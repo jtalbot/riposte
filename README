@@ -1,0 +1,22 @@
+A Quick Riposte, a fast interpreter for R.
+
+Justin Talbot <jtalbot@stanford.edu>
+
+
+Compiling riposte
+-----------------
+1. Install R and make sure the R executable is available on the path.
+
+2. Install the Boehm GC. Available in macports, `port install boehmgc`.
+
+3. Run make in the riposte directory
+
+4. Execute ./riposte to start
+
+
+Limitations
+-----------
+Riposte is in heavy development. Many things haven't been implemented
+and many things have been implemented incorrectly. Use with caution.
+Fixes welcome.
+
