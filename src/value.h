@@ -158,7 +158,7 @@ public:
 	}
 	
 	Block(Value const& v) {
-		assert(v.type() == Type::ByteCode || v.type() == Type::R_promise || v.type() == Type::R_sympromise);
+		assert(v.type() == Type::I_bytecode || v.type() == Type::I_promise || v.type() == Type::I_sympromise);
 		inner = (Inner*)v.p;
 	}
 

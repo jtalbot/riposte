@@ -1,23 +1,27 @@
 # This Makefile requires GNU make.
-CC := g++ 
-CFLAGS := -g -O3 -Wall -DNDEBUG -I/usr/local/include -L/usr/local/lib -L/opt/local/lib -L. -DINSTALL_DIR=$(CURDIR)/bin `R CMD config --cppflags`
-#CFLAGS := -g -O0 -I/usr/local/include -L/usr/local/lib -L/opt/local/lib -L. -DINSTALL_DIR=$(CURDIR)/bin `R CMD config --cppflags`
-LFLAGS := -lm -fpic -lRmath -lgc `R CMD config --ldflags`
-ROCKY_OBJS := src/main.o src/extras.o src/type.o src/output.o src/parse.o src/interpreter.o src/compiler.o src/internal.o src/bc.o
+CXX := g++ 
+CXXFLAGS := -Wall -I/usr/local/include -DINSTALL_DIR=$(CURDIR)/bin `R CMD config --cppflags`
+LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -lm -fpic -lgc `R CMD config --ldflags`
 
-PROGS := bin/riposte
+SRC := main.cpp extras.cpp type.cpp bc.cpp parse.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp
 
-.PHONY: default all clean
+EXECUTABLE := bin/riposte
 
-default: all
+default: release
 
-all: $(PROGS)
+debug: CXXFLAGS += -DDEBUG -O0 -g
+debug: $(EXECUTABLE)
 
-bin/riposte: src/main.o src/extras.o src/type.o src/output.o src/parse.o src/interpreter.o src/compiler.o src/internal.o src/bc.o
-	$(CC) $(CFLAGS) $(LFLAGS) -o $@ $^ $(LIBS)
+release: CXXFLAGS += -DNDEBUG -O3 -g
+release: $(EXECUTABLE)
 
-%.o: %.cpp
-	$(CC) $(CFLAGS) -c $< -o $@ 
+OBJECTS := $(patsubst %.cpp,bin/%.o,$(SRC))
+
+$(EXECUTABLE): $(OBJECTS)
+	$(CXX) $(LFLAGS) -o $@ $^ $(LIBS)
+
+bin/%.o: src/%.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@ 
 
 clean:
-	rm -rf $(PROGS) $(ROCKY_OBJS)
+	rm -rf $(EXECUTABLE) $(OBJECTS)
