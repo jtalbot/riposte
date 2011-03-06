@@ -8,17 +8,8 @@
 #include "bc.h"
 #include "internal.h"
 
-extern Value force(State& state, Value const& v);
-extern Value quoted(Value const& v);
-extern Value code(Value const& v);
-
-extern void zip2(Value const& arg0, Value const& arg1, Value& result, Value const& f);
-extern CFunction::Cffi AddInternal;
-
-std::map<std::string, uint64_t> Symbol::symbolTable;
-std::map<uint64_t, std::string> Symbol::reverseSymbolTable;
-const Value Value::null = Value(Type::R_null, (void*)0);
-const Value Value::NIL = Value(Type::I_nil, (void*)0);
+const Value Value::null = Value(Type::R_null, (void*)0, (Attributes*)0);
+const Value Value::NIL = Value(Type::I_nil, (void*)0, (Attributes*)0);
 
 
 // (stack discipline is hard to prove in R, but can we do better?)
@@ -46,38 +37,100 @@ const Value Value::NIL = Value(Type::I_nil, (void*)0);
 
 void eval(State& state, Block const& block, Environment* env); 
 
+
 static int64_t call_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	//static Environment envs[1024];
 	//static uint64_t env_index = 0;
 	
-	uint64_t nargs = inst.a;
 	Value func(stack.pop());
-			
-	if(func.type() == Type::R_function) {
+	Call compiledCall(block.constants()[inst.a]);
+	
+	if(func.type == Type::R_function) {
 		Function f(func);
-		if(f.body().type() == Type::I_bytecode || f.body().type() == Type::I_promise || f.body().type() == Type::I_sympromise) {
+		if(f.body().type == Type::I_bytecode || 
+			f.body().type == Type::I_promise || 
+			f.body().type == Type::I_sympromise) {
 			//See note above about allocating Environment on heap...
 			Environment* fenv = new Environment(f.s(), state.env);
 			//Environment* fenv = &envs[env_index];
 			//fenv->init(f.s(), state.env);
-			Character names(f.args().names());
-			for(uint64_t i = 0; i < nargs; ++i) {
-				fenv->assign(names[i], stack.pop());
+			
+			PairList parameters = f.parameters();
+			Character pnames(parameters.attributes->names);
+			// populate environment with default values
+			for(uint64_t i = 0; i < parameters.length(); ++i) {
+				fenv->assign(pnames[i], parameters[i]);
+			}	
+
+			// call arguments are not named, do posititional matching
+			if(compiledCall.attributes == 0 || compiledCall.attributes->names.type == Type::R_null)
+			{
+				for(uint64_t i = 1; i < compiledCall.length(); ++i) {
+					fenv->assign(pnames[i-1], compiledCall[i]);
+				}
 			}
+			// call arguments are named, do matching by name
+			else {
+				Character argNames(compiledCall.attributes->names);
+				for(uint64_t i = 1; i < compiledCall.length(); ++i) {
+					// named arg, search for match
+					if(argNames[i] != 0) {
+						for(uint64_t j = 0; j < parameters.length(); ++j) {
+							if(argNames[i] == pnames[j]) {
+								fenv->assign(pnames[j], compiledCall[i]);
+							}
+						}
+					}
+				}
+				uint64_t firstEmpty = 0;
+				for(uint64_t i = 1; i < compiledCall.length(); ++i) {
+					// unnamed arg in a named argument list, fill in first missing spot.
+					if(argNames[i] == 0) {
+						for(; firstEmpty < parameters.length(); ++firstEmpty) {
+							Value v;
+							fenv->getRaw(pnames[firstEmpty], v);
+							if(v.type == Type::I_default || v.type == Type::I_symdefault) {
+								fenv->assign(pnames[firstEmpty], compiledCall[i]);
+								break;
+							}
+						}
+					}
+				}
+			}
+
 			//env_index++;
-			eval(state, f.body(), fenv);
+			if(f.body().type == Type::I_sympromise)
+				fenv->get(state, Symbol(f.body()), stack.reserve());
+			else	
+				eval(state, f.body(), fenv);
 			//env_index--;
 		}
 		else
 			stack.push(f.body());
-	} else if(func.type() == Type::R_cfunction) {
+	} else if(func.type == Type::R_cfunction) {
 		CFunction f(func);
-		f.func(state, nargs);
+		for(uint64_t i = compiledCall.length()-1; i > 0; --i) {
+			stack.push(compiledCall[i]);
+		}
+		f.func(state, compiledCall.length()-1);
 	} else {
 		printf("Non-function as first parameter to call\n");
 		assert(false);
 	}
 	return 1;
+}
+static int64_t inlinecall_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	Value specialized = block.constants()[inst.b];
+	//printf("In guard %s == %s\n", function.toString().c_str(), specialized.toString().c_str());
+	if(stack.peek() ==  specialized) {
+		stack.pop();
+		//printf("Passed guard\n");
+		return 1;
+	} else {
+		//printf("Failed guard, adding %d\n", inst.c);
+		call_op(state, stack, block, inst);
+		return inst.c;
+	}	
 }
 static int64_t get_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	state.env->get(state, Symbol(inst.a), stack.reserve());
@@ -85,14 +138,6 @@ static int64_t get_op(State& state, Stack& stack, Block const& block, Instructio
 }
 static int64_t kget_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	stack.push(block.constants()[inst.a]);
-	return 1;
-}
-static int64_t delay_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
-	Value::set(stack.reserve(), Type::I_promise, block.constants()[inst.a].ptr()); 
-	return 1;
-}
-static int64_t symdelay_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
-	Value::set(stack.reserve(), Type::I_sympromise, block.constants()[inst.a].ptr()); 
 	return 1;
 }
 static int64_t pop_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
@@ -125,38 +170,56 @@ static int64_t forend_op(State& state, Stack& stack, Block const& block, Instruc
 	stack.peek().i -= 1;
 
 	if(stack.peek().i < 0) {
-		Value::set(stack.peek(), Type::R_null, 0);
+		stack.push(Value::null);
 		return 1;
 	}	
 	else
 		return -inst.a;
 }
-static int64_t fguard_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
-	Value function = stack.pop();
-	Value specialized = block.constants()[inst.a];
-	//printf("In guard %s == %s\n", function.toString().c_str(), specialized.toString().c_str());
-	if(function == specialized) {
-		//printf("Passed guard\n");
+static int64_t whilebegin_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	Logical l(stack.pop());
+	if(l[0]) return 1;
+	else {
+		stack.push(Value::null);
+		return inst.a;
+	}
+}
+static int64_t whileend_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	Logical l(stack.pop());
+	// pop the results of the loop...
+	stack.pop();
+	if(l[0]) return -inst.a;
+	else {
+		stack.push(Value::null);
 		return 1;
-	} else {
-		//printf("Failed guard, adding %d\n", inst.c);
-		eval(state, block.constants()[inst.b]);
-		return inst.c;
-	}	
+	}
 }
 static int64_t add_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
-	AddInternal(state,inst.a);
+	binaryArith<Zip2, AddOp>(state,inst.a);
 	return 1;
-
-	//Value a = stack.pop();
-	//Value b = stack.pop();
-	//if(a.type() == Type::R_double && b.type() == Type::R_double &&
-	//	a.packed == 1 && b.packed == 1) {
-	//	Value v(Type::R_double, a.d+b.d);
-	//	stack.push(v);
-	//	return 1;
-	//}
-	//return 0;
+}
+static int64_t pos_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	unaryArith<Zip1, PosOp>(state,inst.a);
+	return 1;
+}
+static int64_t sub_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	binaryArith<Zip2, SubOp>(state,inst.a);
+	return 1;
+}
+static int64_t neg_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	unaryArith<Zip1, NegOp>(state,inst.a);
+	return 1;
+}
+static int64_t mul_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	binaryArith<Zip2, MulOp>(state,inst.a);
+	return 1;
+}
+static int64_t div_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	binaryDoubleArith<Zip2, DivOp>(state,inst.a);
+	return 1;
+}
+static int64_t jmp_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	return (int64_t)inst.a;
 }
 static int64_t ret_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	return 0;
@@ -168,7 +231,7 @@ static int64_t ret_op(State& state, Stack& stack, Block const& block, Instructio
 __attribute__((__noinline__,__noclone__)) 
 void eval(State& state, Block const& block) {
 	
-	Stack& stack = *(state.stack);
+	Stack& stack = state.stack;
 
 #ifdef THREADED_INTERPRETER
     #define LABELS_THREADED(name,type) (void*)&&name##_label,

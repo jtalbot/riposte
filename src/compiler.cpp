@@ -8,10 +8,11 @@
 #include "bc.h"
 
 static bool isLanguage(Value const& expr) {
-	return expr.type() == Type::R_symbol ||
-			expr.type() == Type::R_call ||
-			expr.type() == Type::I_internalcall ||
-			expr.type() == Type::R_expression;
+	return expr.type == Type::R_symbol ||
+			expr.type == Type::R_call ||
+			expr.type == Type::I_internalcall ||
+			expr.type == Type::R_expression ||
+			expr.type == Type::R_pairlist;
 }
 
 // compilation routines
@@ -23,20 +24,21 @@ static void compileConstant(State& state, Value const& expr, Block& block) {
 }
 
 static void compileGetSymbol(State& state, Symbol const& symbol, Block& block) {
-	block.code().push_back(Instruction(ByteCode::get, symbol.index()));
+	block.code().push_back(Instruction(ByteCode::get, symbol.i));
 }
 
 static void compileInternalCall(State& state, InternalCall const& call, Block& block) {
 	Symbol func(call[0]);
-	if(func.toString() == "<-" || func.toString() == ".Assign") {
+	std::string funcStr = func.toString(state);
+	if(funcStr == "<-" || funcStr == ".Assign") {
 		compile(state, call[2], block);
 		//block.constants().push_back(call[1]);
 		//block.code().push_back(Instruction(ByteCode::kget, block.constants().size()-1));
 		//compile(state, call[1], block);
 		//block.code().push_back(Instruction(ByteCode::pop));
-		block.code().push_back(Instruction(ByteCode::assign, Symbol(call[1]).index()));
+		block.code().push_back(Instruction(ByteCode::assign, Symbol(call[1]).i));
 	}
-	else if(func.toString() == "for" || func.toString() == ".For") {
+	else if(funcStr == "for" || funcStr == ".For") {
 		compile(state, Call(call[2])[2], block);
 		compile(state, Call(call[2])[1], block);
 		compileConstant(state, call[1], block);
@@ -48,23 +50,59 @@ static void compileInternalCall(State& state, InternalCall const& call, Block& b
 		block.code().push_back(Instruction(ByteCode::forend, endbody-beginbody));
 		block.code()[beginbody-1].a = endbody-beginbody+1;
 	}
-	else if(func.toString() == ".Brace" || func.toString() == "{") {
+	else if(funcStr == "while" || funcStr == ".While") {
+		compile(state, call[1], block);
+		block.code().push_back(Instruction(ByteCode::whilebegin, 0));
+		uint64_t beginbody = block.code().size();
+		compile(state, call[2], block);
+		compile(state, call[1], block);
+		uint64_t endbody = block.code().size();
+		block.code().push_back(Instruction(ByteCode::whileend, endbody-beginbody));
+		block.code()[beginbody-1].a = endbody-beginbody+2;
+	}
+	else if(funcStr == ".Brace" || funcStr == "{") {
 		uint64_t length = call.length();
 		for(uint64_t i = 1; i < length; i++) {
 			compile(state, call[i], block);
 			if(i < length-1)
 				block.code().push_back(Instruction(ByteCode::pop));
 		}
+		if(length == 0) {
+			block.constants().push_back(Value::null);
+			block.code().push_back(Instruction(ByteCode::kget, block.constants().size()-1));
+		}
 	}
-	else if(func.toString() == ".Paren" || func.toString() == "(") {
+	else if(funcStr == ".Paren" || funcStr == "(") {
 		//uint64_t length = call.length();
 		compile(state, call[1], block);
 	}
-	else if(func.toString() == ".Add" || func.toString() == "+") {
+	else if(funcStr == ".Add" || funcStr == "+") {
 		if(call.length() == 3)
 			compile(state, call[2], block);
 		compile(state, call[1], block);
-		block.code().push_back(Instruction(ByteCode::add, call.length()-1));
+		if(call.length() == 3)
+			block.code().push_back(Instruction(ByteCode::add, call.length()-1));
+		else
+			block.code().push_back(Instruction(ByteCode::pos, call.length()-1));
+	}
+	else if(funcStr == ".Sub" || funcStr == "-") {
+		if(call.length() == 3)
+			compile(state, call[2], block);
+		compile(state, call[1], block);
+		if(call.length() == 3)
+			block.code().push_back(Instruction(ByteCode::sub, call.length()-1));
+		else
+			block.code().push_back(Instruction(ByteCode::neg, call.length()-1));
+	}
+	else if(funcStr == ".Mul" || funcStr == "*") {
+		compile(state, call[2], block);
+		compile(state, call[1], block);
+		block.code().push_back(Instruction(ByteCode::mul, call.length()-1));
+	}
+	else if(funcStr == ".Div" || funcStr == "/") {
+		compile(state, call[2], block);
+		compile(state, call[1], block);
+		block.code().push_back(Instruction(ByteCode::div, call.length()-1));
 	}
 }
 
@@ -77,26 +115,31 @@ static void compileCall(State& state, Call const& call, Block& block) {
 
 	// create a new block for each parameter...
 	// insert delay instruction to make promise
+	Call compiledCall(call.length());
+	compiledCall.attributes = call.attributes;
+
 	for(uint64_t i = length-1; i >= 1; i--) {
-		if(call[i].type() == Type::R_symbol) {
-			Value v;
-			compile(state, call[i]).toValue(v);
-			block.constants().push_back(v);
-			block.code().push_back(Instruction(ByteCode::symdelay, block.constants().size()-1));
+		if(call[i].type == Type::R_symbol) {
+			Value v = call[i];
+			v.type = Type::I_sympromise;
+			compiledCall[i] = v;
 		}
 		else if(isLanguage(call[i])) {
 			Value v;
 			compile(state, call[i]).toValue(v);
-			block.constants().push_back(v);
-			block.code().push_back(Instruction(ByteCode::delay, block.constants().size()-1));
+			v.type = Type::I_promise;
+			compiledCall[i] = v;
 		} else {
-			compile(state, call[i], block);
+			compiledCall[i] = call[i];
 		}
 	}
 	compile(state, call[0], block);
 	
 	// insert call
-	block.code().push_back(Instruction(ByteCode::call, length-1));
+	Value v;
+	compiledCall.toValue(v);
+	block.constants().push_back(v);
+	block.code().push_back(Instruction(ByteCode::call, block.constants().size()-1));
 }
 
 static void compileICCall(State& state, Call const& call, Block& block) {
@@ -106,41 +149,42 @@ static void compileICCall(State& state, Call const& call, Block& block) {
 		return;
 	}
 
-	// we might be able to inline if the function is a symbol...
-	if(call[0].type() == Type::R_symbol) {
-		if(Symbol(call[0]).toString() == "<-" 
-			|| Symbol(call[0]).toString() == "for"
-			|| Symbol(call[0]).toString() == "{"
-			|| Symbol(call[0]).toString() == "("
-			|| Symbol(call[0]).toString() == "+") {
+	// generate a normal call
+	compileCall(state, call, block);
+	
+	// we might be able to inline if the function is a known symbol
+	//  and if no parameter is '...'
+	if(call[0].type == Type::R_symbol) {
+		std::string funcStr = Symbol(call[0]).toString(state);
+		if(funcStr == "<-" 
+			|| funcStr == "for"
+			|| funcStr == "while"
+			|| funcStr == "{"
+			|| funcStr == "("
+			|| funcStr == "+"
+			|| funcStr == "-"
+			|| funcStr == "*"
+			|| funcStr == "/") {
 			
-			// compile the expensive call.
-			Block b;
-			compileCall(state, call, b);
-			b.code().push_back(Instruction(ByteCode::ret));
-			Value exp_value;
-			b.toValue(exp_value);
-			block.constants().push_back(exp_value);
-			uint64_t exp_call_index = block.constants().size()-1;
-
 			Value spec_value;
 			state.baseenv->get(state, Symbol(call[0]), spec_value);
 			block.constants().push_back(spec_value);
 			uint64_t spec_value_index = block.constants().size()-1;
 
 			// check needs 1) function, 2) specialized value, 3) expensive call, and 4) skip amount
-			compile(state, call[0], block);
-			block.code().push_back(Instruction(ByteCode::fguard, spec_value_index, exp_call_index, 0));
+			Instruction& instr = block.code().back();
+			instr.bc = ByteCode::inlinecall;
+			instr.b = spec_value_index;
+			instr.c = 0;
+			
 			uint64_t start = block.code().size();
 			compileInternalCall(state, InternalCall(call), block);
 			uint64_t end = block.code().size();
-			block.code()[start-1].c = end-start+1;
+			instr.c = end-start+1;
 			return;
 		}
 	}
 
-	// otherwise...just generate a normal call
-	compileCall(state, call, block);
 }
 
 static void compileExpression(State& state, Expression const& values, Block& block) {
@@ -152,10 +196,40 @@ static void compileExpression(State& state, Expression const& values, Block& blo
 	}
 }
 
+static void compilePairList(State& state, PairList const& values, Block& block) {
+	/*
+		PairLists are primarily used to provide the default arguments for a function.
+		So the elements need to be compiled.
+		If they're used for anything else, will need to fix this implementation.
+	*/
+	printf("Compiling pair list\n");
+	uint64_t length = values.length();
+	PairList compiledPL(length);
+	compiledPL.attributes = values.attributes;
+	for(uint64_t i = 0; i < length; i++) {
+		if(values[i].type == Type::R_symbol) {
+			Value v = values[i];
+			v.type = Type::I_symdefault;
+			compiledPL[i] = v;
+		}
+		else if(isLanguage(values[i])) {
+			Value v;
+			compile(state, values[i]).toValue(v);
+			v.type = Type::I_default;
+			compiledPL[i] = v;
+		} else {
+			compiledPL[i] = values[i];
+		}
+	}
+	Value v;
+	compiledPL.toValue(v);
+	compileConstant(state, v, block);
+}
+
 
 void compile(State& state, Value const& expr, Block& block) {
 
-	switch(expr.type().internal())
+	switch(expr.type.internal())
 	{
 		case Type::R_symbol:
 			compileGetSymbol(state, Symbol(expr), block);
@@ -168,6 +242,9 @@ void compile(State& state, Value const& expr, Block& block) {
 			break;	
 		case Type::R_expression:
 			compileExpression(state, Expression(expr), block);
+			break;
+		case Type::R_pairlist:
+			compilePairList(state, PairList(expr), block);
 			break;
 		default:
 			compileConstant(state, expr, block);

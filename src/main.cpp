@@ -19,17 +19,17 @@
 extern "C" {
 #include <Rmath.h>
 }
-#include <valgrind/callgrind.h>
+
+#ifdef USE_CALLGRIND
+	#include <valgrind/callgrind.h>
+#endif
 
 #include "rinst.h"
-
-#define STRINGIFY(x) #x
-#define TOSTRING(x) STRINGIFY(x)
 
 #include "value.h"
 #include "internal.h"
 
-extern void parse(SEXP s, Value& v);
+extern void parse(State& state, SEXP s, Value& v);
 
 /*  Globals  */
 static int debug = 0;
@@ -193,7 +193,7 @@ SEXP evalR(SEXP code, SEXP env) {
 }
 
 
-int dostdin(Environment* baseenv) {
+int dostdin(State& state) {
 	SEXP code;
 	int status, rc = 0;
 
@@ -204,26 +204,25 @@ int dostdin(Environment* baseenv) {
 	printf("rockit@graphics.stanford.edu\n");
 	printf("\n");
 
-	State state(new Stack(), new Environment(baseenv, baseenv), baseenv);
 	while(!die) {
         status = 0;
 		code = parseR();
         if (R_NilValue == code) continue;
 
 		Value value, result;
-		parse(code, value);
+		parse(state, code, value);
 		//std::cout << "Parsed: " << value.toString() << std::endl;
 		//interpret(value, env, result); 
 		Block b = compile(state, value);
 		//std::cout << "Compiled code: " << b.toString() << std::endl;
 		eval(state, b);
-		result = state.stack->pop();	
-		std::cout << result.toString() << std::endl;
+		result = state.stack.pop();	
+		std::cout << state.stringify(result) << std::endl;
 	}
 	return rc;
 }
 
-static int dofile(const char * file, Environment* baseenv, bool echo) {
+static int dofile(const char * file, State& state, bool echo) {
 	int rc = 0;
 	std::string s;
 
@@ -243,17 +242,18 @@ static int dofile(const char * file, Environment* baseenv, bool echo) {
 
 	timespec begin;
 	get_time(begin);
-	State state(new Stack(), new Environment(baseenv, baseenv), baseenv);
 	for(int i = 0; i < Rf_length(expressions) && !rc; ++i) {
 		Value value, result;
-		parse(VECTOR_ELT(expressions, i), value);
+		parse(state, VECTOR_ELT(expressions, i), value);
 		//interpret(value, env, result);
 		Block b = compile(state, value);
-		std::cout << b.toString() << std::endl;
+		//Value v;
+		//b.toValue(v);
+		//std::cout << state.stringify(v) << std::endl;
 		eval(state, b);	
-		result = state.stack->pop();	
+		result = state.stack.pop();	
 		if(echo) {
-			std::cout << result.toString() << std::endl;
+			std::cout << state.stringify(result) << std::endl;
 		}
 	}
 	UNPROTECT(1);
@@ -355,17 +355,20 @@ while ((ch = getopt_long(argc, argv, "df:hj:v", longopts, NULL)) != -1)
        dojitcmd(L, jitopts);    
     }*/
 
-	//printf(">> %d\n", sizeof(Value));
-	//printf(">> %d\n", sizeof(Instruction));
+	printf(">> %d\n", sizeof(Value));
+	printf(">> %d\n", sizeof(Instruction));
 
 	/* start garbage collector */
 	GC_INIT();
 
+#ifdef USE_CALLGRIND
 	CALLGRIND_START_INSTRUMENTATION
+#endif
 
 	/* Create riposte environment */
 	Environment* baseenv = new Environment(0,0);
-	addMathOps(baseenv);	
+	State state(new Environment(baseenv, baseenv), baseenv);
+	addMathOps(state);	
 
 /* Either execute the specified file or read interactively from stdin  */
 
@@ -373,9 +376,9 @@ while ((ch = getopt_long(argc, argv, "df:hj:v", longopts, NULL)) != -1)
 	if(-1 != fd) {
 	  close(fd);    /* will reopen in R for parsing */
           d_message(1,"source(%s)\n",filename);
-	  rc = dofile(filename,baseenv,true); 
+	  rc = dofile(filename,state,true); 
 	} else {
-	  rc = dostdin(baseenv);
+	  rc = dostdin(state);
 	}
 
     /* Session over */

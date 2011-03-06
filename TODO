@@ -1,0 +1,19 @@
+
+To do list (not yet in priority order):
+
+Big stuff:
+-Garbage Collector. Replace Boehm with exact, generational garbage collector like everyone else has. Can we borrow the GC from a Javascript implementation?
+
+-Standalone R parser. Currently we have a dependency on R to provide parsing only. Can we strip the parser out from the R distribution so we don't have that dependency? Or maybe write our own? Much of the code in R's parser appears to be necessary to deal with multi-byte character encoding schemes. Is there a parser generator out there that could handle that for us?
+
+-R external interface. Make it possible to load and use existing R packages.
+
+
+Incomplete features:
+-Incomplete parameter name matching.
+	f <- function(x,y,index) {...}
+	f(1,2,i=5)		# i should match parameter `index`
+
+-Warnings on too many parameters
+
+-Warning on attempt to use missing parameter

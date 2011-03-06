@@ -14,13 +14,10 @@
 #include "bc.h"
 #include "common.h"
 
-/*
-TODO: blocked by boehm not seeing packed pointer.
-1 / 12 / 51
-5 bits for type
-46 bits for pointer...assume 4 byte aligned
-*/
+struct Attributes;
 
+
+/** Basic value type */
 class Value {
 public:
 	union {
@@ -28,79 +25,33 @@ public:
 		double d;
 		int64_t i;
 	};
-	Type t;
+	Attributes* attributes;
+	Type type;
 	uint64_t packed:2;
-	// promote length to here...
-	// object flag?
-	// named flag?
 
-public:
-	Value() {/*t=Type::NIL;*/}
-	Value(Type const& type, void* ptr, uint64_t packed=0) : p(ptr), t(type), packed(packed) {}
-	Value(Type const& type, double d, uint64_t packed=1) : d(d), t(type), packed(packed) {}
-	Type type() const { return t; }
-	void* ptr() const { return p; }
-	std::string toString() const;
-
-	// type constructor
-	static void set(Value& v, Type const& type, void* ptr, uint64_t packed=2) {
-		v.t = type;
-		v.p = ptr;
-		v.packed = 2;
-	}
-
+	Value() {/*t=Type::NIL;*/}	// Careful: for efficiency, Value is not initialized by default.
+	
 	// not right for scalar doubles and maybe other stuff, careful!
 	bool operator==(Value const& other) {
-		return t == other.t && i == other.i;
+		return type == other.type && i == other.i;
+	}
+
+	static void set(Value& v, Type type, void* p) {
+		v.type = type;
+		v.p = p;
+		v.attributes = 0;
+		v.packed = 0;
 	}
 
 	static const Value null;
 	static const Value NIL;
+
+private:
+	Value(Type type, void* p, Attributes* attributes)
+		: p(p), attributes(attributes), type(type), packed(0) {}
 };
 
-class Symbol {
-	static std::map<std::string, uint64_t> symbolTable;
-	static std::map<uint64_t, std::string> reverseSymbolTable;
-
-public:
-
-	uint64_t i;
-
-	Symbol() {
-		// really need to initialize to the empty symbol here...
-		i = 0;
-	}
-
-	Symbol(uint64_t index) {
-		i = index;
-	}
-
-	Symbol(std::string const& name) { 
-		if(symbolTable.find(name) == symbolTable.end()) {
-			symbolTable[name] = symbolTable.size();
-			reverseSymbolTable[symbolTable[name]] = name;
-		}
-		i = symbolTable[name];
-	}
-
-	Symbol(Value const& v) {
-		assert(v.type() == Type::R_symbol); 
-		i = v.i;
-	}
-
-	void toValue(Value& v) {
-		v.t = Type::R_symbol;
-		v.i = i;
-	}
-
-	uint64_t index() const { return i; }
-
-	std::string const& toString() const { return reverseSymbolTable[i]; }
-	bool operator<(Symbol const& other) const { return i < other.i;	}
-	bool operator==(Symbol const& other) const { return i == other.i; }
-	bool operator!=(Symbol const& other) const { return i != other.i; }
-};
-
+// The execution stack
 struct Stack : public gc {
 	Value s[1024];
 	uint64_t top;
@@ -126,205 +77,160 @@ struct Stack : public gc {
 	}
 };
 
-struct Instruction {
-	ByteCode bc;
-	void const* ibc;
-	uint64_t a, b, c;
+class Environment;
 
-	Instruction(ByteCode bc, uint64_t a=0, uint64_t b=0, uint64_t c=0) :
-		bc(bc), a(a), b(b), c(c) {}
-	
-	Instruction(void const* ibc, uint64_t a=0, uint64_t b=0, uint64_t c=0) :
-		ibc(ibc), a(a), b(b), c(c) {}
-	
-	std::string toString() const {
-		return std::string("") + bc.toString() + "\t" + intToStr(a);
+// The riposte state
+struct State {
+	Stack stack;
+	Environment *env, *baseenv;
+
+	std::map<std::string, uint64_t> stringTable;
+	std::map<uint64_t, std::string> reverseStringTable;
+
+	State(Environment* env, Environment* baseenv) {
+		this->env = env;
+		this->baseenv = baseenv;
+
+		// insert strings into table that must be at known positions...
+		//   the empty string
+		stringTable[""] = 0;
+		reverseStringTable[0] = "";
+		//   the dots string
+		stringTable["..."] = 0;
+		reverseStringTable[0] = "...";
 	}
+
+	uint64_t inString(std::string const& s) {
+		if(stringTable.find(s) == stringTable.end()) {
+			uint64_t index = stringTable.size();
+			stringTable[s] = index;
+			reverseStringTable[index] = s;
+			return index;
+		} else return stringTable[s];
+	
+	}
+
+	std::string const& outString(uint64_t i) const {
+		return reverseStringTable.find(i)->second;
+	}
+
+	std::string stringify(Value const& v) const;
 };
 
-class Block {
-private:
-	struct Inner : public gc {
-		Value expression;
-		std::vector<Value, traceable_allocator<Value> > constants;
-		std::vector<Instruction> code;
-		mutable std::vector<Instruction> threadedCode;
-	};
-	
-	Inner* inner;
-public:
-	Block() { 
-		inner = new Inner();
-	}
-	
-	Block(Value const& v) {
-		assert(v.type() == Type::I_bytecode || v.type() == Type::I_promise || v.type() == Type::I_sympromise);
-		inner = (Inner*)v.p;
+
+// Value type implementations
+
+struct Symbol {
+	uint64_t i;
+	Attributes* attributes;
+
+	Symbol() : i(0), attributes(0) {}						// Defaults to the empty symbol...
+	Symbol(uint64_t index) : i(index), attributes(0) {}
+	Symbol(State& state, std::string const& s) : i(state.inString(s)), attributes(0) {}
+
+	Symbol(Value const& v) {
+		assert(v.type == Type::R_symbol); 
+		i = v.i;
+		attributes = v.attributes;
 	}
 
 	void toValue(Value& v) {
-		v.t = Type::I_bytecode;
-		v.p = inner;
+		v.type = Type::R_symbol;
+		v.i = i;
+		v.attributes = attributes;
 	}
 
-	std::string toString() const {
-		std::string r = "block:\nconstants: " + intToStr(inner->constants.size()) + "\n";
-		for(uint64_t i = 0; i < inner->constants.size(); i++)
-			r = r + intToStr(i) + "=\t" + inner->constants[i].toString() + "\n";
-		
-		r = r + "code: " + intToStr(inner->code.size()) + "\n";
-		for(uint64_t i = 0; i < inner->code.size(); i++)
-			r = r + intToStr(i) + ":\t" + inner->code[i].toString() + "\n";
-		
-		return r;
-	}
-
-	Value const& expression() const { return inner->expression; }
-	Value& expression() { return inner->expression; }
-	std::vector<Value, traceable_allocator<Value> > const& constants() const { return inner->constants; }
-	std::vector<Value, traceable_allocator<Value> >& constants() { return inner->constants; }
-	std::vector<Instruction> const& code() const { return inner->code; }
-	std::vector<Instruction>& code() { return inner->code; }
-	std::vector<Instruction>& threadedCode() const { return inner->threadedCode; }
+	std::string const& toString(State& state) { return state.outString(i); }
+	bool operator<(Symbol const& other) const { return i < other.i;	}
+	bool operator==(Symbol const& other) const { return i == other.i; }
+	bool operator!=(Symbol const& other) const { return i != other.i; }
 };
 
-class Character;
 
-struct VectorInner : public gc {
-	uint64_t width, length;
-	Value names;
-	void* data;
-};
-
+// A generic vector representation. Only provides support to access length and void* of data.
 struct Vector {
-	Type t;
-	union {
-		VectorInner* inner;
-		int64_t pack;
+	struct Inner {
+		uint64_t length, width;
+		void* data;
 	};
-	uint64_t packed;	
+
+	union {
+		Inner* inner;
+		int64_t packedData;
+	};
+	Attributes* attributes;
+	Type type;
+	uint64_t packed:2;
 	
 	uint64_t length() const { if(packed < 2) return packed; else return inner->length; }
-	void* data() const { if(packed < 2 ) return (void*)&pack; else return inner->data; }
+	void* data() const { if(packed < 2 ) return (void*)&packedData; else return inner->data; }
 
-	Vector() {
-	}
+	Vector() : inner(0), attributes(0), packed(0) {}
 
 	Vector(Value const& v) {
-		t = v.type();
-		pack = v.i;
+		assert(isVector(v.type));
+		packedData = v.i;
+		attributes = v.attributes;
+		type = v.type;
 		packed = v.packed;
 	}
 
-	Vector(Type const& t, uint64_t length, bool named=false);
+	Vector(Type const& t, uint64_t length);
 
 	void toValue(Value& v) const {
-		v.t = t;
-		v.i = pack;
+		v.i = packedData;
+		v.attributes = attributes;
+		v.type = type;
 		v.packed = packed;
 	}
 };
 
-template<Type::Value VectorType, class ElementType>
+template<Type::Value VectorType, class ElementType, bool Pack>
 struct VectorImpl {
-	VectorInner* inner;
-	
-	ElementType& operator[](uint64_t index) { return ((ElementType*)(inner->data))[index]; }
-	ElementType const& operator[](uint64_t index) const { return ((ElementType*)(inner->data))[index]; }
-	uint64_t length() const { return inner->length; }
-	ElementType* data() const { return (ElementType*)inner->data; }
-
-	VectorImpl(uint64_t length, bool named=false) {
-		inner = new VectorInner();
-		inner->length = length;
-		inner->width = sizeof(ElementType);
-		inner->data = new (GC) ElementType[length];
-	}
-
-	VectorImpl(Value const& v) {
-		assert(v.type() == VectorType); 
-		inner = (VectorInner*)v.p;
-	}
-	
-	VectorImpl(Vector const& v) {
-		assert(v.t == VectorType); 
-		inner = (VectorInner*)v.inner;
-	}
-
-	void toValue(Value& v) const {
-		v.t = VectorType;
-		v.p = inner;
-		v.packed = 2;
-	}
-
-	void toVector(Vector& v) const {
-		v.t = VectorType;
-		v.inner = inner;
-		v.packed = 2;
-	}
-
-	Value const& names() const {
-		return inner->names;
-	}
-
-protected:
-	VectorImpl() {inner = 0;}
-};
-
-template<Type::Value VectorType, class ElementType>
-struct PackedVectorImpl {
 	union {
-		VectorInner* inner;
-		int64_t pack;
+		Vector::Inner* inner;
+		int64_t packedData;
 	};
-	uint64_t packed;
+	Attributes* attributes;
+	uint64_t packed:2;
 	
-	ElementType& operator[](uint64_t index) { if(packed < 2) return ((ElementType*)&pack)[index]; else return ((ElementType*)(inner->data))[index]; }
-	ElementType const& operator[](uint64_t index) const { if(packed < 2) return ((ElementType*)&pack)[index]; else return ((ElementType*)(inner->data))[index]; }
-	uint64_t length() const { if(packed < 2) return packed; else return inner->length; }
-	ElementType* data() const { if(packed < 2 ) return (ElementType*)&pack; else return (ElementType*)inner->data; }
+	ElementType& operator[](uint64_t index) { if(Pack && packed < 2) return ((ElementType*)&packedData)[index]; else return ((ElementType*)(inner->data))[index]; }
+	ElementType const& operator[](uint64_t index) const { if(Pack && packed < 2) return ((ElementType*)&packedData)[index]; else return ((ElementType*)(inner->data))[index]; }
+	uint64_t length() const { if(Pack && packed < 2) return packed; else return inner->length; }
+	ElementType* data() const { if(Pack && packed < 2) return (ElementType*)&packedData; else return (ElementType*)inner->data; }
 
-	PackedVectorImpl(uint64_t length, bool named=false) {
-		if(length >=2 || named) {
-			inner = new VectorInner();
+	VectorImpl(uint64_t length) : packedData(0), attributes(0) {
+		if(Pack && length < 2)
+			packed = length;
+		else {
+			inner = new Vector::Inner();
 			inner->length = length;
 			inner->width = sizeof(ElementType);
 			inner->data = new (GC) ElementType[length];
 			packed = 2;
-		} else {
-			packed = length;
 		}
 	}
 
-	PackedVectorImpl(Value const& v) {
-		assert(v.type() == VectorType); 
-		pack = v.i;
-		packed = v.packed;
+	VectorImpl(Value const& v) : packedData(v.i), attributes(v.attributes), packed(v.packed) {
+		assert(v.type == VectorType); 
 	}
 	
-	PackedVectorImpl(Vector const& v) {
-		assert(v.t == VectorType); 
-		pack = v.pack;
-		packed = v.packed;
+	VectorImpl(Vector const& v) : packedData(v.packedData), attributes(v.attributes), packed(v.packed) {
+		assert(v.type == VectorType); 
 	}
 
 	void toValue(Value& v) const {
-		v.t = VectorType;
-		v.i = pack;
+		v.type = VectorType;
+		v.i = packedData;
+		v.attributes = attributes;
 		v.packed = packed;
 	}
 
 	void toVector(Vector& v) const {
-		v.t = VectorType;
-		v.pack = pack;
+		v.packedData = packedData;
+		v.attributes = attributes;
+		v.type = VectorType;
 		v.packed = packed;
-	}
-
-	Value const& names() const {
-		if(packed >= 2)
-			return inner->names;
-		else
-			return Value::null;
 	}
 
 	/*void subset(uint64_t start, uint64_t length, Value& v) const {
@@ -339,7 +245,7 @@ struct PackedVectorImpl {
 	}*/
 
 protected:
-	PackedVectorImpl() {inner = 0;packed=2;}
+	VectorImpl() {inner = 0;packed=0;}
 };
 
 
@@ -347,87 +253,116 @@ struct complex {
 	double a,b;
 };
 
-#define VECTOR_IMPL(Super, Name, Type, type) \
-struct Name : public Super<Type, type> \
-	{ Name(uint64_t length, bool named=false) : Super<Type, type>(length, named) {} \
-	  Name(Value const& v) : Super<Type, type>(v) {} \
-	  Name(Vector const& v) : Super<Type, type>(v) {}
+#define VECTOR_IMPL(Name, Type, type, Pack) \
+struct Name : public VectorImpl<Type, type, Pack> \
+	{ Name(uint64_t length) : VectorImpl<Type, type, Pack>(length) {} \
+	  Name(Value const& v) : VectorImpl<Type, type, Pack>(v) {} \
+	  Name(Vector const& v) : VectorImpl<Type, type, Pack>(v) {}
 /* note missing }; */
 
-VECTOR_IMPL(PackedVectorImpl, Logical, Type::R_logical, unsigned char) };
-VECTOR_IMPL(PackedVectorImpl, Integer, Type::R_integer, int64_t) };
-VECTOR_IMPL(PackedVectorImpl, Double, Type::R_double, double) };
-VECTOR_IMPL(VectorImpl, Complex, Type::R_complex, complex) };
-VECTOR_IMPL(VectorImpl, Character, Type::R_character, std::string) };
-VECTOR_IMPL(PackedVectorImpl, Raw, Type::R_raw, unsigned char) };
-VECTOR_IMPL(VectorImpl, List, Type::R_list, Value) };
-VECTOR_IMPL(VectorImpl, Call, Type::R_call, Value) 
-	Call(List const& v) { inner = v.inner; } };
-VECTOR_IMPL(VectorImpl, InternalCall, Type::I_internalcall, Value) 
-	InternalCall(List const& v) { inner = v.inner; }  
-	InternalCall(Call const& v) { inner = v.inner; } }; 
-VECTOR_IMPL(VectorImpl, Expression, Type::R_expression, Value) 
-	Expression(List const& v) { inner = v.inner; }  };
+VECTOR_IMPL(Logical, Type::R_logical, unsigned char, true) };
+VECTOR_IMPL(Integer, Type::R_integer, int64_t, true) };
+VECTOR_IMPL(Double, Type::R_double, double, true) };
+VECTOR_IMPL(Complex, Type::R_complex, complex, false) };
+VECTOR_IMPL(Character, Type::R_character, uint64_t, true) };
+VECTOR_IMPL(Raw, Type::R_raw, unsigned char, true) };
+VECTOR_IMPL(List, Type::R_list, Value, false) };
+VECTOR_IMPL(PairList, Type::R_pairlist, Value, false) 
+	PairList(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; } };
+VECTOR_IMPL(Call, Type::R_call, Value, false) 
+	Call(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; } };
+VECTOR_IMPL(InternalCall, Type::I_internalcall, Value, false) 
+	InternalCall(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; }  
+	InternalCall(Call const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; } }; 
+VECTOR_IMPL(Expression, Type::R_expression, Value, false) 
+	Expression(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; }  };
 
-inline Vector::Vector(Type const& t, uint64_t length, bool named) {
+inline Vector::Vector(Type const& t, uint64_t length) {
 	switch(t.internal()) {
-		case Type::R_logical: Logical(length, named).toVector(*this); break;	
-		case Type::R_integer: Integer(length, named).toVector(*this); break;	
-		case Type::R_double: Double(length, named).toVector(*this); break;	
-		case Type::R_complex: Complex(length, named).toVector(*this); break;	
-		case Type::R_character: Character(length, named).toVector(*this); break;	
-		case Type::R_raw: Raw(length, named).toVector(*this); break;	
-		case Type::R_list: List(length, named).toVector(*this); break;	
-		case Type::R_call: Call(length, named).toVector(*this); break;	
-		case Type::I_internalcall: InternalCall(length, named).toVector(*this); break;	
-		case Type::R_expression: Expression(length, named).toVector(*this); break;	
+		case Type::R_logical: Logical(length).toVector(*this); break;	
+		case Type::R_integer: Integer(length).toVector(*this); break;	
+		case Type::R_double: Double(length).toVector(*this); break;	
+		case Type::R_complex: Complex(length).toVector(*this); break;	
+		case Type::R_character: Character(length).toVector(*this); break;	
+		case Type::R_raw: Raw(length).toVector(*this); break;	
+		case Type::R_list: List(length).toVector(*this); break;	
+		case Type::R_call: Call(length).toVector(*this); break;	
+		case Type::I_internalcall: InternalCall(length).toVector(*this); break;	
+		case Type::R_expression: Expression(length).toVector(*this); break;	
 		default: printf("Invalid vector type\n"); assert(false); break;
 	};
 }
 
-class Environment;
+class Block {
+private:
+	struct Inner : public gc {
+		Value expression;
+		std::vector<Value, traceable_allocator<Value> > constants;
+		std::vector<Instruction> code;
+		mutable std::vector<Instruction> threadedCode;
+	};
+	
+	Inner* inner;
+public:
+	Block() : inner(new Inner()) {}
+	
+	Block(Value const& v) {
+		assert(	v.type == Type::I_bytecode || 
+				v.type == Type::I_promise || 
+				v.type == Type::I_sympromise);
+		inner = (Inner*)v.p;
+	}
+
+	void toValue(Value& v) {
+		v.type = Type::I_bytecode;
+		v.p = inner;
+		v.attributes = 0;
+	}
+
+	Value const& expression() const { return inner->expression; }
+	Value& expression() { return inner->expression; }
+	std::vector<Value, traceable_allocator<Value> > const& constants() const { return inner->constants; }
+	std::vector<Value, traceable_allocator<Value> >& constants() { return inner->constants; }
+	std::vector<Instruction> const& code() const { return inner->code; }
+	std::vector<Instruction>& code() { return inner->code; }
+	std::vector<Instruction>& threadedCode() const { return inner->threadedCode; }
+};
 
 class Function {
 private:
 	struct Inner : public gc {
-		List args;
+		PairList parameters;
 		Value body;		// Not necessarily a Block consider function(x) 2, body is the constant 2
+		Character str;
 		Environment* s;
-		Inner(List const& args, Value const& body, Environment* s) : args(args), body(body), s(s) {}
+		Inner(PairList const& parameters, Value const& body, Character const& str, Environment* s) 
+			: parameters(parameters), body(body), str(str), s(s) {}
 	};
 	
 	Inner* inner;
-
+	
 public:
-	Function(List const& args, Value const& body, Environment* s) {
-		inner = new Inner(args, body, s);
-	}
+	Attributes* attributes;
+
+	Function(PairList const& parameters, Value const& body, Character const& str, Environment* s) 
+		: inner(new Inner(parameters, body, str, s)), attributes(0) {}
+	
 	Function(Value const& v) {
-		assert(v.t == Type::R_function);
-		inner = (Inner*)v.ptr(); 
+		assert(v.type == Type::R_function);
+		inner = (Inner*)v.p; 
+		attributes = v.attributes;
 	}
+
 	void toValue(Value& v) const {
-		v.t = Type::R_function;
 		v.p = inner;
+		v.attributes = attributes;
+		v.type = Type::R_function;
 	}
 
-	List const& args() const { return inner->args; }
+	PairList const& parameters() const { return inner->parameters; }
 	Value const& body() const { return inner->body; }
+	Character const& str() const { return inner->str; }
 	Environment* s() const { return inner->s; }
-};
-
-// The riposte state
-struct State {
-	Stack* stack;
-	Environment *env, *baseenv;
-
-	// ... string tables
-
-	State(Stack* stack, Environment* env, Environment* baseenv) {
-		this->stack = stack;
-		this->env = env;
-		this->baseenv = baseenv;
-	}
 };
 
 
@@ -437,12 +372,13 @@ typedef uint64_t (*Cffi)(State& s, uint64_t nargs);
 	Cffi func;
 	CFunction(Cffi func) : func(func) {}
 	CFunction(Value const& v) {
-		assert(v.t == Type::R_cfunction);
-		func = (Cffi)v.ptr(); 
+		assert(v.type == Type::R_cfunction);
+		func = (Cffi)v.p; 
 	}
 	void toValue(Value& v) const {
-		v.t = Type::R_cfunction;
+		v.type = Type::R_cfunction;
 		v.p = (void*)func;
+		v.attributes = 0;
 	}
 };
 
@@ -456,8 +392,8 @@ private:
 	Environment *s, *d;		// static and dynamic scopes respectively
 	typedef std::map<Symbol, Value, std::less<Symbol>, gc_allocator<std::pair<Symbol, Value> > > Container;
 	uint64_t size;
+	Container container;
 	//bool expanded;
-	mutable Container container;
 	//struct entry { Symbol s; Value v; };
 	//mutable entry a[32];
 
@@ -480,8 +416,9 @@ f(1,2,3,4,5)()
 	}*/
 
 public:
-	Environment() : s(0), d(0), size(0)/*, expanded(false)*/ {}
-	Environment(Environment* s, Environment* d) : s(s), d(d), size(0) /*, expanded(false)*/ {
+	Attributes* attributes;
+	Environment() : s(0), d(0), size(0), attributes(0)/*, expanded(false)*/ {}
+	Environment(Environment* s, Environment* d) : s(s), d(d), size(0), attributes(0) /*, expanded(false)*/ {
 		/*for(uint64_t i = 0; i < 32; i++)
 			Value::set(a[i].v, Type::I_nil, 0);
 		*/
@@ -492,6 +429,7 @@ public:
 		this->d = d;
 		//this->expanded = false;
 		this->size = 0;
+		this->attributes = 0;
 		/*for(uint64_t i = 0; i < 32; i++)
 			Value::set(a[i].v, Type::I_nil, 0); */
 	}
@@ -515,7 +453,7 @@ public:
 		return false;
 	}
 
-	void get(State& state, Symbol const& name, Value& value) const {
+	bool get(State& state, Symbol const& name, Value& value) {
 		/*if(!expanded) {
 			int64_t key = indexOf(name);
 			if(a[key].v.type() != Type::I_nil) {
@@ -533,27 +471,32 @@ public:
 		}
 		else*/ if(container.find(name) != container.end()) {
 			value = container.find(name)->second;
-			if(value.type() == Type::I_promise) {
+			if(value.type == Type::I_promise) {
 				eval(state, Block(value), d);
 				// This is a redundent copy, eliminate
-				value = state.stack->pop();
-			} else if(value.type() == Type::I_sympromise) {
-				d->get(state, Symbol(Block(value).code()[0].a), value);
+				value = state.stack.pop();
+			} else if(value.type == Type::I_sympromise) {
+				d->get(state, value.i, value);
+			} else if(value.type == Type::I_default) {
+				eval(state, Block(value), this);
+				value = state.stack.pop();
+			} else if(value.type == Type::I_symdefault) {
+				get(state, value.i, value);
 			}
 			container[name] = value;
-			return;
+			return true;
 		}
 		if(s != 0) { 
-			s->get(state, name, value);
+			return s->get(state, name, value);
 		} else {
-			std::cout << "Unable to find object " << name.toString() << std::endl; 
 			value = Value::null;
+			return false;
 		}
 	}
 
 	void getQuoted(Symbol const& name, Value& value) const {
 		getRaw(name, value);
-		if(value.type() == Type::I_promise || value.type() == Type::I_sympromise) {
+		if(value.type == Type::I_promise || value.type == Type::I_sympromise) {
 			value = Block(value).expression();
 		}
 	}
@@ -565,6 +508,9 @@ public:
 	}
 
 	Value assign(Symbol const& name, Value const& value) {
+		if(name.i < 2) {
+			printf("Cannot assign to that symbol\n");
+		}
 		//printf("Assigning %s into %d\n", name.toString().c_str(), this);
 		/*if(!expanded) {
 			int64_t key = indexOf(name);
@@ -602,7 +548,15 @@ public:
 	}
 };
 
+struct Attributes : public gc {
+	Value names;
+	// names
+	// dim
+	// dimnames
+	// class
+};
 
-inline double asReal1(Value const& v) { assert(v.type() == Type::R_double || v.type() == Type::R_integer); if(v.type() == Type::R_integer) return Integer(v)[0]; else return Double(v)[0]; }
+
+inline double asReal1(Value const& v) { assert(v.type == Type::R_double || v.type == Type::R_integer); if(v.type == Type::R_integer) return Integer(v)[0]; else return Double(v)[0]; }
 
 #endif
