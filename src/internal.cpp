@@ -30,27 +30,6 @@ uint64_t function(State& state, uint64_t nargs)
 	Value arg1 = code(stack.pop());
 	Value arg2 = force(state, stack.pop());
 
-	/*Function::ParameterList formals;
-	bool vararg = false;
-	Function::ParameterList after;
-
-	List arguments = List(arg0);
-	Character argNames = Character(arguments.names());
-	uint64_t length = arguments.length();
-	for(uint64_t i = 0; i < length; i++) {
-		std::string name = argNames[i];
-		if(name == "...")
-			vararg = true;
-		else {
-			Function::Parameter p;
-			p.name = Symbol(name);
-			p.def = arguments[i];
-			if(!vararg)
-				formals.push_back(p);
-			else
-				after.push_back(p);
-		}
-	}*/
 	Function func(PairList(arg0), arg1, Character(arg2), state.env);
 	Value result;
 	func.toValue(result);
@@ -149,6 +128,39 @@ uint64_t mode(State& state, uint64_t nargs)
 	return 1;
 }
 
+uint64_t klass(State& state, uint64_t nargs)
+{
+	assert(nargs == 1);
+	Stack& stack = state.stack;
+	Value v = force(state, stack.pop());
+	Value r = getClass(v.attributes);	
+	if(r == Value::null) {
+		Character c(1);
+		c[0] = state.inString((v).type.toString());
+		c.toValue(stack.reserve());
+	}
+	else {
+		stack.push(r);
+	}
+	return 1;
+}
+
+uint64_t assignKlass(State& state, uint64_t nargs)
+{
+	assert(nargs == 2);
+	Stack& stack = state.stack;
+	Value v = force(state, stack.pop());
+	Value k = force(state, stack.pop());
+	setClass(v.attributes, k);
+	stack.push(v);
+	return 1;
+	
+}
+
+uint64_t UseMethod(State& state, uint64_t nargs)
+{
+	return 0;
+}
 
 uint64_t plusOp(State& state, uint64_t nargs) {
 	if(nargs == 1)
@@ -246,6 +258,10 @@ void addMathOps(State& state)
 	CFunction(repeat).toValue(v);
 	env->assign(Symbol(state, "rep"), v);
 
+	CFunction(klass).toValue(v);
+	env->assign(Symbol(state, "class"), v);
+	CFunction(assignKlass).toValue(v);
+	env->assign(Symbol(state, "class<-"), v);
 	//Value::set(v, Type::R_op, (void*)addVPrimitive);
 	//env->assign("+.vprimitive", v);
 }

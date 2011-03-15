@@ -8,6 +8,7 @@ Big stuff:
 
 -R external interface. Make it possible to load and use existing R packages.
 
+-Class systems: S3, S4, R5 (can the implementation of these be simplified somehow?)
 
 Incomplete features:
 -Incomplete parameter name matching.
@@ -15,5 +16,6 @@ Incomplete features:
 	f(1,2,i=5)		# i should match parameter `index`
 
 -Warnings on too many parameters
-
 -Warning on attempt to use missing parameter
+
+-Implement next and break

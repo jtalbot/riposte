@@ -83,6 +83,133 @@ struct LNegOp {
 	}
 };
 
+template<typename AType, typename TAType, typename RType>
+struct AbsOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = fabs(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct SignOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = ta > 0 ? 1 : (ta == 0 ? 0 : -1);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct SqrtOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = sqrt(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct FloorOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = floor(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct CeilingOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = ceil(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct TruncOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = ta >= 0 ? floor(ta) : ceil(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct RoundOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = round(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct SignifOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = round(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct ExpOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = exp(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct LogOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = log(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct CosOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = cos(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct SinOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = sin(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct TanOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = tan(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct ACosOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = acos(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct ASinOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = asin(ta);
+	}
+};
+
+template<typename AType, typename TAType, typename RType>
+struct ATanOp {
+	static void eval(void* a, uint64_t ia, void* r, uint64_t ir) {
+		TAType ta; cast(((AType*)a)[ia], ta);
+		((RType*)r)[ir] = atan(ta);
+	}
+};
 
 template<typename AType, typename TAType, typename BType, typename TBType, typename RType>
 struct AddOp {
@@ -214,19 +341,19 @@ template<UnaryOp func>
 struct Zip1 {
 	static void eval(Vector const& a, Type type, Vector& r)
 	{
-		if(a.length() == 1) {
+		/*if(a.length() == 1) {
 			r = Vector(type, 1);
 			func(a.data(), 0, r.data(), 0);
 		}
 		else if(a.length() == 0) {
 			r = Vector(type, 0);
 		}
-		else {
+		else {*/
 			r = Vector(type, a.length());
 			for(uint64_t i = 0; i < a.length(); ++i) {
 				func(a.data(), i, r.data(), i);
 			}
-		}
+		//}
 	}
 };
 
@@ -234,9 +361,15 @@ template<BinaryOp func>
 struct Zip2 {
 	static void eval(Vector const& a, Vector const& b, Type type, Vector& r)
 	{
-		if(a.length() == 1 && b.length() == 1) {
+		/*if(a.length() == 1 && b.length() == 1) {
 			r = Vector(type, 1);
 			func(a.data(), 0, b.data(), 0, r.data(), 0);
+		}*/
+		if(a.length() == b.length()) {
+			r = Vector(type, a.length());
+			for(uint64_t i = 0; i < a.length(); ++i) {
+				func(a.data(), i, b.data(), i, r.data(), i);
+			}
 		}
 		else if(a.length() == 0 || b.length() == 0) {
 			r = Vector(type, 0);
@@ -253,7 +386,7 @@ struct Zip2 {
 				func(a.data(), 0, b.data(), i, r.data(), i);
 			}
 		}
-		else if(a.length() >= b.length()) {
+		else if(a.length() > b.length()) {
 			r = Vector(type, a.length());
 			uint64_t j = 0;
 			for(uint64_t i = 0; i < a.length(); ++i) {
@@ -567,7 +700,7 @@ uint64_t binaryOrdinal(State& state, uint64_t nargs) {
 			::eval(Vector(a), Vector(b), Type::R_logical, r);
 	}
 	else {
-		printf("non-logical argument to logical operator\n");
+		printf("non-ordinal argument to ordinal operator\n");
 		assert(false);
 	}
 	Value& v = stack.reserve();

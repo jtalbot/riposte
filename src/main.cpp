@@ -247,9 +247,9 @@ static int dofile(const char * file, State& state, bool echo) {
 		parse(state, VECTOR_ELT(expressions, i), value);
 		//interpret(value, env, result);
 		Block b = compile(state, value);
-		//Value v;
-		//b.toValue(v);
-		//std::cout << state.stringify(v) << std::endl;
+		Value v;
+		b.toValue(v);
+		std::cout << state.stringify(v) << std::endl;
 		eval(state, b);	
 		result = state.stack.pop();	
 		if(echo) {

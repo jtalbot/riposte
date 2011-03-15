@@ -11,17 +11,51 @@
 	_(get, "get") \
 	_(kget, "kget") \
 	_(assign, "assign") \
+	_(classassign, "classassign") \
 	_(pop, "pop") \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
 	_(whilebegin, "whilebegin") \
 	_(whileend, "whileend") \
+	_(repeatbegin, "repeatbegin") \
+	_(repeatend, "repeatend") \
+	_(if1, "if1") \
 	_(add, "add") \
 	_(pos, "pos") \
 	_(sub, "sub") \
 	_(neg, "neg") \
 	_(mul, "mul") \
 	_(div, "div") \
+	_(idiv, "idiv") \
+	_(mod, "mod") \
+	_(pow, "pow") \
+	_(lt, "lt") \
+	_(gt, "gt") \
+	_(eq, "eq") \
+	_(neq, "neq") \
+	_(ge, "ge") \
+	_(le, "le") \
+	_(lneg, "lneg") \
+	_(land, "land") \
+	_(sland, "sland") \
+	_(lor, "lor") \
+	_(slor, "slor") \
+	_(abs, "abs") \
+	_(sign, "sign") \
+	_(sqrt, "sqrt") \
+	_(floor, "floor") \
+	_(ceiling, "ceiling") \
+	_(trunc, "trunc") \
+	_(round, "round") \
+	_(signif, "signif") \
+	_(exp, "exp") \
+	_(log, "log") \
+	_(cos, "cos") \
+	_(sin, "sin") \
+	_(tan, "tan") \
+	_(acos, "acos") \
+	_(asin, "asin") \
+	_(atan, "atan") \
 	_(jmp, "jmp") \
 	_(ret, "ret")       /* ret must be the last instruction */
 	/*_(frame, "frame") \

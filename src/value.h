@@ -35,6 +35,10 @@ public:
 	bool operator==(Value const& other) {
 		return type == other.type && i == other.i;
 	}
+	
+	bool operator!=(Value const& other) {
+		return type != other.type || i == other.i;
+	}
 
 	static void set(Value& v, Type type, void* p) {
 		v.type = type;
@@ -62,8 +66,8 @@ struct Stack : public gc {
 		s[top++] = v;
 	}
 
-	Value& peek() {
-		return s[top-1];
+	Value& peek(uint64_t down=0) {
+		return s[top-1-down];
 	}
 
 	Value& reserve() {
@@ -149,7 +153,7 @@ struct Symbol {
 
 // A generic vector representation. Only provides support to access length and void* of data.
 struct Vector {
-	struct Inner {
+	struct Inner : public gc {
 		uint64_t length, width;
 		void* data;
 	};
@@ -286,6 +290,7 @@ inline Vector::Vector(Type const& t, uint64_t length) {
 		case Type::R_character: Character(length).toVector(*this); break;	
 		case Type::R_raw: Raw(length).toVector(*this); break;	
 		case Type::R_list: List(length).toVector(*this); break;	
+		case Type::R_pairlist: PairList(length).toVector(*this); break;	
 		case Type::R_call: Call(length).toVector(*this); break;	
 		case Type::I_internalcall: InternalCall(length).toVector(*this); break;	
 		case Type::R_expression: Expression(length).toVector(*this); break;	
@@ -365,7 +370,6 @@ public:
 	Environment* s() const { return inner->s; }
 };
 
-
 class CFunction {
 public:
 typedef uint64_t (*Cffi)(State& s, uint64_t nargs);
@@ -393,10 +397,6 @@ private:
 	typedef std::map<Symbol, Value, std::less<Symbol>, gc_allocator<std::pair<Symbol, Value> > > Container;
 	uint64_t size;
 	Container container;
-	//bool expanded;
-	//struct entry { Symbol s; Value v; };
-	//mutable entry a[32];
-
 /*
 Insights:
 -All promises must be evaluated in the dynamic scope, so typically don't need to store env
@@ -407,31 +407,14 @@ f <- function(...) function() sum(...)
 f(1,2,3,4,5)()
 15
 */
-	/*int64_t indexOf(Symbol const& name) const {
-		uint64_t key = name.index() & 0x1F;
-		while(a[key].v.type() != Type::I_nil && a[key].s != name) {
-			key = (key+1) & 0x1F;
-		}
-		return key;
-	}*/
-
 public:
-	Attributes* attributes;
-	Environment() : s(0), d(0), size(0), attributes(0)/*, expanded(false)*/ {}
-	Environment(Environment* s, Environment* d) : s(s), d(d), size(0), attributes(0) /*, expanded(false)*/ {
-		/*for(uint64_t i = 0; i < 32; i++)
-			Value::set(a[i].v, Type::I_nil, 0);
-		*/
-	}
+	Environment() : s(0), d(0), size(0) {}
+	Environment(Environment* s, Environment* d) : s(s), d(d), size(0) {}
 	
  	void init(Environment* s, Environment* d) {
 		this->s = s;
 		this->d = d;
-		//this->expanded = false;
 		this->size = 0;
-		this->attributes = 0;
-		/*for(uint64_t i = 0; i < 32; i++)
-			Value::set(a[i].v, Type::I_nil, 0); */
 	}
 
 	Environment* dynamic() const {
@@ -439,14 +422,7 @@ public:
 	}
 
 	bool getRaw(Symbol const& name, Value& value) const {
-		/*if(!expanded) {
-			int64_t key = indexOf(name);
-			if(a[key].v.type() != Type::I_nil) {
-				value = a[key].v;
-				return true;
-			}
-		}
-		else*/ if(container.find(name) != container.end()) {
+		if(container.find(name) != container.end()) {
 			value = container.find(name)->second;
 			return true;
 		}
@@ -454,22 +430,7 @@ public:
 	}
 
 	bool get(State& state, Symbol const& name, Value& value) {
-		/*if(!expanded) {
-			int64_t key = indexOf(name);
-			if(a[key].v.type() != Type::I_nil) {
-				value = a[key].v;
-				if(value.type() == Type::I_promise) {
-					eval(state, Block(value), d);
-					// This is a redundent copy, eliminate
-					value = state.stack->pop();
-				} else if(value.type() == Type::I_sympromise) {
-					d->get(state, Symbol(Block(value).code()[0].a), value);
-				}
-				a[key].v = value;
-				return;
-			}
-		}
-		else*/ if(container.find(name) != container.end()) {
+		if(container.find(name) != container.end()) {
 			value = container.find(name)->second;
 			if(value.type == Type::I_promise) {
 				eval(state, Block(value), d);
@@ -512,50 +473,80 @@ public:
 			printf("Cannot assign to that symbol\n");
 		}
 		//printf("Assigning %s into %d\n", name.toString().c_str(), this);
-		/*if(!expanded) {
-			int64_t key = indexOf(name);
-			if(a[key].v.type() == Type::I_nil)
-				size++;
-			a[key].s = name;
-			a[key].v = value;
-		} else*/ {
-			if(container.find(name) == container.end())
-				size++;
-			container[name] = value;
-		}
-
-		/*if(size > 24) {
-			expanded = true;
-			for(uint64_t i = 0; i < 32; i++)
-				if(a[i].v.type() != Type::I_nil)
-					container[a[i].s] = a[i].v;
-		}*/
+		if(container.find(name) == container.end())
+			size++;
+		container[name] = value;
 
 		return value;
 	}
 
 	void rm(Symbol const& name) {
-		/*if(!expanded) {
-			int64_t key = indexOf(name);
-			if(a[key].v.type() != Type::I_nil)
-				size--;
-			Value::set(a[key].v, Type::I_nil, 0);
-		} else*/ {
-			if(container.find(name) != container.end())
-				size--;
-			container[name] = Value::NIL;
-		}
+		if(container.find(name) != container.end())
+			size--;
+		container[name] = Value::NIL;
+	}
+};
+
+class REnvironment {
+private:
+	Environment* env;
+public:
+	Attributes* attributes;
+	REnvironment(Value const& v) {
+		assert(v.type == Type::R_environment);
+		env = (Environment*)v.p;
+		attributes = v.attributes;
+	}
+	void toValue(Value& v) const {
+		v.type == Type::R_environment;
+		v.p = env;
+		v.attributes = attributes;
+	}
+	Environment* environment() const {
+		return env;
 	}
 };
 
 struct Attributes : public gc {
 	Value names;
-	// names
-	// dim
-	// dimnames
-	// class
+	Value dim;
+	Value dimnames;
+	Value klass;
+	Attributes() : names(Value::null), dim(Value::null), dimnames(Value::null), klass(Value::null) {}
 };
 
+
+inline void setNames(Attributes*& attrs, Value const& names) {
+	Attributes* a = new Attributes();
+	if(attrs != 0)
+		*a = *attrs;
+	a->names = names;
+	attrs = a;
+}
+
+inline Value getNames(Attributes const* attrs) {
+	if(attrs == 0)
+		return Value::null;
+	else return attrs->names;
+}
+
+inline void setClass(Attributes*& attrs, Value const& klass) {
+	Attributes* a = new Attributes();
+	if(attrs != 0)
+		*a = *attrs;
+	a->klass = klass;
+	attrs = a;
+}
+
+inline Value getClass(Attributes const* attrs) {
+	if(attrs == 0)
+		return Value::null;
+	else return attrs->klass;
+}
+
+inline bool isObject(Value const& v) {
+	return v.attributes != 0 && v.attributes->klass != Value::null;
+}
 
 inline double asReal1(Value const& v) { assert(v.type == Type::R_double || v.type == Type::R_integer); if(v.type == Type::R_integer) return Integer(v)[0]; else return Double(v)[0]; }
 

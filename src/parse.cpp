@@ -21,8 +21,9 @@ List parseList(State& state, SEXP s) {
 		s = CDR(s); 
 	}
 	if(named) {
-		d.attributes = new Attributes();
-		n.toValue(d.attributes->names);
+		Value v;
+		n.toValue(v);
+		setNames(d.attributes, v);
 	}
 	return d;
 }

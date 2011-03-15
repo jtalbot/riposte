@@ -36,6 +36,7 @@
 	_(I_default,	"default")		\
 	_(I_symdefault,	"symdefault")		\
 	_(I_bytecode, 	"bc") \
+	_(I_genericfunction, 	"genericfunction") \
 	_(I_nil, 		"NIL")			\
 
 DECLARE_ENUM(Type, TYPE_ENUM)
