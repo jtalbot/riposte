@@ -12,6 +12,7 @@
 	_(kget, "kget") \
 	_(assign, "assign") \
 	_(classassign, "classassign") \
+	_(namesassign, "namesassign") \
 	_(pop, "pop") \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \

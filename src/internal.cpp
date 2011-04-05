@@ -154,7 +154,27 @@ uint64_t assignKlass(State& state, uint64_t nargs)
 	setClass(v.attributes, k);
 	stack.push(v);
 	return 1;
-	
+}
+
+uint64_t names(State& state, uint64_t nargs)
+{
+	assert(nargs == 1);
+	Stack& stack = state.stack;
+	Value v = force(state, stack.pop());
+	Value r = getNames(v.attributes);
+	stack.push(r);	
+	return 1;
+}
+
+uint64_t assignNames(State& state, uint64_t nargs)
+{
+	assert(nargs == 2);
+	Stack& stack = state.stack;
+	Value v = force(state, stack.pop());
+	Value k = force(state, stack.pop());
+	setNames(v.attributes, k);
+	stack.push(v);
+	return 1;
 }
 
 uint64_t UseMethod(State& state, uint64_t nargs)
@@ -262,7 +282,9 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "class"), v);
 	CFunction(assignKlass).toValue(v);
 	env->assign(Symbol(state, "class<-"), v);
-	//Value::set(v, Type::R_op, (void*)addVPrimitive);
-	//env->assign("+.vprimitive", v);
+	CFunction(names).toValue(v);
+	env->assign(Symbol(state, "names"), v);
+	CFunction(assignNames).toValue(v);
+	env->assign(Symbol(state, "names<-"), v);
 }
 

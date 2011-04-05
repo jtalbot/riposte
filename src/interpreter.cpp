@@ -160,6 +160,14 @@ static int64_t classassign_op(State& state, Stack& stack, Block const& block, In
 	state.env->assign(Symbol(inst.a), k);
 	return 1;
 }
+static int64_t namesassign_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	Value v = stack.peek();
+	Value k;
+	state.env->get(state, Symbol(inst.a), k);
+	setNames(k.attributes, v);
+	state.env->assign(Symbol(inst.a), k);
+	return 1;
+}
 static int64_t forbegin_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	Value sym = stack.pop();
 	Value lower = stack.pop();

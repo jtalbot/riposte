@@ -3,6 +3,72 @@
 #include "type.h"
 #include "bc.h"
 
+#include <sstream>
+#include <iomanip>
+#include <math.h>
+
+std::string pad(std::string s, uint64_t width)
+{
+	std::stringstream ss;
+	ss << std::setw(width) << s;
+	return ss.str();
+}
+
+inline std::string toString(State const& state, unsigned char a) {
+	return (a ? "TRUE" : "FALSE");
+}  
+
+inline std::string toString(State const& state, int64_t a) {
+	return intToStr(a);
+}  
+
+inline std::string toString(State const& state, double a) {
+	return doubleToStr(a);
+}  
+
+inline std::string toString(State const& state, uint64_t a) {
+	return std::string("\"") + state.outString(a) + "\"";
+}  
+
+
+template<class T>
+std::string stringifyVector(State const& state, T const& v) {
+	std::string result = "";
+	uint64_t length = v.length();
+	bool dots = false;
+	if(length > 100) { dots = true; length = 100; }
+	Value names = getNames(v.attributes);
+	uint64_t maxlength = 1;
+	for(uint64_t i = 0; i < length; i++) {
+		if(names.type == Type::R_character) {
+			Character c(names);
+			maxlength = std::max((uint64_t)maxlength, (uint64_t)state.outString(c[i]).length());
+		}
+		maxlength = std::max((uint64_t)maxlength, (uint64_t)toString(state, v[i]).length());
+	}
+	uint64_t indexwidth = intToStr(length+1).length();
+	uint64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
+	for(uint64_t i = 0; i < length; i+=perline) {
+		if(names.type == Type::R_character) {
+			Character c(names);
+			result = result + pad("", indexwidth+2);
+			for(uint64_t j = 0; j < perline && i+j < length; j++) {
+				result = result + pad(state.outString(c[i+j]), maxlength+1);
+			}
+			result = result + "\n";
+		}
+		result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
+		for(uint64_t j = 0; j < perline && i+j < length; j++) {
+			result = result + pad(toString(state, v[i+j]), maxlength+1);
+		}
+	
+		if(i+perline < length)	
+			result = result + "\n";
+	}
+	if(dots) result = result + " ...";
+	return result;
+}
+
 std::string State::stringify(Value const& value) const {
 	std::string result = "[1]";
 	bool dots = false;
@@ -16,29 +82,17 @@ std::string State::stringify(Value const& value) const {
 		case Type::R_logical:
 		{
 			Logical v(value);
-			uint64_t length = v.length();
-			if(length > 100) { dots = true; length = 100; }
-			for(uint64_t i = 0; i < length; i++) result = result + (v[i] ? "  TRUE" : " FALSE");
-			if(dots) result = result + " ...";
-			return result;
+			return stringifyVector(*this, v);
 		}
 		case Type::R_integer:
 		{
 			Integer v(value);
-			uint64_t length = v.length();
-			if(length > 100) { dots = true; length = 100; }
-			for(uint64_t i = 0; i < length; i++) result = result + " " + intToStr(v[i]);
-			if(dots) result = result + " ...";
-			return result;
+			return stringifyVector(*this, v);
 		}
 		case Type::R_double:
 		{
 			Double v(value);
-			uint64_t length = v.length();
-			if(length > 100) { dots = true; length = 100; }
-			for(uint64_t i = 0; i < length; i++) result = result + " " + doubleToStr(v[i]);
-			if(dots) result = result + " ...";
-			return result;
+			return stringifyVector(*this, v);
 		}
 		case Type::R_complex:		
 		{
@@ -48,17 +102,13 @@ std::string State::stringify(Value const& value) const {
 		case Type::R_character:
 		{
 			Character v(value);
-			uint64_t length = v.length();
-			if(length > 100) { dots = true; length = 100; }
-			for(uint64_t i = 0; i < length; i++) result = result + " \"" + outString(v[i]) + "\"";
-			if(dots) result = result + " ...";
-			return result;
+			return stringifyVector(*this, v);
 		}
 		case Type::R_list:
 		case Type::R_pairlist:
 		{
 			List v(value);
-			Value names = Value::null;//v.names();
+			Value names = getNames(v.attributes);
 
 			uint64_t length = v.length();
 			if(length > 100) { dots = true; length = 100; }
