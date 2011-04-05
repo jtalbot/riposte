@@ -544,6 +544,20 @@ inline Value getClass(Attributes const* attrs) {
 	else return attrs->klass;
 }
 
+inline void setDim(Attributes*& attrs, Value const& dim) {
+	Attributes* a = new Attributes();
+	if(attrs != 0)
+		*a = *attrs;
+	a->dim = dim;
+	attrs = a;
+}
+
+inline Value getDim(Attributes const* attrs) {
+	if(attrs == 0)
+		return Value::null;
+	else return attrs->dim;
+}
+
 inline bool isObject(Value const& v) {
 	return v.attributes != 0 && v.attributes->klass != Value::null;
 }

@@ -177,6 +177,27 @@ uint64_t assignNames(State& state, uint64_t nargs)
 	return 1;
 }
 
+uint64_t dim(State& state, uint64_t nargs)
+{
+	assert(nargs == 1);
+	Stack& stack = state.stack;
+	Value v = force(state, stack.pop());
+	Value r = getDim(v.attributes);
+	stack.push(r);	
+	return 1;
+}
+
+uint64_t assignDim(State& state, uint64_t nargs)
+{
+	assert(nargs == 2);
+	Stack& stack = state.stack;
+	Value v = force(state, stack.pop());
+	Value k = force(state, stack.pop());
+	setDim(v.attributes, k);
+	stack.push(v);
+	return 1;
+}
+
 uint64_t UseMethod(State& state, uint64_t nargs)
 {
 	return 0;
@@ -286,5 +307,9 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "names"), v);
 	CFunction(assignNames).toValue(v);
 	env->assign(Symbol(state, "names<-"), v);
+	CFunction(dim).toValue(v);
+	env->assign(Symbol(state, "dim"), v);
+	CFunction(assignDim).toValue(v);
+	env->assign(Symbol(state, "dim<-"), v);
 }
 

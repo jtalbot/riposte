@@ -40,6 +40,10 @@ static void compileInternalCall(State& state, InternalCall const& call, Block& b
 				compile(state, call[2], block);
 				block.code().push_back(Instruction(ByteCode::namesassign, Symbol(Call(call[1])[1]).i));
 			}
+			else if(state.outString(Call(call[1])[0].i) == "dim") {
+				compile(state, call[2], block);
+				block.code().push_back(Instruction(ByteCode::dimassign, Symbol(Call(call[1])[1]).i));
+			}
 		} else {
 			compile(state, call[2], block);
 			block.code().push_back(Instruction(ByteCode::assign, Symbol(call[1]).i));

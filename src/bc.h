@@ -13,6 +13,7 @@
 	_(assign, "assign") \
 	_(classassign, "classassign") \
 	_(namesassign, "namesassign") \
+	_(dimassign, "dimassign") \
 	_(pop, "pop") \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \

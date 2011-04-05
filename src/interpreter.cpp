@@ -168,6 +168,14 @@ static int64_t namesassign_op(State& state, Stack& stack, Block const& block, In
 	state.env->assign(Symbol(inst.a), k);
 	return 1;
 }
+static int64_t dimassign_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	Value v = stack.peek();
+	Value k;
+	state.env->get(state, Symbol(inst.a), k);
+	setDim(k.attributes, v);
+	state.env->assign(Symbol(inst.a), k);
+	return 1;
+}
 static int64_t forbegin_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	Value sym = stack.pop();
 	Value lower = stack.pop();
@@ -373,7 +381,7 @@ static int64_t ret_op(State& state, Stack& stack, Block const& block, Instructio
 #define THREADED_INTERPRETER
 
 // Execute block in current environment...
-__attribute__((__noinline__,__noclone__)) 
+//__attribute__((__noinline__,__noclone__)) 
 void eval(State& state, Block const& block) {
 	
 	Stack& stack = state.stack;
