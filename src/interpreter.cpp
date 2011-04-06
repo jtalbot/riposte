@@ -145,11 +145,8 @@ static int64_t pop_op(State& state, Stack& stack, Block const& block, Instructio
 	return 1;
 }
 static int64_t assign_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
-	//Value arg0 = quoted(stack.pop());
-	//Value arg1 = force(state, stack.pop());
-	//Value arg0 = stack.pop();
-	Value arg1 = stack.pop();
-	stack.push(state.env->assign(Symbol(inst.a), arg1));
+	Value value = stack.pop();
+	stack.push(state.env->assign(Symbol(inst.a), value));
 	return 1;
 }
 static int64_t classassign_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
@@ -169,6 +166,36 @@ static int64_t namesassign_op(State& state, Stack& stack, Block const& block, In
 	return 1;
 }
 static int64_t dimassign_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	Value v = stack.peek();
+	Value k;
+	state.env->get(state, Symbol(inst.a), k);
+	setDim(k.attributes, v);
+	state.env->assign(Symbol(inst.a), k);
+	return 1;
+}
+static int64_t iassign_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	Value index = stack.pop();
+	Value value = stack.pop();
+	//stack.push(state.env->assign(Symbol(inst.a), subassign(state.env->get(state, Symbol(inst.a)), value, index)));
+	return 1;
+}
+static int64_t iclassassign_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	Value v = stack.peek();
+	Value k;
+	state.env->get(state, Symbol(inst.a), k);
+	//setClass(k.attributes, v, index);
+	state.env->assign(Symbol(inst.a), k);
+	return 1;
+}
+static int64_t inamesassign_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	Value v = stack.peek();
+	Value k;
+	state.env->get(state, Symbol(inst.a), k);
+	setNames(k.attributes, v);
+	state.env->assign(Symbol(inst.a), k);
+	return 1;
+}
+static int64_t idimassign_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	Value v = stack.peek();
 	Value k;
 	state.env->get(state, Symbol(inst.a), k);
@@ -373,6 +400,10 @@ static int64_t atan_op(State& state, Stack& stack, Block const& block, Instructi
 }
 static int64_t jmp_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	return (int64_t)inst.a;
+}
+static int64_t null_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	stack.push(Value::null);
+	return 1;
 }
 static int64_t ret_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	return 0;

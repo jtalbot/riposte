@@ -31,23 +31,32 @@ static void compileInternalCall(State& state, InternalCall const& call, Block& b
 	Symbol func(call[0]);
 	std::string funcStr = func.toString(state);
 	if(funcStr == "<-" || funcStr == ".Assign") {
-		if(call[1].type == Type::R_call) {
-			if(state.outString(Call(call[1])[0].i) == "class") {
-				compile(state, call[2], block);
-				block.code().push_back(Instruction(ByteCode::classassign, Symbol(Call(call[1])[1]).i));
-			}
-			else if(state.outString(Call(call[1])[0].i) == "names") {
-				compile(state, call[2], block);
-				block.code().push_back(Instruction(ByteCode::namesassign, Symbol(Call(call[1])[1]).i));
-			}
-			else if(state.outString(Call(call[1])[0].i) == "dim") {
-				compile(state, call[2], block);
-				block.code().push_back(Instruction(ByteCode::dimassign, Symbol(Call(call[1])[1]).i));
-			}
-		} else {
-			compile(state, call[2], block);
-			block.code().push_back(Instruction(ByteCode::assign, Symbol(call[1]).i));
+		ByteCode bc;
+		InternalCall c (call);
+		
+		// the source for the assignment
+		compile(state, c[2], block);
+		
+		// any indexing code
+		bool indexed = false;
+		if(c[1].type == Type::R_call && state.outString(Call(c[1])[0].i) == "[") {
+			compile(state, c[3], block);
+			c = c[2];
+			indexed = true;
 		}
+		
+		if(c[1].type == Type::R_call) {
+			c = Call(c[1]);
+			if(state.outString(c[0].i) == "class")
+				bc = indexed ? ByteCode::iclassassign : ByteCode::classassign;
+			else if(state.outString(c[0].i) == "names")
+				bc = indexed ? ByteCode::inamesassign : ByteCode::namesassign;
+			else if(state.outString(c[0].i) == "dim")
+				bc = indexed ? ByteCode::idimassign : ByteCode::dimassign;
+		} else {
+			bc = indexed ? ByteCode::iassign : ByteCode::assign;
+		}
+		block.code().push_back(Instruction(bc, Symbol(c[1]).i));
 	}
 	else if(funcStr == "for" || funcStr == ".For") {
 		compile(state, Call(call[2])[2], block);

@@ -14,6 +14,10 @@
 	_(classassign, "classassign") \
 	_(namesassign, "namesassign") \
 	_(dimassign, "dimassign") \
+	_(iassign, "assign") \
+	_(iclassassign, "classassign") \
+	_(inamesassign, "namesassign") \
+	_(idimassign, "dimassign") \
 	_(pop, "pop") \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
@@ -59,6 +63,7 @@
 	_(asin, "asin") \
 	_(atan, "atan") \
 	_(jmp, "jmp") \
+	_(null, "null") \
 	_(ret, "ret")       /* ret must be the last instruction */
 	/*_(frame, "frame") \
 	_(function, "function") \

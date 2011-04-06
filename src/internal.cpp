@@ -198,6 +198,26 @@ uint64_t assignDim(State& state, uint64_t nargs)
 	return 1;
 }
 
+uint64_t c(State& state, uint64_t nargs) {
+	Stack& stack = state.stack;
+	uint64_t total = 0;
+	std::vector<Vector> args;
+	for(uint64_t i = 0; i < nargs; i++) args.push_back(Vector(force(state, stack.pop())));
+	for(uint64_t i = 0; i < nargs; i++) total += args[i].length();
+	Double out(total);
+	uint64_t j = 0;
+	for(uint64_t i = 0; i < nargs; i++) {
+		Double d(args[i]);
+		for(uint64_t m = 0; m < args[i].length(); m++, j++) {
+			out[j] = d[m];
+		}
+	}
+	Value v;
+	out.toValue(v);
+	stack.push(v);
+	return 1;
+}
+
 uint64_t UseMethod(State& state, uint64_t nargs)
 {
 	return 0;
@@ -216,6 +236,7 @@ uint64_t minusOp(State& state, uint64_t nargs) {
 	else
 		return binaryArith<Zip2, SubOp>(state, nargs);
 }
+
 
 void addMathOps(State& state)
 {
@@ -311,5 +332,8 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "dim"), v);
 	CFunction(assignDim).toValue(v);
 	env->assign(Symbol(state, "dim<-"), v);
+	
+	CFunction(c).toValue(v);
+	env->assign(Symbol(state, "c"), v);
 }
 

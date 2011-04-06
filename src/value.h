@@ -167,6 +167,7 @@ struct Vector {
 	uint64_t packed:2;
 	
 	uint64_t length() const { if(packed < 2) return packed; else return inner->length; }
+	uint64_t width() const { if(packed < 2) return /* maximum possible width */ 8; else return inner->width; }
 	void* data() const { if(packed < 2 ) return (void*)&packedData; else return inner->data; }
 
 	Vector() : inner(0), attributes(0), packed(0) {}
@@ -197,11 +198,13 @@ struct VectorImpl {
 	};
 	Attributes* attributes;
 	uint64_t packed:2;
+
+	typedef ElementType Element;
 	
-	ElementType& operator[](uint64_t index) { if(Pack && packed < 2) return ((ElementType*)&packedData)[index]; else return ((ElementType*)(inner->data))[index]; }
-	ElementType const& operator[](uint64_t index) const { if(Pack && packed < 2) return ((ElementType*)&packedData)[index]; else return ((ElementType*)(inner->data))[index]; }
+	Element& operator[](uint64_t index) { if(Pack && packed < 2) return ((Element*)&packedData)[index]; else return ((Element*)(inner->data))[index]; }
+	Element const& operator[](uint64_t index) const { if(Pack && packed < 2) return ((Element*)&packedData)[index]; else return ((Element*)(inner->data))[index]; }
 	uint64_t length() const { if(Pack && packed < 2) return packed; else return inner->length; }
-	ElementType* data() const { if(Pack && packed < 2) return (ElementType*)&packedData; else return (ElementType*)inner->data; }
+	Element* data() const { if(Pack && packed < 2) return (Element*)&packedData; else return (Element*)inner->data; }
 
 	VectorImpl(uint64_t length) : packedData(0), attributes(0) {
 		if(Pack && length < 2)
@@ -209,8 +212,8 @@ struct VectorImpl {
 		else {
 			inner = new Vector::Inner();
 			inner->length = length;
-			inner->width = sizeof(ElementType);
-			inner->data = new (GC) ElementType[length];
+			inner->width = sizeof(Element);
+			inner->data = new (GC) Element[length];
 			packed = 2;
 		}
 	}
@@ -241,9 +244,9 @@ struct VectorImpl {
 		VectorInner* i = new VectorInner();
 		i->length = length;
 		i->width = inner->width;
-		i->data = new (GC) ElementType[length];
+		i->data = new (GC) Element[length];
 		for(uint64_t j = start; j < start+length; j++)
-			((ElementType*)(i->data))[j-start] = (*this)[j];
+			((Element*)(i->data))[j-start] = (*this)[j];
 		v.p = i;
 		v.t = VectorType;
 	}*/
