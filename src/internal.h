@@ -815,35 +815,5 @@ inline uint64_t subAssign(State& state, uint64_t nargs) {
         return 1;
 }
 
-/*void CastInto(Vector const& in, uint64_t in_index, Vector& out, uint64_t out_index, uint64_t length) {
-	if(out.type == Type::R_logical) {
-		
-	}
-	else if(out.type == Type::R_double) {
-	
-	}
-
-	if(a.type == Type::R_double) {
-		VectorOp<Op<double, boolean, boolean>::eval>
-			::eval(Vector(a), Type::R_logical, r);
-	}
-	else if(a.type == Type::R_integer) {
-		VectorOp<Op<int64_t, boolean, boolean>::eval>
-			::eval(Vector(a), Type::R_logical, r);
-	}
-	else if(a.type == Type::R_logical) {
-		VectorOp<Op<boolean, boolean, boolean>::eval>
-			::eval(Vector(a), Type::R_logical, r);
-	}
-	else {
-		printf("non-numeric argument to unary logical operator\n");
-		assert(false);
-	}
-	Value& v = stack.reserve();
-	r.toValue(v);
-	return 1;
-}*/
-
-
 #endif
 

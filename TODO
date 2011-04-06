@@ -3,19 +3,55 @@ To do list (not yet in priority order):
 
 Big stuff:
 -Garbage Collector. Replace Boehm with exact, generational garbage collector like everyone else has. Can we borrow the GC from a Javascript implementation?
-
 -Standalone R parser. Currently we have a dependency on R to provide parsing only. Can we strip the parser out from the R distribution so we don't have that dependency? Or maybe write our own? Much of the code in R's parser appears to be necessary to deal with multi-byte character encoding schemes. Is there a parser generator out there that could handle that for us?
-
 -R external interface. Make it possible to load and use existing R packages.
-
 -Class systems: S3, S4, R5 (can the implementation of these be simplified somehow?)
+-Graphics support
+-GUI (can we use existing R interfaces?)
+-Debugger or profiler?
 
-Incomplete features:
+
+Incomplete language features:
+-NAs
 -Incomplete parameter name matching.
 	f <- function(x,y,index) {...}
 	f(1,2,i=5)		# i should match parameter `index`
+-warning, stop, on.exit, exceptions(?)
+	-Warnings on too many parameters
+	-Warning on attempt to use missing parameter
+-next and break
+-vector type conversion functions (as.*)
+-... parameters
+-environment and call stack access functions (parent.env, sys.call, sys.parent, etc.)
+-eval
+-attribute access functions
+-attribute propogation
+-factors
+-data frames
+-matrix product, outer product, kronecker product operators
+-Matching operator
+-Help
+-$ indexing
+-matrix indexing
+-[[]] indexing
+-logical vector indexing
+-negative number indexing
+-character indexing
+-switch statement
+-search path
+-argument names to built in functions
+-S3 Classes
+-S4 Class support (what's implemented in the library?)
+	Generic functions as first class type?
+-Computing on the language functions
+-substitute
+-FFI
 
--Warnings on too many parameters
--Warning on attempt to use missing parameter
 
--Implement next and break
+Language design issues:
+-0-based indexing?
+-Separate different indexing variants into distinct operators, e.g.
+	a[c(0,1,2,3)]		selects elements 0..3
+	a![c(0,1,2,3)]		selects all but elements 0..3
+	Reasoning: deciding which to compute currently requires checking the index vector for positive and negative numbers. This revision would make that check unnecessary.
+-Data frames as basic data type, necessary for DB-like query optimizations

@@ -218,6 +218,18 @@ uint64_t c(State& state, uint64_t nargs) {
 	return 1;
 }
 
+uint64_t list(State& state, uint64_t nargs) {
+	Stack& stack = state.stack;
+	List out(nargs);
+	for(uint64_t i = 0; i < nargs; i++) {
+		out[i] = force(state, stack.pop());
+	}
+	Value v;
+	out.toValue(v);
+	stack.push(v);
+	return 1;
+}
+
 uint64_t UseMethod(State& state, uint64_t nargs)
 {
 	return 0;
@@ -389,6 +401,8 @@ void addMathOps(State& state)
 	
 	CFunction(c).toValue(v);
 	env->assign(Symbol(state, "c"), v);
+	CFunction(list).toValue(v);
+	env->assign(Symbol(state, "list"), v);
 	
 	CFunction(subset).toValue(v);
 	env->assign(Symbol(state, "["), v);
