@@ -8,6 +8,24 @@
 
 void addMathOps(State& state);
 
+inline Vector Clone(Vector const& in, uint64_t length) {
+	Vector out(in.type, length);
+	memcpy(out.data(), in.data(), std::min(length, in.length())*in.width());
+	out.attributes = in.attributes;
+	return out;
+}
+
+inline Vector Clone(Vector const& in) {
+	return Clone(in, in.length());
+}
+
+template<class T>
+T Clone(T const& in) {
+	T out(in.length());
+	memcpy(out.data(), in.data(), in.length()*sizeof(typename T::Element));
+	out.attributes = in.attributes;
+	return out;	
+}
 
 inline Value force(State& state, Value const& v) { 
 	if(v.type == Type::I_promise) {
@@ -30,20 +48,30 @@ inline Value code(Value const& v) {
 
 // Casting functions (default is to attempt a C coercion)
 template<class I, class O> struct Cast {
+	typedef I A;
+	typedef O R;
 	static typename O::Element eval(typename I::Element const& i) { return (typename O::Element)i; }
 };
 
 // More involved casting functions
 template<> struct Cast<Logical, Double> {
+	typedef Logical A;
+	typedef Double R;
 	static Double::Element eval(Logical::Element const& i) { return i ? 1.0 : 0.0; }
 };
 template<> struct Cast<Logical, Integer> {
+	typedef Logical A;
+	typedef Integer R;
 	static Integer::Element eval(Logical::Element const& i) { return i ? 1 : 0; }
 };
 template<> struct Cast<Double, Logical> {
+	typedef Double A;
+	typedef Logical R;
 	static Logical::Element eval(Double::Element const& i) { return i != 0.0 ? 1 : 0; }
 };
 template<> struct Cast<Integer, Logical> {
+	typedef Integer A;
+	typedef Logical R;
 	static Logical::Element eval(Integer::Element const& i) { return i != 0 ? 1 : 0; }
 };
 
@@ -389,6 +417,49 @@ struct Zip2 {
 	}
 };
 
+template< class A, class Index >
+struct SubsetIndex {
+	static A eval(A const& a, Index const& d)
+	{
+		// compute length without 0s
+		uint64_t outlength = 0;
+		for(uint64_t i = 0; i < d.length(); i++)
+			if( Cast<Index, Integer>::eval(d[i]) != 0)
+				outlength++;
+	
+		A r(outlength);	
+		uint64_t j = 0;
+		for(uint64_t i = 0; i < d.length(); i++) {	
+			int64_t idx = Cast<Index, Integer>::eval(d[i]);
+			if(idx != 0)
+				r[j++] = a[idx-1];
+		}
+		return r;
+	}
+};
+
+template< class A, class Index, class B >
+struct SubsetAssign {
+	static A eval(A const& a, Index const& d, B const& b)
+	{
+		// compute max index 
+		int64_t outlength = 0;
+		for(uint64_t i = 0; i < d.length(); i++) {
+			int64_t idx = Cast<Index, Integer>::eval(d[i]);
+			outlength = std::max((int64_t)outlength, idx);
+		}
+
+		// should use max index here to extend vector if necessary	
+		A r = Clone(a);	
+		for(uint64_t i = 0; i < d.length(); i++) {	
+			int64_t idx = Cast<Index, Integer>::eval(d[i]);
+			if(idx != 0)
+				r[idx-1] = Cast<B, A>::eval(b[i]);
+		}
+		return r;
+	}
+};
+
 template< 
 	template<class Op> class Lift,
 	template<typename A, typename TA, typename R> class Op > 
@@ -646,15 +717,103 @@ uint64_t binaryOrdinal(State& state, uint64_t nargs) {
 	return 1;
 }
 
-/*
-void Clone(Vector const& in, Vector& out) {
-	out = Vector(in.type, in.length());
-	memcpy
+inline Vector As(Vector a, Type type) {
+	Vector r;
+        if(a.type == Type::R_double && type == Type::R_double) {
+                r = a;
+        }
+        else if(a.type == Type::R_integer && type == Type::R_double) {
+                Zip1< Cast<Integer, Double> >::eval(a).toVector(r);
+        }
+        else if(a.type == Type::R_double && type == Type::R_integer) {
+                Zip1< Cast<Double, Integer> >::eval(a).toVector(r);
+        }
+        else if(a.type == Type::R_integer && type == Type::R_integer) {
+                r = a;
+        }
+        else if(a.type == Type::R_logical && type == Type::R_double) {
+                Zip1< Cast<Logical, Double> >::eval(a).toVector(r);
+        }
+        else if(a.type == Type::R_logical && type == Type::R_integer) {
+                Zip1< Cast<Logical, Integer> >::eval(a).toVector(r);
+        }
+        else if(a.type == Type::R_character && type == Type::R_double) {
+                Zip1< Cast<Character, Double> >::eval(a).toVector(r);
+        }
+        else if(a.type == Type::R_character && type == Type::R_integer) {
+                Zip1< Cast<Character, Integer> >::eval(a).toVector(r);
+        }
+        else if(a.type == Type::R_double && type == Type::R_logical) {
+                Zip1< Cast<Double, Logical> >::eval(a).toVector(r);
+        }
+        else if(a.type == Type::R_integer && type == Type::R_logical) {
+                Zip1< Cast<Integer, Logical> >::eval(a).toVector(r);
+        }
+        else if(a.type == Type::R_logical && type == Type::R_logical) {
+        	r = a;
+	}
+        else {
+                printf("Invalid cast\n");
+                assert(false);
+        }
+	return r;
 }
 
-void SubAssign(Vector const& in, uint64_t in_index, Vector& out, uint64_t out_index, uint64_t length) {
+inline uint64_t subAssign(State& state, uint64_t nargs) {
+
+        assert(nargs == 3);
+
+        Stack& stack = state.stack;
+
+        Value a = force(state, stack.pop());
+        Value i = force(state, stack.pop());
+        Value b = force(state, stack.pop());
+
+	Vector idx(i);
+	idx = As(i, Type::R_integer);
+
+	Vector r;
+        if(a.type == Type::R_double && b.type == Type::R_double) {
+                SubsetAssign< Double, Integer, Double >::eval(a, idx, b).toVector(r);
+        }
+        else if(a.type == Type::R_integer && b.type == Type::R_double) {
+                SubsetAssign< Integer, Integer, Double >::eval(a, idx, b).toVector(r);
+        }
+        else if(a.type == Type::R_double && b.type == Type::R_integer) {
+                SubsetAssign< Integer, Integer, Double >::eval(a, idx, b).toVector(r);
+        }
+        else if(a.type == Type::R_integer && b.type == Type::R_integer) {
+                SubsetAssign< Integer, Integer, Integer >::eval(a, idx, b).toVector(r);
+        }
+        else if(a.type == Type::R_logical && b.type == Type::R_double) {
+                SubsetAssign< Logical, Integer, Double >::eval(a, idx, b).toVector(r);
+        }
+        else if(a.type == Type::R_logical && b.type == Type::R_integer) {
+                SubsetAssign< Logical, Integer, Integer >::eval(a, idx, b).toVector(r);
+        }
+        else if(a.type == Type::R_character && b.type == Type::R_double) {
+                SubsetAssign< Character, Integer, Double >::eval(a, idx, b).toVector(r);
+        }
+        else if(a.type == Type::R_character && b.type == Type::R_integer) {
+                SubsetAssign< Character, Integer, Integer >::eval(a, idx, b).toVector(r);
+        }
+        else if(a.type == Type::R_double && b.type == Type::R_logical) {
+                SubsetAssign< Double, Integer, Logical >::eval(a, idx, b).toVector(r);
+        }
+        else if(a.type == Type::R_integer && b.type == Type::R_logical) {
+                SubsetAssign< Integer, Integer, Logical >::eval(a, idx, b).toVector(r);
+        }
+        else if(a.type == Type::R_logical && b.type == Type::R_logical) {
+                SubsetAssign< Logical, Integer, Logical >::eval(a, idx, b).toVector(r);
+        }
+        else {
+                printf("Invalid index\n");
+                assert(false);
+        }
+        Value& v = stack.reserve();
+        r.toValue(v);
+        return 1;
 }
-*/
 
 /*void CastInto(Vector const& in, uint64_t in_index, Vector& out, uint64_t out_index, uint64_t length) {
 	if(out.type == Type::R_logical) {

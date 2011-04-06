@@ -240,6 +240,10 @@ struct VectorImpl {
 		v.packed = packed;
 	}
 
+	Type type() const {
+		return VectorType;
+	}
+
 	/*void subset(uint64_t start, uint64_t length, Value& v) const {
 		VectorInner* i = new VectorInner();
 		i->length = length;

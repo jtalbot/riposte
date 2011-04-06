@@ -174,9 +174,11 @@ static int64_t dimassign_op(State& state, Stack& stack, Block const& block, Inst
 	return 1;
 }
 static int64_t iassign_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
-	Value index = stack.pop();
-	Value value = stack.pop();
-	//stack.push(state.env->assign(Symbol(inst.a), subassign(state.env->get(state, Symbol(inst.a)), value, index)));
+	Value k;
+	state.env->get(state, Symbol(inst.a), k);
+	stack.push(k);
+	subAssign(state, 3);
+	stack.push(state.env->assign(Symbol(inst.a), stack.pop()));
 	return 1;
 }
 static int64_t iclassassign_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {

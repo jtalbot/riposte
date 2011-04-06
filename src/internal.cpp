@@ -207,7 +207,7 @@ uint64_t c(State& state, uint64_t nargs) {
 	Double out(total);
 	uint64_t j = 0;
 	for(uint64_t i = 0; i < nargs; i++) {
-		Double d(args[i]);
+		Double d(As(args[i], Type::R_double));
 		for(uint64_t m = 0; m < args[i].length(); m++, j++) {
 			out[j] = d[m];
 		}
@@ -236,6 +236,60 @@ uint64_t minusOp(State& state, uint64_t nargs) {
 	else
 		return binaryArith<Zip2, SubOp>(state, nargs);
 }
+
+inline uint64_t subset(State& state, uint64_t nargs) {
+
+        assert(nargs == 2);
+
+        Stack& stack = state.stack;
+
+        Value a = force(state, stack.pop());
+        Value i = force(state, stack.pop());
+
+        Vector r;
+        if(a.type == Type::R_double && i.type == Type::R_double) {
+                SubsetIndex< Double, Double >::eval(a, i).toVector(r);
+        }
+        else if(a.type == Type::R_integer && i.type == Type::R_double) {
+                SubsetIndex< Integer, Double >::eval(a, i).toVector(r);
+        }
+        else if(a.type == Type::R_double && i.type == Type::R_integer) {
+                SubsetIndex< Integer, Double >::eval(a, i).toVector(r);
+        }
+        else if(a.type == Type::R_integer && i.type == Type::R_integer) {
+                SubsetIndex< Integer, Integer >::eval(a, i).toVector(r);
+        }
+        else if(a.type == Type::R_logical && i.type == Type::R_double) {
+                SubsetIndex< Logical, Double >::eval(a, i).toVector(r);
+        }
+        else if(a.type == Type::R_logical && i.type == Type::R_integer) {
+                SubsetIndex< Logical, Integer >::eval(a, i).toVector(r);
+        }
+        else if(a.type == Type::R_character && i.type == Type::R_double) {
+                SubsetIndex< Character, Double >::eval(a, i).toVector(r);
+        }
+        else if(a.type == Type::R_character && i.type == Type::R_integer) {
+                SubsetIndex< Character, Integer >::eval(a, i).toVector(r);
+        }
+        else if(a.type == Type::R_double && i.type == Type::R_logical) {
+                //SubsetIndex< Integer, Double >::eval(a, i).toVector(r);
+        }
+        else if(a.type == Type::R_integer && i.type == Type::R_logical) {
+                //SubsetIndex< Integer, Double >::eval(a, i).toVector(r);
+        }
+        else if(a.type == Type::R_logical && i.type == Type::R_logical) {
+                //SubsetIndex< Integer, Double >::eval(a, i).toVector(r);
+        }
+        else {
+                printf("Invalid index\n");
+                assert(false);
+        }
+        Value& v = stack.reserve();
+        r.toValue(v);
+        return 1;
+}
+
+ 
 
 
 void addMathOps(State& state)
@@ -335,5 +389,8 @@ void addMathOps(State& state)
 	
 	CFunction(c).toValue(v);
 	env->assign(Symbol(state, "c"), v);
+	
+	CFunction(subset).toValue(v);
+	env->assign(Symbol(state, "["), v);
 }
 
