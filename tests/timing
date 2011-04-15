@@ -4,15 +4,14 @@
 # right now, riposte suffers a big hit just loading R to do the parsing.
 # getting rid of that dependency makes riposte look substantially better.
 
-echo "Local variable assignment"
-time ../riposte -q -f local_variable_assign.R
-time R --vanilla -q --slave -f local_variable_assign.R
-echo "Local variable lookup"
-time ../riposte -q -f local_variable_lookup.R 
-time R --vanilla -q --slave -f local_variable_lookup.R
-echo "Scalar addition"
-time ../riposte -q -f addition.R 
-time R --vanilla -q --slave -f addition.R
-echo "Fibinacci sequence"
-time ../riposte -q -f fib.R 
-time R --vanilla -q --slave -f fib.R
+echo "Local variable assignment	" "rip	" `(time ../riposte -q -f local_variable_assign.R) 2>&1 | grep real | awk '{print $2}'`
+echo "Local variable assignment	" "R	" `(time R --vanilla -q --slave -f local_variable_assign.R) 2>&1 | grep real | awk '{print $2}'`
+
+echo "Local variable lookup	" "rip	" `(time ../riposte -q -f local_variable_lookup.R) 2>&1 | grep real | awk '{print $2}'`
+echo "Local variable lookup	" "R	" `(time R --vanilla -q --slave -f local_variable_lookup.R) 2>&1 | grep real | awk '{print $2}'`
+
+echo "Simple addition 	" "rip	" `(time ../riposte -q -f addition.R) 2>&1 | grep real | awk '{print $2}'`
+echo "Simple addition	" "R	" `(time R --vanilla -q --slave -f addition.R) 2>&1 | grep real | awk '{print $2}'`
+
+echo "Fibinacci	" "rip	" `(time ../riposte -q -f fib.R) 2>&1 | grep real | awk '{print $2}'`
+echo "Fibinacci	" "R	" `(time R --vanilla -q --slave -f fib.R) 2>&1 | grep real | awk '{print $2}'`
