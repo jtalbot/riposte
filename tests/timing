@@ -1,0 +1,18 @@
+
+# run timing comparisons between riposte and R.
+# should clean this up and run it regularly, tracking performance difference
+# right now, riposte suffers a big hit just loading R to do the parsing.
+# getting rid of that dependency makes riposte look substantially better.
+
+echo "Local variable assignment"
+time ../riposte -q -f local_variable_assign.R
+time R --vanilla -q --slave -f local_variable_assign.R
+echo "Local variable lookup"
+time ../riposte -q -f local_variable_lookup.R 
+time R --vanilla -q --slave -f local_variable_lookup.R
+echo "Scalar addition"
+time ../riposte -q -f addition.R 
+time R --vanilla -q --slave -f addition.R
+echo "Fibinacci sequence"
+time ../riposte -q -f fib.R 
+time R --vanilla -q --slave -f fib.R

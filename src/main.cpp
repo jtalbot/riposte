@@ -245,11 +245,9 @@ static int dofile(const char * file, State& state, bool echo) {
 	for(int i = 0; i < Rf_length(expressions) && !rc; ++i) {
 		Value value, result;
 		parse(state, VECTOR_ELT(expressions, i), value);
-		//interpret(value, env, result);
 		Block b = compile(state, value);
 		Value v;
 		b.toValue(v);
-		std::cout << state.stringify(v) << std::endl;
 		eval(state, b);	
 		result = state.stack.pop();	
 		if(echo) {
@@ -257,7 +255,7 @@ static int dofile(const char * file, State& state, bool echo) {
 		}
 	}
 	UNPROTECT(1);
-	print_time_elapsed("dofile", begin);
+	//print_time_elapsed("dofile", begin);
 	return rc;
 }
 
@@ -291,6 +289,7 @@ int ch;
 int fd = -1;
 char * filename = NULL;
 char * jitopts = NULL;
+bool echo = true; 
 
 static struct option longopts[] = {
              { "debug",     0,     NULL,           'd' },
@@ -298,12 +297,13 @@ static struct option longopts[] = {
              { "help",      0,     NULL,           'h' },
              { "jitopts",   1,     NULL,           'j' },
              { "verbose",   0,     NULL,           'v' },
+             { "quiet",     0,     NULL,           'q' },
              { NULL,        0,     NULL,            0 }
      };
 
 /*  Parse commandline options  */
 
-while ((ch = getopt_long(argc, argv, "df:hj:v", longopts, NULL)) != -1)
+while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
              switch (ch) {
              case 'd':
                      debug++;
@@ -324,6 +324,9 @@ while ((ch = getopt_long(argc, argv, "df:hj:v", longopts, NULL)) != -1)
                      break;
              case 'v':
                      verbose++;
+                     break;
+             case 'q':
+                     echo = false;
                      break;
              default:
                      usage();
@@ -376,7 +379,7 @@ while ((ch = getopt_long(argc, argv, "df:hj:v", longopts, NULL)) != -1)
 	if(-1 != fd) {
 	  close(fd);    /* will reopen in R for parsing */
           d_message(1,"source(%s)\n",filename);
-	  rc = dofile(filename,state,true); 
+	  rc = dofile(filename,state,echo); 
 	} else {
 	  rc = dostdin(state);
 	}
