@@ -7,9 +7,11 @@
 
 #define BC_ENUM(_) 				\
 	_(call, "call") \
-	_(inlinecall, "inlinecall") \
+	_(dcall, "dcall") \
+	/*_(inlinecall, "inlinecall")*/ \
 	_(get, "get") \
 	_(kget, "kget") \
+	_(iget, "iget") \
 	_(assign, "assign") \
 	_(classassign, "classassign") \
 	_(namesassign, "namesassign") \

@@ -119,13 +119,15 @@ std::string State::stringify(Value const& value) const {
 			if(names.type == Type::R_character) {
 				Character n(names);
 				for(uint64_t i = 0; i < length; i++) {
-					result = result + "[[" + outString(n[i]) + "]]\n";
-					result = result + stringify(v[i]) + "\n\n";
+					result = result + "$" + outString(n[i]) + "\n";
+					result = result + stringify(v[i]) + "\n";
+					if(i < length-1) result = result + "\n";
 				}
 			} else {
 				for(uint64_t i = 0; i < length; i++) {
-					result = result + "[[" + intToStr(i) + "]]\n";
-					result = result + stringify(v[i]) + "\n\n";
+					result = result + "[[" + intToStr(i+1) + "]]\n";
+					result = result + stringify(v[i]) + "\n";
+					if(i < length-1) result = result + "\n";
 				}
 			}
 			if(dots) result = result + " ...\n\n";

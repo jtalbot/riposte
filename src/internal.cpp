@@ -3,67 +3,28 @@
 #include <assert.h>
 #include <math.h>
 
-uint64_t assign(State& state, uint64_t nargs) {
+uint64_t function(State& state, Call const& call) {
+	assert(call.length()-1 == 3);
+	state.stack.push(
+		Function(force(state, call[1]), 
+			code(call[2]), 
+			force(state, call[3]), state.env));
 	return 1;
 }
 
-uint64_t forloop(State& state, uint64_t nargs) {
+uint64_t rm(State& state, Call const& call) {
+	assert(call.length()-1 == 1);
+	state.env->rm(quoted(call[1]));
+	state.stack.push(Null::singleton);
 	return 1;
 }
 
-uint64_t whileloop(State& state, uint64_t nargs) {
-	return 1;
-}
+uint64_t sequence(State& state, Call const& call) {
+	assert(call.length()-1 == 3);
 
-//uint64_t Switch(State& state, uint64_t nargs) {
-//	Character c(stack.pop());
-//	
-//}
-
-uint64_t function(State& state, uint64_t nargs)
-{
-	assert(nargs == 3);
-	
-	Stack& stack = state.stack;
-	
-	Value arg0 = force(state, stack.pop());
-	Value arg1 = code(stack.pop());
-	Value arg2 = force(state, stack.pop());
-
-	Function func(PairList(arg0), arg1, Character(arg2), state.env);
-	Value result;
-	func.toValue(result);
-	stack.push(result);
-
-	return 1;
-}
-
-uint64_t rm(State& state, uint64_t nargs) {
-	assert(nargs == 1);
-	Stack& stack = state.stack;
-	Value symbol = quoted(stack.pop());
-	state.env->rm(Symbol(symbol));
-	stack.push(Value::null);
-	return 1;
-}
-
-uint64_t curlyBrackets(State& state, uint64_t nargs) {
-	return 1;
-}
-
-uint64_t parentheses(State& state, uint64_t nargs) {
-	return 1;
-}
-
-uint64_t sequence(State& state, uint64_t nargs)
-{
-	assert(nargs == 3);
-
-	Stack& stack = state.stack;
-	
-	Value from = force(state, stack.pop());
-	Value by   = force(state, stack.pop());
-	Value len  = force(state, stack.pop());
+	Value from = force(state, call[1]);
+	Value by   = force(state, call[2]);
+	Value len  = force(state, call[3]);
 	
 	double f = asReal1(from);
 	double b = asReal1(by);
@@ -75,20 +36,16 @@ uint64_t sequence(State& state, uint64_t nargs)
 		r[i] = f+j;
 		j = j + b;
 	}
-	Value v;
-	r.toValue(stack.reserve());
-	
+	state.stack.push(r);
 	return 1;
 }
 
-uint64_t repeat(State& state, uint64_t nargs)
-{
-	assert(nargs == 3);
-	Stack& stack = state.stack;
+uint64_t repeat(State& state, Call const& call) {
+	assert(call.length()-1 == 3);
 	
-	Value vec  = force(state, stack.pop());
-	Value each = force(state, stack.pop());
-	Value len  = force(state, stack.pop());
+	Value vec  = force(state, call[1]);
+	Value each = force(state, call[2]);
+	Value len  = force(state, call[3]);
 	
 	double v = asReal1(vec);
 	//double e = asReal1(each);
@@ -98,135 +55,142 @@ uint64_t repeat(State& state, uint64_t nargs)
 	for(uint64_t i = 0; i < l; i++) {
 		r[i] = v;
 	}
-	r.toValue(stack.reserve());
+	state.stack.push(r);
 	return 1;
 }
 
-uint64_t typeOf(State& state, uint64_t nargs)
-{
-	assert(nargs == 1);
-	Stack& stack = state.stack;
+uint64_t typeOf(State& state, Call const& call) {
+	assert(call.length()-1 == 1);
 	Character c(1);
-	c[0] = state.inString(force(state, stack.pop()).type.toString());
-	c.toValue(stack.reserve());
+	c[0] = state.inString(force(state, call[1]).type.toString());
+	state.stack.push(c);
 	return 1;
 }
 
-uint64_t mode(State& state, uint64_t nargs)
-{
-	assert(nargs == 1);
-	Stack& stack = state.stack;
+uint64_t mode(State& state, Call const& call) {
+	assert(call.length()-1 == 1);
 	Character c(1);
-	Value v = force(state, stack.pop());
+	Value v = force(state, call[1]);
 	if(v.type == Type::R_integer || v.type == Type::R_double)
 		c[0] = state.inString("numeric");
 	else if(v.type == Type::R_symbol)
 		c[0] = state.inString("name");
 	else
 		c[0] = state.inString(v.type.toString());
-	c.toValue(stack.reserve());
+	state.stack.push(c);
 	return 1;
 }
 
-uint64_t klass(State& state, uint64_t nargs)
+uint64_t klass(State& state, Call const& call)
 {
-	assert(nargs == 1);
-	Stack& stack = state.stack;
-	Value v = force(state, stack.pop());
-	Value r = getClass(v.attributes);	
-	if(r == Value::null) {
+	assert(call.length()-1 == 1);
+	Value v = force(state, call[1]);
+	Vector r = getClass(v.attributes);	
+	if(r.type == Type::R_null) {
 		Character c(1);
 		c[0] = state.inString((v).type.toString());
-		c.toValue(stack.reserve());
+		state.stack.push(c);
 	}
 	else {
-		stack.push(r);
+		state.stack.push(r);
 	}
 	return 1;
 }
 
-uint64_t assignKlass(State& state, uint64_t nargs)
+uint64_t assignKlass(State& state, Call const& call)
 {
-	assert(nargs == 2);
-	Stack& stack = state.stack;
-	Value v = force(state, stack.pop());
-	Value k = force(state, stack.pop());
+	assert(call.length()-1 == 2);
+	Value v = force(state, call[1]);
+	Value k = force(state, call[2]);
 	setClass(v.attributes, k);
-	stack.push(v);
+	state.stack.push(v);
 	return 1;
 }
 
-uint64_t names(State& state, uint64_t nargs)
+uint64_t names(State& state, Call const& call)
 {
-	assert(nargs == 1);
-	Stack& stack = state.stack;
-	Value v = force(state, stack.pop());
+	assert(call.length()-1 == 1);
+	Value v = force(state, call[1]);
 	Value r = getNames(v.attributes);
-	stack.push(r);	
+	state.stack.push(r);	
 	return 1;
 }
 
-uint64_t assignNames(State& state, uint64_t nargs)
+uint64_t assignNames(State& state, Call const& call)
 {
-	assert(nargs == 2);
-	Stack& stack = state.stack;
-	Value v = force(state, stack.pop());
-	Value k = force(state, stack.pop());
+	assert(call.length()-1 == 2);
+	Value v = force(state, call[1]);
+	Value k = force(state, call[2]);
 	setNames(v.attributes, k);
-	stack.push(v);
+	state.stack.push(v);
 	return 1;
 }
 
-uint64_t dim(State& state, uint64_t nargs)
+uint64_t dim(State& state, Call const& call)
 {
-	assert(nargs == 1);
-	Stack& stack = state.stack;
-	Value v = force(state, stack.pop());
+	assert(call.length()-1 == 1);
+	Value v = force(state, call[1]);
 	Value r = getDim(v.attributes);
-	stack.push(r);	
+	state.stack.push(r);	
 	return 1;
 }
 
-uint64_t assignDim(State& state, uint64_t nargs)
+uint64_t assignDim(State& state, Call const& call)
 {
-	assert(nargs == 2);
-	Stack& stack = state.stack;
-	Value v = force(state, stack.pop());
-	Value k = force(state, stack.pop());
+	assert(call.length()-1 == 2);
+	Value v = force(state, call[1]);
+	Value k = force(state, call[2]);
 	setDim(v.attributes, k);
-	stack.push(v);
+	state.stack.push(v);
 	return 1;
 }
 
-uint64_t c(State& state, uint64_t nargs) {
-	Stack& stack = state.stack;
+Type cTypeCast(Value const& v, Type t)
+{
+	return std::max(v.type.internal(), t.internal());
+}
+
+uint64_t c(State& state, Call const& call) {
 	uint64_t total = 0;
+	Type type = Type::R_null;
 	std::vector<Vector> args;
-	for(uint64_t i = 0; i < nargs; i++) args.push_back(Vector(force(state, stack.pop())));
-	for(uint64_t i = 0; i < nargs; i++) total += args[i].length();
-	Double out(total);
-	uint64_t j = 0;
-	for(uint64_t i = 0; i < nargs; i++) {
-		Double d(As(args[i], Type::R_double));
-		for(uint64_t m = 0; m < args[i].length(); m++, j++) {
-			out[j] = d[m];
-		}
+	for(uint64_t i = 1; i < call.length(); i++) {
+		args.push_back(Vector(force(state, call[i])));
+		total += args[i-1].length();
+		type = cTypeCast(args[i-1], type);
 	}
-	Value v;
-	out.toValue(v);
-	stack.push(v);
+	Vector out(type, total);
+	uint64_t j = 0;
+	for(uint64_t i = 0; i < args.size(); i++) {
+		Insert(args[i], 0, out, j, args[i].length());
+		j += args[i].length();
+	}
+	
+	Vector n = getNames(call.attributes);
+	if(n.type != Type::R_null)
+	{
+		Character names(n);
+		Character outnames(total);
+		uint64_t j = 0;
+		for(uint64_t i = 0; i < args.size(); i++) {
+			for(uint64_t m = 0; m < args[i].length(); m++, j++) {
+				// NYI: R makes these names distinct
+				outnames[j] = names[i+1];
+			}
+		}
+		setNames(out.attributes, outnames);
+	}
+	state.stack.push(out);
 	return 1;
 }
 
-uint64_t list(State& state, uint64_t nargs) {
-	Stack& stack = state.stack;
-	List out(nargs);
-	for(uint64_t i = 0; i < nargs; i++) {
-		out[i] = force(state, stack.pop());
-	}
-	Value v;
-	out.toValue(v);
-	stack.push(v);
+uint64_t list(State& state, Call const& call) {
+	List out(call.length()-1);
+	for(uint64_t i = 1; i < call.length(); i++) out[i-1] = force(state, call[i]);
+	Vector n = getNames(call.attributes);
+	if(n.type != Type::R_null)
+		setNames(out.attributes, Subset(n, 1, call.length()-1));
+	state.stack.push(out);
 	return 1;
 }
 
@@ -249,14 +213,12 @@ uint64_t minusOp(State& state, uint64_t nargs) {
 		return binaryArith<Zip2, SubOp>(state, nargs);
 }
 
-inline uint64_t subset(State& state, uint64_t nargs) {
+uint64_t subset(State& state, Call const& call) {
 
-        assert(nargs == 2);
+        assert(call.length()-1 == 2);
 
-        Stack& stack = state.stack;
-
-        Value a = force(state, stack.pop());
-        Value i = force(state, stack.pop());
+        Value a = force(state, call[1]);
+        Value i = force(state, call[2]);
 
         Vector r;
         if(a.type == Type::R_double && i.type == Type::R_double) {
@@ -296,23 +258,25 @@ inline uint64_t subset(State& state, uint64_t nargs) {
                 printf("Invalid index\n");
                 assert(false);
         }
-        Value& v = stack.reserve();
-        r.toValue(v);
+	state.stack.push(r);
         return 1;
 }
 
- 
-
+uint64_t length(State& state, Call const& call) {
+	Vector a = force(state, call[1]);
+	Integer i(1);
+	i[0] = a.length();
+	state.stack.push(i);
+	return 1;
+}
 
 void addMathOps(State& state)
 {
 	Value v;
-	CFunction::Cffi op;
-
 	Environment* env = state.baseenv;
 
 	// operators that are implemented as byte codes, thus, no actual implemention is necessary here.
-	CFunction(forloop).toValue(v);
+	/*CFunction(forloop).toValue(v);
 	env->assign(Symbol(state, "for"), v);
 	CFunction(whileloop).toValue(v);
 	env->assign(Symbol(state, "while"), v);
@@ -321,9 +285,9 @@ void addMathOps(State& state)
 	CFunction(curlyBrackets).toValue(v);
 	env->assign(Symbol(state, "{"), v);
 	CFunction(parentheses).toValue(v);
-	env->assign(Symbol(state, "("), v);
+	env->assign(Symbol(state, "("), v);*/
 
-	CFunction(plusOp).toValue(v);
+	/*CFunction(plusOp).toValue(v);
 	env->assign(Symbol(state, "+"), v);
 	CFunction(minusOp).toValue(v);
 	env->assign(Symbol(state, "-"), v);
@@ -369,7 +333,7 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, ">"), v);
 	op = binaryOrdinal<Zip2, GEOp>;
 	CFunction(op).toValue(v);
-	env->assign(Symbol(state, ">="), v);
+	env->assign(Symbol(state, ">="), v);*/
 	
 	CFunction(function).toValue(v);
 	env->assign(Symbol(state, "function"), v);
@@ -380,12 +344,12 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "storage.mode"), v);
 	CFunction(mode).toValue(v);
 	env->assign(Symbol(state, "mode"), v);
-	
+
 	CFunction(sequence).toValue(v);
 	env->assign(Symbol(state, "seq"), v);
 	CFunction(repeat).toValue(v);
 	env->assign(Symbol(state, "rep"), v);
-
+	
 	CFunction(klass).toValue(v);
 	env->assign(Symbol(state, "class"), v);
 	CFunction(assignKlass).toValue(v);
@@ -403,6 +367,9 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "c"), v);
 	CFunction(list).toValue(v);
 	env->assign(Symbol(state, "list"), v);
+
+	CFunction(length).toValue(v);
+	env->assign(Symbol(state, "length"), v);
 	
 	CFunction(subset).toValue(v);
 	env->assign(Symbol(state, "["), v);

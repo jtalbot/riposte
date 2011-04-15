@@ -10,7 +10,6 @@
 static bool isLanguage(Value const& expr) {
 	return expr.type == Type::R_symbol ||
 			expr.type == Type::R_call ||
-			expr.type == Type::I_internalcall ||
 			expr.type == Type::R_expression ||
 			expr.type == Type::R_pairlist;
 }
@@ -27,10 +26,14 @@ static void compileGetSymbol(State& state, Symbol const& symbol, Block& block) {
 	block.code().push_back(Instruction(ByteCode::get, symbol.i));
 }
 
-static void compileInternalCall(State& state, InternalCall const& call, Block& block) {
+static void compileOp(State& state, Call const& call, Block& block) {
 	Symbol func(call[0]);
 	std::string funcStr = func.toString(state);
-	if(funcStr == "<-" || funcStr == ".Assign") {
+	if(funcStr == ".Internal") {
+		assert(call[1].type == Type::R_symbol);
+		block.code().push_back(Instruction(ByteCode::iget, Symbol(call[1]).i));
+	}
+	else if(funcStr == "<-" || funcStr == ".Assign") {
 		ByteCode bc;
 		Value v = call[1];
 		
@@ -59,6 +62,15 @@ static void compileInternalCall(State& state, InternalCall const& call, Block& b
 			bc = indexed ? ByteCode::iassign : ByteCode::assign;
 		}
 		block.code().push_back(Instruction(bc, Symbol(v).i));
+	}
+	else if(funcStr == "return") {
+		if(call.length() == 1)
+			block.code().push_back(Instruction(ByteCode::null));
+		else if(call.length() == 2)
+			compile(state, call[1], block);
+		else
+			printf("Too many parameters to return. Wouldn't multiple return values be nice?\n");
+		block.code().push_back(Instruction(ByteCode::ret));
 	}
 	else if(funcStr == "for" || funcStr == ".For") {
 		compile(state, Call(call[2])[2], block);
@@ -100,6 +112,8 @@ static void compileInternalCall(State& state, InternalCall const& call, Block& b
 			begin2 = block.code().size();
 			compile(state, call[3], block);
 		}
+		else
+			begin2 = block.code().size();
 		uint64_t end = block.code().size();
 		block.code()[begin1-1].a = begin2-begin1+1;
 		if(call.length() == 4)
@@ -113,8 +127,7 @@ static void compileInternalCall(State& state, InternalCall const& call, Block& b
 				block.code().push_back(Instruction(ByteCode::pop));
 		}
 		if(length == 0) {
-			block.constants().push_back(Value::null);
-			block.code().push_back(Instruction(ByteCode::kget, block.constants().size()-1));
+			block.code().push_back(Instruction(ByteCode::null));
 		}
 	}
 	else if(funcStr == ".Paren" || funcStr == "(") {
@@ -292,47 +305,11 @@ static void compileCall(State& state, Call const& call, Block& block) {
 		return;
 	}
 
-	// create a new block for each parameter...
-	// insert delay instruction to make promise
-	Call compiledCall(call.length());
-	compiledCall.attributes = call.attributes;
-
-	for(uint64_t i = length-1; i >= 1; i--) {
-		if(call[i].type == Type::R_symbol) {
-			Value v = call[i];
-			v.type = Type::I_sympromise;
-			compiledCall[i] = v;
-		}
-		else if(isLanguage(call[i])) {
-			Value v;
-			compile(state, call[i]).toValue(v);
-			v.type = Type::I_promise;
-			compiledCall[i] = v;
-		} else {
-			compiledCall[i] = call[i];
-		}
-	}
-	compile(state, call[0], block);
-	
-	// insert call
-	Value v;
-	compiledCall.toValue(v);
-	block.constants().push_back(v);
-	block.code().push_back(Instruction(ByteCode::call, block.constants().size()-1));
-}
-
-static void compileICCall(State& state, Call const& call, Block& block) {
-	uint64_t length = call.length();
-	if(length == 0) {
-		printf("call without any stuff\n");
-		return;
-	}
-
-	// we might be able to inline if the function is a known symbol
-	//  and if no parameter is '...'
 	if(call[0].type == Type::R_symbol) {
 		std::string funcStr = Symbol(call[0]).toString(state);
-		if(funcStr == "<-" 
+		if(	funcStr == ".Internal"
+			|| funcStr == "return"
+			|| funcStr == "<-" 
 			|| funcStr == "for"
 			|| funcStr == "while"
 			|| funcStr == "repeat"
@@ -375,6 +352,54 @@ static void compileICCall(State& state, Call const& call, Block& block) {
 			|| funcStr == "asin"
 			|| funcStr == "atan"
 			) {
+			compileOp(state, call, block);
+			return; 
+		}
+	}
+	// create a promise for each parameter...
+	Call compiledCall(call.length());
+	compiledCall.attributes = call.attributes;
+
+	bool dots = false;
+	for(uint64_t i = length-1; i >= 1; i--) {
+		if(call[i].type == Type::R_symbol) {
+			if(call[i].i == DOTS_STRING) {
+				compiledCall[i] = call[i];
+				dots = true;
+			}
+			else {
+				Value v = call[i];
+				v.type = Type::I_sympromise;
+				compiledCall[i] = v;
+			}
+		}
+		else if(isLanguage(call[i])) {
+			Value v;
+			compile(state, call[i]).toValue(v);
+			v.type = Type::I_promise;
+			compiledCall[i] = v;
+		} else {
+			compiledCall[i] = call[i];
+		}
+	}
+	compile(state, call[0], block);
+
+	// insert call
+	Value v;
+	compiledCall.toValue(v);
+	block.constants().push_back(v);
+	block.code().push_back(Instruction(dots ? ByteCode::dcall : ByteCode::call, block.constants().size()-1));
+}
+
+static void compileICCall(State& state, Call const& call, Block& block) {
+	uint64_t length = call.length();
+	if(length == 0) {
+		printf("call without any stuff\n");
+		return;
+	}
+
+	// we might be able to inline if the function is a known symbol
+	//  and if no parameter is '...'
 			
 			/*compileCall(state, call, block);
 			
@@ -390,12 +415,12 @@ static void compileICCall(State& state, Call const& call, Block& block) {
 			instr.c = 0;*/
 			
 			//uint64_t start = block.code().size();
-			compileInternalCall(state, InternalCall(call), block);
+			//compileInternalCall(state, InternalCall(call), block);
 			//uint64_t end = block.code().size();
 			//instr.c = end-start+1;
-			return;
-		}
-	}
+			//return;
+	//	}
+	//}
 
 	// generate a normal call
 	compileCall(state, call, block);
@@ -417,7 +442,7 @@ static void compilePairList(State& state, PairList const& values, Block& block) 
 		So the elements need to be compiled.
 		If they're used for anything else, will need to fix this implementation.
 	*/
-	printf("Compiling pair list\n");
+	//printf("Compiling pair list\n");
 	uint64_t length = values.length();
 	PairList compiledPL(length);
 	compiledPL.attributes = values.attributes;
@@ -452,9 +477,6 @@ void compile(State& state, Value const& expr, Block& block) {
 		case Type::R_call:
 			compileICCall(state, Call(expr), block);
 			break;
-		case Type::I_internalcall:
-			compileInternalCall(state, InternalCall(expr), block);
-			break;	
 		case Type::R_expression:
 			compileExpression(state, Expression(expr), block);
 			break;

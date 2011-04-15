@@ -38,9 +38,11 @@ inline Value force(State& state, Value const& v) {
 	} else return v; 
 }
 inline Value quoted(Value const& v) { 
-	if(v.type == Type::I_promise || v.type == Type::I_sympromise) 
+	if(v.type == Type::I_promise)
 		return Block(v).expression();
-	 else return v; 
+	else if(v.type == Type::I_sympromise)
+		return Symbol(v.i);
+	else return v; 
 }
 inline Value code(Value const& v) {
 	return v; 
@@ -752,6 +754,21 @@ inline Vector As(Vector a, Type type) {
         else if(a.type == Type::R_logical && type == Type::R_logical) {
         	r = a;
 	}
+        else if(a.type == Type::R_character && type == Type::R_character) {
+                r = a;
+        }
+        else if(a.type == Type::R_list && type == Type::R_list) {
+                r = a;
+        }
+        else if(a.type == Type::R_call && type == Type::R_call) {
+                r = a;
+        }
+        else if(a.type == Type::R_call && type == Type::R_list) {
+                r = List(a);
+        }
+        else if(a.type == Type::R_list && type == Type::R_call) {
+                r = Call(a);
+        }
         else {
                 printf("Invalid cast\n");
                 assert(false);
@@ -813,6 +830,40 @@ inline uint64_t subAssign(State& state, uint64_t nargs) {
         Value& v = stack.reserve();
         r.toValue(v);
         return 1;
+}
+
+inline void Insert(Vector const& src, uint64_t srcIndex, Vector& dst, uint64_t dstIndex, uint64_t length) {
+	// First cast to destination type. This operation should be fused eventually to avoid a copy.
+        if(dst.type == Type::R_double) {
+		Double d(dst); Double s = As(src, Type::R_double);
+		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
+	}
+        else if(dst.type == Type::R_integer) {
+		Integer d(dst); Integer s = As(src, Type::R_integer);
+		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
+	}
+        else if(dst.type == Type::R_logical) {
+		Logical d(dst); Logical s = As(src, Type::R_logical);
+		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
+	}
+        else if(dst.type == Type::R_character) {
+		Character d(dst); Character s = As(src, Type::R_character);
+		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
+	}
+        else if(dst.type == Type::R_call) {
+		Call d(dst); Call s = As(src, Type::R_call);
+		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
+	}
+        else {
+                printf("Invalid insertion\n");
+                assert(false);
+        }
+}
+
+inline Vector Subset(Vector const& src, uint64_t start, uint64_t length) {
+	Vector v(src.type, length);
+	memcpy(v.data(), (char*)src.data()+start*src.width(), length*src.width());
+	return v;
 }
 
 #endif

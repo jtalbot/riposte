@@ -47,7 +47,6 @@ public:
 		v.packed = 0;
 	}
 
-	static const Value null;
 	static const Value NIL;
 
 private:
@@ -83,6 +82,9 @@ struct Stack : public gc {
 
 class Environment;
 
+#define EMPTY_STRING 0
+#define DOTS_STRING 1
+
 // The riposte state
 struct State {
 	Stack stack;
@@ -97,11 +99,11 @@ struct State {
 
 		// insert strings into table that must be at known positions...
 		//   the empty string
-		stringTable[""] = 0;
-		reverseStringTable[0] = "";
+		stringTable[""] = EMPTY_STRING;
+		reverseStringTable[EMPTY_STRING] = "";
 		//   the dots string
-		stringTable["..."] = 0;
-		reverseStringTable[0] = "...";
+		stringTable["..."] = DOTS_STRING;
+		reverseStringTable[DOTS_STRING] = "...";
 	}
 
 	uint64_t inString(std::string const& s) {
@@ -142,6 +144,12 @@ struct Symbol {
 		v.type = Type::R_symbol;
 		v.i = i;
 		v.attributes = attributes;
+	}
+
+	operator Value() {
+		Value v;
+		toValue(v);
+		return v;
 	}
 
 	std::string const& toString(State& state) { return state.outString(i); }
@@ -188,6 +196,12 @@ struct Vector {
 		v.type = type;
 		v.packed = packed;
 	}
+	
+	operator Value() const {
+		Value v;
+		toValue(v);
+		return v;
+	}
 };
 
 template<Type::Value VectorType, class ElementType, bool Pack>
@@ -232,12 +246,24 @@ struct VectorImpl {
 		v.attributes = attributes;
 		v.packed = packed;
 	}
+	
+	operator Value() const {
+		Value v;
+		toValue(v);
+		return v;
+	}
 
 	void toVector(Vector& v) const {
 		v.packedData = packedData;
 		v.attributes = attributes;
 		v.type = VectorType;
 		v.packed = packed;
+	}
+
+	operator Vector() const {
+		Vector v;
+		toVector(v);
+		return v;
 	}
 
 	Type type() const {
@@ -271,6 +297,8 @@ struct Name : public VectorImpl<Type, type, Pack> \
 	  Name(Vector const& v) : VectorImpl<Type, type, Pack>(v) {}
 /* note missing }; */
 
+VECTOR_IMPL(Null, Type::R_null, Value, true) 
+	const static Null singleton; };
 VECTOR_IMPL(Logical, Type::R_logical, unsigned char, true) };
 VECTOR_IMPL(Integer, Type::R_integer, int64_t, true) };
 VECTOR_IMPL(Double, Type::R_double, double, true) };
@@ -282,9 +310,6 @@ VECTOR_IMPL(PairList, Type::R_pairlist, Value, false)
 	PairList(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; } };
 VECTOR_IMPL(Call, Type::R_call, Value, false) 
 	Call(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; } };
-VECTOR_IMPL(InternalCall, Type::I_internalcall, Value, false) 
-	InternalCall(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; }  
-	InternalCall(Call const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; } }; 
 VECTOR_IMPL(Expression, Type::R_expression, Value, false) 
 	Expression(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; }  };
 
@@ -299,7 +324,6 @@ inline Vector::Vector(Type const& t, uint64_t length) {
 		case Type::R_list: List(length).toVector(*this); break;	
 		case Type::R_pairlist: PairList(length).toVector(*this); break;	
 		case Type::R_call: Call(length).toVector(*this); break;	
-		case Type::I_internalcall: InternalCall(length).toVector(*this); break;	
 		case Type::R_expression: Expression(length).toVector(*this); break;	
 		default: printf("Invalid vector type\n"); assert(false); break;
 	};
@@ -371,6 +395,12 @@ public:
 		v.type = Type::R_function;
 	}
 
+	operator Value() const {
+		Value v;
+		toValue(v);
+		return v;
+	}
+
 	PairList const& parameters() const { return inner->parameters; }
 	Value const& body() const { return inner->body; }
 	Character const& str() const { return inner->str; }
@@ -379,7 +409,7 @@ public:
 
 class CFunction {
 public:
-typedef uint64_t (*Cffi)(State& s, uint64_t nargs);
+	typedef uint64_t (*Cffi)(State& s, Call const& call);
 	Cffi func;
 	CFunction(Cffi func) : func(func) {}
 	CFunction(Value const& v) {
@@ -404,6 +434,12 @@ private:
 	typedef std::map<Symbol, Value, std::less<Symbol>, gc_allocator<std::pair<Symbol, Value> > > Container;
 	uint64_t size;
 	Container container;
+	struct Dot {
+		Environment* s;
+		Symbol name;
+		Value value;
+	};
+	std::vector<Dot> dots;
 /*
 Insights:
 -All promises must be evaluated in the dynamic scope, so typically don't need to store env
@@ -457,7 +493,7 @@ public:
 		if(s != 0) { 
 			return s->get(state, name, value);
 		} else {
-			value = Value::null;
+			value = Null::singleton;
 			return false;
 		}
 	}
@@ -476,7 +512,7 @@ public:
 	}
 
 	Value assign(Symbol const& name, Value const& value) {
-		if(name.i < 2) {
+		if(name.i < 1) {
 			printf("Cannot assign to that symbol\n");
 		}
 		//printf("Assigning %s into %d\n", name.toString().c_str(), this);
@@ -519,11 +555,12 @@ struct Attributes : public gc {
 	Value dim;
 	Value dimnames;
 	Value klass;
-	Attributes() : names(Value::null), dim(Value::null), dimnames(Value::null), klass(Value::null) {}
+	Attributes() : names(Null::singleton), dim(Null::singleton), 
+			dimnames(Null::singleton), klass(Null::singleton) {}
 };
 
 
-inline void setNames(Attributes*& attrs, Value const& names) {
+inline void setNames(Attributes*& attrs, Vector const& names) {
 	Attributes* a = new Attributes();
 	if(attrs != 0)
 		*a = *attrs;
@@ -531,13 +568,13 @@ inline void setNames(Attributes*& attrs, Value const& names) {
 	attrs = a;
 }
 
-inline Value getNames(Attributes const* attrs) {
+inline Vector getNames(Attributes const* attrs) {
 	if(attrs == 0)
-		return Value::null;
+		return Null::singleton;
 	else return attrs->names;
 }
 
-inline void setClass(Attributes*& attrs, Value const& klass) {
+inline void setClass(Attributes*& attrs, Vector const& klass) {
 	Attributes* a = new Attributes();
 	if(attrs != 0)
 		*a = *attrs;
@@ -545,13 +582,13 @@ inline void setClass(Attributes*& attrs, Value const& klass) {
 	attrs = a;
 }
 
-inline Value getClass(Attributes const* attrs) {
+inline Vector getClass(Attributes const* attrs) {
 	if(attrs == 0)
-		return Value::null;
+		return Null::singleton;
 	else return attrs->klass;
 }
 
-inline void setDim(Attributes*& attrs, Value const& dim) {
+inline void setDim(Attributes*& attrs, Vector const& dim) {
 	Attributes* a = new Attributes();
 	if(attrs != 0)
 		*a = *attrs;
@@ -559,14 +596,14 @@ inline void setDim(Attributes*& attrs, Value const& dim) {
 	attrs = a;
 }
 
-inline Value getDim(Attributes const* attrs) {
+inline Vector getDim(Attributes const* attrs) {
 	if(attrs == 0)
-		return Value::null;
+		return Null::singleton;
 	else return attrs->dim;
 }
 
 inline bool isObject(Value const& v) {
-	return v.attributes != 0 && v.attributes->klass != Value::null;
+	return v.attributes != 0 && v.attributes->klass != Null::singleton;
 }
 
 inline double asReal1(Value const& v) { assert(v.type == Type::R_double || v.type == Type::R_integer); if(v.type == Type::R_integer) return Integer(v)[0]; else return Double(v)[0]; }

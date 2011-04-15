@@ -8,7 +8,7 @@
 #include "bc.h"
 #include "internal.h"
 
-const Value Value::null = Value(Type::R_null, (void*)0, (Attributes*)0);
+const Null Null::singleton = Null(0);
 const Value Value::NIL = Value(Type::I_nil, (void*)0, (Attributes*)0);
 
 
@@ -38,12 +38,7 @@ const Value Value::NIL = Value(Type::I_nil, (void*)0, (Attributes*)0);
 void eval(State& state, Block const& block, Environment* env); 
 
 
-static int64_t call_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
-	//static Environment envs[1024];
-	//static uint64_t env_index = 0;
-	
-	Value func(stack.pop());
-	Call compiledCall(block.constants()[inst.a]);
+static int64_t call_function(State& state, Value const& func, Call const& call) {
 	
 	if(func.type == Type::R_function) {
 		Function f(func);
@@ -52,8 +47,6 @@ static int64_t call_op(State& state, Stack& stack, Block const& block, Instructi
 			f.body().type == Type::I_sympromise) {
 			//See note above about allocating Environment on heap...
 			Environment* fenv = new Environment(f.s(), state.env);
-			//Environment* fenv = &envs[env_index];
-			//fenv->init(f.s(), state.env);
 			
 			PairList parameters = f.parameters();
 			Character pnames(parameters.attributes->names);
@@ -63,34 +56,40 @@ static int64_t call_op(State& state, Stack& stack, Block const& block, Instructi
 			}	
 
 			// call arguments are not named, do posititional matching
-			if(compiledCall.attributes == 0 || compiledCall.attributes->names.type == Type::R_null)
+			if(call.attributes == 0 || call.attributes->names.type == Type::R_null)
 			{
-				for(uint64_t i = 1; i < compiledCall.length(); ++i) {
-					fenv->assign(pnames[i-1], compiledCall[i]);
+				uint64_t i = 1;
+				for(i = 1; i < std::min(call.length(), pnames.length()+1); ++i) {
+					if(pnames[i-1] == DOTS_STRING)
+						break; 
+					fenv->assign(pnames[i-1], call[i]);
+				}
+				if(i < call.length() && pnames[i-1] == DOTS_STRING) {
+					fenv->assign(DOTS_STRING, List(Subset(call, i, call.length()-i)));
 				}
 			}
 			// call arguments are named, do matching by name
 			else {
-				Character argNames(compiledCall.attributes->names);
-				for(uint64_t i = 1; i < compiledCall.length(); ++i) {
+				Character argNames(call.attributes->names);
+				for(uint64_t i = 1; i < call.length(); ++i) {
 					// named arg, search for match
 					if(argNames[i] != 0) {
 						for(uint64_t j = 0; j < parameters.length(); ++j) {
 							if(argNames[i] == pnames[j]) {
-								fenv->assign(pnames[j], compiledCall[i]);
+								fenv->assign(pnames[j], call[i]);
 							}
 						}
 					}
 				}
 				uint64_t firstEmpty = 0;
-				for(uint64_t i = 1; i < compiledCall.length(); ++i) {
+				for(uint64_t i = 1; i < call.length(); ++i) {
 					// unnamed arg in a named argument list, fill in first missing spot.
 					if(argNames[i] == 0) {
 						for(; firstEmpty < parameters.length(); ++firstEmpty) {
 							Value v;
 							fenv->getRaw(pnames[firstEmpty], v);
 							if(v.type == Type::I_default || v.type == Type::I_symdefault) {
-								fenv->assign(pnames[firstEmpty], compiledCall[i]);
+								fenv->assign(pnames[firstEmpty], call[i]);
 								break;
 							}
 						}
@@ -100,26 +99,49 @@ static int64_t call_op(State& state, Stack& stack, Block const& block, Instructi
 
 			//env_index++;
 			if(f.body().type == Type::I_sympromise)
-				fenv->get(state, Symbol(f.body()), stack.reserve());
+				fenv->get(state, Symbol(f.body()), state.stack.reserve());
 			else	
 				eval(state, f.body(), fenv);
 			//env_index--;
 		}
 		else
-			stack.push(f.body());
+			state.stack.push(f.body());
 	} else if(func.type == Type::R_cfunction) {
 		CFunction f(func);
-		for(uint64_t i = compiledCall.length()-1; i > 0; --i) {
-			stack.push(compiledCall[i]);
-		}
-		f.func(state, compiledCall.length()-1);
+		f.func(state, call);
 	} else {
 		printf("Non-function as first parameter to call\n");
 		assert(false);
 	}
 	return 1;
 }
-static int64_t inlinecall_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+static int64_t call_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	Value func(stack.pop());
+	Call call(block.constants()[inst.a]);
+	return call_function(state, func, call);
+}
+static int64_t dcall_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	Value func(stack.pop());
+	Call call(block.constants()[inst.a]);
+	// expand dots into call...
+	uint64_t i;
+	for(i = 1; i < call.length(); i++) {
+		if(call[i].type == Type::R_symbol && Symbol(call[i]).i == DOTS_STRING)
+			break;
+	}	
+	if(i < call.length()) {
+		Value v;
+		state.env->get(state, Symbol(DOTS_STRING), v);
+		Vector dots(v);
+		Vector exp_call = Call(call.length() - 1 + dots.length());
+		Insert(call, 0, exp_call, 0, i);
+		Insert(dots, 0, exp_call, i, dots.length());
+		Insert(call, i+1, exp_call, i+dots.length(), call.length()-i-1);
+		call = Call(exp_call);
+	}
+	return call_function(state, func, call);
+}	
+/*static int64_t inlinecall_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	Value specialized = block.constants()[inst.b];
 	//printf("In guard %s == %s\n", function.toString().c_str(), specialized.toString().c_str());
 	if(stack.peek() ==  specialized) {
@@ -131,13 +153,17 @@ static int64_t inlinecall_op(State& state, Stack& stack, Block const& block, Ins
 		call_op(state, stack, block, inst);
 		return inst.c;
 	}	
-}
+}*/
 static int64_t get_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	state.env->get(state, Symbol(inst.a), stack.reserve());
 	return 1;
 }
 static int64_t kget_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	stack.push(block.constants()[inst.a]);
+	return 1;
+}
+static int64_t iget_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	state.baseenv->get(state, Symbol(inst.a), stack.reserve());
 	return 1;
 }
 static int64_t pop_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
@@ -210,7 +236,7 @@ static int64_t forbegin_op(State& state, Stack& stack, Block const& block, Instr
 	Value lower = stack.pop();
 	Value upper = stack.pop();
 	double k = asReal1(upper)-asReal1(lower);
-	stack.push(Value::null);
+	stack.push(Null::singleton);
 	stack.reserve().i = (int64_t)k;
 	//env->assign(Symbol(inst.a), registers[inst.c]);
 	//if(asReal1(registers[inst.c]) > asReal1(registers[inst.b]))
@@ -228,7 +254,7 @@ static int64_t forend_op(State& state, Stack& stack, Block const& block, Instruc
 }
 static int64_t whilebegin_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	Logical l(stack.pop());
-	stack.push(Value::null);
+	stack.push(Null::singleton);
 	if(l[0]) return 1;
 	else return inst.a;
 }
@@ -240,7 +266,7 @@ static int64_t whileend_op(State& state, Stack& stack, Block const& block, Instr
 	else return 1;
 }
 static int64_t repeatbegin_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
-	stack.push(Value::null);
+	stack.push(Null::singleton);
 	return 1;
 }
 static int64_t repeatend_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
@@ -404,7 +430,7 @@ static int64_t jmp_op(State& state, Stack& stack, Block const& block, Instructio
 	return (int64_t)inst.a;
 }
 static int64_t null_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
-	stack.push(Value::null);
+	stack.push(Null::singleton);
 	return 1;
 }
 static int64_t ret_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {

@@ -2,10 +2,6 @@
 #include "rinst.h"
 #include "value.h"
 
-bool isInternalCall(std::string str) {
-	return (str[0] == '.' && str[1] >= 'A' && str[1] <= 'Z');
-}
-
 void parse(State& state, SEXP s, Value& v);
 
 List parseList(State& state, SEXP s) {
@@ -31,7 +27,7 @@ List parseList(State& state, SEXP s) {
 void parse(State& state, SEXP s, Value& v)
 {
 	if(Rf_isNull(s)) {
-		v = Value::null;
+		v = Null::singleton;
 	} else if(Rf_isExpression(s)) {
 		uint64_t length = Rf_length(s);
 		Expression d(length);
@@ -40,16 +36,15 @@ void parse(State& state, SEXP s, Value& v)
 	} else if(Rf_isLanguage(s)) {
 		Call d(parseList(state, s));
 		d.toValue(v);
-		if(d[0].type == Type::R_symbol && isInternalCall(state.outString(Symbol(d[0]).i))) {
-			InternalCall ic = InternalCall(d);
-			ic.toValue(v);
+		if(d[0].type == Type::R_symbol && state.outString(Symbol(d[0]).i) == ".Internal" && d[1].type == Type::R_call)
+		{
+			Call call(d[1]);
+			Call internal(2);
+			internal[0] = d[0];
+			internal[1] = call[0];
+			call[0] = internal;
+			call.toValue(v);
 		}
-		// This code means that you can't redefine ".Internal"
-		//else if(length == 2 && d[0].type() == Type::R_symbol && Symbol(d[0]).toString() == ".Internal")
-		//{
-		//	InternalCall ic = InternalCall(Call(d[1]));
-		//	ic.toValue(v);
-		//}
 	} else if(Rf_isSymbol(s)) {
 		Symbol symbol(state, std::string(CHAR(PRINTNAME(s))));
 		symbol.toValue(v);
@@ -77,7 +72,7 @@ void parse(State& state, SEXP s, Value& v)
 			d[i] = state.inString(std::string(CHAR(STRING_ELT(s,i))));
 		d.toValue(v);
 	} else if(Rf_isPairList(s)) {
-		printf("Parsing pair list\n");
+		//printf("Parsing pair list\n");
 		PairList(parseList(state, s)).toValue(v);
 	} else if(Rf_isList(s)) {
 		parseList(state, s).toValue(v);

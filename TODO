@@ -20,13 +20,12 @@ Incomplete language features:
 	-Warnings on too many parameters
 	-Warning on attempt to use missing parameter
 -next and break
--vector type conversion functions (as.*)
 -... parameters
+-vector type conversion functions (as.*)
 -environment and call stack access functions (parent.env, sys.call, sys.parent, etc.)
 -eval
 -attribute access functions
 -attribute propogation
--factors
 -data frames
 -matrix product, outer product, kronecker product operators
 -Matching operator
@@ -46,7 +45,8 @@ Incomplete language features:
 -Computing on the language functions
 -substitute
 -FFI
-
+-built in functions galore
+-factors
 
 Language design issues:
 -0-based indexing?

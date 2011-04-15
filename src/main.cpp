@@ -355,8 +355,8 @@ while ((ch = getopt_long(argc, argv, "df:hj:v", longopts, NULL)) != -1)
        dojitcmd(L, jitopts);    
     }*/
 
-	printf(">> %d\n", sizeof(Value));
-	printf(">> %d\n", sizeof(Instruction));
+	//printf(">> %d\n", sizeof(Value));
+	//printf(">> %d\n", sizeof(Instruction));
 
 	/* start garbage collector */
 	GC_INIT();
