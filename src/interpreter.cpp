@@ -39,7 +39,7 @@ void eval(State& state, Block const& block, Environment* env);
 
 
 static int64_t call_function(State& state, Value const& func, Call const& call) {
-	
+
 	if(func.type == Type::R_function) {
 		Function f(func);
 		if(f.body().type == Type::I_bytecode || 

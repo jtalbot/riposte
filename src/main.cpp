@@ -255,7 +255,7 @@ static int dofile(const char * file, State& state, bool echo) {
 		}
 	}
 	UNPROTECT(1);
-	//print_time_elapsed("dofile", begin);
+	print_time_elapsed("dofile", begin);
 	return rc;
 }
 

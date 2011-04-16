@@ -1,0 +1,4 @@
+j <- 0
+f <- function(x,y) x
+for(i in 1:1000000) j <- f(j,1)
+j

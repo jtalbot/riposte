@@ -434,12 +434,12 @@ private:
 	typedef std::map<Symbol, Value, std::less<Symbol>, gc_allocator<std::pair<Symbol, Value> > > Container;
 	uint64_t size;
 	Container container;
-	struct Dot {
+	/*struct Dot {
 		Environment* s;
 		Symbol name;
 		Value value;
 	};
-	std::vector<Dot> dots;
+	std::vector<Dot> dots;*/
 /*
 Insights:
 -All promises must be evaluated in the dynamic scope, so typically don't need to store env
