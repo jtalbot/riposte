@@ -78,37 +78,37 @@ std::string State::stringify(Value const& value) const {
 
 	switch(value.type.internal())
 	{
-		case Type::R_null:
+		case Type::ER_null:
 			return "NULL";
-		case Type::R_raw:
+		case Type::ER_raw:
 			return "raw";
-		case Type::R_logical:
+		case Type::ER_logical:
 		{
 			Logical v(value);
 			return stringifyVector(*this, v);
 		}
-		case Type::R_integer:
+		case Type::ER_integer:
 		{
 			Integer v(value);
 			return stringifyVector(*this, v);
 		}
-		case Type::R_double:
+		case Type::ER_double:
 		{
 			Double v(value);
 			return stringifyVector(*this, v);
 		}
-		case Type::R_complex:		
+		case Type::ER_complex:		
 		{
 			//for(uint64_t i = 0; i < length; i++) result = result + ((int64_t*)ptr)[i];
 			return "complex";
 		}
-		case Type::R_character:
+		case Type::ER_character:
 		{
 			Character v(value);
 			return stringifyVector(*this, v);
 		}
-		case Type::R_list:
-		case Type::R_pairlist:
+		case Type::ER_list:
+		case Type::ER_pairlist:
 		{
 			List v(value);
 			Value names = getNames(v.attributes);
@@ -133,18 +133,18 @@ std::string State::stringify(Value const& value) const {
 			if(dots) result = result + " ...\n\n";
 			return result;
 		}
-		case Type::R_symbol:
+		case Type::ER_symbol:
 		{
 			result = "`" + outString(Symbol(value).i) + "`";
 			return result;
 		}
-		case Type::R_function:
+		case Type::ER_function:
 		{
 			//result = "function: " + intToHexStr((uint64_t)value.p) /*+ "\n" + Function(*this).body().toString()*/;
 			result = outString(Function(value).str()[0]);
 			return result;
 		}
-		case Type::I_bytecode:
+		case Type::EI_bytecode:
 		{
 			Block b(value);
 			std::string r = "block:\nconstants: " + intToStr(b.constants().size()) + "\n";

@@ -9,7 +9,15 @@
 #include "internal.h"
 
 const Null Null::singleton = Null(0);
-const Value Value::NIL = Value(Type::I_nil, (void*)0, (Attributes*)0);
+const Character Character::NA = Character(1);
+const Logical Logical::NA = Logical::c(false);
+const Logical Logical::False = Logical::c(false);
+const Logical Logical::True = Logical::c(true);
+const Double Double::NA = Double::c(0);
+const Double Double::NaN = Double::c(0);
+const Double Double::Inf = Double::c(1);
+const Integer Integer::NA = Integer::c(0);
+const Value Value::NIL = {{0}, 0, Type::I_nil, 0}; //Value(Type::I_nil, (void*)0, (Attributes*)0);
 
 
 // (stack discipline is hard to prove in R, but can we do better?)
@@ -446,8 +454,8 @@ void eval(State& state, Block const& block) {
 	Stack& stack = state.stack;
 
 #ifdef THREADED_INTERPRETER
-    #define LABELS_THREADED(name,type) (void*)&&name##_label,
-	static const void* labels[] = {BC_ENUM(LABELS_THREADED)};
+    #define LABELS_THREADED(name,type,p) (void*)&&name##_label,
+	static const void* labels[] = {BC_ENUM(LABELS_THREADED,0)};
 
 	/* Initialize threadedCode in block if not yet done */
 	if(block.threadedCode().size() == 0)
@@ -463,10 +471,10 @@ void eval(State& state, Block const& block) {
 
 	Instruction const* pc = &(block.threadedCode()[0]);
 	goto *(pc->ibc);
-	#define LABELED_OP(name,type) \
+	#define LABELED_OP(name,type,p) \
 		name##_label: \
 			pc += name##_op(state, stack, block, *pc); goto *(pc->ibc); 
-	BC_ENUM(LABELED_OP)
+	BC_ENUM(LABELED_OP,0)
 	DONE:
 	{}
 #else
@@ -474,9 +482,9 @@ void eval(State& state, Block const& block) {
     while(block.code()[pc].bc != ByteCode::ret) {
 		Instruction const& inst = block.code()[pc];
 		switch(inst.bc.internal()) {
-			#define SWITCH_OP(name,type) \
+			#define SWITCH_OP(name,type,p) \
 				case ByteCode::name: pc += name##_op(state, stack, block, inst); break;
-			BC_ENUM(SWITCH_OP)
+			BC_ENUM(SWITCH_OP,0)
 		};
 	}
 #endif

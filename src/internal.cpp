@@ -147,7 +147,9 @@ uint64_t assignDim(State& state, Call const& call)
 
 Type cTypeCast(Value const& v, Type t)
 {
-	return std::max(v.type.internal(), t.internal());
+	Type r;
+	r.v = std::max(v.type.internal(), t.internal());
+	return r;
 }
 
 uint64_t c(State& state, Call const& call) {

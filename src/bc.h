@@ -5,68 +5,68 @@
 #include "enum.h"
 #include "common.h"
 
-#define BC_ENUM(_) 				\
-	_(call, "call") \
-	_(dcall, "dcall") \
+#define BC_ENUM(_, p) 				\
+	_(call, "call", p) \
+	_(dcall, "dcall", p) \
 	/*_(inlinecall, "inlinecall")*/ \
-	_(get, "get") \
-	_(kget, "kget") \
-	_(iget, "iget") \
-	_(assign, "assign") \
-	_(classassign, "classassign") \
-	_(namesassign, "namesassign") \
-	_(dimassign, "dimassign") \
-	_(iassign, "assign") \
-	_(iclassassign, "classassign") \
-	_(inamesassign, "namesassign") \
-	_(idimassign, "dimassign") \
-	_(pop, "pop") \
-	_(forbegin, "forbegin") \
-	_(forend, "forend") \
-	_(whilebegin, "whilebegin") \
-	_(whileend, "whileend") \
-	_(repeatbegin, "repeatbegin") \
-	_(repeatend, "repeatend") \
-	_(if1, "if1") \
-	_(add, "add") \
-	_(pos, "pos") \
-	_(sub, "sub") \
-	_(neg, "neg") \
-	_(mul, "mul") \
-	_(div, "div") \
-	_(idiv, "idiv") \
-	_(mod, "mod") \
-	_(pow, "pow") \
-	_(lt, "lt") \
-	_(gt, "gt") \
-	_(eq, "eq") \
-	_(neq, "neq") \
-	_(ge, "ge") \
-	_(le, "le") \
-	_(lneg, "lneg") \
-	_(land, "land") \
-	_(sland, "sland") \
-	_(lor, "lor") \
-	_(slor, "slor") \
-	_(abs, "abs") \
-	_(sign, "sign") \
-	_(sqrt, "sqrt") \
-	_(floor, "floor") \
-	_(ceiling, "ceiling") \
-	_(trunc, "trunc") \
-	_(round, "round") \
-	_(signif, "signif") \
-	_(exp, "exp") \
-	_(log, "log") \
-	_(cos, "cos") \
-	_(sin, "sin") \
-	_(tan, "tan") \
-	_(acos, "acos") \
-	_(asin, "asin") \
-	_(atan, "atan") \
-	_(jmp, "jmp") \
-	_(null, "null") \
-	_(ret, "ret")       /* ret must be the last instruction */
+	_(get, "get", p) \
+	_(kget, "kget", p) \
+	_(iget, "iget", p) \
+	_(assign, "assign", p) \
+	_(classassign, "classassign", p) \
+	_(namesassign, "namesassign", p) \
+	_(dimassign, "dimassign", p) \
+	_(iassign, "assign", p) \
+	_(iclassassign, "classassign", p) \
+	_(inamesassign, "namesassign", p) \
+	_(idimassign, "dimassign", p) \
+	_(pop, "pop", p) \
+	_(forbegin, "forbegin", p) \
+	_(forend, "forend", p) \
+	_(whilebegin, "whilebegin", p) \
+	_(whileend, "whileend", p) \
+	_(repeatbegin, "repeatbegin", p) \
+	_(repeatend, "repeatend", p) \
+	_(if1, "if1", p) \
+	_(add, "add", p) \
+	_(pos, "pos", p) \
+	_(sub, "sub", p) \
+	_(neg, "neg", p) \
+	_(mul, "mul", p) \
+	_(div, "div", p) \
+	_(idiv, "idiv", p) \
+	_(mod, "mod", p) \
+	_(pow, "pow", p) \
+	_(lt, "lt", p) \
+	_(gt, "gt", p) \
+	_(eq, "eq", p) \
+	_(neq, "neq", p) \
+	_(ge, "ge", p) \
+	_(le, "le", p) \
+	_(lneg, "lneg", p) \
+	_(land, "land", p) \
+	_(sland, "sland", p) \
+	_(lor, "lor", p) \
+	_(slor, "slor", p) \
+	_(abs, "abs", p) \
+	_(sign, "sign", p) \
+	_(sqrt, "sqrt", p) \
+	_(floor, "floor", p) \
+	_(ceiling, "ceiling", p) \
+	_(trunc, "trunc", p) \
+	_(round, "round", p) \
+	_(signif, "signif", p) \
+	_(exp, "exp", p) \
+	_(log, "log", p) \
+	_(cos, "cos", p) \
+	_(sin, "sin", p) \
+	_(tan, "tan", p) \
+	_(acos, "acos", p) \
+	_(asin, "asin", p) \
+	_(atan, "atan", p) \
+	_(jmp, "jmp", p) \
+	_(null, "null", p) \
+	_(ret, "ret", p)       /* ret must be the last instruction */
 	/*_(frame, "frame") \
 	_(function, "function") \
 	_(rawfunction, "rawfunction") \

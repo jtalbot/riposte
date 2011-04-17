@@ -29,6 +29,8 @@ extern "C" {
 #include "value.h"
 #include "internal.h"
 
+#include "parser.h"
+
 extern void parse(State& state, SEXP s, Value& v);
 
 /*  Globals  */
@@ -235,9 +237,10 @@ static int dofile(const char * file, State& state, bool echo) {
         {
 		if (echo && verbose) l_message(1,line.c_str());
 		code += line + '\n';
-        }	
+        }
+
 	// Get R to parse it, should get parse errors here, rather than a crash during eval
-	SEXP expressions = PROTECT(parseR2(code.c_str()));
+	/*SEXP expressions = PROTECT(parseR2(code.c_str()));
     if (expressions == R_NilValue) { UNPROTECT(1); return 1; }
 
 	timespec begin;
@@ -255,6 +258,25 @@ static int dofile(const char * file, State& state, bool echo) {
 		}
 	}
 	UNPROTECT(1);
+*/
+	timespec begin;
+	get_time(begin);
+	
+	Parser parser(state);
+	Value ppr;
+	parser.execute(code.c_str(), code.length(), true, ppr);	
+	/*printf("Type: %s\n", ppr.type.toString());
+	printf("Length: %d\n", Expression(ppr).length());*/
+	
+	Expression expressions(ppr);
+	for(uint64_t i = 0; i < expressions.length(); i++) {
+		Block b = compile(state, expressions[i]);
+		eval(state, b);
+		Value result = state.stack.pop();
+		if(echo)
+			std::cout << state.stringify(result) << std::endl;
+	}
+
 	print_time_elapsed("dofile", begin);
 	return rc;
 }
@@ -342,13 +364,13 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 /* Create  an R instance  to use for parsing */
         char const *  av[]= {"riposte", "--gui=none", "--no-save"};
 
-	if ((rc = embedR(3,av))) {
-                e_message("FATAL","riposte","Unable to instance R");
-		exit(rc);
-	}
+	//if ((rc = embedR(3,av))) {
+          //      e_message("FATAL","riposte","Unable to instance R");
+	//	exit(rc);
+	//}
 
     /* Initialize R  */
-	setup_Rmainloop();
+	//setup_Rmainloop();
 	
      d_message(1,NULL,"R instanced");
 
@@ -390,9 +412,9 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
         fflush(stderr);
     
     /* Clean up R */
-    R_RunExitFinalizers();
-    Rf_KillAllDevices();
-    R_CleanTempDir();
+    //R_RunExitFinalizers();
+    //Rf_KillAllDevices();
+    //R_CleanTempDir();
  
 	return rc;
 }

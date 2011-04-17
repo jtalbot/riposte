@@ -471,16 +471,16 @@ void compile(State& state, Value const& expr, Block& block) {
 
 	switch(expr.type.internal())
 	{
-		case Type::R_symbol:
+		case Type::ER_symbol:
 			compileGetSymbol(state, Symbol(expr), block);
 			break;
-		case Type::R_call:
+		case Type::ER_call:
 			compileICCall(state, Call(expr), block);
 			break;
-		case Type::R_expression:
+		case Type::ER_expression:
 			compileExpression(state, Expression(expr), block);
 			break;
-		case Type::R_pairlist:
+		case Type::ER_pairlist:
 			compilePairList(state, PairList(expr), block);
 			break;
 		default:

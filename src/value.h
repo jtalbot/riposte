@@ -5,6 +5,7 @@
 #include <map>
 #include <iostream>
 #include <vector>
+#include <deque>
 #include <assert.h>
 
 #include <gc/gc_cpp.h>
@@ -18,8 +19,8 @@ struct Attributes;
 
 
 /** Basic value type */
-class Value {
-public:
+struct Value {
+//public:
 	union {
 		void* p;
 		double d;
@@ -29,7 +30,7 @@ public:
 	Type type;
 	uint64_t packed:2;
 
-	Value() {/*t=Type::NIL;*/}	// Careful: for efficiency, Value is not initialized by default.
+	//Value() {/*t=Type::NIL;*/}	// Careful: for efficiency, Value is not initialized by default.
 	
 	// not right for scalar doubles and maybe other stuff, careful!
 	bool operator==(Value const& other) {
@@ -49,9 +50,9 @@ public:
 
 	static const Value NIL;
 
-private:
-	Value(Type type, void* p, Attributes* attributes)
-		: p(p), attributes(attributes), type(type), packed(0) {}
+//private:
+//	Value(Type type, void* p, Attributes* attributes)
+//		: p(p), attributes(attributes), type(type), packed(0) {}
 };
 
 // The execution stack
@@ -178,7 +179,7 @@ struct Vector {
 	uint64_t width() const { if(packed < 2) return /* maximum possible width */ 8; else return inner->width; }
 	void* data() const { if(packed < 2 ) return (void*)&packedData; else return inner->data; }
 
-	Vector() : inner(0), attributes(0), packed(0) {}
+	Vector() : inner(0), attributes(0), type(Type::I_nil), packed(0) {}
 
 	Vector(Value const& v) {
 		assert(isVector(v.type));
@@ -233,15 +234,15 @@ struct VectorImpl {
 	}
 
 	VectorImpl(Value const& v) : packedData(v.i), attributes(v.attributes), packed(v.packed) {
-		assert(v.type == VectorType); 
+		assert(v.type.internal() == VectorType); 
 	}
 	
 	VectorImpl(Vector const& v) : packedData(v.packedData), attributes(v.attributes), packed(v.packed) {
-		assert(v.type == VectorType); 
+		assert(v.type.internal() == VectorType); 
 	}
 
 	void toValue(Value& v) const {
-		v.type = VectorType;
+		v.type.v = VectorType;
 		v.i = packedData;
 		v.attributes = attributes;
 		v.packed = packed;
@@ -267,7 +268,9 @@ struct VectorImpl {
 	}
 
 	Type type() const {
-		return VectorType;
+		Type t;
+		t.v = VectorType;
+		return t;
 	}
 
 	/*void subset(uint64_t start, uint64_t length, Value& v) const {
@@ -286,8 +289,10 @@ protected:
 };
 
 
-struct complex {
+struct _complex {
 	double a,b;
+	_complex() {}
+	_complex(double r, double i) : a(r), b(i) {}
 };
 
 #define VECTOR_IMPL(Name, Type, type, Pack) \
@@ -297,37 +302,64 @@ struct Name : public VectorImpl<Type, type, Pack> \
 	  Name(Vector const& v) : VectorImpl<Type, type, Pack>(v) {}
 /* note missing }; */
 
-VECTOR_IMPL(Null, Type::R_null, Value, true) 
+VECTOR_IMPL(Null, Type::ER_null, Value, true) 
 	const static Null singleton; };
-VECTOR_IMPL(Logical, Type::R_logical, unsigned char, true) };
-VECTOR_IMPL(Integer, Type::R_integer, int64_t, true) };
-VECTOR_IMPL(Double, Type::R_double, double, true) };
-VECTOR_IMPL(Complex, Type::R_complex, complex, false) };
-VECTOR_IMPL(Character, Type::R_character, uint64_t, true) };
-VECTOR_IMPL(Raw, Type::R_raw, unsigned char, true) };
-VECTOR_IMPL(List, Type::R_list, Value, false) };
-VECTOR_IMPL(PairList, Type::R_pairlist, Value, false) 
-	PairList(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; } };
-VECTOR_IMPL(Call, Type::R_call, Value, false) 
-	Call(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; } };
-VECTOR_IMPL(Expression, Type::R_expression, Value, false) 
-	Expression(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; }  };
+VECTOR_IMPL(Logical, Type::ER_logical, unsigned char, true)
+	static Logical c(bool c) { Logical r(1); r[0] = c; return r; }
+	const static Logical NA;
+	const static Logical True;
+	const static Logical False; };
+VECTOR_IMPL(Integer, Type::ER_integer, int64_t, true)
+	static Integer c(double c) { Integer r(1); r[0] = c; return r; }
+	const static Integer NA; };
+VECTOR_IMPL(Double, Type::ER_double, double, true)
+	static Double c(double c) { Double r(1); r[0] = c; return r; }
+	const static Double NA;
+	const static Double Inf;
+	const static Double NaN; };
+VECTOR_IMPL(Complex, Type::ER_complex, _complex, false)
+	static Complex c(double r, double i=0) { Complex c(1); c[0] = _complex(r,i); return c; } };
+VECTOR_IMPL(Character, Type::ER_character, uint64_t, true)
+	static Character c(State& state, std::string const& s) { Character c(1); c[0] = state.inString(s); return c; }
+	const static Character NA; };
+VECTOR_IMPL(Raw, Type::ER_raw, unsigned char, true) };
+VECTOR_IMPL(List, Type::ER_list, Value, false) 
+	static List c(Value v0) { List c(1); c[0] = v0; return c; }
+	static List c(Value v0, Value v1) { List c(2); c[0] = v0; c[1] = v1; return c; }
+	static List c(Value v0, Value v1, Value v2) { List c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } };
+VECTOR_IMPL(PairList, Type::ER_pairlist, Value, false) 
+	PairList(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; }
+	static PairList c(Value v0) { PairList c(1); c[0] = v0; return c; }
+	static PairList c(Value v0, Value v1) { PairList c(2); c[0] = v0; c[1] = v1; return c; }
+	static PairList c(Value v0, Value v1, Value v2) { PairList c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } };
+VECTOR_IMPL(Call, Type::ER_call, Value, false) 
+	Call(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; }
+	static Call c(Value v0) { Call c(1); c[0] = v0; return c; }
+	static Call c(Value v0, Value v1) { Call c(2); c[0] = v0; c[1] = v1; return c; }
+	static Call c(Value v0, Value v1, Value v2) { Call c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; }
+	static Call c(Value v0, Value v1, Value v2, Value v3) { Call c(4); c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; return c; } };
+VECTOR_IMPL(Expression, Type::ER_expression, Value, false) 
+	Expression(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; }
+	static Expression c(Value v0) { Expression c(1); c[0] = v0; return c; }
+	static Expression c(Value v0, Value v1) { Expression c(2); c[0] = v0; c[1] = v1; return c; }
+	static Expression c(Value v0, Value v1, Value v2) { Expression c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } };
 
 inline Vector::Vector(Type const& t, uint64_t length) {
 	switch(t.internal()) {
-		case Type::R_logical: Logical(length).toVector(*this); break;	
-		case Type::R_integer: Integer(length).toVector(*this); break;	
-		case Type::R_double: Double(length).toVector(*this); break;	
-		case Type::R_complex: Complex(length).toVector(*this); break;	
-		case Type::R_character: Character(length).toVector(*this); break;	
-		case Type::R_raw: Raw(length).toVector(*this); break;	
-		case Type::R_list: List(length).toVector(*this); break;	
-		case Type::R_pairlist: PairList(length).toVector(*this); break;	
-		case Type::R_call: Call(length).toVector(*this); break;	
-		case Type::R_expression: Expression(length).toVector(*this); break;	
+		case Type::ER_logical: Logical(length).toVector(*this); break;	
+		case Type::ER_integer: Integer(length).toVector(*this); break;	
+		case Type::ER_double: Double(length).toVector(*this); break;	
+		case Type::ER_complex: Complex(length).toVector(*this); break;	
+		case Type::ER_character: Character(length).toVector(*this); break;	
+		case Type::ER_raw: Raw(length).toVector(*this); break;	
+		case Type::ER_list: List(length).toVector(*this); break;	
+		case Type::ER_pairlist: PairList(length).toVector(*this); break;	
+		case Type::ER_call: Call(length).toVector(*this); break;	
+		case Type::ER_expression: Expression(length).toVector(*this); break;	
 		default: printf("Invalid vector type\n"); assert(false); break;
 	};
 }
+
 
 class Block {
 private:
@@ -607,5 +639,41 @@ inline bool isObject(Value const& v) {
 }
 
 inline double asReal1(Value const& v) { assert(v.type == Type::R_double || v.type == Type::R_integer); if(v.type == Type::R_integer) return Integer(v)[0]; else return Double(v)[0]; }
+
+struct Pairs {
+	struct Pair {
+		Symbol n;
+		Value v;
+	};
+	struct Inner : public gc {
+		std::deque<Pair, traceable_allocator<Value> > p;
+	};
+	Inner* inner;
+	static Pairs Make() { Pairs p; p.inner = new Inner(); return p; }
+	uint64_t length() const { return inner->p.size(); }
+	void push_front(Symbol n, Value v) { Pair t = {n, v}; inner->p.push_front(t); }
+	void push_back(Symbol n, Value v)  { Pair t = {n, v}; inner->p.push_back(t); }
+	const Value& value(uint64_t i) const { return inner->p[i].v; }
+	const Symbol& name(uint64_t i) const { return inner->p[i].n; }
+	operator List() const {
+		List l(length());
+		for(uint64_t i = 0; i < length(); i++)
+			l[i] = value(i);
+		bool named = false;
+		for(uint64_t i = 0; i < length(); i++) {
+			if(name(i).i != 0) {
+				named = true;
+				break;
+			}
+		}
+		if(named) {
+			Character n(length());
+			for(uint64_t i = 0; i < length(); i++)
+				n[i] = name(i).i;
+			setNames(l.attributes, n);
+		}
+		return l;
+	}
+};
 
 #endif
