@@ -130,7 +130,7 @@
 	# Comments and whitespace.
 	'/*' { fgoto c_comment; };
 	'#' [^\n]*;
-	'\n' {token( TOKEN_NEWLINE );};
+	'\n'+ {token( TOKEN_NEWLINE );};
 	( any - 33..126 )+;
 
 	*|;
