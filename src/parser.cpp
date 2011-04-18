@@ -434,7 +434,7 @@ static const int Scanner_en_main = 16;
 
 void Parser::token( int tok, Value v)
 {
-	Value result;
+	Parser::Result result;
 	const char *data = ts;
 	int len = te - ts;
 
@@ -472,6 +472,9 @@ Parser::Parser(State& state) : line(0), col(0), have(0), state(state)
 
 int Parser::execute( const char* data, int len, bool isEof, Value& result)
 {
+	Result r;
+	r.state = 0;
+
 	pParser = ParseAlloc(malloc);
 
 	const char *p = data;
@@ -479,7 +482,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& result)
 	const char* eof = isEof ? pe : 0;
 
 	
-#line 483 "../parser.cpp"
+#line 486 "../parser.cpp"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -500,7 +503,7 @@ _resume:
 #line 1 "NONE"
 	{ts = p;}
 	break;
-#line 504 "../parser.cpp"
+#line 507 "../parser.cpp"
 		}
 	}
 
@@ -967,7 +970,7 @@ _eof_trans:
 	}
 	}
 	break;
-#line 971 "../parser.cpp"
+#line 974 "../parser.cpp"
 		}
 	}
 
@@ -984,7 +987,7 @@ _again:
 #line 1 "NONE"
 	{act = 0;}
 	break;
-#line 988 "../parser.cpp"
+#line 991 "../parser.cpp"
 		}
 	}
 
@@ -1004,14 +1007,16 @@ _again:
 	_out: {}
 	}
 
-#line 177 "lexer.rl"
+#line 180 "lexer.rl"
 
-	Parse(pParser, 0, Value::NIL, &result);
+	Parse(pParser, 0, Value::NIL, &r);
 	ParseFree(pParser, free);
 
-	if( cs == Scanner_error )
+	result = r.value;
+
+	if( cs == Scanner_error || r.state == -1 )
 		return -1;
-	else if( cs >= Scanner_first_final )
+	else if( cs >= Scanner_first_final && r.state == 1)
 		return 1;
 	else
 		return 0;
@@ -1019,11 +1024,10 @@ _again:
 
 int Parser::buffer_execute( )
 {
-	static char buf[16384];
+	/*static char buf[16384];
 
 	std::ios::sync_with_stdio(false);
 
-	/* Do the first read. */
 	bool done = false;
 	while ( !done ) {
 		char* b = buf + have;
@@ -1031,7 +1035,6 @@ int Parser::buffer_execute( )
 		int space = 16384 - have;
 
 		if ( space == 0 ) {
-			/* We filled up the buffer trying to scan a token. */
 			std::cerr << "OUT OF BUFFER SPACE" << std::endl;
 			return -1;
 		}
@@ -1041,559 +1044,28 @@ int Parser::buffer_execute( )
 		const char *pe = p + len;
 		const char *eof = 0;
 
-		/* If we see eof then append the EOF char. */
 	 	if ( std::cin.eof() ) {
 			eof = pe;
 			done = true;
 		}
 
-		
-#line 1052 "../parser.cpp"
-	{
-	int _klen;
-	unsigned int _trans;
-	const char *_acts;
-	unsigned int _nacts;
-	const char *_keys;
+		%% write exec;
 
-	if ( p == pe )
-		goto _test_eof;
-	if ( cs == 0 )
-		goto _out;
-_resume:
-	_acts = _Scanner_actions + _Scanner_from_state_actions[cs];
-	_nacts = (unsigned int) *_acts++;
-	while ( _nacts-- > 0 ) {
-		switch ( *_acts++ ) {
-	case 3:
-#line 1 "NONE"
-	{ts = p;}
-	break;
-#line 1073 "../parser.cpp"
-		}
-	}
-
-	_keys = _Scanner_trans_keys + _Scanner_key_offsets[cs];
-	_trans = _Scanner_index_offsets[cs];
-
-	_klen = _Scanner_single_lengths[cs];
-	if ( _klen > 0 ) {
-		const char *_lower = _keys;
-		const char *_mid;
-		const char *_upper = _keys + _klen - 1;
-		while (1) {
-			if ( _upper < _lower )
-				break;
-
-			_mid = _lower + ((_upper-_lower) >> 1);
-			if ( (*p) < *_mid )
-				_upper = _mid - 1;
-			else if ( (*p) > *_mid )
-				_lower = _mid + 1;
-			else {
-				_trans += (_mid - _keys);
-				goto _match;
-			}
-		}
-		_keys += _klen;
-		_trans += _klen;
-	}
-
-	_klen = _Scanner_range_lengths[cs];
-	if ( _klen > 0 ) {
-		const char *_lower = _keys;
-		const char *_mid;
-		const char *_upper = _keys + (_klen<<1) - 2;
-		while (1) {
-			if ( _upper < _lower )
-				break;
-
-			_mid = _lower + (((_upper-_lower) >> 1) & ~1);
-			if ( (*p) < _mid[0] )
-				_upper = _mid - 2;
-			else if ( (*p) > _mid[1] )
-				_lower = _mid + 2;
-			else {
-				_trans += ((_mid - _keys)>>1);
-				goto _match;
-			}
-		}
-		_trans += _klen;
-	}
-
-_match:
-	_trans = _Scanner_indicies[_trans];
-_eof_trans:
-	cs = _Scanner_trans_targs[_trans];
-
-	if ( _Scanner_trans_actions[_trans] == 0 )
-		goto _again;
-
-	_acts = _Scanner_actions + _Scanner_trans_actions[_trans];
-	_nacts = (unsigned int) *_acts++;
-	while ( _nacts-- > 0 )
-	{
-		switch ( *_acts++ )
-		{
-	case 0:
-#line 29 "lexer.rl"
-	{ {cs = 16; goto _again;} }
-	break;
-	case 4:
-#line 1 "NONE"
-	{te = p+1;}
-	break;
-	case 5:
-#line 34 "lexer.rl"
-	{act = 1;}
-	break;
-	case 6:
-#line 36 "lexer.rl"
-	{act = 3;}
-	break;
-	case 7:
-#line 37 "lexer.rl"
-	{act = 4;}
-	break;
-	case 8:
-#line 38 "lexer.rl"
-	{act = 5;}
-	break;
-	case 9:
-#line 39 "lexer.rl"
-	{act = 6;}
-	break;
-	case 10:
-#line 40 "lexer.rl"
-	{act = 7;}
-	break;
-	case 11:
-#line 41 "lexer.rl"
-	{act = 8;}
-	break;
-	case 12:
-#line 42 "lexer.rl"
-	{act = 9;}
-	break;
-	case 13:
-#line 43 "lexer.rl"
-	{act = 10;}
-	break;
-	case 14:
-#line 44 "lexer.rl"
-	{act = 11;}
-	break;
-	case 15:
-#line 45 "lexer.rl"
-	{act = 12;}
-	break;
-	case 16:
-#line 46 "lexer.rl"
-	{act = 13;}
-	break;
-	case 17:
-#line 47 "lexer.rl"
-	{act = 14;}
-	break;
-	case 18:
-#line 48 "lexer.rl"
-	{act = 15;}
-	break;
-	case 19:
-#line 49 "lexer.rl"
-	{act = 16;}
-	break;
-	case 20:
-#line 50 "lexer.rl"
-	{act = 17;}
-	break;
-	case 21:
-#line 51 "lexer.rl"
-	{act = 18;}
-	break;
-	case 22:
-#line 52 "lexer.rl"
-	{act = 19;}
-	break;
-	case 23:
-#line 62 "lexer.rl"
-	{act = 22;}
-	break;
-	case 24:
-#line 64 "lexer.rl"
-	{act = 23;}
-	break;
-	case 25:
-#line 68 "lexer.rl"
-	{act = 24;}
-	break;
-	case 26:
-#line 124 "lexer.rl"
-	{act = 65;}
-	break;
-	case 27:
-#line 133 "lexer.rl"
-	{act = 70;}
-	break;
-	case 28:
-#line 134 "lexer.rl"
-	{act = 71;}
-	break;
-	case 29:
-#line 56 "lexer.rl"
-	{te = p+1;{token( TOKEN_STR_CONST, Character::c(state, std::string(ts+1, te-ts-2)) );}}
-	break;
-	case 30:
-#line 58 "lexer.rl"
-	{te = p+1;{token( TOKEN_STR_CONST, Character::c(state, std::string(ts+1, te-ts-2)) );}}
-	break;
-	case 31:
-#line 71 "lexer.rl"
-	{te = p+1;{token( TOKEN_NUM_CONST, Complex::c(0, atof(std::string(ts, te-ts-1).c_str())) );}}
-	break;
-	case 32:
-#line 74 "lexer.rl"
-	{te = p+1;{token( TOKEN_NUM_CONST, Integer::c(atof(std::string(ts, te-ts-1).c_str())) );}}
-	break;
-	case 33:
-#line 86 "lexer.rl"
-	{te = p+1;{token( TOKEN_PLUS, Symbol(state, "+") );}}
-	break;
-	case 34:
-#line 88 "lexer.rl"
-	{te = p+1;{token( TOKEN_POW, Symbol(state, "^") );}}
-	break;
-	case 35:
-#line 91 "lexer.rl"
-	{te = p+1;{token( TOKEN_POW, Symbol(state, "^") );}}
-	break;
-	case 36:
-#line 92 "lexer.rl"
-	{te = p+1;{token( TOKEN_TILDE, Symbol(state, "~") );}}
-	break;
-	case 37:
-#line 93 "lexer.rl"
-	{te = p+1;{token( TOKEN_DOLLAR, Symbol(state, "$") );}}
-	break;
-	case 38:
-#line 94 "lexer.rl"
-	{te = p+1;{token( TOKEN_AT, Symbol(state, "@") );}}
-	break;
-	case 39:
-#line 98 "lexer.rl"
-	{te = p+1;{token( TOKEN_NS_GET_INT, Symbol(state, ":::") );}}
-	break;
-	case 40:
-#line 101 "lexer.rl"
-	{te = p+1;{token( TOKEN_LBRACE, Symbol(state, "{") );}}
-	break;
-	case 41:
-#line 102 "lexer.rl"
-	{te = p+1;{token( TOKEN_RBRACE, Symbol(state, "}") );}}
-	break;
-	case 42:
-#line 103 "lexer.rl"
-	{te = p+1;{token( TOKEN_LPAREN, Symbol(state, "(") );}}
-	break;
-	case 43:
-#line 104 "lexer.rl"
-	{te = p+1;{token( TOKEN_RPAREN, Symbol(state, ")") );}}
-	break;
-	case 44:
-#line 106 "lexer.rl"
-	{te = p+1;{token( TOKEN_LBB, Symbol(state, "[[") );}}
-	break;
-	case 45:
-#line 108 "lexer.rl"
-	{te = p+1;{token( TOKEN_RBB, Symbol(state, "]]") );}}
-	break;
-	case 46:
-#line 111 "lexer.rl"
-	{te = p+1;{token( TOKEN_LE, Symbol(state, "<=") );}}
-	break;
-	case 47:
-#line 112 "lexer.rl"
-	{te = p+1;{token( TOKEN_GE, Symbol(state, ">=") );}}
-	break;
-	case 48:
-#line 113 "lexer.rl"
-	{te = p+1;{token( TOKEN_EQ, Symbol(state, "==") );}}
-	break;
-	case 49:
-#line 114 "lexer.rl"
-	{te = p+1;{token( TOKEN_NE, Symbol(state, "!=") );}}
-	break;
-	case 50:
-#line 115 "lexer.rl"
-	{te = p+1;{token( TOKEN_AND2, Symbol(state, "&&") );}}
-	break;
-	case 51:
-#line 116 "lexer.rl"
-	{te = p+1;{token( TOKEN_OR2, Symbol(state, "||") );}}
-	break;
-	case 52:
-#line 117 "lexer.rl"
-	{te = p+1;{token( TOKEN_LEFT_ASSIGN, Symbol(state, "<-") );}}
-	break;
-	case 53:
-#line 119 "lexer.rl"
-	{te = p+1;{token( TOKEN_RIGHT_ASSIGN, Symbol(state, "->>") );}}
-	break;
-	case 54:
-#line 120 "lexer.rl"
-	{te = p+1;{token( TOKEN_LEFT_ASSIGN, Symbol(state, "<<-") );}}
-	break;
-	case 55:
-#line 121 "lexer.rl"
-	{te = p+1;{token( TOKEN_QUESTION, Symbol(state, "?") );}}
-	break;
-	case 56:
-#line 127 "lexer.rl"
-	{te = p+1;{token( TOKEN_COMMA );}}
-	break;
-	case 57:
-#line 128 "lexer.rl"
-	{te = p+1;{token( TOKEN_SEMICOLON );}}
-	break;
-	case 58:
-#line 131 "lexer.rl"
-	{te = p+1;{ {cs = 14; goto _again;} }}
-	break;
-	case 59:
-#line 35 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NUM_CONST, Logical::NA );}}
-	break;
-	case 60:
-#line 62 "lexer.rl"
-	{te = p;p--;{token( TOKEN_SYMBOL, Symbol(state, std::string(ts, te-ts)) );}}
-	break;
-	case 61:
-#line 64 "lexer.rl"
-	{te = p;p--;{token( TOKEN_SYMBOL, Symbol(state, std::string(ts+1, te-ts-2)) );}}
-	break;
-	case 62:
-#line 68 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );}}
-	break;
-	case 63:
-#line 82 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NUM_CONST );}}
-	break;
-	case 64:
-#line 85 "lexer.rl"
-	{te = p;p--;{token( TOKEN_EQ_ASSIGN, Symbol(state, "=") );}}
-	break;
-	case 65:
-#line 87 "lexer.rl"
-	{te = p;p--;{token( TOKEN_MINUS, Symbol(state, "-") );}}
-	break;
-	case 66:
-#line 89 "lexer.rl"
-	{te = p;p--;{token( TOKEN_DIVIDE, Symbol(state, "/") );}}
-	break;
-	case 67:
-#line 90 "lexer.rl"
-	{te = p;p--;{token( TOKEN_TIMES, Symbol(state, "*") );}}
-	break;
-	case 68:
-#line 95 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NOT, Symbol(state, "!") );}}
-	break;
-	case 69:
-#line 96 "lexer.rl"
-	{te = p;p--;{token( TOKEN_COLON, Symbol(state, ":") );}}
-	break;
-	case 70:
-#line 97 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NS_GET, Symbol(state, "::") );}}
-	break;
-	case 71:
-#line 99 "lexer.rl"
-	{te = p;p--;{token( TOKEN_AND, Symbol(state, "&") );}}
-	break;
-	case 72:
-#line 100 "lexer.rl"
-	{te = p;p--;{token( TOKEN_OR, Symbol(state, "|") );}}
-	break;
-	case 73:
-#line 105 "lexer.rl"
-	{te = p;p--;{token( TOKEN_LBRACKET, Symbol(state, "[") );}}
-	break;
-	case 74:
-#line 107 "lexer.rl"
-	{te = p;p--;{token( TOKEN_RBRACKET, Symbol(state, "]") );}}
-	break;
-	case 75:
-#line 109 "lexer.rl"
-	{te = p;p--;{token( TOKEN_LT, Symbol(state, "<") );}}
-	break;
-	case 76:
-#line 110 "lexer.rl"
-	{te = p;p--;{token( TOKEN_GT, Symbol(state, ">") );}}
-	break;
-	case 77:
-#line 118 "lexer.rl"
-	{te = p;p--;{token( TOKEN_RIGHT_ASSIGN, Symbol(state, "->") );}}
-	break;
-	case 78:
-#line 124 "lexer.rl"
-	{te = p;p--;{token(TOKEN_SPECIALOP, Symbol(state, std::string(ts, te-ts)) ); }}
-	break;
-	case 79:
-#line 132 "lexer.rl"
-	{te = p;p--;}
-	break;
-	case 80:
-#line 68 "lexer.rl"
-	{{p = ((te))-1;}{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );}}
-	break;
-	case 81:
-#line 82 "lexer.rl"
-	{{p = ((te))-1;}{token( TOKEN_NUM_CONST );}}
-	break;
-	case 82:
-#line 109 "lexer.rl"
-	{{p = ((te))-1;}{token( TOKEN_LT, Symbol(state, "<") );}}
-	break;
-	case 83:
-#line 1 "NONE"
-	{	switch( act ) {
-	case 0:
-	{{cs = 0; goto _again;}}
-	break;
-	case 1:
-	{{p = ((te))-1;}token( TOKEN_NULL_CONST, Null::singleton );}
-	break;
-	case 3:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Logical::True );}
-	break;
-	case 4:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Logical::False );}
-	break;
-	case 5:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::Inf);}
-	break;
-	case 6:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::NaN);}
-	break;
-	case 7:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Integer::NA);}
-	break;
-	case 8:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::NA);}
-	break;
-	case 9:
-	{{p = ((te))-1;}token( TOKEN_STR_CONST, Character::NA);}
-	break;
-	case 10:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST);}
-	break;
-	case 11:
-	{{p = ((te))-1;}token( TOKEN_FUNCTION, Symbol(state, "function") );}
-	break;
-	case 12:
-	{{p = ((te))-1;}token( TOKEN_WHILE, Symbol(state, "while") );}
-	break;
-	case 13:
-	{{p = ((te))-1;}token( TOKEN_REPEAT, Symbol(state, "repeat") );}
-	break;
-	case 14:
-	{{p = ((te))-1;}token( TOKEN_FOR, Symbol(state, "for") );}
-	break;
-	case 15:
-	{{p = ((te))-1;}token( TOKEN_IF, Symbol(state, "if") );}
-	break;
-	case 16:
-	{{p = ((te))-1;}token( TOKEN_IN, Symbol(state, "in") );}
-	break;
-	case 17:
-	{{p = ((te))-1;}token( TOKEN_ELSE, Symbol(state, "else") );}
-	break;
-	case 18:
-	{{p = ((te))-1;}token( TOKEN_NEXT, Symbol(state, "next") );}
-	break;
-	case 19:
-	{{p = ((te))-1;}token( TOKEN_BREAK, Symbol(state, "break") );}
-	break;
-	case 22:
-	{{p = ((te))-1;}token( TOKEN_SYMBOL, Symbol(state, std::string(ts, te-ts)) );}
-	break;
-	case 23:
-	{{p = ((te))-1;}token( TOKEN_SYMBOL, Symbol(state, std::string(ts+1, te-ts-2)) );}
-	break;
-	case 24:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );}
-	break;
-	case 65:
-	{{p = ((te))-1;}token(TOKEN_SPECIALOP, Symbol(state, std::string(ts, te-ts)) ); }
-	break;
-	case 70:
-	{{p = ((te))-1;}token( TOKEN_NEWLINE );}
-	break;
-	default:
-	{{p = ((te))-1;}}
-	break;
-	}
-	}
-	break;
-#line 1540 "../parser.cpp"
-		}
-	}
-
-_again:
-	_acts = _Scanner_actions + _Scanner_to_state_actions[cs];
-	_nacts = (unsigned int) *_acts++;
-	while ( _nacts-- > 0 ) {
-		switch ( *_acts++ ) {
-	case 1:
-#line 1 "NONE"
-	{ts = 0;}
-	break;
-	case 2:
-#line 1 "NONE"
-	{act = 0;}
-	break;
-#line 1557 "../parser.cpp"
-		}
-	}
-
-	if ( cs == 0 )
-		goto _out;
-	if ( ++p != pe )
-		goto _resume;
-	_test_eof: {}
-	if ( p == eof )
-	{
-	if ( _Scanner_eof_trans[cs] > 0 ) {
-		_trans = _Scanner_eof_trans[cs] - 1;
-		goto _eof_trans;
-	}
-	}
-
-	_out: {}
-	}
-
-#line 220 "lexer.rl"
-
-		/* Check if we failed. */
 		if ( cs == Scanner_error ) {
-			/* Machine failed before finding a token. */
 			std::cerr << "PARSE ERROR" << std::endl;
 			return -1;
 		}
 
-		/* Now set up the prefix. */
 		if ( ts == 0 )
 			have = 0;
 		else {
-			/* There is data that needs to be shifted over. */
 			have = pe - ts;
 			memmove( buf, ts, have );
 			te -= (ts-buf);
 			ts = buf;
 		}
 	}
-
+	*/
 	return 0;
 }
 

@@ -8,6 +8,11 @@
 #include "value.h"
 
 struct Parser {
+	struct Result {
+		Value value;
+		int state;
+	};
+
 	int line, col;
 	const char *ts;
 	const char *te;

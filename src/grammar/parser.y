@@ -9,7 +9,7 @@
 
 %token_prefix	TOKEN_
 %token_type {Value}
-%extra_argument {Value* result}
+%extra_argument {Parser::Result* result}
 
 %type exprlist {Pairs}
 %type sublist  {Pairs}
@@ -44,23 +44,28 @@
 }
 
 %syntax_error {
+        result->state = -1;
 	std::cout << "Syntax error!" << std::endl;
 }
 
 %parse_accept {
-      printf("parsing complete!\n");
+     result->state = 1;
 }
 
 %parse_failure {
+     result->state = -1;
      printf("Giving up.  Parser is hopelessly lost...\n");
 }
 
-prog(A) ::= END_OF_INPUT. { *result = A = Expression(0); }
-prog(A) ::= NEWLINE. { *result = A = Expression(0); }
+prog(A) ::= END_OF_INPUT. { result->value = A = Expression(0); }
+prog(A) ::= NEWLINE. { result->value = A = Expression(0); }
 //prog ::= expr_or_assign NEWLINE.
 //prog ::= expr_or_assign SEMICOLON.
-prog(A) ::= exprlist(B). { *result = A = Expression(List(B)); }
-prog(A) ::= error. { *result = A = Expression(0); }
+prog(A) ::= exprlist(B). { result->value = A = Expression(List(B)); }
+prog(A) ::= error. { result->value = A = Expression(0); }
+
+optnl ::= NEWLINE.
+optnl ::= .
 
 expr_or_assign(A) ::= expr(B). { A = B; }
 expr_or_assign(A) ::= equal_assign(B). { A = B; }
@@ -82,7 +87,7 @@ expr(A) ::= TILDE(B) expr(C). { A = Call::c(B, C); }
 expr(A) ::= QUESTION(B) expr(C). { A = Call::c(B, C); }
 
 expr(A) ::= expr(B) COLON(C) expr(D). { A = Call::c(C, B, D); }
-expr(A) ::= expr(B) PLUS(C) expr(D). { A = Call::c(C, B, D); }
+expr(A) ::= expr(B) PLUS(C) optnl expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) MINUS(C) expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) TIMES(C) expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) DIVIDE(C) expr(D). { A = Call::c(C, B, D); }

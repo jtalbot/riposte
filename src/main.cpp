@@ -164,6 +164,49 @@ SEXP parseR() {
 	return cmdexpr;
 }
 
+Value parsetty(State& state) {
+	Value ppr;
+	int i = 0;
+	int is_tty = isatty(fileno(stdin));
+	char code[8192];
+	ParseStatus status = PARSE_INCOMPLETE;
+	
+	while(status == PARSE_INCOMPLETE)
+	{
+		if(is_tty){
+		  if(i == 0)
+		   printf("> ");
+		  else
+		   printf(" + ");
+		}
+		if (NULL == fgets(code+i, 8192-i, stdin))
+                  {
+                    // EOF exit
+                    l_message(0,"EOF");
+                    die = 1;
+                    return Value::NIL;
+                  }
+		i = strlen(code);
+		if(i == 1)
+			i = 0;
+		if(i > 0) {
+			Parser parser(state);
+			int s = parser.execute(code, i, true, ppr);	
+			if(s == 1)
+				status = PARSE_OK;
+			if(s == -1)
+				status = PARSE_ERROR;	
+		}
+	}
+	
+        // if not a terminal echo the parse so as to interleave with output
+	if (!is_tty) fprintf(stdout,"%s",code); 
+	if (status != PARSE_OK) {
+		e_message("Error","Rparse", code);
+	}
+	return ppr;
+}
+
 SEXP parseR2(char const* code) {
 	SEXP cmdSexp, cmdexpr;
 	ParseStatus status;
@@ -208,11 +251,13 @@ int dostdin(State& state) {
 
 	while(!die) {
         status = 0;
-		code = parseR();
-        if (R_NilValue == code) continue;
+		//code = parseR();
+        //if (R_NilValue == code) continue;
 
 		Value value, result;
-		parse(state, code, value);
+		//parse(state, code, value);
+		value = parsetty(state);
+		if(value.type == Type::I_nil) continue;
 		//std::cout << "Parsed: " << value.toString() << std::endl;
 		//interpret(value, env, result); 
 		Block b = compile(state, value);

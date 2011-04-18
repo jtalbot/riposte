@@ -138,7 +138,7 @@
 
 void Parser::token( int tok, Value v)
 {
-	Value result;
+	Parser::Result result;
 	const char *data = ts;
 	int len = te - ts;
 
@@ -167,6 +167,9 @@ Parser::Parser(State& state) : line(0), col(0), have(0), state(state)
 
 int Parser::execute( const char* data, int len, bool isEof, Value& result)
 {
+	Result r;
+	r.state = 0;
+
 	pParser = ParseAlloc(malloc);
 
 	const char *p = data;
@@ -175,12 +178,14 @@ int Parser::execute( const char* data, int len, bool isEof, Value& result)
 
 	%% write exec;
 
-	Parse(pParser, 0, Value::NIL, &result);
+	Parse(pParser, 0, Value::NIL, &r);
 	ParseFree(pParser, free);
 
-	if( cs == Scanner_error )
+	result = r.value;
+
+	if( cs == Scanner_error || r.state == -1 )
 		return -1;
-	else if( cs >= Scanner_first_final )
+	else if( cs >= Scanner_first_final && r.state == 1)
 		return 1;
 	else
 		return 0;
@@ -188,11 +193,10 @@ int Parser::execute( const char* data, int len, bool isEof, Value& result)
 
 int Parser::buffer_execute( )
 {
-	static char buf[16384];
+	/*static char buf[16384];
 
 	std::ios::sync_with_stdio(false);
 
-	/* Do the first read. */
 	bool done = false;
 	while ( !done ) {
 		char* b = buf + have;
@@ -200,7 +204,6 @@ int Parser::buffer_execute( )
 		int space = 16384 - have;
 
 		if ( space == 0 ) {
-			/* We filled up the buffer trying to scan a token. */
 			std::cerr << "OUT OF BUFFER SPACE" << std::endl;
 			return -1;
 		}
@@ -210,7 +213,6 @@ int Parser::buffer_execute( )
 		const char *pe = p + len;
 		const char *eof = 0;
 
-		/* If we see eof then append the EOF char. */
 	 	if ( std::cin.eof() ) {
 			eof = pe;
 			done = true;
@@ -218,25 +220,21 @@ int Parser::buffer_execute( )
 
 		%% write exec;
 
-		/* Check if we failed. */
 		if ( cs == Scanner_error ) {
-			/* Machine failed before finding a token. */
 			std::cerr << "PARSE ERROR" << std::endl;
 			return -1;
 		}
 
-		/* Now set up the prefix. */
 		if ( ts == 0 )
 			have = 0;
 		else {
-			/* There is data that needs to be shifted over. */
 			have = pe - ts;
 			memmove( buf, ts, have );
 			te -= (ts-buf);
 			ts = buf;
 		}
 	}
-
+	*/
 	return 0;
 }
 
