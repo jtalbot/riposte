@@ -17,7 +17,7 @@ const Double Double::NA = Double::c(0);
 const Double Double::NaN = Double::c(0);
 const Double Double::Inf = Double::c(1);
 const Integer Integer::NA = Integer::c(0);
-const Value Value::NIL = {{0}, 0, Type::I_nil, 0}; //Value(Type::I_nil, (void*)0, (Attributes*)0);
+const Value Value::NIL = {{0}, 0, Type::I_nil, 0}; 
 
 
 // (stack discipline is hard to prove in R, but can we do better?)
@@ -149,19 +149,6 @@ static int64_t dcall_op(State& state, Stack& stack, Block const& block, Instruct
 	}
 	return call_function(state, func, call);
 }	
-/*static int64_t inlinecall_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
-	Value specialized = block.constants()[inst.b];
-	//printf("In guard %s == %s\n", function.toString().c_str(), specialized.toString().c_str());
-	if(stack.peek() ==  specialized) {
-		stack.pop();
-		//printf("Passed guard\n");
-		return 1;
-	} else {
-		//printf("Failed guard, adding %d\n", inst.c);
-		call_op(state, stack, block, inst);
-		return inst.c;
-	}	
-}*/
 static int64_t get_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	state.env->get(state, Symbol(inst.a), stack.reserve());
 	return 1;
@@ -240,25 +227,20 @@ static int64_t idimassign_op(State& state, Stack& stack, Block const& block, Ins
 	return 1;
 }
 static int64_t forbegin_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
-	Value sym = stack.pop();
-	Value lower = stack.pop();
-	Value upper = stack.pop();
-	double k = asReal1(upper)-asReal1(lower);
-	stack.push(Null::singleton);
-	stack.reserve().i = (int64_t)k;
-	//env->assign(Symbol(inst.a), registers[inst.c]);
-	//if(asReal1(registers[inst.c]) > asReal1(registers[inst.b]))
-	//i = i + inst.op;
+	Vector loopvec = Vector(stack.peek());
+	stack.reserve().i = (uint64_t)0;
+	if((uint64_t)stack.peek().i >= Vector(stack.peek(1)).length()) { stack.pop(); stack.pop(); stack.push(Null::singleton); return inst.a;	}
+	state.env->assign(Symbol(inst.b), Element(loopvec, stack.peek().i));
 	return 1;
 }
 static int64_t forend_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	// pop the results of the loop...
 	stack.pop();
-	// decrement the loop variable
-	stack.peek().i -= 1;
-
-	if(stack.peek().i < 0) { stack.pop(); return 1;	}
-	else return -inst.a;
+	// increment the loop variable
+	stack.peek().i += 1;
+	if((uint64_t)stack.peek().i >= Vector(stack.peek(1)).length()) { stack.pop(); stack.pop(); stack.push(Null::singleton); return 1;	}
+	state.env->assign(Symbol(inst.b), Element(Vector(stack.peek(1)), stack.peek().i));
+	return -inst.a;
 }
 static int64_t whilebegin_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	Logical l(stack.pop());
@@ -286,6 +268,12 @@ static int64_t if1_op(State& state, Stack& stack, Block const& block, Instructio
 	Logical l(stack.pop());
 	if(l[0]) return 1;
 	else return inst.a;
+}
+static int64_t colon_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
+	double to = asReal1(stack.pop());
+	double from = asReal1(stack.pop());
+	stack.push(Sequence(from, to>from?1:-1, fabs(to-from)+1));
+	return 1;
 }
 static int64_t add_op(State& state, Stack& stack, Block const& block, Instruction const& inst) {
 	if(!isObject(stack.peek()) && !isObject(stack.peek(1)))

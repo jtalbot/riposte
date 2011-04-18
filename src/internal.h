@@ -440,6 +440,7 @@ struct SubsetIndex {
 	}
 };
 
+
 template< class A, class Index, class B >
 struct SubsetAssign {
 	static A eval(A const& a, Index const& d, B const& b)
@@ -452,7 +453,7 @@ struct SubsetAssign {
 		}
 
 		// should use max index here to extend vector if necessary	
-		A r = Clone(a);	
+		A r = a;//Clone(a);	
 		for(uint64_t i = 0; i < d.length(); i++) {	
 			int64_t idx = Cast<Index, Integer>::eval(d[i]);
 			if(idx != 0)
@@ -864,6 +865,30 @@ inline Vector Subset(Vector const& src, uint64_t start, uint64_t length) {
 	Vector v(src.type, length);
 	memcpy(v.data(), (char*)src.data()+start*src.width(), length*src.width());
 	return v;
+}
+
+inline Double Sequence(double from, double by, double len) {
+	Double r(len);
+	double j = 0;
+	for(uint64_t i = 0; i < len; i++) {
+		r[i] = from+j;
+		j = j + by;
+	}
+	return r;
+}
+
+inline Vector Element(Vector const& a, uint64_t index)
+{
+	if(a.type == Type::R_double) return Double::c(Double(a)[index]);
+	else if(a.type == Type::R_integer) return Integer::c(Integer(a)[index]);
+	else if(a.type == Type::R_logical) return Logical::c(Logical(a)[index]);
+	else if(a.type == Type::R_character) return Character::c(Character(a)[index]);
+	else if(a.type == Type::R_complex) return Complex::c(Complex(a)[index]);
+	else if(a.type == Type::R_list) return List::c(List(a)[index]);
+	else {
+		printf("Invalid element\n");
+		return Null::singleton;
+	};
 }
 
 #endif

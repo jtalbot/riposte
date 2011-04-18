@@ -318,9 +318,11 @@ VECTOR_IMPL(Double, Type::ER_double, double, true)
 	const static Double Inf;
 	const static Double NaN; };
 VECTOR_IMPL(Complex, Type::ER_complex, _complex, false)
-	static Complex c(double r, double i=0) { Complex c(1); c[0] = _complex(r,i); return c; } };
+	static Complex c(double r, double i=0) { Complex c(1); c[0] = _complex(r,i); return c; }
+	static Complex c(_complex c) { Complex r(1); r[0] = c; return r; } };
 VECTOR_IMPL(Character, Type::ER_character, uint64_t, true)
 	static Character c(State& state, std::string const& s) { Character c(1); c[0] = state.inString(s); return c; }
+	static Character c(uint64_t s) { Character c(1); c[0] = s; return c; }
 	const static Character NA; };
 VECTOR_IMPL(Raw, Type::ER_raw, unsigned char, true) };
 VECTOR_IMPL(List, Type::ER_list, Value, false) 

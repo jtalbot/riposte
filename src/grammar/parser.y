@@ -77,7 +77,7 @@ expr(A) ::= STR_CONST(B). { A = B; }
 expr(A) ::= NULL_CONST(B). { A = B; }
 expr(A) ::= SYMBOL(B). { A = B; }
 
-expr(A) ::= LBRACE(B) exprlist(C) RBRACE. { C.push_front(Symbol(0), B); A = Expression(List(C)); }
+expr(A) ::= LBRACE(B) optnl exprlist(C) optnl RBRACE. { C.push_front(Symbol(0), B); A = Expression(List(C)); }
 expr(A) ::= LPAREN expr_or_assign(B) RPAREN. [PAREN] { A = B; }
 
 expr(A) ::= MINUS(B) expr(C). [UMINUS] { A = Call::c(B, C); }

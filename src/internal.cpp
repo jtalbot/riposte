@@ -25,18 +25,12 @@ uint64_t sequence(State& state, Call const& call) {
 	Value from = force(state, call[1]);
 	Value by   = force(state, call[2]);
 	Value len  = force(state, call[3]);
-	
+
 	double f = asReal1(from);
 	double b = asReal1(by);
 	double l = asReal1(len);
 
-	Double r(l);
-	double j = 0;
-	for(uint64_t i = 0; i < l; i++) {
-		r[i] = f+j;
-		j = j + b;
-	}
-	state.stack.push(r);
+	state.stack.push(Sequence(f, b, l));	
 	return 1;
 }
 

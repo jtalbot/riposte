@@ -73,15 +73,12 @@ static void compileOp(State& state, Call const& call, Block& block) {
 		block.code().push_back(Instruction(ByteCode::ret));
 	}
 	else if(funcStr == "for" || funcStr == ".For") {
-		compile(state, Call(call[2])[2], block);
-		compile(state, Call(call[2])[1], block);
-		compileConstant(state, call[1], block);
-		// FIXME: to special common case "i in x:y", need to check if ':' has been replaced, also only works if stepping forward...
-		block.code().push_back(Instruction(ByteCode::forbegin, 0));
+		compile(state, call[2], block);
+		block.code().push_back(Instruction(ByteCode::forbegin, 0, Symbol(call[1]).i));
 		uint64_t beginbody = block.code().size();
 		compile(state, call[3], block);
 		uint64_t endbody = block.code().size();
-		block.code().push_back(Instruction(ByteCode::forend, endbody-beginbody));
+		block.code().push_back(Instruction(ByteCode::forend, endbody-beginbody, Symbol(call[1]).i));
 		block.code()[beginbody-1].a = endbody-beginbody+1;
 	}
 	else if(funcStr == "while" || funcStr == ".While") {
@@ -133,6 +130,11 @@ static void compileOp(State& state, Call const& call, Block& block) {
 	else if(funcStr == ".Paren" || funcStr == "(") {
 		//uint64_t length = call.length();
 		compile(state, call[1], block);
+	}
+	else if(funcStr == ":") {
+		compile(state, call[1], block);
+		compile(state, call[2], block);
+		block.code().push_back(Instruction(ByteCode::colon, call.length()-1));
 	}
 	else if(funcStr == ".Add" || funcStr == "+") {
 		if(call.length() == 3)
@@ -316,6 +318,7 @@ static void compileCall(State& state, Call const& call, Block& block) {
 			|| funcStr == "if"
 			|| funcStr == "{"
 			|| funcStr == "("
+			|| funcStr == ":"
 			|| funcStr == "+"
 			|| funcStr == "-"
 			|| funcStr == "*"

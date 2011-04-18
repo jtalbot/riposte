@@ -28,6 +28,7 @@
 	_(repeatbegin, "repeatbegin", p) \
 	_(repeatend, "repeatend", p) \
 	_(if1, "if1", p) \
+	_(colon, "colon", p) \
 	_(add, "add", p) \
 	_(pos, "pos", p) \
 	_(sub, "sub", p) \
