@@ -1,13 +1,4 @@
-/*
- * main.cpp
- *   commandline execution for luaR
- *
- * Drawn from Example of a C program that interfaces with Lua.
- * Based on Lua 5.0 code by Pedro Martelletto in November, 2003.
- * Updated to Lua 5.1. David Manura, January 2007.
- */
 
-#define MATHLIB_STANDALONE
 #include <stdlib.h>
 #include <stdio.h>
 #include <err.h>
@@ -16,6 +7,8 @@
 #include <getopt.h>
 #include <fstream>
 #include <iostream>
+
+#define MATHLIB_STANDALONE
 extern "C" {
 #include <Rmath.h>
 }
@@ -24,14 +17,9 @@ extern "C" {
 	#include <valgrind/callgrind.h>
 #endif
 
-#include "rinst.h"
-
 #include "value.h"
 #include "internal.h"
-
 #include "parser.h"
-
-extern void parse(State& state, SEXP s, Value& v);
 
 /*  Globals  */
 static int debug = 0;
@@ -68,110 +56,14 @@ static void d_message(const int level, const char* ifmt, const char *msg)
    fflush(stderr);
  }
  
-/*
-  start up an instance of R to use for parsing
-*/
-int embedR(int argc, char const **argv){
-  
-  structRstart rp;
-  Rstart Rp = &rp;
-  if (!getenv("R_HOME")) {
-    e_message("FATAL","embedR","R_HOME is not set. Please set all required environment variables before running this program.");
- 
-       return(-1);
-    } 
-
-/* 
-   This all looks great, but none of it seems to have any effect
-*/
-  R_running_as_main_program = 1;
-  R_DefParams(Rp);
-  // vanilla
-  Rp->SaveAction = SA_NOSAVE;
-  Rp->RestoreAction = SA_NORESTORE;
-  Rp->LoadSiteFile = (Rboolean)FALSE;
-  Rp->LoadInitFile = (Rboolean)FALSE;
-  R_RestoreHistory = (Rboolean)0;
-  Rp->NoRenviron = TRUE;
-  Rp->R_Interactive = (Rboolean)0;
-  Rp->R_Quiet = (Rboolean)TRUE;
-  R_SetParams(Rp);
-
-  int stat= Rf_initialize_R(argc, (char **) argv);
-  if (stat<0) {
-     char msg[64];
-     sprintf(msg,"Failed to initialize embedded R rc=%d",stat);
-     e_message("FATAL","InitR",msg); 
-    return(-2);
-  }
-
-  R_SignalHandlers=0;
-  R_CStackLimit = (uintptr_t)-1;
-
-  R_Outputfile = NULL;
-  R_Consolefile = NULL;
-  R_Interactive = (Rboolean)1;
-  ptr_R_ShowMessage = Re_ShowMessage;
-  ptr_R_WriteConsoleEx =Re_WriteConsoleEx;
-
-  ptr_R_WriteConsole = NULL;
-  ptr_R_ReadConsole = NULL;
-  
-  return(0);
-}
-
-/*
-  Read stdin and return R expressions (empty of end-of-file)
-*/
-SEXP parseR() {
-	SEXP cmdSexp, cmdexpr = R_NilValue;
-	int i = 0;
-	int is_tty = isatty(fileno(stdin));
-	char code[8192];
-	ParseStatus status = PARSE_INCOMPLETE;
-	
-	while(status == PARSE_INCOMPLETE)
-	{
-		if(is_tty){
-		  if(i == 0)
-		   printf("> ");
-		  else
-		   printf(" + ");
-		}
-		if (NULL == fgets(code+i, 8192-i, stdin))
-                  {
-                    // EOF exit
-                    l_message(0,"EOF");
-                    die = 1;
-                    return R_NilValue;
-                  }
-		i = strlen(code);
-		if(i == 1)
-			i = 0;
-		if(i > 0) {		
-			PROTECT(cmdSexp = Rf_allocVector(STRSXP, 1));
-			SET_STRING_ELT(cmdSexp, 0, Rf_mkChar(code));
-			cmdexpr = PROTECT(R_ParseVector(cmdSexp, -1, &status, R_NilValue));
-			UNPROTECT(2);
-		}
-	}
-	
-        // if not a terminal echo the parse so as to interleave with output
-	if (!is_tty) fprintf(stdout,"%s",code); 
-	if (status != PARSE_OK) {
-		e_message("Error","Rparse", code);
-	}
-	return cmdexpr;
-}
-
 Value parsetty(State& state) {
-	Value ppr;
+	Value ppr = Value::NIL;
 	int i = 0;
 	int is_tty = isatty(fileno(stdin));
 	char code[8192];
-	ParseStatus status = PARSE_INCOMPLETE;
+	int status = 0;
 	
-	while(status == PARSE_INCOMPLETE)
+	while(status == 0)
 	{
 		if(is_tty){
 		  if(i == 0)
@@ -191,56 +83,20 @@ Value parsetty(State& state) {
 			i = 0;
 		if(i > 0) {
 			Parser parser(state);
-			int s = parser.execute(code, i, true, ppr);	
-			if(s == 1)
-				status = PARSE_OK;
-			if(s == -1)
-				status = PARSE_ERROR;	
+			status = parser.execute(code, i, true, ppr);	
 		}
 	}
 	
         // if not a terminal echo the parse so as to interleave with output
 	if (!is_tty) fprintf(stdout,"%s",code); 
-	if (status != PARSE_OK) {
+	if (status == -1) {
 		e_message("Error","Rparse", code);
 	}
 	return ppr;
 }
 
-SEXP parseR2(char const* code) {
-	SEXP cmdSexp, cmdexpr;
-	ParseStatus status;
-	
-	PROTECT(cmdSexp = Rf_allocVector(STRSXP, 1));
-	SET_STRING_ELT(cmdSexp, 0, Rf_mkChar(code));
-	cmdexpr = PROTECT(R_ParseVector(cmdSexp, -1, &status, R_NilValue));
-	
-	if (status != PARSE_OK) {
-		char msg[64];
-        	sprintf(msg,"ParseStatus=%d",status);
-		e_message("Error","R",msg);
-                cmdexpr = R_NilValue;
-	}
-	UNPROTECT(2);
-	return cmdexpr;
-}
-
-SEXP evalR(SEXP code, SEXP env) {
-	int i;
-	SEXP ans = R_NilValue;
-	PROTECT(code);
-	PROTECT(env);
-	for(i = 0; i < Rf_length(code); ++i) {
-		ans = Rf_eval(VECTOR_ELT(code, i), env);
-	}
-	UNPROTECT(2);
-	return ans;
-}
-
-
 int dostdin(State& state) {
-	SEXP code;
-	int status, rc = 0;
+	int rc = 0;
 
 	printf("\n");
 	printf("A Quick Riposte!   (Fast R)\n\n");
@@ -250,16 +106,10 @@ int dostdin(State& state) {
 	printf("\n");
 
 	while(!die) {
-        status = 0;
-		//code = parseR();
-        //if (R_NilValue == code) continue;
-
 		Value value, result;
-		//parse(state, code, value);
 		value = parsetty(state);
 		if(value.type == Type::I_nil) continue;
 		//std::cout << "Parsed: " << value.toString() << std::endl;
-		//interpret(value, env, result); 
 		Block b = compile(state, value);
 		//std::cout << "Compiled code: " << b.toString() << std::endl;
 		eval(state, b);
@@ -273,7 +123,7 @@ static int dofile(const char * file, State& state, bool echo) {
 	int rc = 0;
 	std::string s;
 
-	// Read in the file ourselves
+	// Read in the file
 	std::string code;
 	std::string line;
 	std::ifstream in(file);
@@ -284,34 +134,12 @@ static int dofile(const char * file, State& state, bool echo) {
 		code += line + '\n';
         }
 
-	// Get R to parse it, should get parse errors here, rather than a crash during eval
-	/*SEXP expressions = PROTECT(parseR2(code.c_str()));
-    if (expressions == R_NilValue) { UNPROTECT(1); return 1; }
-
-	timespec begin;
-	get_time(begin);
-	for(int i = 0; i < Rf_length(expressions) && !rc; ++i) {
-		Value value, result;
-		parse(state, VECTOR_ELT(expressions, i), value);
-		Block b = compile(state, value);
-		Value v;
-		b.toValue(v);
-		eval(state, b);	
-		result = state.stack.pop();	
-		if(echo) {
-			std::cout << state.stringify(result) << std::endl;
-		}
-	}
-	UNPROTECT(1);
-*/
 	timespec begin;
 	get_time(begin);
 	
 	Parser parser(state);
 	Value ppr;
 	parser.execute(code.c_str(), code.length(), true, ppr);	
-	/*printf("Type: %s\n", ppr.type.toString());
-	printf("Length: %d\n", Expression(ppr).length());*/
 	
 	Expression expressions(ppr);
 	for(uint64_t i = 0; i < expressions.length(); i++) {
@@ -325,20 +153,6 @@ static int dofile(const char * file, State& state, bool echo) {
 	print_time_elapsed("dofile", begin);
 	return rc;
 }
-
-/*static int luaR_quit() {
-    die = 1;
-    return 0;
-}*/
-
-/*static const luaL_reg vectorlib[] = {
-	{"allocVector", luaB_createtable},
-	{"dumpLuaCode", luaR_dumpLuaCode},
-	{"source", luaR_source},
-	{"parse", luaR_parse},
-	{"quit", luaR_quit},
-	{NULL, NULL}
-};*/
 
 static void usage()
 {
@@ -406,25 +220,6 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 
       d_message(1,NULL,"Command option processing complete");
 
-/* Create  an R instance  to use for parsing */
-        char const *  av[]= {"riposte", "--gui=none", "--no-save"};
-
-	//if ((rc = embedR(3,av))) {
-          //      e_message("FATAL","riposte","Unable to instance R");
-	//	exit(rc);
-	//}
-
-    /* Initialize R  */
-	//setup_Rmainloop();
-	
-     d_message(1,NULL,"R instanced");
-
-    /* if specified, pass options to luajit  */
-    /*if(NULL  != jitopts ){ 
-       d_message(1,"jitopts(%s)\n",jitopts);
-       dojitcmd(L, jitopts);    
-    }*/
-
 	//printf(">> %d\n", sizeof(Value));
 	//printf(">> %d\n", sizeof(Instruction));
 
@@ -456,11 +251,6 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
         fflush(stdout);
         fflush(stderr);
     
-    /* Clean up R */
-    //R_RunExitFinalizers();
-    //Rf_KillAllDevices();
-    //R_CleanTempDir();
- 
 	return rc;
 }
 

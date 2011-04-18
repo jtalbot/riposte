@@ -5,14 +5,12 @@ Justin Talbot <jtalbot@stanford.edu>
 
 Compiling riposte
 -----------------
-1. Install R and make sure the R executable is available on the path.
-
-2. Install the Boehm GC. Available in macports, `port install boehmgc`.
+1. Install the Boehm GC. Available in macports, `port install boehmgc`.
    (Optional) Install rlwrap. Available in macports, `port install rlwrap`.
 
-3. Run make in the riposte directory
+2. Run make in the riposte directory
 
-4. Execute ./riposte to start
+3. Execute ./riposte to start
 
 
 Limitations
