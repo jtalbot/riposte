@@ -3,13 +3,13 @@ To do list (not yet in priority order):
 
 Big stuff:
 -Garbage Collector. Replace Boehm with exact, generational garbage collector like everyone else has. Can we borrow the GC from a Javascript implementation?
--Standalone R parser. Currently we have a dependency on R to provide parsing only. Can we strip the parser out from the R distribution so we don't have that dependency? Or maybe write our own? Much of the code in R's parser appears to be necessary to deal with multi-byte character encoding schemes. Is there a parser generator out there that could handle that for us?
 -R external interface. Make it possible to load and use existing R packages.
 -Class systems: S3, S4, R5 (can the implementation of these be simplified somehow?)
 -Graphics support
 -GUI (can we use existing R interfaces?)
 -Debugger or profiler?
 
+-Validate parser against R parser. Handle line breaks in some statements like R currently does. Handle multibyte strings (use iconv?) See list of open questions in lexer.rl
 
 Incomplete language features:
 -NAs
@@ -20,7 +20,7 @@ Incomplete language features:
 	-Warnings on too many parameters
 	-Warning on attempt to use missing parameter
 -next and break
--... parameters
+-... parameters (some progress made on this front. repassed ... parameters are still evaluated in the wrong environment (the immediate caller's environment, rather than the original environment.)
 -vector type conversion functions (as.*)
 -environment and call stack access functions (parent.env, sys.call, sys.parent, etc.)
 -eval
@@ -55,3 +55,4 @@ Language design issues:
 	a![c(0,1,2,3)]		selects all but elements 0..3
 	Reasoning: deciding which to compute currently requires checking the index vector for positive and negative numbers. This revision would make that check unnecessary.
 -Data frames as basic data type, necessary for DB-like query optimizations
+-Richer type system, based on ADT? Represent NA in the type system.

@@ -258,6 +258,28 @@ uint64_t subset(State& state, Call const& call) {
         return 1;
 }
 
+uint64_t dollar(State& state, Call const& call) {
+        assert(call.length()-1 == 2);
+
+        Value a = force(state, call[1]);
+        uint64_t i = Symbol(code(call[2])).i;
+	Value r = getNames(a.attributes);
+	if(r.type != Type::R_null) {
+		Character c(r);
+		uint64_t j = 0;
+		for(;j < c.length(); j++) {
+			if(c[j] == i)
+				break;
+		}
+		if(j < c.length()) {
+			state.stack.push(Element(a, j));
+			return 1;
+		}
+	}
+	state.stack.push(Null::singleton);
+	return 1;
+} 
+
 uint64_t length(State& state, Call const& call) {
 	Vector a = force(state, call[1]);
 	Integer i(1);
@@ -369,5 +391,7 @@ void addMathOps(State& state)
 	
 	CFunction(subset).toValue(v);
 	env->assign(Symbol(state, "["), v);
+	CFunction(dollar).toValue(v);
+	env->assign(Symbol(state, "$"), v);
 }
 
