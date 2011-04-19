@@ -30,9 +30,9 @@ Incomplete language features:
 -matrix product, outer product, kronecker product operators
 -Matching operator
 -Help
--$ indexing
+-$ indexing (Linear scan version done, but very slow. Can we store a map with a list or PIC?)
 -matrix indexing
--[[]] indexing
+-[[]] indexing (Works with a single index)
 -logical vector indexing
 -negative number indexing
 -character indexing

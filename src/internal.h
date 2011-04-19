@@ -891,5 +891,19 @@ inline Vector Element(Vector const& a, uint64_t index)
 	};
 }
 
+inline Value Element2(Vector const& a, uint64_t index)
+{
+	if(a.type == Type::R_double) return Double::c(Double(a)[index]);
+	else if(a.type == Type::R_integer) return Integer::c(Integer(a)[index]);
+	else if(a.type == Type::R_logical) return Logical::c(Logical(a)[index]);
+	else if(a.type == Type::R_character) return Character::c(Character(a)[index]);
+	else if(a.type == Type::R_complex) return Complex::c(Complex(a)[index]);
+	else if(a.type == Type::R_list) return List(a)[index];
+	else {
+		printf("Invalid element\n");
+		return Null::singleton;
+	};
+}
+
 #endif
 

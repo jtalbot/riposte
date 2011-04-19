@@ -241,6 +241,12 @@ uint64_t subset(State& state, Call const& call) {
         else if(a.type == Type::R_character && i.type == Type::R_integer) {
                 SubsetIndex< Character, Integer >::eval(a, i).toVector(r);
         }
+        else if(a.type == Type::R_list && i.type == Type::R_double) {
+                SubsetIndex< List, Double >::eval(a, i).toVector(r);
+        }
+        else if(a.type == Type::R_list && i.type == Type::R_integer) {
+                SubsetIndex< List, Integer >::eval(a, i).toVector(r);
+        }
         else if(a.type == Type::R_double && i.type == Type::R_logical) {
                 //SubsetIndex< Integer, Double >::eval(a, i).toVector(r);
         }
@@ -258,6 +264,38 @@ uint64_t subset(State& state, Call const& call) {
         return 1;
 }
 
+uint64_t subset2(State& state, Call const& call) {
+
+        Value a = force(state, call[1]);
+        Value b = force(state, call[2]);
+	if(b.type == Type::R_character) {
+		uint64_t i = Character(b)[0];
+		Value r = getNames(a.attributes);
+		if(r.type != Type::R_null) {
+			Character c(r);
+			uint64_t j = 0;
+			for(;j < c.length(); j++) {
+				if(c[j] == i)
+					break;
+			}
+			if(j < c.length()) {
+				state.stack.push(Element2(a, j));
+				return 1;
+			}
+		}
+	}
+	else if(b.type == Type::R_integer) {
+		state.stack.push(Element2(a, Integer(b)[0]-1));
+		return 1;
+	}
+	else if(b.type == Type::R_double) {
+		state.stack.push(Element2(a, (uint64_t)Double(b)[0]-1));
+		return 1;
+	}
+	state.stack.push(Null::singleton);
+	return 1;
+} 
+
 uint64_t dollar(State& state, Call const& call) {
         assert(call.length()-1 == 2);
 
@@ -272,7 +310,7 @@ uint64_t dollar(State& state, Call const& call) {
 				break;
 		}
 		if(j < c.length()) {
-			state.stack.push(Element(a, j));
+			state.stack.push(Element2(a, j));
 			return 1;
 		}
 	}
@@ -391,6 +429,8 @@ void addMathOps(State& state)
 	
 	CFunction(subset).toValue(v);
 	env->assign(Symbol(state, "["), v);
+	CFunction(subset2).toValue(v);
+	env->assign(Symbol(state, "[["), v);
 	CFunction(dollar).toValue(v);
 	env->assign(Symbol(state, "$"), v);
 }
