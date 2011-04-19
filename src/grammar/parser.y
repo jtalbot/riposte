@@ -4,6 +4,7 @@
 	TODO: support for interactive input
 		combine SYMBOL and STR_CONST into a single rule, rather than have 4 variations for sub, NS_GET, and NS_GET_INT 
 		similarly, combine NEWLINE and SEMICOLON into single rule, rather than have 2 variations.
+		R parser supports a rule: expr % expr, but this doesn't appear to work with the lexer which treats anything that starts with % as a special op. 
 		can I factor out the actions?
  */
 
@@ -17,7 +18,7 @@
 %type formlist {Pairs}
 
 %left           QUESTION.
-%left           LOW WHILE FOR REPEAT.
+%left           FUNCTION WHILE FOR REPEAT.
 %right          IF.
 %left           ELSE.
 %right          LEFT_ASSIGN.
@@ -36,7 +37,7 @@
 %right          POW.
 %left           DOLLAR AT.
 %left           NS_GET NS_GET_INT.
-%nonassoc       PAREN BRACKET BB.
+%nonassoc       LPAREN LBRACKET LBB LBRACE.
 
 %include {
 	#include <iostream>
@@ -59,13 +60,8 @@
 
 prog(A) ::= END_OF_INPUT. { result->value = A = Expression(0); }
 prog(A) ::= NEWLINE. { result->value = A = Expression(0); }
-//prog ::= expr_or_assign NEWLINE.
-//prog ::= expr_or_assign SEMICOLON.
 prog(A) ::= exprlist(B). { result->value = A = Expression(List(B)); }
 prog(A) ::= error. { result->value = A = Expression(0); }
-
-optnl ::= NEWLINE.
-optnl ::= .
 
 expr_or_assign(A) ::= expr(B). { A = B; }
 expr_or_assign(A) ::= equal_assign(B). { A = B; }
@@ -77,8 +73,8 @@ expr(A) ::= STR_CONST(B). { A = B; }
 expr(A) ::= NULL_CONST(B). { A = B; }
 expr(A) ::= SYMBOL(B). { A = B; }
 
-expr(A) ::= LBRACE(B) optnl exprlist(C) optnl RBRACE. { C.push_front(Symbol(0), B); A = Expression(List(C)); }
-expr(A) ::= LPAREN expr_or_assign(B) RPAREN. [PAREN] { A = B; }
+expr(A) ::= LBRACE(B) exprlist(C) RBRACE. { C.push_front(Symbol(0), B); A = Expression(List(C)); }
+expr(A) ::= LPAREN expr_or_assign(B) RPAREN. { A = B; }
 
 expr(A) ::= MINUS(B) expr(C). [UMINUS] { A = Call::c(B, C); }
 expr(A) ::= PLUS(B) expr(C).  [UPLUS]  { A = Call::c(B, C); }
@@ -87,13 +83,12 @@ expr(A) ::= TILDE(B) expr(C). { A = Call::c(B, C); }
 expr(A) ::= QUESTION(B) expr(C). { A = Call::c(B, C); }
 
 expr(A) ::= expr(B) COLON(C) expr(D). { A = Call::c(C, B, D); }
-expr(A) ::= expr(B) PLUS(C) optnl expr(D). { A = Call::c(C, B, D); }
+expr(A) ::= expr(B) PLUS(C) expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) MINUS(C) expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) TIMES(C) expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) DIVIDE(C) expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) POW(C) expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) SPECIALOP(C) expr(D). { A = Call::c(C, B, D); }
-expr(A) ::= expr(B) PERCENT(C) expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) TILDE(C) expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) QUESTION(C) expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) LT(C) expr(D). { A = Call::c(C, B, D); }
@@ -109,32 +104,29 @@ expr(A) ::= expr(B) OR2(C) expr(D). { A = Call::c(C, B, D); }
 
 expr(A) ::= expr(B) LEFT_ASSIGN(C) expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) RIGHT_ASSIGN(C) expr(D). { A = Call::c(C, D, B); }
-expr(A) ::= FUNCTION(B) LPAREN formlist(C) RPAREN expr_or_assign(D).  [LOW] { A = Call::c(B, PairList(List(C)), D); }
-expr(A) ::= expr(B) LPAREN sublist(C) RPAREN. { C.push_front(Symbol(0), B); A = Call(List(C)); }  /* Function call */
+expr(A) ::= FUNCTION(B) LPAREN formlist(C) RPAREN expr_or_assign(D).  { A = Call::c(B, PairList(List(C)), D); }
+expr(A) ::= expr(B) LPAREN sublist(C) RPAREN. { C.push_front(Symbol(0), B); A = Call(List(C)); } 
 expr(A) ::= IF(B) ifcond(C) expr_or_assign(D). { A = Call::c(B, C, D); }
 expr(A) ::= IF(B) ifcond(C) expr_or_assign(D) ELSE expr_or_assign(E). { A = Call::c(B, C, D, E); }
-expr(A) ::= FOR(B) LPAREN SYMBOL(C) IN expr(D) RPAREN expr_or_assign(E). [FOR] { A = Call::c(B, C, D, E); }
+expr(A) ::= FOR(B) LPAREN SYMBOL(C) IN expr(D) RPAREN expr_or_assign(E). { A = Call::c(B, C, D, E); }
 expr(A) ::= WHILE(B) cond(C) expr_or_assign(D). { A = Call::c(B, C, D); }
 expr(A) ::= REPEAT(B) expr_or_assign(C). { A = Call::c(B, C); }
-expr(A) ::= expr(B) LBB(C) sublist(D) RBB. [BB] { D.push_front(Symbol(0), B); D.push_front(Symbol(0), C); A = Call(List(D)); }
-expr(A) ::= expr(B) LBRACKET(C) sublist(D) RBRACKET. [BRACKET] { D.push_front(Symbol(0), B); D.push_front(Symbol(0), C); A = Call(List(D)); }
-expr(A) ::= SYMBOL(B) NS_GET(C) SYMBOL(D). { A = Call::c(C, B, D); }
-expr(A) ::= SYMBOL(B) NS_GET(C) STR_CONST(D). { A = Call::c(C, B, D); }
-expr(A) ::= STR_CONST(B) NS_GET(C) SYMBOL(D). { A = Call::c(C, B, D); }
-expr(A) ::= STR_CONST(B) NS_GET(C) STR_CONST(D). { A = Call::c(C, B, D); }
-expr(A) ::= SYMBOL(B) NS_GET_INT(C) SYMBOL(D). { A = Call::c(C, B, D); }
-expr(A) ::= SYMBOL(B) NS_GET_INT(C) STR_CONST(D). { A = Call::c(C, B, D); }
-expr(A) ::= STR_CONST(B) NS_GET_INT(C) SYMBOL(D). { A = Call::c(C, B, D); }
-expr(A) ::= STR_CONST(B) NS_GET_INT(C) STR_CONST(D). { A = Call::c(C, B, D); }
-expr(A) ::= expr(B) DOLLAR(C) SYMBOL(D). { A = Call::c(C, B, D); }
-expr(A) ::= expr(B) DOLLAR(C) STR_CONST(D). { A = Call::c(C, B, D); }
-expr(A) ::= expr(B) AT(C) SYMBOL(D). { A = Call::c(C, B, D); }
-expr(A) ::= expr(B) AT(C) STR_CONST(D). { A = Call::c(C, B, D); }
+expr(A) ::= expr(B) LBB(C) sublist(D) RBB. { D.push_front(Symbol(0), B); D.push_front(Symbol(0), C); A = Call(List(D)); }
+expr(A) ::= expr(B) LBRACKET(C) sublist(D) RBRACKET. { D.push_front(Symbol(0), B); D.push_front(Symbol(0), C); A = Call(List(D)); }
+expr(A) ::= SYMBOL(B) NS_GET(C) symbolstr(D). { A = Call::c(C, B, D); }
+expr(A) ::= STR_CONST(B) NS_GET(C) symbolstr(D). { A = Call::c(C, B, D); }
+expr(A) ::= SYMBOL(B) NS_GET_INT(C) symbolstr(D). { A = Call::c(C, B, D); }
+expr(A) ::= STR_CONST(B) NS_GET_INT(C) symbolstr(D). { A = Call::c(C, B, D); }
+expr(A) ::= expr(B) DOLLAR(C) symbolstr(D). { A = Call::c(C, B, D); }
+expr(A) ::= expr(B) AT(C) symbolstr(D). { A = Call::c(C, B, D); }
 expr(A) ::= NEXT(B). { A = Call::c(B); }
 expr(A) ::= BREAK(B). { A = Call::c(B); }
 
 cond(A) ::= LPAREN expr(B) RPAREN. { A = B; }
 ifcond(A) ::= LPAREN expr(B) RPAREN. { A = B; }
+
+symbolstr(A) ::= STR_CONST(B). { A = B; }
+symbolstr(A) ::= SYMBOL(B). { A = B; }
 
 exprlist(A) ::= expr_or_assign(B). { A = Pairs::Make(); A.push_back(Symbol(0), B); }
 exprlist(A) ::= exprlist(B) SEMICOLON expr_or_assign(C). { A = B; A.push_back(Symbol(0), C); }
@@ -147,8 +139,8 @@ sublist(A) ::= sublist(B) COMMA sub(C). { A = B; A.push_back(C.name(0), C.value(
 
 sub(A) ::= expr(B). { A = Pairs::Make(); A.push_back(Symbol(0), B); }
 sub(A) ::= SYMBOL(B) EQ_ASSIGN. { A = Pairs::Make(); A.push_back(B, Value::NIL); }
-sub(A) ::= SYMBOL(B) EQ_ASSIGN expr(C). { A = Pairs::Make(); A.push_back(Symbol(B), C); }
 sub(A) ::= STR_CONST(B) EQ_ASSIGN. { A = Pairs::Make(); A.push_back(B, Value::NIL); }
+sub(A) ::= SYMBOL(B) EQ_ASSIGN expr(C). { A = Pairs::Make(); A.push_back(Symbol(B), C); }
 sub(A) ::= STR_CONST(B) EQ_ASSIGN expr(C). { A = Pairs::Make(); A.push_back(Symbol(B), C); }
 sub(A) ::= NULL_CONST EQ_ASSIGN. { A = Pairs::Make(); A.push_back(Symbol(0), Value::NIL); }
 sub(A) ::= NULL_CONST EQ_ASSIGN expr(C). { A = Pairs::Make(); A.push_back(Symbol(0), C); }

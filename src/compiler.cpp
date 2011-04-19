@@ -33,7 +33,7 @@ static void compileOp(State& state, Call const& call, Block& block) {
 		assert(call[1].type == Type::R_symbol);
 		block.code().push_back(Instruction(ByteCode::iget, Symbol(call[1]).i));
 	}
-	else if(funcStr == "<-" || funcStr == ".Assign") {
+	else if(funcStr == "<-" || funcStr == "=" || funcStr == ".Assign") {
 		ByteCode bc;
 		Value v = call[1];
 		
@@ -312,6 +312,7 @@ static void compileCall(State& state, Call const& call, Block& block) {
 		if(	funcStr == ".Internal"
 			|| funcStr == "return"
 			|| funcStr == "<-" 
+			|| funcStr == "=" 
 			|| funcStr == "for"
 			|| funcStr == "while"
 			|| funcStr == "repeat"

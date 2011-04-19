@@ -60,7 +60,7 @@
 	# Symbols.
 	( ('.'? [a-zA-Z_.]) [a-zA-Z0-9_.]* ) 
 		{token( TOKEN_SYMBOL, Symbol(state, std::string(ts, te-ts)) );};
-	( '`' ( [^"\\\n] | /\\./ )* '`' ) 
+	( '`' ( [^`\\\n] | /\\./ )* '`' ) 
 		{token( TOKEN_SYMBOL, Symbol(state, std::string(ts+1, te-ts-2)) );};
 
 	# Numeric literals.
