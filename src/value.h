@@ -91,6 +91,10 @@ struct State {
 	Stack stack;
 	Environment *env, *baseenv;
 
+	// reset at the beginning of a call to eval
+	bool stopped;
+	std::vector<std::string> warnings;
+
 	std::map<std::string, uint64_t> stringTable;
 	std::map<uint64_t, std::string> reverseStringTable;
 

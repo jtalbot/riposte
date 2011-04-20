@@ -24,10 +24,6 @@
 	exponent = [eE] [+\-]? digit+;
 	hexponent = [pP] [+\-]? digit+;
 	
-	c_comment := 
-		any* :>> '*/'
-		@{ fgoto main; };
-
 	main := |*
 
 	# Keywords.
@@ -126,12 +122,11 @@
 	# Separators.
 	',' {token( TOKEN_COMMA );};
 	';' {token( TOKEN_SEMICOLON );};
+	# the parser expects to never get two NEWLINE tokens in a row.
+	((any-(10 | 33..126))* ('#' [^\n]* '\n' | '\n'))+ {token( TOKEN_NEWLINE );};
 	
-	# Comments and whitespace.
-	'/*' { fgoto c_comment; };
-	'#' [^\n]*;
-	'\n'+ {token( TOKEN_NEWLINE );};
-	( any - 33..126 )+;
+	# Discard all other characters
+	( any - (10 | 33..126) )+;
 
 	*|;
 }%%
@@ -146,8 +141,20 @@ void Parser::token( int tok, Value v)
 	std::cout.write( data, len );
 	std::cout << '\n';*/
 
-	Parse(pParser, tok, v, &result); 
-	
+	// Do the lookahead to resolve the dangling else conflict
+	if(lastTokenWasNL) {
+		if(tok != TOKEN_ELSE)
+			Parse(pParser, TOKEN_NEWLINE, Value::NIL, &result);
+		Parse(pParser, tok, v, &result);
+		lastTokenWasNL = false;
+	}
+	else {
+		if(tok == TOKEN_NEWLINE)
+			lastTokenWasNL = true;
+		else
+			Parse(pParser, tok, v, &result);
+	}
+
 	/* Count newlines and columns. Use for error reporting? */ 
 	for ( int i = 0; i < len; i ++ ) {
 		if ( data[i] == '\n' ) {
@@ -160,7 +167,7 @@ void Parser::token( int tok, Value v)
 	}
 }
 
-Parser::Parser(State& state) : line(0), col(0), have(0), state(state)
+Parser::Parser(State& state) : line(0), col(0), have(0), state(state), lastTokenWasNL(false)
 {
 	%% write init;
 }
@@ -175,6 +182,8 @@ int Parser::execute( const char* data, int len, bool isEof, Value& result)
 	const char *p = data;
 	const char *pe = data+len;
 	const char* eof = isEof ? pe : 0;
+
+	lastTokenWasNL = false;
 
 	%% write exec;
 

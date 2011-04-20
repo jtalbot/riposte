@@ -441,6 +441,9 @@ void eval(State& state, Block const& block) {
 	
 	Stack& stack = state.stack;
 
+	state.stopped = false;
+	state.warnings.clear();
+
 #ifdef THREADED_INTERPRETER
     #define LABELS_THREADED(name,type,p) (void*)&&name##_label,
 	static const void* labels[] = {BC_ENUM(LABELS_THREADED,0)};
@@ -461,13 +464,13 @@ void eval(State& state, Block const& block) {
 	goto *(pc->ibc);
 	#define LABELED_OP(name,type,p) \
 		name##_label: \
-			pc += name##_op(state, stack, block, *pc); goto *(pc->ibc); 
+			pc += name##_op(state, stack, block, *pc); if(state.stopped) goto DONE; else goto *(pc->ibc); 
 	BC_ENUM(LABELED_OP,0)
 	DONE:
 	{}
 #else
 	int64_t pc = 0;
-    while(block.code()[pc].bc != ByteCode::ret) {
+    while(block.code()[pc].bc != ByteCode::ret && !state.stopped) {
 		Instruction const& inst = block.code()[pc];
 		switch(inst.bc.internal()) {
 			#define SWITCH_OP(name,type,p) \

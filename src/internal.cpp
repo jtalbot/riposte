@@ -326,6 +326,11 @@ uint64_t length(State& state, Call const& call) {
 	return 1;
 }
 
+uint64_t stop(State& state, Call const& call) {
+	state.stopped = true;
+	return 0;
+}
+
 void addMathOps(State& state)
 {
 	Value v;
@@ -433,5 +438,8 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "[["), v);
 	CFunction(dollar).toValue(v);
 	env->assign(Symbol(state, "$"), v);
+
+	CFunction(stop).toValue(v);
+	env->assign(Symbol(state, "stop"), v);
 }
 

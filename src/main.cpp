@@ -138,7 +138,8 @@ static int dofile(const char * file, State& state, bool echo) {
 	parser.execute(code.c_str(), code.length(), true, ppr);	
 	
 	Expression expressions(ppr);
-	for(uint64_t i = 0; i < expressions.length(); i++) {
+	state.stopped = false;
+	for(uint64_t i = 0; i < expressions.length() && !state.stopped; i++) {
 		Block b = compile(state, expressions[i]);
 		eval(state, b);
 		Value result = state.stack.pop();

@@ -38,7 +38,7 @@ Incomplete language features:
 -character indexing
 -switch statement
 -search path
--argument names to built in functions
+-argument names to built in functions (DONE)
 -S3 Classes
 -S4 Class support (what's implemented in the library?)
 	Generic functions as first class type?
