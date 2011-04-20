@@ -10,7 +10,7 @@
 
 %token_prefix	TOKEN_
 %token_type {Value}
-%extra_argument {Parser::Result* result}
+%extra_argument {Parser* parser}
 
 %type exprlist {Pairs}
 %type sublist  {Pairs}
@@ -44,21 +44,20 @@
 }
 
 %syntax_error {
-        result->state = -1;
-	std::cout << "Syntax error!" << std::endl;
+        parser->errors++;
 }
 
 %parse_accept {
-     result->state = 1;
+     parser->complete = true;
 }
 
-%parse_failure {
+/*%parse_failure {
      result->state = -1;
      printf("Giving up.  Parser is hopelessly lost...\n");
-}
+}*/
 
-prog(A) ::= optnl exprlist(B) optnl. { result->value = A = Expression(List(B)); }
-prog(A) ::= error. { result->value = A = Expression(0); }
+prog ::= optnl exprlist(B) optnl. { parser->result = Expression(List(B)); }
+prog ::= error. { parser->result = Expression(0); }
 
 expr(A) ::= NUM_CONST(B). { A = B; }
 expr(A) ::= STR_CONST(B). { A = B; }

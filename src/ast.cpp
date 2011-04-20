@@ -71,10 +71,10 @@ typedef union {
 #ifndef YYSTACKDEPTH
 #define YYSTACKDEPTH 100
 #endif
-#define ParseARG_SDECL Parser::Result* result;
-#define ParseARG_PDECL ,Parser::Result* result
-#define ParseARG_FETCH Parser::Result* result = yypParser->result
-#define ParseARG_STORE yypParser->result = result
+#define ParseARG_SDECL Parser* parser;
+#define ParseARG_PDECL ,Parser* parser
+#define ParseARG_FETCH Parser* parser = yypParser->parser
+#define ParseARG_STORE yypParser->parser = parser
 #define YYNSTATE 216
 #define YYNRULE 75
 #define YYERRORSYMBOL 54
@@ -934,13 +934,13 @@ static void yy_reduce(
   **     break;
   */
       case 0: /* prog ::= optnl exprlist optnl */
-#line 60 "parser.y"
-{ result->value = yygotominor.yy0 = Expression(List(yymsp[-1].minor.yy72)); }
+#line 59 "parser.y"
+{ parser->result = Expression(List(yymsp[-1].minor.yy72)); }
 #line 940 "parser.c"
         break;
       case 1: /* prog ::= error */
-#line 61 "parser.y"
-{ result->value = yygotominor.yy0 = Expression(0); }
+#line 60 "parser.y"
+{ parser->result = Expression(0); }
 #line 945 "parser.c"
         break;
       case 2: /* expr ::= NUM_CONST */
@@ -949,17 +949,17 @@ static void yy_reduce(
       case 5: /* expr ::= SYMBOL */ yytestcase(yyruleno==5);
       case 52: /* symbolstr ::= STR_CONST */ yytestcase(yyruleno==52);
       case 53: /* symbolstr ::= SYMBOL */ yytestcase(yyruleno==53);
-#line 63 "parser.y"
+#line 62 "parser.y"
 { yygotominor.yy0 = yymsp[0].minor.yy0; }
 #line 955 "parser.c"
         break;
       case 6: /* expr ::= LBRACE optnl exprlist optnl RBRACE */
-#line 68 "parser.y"
+#line 67 "parser.y"
 { yymsp[-2].minor.yy72.push_front(Symbol(0), yymsp[-4].minor.yy0); yygotominor.yy0 = Expression(List(yymsp[-2].minor.yy72)); }
 #line 960 "parser.c"
         break;
       case 7: /* expr ::= LPAREN optnl expr optnl RPAREN */
-#line 69 "parser.y"
+#line 68 "parser.y"
 { yygotominor.yy0 = yymsp[-2].minor.yy0; }
 #line 965 "parser.c"
         break;
@@ -969,7 +969,7 @@ static void yy_reduce(
       case 11: /* expr ::= TILDE optnl expr */ yytestcase(yyruleno==11);
       case 12: /* expr ::= QUESTION optnl expr */ yytestcase(yyruleno==12);
       case 41: /* expr ::= REPEAT optnl expr */ yytestcase(yyruleno==41);
-#line 71 "parser.y"
+#line 70 "parser.y"
 { yygotominor.yy0 = Call::c(yymsp[-2].minor.yy0, yymsp[0].minor.yy0); }
 #line 975 "parser.c"
         break;
@@ -996,44 +996,44 @@ static void yy_reduce(
       case 33: /* expr ::= expr EQ_ASSIGN optnl expr */ yytestcase(yyruleno==33);
       case 48: /* expr ::= expr DOLLAR optnl symbolstr */ yytestcase(yyruleno==48);
       case 49: /* expr ::= expr AT optnl symbolstr */ yytestcase(yyruleno==49);
-#line 77 "parser.y"
+#line 76 "parser.y"
 { yygotominor.yy0 = Call::c(yymsp[-2].minor.yy0, yymsp[-3].minor.yy0, yymsp[0].minor.yy0); }
 #line 1002 "parser.c"
         break;
       case 34: /* expr ::= expr RIGHT_ASSIGN optnl expr */
-#line 99 "parser.y"
+#line 98 "parser.y"
 { yygotominor.yy0 = Call::c(yymsp[-2].minor.yy0, yymsp[0].minor.yy0, yymsp[-3].minor.yy0); }
 #line 1007 "parser.c"
         break;
       case 35: /* expr ::= FUNCTION optnl LPAREN optnl formallist optnl RPAREN optnl expr */
-#line 100 "parser.y"
+#line 99 "parser.y"
 { yygotominor.yy0 = Call::c(yymsp[-8].minor.yy0, PairList(List(yymsp[-4].minor.yy72)), yymsp[0].minor.yy0); }
 #line 1012 "parser.c"
         break;
       case 36: /* expr ::= expr LPAREN sublist RPAREN */
-#line 101 "parser.y"
+#line 100 "parser.y"
 { yymsp[-1].minor.yy72.push_front(Symbol(0), yymsp[-3].minor.yy0); yygotominor.yy0 = Call(List(yymsp[-1].minor.yy72)); }
 #line 1017 "parser.c"
         break;
       case 37: /* expr ::= IF optnl LPAREN optnl expr optnl RPAREN optnl expr */
       case 40: /* expr ::= WHILE optnl LPAREN optnl expr optnl RPAREN optnl expr */ yytestcase(yyruleno==40);
-#line 102 "parser.y"
+#line 101 "parser.y"
 { yygotominor.yy0 = Call::c(yymsp[-8].minor.yy0, yymsp[-4].minor.yy0, yymsp[0].minor.yy0); }
 #line 1023 "parser.c"
         break;
       case 38: /* expr ::= IF optnl LPAREN optnl expr optnl RPAREN optnl expr ELSE optnl expr */
-#line 103 "parser.y"
+#line 102 "parser.y"
 { yygotominor.yy0 = Call::c(yymsp[-11].minor.yy0, yymsp[-7].minor.yy0, yymsp[-3].minor.yy0, yymsp[0].minor.yy0); }
 #line 1028 "parser.c"
         break;
       case 39: /* expr ::= FOR optnl LPAREN optnl SYMBOL optnl IN optnl expr optnl RPAREN optnl expr */
-#line 104 "parser.y"
+#line 103 "parser.y"
 { yygotominor.yy0 = Call::c(yymsp[-12].minor.yy0, yymsp[-8].minor.yy0, yymsp[-4].minor.yy0, yymsp[0].minor.yy0); }
 #line 1033 "parser.c"
         break;
       case 42: /* expr ::= expr LBB optnl sublist optnl RBB */
       case 43: /* expr ::= expr LBRACKET optnl sublist optnl RBRACKET */ yytestcase(yyruleno==43);
-#line 107 "parser.y"
+#line 106 "parser.y"
 { yymsp[-2].minor.yy72.push_front(Symbol(0), yymsp[-5].minor.yy0); yymsp[-2].minor.yy72.push_front(Symbol(0), yymsp[-4].minor.yy0); yygotominor.yy0 = Call(List(yymsp[-2].minor.yy72)); }
 #line 1039 "parser.c"
         break;
@@ -1041,84 +1041,84 @@ static void yy_reduce(
       case 45: /* expr ::= STR_CONST NS_GET symbolstr */ yytestcase(yyruleno==45);
       case 46: /* expr ::= SYMBOL NS_GET_INT symbolstr */ yytestcase(yyruleno==46);
       case 47: /* expr ::= STR_CONST NS_GET_INT symbolstr */ yytestcase(yyruleno==47);
-#line 109 "parser.y"
+#line 108 "parser.y"
 { yygotominor.yy0 = Call::c(yymsp[-1].minor.yy0, yymsp[-2].minor.yy0, yymsp[0].minor.yy0); }
 #line 1047 "parser.c"
         break;
       case 50: /* expr ::= NEXT */
       case 51: /* expr ::= BREAK */ yytestcase(yyruleno==51);
-#line 115 "parser.y"
+#line 114 "parser.y"
 { yygotominor.yy0 = Call::c(yymsp[0].minor.yy0); }
 #line 1053 "parser.c"
         break;
       case 56: /* exprlist ::= exprlist SEMICOLON expr */
       case 58: /* exprlist ::= exprlist NEWLINE expr */ yytestcase(yyruleno==58);
-#line 124 "parser.y"
+#line 123 "parser.y"
 { yygotominor.yy72 = yymsp[-2].minor.yy72; yygotominor.yy72.push_back(Symbol(0), yymsp[0].minor.yy0); }
 #line 1059 "parser.c"
         break;
       case 57: /* exprlist ::= exprlist SEMICOLON */
-#line 125 "parser.y"
+#line 124 "parser.y"
 { yygotominor.yy72 = yymsp[-1].minor.yy72; }
 #line 1064 "parser.c"
         break;
       case 59: /* exprlist ::= expr */
       case 64: /* sub ::= expr */ yytestcase(yyruleno==64);
       case 70: /* sub ::= NULL_CONST optnl EQ_ASSIGN optnl expr */ yytestcase(yyruleno==70);
-#line 127 "parser.y"
+#line 126 "parser.y"
 { yygotominor.yy72 = Pairs::Make(); yygotominor.yy72.push_back(Symbol(0), yymsp[0].minor.yy0); }
 #line 1071 "parser.c"
         break;
       case 60: /* exprlist ::= */
-#line 128 "parser.y"
+#line 127 "parser.y"
 { yygotominor.yy72 = Pairs::Make(); }
 #line 1076 "parser.c"
         break;
       case 61: /* sublist ::= sub */
-#line 130 "parser.y"
+#line 129 "parser.y"
 { yygotominor.yy72 = yymsp[0].minor.yy72; }
 #line 1081 "parser.c"
         break;
       case 62: /* sublist ::= sublist optnl COMMA optnl sub */
-#line 131 "parser.y"
+#line 130 "parser.y"
 { yygotominor.yy72 = yymsp[-4].minor.yy72; yygotominor.yy72.push_back(yymsp[0].minor.yy72.name(0), yymsp[0].minor.yy72.value(0)); }
 #line 1086 "parser.c"
         break;
       case 63: /* sub ::= */
-#line 133 "parser.y"
+#line 132 "parser.y"
 { yygotominor.yy72 = Pairs::Make(); yygotominor.yy72.push_back(Symbol(0), Symbol(0)); }
 #line 1091 "parser.c"
         break;
       case 65: /* sub ::= SYMBOL optnl EQ_ASSIGN */
       case 66: /* sub ::= STR_CONST optnl EQ_ASSIGN */ yytestcase(yyruleno==66);
-#line 135 "parser.y"
+#line 134 "parser.y"
 { yygotominor.yy72 = Pairs::Make(); yygotominor.yy72.push_back(yymsp[-2].minor.yy0, Value::NIL); }
 #line 1097 "parser.c"
         break;
       case 67: /* sub ::= SYMBOL optnl EQ_ASSIGN optnl expr */
       case 68: /* sub ::= STR_CONST optnl EQ_ASSIGN optnl expr */ yytestcase(yyruleno==68);
       case 72: /* formallist ::= SYMBOL optnl EQ_ASSIGN optnl expr */ yytestcase(yyruleno==72);
-#line 137 "parser.y"
+#line 136 "parser.y"
 { yygotominor.yy72 = Pairs::Make(); yygotominor.yy72.push_back(Symbol(yymsp[-4].minor.yy0), yymsp[0].minor.yy0); }
 #line 1104 "parser.c"
         break;
       case 69: /* sub ::= NULL_CONST optnl EQ_ASSIGN */
-#line 139 "parser.y"
+#line 138 "parser.y"
 { yygotominor.yy72 = Pairs::Make(); yygotominor.yy72.push_back(Symbol(0), Value::NIL); }
 #line 1109 "parser.c"
         break;
       case 71: /* formallist ::= SYMBOL */
-#line 142 "parser.y"
+#line 141 "parser.y"
 { yygotominor.yy72 = Pairs::Make(); yygotominor.yy72.push_back(Symbol(yymsp[0].minor.yy0), Value::NIL); }
 #line 1114 "parser.c"
         break;
       case 73: /* formallist ::= formallist optnl COMMA optnl SYMBOL */
-#line 144 "parser.y"
+#line 143 "parser.y"
 { yygotominor.yy72 = yymsp[-4].minor.yy72; yygotominor.yy72.push_back(Symbol(yymsp[0].minor.yy0), Value::NIL); }
 #line 1119 "parser.c"
         break;
       case 74: /* formallist ::= formallist optnl COMMA optnl SYMBOL optnl EQ_ASSIGN optnl expr */
-#line 145 "parser.y"
+#line 144 "parser.y"
 { yygotominor.yy72 = yymsp[-8].minor.yy72; yygotominor.yy72.push_back(Symbol(yymsp[-4].minor.yy0), yymsp[0].minor.yy0); }
 #line 1124 "parser.c"
         break;
@@ -1170,11 +1170,6 @@ static void yy_parse_failed(
   while( yypParser->yyidx>=0 ) yy_pop_parser_stack(yypParser);
   /* Here code is inserted which will be executed whenever the
   ** parser fails */
-#line 55 "parser.y"
-
-     result->state = -1;
-     printf("Giving up.  Parser is hopelessly lost...\n");
-#line 1178 "parser.c"
   ParseARG_STORE; /* Suppress warning about unused %extra_argument variable */
 }
 #endif /* YYNOERRORRECOVERY */
@@ -1191,9 +1186,8 @@ static void yy_syntax_error(
 #define TOKEN (yyminor.yy0)
 #line 46 "parser.y"
 
-        result->state = -1;
-	std::cout << "Syntax error!" << std::endl;
-#line 1197 "parser.c"
+        parser->errors++;
+#line 1191 "parser.c"
   ParseARG_STORE; /* Suppress warning about unused %extra_argument variable */
 }
 
@@ -1212,10 +1206,10 @@ static void yy_accept(
   while( yypParser->yyidx>=0 ) yy_pop_parser_stack(yypParser);
   /* Here code is inserted which will be executed whenever the
   ** parser accepts */
-#line 51 "parser.y"
+#line 50 "parser.y"
 
-     result->state = 1;
-#line 1219 "parser.c"
+     parser->complete = true;
+#line 1213 "parser.c"
   ParseARG_STORE; /* Suppress warning about unused %extra_argument variable */
 }
 

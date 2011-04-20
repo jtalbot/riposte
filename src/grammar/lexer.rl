@@ -133,7 +133,6 @@
 
 void Parser::token( int tok, Value v)
 {
-	Parser::Result result;
 	const char *data = ts;
 	int len = te - ts;
 
@@ -141,18 +140,20 @@ void Parser::token( int tok, Value v)
 	std::cout.write( data, len );
 	std::cout << '\n';*/
 
+	int initialErrors = errors;
+
 	// Do the lookahead to resolve the dangling else conflict
 	if(lastTokenWasNL) {
 		if(tok != TOKEN_ELSE)
-			Parse(pParser, TOKEN_NEWLINE, Value::NIL, &result);
-		Parse(pParser, tok, v, &result);
+			Parse(pParser, TOKEN_NEWLINE, Value::NIL, this);
+		Parse(pParser, tok, v, this);
 		lastTokenWasNL = false;
 	}
 	else {
 		if(tok == TOKEN_NEWLINE)
 			lastTokenWasNL = true;
 		else
-			Parse(pParser, tok, v, &result);
+			Parse(pParser, tok, v, this);
 	}
 
 	/* Count newlines and columns. Use for error reporting? */ 
@@ -165,44 +166,53 @@ void Parser::token( int tok, Value v)
 			col += 1;
 		}
 	}
+
+	if(errors > initialErrors) {
+		std::cout << "Error: unexpected '" << std::string(data, len) + "'" << std::endl; 
+	}
 }
 
-Parser::Parser(State& state) : line(0), col(0), have(0), state(state), lastTokenWasNL(false)
-{
-	%% write init;
-}
+Parser::Parser(State& state) : line(0), col(0), state(state), errors(0), complete(false), lastTokenWasNL(false)
+{}
 
-int Parser::execute( const char* data, int len, bool isEof, Value& result)
+int Parser::execute( const char* data, int len, bool isEof, Value& out)
 {
-	Result r;
-	r.state = 0;
+	out = Value::NIL;
+	errors = 0;
+	lastTokenWasNL = false;
+	complete = false;
 
 	pParser = ParseAlloc(malloc);
 
 	const char *p = data;
 	const char *pe = data+len;
 	const char* eof = isEof ? pe : 0;
-
-	lastTokenWasNL = false;
-
+	int cs, act;
+	%% write init;
 	%% write exec;
-
-	Parse(pParser, 0, Value::NIL, &r);
+	int syntaxErrors = errors;
+	Parse(pParser, 0, Value::NIL, this);
 	ParseFree(pParser, free);
+	errors = syntaxErrors;
 
-	result = r.value;
-
-	if( cs == Scanner_error || r.state == -1 )
+	if( cs == Scanner_error && syntaxErrors == 0) {
+		syntaxErrors++;
+		std::cout << "Error: unexpected input" << std::endl;
+	}
+	
+	if( syntaxErrors > 0 )
 		return -1;
-	else if( cs >= Scanner_first_final && r.state == 1)
+	else if( cs >= Scanner_first_final && complete) {
+		out = result;
 		return 1;
+	} 
 	else
 		return 0;
 }
-
+/*
 int Parser::buffer_execute( )
 {
-	/*static char buf[16384];
+	static char buf[16384];
 
 	std::ios::sync_with_stdio(false);
 
@@ -243,17 +253,7 @@ int Parser::buffer_execute( )
 			ts = buf;
 		}
 	}
-	*/
 	return 0;
 }
-
-int Parser::finish()
-{
-	if( cs == Scanner_error )
-		return -1;
-	else if( cs >= Scanner_first_final )
-		return 1;
-	else
-		return 0;
-}
+*/
 

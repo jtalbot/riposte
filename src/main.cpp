@@ -68,7 +68,7 @@ Value parsetty(State& state) {
 		  if(i == 0)
 		   printf("> ");
 		  else
-		   printf(" + ");
+		   printf("+ ");
 		}
 		if (NULL == fgets(code+i, 8192-i, stdin))
                   {
@@ -88,9 +88,8 @@ Value parsetty(State& state) {
 	
         // if not a terminal echo the parse so as to interleave with output
 	if (!is_tty) fprintf(stdout,"%s",code); 
-	if (status == -1) {
-		e_message("Error","Rparse", code);
-	}
+	if (status == -1)
+		return Value::NIL;
 	return ppr;
 }
 

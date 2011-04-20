@@ -432,7 +432,6 @@ static const int Scanner_en_main = 16;
 
 void Parser::token( int tok, Value v)
 {
-	Parser::Result result;
 	const char *data = ts;
 	int len = te - ts;
 
@@ -440,18 +439,20 @@ void Parser::token( int tok, Value v)
 	std::cout.write( data, len );
 	std::cout << '\n';*/
 
+	int initialErrors = errors;
+
 	// Do the lookahead to resolve the dangling else conflict
 	if(lastTokenWasNL) {
 		if(tok != TOKEN_ELSE)
-			Parse(pParser, TOKEN_NEWLINE, Value::NIL, &result);
-		Parse(pParser, tok, v, &result);
+			Parse(pParser, TOKEN_NEWLINE, Value::NIL, this);
+		Parse(pParser, tok, v, this);
 		lastTokenWasNL = false;
 	}
 	else {
 		if(tok == TOKEN_NEWLINE)
 			lastTokenWasNL = true;
 		else
-			Parse(pParser, tok, v, &result);
+			Parse(pParser, tok, v, this);
 	}
 
 	/* Count newlines and columns. Use for error reporting? */ 
@@ -464,12 +465,30 @@ void Parser::token( int tok, Value v)
 			col += 1;
 		}
 	}
+
+	if(errors > initialErrors) {
+		std::cout << "Error: unexpected '" << std::string(data, len) + "'" << std::endl; 
+	}
 }
 
-Parser::Parser(State& state) : line(0), col(0), have(0), state(state), lastTokenWasNL(false)
+Parser::Parser(State& state) : line(0), col(0), state(state), errors(0), complete(false), lastTokenWasNL(false)
+{}
+
+int Parser::execute( const char* data, int len, bool isEof, Value& out)
 {
+	out = Value::NIL;
+	errors = 0;
+	lastTokenWasNL = false;
+	complete = false;
+
+	pParser = ParseAlloc(malloc);
+
+	const char *p = data;
+	const char *pe = data+len;
+	const char* eof = isEof ? pe : 0;
+	int cs, act;
 	
-#line 473 "../parser.cpp"
+#line 492 "../parser.cpp"
 	{
 	cs = Scanner_start;
 	ts = 0;
@@ -477,24 +496,9 @@ Parser::Parser(State& state) : line(0), col(0), have(0), state(state), lastToken
 	act = 0;
 	}
 
-#line 173 "lexer.rl"
-}
-
-int Parser::execute( const char* data, int len, bool isEof, Value& result)
-{
-	Result r;
-	r.state = 0;
-
-	pParser = ParseAlloc(malloc);
-
-	const char *p = data;
-	const char *pe = data+len;
-	const char* eof = isEof ? pe : 0;
-
-	lastTokenWasNL = false;
-
+#line 192 "lexer.rl"
 	
-#line 498 "../parser.cpp"
+#line 502 "../parser.cpp"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -515,7 +519,7 @@ _resume:
 #line 1 "NONE"
 	{ts = p;}
 	break;
-#line 519 "../parser.cpp"
+#line 523 "../parser.cpp"
 		}
 	}
 
@@ -975,7 +979,7 @@ _eof_trans:
 	}
 	}
 	break;
-#line 979 "../parser.cpp"
+#line 983 "../parser.cpp"
 		}
 	}
 
@@ -992,7 +996,7 @@ _again:
 #line 1 "NONE"
 	{act = 0;}
 	break;
-#line 996 "../parser.cpp"
+#line 1000 "../parser.cpp"
 		}
 	}
 
@@ -1012,24 +1016,30 @@ _again:
 	_out: {}
 	}
 
-#line 189 "lexer.rl"
-
-	Parse(pParser, 0, Value::NIL, &r);
+#line 193 "lexer.rl"
+	int syntaxErrors = errors;
+	Parse(pParser, 0, Value::NIL, this);
 	ParseFree(pParser, free);
+	errors = syntaxErrors;
 
-	result = r.value;
-
-	if( cs == Scanner_error || r.state == -1 )
+	if( cs == Scanner_error && syntaxErrors == 0) {
+		syntaxErrors++;
+		std::cout << "Error: unexpected input" << std::endl;
+	}
+	
+	if( syntaxErrors > 0 )
 		return -1;
-	else if( cs >= Scanner_first_final && r.state == 1)
+	else if( cs >= Scanner_first_final && complete) {
+		out = result;
 		return 1;
+	} 
 	else
 		return 0;
 }
-
+/*
 int Parser::buffer_execute( )
 {
-	/*static char buf[16384];
+	static char buf[16384];
 
 	std::ios::sync_with_stdio(false);
 
@@ -1070,17 +1080,7 @@ int Parser::buffer_execute( )
 			ts = buf;
 		}
 	}
-	*/
 	return 0;
 }
-
-int Parser::finish()
-{
-	if( cs == Scanner_error )
-		return -1;
-	else if( cs >= Scanner_first_final )
-		return 1;
-	else
-		return 0;
-}
+*/
 
