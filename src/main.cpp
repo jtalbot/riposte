@@ -133,10 +133,12 @@ static int dofile(const char * file, State& state, bool echo) {
         }
 
 	Parser parser(state);
-	Value ppr;
-	parser.execute(code.c_str(), code.length(), true, ppr);	
+	Value value;
+	parser.execute(code.c_str(), code.length(), true, value);	
 	
-	Expression expressions(ppr);
+	if(value.type == Type::I_nil) return -1;
+	
+	Expression expressions(value);
 	state.stopped = false;
 	for(uint64_t i = 0; i < expressions.length() && !state.stopped; i++) {
 		Block b = compile(state, expressions[i]);
