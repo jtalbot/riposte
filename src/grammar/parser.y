@@ -99,7 +99,7 @@ expr(A) ::= expr(B) OR2(C) optnl expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) LEFT_ASSIGN(C) optnl expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) RIGHT_ASSIGN(C) optnl expr(D). { A = Call::c(C, D, B); }
 expr(A) ::= FUNCTION(B) optnl LPAREN optnl formallist(C) optnl RPAREN optnl statement(D).  { A = Call::c(B, PairList(List(C)), D); }
-expr(A) ::= expr(B) LPAREN sublist(C) RPAREN. { C.push_front(Symbol(0), B); A = Call(List(C)); } 
+expr(A) ::= expr(B) LPAREN optnl sublist(C) optnl RPAREN. { C.push_front(Symbol(0), B); A = Call(List(C)); } 
 expr(A) ::= IF(B) optnl LPAREN optnl expr(C) optnl RPAREN optnl statement(D). { A = Call::c(B, C, D); }
 expr(A) ::= IF(B) optnl LPAREN optnl expr(C) optnl RPAREN optnl statement(D) ELSE optnl statement(E). { A = Call::c(B, C, D, E); }
 expr(A) ::= FOR(B) optnl LPAREN optnl SYMBOL(C) optnl IN optnl expr(D) optnl RPAREN optnl statement(E). { A = Call::c(B, C, D, E); }
