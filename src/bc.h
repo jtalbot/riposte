@@ -7,7 +7,6 @@
 
 #define BC_ENUM(_, p) 				\
 	_(call, "call", p) \
-	_(dcall, "dcall", p) \
 	/*_(inlinecall, "inlinecall")*/ \
 	_(get, "get", p) \
 	_(kget, "kget", p) \

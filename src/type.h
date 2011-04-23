@@ -18,10 +18,10 @@
 	_(R_expression,	"expression", p)		\
 	_(R_symbol,	"symbol", p)		\
 	_(R_pairlist,	"pairlist", p)		\
-	_(R_function,	"closure", p)		\
+	_(R_function,	"function", p)		\
 	_(R_environment,"environment", p)		\
 	/* Note: no user-visible promise type in riposte */ \
-	_(R_call,	"language", p)		\
+	_(R_call,	"call", p)		\
 	/* Note: specials are treated the same as normal functions right now */ \
 	_(R_cfunction,	"builtin", p)		\
 	_(R_any,	"any", p)	/* If there are no objects of this type, how can typeof return it? */	\
@@ -30,12 +30,12 @@
 	_(R_S4, 	"S4", p)			\
 									\
 	/* Now the internal types, not necessarily matching R */ \
+	_(I_compiledcall,"compiled call", p)			\
 	_(I_dots,			"...", p)			\
 	_(I_promise,	"promise", p)		\
-	_(I_sympromise,	"sympromise", p)		\
 	_(I_default,	"default", p)		\
 	_(I_symdefault,	"symdefault", p)		\
-	_(I_bytecode, 	"bc", p) \
+	_(I_closure, 	"closure", p) \
 	_(I_genericfunction, 	"genericfunction", p) \
 	_(I_nil, 		"NIL", p)			\
 

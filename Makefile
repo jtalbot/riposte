@@ -9,11 +9,11 @@ ifeq ($(UNAME),Darwin)
 	CXXFLAGS += -I/opt/local/include
 endif
 
-SRC := main.cpp type.cpp bc.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp
+SRC := main.cpp type.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp
 
 EXECUTABLE := bin/riposte
 
-default: release
+default: debug
 
 debug: CXXFLAGS += -DDEBUG -O0 -g
 debug: $(EXECUTABLE)

@@ -3,28 +3,28 @@
 #include <assert.h>
 #include <math.h>
 
-uint64_t function(State& state, Call const& call) {
-	assert(call.length()-1 == 3);
+uint64_t function(State& state, Call const& call, List const& args) {
+	assert(args.length() == 2/*3*/);
 	state.stack.push(
-		Function(force(state, call[1]), 
-			code(call[2]), 
-			force(state, call[3]), state.env));
+		Function(force(state, args[0]), 
+			args[1], 
+			Character::NA/*force(state, args[2])*/, state.env));
 	return 1;
 }
 
-uint64_t rm(State& state, Call const& call) {
-	assert(call.length()-1 == 1);
-	state.env->rm(quoted(call[1]));
+uint64_t rm(State& state, Call const& call, List const& args) {
+	assert(args.length() == 1);
+	state.env->rm(expression(args[0]));
 	state.stack.push(Null::singleton);
 	return 1;
 }
 
-uint64_t sequence(State& state, Call const& call) {
-	assert(call.length()-1 == 3);
+uint64_t sequence(State& state, Call const& call, List const& args) {
+	assert(args.length() == 3);
 
-	Value from = force(state, call[1]);
-	Value by   = force(state, call[2]);
-	Value len  = force(state, call[3]);
+	Value from = force(state, args[0]);
+	Value by   = force(state, args[1]);
+	Value len  = force(state, args[2]);
 
 	double f = asReal1(from);
 	double b = asReal1(by);
@@ -34,12 +34,12 @@ uint64_t sequence(State& state, Call const& call) {
 	return 1;
 }
 
-uint64_t repeat(State& state, Call const& call) {
-	assert(call.length()-1 == 3);
+uint64_t repeat(State& state, Call const& call, List const& args) {
+	assert(args.length() == 3);
 	
-	Value vec  = force(state, call[1]);
-	Value each = force(state, call[2]);
-	Value len  = force(state, call[3]);
+	Value vec  = force(state, args[0]);
+	Value each = force(state, args[1]);
+	Value len  = force(state, args[2]);
 	
 	double v = asReal1(vec);
 	//double e = asReal1(each);
@@ -53,18 +53,18 @@ uint64_t repeat(State& state, Call const& call) {
 	return 1;
 }
 
-uint64_t typeOf(State& state, Call const& call) {
-	assert(call.length()-1 == 1);
+uint64_t typeOf(State& state, Call const& call, List const& args) {
+	assert(args.length() == 1);
 	Character c(1);
-	c[0] = state.inString(force(state, call[1]).type.toString());
+	c[0] = state.inString(force(state, args[0]).type.toString());
 	state.stack.push(c);
 	return 1;
 }
 
-uint64_t mode(State& state, Call const& call) {
-	assert(call.length()-1 == 1);
+uint64_t mode(State& state, Call const& call, List const& args) {
+	assert(args.length() == 1);
 	Character c(1);
-	Value v = force(state, call[1]);
+	Value v = force(state, args[0]);
 	if(v.type == Type::R_integer || v.type == Type::R_double)
 		c[0] = state.inString("numeric");
 	else if(v.type == Type::R_symbol)
@@ -75,10 +75,10 @@ uint64_t mode(State& state, Call const& call) {
 	return 1;
 }
 
-uint64_t klass(State& state, Call const& call)
+uint64_t klass(State& state, Call const& call, List const& args)
 {
-	assert(call.length()-1 == 1);
-	Value v = force(state, call[1]);
+	assert(args.length() == 1);
+	Value v = force(state, args[0]);
 	Vector r = getClass(v.attributes);	
 	if(r.type == Type::R_null) {
 		Character c(1);
@@ -91,49 +91,49 @@ uint64_t klass(State& state, Call const& call)
 	return 1;
 }
 
-uint64_t assignKlass(State& state, Call const& call)
+uint64_t assignKlass(State& state, Call const& call, List const& args)
 {
-	assert(call.length()-1 == 2);
-	Value v = force(state, call[1]);
-	Value k = force(state, call[2]);
+	assert(args.length() == 2);
+	Value v = force(state, args[0]);
+	Value k = force(state, args[1]);
 	setClass(v.attributes, k);
 	state.stack.push(v);
 	return 1;
 }
 
-uint64_t names(State& state, Call const& call)
+uint64_t names(State& state, Call const& call, List const& args)
 {
-	assert(call.length()-1 == 1);
-	Value v = force(state, call[1]);
+	assert(args.length() == 1);
+	Value v = force(state, args[0]);
 	Value r = getNames(v.attributes);
 	state.stack.push(r);	
 	return 1;
 }
 
-uint64_t assignNames(State& state, Call const& call)
+uint64_t assignNames(State& state, Call const& call, List const& args)
 {
-	assert(call.length()-1 == 2);
-	Value v = force(state, call[1]);
-	Value k = force(state, call[2]);
+	assert(call.length() == 2);
+	Value v = force(state, args[0]);
+	Value k = force(state, args[2]);
 	setNames(v.attributes, k);
 	state.stack.push(v);
 	return 1;
 }
 
-uint64_t dim(State& state, Call const& call)
+uint64_t dim(State& state, Call const& call, List const& args)
 {
-	assert(call.length()-1 == 1);
-	Value v = force(state, call[1]);
+	assert(args.length() == 1);
+	Value v = force(state, args[0]);
 	Value r = getDim(v.attributes);
 	state.stack.push(r);	
 	return 1;
 }
 
-uint64_t assignDim(State& state, Call const& call)
+uint64_t assignDim(State& state, Call const& call, List const& args)
 {
-	assert(call.length()-1 == 2);
-	Value v = force(state, call[1]);
-	Value k = force(state, call[2]);
+	assert(args.length() == 2);
+	Value v = force(state, args[0]);
+	Value k = force(state, args[1]);
 	setDim(v.attributes, k);
 	state.stack.push(v);
 	return 1;
@@ -146,14 +146,14 @@ Type cTypeCast(Value const& v, Type t)
 	return r;
 }
 
-uint64_t c(State& state, Call const& call) {
+uint64_t c(State& state, Call const& call, List const& Args) {
 	uint64_t total = 0;
 	Type type = Type::R_null;
 	std::vector<Vector> args;
-	for(uint64_t i = 1; i < call.length(); i++) {
-		args.push_back(Vector(force(state, call[i])));
-		total += args[i-1].length();
-		type = cTypeCast(args[i-1], type);
+	for(uint64_t i = 0; i < Args.length(); i++) {
+		args.push_back(Vector(force(state, Args[i])));
+		total += args[i].length();
+		type = cTypeCast(args[i], type);
 	}
 	Vector out(type, total);
 	uint64_t j = 0;
@@ -162,7 +162,7 @@ uint64_t c(State& state, Call const& call) {
 		j += args[i].length();
 	}
 	
-	Vector n = getNames(call.attributes);
+	Vector n = getNames(Args.attributes);
 	if(n.type != Type::R_null)
 	{
 		Character names(n);
@@ -171,7 +171,7 @@ uint64_t c(State& state, Call const& call) {
 		for(uint64_t i = 0; i < args.size(); i++) {
 			for(uint64_t m = 0; m < args[i].length(); m++, j++) {
 				// NYI: R makes these names distinct
-				outnames[j] = names[i+1];
+				outnames[j] = names[i];
 			}
 		}
 		setNames(out.attributes, outnames);
@@ -180,16 +180,16 @@ uint64_t c(State& state, Call const& call) {
 	return 1;
 }
 
-uint64_t list(State& state, Call const& call) {
-	List out(call.length()-1);
-	for(uint64_t i = 1; i < call.length(); i++) out[i-1] = force(state, call[i]);
-	Vector n = getNames(call.attributes);
+uint64_t list(State& state, Call const& call, List const& args) {
+	List out(args.length());
+	for(uint64_t i = 0; i < args.length(); i++) out[i] = force(state, args[i]);
+	Vector n = getNames(args.attributes);
 	if(n.type != Type::R_null)
-		setNames(out.attributes, Subset(n, 1, call.length()-1));
+		setNames(out.attributes, n);
 	state.stack.push(out);
 	return 1;
 }
-
+/*
 uint64_t UseMethod(State& state, uint64_t nargs)
 {
 	return 0;
@@ -208,13 +208,13 @@ uint64_t minusOp(State& state, uint64_t nargs) {
 	else
 		return binaryArith<Zip2, SubOp>(state, nargs);
 }
+*/
+uint64_t subset(State& state, Call const& call, List const& args) {
 
-uint64_t subset(State& state, Call const& call) {
+        assert(args.length() == 2);
 
-        assert(call.length()-1 == 2);
-
-        Value a = force(state, call[1]);
-        Value i = force(state, call[2]);
+        Value a = force(state, args[0]);
+        Value i = force(state, args[1]);
 
         Vector r;
         if(a.type == Type::R_double && i.type == Type::R_double) {
@@ -264,10 +264,10 @@ uint64_t subset(State& state, Call const& call) {
         return 1;
 }
 
-uint64_t subset2(State& state, Call const& call) {
+uint64_t subset2(State& state, Call const& call, List const& args) {
 
-        Value a = force(state, call[1]);
-        Value b = force(state, call[2]);
+        Value a = force(state, args[0]);
+        Value b = force(state, args[1]);
 	if(b.type == Type::R_character) {
 		uint64_t i = Character(b)[0];
 		Value r = getNames(a.attributes);
@@ -296,11 +296,11 @@ uint64_t subset2(State& state, Call const& call) {
 	return 1;
 } 
 
-uint64_t dollar(State& state, Call const& call) {
-        assert(call.length()-1 == 2);
+uint64_t dollar(State& state, Call const& call, List const& args) {
+        assert(args.length() == 2);
 
-        Value a = force(state, call[1]);
-        uint64_t i = Symbol(code(call[2])).i;
+        Value a = force(state, args[0]);
+        uint64_t i = Symbol(expression(args[1])).i;
 	Value r = getNames(a.attributes);
 	if(r.type != Type::R_null) {
 		Character c(r);
@@ -318,18 +318,34 @@ uint64_t dollar(State& state, Call const& call) {
 	return 1;
 } 
 
-uint64_t length(State& state, Call const& call) {
-	Vector a = force(state, call[1]);
+uint64_t length(State& state, Call const& call, List const& args) {
+	Vector a = force(state, args[0]);
 	Integer i(1);
 	i[0] = a.length();
 	state.stack.push(i);
 	return 1;
 }
 
-uint64_t stop(State& state, Call const& call) {
+/*uint64_t stop(State& state, Call const& call, List const& args) {
 	state.stopped = true;
 	return 0;
 }
+*/
+uint64_t quote(State& state, Call const& call, List const& args) {
+	state.stack.push(expression(args[0]));
+	return 1;
+}
+
+uint64_t eval_fn(State& state, Call const& call, List const& args) {
+	Value expr = force(state, args[0]);
+	//Value envir = force(state, call[2]);
+	//Value enclos = force(state, call[3]);
+	Closure closure = compile(state, expr);
+	uint64_t top = state.stack.top;
+	eval(state, closure);
+	return state.stack.top-top;
+}
+
 
 void addMathOps(State& state)
 {
@@ -438,8 +454,14 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "[["), v);
 	CFunction(dollar).toValue(v);
 	env->assign(Symbol(state, "$"), v);
-
+/*
 	CFunction(stop).toValue(v);
 	env->assign(Symbol(state, "stop"), v);
+*/
+	
+	CFunction(eval_fn).toValue(v);
+	env->assign(Symbol(state, "eval"), v);
+	CFunction(quote).toValue(v);
+	env->assign(Symbol(state, "quote"), v);
 }
 

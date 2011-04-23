@@ -119,7 +119,10 @@ std::string State::stringify(Value const& value) const {
 			if(names.type == Type::R_character) {
 				Character n(names);
 				for(uint64_t i = 0; i < length; i++) {
-					result = result + "$" + outString(n[i]) + "\n";
+					if(outString(n[i])=="")
+						result = result + "[[" + intToStr(i+1) + "]]\n";
+					else
+						result = result + "$" + outString(n[i]) + "\n";
 					result = result + stringify(v[i]) + "\n";
 					if(i < length-1) result = result + "\n";
 				}
@@ -144,9 +147,9 @@ std::string State::stringify(Value const& value) const {
 			result = outString(Function(value).str()[0]);
 			return result;
 		}
-		case Type::EI_bytecode:
+		case Type::EI_closure:
 		{
-			Block b(value);
+			Closure b(value);
 			std::string r = "block:\nconstants: " + intToStr(b.constants().size()) + "\n";
 			for(uint64_t i = 0; i < b.constants().size(); i++)
 				r = r + intToStr(i) + "=\t" + stringify(b.constants()[i]) + "\n";

@@ -108,9 +108,9 @@ int dostdin(State& state) {
 		value = parsetty(state);
 		if(value.type == Type::I_nil) continue;
 		//std::cout << "Parsed: " << value.toString() << std::endl;
-		Block b = compile(state, value);
-		//std::cout << "Compiled code: " << b.toString() << std::endl;
-		eval(state, b);
+		Closure closure = compile(state, value);
+		//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
+		eval(state, closure);
 		result = state.stack.pop();	
 		std::cout << state.stringify(result) << std::endl;
 	}
@@ -141,8 +141,8 @@ static int dofile(const char * file, State& state, bool echo) {
 	Expression expressions(value);
 	state.stopped = false;
 	for(uint64_t i = 0; i < expressions.length() && !state.stopped; i++) {
-		Block b = compile(state, expressions[i]);
-		eval(state, b);
+		Closure closure = compile(state, expressions[i]);
+		eval(state, closure);
 		Value result = state.stack.pop();
 		if(echo)
 			std::cout << state.stringify(result) << std::endl;

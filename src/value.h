@@ -20,7 +20,6 @@ struct Attributes;
 
 /** Basic value type */
 struct Value {
-//public:
 	union {
 		void* p;
 		double d;
@@ -30,7 +29,7 @@ struct Value {
 	Type type;
 	uint64_t packed:2;
 
-	//Value() {/*t=Type::NIL;*/}	// Careful: for efficiency, Value is not initialized by default.
+	//Value() {t=Type::NIL;}	// Careful: for efficiency, Value is not initialized by default.
 	
 	// not right for scalar doubles and maybe other stuff, careful!
 	bool operator==(Value const& other) {
@@ -49,10 +48,6 @@ struct Value {
 	}
 
 	static const Value NIL;
-
-//private:
-//	Value(Type type, void* p, Attributes* attributes)
-//		: p(p), attributes(attributes), type(type), packed(0) {}
 };
 
 // The execution stack
@@ -366,8 +361,7 @@ inline Vector::Vector(Type const& t, uint64_t length) {
 	};
 }
 
-
-class Block {
+class Closure {
 private:
 	struct Inner : public gc {
 		Value expression;
@@ -377,20 +371,36 @@ private:
 	};
 	
 	Inner* inner;
+	Environment* env;	// if NULL, execute in current environment
+
+	Closure(Closure& c, Environment* environment) {
+		inner = c.inner;
+		env = environment;
+	} 
 public:
-	Block() : inner(new Inner()) {}
+	Closure() : inner(new Inner()), env(0) {}
 	
-	Block(Value const& v) {
-		assert(	v.type == Type::I_bytecode || 
-				v.type == Type::I_promise || 
-				v.type == Type::I_sympromise);
+	Closure(Value const& v) {
+		assert(	v.type == Type::I_closure || 
+				v.type == Type::I_promise); 
 		inner = (Inner*)v.p;
+		env = (Environment*)v.attributes;
 	}
 
-	void toValue(Value& v) {
-		v.type = Type::I_bytecode;
+	void toValue(Value& v) const {
+		v.type = Type::I_closure;
 		v.p = inner;
-		v.attributes = 0;
+		v.attributes = (Attributes*)env;
+	}
+
+	operator Value() const {
+		Value v;
+		toValue(v);
+		return v;
+	}
+
+	Closure bind(Environment* environment) {
+		return Closure(*this, environment);
 	}
 
 	Value const& expression() const { return inner->expression; }
@@ -400,13 +410,16 @@ public:
 	std::vector<Instruction> const& code() const { return inner->code; }
 	std::vector<Instruction>& code() { return inner->code; }
 	std::vector<Instruction>& threadedCode() const { return inner->threadedCode; }
+	Environment* environment() const { return env; }
 };
+
 
 class Function {
 private:
 	struct Inner : public gc {
 		PairList parameters;
-		Value body;		// Not necessarily a Block consider function(x) 2, body is the constant 2
+		uint64_t dots;
+		Value body;		// Not necessarily a Closure consider function(x) 2, body is the constant 2
 		Character str;
 		Environment* s;
 		Inner(PairList const& parameters, Value const& body, Character const& str, Environment* s) 
@@ -418,8 +431,7 @@ private:
 public:
 	Attributes* attributes;
 
-	Function(PairList const& parameters, Value const& body, Character const& str, Environment* s) 
-		: inner(new Inner(parameters, body, str, s)), attributes(0) {}
+	Function(PairList const& parameters, Value const& body, Character const& str, Environment* s); 
 	
 	Function(Value const& v) {
 		assert(v.type == Type::R_function);
@@ -440,6 +452,7 @@ public:
 	}
 
 	PairList const& parameters() const { return inner->parameters; }
+	uint64_t dots() const { return inner->dots; }
 	Value const& body() const { return inner->body; }
 	Character const& str() const { return inner->str; }
 	Environment* s() const { return inner->s; }
@@ -447,7 +460,7 @@ public:
 
 class CFunction {
 public:
-	typedef uint64_t (*Cffi)(State& s, Call const& call);
+	typedef uint64_t (*Cffi)(State& s, Call const& call, List const& args);
 	Cffi func;
 	CFunction(Cffi func) : func(func) {}
 	CFunction(Value const& v) {
@@ -461,10 +474,40 @@ public:
 	}
 };
 
+void eval(State& state, Closure const& closure);
+Closure compile(State& state, Value const& expression);
 
-void eval(State& state, Block const& block);
-void eval(State& state, Block const& block, Environment* env); 
-Block compile(State& state, Value const& expression);
+class CompiledCall {
+	struct Inner : public gc {
+		Value call;
+		Value parameters; // a list of closures
+		uint64_t dots;
+	};
+
+	Inner* inner;
+public:
+	CompiledCall(Call const& call, State& state);
+
+	CompiledCall(Value const& v) {
+		assert(v.type == Type::I_compiledcall);
+		inner = (Inner*)v.p; 
+	}
+
+	void toValue(Value& v) const {
+		v.p = inner;
+		v.type = Type::I_compiledcall;
+	}
+
+	operator Value() const {
+		Value v;
+		toValue(v);
+		return v;
+	}
+	
+	Call call() const { return Call(inner->call); }
+	List parameters() const { return List(inner->parameters); }
+	uint64_t dots() const { return inner->dots; }
+};
 
 class Environment : public gc {
 private:
@@ -472,22 +515,6 @@ private:
 	typedef std::map<Symbol, Value, std::less<Symbol>, gc_allocator<std::pair<Symbol, Value> > > Container;
 	uint64_t size;
 	Container container;
-	/*struct Dot {
-		Environment* s;
-		Symbol name;
-		Value value;
-	};
-	std::vector<Dot> dots;*/
-/*
-Insights:
--All promises must be evaluated in the dynamic scope, so typically don't need to store env
--If a promise is re-passed, what is actually passed is a new promise to look up the variable name in the other scope.
--Dots are a special case which do need to store env since they can be repassed.
--Consider this example:
-f <- function(...) function() sum(...)
-f(1,2,3,4,5)()
-15
-*/
 public:
 	Environment() : s(0), d(0), size(0) {}
 	Environment(Environment* s, Environment* d) : s(s), d(d), size(0) {}
@@ -514,13 +541,11 @@ public:
 		if(container.find(name) != container.end()) {
 			value = container.find(name)->second;
 			if(value.type == Type::I_promise) {
-				eval(state, Block(value), d);
+				eval(state, Closure(value));
 				// This is a redundent copy, eliminate
 				value = state.stack.pop();
-			} else if(value.type == Type::I_sympromise) {
-				d->get(state, value.i, value);
 			} else if(value.type == Type::I_default) {
-				eval(state, Block(value), this);
+				eval(state, Closure(value).bind(this));
 				value = state.stack.pop();
 			} else if(value.type == Type::I_symdefault) {
 				get(state, value.i, value);
@@ -538,15 +563,15 @@ public:
 
 	void getQuoted(Symbol const& name, Value& value) const {
 		getRaw(name, value);
-		if(value.type == Type::I_promise || value.type == Type::I_sympromise) {
-			value = Block(value).expression();
+		if(value.type == Type::I_promise) {
+			value = Closure(value).expression();
 		}
 	}
 
-	void getCode(Symbol const& name, Block& block) const {
+	void getCode(Symbol const& name, Closure& closure) const {
 		Value value;
 		getRaw(name, value);
-		block = Block(value);
+		closure = Closure(value);
 	}
 
 	Value assign(Symbol const& name, Value const& value) {
@@ -564,7 +589,7 @@ public:
 	void rm(Symbol const& name) {
 		if(container.find(name) != container.end())
 			size--;
-		container[name] = Value::NIL;
+		container.erase(name);
 	}
 };
 
@@ -661,6 +686,7 @@ struct Pairs {
 	void push_back(Symbol n, Value v)  { Pair t = {n, v}; inner->p.push_back(t); }
 	const Value& value(uint64_t i) const { return inner->p[i].v; }
 	const Symbol& name(uint64_t i) const { return inner->p[i].n; }
+	
 	operator List() const {
 		List l(length());
 		for(uint64_t i = 0; i < length(); i++)

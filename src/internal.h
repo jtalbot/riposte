@@ -29,23 +29,14 @@ T Clone(T const& in) {
 
 inline Value force(State& state, Value const& v) { 
 	if(v.type == Type::I_promise) {
-		eval(state, Block(v), state.env); 
+		eval(state, Closure(v)); 
 		return state.stack.pop();
-	} else if(v.type == Type::I_sympromise) {
-		Value value;
-		state.env->get(state, v.i, value);
-		return value;
 	} else return v; 
 }
-inline Value quoted(Value const& v) { 
+inline Value expression(Value const& v) { 
 	if(v.type == Type::I_promise)
-		return Block(v).expression();
-	else if(v.type == Type::I_sympromise)
-		return Symbol(v.i);
+		return Closure(v).expression();
 	else return v; 
-}
-inline Value code(Value const& v) {
-	return v; 
 }
 
 // Casting functions (default is to attempt a C coercion)
@@ -849,6 +840,10 @@ inline void Insert(Vector const& src, uint64_t srcIndex, Vector& dst, uint64_t d
 	}
         else if(dst.type == Type::R_character) {
 		Character d(dst); Character s = As(src, Type::R_character);
+		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
+	}
+        else if(dst.type == Type::R_list) {
+		List d(dst); List s = As(src, Type::R_list);
 		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
 	}
         else if(dst.type == Type::R_call) {
