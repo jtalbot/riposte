@@ -20,7 +20,6 @@ Incomplete language features:
 	-Warnings on too many parameters
 	-Warning on attempt to use missing parameter
 -next and break
--... parameters (some progress made on this front. repassed ... parameters are still evaluated in the wrong environment (the immediate caller's environment, rather than the original environment.)
 -vector type conversion functions (as.*)
 -environment and call stack access functions (parent.env, sys.call, sys.parent, etc.)
 -eval
@@ -36,9 +35,7 @@ Incomplete language features:
 -logical vector indexing
 -negative number indexing
 -character indexing
--switch statement
 -search path
--argument names to built in functions (DONE)
 -S3 Classes
 -S4 Class support (what's implemented in the library?)
 	Generic functions as first class type?
@@ -47,6 +44,13 @@ Incomplete language features:
 -FFI
 -built in functions galore
 -factors
+
+Implemented, but needs testing
+------------------------------
+-... parameters
+-argument names to built in functions
+-$ indexing
+-switch statement
 
 Language design issues:
 -0-based indexing?

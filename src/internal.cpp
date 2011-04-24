@@ -346,6 +346,33 @@ uint64_t eval_fn(State& state, Call const& call, List const& args) {
 	return state.stack.top-top;
 }
 
+uint64_t switch_fn(State& state, Call const& call, List const& args) {
+	Value one = force(state, args[0]);
+	if(one.type == Type::R_integer && Integer(one).length() == 1) {
+		int64_t i = Integer(one)[0];
+		if(i >= 1 && (uint64_t)i <= args.length()) {state.stack.push(force(state, args[i])); return 1; }
+	} else if(one.type == Type::R_double && Double(one).length() == 1) {
+		int64_t i = (int64_t)Double(one)[0];
+		if(i >= 1 && (uint64_t)i <= args.length()) {state.stack.push(force(state, args[i])); return 1; }
+	} else if(one.type == Type::R_character && Character(one).length() == 1 && 
+			getNames(args.attributes).type != Type::R_null) {
+		Character names(getNames(args.attributes));
+		for(uint64_t i = 1; i < args.length(); i++) {
+			if(names[i] == Character(one)[0]) {
+				state.stack.push(force(state, args[i]));
+				return 1;
+			}
+		}
+		for(uint64_t i = 1; args.length(); i++) {
+			if(names[i] == EMPTY_STRING) {
+				state.stack.push(force(state, args[i]));
+				return 1;
+			}
+		}
+	}
+	state.stack.push(Null::singleton);
+	return 1;
+}
 
 void addMathOps(State& state)
 {
@@ -458,6 +485,9 @@ void addMathOps(State& state)
 	CFunction(stop).toValue(v);
 	env->assign(Symbol(state, "stop"), v);
 */
+	
+	CFunction(switch_fn).toValue(v);
+	env->assign(Symbol(state, "switch"), v);
 	
 	CFunction(eval_fn).toValue(v);
 	env->assign(Symbol(state, "eval"), v);
