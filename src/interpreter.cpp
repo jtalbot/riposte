@@ -74,24 +74,42 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 		}
 		// call arguments are named, do matching by name
 		else {
-			static uint64_t assignment[64];
+			// we should be able to cache and reuse this assignment for pairs of functions and call sites.
+			static uint64_t assignment[64], set[64];
 			for(uint64_t i = 0; i < args.length(); i++) assignment[i] = 0;
+			for(uint64_t i = 0; i < parameters.length(); i++) set[i] = 0;
 			Character argNames(args.attributes->names);
+			// named args, search for complete matches
 			for(uint64_t i = 0; i < args.length(); ++i) {
-				// named arg, search for match
 				if(argNames[i] != 0) {
 					for(uint64_t j = 0; j < parameters.length(); ++j) {
 						if(pnames[j] != DOTS_STRING && argNames[i] == pnames[j]) {
 							fenv->assign(pnames[j], args[i]);
 							assignment[i] = j+1;
+							set[j] = i+1;
 							break;
 						}
 					}
 				}
 			}
+			// named args, search for incomplete matches
+			for(uint64_t i = 0; i < args.length(); ++i) {
+				std::string a = state.outString(argNames[i]);
+				if(argNames[i] != 0 && assignment[i] == 0) {
+					for(uint64_t j = 0; j < parameters.length(); ++j) {
+						if(set[j] == 0 && pnames[j] != DOTS_STRING &&
+							state.outString(pnames[i]).compare( 0, a.size(), a ) == 0 ) {	
+							fenv->assign(pnames[j], args[i]);
+							assignment[i] = j+1;
+							set[j] = i+1;
+							break;
+						}
+					}
+				}
+			}
+			// unnamed args, fill into first missing spot.
 			uint64_t firstEmpty = 0;
 			for(uint64_t i = 0; i < args.length(); ++i) {
-				// unnamed arg in a named argument list, fill in first missing spot.
 				if(argNames[i] == 0) {
 					for(; firstEmpty < parameters.length(); ++firstEmpty) {
 						if(pnames[firstEmpty] == DOTS_STRING) {
@@ -99,10 +117,12 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 						}
 						fenv->assign(pnames[firstEmpty], args[i]);
 						assignment[i] = firstEmpty+1;
+						set[firstEmpty] = i+1;
 						break;
 					}
 				}
 			}
+			// put unused args into the dots
 			if(func.dots()) {
 				// count up the unassigned args
 				uint64_t unassigned = 0;

@@ -1,7 +1,8 @@
 
 To do list (not yet in priority order):
 
-Big stuff:
+Big stuff
+---------
 -Garbage Collector. Replace Boehm with exact, generational garbage collector like everyone else has. Can we borrow the GC from a Javascript implementation?
 -R external interface. Make it possible to load and use existing R packages.
 -Class systems: S3, S4, R5 (can the implementation of these be simplified somehow?)
@@ -11,25 +12,21 @@ Big stuff:
 
 -Validate parser against R parser. Handle line breaks in some statements like R currently does. Handle multibyte strings (use iconv?) See list of open questions in lexer.rl
 
-Incomplete language features:
+Incomplete language features
+----------------------------
 -NAs
--Incomplete parameter name matching.
-	f <- function(x,y,index) {...}
-	f(1,2,i=5)		# i should match parameter `index`
 -warning, stop, on.exit, exceptions(?)
 	-Warnings on too many parameters
 	-Warning on attempt to use missing parameter
 -next and break
 -vector type conversion functions (as.*)
 -environment and call stack access functions (parent.env, sys.call, sys.parent, etc.)
--eval
 -attribute access functions
 -attribute propogation
 -data frames
 -matrix product, outer product, kronecker product operators
 -Matching operator
 -Help
--$ indexing (Linear scan version done, but very slow. Can we store a map with a list or PIC?)
 -matrix indexing
 -[[]] indexing (Works with a single index)
 -logical vector indexing
@@ -45,14 +42,21 @@ Incomplete language features:
 -built in functions galore
 -factors
 
-Implemented, but needs testing
-------------------------------
+Implemented, but needs testing and/or additional functionality
+--------------------------------------------------------------
 -... parameters
 -argument names to built in functions
 -$ indexing
 -switch statement
+-Incomplete parameter name matching.
+	f <- function(x,y,index) {...}
+	f(1,2,i=5)		# i should match parameter `index`
+-$ indexing (Linear scan version done, but very slow. Can we store a map with a list or PIC?)
+-eval
 
-Language design issues:
+
+Language design issues
+----------------------
 -0-based indexing?
 -Separate different indexing variants into distinct operators, e.g.
 	a[c(0,1,2,3)]		selects elements 0..3
