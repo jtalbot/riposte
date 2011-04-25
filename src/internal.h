@@ -27,11 +27,12 @@ T Clone(T const& in) {
 	return out;	
 }
 
-inline Value force(State& state, Value const& v) { 
-	if(v.type == Type::I_promise) {
+inline Value force(State& state, Value v) { 
+	while(v.type == Type::I_promise) {
 		eval(state, Closure(v)); 
-		return state.stack.pop();
-	} else return v; 
+		v = state.stack.pop();
+	} 
+	return v; 
 }
 inline Value expression(Value const& v) { 
 	if(v.type == Type::I_promise)

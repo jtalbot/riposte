@@ -66,9 +66,9 @@
 	_(atan, "atan", p) \
 	_(jmp, "jmp", p) \
 	_(null, "null", p) \
+	_(function, "function", p) \
 	_(ret, "ret", p)       /* ret must be the last instruction */
 	/*_(frame, "frame") \
-	_(function, "function") \
 	_(rawfunction, "rawfunction") \
 	_(quote, "quote") \
 	_(force, "force") \

@@ -140,13 +140,13 @@ struct Symbol {
 		attributes = v.attributes;
 	}
 
-	void toValue(Value& v) {
+	void toValue(Value& v) const {
 		v.type = Type::R_symbol;
 		v.i = i;
 		v.attributes = attributes;
 	}
 
-	operator Value() {
+	operator Value() const {
 		Value v;
 		toValue(v);
 		return v;
@@ -332,7 +332,8 @@ VECTOR_IMPL(PairList, Type::ER_pairlist, Value, false)
 	PairList(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; }
 	static PairList c(Value v0) { PairList c(1); c[0] = v0; return c; }
 	static PairList c(Value v0, Value v1) { PairList c(2); c[0] = v0; c[1] = v1; return c; }
-	static PairList c(Value v0, Value v1, Value v2) { PairList c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } };
+	static PairList c(Value v0, Value v1, Value v2) { PairList c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; }
+	operator List() {Value v = *this; v.type = Type::R_list; return List(v);} };
 VECTOR_IMPL(Call, Type::ER_call, Value, false) 
 	Call(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; }
 	static Call c(Value v0) { Call c(1); c[0] = v0; return c; }
@@ -382,7 +383,8 @@ public:
 	
 	Closure(Value const& v) {
 		assert(	v.type == Type::I_closure || 
-				v.type == Type::I_promise); 
+			v.type == Type::I_promise ||
+			v.type == Type::I_default); 
 		inner = (Inner*)v.p;
 		env = (Environment*)v.attributes;
 	}
@@ -417,12 +419,12 @@ public:
 class Function {
 private:
 	struct Inner : public gc {
-		PairList parameters;
+		List parameters;
 		uint64_t dots;
 		Value body;		// Not necessarily a Closure consider function(x) 2, body is the constant 2
 		Character str;
 		Environment* s;
-		Inner(PairList const& parameters, Value const& body, Character const& str, Environment* s) 
+		Inner(List const& parameters, Value const& body, Character const& str, Environment* s) 
 			: parameters(parameters), body(body), str(str), s(s) {}
 	};
 	
@@ -431,7 +433,7 @@ private:
 public:
 	Attributes* attributes;
 
-	Function(PairList const& parameters, Value const& body, Character const& str, Environment* s); 
+	Function(List const& parameters, Value const& body, Character const& str, Environment* s); 
 	
 	Function(Value const& v) {
 		assert(v.type == Type::R_function);
@@ -451,7 +453,7 @@ public:
 		return v;
 	}
 
-	PairList const& parameters() const { return inner->parameters; }
+	List const& parameters() const { return inner->parameters; }
 	uint64_t dots() const { return inner->dots; }
 	Value const& body() const { return inner->body; }
 	Character const& str() const { return inner->str; }
@@ -518,6 +520,9 @@ private:
 public:
 	Environment() : s(0), d(0), size(0) {}
 	Environment(Environment* s, Environment* d) : s(s), d(d), size(0) {}
+
+	Environment* staticParent() const { return s; }
+	Environment* dynamicParent() const { return d; }
 	
  	void init(Environment* s, Environment* d) {
 		this->s = s;
@@ -541,19 +546,18 @@ public:
 		if(container.find(name) != container.end()) {
 			value = container.find(name)->second;
 			if(value.type == Type::I_promise) {
-				eval(state, Closure(value));
-				// This is a redundent copy, eliminate
-				value = state.stack.pop();
+				while(value.type == Type::I_promise) {
+					eval(state, Closure(value));
+					value = state.stack.pop();
+				}
 			} else if(value.type == Type::I_default) {
 				eval(state, Closure(value).bind(this));
 				value = state.stack.pop();
-			} else if(value.type == Type::I_symdefault) {
-				get(state, value.i, value);
 			}
 			container[name] = value;
 			return true;
 		}
-		if(s != 0) { 
+		if(s != 0) {
 			return s->get(state, name, value);
 		} else {
 			value = Null::singleton;
@@ -578,7 +582,6 @@ public:
 		if(name.i < 1) {
 			printf("Cannot assign to that symbol\n");
 		}
-		//printf("Assigning %s into %d\n", name.toString().c_str(), this);
 		if(container.find(name) == container.end())
 			size++;
 		container[name] = value;
@@ -598,17 +601,24 @@ private:
 	Environment* env;
 public:
 	Attributes* attributes;
+	REnvironment(Environment* env) : env(env), attributes(0) {
+	}
 	REnvironment(Value const& v) {
 		assert(v.type == Type::R_environment);
 		env = (Environment*)v.p;
 		attributes = v.attributes;
 	}
 	void toValue(Value& v) const {
-		v.type == Type::R_environment;
+		v.type = Type::R_environment;
 		v.p = env;
 		v.attributes = attributes;
 	}
-	Environment* environment() const {
+	operator Value() const {
+		Value v;
+		toValue(v);
+		return v;
+	}
+	Environment* ptr() const {
 		return env;
 	}
 };

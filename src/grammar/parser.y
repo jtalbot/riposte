@@ -129,9 +129,9 @@ statementlist(A) ::= statement(B). { A = Pairs::Make(); A.push_back(Symbol(0), B
 statementlist(A) ::= . { A = Pairs::Make(); }
 
 sublist(A) ::= sub(B). { A = B; }
-sublist(A) ::= sublist(B) optnl COMMA optnl sub(C). { A = B; A.push_back(C.name(0), C.value(0)); }
+sublist(A) ::= sublist(B) optnl COMMA optnl sub(C). { A = B; if(C.length() == 1) A.push_back(C.name(0), C.value(0)); }
 
-sub(A) ::= . { A = Pairs::Make(); A.push_back(Symbol(0), Symbol(0)); }
+sub(A) ::= . { A = Pairs::Make(); }
 sub(A) ::= SYMBOL(B) optnl EQ_ASSIGN. { A = Pairs::Make(); A.push_back(B, Value::NIL); }
 sub(A) ::= STR_CONST(B) optnl EQ_ASSIGN. { A = Pairs::Make(); A.push_back(B, Value::NIL); }
 sub(A) ::= SYMBOL(B) optnl EQ_ASSIGN optnl expr(C). { A = Pairs::Make(); A.push_back(Symbol(B), C); }

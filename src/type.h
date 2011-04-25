@@ -34,7 +34,6 @@
 	_(I_dots,			"...", p)			\
 	_(I_promise,	"promise", p)		\
 	_(I_default,	"default", p)		\
-	_(I_symdefault,	"symdefault", p)		\
 	_(I_closure, 	"closure", p) \
 	_(I_genericfunction, 	"genericfunction", p) \
 	_(I_nil, 		"NIL", p)			\

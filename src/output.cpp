@@ -75,7 +75,6 @@ std::string stringifyVector(State const& state, T const& v) {
 std::string State::stringify(Value const& value) const {
 	std::string result = "[1]";
 	bool dots = false;
-
 	switch(value.type.internal())
 	{
 		case Type::ER_null:
@@ -146,6 +145,10 @@ std::string State::stringify(Value const& value) const {
 			//result = "function: " + intToHexStr((uint64_t)value.p) /*+ "\n" + Function(*this).body().toString()*/;
 			result = outString(Function(value).str()[0]);
 			return result;
+		}
+		case Type::ER_environment:
+		{
+			return "environment";
 		}
 		case Type::EI_closure:
 		{

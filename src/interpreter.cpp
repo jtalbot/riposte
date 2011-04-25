@@ -52,7 +52,7 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 		//See note above about allocating Environment on heap...
 		Environment* fenv = new Environment(func.s(), state.env);
 			
-		PairList parameters = func.parameters();
+		List parameters = func.parameters();
 		Character pnames(parameters.attributes->names);
 		// populate environment with default values
 		for(uint64_t i = 0; i < parameters.length(); ++i) {
@@ -97,12 +97,9 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 						if(pnames[firstEmpty] == DOTS_STRING) {
 							break;
 						}
-
-						if(assignment[firstEmpty] == 0) {
-							fenv->assign(pnames[firstEmpty], args[i]);
-							assignment[i] = firstEmpty+1;
-							break;
-						}
+						fenv->assign(pnames[firstEmpty], args[i]);
+						assignment[i] = firstEmpty+1;
+						break;
 					}
 				}
 			}
@@ -460,6 +457,10 @@ static int64_t jmp_op(State& state, Stack& stack, Closure const& closure, Instru
 }
 static int64_t null_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
 	stack.push(Null::singleton);
+	return 1;
+}
+static int64_t function_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
+	stack.push(Function(closure.constants()[inst.a], closure.constants()[inst.b], Character::NA, state.env));
 	return 1;
 }
 static int64_t ret_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {

@@ -7,13 +7,6 @@
 #include "type.h"
 #include "bc.h"
 
-static bool isLanguage(Value const& expr) {
-	return expr.type == Type::R_symbol ||
-			expr.type == Type::R_call ||
-			expr.type == Type::R_expression ||
-			expr.type == Type::R_pairlist;
-}
-
 // compilation routines
 static void compile(State& state, Value const& expr, Closure& closure); 
 
@@ -62,6 +55,28 @@ static void compileOp(State& state, Call const& call, Closure& closure) {
 			bc = indexed ? ByteCode::iassign : ByteCode::assign;
 		}
 		closure.code().push_back(Instruction(bc, Symbol(v).i));
+	}
+	else if(funcStr == "function") {
+		//compile the default parameters	
+		List c = PairList(call[1]);
+		List parameters(c.length());
+		uint64_t j = 0;
+		for(uint64_t i = 0; i < parameters.length(); i++) {
+			parameters[j] = compile(state, c[i]);
+			parameters[j].type = Type::I_default;
+			j++;
+		}
+		Vector n = getNames(c.attributes);
+		if(n.type != Type::R_null) {
+			setNames(parameters.attributes, n);
+		}
+		closure.constants().push_back(parameters);
+
+		//compile the source for the body
+		Closure body = compile(state, call[2]);
+		closure.constants().push_back(body);
+	
+		closure.code().push_back(Instruction(ByteCode::function, closure.constants().size()-2, closure.constants().size()-1));
 	}
 	else if(funcStr == "return") {
 		if(call.length() == 1)
@@ -310,6 +325,7 @@ static void compileCall(State& state, Call const& call, Closure& closure) {
 	if(call[0].type == Type::R_symbol) {
 		std::string funcStr = Symbol(call[0]).toString(state);
 		if(	funcStr == ".Internal"
+			|| funcStr == "function"
 			|| funcStr == "return"
 			|| funcStr == "<-" 
 			|| funcStr == "=" 
@@ -438,37 +454,6 @@ static void compileExpression(State& state, Expression const& values, Closure& c
 	}
 }
 
-static void compilePairList(State& state, PairList const& values, Closure& closure) {
-	/*
-		PairLists are primarily used to provide the default arguments for a function.
-		So the elements need to be compiled.
-		If they're used for anything else, will need to fix this implementation.
-	*/
-	//printf("Compiling pair list\n");
-	uint64_t length = values.length();
-	PairList compiledPL(length);
-	compiledPL.attributes = values.attributes;
-	for(uint64_t i = 0; i < length; i++) {
-		if(values[i].type == Type::R_symbol) {
-			Value v = values[i];
-			v.type = Type::I_symdefault;
-			compiledPL[i] = v;
-		}
-		else if(isLanguage(values[i])) {
-			Value v;
-			compile(state, values[i]).toValue(v);
-			v.type = Type::I_default;
-			compiledPL[i] = v;
-		} else {
-			compiledPL[i] = values[i];
-		}
-	}
-	Value v;
-	compiledPL.toValue(v);
-	compileConstant(state, v, closure);
-}
-
-
 void compile(State& state, Value const& expr, Closure& closure) {
 
 	switch(expr.type.internal())
@@ -481,9 +466,6 @@ void compile(State& state, Value const& expr, Closure& closure) {
 			break;
 		case Type::ER_expression:
 			compileExpression(state, Expression(expr), closure);
-			break;
-		case Type::ER_pairlist:
-			compilePairList(state, PairList(expr), closure);
 			break;
 		default:
 			compileConstant(state, expr, closure);

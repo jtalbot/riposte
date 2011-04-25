@@ -2,7 +2,7 @@
 #include "value.h"
 #include "internal.h"
 
-	Function::Function(PairList const& parameters, Value const& body, Character const& str, Environment* s) 
+	Function::Function(List const& parameters, Value const& body, Character const& str, Environment* s) 
 		: inner(new Inner(parameters, body, str, s)), attributes(0) {
 		Character names(getNames(parameters.attributes));
 		uint64_t i = 0;
@@ -21,7 +21,8 @@
 				inner->dots = i;
 			} else if(call[i].type == Type::R_call ||
 			   call[i].type == Type::R_symbol ||
-			   call[i].type == Type::I_promise) {
+			   call[i].type == Type::I_promise ||
+			   call[i].type == Type::R_pairlist) {
 				parameters[j] = compile(state, call[i]);
 				parameters[j].type = Type::I_promise;
 			} else if(call[i].type == Type::I_closure) {

@@ -5,10 +5,11 @@
 
 uint64_t function(State& state, Call const& call, List const& args) {
 	assert(args.length() == 2/*3*/);
+	Value parameters = force(state, args[0]);
+	Value body = args[1];
+	printf("Function param type: %s\n", parameters.type.toString());
 	state.stack.push(
-		Function(force(state, args[0]), 
-			args[1], 
-			Character::NA/*force(state, args[2])*/, state.env));
+		Function(parameters, body, Character::NA/*force(state, args[2])*/, state.env));
 	return 1;
 }
 
@@ -338,9 +339,10 @@ uint64_t quote(State& state, Call const& call, List const& args) {
 
 uint64_t eval_fn(State& state, Call const& call, List const& args) {
 	Value expr = force(state, args[0]);
-	//Value envir = force(state, call[2]);
+	Value envir = force(state, args[1]);
 	//Value enclos = force(state, call[3]);
 	Closure closure = compile(state, expr);
+	closure.bind(REnvironment(envir).ptr());
 	uint64_t top = state.stack.top;
 	eval(state, closure);
 	return state.stack.top-top;
@@ -371,6 +373,32 @@ uint64_t switch_fn(State& state, Call const& call, List const& args) {
 		}
 	}
 	state.stack.push(Null::singleton);
+	return 1;
+}
+
+uint64_t environment(State& state, Call const& call, List const& args) {
+	assert(args.length() == 1);
+	Value e = force(state, args[0]);
+	if(e.type == Type::R_null) {
+		state.stack.push(REnvironment(state.env));
+		return 1;
+	}
+	else if(e.type == Type::R_function) {
+		state.stack.push(REnvironment(Function(e).s()));
+		return 1;
+	}
+	state.stack.push(Null::singleton);
+	return 1;
+}
+
+uint64_t parentframe(State& state, Call const& call, List const& args) {
+	assert(args.length() == 1);
+	uint64_t i = (uint64_t)asReal1(force(state, args[0]));
+	Environment* e = state.env;
+	for(uint64_t j = 0; j < i-1 && e != NULL; j++) {
+		e = e->dynamicParent();
+	}
+	state.stack.push(REnvironment(e));
 	return 1;
 }
 
@@ -493,5 +521,10 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "eval"), v);
 	CFunction(quote).toValue(v);
 	env->assign(Symbol(state, "quote"), v);
+
+	CFunction(environment).toValue(v);
+	env->assign(Symbol(state, "environment"), v);
+	CFunction(parentframe).toValue(v);
+	env->assign(Symbol(state, "parent.frame"), v);
 }
 
