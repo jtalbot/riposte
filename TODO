@@ -14,7 +14,6 @@ Big stuff
 
 Incomplete language features
 ----------------------------
--NAs
 -on.exit, exceptions(?)
 -next and break
 -vector type conversion functions (as.*)
@@ -52,6 +51,7 @@ Implemented, but needs testing and/or additional functionality
 -$ indexing (Linear scan version done, but very slow. Can we store a map with a list or PIC?)
 -eval
 -warning, stop, on.exit, exceptions(?)
+-NAs
 
 
 Language design issues

@@ -15,19 +15,19 @@ std::string pad(std::string s, uint64_t width)
 }
 
 inline std::string toString(State const& state, unsigned char a) {
-	return (a ? "TRUE" : "FALSE");
+	return a == Logical::NAelement ? "NA" : (a ? "TRUE" : "FALSE");
 }  
 
 inline std::string toString(State const& state, int64_t a) {
-	return intToStr(a);
+	return a == Integer::NAelement ? "NA" : intToStr(a);
 }  
 
 inline std::string toString(State const& state, double a) {
-	return doubleToStr(a);
+	return *(uint64_t*)&a == *(uint64_t*)&Double::NAelement ? "NA" : doubleToStr(a);
 }  
 
 inline std::string toString(State const& state, uint64_t a) {
-	return std::string("\"") + state.outString(a) + "\"";
+	return a == Character::NAelement ? "NA" : std::string("\"") + state.outString(a) + "\"";
 }  
 
 

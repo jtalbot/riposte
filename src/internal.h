@@ -53,6 +53,7 @@ inline double asReal1(Value const& v) { if(v.type != Type::R_double && v.type !=
 // Casting functions (default is to attempt a C coercion)
 template<class I, class O> struct Cast {
 	typedef I A;
+	typedef I TA;
 	typedef O R;
 	static typename O::Element eval(typename I::Element const& i) { return (typename O::Element)i; }
 };
@@ -83,7 +84,7 @@ template<> struct Cast<Integer, Logical> {
 template<class X, class Y, class Z>
 struct UnaryOp {
 	typedef X A;
-	typedef Y TR;
+	typedef Y TA;
 	typedef Z R;
 	
 };
@@ -224,13 +225,24 @@ struct ATanOp : UnaryOp<A, TA, R> {
 	}
 };
 
+template<class Op>
+struct NA1 : UnaryOp<typename Op::A, typename Op::TA, typename Op::R> {
+	static typename Op::R::Element eval(typename Op::A::Element const& a) {
+		if(!Op::A::CheckNA || !Op::A::isNA(a))
+			return Op::eval(a);
+		else
+			return Op::R::NAelement;
+	}
+};
 
 
 // Binary operators
 
 template<typename X, typename TX, typename Y, typename TY, typename Z> struct BinaryOp {
 	typedef X A;
+	typedef TX TA;
 	typedef Y B;
+	typedef TY TB;
 	typedef Z R;
 };
 
@@ -334,14 +346,28 @@ struct LEOp : BinaryOp<A, TA, B, TB, R> {
 template<typename A, typename TA, typename B, typename TB, typename R>
 struct AndOp : BinaryOp<A, TA, B, TB, R> {
 	static typename R::Element eval(typename A::Element const& a, typename B::Element const& b) {
-		return Cast<A, TA>::eval(a) && Cast<B, TB>::eval(b);
+		if(A::isNA(a)) return Cast<B, TB>::eval(b) ? R::NAelement : false;
+		else if(B::isNA(b)) return Cast<A, TA>::eval(a) ? R::NAelement : false;
+		else return Cast<A, TA>::eval(a) && Cast<B, TB>::eval(b);
 	}
 };
 
 template<typename A, typename TA, typename B, typename TB, typename R>
 struct OrOp : BinaryOp<A, TA, B, TB, R> {
 	static typename R::Element eval(typename A::Element const& a, typename B::Element const& b) {
+		if(A::isNA(a)) return Cast<B, TB>::eval(b) ? true : R::NAelement;
+		else if(B::isNA(b)) return Cast<A, TA>::eval(a) ? true : R::NAelement;
 		return Cast<A, TA>::eval(a) || Cast<B, TB>::eval(b);
+	}
+};
+
+template<class Op>
+struct NA2 : BinaryOp<typename Op::A, typename Op::TA, typename Op::B, typename Op::TB, typename Op::R> {
+	static typename Op::R::Element eval(typename Op::A::Element const& a, typename Op::B::Element const& b) {
+		if((!Op::A::CheckNA || !Op::A::isNA(a)) && (!Op::B::CheckNA || !Op::B::isNA(b)))
+			return Op::eval(a, b);
+		else
+			return Op::R::NAelement;
 	}
 };
 
@@ -479,13 +505,13 @@ uint64_t unaryArith(State& state, uint64_t nargs) {
 
 	Vector r;
 	if(a.type == Type::R_double) {
-		Lift< Op<Double, Double, Double> >::eval(a).toVector(r);
+		Lift< NA1< Op<Double, Double, Double> > >::eval(a).toVector(r);
 	}
 	else if(a.type == Type::R_integer) {
-		Lift< Op<Integer, Integer, Integer> >::eval(a).toVector(r);
+		Lift< NA1< Op<Integer, Integer, Integer> > >::eval(a).toVector(r);
 	}
 	else if(a.type == Type::R_logical) {
-		Lift< Op<Logical, Integer, Integer> >::eval(a).toVector(r);
+		Lift< NA1< Op<Logical, Integer, Integer> > >::eval(a).toVector(r);
 	}
 	else {
 		_error("non-numeric argument to unary numeric operator");
@@ -541,31 +567,31 @@ uint64_t binaryArith(State& state, uint64_t nargs) {
 
 	Vector r;
 	if(a.type == Type::R_double && b.type == Type::R_double) {
-		Lift< Op<Double, Double, Double, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Double, Double, Double, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_double) {
-		Lift< Op<Integer, Double, Double, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Integer, Double, Double, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_integer) {
-		Lift< Op<Double, Double, Integer, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Double, Double, Integer, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_integer) {
-		Lift< Op<Integer, Integer, Integer, Integer, Integer> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Integer, Integer, Integer, Integer, Integer> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_logical) {
-		Lift< Op<Double, Double, Logical, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Double, Double, Logical, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_double) {
-		Lift< Op<Logical, Double, Double, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Logical, Double, Double, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_logical) {
-		Lift< Op<Integer, Integer, Logical, Integer, Integer> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Integer, Integer, Logical, Integer, Integer> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_integer) {
-		Lift< Op<Logical, Integer, Integer, Integer, Integer> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Logical, Integer, Integer, Integer, Integer> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_logical) {
-		Lift< Op<Logical, Integer, Logical, Integer, Integer> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Logical, Integer, Logical, Integer, Integer> > >::eval(a, b).toVector(r);
 	}
 	else {
 		_error("non-numeric argument to binary numeric operator");
@@ -590,31 +616,31 @@ uint64_t binaryDoubleArith(State& state, uint64_t nargs) {
 
 	Vector r;
 	if(a.type == Type::R_double && b.type == Type::R_double) {
-		Lift< Op<Double, Double, Double, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Double, Double, Double, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_double) {
-		Lift< Op<Integer, Double, Double, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Integer, Double, Double, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_integer) {
-		Lift< Op<Double, Double, Integer, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Double, Double, Integer, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_integer) {
-		Lift< Op<Integer, Double, Integer, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Integer, Double, Integer, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_logical) {
-		Lift< Op<Double, Double, Logical, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Double, Double, Logical, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_double) {
-		Lift< Op<Logical, Double, Double, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Logical, Double, Double, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_logical) {
-		Lift< Op<Integer, Double, Logical, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Integer, Double, Logical, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_integer) {
-		Lift< Op<Logical, Double, Integer, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Logical, Double, Integer, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_logical) {
-		Lift< Op<Logical, Double, Logical, Double, Double> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Logical, Double, Logical, Double, Double> > >::eval(a, b).toVector(r);
 	}
 	else {
 		_error("non-numeric argument to numeric operator");
@@ -688,31 +714,31 @@ uint64_t binaryOrdinal(State& state, uint64_t nargs) {
 
 	Vector r;
 	if(a.type == Type::R_double && b.type == Type::R_double) {
-		Lift< Op<Double, Double, Double, Double, Logical> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Double, Double, Double, Double, Logical> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_double) {
-		Lift< Op<Integer, Double, Double, Double, Logical> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Integer, Double, Double, Double, Logical> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_integer) {
-		Lift< Op<Double, Double, Integer, Double, Logical> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Double, Double, Integer, Double, Logical> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_integer) {
-		Lift< Op<Integer, Integer, Integer, Integer, Logical> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Integer, Integer, Integer, Integer, Logical> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_logical) {
-		Lift< Op<Double, Double, Logical, Double, Logical> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Double, Double, Logical, Double, Logical> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_double) {
-		Lift< Op<Logical, Double, Double, Double, Logical> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Logical, Double, Double, Double, Logical> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_logical) {
-		Lift< Op<Integer, Integer, Logical, Integer, Logical> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Integer, Integer, Logical, Integer, Logical> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_integer) {
-		Lift< Op<Logical, Integer, Integer, Integer, Logical> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Logical, Integer, Integer, Integer, Logical> > >::eval(a, b).toVector(r);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_logical) {
-		Lift< Op<Logical, Logical, Logical, Logical, Logical> >::eval(a, b).toVector(r);
+		Lift< NA2< Op<Logical, Logical, Logical, Logical, Logical> > >::eval(a, b).toVector(r);
 	}
 	else {
 		_error("non-ordinal argument to ordinal operator");
@@ -728,7 +754,7 @@ inline Vector As(Vector a, Type type) {
                 r = a;
         }
         else if(a.type == Type::R_integer && type == Type::R_double) {
-                Zip1< Cast<Integer, Double> >::eval(a).toVector(r);
+                Zip1< NA1< Cast<Integer, Double> > >::eval(a).toVector(r);
         }
         else if(a.type == Type::R_double && type == Type::R_integer) {
                 Zip1< Cast<Double, Integer> >::eval(a).toVector(r);

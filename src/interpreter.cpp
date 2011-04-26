@@ -8,18 +8,6 @@
 #include "bc.h"
 #include "internal.h"
 
-const Null Null::singleton = Null(0);
-const Character Character::NA = Character(1);
-const Logical Logical::NA = Logical::c(false);
-const Logical Logical::False = Logical::c(false);
-const Logical Logical::True = Logical::c(true);
-const Double Double::NA = Double::c(0);
-const Double Double::NaN = Double::c(0);
-const Double Double::Inf = Double::c(1);
-const Integer Integer::NA = Integer::c(0);
-const Value Value::NIL = {{0}, 0, Type::I_nil, 0}; 
-
-
 // (stack discipline is hard to prove in R, but can we do better?)
 // 1. If a function is returned, must assume that it contains upvalues to anything in either
 //    its static scope (true upvalues) or dynamic scope (promises)
@@ -333,7 +321,7 @@ static int64_t add_op(State& state, Stack& stack, Closure const& closure, Instru
 	return 1;
 }
 static int64_t pos_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, PosOp>(state,inst.a);
+	unaryArith<Zip1, PosOp >(state,inst.a);
 	return 1;
 }
 static int64_t sub_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
@@ -341,7 +329,7 @@ static int64_t sub_op(State& state, Stack& stack, Closure const& closure, Instru
 	return 1;
 }
 static int64_t neg_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, NegOp>(state,inst.a);
+	unaryArith<Zip1, NegOp >(state,inst.a);
 	return 1;
 }
 static int64_t mul_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {

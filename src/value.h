@@ -308,15 +308,24 @@ struct Name : public VectorImpl<Type, type, Pack> \
 VECTOR_IMPL(Null, Type::ER_null, Value, true) 
 	const static Null singleton; };
 VECTOR_IMPL(Logical, Type::ER_logical, unsigned char, true)
-	static Logical c(bool c) { Logical r(1); r[0] = c; return r; }
+	static Logical c(unsigned char c) { Logical r(1); r[0] = c; return r; }
+	static bool isNA(unsigned char c) { return c == NAelement; }
+	const static bool CheckNA;
+	const static unsigned char NAelement;
 	const static Logical NA;
 	const static Logical True;
 	const static Logical False; };
 VECTOR_IMPL(Integer, Type::ER_integer, int64_t, true)
 	static Integer c(double c) { Integer r(1); r[0] = c; return r; }
+	static bool isNA(int64_t c) { return c == NAelement; }
+	const static bool CheckNA;
+	const static int64_t NAelement;
 	const static Integer NA; };
 VECTOR_IMPL(Double, Type::ER_double, double, true)
 	static Double c(double c) { Double r(1); r[0] = c; return r; }
+	static bool isNA(double c) { return *(uint64_t*)&c == *(uint64_t*)&NAelement; }
+	const static bool CheckNA;
+	const static double NAelement;
 	const static Double NA;
 	const static Double Inf;
 	const static Double NaN; };
@@ -326,6 +335,9 @@ VECTOR_IMPL(Complex, Type::ER_complex, _complex, false)
 VECTOR_IMPL(Character, Type::ER_character, uint64_t, true)
 	static Character c(State& state, std::string const& s) { Character c(1); c[0] = state.inString(s); return c; }
 	static Character c(uint64_t s) { Character c(1); c[0] = s; return c; }
+	static bool isNA(uint64_t c) { return c == NAelement; }
+	const static bool CheckNA;
+	const static uint64_t NAelement;
 	const static Character NA; };
 VECTOR_IMPL(Raw, Type::ER_raw, unsigned char, true) };
 VECTOR_IMPL(List, Type::ER_list, Value, false) 
