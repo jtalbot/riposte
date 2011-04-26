@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "exceptions.h"
 #include "value.h"
 #include "type.h"
 #include "bc.h"
@@ -23,8 +24,20 @@ static void compileOp(State& state, Call const& call, Closure& closure) {
 	Symbol func(call[0]);
 	std::string funcStr = func.toString(state);
 	if(funcStr == ".Internal") {
-		assert(call[1].type == Type::R_symbol);
-		closure.code().push_back(Instruction(ByteCode::iget, Symbol(call[1]).i));
+		if(call[1].type == Type::R_symbol) {
+			// The riposte way... .Internal is a function on functions, returning the internal function
+			closure.code().push_back(Instruction(ByteCode::iget, Symbol(call[1]).i));
+		} else if(call[1].type == Type::R_call) {
+			// The R way... .Internal is a function on calls
+			Call c = call[1];
+			Call ic(2);
+			ic[0] = Symbol(state, ".Internal");
+			ic[1] = c[0];
+			c[0] = ic;
+			compile(state, c, closure);
+		} else {
+			throw CompileError(".Internal has invalid arguments");
+		}
 	}
 	else if(funcStr == "<-" || funcStr == "=" || funcStr == ".Assign") {
 		ByteCode bc;

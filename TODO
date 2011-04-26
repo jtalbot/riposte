@@ -15,9 +15,7 @@ Big stuff
 Incomplete language features
 ----------------------------
 -NAs
--warning, stop, on.exit, exceptions(?)
-	-Warnings on too many parameters
-	-Warning on attempt to use missing parameter
+-on.exit, exceptions(?)
 -next and break
 -vector type conversion functions (as.*)
 -environment and call stack access functions (parent.env, sys.call, sys.parent, etc.)
@@ -53,6 +51,7 @@ Implemented, but needs testing and/or additional functionality
 	f(1,2,i=5)		# i should match parameter `index`
 -$ indexing (Linear scan version done, but very slow. Can we store a map with a list or PIC?)
 -eval
+-warning, stop, on.exit, exceptions(?)
 
 
 Language design issues
