@@ -104,15 +104,27 @@ int dostdin(State& state) {
 	printf("\n");
 
 	while(!die) {
-		Value value, result;
-		value = parsetty(state);
-		if(value.type == Type::I_nil) continue;
-		//std::cout << "Parsed: " << value.toString() << std::endl;
-		Closure closure = compile(state, value);
-		//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
-		eval(state, closure);
-		result = state.stack.pop();	
-		std::cout << state.stringify(result) << std::endl;
+		try { 
+			Value value, result;
+			value = parsetty(state);
+			if(value.type == Type::I_nil) continue;
+			//std::cout << "Parsed: " << value.toString() << std::endl;
+			Closure closure = compile(state, value);
+			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
+			eval(state, closure);
+			result = state.stack.pop();	
+			std::cout << state.stringify(result) << std::endl;
+		} catch(RiposteError& error) { 
+			e_message("Error", "riposte", error.what().c_str());
+		}
+		if(state.warnings.size() > 0) {
+			std::cout << "There were " << intToStr(state.warnings.size()) << " warnings." << std::endl;
+			for(uint64_t i = 0; i < state.warnings.size() && i < 50; i++) {
+				std::cout << "(" << intToStr(i+1) << ") " << state.warnings[i] << std::endl;
+			}
+		}
+		state.stack.clear();
+		state.warnings.clear();
 	}
 	return rc;
 }
@@ -139,13 +151,16 @@ static int dofile(const char * file, State& state, bool echo) {
 	if(value.type == Type::I_nil) return -1;
 	
 	Expression expressions(value);
-	state.stopped = false;
-	for(uint64_t i = 0; i < expressions.length() && !state.stopped; i++) {
-		Closure closure = compile(state, expressions[i]);
-		eval(state, closure);
-		Value result = state.stack.pop();
-		if(echo)
-			std::cout << state.stringify(result) << std::endl;
+	for(uint64_t i = 0; i < expressions.length(); i++) {
+		try {
+			Closure closure = compile(state, expressions[i]);
+			eval(state, closure);
+			Value result = state.stack.pop();
+			if(echo)
+				std::cout << state.stringify(result) << std::endl;
+		} catch(RiposteError& error) {
+			e_message("Error", "riposte", error.what().c_str());
+		}
 	}
 
 	return rc;

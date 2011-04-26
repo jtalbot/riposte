@@ -3,8 +3,16 @@
 #define _RIPOSTE_INTERNAL_H
 
 #include "value.h"
-#include <assert.h>
+#include "exceptions.h"
 #include <math.h>
+
+inline void _error(std::string message) {
+	throw RiposteError(message);
+}
+
+inline void _warning(State& state, std::string const& message) {
+	state.warnings.push_back(message);
+}
 
 void addMathOps(State& state);
 
@@ -39,6 +47,8 @@ inline Value expression(Value const& v) {
 		return Closure(v).expression();
 	else return v; 
 }
+
+inline double asReal1(Value const& v) { if(v.type != Type::R_double && v.type != Type::R_integer) _error("Can't cast argument to number"); if(v.type == Type::R_integer) return Integer(v)[0]; else return Double(v)[0]; }
 
 // Casting functions (default is to attempt a C coercion)
 template<class I, class O> struct Cast {
@@ -460,7 +470,8 @@ template<
 	template<typename A, typename TA, typename R> class Op > 
 uint64_t unaryArith(State& state, uint64_t nargs) {
 
-	assert(nargs == 1);
+	if(nargs == 0) _error("unary arithmetic operator called with no arguments");
+	if(nargs > 1) _error("unary arithmetic operator called with too many arguments");
 	
 	Stack& stack = state.stack;
 	
@@ -477,8 +488,7 @@ uint64_t unaryArith(State& state, uint64_t nargs) {
 		Lift< Op<Logical, Integer, Integer> >::eval(a).toVector(r);
 	}
 	else {
-		printf("non-numeric argument to unary numeric operator\n");
-		assert(false);
+		_error("non-numeric argument to unary numeric operator");
 	}
 	Value& v = stack.reserve();
 	r.toValue(v);
@@ -489,8 +499,9 @@ template<
 	template<class Op> class Lift,
 	template<typename A, typename TA, typename R> class Op > 
 uint64_t unaryLogical(State& state, uint64_t nargs) {
-
-	assert(nargs == 1);
+	
+	if(nargs == 0) _error("unary logical operator called with no arguments");
+	if(nargs > 1) _error("unary logical operator called with too many arguments");
 	
 	Stack& stack = state.stack;
 	
@@ -507,8 +518,7 @@ uint64_t unaryLogical(State& state, uint64_t nargs) {
 		Lift< Op<Logical, Logical, Logical> >::eval(a).toVector(r);
 	}
 	else {
-		printf("non-numeric argument to unary logical operator\n");
-		assert(false);
+		_error("non-numeric argument to unary logical operator");
 	}
 	Value& v = stack.reserve();
 	r.toValue(v);
@@ -521,7 +531,8 @@ template<
 	template<typename A, typename TA, typename B, typename TB, typename R> class Op > 
 uint64_t binaryArith(State& state, uint64_t nargs) {
 
-	assert(nargs == 2);
+	if(nargs < 2) _error("binary arithmetic operator called with too few arguments");
+	if(nargs > 2) _error("binary arithmetic operator called with too many arguments");
 	
 	Stack& stack = state.stack;
 	
@@ -557,8 +568,7 @@ uint64_t binaryArith(State& state, uint64_t nargs) {
 		Lift< Op<Logical, Integer, Logical, Integer, Integer> >::eval(a, b).toVector(r);
 	}
 	else {
-		printf("non-numeric argument to binary numeric operator\n");
-		assert(false);
+		_error("non-numeric argument to binary numeric operator");
 	}
 	Value& v = stack.reserve();
 	r.toValue(v);
@@ -570,7 +580,8 @@ template<
 	template<typename A, typename TA, typename B, typename TB, typename R> class Op > 
 uint64_t binaryDoubleArith(State& state, uint64_t nargs) {
 
-	assert(nargs == 2);
+	if(nargs < 2) _error("binary arithmetic operator called with too few arguments");
+	if(nargs > 2) _error("binary arithmetic operator called with too many arguments");
 	
 	Stack& stack = state.stack;
 	
@@ -606,8 +617,7 @@ uint64_t binaryDoubleArith(State& state, uint64_t nargs) {
 		Lift< Op<Logical, Double, Logical, Double, Double> >::eval(a, b).toVector(r);
 	}
 	else {
-		printf("non-numeric argument to numeric operator\n");
-		assert(false);
+		_error("non-numeric argument to numeric operator");
 	}
 	Value& v = stack.reserve();
 	r.toValue(v);
@@ -619,7 +629,8 @@ template<
 	template<typename A, typename TA, typename B, typename TB, typename R> class Op > 
 uint64_t binaryLogical(State& state, uint64_t nargs) {
 
-	assert(nargs == 2);
+	if(nargs < 2) _error("binary logical operator called with too few arguments");
+	if(nargs > 2) _error("binary logical operator called with too many arguments");
 	
 	Stack& stack = state.stack;
 	
@@ -655,8 +666,7 @@ uint64_t binaryLogical(State& state, uint64_t nargs) {
 		Lift< Op<Logical, Logical, Logical, Logical, Logical> >::eval(a, b).toVector(r);
 	}
 	else {
-		printf("non-logical argument to logical operator\n");
-		assert(false);
+		_error("non-logical argument to binary logical operator");
 	}
 	Value& v = stack.reserve();
 	r.toValue(v);
@@ -668,7 +678,8 @@ template<
 	template<typename A, typename TA, typename B, typename TB, typename R> class Op > 
 uint64_t binaryOrdinal(State& state, uint64_t nargs) {
 
-	assert(nargs == 2);
+	if(nargs < 2) _error("binary ordinal operator called with too few arguments");
+	if(nargs > 2) _error("binary ordinal operator called with too many arguments");
 	
 	Stack& stack = state.stack;
 	
@@ -704,8 +715,7 @@ uint64_t binaryOrdinal(State& state, uint64_t nargs) {
 		Lift< Op<Logical, Logical, Logical, Logical, Logical> >::eval(a, b).toVector(r);
 	}
 	else {
-		printf("non-ordinal argument to ordinal operator\n");
-		assert(false);
+		_error("non-ordinal argument to ordinal operator");
 	}
 	Value& v = stack.reserve();
 	r.toValue(v);
@@ -763,8 +773,7 @@ inline Vector As(Vector a, Type type) {
                 r = Call(a);
         }
         else {
-                printf("Invalid cast\n");
-                assert(false);
+                _error("Invalid cast");
         }
 	return r;
 }
@@ -817,8 +826,7 @@ inline uint64_t subAssign(State& state, uint64_t nargs) {
                 SubsetAssign< Logical, Integer, Logical >::eval(a, idx, b).toVector(r);
         }
         else {
-                printf("Invalid index\n");
-                assert(false);
+                _error("Invalid index");
         }
         Value& v = stack.reserve();
         r.toValue(v);
@@ -852,8 +860,7 @@ inline void Insert(Vector const& src, uint64_t srcIndex, Vector& dst, uint64_t d
 		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
 	}
         else {
-                printf("Invalid insertion\n");
-                assert(false);
+                _error("Invalid insertion");
         }
 }
 
@@ -896,7 +903,7 @@ inline Value Element2(Vector const& a, uint64_t index)
 	else if(a.type == Type::R_complex) return Complex::c(Complex(a)[index]);
 	else if(a.type == Type::R_list) return List(a)[index];
 	else {
-		printf("Invalid element\n");
+		_error("Invalid element");
 		return Null::singleton;
 	};
 }

@@ -1,27 +1,31 @@
 
 #include "internal.h"
-#include <assert.h>
 #include <math.h>
 
+void checkNumArgs(List const& args, uint64_t nargs) {
+	if(args.length() > nargs) _error("unused argument(s)");
+	else if(args.length() < nargs) _error("too few arguments");
+}
+
 uint64_t function(State& state, Call const& call, List const& args) {
-	assert(args.length() == 2/*3*/);
 	Value parameters = force(state, args[0]);
 	Value body = args[1];
-	printf("Function param type: %s\n", parameters.type.toString());
 	state.stack.push(
 		Function(parameters, body, Character::NA/*force(state, args[2])*/, state.env));
 	return 1;
 }
 
 uint64_t rm(State& state, Call const& call, List const& args) {
-	assert(args.length() == 1);
-	state.env->rm(expression(args[0]));
+	for(uint64_t i = 0; i < args.length(); i++) if(args[i].type != Type::R_symbol && args[i].type != Type::R_character) _error("rm() arguments must be symbols or character vectors");
+	for(uint64_t i = 0; i < args.length(); i++) {
+		state.env->rm(expression(args[i]));
+	}
 	state.stack.push(Null::singleton);
 	return 1;
 }
 
 uint64_t sequence(State& state, Call const& call, List const& args) {
-	assert(args.length() == 3);
+	checkNumArgs(args, 3);
 
 	Value from = force(state, args[0]);
 	Value by   = force(state, args[1]);
@@ -36,6 +40,8 @@ uint64_t sequence(State& state, Call const& call, List const& args) {
 }
 
 uint64_t repeat(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 3);
+	Value from = force(state, args[0]);
 	assert(args.length() == 3);
 	
 	Value vec  = force(state, args[0]);
@@ -55,7 +61,7 @@ uint64_t repeat(State& state, Call const& call, List const& args) {
 }
 
 uint64_t typeOf(State& state, Call const& call, List const& args) {
-	assert(args.length() == 1);
+	checkNumArgs(args, 1);
 	Character c(1);
 	c[0] = state.inString(force(state, args[0]).type.toString());
 	state.stack.push(c);
@@ -63,7 +69,7 @@ uint64_t typeOf(State& state, Call const& call, List const& args) {
 }
 
 uint64_t mode(State& state, Call const& call, List const& args) {
-	assert(args.length() == 1);
+	checkNumArgs(args, 1);
 	Character c(1);
 	Value v = force(state, args[0]);
 	if(v.type == Type::R_integer || v.type == Type::R_double)
@@ -78,7 +84,7 @@ uint64_t mode(State& state, Call const& call, List const& args) {
 
 uint64_t klass(State& state, Call const& call, List const& args)
 {
-	assert(args.length() == 1);
+	checkNumArgs(args, 1);
 	Value v = force(state, args[0]);
 	Vector r = getClass(v.attributes);	
 	if(r.type == Type::R_null) {
@@ -94,7 +100,7 @@ uint64_t klass(State& state, Call const& call, List const& args)
 
 uint64_t assignKlass(State& state, Call const& call, List const& args)
 {
-	assert(args.length() == 2);
+	checkNumArgs(args, 2);
 	Value v = force(state, args[0]);
 	Value k = force(state, args[1]);
 	setClass(v.attributes, k);
@@ -104,7 +110,7 @@ uint64_t assignKlass(State& state, Call const& call, List const& args)
 
 uint64_t names(State& state, Call const& call, List const& args)
 {
-	assert(args.length() == 1);
+	checkNumArgs(args, 1);
 	Value v = force(state, args[0]);
 	Value r = getNames(v.attributes);
 	state.stack.push(r);	
@@ -113,7 +119,7 @@ uint64_t names(State& state, Call const& call, List const& args)
 
 uint64_t assignNames(State& state, Call const& call, List const& args)
 {
-	assert(call.length() == 2);
+	checkNumArgs(args, 2);
 	Value v = force(state, args[0]);
 	Value k = force(state, args[2]);
 	setNames(v.attributes, k);
@@ -123,7 +129,7 @@ uint64_t assignNames(State& state, Call const& call, List const& args)
 
 uint64_t dim(State& state, Call const& call, List const& args)
 {
-	assert(args.length() == 1);
+	checkNumArgs(args, 1);
 	Value v = force(state, args[0]);
 	Value r = getDim(v.attributes);
 	state.stack.push(r);	
@@ -132,7 +138,7 @@ uint64_t dim(State& state, Call const& call, List const& args)
 
 uint64_t assignDim(State& state, Call const& call, List const& args)
 {
-	assert(args.length() == 2);
+	checkNumArgs(args, 2);
 	Value v = force(state, args[0]);
 	Value k = force(state, args[1]);
 	setDim(v.attributes, k);
@@ -212,7 +218,7 @@ uint64_t minusOp(State& state, uint64_t nargs) {
 */
 uint64_t subset(State& state, Call const& call, List const& args) {
 
-        assert(args.length() == 2);
+	checkNumArgs(args, 2);
 
         Value a = force(state, args[0]);
         Value i = force(state, args[1]);
@@ -266,6 +272,7 @@ uint64_t subset(State& state, Call const& call, List const& args) {
 }
 
 uint64_t subset2(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 2);
 
         Value a = force(state, args[0]);
         Value b = force(state, args[1]);
@@ -298,7 +305,7 @@ uint64_t subset2(State& state, Call const& call, List const& args) {
 } 
 
 uint64_t dollar(State& state, Call const& call, List const& args) {
-        assert(args.length() == 2);
+	checkNumArgs(args, 2);
 
         Value a = force(state, args[0]);
         uint64_t i = Symbol(expression(args[1])).i;
@@ -320,6 +327,7 @@ uint64_t dollar(State& state, Call const& call, List const& args) {
 } 
 
 uint64_t length(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
 	Vector a = force(state, args[0]);
 	Integer i(1);
 	i[0] = a.length();
@@ -333,11 +341,13 @@ uint64_t length(State& state, Call const& call, List const& args) {
 }
 */
 uint64_t quote(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
 	state.stack.push(expression(args[0]));
 	return 1;
 }
 
 uint64_t eval_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 2);
 	Value expr = force(state, args[0]);
 	Value envir = force(state, args[1]);
 	//Value enclos = force(state, call[3]);
@@ -377,7 +387,7 @@ uint64_t switch_fn(State& state, Call const& call, List const& args) {
 }
 
 uint64_t environment(State& state, Call const& call, List const& args) {
-	assert(args.length() == 1);
+	checkNumArgs(args, 1);
 	Value e = force(state, args[0]);
 	if(e.type == Type::R_null) {
 		state.stack.push(REnvironment(state.env));
@@ -392,7 +402,7 @@ uint64_t environment(State& state, Call const& call, List const& args) {
 }
 
 uint64_t parentframe(State& state, Call const& call, List const& args) {
-	assert(args.length() == 1);
+	checkNumArgs(args, 1);
 	uint64_t i = (uint64_t)asReal1(force(state, args[0]));
 	Environment* e = state.env;
 	for(uint64_t j = 0; j < i-1 && e != NULL; j++) {
@@ -401,6 +411,30 @@ uint64_t parentframe(State& state, Call const& call, List const& args) {
 	state.stack.push(REnvironment(e));
 	return 1;
 }
+
+uint64_t stop_fn(State& state, Call const& call, List const& args) {
+	// this should stop whether or not the arguments are correct...
+	std::string message = "user stop";
+	if(args.length() > 0) {
+		if(args[0].type == Type::R_character && Character(args[0]).length() > 0) {
+			message = state.outString(Character(args[0])[0]);
+		}
+	}
+	_error(message);
+	return 0;
+}
+
+uint64_t warning_fn(State& state, Call const& call, List const& args) {
+	std::string message = "user warning";
+	if(args.length() > 0) {
+		if(args[0].type == Type::R_character && Character(args[0]).length() > 0) {
+			message = state.outString(Character(args[0])[0]);
+		}
+	}
+	_warning(state, message);
+	state.stack.push(Character::c(state, message));
+	return 1;
+} 
 
 void addMathOps(State& state)
 {
@@ -526,5 +560,10 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "environment"), v);
 	CFunction(parentframe).toValue(v);
 	env->assign(Symbol(state, "parent.frame"), v);
+	
+	CFunction(stop_fn).toValue(v);
+	env->assign(Symbol(state, "stop"), v);
+	CFunction(warning_fn).toValue(v);
+	env->assign(Symbol(state, "warning"), v);
 }
 

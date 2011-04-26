@@ -17,6 +17,7 @@
 
 struct Attributes;
 
+enum Result { OK, ERROR };
 
 /** Basic value type */
 struct Value {
@@ -74,6 +75,10 @@ struct Stack : public gc {
 		assert(top > 0);
 		return s[--top];
 	}
+
+	void clear() {
+		top = 0;
+	}
 };
 
 class Environment;
@@ -87,7 +92,6 @@ struct State {
 	Environment *env, *baseenv;
 
 	// reset at the beginning of a call to eval
-	bool stopped;
 	std::vector<std::string> warnings;
 
 	std::map<std::string, uint64_t> stringTable;
@@ -678,8 +682,6 @@ inline Vector getDim(Attributes const* attrs) {
 inline bool isObject(Value const& v) {
 	return v.attributes != 0 && v.attributes->klass != Null::singleton;
 }
-
-inline double asReal1(Value const& v) { assert(v.type == Type::R_double || v.type == Type::R_integer); if(v.type == Type::R_integer) return Integer(v)[0]; else return Double(v)[0]; }
 
 struct Pairs {
 	struct Pair {
