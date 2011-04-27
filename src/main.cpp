@@ -154,6 +154,7 @@ static int dofile(const char * file, State& state, bool echo) {
 	for(uint64_t i = 0; i < expressions.length(); i++) {
 		try {
 			Closure closure = compile(state, expressions[i]);
+			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
 			eval(state, closure);
 			Value result = state.stack.pop();
 			if(echo)

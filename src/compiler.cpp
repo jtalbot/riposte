@@ -8,21 +8,29 @@
 #include "type.h"
 #include "bc.h"
 
-// compilation routines
-static void compile(State& state, Value const& expr, Closure& closure); 
+struct CompileState {
+	State& state;
+	bool inFunction;
+	std::vector<uint64_t> slots;
+	CompileState(State& state) : state(state) {}
+};
 
-static void compileConstant(State& state, Value const& expr, Closure& closure) {
+// compilation routines
+static void compile(CompileState& state, Value const& expr, Closure& closure); 
+static Closure compile(CompileState& state, Value const& expr);
+
+static void compileConstant(CompileState& state, Value const& expr, Closure& closure) {
 	closure.constants().push_back(expr);
 	closure.code().push_back(Instruction(ByteCode::kget, closure.constants().size()-1));
 }
 
-static void compileGetSymbol(State& state, Symbol const& symbol, Closure& closure) {
+static void compileGetSymbol(CompileState& state, Symbol const& symbol, Closure& closure) {
 	closure.code().push_back(Instruction(ByteCode::get, symbol.i));
 }
 
-static void compileOp(State& state, Call const& call, Closure& closure) {
+static void compileOp(CompileState& state, Call const& call, Closure& closure) {
 	Symbol func(call[0]);
-	std::string funcStr = func.toString(state);
+	std::string funcStr = func.toString(state.state);
 	if(funcStr == ".Internal") {
 		if(call[1].type == Type::R_symbol) {
 			// The riposte way... .Internal is a function on functions, returning the internal function
@@ -31,7 +39,7 @@ static void compileOp(State& state, Call const& call, Closure& closure) {
 			// The R way... .Internal is a function on calls
 			Call c = call[1];
 			Call ic(2);
-			ic[0] = Symbol(state, ".Internal");
+			ic[0] = Symbol(state.state, ".Internal");
 			ic[1] = c[0];
 			c[0] = ic;
 			compile(state, c, closure);
@@ -48,7 +56,7 @@ static void compileOp(State& state, Call const& call, Closure& closure) {
 		
 		// any indexing code
 		bool indexed = false;
-		if(v.type == Type::R_call && state.outString(Call(v)[0].i) == "[") {
+		if(v.type == Type::R_call && state.state.outString(Call(v)[0].i) == "[") {
 			Call c(v);
 			compile(state, c[2], closure);
 			v = c[1];
@@ -57,11 +65,11 @@ static void compileOp(State& state, Call const& call, Closure& closure) {
 		
 		if(v.type == Type::R_call) {
 			Call c(v);
-			if(state.outString(c[0].i) == "class")
+			if(state.state.outString(c[0].i) == "class")
 				bc = indexed ? ByteCode::iclassassign : ByteCode::classassign;
-			else if(state.outString(c[0].i) == "names")
+			else if(state.state.outString(c[0].i) == "names")
 				bc = indexed ? ByteCode::inamesassign : ByteCode::namesassign;
-			else if(state.outString(c[0].i) == "dim")
+			else if(state.state.outString(c[0].i) == "dim")
 				bc = indexed ? ByteCode::idimassign : ByteCode::dimassign;
 			v = c[1];
 		} else {
@@ -85,8 +93,14 @@ static void compileOp(State& state, Call const& call, Closure& closure) {
 		}
 		closure.constants().push_back(parameters);
 
+		CompileState s(state.state);
+		s.inFunction = true;
+		for(uint64_t i = 0; i < n.length(); i++) {
+			s.slots.push_back(Character(n)[i]);
+		}	
+
 		//compile the source for the body
-		Closure body = compile(state, call[2]);
+		Closure body = compile(s, call[2]);
 		closure.constants().push_back(body);
 	
 		closure.code().push_back(Instruction(ByteCode::function, closure.constants().size()-2, closure.constants().size()-1));
@@ -97,17 +111,30 @@ static void compileOp(State& state, Call const& call, Closure& closure) {
 		else if(call.length() == 2)
 			compile(state, call[1], closure);
 		else
-			printf("Too many parameters to return. Wouldn't multiple return values be nice?\n");
+			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
 		closure.code().push_back(Instruction(ByteCode::ret));
 	}
 	else if(funcStr == "for" || funcStr == ".For") {
-		compile(state, call[2], closure);
-		closure.code().push_back(Instruction(ByteCode::forbegin, 0, Symbol(call[1]).i));
-		uint64_t beginbody = closure.code().size();
-		compile(state, call[3], closure);
-		uint64_t endbody = closure.code().size();
-		closure.code().push_back(Instruction(ByteCode::forend, endbody-beginbody, Symbol(call[1]).i));
-		closure.code()[beginbody-1].a = endbody-beginbody+1;
+		// special case common i in m:n case
+		/*if(call[2].type == Type::R_call && state.state.outString(Symbol(Call(call[2])[0]).i) == ":") {
+			compile(state, Call(call[2])[1], closure);
+			compile(state, Call(call[2])[2], closure);
+			closure.code().push_back(Instruction(ByteCode::iforbegin, 0, Symbol(call[1]).i));
+			uint64_t beginbody = closure.code().size();
+			compile(state, call[3], closure);
+			uint64_t endbody = closure.code().size();
+			closure.code().push_back(Instruction(ByteCode::iforend, endbody-beginbody, Symbol(call[1]).i));
+			closure.code()[beginbody-1].a = endbody-beginbody+1;
+		}
+		else {*/
+			compile(state, call[2], closure);
+			closure.code().push_back(Instruction(ByteCode::forbegin, 0, Symbol(call[1]).i));
+			uint64_t beginbody = closure.code().size();
+			compile(state, call[3], closure);
+			uint64_t endbody = closure.code().size();
+			closure.code().push_back(Instruction(ByteCode::forend, endbody-beginbody, Symbol(call[1]).i));
+			closure.code()[beginbody-1].a = endbody-beginbody+1;
+		//}
 	}
 	else if(funcStr == "while" || funcStr == ".While") {
 		compile(state, call[1], closure);
@@ -328,15 +355,14 @@ static void compileOp(State& state, Call const& call, Closure& closure) {
 	}
 }
 
-static void compileCall(State& state, Call const& call, Closure& closure) {
+static void compileCall(CompileState& state, Call const& call, Closure& closure) {
 	uint64_t length = call.length();
 	if(length == 0) {
-		printf("call without any stuff\n");
-		return;
+		throw CompileError("invalid empty call");
 	}
 
 	if(call[0].type == Type::R_symbol) {
-		std::string funcStr = Symbol(call[0]).toString(state);
+		std::string funcStr = Symbol(call[0]).toString(state.state);
 		if(	funcStr == ".Internal"
 			|| funcStr == "function"
 			|| funcStr == "return"
@@ -390,7 +416,7 @@ static void compileCall(State& state, Call const& call, Closure& closure) {
 		}
 	}
 	// create a promise for each parameter...
-	CompiledCall compiledCall(call, state);
+	CompiledCall compiledCall(call, state.state);
 	/*Call compiledCall(call.length());
 	compiledCall.attributes = call.attributes;
 
@@ -423,10 +449,10 @@ static void compileCall(State& state, Call const& call, Closure& closure) {
 	closure.code().push_back(Instruction(ByteCode::call, closure.constants().size()-1));
 }
 
-static void compileICCall(State& state, Call const& call, Closure& closure) {
+static void compileICCall(CompileState& state, Call const& call, Closure& closure) {
 	uint64_t length = call.length();
 	if(length == 0) {
-		printf("call without any stuff\n");
+		throw CompileError("invalid empty call");
 		return;
 	}
 
@@ -458,7 +484,7 @@ static void compileICCall(State& state, Call const& call, Closure& closure) {
 
 }
 
-static void compileExpression(State& state, Expression const& values, Closure& closure) {
+static void compileExpression(CompileState& state, Expression const& values, Closure& closure) {
 	uint64_t length = values.length();
 	for(uint64_t i = 0; i < length; i++) {
 		compile(state, values[i], closure);
@@ -467,7 +493,7 @@ static void compileExpression(State& state, Expression const& values, Closure& c
 	}
 }
 
-void compile(State& state, Value const& expr, Closure& closure) {
+void compile(CompileState& state, Value const& expr, Closure& closure) {
 
 	switch(expr.type.internal())
 	{
@@ -486,7 +512,7 @@ void compile(State& state, Value const& expr, Closure& closure) {
 	};
 }
 
-Closure compile(State& state, Value const& expr) {
+Closure compile(CompileState& state, Value const& expr) {
 	Closure closure;
 	compile(state, expr, closure);
 	closure.expression() = expr;
@@ -495,6 +521,16 @@ Closure compile(State& state, Value const& expr) {
 	return closure;	
 }
 
+Closure compile(State& state, Value const& expr) {
+	Closure closure;
+	CompileState s(state);
+	s.inFunction = false;
+	compile(s, expr, closure);
+	closure.expression() = expr;
+	// insert return statement at end of closure
+	closure.code().push_back(Instruction(ByteCode::ret));
+	return closure;	
+}
 
 /*
 void functionCall(Value const& func, Value const* values, uint64_t length, Environment* env, Value& result) {

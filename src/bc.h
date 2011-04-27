@@ -22,6 +22,8 @@
 	_(pop, "pop", p) \
 	_(forbegin, "forbegin", p) \
 	_(forend, "forend", p) \
+	_(iforbegin, "iforbegin", p) \
+	_(iforend, "iforend", p) \
 	_(whilebegin, "whilebegin", p) \
 	_(whileend, "whileend", p) \
 	_(repeatbegin, "repeatbegin", p) \
@@ -81,8 +83,10 @@ DECLARE_ENUM(ByteCode, BC_ENUM)
 
 
 struct Instruction {
-	ByteCode bc;
-	void const* ibc;
+	union {
+		ByteCode bc;
+		void const* ibc;
+	};
 	uint64_t a, b, c;
 
 	Instruction(ByteCode bc, uint64_t a=0, uint64_t b=0, uint64_t c=0) :
@@ -95,6 +99,5 @@ struct Instruction {
 		return std::string("") + bc.toString() + "\t" + intToStr(a);
 	}
 };
-
 
 #endif

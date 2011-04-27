@@ -33,7 +33,6 @@
 
 void eval(State& state, Closure const& closure, Environment* env); 
 
-
 static int64_t call_function(State& state, Function const& func, List const& args) {
 	if(func.body().type == Type::I_closure || 
 		func.body().type == Type::I_promise) {
@@ -265,19 +264,39 @@ static int64_t idimassign_op(State& state, Stack& stack, Closure const& closure,
 	return 1;
 }
 static int64_t forbegin_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
-	Vector loopvec = Vector(stack.peek());
-	stack.reserve().i = (uint64_t)0;
-	if((uint64_t)stack.peek().i >= Vector(stack.peek(1)).length()) { stack.pop(); stack.pop(); stack.push(Null::singleton); return inst.a;	}
-	state.env->assign(Symbol(inst.b), Element(loopvec, stack.peek().i));
+	state.loopVector = stack.pop();
+	state.loopIndex = (int64_t)0;
+	state.loopEnd = (int64_t)Vector(state.loopVector).length();
+	if(state.loopIndex >= state.loopEnd) { stack.push(Null::singleton); return inst.a;	}
+	state.env->assign(Symbol(inst.b), Element(state.loopVector, state.loopIndex));
 	return 1;
 }
 static int64_t forend_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
 	// pop the results of the loop...
 	stack.pop();
 	// increment the loop variable
-	stack.peek().i += 1;
-	if((uint64_t)stack.peek().i >= Vector(stack.peek(1)).length()) { stack.pop(); stack.pop(); stack.push(Null::singleton); return 1;	}
-	state.env->assign(Symbol(inst.b), Element(Vector(stack.peek(1)), stack.peek().i));
+	state.loopIndex++;
+	if(state.loopIndex >= state.loopEnd) { stack.push(Null::singleton); return 1;	}
+	state.env->assign(Symbol(inst.b), Element(Vector(state.loopVector), state.loopIndex));
+	return -inst.a;
+}
+static int64_t iforbegin_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
+	double n = asReal1(stack.pop());
+	double m = asReal1(stack.pop());
+	state.loopIndex = (int64_t)m;
+	state.loopStep = n > m ? 1 : -1;
+	state.loopEnd = (int64_t)n;
+	if(state.loopIndex <= 0 >= state.loopEnd) { stack.push(Null::singleton); return inst.a;	}
+	//state.env->assign(Symbol(inst.b), Element(loopvec, stack.peek().i));
+	return 1;
+}
+static int64_t iforend_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
+	// pop the results of the loop...
+	stack.pop();
+	// increment the loop variable
+	state.loopIndex++;
+	if(state.loopIndex >= state.loopEnd) { stack.push(Null::singleton); return 1;	}
+	//state.env->assign(Symbol(inst.b), Element(Vector(stack.peek(1)), stack.peek().i));
 	return -inst.a;
 }
 static int64_t whilebegin_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
@@ -505,18 +524,19 @@ void eval(State& state, Closure const& closure) {
 		name##_label: \
 			pc += name##_op(state, stack, closure, *pc); goto *(pc->ibc); 
 	BC_ENUM(LABELED_OP,0)
+	DONE:
+		{}	
 #else
 	int64_t pc = 0;
-	while(closure.code()[pc].bc != ByteCode::ret && !state.stopped) {
+	while(closure.code()[pc].bc != ByteCode::ret) {
 		Instruction const& inst = closure.code()[pc];
 		switch(inst.bc.internal()) {
 			#define SWITCH_OP(name,type,p) \
-				case ByteCode::name: pc += name##_op(state, stack, closure, inst); break;
+				case ByteCode::E##name: pc += name##_op(state, stack, closure, inst); break;
 			BC_ENUM(SWITCH_OP,0)
 		};
 	}
 #endif
-	DONE:	
 	state.env = oldenv;
 }
 

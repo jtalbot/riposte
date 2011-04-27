@@ -96,6 +96,11 @@ struct State {
 
 	std::map<std::string, uint64_t> stringTable;
 	std::map<uint64_t, std::string> reverseStringTable;
+	
+	Value loopVector;
+	int64_t loopIndex;
+	int64_t loopStep;
+	int64_t loopEnd;
 
 	State(Environment* env, Environment* baseenv) {
 		this->env = env;
@@ -598,10 +603,9 @@ public:
 		if(name.i < 1) {
 			printf("Cannot assign to that symbol\n");
 		}
-		if(container.find(name) == container.end())
-			size++;
+		//if(container.find(name) == container.end())
+		//	size++;
 		container[name] = value;
-
 		return value;
 	}
 
