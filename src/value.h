@@ -498,7 +498,6 @@ public:
 };
 
 void eval(State& state, Closure const& closure);
-Closure compile(State& state, Value const& expression);
 
 class CompiledCall {
 	struct Inner : public gc {

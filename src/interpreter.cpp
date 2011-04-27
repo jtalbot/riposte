@@ -277,7 +277,7 @@ static int64_t forend_op(State& state, Stack& stack, Closure const& closure, Ins
 	// increment the loop variable
 	state.loopIndex++;
 	if(state.loopIndex >= state.loopEnd) { stack.push(Null::singleton); return 1;	}
-	state.env->assign(Symbol(inst.b), Element(Vector(state.loopVector), state.loopIndex));
+	//state.env->assign(Symbol(inst.b), Element(Vector(state.loopVector), state.loopIndex));
 	return -inst.a;
 }
 static int64_t iforbegin_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {

@@ -20,6 +20,7 @@
 #include "value.h"
 #include "internal.h"
 #include "parser.h"
+#include "compiler.h"
 
 /*  Globals  */
 static int debug = 0;
@@ -109,7 +110,7 @@ int dostdin(State& state) {
 			value = parsetty(state);
 			if(value.type == Type::I_nil) continue;
 			//std::cout << "Parsed: " << value.toString() << std::endl;
-			Closure closure = compile(state, value);
+			Closure closure = Compiler::compile(state, value);
 			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
 			eval(state, closure);
 			result = state.stack.pop();	
@@ -153,7 +154,7 @@ static int dofile(const char * file, State& state, bool echo) {
 	Expression expressions(value);
 	for(uint64_t i = 0; i < expressions.length(); i++) {
 		try {
-			Closure closure = compile(state, expressions[i]);
+			Closure closure = Compiler::compile(state, expressions[i]);
 			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
 			eval(state, closure);
 			Value result = state.stack.pop();

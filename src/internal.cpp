@@ -1,5 +1,6 @@
 
 #include "internal.h"
+#include "compiler.h"
 #include <math.h>
 
 void checkNumArgs(List const& args, uint64_t nargs) {
@@ -351,7 +352,7 @@ uint64_t eval_fn(State& state, Call const& call, List const& args) {
 	Value expr = force(state, args[0]);
 	Value envir = force(state, args[1]);
 	//Value enclos = force(state, call[3]);
-	Closure closure = compile(state, expr);
+	Closure closure = Compiler::compile(state, expr);
 	closure.bind(REnvironment(envir).ptr());
 	uint64_t top = state.stack.top;
 	eval(state, closure);

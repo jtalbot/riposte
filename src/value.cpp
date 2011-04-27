@@ -1,6 +1,7 @@
 
 #include "value.h"
 #include "internal.h"
+#include "compiler.h"
 
 union {
 	uint64_t i;
@@ -48,7 +49,7 @@ const Value Value::NIL = {{0}, 0, Type::I_nil, 0};
 			   call[i].type == Type::R_symbol ||
 			   call[i].type == Type::I_promise ||
 			   call[i].type == Type::R_pairlist) {
-				parameters[j] = compile(state, call[i]);
+				parameters[j] = Compiler::compile(state, call[i]);
 				parameters[j].type = Type::I_promise;
 			} else if(call[i].type == Type::I_closure) {
 				parameters[j] = call[i];
