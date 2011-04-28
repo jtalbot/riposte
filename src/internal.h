@@ -38,7 +38,7 @@ T Clone(T const& in) {
 inline Value force(State& state, Value v) { 
 	while(v.type == Type::I_promise) {
 		eval(state, Closure(v)); 
-		v = state.stack.pop();
+		v = state.registers[0]; 
 	} 
 	return v; 
 }
@@ -508,258 +508,187 @@ struct SubsetAssign {
 template< 
 	template<class Op> class Lift,
 	template<typename A, typename TA, typename R> class Op > 
-uint64_t unaryArith(State& state, uint64_t nargs) {
+void unaryArith(State& state, Value const& a, Value& c) {
 
-	if(nargs == 0) _error("unary arithmetic operator called with no arguments");
-	if(nargs > 1) _error("unary arithmetic operator called with too many arguments");
-	
-	Stack& stack = state.stack;
-	
-	Value a = force(state, stack.pop());	
-
-	Vector r;
 	if(a.type == Type::R_double) {
-		Lift< NA1< Op<Double, Double, Double> > >::eval(a).toVector(r);
+		c = Lift< NA1< Op<Double, Double, Double> > >::eval(a);
 	}
 	else if(a.type == Type::R_integer) {
-		Lift< NA1< Op<Integer, Integer, Integer> > >::eval(a).toVector(r);
+		c = Lift< NA1< Op<Integer, Integer, Integer> > >::eval(a);
 	}
 	else if(a.type == Type::R_logical) {
-		Lift< NA1< Op<Logical, Integer, Integer> > >::eval(a).toVector(r);
+		c = Lift< NA1< Op<Logical, Integer, Integer> > >::eval(a);
 	}
 	else {
 		_error("non-numeric argument to unary numeric operator");
 	}
-	Value& v = stack.reserve();
-	r.toValue(v);
-	return 1;
 };
 
 template< 
 	template<class Op> class Lift,
 	template<typename A, typename TA, typename R> class Op > 
-uint64_t unaryLogical(State& state, uint64_t nargs) {
+void unaryLogical(State& state, Value const& a, Value& c) {
 	
-	if(nargs == 0) _error("unary logical operator called with no arguments");
-	if(nargs > 1) _error("unary logical operator called with too many arguments");
-	
-	Stack& stack = state.stack;
-	
-	Value a = force(state, stack.pop());	
-
-	Vector r;
 	if(a.type == Type::R_double) {
-		Lift< Op<Double, Logical, Logical> >::eval(a).toVector(r);
+		c = Lift< Op<Double, Logical, Logical> >::eval(a);
 	}
 	else if(a.type == Type::R_integer) {
-		Lift< Op<Integer, Logical, Logical> >::eval(a).toVector(r);
+		c = Lift< Op<Integer, Logical, Logical> >::eval(a);
 	}
 	else if(a.type == Type::R_logical) {
-		Lift< Op<Logical, Logical, Logical> >::eval(a).toVector(r);
+		c = Lift< Op<Logical, Logical, Logical> >::eval(a);
 	}
 	else {
 		_error("non-numeric argument to unary logical operator");
 	}
-	Value& v = stack.reserve();
-	r.toValue(v);
-	return 1;
 };
-
 
 template< 
 	template<class Op> class Lift,
 	template<typename A, typename TA, typename B, typename TB, typename R> class Op > 
-uint64_t binaryArith(State& state, uint64_t nargs) {
+void binaryArith(State& state, Value const& a, Value const& b, Value& c) {
 
-	if(nargs < 2) _error("binary arithmetic operator called with too few arguments");
-	if(nargs > 2) _error("binary arithmetic operator called with too many arguments");
-	
-	Stack& stack = state.stack;
-	
-	Value a = force(state, stack.pop());	
-	Value b = force(state, stack.pop());	
-
-	Vector r;
 	if(a.type == Type::R_double && b.type == Type::R_double) {
-		Lift< NA2< Op<Double, Double, Double, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Double, Double, Double, Double, Double> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_double) {
-		Lift< NA2< Op<Integer, Double, Double, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Integer, Double, Double, Double, Double> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_integer) {
-		Lift< NA2< Op<Double, Double, Integer, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Double, Double, Integer, Double, Double> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_integer) {
-		Lift< NA2< Op<Integer, Integer, Integer, Integer, Integer> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Integer, Integer, Integer, Integer, Integer> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_logical) {
-		Lift< NA2< Op<Double, Double, Logical, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Double, Double, Logical, Double, Double> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_double) {
-		Lift< NA2< Op<Logical, Double, Double, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Logical, Double, Double, Double, Double> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_logical) {
-		Lift< NA2< Op<Integer, Integer, Logical, Integer, Integer> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Integer, Integer, Logical, Integer, Integer> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_integer) {
-		Lift< NA2< Op<Logical, Integer, Integer, Integer, Integer> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Logical, Integer, Integer, Integer, Integer> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_logical) {
-		Lift< NA2< Op<Logical, Integer, Logical, Integer, Integer> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Logical, Integer, Logical, Integer, Integer> > >::eval(a, b);
 	}
 	else {
 		_error("non-numeric argument to binary numeric operator");
 	}
-	Value& v = stack.reserve();
-	r.toValue(v);
-	return 1;
 }
 
 template< 
 	template<class Op> class Lift,
 	template<typename A, typename TA, typename B, typename TB, typename R> class Op > 
-uint64_t binaryDoubleArith(State& state, uint64_t nargs) {
+void binaryDoubleArith(State& state, Value const& a, Value const& b, Value& c) {
 
-	if(nargs < 2) _error("binary arithmetic operator called with too few arguments");
-	if(nargs > 2) _error("binary arithmetic operator called with too many arguments");
-	
-	Stack& stack = state.stack;
-	
-	Value a = force(state, stack.pop());	
-	Value b = force(state, stack.pop());	
-
-	Vector r;
 	if(a.type == Type::R_double && b.type == Type::R_double) {
-		Lift< NA2< Op<Double, Double, Double, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Double, Double, Double, Double, Double> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_double) {
-		Lift< NA2< Op<Integer, Double, Double, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Integer, Double, Double, Double, Double> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_integer) {
-		Lift< NA2< Op<Double, Double, Integer, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Double, Double, Integer, Double, Double> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_integer) {
-		Lift< NA2< Op<Integer, Double, Integer, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Integer, Double, Integer, Double, Double> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_logical) {
-		Lift< NA2< Op<Double, Double, Logical, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Double, Double, Logical, Double, Double> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_double) {
-		Lift< NA2< Op<Logical, Double, Double, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Logical, Double, Double, Double, Double> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_logical) {
-		Lift< NA2< Op<Integer, Double, Logical, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Integer, Double, Logical, Double, Double> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_integer) {
-		Lift< NA2< Op<Logical, Double, Integer, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Logical, Double, Integer, Double, Double> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_logical) {
-		Lift< NA2< Op<Logical, Double, Logical, Double, Double> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Logical, Double, Logical, Double, Double> > >::eval(a, b);
 	}
 	else {
 		_error("non-numeric argument to numeric operator");
 	}
-	Value& v = stack.reserve();
-	r.toValue(v);
-	return 1;
 }
 
 template< 
 	template<class Op> class Lift,
 	template<typename A, typename TA, typename B, typename TB, typename R> class Op > 
-uint64_t binaryLogical(State& state, uint64_t nargs) {
+void binaryLogical(State& state, Value const& a, Value const& b, Value& c) {
 
-	if(nargs < 2) _error("binary logical operator called with too few arguments");
-	if(nargs > 2) _error("binary logical operator called with too many arguments");
-	
-	Stack& stack = state.stack;
-	
-	Value a = force(state, stack.pop());	
-	Value b = force(state, stack.pop());	
-
-	Vector r;
 	if(a.type == Type::R_double && b.type == Type::R_double) {
-		Lift< Op<Double, Logical, Double, Logical, Logical> >::eval(a, b).toVector(r);
+		c = Lift< Op<Double, Logical, Double, Logical, Logical> >::eval(a, b);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_double) {
-		Lift< Op<Integer, Logical, Double, Logical, Logical> >::eval(a, b).toVector(r);
+		c = Lift< Op<Integer, Logical, Double, Logical, Logical> >::eval(a, b);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_integer) {
-		Lift< Op<Double, Logical, Integer, Logical, Logical> >::eval(a, b).toVector(r);
+		c = Lift< Op<Double, Logical, Integer, Logical, Logical> >::eval(a, b);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_integer) {
-		Lift< Op<Integer, Logical, Integer, Logical, Logical> >::eval(a, b).toVector(r);
+		c = Lift< Op<Integer, Logical, Integer, Logical, Logical> >::eval(a, b);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_logical) {
-		Lift< Op<Double, Logical, Logical, Logical, Logical> >::eval(a, b).toVector(r);
+		c = Lift< Op<Double, Logical, Logical, Logical, Logical> >::eval(a, b);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_double) {
-		Lift< Op<Logical, Logical, Double, Logical, Logical> >::eval(a, b).toVector(r);
+		c = Lift< Op<Logical, Logical, Double, Logical, Logical> >::eval(a, b);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_logical) {
-		Lift< Op<Integer, Logical, Logical, Logical, Logical> >::eval(a, b).toVector(r);
+		c = Lift< Op<Integer, Logical, Logical, Logical, Logical> >::eval(a, b);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_integer) {
-		Lift< Op<Logical, Logical, Integer, Logical, Logical> >::eval(a, b).toVector(r);
+		c = Lift< Op<Logical, Logical, Integer, Logical, Logical> >::eval(a, b);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_logical) {
-		Lift< Op<Logical, Logical, Logical, Logical, Logical> >::eval(a, b).toVector(r);
+		c = Lift< Op<Logical, Logical, Logical, Logical, Logical> >::eval(a, b);
 	}
 	else {
 		_error("non-logical argument to binary logical operator");
 	}
-	Value& v = stack.reserve();
-	r.toValue(v);
-	return 1;
 }
 
 template< 
 	template<class Op> class Lift,
 	template<typename A, typename TA, typename B, typename TB, typename R> class Op > 
-uint64_t binaryOrdinal(State& state, uint64_t nargs) {
-
-	if(nargs < 2) _error("binary ordinal operator called with too few arguments");
-	if(nargs > 2) _error("binary ordinal operator called with too many arguments");
+void binaryOrdinal(State& state, Value const& a, Value const& b, Value& c) {
 	
-	Stack& stack = state.stack;
-	
-	Value a = force(state, stack.pop());	
-	Value b = force(state, stack.pop());	
-
-	Vector r;
 	if(a.type == Type::R_double && b.type == Type::R_double) {
-		Lift< NA2< Op<Double, Double, Double, Double, Logical> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Double, Double, Double, Double, Logical> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_double) {
-		Lift< NA2< Op<Integer, Double, Double, Double, Logical> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Integer, Double, Double, Double, Logical> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_integer) {
-		Lift< NA2< Op<Double, Double, Integer, Double, Logical> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Double, Double, Integer, Double, Logical> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_integer) {
-		Lift< NA2< Op<Integer, Integer, Integer, Integer, Logical> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Integer, Integer, Integer, Integer, Logical> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_double && b.type == Type::R_logical) {
-		Lift< NA2< Op<Double, Double, Logical, Double, Logical> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Double, Double, Logical, Double, Logical> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_double) {
-		Lift< NA2< Op<Logical, Double, Double, Double, Logical> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Logical, Double, Double, Double, Logical> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_integer && b.type == Type::R_logical) {
-		Lift< NA2< Op<Integer, Integer, Logical, Integer, Logical> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Integer, Integer, Logical, Integer, Logical> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_integer) {
-		Lift< NA2< Op<Logical, Integer, Integer, Integer, Logical> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Logical, Integer, Integer, Integer, Logical> > >::eval(a, b);
 	}
 	else if(a.type == Type::R_logical && b.type == Type::R_logical) {
-		Lift< NA2< Op<Logical, Logical, Logical, Logical, Logical> > >::eval(a, b).toVector(r);
+		c = Lift< NA2< Op<Logical, Logical, Logical, Logical, Logical> > >::eval(a, b);
 	}
 	else {
 		_error("non-ordinal argument to ordinal operator");
 	}
-	Value& v = stack.reserve();
-	r.toValue(v);
-	return 1;
 }
 
 inline Vector As(Vector a, Type type) {
@@ -818,59 +747,47 @@ inline Vector As(Vector a, Type type) {
 	return r;
 }
 
-inline uint64_t subAssign(State& state, uint64_t nargs) {
-
-        assert(nargs == 3);
-
-        Stack& stack = state.stack;
-
-        Value a = force(state, stack.pop());
-        Value i = force(state, stack.pop());
-        Value b = force(state, stack.pop());
+inline void subAssign(State& state, Value const& a, Value const& i, Value const& b, Value& c) {
 
 	Vector idx(i);
 	idx = As(i, Type::R_integer);
 
-	Vector r;
         if(a.type == Type::R_double && b.type == Type::R_double) {
-                SubsetAssign< Double, Integer, Double >::eval(a, idx, b).toVector(r);
+                c = SubsetAssign< Double, Integer, Double >::eval(a, idx, b);
         }
         else if(a.type == Type::R_integer && b.type == Type::R_double) {
-                SubsetAssign< Integer, Integer, Double >::eval(a, idx, b).toVector(r);
+                c = SubsetAssign< Integer, Integer, Double >::eval(a, idx, b);
         }
         else if(a.type == Type::R_double && b.type == Type::R_integer) {
-                SubsetAssign< Integer, Integer, Double >::eval(a, idx, b).toVector(r);
+                c = SubsetAssign< Integer, Integer, Double >::eval(a, idx, b);
         }
         else if(a.type == Type::R_integer && b.type == Type::R_integer) {
-                SubsetAssign< Integer, Integer, Integer >::eval(a, idx, b).toVector(r);
+                c = SubsetAssign< Integer, Integer, Integer >::eval(a, idx, b);
         }
         else if(a.type == Type::R_logical && b.type == Type::R_double) {
-                SubsetAssign< Logical, Integer, Double >::eval(a, idx, b).toVector(r);
+                c = SubsetAssign< Logical, Integer, Double >::eval(a, idx, b);
         }
         else if(a.type == Type::R_logical && b.type == Type::R_integer) {
-                SubsetAssign< Logical, Integer, Integer >::eval(a, idx, b).toVector(r);
+                c = SubsetAssign< Logical, Integer, Integer >::eval(a, idx, b);
         }
         else if(a.type == Type::R_character && b.type == Type::R_double) {
-                SubsetAssign< Character, Integer, Double >::eval(a, idx, b).toVector(r);
+                c = SubsetAssign< Character, Integer, Double >::eval(a, idx, b);
         }
         else if(a.type == Type::R_character && b.type == Type::R_integer) {
-                SubsetAssign< Character, Integer, Integer >::eval(a, idx, b).toVector(r);
+                c = SubsetAssign< Character, Integer, Integer >::eval(a, idx, b);
         }
         else if(a.type == Type::R_double && b.type == Type::R_logical) {
-                SubsetAssign< Double, Integer, Logical >::eval(a, idx, b).toVector(r);
+                c = SubsetAssign< Double, Integer, Logical >::eval(a, idx, b);
         }
         else if(a.type == Type::R_integer && b.type == Type::R_logical) {
-                SubsetAssign< Integer, Integer, Logical >::eval(a, idx, b).toVector(r);
+                c = SubsetAssign< Integer, Integer, Logical >::eval(a, idx, b);
         }
         else if(a.type == Type::R_logical && b.type == Type::R_logical) {
-                SubsetAssign< Logical, Integer, Logical >::eval(a, idx, b).toVector(r);
+                c = SubsetAssign< Logical, Integer, Logical >::eval(a, idx, b);
         }
         else {
                 _error("Invalid index");
         }
-        Value& v = stack.reserve();
-        r.toValue(v);
-        return 1;
 }
 
 inline void Insert(Vector const& src, uint64_t srcIndex, Vector& dst, uint64_t dstIndex, uint64_t length) {

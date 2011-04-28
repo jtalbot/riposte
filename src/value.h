@@ -54,41 +54,13 @@ struct Value {
 	static const Value NIL;
 };
 
-// The execution stack
-struct Stack : public gc {
-	Value s[1024];
-	uint64_t top;
-	Stack() : top(0) {}
-
-	void push(Value const& v) {
-		assert(top < 1024);
-		s[top++] = v;
-	}
-
-	Value& peek(uint64_t down=0) {
-		return s[top-1-down];
-	}
-
-	Value& reserve() {
-		top++;
-		return s[top-1];
-	}
-
-	Value pop() {
-		assert(top > 0);
-		return s[--top];
-	}
-
-	void clear() {
-		top = 0;
-	}
-};
-
 class Environment;
 
 // The riposte state
 struct State {
-	Stack stack;
+	Value Registers[1024];
+	Value* registers;
+	
 	Environment *env, *baseenv;
 
 	// reset at the beginning of a call to eval
@@ -566,11 +538,11 @@ public:
 			if(value.type == Type::I_promise) {
 				while(value.type == Type::I_promise) {
 					eval(state, Closure(value));
-					value = state.stack.pop();
+					value = state.registers[0];
 				}
 			} else if(value.type == Type::I_default) {
 				eval(state, Closure(value).bind(this));
-				value = state.stack.pop();
+				value = state.registers[0];
 			}
 			container[name] = value;
 			return true;

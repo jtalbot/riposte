@@ -33,6 +33,8 @@ DEFINE_ENUM(Symbol, SYMBOLS_ENUM)
 		this->env = env;
 		this->baseenv = baseenv;
 
+		registers = &Registers[0];
+
 		// insert predefined symbols into table at known positions (corresponding to their enum value)
 #define ENUM_STRING_TABLE(name, string, EnumType) \
 	stringTable[string] = EnumType::E_##name; \

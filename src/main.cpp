@@ -113,10 +113,14 @@ int dostdin(State& state) {
 			Closure closure = Compiler::compile(state, value);
 			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
 			eval(state, closure);
-			result = state.stack.pop();	
+			result = state.registers[0];	
 			std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) { 
 			e_message("Error", "riposte", error.what().c_str());
+		} catch(RuntimeError& error) {
+			e_message("Error", "runtime", error.what().c_str());
+		} catch(CompileError& error) {
+			e_message("Error", "compiler", error.what().c_str());
 		}
 		if(state.warnings.size() > 0) {
 			std::cout << "There were " << intToStr(state.warnings.size()) << " warnings." << std::endl;
@@ -124,7 +128,6 @@ int dostdin(State& state) {
 				std::cout << "(" << intToStr(i+1) << ") " << state.warnings[i] << std::endl;
 			}
 		}
-		state.stack.clear();
 		state.warnings.clear();
 	}
 	return rc;
@@ -157,7 +160,7 @@ static int dofile(const char * file, State& state, bool echo) {
 			Closure closure = Compiler::compile(state, expressions[i]);
 			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
 			eval(state, closure);
-			Value result = state.stack.pop();
+			Value result = state.registers[0];
 			if(echo)
 				std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) {

@@ -19,7 +19,6 @@
 	_(iclassassign, "classassign", p) \
 	_(inamesassign, "namesassign", p) \
 	_(idimassign, "dimassign", p) \
-	_(pop, "pop", p) \
 	_(forbegin, "forbegin", p) \
 	_(forend, "forend", p) \
 	_(iforbegin, "iforbegin", p) \
@@ -98,7 +97,7 @@ struct Instruction {
 		ibc(ibc), a(a), b(b), c(c) {}
 	
 	std::string toString() const {
-		return std::string("") + bc.toString() + "\t" + intToStr(a);
+		return std::string("") + bc.toString() + "\t" + intToStr(a) + "\t" + intToStr(b) + "\t" + intToStr(c);
 	}
 };
 

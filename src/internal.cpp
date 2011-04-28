@@ -11,17 +11,19 @@ void checkNumArgs(List const& args, uint64_t nargs) {
 uint64_t function(State& state, Call const& call, List const& args) {
 	Value parameters = force(state, args[0]);
 	Value body = args[1];
-	state.stack.push(
-		Function(parameters, body, Character::NA/*force(state, args[2])*/, state.env));
+	state.registers[0] = 	
+		Function(parameters, body, Character::NA/*force(state, args[2])*/, state.env);
 	return 1;
 }
 
 uint64_t rm(State& state, Call const& call, List const& args) {
-	for(uint64_t i = 0; i < args.length(); i++) if(args[i].type != Type::R_symbol && args[i].type != Type::R_character) _error("rm() arguments must be symbols or character vectors");
+	for(uint64_t i = 0; i < args.length(); i++) 
+		if(expression(args[i]).type != Type::R_symbol && expression(args[i]).type != Type::R_character) 
+			_error("rm() arguments must be symbols or character vectors");
 	for(uint64_t i = 0; i < args.length(); i++) {
 		state.env->rm(expression(args[i]));
 	}
-	state.stack.push(Null::singleton);
+	state.registers[0] = Null::singleton;
 	return 1;
 }
 
@@ -36,7 +38,7 @@ uint64_t sequence(State& state, Call const& call, List const& args) {
 	double b = asReal1(by);
 	double l = asReal1(len);
 
-	state.stack.push(Sequence(f, b, l));	
+	state.registers[0] = Sequence(f, b, l);	
 	return 1;
 }
 
@@ -57,7 +59,7 @@ uint64_t repeat(State& state, Call const& call, List const& args) {
 	for(uint64_t i = 0; i < l; i++) {
 		r[i] = v;
 	}
-	state.stack.push(r);
+	state.registers[0] = r;
 	return 1;
 }
 
@@ -65,7 +67,7 @@ uint64_t typeOf(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	Character c(1);
 	c[0] = state.inString(force(state, args[0]).type.toString());
-	state.stack.push(c);
+	state.registers[0] = c;
 	return 1;
 }
 
@@ -79,7 +81,7 @@ uint64_t mode(State& state, Call const& call, List const& args) {
 		c[0] = state.inString("name");
 	else
 		c[0] = state.inString(v.type.toString());
-	state.stack.push(c);
+	state.registers[0] = c;
 	return 1;
 }
 
@@ -91,10 +93,10 @@ uint64_t klass(State& state, Call const& call, List const& args)
 	if(r.type == Type::R_null) {
 		Character c(1);
 		c[0] = state.inString((v).type.toString());
-		state.stack.push(c);
+		state.registers[0] = c;
 	}
 	else {
-		state.stack.push(r);
+		state.registers[0] = r;
 	}
 	return 1;
 }
@@ -105,7 +107,7 @@ uint64_t assignKlass(State& state, Call const& call, List const& args)
 	Value v = force(state, args[0]);
 	Value k = force(state, args[1]);
 	setClass(v.attributes, k);
-	state.stack.push(v);
+	state.registers[0] = v;
 	return 1;
 }
 
@@ -114,7 +116,7 @@ uint64_t names(State& state, Call const& call, List const& args)
 	checkNumArgs(args, 1);
 	Value v = force(state, args[0]);
 	Value r = getNames(v.attributes);
-	state.stack.push(r);	
+	state.registers[0] = r;	
 	return 1;
 }
 
@@ -124,7 +126,7 @@ uint64_t assignNames(State& state, Call const& call, List const& args)
 	Value v = force(state, args[0]);
 	Value k = force(state, args[2]);
 	setNames(v.attributes, k);
-	state.stack.push(v);
+	state.registers[0] = v;
 	return 1;
 }
 
@@ -133,7 +135,7 @@ uint64_t dim(State& state, Call const& call, List const& args)
 	checkNumArgs(args, 1);
 	Value v = force(state, args[0]);
 	Value r = getDim(v.attributes);
-	state.stack.push(r);	
+	state.registers[0]= r;	
 	return 1;
 }
 
@@ -143,7 +145,7 @@ uint64_t assignDim(State& state, Call const& call, List const& args)
 	Value v = force(state, args[0]);
 	Value k = force(state, args[1]);
 	setDim(v.attributes, k);
-	state.stack.push(v);
+	state.registers[0] = v;
 	return 1;
 }
 
@@ -184,7 +186,7 @@ uint64_t c(State& state, Call const& call, List const& Args) {
 		}
 		setNames(out.attributes, outnames);
 	}
-	state.stack.push(out);
+	state.registers[0] = out;
 	return 1;
 }
 
@@ -194,7 +196,7 @@ uint64_t list(State& state, Call const& call, List const& args) {
 	Vector n = getNames(args.attributes);
 	if(n.type != Type::R_null)
 		setNames(out.attributes, n);
-	state.stack.push(out);
+	state.registers[0] = out;
 	return 1;
 }
 /*
@@ -265,10 +267,9 @@ uint64_t subset(State& state, Call const& call, List const& args) {
                 //SubsetIndex< Integer, Double >::eval(a, i).toVector(r);
         }
         else {
-                printf("Invalid index\n");
-                assert(false);
+                _error("Invalid index\n");
         }
-	state.stack.push(r);
+	state.registers[0] = r;
         return 1;
 }
 
@@ -288,20 +289,20 @@ uint64_t subset2(State& state, Call const& call, List const& args) {
 					break;
 			}
 			if(j < c.length()) {
-				state.stack.push(Element2(a, j));
+				state.registers[0] = Element2(a, j);
 				return 1;
 			}
 		}
 	}
 	else if(b.type == Type::R_integer) {
-		state.stack.push(Element2(a, Integer(b)[0]-1));
+		state.registers[0] = Element2(a, Integer(b)[0]-1);
 		return 1;
 	}
 	else if(b.type == Type::R_double) {
-		state.stack.push(Element2(a, (uint64_t)Double(b)[0]-1));
+		state.registers[0] = Element2(a, (uint64_t)Double(b)[0]-1);
 		return 1;
 	}
-	state.stack.push(Null::singleton);
+	state.registers[0] = Null::singleton;
 	return 1;
 } 
 
@@ -319,11 +320,11 @@ uint64_t dollar(State& state, Call const& call, List const& args) {
 				break;
 		}
 		if(j < c.length()) {
-			state.stack.push(Element2(a, j));
+			state.registers[0] = Element2(a, j);
 			return 1;
 		}
 	}
-	state.stack.push(Null::singleton);
+	state.registers[0] = Null::singleton;
 	return 1;
 } 
 
@@ -332,7 +333,7 @@ uint64_t length(State& state, Call const& call, List const& args) {
 	Vector a = force(state, args[0]);
 	Integer i(1);
 	i[0] = a.length();
-	state.stack.push(i);
+	state.registers[0] = i;
 	return 1;
 }
 
@@ -343,7 +344,7 @@ uint64_t length(State& state, Call const& call, List const& args) {
 */
 uint64_t quote(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
-	state.stack.push(expression(args[0]));
+	state.registers[0] = expression(args[0]);
 	return 1;
 }
 
@@ -354,36 +355,35 @@ uint64_t eval_fn(State& state, Call const& call, List const& args) {
 	//Value enclos = force(state, call[3]);
 	Closure closure = Compiler::compile(state, expr);
 	closure.bind(REnvironment(envir).ptr());
-	uint64_t top = state.stack.top;
 	eval(state, closure);
-	return state.stack.top-top;
+	return 1;
 }
 
 uint64_t switch_fn(State& state, Call const& call, List const& args) {
 	Value one = force(state, args[0]);
 	if(one.type == Type::R_integer && Integer(one).length() == 1) {
 		int64_t i = Integer(one)[0];
-		if(i >= 1 && (uint64_t)i <= args.length()) {state.stack.push(force(state, args[i])); return 1; }
+		if(i >= 1 && (uint64_t)i <= args.length()) {state.registers[0] = force(state, args[i]); return 1; }
 	} else if(one.type == Type::R_double && Double(one).length() == 1) {
 		int64_t i = (int64_t)Double(one)[0];
-		if(i >= 1 && (uint64_t)i <= args.length()) {state.stack.push(force(state, args[i])); return 1; }
+		if(i >= 1 && (uint64_t)i <= args.length()) {state.registers[0] = force(state, args[i]); return 1; }
 	} else if(one.type == Type::R_character && Character(one).length() == 1 && 
 			getNames(args.attributes).type != Type::R_null) {
 		Character names(getNames(args.attributes));
 		for(uint64_t i = 1; i < args.length(); i++) {
 			if(names[i] == Character(one)[0]) {
-				state.stack.push(force(state, args[i]));
+				state.registers[0] = force(state, args[i]);
 				return 1;
 			}
 		}
 		for(uint64_t i = 1; args.length(); i++) {
 			if(names[i] == Symbol::empty) {
-				state.stack.push(force(state, args[i]));
+				state.registers[0] = force(state, args[i]);
 				return 1;
 			}
 		}
 	}
-	state.stack.push(Null::singleton);
+	state.registers[0] = Null::singleton;
 	return 1;
 }
 
@@ -391,14 +391,14 @@ uint64_t environment(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	Value e = force(state, args[0]);
 	if(e.type == Type::R_null) {
-		state.stack.push(REnvironment(state.env));
+		state.registers[0] = REnvironment(state.env);
 		return 1;
 	}
 	else if(e.type == Type::R_function) {
-		state.stack.push(REnvironment(Function(e).s()));
+		state.registers[0] = REnvironment(Function(e).s());
 		return 1;
 	}
-	state.stack.push(Null::singleton);
+	state.registers[0] = Null::singleton;
 	return 1;
 }
 
@@ -409,7 +409,7 @@ uint64_t parentframe(State& state, Call const& call, List const& args) {
 	for(uint64_t j = 0; j < i-1 && e != NULL; j++) {
 		e = e->dynamicParent();
 	}
-	state.stack.push(REnvironment(e));
+	state.registers[0] = REnvironment(e);
 	return 1;
 }
 
@@ -433,7 +433,7 @@ uint64_t warning_fn(State& state, Call const& call, List const& args) {
 		}
 	}
 	_warning(state, message);
-	state.stack.push(Character::c(state, message));
+	state.registers[0] = Character::c(state, message);
 	return 1;
 } 
 

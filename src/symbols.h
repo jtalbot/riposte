@@ -65,5 +65,8 @@
 	_(acos, "acos", p) \
 	_(asin, "asin", p) \
 	_(atan, "atan", p) \
+	_(names, "names", p) \
+	_(dim, "dim", p) \
+	_(classSym, "class", p) \
 
 #endif
