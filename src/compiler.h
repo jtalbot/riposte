@@ -19,7 +19,11 @@ private:
 	bool inFunction;
 	std::vector<uint64_t> slots;
 
-	Compiler(State& state) : state(state) {}
+	uint64_t loopDepth;	
+
+	Compiler(State& state) : state(state) {
+		loopDepth = 0;
+	}
 	
 	Closure compile(Value const& expr); 				// compile into new closure
 	void compile(Value const& expr, Closure& closure);		// compile into existing closure

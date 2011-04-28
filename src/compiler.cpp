@@ -38,6 +38,16 @@ static ByteCode op(Symbol const& s) {
 	}
 }
 
+static void resolveLoopReferences(Closure& closure, uint64_t start, uint64_t end, uint64_t depth, uint64_t nextTarget, uint64_t breakTarget) {
+	for(uint64_t i = start; i < end; i++) {
+		if(closure.code()[i].bc == ByteCode::next && closure.code()[i].a == depth) {
+			closure.code()[i].a = nextTarget-i;
+		} else if(closure.code()[i].bc == ByteCode::break1 && closure.code()[i].a == depth) {
+			closure.code()[i].a = breakTarget-i;
+		}
+	}
+}
+
 void Compiler::compileConstant(Value const& expr, Closure& closure) {
 	closure.constants().push_back(expr);
 	closure.code().push_back(Instruction(ByteCode::kget, closure.constants().size()-1));
@@ -154,18 +164,24 @@ void Compiler::compileCall(Call const& call, Closure& closure) {
 			compile(Call(call[2])[1], closure);
 			compile(Call(call[2])[2], closure);
 			closure.code().push_back(Instruction(ByteCode::iforbegin, 0, Symbol(call[1]).i));
+			loopDepth++;
 			uint64_t beginbody = closure.code().size();
 			compile(call[3], closure);
 			uint64_t endbody = closure.code().size();
+			resolveLoopReferences(closure, beginbody, endbody, loopDepth, endbody, endbody+1);
+			loopDepth--;
 			closure.code().push_back(Instruction(ByteCode::iforend, endbody-beginbody, Symbol(call[1]).i));
 			closure.code()[beginbody-1].a = endbody-beginbody+1;
 		}
 		else {
 			compile(call[2], closure);
 			closure.code().push_back(Instruction(ByteCode::forbegin, 0, Symbol(call[1]).i));
+			loopDepth++;
 			uint64_t beginbody = closure.code().size();
 			compile(call[3], closure);
 			uint64_t endbody = closure.code().size();
+			resolveLoopReferences(closure, beginbody, endbody, loopDepth, endbody, endbody+1);
+			loopDepth--;
 			closure.code().push_back(Instruction(ByteCode::forend, endbody-beginbody, Symbol(call[1]).i));
 			closure.code()[beginbody-1].a = endbody-beginbody+1;
 		}
@@ -174,21 +190,38 @@ void Compiler::compileCall(Call const& call, Closure& closure) {
 	{
 		compile(call[1], closure);
 		closure.code().push_back(Instruction(ByteCode::whilebegin, 0));
+		loopDepth++;
 		uint64_t beginbody = closure.code().size();
 		compile(call[2], closure);
+		uint64_t beforecond = closure.code().size();
 		compile(call[1], closure);
 		uint64_t endbody = closure.code().size();
+		resolveLoopReferences(closure, beginbody, endbody, loopDepth, beforecond, endbody+1);
+		loopDepth--;
 		closure.code().push_back(Instruction(ByteCode::whileend, endbody-beginbody));
 		closure.code()[beginbody-1].a = endbody-beginbody+2;
 	} break;
 	case Symbol::E_repeatSym: 
 	{
 		closure.code().push_back(Instruction(ByteCode::repeatbegin, 0));
+		loopDepth++;
 		uint64_t beginbody = closure.code().size();
 		compile(call[1], closure);
 		uint64_t endbody = closure.code().size();
+		resolveLoopReferences(closure, beginbody, endbody, loopDepth, endbody, endbody+1);
+		loopDepth--;
 		closure.code().push_back(Instruction(ByteCode::repeatend, endbody-beginbody));
 		closure.code()[beginbody-1].a = endbody-beginbody+2;
+	} break;
+	case Symbol::E_nextSym:
+	{
+		if(loopDepth == 0) throw CompileError("next used outside of loop");
+		closure.code().push_back(Instruction(ByteCode::next, loopDepth));
+	} break;
+	case Symbol::E_breakSym:
+	{
+		if(loopDepth == 0) throw CompileError("break used outside of loop");
+		closure.code().push_back(Instruction(ByteCode::break1, loopDepth));
 	} break;
 	case Symbol::E_ifSym: 
 	{
@@ -331,10 +364,16 @@ void Compiler::compile(Value const& expr, Closure& closure) {
 
 Closure Compiler::compile(Value const& expr) {
 	Closure closure;
+
+	uint64_t oldLoopDepth = loopDepth;
+	loopDepth = 0;
 	compile(expr, closure);
 	closure.expression() = expr;
 	// insert return statement at end of closure
 	closure.code().push_back(Instruction(ByteCode::ret));
+	
+	loopDepth = oldLoopDepth;
+
 	return closure;	
 }
 

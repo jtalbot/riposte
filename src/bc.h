@@ -28,6 +28,8 @@
 	_(whileend, "whileend", p) \
 	_(repeatbegin, "repeatbegin", p) \
 	_(repeatend, "repeatend", p) \
+	_(next, "next", p) \
+	_(break1, "break1", p) \
 	_(if1, "if1", p) \
 	_(colon, "colon", p) \
 	_(add, "add", p) \

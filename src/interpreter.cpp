@@ -321,6 +321,12 @@ static int64_t repeatend_op(State& state, Stack& stack, Closure const& closure, 
 	stack.pop();
 	return -inst.a;
 }
+static int64_t next_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
+	return inst.a;
+}
+static int64_t break1_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
+	return inst.a;
+}
 static int64_t if1_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
 	Logical l(stack.pop());
 	if(l[0]) return 1;
