@@ -45,7 +45,7 @@
 	_(neq, "neq", p) \
 	_(ge, "ge", p) \
 	_(le, "le", p) \
-	_(lneg, "lneg", p) \
+	_(lnot, "lnot", p) \
 	_(land, "land", p) \
 	_(sland, "sland", p) \
 	_(lor, "lor", p) \

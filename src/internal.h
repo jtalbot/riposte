@@ -118,7 +118,7 @@ struct NegOp : UnaryOp<A, TA, R> {
 };
 
 template<typename A, typename TA, typename R>
-struct LNegOp : UnaryOp<A, TA, R> {
+struct LNotOp : UnaryOp<A, TA, R> {
 	static typename R::Element eval(typename A::Element const& a) {
 		return !Cast<A, TA>::eval(a);
 	}

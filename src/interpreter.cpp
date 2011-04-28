@@ -371,8 +371,8 @@ static int64_t pow_op(State& state, Stack& stack, Closure const& closure, Instru
 	binaryDoubleArith<Zip2, PowOp>(state,inst.a);
 	return 1;
 }
-static int64_t lneg_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
-	unaryLogical<Zip1, LNegOp>(state,inst.a);
+static int64_t lnot_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
+	unaryLogical<Zip1, LNotOp>(state,inst.a);
 	return 1;
 }
 static int64_t land_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {

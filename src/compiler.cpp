@@ -1,6 +1,43 @@
 
 #include "compiler.h"
 
+static ByteCode op(Symbol const& s) {
+	switch(s.Enum()) {
+		case Symbol::E_mul: return ByteCode::mul; break;
+		case Symbol::E_div: return ByteCode::div; break;
+		case Symbol::E_idiv: return ByteCode::idiv; break;
+		case Symbol::E_mod: return ByteCode::mod; break;
+		case Symbol::E_pow: return ByteCode::pow; break;
+		case Symbol::E_lt: return ByteCode::lt; break;
+		case Symbol::E_gt: return ByteCode::gt; break;
+		case Symbol::E_eq: return ByteCode::eq; break;
+		case Symbol::E_neq: return ByteCode::neq; break;
+		case Symbol::E_ge: return ByteCode::ge; break;
+		case Symbol::E_le: return ByteCode::le; break;
+		case Symbol::E_lnot: return ByteCode::lnot; break;
+		case Symbol::E_land: return ByteCode::land; break;
+		case Symbol::E_sland: return ByteCode::sland; break;
+		case Symbol::E_lor: return ByteCode::slor; break;
+		case Symbol::E_abs: return ByteCode::abs; break;
+		case Symbol::E_sign: return ByteCode::sign; break;
+		case Symbol::E_sqrt: return ByteCode::sqrt; break;
+		case Symbol::E_floor: return ByteCode::floor; break;
+		case Symbol::E_ceiling: return ByteCode::ceiling; break;
+		case Symbol::E_trunc: return ByteCode::trunc; break;
+		case Symbol::E_round: return ByteCode::round; break;
+		case Symbol::E_signif: return ByteCode::signif; break;
+		case Symbol::E_exp: return ByteCode::exp; break;
+		case Symbol::E_log: return ByteCode::log; break;
+		case Symbol::E_cos: return ByteCode::cos; break;
+		case Symbol::E_sin: return ByteCode::sin; break;
+		case Symbol::E_tan: return ByteCode::tan; break;
+		case Symbol::E_acos: return ByteCode::acos; break;
+		case Symbol::E_asin: return ByteCode::asin; break;
+		case Symbol::E_atan: return ByteCode::atan; break;
+		default: throw RuntimeError("unexpected symbol used as an operator"); break;
+	}
+}
+
 void Compiler::compileConstant(Value const& expr, Closure& closure) {
 	closure.constants().push_back(expr);
 	closure.code().push_back(Instruction(ByteCode::kget, closure.constants().size()-1));
@@ -10,10 +47,20 @@ void Compiler::compileSymbol(Symbol const& symbol, Closure& closure) {
 	closure.code().push_back(Instruction(ByteCode::get, symbol.i));
 }
 
-void Compiler::compileOp(Call const& call, Closure& closure) {
-	Symbol func(call[0]);
-	std::string funcStr = func.toString(state);
-	if(funcStr == ".Internal") {
+void Compiler::compileCall(Call const& call, Closure& closure) {
+	uint64_t length = call.length();
+	if(length == 0) {
+		throw CompileError("invalid empty call");
+	}
+
+	Symbol func = Symbol::E_NA;
+	if(call[0].type == Type::R_symbol)
+		func = Symbol(call[0]);
+	
+	switch(func.Enum()) {
+
+	case Symbol::E_internal: 
+	{
 		if(call[1].type == Type::R_symbol) {
 			// The riposte way... .Internal is a function on symbols, returning the internal function
 			closure.code().push_back(Instruction(ByteCode::iget, Symbol(call[1]).i));
@@ -28,8 +75,10 @@ void Compiler::compileOp(Call const& call, Closure& closure) {
 		} else {
 			throw CompileError(".Internal has invalid arguments");
 		}
-	}
-	else if(funcStr == "<-" || funcStr == "=" || funcStr == ".Assign") {
+	} break;
+	case Symbol::E_assign:
+	case Symbol::E_eqassign: 
+	{
 		ByteCode bc;
 		Value v = call[1];
 		
@@ -58,8 +107,9 @@ void Compiler::compileOp(Call const& call, Closure& closure) {
 			bc = indexed ? ByteCode::iassign : ByteCode::assign;
 		}
 		closure.code().push_back(Instruction(bc, Symbol(v).i));
-	}
-	else if(funcStr == "function") {
+	} break;
+	case Symbol::E_function: 
+	{
 		//compile the default parameters	
 		List c = PairList(call[1]);
 		List parameters(c.length());
@@ -86,8 +136,9 @@ void Compiler::compileOp(Call const& call, Closure& closure) {
 		closure.constants().push_back(body);
 	
 		closure.code().push_back(Instruction(ByteCode::function, closure.constants().size()-2, closure.constants().size()-1));
-	}
-	else if(funcStr == "return") {
+	} break;
+	case Symbol::E_returnSym: 
+	{
 		if(call.length() == 1)
 			closure.code().push_back(Instruction(ByteCode::null));
 		else if(call.length() == 2)
@@ -95,8 +146,9 @@ void Compiler::compileOp(Call const& call, Closure& closure) {
 		else
 			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
 		closure.code().push_back(Instruction(ByteCode::ret));
-	}
-	else if(funcStr == "for" || funcStr == ".For") {
+	} break;
+	case Symbol::E_forSym: 
+	{
 		// special case common i in m:n case
 		if(call[2].type == Type::R_call && state.outString(Symbol(Call(call[2])[0]).i) == ":") {
 			compile(Call(call[2])[1], closure);
@@ -117,8 +169,9 @@ void Compiler::compileOp(Call const& call, Closure& closure) {
 			closure.code().push_back(Instruction(ByteCode::forend, endbody-beginbody, Symbol(call[1]).i));
 			closure.code()[beginbody-1].a = endbody-beginbody+1;
 		}
-	}
-	else if(funcStr == "while" || funcStr == ".While") {
+	} break;
+	case Symbol::E_whileSym: 
+	{
 		compile(call[1], closure);
 		closure.code().push_back(Instruction(ByteCode::whilebegin, 0));
 		uint64_t beginbody = closure.code().size();
@@ -127,16 +180,18 @@ void Compiler::compileOp(Call const& call, Closure& closure) {
 		uint64_t endbody = closure.code().size();
 		closure.code().push_back(Instruction(ByteCode::whileend, endbody-beginbody));
 		closure.code()[beginbody-1].a = endbody-beginbody+2;
-	}
-	else if(funcStr == "repeat" || funcStr == ".Repeat") {
+	} break;
+	case Symbol::E_repeatSym: 
+	{
 		closure.code().push_back(Instruction(ByteCode::repeatbegin, 0));
 		uint64_t beginbody = closure.code().size();
 		compile(call[1], closure);
 		uint64_t endbody = closure.code().size();
 		closure.code().push_back(Instruction(ByteCode::repeatend, endbody-beginbody));
 		closure.code()[beginbody-1].a = endbody-beginbody+2;
-	}
-	else if(funcStr == "if" || funcStr == ".If") {
+	} break;
+	case Symbol::E_ifSym: 
+	{
 		compile(call[1], closure);
 		closure.code().push_back(Instruction(ByteCode::if1, 0));
 		uint64_t begin1 = closure.code().size(), begin2 = 0;
@@ -152,8 +207,9 @@ void Compiler::compileOp(Call const& call, Closure& closure) {
 		closure.code()[begin1-1].a = begin2-begin1+1;
 		if(call.length() == 4)
 			closure.code()[begin2-1].a = end-begin2+1;
-	}
-	else if(funcStr == ".Brace" || funcStr == "{") {
+	} break;
+	case Symbol::E_brace: 
+	{
 		uint64_t length = call.length();
 		for(uint64_t i = 1; i < length; i++) {
 			compile(call[i], closure);
@@ -163,17 +219,13 @@ void Compiler::compileOp(Call const& call, Closure& closure) {
 		if(length == 0) {
 			closure.code().push_back(Instruction(ByteCode::null));
 		}
-	}
-	else if(funcStr == ".Paren" || funcStr == "(") {
-		//uint64_t length = call.length();
+	} break;
+	case Symbol::E_paren: 
+	{
 		compile(call[1], closure);
-	}
-	else if(funcStr == ":") {
-		compile(call[1], closure);
-		compile(call[2], closure);
-		closure.code().push_back(Instruction(ByteCode::colon, call.length()-1));
-	}
-	else if(funcStr == ".Add" || funcStr == "+") {
+	} break;
+	case Symbol::E_add: 
+	{
 		if(call.length() == 3)
 			compile(call[2], closure);
 		compile(call[1], closure);
@@ -181,8 +233,9 @@ void Compiler::compileOp(Call const& call, Closure& closure) {
 			closure.code().push_back(Instruction(ByteCode::add, call.length()-1));
 		else
 			closure.code().push_back(Instruction(ByteCode::pos, call.length()-1));
-	}
-	else if(funcStr == ".Sub" || funcStr == "-") {
+	} break;
+	case Symbol::E_sub: 
+	{
 		if(call.length() == 3)
 			compile(call[2], closure);
 		compile(call[1], closure);
@@ -190,281 +243,63 @@ void Compiler::compileOp(Call const& call, Closure& closure) {
 			closure.code().push_back(Instruction(ByteCode::sub, call.length()-1));
 		else
 			closure.code().push_back(Instruction(ByteCode::neg, call.length()-1));
-	}
-	else if(funcStr == ".Mul" || funcStr == "*") {
+	} break;
+	// Binary operators
+	case Symbol::E_colon:
+	case Symbol::E_mul: 
+	case Symbol::E_div: 
+	case Symbol::E_idiv: 
+	case Symbol::E_pow: 
+	case Symbol::E_mod:
+	case Symbol::E_land:
+	case Symbol::E_lor:
+	case Symbol::E_eq:
+	case Symbol::E_neq:
+	case Symbol::E_lt:
+	case Symbol::E_gt:
+	case Symbol::E_ge:
+	case Symbol::E_le:
+	case Symbol::E_sland:
+	case Symbol::E_slor:
+	{ 
 		compile(call[2], closure);
 		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::mul, call.length()-1));
-	}
-	else if(funcStr == ".Div" || funcStr == "/") {
-		compile(call[2], closure);
+		closure.code().push_back(Instruction(op(func), 2));
+	} break;
+	// Unary operators
+	case Symbol::E_lnot: 
+	case Symbol::E_abs: 
+	case Symbol::E_sign: 
+	case Symbol::E_sqrt: 
+	case Symbol::E_floor: 
+	case Symbol::E_ceiling: 
+	case Symbol::E_trunc: 
+	case Symbol::E_round: 
+	case Symbol::E_signif: 
+	case Symbol::E_exp: 
+	case Symbol::E_log: 
+	case Symbol::E_cos: 
+	case Symbol::E_sin: 
+	case Symbol::E_tan: 
+	case Symbol::E_acos: 
+	case Symbol::E_asin: 
+	case Symbol::E_atan:
+	{ 
 		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::div, call.length()-1));
+		closure.code().push_back(Instruction(op(func), 1));
+	} break;
+
+	default:
+	{
+		// a standard call, not an op
+		compile(call[0], closure);
+		CompiledCall compiledCall(call, state);
+		// insert call
+		closure.constants().push_back(compiledCall);
+		closure.code().push_back(Instruction(ByteCode::call, closure.constants().size()-1));
 	}
-	else if(funcStr == ".IDiv" || funcStr == "%/%") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::idiv, call.length()-1));
-	}
-	else if(funcStr == ".Pow" || funcStr == "^" || funcStr == "**") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::pow, call.length()-1));
-	}
-	else if(funcStr == ".Mod" || funcStr == "%%") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::mod, call.length()-1));
-	}
-	else if(funcStr == ".Lneg" || funcStr == "!") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::lneg, call.length()-1));
-	}
-	else if(funcStr == ".Land" || funcStr == "&") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::land, call.length()-1));
-	}
-	else if(funcStr == ".Sland" || funcStr == "&&") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::sland, call.length()-1));
-	}
-	else if(funcStr == ".Lor" || funcStr == "|") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::lor, call.length()-1));
-	}
-	else if(funcStr == ".Slor" || funcStr == "||") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::slor, call.length()-1));
-	}
-	else if(funcStr == ".Eq" || funcStr == "==") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::eq, call.length()-1));
-	}
-	else if(funcStr == ".Neq" || funcStr == "!=") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::neq, call.length()-1));
-	}
-	else if(funcStr == ".LT" || funcStr == "<") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::lt, call.length()-1));
-	}
-	else if(funcStr == ".LE" || funcStr == "<=") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::le, call.length()-1));
-	}
-	else if(funcStr == ".GT" || funcStr == ">") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::gt, call.length()-1));
-	}
-	else if(funcStr == ".GE" || funcStr == ">=") {
-		compile(call[2], closure);
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::ge, call.length()-1));
-	}
-	else if(funcStr == ".Abs" || funcStr == "abs") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::abs, call.length()-1));
-	}
-	else if(funcStr == ".Sign" || funcStr == "sign") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::sign, call.length()-1));
-	}
-	else if(funcStr == ".Sqrt" || funcStr == "sqrt") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::sqrt, call.length()-1));
-	}
-	else if(funcStr == ".Floor" || funcStr == "floor") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::floor, call.length()-1));
-	}
-	else if(funcStr == ".Ceiling" || funcStr == "ceiling") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::ceiling, call.length()-1));
-	}
-	else if(funcStr == ".Trunc" || funcStr == "trunc") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::trunc, call.length()-1));
-	}
-	else if(funcStr == ".Round" || funcStr == "round") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::round, call.length()-1));
-	}
-	else if(funcStr == ".Signif" || funcStr == "signif") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::signif, call.length()-1));
-	}
-	else if(funcStr == ".Exp" || funcStr == "exp") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::exp, call.length()-1));
-	}
-	else if(funcStr == ".Log" || funcStr == "log") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::log, call.length()-1));
-	}
-	else if(funcStr == ".Cos" || funcStr == "cos") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::cos, call.length()-1));
-	}
-	else if(funcStr == ".Sin" || funcStr == "sin") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::sin, call.length()-1));
-	}
-	else if(funcStr == ".Tan" || funcStr == "tan") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::tan, call.length()-1));
-	}
-	else if(funcStr == ".ACos" || funcStr == "acos") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::acos, call.length()-1));
-	}
-	else if(funcStr == ".ASin" || funcStr == "asin") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::asin, call.length()-1));
-	}
-	else if(funcStr == ".ATan" || funcStr == "atan") {
-		compile(call[1], closure);
-		closure.code().push_back(Instruction(ByteCode::atan, call.length()-1));
-	}
+	};
 }
-
-void Compiler::compileCall(Call const& call, Closure& closure) {
-	uint64_t length = call.length();
-	if(length == 0) {
-		throw CompileError("invalid empty call");
-	}
-
-	if(call[0].type == Type::R_symbol) {
-		std::string funcStr = Symbol(call[0]).toString(state);
-		if(	funcStr == ".Internal"
-			|| funcStr == "function"
-			|| funcStr == "return"
-			|| funcStr == "<-" 
-			|| funcStr == "=" 
-			|| funcStr == "for"
-			|| funcStr == "while"
-			|| funcStr == "repeat"
-			|| funcStr == "if"
-			|| funcStr == "{"
-			|| funcStr == "("
-			|| funcStr == ":"
-			|| funcStr == "+"
-			|| funcStr == "-"
-			|| funcStr == "*"
-			|| funcStr == "/"
-			|| funcStr == "^"
-			|| funcStr == "**"
-			|| funcStr == "%/%"
-			|| funcStr == "%%"
-			|| funcStr == "!"
-			|| funcStr == "&"
-			|| funcStr == "&&"
-			|| funcStr == "|"
-			|| funcStr == "||"
-			|| funcStr == "=="
-			|| funcStr == "!="
-			|| funcStr == "<"
-			|| funcStr == "<="
-			|| funcStr == ">"
-			|| funcStr == ">="
-			|| funcStr == "abs"
-			|| funcStr == "sign"
-			|| funcStr == "sqrt"
-			|| funcStr == "floor"
-			|| funcStr == "ceiling"
-			|| funcStr == "trunc"
-			|| funcStr == "round"
-			|| funcStr == "signif"
-			|| funcStr == "exp"
-			|| funcStr == "log"
-			|| funcStr == "cos"
-			|| funcStr == "sin"
-			|| funcStr == "tan"
-			|| funcStr == "acos"
-			|| funcStr == "asin"
-			|| funcStr == "atan"
-			) {
-			compileOp(call, closure);
-			return; 
-		}
-	}
-	// create a promise for each parameter...
-	CompiledCall compiledCall(call, state);
-	/*Call compiledCall(call.length());
-	compiledCall.attributes = call.attributes;
-
-	bool dots = false;
-	for(uint64_t i = length-1; i >= 1; i--) {
-		if(call[i].type == Type::R_symbol) {
-			if(call[i].i == DOTS_STRING) {
-				compiledCall[i] = call[i];
-				dots = true;
-			}
-			else {
-				Value v = call[i];
-				v.type = Type::I_sympromise;
-				compiledCall[i] = v;
-			}
-		}
-		else if(isLanguage(call[i])) {
-			Value v;
-			compile(call[i]).toValue(v);
-			v.type = Type::I_promise;
-			compiledCall[i] = v;
-		} else {
-			compiledCall[i] = call[i];
-		}
-	}*/
-	compile(call[0], closure);
-
-	// insert call
-	closure.constants().push_back(compiledCall);
-	closure.code().push_back(Instruction(ByteCode::call, closure.constants().size()-1));
-}
-/*
-static void compileICCall(CompileState& state, Call const& call, Closure& closure) {
-	uint64_t length = call.length();
-	if(length == 0) {
-		throw CompileError("invalid empty call");
-		return;
-	}
-
-	// we might be able to inline if the function is a known symbol
-	//  and if no parameter is '...'
-			
-			compileCall(state, call, closure);
-			
-			Value spec_value;
-			state.baseenv->get(state, Symbol(call[0]), spec_value);
-			closure.constants().push_back(spec_value);
-			uint64_t spec_value_index = closure.constants().size()-1;
-
-			// check needs 1) function, 2) specialized value, 3) expensive call, and 4) skip amount
-			Instruction& instr = closure.code().back();
-			instr.bc = ByteCode::inlinecall;
-			instr.b = spec_value_index;
-			instr.c = 0;
-			
-			//uint64_t start = closure.code().size();
-			//compileInternalCall(state, InternalCall(call), closure);
-			//uint64_t end = closure.code().size();
-			//instr.c = end-start+1;
-			//return;
-	//	}
-	//}
-	// generate a normal call
-	compileCall(state, call, closure);
-
-}*/
 
 void Compiler::compileExpression(Expression const& values, Closure& closure) {
 	uint64_t length = values.length();
@@ -502,6 +337,42 @@ Closure Compiler::compile(Value const& expr) {
 	closure.code().push_back(Instruction(ByteCode::ret));
 	return closure;	
 }
+
+/*
+static void compileICCall(CompileState& state, Call const& call, Closure& closure) {
+	uint64_t length = call.length();
+	if(length == 0) {
+		throw CompileError("invalid empty call");
+		return;
+	}
+
+	// we might be able to inline if the function is a known symbol
+	//  and if no parameter is '...'
+			
+			compileCall(state, call, closure);
+			
+			Value spec_value;
+			state.baseenv->get(state, Symbol(call[0]), spec_value);
+			closure.constants().push_back(spec_value);
+			uint64_t spec_value_index = closure.constants().size()-1;
+
+			// check needs 1) function, 2) specialized value, 3) expensive call, and 4) skip amount
+			Instruction& instr = closure.code().back();
+			instr.bc = ByteCode::inlinecall;
+			instr.b = spec_value_index;
+			instr.c = 0;
+			
+			//uint64_t start = closure.code().size();
+			//compileInternalCall(state, InternalCall(call), closure);
+			//uint64_t end = closure.code().size();
+			//instr.c = end-start+1;
+			//return;
+	//	}
+	//}
+	// generate a normal call
+	compileCall(state, call, closure);
+
+}*/
 
 /*
 void functionCall(Value const& func, Value const* values, uint64_t length, Environment* env, Value& result) {
