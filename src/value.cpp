@@ -2,6 +2,7 @@
 #include "value.h"
 #include "internal.h"
 #include "compiler.h"
+#include <limits.h>
 
 union {
 	uint64_t i;

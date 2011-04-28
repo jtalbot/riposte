@@ -6,6 +6,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <sys/time.h>
+#include <stdio.h>
 
 #define TIMING
 
