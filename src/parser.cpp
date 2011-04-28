@@ -703,99 +703,99 @@ _eof_trans:
 	break;
 	case 32:
 #line 82 "lexer.rl"
-	{te = p+1;{token( TOKEN_PLUS, Symbol(state, "+") );}}
+	{te = p+1;{token( TOKEN_PLUS, Symbol::add );}}
 	break;
 	case 33:
 #line 84 "lexer.rl"
-	{te = p+1;{token( TOKEN_POW, Symbol(state, "^") );}}
+	{te = p+1;{token( TOKEN_POW, Symbol::pow );}}
 	break;
 	case 34:
 #line 85 "lexer.rl"
-	{te = p+1;{token( TOKEN_DIVIDE, Symbol(state, "/") );}}
+	{te = p+1;{token( TOKEN_DIVIDE, Symbol::div );}}
 	break;
 	case 35:
 #line 87 "lexer.rl"
-	{te = p+1;{token( TOKEN_POW, Symbol(state, "^") );}}
+	{te = p+1;{token( TOKEN_POW, Symbol::pow );}}
 	break;
 	case 36:
 #line 88 "lexer.rl"
-	{te = p+1;{token( TOKEN_TILDE, Symbol(state, "~") );}}
+	{te = p+1;{token( TOKEN_TILDE, Symbol::tilde );}}
 	break;
 	case 37:
 #line 89 "lexer.rl"
-	{te = p+1;{token( TOKEN_DOLLAR, Symbol(state, "$") );}}
+	{te = p+1;{token( TOKEN_DOLLAR, Symbol::dollar );}}
 	break;
 	case 38:
 #line 90 "lexer.rl"
-	{te = p+1;{token( TOKEN_AT, Symbol(state, "@") );}}
+	{te = p+1;{token( TOKEN_AT, Symbol::at );}}
 	break;
 	case 39:
 #line 94 "lexer.rl"
-	{te = p+1;{token( TOKEN_NS_GET_INT, Symbol(state, ":::") );}}
+	{te = p+1;{token( TOKEN_NS_GET_INT, Symbol::nsgetint );}}
 	break;
 	case 40:
 #line 97 "lexer.rl"
-	{te = p+1;{token( TOKEN_LBRACE, Symbol(state, "{") );}}
+	{te = p+1;{token( TOKEN_LBRACE, Symbol::brace );}}
 	break;
 	case 41:
 #line 98 "lexer.rl"
-	{te = p+1;{token( TOKEN_RBRACE, Symbol(state, "}") );}}
+	{te = p+1;{token( TOKEN_RBRACE );}}
 	break;
 	case 42:
 #line 99 "lexer.rl"
-	{te = p+1;{token( TOKEN_LPAREN, Symbol(state, "(") );}}
+	{te = p+1;{token( TOKEN_LPAREN, Symbol::paren );}}
 	break;
 	case 43:
 #line 100 "lexer.rl"
-	{te = p+1;{token( TOKEN_RPAREN, Symbol(state, ")") );}}
+	{te = p+1;{token( TOKEN_RPAREN );}}
 	break;
 	case 44:
 #line 102 "lexer.rl"
-	{te = p+1;{token( TOKEN_LBB, Symbol(state, "[[") );}}
+	{te = p+1;{token( TOKEN_LBB, Symbol::bb );}}
 	break;
 	case 45:
 #line 104 "lexer.rl"
-	{te = p+1;{token( TOKEN_RBB, Symbol(state, "]]") );}}
+	{te = p+1;{token( TOKEN_RBB );}}
 	break;
 	case 46:
 #line 107 "lexer.rl"
-	{te = p+1;{token( TOKEN_LE, Symbol(state, "<=") );}}
+	{te = p+1;{token( TOKEN_LE, Symbol::le );}}
 	break;
 	case 47:
 #line 108 "lexer.rl"
-	{te = p+1;{token( TOKEN_GE, Symbol(state, ">=") );}}
+	{te = p+1;{token( TOKEN_GE, Symbol::ge );}}
 	break;
 	case 48:
 #line 109 "lexer.rl"
-	{te = p+1;{token( TOKEN_EQ, Symbol(state, "==") );}}
+	{te = p+1;{token( TOKEN_EQ, Symbol::eq );}}
 	break;
 	case 49:
 #line 110 "lexer.rl"
-	{te = p+1;{token( TOKEN_NE, Symbol(state, "!=") );}}
+	{te = p+1;{token( TOKEN_NE, Symbol::neq );}}
 	break;
 	case 50:
 #line 111 "lexer.rl"
-	{te = p+1;{token( TOKEN_AND2, Symbol(state, "&&") );}}
+	{te = p+1;{token( TOKEN_AND2, Symbol::sland );}}
 	break;
 	case 51:
 #line 112 "lexer.rl"
-	{te = p+1;{token( TOKEN_OR2, Symbol(state, "||") );}}
+	{te = p+1;{token( TOKEN_OR2, Symbol::slor );}}
 	break;
 	case 52:
 #line 113 "lexer.rl"
-	{te = p+1;{token( TOKEN_LEFT_ASSIGN, Symbol(state, "<-") );}}
+	{te = p+1;{token( TOKEN_LEFT_ASSIGN, Symbol::assign );}}
 	break;
 	case 53:
 #line 115 "lexer.rl"
-	{te = p+1;{token( TOKEN_RIGHT_ASSIGN, Symbol(state, "->>") );}}
+	{te = p+1;{token( TOKEN_RIGHT_ASSIGN, Symbol::assign2 );}}
 	break;
 	case 54:
 #line 116 "lexer.rl"
-	{te = p+1;{token( TOKEN_LEFT_ASSIGN, Symbol(state, "<<-") );}}
+	{te = p+1;{token( TOKEN_LEFT_ASSIGN, Symbol::assign2 );}}
 	break;
 	case 55:
 #line 117 "lexer.rl"
-	{te = p+1;{token( TOKEN_QUESTION, Symbol(state, "?") );}}
+	{te = p+1;{token( TOKEN_QUESTION, Symbol::question );}}
 	break;
 	case 56:
 #line 123 "lexer.rl"
@@ -823,55 +823,55 @@ _eof_trans:
 	break;
 	case 62:
 #line 81 "lexer.rl"
-	{te = p;p--;{token( TOKEN_EQ_ASSIGN, Symbol(state, "=") );}}
+	{te = p;p--;{token( TOKEN_EQ_ASSIGN, Symbol::eqassign );}}
 	break;
 	case 63:
 #line 83 "lexer.rl"
-	{te = p;p--;{token( TOKEN_MINUS, Symbol(state, "-") );}}
+	{te = p;p--;{token( TOKEN_MINUS, Symbol::sub );}}
 	break;
 	case 64:
 #line 86 "lexer.rl"
-	{te = p;p--;{token( TOKEN_TIMES, Symbol(state, "*") );}}
+	{te = p;p--;{token( TOKEN_TIMES, Symbol::mul );}}
 	break;
 	case 65:
 #line 91 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NOT, Symbol(state, "!") );}}
+	{te = p;p--;{token( TOKEN_NOT, Symbol::lnot );}}
 	break;
 	case 66:
 #line 92 "lexer.rl"
-	{te = p;p--;{token( TOKEN_COLON, Symbol(state, ":") );}}
+	{te = p;p--;{token( TOKEN_COLON, Symbol::colon );}}
 	break;
 	case 67:
 #line 93 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NS_GET, Symbol(state, "::") );}}
+	{te = p;p--;{token( TOKEN_NS_GET, Symbol::nsget );}}
 	break;
 	case 68:
 #line 95 "lexer.rl"
-	{te = p;p--;{token( TOKEN_AND, Symbol(state, "&") );}}
+	{te = p;p--;{token( TOKEN_AND, Symbol::land );}}
 	break;
 	case 69:
 #line 96 "lexer.rl"
-	{te = p;p--;{token( TOKEN_OR, Symbol(state, "|") );}}
+	{te = p;p--;{token( TOKEN_OR, Symbol::lor );}}
 	break;
 	case 70:
 #line 101 "lexer.rl"
-	{te = p;p--;{token( TOKEN_LBRACKET, Symbol(state, "[") );}}
+	{te = p;p--;{token( TOKEN_LBRACKET, Symbol::bracket );}}
 	break;
 	case 71:
 #line 103 "lexer.rl"
-	{te = p;p--;{token( TOKEN_RBRACKET, Symbol(state, "]") );}}
+	{te = p;p--;{token( TOKEN_RBRACKET );}}
 	break;
 	case 72:
 #line 105 "lexer.rl"
-	{te = p;p--;{token( TOKEN_LT, Symbol(state, "<") );}}
+	{te = p;p--;{token( TOKEN_LT, Symbol::lt );}}
 	break;
 	case 73:
 #line 106 "lexer.rl"
-	{te = p;p--;{token( TOKEN_GT, Symbol(state, ">") );}}
+	{te = p;p--;{token( TOKEN_GT, Symbol::gt );}}
 	break;
 	case 74:
 #line 114 "lexer.rl"
-	{te = p;p--;{token( TOKEN_RIGHT_ASSIGN, Symbol(state, "->") );}}
+	{te = p;p--;{token( TOKEN_RIGHT_ASSIGN, Symbol::assign );}}
 	break;
 	case 75:
 #line 120 "lexer.rl"
@@ -895,7 +895,7 @@ _eof_trans:
 	break;
 	case 80:
 #line 105 "lexer.rl"
-	{{p = ((te))-1;}{token( TOKEN_LT, Symbol(state, "<") );}}
+	{{p = ((te))-1;}{token( TOKEN_LT, Symbol::lt );}}
 	break;
 	case 81:
 #line 126 "lexer.rl"
@@ -935,31 +935,31 @@ _eof_trans:
 	{{p = ((te))-1;}token( TOKEN_NUM_CONST);}
 	break;
 	case 11:
-	{{p = ((te))-1;}token( TOKEN_FUNCTION, Symbol(state, "function") );}
+	{{p = ((te))-1;}token( TOKEN_FUNCTION, Symbol::function );}
 	break;
 	case 12:
-	{{p = ((te))-1;}token( TOKEN_WHILE, Symbol(state, "while") );}
+	{{p = ((te))-1;}token( TOKEN_WHILE, Symbol::whileSym );}
 	break;
 	case 13:
-	{{p = ((te))-1;}token( TOKEN_REPEAT, Symbol(state, "repeat") );}
+	{{p = ((te))-1;}token( TOKEN_REPEAT, Symbol::repeatSym );}
 	break;
 	case 14:
-	{{p = ((te))-1;}token( TOKEN_FOR, Symbol(state, "for") );}
+	{{p = ((te))-1;}token( TOKEN_FOR, Symbol::forSym );}
 	break;
 	case 15:
-	{{p = ((te))-1;}token( TOKEN_IF, Symbol(state, "if") );}
+	{{p = ((te))-1;}token( TOKEN_IF, Symbol::ifSym );}
 	break;
 	case 16:
-	{{p = ((te))-1;}token( TOKEN_IN, Symbol(state, "in") );}
+	{{p = ((te))-1;}token( TOKEN_IN );}
 	break;
 	case 17:
-	{{p = ((te))-1;}token( TOKEN_ELSE, Symbol(state, "else") );}
+	{{p = ((te))-1;}token( TOKEN_ELSE );}
 	break;
 	case 18:
-	{{p = ((te))-1;}token( TOKEN_NEXT, Symbol(state, "next") );}
+	{{p = ((te))-1;}token( TOKEN_NEXT, Symbol::nextSym );}
 	break;
 	case 19:
-	{{p = ((te))-1;}token( TOKEN_BREAK, Symbol(state, "break") );}
+	{{p = ((te))-1;}token( TOKEN_BREAK, Symbol::breakSym );}
 	break;
 	case 22:
 	{{p = ((te))-1;}token( TOKEN_SYMBOL, Symbol(state, std::string(ts, te-ts)) );}

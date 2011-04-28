@@ -6,7 +6,7 @@ void Compiler::compileConstant(Value const& expr, Closure& closure) {
 	closure.code().push_back(Instruction(ByteCode::kget, closure.constants().size()-1));
 }
 
-void Compiler::compileGetSymbol(Symbol const& symbol, Closure& closure) {
+void Compiler::compileSymbol(Symbol const& symbol, Closure& closure) {
 	closure.code().push_back(Instruction(ByteCode::get, symbol.i));
 }
 
@@ -15,7 +15,7 @@ void Compiler::compileOp(Call const& call, Closure& closure) {
 	std::string funcStr = func.toString(state);
 	if(funcStr == ".Internal") {
 		if(call[1].type == Type::R_symbol) {
-			// The riposte way... .Internal is a function on functions, returning the internal function
+			// The riposte way... .Internal is a function on symbols, returning the internal function
 			closure.code().push_back(Instruction(ByteCode::iget, Symbol(call[1]).i));
 		} else if(call[1].type == Type::R_call) {
 			// The R way... .Internal is a function on calls
@@ -477,15 +477,15 @@ void Compiler::compileExpression(Expression const& values, Closure& closure) {
 
 void Compiler::compile(Value const& expr, Closure& closure) {
 
-	switch(expr.type.internal())
+	switch(expr.type.Enum())
 	{
-		case Type::ER_symbol:
-			compileGetSymbol(Symbol(expr), closure);
+		case Type::E_R_symbol:
+			compileSymbol(Symbol(expr), closure);
 			break;
-		case Type::ER_call:
+		case Type::E_R_call:
 			compileCall(Call(expr), closure);
 			break;
-		case Type::ER_expression:
+		case Type::E_R_expression:
 			compileExpression(Expression(expr), closure);
 			break;
 		default:

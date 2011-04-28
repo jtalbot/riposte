@@ -26,10 +26,9 @@ inline std::string toString(State const& state, double a) {
 	return *(uint64_t*)&a == *(uint64_t*)&Double::NAelement ? "NA" : doubleToStr(a);
 }  
 
-inline std::string toString(State const& state, uint64_t a) {
-	return a == Character::NAelement ? "NA" : std::string("\"") + state.outString(a) + "\"";
+inline std::string toString(State const& state, Symbol const& a) {
+	return a == Character::NAelement ? "NA" : std::string("\"") + a.toString(state) + "\"";
 }  
-
 
 template<class T>
 std::string stringifyVector(State const& state, T const& v) {
@@ -45,7 +44,7 @@ std::string stringifyVector(State const& state, T const& v) {
 	for(uint64_t i = 0; i < length; i++) {
 		if(names.type == Type::R_character) {
 			Character c(names);
-			maxlength = std::max((uint64_t)maxlength, (uint64_t)state.outString(c[i]).length());
+			maxlength = std::max((uint64_t)maxlength, (uint64_t)c[i].toString(state).length());
 		}
 		maxlength = std::max((uint64_t)maxlength, (uint64_t)toString(state, v[i]).length());
 	}
@@ -56,7 +55,7 @@ std::string stringifyVector(State const& state, T const& v) {
 			Character c(names);
 			result = result + pad("", indexwidth+2);
 			for(uint64_t j = 0; j < perline && i+j < length; j++) {
-				result = result + pad(state.outString(c[i+j]), maxlength+1);
+				result = result + pad(c[i+j].toString(state), maxlength+1);
 			}
 			result = result + "\n";
 		}
@@ -75,39 +74,39 @@ std::string stringifyVector(State const& state, T const& v) {
 std::string State::stringify(Value const& value) const {
 	std::string result = "[1]";
 	bool dots = false;
-	switch(value.type.internal())
+	switch(value.type.Enum())
 	{
-		case Type::ER_null:
+		case Type::E_R_null:
 			return "NULL";
-		case Type::ER_raw:
+		case Type::E_R_raw:
 			return "raw";
-		case Type::ER_logical:
+		case Type::E_R_logical:
 		{
 			Logical v(value);
 			return stringifyVector(*this, v);
 		}
-		case Type::ER_integer:
+		case Type::E_R_integer:
 		{
 			Integer v(value);
 			return stringifyVector(*this, v);
 		}
-		case Type::ER_double:
+		case Type::E_R_double:
 		{
 			Double v(value);
 			return stringifyVector(*this, v);
 		}
-		case Type::ER_complex:		
+		case Type::E_R_complex:		
 		{
 			//for(uint64_t i = 0; i < length; i++) result = result + ((int64_t*)ptr)[i];
 			return "complex";
 		}
-		case Type::ER_character:
+		case Type::E_R_character:
 		{
 			Character v(value);
 			return stringifyVector(*this, v);
 		}
-		case Type::ER_list:
-		case Type::ER_pairlist:
+		case Type::E_R_list:
+		case Type::E_R_pairlist:
 		{
 			List v(value);
 			Value names = getNames(v.attributes);
@@ -118,10 +117,10 @@ std::string State::stringify(Value const& value) const {
 			if(names.type == Type::R_character) {
 				Character n(names);
 				for(uint64_t i = 0; i < length; i++) {
-					if(outString(n[i])=="")
+					if(n[i].toString(*this)=="")
 						result = result + "[[" + intToStr(i+1) + "]]\n";
 					else
-						result = result + "$" + outString(n[i]) + "\n";
+						result = result + "$" + n[i].toString(*this) + "\n";
 					result = result + stringify(v[i]) + "\n";
 					if(i < length-1) result = result + "\n";
 				}
@@ -135,22 +134,22 @@ std::string State::stringify(Value const& value) const {
 			if(dots) result = result + " ...\n\n";
 			return result;
 		}
-		case Type::ER_symbol:
+		case Type::E_R_symbol:
 		{
-			result = "`" + outString(Symbol(value).i) + "`";
+			result = "`" + Symbol(value).toString(*this) + "`";
 			return result;
 		}
-		case Type::ER_function:
+		case Type::E_R_function:
 		{
 			//result = "function: " + intToHexStr((uint64_t)value.p) /*+ "\n" + Function(*this).body().toString()*/;
-			result = outString(Function(value).str()[0]);
+			result = (Function(value).str()[0]).toString(*this);
 			return result;
 		}
-		case Type::ER_environment:
+		case Type::E_R_environment:
 		{
 			return "environment";
 		}
-		case Type::EI_closure:
+		case Type::E_I_closure:
 		{
 			Closure b(value);
 			std::string r = "block:\nconstants: " + intToStr(b.constants().size()) + "\n";

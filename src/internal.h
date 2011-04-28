@@ -79,7 +79,21 @@ template<> struct Cast<Integer, Logical> {
 	typedef Logical R;
 	static Logical::Element eval(Integer::Element const& i) { return i != 0 ? 1 : 0; }
 };
-
+template<> struct Cast<Character, Logical> {
+	typedef Character A;
+	typedef Logical R;
+	static Logical::Element eval(Character::Element const& i) { return i.i != 0 ? 1 : 0; }
+};
+template<> struct Cast<Character, Integer> {
+	typedef Character A;
+	typedef Integer R;
+	static Integer::Element eval(Character::Element const& i) { return i.i != 0 ? 1 : 0; }
+};
+template<> struct Cast<Character, Double> {
+	typedef Character A;
+	typedef Double R;
+	static Double::Element eval(Character::Element const& i) { return i.i != 0 ? 1 : 0; }
+};
 
 template<class X, class Y, class Z>
 struct UnaryOp {

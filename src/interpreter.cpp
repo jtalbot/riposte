@@ -51,12 +51,12 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 		{
 			uint64_t i = 0;
 			for(i = 0; i < std::min(args.length(), pnames.length()); ++i) {
-				if(pnames[i] == DOTS_STRING)
+				if(Symbol(pnames[i]) == Symbol::dots)
 					break; 
 				fenv->assign(pnames[i], args[i]);
 			}
-			if(i < args.length() && pnames[i] == DOTS_STRING) {
-				fenv->assign(DOTS_STRING, List(Subset(args, i, args.length()-i)));
+			if(i < args.length() && Symbol(pnames[i]) == Symbol::dots) {
+				fenv->assign(Symbol::dots, List(Subset(args, i, args.length()-i)));
 			}
 		}
 		// call arguments are named, do matching by name
@@ -70,7 +70,7 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 			for(uint64_t i = 0; i < args.length(); ++i) {
 				if(argNames[i] != 0) {
 					for(uint64_t j = 0; j < parameters.length(); ++j) {
-						if(pnames[j] != DOTS_STRING && argNames[i] == pnames[j]) {
+						if(Symbol(pnames[j]) != Symbol::dots && argNames[i] == pnames[j]) {
 							fenv->assign(pnames[j], args[i]);
 							assignment[i] = j+1;
 							set[j] = i+1;
@@ -81,11 +81,11 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 			}
 			// named args, search for incomplete matches
 			for(uint64_t i = 0; i < args.length(); ++i) {
-				std::string a = state.outString(argNames[i]);
+				std::string a = argNames[i].toString(state);
 				if(argNames[i] != 0 && assignment[i] == 0) {
 					for(uint64_t j = 0; j < parameters.length(); ++j) {
-						if(set[j] == 0 && pnames[j] != DOTS_STRING &&
-							state.outString(pnames[i]).compare( 0, a.size(), a ) == 0 ) {	
+						if(set[j] == 0 && pnames[j] != Symbol::dots &&
+							pnames[i].toString(state).compare( 0, a.size(), a ) == 0 ) {	
 							fenv->assign(pnames[j], args[i]);
 							assignment[i] = j+1;
 							set[j] = i+1;
@@ -99,7 +99,7 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 			for(uint64_t i = 0; i < args.length(); ++i) {
 				if(argNames[i] == 0) {
 					for(; firstEmpty < parameters.length(); ++firstEmpty) {
-						if(pnames[firstEmpty] == DOTS_STRING) {
+						if(pnames[firstEmpty] == Symbol::dots) {
 							break;
 						}
 						fenv->assign(pnames[firstEmpty], args[i]);
@@ -125,7 +125,7 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 				}
 				setNames(values.attributes, names);
 				
-				fenv->assign(DOTS_STRING, values);
+				fenv->assign(Symbol::dots, values);
 			}
 		}
 		//env_index++;
@@ -151,7 +151,7 @@ static int64_t call_op(State& state, Stack& stack, Closure const& closure, Instr
 		// If its in the dots it must already be a promise, thus no need to make a promise again.
 		// Need to do the same for the names...
 		Value v;
-		state.env->get(state, Symbol(DOTS_STRING), v);
+		state.env->get(state, Symbol::dots, v);
 		List dots(v);
 		Vector expanded(Type::R_list, parameters.length() + dots.length()-1);
 		Insert(parameters, 0, expanded, 0, call.dots()-1);
@@ -277,7 +277,7 @@ static int64_t forend_op(State& state, Stack& stack, Closure const& closure, Ins
 	// increment the loop variable
 	state.loopIndex++;
 	if(state.loopIndex >= state.loopEnd) { stack.push(Null::singleton); return 1;	}
-	//state.env->assign(Symbol(inst.b), Element(Vector(state.loopVector), state.loopIndex));
+	state.env->assign(Symbol(inst.b), Element(Vector(state.loopVector), state.loopIndex));
 	return -inst.a;
 }
 static int64_t iforbegin_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
@@ -285,9 +285,9 @@ static int64_t iforbegin_op(State& state, Stack& stack, Closure const& closure, 
 	double m = asReal1(stack.pop());
 	state.loopIndex = (int64_t)m;
 	state.loopStep = n > m ? 1 : -1;
-	state.loopEnd = (int64_t)n;
-	if(state.loopIndex <= 0 >= state.loopEnd) { stack.push(Null::singleton); return inst.a;	}
-	//state.env->assign(Symbol(inst.b), Element(loopvec, stack.peek().i));
+	state.loopEnd = (int64_t)n+1;
+	if(state.loopIndex >= state.loopEnd) { stack.push(Null::singleton); return inst.a;	}
+	state.env->assign(Symbol(inst.b), Integer::c(state.loopIndex));
 	return 1;
 }
 static int64_t iforend_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
@@ -296,7 +296,7 @@ static int64_t iforend_op(State& state, Stack& stack, Closure const& closure, In
 	// increment the loop variable
 	state.loopIndex++;
 	if(state.loopIndex >= state.loopEnd) { stack.push(Null::singleton); return 1;	}
-	//state.env->assign(Symbol(inst.b), Element(Vector(stack.peek(1)), stack.peek().i));
+	state.env->assign(Symbol(inst.b), Integer::c(state.loopIndex));
 	return -inst.a;
 }
 static int64_t whilebegin_op(State& state, Stack& stack, Closure const& closure, Instruction const& inst) {
@@ -513,7 +513,7 @@ void eval(State& state, Closure const& closure) {
 			Instruction const& inst = closure.code()[i];
 			closure.threadedCode().push_back(
 				Instruction(
-					inst.bc == ByteCode::ret ? (void*)&&DONE : labels[inst.bc.internal()],
+					inst.bc == ByteCode::ret ? (void*)&&DONE : labels[inst.bc.Enum()],
 					inst.a, inst.b, inst.c));
 		}
 	}

@@ -150,7 +150,7 @@ uint64_t assignDim(State& state, Call const& call, List const& args)
 Type cTypeCast(Value const& v, Type t)
 {
 	Type r;
-	r.v = std::max(v.type.internal(), t.internal());
+	r.v = std::max(v.type.Enum(), t.Enum());
 	return r;
 }
 
@@ -232,7 +232,7 @@ uint64_t subset(State& state, Call const& call, List const& args) {
                 SubsetIndex< Integer, Double >::eval(a, i).toVector(r);
         }
         else if(a.type == Type::R_double && i.type == Type::R_integer) {
-                SubsetIndex< Integer, Double >::eval(a, i).toVector(r);
+                SubsetIndex< Double, Integer >::eval(a, i).toVector(r);
         }
         else if(a.type == Type::R_integer && i.type == Type::R_integer) {
                 SubsetIndex< Integer, Integer >::eval(a, i).toVector(r);
@@ -278,7 +278,7 @@ uint64_t subset2(State& state, Call const& call, List const& args) {
         Value a = force(state, args[0]);
         Value b = force(state, args[1]);
 	if(b.type == Type::R_character) {
-		uint64_t i = Character(b)[0];
+		Symbol i = Character(b)[0];
 		Value r = getNames(a.attributes);
 		if(r.type != Type::R_null) {
 			Character c(r);
@@ -377,7 +377,7 @@ uint64_t switch_fn(State& state, Call const& call, List const& args) {
 			}
 		}
 		for(uint64_t i = 1; args.length(); i++) {
-			if(names[i] == EMPTY_STRING) {
+			if(names[i] == Symbol::empty) {
 				state.stack.push(force(state, args[i]));
 				return 1;
 			}
@@ -418,7 +418,7 @@ uint64_t stop_fn(State& state, Call const& call, List const& args) {
 	std::string message = "user stop";
 	if(args.length() > 0) {
 		if(args[0].type == Type::R_character && Character(args[0]).length() > 0) {
-			message = state.outString(Character(args[0])[0]);
+			message = Character(args[0])[0].toString(state);
 		}
 	}
 	_error(message);
@@ -429,7 +429,7 @@ uint64_t warning_fn(State& state, Call const& call, List const& args) {
 	std::string message = "user warning";
 	if(args.length() > 0) {
 		if(args[0].type == Type::R_character && Character(args[0]).length() > 0) {
-			message = state.outString(Character(args[0])[0]);
+			message = Character(args[0])[0].toString(state);
 		}
 	}
 	_warning(state, message);

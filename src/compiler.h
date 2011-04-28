@@ -25,7 +25,7 @@ private:
 	void compile(Value const& expr, Closure& closure);		// compile into existing closure
 
 	void compileConstant(Value const& expr, Closure& closure);
-	void compileGetSymbol(Symbol const& symbol, Closure& closure); 
+	void compileSymbol(Symbol const& symbol, Closure& closure); 
 	void compileOp(Call const& call, Closure& closure); 
 	void compileCall(Call const& call, Closure& closure); 
 	void compileExpression(Expression const& values, Closure& closure);

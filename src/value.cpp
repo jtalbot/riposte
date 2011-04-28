@@ -10,8 +10,8 @@ union {
 
 const Null Null::singleton = Null(0);
 const bool Character::CheckNA = true;
-const uint64_t Character::NAelement = 0;
-const Character Character::NA = Character(1);
+const Symbol Character::NAelement = Symbol::NA;
+const Character Character::NA = Character::c(Symbol::NA);
 const bool Logical::CheckNA = true;
 const unsigned char Logical::NAelement = 255;
 const Logical Logical::NA = Logical::c(255);
@@ -27,12 +27,25 @@ const int64_t Integer::NAelement = INT_MIN;
 const Integer Integer::NA = Integer::c(INT_MIN);
 const Value Value::NIL = {{0}, 0, Type::I_nil, 0}; 
 
+DEFINE_ENUM(Symbol, SYMBOLS_ENUM)
+
+	State::State(Environment* env, Environment* baseenv) {
+		this->env = env;
+		this->baseenv = baseenv;
+
+		// insert predefined symbols into table at known positions (corresponding to their enum value)
+#define ENUM_STRING_TABLE(name, string, EnumType) \
+	stringTable[string] = EnumType::E_##name; \
+	reverseStringTable[EnumType::E_##name] = string;\
+
+		SYMBOLS_ENUM(ENUM_STRING_TABLE,Symbol);
+	}
 
 	Function::Function(List const& parameters, Value const& body, Character const& str, Environment* s) 
 		: inner(new Inner(parameters, body, str, s)), attributes(0) {
 		Character names(getNames(parameters.attributes));
 		uint64_t i = 0;
-		for(;i < names.length(); i++) if(names[i] == DOTS_STRING) inner->dots = i+1;
+		for(;i < names.length(); i++) if(Symbol(names[i]) == Symbol::dots) inner->dots = i+1;
 	}
 
 	CompiledCall::CompiledCall(Call const& call, State& state) {
@@ -42,7 +55,7 @@ const Value Value::NIL = {{0}, 0, Type::I_nil, 0};
 		uint64_t j = 0;
 		List parameters(call.length()-1);
 		for(uint64_t i = 1; i < call.length(); i++) {
-			if(call[i].type == Type::R_symbol && call[i].i == DOTS_STRING) {
+			if(call[i].type == Type::R_symbol && Symbol(call[i]) == Symbol::dots) {
 				parameters[j] = call[i];
 				inner->dots = i;
 			} else if(call[i].type == Type::R_call ||

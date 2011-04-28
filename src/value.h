@@ -14,6 +14,9 @@
 #include "type.h"
 #include "bc.h"
 #include "common.h"
+#include "enum.h"
+#include "symbols.h"
+#include "exceptions.h"
 
 struct Attributes;
 
@@ -83,9 +86,6 @@ struct Stack : public gc {
 
 class Environment;
 
-#define EMPTY_STRING 0
-#define DOTS_STRING 1
-
 // The riposte state
 struct State {
 	Stack stack;
@@ -102,22 +102,11 @@ struct State {
 	int64_t loopStep;
 	int64_t loopEnd;
 
-	State(Environment* env, Environment* baseenv) {
-		this->env = env;
-		this->baseenv = baseenv;
-
-		// insert strings into table that must be at known positions...
-		//   the empty string
-		stringTable[""] = EMPTY_STRING;
-		reverseStringTable[EMPTY_STRING] = "";
-		//   the dots string
-		stringTable["..."] = DOTS_STRING;
-		reverseStringTable[DOTS_STRING] = "...";
-	}
+	State(Environment* env, Environment* baseenv);
 
 	uint64_t inString(std::string const& s) {
 		if(stringTable.find(s) == stringTable.end()) {
-			uint64_t index = stringTable.size();
+			uint64_t index = stringTable.size()+1; // due to NA string which needs an index, but not an actual entry in the table.
 			stringTable[s] = index;
 			reverseStringTable[index] = s;
 			return index;
@@ -137,22 +126,27 @@ struct State {
 
 struct Symbol {
 	uint64_t i;
-	Attributes* attributes;
 
-	Symbol() : i(0), attributes(0) {}						// Defaults to the empty symbol...
-	Symbol(uint64_t index) : i(index), attributes(0) {}
-	Symbol(State& state, std::string const& s) : i(state.inString(s)), attributes(0) {}
+#define DECLARE_SYMBOLS(EnumType,ENUM_DEF) \
+  enum EnumValue { \
+    ENUM_DEF(ENUM_VALUE,0) \
+  }; \
+  ENUM_DEF(ENUM_CONST,EnumType) \
+
+	DECLARE_SYMBOLS(Symbol,SYMBOLS_ENUM)
+
+	Symbol() : i(1) {}						// Defaults to the empty symbol...
+	Symbol(uint64_t index) : i(index) {}
+	Symbol(State& state, std::string const& s) : i(state.inString(s)) {}
 
 	Symbol(Value const& v) {
 		assert(v.type == Type::R_symbol); 
 		i = v.i;
-		attributes = v.attributes;
 	}
 
 	void toValue(Value& v) const {
 		v.type = Type::R_symbol;
 		v.i = i;
-		v.attributes = attributes;
 	}
 
 	operator Value() const {
@@ -161,10 +155,14 @@ struct Symbol {
 		return v;
 	}
 
-	std::string const& toString(State& state) { return state.outString(i); }
+	std::string const& toString(State const& state) const { return state.outString(i); }
 	bool operator<(Symbol const& other) const { return i < other.i;	}
 	bool operator==(Symbol const& other) const { return i == other.i; }
 	bool operator!=(Symbol const& other) const { return i != other.i; }
+
+	bool operator==(uint64_t other) const { return i == other; }
+
+	uint64_t Enum() const { return i; }
 };
 
 
@@ -213,7 +211,7 @@ struct Vector {
 	}
 };
 
-template<Type::Value VectorType, class ElementType, bool Pack>
+template<Type::EnumValue VectorType, class ElementType, bool Pack>
 struct VectorImpl {
 	union {
 		Vector::Inner* inner;
@@ -242,11 +240,11 @@ struct VectorImpl {
 	}
 
 	VectorImpl(Value const& v) : packedData(v.i), attributes(v.attributes), packed(v.packed) {
-		assert(v.type.internal() == VectorType); 
+		assert(v.type.Enum() == VectorType); 
 	}
 	
 	VectorImpl(Vector const& v) : packedData(v.packedData), attributes(v.attributes), packed(v.packed) {
-		assert(v.type.internal() == VectorType); 
+		assert(v.type.Enum() == VectorType); 
 	}
 
 	void toValue(Value& v) const {
@@ -310,9 +308,9 @@ struct Name : public VectorImpl<Type, type, Pack> \
 	  Name(Vector const& v) : VectorImpl<Type, type, Pack>(v) {}
 /* note missing }; */
 
-VECTOR_IMPL(Null, Type::ER_null, Value, true) 
+VECTOR_IMPL(Null, Type::E_R_null, Value, true) 
 	const static Null singleton; };
-VECTOR_IMPL(Logical, Type::ER_logical, unsigned char, true)
+VECTOR_IMPL(Logical, Type::E_R_logical, unsigned char, true)
 	static Logical c(unsigned char c) { Logical r(1); r[0] = c; return r; }
 	static bool isNA(unsigned char c) { return c == NAelement; }
 	const static bool CheckNA;
@@ -320,13 +318,13 @@ VECTOR_IMPL(Logical, Type::ER_logical, unsigned char, true)
 	const static Logical NA;
 	const static Logical True;
 	const static Logical False; };
-VECTOR_IMPL(Integer, Type::ER_integer, int64_t, true)
+VECTOR_IMPL(Integer, Type::E_R_integer, int64_t, true)
 	static Integer c(double c) { Integer r(1); r[0] = c; return r; }
 	static bool isNA(int64_t c) { return c == NAelement; }
 	const static bool CheckNA;
 	const static int64_t NAelement;
 	const static Integer NA; };
-VECTOR_IMPL(Double, Type::ER_double, double, true)
+VECTOR_IMPL(Double, Type::E_R_double, double, true)
 	static Double c(double c) { Double r(1); r[0] = c; return r; }
 	static bool isNA(double c) { return *(uint64_t*)&c == *(uint64_t*)&NAelement; }
 	const static bool CheckNA;
@@ -334,52 +332,52 @@ VECTOR_IMPL(Double, Type::ER_double, double, true)
 	const static Double NA;
 	const static Double Inf;
 	const static Double NaN; };
-VECTOR_IMPL(Complex, Type::ER_complex, _complex, false)
+VECTOR_IMPL(Complex, Type::E_R_complex, _complex, false)
 	static Complex c(double r, double i=0) { Complex c(1); c[0] = _complex(r,i); return c; }
 	static Complex c(_complex c) { Complex r(1); r[0] = c; return r; } };
-VECTOR_IMPL(Character, Type::ER_character, uint64_t, true)
-	static Character c(State& state, std::string const& s) { Character c(1); c[0] = state.inString(s); return c; }
-	static Character c(uint64_t s) { Character c(1); c[0] = s; return c; }
-	static bool isNA(uint64_t c) { return c == NAelement; }
+VECTOR_IMPL(Character, Type::E_R_character, Symbol, true)
+	static Character c(State& state, std::string const& s) { Character c(1); c[0] = Symbol(state, s); return c; }
+	static Character c(Symbol const& s) { Character c(1); c[0] = s; return c; }
+	static bool isNA(Symbol const& c) { return c == Symbol::NA; }
 	const static bool CheckNA;
-	const static uint64_t NAelement;
+	const static Symbol NAelement;
 	const static Character NA; };
-VECTOR_IMPL(Raw, Type::ER_raw, unsigned char, true) };
-VECTOR_IMPL(List, Type::ER_list, Value, false) 
+VECTOR_IMPL(Raw, Type::E_R_raw, unsigned char, true) };
+VECTOR_IMPL(List, Type::E_R_list, Value, false) 
 	static List c(Value v0) { List c(1); c[0] = v0; return c; }
 	static List c(Value v0, Value v1) { List c(2); c[0] = v0; c[1] = v1; return c; }
 	static List c(Value v0, Value v1, Value v2) { List c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } };
-VECTOR_IMPL(PairList, Type::ER_pairlist, Value, false) 
+VECTOR_IMPL(PairList, Type::E_R_pairlist, Value, false) 
 	PairList(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; }
 	static PairList c(Value v0) { PairList c(1); c[0] = v0; return c; }
 	static PairList c(Value v0, Value v1) { PairList c(2); c[0] = v0; c[1] = v1; return c; }
 	static PairList c(Value v0, Value v1, Value v2) { PairList c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; }
 	operator List() {Value v = *this; v.type = Type::R_list; return List(v);} };
-VECTOR_IMPL(Call, Type::ER_call, Value, false) 
+VECTOR_IMPL(Call, Type::E_R_call, Value, false) 
 	Call(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; }
 	static Call c(Value v0) { Call c(1); c[0] = v0; return c; }
 	static Call c(Value v0, Value v1) { Call c(2); c[0] = v0; c[1] = v1; return c; }
 	static Call c(Value v0, Value v1, Value v2) { Call c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; }
 	static Call c(Value v0, Value v1, Value v2, Value v3) { Call c(4); c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; return c; } };
-VECTOR_IMPL(Expression, Type::ER_expression, Value, false) 
+VECTOR_IMPL(Expression, Type::E_R_expression, Value, false) 
 	Expression(List const& v) { inner = v.inner; attributes = v.attributes; packed = v.packed; }
 	static Expression c(Value v0) { Expression c(1); c[0] = v0; return c; }
 	static Expression c(Value v0, Value v1) { Expression c(2); c[0] = v0; c[1] = v1; return c; }
 	static Expression c(Value v0, Value v1, Value v2) { Expression c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } };
 
 inline Vector::Vector(Type const& t, uint64_t length) {
-	switch(t.internal()) {
-		case Type::ER_logical: Logical(length).toVector(*this); break;	
-		case Type::ER_integer: Integer(length).toVector(*this); break;	
-		case Type::ER_double: Double(length).toVector(*this); break;	
-		case Type::ER_complex: Complex(length).toVector(*this); break;	
-		case Type::ER_character: Character(length).toVector(*this); break;	
-		case Type::ER_raw: Raw(length).toVector(*this); break;	
-		case Type::ER_list: List(length).toVector(*this); break;	
-		case Type::ER_pairlist: PairList(length).toVector(*this); break;	
-		case Type::ER_call: Call(length).toVector(*this); break;	
-		case Type::ER_expression: Expression(length).toVector(*this); break;	
-		default: printf("Invalid vector type\n"); assert(false); break;
+	switch(t.Enum()) {
+		case Type::E_R_logical: Logical(length).toVector(*this); break;	
+		case Type::E_R_integer: Integer(length).toVector(*this); break;	
+		case Type::E_R_double: Double(length).toVector(*this); break;	
+		case Type::E_R_complex: Complex(length).toVector(*this); break;	
+		case Type::E_R_character: Character(length).toVector(*this); break;	
+		case Type::E_R_raw: Raw(length).toVector(*this); break;	
+		case Type::E_R_list: List(length).toVector(*this); break;	
+		case Type::E_R_pairlist: PairList(length).toVector(*this); break;	
+		case Type::E_R_call: Call(length).toVector(*this); break;	
+		case Type::E_R_expression: Expression(length).toVector(*this); break;	
+		default: throw RuntimeError("attempt to create invalid vector type"); break;
 	};
 }
 
@@ -599,8 +597,8 @@ public:
 	}
 
 	Value assign(Symbol const& name, Value const& value) {
-		if(name.i < 1) {
-			printf("Cannot assign to that symbol\n");
+		if(name.i < 2) {
+			throw RiposteError("cannot assign to that symbol");
 		}
 		//if(container.find(name) == container.end())
 		//	size++;

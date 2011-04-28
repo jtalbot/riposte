@@ -2,3 +2,4 @@
 #include "type.h"
 
 DEFINE_ENUM(Type, TYPE_ENUM)
+DEFINE_ENUM_TO_STRING(Type, TYPE_ENUM)
