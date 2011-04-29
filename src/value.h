@@ -20,10 +20,10 @@
 
 struct Attributes;
 
-enum Result { OK, ERROR };
-
 /** Basic value type */
 struct Value {
+	// Careful: for efficiency, Value is not initialized by default.
+	
 	union {
 		void* p;
 		double d;
@@ -33,8 +33,6 @@ struct Value {
 	Type type;
 	uint64_t packed:2;
 
-	//Value() {t=Type::NIL;}	// Careful: for efficiency, Value is not initialized by default.
-	
 	// not right for scalar doubles and maybe other stuff, careful!
 	bool operator==(Value const& other) {
 		return type == other.type && i == other.i;
@@ -509,10 +507,6 @@ public:
  	void init(Environment* s, Environment* d) {
 		this->s = s;
 		this->d = d;
-	}
-
-	Environment* dynamic() const {
-		return this->d;
 	}
 
 	bool getRaw(Symbol const& name, Value& value) const {

@@ -1,5 +1,4 @@
 #!/bin/bash
 
-export R_HOME=`R RHOME`
 DIR="$( cd "$( dirname "$0" )" && pwd )"
 rlwrap $DIR/bin/riposte $@
