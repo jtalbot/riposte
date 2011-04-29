@@ -111,7 +111,7 @@ int dostdin(State& state) {
 			if(value.type == Type::I_nil) continue;
 			//std::cout << "Parsed: " << value.toString() << std::endl;
 			Closure closure = Compiler::compile(state, value);
-			std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
+			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
 			eval(state, closure);
 			result = state.registers[0];	
 			std::cout << state.stringify(result) << std::endl;
@@ -158,7 +158,7 @@ static int dofile(const char * file, State& state, bool echo) {
 	for(uint64_t i = 0; i < expressions.length(); i++) {
 		try {
 			Closure closure = Compiler::compile(state, expressions[i]);
-			std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
+			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
 			eval(state, closure);
 			Value result = state.registers[0];
 			if(echo)
