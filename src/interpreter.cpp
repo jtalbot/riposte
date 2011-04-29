@@ -503,6 +503,13 @@ static int64_t ret_op(State& state, Closure const& closure, Instruction const& i
 
 #define THREADED_INTERPRETER
 
+
+// 
+//
+//    Main interpreter loop 
+//
+//
+
 //__attribute__((__noinline__,__noclone__)) 
 void eval(State& state, Closure const& closure) {
 	Environment* oldenv = state.env;
