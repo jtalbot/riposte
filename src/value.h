@@ -135,6 +135,10 @@ struct Symbol {
 	bool operator==(uint64_t other) const { return i == other; }
 
 	uint64_t Enum() const { return i; }
+
+	bool isAssignable() const {
+		return !(*this == Symbol::NA || *this == Symbol::empty);
+	}
 };
 
 
@@ -250,17 +254,6 @@ struct VectorImpl {
 		t.v = VectorType;
 		return t;
 	}
-
-	/*void subset(uint64_t start, uint64_t length, Value& v) const {
-		VectorInner* i = new VectorInner();
-		i->length = length;
-		i->width = inner->width;
-		i->data = new (GC) Element[length];
-		for(uint64_t j = start; j < start+length; j++)
-			((Element*)(i->data))[j-start] = (*this)[j];
-		v.p = i;
-		v.t = VectorType;
-	}*/
 
 protected:
 	VectorImpl() {inner = 0;packed=0;}
@@ -505,11 +498,10 @@ class Environment : public gc {
 private:
 	Environment *s, *d;		// static and dynamic scopes respectively
 	typedef std::map<Symbol, Value, std::less<Symbol>, gc_allocator<std::pair<Symbol, Value> > > Container;
-	uint64_t size;
 	Container container;
 public:
-	Environment() : s(0), d(0), size(0) {}
-	Environment(Environment* s, Environment* d) : s(s), d(d), size(0) {}
+	Environment() : s(0), d(0) {}
+	Environment(Environment* s, Environment* d) : s(s), d(d) {}
 
 	Environment* staticParent() const { return s; }
 	Environment* dynamicParent() const { return d; }
@@ -517,7 +509,6 @@ public:
  	void init(Environment* s, Environment* d) {
 		this->s = s;
 		this->d = d;
-		this->size = 0;
 	}
 
 	Environment* dynamic() const {
@@ -525,29 +516,30 @@ public:
 	}
 
 	bool getRaw(Symbol const& name, Value& value) const {
-		if(container.find(name) != container.end()) {
-			value = container.find(name)->second;
+		Container::const_iterator i = container.find(name);
+		if(i != container.end()) {
+			value = i->second;
 			return true;
 		}
 		return false;
 	}
 
 	bool get(State& state, Symbol const& name, Value& value) {
-		if(container.find(name) != container.end()) {
-			value = container.find(name)->second;
+		Container::const_iterator i = container.find(name);
+		if(i != container.end()) {
+			value = i->second;
 			if(value.type == Type::I_promise) {
 				while(value.type == Type::I_promise) {
 					eval(state, Closure(value));
 					value = state.registers[0];
 				}
+				container[name] = value;
 			} else if(value.type == Type::I_default) {
 				eval(state, Closure(value).bind(this));
-				value = state.registers[0];
+				container[name] = value = state.registers[0];
 			}
-			container[name] = value;
 			return true;
-		}
-		if(s != 0) {
+		} else if(s != 0) {
 			return s->get(state, name, value);
 		} else {
 			value = Null::singleton;
@@ -568,19 +560,11 @@ public:
 		closure = Closure(value);
 	}
 
-	Value assign(Symbol const& name, Value const& value) {
-		if(name.i < 2) {
-			throw RiposteError("cannot assign to that symbol");
-		}
-		//if(container.find(name) == container.end())
-		//	size++;
+	void assign(Symbol const& name, Value const& value) {
 		container[name] = value;
-		return value;
 	}
 
 	void rm(Symbol const& name) {
-		if(container.find(name) != container.end())
-			size--;
 		container.erase(name);
 	}
 };

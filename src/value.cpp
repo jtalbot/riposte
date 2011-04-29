@@ -28,7 +28,8 @@ const int64_t Integer::NAelement = INT_MIN;
 const Integer Integer::NA = Integer::c(INT_MIN);
 const Value Value::NIL = {{0}, 0, Type::I_nil, 0}; 
 
-DEFINE_ENUM(Symbol, SYMBOLS_ENUM)
+#define ENUM_CONST_CONSTRUCT(name, string, EnumType) const EnumType EnumType::name(EnumType::E_##name);
+SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 
 	State::State(Environment* env, Environment* baseenv) {
 		this->env = env;

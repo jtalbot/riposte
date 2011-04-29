@@ -205,6 +205,9 @@ static int64_t iget_op(State& state, Closure const& closure, Instruction const& 
 	return 1;
 }
 static int64_t assign_op(State& state, Closure const& closure, Instruction const& inst) {
+	if(!Symbol(inst.a).isAssignable()) {
+		throw RiposteError("cannot assign to that symbol");
+	}
 	state.env->assign(Symbol(inst.a), state.registers[inst.c]);
 	// assign assumes that source is equal to destination
 	return 1;
@@ -278,11 +281,10 @@ static int64_t forbegin_op(State& state, Closure const& closure, Instruction con
 	return 1;
 }
 static int64_t forend_op(State& state, Closure const& closure, Instruction const& inst) {
-	// increment the loop variable
-	state.loopIndex++;
-	if(state.loopIndex >= state.loopEnd) { return 1; }
-	state.env->assign(Symbol(inst.b), Element(Vector(state.loopVector), state.loopIndex));
-	return -inst.a;
+	if(++state.loopIndex < state.loopEnd) { 
+		state.env->assign(Symbol(inst.b), Element(Vector(state.loopVector), state.loopIndex));
+		return inst.a; 
+	} else return 1;
 }
 static int64_t iforbegin_op(State& state, Closure const& closure, Instruction const& inst) {
 	double m = asReal1(state.registers[inst.c]);
@@ -296,11 +298,10 @@ static int64_t iforbegin_op(State& state, Closure const& closure, Instruction co
 	return 1;
 }
 static int64_t iforend_op(State& state, Closure const& closure, Instruction const& inst) {
-	// increment the loop variable
-	state.loopIndex++;
-	if(state.loopIndex >= state.loopEnd) { return 1; }
-	state.env->assign(Symbol(inst.b), Integer::c(state.loopIndex));
-	return -inst.a;
+	if(++state.loopIndex < state.loopEnd) { 
+		state.env->assign(Symbol(inst.b), Integer::c(state.loopIndex));
+		return inst.a; 
+	} else return 1;
 }
 static int64_t whilebegin_op(State& state, Closure const& closure, Instruction const& inst) {
 	Logical l(state.registers[inst.b]);
@@ -310,7 +311,7 @@ static int64_t whilebegin_op(State& state, Closure const& closure, Instruction c
 }
 static int64_t whileend_op(State& state, Closure const& closure, Instruction const& inst) {
 	Logical l(state.registers[inst.b]);
-	if(l[0]) return -inst.a;
+	if(l[0]) return inst.a;
 	else return 1;
 }
 static int64_t repeatbegin_op(State& state, Closure const& closure, Instruction const& inst) {
@@ -318,7 +319,7 @@ static int64_t repeatbegin_op(State& state, Closure const& closure, Instruction 
 	return 1;
 }
 static int64_t repeatend_op(State& state, Closure const& closure, Instruction const& inst) {
-	return -inst.a;
+	return inst.a;
 }
 static int64_t next_op(State& state, Closure const& closure, Instruction const& inst) {
 	return inst.a;

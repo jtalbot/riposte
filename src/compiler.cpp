@@ -190,7 +190,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 			uint64_t endbody = closure.code().size();
 			resolveLoopReferences(closure, beginbody, endbody, loopDepth, endbody, endbody+1);
 			loopDepth--;
-			closure.code().push_back(Instruction(ByteCode::iforend, endbody-beginbody, Symbol(call[1]).i, lim1));
+			closure.code().push_back(Instruction(ByteCode::iforend, beginbody-endbody, Symbol(call[1]).i, lim1));
 			closure.code()[beginbody-1].a = endbody-beginbody+1;
 		}
 		else {
@@ -203,7 +203,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 			uint64_t endbody = closure.code().size();
 			resolveLoopReferences(closure, beginbody, endbody, loopDepth, endbody, endbody+1);
 			loopDepth--;
-			closure.code().push_back(Instruction(ByteCode::forend, endbody-beginbody, Symbol(call[1]).i, lim));
+			closure.code().push_back(Instruction(ByteCode::forend, beginbody-endbody, Symbol(call[1]).i, lim));
 			closure.code()[beginbody-1].a = endbody-beginbody+1;
 		}
 		registerDepth = initialDepth;
@@ -223,7 +223,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		uint64_t endbody = closure.code().size();
 		resolveLoopReferences(closure, beginbody, endbody, loopDepth, beforecond, endbody+1);
 		loopDepth--;
-		closure.code().push_back(Instruction(ByteCode::whileend, endbody-beginbody, lim2, lim));
+		closure.code().push_back(Instruction(ByteCode::whileend, beginbody-endbody, lim2, lim));
 		closure.code()[beginbody-1].a = endbody-beginbody+2;
 		registerDepth = initialDepth;
 		return registerDepth++;
@@ -238,7 +238,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		uint64_t endbody = closure.code().size();
 		resolveLoopReferences(closure, beginbody, endbody, loopDepth, endbody, endbody+1);
 		loopDepth--;
-		closure.code().push_back(Instruction(ByteCode::repeatend, endbody-beginbody, 0, initialDepth));
+		closure.code().push_back(Instruction(ByteCode::repeatend, beginbody-endbody, 0, initialDepth));
 		closure.code()[beginbody-1].a = endbody-beginbody+2;
 		registerDepth = initialDepth;
 		return registerDepth++;

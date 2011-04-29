@@ -88,12 +88,12 @@ struct Instruction {
 		ByteCode bc;
 		void const* ibc;
 	};
-	uint64_t a, b, c;
+	int64_t a, b, c;
 
-	Instruction(ByteCode bc, uint64_t a=0, uint64_t b=0, uint64_t c=0) :
+	Instruction(ByteCode bc, int64_t a=0, int64_t b=0, int64_t c=0) :
 		bc(bc), a(a), b(b), c(c) {}
 	
-	Instruction(void const* ibc, uint64_t a=0, uint64_t b=0, uint64_t c=0) :
+	Instruction(void const* ibc, int64_t a=0, int64_t b=0, int64_t c=0) :
 		ibc(ibc), a(a), b(b), c(c) {}
 	
 	std::string toString() const {

@@ -5,7 +5,7 @@
 #define ENUM_VALUE(name,string,p) E_##name,
 
 #define ENUM_CONST(name, string, EnumType) static const EnumType name;
-#define ENUM_CONST_DEFN(name, string, EnumType) const EnumType EnumType::name(EnumType::E_##name);
+#define ENUM_CONST_DEFN(name, string, EnumType) const EnumType EnumType::name = {EnumType::E_##name};
 
 // expansion macro for enum to string conversion
 #define ENUM_CASE(name,string,p) case E_##name: return string;
