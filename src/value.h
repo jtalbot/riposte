@@ -18,6 +18,8 @@
 #include "symbols.h"
 #include "exceptions.h"
 
+#define STATE_NUM_REGISTERS 1024
+
 struct Attributes;
 
 /** Basic value type */
@@ -56,7 +58,7 @@ class Environment;
 
 // The riposte state
 struct State {
-	Value Registers[1024];
+	Value Registers[STATE_NUM_REGISTERS];
 	Value* registers;
 	
 	Environment *env, *baseenv;

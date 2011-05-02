@@ -21,6 +21,7 @@
 #include "internal.h"
 #include "parser.h"
 #include "compiler.h"
+#include "arbb_compiler.h"
 
 /*  Globals  */
 static int debug = 0;
@@ -112,7 +113,10 @@ int dostdin(State& state) {
 			//std::cout << "Parsed: " << value.toString() << std::endl;
 			Closure closure = Compiler::compile(state, value);
 			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
-			eval(state, closure);
+
+			if(!arbb_eval(state,closure))
+				eval(state, closure);
+
 			result = state.registers[0];	
 			std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) { 

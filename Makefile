@@ -7,9 +7,13 @@ LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -lm -fpic -lgc
 
 ifeq ($(UNAME),Darwin)
 	CXXFLAGS += -I/opt/local/include
+else
+	ARBB_HOME=/opt/intel/arbb/1.0.0.015
+	LFLAGS += -L$(ARBB_HOME)/lib/intel64 -larbb -ltbb
+	CXXFLAGS += -I$(ARBB_HOME)/include -DARBB_ENABLED
 endif
 
-SRC := main.cpp type.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp
+SRC := main.cpp type.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp arbb_compiler.cpp
 
 EXECUTABLE := bin/riposte
 
