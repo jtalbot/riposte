@@ -22,6 +22,7 @@ release: CXXFLAGS += -DNDEBUG -O3 -g
 release: $(EXECUTABLE)
 
 OBJECTS := $(patsubst %.cpp,bin/%.o,$(SRC))
+DEPENDENCIES := $(patsubst %.cpp,bin/%.d,$(SRC))
 
 $(EXECUTABLE): $(OBJECTS)
 	$(CXX) $(LFLAGS) -o $@ $^ $(LIBS)
@@ -30,4 +31,10 @@ bin/%.o: src/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@ 
 
 clean:
-	rm -rf $(EXECUTABLE) $(OBJECTS)
+	rm -rf $(EXECUTABLE) $(OBJECTS) $(DEPENDENCIES)
+
+# dependency rules
+bin/%.d:	src/%.cpp
+	@$(CXX) $(CXXFLAGS) -MM -MT '$@ $(@:.d=.o)' $< -o $@
+	
+-include $(DEPENDENCIES)
