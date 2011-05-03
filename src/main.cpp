@@ -114,9 +114,11 @@ int dostdin(State& state) {
 			Closure closure = Compiler::compile(state, value);
 			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
 
+			timespec start = get_time();
 			if(!arbb_eval(state,closure))
 				eval(state, closure);
-
+			timespec end = get_time();
+			print_time("total: ",start,end);
 			result = state.registers[0];	
 			std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) { 

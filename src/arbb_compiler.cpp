@@ -117,6 +117,8 @@ bool is_supported(Instruction const & i) {
 	case ByteCode::E_ret:
 	case ByteCode::E_add:
 	case ByteCode::E_assign:
+	case ByteCode::E_whilebegin:
+	case ByteCode::E_whileend:
 		return true;
 	default: {
 			arbb_opcode_t op;
@@ -157,6 +159,8 @@ bool arbb_eval(State& state, Closure const& closure) {
 	}
 	arbb_type_t f64;
 	ARBB_DO(arbb_get_scalar_type(context,&f64,arbb_f64,&details));
+	arbb_type_t bt;
+	ARBB_DO(arbb_get_scalar_type(context,&bt,arbb_boolean,&details));
 	//create arbb variables for all R variables, for now everything is f64
 
 	std::vector<arbb_global_variable_t> arbb_globals;
@@ -191,6 +195,13 @@ bool arbb_eval(State& state, Closure const& closure) {
 		ARBB_DO(arbb_get_variable_from_global(context,&vc,c,&details));
 		constants.push_back(vc);
 	}
+
+	double z = 0.0;
+	arbb_variable_t zero;
+	arbb_global_variable_t zero_g;
+	ARBB_DO(arbb_create_constant(context,&zero_g,f64,&z,NULL,&details));
+	ARBB_DO(arbb_get_variable_from_global(context,&zero,zero_g,&details));
+
 #define GET_VAR(x) arbb_globals_as_vars[find_entry(all,(x))]
 
 	arbb_function_t fn;
@@ -240,6 +251,32 @@ bool arbb_eval(State& state, Closure const& closure) {
 			arbb_variable_t out[] = { ret_value };
 			ARBB_DO(arbb_op(fn,arbb_op_copy,out,in,NULL,&details));
 		} break;
+		case ByteCode::E_whilebegin: {
+			arbb_variable_t cond;
+			ARBB_DO(arbb_create_local(fn,&cond,bt,NULL,&details));
+			arbb_variable_t in[] = { registers[inst.b], zero };
+			arbb_variable_t out[] = { cond };
+			ARBB_DO(arbb_op(fn,arbb_op_neq,out,in,NULL,&details));
+			ARBB_DO(arbb_begin_loop(fn,arbb_loop_while,&details));
+			ARBB_DO(arbb_begin_loop_block(fn,arbb_loop_block_cond,&details));
+			ARBB_DO(arbb_loop_condition(fn,cond,&details));
+			ARBB_DO(arbb_begin_loop_block(fn,arbb_loop_block_body,&details));
+		} break;
+		case ByteCode::E_whileend: {
+
+			arbb_variable_t cond;
+			ARBB_DO(arbb_create_local(fn,&cond,bt,NULL,&details));
+			arbb_variable_t in[] = { registers[inst.b], zero };
+			arbb_variable_t out[] = { cond };
+			ARBB_DO(arbb_op(fn,arbb_op_equal,out,in,NULL,&details));
+
+			ARBB_DO(arbb_if(fn,cond,&details));
+			ARBB_DO(arbb_break(fn,&details));
+			ARBB_DO(arbb_end_if(fn,&details));
+
+			ARBB_DO(arbb_end_loop(fn,&details));
+
+		} break;
 		default:
 			arbb_opcode_t op;
 			int n;
@@ -252,8 +289,6 @@ bool arbb_eval(State& state, Closure const& closure) {
 				ARBB_DO(arbb_op(fn,op,out,in,NULL,&details));
 			} else {
 				//boolean operations, we need to first perform the op then cast to double
-				arbb_type_t bt;
-				ARBB_DO(arbb_get_scalar_type(context,&bt,arbb_boolean,&details));
 				arbb_variable_t r;
 				ARBB_DO(arbb_create_local(fn,&r,bt,NULL,&details));
 				arbb_variable_t in[] = { registers[inst.c], registers[inst.b] };
