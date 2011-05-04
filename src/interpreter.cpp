@@ -332,6 +332,9 @@ static int64_t if1_op(State& state, Closure const& closure, Instruction const& i
 	if(l[0]) return 1;
 	else return inst.a;
 }
+static int64_t endif1_op(State& state, Closure const& closure, Instruction const& inst) {
+	return 1;
+}
 static int64_t colon_op(State& state, Closure const& closure, Instruction const& inst) {
 	double from = asReal1(state.registers[inst.a]);
 	double to = asReal1(state.registers[inst.b]);

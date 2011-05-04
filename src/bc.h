@@ -30,6 +30,7 @@
 	_(next, "next", p) \
 	_(break1, "break1", p) \
 	_(if1, "if1", p) \
+	_(endif1, "endif1", p) \
 	_(colon, "colon", p) \
 	_(add, "add", p) \
 	_(pos, "pos", p) \

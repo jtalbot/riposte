@@ -119,6 +119,9 @@ bool is_supported(Instruction const & i) {
 	case ByteCode::E_assign:
 	case ByteCode::E_whilebegin:
 	case ByteCode::E_whileend:
+	case ByteCode::E_if1:
+	case ByteCode::E_endif1:
+	case ByteCode::E_jmp:
 		return true;
 	default: {
 			arbb_opcode_t op;
@@ -276,6 +279,21 @@ bool arbb_eval(State& state, Closure const& closure) {
 
 			ARBB_DO(arbb_end_loop(fn,&details));
 
+		} break;
+		case ByteCode::E_if1: {
+			arbb_variable_t cond;
+			ARBB_DO(arbb_create_local(fn,&cond,bt,NULL,&details));
+			arbb_variable_t in[] = { registers[inst.b], zero };
+			arbb_variable_t out[] = { cond };
+			ARBB_DO(arbb_op(fn,arbb_op_neq,out,in,NULL,&details));
+			ARBB_DO(arbb_if(fn, cond, &details));
+		} break;
+		case ByteCode::E_jmp: {
+			// right now the jmp instruction is only used to jump over an else block, so repurpose to emit ARBB else instruction
+			ARBB_DO(arbb_else(fn, &details));
+		} break;
+		case ByteCode::E_endif1: {
+			ARBB_DO(arbb_end_if(fn, &details));
 		} break;
 		default:
 			arbb_opcode_t op;

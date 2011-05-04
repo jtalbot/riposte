@@ -276,6 +276,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		if(call.length() == 4)
 			closure.code()[begin2-1].a = end-begin2+1;
 		registerDepth = initialDepth;
+		closure.code().push_back(Instruction(ByteCode::endif1));
 		return registerDepth++;
 	} break;
 	case Symbol::E_brace: 
