@@ -8,7 +8,7 @@ LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -lm -fpic -lgc
 ifeq ($(UNAME),Darwin)
 	CXXFLAGS += -I/opt/local/include
 else
-	ARBB_HOME=$(HOME)/intel/arbb/1.0.0.015
+	ARBB_HOME=/opt/intel/arbb/1.0.0.015
 	LFLAGS += -L$(HOME)/local/lib -L$(ARBB_HOME)/lib/intel64 -larbb -ltbb
 	CXXFLAGS += -I$(HOME)/local/include -I$(ARBB_HOME)/include -DARBB_ENABLED
 endif
