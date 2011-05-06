@@ -9,7 +9,7 @@ ifeq ($(UNAME),Darwin)
 	CXXFLAGS += -I/opt/local/include
 else
 	ARBB_HOME=/opt/intel/arbb/1.0.0.015
-	LFLAGS += -L$(HOME)/local/lib -L$(ARBB_HOME)/lib/intel64 -larbb -ltbb
+	LFLAGS += -L$(HOME)/local/lib -L$(ARBB_HOME)/lib/intel64 -larbbd -ltbb
 	CXXFLAGS += -I$(HOME)/local/include -I$(ARBB_HOME)/include -DARBB_ENABLED
 endif
 
