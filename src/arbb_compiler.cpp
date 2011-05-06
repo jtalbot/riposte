@@ -10,6 +10,7 @@ void error_break() {
 }
 #define ARBB_DO(fn) \
 do { \
+  /*fprintf(stderr,"%s:%d: %s\n",__FILE__,__LINE__,#fn);*/ \
   arbb_error_t err = (fn); \
   if(arbb_error_none != err) { \
 	  std::ostringstream oss; \
@@ -196,7 +197,8 @@ private:
 			ARBB_DO(arbb_create_global(context,&input_data,v.var.type.a,NULL,binding,NULL,&details));
 			arbb_variable_t input_var;
 			ARBB_DO(arbb_get_variable_from_global(context,&input_var,input_data,&details));
-			if(!v.is_output && false) {
+			if(!v.is_output) {
+				printf("%ld: in\n",v.r_name);
 				//we can just bind our variable directly!
 				v.binding = binding;
 				v.global_var = input_data;
@@ -230,8 +232,10 @@ private:
 		arbb_set_binding_null(&null_binding);
 		v.is_allocated = true;
 		v.var.type = typ;
+		printf("%ld: out\n",v.r_name);
 		ARBB_DO(arbb_create_global(context,&v.global_var,v.var.type.a,NULL,null_binding,NULL,&details));
 		ARBB_DO(arbb_get_variable_from_global(context,&v.var.var,v.global_var,&details));
+
 		if(v.var.type.is_vector()) {
 			//we need to store the length in another global variable...
 			arbb_type_t usize;
@@ -307,6 +311,60 @@ private:
 		}
 	}
 
+	void abstract_interp() {
+		//currently this fills in the types for global variables, later we can use it for more complicated type inference
+		ArType registers[STATE_NUM_REGISTERS];
+		std::vector<Instruction> const & code = closure.code();
+		for(size_t i = 0; i < code.size(); i++) {
+			Instruction const & inst = code[i];
+			switch(inst.bc.Enum()) {
+			case ByteCode::E_get: {
+				registers[inst.c] = global_by_name(inst.a).var.type;
+			} break;
+			case ByteCode::E_kget: {
+				registers[inst.c] = global_constants[inst.a].var.type;
+			} break;
+			case ByteCode::E_assign: {
+				GlobalVariable & gv = global_by_name(inst.a);
+				if(!gv.is_allocated) //output variables may not be allocated because we didn't know the type until now
+					allocate_output(gv,registers[inst.c]);
+			} break;
+			case ByteCode::E_ret: {
+				GlobalVariable & gv =  global_by_name(RET_VALUE);
+				if(!gv.is_allocated)
+					allocate_output(gv,registers[inst.a]);
+			} break;
+			case ByteCode::E_whilebegin: {
+				//nop
+			} break;
+			case ByteCode::E_whileend: {
+				//nop
+			} break;
+			case ByteCode::E_if1: {
+				//nop
+			} break;
+			case ByteCode::E_jmp: {
+				//nop
+			} break;
+			case ByteCode::E_endif1: {
+				//nop
+			} break;
+			default:
+				arbb_opcode_t op;
+				int n;
+				if(!bytecode_to_arbb_opcode(inst.bc,&op,&n)) {
+					assert(!"unknown bytecode");
+				}
+				if(n != 3) {
+					registers[inst.a] = infer_type(op,registers[inst.c],registers[inst.b]);
+				} else {
+					//boolean operators, result type will be cast to double
+					registers[inst.a] = ArType(context,Type::R_double,1);
+				}
+			}
+		}
+	}
+
 	std::vector<Variable> registers;
 	int registers_to_var[STATE_NUM_REGISTERS];
 
@@ -344,10 +402,10 @@ private:
 	void compile_fn() {
 		std::fill(registers_to_var,registers_to_var + STATE_NUM_REGISTERS, -1);
 		//some useful constants
-		arbb_type_t f64;
-		ARBB_DO(arbb_get_scalar_type(context,&f64,arbb_f64,&details));
-		arbb_type_t bt;
+		arbb_type_t bt,f64;
 		ARBB_DO(arbb_get_scalar_type(context,&bt,arbb_boolean,&details));
+		ARBB_DO(arbb_get_scalar_type(context,&f64,arbb_f64,&details));
+
 		arbb_binding_t null_binding;
 		arbb_set_binding_null(&null_binding);
 		double z = 0.0;
@@ -384,9 +442,6 @@ private:
 				Variable & v = get_register(inst.c);
 				GlobalVariable & gv = global_by_name(inst.a);
 
-				if(!gv.is_allocated) //output variables may not be allocated because we didn't know the type until now
-					allocate_output(gv,v.type);
-
 				arbb_variable_t in[] = { v.var };
 				arbb_variable_t out[] = { gv.var.var };
 				ARBB_DO(arbb_op(fn,arbb_op_copy,out,in,NULL,&details));
@@ -395,9 +450,6 @@ private:
 				Variable & input =  get_register(inst.a);
 				arbb_variable_t in[] = { input.var };
 				GlobalVariable & gv =  global_by_name(RET_VALUE);
-
-				if(!gv.is_allocated)
-					allocate_output(gv,input.type);
 
 				arbb_variable_t out[] = { gv.var.var };
 				ARBB_DO(arbb_op(fn,arbb_op_copy,out,in,NULL,&details));
@@ -552,7 +604,6 @@ public:
 			return false;
 		}
 
-
 		std::cout << "code: " << state.stringify(closure) << std::endl;
 
 		std::cout << "go for codegen!" << std::endl;
@@ -560,6 +611,8 @@ public:
 		this->allocate_globals();
 
 		this->allocate_constants();
+
+		this->abstract_interp(); //will create arbb objects for output globals
 
 		this->compile_fn();
 
