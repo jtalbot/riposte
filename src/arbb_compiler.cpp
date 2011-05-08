@@ -109,6 +109,7 @@ struct GlobalVariable {
 
 	Variable var;
 
+	arbb_variable_t local; //local working var
 	arbb_global_variable_t length;
 
 	unsigned is_input : 1;
@@ -268,6 +269,7 @@ private:
 			v.is_input = contains(in,all[i]);
 			v.is_output = contains(out,all[i]);
 			v.r_name = all[i];
+			v.is_allocated = false;
 
 			arbb_binding_t null_binding;
 			arbb_set_binding_null(&null_binding);
@@ -276,17 +278,15 @@ private:
 				//read the current value
 				Value val;
 				state.env->get(state, Symbol(v.r_name), val);
-				allocate_input(v,val);
-				if(v.is_output && v.var.type.is_vector()) {
-					//we need to store the length in another global variable...
-					arbb_type_t usize;
-					ARBB_DO(arbb_get_scalar_type(context,&usize,arbb_usize,&details));
-					ARBB_DO(arbb_create_global(context,&v.length,usize,NULL,null_binding,NULL,&details));
+				if(val.type.Enum() != Type::E_R_null) { //has it been defined? if so allocate a global and copy it in, otherwise, we allocated it as an output
+					allocate_input(v,val);
+					if(v.is_output && v.var.type.is_vector()) {
+						//we need to store the length in another global variable...
+						arbb_type_t usize;
+						ARBB_DO(arbb_get_scalar_type(context,&usize,arbb_usize,&details));
+						ARBB_DO(arbb_create_global(context,&v.length,usize,NULL,null_binding,NULL,&details));
+					}
 				}
-			} else {
-				//we don't know type information yet
-				//so we will allocate this the first time we see it
-				v.is_allocated = false;
 			}
 		}
 	}
@@ -317,6 +317,7 @@ private:
 		std::vector<Instruction> const & code = closure.code();
 		for(size_t i = 0; i < code.size(); i++) {
 			Instruction const & inst = code[i];
+			printf("ainterp %s\n",inst.toString().c_str());
 			switch(inst.bc.Enum()) {
 			case ByteCode::E_get: {
 				registers[inst.c] = global_by_name(inst.a).var.type;
@@ -421,15 +422,34 @@ private:
 
 		ARBB_DO(arbb_begin_function(context,&fn,fn_type,NULL,0,&details));
 
+		//copy all inout variables into locals, create locals for ouput variables, readonly points to global
+		for(size_t i = 0; i < global_variables.size(); i++) {
+			GlobalVariable & v = global_variables[i];
+			if(v.is_output) {
+				printf("CREATING OUT\n");
+				ARBB_DO(arbb_create_local(fn,&v.local,v.var.type.a,"FOO",&details));
+				if(v.is_input) {
+					printf("COPY IN!\n");
+					arbb_variable_t in[] = { v.var.var };
+					arbb_variable_t out[] = {v.local};
+					ARBB_DO(arbb_op(fn,arbb_op_copy,out,in,NULL,&details));
+				}
+			} else {
+				printf("ALIAS IN\n");
+				v.local = v.var.var;
+			}
+		}
+
 
 		std::vector<Instruction> const & code = closure.code();
 		for(size_t i = 0; i < code.size(); i++) {
+			printf("gen %s\n",code[i].toString().c_str());
 			Instruction const & inst = code[i];
 			switch(inst.bc.Enum()) {
 			case ByteCode::E_get: {
-				Variable & v = global_by_name(inst.a).var;
-				arbb_variable_t in[] = { v.var };
-				arbb_variable_t out[] = { new_local(inst.c,v.type).var };
+				GlobalVariable & gv = global_by_name(inst.a);
+				arbb_variable_t in[] = { gv.local };
+				arbb_variable_t out[] = { new_local(inst.c,gv.var.type).var };
 				ARBB_DO(arbb_op(fn,arbb_op_copy,out,in,NULL,&details));
 			} break;
 			case ByteCode::E_kget: {
@@ -443,7 +463,7 @@ private:
 				GlobalVariable & gv = global_by_name(inst.a);
 
 				arbb_variable_t in[] = { v.var };
-				arbb_variable_t out[] = { gv.var.var };
+				arbb_variable_t out[] = { gv.local };
 				ARBB_DO(arbb_op(fn,arbb_op_copy,out,in,NULL,&details));
 			} break;
 			case ByteCode::E_ret: {
@@ -451,7 +471,7 @@ private:
 				arbb_variable_t in[] = { input.var };
 				GlobalVariable & gv =  global_by_name(RET_VALUE);
 
-				arbb_variable_t out[] = { gv.var.var };
+				arbb_variable_t out[] = { gv.local };
 				ARBB_DO(arbb_op(fn,arbb_op_copy,out,in,NULL,&details));
 			} break;
 			case ByteCode::E_whilebegin: {
@@ -529,12 +549,19 @@ private:
 
 		for(size_t i = 0; i < global_variables.size(); i++) {
 			GlobalVariable & v = global_variables[i];
-			if(v.is_output && v.var.type.is_vector()) {
-				arbb_variable_t var;
-				ARBB_DO(arbb_get_variable_from_global(context,&var,v.length,&details));
-				arbb_variable_t in[1] = { v.var.var };
-				arbb_variable_t out[1] = { var };
-				ARBB_DO(arbb_op(fn,arbb_op_length,out,in,NULL,&details));
+			if(v.is_output) {
+				{
+					arbb_variable_t in[] = { v.local };
+					arbb_variable_t out[] = {v.var.var};
+					ARBB_DO(arbb_op(fn,arbb_op_copy,out,in,NULL,&details));
+				}
+				if(v.var.type.is_vector()) {
+					arbb_variable_t var;
+					ARBB_DO(arbb_get_variable_from_global(context,&var,v.length,&details));
+					arbb_variable_t in[1] = { v.var.var };
+					arbb_variable_t out[1] = { var };
+					ARBB_DO(arbb_op(fn,arbb_op_length,out,in,NULL,&details));
+				}
 			}
 		}
 
