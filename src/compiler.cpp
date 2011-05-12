@@ -35,6 +35,7 @@ static ByteCode op(Symbol const& s) {
 		case Symbol::E_acos: return ByteCode::acos; break;
 		case Symbol::E_asin: return ByteCode::asin; break;
 		case Symbol::E_atan: return ByteCode::atan; break;
+		case Symbol::E_sum: return ByteCode::sum; break;
 		default: throw RuntimeError("unexpected symbol used as an operator"); break;
 	}
 }
@@ -369,6 +370,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_acos: 
 	case Symbol::E_asin: 
 	case Symbol::E_atan:
+	case Symbol::E_sum:
 	{ 
 		uint64_t a = compile(call[1], closure);
 		closure.code().push_back(Instruction(op(func), a, 0, initialDepth));

@@ -71,6 +71,7 @@
 	_(jmp, "jmp", p) \
 	_(null, "null", p) \
 	_(function, "function", p) \
+	_(sum,"sum",p) \
 	_(ret, "ret", p)       /* ret must be the last instruction */
 	/*_(frame, "frame") \
 	_(rawfunction, "rawfunction") \

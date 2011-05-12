@@ -160,6 +160,7 @@ private:
 		case ByteCode::E_if1:
 		case ByteCode::E_endif1:
 		case ByteCode::E_jmp:
+		case ByteCode::E_sum:
 			return true;
 		default: {
 				arbb_opcode_t op;
@@ -350,6 +351,10 @@ private:
 			case ByteCode::E_endif1: {
 				//nop
 			} break;
+			case ByteCode::E_sum: {
+				ArType typ = registers[inst.c];
+				registers[inst.a] = ArType(context,typ.r,1);
+			} break;
 			default:
 				arbb_opcode_t op;
 				int n;
@@ -514,6 +519,13 @@ private:
 			} break;
 			case ByteCode::E_endif1: {
 				ARBB_DO(arbb_end_if(fn, &details));
+			} break;
+			case ByteCode::E_sum: {
+				Variable & v = get_register(inst.c);
+				ArType tp = ArType(context,v.type.r,1);
+				arbb_variable_t in[] = { v.var };
+				arbb_variable_t out[] = { new_local(inst.a,tp).var };
+				ARBB_DO(arbb_op_dynamic(fn,arbb_op_add_reduce,1,out,1,in,NULL,&details));
 			} break;
 			default:
 				arbb_opcode_t op;

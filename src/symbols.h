@@ -68,5 +68,6 @@
 	_(names, "names", p) \
 	_(dim, "dim", p) \
 	_(classSym, "class", p) \
+	_(sum,"sum",p)
 
 #endif

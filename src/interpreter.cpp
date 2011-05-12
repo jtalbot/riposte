@@ -499,6 +499,9 @@ static int64_t function_op(State& state, Closure const& closure, Instruction con
 	state.registers[inst.c] = Function(closure.constants()[inst.a], closure.constants()[inst.b], Character::NA, state.env);
 	return 1;
 }
+static int64_t sum_op(State& state, Closure const& closure, Instruction const& inst) {
+	return 1;
+}
 static int64_t ret_op(State& state, Closure const& closure, Instruction const& inst) {
 	// not used. Jumps to done label instead
 	return 0;
