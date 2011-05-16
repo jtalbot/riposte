@@ -352,8 +352,8 @@ private:
 				//nop
 			} break;
 			case ByteCode::E_sum: {
-				ArType typ = registers[inst.c];
-				registers[inst.a] = ArType(context,typ.r,1);
+				ArType typ = registers[inst.a];
+				registers[inst.c] = ArType(context,typ.r,1);
 			} break;
 			default:
 				arbb_opcode_t op;
@@ -362,10 +362,10 @@ private:
 					assert(!"unknown bytecode");
 				}
 				if(n != 3) {
-					registers[inst.a] = infer_type(op,registers[inst.c],registers[inst.b]);
+					registers[inst.c] = infer_type(op,registers[inst.a],registers[inst.b]);
 				} else {
 					//boolean operators, result type will be cast to double
-					registers[inst.a] = ArType(context,Type::R_double,1);
+					registers[inst.c] = ArType(context,Type::R_double,1);
 				}
 			}
 		}
@@ -521,10 +521,10 @@ private:
 				ARBB_DO(arbb_end_if(fn, &details));
 			} break;
 			case ByteCode::E_sum: {
-				Variable & v = get_register(inst.c);
+				Variable & v = get_register(inst.a);
 				ArType tp = ArType(context,v.type.r,1);
 				arbb_variable_t in[] = { v.var };
-				arbb_variable_t out[] = { new_local(inst.a,tp).var };
+				arbb_variable_t out[] = { new_local(inst.c,tp).var };
 				ARBB_DO(arbb_op_dynamic(fn,arbb_op_add_reduce,1,out,1,in,NULL,&details));
 			} break;
 			default:
@@ -534,22 +534,21 @@ private:
 					assert(!"unknown bytecode");
 				}
 				if(n != 3) {
-					//boolean operations, we need to first perform the op then cast to double
-					Variable & v1 = get_register(inst.c);
+					Variable & v1 = get_register(inst.a);
 					Variable & v2 = get_register(inst.b);
 					arbb_variable_t in[] = { v1.var, v2.var };
 					ArType tpe = infer_type(op,v1.type,v2.type);
-					arbb_variable_t out[] = {  new_local(inst.a,tpe).var };
+					arbb_variable_t out[] = {  new_local(inst.c,tpe).var };
 					ARBB_DO(arbb_op(fn,op,out,in,NULL,&details));
 				} else {
 					//boolean operations, we need to first perform the op then cast to double
 					arbb_variable_t r;
 					ARBB_DO(arbb_create_local(fn,&r,bt,NULL,&details));
-					arbb_variable_t in[] = { get_register(inst.c).var, get_register(inst.b).var };
+					arbb_variable_t in[] = { get_register(inst.a).var, get_register(inst.b).var };
 					arbb_variable_t out[] = { r };
 					ARBB_DO(arbb_op(fn,op,out,in,NULL,&details));
 					ArType dbl(context,Type::R_double,1);
-					out[0] = new_local(inst.a,dbl).var;
+					out[0] = new_local(inst.c,dbl).var;
 					in[0] = r;
 					ARBB_DO(arbb_op(fn,arbb_op_cast,out,in,NULL,&details));
 				}
