@@ -115,7 +115,7 @@ int dostdin(State& state) {
 			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
 
 			timespec start = get_time();
-			if(!arbb_eval(state,closure))
+			if(!arbb_eval(state,closure,verbose))
 				eval(state, closure);
 			timespec end = get_time();
 			print_time("total: ",start,end);

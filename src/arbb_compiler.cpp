@@ -32,6 +32,7 @@ do { \
 	_(mul,mul,2,p) \
 	_(div,div,2,p) \
 	_(pow,pow,2,p) \
+	_(sqrt, sqrt,1, p) \
 	_(abs,abs,1,p) \
 	_(exp,exp,1,p) \
 	_(log,log10,1,p) \
@@ -148,12 +149,12 @@ private:
 	arbb_error_details_t details;
 	State & state;
 	Closure const& closure;
+	bool verbose;
 	bool is_instruction_supported(Instruction const & i) {
 		switch(i.bc.Enum()) {
 		case ByteCode::E_kget:
 		case ByteCode::E_get:
 		case ByteCode::E_ret:
-		case ByteCode::E_add:
 		case ByteCode::E_assign:
 		case ByteCode::E_whilebegin:
 		case ByteCode::E_whileend:
@@ -200,13 +201,13 @@ private:
 			arbb_variable_t input_var;
 			ARBB_DO(arbb_get_variable_from_global(context,&input_var,input_data,&details));
 			if(!v.is_output) {
-				printf("%ld: in\n",v.r_name);
+				if(verbose) printf("%ld: in\n",v.r_name);
 				//we can just bind our variable directly!
 				v.binding = binding;
 				v.global_var = input_data;
 				v.var.var = input_var;
 			} else {
-				printf("%ld: inout\n",v.r_name);
+				if(verbose) printf("%ld: inout\n",v.r_name);
 				//we might write to this and change its shape, so we need to copy in
 				arbb_function_t null_fn;
 				arbb_set_function_null(&null_fn);
@@ -234,7 +235,7 @@ private:
 		arbb_set_binding_null(&null_binding);
 		v.is_allocated = true;
 		v.var.type = typ;
-		printf("%ld: out\n",v.r_name);
+		if(verbose) printf("%ld: out\n",v.r_name);
 		ARBB_DO(arbb_create_global(context,&v.global_var,v.var.type.a,NULL,null_binding,NULL,&details));
 		ARBB_DO(arbb_get_variable_from_global(context,&v.var.var,v.global_var,&details));
 
@@ -318,7 +319,7 @@ private:
 		std::vector<Instruction> const & code = closure.code();
 		for(size_t i = 0; i < code.size(); i++) {
 			Instruction const & inst = code[i];
-			printf("ainterp %s\n",inst.toString().c_str());
+			if(verbose) printf("ainterp %s\n",inst.toString().c_str());
 			switch(inst.bc.Enum()) {
 			case ByteCode::E_get: {
 				registers[inst.c] = global_by_name(inst.a).var.type;
@@ -431,16 +432,16 @@ private:
 		for(size_t i = 0; i < global_variables.size(); i++) {
 			GlobalVariable & v = global_variables[i];
 			if(v.is_output) {
-				printf("CREATING OUT\n");
+				if(verbose) printf("CREATING OUT\n");
 				ARBB_DO(arbb_create_local(fn,&v.local,v.var.type.a,"FOO",&details));
 				if(v.is_input) {
-					printf("COPY IN!\n");
+					if(verbose) printf("COPY IN!\n");
 					arbb_variable_t in[] = { v.var.var };
 					arbb_variable_t out[] = {v.local};
 					ARBB_DO(arbb_op(fn,arbb_op_copy,out,in,NULL,&details));
 				}
 			} else {
-				printf("ALIAS IN\n");
+				if(verbose) printf("ALIAS IN\n");
 				v.local = v.var.var;
 			}
 		}
@@ -448,7 +449,7 @@ private:
 
 		std::vector<Instruction> const & code = closure.code();
 		for(size_t i = 0; i < code.size(); i++) {
-			printf("gen %s\n",code[i].toString().c_str());
+			if(verbose) printf("gen %s\n",code[i].toString().c_str());
 			Instruction const & inst = code[i];
 			switch(inst.bc.Enum()) {
 			case ByteCode::E_get: {
@@ -583,7 +584,7 @@ private:
 
 		arbb_string_t fn_str;
 		ARBB_DO(arbb_serialize_function(fn,&fn_str,&details));
-		printf("function is\n%s\n",arbb_get_c_string(fn_str));
+		if(verbose) printf("function is\n%s\n",arbb_get_c_string(fn_str));
 		arbb_free_string(fn_str);
 	}
 	void write_outputs() {
@@ -602,7 +603,7 @@ private:
 					//now get the data..
 					void * data;
 					uint64_t pitch;
-					printf("length is %lld\n",len);
+					if(verbose) printf("length is %lld\n",len);
 					ARBB_DO(arbb_map_to_host(context,v.var.var,&data,&pitch,arbb_read_only_range,&details));
 					if(len == 1) {
 						Double d = Double::c(*(double*)data);
@@ -617,7 +618,7 @@ private:
 				} else {
 					double val;
 					ARBB_DO(arbb_read_scalar(context,v.var.var,&val,&details));
-					printf("reading %f from %ld\n",val,v.r_name);
+					if(verbose) printf("reading %f from %ld\n",val,v.r_name);
 					Double d = Double::c(val);
 					out = d;
 				}
@@ -630,10 +631,11 @@ private:
 	}
 public:
 	CompilationUnit(State & state_, Closure const & closure_)
-	: state(state_), closure(closure_) {
+	: state(state_), closure(closure_), verbose(false) {
 		ARBB_DO(arbb_get_default_context(&context,&details));
 	}
-	bool eval() {
+	bool eval(bool verbose=false) {
+		this->verbose = verbose;
 		Environment * oldenv = state.env;
 		if(closure.environment() != NULL)
 			state.env = closure.environment();
@@ -642,10 +644,10 @@ public:
 			return false;
 		}
 
-		std::cout << "code: " << state.stringify(closure) << std::endl;
-
-		std::cout << "go for codegen!" << std::endl;
-
+		if(verbose) {
+			std::cout << "code: " << state.stringify(closure) << std::endl;
+			std::cout << "go for codegen!" << std::endl;
+		}
 		this->allocate_globals();
 
 		this->allocate_constants();
@@ -659,12 +661,12 @@ public:
 		this->write_outputs();
 
 		state.env = oldenv;
-
+		this->verbose = false;
 		return true;
 	}
 };
 
-bool arbb_eval(State& state, Closure const& closure) {
+bool arbb_eval(State& state, Closure const& closure, bool verbose) {
 	CompilationUnit unit(state,closure);
-	return unit.eval();
+	return unit.eval(verbose);
 }
