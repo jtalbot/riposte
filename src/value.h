@@ -264,6 +264,12 @@ struct _complex {
 	_complex(double r, double i) : a(r), b(i) {}
 };
 
+
+union _doublena {
+	uint64_t i;
+	double d;
+};
+
 #define VECTOR_IMPL(Name, Type, type, Pack) \
 struct Name : public VectorImpl<Type, type, Pack> \
 	{ Name(uint64_t length) : VectorImpl<Type, type, Pack>(length) {} \
@@ -289,7 +295,7 @@ VECTOR_IMPL(Integer, Type::E_R_integer, int64_t, true)
 	const static Integer NA; };
 VECTOR_IMPL(Double, Type::E_R_double, double, true)
 	static Double c(double c) { Double r(1); r[0] = c; return r; }
-	static bool isNA(double c) { return *(uint64_t*)&c == *(uint64_t*)&NAelement; }
+	static bool isNA(double c) { _doublena a, b; a.d = c; b.d = NAelement; return a.i==b.i; }
 	const static bool CheckNA;
 	const static double NAelement;
 	const static Double NA;
