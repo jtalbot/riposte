@@ -12,6 +12,8 @@
 %token_type {Value}
 %extra_argument {Parser* parser}
 
+%token_destructor {(void)parser;}
+
 %type statementlist {Pairs}
 %type sublist  {Pairs}
 %type sub  {Pairs}

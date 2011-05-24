@@ -15,8 +15,8 @@ echo "Local variable lookup	" "R	" `(time R --vanilla -q --slave -f local_variab
 echo "Simple addition	" "rip	" `(time ../riposte -q -f addition.R) 2>&1 | grep real | awk '{print $2}'`
 echo "Simple addition	" "R	" `(time R --vanilla -q --slave -f addition.R) 2>&1 | grep real | awk '{print $2}'`
 
-echo "Fibinacci	" "rip	" `(time ../riposte -q -f fib.R) 2>&1 | grep real | awk '{print $2}'`
-echo "Fibinacci	" "R	" `(time R --vanilla -q --slave -f fib.R) 2>&1 | grep real | awk '{print $2}'`
+echo "Fibonacci	" "rip	" `(time ../riposte -q -f fib.R) 2>&1 | grep real | awk '{print $2}'`
+echo "Fibonacci	" "R	" `(time R --vanilla -q --slave -f fib.R) 2>&1 | grep real | awk '{print $2}'`
 
 echo "Function call	" "rip	" `(time ../riposte -q -f function_call.R) 2>&1 | grep real | awk '{print $2}'`
 echo "Function call	" "R	" `(time R --vanilla -q --slave -f function_call.R) 2>&1 | grep real | awk '{print $2}'`

@@ -4,7 +4,7 @@
 #include "compiler.h"
 #include <limits.h>
 
-union {
+union narep {
 	uint64_t i;
 	double d;
 } narep = {0x7fff000000001953};
