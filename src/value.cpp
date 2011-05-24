@@ -4,10 +4,7 @@
 #include "compiler.h"
 #include <limits.h>
 
-union {
-	uint64_t i;
-	double d;
-} narep = {0x7fff000000001953};
+_doublena doublena = {0x7fff000000001953};
 
 const Null Null::singleton = Null(0);
 const bool Character::CheckNA = true;
@@ -19,8 +16,8 @@ const Logical Logical::NA = Logical::c(255);
 const Logical Logical::False = Logical::c(false);
 const Logical Logical::True = Logical::c(true);
 const bool Double::CheckNA = false;
-const double Double::NAelement = narep.d;
-const Double Double::NA = Double::c(narep.d);
+const double Double::NAelement = doublena.d;
+const Double Double::NA = Double::c(doublena.d);
 const Double Double::NaN = Double::c(0);
 const Double Double::Inf = Double::c(1);
 const bool Integer::CheckNA = true;

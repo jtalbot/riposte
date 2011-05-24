@@ -42,9 +42,9 @@ static ByteCode op(Symbol const& s) {
 
 static void resolveLoopReferences(Closure& closure, uint64_t start, uint64_t end, uint64_t depth, uint64_t nextTarget, uint64_t breakTarget) {
 	for(uint64_t i = start; i < end; i++) {
-		if(closure.code()[i].bc == ByteCode::next && closure.code()[i].a == depth) {
+		if(closure.code()[i].bc == ByteCode::next && closure.code()[i].a == (int64_t)depth) {
 			closure.code()[i].a = nextTarget-i;
-		} else if(closure.code()[i].bc == ByteCode::break1 && closure.code()[i].a == depth) {
+		} else if(closure.code()[i].bc == ByteCode::break1 && closure.code()[i].a == (int64_t)depth) {
 			closure.code()[i].a = breakTarget-i;
 		}
 	}
