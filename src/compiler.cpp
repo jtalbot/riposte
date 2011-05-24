@@ -120,6 +120,8 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 				bc = indexed ? ByteCode::inamesassign : ByteCode::namesassign;
 			else if(c[0] == Symbol::dim)
 				bc = indexed ? ByteCode::idimassign : ByteCode::dimassign;
+			else
+				throw CompileError("invalid function on left side of assign");
 			v = c[1];
 		} else {
 			bc = indexed ? ByteCode::iassign : ByteCode::assign;

@@ -1,8 +1,8 @@
 # This Makefile requires GNU make.
 UNAME := $(shell uname -s)
  
-CXX := g++ 
-CXXFLAGS := -Wall -DINSTALL_DIR=$(CURDIR)/bin 
+CXX := g++
+CXXFLAGS := -Wall
 LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -lm -fpic -lgc
 
 ifeq ($(UNAME),Darwin)
