@@ -697,31 +697,31 @@ inline Vector As(Vector a, Type type) {
                 r = a;
         }
         else if(a.type == Type::R_integer && type == Type::R_double) {
-                Zip1< NA1< Cast<Integer, Double> > >::eval(a).toVector(r);
+                r = Zip1< NA1< Cast<Integer, Double> > >::eval(a);
         }
         else if(a.type == Type::R_double && type == Type::R_integer) {
-                Zip1< Cast<Double, Integer> >::eval(a).toVector(r);
+                r = Zip1< Cast<Double, Integer> >::eval(a);
         }
         else if(a.type == Type::R_integer && type == Type::R_integer) {
                 r = a;
         }
         else if(a.type == Type::R_logical && type == Type::R_double) {
-                Zip1< Cast<Logical, Double> >::eval(a).toVector(r);
+                r = Zip1< Cast<Logical, Double> >::eval(a);
         }
         else if(a.type == Type::R_logical && type == Type::R_integer) {
-                Zip1< Cast<Logical, Integer> >::eval(a).toVector(r);
+                r = Zip1< Cast<Logical, Integer> >::eval(a);
         }
         else if(a.type == Type::R_character && type == Type::R_double) {
-                Zip1< Cast<Character, Double> >::eval(a).toVector(r);
+                r = Zip1< Cast<Character, Double> >::eval(a);
         }
         else if(a.type == Type::R_character && type == Type::R_integer) {
-                Zip1< Cast<Character, Integer> >::eval(a).toVector(r);
+                r = Zip1< Cast<Character, Integer> >::eval(a);
         }
         else if(a.type == Type::R_double && type == Type::R_logical) {
-                Zip1< Cast<Double, Logical> >::eval(a).toVector(r);
+                r = Zip1< Cast<Double, Logical> >::eval(a);
         }
         else if(a.type == Type::R_integer && type == Type::R_logical) {
-                Zip1< Cast<Integer, Logical> >::eval(a).toVector(r);
+                r = Zip1< Cast<Integer, Logical> >::eval(a);
         }
         else if(a.type == Type::R_logical && type == Type::R_logical) {
         	r = a;

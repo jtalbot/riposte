@@ -228,43 +228,43 @@ uint64_t subset(State& state, Call const& call, List const& args) {
 
         Vector r;
         if(a.type == Type::R_double && i.type == Type::R_double) {
-                SubsetIndex< Double, Double >::eval(a, i).toVector(r);
+                r = SubsetIndex< Double, Double >::eval(a, i);
         }
         else if(a.type == Type::R_integer && i.type == Type::R_double) {
-                SubsetIndex< Integer, Double >::eval(a, i).toVector(r);
+                r = SubsetIndex< Integer, Double >::eval(a, i);
         }
         else if(a.type == Type::R_double && i.type == Type::R_integer) {
-                SubsetIndex< Double, Integer >::eval(a, i).toVector(r);
+                r = SubsetIndex< Double, Integer >::eval(a, i);
         }
         else if(a.type == Type::R_integer && i.type == Type::R_integer) {
-                SubsetIndex< Integer, Integer >::eval(a, i).toVector(r);
+                r = SubsetIndex< Integer, Integer >::eval(a, i);
         }
         else if(a.type == Type::R_logical && i.type == Type::R_double) {
-                SubsetIndex< Logical, Double >::eval(a, i).toVector(r);
+                r = SubsetIndex< Logical, Double >::eval(a, i);
         }
         else if(a.type == Type::R_logical && i.type == Type::R_integer) {
-                SubsetIndex< Logical, Integer >::eval(a, i).toVector(r);
+                r = SubsetIndex< Logical, Integer >::eval(a, i);
         }
         else if(a.type == Type::R_character && i.type == Type::R_double) {
-                SubsetIndex< Character, Double >::eval(a, i).toVector(r);
+                r = SubsetIndex< Character, Double >::eval(a, i);
         }
         else if(a.type == Type::R_character && i.type == Type::R_integer) {
-                SubsetIndex< Character, Integer >::eval(a, i).toVector(r);
+                r = SubsetIndex< Character, Integer >::eval(a, i);
         }
         else if(a.type == Type::R_list && i.type == Type::R_double) {
-                SubsetIndex< List, Double >::eval(a, i).toVector(r);
+                r = SubsetIndex< List, Double >::eval(a, i);
         }
         else if(a.type == Type::R_list && i.type == Type::R_integer) {
-                SubsetIndex< List, Integer >::eval(a, i).toVector(r);
+                r = SubsetIndex< List, Integer >::eval(a, i);
         }
         else if(a.type == Type::R_double && i.type == Type::R_logical) {
-                //SubsetIndex< Integer, Double >::eval(a, i).toVector(r);
+                //r = SubsetIndex< Integer, Double >::eval(a, i);
         }
         else if(a.type == Type::R_integer && i.type == Type::R_logical) {
-                //SubsetIndex< Integer, Double >::eval(a, i).toVector(r);
+                //r = SubsetIndex< Integer, Double >::eval(a, i);
         }
         else if(a.type == Type::R_logical && i.type == Type::R_logical) {
-                //SubsetIndex< Integer, Double >::eval(a, i).toVector(r);
+                //r = SubsetIndex< Integer, Double >::eval(a, i);
         }
         else {
                 _error("Invalid index\n");
