@@ -606,11 +606,11 @@ private:
 					ARBB_DO(arbb_map_to_host(context,v.var.var,&data,&pitch,arbb_read_only_range,&details));
 					if(len == 1) {
 						Double d = Double::c(*(double*)data);
-						d.toValue(out);
+						out = d;
 					} else {
 						Double d(len);
 						memcpy(d.inner->data,data,sizeof(double) * len);
-						d.toValue(out);
+						out = d;
 						std::cout << v.r_name << " " << state.stringify(d) << std::endl;
 					}
 
@@ -619,7 +619,7 @@ private:
 					ARBB_DO(arbb_read_scalar(context,v.var.var,&val,&details));
 					printf("reading %f from %ld\n",val,v.r_name);
 					Double d = Double::c(val);
-					d.toValue(out);
+					out = d;
 				}
 				if(v.r_name == RET_VALUE)
 					state.registers[0] = out;
