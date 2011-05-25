@@ -496,7 +496,7 @@ static int64_t null_op(State& state, Closure const& closure, Instruction const& 
 	return 1;
 }
 static int64_t function_op(State& state, Closure const& closure, Instruction const& inst) {
-	state.registers[inst.c] = Function(closure.constants()[inst.a], closure.constants()[inst.b], Character::NA, state.env);
+	state.registers[inst.c] = Function(closure.constants()[inst.a], closure.constants()[inst.b], Character::NA(), state.env);
 	return 1;
 }
 static int64_t sum_op(State& state, Closure const& closure, Instruction const& inst) {

@@ -28,14 +28,14 @@
 
 	# Keywords.
 	'NULL' 	{token( TOKEN_NULL_CONST, Null::singleton );};
-	'NA' 	{token( TOKEN_NUM_CONST, Logical::NA );};
-	'TRUE' 	{token( TOKEN_NUM_CONST, Logical::True );};
-	'FALSE'	{token( TOKEN_NUM_CONST, Logical::False );};
-	'Inf'	{token( TOKEN_NUM_CONST, Double::Inf);};
-	'NaN'	{token( TOKEN_NUM_CONST, Double::NaN);};
-	'NA_integer_'	{token( TOKEN_NUM_CONST, Integer::NA);};
-	'NA_real_'	{token( TOKEN_NUM_CONST, Double::NA);};
-	'NA_character_'	{token( TOKEN_STR_CONST, Character::NA);};
+	'NA' 	{token( TOKEN_NUM_CONST, Logical::NA() );};
+	'TRUE' 	{token( TOKEN_NUM_CONST, Logical::True() );};
+	'FALSE'	{token( TOKEN_NUM_CONST, Logical::False() );};
+	'Inf'	{token( TOKEN_NUM_CONST, Double::Inf() );};
+	'NaN'	{token( TOKEN_NUM_CONST, Double::NaN() );};
+	'NA_integer_'	{token( TOKEN_NUM_CONST, Integer::NA() );};
+	'NA_real_'	{token( TOKEN_NUM_CONST, Double::NA() );};
+	'NA_character_'	{token( TOKEN_STR_CONST, Character::NA() );};
 	'NA_complex_'	{token( TOKEN_NUM_CONST);};
 	'function'	{token( TOKEN_FUNCTION, Symbol::function );};
 	'while'	{token( TOKEN_WHILE, Symbol::whileSym );};
