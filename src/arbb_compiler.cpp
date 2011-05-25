@@ -612,7 +612,7 @@ private:
 						Double d(len);
 						memcpy(d.inner->data,data,sizeof(double) * len);
 						out = d;
-						std::cout << v.r_name << " " << state.stringify(d) << std::endl;
+						if(verbose) std::cout << v.r_name << " " << state.stringify(d) << std::endl;
 					}
 
 				} else {

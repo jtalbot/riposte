@@ -2,7 +2,7 @@
 UNAME := $(shell uname -s)
  
 CXX := g++ 
-CXXFLAGS := -Wall -DINSTALL_DIR=$(CURDIR)/bin 
+CXXFLAGS := -Wall 
 LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -lm -fpic -lgc
 
 ifeq ($(UNAME),Darwin)

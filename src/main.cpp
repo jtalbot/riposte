@@ -165,7 +165,8 @@ static int dofile(const char * file, State& state, bool echo) {
 		try {
 			Closure closure = Compiler::compile(state, expressions[i]);
 			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
-			eval(state, closure);
+			if(!arbb_eval(state,closure,verbose))
+				eval(state, closure);
 			Value result = state.registers[0];
 			if(echo)
 				std::cout << state.stringify(result) << std::endl;
