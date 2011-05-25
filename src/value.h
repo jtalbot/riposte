@@ -7,6 +7,7 @@
 #include <vector>
 #include <deque>
 #include <assert.h>
+#include <limits>
 
 #include <gc/gc_cpp.h>
 #include <gc/gc_allocator.h>
@@ -327,23 +328,23 @@ VECTOR_IMPL(PackedVectorImpl, Logical, Type::E_R_logical, unsigned char)
 	static bool isNA(unsigned char c) { return c == NAelement; }
 	const static bool CheckNA;
 	const static unsigned char NAelement;
-	const static Logical NA;
-	const static Logical True;
-	const static Logical False; };
+	static Logical NA() { static Logical na = Logical::c(NAelement); return na; }
+	static Logical True() { static Logical t = Logical::c(1); return t; }
+	static Logical False() { static Logical f = Logical::c(0); return f; } };
 VECTOR_IMPL(PackedVectorImpl, Integer, Type::E_R_integer, int64_t)
 	static Integer c(double c) { Integer r(1); r[0] = c; return r; }
 	static bool isNA(int64_t c) { return c == NAelement; }
 	const static bool CheckNA;
 	const static int64_t NAelement;
-	const static Integer NA; };
+	static Integer NA() { static Integer na = Integer::c(NAelement); return na; } }; 
 VECTOR_IMPL(PackedVectorImpl, Double, Type::E_R_double, double)
 	static Double c(double c) { Double r(1); r[0] = c; return r; }
 	static bool isNA(double c) { _doublena a, b; a.d = c; b.d = NAelement; return a.i==b.i; }
 	const static bool CheckNA;
 	const static double NAelement;
-	const static Double NA;
-	const static Double Inf;
-	const static Double NaN; };
+	static Double NA() { static Double na = Double::c(NAelement); return na; }
+	static Double Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
+	static Double NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } };
 VECTOR_IMPL(VectorImpl, Complex, Type::E_R_complex, _complex)
 	static Complex c(double r, double i=0) { Complex c(1); c[0] = _complex(r,i); return c; }
 	static Complex c(_complex c) { Complex r(1); r[0] = c; return r; } };
@@ -353,7 +354,7 @@ VECTOR_IMPL(VectorImpl, Character, Type::E_R_character, Symbol)
 	static bool isNA(Symbol const& c) { return c == Symbol::NA; }
 	const static bool CheckNA;
 	const static Symbol NAelement;
-	const static Character NA; };
+	static Character NA() { static Character na = Character::c(NAelement); return na; } };
 VECTOR_IMPL(PackedVectorImpl, Raw, Type::E_R_raw, unsigned char) };
 VECTOR_IMPL(VectorImpl, List, Type::E_R_list, Value) 
 	static List c(Value v0) { List c(1); c[0] = v0; return c; }

@@ -2,27 +2,18 @@
 #include "value.h"
 #include "internal.h"
 #include "compiler.h"
-#include <limits.h>
 
 _doublena doublena = {0x7fff000000001953};
 
 const Null Null::singleton = Null(0);
 const bool Character::CheckNA = true;
 const Symbol Character::NAelement = Symbol::NA;
-const Character Character::NA = Character::c(Symbol::NA);
 const bool Logical::CheckNA = true;
 const unsigned char Logical::NAelement = 255;
-const Logical Logical::NA = Logical::c(255);
-const Logical Logical::False = Logical::c(false);
-const Logical Logical::True = Logical::c(true);
 const bool Double::CheckNA = false;
 const double Double::NAelement = doublena.d;
-const Double Double::NA = Double::c(doublena.d);
-const Double Double::NaN = Double::c(0);
-const Double Double::Inf = Double::c(1);
 const bool Integer::CheckNA = true;
 const int64_t Integer::NAelement = INT_MIN;
-const Integer Integer::NA = Integer::c(INT_MIN);
 const Value Value::NIL = {{0}, 0, Type::I_nil, 0}; 
 
 #define ENUM_CONST_CONSTRUCT(name, string, EnumType) const EnumType EnumType::name(EnumType::E_##name);

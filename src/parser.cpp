@@ -807,7 +807,7 @@ _eof_trans:
 	break;
 	case 58:
 #line 31 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NUM_CONST, Logical::NA );}}
+	{te = p;p--;{token( TOKEN_NUM_CONST, Logical::NA() );}}
 	break;
 	case 59:
 #line 58 "lexer.rl"
@@ -911,25 +911,25 @@ _eof_trans:
 	{{p = ((te))-1;}token( TOKEN_NULL_CONST, Null::singleton );}
 	break;
 	case 3:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Logical::True );}
+	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Logical::True() );}
 	break;
 	case 4:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Logical::False );}
+	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Logical::False() );}
 	break;
 	case 5:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::Inf);}
+	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::Inf() );}
 	break;
 	case 6:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::NaN);}
+	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::NaN() );}
 	break;
 	case 7:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Integer::NA);}
+	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Integer::NA() );}
 	break;
 	case 8:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::NA);}
+	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::NA() );}
 	break;
 	case 9:
-	{{p = ((te))-1;}token( TOKEN_STR_CONST, Character::NA);}
+	{{p = ((te))-1;}token( TOKEN_STR_CONST, Character::NA() );}
 	break;
 	case 10:
 	{{p = ((te))-1;}token( TOKEN_NUM_CONST);}
