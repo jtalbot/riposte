@@ -13,7 +13,7 @@ const unsigned char Logical::NAelement = 255;
 const bool Double::CheckNA = false;
 const double Double::NAelement = doublena.d;
 const bool Integer::CheckNA = true;
-const int64_t Integer::NAelement = INT_MIN;
+const int64_t Integer::NAelement = std::numeric_limits<int64_t>::min();
 const Value Value::NIL = {{0}, 0, Type::I_nil, 0}; 
 
 #define ENUM_CONST_CONSTRUCT(name, string, EnumType) const EnumType EnumType::name(EnumType::E_##name);
