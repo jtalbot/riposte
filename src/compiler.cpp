@@ -61,7 +61,7 @@ uint64_t Compiler::compileSymbol(Symbol const& symbol, Closure& closure) {
 }
 
 uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
-	uint64_t length = call.length();
+	uint64_t length = call.length;
 	if(length == 0) {
 		throw CompileError("invalid empty call");
 	}
@@ -135,9 +135,9 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	{
 		//compile the default parameters	
 		List c = PairList(call[1]);
-		List parameters(c.length());
+		List parameters(c.length);
 		uint64_t j = 0;
-		for(uint64_t i = 0; i < parameters.length(); i++) {
+		for(uint64_t i = 0; i < parameters.length; i++) {
 			parameters[j] = compile(c[i]);
 			parameters[j].type = Type::I_default;
 			j++;
@@ -150,7 +150,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 
 		/*CompileState s(state);
 		s.inFunction = true;
-		for(uint64_t i = 0; i < n.length(); i++) {
+		for(uint64_t i = 0; i < n.length; i++) {
 			s.slots.push_back(Character(n)[i]);
 		}*/	
 
@@ -166,10 +166,10 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	{
 		// return always writes to the 0 register
 		uint64_t result;
-		if(call.length() == 1) {
+		if(call.length == 1) {
 			closure.code().push_back(Instruction(ByteCode::null, 0, 0, 0));
 			result = registerDepth;
-		} else if(call.length() == 2)
+		} else if(call.length == 2)
 			result = compile(call[1], closure);
 		else
 			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
@@ -264,7 +264,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		uint64_t begin1 = closure.code().size(), begin2 = 0;
 		registerDepth = initialDepth;
 		uint64_t result = compile(call[2], closure);
-		if(call.length() == 4) {
+		if(call.length == 4) {
 			closure.code().push_back(Instruction(ByteCode::jmp, 0));
 			registerDepth = initialDepth;
 			begin2 = closure.code().size();
@@ -275,14 +275,14 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 			begin2 = closure.code().size();
 		uint64_t end = closure.code().size();
 		closure.code()[begin1-1].a = begin2-begin1+1;
-		if(call.length() == 4)
+		if(call.length == 4)
 			closure.code()[begin2-1].a = end-begin2+1;
 		registerDepth = initialDepth;
 		return registerDepth++;
 	} break;
 	case Symbol::E_brace: 
 	{
-		uint64_t length = call.length();
+		uint64_t length = call.length;
 		if(length == 0) {
 			closure.code().push_back(Instruction(ByteCode::null, 0, 0, registerDepth));
 			return registerDepth++;
@@ -304,10 +304,10 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	} break;
 	case Symbol::E_add: 
 	{
-		if(call.length() == 2) {
+		if(call.length == 2) {
 			uint64_t a = compile(call[1], closure);
 			closure.code().push_back(Instruction(ByteCode::pos, a, 0, initialDepth));
-		} else if(call.length() == 3) {
+		} else if(call.length == 3) {
 			uint64_t a = compile(call[1], closure);
 			uint64_t b = compile(call[2], closure);
 			closure.code().push_back(Instruction(ByteCode::add, a, b, initialDepth));
@@ -317,10 +317,10 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	} break;
 	case Symbol::E_sub: 
 	{
-		if(call.length() == 2) {
+		if(call.length == 2) {
 			uint64_t a = compile(call[1], closure);
 			closure.code().push_back(Instruction(ByteCode::neg, a, 0, initialDepth));
-		} else if(call.length() == 3) {
+		} else if(call.length == 3) {
 			uint64_t a = compile(call[1], closure);
 			uint64_t b = compile(call[2], closure);
 			closure.code().push_back(Instruction(ByteCode::sub, a, b, initialDepth));
@@ -394,7 +394,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 uint64_t Compiler::compileExpression(Expression const& values, Closure& closure) {
 	uint64_t initialDepth = registerDepth;
 	uint64_t result;
-	uint64_t length = values.length();
+	uint64_t length = values.length;
 	for(uint64_t i = 0; i < length; i++) {
 		registerDepth = initialDepth;
 		result = compile(values[i], closure);
@@ -406,7 +406,6 @@ uint64_t Compiler::compileExpression(Expression const& values, Closure& closure)
 }
 
 uint64_t Compiler::compile(Value const& expr, Closure& closure) {
-
 	switch(expr.type.Enum())
 	{
 		case Type::E_R_symbol:

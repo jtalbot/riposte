@@ -155,7 +155,7 @@ static int dofile(const char * file, State& state, bool echo) {
 	if(value.type == Type::I_nil) return -1;
 	
 	Expression expressions(value);
-	for(uint64_t i = 0; i < expressions.length(); i++) {
+	for(uint64_t i = 0; i < expressions.length; i++) {
 		try {
 			Closure closure = Compiler::compile(state, expressions[i]);
 			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;

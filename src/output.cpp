@@ -19,7 +19,7 @@ inline std::string toString(State const& state, unsigned char a) {
 }  
 
 inline std::string toString(State const& state, int64_t a) {
-	return Integer::isNA(a) ? "NA" : intToStr(a);
+	return Integer::isNA(a) ? "NA" : std::string("") + intToStr(a) + std::string("L");
 }  
 
 inline std::string toString(State const& state, double a) {
@@ -33,7 +33,7 @@ inline std::string toString(State const& state, Symbol const& a) {
 template<class T>
 std::string stringifyVector(State const& state, T const& v) {
 	std::string result = "";
-	uint64_t length = v.length();
+	uint64_t length = v.length;
 	if(length == 0)
 		return std::string(v.type().toString()) + "(0)";
 
@@ -111,7 +111,7 @@ std::string State::stringify(Value const& value) const {
 			List v(value);
 			Value names = getNames(v.attributes);
 
-			uint64_t length = v.length();
+			uint64_t length = v.length;
 			if(length > 100) { dots = true; length = 100; }
 			result = "";
 			if(names.type == Type::R_character) {

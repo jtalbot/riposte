@@ -42,7 +42,7 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 		List parameters = func.parameters();
 		Character pnames(parameters.attributes->names);
 		// populate environment with default values
-		for(uint64_t i = 0; i < parameters.length(); ++i) {
+		for(uint64_t i = 0; i < parameters.length; ++i) {
 			fenv->assign(pnames[i], parameters[i]);
 		}	
 
@@ -50,26 +50,26 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 		if(args.attributes == 0 || args.attributes->names.type == Type::R_null)
 		{
 			uint64_t i = 0;
-			for(i = 0; i < std::min(args.length(), pnames.length()); ++i) {
+			for(i = 0; i < std::min(args.length, pnames.length); ++i) {
 				if(Symbol(pnames[i]) == Symbol::dots)
 					break; 
 				fenv->assign(pnames[i], args[i]);
 			}
-			if(i < args.length() && Symbol(pnames[i]) == Symbol::dots) {
-				fenv->assign(Symbol::dots, List(Subset(args, i, args.length()-i)));
+			if(i < args.length && Symbol(pnames[i]) == Symbol::dots) {
+				fenv->assign(Symbol::dots, List(Subset(args, i, args.length-i)));
 			}
 		}
 		// call arguments are named, do matching by name
 		else {
 			// we should be able to cache and reuse this assignment for pairs of functions and call sites.
 			static uint64_t assignment[64], set[64];
-			for(uint64_t i = 0; i < args.length(); i++) assignment[i] = 0;
-			for(uint64_t i = 0; i < parameters.length(); i++) set[i] = 0;
+			for(uint64_t i = 0; i < args.length; i++) assignment[i] = 0;
+			for(uint64_t i = 0; i < parameters.length; i++) set[i] = 0;
 			Character argNames(args.attributes->names);
 			// named args, search for complete matches
-			for(uint64_t i = 0; i < args.length(); ++i) {
+			for(uint64_t i = 0; i < args.length; ++i) {
 				if(argNames[i] != 0) {
-					for(uint64_t j = 0; j < parameters.length(); ++j) {
+					for(uint64_t j = 0; j < parameters.length; ++j) {
 						if(Symbol(pnames[j]) != Symbol::dots && argNames[i] == pnames[j]) {
 							fenv->assign(pnames[j], args[i]);
 							assignment[i] = j+1;
@@ -80,10 +80,10 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 				}
 			}
 			// named args, search for incomplete matches
-			for(uint64_t i = 0; i < args.length(); ++i) {
+			for(uint64_t i = 0; i < args.length; ++i) {
 				std::string a = argNames[i].toString(state);
 				if(argNames[i] != 0 && assignment[i] == 0) {
-					for(uint64_t j = 0; j < parameters.length(); ++j) {
+					for(uint64_t j = 0; j < parameters.length; ++j) {
 						if(set[j] == 0 && pnames[j] != Symbol::dots &&
 							pnames[i].toString(state).compare( 0, a.size(), a ) == 0 ) {	
 							fenv->assign(pnames[j], args[i]);
@@ -96,9 +96,9 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 			}
 			// unnamed args, fill into first missing spot.
 			uint64_t firstEmpty = 0;
-			for(uint64_t i = 0; i < args.length(); ++i) {
+			for(uint64_t i = 0; i < args.length; ++i) {
 				if(argNames[i] == 0) {
-					for(; firstEmpty < parameters.length(); ++firstEmpty) {
+					for(; firstEmpty < parameters.length; ++firstEmpty) {
 						if(pnames[firstEmpty] == Symbol::dots) {
 							break;
 						}
@@ -113,11 +113,11 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 			if(func.dots()) {
 				// count up the unassigned args
 				uint64_t unassigned = 0;
-				for(uint64_t j = 0; j < args.length(); j++) if(assignment[j] == 0) unassigned++;
+				for(uint64_t j = 0; j < args.length; j++) if(assignment[j] == 0) unassigned++;
 				List values(unassigned);
 				Character names(unassigned);
 				uint64_t idx = 0;
-				for(uint64_t j = 0; j < args.length(); j++) {
+				for(uint64_t j = 0; j < args.length; j++) {
 					if(assignment[j] == 0) {
 						values[idx] = args[j];
 						names[idx++] = argNames[j];
@@ -139,8 +139,8 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 static int64_t call_op(State& state, Closure const& closure, Instruction const& inst) {
 	Value func = state.registers[inst.c];
 	CompiledCall call(closure.constants()[inst.a]);
-	List parameters(call.parameters().length());
-	for(uint64_t i = 0; i < parameters.length(); i++) {
+	List parameters(call.parameters().length);
+	for(uint64_t i = 0; i < parameters.length; i++) {
 		parameters[i] = call.parameters()[i];
 		if(parameters[i].type == Type::I_promise)
 			parameters[i].attributes = (Attributes*)state.env;
@@ -153,22 +153,22 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 		Value v;
 		state.env->get(state, Symbol::dots, v);
 		List dots(v);
-		Vector expanded(Type::R_list, parameters.length() + dots.length()-1);
+		Vector expanded(Type::R_list, parameters.length + dots.length-1);
 		Insert(parameters, 0, expanded, 0, call.dots()-1);
-		Insert(dots, 0, expanded, call.dots()-1, dots.length());
-		Insert(parameters, call.dots(), expanded, call.dots()-1+dots.length(), parameters.length()-call.dots());
+		Insert(dots, 0, expanded, call.dots()-1, dots.length);
+		Insert(parameters, call.dots(), expanded, call.dots()-1+dots.length, parameters.length-call.dots());
 		if( (parameters.attributes != 0 && getNames(parameters.attributes).type != Type::R_null) ||
 		    (dots.attributes != 0 && getNames(dots.attributes).type != Type::R_null) ) {
-			Character names(expanded.length());
-			for(uint64_t i = 0; i < names.length(); i++) names[i] = 0;
+			Character names(expanded.length);
+			for(uint64_t i = 0; i < names.length; i++) names[i] = 0;
 			if(parameters.attributes != 0 && getNames(parameters.attributes).type != Type::R_null) {
 				for(uint64_t i = 0; i < call.dots()-1; i++) names[i] = Character(getNames(parameters.attributes))[i];
-				for(uint64_t i = 0; i < parameters.length()-call.dots(); i++) names[call.dots()-1+dots.length()+i] = Character(getNames(parameters.attributes))[call.dots()+i];
+				for(uint64_t i = 0; i < parameters.length-call.dots(); i++) names[call.dots()-1+dots.length+i] = Character(getNames(parameters.attributes))[call.dots()+i];
 				//Insert(getNames(parameters.attributes), 0, names, 0, call.dots()-1);
 				//Insert(getNames(parameters.attributes), call.dots(), names, call.dots()-1+dots.length(), parameters.length()-call.dots());
 			}
 		    	if(dots.attributes != 0 && getNames(dots.attributes).type != Type::R_null)
-				for(uint64_t i = 0; i < dots.length(); i++) names[call.dots()-1+i] = Character(getNames(dots.attributes))[i];
+				for(uint64_t i = 0; i < dots.length; i++) names[call.dots()-1+i] = Character(getNames(dots.attributes))[i];
 				//Insert(getNames(dots.attributes), 0, names, call.dots()-1, dots.length());
 			setNames(expanded.attributes, names);
 		}
@@ -274,7 +274,7 @@ static int64_t forbegin_op(State& state, Closure const& closure, Instruction con
 	//TODO: need to keep a stack of these...
 	state.loopVector = state.registers[inst.c];
 	state.loopIndex = (int64_t)0;
-	state.loopEnd = (int64_t)Vector(state.loopVector).length();
+	state.loopEnd = (int64_t)Vector(state.loopVector).length;
 	state.registers[inst.c] = Null::singleton;
 	if(state.loopIndex >= state.loopEnd) { return inst.a; }
 	state.env->assign(Symbol(inst.b), Element(state.loopVector, state.loopIndex));

@@ -23,13 +23,16 @@ struct Attributes;
 
 struct Value {
 	union {
+		int64_t i;
 		void* p;
 		double d;
-		int64_t i;
+	};
+	union {
+		uint64_t length;
+		void* env;
 	};
 	Attributes* attributes;
 	Type type;
-	uint64_t packed:2;
 
 	bool isNull() const { return type == Type::R_null; }
 	static const Value NIL;
@@ -121,41 +124,22 @@ struct Symbol {
 
 // A generic vector representation. Only provides support to access length and void* of data.
 struct Vector {
-	struct Inner : public gc {
-		uint64_t length, width;
-		void* data;
-	};
-
-	union {
-		Inner* inner;
-		int64_t i;
-	};
+	void* _data;
+	uint64_t length, width;
+	bool _packed;
 	Attributes* attributes;
 	Type type;
-	uint64_t packed:2;
-	
-	uint64_t length() const { if(packed < 2) return packed; else return inner->length; }
-	uint64_t width() const { if(packed < 2) return /* maximum possible width */ 8; else return inner->width; }
-	void* data() const { if(packed < 2 ) return (void*)&i; else return inner->data; }
 
-	Vector() : inner(0), attributes(0), type(Type::I_nil), packed(0) {}
+	bool packed() const { return _packed; }
+	void* data() const { if(packed()) return (void*)&_data; else return _data; }
+	void* data(uint64_t i) const { if(packed()) return ((char*)&_data) + i*width; else return (char*)_data + i*width; }
 
-	Vector(Value const& v) {
-		assert(isVector(v.type));
-		i = v.i;
-		attributes = v.attributes;
-		type = v.type;
-		packed = v.packed;
-	}
-
-	Vector(Type const& t, uint64_t length);
+	Vector() : _data(0), length(0), width(0), _packed(true), attributes(0), type(Type::I_nil) {}
+	Vector(Value v);
+	Vector(Type t, uint64_t length);
 
 	operator Value() const {
-		Value v;
-		v.i = i;
-		v.attributes = attributes;
-		v.type = type;
-		v.packed = packed;
+		Value v = {{(int64_t)_data}, {length}, attributes, type};
 		return v;
 	}
 };
@@ -164,44 +148,41 @@ template<Type::EnumValue VectorType, typename ElementType>
 struct VectorImpl {
 	typedef ElementType Element;
 	
-	Vector::Inner* inner;
+	ElementType* _data;
+	uint64_t length;
+	static const uint64_t width = sizeof(ElementType); 
 	Attributes* attributes;
 
-	ElementType& operator[](uint64_t index) { return ((ElementType*)(inner->data))[index]; }
-	ElementType const& operator[](uint64_t index) const { return ((ElementType*)(inner->data))[index]; }
-	uint64_t length() const { return inner->length; }
-	ElementType* data() const { return (ElementType*)inner->data; }
+	ElementType& operator[](uint64_t index) { return _data[index]; }
+	ElementType const& operator[](uint64_t index) const { return _data[index]; }
+	ElementType* data() const { return _data; }
+	ElementType* data(uint64_t i) const { return _data + i; }
 
-	VectorImpl(uint64_t length) : inner(0), attributes(0) {
-		inner = new Vector::Inner();
-		inner->length = length;
-		inner->width = sizeof(Element);
-		inner->data = new (GC) Element[length];
-	}
+	bool packed() const { return false; }
 
-	VectorImpl(Value const& v) : inner((Vector::Inner*)v.p), attributes(v.attributes) {
+	VectorImpl(uint64_t length) : _data(new (GC) Element[length]), length(length), attributes(0) {}
+
+	VectorImpl(Value v) : _data((ElementType*)v.p), length(v.length), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
 	}
 	
-	VectorImpl(Vector const& v) : inner(v.inner), attributes(v.attributes) {
+	VectorImpl(Vector v) : _data((ElementType*)v._data), length(v.length), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
 	}
 
 	operator Value() const {
-		Value v;
-		v.type.v = VectorType;
-		v.p = inner;
-		v.attributes = attributes;
-		v.packed = 3;
+		Value v = {{(int64_t)_data}, {length}, attributes, {VectorType}};
 		return v;
 	}
 
 	operator Vector() const {
 		Vector v;
-		v.inner = inner;
+		v._data = _data;
+		v.length = length;
+		v.width = width;
+		v._packed = packed();
 		v.attributes = attributes;
 		v.type = VectorType;
-		v.packed = 3;
 		return v;
 	}
 
@@ -212,7 +193,7 @@ struct VectorImpl {
 	}
 
 protected:
-	VectorImpl() {inner = 0;}
+	VectorImpl(ElementType* _data, uint64_t length, Attributes* attributes) : _data(_data), length(length), attributes(attributes) {}
 };
 
 template<Type::EnumValue VectorType, typename ElementType>
@@ -220,53 +201,46 @@ struct PackedVectorImpl {
 	typedef ElementType Element;
 	
 	union {
-		Vector::Inner* inner;
-		int64_t i;
-		ElementType packedData[sizeof(int64_t)/sizeof(ElementType)];
+		ElementType* _data;
+		ElementType packedData[sizeof(ElementType*)/sizeof(ElementType)];
 	};
+	uint64_t length;
+	static const uint64_t width = sizeof(ElementType);
 	Attributes* attributes;
-	uint64_t packed:2;
 
-	ElementType& operator[](uint64_t index) { if(packed < 2) return packedData[index]; else return ((ElementType*)(inner->data))[index]; }
-	ElementType const& operator[](uint64_t index) const { if(packed < 2) return packedData[index]; else return ((ElementType*)(inner->data))[index]; }
-	uint64_t length() const { if(packed < 2) return packed; else return inner->length; }
-	ElementType* data() const { if(packed < 2) return &packedData[0]; else return (ElementType*)inner->data; }
+	ElementType& operator[](uint64_t index) { if(packed()) return packedData[index]; else return _data[index]; }
+	ElementType const& operator[](uint64_t index) const { if(packed()) return packedData[index]; else return _data[index]; }
+	ElementType* data() const { if(packed()) return &packedData[0]; else return _data; }
+	ElementType* data(uint64_t i) const { if(packed()) return &packedData[i]; else return _data + i; }
 
-	PackedVectorImpl(uint64_t length) : inner(0), attributes(0) {
-		if(length < 2)
-			packed = length;
-		else {
-			inner = new Vector::Inner();
-			inner->length = length;
-			inner->width = sizeof(Element);
-			inner->data = new (GC) Element[length];
-			packed = 2;
-		}
+	bool packed() const { return length <= sizeof(int64_t)/sizeof(ElementType); }
+	
+	PackedVectorImpl(uint64_t length) : _data(0), length(length), attributes(0) {
+		if(!packed())
+			_data = new (GC) Element[length];
 	}
 
-	PackedVectorImpl(Value const& v) : i(v.i), attributes(v.attributes), packed(v.packed) {
+	PackedVectorImpl(Value v) : _data((ElementType*)v.p), length(v.length), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
 	}
 	
-	PackedVectorImpl(Vector const& v) : i(v.i), attributes(v.attributes), packed(v.packed) {
+	PackedVectorImpl(Vector v) : _data((ElementType*)v._data), length(v.length), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
 	}
 
 	operator Value() const {
-		Value v;
-		v.type.v = VectorType;
-		v.i = i;
-		v.attributes = attributes;
-		v.packed = packed;
+		Value v = {{(int64_t)_data}, {length}, attributes, {VectorType}};
 		return v;
 	}
 
 	operator Vector() const {
 		Vector v;
-		v.i = i;
+		v._data = _data;
+		v.length = length;
+		v.width = width;
+		v._packed = packed();
 		v.attributes = attributes;
 		v.type = VectorType;
-		v.packed = packed;
 		return v;
 	}
 
@@ -277,7 +251,7 @@ struct PackedVectorImpl {
 	}
 
 protected:
-	PackedVectorImpl() {inner = 0;packed=0;}
+	PackedVectorImpl(ElementType* _data, uint64_t length, Attributes* attributes) : _data(_data), length(length), attributes(attributes) {}
 };
 
 struct _complex {
@@ -339,25 +313,26 @@ VECTOR_IMPL(VectorImpl, List, Type::E_R_list, Value)
 	static List c(Value v0, Value v1) { List c(2); c[0] = v0; c[1] = v1; return c; }
 	static List c(Value v0, Value v1, Value v2) { List c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } };
 VECTOR_IMPL(VectorImpl, PairList, Type::E_R_pairlist, Value) 
-	PairList(List const& v) { inner = v.inner; attributes = v.attributes; }
+	PairList(List v) : VectorImpl<Type::E_R_pairlist, Value>(v.data(), v.length, v.attributes) {}
 	static PairList c(Value v0) { PairList c(1); c[0] = v0; return c; }
 	static PairList c(Value v0, Value v1) { PairList c(2); c[0] = v0; c[1] = v1; return c; }
 	static PairList c(Value v0, Value v1, Value v2) { PairList c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; }
 	operator List() {Value v = *this; v.type = Type::R_list; return List(v);} };
 VECTOR_IMPL(VectorImpl, Call, Type::E_R_call, Value) 
-	Call(List const& v) { inner = v.inner; attributes = v.attributes; }
+	Call(List v) : VectorImpl<Type::E_R_call, Value>(v.data(), v.length, v.attributes) {}
 	static Call c(Value v0) { Call c(1); c[0] = v0; return c; }
 	static Call c(Value v0, Value v1) { Call c(2); c[0] = v0; c[1] = v1; return c; }
 	static Call c(Value v0, Value v1, Value v2) { Call c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; }
 	static Call c(Value v0, Value v1, Value v2, Value v3) { Call c(4); c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; return c; } };
 VECTOR_IMPL(VectorImpl, Expression, Type::E_R_expression, Value) 
-	Expression(List const& v) { inner = v.inner; attributes = v.attributes; }
+	Expression(List v) : VectorImpl<Type::E_R_expression, Value>(v.data(), v.length, v.attributes) {}
 	static Expression c(Value v0) { Expression c(1); c[0] = v0; return c; }
 	static Expression c(Value v0, Value v1) { Expression c(2); c[0] = v0; c[1] = v1; return c; }
 	static Expression c(Value v0, Value v1, Value v2) { Expression c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } };
 
-inline Vector::Vector(Type const& t, uint64_t length) {
+inline Vector::Vector(Type t, uint64_t length) {
 	switch(t.Enum()) {
+		case Type::E_R_null: *this = Null::singleton; break;
 		case Type::E_R_logical: *this = Logical(length); break;	
 		case Type::E_R_integer: *this = Integer(length); break;	
 		case Type::E_R_double: *this = Double(length); break;	
@@ -368,6 +343,23 @@ inline Vector::Vector(Type const& t, uint64_t length) {
 		case Type::E_R_pairlist: *this = PairList(length); break;	
 		case Type::E_R_call: *this = Call(length); break;	
 		case Type::E_R_expression: *this = Expression(length); break;	
+		default: throw RuntimeError("attempt to create invalid vector type"); break;
+	};
+}
+
+inline Vector::Vector(Value v) {
+	switch(v.type.Enum()) {
+		case Type::E_R_null: *this = Null::singleton; break;
+		case Type::E_R_logical: *this = Logical(v); break;	
+		case Type::E_R_integer: *this = Integer(v); break;	
+		case Type::E_R_double: *this = Double(v); break;	
+		case Type::E_R_complex: *this = Complex(v); break;	
+		case Type::E_R_character: *this = Character(v); break;	
+		case Type::E_R_raw: *this = Raw(v); break;	
+		case Type::E_R_list: *this = List(v); break;	
+		case Type::E_R_pairlist: *this = PairList(v); break;	
+		case Type::E_R_call: *this = Call(v); break;	
+		case Type::E_R_expression: *this = Expression(v); break;	
 		default: throw RuntimeError("attempt to create invalid vector type"); break;
 	};
 }
@@ -396,14 +388,11 @@ public:
 			v.type == Type::I_promise ||
 			v.type == Type::I_default); 
 		inner = (Inner*)v.p;
-		env = (Environment*)v.attributes;
+		env = (Environment*)v.env;
 	}
 
 	operator Value() const {
-		Value v;
-		v.type = Type::I_closure;
-		v.p = inner;
-		v.attributes = (Attributes*)env;
+		Value v = {{(int64_t)inner}, {(uint64_t)env}, 0, Type::I_closure};
 		return v;
 	}
 

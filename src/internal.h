@@ -18,13 +18,13 @@ void addMathOps(State& state);
 
 inline Vector Clone(Vector const& in, uint64_t length) {
 	Vector out(in.type, length);
-	memcpy(out.data(), in.data(), std::min(length, in.length())*in.width());
+	memcpy(out.data(), in.data(), std::min(length, in.length)*in.width);
 	out.attributes = in.attributes;
 	return out;
 }
 
 inline Vector Clone(Vector const& in) {
-	return Clone(in, in.length());
+	return Clone(in, in.length);
 }
 
 template<class T>
@@ -390,8 +390,8 @@ template< class Op >
 struct Zip1 {
 	static typename Op::R eval(typename Op::A const& a)
 	{
-		typename Op::R r = typename Op::R(a.length());
-		for(uint64_t i = 0; i < a.length(); ++i) {
+		typename Op::R r = typename Op::R(a.length);
+		for(uint64_t i = 0; i < a.length; ++i) {
 			r[i] = Op::eval(a[i]);
 		}
 		return r;
@@ -414,47 +414,47 @@ template< class Op >
 struct Zip2 {
 	static typename Op::R eval(typename Op::A const& a, typename Op::B const& b)
 	{
-		if(a.length() == b.length()) {
-			typename Op::R r(a.length());
-			for(uint64_t i = 0; i < a.length(); ++i) {
+		if(a.length == b.length) {
+			typename Op::R r(a.length);
+			for(uint64_t i = 0; i < a.length; ++i) {
 				r[i] = Op::eval(a[i], b[i]);
 			}
 			return r;
 		}
-		else if(a.length() == 0 || b.length() == 0) {
+		else if(a.length == 0 || b.length == 0) {
 			return typename Op::R(0);
 		}
-		else if(b.length() == 1) {
-			typename Op::R r(a.length());
-			for(uint64_t i = 0; i < a.length(); ++i) {
+		else if(b.length == 1) {
+			typename Op::R r(a.length);
+			for(uint64_t i = 0; i < a.length; ++i) {
 				r[i] = Op::eval(a[i], b[0]);
 			}
 			return r;
 		}
-		else if(a.length() == 1) {
-			typename Op::R r(b.length());
-			for(uint64_t i = 0; i < b.length(); ++i) {
+		else if(a.length == 1) {
+			typename Op::R r(b.length);
+			for(uint64_t i = 0; i < b.length; ++i) {
 				r[i] = Op::eval(a[0], b[i]);
 			}
 			return r;
 		}
-		else if(a.length() > b.length()) {
-			typename Op::R r(a.length());
+		else if(a.length > b.length) {
+			typename Op::R r(a.length);
 			uint64_t j = 0;
-			for(uint64_t i = 0; i < a.length(); ++i) {
+			for(uint64_t i = 0; i < a.length; ++i) {
 				r[i] = Op::eval(a[i], b[j]);
 				++j;
-				if(j >= b.length()) j = 0;
+				if(j >= b.length) j = 0;
 			}
 			return r;
 		}
 		else {
-			typename Op::R r(b.length());
+			typename Op::R r(b.length);
 			uint64_t j = 0;
-			for(uint64_t i = 0; i < b.length(); ++i) {
+			for(uint64_t i = 0; i < b.length; ++i) {
 				r[i] = Op::eval(a[j], b[i]);
 				++j;
-				if(j >= a.length()) j = 0;
+				if(j >= a.length) j = 0;
 			}
 			return r;
 		}
@@ -467,13 +467,13 @@ struct SubsetIndex {
 	{
 		// compute length without 0s
 		uint64_t outlength = 0;
-		for(uint64_t i = 0; i < d.length(); i++)
+		for(uint64_t i = 0; i < d.length; i++)
 			if( Cast<Index, Integer>::eval(d[i]) != 0)
 				outlength++;
 	
 		A r(outlength);	
 		uint64_t j = 0;
-		for(uint64_t i = 0; i < d.length(); i++) {	
+		for(uint64_t i = 0; i < d.length; i++) {	
 			int64_t idx = Cast<Index, Integer>::eval(d[i]);
 			if(idx != 0)
 				r[j++] = a[idx-1];
@@ -489,14 +489,14 @@ struct SubsetAssign {
 	{
 		// compute max index 
 		int64_t outlength = 0;
-		for(uint64_t i = 0; i < d.length(); i++) {
+		for(uint64_t i = 0; i < d.length; i++) {
 			int64_t idx = Cast<Index, Integer>::eval(d[i]);
 			outlength = std::max((int64_t)outlength, idx);
 		}
 
 		// should use max index here to extend vector if necessary	
 		A r = a;//Clone(a);	
-		for(uint64_t i = 0; i < d.length(); i++) {	
+		for(uint64_t i = 0; i < d.length; i++) {	
 			int64_t idx = Cast<Index, Integer>::eval(d[i]);
 			if(idx != 0)
 				r[idx-1] = Cast<B, A>::eval(b[i]);
@@ -791,39 +791,13 @@ inline void subAssign(State& state, Value const& a, Value const& i, Value const&
 }
 
 inline void Insert(Vector const& src, uint64_t srcIndex, Vector& dst, uint64_t dstIndex, uint64_t length) {
-	// First cast to destination type. This operation should be fused eventually to avoid a copy.
-        if(dst.type == Type::R_double) {
-		Double d(dst); Double s = As(src, Type::R_double);
-		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
-	}
-        else if(dst.type == Type::R_integer) {
-		Integer d(dst); Integer s = As(src, Type::R_integer);
-		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
-	}
-        else if(dst.type == Type::R_logical) {
-		Logical d(dst); Logical s = As(src, Type::R_logical);
-		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
-	}
-        else if(dst.type == Type::R_character) {
-		Character d(dst); Character s = As(src, Type::R_character);
-		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
-	}
-        else if(dst.type == Type::R_list) {
-		List d(dst); List s = As(src, Type::R_list);
-		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
-	}
-        else if(dst.type == Type::R_call) {
-		Call d(dst); Call s = As(src, Type::R_call);
-		for(uint64_t i = 0; i < length; i++) d[dstIndex+i] = s[srcIndex+i];
-	}
-        else {
-                _error("Invalid insertion");
-        }
+	Vector as = As(src, dst.type);
+	memcpy(dst.data(dstIndex), as.data(srcIndex), length*as.width);
 }
 
 inline Vector Subset(Vector const& src, uint64_t start, uint64_t length) {
 	Vector v(src.type, length);
-	memcpy(v.data(), (char*)src.data()+start*src.width(), length*src.width());
+	memcpy(v.data(0), src.data(start), length*src.width);
 	return v;
 }
 

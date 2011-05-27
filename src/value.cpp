@@ -14,7 +14,7 @@ const bool Double::CheckNA = false;
 const double Double::NAelement = doublena.d;
 const bool Integer::CheckNA = true;
 const int64_t Integer::NAelement = std::numeric_limits<int64_t>::min();
-const Value Value::NIL = {{0}, 0, Type::I_nil, 0}; 
+const Value Value::NIL = {{0}, {0}, 0, Type::I_nil}; 
 
 #define ENUM_CONST_CONSTRUCT(name, string, EnumType) const EnumType EnumType::name(EnumType::E_##name);
 SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
@@ -37,7 +37,7 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 		: inner(new Inner(parameters, body, str, s)), attributes(0) {
 		Character names(getNames(parameters.attributes));
 		uint64_t i = 0;
-		for(;i < names.length(); i++) if(Symbol(names[i]) == Symbol::dots) inner->dots = i+1;
+		for(;i < names.length; i++) if(Symbol(names[i]) == Symbol::dots) inner->dots = i+1;
 	}
 
 	CompiledCall::CompiledCall(Call const& call, State& state) {
@@ -45,8 +45,8 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 		inner->call = call;
 		inner->dots = 0;
 		uint64_t j = 0;
-		List parameters(call.length()-1);
-		for(uint64_t i = 1; i < call.length(); i++) {
+		List parameters(call.length-1);
+		for(uint64_t i = 1; i < call.length; i++) {
 			if(call[i].type == Type::R_symbol && Symbol(call[i]) == Symbol::dots) {
 				parameters[j] = call[i];
 				inner->dots = i;
@@ -66,7 +66,7 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 		}
 		Vector n = getNames(call.attributes);
 		if(n.type != Type::R_null) {
-			setNames(parameters.attributes, Subset(n, 1, call.length()-1));
+			setNames(parameters.attributes, Subset(n, 1, call.length-1));
 		}
 		inner->parameters = parameters;
 	}
