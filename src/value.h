@@ -21,10 +21,7 @@
 
 struct Attributes;
 
-/** Basic value type */
 struct Value {
-	// Careful: for efficiency, Value is not initialized by default.
-	
 	union {
 		void* p;
 		double d;
@@ -34,22 +31,7 @@ struct Value {
 	Type type;
 	uint64_t packed:2;
 
-	// not right for scalar doubles and maybe other stuff, careful!
-	bool operator==(Value const& other) {
-		return type == other.type && i == other.i;
-	}
-	
-	bool operator!=(Value const& other) {
-		return type != other.type || i == other.i;
-	}
-
-	static void set(Value& v, Type type, void* p) {
-		v.type = type;
-		v.p = p;
-		v.attributes = 0;
-		v.packed = 0;
-	}
-
+	bool isNull() const { return type == Type::R_null; }
 	static const Value NIL;
 };
 
@@ -115,14 +97,10 @@ struct Symbol {
 		i = v.i;
 	}
 
-	void toValue(Value& v) const {
-		v.type = Type::R_symbol;
-		v.i = i;
-	}
-
 	operator Value() const {
 		Value v;
-		toValue(v);
+		v.type = Type::R_symbol;
+		v.i = i;
 		return v;
 	}
 
@@ -421,15 +399,11 @@ public:
 		env = (Environment*)v.attributes;
 	}
 
-	void toValue(Value& v) const {
+	operator Value() const {
+		Value v;
 		v.type = Type::I_closure;
 		v.p = inner;
 		v.attributes = (Attributes*)env;
-	}
-
-	operator Value() const {
-		Value v;
-		toValue(v);
 		return v;
 	}
 
@@ -473,15 +447,11 @@ public:
 		attributes = v.attributes;
 	}
 
-	void toValue(Value& v) const {
+	operator Value() const {
+		Value v;
 		v.p = inner;
 		v.attributes = attributes;
 		v.type = Type::R_function;
-	}
-
-	operator Value() const {
-		Value v;
-		toValue(v);
 		return v;
 	}
 
@@ -526,14 +496,10 @@ public:
 		inner = (Inner*)v.p; 
 	}
 
-	void toValue(Value& v) const {
-		v.p = inner;
-		v.type = Type::I_compiledcall;
-	}
-
 	operator Value() const {
 		Value v;
-		toValue(v);
+		v.p = inner;
+		v.type = Type::I_compiledcall;
 		return v;
 	}
 	
@@ -625,14 +591,12 @@ public:
 		env = (Environment*)v.p;
 		attributes = v.attributes;
 	}
-	void toValue(Value& v) const {
+	
+	operator Value() const {
+		Value v;
 		v.type = Type::R_environment;
 		v.p = env;
 		v.attributes = attributes;
-	}
-	operator Value() const {
-		Value v;
-		toValue(v);
 		return v;
 	}
 	Environment* ptr() const {
@@ -693,7 +657,7 @@ inline Vector getDim(Attributes const* attrs) {
 }
 
 inline bool isObject(Value const& v) {
-	return v.attributes != 0 && v.attributes->klass != Null::singleton;
+	return v.attributes != 0 && v.attributes->klass.isNull();// != Null::singleton;
 }
 
 struct Pairs {

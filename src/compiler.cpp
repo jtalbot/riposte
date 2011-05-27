@@ -114,11 +114,11 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		
 		if(v.type == Type::R_call) {
 			Call c(v);
-			if(c[0] == Symbol::classSym)
+			if(Symbol(c[0]) == Symbol::classSym)
 				bc = indexed ? ByteCode::iclassassign : ByteCode::classassign;
-			else if(c[0] == Symbol::names)
+			else if(Symbol(c[0]) == Symbol::names)
 				bc = indexed ? ByteCode::inamesassign : ByteCode::namesassign;
-			else if(c[0] == Symbol::dim)
+			else if(Symbol(c[0]) == Symbol::dim)
 				bc = indexed ? ByteCode::idimassign : ByteCode::dimassign;
 			else
 				throw CompileError("invalid function on left side of assign");
