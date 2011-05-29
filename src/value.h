@@ -35,6 +35,12 @@ struct Value {
 	Type type;
 
 	bool isNull() const { return type == Type::R_null; }
+	bool isDouble() const { return type == Type::R_double; }
+	bool isInteger() const { return type == Type::R_integer; }
+	bool isLogical() const { return type == Type::R_logical; }
+	bool isCharacter() const { return type == Type::R_character; }
+	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical(); }
+	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	static const Value NIL;
 };
 
@@ -147,6 +153,7 @@ struct Vector {
 template<Type::EnumValue VectorType, typename ElementType>
 struct VectorImpl {
 	typedef ElementType Element;
+	static const Type type;
 	
 	ElementType* _data;
 	uint64_t length;
@@ -186,19 +193,17 @@ struct VectorImpl {
 		return v;
 	}
 
-	Type type() const {
-		Type t;
-		t.v = VectorType;
-		return t;
-	}
-
 protected:
 	VectorImpl(ElementType* _data, uint64_t length, Attributes* attributes) : _data(_data), length(length), attributes(attributes) {}
 };
 
 template<Type::EnumValue VectorType, typename ElementType>
+const Type VectorImpl<VectorType, ElementType>::type = {VectorType};
+
+template<Type::EnumValue VectorType, typename ElementType>
 struct PackedVectorImpl {
 	typedef ElementType Element;
+	static const Type type;
 	
 	union {
 		ElementType* _data;
@@ -244,15 +249,12 @@ struct PackedVectorImpl {
 		return v;
 	}
 
-	Type type() const {
-		Type t;
-		t.v = VectorType;
-		return t;
-	}
-
 protected:
 	PackedVectorImpl(ElementType* _data, uint64_t length, Attributes* attributes) : _data(_data), length(length), attributes(attributes) {}
 };
+
+template<Type::EnumValue VectorType, typename ElementType>
+const Type PackedVectorImpl<VectorType, ElementType>::type = {VectorType};
 
 struct _complex {
 	double a,b;

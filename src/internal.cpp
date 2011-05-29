@@ -223,14 +223,14 @@ uint64_t minusOp(State& state, uint64_t nargs) {
 
 Vector Subset(Vector const& a, Vector const& i)	{
 	if(i.type == Type::R_double || i.type == Type::R_integer) {
-		Integer index = Integer(As(i, Type::R_integer));
+		Integer index = As<Integer>(i);
 		uint64_t positive = 0, negative = 0;
 		for(uint64_t i = 0; i < index.length; i++) {
 			if(index[i] > 0 || Integer::isNA(index[i])) positive++;
 			else if(index[i] < 0) negative++;
 		}
 		if(positive > 0 && negative > 0)
-			throw RuntimeError("mixed subscripts not allowed");
+			_error("mixed subscripts not allowed");
 		else if(positive > 0) {
 			switch(a.type.Enum()) {
 				case Type::E_R_double: return SubsetInclude<Double>::eval(a, index, positive); break;
@@ -238,7 +238,7 @@ Vector Subset(Vector const& a, Vector const& i)	{
 				case Type::E_R_logical: return SubsetInclude<Logical>::eval(a, index, positive); break;
 				case Type::E_R_character: return SubsetInclude<Character>::eval(a, index, positive); break;
 				case Type::E_R_list: return SubsetInclude<List>::eval(a, index, positive); break;
-				default: throw RuntimeError("NYI"); break;
+				default: _error("NYI"); break;
 			};
 		}
 		else if(negative > 0) {
@@ -248,7 +248,7 @@ Vector Subset(Vector const& a, Vector const& i)	{
 				case Type::E_R_logical: return SubsetExclude<Logical>::eval(a, index, negative); break;
 				case Type::E_R_character: return SubsetExclude<Character>::eval(a, index, negative); break;
 				case Type::E_R_list: return SubsetExclude<List>::eval(a, index, negative); break;
-				default: throw RuntimeError("NYI"); break;
+				default: _error("NYI"); break;
 			};	
 		}
 		else {
@@ -263,10 +263,11 @@ Vector Subset(Vector const& a, Vector const& i)	{
 			case Type::E_R_logical: return SubsetLogical<Logical>::eval(a, index); break;
 			case Type::E_R_character: return SubsetLogical<Character>::eval(a, index); break;
 			case Type::E_R_list: return SubsetLogical<List>::eval(a, index); break;
-			default: throw RuntimeError("NYI"); break;
+			default: _error("NYI"); break;
 		};	
 	}
-	else throw RuntimeError("NYI indexing type");
+	_error("NYI indexing type");
+	return Null::singleton;
 }
 
 uint64_t subset(State& state, Call const& call, List const& args) {

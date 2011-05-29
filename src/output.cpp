@@ -35,7 +35,7 @@ std::string stringifyVector(State const& state, T const& v) {
 	std::string result = "";
 	uint64_t length = v.length;
 	if(length == 0)
-		return std::string(v.type().toString()) + "(0)";
+		return std::string(v.type.toString()) + "(0)";
 
 	bool dots = false;
 	if(length > 100) { dots = true; length = 100; }

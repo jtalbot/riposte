@@ -347,7 +347,7 @@ static int64_t add_op(State& state, Closure const& closure, Instruction const& i
 	return 1;
 }
 static int64_t pos_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, PosOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, PosOp>(state,state.registers[inst.a], state.registers[inst.c]);
 	return 1;
 }
 static int64_t sub_op(State& state, Closure const& closure, Instruction const& inst) {
@@ -355,7 +355,7 @@ static int64_t sub_op(State& state, Closure const& closure, Instruction const& i
 	return 1;
 }
 static int64_t neg_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, NegOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, NegOp>(state,state.registers[inst.a], state.registers[inst.c]);
 	return 1;
 }
 static int64_t mul_op(State& state, Closure const& closure, Instruction const& inst) {
@@ -363,7 +363,7 @@ static int64_t mul_op(State& state, Closure const& closure, Instruction const& i
 	return 1;
 }
 static int64_t div_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryDoubleArith<Zip2, DivOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryArith<Zip2, DivOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
 	return 1;
 }
 static int64_t idiv_op(State& state, Closure const& closure, Instruction const& inst) {
@@ -375,7 +375,7 @@ static int64_t mod_op(State& state, Closure const& closure, Instruction const& i
 	return 1;
 }
 static int64_t pow_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryDoubleArith<Zip2, PowOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryArith<Zip2, PowOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
 	return 1;
 }
 static int64_t lnot_op(State& state, Closure const& closure, Instruction const& inst) {
