@@ -5,6 +5,8 @@
 #include "value.h"
 #include "exceptions.h"
 #include <math.h>
+#include <algorithm>
+#include <set>
 
 inline void _error(std::string message) {
 	throw RiposteError(message);
@@ -62,22 +64,22 @@ template<class I, class O> struct Cast {
 template<> struct Cast<Logical, Double> {
 	typedef Logical A;
 	typedef Double R;
-	static Double::Element eval(Logical::Element const& i) { return i ? 1.0 : 0.0; }
+	static Double::Element eval(Logical::Element const& i) { return Logical::isNA(i) ? Double::NAelement : i ? 1.0 : 0.0; }
 };
 template<> struct Cast<Logical, Integer> {
 	typedef Logical A;
 	typedef Integer R;
-	static Integer::Element eval(Logical::Element const& i) { return i ? 1 : 0; }
+	static Integer::Element eval(Logical::Element const& i) { return Logical::isNA(i) ? Integer::NAelement : i ? 1 : 0; }
 };
 template<> struct Cast<Double, Logical> {
 	typedef Double A;
 	typedef Logical R;
-	static Logical::Element eval(Double::Element const& i) { return i != 0.0 ? 1 : 0; }
+	static Logical::Element eval(Double::Element const& i) { return Double::isNA(i) ? Logical::NAelement : i != 0.0 ? 1 : 0; }
 };
 template<> struct Cast<Integer, Logical> {
 	typedef Integer A;
 	typedef Logical R;
-	static Logical::Element eval(Integer::Element const& i) { return i != 0 ? 1 : 0; }
+	static Logical::Element eval(Integer::Element const& i) { return Integer::isNA(i) ? Logical::NAelement : i != 0 ? 1 : 0; }
 };
 template<> struct Cast<Character, Logical> {
 	typedef Character A;
@@ -461,22 +463,59 @@ struct Zip2 {
 	}
 };
 
-template< class A, class Index >
-struct SubsetIndex {
-	static A eval(A const& a, Index const& d)
+template< class A >
+struct SubsetInclude {
+	static A eval(A const& a, Integer const& d, uint64_t nonzero)
 	{
-		// compute length without 0s
-		uint64_t outlength = 0;
-		for(uint64_t i = 0; i < d.length; i++)
-			if( Cast<Index, Integer>::eval(d[i]) != 0)
-				outlength++;
-	
-		A r(outlength);	
+		A r(nonzero);
 		uint64_t j = 0;
-		for(uint64_t i = 0; i < d.length; i++) {	
-			int64_t idx = Cast<Index, Integer>::eval(d[i]);
-			if(idx != 0)
-				r[j++] = a[idx-1];
+		for(uint64_t i = 0; i < d.length; i++) {
+			if(Integer::isNA(d[i])) r[j++] = A::NAelement;	
+			else if(d[i] != 0) r[j++] = a[d[i]-1];
+		}
+		return r;
+	}
+};
+
+template< class A >
+struct SubsetExclude {
+	static A eval(A const& a, Integer const& d, uint64_t nonzero)
+	{
+		std::set<Integer::Element> index; 
+		for(uint64_t i = 0; i < d.length; i++) if(-d[i] > 0 && -d[i] < (int64_t)a.length) index.insert(-d[i]);
+		// iterate through excluded elements copying intervening ranges.
+		A r(a.length-index.size());
+		uint64_t start = 1;
+		uint64_t k = 0;
+		for(std::set<Integer::Element>::const_iterator i = index.begin(); i != index.end(); ++i) {
+			uint64_t end = *i;
+			for(uint64_t j = start; j < end; j++) r[k++] = a[j-1];
+			start = end+1;
+		}
+		for(uint64_t j = start; j <= a.length; j++) r[k++] = a[j-1];
+		return r;
+	}
+};
+
+template< class A >
+struct SubsetLogical {
+	static A eval(A const& a, Logical const& d)
+	{
+		// determine length
+		uint64_t length = 0;
+		if(d.length > 0) {
+			uint64_t j = 0;
+			for(uint64_t i = 0; i < std::max(a.length, d.length); i++) {
+				if(!Logical::isFalse(d[j])) length++;
+				if(++j >= d.length) j = 0;
+			}
+		}
+		A r(length);
+		uint64_t j = 0, k = 0;
+		for(uint64_t i = 0; i < std::max(a.length, d.length) && k < length; i++) {
+			if(i >= a.length || Logical::isNA(d[j])) r[k++] = A::NAelement;
+			else if(Logical::isTrue(d[j])) r[k++] = a[i];
+			if(++j >= d.length) j = 0;
 		}
 		return r;
 	}
@@ -796,6 +835,8 @@ inline void Insert(Vector const& src, uint64_t srcIndex, Vector& dst, uint64_t d
 }
 
 inline Vector Subset(Vector const& src, uint64_t start, uint64_t length) {
+	if(start+length > src.length)
+		throw RuntimeError("subset index out of bounds");
 	Vector v(src.type, length);
 	memcpy(v.data(0), src.data(start), length*src.width);
 	return v;
@@ -811,32 +852,15 @@ inline Double Sequence(double from, double by, double len) {
 	return r;
 }
 
-inline Vector Element(Vector const& a, uint64_t index)
+inline Vector Element(Vector const& src, uint64_t index)
 {
-	if(a.type == Type::R_double) return Double::c(Double(a)[index]);
-	else if(a.type == Type::R_integer) return Integer::c(Integer(a)[index]);
-	else if(a.type == Type::R_logical) return Logical::c(Logical(a)[index]);
-	else if(a.type == Type::R_character) return Character::c(Character(a)[index]);
-	else if(a.type == Type::R_complex) return Complex::c(Complex(a)[index]);
-	else if(a.type == Type::R_list) return List::c(List(a)[index]);
-	else {
-		printf("Invalid element\n");
-		return Null::singleton;
-	};
+	return Subset(src, index, 1);
 }
 
-inline Value Element2(Vector const& a, uint64_t index)
+inline Value Element2(Vector const& src, uint64_t index)
 {
-	if(a.type == Type::R_double) return Double::c(Double(a)[index]);
-	else if(a.type == Type::R_integer) return Integer::c(Integer(a)[index]);
-	else if(a.type == Type::R_logical) return Logical::c(Logical(a)[index]);
-	else if(a.type == Type::R_character) return Character::c(Character(a)[index]);
-	else if(a.type == Type::R_complex) return Complex::c(Complex(a)[index]);
-	else if(a.type == Type::R_list) return List(a)[index];
-	else {
-		_error("Invalid element");
-		return Null::singleton;
-	};
+	if(src.type == Type::R_list) return List(src)[index];
+	else return Subset(src, index, 1);
 }
 
 #endif

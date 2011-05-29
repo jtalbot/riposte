@@ -193,7 +193,8 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 	}	
 }
 static int64_t get_op(State& state, Closure const& closure, Instruction const& inst) {
-	state.env->get(state, Symbol(inst.a), state.registers[inst.c]);
+	bool success = state.env->get(state, Symbol(inst.a), state.registers[inst.c]);
+	if(!success) throw RiposteError(std::string("object '") + Symbol(inst.a).toString(state) + "' not found");
 	return 1;
 }
 static int64_t kget_op(State& state, Closure const& closure, Instruction const& inst) {

@@ -165,6 +165,10 @@ static int dofile(const char * file, State& state, bool echo) {
 				std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) {
 			e_message("Error", "riposte", error.what().c_str());
+		} catch(RuntimeError& error) {
+			e_message("Error", "runtime", error.what().c_str());
+		} catch(CompileError& error) {
+			e_message("Error", "compiler", error.what().c_str());
 		}
 	}
 

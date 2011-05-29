@@ -220,57 +220,60 @@ uint64_t minusOp(State& state, uint64_t nargs) {
 		return binaryArith<Zip2, SubOp>(state, nargs);
 }
 */
+
+Vector Subset(Vector const& a, Vector const& i)	{
+	if(i.type == Type::R_double || i.type == Type::R_integer) {
+		Integer index = Integer(As(i, Type::R_integer));
+		uint64_t positive = 0, negative = 0;
+		for(uint64_t i = 0; i < index.length; i++) {
+			if(index[i] > 0 || Integer::isNA(index[i])) positive++;
+			else if(index[i] < 0) negative++;
+		}
+		if(positive > 0 && negative > 0)
+			throw RuntimeError("mixed subscripts not allowed");
+		else if(positive > 0) {
+			switch(a.type.Enum()) {
+				case Type::E_R_double: return SubsetInclude<Double>::eval(a, index, positive); break;
+				case Type::E_R_integer: return SubsetInclude<Integer>::eval(a, index, positive); break;
+				case Type::E_R_logical: return SubsetInclude<Logical>::eval(a, index, positive); break;
+				case Type::E_R_character: return SubsetInclude<Character>::eval(a, index, positive); break;
+				case Type::E_R_list: return SubsetInclude<List>::eval(a, index, positive); break;
+				default: throw RuntimeError("NYI"); break;
+			};
+		}
+		else if(negative > 0) {
+			switch(a.type.Enum()) {
+				case Type::E_R_double: return SubsetExclude<Double>::eval(a, index, negative); break;
+				case Type::E_R_integer: return SubsetExclude<Integer>::eval(a, index, negative); break;
+				case Type::E_R_logical: return SubsetExclude<Logical>::eval(a, index, negative); break;
+				case Type::E_R_character: return SubsetExclude<Character>::eval(a, index, negative); break;
+				case Type::E_R_list: return SubsetExclude<List>::eval(a, index, negative); break;
+				default: throw RuntimeError("NYI"); break;
+			};	
+		}
+		else {
+			return Vector(a.type, 0);
+		}
+	}
+	else if(i.type == Type::R_logical) {
+		Logical index = Logical(i);
+		switch(a.type.Enum()) {
+			case Type::E_R_double: return SubsetLogical<Double>::eval(a, index); break;
+			case Type::E_R_integer: return SubsetLogical<Integer>::eval(a, index); break;
+			case Type::E_R_logical: return SubsetLogical<Logical>::eval(a, index); break;
+			case Type::E_R_character: return SubsetLogical<Character>::eval(a, index); break;
+			case Type::E_R_list: return SubsetLogical<List>::eval(a, index); break;
+			default: throw RuntimeError("NYI"); break;
+		};	
+	}
+	else throw RuntimeError("NYI indexing type");
+}
+
 uint64_t subset(State& state, Call const& call, List const& args) {
-
 	checkNumArgs(args, 2);
-
-        Value a = force(state, args[0]);
-        Value i = force(state, args[1]);
-
-        Vector r;
-        if(a.type == Type::R_double && i.type == Type::R_double) {
-                r = SubsetIndex< Double, Double >::eval(a, i);
-        }
-        else if(a.type == Type::R_integer && i.type == Type::R_double) {
-                r = SubsetIndex< Integer, Double >::eval(a, i);
-        }
-        else if(a.type == Type::R_double && i.type == Type::R_integer) {
-                r = SubsetIndex< Double, Integer >::eval(a, i);
-        }
-        else if(a.type == Type::R_integer && i.type == Type::R_integer) {
-                r = SubsetIndex< Integer, Integer >::eval(a, i);
-        }
-        else if(a.type == Type::R_logical && i.type == Type::R_double) {
-                r = SubsetIndex< Logical, Double >::eval(a, i);
-        }
-        else if(a.type == Type::R_logical && i.type == Type::R_integer) {
-                r = SubsetIndex< Logical, Integer >::eval(a, i);
-        }
-        else if(a.type == Type::R_character && i.type == Type::R_double) {
-                r = SubsetIndex< Character, Double >::eval(a, i);
-        }
-        else if(a.type == Type::R_character && i.type == Type::R_integer) {
-                r = SubsetIndex< Character, Integer >::eval(a, i);
-        }
-        else if(a.type == Type::R_list && i.type == Type::R_double) {
-                r = SubsetIndex< List, Double >::eval(a, i);
-        }
-        else if(a.type == Type::R_list && i.type == Type::R_integer) {
-                r = SubsetIndex< List, Integer >::eval(a, i);
-        }
-        else if(a.type == Type::R_double && i.type == Type::R_logical) {
-                //r = SubsetIndex< Integer, Double >::eval(a, i);
-        }
-        else if(a.type == Type::R_integer && i.type == Type::R_logical) {
-                //r = SubsetIndex< Integer, Double >::eval(a, i);
-        }
-        else if(a.type == Type::R_logical && i.type == Type::R_logical) {
-                //r = SubsetIndex< Integer, Double >::eval(a, i);
-        }
-        else {
-                _error("Invalid index\n");
-        }
-	state.registers[0] = r;
+        Vector a = Vector(force(state, args[0]));
+        Vector i = Vector(force(state, args[1]));
+	state.registers[0] = Subset(a,i);
         return 1;
 }
 

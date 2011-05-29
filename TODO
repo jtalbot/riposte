@@ -26,8 +26,6 @@ Incomplete language features
 -Help
 -matrix indexing
 -[[]] indexing (Works with a single index)
--logical vector indexing
--negative number indexing
 -character indexing
 -search path
 -S3 Classes
@@ -52,6 +50,8 @@ Implemented, but needs testing and/or additional functionality
 -eval
 -warning, stop, on.exit, exceptions(?)
 -NAs
+-logical vector indexing
+-negative number indexing
 
 
 Language design issues

@@ -278,6 +278,8 @@ VECTOR_IMPL(PackedVectorImpl, Null, Type::E_R_null, unsigned char)
 VECTOR_IMPL(PackedVectorImpl, Logical, Type::E_R_logical, unsigned char)
 	static Logical c(unsigned char c) { Logical r(1); r[0] = c; return r; }
 	static bool isNA(unsigned char c) { return c == NAelement; }
+	static bool isTrue(unsigned char c) { return c == 1; }
+	static bool isFalse(unsigned char c) { return c == 0; }
 	const static bool CheckNA;
 	const static unsigned char NAelement;
 	static Logical NA() { static Logical na = Logical::c(NAelement); return na; }
@@ -311,7 +313,8 @@ VECTOR_IMPL(PackedVectorImpl, Raw, Type::E_R_raw, unsigned char) };
 VECTOR_IMPL(VectorImpl, List, Type::E_R_list, Value) 
 	static List c(Value v0) { List c(1); c[0] = v0; return c; }
 	static List c(Value v0, Value v1) { List c(2); c[0] = v0; c[1] = v1; return c; }
-	static List c(Value v0, Value v1, Value v2) { List c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } };
+	static List c(Value v0, Value v1, Value v2) { List c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; }
+	const static Value NAelement; };
 VECTOR_IMPL(VectorImpl, PairList, Type::E_R_pairlist, Value) 
 	PairList(List v) : VectorImpl<Type::E_R_pairlist, Value>(v.data(), v.length, v.attributes) {}
 	static PairList c(Value v0) { PairList c(1); c[0] = v0; return c; }
