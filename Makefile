@@ -9,7 +9,7 @@ ifeq ($(UNAME),Darwin)
 	CXXFLAGS += -I/opt/local/include
 endif
 
-SRC := main.cpp type.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp
+SRC := main.cpp type.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp
 
 EXECUTABLE := bin/riposte
 

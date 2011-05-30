@@ -31,6 +31,18 @@ static inline std::string doubleToStr( double n )
     return result.str();
 }
 
+static inline int64_t strToInt( std::string const& s) {
+	int64_t r;
+	std::istringstream(s) >> r;
+	return r;
+}
+
+static inline double strToDouble( std::string const& s) {
+	double r;
+	std::istringstream(s) >> r;
+	return r;
+}
+
 static inline double time_diff (
     timespec const& end, timespec const& begin)
 {

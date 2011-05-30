@@ -30,4 +30,7 @@ public:
 	std::string what() const { return message; }
 };
 
+#define _error(T) (throw RiposteError(T))
+#define _warning(S, T) (S.warnings.push_back(T))
+
 #endif

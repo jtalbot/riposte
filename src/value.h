@@ -39,6 +39,7 @@ struct Value {
 	bool isInteger() const { return type == Type::R_integer; }
 	bool isLogical() const { return type == Type::R_logical; }
 	bool isCharacter() const { return type == Type::R_character; }
+	bool isList() const { return type == Type::R_list; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	static const Value NIL;

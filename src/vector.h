@@ -4,49 +4,114 @@
 
 #include "value.h"
 
-// Vectors are defined in value. This defines common operations on vectors.
+template<class X, class Y>
+struct UnaryOp {
+	typedef X A;
+	typedef Y R;
+};
 
-inline bool isVector(Value& v) {
-	return 	v.type() == R_logical ||
-			v.type() == R_integer ||
-			v.type() == R_double ||
-			v.type() == R_complex ||
-			v.type() == R_character ||
-			v.type() == R_raw ||
-			v.type() == R_list ||
-			v.type() == R_call ||
-			v.type() == R_expression;
-}
-
-inline bool isBasicVector(Value& v) {
-	return 	v.type() == R_logical ||
-			v.type() == R_integer ||
-			v.type() == R_double ||
-			v.type() == R_complex ||
-			v.type() == R_character ||
-			v.type() == R_raw;
-}
-
-inline Value unpack(Value const& v) {
-	if(v.packed == 0) {
-		switch(v.type().internal()) {
-			case R_logical: return Logical(0, false); break;
-			case R_integer: return Integer(0, false); break;
-			case R_double: return Double(0, false); break;
-			case R_raw: return Raw(0, false); break;
-			default: return v; break;
-		}	
-	} else if(v.packed == 1) {
-		Value r;
-		switch(v.type().internal()) {
-			case R_logical: { Logical t(1, false); t[0] = Logical(v)[0]; t.toValue(r); } break;
-			case R_integer: { Integer t(1, false); t[0] = Integer(v)[0]; t.toValue(r); } break;
-			case R_double: { Double t(1, false); t[0] = Double(v)[0]; t.toValue(r); } break;
-			case R_raw: { Raw t(1, false); t[0] = Raw(v)[0]; t.toValue(r); } break;
-			default: return v; break;
-		}	
+template<class Op>
+struct NA1 : UnaryOp<typename Op::A, typename Op::R> {
+	static typename Op::R::Element eval(State& state, typename Op::A::Element const& a) {
+		if(!Op::A::CheckNA || !Op::A::isNA(a))
+			return Op::eval(state, a);
+		else
+			return Op::R::NAelement;
 	}
-	else return v;
+};
+
+template<typename X, typename Y, typename Z> struct BinaryOp {
+	typedef X A;
+	typedef Y B;
+	typedef Z R;
+};
+
+template<class Op>
+struct NA2 : BinaryOp<typename Op::A, typename Op::B, typename Op::R> {
+	static typename Op::R::Element eval(State& state, typename Op::A::Element const& a, typename Op::B::Element const& b) {
+		if((!Op::A::CheckNA || !Op::A::isNA(a)) && (!Op::B::CheckNA || !Op::B::isNA(b)))
+			return Op::eval(state, a, b);
+		else
+			return Op::R::NAelement;
+	}
+};
+
+template< class Op >
+struct Zip1 {
+	static typename Op::R eval(State& state, typename Op::A const& a)
+	{
+		typename Op::R r = typename Op::R(a.length);
+		for(uint64_t i = 0; i < a.length; ++i) {
+			r[i] = Op::eval(state, a[i]);
+		}
+		return r;
+	}
+};
+
+template< class Op >
+struct Zip2 {
+	static typename Op::R eval(State& state, typename Op::A const& a, typename Op::B const& b)
+	{
+		if(a.length == b.length) {
+			typename Op::R r(a.length);
+			for(uint64_t i = 0; i < a.length; ++i) {
+				r[i] = Op::eval(state, a[i], b[i]);
+			}
+			return r;
+		}
+		else if(a.length == 1) {
+			typename Op::R r(b.length);
+			for(uint64_t i = 0; i < b.length; ++i) {
+				r[i] = Op::eval(state, a[0], b[i]);
+			}
+			return r;
+		}
+		else if(b.length == 1) {
+			typename Op::R r(a.length);
+			for(uint64_t i = 0; i < a.length; ++i) {
+				r[i] = Op::eval(state, a[i], b[0]);
+			}
+			return r;
+		}
+		else if(a.length == 0 || b.length == 0) {
+			return typename Op::R(0);
+		}
+		else if(a.length > b.length) {
+			typename Op::R r(a.length);
+			uint64_t j = 0;
+			for(uint64_t i = 0; i < a.length; ++i) {
+				r[i] = Op::eval(state, a[i], b[j]);
+				++j;
+				if(j >= b.length) j = 0;
+			}
+			return r;
+		}
+		else {
+			typename Op::R r(b.length);
+			uint64_t j = 0;
+			for(uint64_t i = 0; i < b.length; ++i) {
+				r[i] = Op::eval(state, a[j], b[i]);
+				++j;
+				if(j >= a.length) j = 0;
+			}
+			return r;
+		}
+	}
+};
+
+template<class T>
+T Clone(T const& in) {
+	T out(in.length());
+	memcpy(out.data(), in.data(), in.length*in.width);
+	out.attributes = in.attributes;
+	return out;	
+}
+
+inline Vector Clone(Vector const& in) {
+	Vector out(in.type, in.length);
+	memcpy(out.data(), in.data(), in.length*in.width);
+	out.attributes = in.attributes;
+	return out;
 }
 
 #endif

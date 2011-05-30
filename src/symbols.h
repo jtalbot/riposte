@@ -68,5 +68,7 @@
 	_(names, "names", p) \
 	_(dim, "dim", p) \
 	_(classSym, "class", p) \
+	_(TRUE, "TRUE", p) \
+	_(FALSE, "FALSE", p) \
 
 #endif

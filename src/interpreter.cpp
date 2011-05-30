@@ -154,9 +154,9 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 		state.env->get(state, Symbol::dots, v);
 		List dots(v);
 		Vector expanded(Type::R_list, parameters.length + dots.length-1);
-		Insert(parameters, 0, expanded, 0, call.dots()-1);
-		Insert(dots, 0, expanded, call.dots()-1, dots.length);
-		Insert(parameters, call.dots(), expanded, call.dots()-1+dots.length, parameters.length-call.dots());
+		Insert(state, parameters, 0, expanded, 0, call.dots()-1);
+		Insert(state, dots, 0, expanded, call.dots()-1, dots.length);
+		Insert(state, parameters, call.dots(), expanded, call.dots()-1+dots.length, parameters.length-call.dots());
 		if( (parameters.attributes != 0 && getNames(parameters.attributes).type != Type::R_null) ||
 		    (dots.attributes != 0 && getNames(dots.attributes).type != Type::R_null) ) {
 			Character names(expanded.length);

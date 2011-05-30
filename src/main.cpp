@@ -19,6 +19,7 @@
 
 #include "value.h"
 #include "internal.h"
+#include "coerce.h"
 #include "parser.h"
 #include "compiler.h"
 
@@ -250,6 +251,7 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 	Environment* baseenv = new Environment(0,0);
 	State state(new Environment(baseenv, baseenv), baseenv);
 	addMathOps(state);	
+	importCoerceFunctions(state);	
 
 /* Either execute the specified file or read interactively from stdin  */
 

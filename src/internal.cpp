@@ -169,7 +169,7 @@ uint64_t c(State& state, Call const& call, List const& Args) {
 	Vector out(type, total);
 	uint64_t j = 0;
 	for(uint64_t i = 0; i < args.size(); i++) {
-		Insert(args[i], 0, out, j, args[i].length);
+		Insert(state, args[i], 0, out, j, args[i].length);
 		j += args[i].length;
 	}
 	
@@ -221,9 +221,9 @@ uint64_t minusOp(State& state, uint64_t nargs) {
 }
 */
 
-Vector Subset(Vector const& a, Vector const& i)	{
+Vector Subset(State& state, Vector const& a, Vector const& i)	{
 	if(i.type == Type::R_double || i.type == Type::R_integer) {
-		Integer index = As<Integer>(i);
+		Integer index = As<Integer>(state, i);
 		uint64_t positive = 0, negative = 0;
 		for(uint64_t i = 0; i < index.length; i++) {
 			if(index[i] > 0 || Integer::isNA(index[i])) positive++;
@@ -233,21 +233,21 @@ Vector Subset(Vector const& a, Vector const& i)	{
 			_error("mixed subscripts not allowed");
 		else if(positive > 0) {
 			switch(a.type.Enum()) {
-				case Type::E_R_double: return SubsetInclude<Double>::eval(a, index, positive); break;
-				case Type::E_R_integer: return SubsetInclude<Integer>::eval(a, index, positive); break;
-				case Type::E_R_logical: return SubsetInclude<Logical>::eval(a, index, positive); break;
-				case Type::E_R_character: return SubsetInclude<Character>::eval(a, index, positive); break;
-				case Type::E_R_list: return SubsetInclude<List>::eval(a, index, positive); break;
+				case Type::E_R_double: return SubsetInclude<Double>::eval(state, a, index, positive); break;
+				case Type::E_R_integer: return SubsetInclude<Integer>::eval(state, a, index, positive); break;
+				case Type::E_R_logical: return SubsetInclude<Logical>::eval(state, a, index, positive); break;
+				case Type::E_R_character: return SubsetInclude<Character>::eval(state, a, index, positive); break;
+				case Type::E_R_list: return SubsetInclude<List>::eval(state, a, index, positive); break;
 				default: _error("NYI"); break;
 			};
 		}
 		else if(negative > 0) {
 			switch(a.type.Enum()) {
-				case Type::E_R_double: return SubsetExclude<Double>::eval(a, index, negative); break;
-				case Type::E_R_integer: return SubsetExclude<Integer>::eval(a, index, negative); break;
-				case Type::E_R_logical: return SubsetExclude<Logical>::eval(a, index, negative); break;
-				case Type::E_R_character: return SubsetExclude<Character>::eval(a, index, negative); break;
-				case Type::E_R_list: return SubsetExclude<List>::eval(a, index, negative); break;
+				case Type::E_R_double: return SubsetExclude<Double>::eval(state, a, index, negative); break;
+				case Type::E_R_integer: return SubsetExclude<Integer>::eval(state, a, index, negative); break;
+				case Type::E_R_logical: return SubsetExclude<Logical>::eval(state, a, index, negative); break;
+				case Type::E_R_character: return SubsetExclude<Character>::eval(state, a, index, negative); break;
+				case Type::E_R_list: return SubsetExclude<List>::eval(state, a, index, negative); break;
 				default: _error("NYI"); break;
 			};	
 		}
@@ -258,11 +258,11 @@ Vector Subset(Vector const& a, Vector const& i)	{
 	else if(i.type == Type::R_logical) {
 		Logical index = Logical(i);
 		switch(a.type.Enum()) {
-			case Type::E_R_double: return SubsetLogical<Double>::eval(a, index); break;
-			case Type::E_R_integer: return SubsetLogical<Integer>::eval(a, index); break;
-			case Type::E_R_logical: return SubsetLogical<Logical>::eval(a, index); break;
-			case Type::E_R_character: return SubsetLogical<Character>::eval(a, index); break;
-			case Type::E_R_list: return SubsetLogical<List>::eval(a, index); break;
+			case Type::E_R_double: return SubsetLogical<Double>::eval(state, a, index); break;
+			case Type::E_R_integer: return SubsetLogical<Integer>::eval(state, a, index); break;
+			case Type::E_R_logical: return SubsetLogical<Logical>::eval(state, a, index); break;
+			case Type::E_R_character: return SubsetLogical<Character>::eval(state, a, index); break;
+			case Type::E_R_list: return SubsetLogical<List>::eval(state, a, index); break;
 			default: _error("NYI"); break;
 		};	
 	}
@@ -274,7 +274,7 @@ uint64_t subset(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 2);
         Vector a = Vector(force(state, args[0]));
         Vector i = Vector(force(state, args[1]));
-	state.registers[0] = Subset(a,i);
+	state.registers[0] = Subset(state, a,i);
         return 1;
 }
 
