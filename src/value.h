@@ -62,11 +62,11 @@ struct State {
 	std::map<std::string, uint64_t> stringTable;
 	std::map<uint64_t, std::string> reverseStringTable;
 	
-	Value loopVector;
+/*	Value loopVector;
 	int64_t loopIndex;
 	int64_t loopStep;
 	int64_t loopEnd;
-
+*/
 	State(Environment* env, Environment* baseenv);
 
 	uint64_t inString(std::string const& s) {

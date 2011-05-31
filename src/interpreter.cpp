@@ -272,34 +272,34 @@ static int64_t idimassign_op(State& state, Closure const& closure, Instruction c
 }
 static int64_t forbegin_op(State& state, Closure const& closure, Instruction const& inst) {
 	//TODO: need to keep a stack of these...
-	state.loopVector = state.registers[inst.c];
-	state.loopIndex = (int64_t)0;
-	state.loopEnd = (int64_t)Vector(state.loopVector).length;
+	Value loopVector = state.registers[inst.c];
 	state.registers[inst.c] = Null::singleton;
-	if(state.loopIndex >= state.loopEnd) { return inst.a; }
-	state.env->assign(Symbol(inst.b), Element(state.loopVector, state.loopIndex));
+	state.registers[inst.c+1] = loopVector;
+	state.registers[inst.c+2] = Integer::c(0);
+	if(state.registers[inst.c+2].i >= state.registers[inst.c+1].length) { return inst.a; }
+	state.env->assign(Symbol(inst.b), Element(loopVector, 0));
 	return 1;
 }
 static int64_t forend_op(State& state, Closure const& closure, Instruction const& inst) {
-	if(++state.loopIndex < state.loopEnd) { 
-		state.env->assign(Symbol(inst.b), Element(Vector(state.loopVector), state.loopIndex));
+	if(++state.registers[inst.c+2].i < state.registers[inst.c+1].length) { 
+		state.env->assign(Symbol(inst.b), Element(state.registers[inst.c+1], state.registers[inst.c+2].i));
 		return inst.a; 
 	} else return 1;
 }
 static int64_t iforbegin_op(State& state, Closure const& closure, Instruction const& inst) {
 	double m = asReal1(state.registers[inst.c]);
 	double n = asReal1(state.registers[inst.c+1]);
-	state.loopIndex = (int64_t)m;
-	state.loopStep = n > m ? 1 : -1;
-	state.loopEnd = (int64_t)n+1;
 	state.registers[inst.c] = Null::singleton;
-	if(state.loopIndex >= state.loopEnd) { return inst.a; }
-	state.env->assign(Symbol(inst.b), Integer::c(state.loopIndex));
+	state.registers[inst.c+1] = Integer::c(n > m ? 1 : -1);
+	state.registers[inst.c+1].length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
+	state.registers[inst.c+2] = Integer::c((int64_t)m);
+	if(state.registers[inst.c+2].i >= state.registers[inst.c+1].length) { return inst.a; }
+	state.env->assign(Symbol(inst.b), Integer::c(m));
 	return 1;
 }
 static int64_t iforend_op(State& state, Closure const& closure, Instruction const& inst) {
-	if(++state.loopIndex < state.loopEnd) { 
-		state.env->assign(Symbol(inst.b), Integer::c(state.loopIndex));
+	if((state.registers[inst.c+2].i+=state.registers[inst.c+1].i) < state.registers[inst.c+1].length) { 
+		state.env->assign(Symbol(inst.b), state.registers[inst.c+2]);
 		return inst.a; 
 	} else return 1;
 }

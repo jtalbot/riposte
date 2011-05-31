@@ -184,7 +184,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		if(call[2].type == Type::R_call && state.outString(Symbol(Call(call[2])[0]).i) == ":") {
 			uint64_t lim1 = compile(Call(call[2])[1], closure);
 			uint64_t lim2 = compile(Call(call[2])[2], closure);
-			registerDepth = initialDepth+1; // save space for NULL result
+			registerDepth = initialDepth+3; // save space for NULL result and loop variables 
 			if(lim2 != lim1+1) throw CompileError("limits aren't in adjacent registers");
 			closure.code().push_back(Instruction(ByteCode::iforbegin, 0, Symbol(call[1]).i, lim1));
 			loopDepth++;
@@ -198,7 +198,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		}
 		else {
 			uint64_t lim = compile(call[2], closure);
-			registerDepth = initialDepth+1; // save space for NULL result
+			registerDepth = initialDepth+3; // save space for NULL result and loop variables
 			closure.code().push_back(Instruction(ByteCode::forbegin, 0, Symbol(call[1]).i, lim));
 			loopDepth++;
 			uint64_t beginbody = closure.code().size();
