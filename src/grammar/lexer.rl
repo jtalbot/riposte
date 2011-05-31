@@ -2,9 +2,8 @@
  *	A ragel lexer for R.
  *	In ragel, the lexer drives the parsing process, so this also has the basic parsing functions.
  *	Use this to generate parser.cpp
- *      TODO: Eliminate calls to Symbol(state, ...) which require a map search. Should be a hard-coded value.
+ *      TODO: 
  *            Parse escape sequences embedded in strings.
- *            Emit complex NA
  *            Include the double-to-int warnings, e.g. on 1.0L  and 1.5L
  *            Generate hex numbers
  *            Do we really want to allow '.' inside hex numbers? R allows them, but ignores them when parsing to a number.

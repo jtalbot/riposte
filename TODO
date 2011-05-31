@@ -16,7 +16,6 @@ Incomplete language features
 ----------------------------
 -on.exit, exceptions(?)
 -next and break
--vector type conversion functions (as.*)
 -environment and call stack access functions (parent.env, sys.call, sys.parent, etc.)
 -attribute access functions
 -attribute propogation
@@ -52,7 +51,8 @@ Implemented, but needs testing and/or additional functionality
 -NAs
 -logical vector indexing
 -negative number indexing
-
+-complex numbers
+-vector type conversion functions (as.*)
 
 Language design issues
 ----------------------
