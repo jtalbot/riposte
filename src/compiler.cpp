@@ -18,7 +18,8 @@ static ByteCode op(Symbol const& s) {
 		case Symbol::E_lnot: return ByteCode::lnot; break;
 		case Symbol::E_land: return ByteCode::land; break;
 		case Symbol::E_sland: return ByteCode::sland; break;
-		case Symbol::E_lor: return ByteCode::slor; break;
+		case Symbol::E_lor: return ByteCode::lor; break;
+		case Symbol::E_slor: return ByteCode::slor; break;
 		case Symbol::E_abs: return ByteCode::abs; break;
 		case Symbol::E_sign: return ByteCode::sign; break;
 		case Symbol::E_sqrt: return ByteCode::sqrt; break;

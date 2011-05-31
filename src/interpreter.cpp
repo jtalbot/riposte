@@ -187,8 +187,7 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 		state.registers = old_registers;
 		return 1;
 	} else {
-		printf("Non-function as first parameter to call\n");
-		assert(false);
+		_error("Non-function as first parameter to call\n");
 		return 1;
 	}	
 }

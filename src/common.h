@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <string>
 #include <sstream>
+#include <complex>
+#include <iostream>
 #include <stdexcept>
 #include <sys/time.h>
 #include <stdio.h>
@@ -31,6 +33,15 @@ static inline std::string doubleToStr( double n )
     return result.str();
 }
 
+static inline std::string complexToStr( std::complex<double> n )
+{
+    std::ostringstream result;
+    result << n.real();
+    result.setf(std::ios::showpos);
+    result << n.imag() << "i";
+    return result.str();
+}
+
 static inline int64_t strToInt( std::string const& s) {
 	int64_t r;
 	std::istringstream(s) >> r;
@@ -41,6 +52,14 @@ static inline double strToDouble( std::string const& s) {
 	double r;
 	std::istringstream(s) >> r;
 	return r;
+}
+
+static inline std::complex<double> strToComplex( std::string const& s) {
+	double r, i;
+	std::istringstream t(s);
+	t >> r;
+	t >> i;
+	return std::complex<double>(r,i);
 }
 
 static inline double time_diff (

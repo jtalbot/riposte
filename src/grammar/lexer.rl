@@ -36,7 +36,7 @@
 	'NA_integer_'	{token( TOKEN_NUM_CONST, Integer::NA() );};
 	'NA_real_'	{token( TOKEN_NUM_CONST, Double::NA() );};
 	'NA_character_'	{token( TOKEN_STR_CONST, Character::NA() );};
-	'NA_complex_'	{token( TOKEN_NUM_CONST);};
+	'NA_complex_'	{token( TOKEN_NUM_CONST, Complex::NA() );};
 	'function'	{token( TOKEN_FUNCTION, Symbol::function );};
 	'while'	{token( TOKEN_WHILE, Symbol::whileSym );};
 	'repeat'	{token( TOKEN_REPEAT, Symbol::repeatSym );};
@@ -54,7 +54,7 @@
 		{token( TOKEN_STR_CONST, Character::c(state, std::string(ts+1, te-ts-2)) );};
 
 	# Symbols.
-	( ('.'? [a-zA-Z_.]) [a-zA-Z0-9_.]* ) 
+	( (('.' [a-zA-Z_.]) | [a-zA-Z_]) [a-zA-Z0-9_.]* ) 
 		{token( TOKEN_SYMBOL, Symbol(state, std::string(ts, te-ts)) );};
 	( '`' ( [^`\\\n] | /\\./ )* '`' ) 
 		{token( TOKEN_SYMBOL, Symbol(state, std::string(ts+1, te-ts-2)) );};

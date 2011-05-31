@@ -19,6 +19,12 @@ uint64_t asdouble(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
+uint64_t ascomplex(State& state, Call const& call, List const& args) {
+	Value from = force(state, args[0]);
+	state.registers[0] = As<Complex>(state, from);
+	return 1;
+}
+
 uint64_t ascharacter(State& state, Call const& call, List const& args) {
 	Value from = force(state, args[0]);
 	state.registers[0] = As<Character>(state, from);
@@ -56,6 +62,12 @@ uint64_t isdouble(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
+uint64_t iscomplex(State& state, Call const& call, List const& args) {
+	Value from = force(state, args[0]);
+	state.registers[0] = Logical::c(from.isComplex());
+	return 1;
+}
+
 uint64_t ischaracter(State& state, Call const& call, List const& args) {
 	Value from = force(state, args[0]);
 	state.registers[0] = Logical::c(from.isCharacter());
@@ -80,6 +92,8 @@ void importCoerceFunctions(State& state)
 	CFunction(asdouble).toValue(v);
 	env->assign(Symbol(state, "as.double"), v);
 	env->assign(Symbol(state, "as.numeric"), v);
+	CFunction(ascomplex).toValue(v);
+	env->assign(Symbol(state, "as.complex"), v);
 	CFunction(ascharacter).toValue(v);
 	env->assign(Symbol(state, "as.character"), v);
 	CFunction(aslist).toValue(v);
@@ -94,6 +108,8 @@ void importCoerceFunctions(State& state)
 	CFunction(isdouble).toValue(v);
 	env->assign(Symbol(state, "is.double"), v);
 	env->assign(Symbol(state, "is.real"), v);
+	CFunction(iscomplex).toValue(v);
+	env->assign(Symbol(state, "is.complex"), v);
 	CFunction(ischaracter).toValue(v);
 	env->assign(Symbol(state, "is.character"), v);
 	CFunction(islist).toValue(v);

@@ -8,6 +8,7 @@
 #include <deque>
 #include <assert.h>
 #include <limits>
+#include <complex>
 
 #include <gc/gc_cpp.h>
 #include <gc/gc_allocator.h>
@@ -35,13 +36,14 @@ struct Value {
 	Type type;
 
 	bool isNull() const { return type == Type::R_null; }
-	bool isDouble() const { return type == Type::R_double; }
-	bool isInteger() const { return type == Type::R_integer; }
 	bool isLogical() const { return type == Type::R_logical; }
+	bool isInteger() const { return type == Type::R_integer; }
+	bool isDouble() const { return type == Type::R_double; }
+	bool isComplex() const { return type == Type::R_complex; }
 	bool isCharacter() const { return type == Type::R_character; }
 	bool isList() const { return type == Type::R_list; }
-	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical(); }
-	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }
+	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
+	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	static const Value NIL;
 };
 
@@ -257,12 +259,6 @@ protected:
 template<Type::EnumValue VectorType, typename ElementType>
 const Type PackedVectorImpl<VectorType, ElementType>::type = {VectorType};
 
-struct _complex {
-	double a,b;
-	_complex() {}
-	_complex(double r, double i) : a(r), b(i) {}
-};
-
 
 union _doublena {
 	uint64_t i;
@@ -302,9 +298,13 @@ VECTOR_IMPL(PackedVectorImpl, Double, Type::E_R_double, double)
 	static Double NA() { static Double na = Double::c(NAelement); return na; }
 	static Double Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
 	static Double NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } };
-VECTOR_IMPL(VectorImpl, Complex, Type::E_R_complex, _complex)
-	static Complex c(double r, double i=0) { Complex c(1); c[0] = _complex(r,i); return c; }
-	static Complex c(_complex c) { Complex r(1); r[0] = c; return r; } };
+VECTOR_IMPL(VectorImpl, Complex, Type::E_R_complex, std::complex<double>)
+	static Complex c(double r, double i=0) { Complex c(1); c[0] = std::complex<double>(r,i); return c; }
+	static Complex c(std::complex<double> c) { Complex r(1); r[0] = c; return r; } 
+	static bool isNA(std::complex<double> c) { _doublena a, b, t ; a.d = c.real(); b.d = c.imag(); t.d = Double::NAelement; return a.i==t.i || b.i==t.i; }
+	const static bool CheckNA;
+	const static std::complex<double> NAelement;
+	static Complex NA() { static Complex na = Complex::c(NAelement); return na; } };
 VECTOR_IMPL(VectorImpl, Character, Type::E_R_character, Symbol)
 	static Character c(State& state, std::string const& s) { Character c(1); c[0] = Symbol(state, s); return c; }
 	static Character c(Symbol const& s) { Character c(1); c[0] = s; return c; }

@@ -26,6 +26,10 @@ inline std::string toString(State const& state, double a) {
 	return Double::isNA(a) ? "NA" : doubleToStr(a);
 }  
 
+inline std::string toString(State const& state, std::complex<double> a) {
+	return Complex::isNA(a) ? "NA" : complexToStr(a);
+}  
+
 inline std::string toString(State const& state, Symbol const& a) {
 	return Character::isNA(a) ? "NA" : std::string("\"") + a.toString(state) + "\"";
 }  
@@ -81,30 +85,16 @@ std::string State::stringify(Value const& value) const {
 		case Type::E_R_raw:
 			return "raw";
 		case Type::E_R_logical:
-		{
-			Logical v(value);
-			return stringifyVector(*this, v);
-		}
+			return stringifyVector(*this, Logical(value));
 		case Type::E_R_integer:
-		{
-			Integer v(value);
-			return stringifyVector(*this, v);
-		}
+			return stringifyVector(*this, Integer(value));
 		case Type::E_R_double:
-		{
-			Double v(value);
-			return stringifyVector(*this, v);
-		}
+			return stringifyVector(*this, Double(value));
 		case Type::E_R_complex:		
-		{
-			//for(uint64_t i = 0; i < length; i++) result = result + ((int64_t*)ptr)[i];
-			return "complex";
-		}
+			return stringifyVector(*this, Complex(value));
 		case Type::E_R_character:
-		{
-			Character v(value);
-			return stringifyVector(*this, v);
-		}
+			return stringifyVector(*this, Character(value));
+		
 		case Type::E_R_list:
 		case Type::E_R_pairlist:
 		{

@@ -5,7 +5,7 @@
 #include "vector.h"
 #include "coerce.h"
 #include "exceptions.h"
-#include <math.h>
+#include <cmath>
 #include <algorithm>
 #include <set>
 
@@ -27,6 +27,10 @@ inline Value expression(Value const& v) {
 inline double asReal1(Value const& v) { if(v.type != Type::R_double && v.type != Type::R_integer) _error("Can't cast argument to number"); if(v.type == Type::R_integer) return Integer(v)[0]; else return Double(v)[0]; }
 
 // Unary operators
+#define UNIMPLEMENTED_COMPLEX_FUNCTION(T) template<> \
+struct T<Complex> : public UnaryOp<Complex, Complex> { \
+	static T::R::Element eval(State& state, T::A::Element const& a) { _error("unimplemented complex function"); } \
+};
 
 template<typename A>
 struct PosOp : public UnaryOp<A, A> {
@@ -44,47 +48,63 @@ struct LNotOp : UnaryOp<Logical, Logical> {
 
 template<typename A>
 struct AbsOp : UnaryOp<A, A> {
-	static typename AbsOp::R::Element eval(State& state, typename AbsOp::A::Element const& a) { return fabs(a); }
+	static typename AbsOp::R::Element eval(State& state, typename AbsOp::A::Element const& a) { return abs(a); }
 };
 
 template<typename A>
 struct SignOp : UnaryOp<A, Double> {
 	static typename SignOp::R::Element eval(State& state, typename SignOp::A::Element const& a) { return a > 0 ? 1 : (a < 0 ? -1 : 0); }
 };
+UNIMPLEMENTED_COMPLEX_FUNCTION(SignOp)
 
 template<typename A>
 struct SqrtOp : UnaryOp<A, Double> {
 	static typename SqrtOp::R::Element eval(State& state, typename SqrtOp::A::Element const& a) { return sqrt(a); }
 };
 
+template<>
+struct SqrtOp<Complex> : UnaryOp<Complex, Complex> {
+	static SqrtOp::R::Element eval(State& state, SqrtOp::A::Element const& a) { return sqrt(a); }
+};
+
 template<typename A>
 struct FloorOp : UnaryOp<A, Double> {
 	static typename FloorOp::R::Element eval(State& state, typename FloorOp::A::Element const& a) { return floor(a); }
 };
+UNIMPLEMENTED_COMPLEX_FUNCTION(FloorOp)
 
 template<typename A>
 struct CeilingOp : UnaryOp<A, Double> {
 	static typename CeilingOp::R::Element eval(State& state, typename CeilingOp::A::Element const& a) { return ceil(a); }
 };
+UNIMPLEMENTED_COMPLEX_FUNCTION(CeilingOp)
 
 template<typename A>
 struct TruncOp : UnaryOp<A, Double> {
 	static typename TruncOp::R::Element eval(State& state, typename TruncOp::A::Element const& a) { return a >= 0 ? floor(a) : ceil(a); }
 };
+UNIMPLEMENTED_COMPLEX_FUNCTION(TruncOp)
 
 template<typename A>
 struct RoundOp : UnaryOp<A, Double> {
 	static typename RoundOp::R::Element eval(State& state, typename RoundOp::A::Element const& a) { return round(a); }
 };
+UNIMPLEMENTED_COMPLEX_FUNCTION(RoundOp)
 
 template<typename A>
 struct SignifOp : UnaryOp<A, Double> {
 	static typename SignifOp::R::Element eval(State& state, typename SignifOp::A::Element const& a) { _error("NYI: signif"); }
 };
+UNIMPLEMENTED_COMPLEX_FUNCTION(SignifOp)
 
 template<typename A>
 struct ExpOp : UnaryOp<A, Double> {
 	static typename ExpOp::R::Element eval(State& state, typename ExpOp::A::Element const& a) { return exp(a); }
+};
+
+template<>
+struct ExpOp<Complex> : UnaryOp<Complex, Complex> {
+	static ExpOp::R::Element eval(State& state, ExpOp::A::Element const& a) { return exp(a); }
 };
 
 template<typename A>
@@ -92,9 +112,19 @@ struct LogOp : UnaryOp<A, Double> {
 	static typename LogOp::R::Element eval(State& state, typename LogOp::A::Element const& a) { return log(a); }
 };
 
+template<>
+struct LogOp<Complex> : UnaryOp<Complex, Complex> {
+	static LogOp::R::Element eval(State& state, LogOp::A::Element const& a) { return exp(a); }
+};
+
 template<typename A>
 struct CosOp : UnaryOp<A, Double> {
 	static typename CosOp::R::Element eval(State& state, typename CosOp::A::Element const& a) { return cos(a); }
+};
+
+template<>
+struct CosOp<Complex> : UnaryOp<Complex, Complex> {
+	static CosOp::R::Element eval(State& state, CosOp::A::Element const& a) { return cos(a); }
 };
 
 template<typename A>
@@ -102,28 +132,46 @@ struct SinOp : UnaryOp<A, Double> {
 	static typename SinOp::R::Element eval(State& state, typename SinOp::A::Element const& a) { return sin(a); }
 };
 
+template<>
+struct SinOp<Complex> : UnaryOp<Complex, Complex> {
+	static SinOp::R::Element eval(State& state, SinOp::A::Element const& a) { return sin(a); }
+};
+
 template<typename A>
 struct TanOp : UnaryOp<A, Double> {
 	static typename TanOp::R::Element eval(State& state, typename TanOp::A::Element const& a) { return tan(a); }
+};
+
+template<>
+struct TanOp<Complex> : UnaryOp<Complex, Complex> {
+	static TanOp::R::Element eval(State& state, TanOp::A::Element const& a) { return tan(a); }
 };
 
 template<typename A>
 struct ACosOp : UnaryOp<A, Double> {
 	static typename ACosOp::R::Element eval(State& state, typename ACosOp::A::Element const& a) { return acos(a); }
 };
+UNIMPLEMENTED_COMPLEX_FUNCTION(ACosOp)
 
 template<typename A>
 struct ASinOp : UnaryOp<A, Double> {
 	static typename ASinOp::R::Element eval(State& state, typename ASinOp::A::Element const& a) { return asin(a); }
 };
+UNIMPLEMENTED_COMPLEX_FUNCTION(ASinOp)
 
 template<typename A>
 struct ATanOp : UnaryOp<A, Double> {
 	static typename ATanOp::R::Element eval(State& state, typename ATanOp::A::Element const& a) { return atan(a); }
 };
+UNIMPLEMENTED_COMPLEX_FUNCTION(ATanOp)
 
+#undef UNIMPLEMENTED_COMPLEX_FUNCTION
 
 // Binary operators
+#define UNIMPLEMENTED_COMPLEX_FUNCTION(T) template<> \
+struct T<Complex> : public BinaryOp<Complex, Complex, Complex> { \
+	static T::R::Element eval(State& state, T::A::Element const& a, T::B::Element const& b) { _error("unimplemented complex function"); } \
+};
 
 template<typename A>
 struct AddOp : BinaryOp<A, A, A> {
@@ -153,6 +201,13 @@ struct DivOp : BinaryOp<A, A, Double> {
 	}
 };
 
+template<>
+struct DivOp<Complex> : BinaryOp<Complex, Complex, Complex> {
+	static DivOp::R::Element eval(State& state, DivOp::A::Element const& a, DivOp::B::Element const& b) {
+		return a/b;
+	}
+};
+
 inline double IDiv(double a, double b) { return floor(a/b); /* TODO: Replace with ugly R version */ }
 inline int64_t IDiv(int64_t a, int64_t b) { return a/b; }
 
@@ -162,10 +217,18 @@ struct IDivOp : BinaryOp<A, A, A> {
 		return IDiv(a, b);
 	}
 };
+UNIMPLEMENTED_COMPLEX_FUNCTION(IDivOp)
 
 template<typename A>
 struct PowOp : BinaryOp<A, A, Double> {
 	static typename PowOp::R::Element eval(State& state, typename PowOp::A::Element const& a, typename PowOp::B::Element const& b) {
+		return pow(a, b);
+	}
+};
+
+template<>
+struct PowOp<Complex> : BinaryOp<Complex, Complex, Complex> {
+	static PowOp::R::Element eval(State& state, PowOp::A::Element const& a, PowOp::B::Element const& b) {
 		return pow(a, b);
 	}
 };
@@ -179,6 +242,14 @@ struct ModOp : BinaryOp<A, A, A> {
 		return Mod(a, b);
 	}
 };
+UNIMPLEMENTED_COMPLEX_FUNCTION(ModOp)
+
+#undef UNIMPLEMENTED_COMPLEX_FUNCTION
+
+#define INVALID_COMPLEX_FUNCTION(T) template<> \
+struct T<Complex> : public BinaryOp<Complex, Complex, Complex> { \
+	static T::R::Element eval(State& state, T::A::Element const& a, T::B::Element const& b) { _error("invalid complex function"); } \
+};
 
 template<typename A>
 struct LTOp : BinaryOp<A, A, Logical> {
@@ -186,6 +257,7 @@ struct LTOp : BinaryOp<A, A, Logical> {
 		return a<b;
 	}
 };
+INVALID_COMPLEX_FUNCTION(LTOp);
 
 template<typename A>
 struct GTOp : BinaryOp<A, A, Logical> {
@@ -193,6 +265,7 @@ struct GTOp : BinaryOp<A, A, Logical> {
 		return a>b;
 	}
 };
+INVALID_COMPLEX_FUNCTION(GTOp);
 
 template<typename A>
 struct EqOp : BinaryOp<A, A, Logical> {
@@ -200,6 +273,7 @@ struct EqOp : BinaryOp<A, A, Logical> {
 		return a==b;
 	}
 };
+INVALID_COMPLEX_FUNCTION(EqOp);
 
 template<typename A>
 struct NeqOp : BinaryOp<A, A, Logical> {
@@ -207,6 +281,7 @@ struct NeqOp : BinaryOp<A, A, Logical> {
 		return a!=b;
 	}
 };
+INVALID_COMPLEX_FUNCTION(NeqOp);
 
 template<typename A>
 struct GEOp : BinaryOp<A, A, Logical> {
@@ -214,6 +289,7 @@ struct GEOp : BinaryOp<A, A, Logical> {
 		return a>=b;
 	}
 };
+INVALID_COMPLEX_FUNCTION(GEOp);
 
 template<typename A>
 struct LEOp : BinaryOp<A, A, Logical> {
@@ -221,6 +297,7 @@ struct LEOp : BinaryOp<A, A, Logical> {
 		return a<=b;
 	}
 };
+INVALID_COMPLEX_FUNCTION(LEOp);
 
 struct AndOp : BinaryOp<Logical, Logical, Logical> {
 	static AndOp::R::Element eval(State& state, AndOp::A::Element const& a, AndOp::B::Element const& b) {
@@ -237,6 +314,8 @@ struct OrOp : BinaryOp<Logical, Logical, Logical> {
 		return (a || b) ? 1 : 0;
 	}
 };
+
+#undef INVALID_COMPLEX_FUNCTION
 
 template< class A >
 struct SubsetInclude {
@@ -322,6 +401,8 @@ template< template<class Op> class Lift, template<typename A> class Op >
 void unaryArith(State& state, Value const& a, Value& c) {
 	if(a.isDouble())
 		c = Lift< NA1< Op<Double> > >::eval(state, Double(a));
+	else if(a.isComplex())
+		c = Lift< NA1< Op<Complex> > >::eval(state, Complex(a));
 	else if(a.isMathCoerce())
 		c = Lift< NA1< Op<Integer> > >::eval(state, As<Integer>(state, a));
 	else 
@@ -338,7 +419,9 @@ void unaryLogical(State& state, Value const& a, Value& c) {
 
 template< template<class Op> class Lift, template<typename A> class Op > 
 void binaryArith(State& state, Value const& a, Value const& b, Value& c) {
-	if((a.isDouble() && b.isMathCoerce()) || (b.isDouble() && a.isMathCoerce()))
+	if((a.isComplex() && b.isMathCoerce()) || (b.isComplex() && a.isMathCoerce()))
+		c = Lift< NA2< Op<Complex> > >::eval(state, As<Complex>(state, a), As<Complex>(state, b));
+	else if((a.isDouble() && b.isMathCoerce()) || (b.isDouble() && a.isMathCoerce()))
 		c = Lift< NA2< Op<Double> > >::eval(state, As<Double>(state, a), As<Double>(state, b));
 	else if(a.isMathCoerce() && b.isMathCoerce()) 
 		c = Lift< NA2< Op<Integer> > >::eval(state, As<Integer>(state, a), As<Integer>(state, b));
@@ -356,7 +439,9 @@ void binaryLogical(State& state, Value const& a, Value const& b, Value& c) {
 
 template< template<class Op> class Lift, template<typename A> class Op > 
 void binaryOrdinal(State& state, Value const& a, Value const& b, Value& c) {
-	if((a.isDouble() && b.isMathCoerce()) || (b.isDouble() && a.isMathCoerce()))
+	if((a.isComplex() && b.isMathCoerce()) || (b.isComplex() && a.isMathCoerce()))
+		c = Lift< NA2< Op<Complex> > >::eval(state, As<Complex>(state, a), As<Complex>(state, b));
+	else if((a.isDouble() && b.isMathCoerce()) || (b.isDouble() && a.isMathCoerce()))
 		c = Lift< NA2< Op<Double> > >::eval(state, As<Double>(state, a), As<Double>(state, b));
 	else if(a.isMathCoerce() && b.isMathCoerce()) 
 		c = Lift< NA2< Op<Integer> > >::eval(state, a, b);
