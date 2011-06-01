@@ -8,6 +8,13 @@
 	_(NA, "", p) /* this should have the same string representation as something else so it will be masked in the string table. */ \
 	_(empty, "", p) \
 	_(dots, "...", p) \
+	_(Logical, "logical", p)\
+	_(Integer, "integer", p)\
+	_(Numeric, "numeric", p)\
+	_(Double, "double", p)\
+	_(Complex, "complex", p)\
+	_(Character, "character", p)\
+	_(Raw, "raw", p)\
 	_(internal, ".Internal", p) \
 	_(assign, "<-", p) \
 	_(assign2, "<<-", p) \

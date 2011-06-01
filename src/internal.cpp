@@ -1,7 +1,12 @@
 
 #include "internal.h"
 #include "compiler.h"
+#include "parser.h"
 #include <math.h>
+#include <fstream>
+
+const MaxOp<TComplex>::A MaxOp<TComplex>::Base = std::complex<double>(0,0);
+const MinOp<TComplex>::A MinOp<TComplex>::Base = std::complex<double>(0,0);
 
 void checkNumArgs(List const& args, uint64_t nargs) {
 	if(args.length > nargs) _error("unused argument(s)");
@@ -200,6 +205,23 @@ uint64_t list(State& state, Call const& call, List const& args) {
 	state.registers[0] = out;
 	return 1;
 }
+
+uint64_t vector(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 2);
+	Value mode = force(state, args[0]);
+	Value length = force(state, args[1]);
+	double l = asReal1(length);
+	Symbol m = Character(mode)[0];
+	if(m == Symbol::Logical) state.registers[0] = Logical((uint64_t)l);
+	else if(m == Symbol::Integer) state.registers[0] = Integer((uint64_t)l);
+	else if(m == Symbol::Double || m == Symbol::Numeric) state.registers[0] =  Double((uint64_t)l);
+	else if(m == Symbol::Complex) state.registers[0] =  Complex((uint64_t)l);
+	else if(m == Symbol::Character) state.registers[0] =  Character((uint64_t)l);
+	else if(m == Symbol::Raw) state.registers[0] =  Raw((uint64_t)l);
+	else _error("cannot make a vector of mode '" + m.toString(state) + "'");
+	return 1;
+}
+
 /*
 uint64_t UseMethod(State& state, uint64_t nargs)
 {
@@ -364,6 +386,23 @@ uint64_t eval_fn(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
+uint64_t source(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value file = force(state, args[0]);
+	std::ifstream t(Character(file)[0].toString(state).c_str());
+	std::stringstream buffer;
+	buffer << t.rdbuf();
+	std::string code = buffer.str();
+
+	Parser parser(state);
+	Value value;
+	parser.execute(code.c_str(), code.length(), true, value);	
+	
+	Closure closure = Compiler::compile(state, value);
+	eval(state, closure);
+	return 1;
+}
+
 uint64_t switch_fn(State& state, Call const& call, List const& args) {
 	Value one = force(state, args[0]);
 	if(one.type == Type::R_integer && Integer(one).length == 1) {
@@ -442,6 +481,42 @@ uint64_t warning_fn(State& state, Call const& call, List const& args) {
 	return 1;
 } 
 
+uint64_t missing(State& state, Call const& call, List const& args) {
+	Symbol s = expression(args[0]); 
+	Value v;
+	bool success = state.env->getRaw(s, v);
+	state.registers[0] =  (!success || v.type == Type::I_default) ? Logical::True() : Logical::False();
+	return 1;
+}
+
+uint64_t max_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryArith<FoldLeft, MaxOp>(state,a, state.registers[0]);
+	return 1;
+}
+
+uint64_t min_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryArith<FoldLeft, MinOp>(state,a, state.registers[0]);
+	return 1;
+}
+
+uint64_t sum_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryArith<FoldLeft, SumOp>(state,a, state.registers[0]);
+	return 1;
+}
+
+uint64_t prod_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryArith<FoldLeft, ProdOp>(state,a, state.registers[0]);
+	return 1;
+}
+
 void addMathOps(State& state)
 {
 	Value v;
@@ -507,6 +582,15 @@ void addMathOps(State& state)
 	CFunction(op).toValue(v);
 	env->assign(Symbol(state, ">="), v);*/
 	
+	CFunction(max_fn).toValue(v);
+	env->assign(Symbol(state, "max"), v);
+	CFunction(min_fn).toValue(v);
+	env->assign(Symbol(state, "min"), v);
+	CFunction(sum_fn).toValue(v);
+	env->assign(Symbol(state, "sum"), v);
+	CFunction(prod_fn).toValue(v);
+	env->assign(Symbol(state, "prod"), v);
+	
 	CFunction(function).toValue(v);
 	env->assign(Symbol(state, "function"), v);
 	CFunction(rm).toValue(v);
@@ -543,6 +627,9 @@ void addMathOps(State& state)
 	CFunction(length).toValue(v);
 	env->assign(Symbol(state, "length"), v);
 	
+	CFunction(vector).toValue(v);
+	env->assign(Symbol(state, "vector"), v);
+	
 	CFunction(subset).toValue(v);
 	env->assign(Symbol(state, "["), v);
 	CFunction(subset2).toValue(v);
@@ -561,11 +648,16 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "eval"), v);
 	CFunction(quote).toValue(v);
 	env->assign(Symbol(state, "quote"), v);
+	CFunction(source).toValue(v);
+	env->assign(Symbol(state, "source"), v);
 
 	CFunction(environment).toValue(v);
 	env->assign(Symbol(state, "environment"), v);
 	CFunction(parentframe).toValue(v);
 	env->assign(Symbol(state, "parent.frame"), v);
+	
+	CFunction(missing).toValue(v);
+	env->assign(Symbol(state, "missing"), v);
 	
 	CFunction(stop_fn).toValue(v);
 	env->assign(Symbol(state, "stop"), v);

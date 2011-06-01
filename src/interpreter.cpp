@@ -143,7 +143,7 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 	for(uint64_t i = 0; i < parameters.length; i++) {
 		parameters[i] = call.parameters()[i];
 		if(parameters[i].type == Type::I_promise)
-			parameters[i].attributes = (Attributes*)state.env;
+			parameters[i].env = (void*)state.env;
 		parameters.attributes = call.parameters().attributes;
 	}
 	if(call.dots() != 0) {
@@ -276,12 +276,12 @@ static int64_t forbegin_op(State& state, Closure const& closure, Instruction con
 	state.registers[inst.c] = Null::singleton;
 	state.registers[inst.c+1] = loopVector;
 	state.registers[inst.c+2] = Integer::c(0);
-	if(state.registers[inst.c+2].i >= state.registers[inst.c+1].length) { return inst.a; }
+	if(state.registers[inst.c+2].i >= (int64_t)state.registers[inst.c+1].length) { return inst.a; }
 	state.env->assign(Symbol(inst.b), Element(loopVector, 0));
 	return 1;
 }
 static int64_t forend_op(State& state, Closure const& closure, Instruction const& inst) {
-	if(++state.registers[inst.c+2].i < state.registers[inst.c+1].length) { 
+	if(++state.registers[inst.c+2].i < (int64_t)state.registers[inst.c+1].length) { 
 		state.env->assign(Symbol(inst.b), Element(state.registers[inst.c+1], state.registers[inst.c+2].i));
 		return inst.a; 
 	} else return 1;
@@ -293,12 +293,12 @@ static int64_t iforbegin_op(State& state, Closure const& closure, Instruction co
 	state.registers[inst.c+1] = Integer::c(n > m ? 1 : -1);
 	state.registers[inst.c+1].length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
 	state.registers[inst.c+2] = Integer::c((int64_t)m);
-	if(state.registers[inst.c+2].i >= state.registers[inst.c+1].length) { return inst.a; }
+	if(state.registers[inst.c+2].i >= (int64_t)state.registers[inst.c+1].length) { return inst.a; }
 	state.env->assign(Symbol(inst.b), Integer::c(m));
 	return 1;
 }
 static int64_t iforend_op(State& state, Closure const& closure, Instruction const& inst) {
-	if((state.registers[inst.c+2].i+=state.registers[inst.c+1].i) < state.registers[inst.c+1].length) { 
+	if((state.registers[inst.c+2].i+=state.registers[inst.c+1].i) < (int64_t)state.registers[inst.c+1].length) { 
 		state.env->assign(Symbol(inst.b), state.registers[inst.c+2]);
 		return inst.a; 
 	} else return 1;

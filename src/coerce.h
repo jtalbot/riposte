@@ -111,7 +111,7 @@ static Character::Element Cast<List, Character>(State& state, List::Element cons
 
 template<class I, class O> 
 struct CastOp : public UnaryOp<I, O> {
-	static typename CastOp::R::Element eval(State& state, typename I::Element const& i) { return Cast<I, O>(state, i); }
+	static typename CastOp::R eval(State& state, typename CastOp::A const& i) { return Cast<typename CastOp::AV, typename CastOp::RV>(state, i); }
 };
 
 template<class O>

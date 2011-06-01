@@ -297,6 +297,7 @@ VECTOR_IMPL(PackedVectorImpl, Double, Type::E_R_double, double)
 	const static double NAelement;
 	static Double NA() { static Double na = Double::c(NAelement); return na; }
 	static Double Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
+	static Double NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
 	static Double NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } };
 VECTOR_IMPL(VectorImpl, Complex, Type::E_R_complex, std::complex<double>)
 	static Complex c(double r, double i=0) { Complex c(1); c[0] = std::complex<double>(r,i); return c; }
