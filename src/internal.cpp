@@ -206,6 +206,20 @@ uint64_t list(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
+uint64_t flatten(State& state, Call const& call, List const& args) {
+	List from = force(state, args[0]);
+	uint64_t length = 0;
+	for(uint64_t i = 0; i < from.length; i++) length += from[i].length;
+	Vector out = List(length);
+	uint64_t j = 0;
+	for(uint64_t i = 0; i < from.length; i++) {
+		Insert(state, from[i], 0, out, j, from[i].length);
+		j += from[i].length;
+	}
+	state.registers[0] = out;
+	return 1;
+}
+
 uint64_t vector(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 2);
 	Value mode = force(state, args[0]);
@@ -383,6 +397,27 @@ uint64_t eval_fn(State& state, Call const& call, List const& args) {
 	Closure closure = Compiler::compile(state, expr);
 	closure.bind(REnvironment(envir).ptr());
 	eval(state, closure);
+	return 1;
+}
+
+uint64_t lapply(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 2);
+	List x = As<List>(state, force(state, args[0]));
+	Value func = force(state, args[1]);
+
+	Call apply(2);
+	apply[0] = func;
+
+	List result(x.length);
+	
+	for(uint64_t i = 0; i < x.length; i++) {
+		apply[1] = x[i];
+		Closure closure = Compiler::compile(state, apply);
+		eval(state, closure);
+		result[i] = state.registers[0];
+	}
+
+	state.registers[0] = result;
 	return 1;
 }
 
@@ -623,6 +658,8 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "c"), v);
 	CFunction(list).toValue(v);
 	env->assign(Symbol(state, "list"), v);
+	CFunction(flatten).toValue(v);
+	env->assign(Symbol(state, "flatten"), v);
 
 	CFunction(length).toValue(v);
 	env->assign(Symbol(state, "length"), v);
@@ -648,6 +685,8 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "eval"), v);
 	CFunction(quote).toValue(v);
 	env->assign(Symbol(state, "quote"), v);
+	CFunction(lapply).toValue(v);
+	env->assign(Symbol(state, "lapply"), v);
 	CFunction(source).toValue(v);
 	env->assign(Symbol(state, "source"), v);
 

@@ -92,27 +92,11 @@ template<>
 static List::Element Cast<Character, List>(State& state, Character::Element const& i) { return Character::c(i); }
 
 
-template<>
-static Logical::Element Cast<List, Logical>(State& state, List::Element const& i) { _error("NYI list to vector cast"); }
-
-template<>
-static Integer::Element Cast<List, Integer>(State& state, List::Element const& i) { _error("NYI list to vector cast"); }
-
-template<>
-static Double::Element Cast<List, Double>(State& state, List::Element const& i) { _error("NYI list to vector cast"); }
-
-template<>
-static Complex::Element Cast<List, Complex>(State& state, List::Element const& i) { _error("NYI list to vector cast"); }
-
-template<>
-static Character::Element Cast<List, Character>(State& state, List::Element const& i) { _error("NYI list to vector cast"); }
-
-
-
 template<class I, class O> 
 struct CastOp : public UnaryOp<I, O> {
 	static typename CastOp::R eval(State& state, typename CastOp::A const& i) { return Cast<typename CastOp::AV, typename CastOp::RV>(state, i); }
 };
+
 
 template<class O>
 O As(State& state, Value const& src) {
@@ -142,6 +126,25 @@ inline Value As(State& state, Type type, Value const& src) {
 		default: _error("Invalid cast"); break;
 	};
 }
+
+
+// Use As, so have to be after...
+
+template<>
+static Logical::Element Cast<List, Logical>(State& state, List::Element const& i) { Logical a = As<Logical>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+
+template<>
+static Integer::Element Cast<List, Integer>(State& state, List::Element const& i) { Integer a = As<Integer>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+
+template<>
+static Double::Element Cast<List, Double>(State& state, List::Element const& i) { Double a = As<Double>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+
+template<>
+static Complex::Element Cast<List, Complex>(State& state, List::Element const& i) { Complex a = As<Complex>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+
+template<>
+static Character::Element Cast<List, Character>(State& state, List::Element const& i) { Character a = As<Character>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+
 
 
 void importCoerceFunctions(State& state);

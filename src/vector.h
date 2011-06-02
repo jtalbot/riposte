@@ -132,4 +132,5 @@ inline Vector Clone(Vector const& in) {
 	return out;
 }
 
+
 #endif

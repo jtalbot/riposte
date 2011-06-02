@@ -6,6 +6,7 @@
 #include "value.h"
 #include "type.h"
 #include "bc.h"
+#include "ops.h"
 #include "internal.h"
 
 // (stack discipline is hard to prove in R, but can we do better?)

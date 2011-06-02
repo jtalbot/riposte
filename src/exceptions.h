@@ -2,6 +2,8 @@
 #ifndef RIPOSTE_EXCEPTIONS_H
 #define RIPOSTE_EXCEPTIONS_H
 
+#include <string>
+
 class RiposteException {
 public:
 	RiposteException() {}

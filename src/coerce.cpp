@@ -37,7 +37,6 @@ uint64_t aslist(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
-
 uint64_t isnull(State& state, Call const& call, List const& args) {
 	Value from = force(state, args[0]);
 	state.registers[0] = Logical::c(from.isNull());
