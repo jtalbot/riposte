@@ -7,6 +7,10 @@
 #include "exceptions.h"
 #include <cmath>
 
+struct TLogical {
+	typedef Logical Self;
+	typedef Logical Up;
+};
 struct TInteger {
 	typedef Integer Self;
 	typedef Double Up;
@@ -63,6 +67,19 @@ UNARY_OP(TanOp, Self, Up, tan(a))
 UNARY_OP(ACosOp, Self, Up, acos(a))				NYI_COMPLEX_OP(ACosOp)
 UNARY_OP(ASinOp, Self, Up, asin(a))				NYI_COMPLEX_OP(ASinOp)
 UNARY_OP(ATanOp, Self, Up, atan(a))				NYI_COMPLEX_OP(ATanOp)
+
+#define UNARY_FILTER_OP(Name, Func) \
+template<typename T> \
+struct Name : public UnaryOp<T, Logical> {\
+	static typename Name::R eval(State& state, typename Name::A const& a) {\
+		return (Func);\
+	}\
+};
+
+UNARY_FILTER_OP(IsNAOp, IsNAOp::AV::isNA(a))
+UNARY_FILTER_OP(IsNaNOp, IsNaNOp::AV::isNaN(a))
+UNARY_FILTER_OP(IsFiniteOp, IsFiniteOp::AV::isFinite(a))
+UNARY_FILTER_OP(IsInfiniteOp, IsInfiniteOp::AV::isInfinite(a))
 
 struct LNotOp : UnaryOp<Logical, Logical> {
 	static LNotOp::R eval(State& state, LNotOp::A const& a) { return !a; }
@@ -207,6 +224,20 @@ void unaryLogical(State& state, Value const& a, Value& c) {
 		c = Lift<Op>::eval(state, As<Logical>(state, a));
 	else
 		_error("non-logical argument to unary logical operator");
+};
+
+template< template<class Op> class Lift, template<typename T> class Op > 
+void unaryFilter(State& state, Value const& a, Value& c) {
+	if(a.isDouble())
+		c = Lift< Op<Double> >::eval(state, a);
+	else if(a.isComplex())
+		c = Lift< Op<Complex> >::eval(state, a);
+	else if(a.isInteger())
+		c = Lift< Op<Integer> >::eval(state, a);
+	else if(a.isLogical())
+		c = Lift< Op<Logical> >::eval(state, a);
+	else if(a.isCharacter())
+		c = Lift< Op<Character> >::eval(state, a);
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 

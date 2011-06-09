@@ -259,6 +259,9 @@ VECTOR_IMPL(PackedVectorImpl, Logical, Type::E_R_logical, unsigned char)
 	static bool isNA(unsigned char c) { return c == NAelement; }
 	static bool isTrue(unsigned char c) { return c == 1; }
 	static bool isFalse(unsigned char c) { return c == 0; }
+	static bool isNaN(unsigned char c) { return false; }
+	static bool isFinite(unsigned char c) { return false; }
+	static bool isInfinite(unsigned char c) { return false; }
 	const static bool CheckNA;
 	const static unsigned char NAelement;
 	static Logical NA() { static Logical na = Logical::c(NAelement); return na; }
@@ -267,12 +270,18 @@ VECTOR_IMPL(PackedVectorImpl, Logical, Type::E_R_logical, unsigned char)
 VECTOR_IMPL(PackedVectorImpl, Integer, Type::E_R_integer, int64_t)
 	static Integer c(double c) { Integer r(1); r[0] = c; return r; }
 	static bool isNA(int64_t c) { return c == NAelement; }
+	static bool isNaN(int64_t c) { return false; }
+	static bool isFinite(int64_t c) { return c != NAelement; }
+	static bool isInfinite(int64_t c) { return false; }
 	const static bool CheckNA;
 	const static int64_t NAelement;
 	static Integer NA() { static Integer na = Integer::c(NAelement); return na; } }; 
 VECTOR_IMPL(PackedVectorImpl, Double, Type::E_R_double, double)
 	static Double c(double c) { Double r(1); r[0] = c; return r; }
 	static bool isNA(double c) { _doublena a, b; a.d = c; b.d = NAelement; return a.i==b.i; }
+	static bool isNaN(double c) { return (c != c) && !isNA(c); }
+	static bool isFinite(double c) { return c == c && c != std::numeric_limits<double>::infinity() && c != -std::numeric_limits<double>::infinity(); }
+	static bool isInfinite(double c) { return c == std::numeric_limits<double>::infinity() || c == -std::numeric_limits<double>::infinity(); }
 	const static bool CheckNA;
 	const static double NAelement;
 	static Double NA() { static Double na = Double::c(NAelement); return na; }
@@ -283,6 +292,9 @@ VECTOR_IMPL(VectorImpl, Complex, Type::E_R_complex, std::complex<double>)
 	static Complex c(double r, double i=0) { Complex c(1); c[0] = std::complex<double>(r,i); return c; }
 	static Complex c(std::complex<double> c) { Complex r(1); r[0] = c; return r; } 
 	static bool isNA(std::complex<double> c) { _doublena a, b, t ; a.d = c.real(); b.d = c.imag(); t.d = Double::NAelement; return a.i==t.i || b.i==t.i; }
+	static bool isNaN(std::complex<double> c) { return Double::isNaN(c.real()) || Double::isNaN(c.imag()); }
+	static bool isFinite(std::complex<double> c) { return Double::isFinite(c.real()) && Double::isFinite(c.imag()); }
+	static bool isInfinite(std::complex<double> c) { return Double::isInfinite(c.real()) || Double::isInfinite(c.imag()); }
 	const static bool CheckNA;
 	const static std::complex<double> NAelement;
 	static Complex NA() { static Complex na = Complex::c(NAelement); return na; } };
@@ -290,6 +302,9 @@ VECTOR_IMPL(VectorImpl, Character, Type::E_R_character, Symbol)
 	static Character c(State& state, std::string const& s) { Character c(1); c[0] = Symbol(state, s); return c; }
 	static Character c(Symbol const& s) { Character c(1); c[0] = s; return c; }
 	static bool isNA(Symbol const& c) { return c == Symbol::NA; }
+	static bool isNaN(Symbol const& c) { return false; }
+	static bool isFinite(Symbol const& c) { return false; }
+	static bool isInfinite(Symbol const& c) { return false; }
 	const static bool CheckNA;
 	const static Symbol NAelement;
 	static Character NA() { static Character na = Character::c(NAelement); return na; } };

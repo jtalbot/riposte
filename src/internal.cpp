@@ -528,28 +528,56 @@ uint64_t missing(State& state, Call const& call, List const& args) {
 uint64_t max_fn(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryArith<FoldLeft, MaxOp>(state,a, state.registers[0]);
+	unaryArith<FoldLeft, MaxOp>(state, a, state.registers[0]);
 	return 1;
 }
 
 uint64_t min_fn(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryArith<FoldLeft, MinOp>(state,a, state.registers[0]);
+	unaryArith<FoldLeft, MinOp>(state, a, state.registers[0]);
 	return 1;
 }
 
 uint64_t sum_fn(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryArith<FoldLeft, SumOp>(state,a, state.registers[0]);
+	unaryArith<FoldLeft, SumOp>(state, a, state.registers[0]);
 	return 1;
 }
 
 uint64_t prod_fn(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryArith<FoldLeft, ProdOp>(state,a, state.registers[0]);
+	unaryArith<FoldLeft, ProdOp>(state, a, state.registers[0]);
+	return 1;
+}
+
+uint64_t isna_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryFilter<Zip1, IsNAOp>(state, a, state.registers[0]);
+	return 1;
+}
+
+uint64_t isnan_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryFilter<Zip1, IsNaNOp>(state, a, state.registers[0]);
+	return 1;
+}
+
+uint64_t isfinite_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryFilter<Zip1, IsFiniteOp>(state, a, state.registers[0]);
+	return 1;
+}
+
+uint64_t isinfinite_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryFilter<Zip1, IsInfiniteOp>(state, a, state.registers[0]);
 	return 1;
 }
 
@@ -566,6 +594,15 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "sum"), v);
 	CFunction(prod_fn).toValue(v);
 	env->assign(Symbol(state, "prod"), v);
+	
+	CFunction(isna_fn).toValue(v);
+	env->assign(Symbol(state, "is.na"), v);
+	CFunction(isnan_fn).toValue(v);
+	env->assign(Symbol(state, "is.nan"), v);
+	CFunction(isfinite_fn).toValue(v);
+	env->assign(Symbol(state, "is.finite"), v);
+	CFunction(isinfinite_fn).toValue(v);
+	env->assign(Symbol(state, "is.infinite"), v);
 	
 	CFunction(function).toValue(v);
 	env->assign(Symbol(state, "function"), v);
