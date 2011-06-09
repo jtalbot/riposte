@@ -71,7 +71,7 @@ uint64_t repeat(State& state, Call const& call, List const& args) {
 uint64_t typeOf(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	Character c(1);
-	c[0] = state.inString(force(state, args[0]).type.toString());
+	c[0] = Symbol(state, force(state, args[0]).type.toString());
 	state.registers[0] = c;
 	return 1;
 }
@@ -81,11 +81,11 @@ uint64_t mode(State& state, Call const& call, List const& args) {
 	Character c(1);
 	Value v = force(state, args[0]);
 	if(v.type == Type::R_integer || v.type == Type::R_double)
-		c[0] = state.inString("numeric");
+		c[0] = Symbol(state, "numeric");
 	else if(v.type == Type::R_symbol)
-		c[0] = state.inString("name");
+		c[0] = Symbol(state, "name");
 	else
-		c[0] = state.inString(v.type.toString());
+		c[0] = Symbol(state, v.type.toString());
 	state.registers[0] = c;
 	return 1;
 }
@@ -97,7 +97,7 @@ uint64_t klass(State& state, Call const& call, List const& args)
 	Vector r = getClass(v.attributes);	
 	if(r.type == Type::R_null) {
 		Character c(1);
-		c[0] = state.inString((v).type.toString());
+		c[0] = Symbol(state, (v).type.toString());
 		state.registers[0] = c;
 	}
 	else {

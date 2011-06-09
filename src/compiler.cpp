@@ -106,7 +106,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		// any indexing code
 		bool indexed = false;
 		uint64_t index = 0;
-		if(v.type == Type::R_call && state.outString(Call(v)[0].i) == "[") {
+		if(v.type == Type::R_call && Symbol(Call(v)[0]) == Symbol::leftBrace) {
 			Call c(v);
 			index = compile(c[2], closure);
 			v = c[1];
@@ -181,7 +181,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_forSym: 
 	{
 		// special case common i in m:n case
-		if(call[2].type == Type::R_call && state.outString(Symbol(Call(call[2])[0]).i) == ":") {
+		if(call[2].type == Type::R_call && Symbol(Call(call[2])[0]) == Symbol::colon) {
 			uint64_t lim1 = compile(Call(call[2])[1], closure);
 			uint64_t lim2 = compile(Call(call[2])[2], closure);
 			registerDepth = initialDepth+3; // save space for NULL result and loop variables 

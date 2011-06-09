@@ -22,19 +22,15 @@ const Value Value::NIL = {{0}, {0}, 0, Type::I_nil};
 #define ENUM_CONST_CONSTRUCT(name, string, EnumType) const EnumType EnumType::name(EnumType::E_##name);
 SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 
-	State::State(Environment* env, Environment* baseenv) {
-		this->env = env;
-		this->baseenv = baseenv;
-
-		registers = &Registers[0];
-
+	SymbolTable::SymbolTable() {
 		// insert predefined symbols into table at known positions (corresponding to their enum value)
 #define ENUM_STRING_TABLE(name, string, EnumType) \
-	stringTable[string] = EnumType::E_##name; \
-	reverseStringTable[EnumType::E_##name] = string;\
+		symbolTable[string] = EnumType::E_##name; \
+		reverseSymbolTable[EnumType::E_##name] = string;\
 
 		SYMBOLS_ENUM(ENUM_STRING_TABLE,Symbol);
 	}
+
 
 	Function::Function(List const& parameters, Value const& body, Character const& str, Environment* s) 
 		: inner(new Inner(parameters, body, str, s)), attributes(0) {

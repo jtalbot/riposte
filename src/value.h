@@ -59,24 +59,9 @@ struct State {
 	// reset at the beginning of a call to eval
 	std::vector<std::string> warnings;
 
-	std::map<std::string, uint64_t> stringTable;
-	std::map<uint64_t, std::string> reverseStringTable;
+	SymbolTable symbols;
 	
-	State(Environment* env, Environment* baseenv);
-
-	uint64_t inString(std::string const& s) {
-		if(stringTable.find(s) == stringTable.end()) {
-			uint64_t index = stringTable.size()+1; // due to NA string which needs an index, but not an actual entry in the table.
-			stringTable[s] = index;
-			reverseStringTable[index] = s;
-			return index;
-		} else return stringTable[s];
-	
-	}
-
-	std::string const& outString(uint64_t i) const {
-		return reverseStringTable.find(i)->second;
-	}
+	State(Environment* env, Environment* baseenv) : registers(&Registers[0]), env(env), baseenv(baseenv) {}
 
 	std::string stringify(Value const& v) const;
 };
@@ -97,7 +82,7 @@ struct Symbol {
 
 	Symbol() : i(1) {}						// Defaults to the empty symbol...
 	Symbol(uint64_t index) : i(index) {}
-	Symbol(State& state, std::string const& s) : i(state.inString(s)) {}
+	Symbol(State& state, std::string const& s) : i(state.symbols.in(s)) {}
 
 	Symbol(Value const& v) {
 		assert(v.type == Type::R_symbol); 
@@ -111,7 +96,7 @@ struct Symbol {
 		return v;
 	}
 
-	std::string const& toString(State const& state) const { return state.outString(i); }
+	std::string const& toString(State const& state) const { return state.symbols.out(i); }
 	bool operator<(Symbol const& other) const { return i < other.i;	}
 	bool operator==(Symbol const& other) const { return i == other.i; }
 	bool operator!=(Symbol const& other) const { return i != other.i; }

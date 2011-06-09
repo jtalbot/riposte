@@ -77,5 +77,31 @@
 	_(classSym, "class", p) \
 	_(TRUE, "TRUE", p) \
 	_(FALSE, "FALSE", p) \
+	_(leftBrace, "[", p) \
+
+
+class SymbolTable {
+	std::map<std::string, uint64_t> symbolTable;
+	std::map<uint64_t, std::string> reverseSymbolTable;
+
+public:
+	SymbolTable();
+
+	uint64_t in(std::string const& s) {
+		std::map<std::string, uint64_t>::const_iterator i = symbolTable.find(s);
+		if(i == symbolTable.end()) {
+			uint64_t index = symbolTable.size()+1; // due to NA string which needs an index, but not an actual entry in the table.
+			symbolTable[s] = index;
+			reverseSymbolTable[index] = s;
+			return index;
+		} else return i->second;
+	
+	}
+
+	std::string const& out(uint64_t i) const {
+		return reverseSymbolTable.find(i)->second;
+	}
+
+};
 
 #endif
