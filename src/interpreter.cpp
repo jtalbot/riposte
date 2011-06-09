@@ -224,7 +224,7 @@ static int64_t classassign_op(State& state, Closure const& closure, Instruction 
 static int64_t namesassign_op(State& state, Closure const& closure, Instruction const& inst) {
 	Value k;
 	state.env->get(state, Symbol(inst.a), k);
-	setNames(k.attributes, state.registers[inst.c]);
+	setNames(k.attributes, As<Character>(state, state.registers[inst.c]));
 	state.env->assign(Symbol(inst.a), k);
 	state.registers[inst.c] = k;
 	return 1;
@@ -329,8 +329,15 @@ static int64_t break1_op(State& state, Closure const& closure, Instruction const
 	return inst.a;
 }
 static int64_t if1_op(State& state, Closure const& closure, Instruction const& inst) {
-	Logical l(state.registers[inst.b]);
+	Logical l = As<Logical>(state, state.registers[inst.b]);
+	if(l.length == 0) _error("if argument is of zero length");
 	if(l[0]) return 1;
+	else return inst.a;
+}
+static int64_t if0_op(State& state, Closure const& closure, Instruction const& inst) {
+	Logical l = As<Logical>(state, state.registers[inst.b]);
+	if(l.length == 0) _error("if argument is of zero length");
+	if(!l[0]) return 1;
 	else return inst.a;
 }
 static int64_t colon_op(State& state, Closure const& closure, Instruction const& inst) {
@@ -386,16 +393,8 @@ static int64_t land_op(State& state, Closure const& closure, Instruction const& 
 	binaryLogical<Zip2, AndOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
 	return 1;
 }
-static int64_t sland_op(State& state, Closure const& closure, Instruction const& inst) {
-	/* NYI */
-	return 1;
-}
 static int64_t lor_op(State& state, Closure const& closure, Instruction const& inst) {
 	binaryLogical<Zip2, OrOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
-	return 1;
-}
-static int64_t slor_op(State& state, Closure const& closure, Instruction const& inst) {
-	/* NYI */
 	return 1;
 }
 static int64_t eq_op(State& state, Closure const& closure, Instruction const& inst) {
@@ -491,6 +490,25 @@ static int64_t jmp_op(State& state, Closure const& closure, Instruction const& i
 }
 static int64_t null_op(State& state, Closure const& closure, Instruction const& inst) {
 	state.registers[inst.c] = Null::singleton;
+	return 1;
+}
+static int64_t true1_op(State& state, Closure const& closure, Instruction const& inst) {
+	state.registers[inst.c] = Logical::True();
+	return 1;
+}
+static int64_t false1_op(State& state, Closure const& closure, Instruction const& inst) {
+	state.registers[inst.c] = Logical::False();
+	return 1;
+}
+static int64_t NA_op(State& state, Closure const& closure, Instruction const& inst) {
+	state.registers[inst.c] = Logical::NA();
+	return 1;
+}
+static int64_t istrue_op(State& state, Closure const& closure, Instruction const& inst) {
+	Logical l = As<Logical>(state, state.registers[inst.a]);
+	if(l.length == 0) _error("argument is of zero length");
+	if(l[0]) state.registers[inst.c] = Logical::True();
+	else state.registers[inst.c] = Logical::False();
 	return 1;
 }
 static int64_t function_op(State& state, Closure const& closure, Instruction const& inst) {

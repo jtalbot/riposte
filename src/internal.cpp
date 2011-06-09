@@ -129,8 +129,8 @@ uint64_t assignNames(State& state, Call const& call, List const& args)
 {
 	checkNumArgs(args, 2);
 	Value v = force(state, args[0]);
-	Value k = force(state, args[2]);
-	setNames(v.attributes, k);
+	Value k = force(state, args[1]);
+	setNames(v.attributes, As<Character>(state,k));
 	state.registers[0] = v;
 	return 1;
 }
@@ -451,7 +451,8 @@ uint64_t switch_fn(State& state, Call const& call, List const& args) {
 		Character names(getNames(args.attributes));
 		for(uint64_t i = 1; i < args.length; i++) {
 			if(names[i] == Character(one)[0]) {
-				state.registers[0] = force(state, args[i]);
+				while(args[i].type == Type::I_nil && i < args.length) i++;
+				state.registers[0] = i < args.length ? force(state, args[i]) : (Value)(Null::singleton);
 				return 1;
 			}
 		}
@@ -557,66 +558,6 @@ void addMathOps(State& state)
 	Value v;
 	Environment* env = state.baseenv;
 
-	// operators that are implemented as byte codes, thus, no actual implemention is necessary here.
-	/*CFunction(forloop).toValue(v);
-	env->assign(Symbol(state, "for"), v);
-	CFunction(whileloop).toValue(v);
-	env->assign(Symbol(state, "while"), v);
-	CFunction(assign).toValue(v);
-	env->assign(Symbol(state, "<-"), v);
-	CFunction(curlyBrackets).toValue(v);
-	env->assign(Symbol(state, "{"), v);
-	CFunction(parentheses).toValue(v);
-	env->assign(Symbol(state, "("), v);*/
-
-	/*CFunction(plusOp).toValue(v);
-	env->assign(Symbol(state, "+"), v);
-	CFunction(minusOp).toValue(v);
-	env->assign(Symbol(state, "-"), v);
-	op = binaryArith<Zip2, MulOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, "*"), v);
-	op = binaryDoubleArith<Zip2, DivOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, "/"), v);
-	op = binaryArith<Zip2, IDivOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, "%/%"), v);
-	op = binaryDoubleArith<Zip2, PowOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, "^"), v);
-	op = binaryArith<Zip2, ModOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, "%%"), v);
-
-	op = unaryLogical<Zip1, LNegOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, "!"), v);
-	op = binaryLogical<Zip2, AndOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, "&"), v);
-	op = binaryLogical<Zip2, OrOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, "|"), v);
-	op = binaryOrdinal<Zip2, EqOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, "=="), v);
-	op = binaryOrdinal<Zip2, NeqOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, "!="), v);
-	op = binaryOrdinal<Zip2, LTOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, "<"), v);
-	op = binaryOrdinal<Zip2, LEOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, "<="), v);
-	op = binaryOrdinal<Zip2, GTOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, ">"), v);
-	op = binaryOrdinal<Zip2, GEOp>;
-	CFunction(op).toValue(v);
-	env->assign(Symbol(state, ">="), v);*/
-	
 	CFunction(max_fn).toValue(v);
 	env->assign(Symbol(state, "max"), v);
 	CFunction(min_fn).toValue(v);

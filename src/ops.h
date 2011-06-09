@@ -19,6 +19,10 @@ struct TComplex {
 	typedef Complex Self;
 	typedef Complex Up;
 };
+struct TCharacter {
+	typedef Character Self;
+	typedef Character Up;
+};
 
 // Unary operators
 #define UNARY_OP(Name, T1, T2, Func) \
@@ -110,20 +114,30 @@ struct Name : public BinaryOp<typename T::Self, typename T::Self, Logical> {\
 	} \
 };\
 
+#define CHARACTER_ORDINAL_OP(Name, Func) \
+template<> \
+struct Name<TCharacter> : public BinaryOp<Character, Character, Logical> {\
+	static Name::R eval(State& state, Name::A const& a, Name::B const& b) { \
+		if(!Name::AV::isNA(a) && !Name::BV::isNA(b)) return (Func); \
+		else return Name::RV::NAelement; \
+	} \
+};\
+
 #define INVALID_COMPLEX_OP(Name) \
 template<> \
 struct Name<TComplex> : public BinaryOp<Complex, Complex, Logical> { \
 	static Name::R eval(State& state, Name::A const& a, Name::B const& b) { _error("invalid complex function"); } \
 };
 
-ORDINAL_OP(LTOp, a<b)						INVALID_COMPLEX_OP(LTOp)
-ORDINAL_OP(GTOp, a>b)						INVALID_COMPLEX_OP(GTOp)
-ORDINAL_OP(LEOp, a<=b)						INVALID_COMPLEX_OP(LEOp)
-ORDINAL_OP(GEOp, a>=b)						INVALID_COMPLEX_OP(GEOp)
-ORDINAL_OP(EqOp, a==b)
-ORDINAL_OP(NeqOp, a!=b)
+ORDINAL_OP(LTOp, a<b)	CHARACTER_ORDINAL_OP(LTOp, a.toString(state).compare(b.toString(state)) < 0)		INVALID_COMPLEX_OP(LTOp)
+ORDINAL_OP(GTOp, a>b)	CHARACTER_ORDINAL_OP(GTOp, a.toString(state).compare(b.toString(state)) > 0)		INVALID_COMPLEX_OP(GTOp)
+ORDINAL_OP(LEOp, a<=b)	CHARACTER_ORDINAL_OP(LEOp, a.toString(state).compare(b.toString(state)) <= 0)	INVALID_COMPLEX_OP(LEOp)
+ORDINAL_OP(GEOp, a>=b)	CHARACTER_ORDINAL_OP(GEOp, a.toString(state).compare(b.toString(state)) >= 0)	INVALID_COMPLEX_OP(GEOp)
+ORDINAL_OP(EqOp, a==b)	/* Character equality can just compare Symbols */
+ORDINAL_OP(NeqOp, a!=b) /* Character inequality can just compare Symbols */
 
 #undef ORDINAL_OP
+#undef CHARACTER_ORDINAL_OP
 #undef INVALID_COMPLEX_OP
 
 // Logical binary ops
@@ -223,6 +237,8 @@ void binaryOrdinal(State& state, Value const& a, Value const& b, Value& c) {
 		c = Lift< Op<TDouble> >::eval(state, As<Double>(state, a), As<Double>(state, b));
 	else if(a.isMathCoerce() && b.isMathCoerce()) 
 		c = Lift< Op<TInteger> >::eval(state, a, b);
+	else if(a.isCharacter() && b.isCharacter())
+		c = Lift< Op<TCharacter> >::eval(state, a, b);
 	else
 		_error("non-ordinal argument to ordinal operator");
 }

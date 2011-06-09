@@ -17,9 +17,7 @@ static ByteCode op(Symbol const& s) {
 		case Symbol::E_le: return ByteCode::le; break;
 		case Symbol::E_lnot: return ByteCode::lnot; break;
 		case Symbol::E_land: return ByteCode::land; break;
-		case Symbol::E_sland: return ByteCode::sland; break;
 		case Symbol::E_lor: return ByteCode::lor; break;
-		case Symbol::E_slor: return ByteCode::slor; break;
 		case Symbol::E_abs: return ByteCode::abs; break;
 		case Symbol::E_sign: return ByteCode::sign; break;
 		case Symbol::E_sqrt: return ByteCode::sqrt; break;
@@ -51,8 +49,13 @@ static void resolveLoopReferences(Closure& closure, uint64_t start, uint64_t end
 }
 
 uint64_t Compiler::compileConstant(Value const& expr, Closure& closure) {
-	closure.constants().push_back(expr);
-	closure.code().push_back(Instruction(ByteCode::kget, closure.constants().size()-1, 0, registerDepth));
+	if(expr.isNull()) closure.code().push_back(Instruction(ByteCode::null, 0, 0, registerDepth));
+	else if(expr.isLogical() && expr.length == 1 && Logical(expr)[0]) closure.code().push_back(Instruction(ByteCode::true1, 0, 0, registerDepth));
+	else if(expr.isLogical() && expr.length == 1 && !Logical(expr)[0]) closure.code().push_back(Instruction(ByteCode::false1, 0, 0, registerDepth));
+	else {
+		closure.constants().push_back(expr);
+		closure.code().push_back(Instruction(ByteCode::kget, closure.constants().size()-1, 0, registerDepth));
+	}
 	return registerDepth++;
 }
 
@@ -344,8 +347,6 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_gt:
 	case Symbol::E_ge:
 	case Symbol::E_le:
-	case Symbol::E_sland:
-	case Symbol::E_slor:
 	{ 
 		uint64_t a = compile(call[1], closure);
 		uint64_t b = compile(call[2], closure);
@@ -377,6 +378,35 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		registerDepth = initialDepth;
 		return registerDepth++;
 	} break;
+	// Shortcut operators
+	case Symbol::E_sland:
+	{
+		closure.code().push_back(Instruction(ByteCode::false1, 0, 0, registerDepth++));
+		uint64_t cond = compile(call[1], closure);
+		closure.code().push_back(Instruction(ByteCode::if1, 0, cond));
+		uint64_t begin1 = closure.code().size();
+		registerDepth = initialDepth;
+		uint64_t cond2 = compile(call[2], closure);
+		closure.code().push_back(Instruction(ByteCode::istrue, cond2, 0, initialDepth));
+		uint64_t end = closure.code().size();
+		closure.code()[begin1-1].a = end-begin1+1;
+		registerDepth = initialDepth;
+		return registerDepth++;
+	}
+	case Symbol::E_slor:
+	{
+		closure.code().push_back(Instruction(ByteCode::true1, 0, 0, registerDepth++));
+		uint64_t cond = compile(call[1], closure);
+		closure.code().push_back(Instruction(ByteCode::if0, 0, cond));
+		uint64_t begin1 = closure.code().size();
+		registerDepth = initialDepth;
+		uint64_t cond2 = compile(call[2], closure);
+		closure.code().push_back(Instruction(ByteCode::istrue, cond2, 0, initialDepth));
+		uint64_t end = closure.code().size();
+		closure.code()[begin1-1].a = end-begin1+1;
+		registerDepth = initialDepth;
+		return registerDepth++;
+	}
 
 	default:
 	{

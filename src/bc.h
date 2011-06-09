@@ -30,6 +30,7 @@
 	_(next, "next", p) \
 	_(break1, "break1", p) \
 	_(if1, "if1", p) \
+	_(if0, "if0", p) \
 	_(colon, "colon", p) \
 	_(add, "add", p) \
 	_(pos, "pos", p) \
@@ -48,9 +49,7 @@
 	_(le, "le", p) \
 	_(lnot, "lnot", p) \
 	_(land, "land", p) \
-	_(sland, "sland", p) \
 	_(lor, "lor", p) \
-	_(slor, "slor", p) \
 	_(abs, "abs", p) \
 	_(sign, "sign", p) \
 	_(sqrt, "sqrt", p) \
@@ -69,6 +68,10 @@
 	_(atan, "atan", p) \
 	_(jmp, "jmp", p) \
 	_(null, "null", p) \
+	_(true1, "true", p) \
+	_(false1, "false", p) \
+	_(NA, "NA", p) \
+	_(istrue, "istrue", p) \
 	_(function, "function", p) \
 	_(ret, "ret", p)       /* ret must be the last instruction */
 	/*_(frame, "frame") \
