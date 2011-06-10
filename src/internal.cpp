@@ -567,6 +567,34 @@ uint64_t prod_fn(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
+uint64_t cummax_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryArith<ScanLeft, MaxOp>(state, a, state.registers[0]);
+	return 1;
+}
+
+uint64_t cummin_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryArith<ScanLeft, MinOp>(state, a, state.registers[0]);
+	return 1;
+}
+
+uint64_t cumsum_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryArith<ScanLeft, SumOp>(state, a, state.registers[0]);
+	return 1;
+}
+
+uint64_t cumprod_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryArith<ScanLeft, ProdOp>(state, a, state.registers[0]);
+	return 1;
+}
+
 uint64_t any_fn(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
@@ -622,6 +650,14 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "sum"), v);
 	CFunction(prod_fn).toValue(v);
 	env->assign(Symbol(state, "prod"), v);
+	CFunction(cummax_fn).toValue(v);
+	env->assign(Symbol(state, "cummax"), v);
+	CFunction(cummin_fn).toValue(v);
+	env->assign(Symbol(state, "cummin"), v);
+	CFunction(cumsum_fn).toValue(v);
+	env->assign(Symbol(state, "cumsum"), v);
+	CFunction(cumprod_fn).toValue(v);
+	env->assign(Symbol(state, "cumprod"), v);
 	CFunction(any_fn).toValue(v);
 	env->assign(Symbol(state, "any"), v);
 	CFunction(all_fn).toValue(v);

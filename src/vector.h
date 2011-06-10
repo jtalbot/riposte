@@ -117,6 +117,19 @@ struct FoldLeft {
 	}
 };
 
+template< class Op >
+struct ScanLeft {
+	static typename Op::RV eval(State& state, typename Op::AV const& a)
+	{
+		typename Op::R b = Op::Base;
+		typename Op::RV result(a.length);
+		for(uint64_t i = 0; i < a.length; ++i) {
+			result[i] = b = Op::eval(state, b, a[i]);
+		}
+		return result;
+	}
+};
+
 template<class T>
 T Clone(T const& in) {
 	T out(in.length());
