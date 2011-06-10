@@ -32,13 +32,11 @@
 // Conclusion for now: heap allocate environments. 
 // Try to make that fast, maybe with a pooled allocator...
 
-void eval(State& state, Closure const& closure, Environment* env); 
-
 static int64_t call_function(State& state, Function const& func, List const& args) {
 	if(func.body().type == Type::I_closure || 
 		func.body().type == Type::I_promise) {
 		//See note above about allocating Environment on heap...
-		Environment* fenv = new Environment(func.s(), state.env);
+		Environment* fenv = new Environment(func.s(), state.global);
 			
 		List parameters = func.parameters();
 		Character pnames(parameters.attributes->names);
@@ -144,7 +142,7 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 	for(uint64_t i = 0; i < parameters.length; i++) {
 		parameters[i] = call.parameters()[i];
 		if(parameters[i].type == Type::I_promise)
-			parameters[i].env = (void*)state.env;
+			parameters[i].env = (void*)state.global;
 		parameters.attributes = call.parameters().attributes;
 	}
 	if(call.dots() != 0) {
@@ -152,7 +150,7 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 		// If it's in the dots it must already be a promise, thus no need to make a promise again.
 		// Need to do the same for the names...
 		Value v;
-		state.env->get(state, Symbol::dots, v);
+		state.global->get(state, Symbol::dots, v);
 		List dots(v);
 		Vector expanded(Type::R_list, parameters.length + dots.length-1);
 		Insert(state, parameters, 0, expanded, 0, call.dots()-1);
@@ -193,7 +191,7 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 	}	
 }
 static int64_t get_op(State& state, Closure const& closure, Instruction const& inst) {
-	bool success = state.env->get(state, Symbol(inst.a), state.registers[inst.c]);
+	bool success = state.global->get(state, Symbol(inst.a), state.registers[inst.c]);
 	if(!success) throw RiposteError(std::string("object '") + Symbol(inst.a).toString(state) + "' not found");
 	return 1;
 }
@@ -202,72 +200,72 @@ static int64_t kget_op(State& state, Closure const& closure, Instruction const& 
 	return 1;
 }
 static int64_t iget_op(State& state, Closure const& closure, Instruction const& inst) {
-	state.baseenv->get(state, Symbol(inst.a), state.registers[inst.c]);
+	state.path[0]->get(state, Symbol(inst.a), state.registers[inst.c]);
 	return 1;
 }
 static int64_t assign_op(State& state, Closure const& closure, Instruction const& inst) {
 	if(!Symbol(inst.a).isAssignable()) {
 		throw RiposteError("cannot assign to that symbol");
 	}
-	state.env->assign(Symbol(inst.a), state.registers[inst.c]);
+	state.global->assign(Symbol(inst.a), state.registers[inst.c]);
 	// assign assumes that source is equal to destination
 	return 1;
 }
 static int64_t classassign_op(State& state, Closure const& closure, Instruction const& inst) {
 	Value k;
-	state.env->get(state, Symbol(inst.a), k);
+	state.global->get(state, Symbol(inst.a), k);
 	setClass(k.attributes, state.registers[inst.c]);
-	state.env->assign(Symbol(inst.a), k);
+	state.global->assign(Symbol(inst.a), k);
 	state.registers[inst.c] = k;
 	return 1;
 }
 static int64_t namesassign_op(State& state, Closure const& closure, Instruction const& inst) {
 	Value k;
-	state.env->get(state, Symbol(inst.a), k);
+	state.global->get(state, Symbol(inst.a), k);
 	setNames(k.attributes, As<Character>(state, state.registers[inst.c]));
-	state.env->assign(Symbol(inst.a), k);
+	state.global->assign(Symbol(inst.a), k);
 	state.registers[inst.c] = k;
 	return 1;
 }
 static int64_t dimassign_op(State& state, Closure const& closure, Instruction const& inst) {
 	Value k;
-	state.env->get(state, Symbol(inst.a), k);
+	state.global->get(state, Symbol(inst.a), k);
 	setDim(k.attributes, state.registers[inst.c]);
-	state.env->assign(Symbol(inst.a), k);
+	state.global->assign(Symbol(inst.a), k);
 	state.registers[inst.c] = k;
 	return 1;
 }
 static int64_t iassign_op(State& state, Closure const& closure, Instruction const& inst) {
 	Value k;
-	state.env->get(state, Symbol(inst.a), k);
+	state.global->get(state, Symbol(inst.a), k);
 	subAssign(state, k, state.registers[inst.b], state.registers[inst.c], state.registers[inst.c]);
-	state.env->assign(Symbol(inst.a), state.registers[inst.c]);
+	state.global->assign(Symbol(inst.a), state.registers[inst.c]);
 	return 1;
 }
 static int64_t iclassassign_op(State& state, Closure const& closure, Instruction const& inst) {
 	// TODO: needs indexing
 	Value k;
-	state.env->get(state, Symbol(inst.a), k);
+	state.global->get(state, Symbol(inst.a), k);
 	setClass(k.attributes, state.registers[inst.c]);
-	state.env->assign(Symbol(inst.a), k);
+	state.global->assign(Symbol(inst.a), k);
 	state.registers[inst.c] = k;
 	return 1;
 }
 static int64_t inamesassign_op(State& state, Closure const& closure, Instruction const& inst) {
 	// TODO: needs indexing
 	Value k;
-	state.env->get(state, Symbol(inst.a), k);
+	state.global->get(state, Symbol(inst.a), k);
 	setNames(k.attributes, state.registers[inst.c]);
-	state.env->assign(Symbol(inst.a), k);
+	state.global->assign(Symbol(inst.a), k);
 	state.registers[inst.c] = k;
 	return 1;
 }
 static int64_t idimassign_op(State& state, Closure const& closure, Instruction const& inst) {
 	// TODO: needs indexing
 	Value k;
-	state.env->get(state, Symbol(inst.a), k);
+	state.global->get(state, Symbol(inst.a), k);
 	setDim(k.attributes, state.registers[inst.c]);
-	state.env->assign(Symbol(inst.a), k);
+	state.global->assign(Symbol(inst.a), k);
 	state.registers[inst.c] = k;
 	return 1;
 }
@@ -278,12 +276,12 @@ static int64_t forbegin_op(State& state, Closure const& closure, Instruction con
 	state.registers[inst.c+1] = loopVector;
 	state.registers[inst.c+2] = Integer::c(0);
 	if(state.registers[inst.c+2].i >= (int64_t)state.registers[inst.c+1].length) { return inst.a; }
-	state.env->assign(Symbol(inst.b), Element(loopVector, 0));
+	state.global->assign(Symbol(inst.b), Element(loopVector, 0));
 	return 1;
 }
 static int64_t forend_op(State& state, Closure const& closure, Instruction const& inst) {
 	if(++state.registers[inst.c+2].i < (int64_t)state.registers[inst.c+1].length) { 
-		state.env->assign(Symbol(inst.b), Element(state.registers[inst.c+1], state.registers[inst.c+2].i));
+		state.global->assign(Symbol(inst.b), Element(state.registers[inst.c+1], state.registers[inst.c+2].i));
 		return inst.a; 
 	} else return 1;
 }
@@ -295,12 +293,12 @@ static int64_t iforbegin_op(State& state, Closure const& closure, Instruction co
 	state.registers[inst.c+1].length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
 	state.registers[inst.c+2] = Integer::c((int64_t)m);
 	if(state.registers[inst.c+2].i >= (int64_t)state.registers[inst.c+1].length) { return inst.a; }
-	state.env->assign(Symbol(inst.b), Integer::c(m));
+	state.global->assign(Symbol(inst.b), Integer::c(m));
 	return 1;
 }
 static int64_t iforend_op(State& state, Closure const& closure, Instruction const& inst) {
 	if((state.registers[inst.c+2].i+=state.registers[inst.c+1].i) < (int64_t)state.registers[inst.c+1].length) { 
-		state.env->assign(Symbol(inst.b), state.registers[inst.c+2]);
+		state.global->assign(Symbol(inst.b), state.registers[inst.c+2]);
 		return inst.a; 
 	} else return 1;
 }
@@ -512,7 +510,7 @@ static int64_t istrue_op(State& state, Closure const& closure, Instruction const
 	return 1;
 }
 static int64_t function_op(State& state, Closure const& closure, Instruction const& inst) {
-	state.registers[inst.c] = Function(closure.constants()[inst.a], closure.constants()[inst.b], Character::NA(), state.env);
+	state.registers[inst.c] = Function(closure.constants()[inst.a], closure.constants()[inst.b], Character::NA(), state.global);
 	return 1;
 }
 static int64_t ret_op(State& state, Closure const& closure, Instruction const& inst) {
@@ -531,8 +529,8 @@ static int64_t ret_op(State& state, Closure const& closure, Instruction const& i
 
 //__attribute__((__noinline__,__noclone__)) 
 void eval(State& state, Closure const& closure) {
-	Environment* oldenv = state.env;
-	if(closure.environment() != 0) state.env = closure.environment();	
+	Environment* oldenv = state.global;
+	if(closure.environment() != 0) state.global = closure.environment();	
 
 	Instruction const* pc;
 
@@ -570,7 +568,7 @@ void eval(State& state, Closure const& closure) {
 		};
 	}
 #endif
-	state.env = oldenv;
+	state.global = oldenv;
 	state.registers[0] = state.registers[pc->a];
 }
 

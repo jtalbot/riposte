@@ -2,6 +2,7 @@
 #include "internal.h"
 #include "compiler.h"
 #include "parser.h"
+#include "library.h"
 #include <math.h>
 #include <fstream>
 
@@ -13,11 +14,27 @@ void checkNumArgs(List const& args, uint64_t nargs) {
 	else if(args.length < nargs) _error("too few arguments");
 }
 
+uint64_t library(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+
+	Character from = As<Character>(state, force(state, args[0]));
+	if(from.length > 0) {
+		Environment* global = state.global;
+		state.global = new Environment(state.path.back(), state.path.back());
+		loadLibrary(state, from[0].toString(state));
+		state.path.push_back(state.global);
+		global->init(state.global, state.global);
+		state.global = global;
+	}
+	state.registers[0] = Null::singleton;
+	return 1;
+}
+
 uint64_t function(State& state, Call const& call, List const& args) {
 	Value parameters = force(state, args[0]);
 	Value body = args[1];
 	state.registers[0] = 	
-		Function(parameters, body, Character::NA()/*force(state, args[2])*/, state.env);
+		Function(parameters, body, Character::NA()/*force(state, args[2])*/, state.global);
 	return 1;
 }
 
@@ -26,7 +43,7 @@ uint64_t rm(State& state, Call const& call, List const& args) {
 		if(expression(args[i]).type != Type::R_symbol && expression(args[i]).type != Type::R_character) 
 			_error("rm() arguments must be symbols or character vectors");
 	for(uint64_t i = 0; i < args.length; i++) {
-		state.env->rm(expression(args[i]));
+		state.global->rm(expression(args[i]));
 	}
 	state.registers[0] = Null::singleton;
 	return 1;
@@ -471,7 +488,7 @@ uint64_t environment(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	Value e = force(state, args[0]);
 	if(e.type == Type::R_null) {
-		state.registers[0] = REnvironment(state.env);
+		state.registers[0] = REnvironment(state.global);
 		return 1;
 	}
 	else if(e.type == Type::R_function) {
@@ -485,7 +502,7 @@ uint64_t environment(State& state, Call const& call, List const& args) {
 uint64_t parentframe(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	uint64_t i = (uint64_t)asReal1(force(state, args[0]));
-	Environment* e = state.env;
+	Environment* e = state.global;
 	for(uint64_t j = 0; j < i-1 && e != NULL; j++) {
 		e = e->dynamicParent();
 	}
@@ -520,7 +537,7 @@ uint64_t warning_fn(State& state, Call const& call, List const& args) {
 uint64_t missing(State& state, Call const& call, List const& args) {
 	Symbol s = expression(args[0]); 
 	Value v;
-	bool success = state.env->getRaw(s, v);
+	bool success = state.global->getRaw(s, v);
 	state.registers[0] =  (!success || v.type == Type::I_default) ? Logical::True() : Logical::False();
 	return 1;
 }
@@ -584,7 +601,7 @@ uint64_t isinfinite_fn(State& state, Call const& call, List const& args) {
 void addMathOps(State& state)
 {
 	Value v;
-	Environment* env = state.baseenv;
+	Environment* env = state.path[0];
 
 	CFunction(max_fn).toValue(v);
 	env->assign(Symbol(state, "max"), v);
@@ -604,6 +621,8 @@ void addMathOps(State& state)
 	CFunction(isinfinite_fn).toValue(v);
 	env->assign(Symbol(state, "is.infinite"), v);
 	
+	CFunction(library).toValue(v);
+	env->assign(Symbol(state, "library"), v);
 	CFunction(function).toValue(v);
 	env->assign(Symbol(state, "function"), v);
 	CFunction(rm).toValue(v);

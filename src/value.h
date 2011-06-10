@@ -54,14 +54,18 @@ struct State {
 	Value Registers[1024];
 	Value* registers;
 	
-	Environment *env, *baseenv;
+	std::vector<Environment*, traceable_allocator<Environment*> > path;
+	Environment* global;
 
 	// reset at the beginning of a call to eval
 	std::vector<std::string> warnings;
 
 	SymbolTable symbols;
 	
-	State(Environment* env, Environment* baseenv) : registers(&Registers[0]), env(env), baseenv(baseenv) {}
+	State(Environment* global, Environment* base) : registers(&Registers[0]) {
+		this->global = global;
+		path.push_back(base);
+	}
 
 	std::string stringify(Value const& v) const;
 };

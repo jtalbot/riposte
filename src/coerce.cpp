@@ -82,7 +82,7 @@ uint64_t islist(State& state, Call const& call, List const& args) {
 void importCoerceFunctions(State& state)
 {
 	Value v;
-	Environment* env = state.baseenv;
+	Environment* env = state.path[0];
 
 	CFunction(aslogical).toValue(v);
 	env->assign(Symbol(state, "as.logical"), v);
