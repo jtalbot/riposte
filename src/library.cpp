@@ -25,6 +25,9 @@ void sourceFile(State& state, std::string name) {
 
 
 void loadLibrary(State& state, std::string library_name) {
+	Environment* global = state.global;
+	state.global = new Environment(state.path.back(), state.path.back());
+	
 	std::string path = std::string("library/")+library_name+("/R/");
 
 	DIR* dir = opendir(path.c_str());
@@ -41,4 +44,8 @@ void loadLibrary(State& state, std::string library_name) {
 			}
 		}
 	}
+
+	state.path.push_back(state.global);
+	global->init(state.global, state.global);
+	state.global = global;
 }

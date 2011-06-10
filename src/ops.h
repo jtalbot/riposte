@@ -196,12 +196,32 @@ struct T<TComplex> : public BinaryOp<Complex, Complex, Complex> { \
 	static T::R eval(State& state, T::A const& a, T::B const& b) { _error("invalid complex function"); } \
 }; 
 
-FOLD_OP(MaxOp, std::max(a,b), std::numeric_limits<typename MaxOp<T>::A>::min()) 
+template<typename T>
+T riposte_max(T a, T b) { return std::max(a, b); }
+template<>
+inline double riposte_max<double>(double a, double b) { if(a!=a) return a; if(b!=b) return b; return a > b ? a : b; }
+
+template<typename T>
+T riposte_min(T a, T b) { return std::min(a, b); }
+template<>
+inline double riposte_min<double>(double a, double b) { if(a!=a) return a; if(b!=b) return b; return a < b ? a : b; }
+
+FOLD_OP(MaxOp, riposte_max(a,b), -std::numeric_limits<typename MaxOp<T>::A>::infinity()) 
 INVALID_COMPLEX_FUNCTION(MaxOp);
-FOLD_OP(MinOp, std::min(a,b), std::numeric_limits<typename MaxOp<T>::A>::max()) 
+FOLD_OP(MinOp, riposte_min(a,b), std::numeric_limits<typename MaxOp<T>::A>::infinity()) 
 INVALID_COMPLEX_FUNCTION(MinOp);
 FOLD_OP(SumOp, a+b, 0) 
 FOLD_OP(ProdOp, a*b, 1) 
+
+struct AnyOp : FoldOp<Logical> {
+	static const AnyOp::A Base;
+	static AnyOp::R eval(State& state, AnyOp::R const& a, AnyOp::A const& b) { return OrOp::eval(state, a,b); }
+};
+
+struct AllOp : FoldOp<Logical> {
+	static const AllOp::A Base;
+	static AllOp::R eval(State& state, AllOp::R const& a, AllOp::A const& b) { return AndOp::eval(state, a,b); }
+};
 
 #undef FOLD_OP
 #undef INVALID_COMPLEX_FUNCTION
@@ -214,6 +234,8 @@ void unaryArith(State& state, Value const& a, Value& c) {
 		c = Lift< Op<TComplex> >::eval(state, Complex(a));
 	else if(a.isMathCoerce())
 		c = Lift< Op<TInteger> >::eval(state, As<Integer>(state, a));
+	else if(a.isNull())
+		c = Null::singleton;
 	else 
 		_error("non-numeric argument to unary numeric operator");
 };
@@ -222,6 +244,8 @@ template< template<class Op> class Lift, class Op >
 void unaryLogical(State& state, Value const& a, Value& c) {
 	if(a.isLogicalCoerce())
 		c = Lift<Op>::eval(state, As<Logical>(state, a));
+	else if(a.isNull())
+		c = Logical(0);
 	else
 		_error("non-logical argument to unary logical operator");
 };
@@ -238,6 +262,8 @@ void unaryFilter(State& state, Value const& a, Value& c) {
 		c = Lift< Op<Logical> >::eval(state, a);
 	else if(a.isCharacter())
 		c = Lift< Op<Character> >::eval(state, a);
+	else if(a.isNull())
+		c = Logical(0);
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 

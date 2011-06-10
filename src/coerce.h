@@ -12,6 +12,7 @@
 template<typename I, typename O>
 static typename O::Element Cast(State& state, typename I::Element const& i) { return (typename O::Element)i; }
 
+
 template<>
 static Integer::Element Cast<Logical, Integer>(State& state, Logical::Element const& i) { return Logical::isNA(i) ? Integer::NAelement : i ? 1 : 0; }
 
@@ -103,6 +104,7 @@ O As(State& state, Value const& src) {
 	if(src.type == O::type)
 		return src;
 	switch(src.type.Enum()) {
+		case Type::E_R_null: return O(0); break;
 		case Type::E_R_double: return Zip1< CastOp<Double, O> >::eval(state, src); break;
 		case Type::E_R_integer: return Zip1< CastOp<Integer, O> >::eval(state, src); break;
 		case Type::E_R_logical: return Zip1< CastOp<Logical, O> >::eval(state, src); break;
@@ -112,11 +114,16 @@ O As(State& state, Value const& src) {
 		default: _error("Invalid cast"); break;
 	};
 }
+template<>
+inline Null As<Null>(State& state, Value const& src) {
+	return Null::singleton;
+}
 
 inline Value As(State& state, Type type, Value const& src) {
 	if(src.type == type)
 		return src;
 	switch(type.Enum()) {
+		case Type::E_R_null: return As<Null>(state, src); break;
 		case Type::E_R_double: return As<Double>(state, src); break;
 		case Type::E_R_integer: return As<Integer>(state, src); break;
 		case Type::E_R_logical: return As<Logical>(state, src); break;

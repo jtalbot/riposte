@@ -22,6 +22,7 @@
 #include "coerce.h"
 #include "parser.h"
 #include "compiler.h"
+#include "library.h"
 
 /*  Globals  */
 static int debug = 0;
@@ -252,6 +253,8 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 	State state(new Environment(baseenv, baseenv), baseenv);
 	addMathOps(state);	
 	importCoerceFunctions(state);	
+
+	loadLibrary(state, "base");
 
 /* Either execute the specified file or read interactively from stdin  */
 

@@ -57,6 +57,9 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 			if(i < args.length && Symbol(pnames[i]) == Symbol::dots) {
 				fenv->assign(Symbol::dots, List(Subset(args, i, args.length-i)));
 			}
+			else {
+				fenv->assign(Symbol::dots, List(0));
+			}
 		}
 		// call arguments are named, do matching by name
 		else {

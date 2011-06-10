@@ -1,6 +1,12 @@
 
 #include "internal.h"
 
+uint64_t asnull(State& state, Call const& call, List const& args) {
+	Value from = force(state, args[0]);
+	state.registers[0] = As<Null>(state, from);
+	return 1;
+}
+
 uint64_t aslogical(State& state, Call const& call, List const& args) {
 	Value from = force(state, args[0]);
 	state.registers[0] = As<Logical>(state, from);
@@ -84,6 +90,8 @@ void importCoerceFunctions(State& state)
 	Value v;
 	Environment* env = state.path[0];
 
+	CFunction(asnull).toValue(v);
+	env->assign(Symbol(state, "as.null"), v);
 	CFunction(aslogical).toValue(v);
 	env->assign(Symbol(state, "as.logical"), v);
 	CFunction(asinteger).toValue(v);

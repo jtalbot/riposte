@@ -4,9 +4,8 @@
  *	A ragel lexer for R.
  *	In ragel, the lexer drives the parsing process, so this also has the basic parsing functions.
  *	Use this to generate parser.cpp
- *      TODO: Eliminate calls to Symbol(state, ...) which require a map search. Should be a hard-coded value.
+ *      TODO: 
  *            Parse escape sequences embedded in strings.
- *            Emit complex NA
  *            Include the double-to-int warnings, e.g. on 1.0L  and 1.5L
  *            Generate hex numbers
  *            Do we really want to allow '.' inside hex numbers? R allows them, but ignores them when parsing to a number.
@@ -18,7 +17,7 @@
 #include "ast.cpp"
 
 
-#line 22 "../parser.cpp"
+#line 21 "../parser.cpp"
 static const char _Scanner_actions[] = {
 	0, 1, 2, 1, 3, 1, 26, 1, 
 	27, 1, 28, 1, 29, 1, 30, 1, 
@@ -411,7 +410,7 @@ static const int Scanner_error = 0;
 static const int Scanner_en_main = 17;
 
 
-#line 132 "lexer.rl"
+#line 131 "lexer.rl"
 
 
 void Parser::token( int tok, Value v)
@@ -472,7 +471,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out)
 	const char* eof = isEof ? pe : 0;
 	int cs, act;
 	
-#line 476 "../parser.cpp"
+#line 475 "../parser.cpp"
 	{
 	cs = Scanner_start;
 	ts = 0;
@@ -480,9 +479,9 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out)
 	act = 0;
 	}
 
-#line 192 "lexer.rl"
+#line 191 "lexer.rl"
 	
-#line 486 "../parser.cpp"
+#line 485 "../parser.cpp"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -503,7 +502,7 @@ _resume:
 #line 1 "NONE"
 	{ts = p;}
 	break;
-#line 507 "../parser.cpp"
+#line 506 "../parser.cpp"
 		}
 	}
 
@@ -574,311 +573,311 @@ _eof_trans:
 	{te = p+1;}
 	break;
 	case 4:
-#line 30 "lexer.rl"
+#line 29 "lexer.rl"
 	{act = 1;}
 	break;
 	case 5:
-#line 32 "lexer.rl"
+#line 31 "lexer.rl"
 	{act = 3;}
 	break;
 	case 6:
-#line 33 "lexer.rl"
+#line 32 "lexer.rl"
 	{act = 4;}
 	break;
 	case 7:
-#line 34 "lexer.rl"
+#line 33 "lexer.rl"
 	{act = 5;}
 	break;
 	case 8:
-#line 35 "lexer.rl"
+#line 34 "lexer.rl"
 	{act = 6;}
 	break;
 	case 9:
-#line 36 "lexer.rl"
+#line 35 "lexer.rl"
 	{act = 7;}
 	break;
 	case 10:
-#line 37 "lexer.rl"
+#line 36 "lexer.rl"
 	{act = 8;}
 	break;
 	case 11:
-#line 38 "lexer.rl"
+#line 37 "lexer.rl"
 	{act = 9;}
 	break;
 	case 12:
-#line 39 "lexer.rl"
+#line 38 "lexer.rl"
 	{act = 10;}
 	break;
 	case 13:
-#line 40 "lexer.rl"
+#line 39 "lexer.rl"
 	{act = 11;}
 	break;
 	case 14:
-#line 41 "lexer.rl"
+#line 40 "lexer.rl"
 	{act = 12;}
 	break;
 	case 15:
-#line 42 "lexer.rl"
+#line 41 "lexer.rl"
 	{act = 13;}
 	break;
 	case 16:
-#line 43 "lexer.rl"
+#line 42 "lexer.rl"
 	{act = 14;}
 	break;
 	case 17:
-#line 44 "lexer.rl"
+#line 43 "lexer.rl"
 	{act = 15;}
 	break;
 	case 18:
-#line 45 "lexer.rl"
+#line 44 "lexer.rl"
 	{act = 16;}
 	break;
 	case 19:
-#line 46 "lexer.rl"
+#line 45 "lexer.rl"
 	{act = 17;}
 	break;
 	case 20:
-#line 47 "lexer.rl"
+#line 46 "lexer.rl"
 	{act = 18;}
 	break;
 	case 21:
-#line 48 "lexer.rl"
+#line 47 "lexer.rl"
 	{act = 19;}
 	break;
 	case 22:
-#line 58 "lexer.rl"
+#line 57 "lexer.rl"
 	{act = 22;}
 	break;
 	case 23:
-#line 120 "lexer.rl"
+#line 119 "lexer.rl"
 	{act = 65;}
 	break;
 	case 24:
-#line 126 "lexer.rl"
+#line 125 "lexer.rl"
 	{act = 68;}
 	break;
 	case 25:
-#line 129 "lexer.rl"
+#line 128 "lexer.rl"
 	{act = 69;}
 	break;
 	case 26:
-#line 52 "lexer.rl"
+#line 51 "lexer.rl"
 	{te = p+1;{token( TOKEN_STR_CONST, Character::c(state, std::string(ts+1, te-ts-2)) );}}
 	break;
 	case 27:
-#line 54 "lexer.rl"
+#line 53 "lexer.rl"
 	{te = p+1;{token( TOKEN_STR_CONST, Character::c(state, std::string(ts+1, te-ts-2)) );}}
 	break;
 	case 28:
-#line 60 "lexer.rl"
+#line 59 "lexer.rl"
 	{te = p+1;{token( TOKEN_SYMBOL, Symbol(state, std::string(ts+1, te-ts-2)) );}}
 	break;
 	case 29:
-#line 67 "lexer.rl"
+#line 66 "lexer.rl"
 	{te = p+1;{token( TOKEN_NUM_CONST, Complex::c(0, atof(std::string(ts, te-ts-1).c_str())) );}}
 	break;
 	case 30:
-#line 70 "lexer.rl"
+#line 69 "lexer.rl"
 	{te = p+1;{token( TOKEN_NUM_CONST, Integer::c(atof(std::string(ts, te-ts-1).c_str())) );}}
 	break;
 	case 31:
-#line 82 "lexer.rl"
+#line 81 "lexer.rl"
 	{te = p+1;{token( TOKEN_PLUS, Symbol::add );}}
 	break;
 	case 32:
-#line 84 "lexer.rl"
+#line 83 "lexer.rl"
 	{te = p+1;{token( TOKEN_POW, Symbol::pow );}}
 	break;
 	case 33:
-#line 85 "lexer.rl"
+#line 84 "lexer.rl"
 	{te = p+1;{token( TOKEN_DIVIDE, Symbol::div );}}
 	break;
 	case 34:
-#line 87 "lexer.rl"
+#line 86 "lexer.rl"
 	{te = p+1;{token( TOKEN_POW, Symbol::pow );}}
 	break;
 	case 35:
-#line 88 "lexer.rl"
+#line 87 "lexer.rl"
 	{te = p+1;{token( TOKEN_TILDE, Symbol::tilde );}}
 	break;
 	case 36:
-#line 89 "lexer.rl"
+#line 88 "lexer.rl"
 	{te = p+1;{token( TOKEN_DOLLAR, Symbol::dollar );}}
 	break;
 	case 37:
-#line 90 "lexer.rl"
+#line 89 "lexer.rl"
 	{te = p+1;{token( TOKEN_AT, Symbol::at );}}
 	break;
 	case 38:
-#line 94 "lexer.rl"
+#line 93 "lexer.rl"
 	{te = p+1;{token( TOKEN_NS_GET_INT, Symbol::nsgetint );}}
 	break;
 	case 39:
-#line 97 "lexer.rl"
+#line 96 "lexer.rl"
 	{te = p+1;{token( TOKEN_LBRACE, Symbol::brace );}}
 	break;
 	case 40:
-#line 98 "lexer.rl"
+#line 97 "lexer.rl"
 	{te = p+1;{token( TOKEN_RBRACE );}}
 	break;
 	case 41:
-#line 99 "lexer.rl"
+#line 98 "lexer.rl"
 	{te = p+1;{token( TOKEN_LPAREN, Symbol::paren );}}
 	break;
 	case 42:
-#line 100 "lexer.rl"
+#line 99 "lexer.rl"
 	{te = p+1;{token( TOKEN_RPAREN );}}
 	break;
 	case 43:
-#line 102 "lexer.rl"
+#line 101 "lexer.rl"
 	{te = p+1;{token( TOKEN_LBB, Symbol::bb );}}
 	break;
 	case 44:
-#line 104 "lexer.rl"
+#line 103 "lexer.rl"
 	{te = p+1;{token( TOKEN_RBB );}}
 	break;
 	case 45:
-#line 107 "lexer.rl"
+#line 106 "lexer.rl"
 	{te = p+1;{token( TOKEN_LE, Symbol::le );}}
 	break;
 	case 46:
-#line 108 "lexer.rl"
+#line 107 "lexer.rl"
 	{te = p+1;{token( TOKEN_GE, Symbol::ge );}}
 	break;
 	case 47:
-#line 109 "lexer.rl"
+#line 108 "lexer.rl"
 	{te = p+1;{token( TOKEN_EQ, Symbol::eq );}}
 	break;
 	case 48:
-#line 110 "lexer.rl"
+#line 109 "lexer.rl"
 	{te = p+1;{token( TOKEN_NE, Symbol::neq );}}
 	break;
 	case 49:
-#line 111 "lexer.rl"
+#line 110 "lexer.rl"
 	{te = p+1;{token( TOKEN_AND2, Symbol::sland );}}
 	break;
 	case 50:
-#line 112 "lexer.rl"
+#line 111 "lexer.rl"
 	{te = p+1;{token( TOKEN_OR2, Symbol::slor );}}
 	break;
 	case 51:
-#line 113 "lexer.rl"
+#line 112 "lexer.rl"
 	{te = p+1;{token( TOKEN_LEFT_ASSIGN, Symbol::assign );}}
 	break;
 	case 52:
-#line 115 "lexer.rl"
+#line 114 "lexer.rl"
 	{te = p+1;{token( TOKEN_RIGHT_ASSIGN, Symbol::assign2 );}}
 	break;
 	case 53:
-#line 116 "lexer.rl"
+#line 115 "lexer.rl"
 	{te = p+1;{token( TOKEN_LEFT_ASSIGN, Symbol::assign2 );}}
 	break;
 	case 54:
-#line 117 "lexer.rl"
+#line 116 "lexer.rl"
 	{te = p+1;{token( TOKEN_QUESTION, Symbol::question );}}
 	break;
 	case 55:
-#line 123 "lexer.rl"
+#line 122 "lexer.rl"
 	{te = p+1;{token( TOKEN_COMMA );}}
 	break;
 	case 56:
-#line 124 "lexer.rl"
+#line 123 "lexer.rl"
 	{te = p+1;{token( TOKEN_SEMICOLON );}}
 	break;
 	case 57:
-#line 31 "lexer.rl"
+#line 30 "lexer.rl"
 	{te = p;p--;{token( TOKEN_NUM_CONST, Logical::NA() );}}
 	break;
 	case 58:
-#line 58 "lexer.rl"
+#line 57 "lexer.rl"
 	{te = p;p--;{token( TOKEN_SYMBOL, Symbol(state, std::string(ts, te-ts)) );}}
 	break;
 	case 59:
-#line 64 "lexer.rl"
+#line 63 "lexer.rl"
 	{te = p;p--;{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );}}
 	break;
 	case 60:
-#line 78 "lexer.rl"
+#line 77 "lexer.rl"
 	{te = p;p--;{token( TOKEN_NUM_CONST );}}
 	break;
 	case 61:
-#line 81 "lexer.rl"
+#line 80 "lexer.rl"
 	{te = p;p--;{token( TOKEN_EQ_ASSIGN, Symbol::eqassign );}}
 	break;
 	case 62:
-#line 83 "lexer.rl"
+#line 82 "lexer.rl"
 	{te = p;p--;{token( TOKEN_MINUS, Symbol::sub );}}
 	break;
 	case 63:
-#line 86 "lexer.rl"
+#line 85 "lexer.rl"
 	{te = p;p--;{token( TOKEN_TIMES, Symbol::mul );}}
 	break;
 	case 64:
-#line 91 "lexer.rl"
+#line 90 "lexer.rl"
 	{te = p;p--;{token( TOKEN_NOT, Symbol::lnot );}}
 	break;
 	case 65:
-#line 92 "lexer.rl"
+#line 91 "lexer.rl"
 	{te = p;p--;{token( TOKEN_COLON, Symbol::colon );}}
 	break;
 	case 66:
-#line 93 "lexer.rl"
+#line 92 "lexer.rl"
 	{te = p;p--;{token( TOKEN_NS_GET, Symbol::nsget );}}
 	break;
 	case 67:
-#line 95 "lexer.rl"
+#line 94 "lexer.rl"
 	{te = p;p--;{token( TOKEN_AND, Symbol::land );}}
 	break;
 	case 68:
-#line 96 "lexer.rl"
+#line 95 "lexer.rl"
 	{te = p;p--;{token( TOKEN_OR, Symbol::lor );}}
 	break;
 	case 69:
-#line 101 "lexer.rl"
+#line 100 "lexer.rl"
 	{te = p;p--;{token( TOKEN_LBRACKET, Symbol::bracket );}}
 	break;
 	case 70:
-#line 103 "lexer.rl"
+#line 102 "lexer.rl"
 	{te = p;p--;{token( TOKEN_RBRACKET );}}
 	break;
 	case 71:
-#line 105 "lexer.rl"
+#line 104 "lexer.rl"
 	{te = p;p--;{token( TOKEN_LT, Symbol::lt );}}
 	break;
 	case 72:
-#line 106 "lexer.rl"
+#line 105 "lexer.rl"
 	{te = p;p--;{token( TOKEN_GT, Symbol::gt );}}
 	break;
 	case 73:
-#line 114 "lexer.rl"
+#line 113 "lexer.rl"
 	{te = p;p--;{token( TOKEN_RIGHT_ASSIGN, Symbol::assign );}}
 	break;
 	case 74:
-#line 120 "lexer.rl"
+#line 119 "lexer.rl"
 	{te = p;p--;{token(TOKEN_SPECIALOP, Symbol(state, std::string(ts, te-ts)) ); }}
 	break;
 	case 75:
-#line 126 "lexer.rl"
+#line 125 "lexer.rl"
 	{te = p;p--;{token( TOKEN_NEWLINE );}}
 	break;
 	case 76:
-#line 129 "lexer.rl"
+#line 128 "lexer.rl"
 	{te = p;p--;}
 	break;
 	case 77:
-#line 64 "lexer.rl"
+#line 63 "lexer.rl"
 	{{p = ((te))-1;}{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );}}
 	break;
 	case 78:
-#line 78 "lexer.rl"
+#line 77 "lexer.rl"
 	{{p = ((te))-1;}{token( TOKEN_NUM_CONST );}}
 	break;
 	case 79:
-#line 105 "lexer.rl"
+#line 104 "lexer.rl"
 	{{p = ((te))-1;}{token( TOKEN_LT, Symbol::lt );}}
 	break;
 	case 80:
-#line 126 "lexer.rl"
+#line 125 "lexer.rl"
 	{{p = ((te))-1;}{token( TOKEN_NEWLINE );}}
 	break;
 	case 81:
@@ -956,7 +955,7 @@ _eof_trans:
 	}
 	}
 	break;
-#line 960 "../parser.cpp"
+#line 959 "../parser.cpp"
 		}
 	}
 
@@ -973,7 +972,7 @@ _again:
 #line 1 "NONE"
 	{act = 0;}
 	break;
-#line 977 "../parser.cpp"
+#line 976 "../parser.cpp"
 		}
 	}
 
@@ -993,7 +992,7 @@ _again:
 	_out: {}
 	}
 
-#line 193 "lexer.rl"
+#line 192 "lexer.rl"
 	int syntaxErrors = errors;
 	Parse(pParser, 0, Value::NIL, this);
 	ParseFree(pParser, free);

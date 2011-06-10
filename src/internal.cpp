@@ -8,6 +8,8 @@
 
 const MaxOp<TComplex>::A MaxOp<TComplex>::Base = std::complex<double>(0,0);
 const MinOp<TComplex>::A MinOp<TComplex>::Base = std::complex<double>(0,0);
+const AnyOp::A AnyOp::Base = 0;
+const AllOp::A AllOp::Base = 1;
 
 void checkNumArgs(List const& args, uint64_t nargs) {
 	if(args.length > nargs) _error("unused argument(s)");
@@ -19,12 +21,7 @@ uint64_t library(State& state, Call const& call, List const& args) {
 
 	Character from = As<Character>(state, force(state, args[0]));
 	if(from.length > 0) {
-		Environment* global = state.global;
-		state.global = new Environment(state.path.back(), state.path.back());
 		loadLibrary(state, from[0].toString(state));
-		state.path.push_back(state.global);
-		global->init(state.global, state.global);
-		state.global = global;
 	}
 	state.registers[0] = Null::singleton;
 	return 1;
@@ -570,6 +567,20 @@ uint64_t prod_fn(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
+uint64_t any_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryLogical<FoldLeft, AnyOp>(state, a, state.registers[0]);
+	return 1;
+}
+
+uint64_t all_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryLogical<FoldLeft, AllOp>(state, a, state.registers[0]);
+	return 1;
+}
+
 uint64_t isna_fn(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
@@ -611,6 +622,10 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "sum"), v);
 	CFunction(prod_fn).toValue(v);
 	env->assign(Symbol(state, "prod"), v);
+	CFunction(any_fn).toValue(v);
+	env->assign(Symbol(state, "any"), v);
+	CFunction(all_fn).toValue(v);
+	env->assign(Symbol(state, "all"), v);
 	
 	CFunction(isna_fn).toValue(v);
 	env->assign(Symbol(state, "is.na"), v);

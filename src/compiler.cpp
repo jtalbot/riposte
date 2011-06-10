@@ -50,8 +50,8 @@ static void resolveLoopReferences(Closure& closure, uint64_t start, uint64_t end
 
 uint64_t Compiler::compileConstant(Value const& expr, Closure& closure) {
 	if(expr.isNull()) closure.code().push_back(Instruction(ByteCode::null, 0, 0, registerDepth));
-	else if(expr.isLogical() && expr.length == 1 && Logical(expr)[0]) closure.code().push_back(Instruction(ByteCode::true1, 0, 0, registerDepth));
-	else if(expr.isLogical() && expr.length == 1 && !Logical(expr)[0]) closure.code().push_back(Instruction(ByteCode::false1, 0, 0, registerDepth));
+	else if(expr.isLogical() && expr.length == 1 && Logical::isTrue(Logical(expr)[0])) closure.code().push_back(Instruction(ByteCode::true1, 0, 0, registerDepth));
+	else if(expr.isLogical() && expr.length == 1 && Logical::isFalse(Logical(expr)[0])) closure.code().push_back(Instruction(ByteCode::false1, 0, 0, registerDepth));
 	else {
 		closure.constants().push_back(expr);
 		closure.code().push_back(Instruction(ByteCode::kget, closure.constants().size()-1, 0, registerDepth));
@@ -109,7 +109,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		// any indexing code
 		bool indexed = false;
 		uint64_t index = 0;
-		if(v.type == Type::R_call && Symbol(Call(v)[0]) == Symbol::leftBrace) {
+		if(v.type == Type::R_call && Symbol(Call(v)[0]) == Symbol::bracket) {
 			Call c(v);
 			index = compile(c[2], closure);
 			v = c[1];

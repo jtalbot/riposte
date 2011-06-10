@@ -22,11 +22,13 @@ const Value Value::NIL = {{0}, {0}, 0, Type::I_nil};
 #define ENUM_CONST_CONSTRUCT(name, string, EnumType) const EnumType EnumType::name(EnumType::E_##name);
 SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 
-	SymbolTable::SymbolTable() {
+	SymbolTable::SymbolTable() : next(0) {
 		// insert predefined symbols into table at known positions (corresponding to their enum value)
 #define ENUM_STRING_TABLE(name, string, EnumType) \
 		symbolTable[string] = EnumType::E_##name; \
 		reverseSymbolTable[EnumType::E_##name] = string;\
+		assert(next==EnumType::E_##name);\
+		next++; 
 
 		SYMBOLS_ENUM(ENUM_STRING_TABLE,Symbol);
 	}

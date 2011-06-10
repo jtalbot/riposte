@@ -660,16 +660,13 @@ struct Pairs {
 		Symbol n;
 		Value v;
 	};
-	struct Inner : public gc {
-		std::deque<Pair, traceable_allocator<Value> > p;
-	};
-	Inner* inner;
-	static Pairs Make() { Pairs p; p.inner = new Inner(); return p; }
-	uint64_t length() const { return inner->p.size(); }
-	void push_front(Symbol n, Value v) { Pair t = {n, v}; inner->p.push_front(t); }
-	void push_back(Symbol n, Value v)  { Pair t = {n, v}; inner->p.push_back(t); }
-	const Value& value(uint64_t i) const { return inner->p[i].v; }
-	const Symbol& name(uint64_t i) const { return inner->p[i].n; }
+	std::deque<Pair, traceable_allocator<Value> > p;
+	
+	uint64_t length() const { return p.size(); }
+	void push_front(Symbol n, Value v) { Pair t = {n, v}; p.push_front(t); }
+	void push_back(Symbol n, Value v)  { Pair t = {n, v}; p.push_back(t); }
+	const Value& value(uint64_t i) const { return p[i].v; }
+	const Symbol& name(uint64_t i) const { return p[i].n; }
 	
 	operator List() const {
 		List l(length());
