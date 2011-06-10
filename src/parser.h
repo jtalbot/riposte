@@ -5,6 +5,7 @@
 #include <string>
 #include <stdlib.h>
 #include <iostream>
+#include <stack>
 #include "value.h"
 
 struct Parser {
@@ -23,10 +24,14 @@ struct Parser {
 	// otherwise, emit newline and next token
 	bool lastTokenWasNL;
 
+	// If we're inside parentheses, we should discard all newlines
+	// If we're in the top level or in curly braces, we have to preserve newlines
+	std::stack<int> nesting;
+
 	void token( int tok, Value v=Value::NIL );
 
 	Parser(State& state); 
-	int execute( const char* data, int len, bool isEof, Value& result );
+	int execute( const char* data, int len, bool isEof, Value& result, FILE* trace=NULL );
 };
 
 

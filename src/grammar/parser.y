@@ -8,6 +8,7 @@
 		can I factor out the actions?
  */
 
+%stack_size 1000
 %token_prefix	TOKEN_
 %token_type {Value}
 %extra_argument {Parser* parser}
@@ -54,7 +55,12 @@
 }
 
 %parse_accept {
-     parser->complete = true;
+	parser->complete = true;
+}
+
+%stack_overflow {
+	parser->errors++;
+	fprintf(stderr,"Giving up.  Parser stack overflow\n");
 }
 
 /*%parse_failure {
@@ -146,6 +152,7 @@ sub(A) ::= NULL_CONST optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(Symbol::e
 sub(A) ::= NULL_CONST optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(Symbol::empty, C); }
 sub(A) ::= expr(B). { A = new Pairs(); A->push_back(Symbol::empty, B); }
 
+formallist(A) ::= . { A = new Pairs(); }
 formallist(A) ::= SYMBOL(B). { A = new Pairs(); A->push_back(Symbol(B), Value::NIL); }
 formallist(A) ::= SYMBOL(B) optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(Symbol(B), C); }
 formallist(A) ::= formallist(B) optnl COMMA optnl SYMBOL(C). { A = B; A->push_back(Symbol(C), Value::NIL); }

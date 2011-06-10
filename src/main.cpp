@@ -254,8 +254,11 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 	addMathOps(state);	
 	importCoerceFunctions(state);	
 
-	loadLibrary(state, "base");
-
+	try {
+		loadLibrary(state, "base");
+	} catch(CompileError& error) {
+		e_message("Error", "compiler", error.what().c_str());
+	}
 /* Either execute the specified file or read interactively from stdin  */
 
    /* Load the file containing the script we are going to run */

@@ -116,7 +116,7 @@
 	'?' {token( TOKEN_QUESTION, Symbol::question );};
 	
 	# Special Operators.
-	('%' [^\n]* '%') {token(TOKEN_SPECIALOP, Symbol(state, std::string(ts, te-ts)) ); };
+	('%' [^\n%]* '%') {token(TOKEN_SPECIALOP, Symbol(state, std::string(ts, te-ts)) ); };
 
 	# Separators.
 	',' {token( TOKEN_COMMA );};
@@ -143,7 +143,7 @@ void Parser::token( int tok, Value v)
 
 	// Do the lookahead to resolve the dangling else conflict
 	if(lastTokenWasNL) {
-		if(tok != TOKEN_ELSE)
+		if(tok != TOKEN_ELSE && (nesting.size()==0 || nesting.top()!=TOKEN_LPAREN))
 			Parse(pParser, TOKEN_NEWLINE, Value::NIL, this);
 		Parse(pParser, tok, v, this);
 		lastTokenWasNL = false;
@@ -154,6 +154,10 @@ void Parser::token( int tok, Value v)
 		else
 			Parse(pParser, tok, v, this);
 	}
+
+	if(tok == TOKEN_LPAREN) nesting.push(tok);
+	else if(tok == TOKEN_LBRACE) nesting.push(tok);
+	else if(tok == TOKEN_RPAREN || tok == TOKEN_RBRACE) nesting.pop();
 
 	/* Count newlines and columns. Use for error reporting? */ 
 	for ( int i = 0; i < len; i ++ ) {
@@ -167,14 +171,14 @@ void Parser::token( int tok, Value v)
 	}
 
 	if(errors > initialErrors) {
-		std::cout << "Error: unexpected '" << std::string(data, len) + "'" << std::endl; 
+		std::cout << "Error (" << intToStr(line+1) << "," << intToStr(col+1) << ") : unexpected '" << std::string(data, len) + "'" << std::endl; 
 	}
 }
 
-Parser::Parser(State& state) : line(0), col(0), state(state), errors(0), complete(false), lastTokenWasNL(false)
+Parser::Parser(State& state) : line(0), col(0), state(state), errors(0), complete(false), lastTokenWasNL(false) 
 {}
 
-int Parser::execute( const char* data, int len, bool isEof, Value& out)
+int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* trace )
 {
 	out = Value::NIL;
 	errors = 0;
@@ -182,6 +186,8 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out)
 	complete = false;
 
 	pParser = ParseAlloc(malloc);
+
+	ParseTrace(trace, "trace> ");
 
 	const char *p = data;
 	const char *pe = data+len;
@@ -196,7 +202,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out)
 
 	if( cs == Scanner_error && syntaxErrors == 0) {
 		syntaxErrors++;
-		std::cout << "Error: unexpected input" << std::endl;
+		std::cout << "Lexing error (" << intToStr(line+1) << "," << intToStr(col+1) << ") : unexpected '" << std::string(ts, te-ts) + "'" << std::endl; 
 	}
 	
 	if( syntaxErrors > 0 )

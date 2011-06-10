@@ -131,7 +131,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 			else if(Symbol(c[0]) == Symbol::dim)
 				bc = indexed ? ByteCode::idimassign : ByteCode::dimassign;
 			else
-				throw CompileError("invalid function on left side of assign");
+				throw CompileError(std::string("invalid function on left side of assign: ") + Symbol(c[0]).toString(state));
 			v = c[1];
 		} else {
 			bc = indexed ? ByteCode::iassign : ByteCode::assign;
