@@ -42,6 +42,8 @@ struct Value {
 	bool isComplex() const { return type == Type::R_complex; }
 	bool isCharacter() const { return type == Type::R_character; }
 	bool isList() const { return type == Type::R_list; }
+	bool isCall() const { return type == Type::R_call; }
+	bool isSymbol() const { return type == Type::R_symbol; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	static const Value NIL;

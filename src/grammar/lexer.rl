@@ -187,7 +187,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 
 	pParser = ParseAlloc(malloc);
 
-	ParseTrace(trace, "trace> ");
+	ParseTrace(trace, 0);
 
 	const char *p = data;
 	const char *pe = data+len;

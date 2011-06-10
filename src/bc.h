@@ -12,13 +12,7 @@
 	_(kget, "kget", p) \
 	_(iget, "iget", p) \
 	_(assign, "assign", p) \
-	_(classassign, "classassign", p) \
-	_(namesassign, "namesassign", p) \
-	_(dimassign, "dimassign", p) \
-	_(iassign, "assign", p) \
-	_(iclassassign, "classassign", p) \
-	_(inamesassign, "namesassign", p) \
-	_(idimassign, "dimassign", p) \
+	_(iassign, "iassign", p) \
 	_(forbegin, "forbegin", p) \
 	_(forend, "forend", p) \
 	_(iforbegin, "iforbegin", p) \

@@ -36,9 +36,11 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 
 	Function::Function(List const& parameters, Value const& body, Character const& str, Environment* s) 
 		: inner(new Inner(parameters, body, str, s)), attributes(0) {
-		Character names(getNames(parameters.attributes));
-		uint64_t i = 0;
-		for(;i < names.length; i++) if(Symbol(names[i]) == Symbol::dots) inner->dots = i+1;
+		if(parameters.length > 0) {
+			Character names(getNames(parameters.attributes));
+			uint64_t i = 0;
+			for(;i < names.length; i++) if(Symbol(names[i]) == Symbol::dots) inner->dots = i+1;
+		}
 	}
 
 	CompiledCall::CompiledCall(Call const& call, State& state) {

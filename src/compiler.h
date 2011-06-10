@@ -33,6 +33,7 @@ private:
 	uint64_t compileSymbol(Symbol const& symbol, Closure& closure); 
 	uint64_t compileOp(Call const& call, Closure& closure); 
 	uint64_t compileCall(Call const& call, Closure& closure); 
+	uint64_t compileFunctionCall(Call const& call, Closure& closure); 
 	uint64_t compileExpression(Expression const& values, Closure& closure);
 public:
 	static Closure compile(State& state, Value const& expr) {

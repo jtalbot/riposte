@@ -70,6 +70,18 @@ uint64_t Compiler::compileSymbol(Symbol const& symbol, Closure& closure) {
 	return registerDepth++;
 }
 
+uint64_t Compiler::compileFunctionCall(Call const& call, Closure& closure) {
+	uint64_t initialDepth = registerDepth;
+	// a standard call, not an op
+	compile(call[0], closure);
+	CompiledCall compiledCall(call, state);
+	// insert call
+	closure.constants().push_back(compiledCall);
+	closure.code().push_back(Instruction(ByteCode::call, closure.constants().size()-1, 0, initialDepth));
+	registerDepth = initialDepth;
+	return registerDepth++;
+}
+
 uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	uint64_t length = call.length;
 	if(length == 0) {
@@ -106,12 +118,35 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_assign:
 	case Symbol::E_eqassign: 
 	{
-		ByteCode bc;
-		Value v = call[1];
+		Value dest = call[1];
+		
+		// recursively handle emitting assignment instructions...
+		Value value = call[2];
+		while(dest.isCall()) {
+			Call c(dest);
+			Call n(c.length+1);
+			
+			for(uint64_t i = 0; i < c.length; i++) { n[i] = c[i]; }
+			Character nnames(c.length+1);
+			Vector vnames = getNames(c.attributes);
+			if(!Value(vnames).isNull()) {
+				Character cnames(vnames);
+				for(uint64_t i = 0; i < c.length; i++) { nnames[i] = cnames[i]; }
+			}
+			n[0] = Symbol(state, Symbol(c[0]).toString(state) + "<-");
+			n[c.length] = value;
+			nnames[c.length] = Symbol(state, "value");
+			setNames(n.attributes, nnames);
+			value = n; 
+			dest = c[1];
+		}
 		
 		// the source for the assignment
-		uint64_t source = compile(call[2], closure);
-		
+		uint64_t source = compile(value, closure);
+
+		if(dest.isSymbol())
+			closure.code().push_back(Instruction(ByteCode::assign, source, 0, Symbol(dest).i));
+	/*	
 		// any indexing code
 		bool indexed = false;
 		uint64_t index = 0;
@@ -137,7 +172,19 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 			bc = indexed ? ByteCode::iassign : ByteCode::assign;
 		}
 		closure.code().push_back(Instruction(bc, Symbol(v).i, index, source));
+		*/
 		if(source != initialDepth) throw CompileError("unbalanced registers in assign");
+		registerDepth = initialDepth;
+		return registerDepth++;
+	} break;
+	case Symbol::E_bracketAssign: {
+		// if there's more than three parameters, we should call the library version...
+		if(call.length > 4) return compileFunctionCall(call, closure);
+		uint64_t dest = compile(call[1], closure);
+		assert(initialDepth == dest);
+		uint64_t index = compile(call[2], closure);
+		uint64_t value = compile(call[3], closure);
+		closure.code().push_back(Instruction(ByteCode::iassign, value, index, dest));
 		registerDepth = initialDepth;
 		return registerDepth++;
 	} break;
@@ -183,7 +230,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 			result = compile(call[1], closure);
 		else
 			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
-		closure.code().push_back(Instruction(ByteCode::ret, result, 0, 0));
+		closure.code().push_back(Instruction(ByteCode::ret, 0, 0, result));
 		registerDepth = 0;
 		return registerDepth++;
 	} break;
@@ -404,7 +451,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		closure.code()[begin1-1].a = end-begin1+1;
 		registerDepth = initialDepth;
 		return registerDepth++;
-	}
+	} break;
 	case Symbol::E_slor:
 	{
 		closure.code().push_back(Instruction(ByteCode::true1, 0, 0, registerDepth++));
@@ -418,18 +465,10 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		closure.code()[begin1-1].a = end-begin1+1;
 		registerDepth = initialDepth;
 		return registerDepth++;
-	}
-
+	} break;
 	default:
 	{
-		// a standard call, not an op
-		compile(call[0], closure);
-		CompiledCall compiledCall(call, state);
-		// insert call
-		closure.constants().push_back(compiledCall);
-		closure.code().push_back(Instruction(ByteCode::call, closure.constants().size()-1, 0, initialDepth));
-		registerDepth = initialDepth;
-		return registerDepth++;
+		return compileFunctionCall(call, closure);
 	}
 	};
 }

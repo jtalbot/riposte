@@ -189,7 +189,7 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 		state.registers = old_registers;
 		return 1;
 	} else {
-		_error("Non-function as first parameter to call\n");
+		_error(std::string("Non-function (") + func.type.toString() + ") as first parameter to call\n");
 		return 1;
 	}	
 }
@@ -207,69 +207,16 @@ static int64_t iget_op(State& state, Closure const& closure, Instruction const& 
 	return 1;
 }
 static int64_t assign_op(State& state, Closure const& closure, Instruction const& inst) {
-	if(!Symbol(inst.a).isAssignable()) {
+	if(!Symbol(inst.c).isAssignable()) {
 		throw RiposteError("cannot assign to that symbol");
 	}
-	state.global->assign(Symbol(inst.a), state.registers[inst.c]);
+	state.global->assign(Symbol(inst.c), state.registers[inst.a]);
 	// assign assumes that source is equal to destination
 	return 1;
 }
-static int64_t classassign_op(State& state, Closure const& closure, Instruction const& inst) {
-	Value k;
-	state.global->get(state, Symbol(inst.a), k);
-	setClass(k.attributes, state.registers[inst.c]);
-	state.global->assign(Symbol(inst.a), k);
-	state.registers[inst.c] = k;
-	return 1;
-}
-static int64_t namesassign_op(State& state, Closure const& closure, Instruction const& inst) {
-	Value k;
-	state.global->get(state, Symbol(inst.a), k);
-	setNames(k.attributes, As<Character>(state, state.registers[inst.c]));
-	state.global->assign(Symbol(inst.a), k);
-	state.registers[inst.c] = k;
-	return 1;
-}
-static int64_t dimassign_op(State& state, Closure const& closure, Instruction const& inst) {
-	Value k;
-	state.global->get(state, Symbol(inst.a), k);
-	setDim(k.attributes, state.registers[inst.c]);
-	state.global->assign(Symbol(inst.a), k);
-	state.registers[inst.c] = k;
-	return 1;
-}
 static int64_t iassign_op(State& state, Closure const& closure, Instruction const& inst) {
-	Value k;
-	state.global->get(state, Symbol(inst.a), k);
-	subAssign(state, k, state.registers[inst.b], state.registers[inst.c], state.registers[inst.c]);
-	state.global->assign(Symbol(inst.a), state.registers[inst.c]);
-	return 1;
-}
-static int64_t iclassassign_op(State& state, Closure const& closure, Instruction const& inst) {
-	// TODO: needs indexing
-	Value k;
-	state.global->get(state, Symbol(inst.a), k);
-	setClass(k.attributes, state.registers[inst.c]);
-	state.global->assign(Symbol(inst.a), k);
-	state.registers[inst.c] = k;
-	return 1;
-}
-static int64_t inamesassign_op(State& state, Closure const& closure, Instruction const& inst) {
-	// TODO: needs indexing
-	Value k;
-	state.global->get(state, Symbol(inst.a), k);
-	setNames(k.attributes, state.registers[inst.c]);
-	state.global->assign(Symbol(inst.a), k);
-	state.registers[inst.c] = k;
-	return 1;
-}
-static int64_t idimassign_op(State& state, Closure const& closure, Instruction const& inst) {
-	// TODO: needs indexing
-	Value k;
-	state.global->get(state, Symbol(inst.a), k);
-	setDim(k.attributes, state.registers[inst.c]);
-	state.global->assign(Symbol(inst.a), k);
-	state.registers[inst.c] = k;
+	// a = value, b = index, c = dest 
+	subAssign(state, state.registers[inst.c], state.registers[inst.b], state.registers[inst.a], state.registers[inst.c]);
 	return 1;
 }
 static int64_t forbegin_op(State& state, Closure const& closure, Instruction const& inst) {
@@ -602,6 +549,6 @@ void eval(State& state, Closure const& closure) {
 	}
 #endif
 	state.global = oldenv;
-	state.registers[0] = state.registers[pc->a];
+	state.registers[0] = state.registers[pc->c];
 }
 
