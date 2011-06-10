@@ -14,13 +14,20 @@
 #  A copy of the GNU General Public License is available at
 #  http://www.r-project.org/Licenses/
 
-vector <- function(mode = "logical", length = 0).Internal(vector(mode,length))
-logical <- function(length = 0) vector("logical", length)
-character <- function(length = 0) vector("character", length)
-integer <- function(length = 0) vector("integer", length)
-double <- function(length = 0) vector("double", length)
-real <- double
-numeric <- double
+vector <- function(mode = "logical", length = 0)
+	switch(mode,
+		logical=logical(length),
+		integer=integer(length),
+		double=double(length),
+		numeric=double(length),
+		character=character(length),
+		complex=complex(length),
+		raw=raw(length),
+		stop("cannot make a vector of mode 'NYI'"))
+real <- function(length) double(length)
+numeric <- function(length) double(length)
+
+# This function is currently not working since "complex" is interpreted as an op code.
 complex <- function(length.out = 0,
 		    real = numeric(), imaginary = numeric(),
 		    modulus = 1, argument = 0) {
@@ -34,9 +41,6 @@ complex <- function(length.out = 0,
 	    exp(1i * rep(argument, length.out=n))
     }
 }
-
-single <- function(length = 0)
-    structure(vector("double", length), Csingle=TRUE)
 
 is.null <- function(x) .Internal(typeof)(x) == "NULL"
 is.logical <- function(x) .Internal(typeof)(x) == "logical"

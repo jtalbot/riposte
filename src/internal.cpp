@@ -392,11 +392,6 @@ uint64_t length(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
-/*uint64_t stop(State& state, Call const& call, List const& args) {
-	state.stopped = true;
-	return 0;
-}
-*/
 uint64_t quote(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	state.registers[0] = expression(args[0]);
@@ -470,7 +465,7 @@ uint64_t switch_fn(State& state, Call const& call, List const& args) {
 				return 1;
 			}
 		}
-		for(uint64_t i = 1; args.length; i++) {
+		for(uint64_t i = 1; i < args.length; i++) {
 			if(names[i] == Symbol::empty) {
 				state.registers[0] = force(state, args[i]);
 				return 1;

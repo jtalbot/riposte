@@ -516,6 +516,36 @@ static int64_t function_op(State& state, Closure const& closure, Instruction con
 	state.registers[inst.c] = Function(closure.constants()[inst.a], closure.constants()[inst.b], Character::NA(), state.global);
 	return 1;
 }
+static int64_t logical1_op(State& state, Closure const& closure, Instruction const& inst) {
+	Integer i = As<Integer>(state, state.registers[inst.a]);
+	state.registers[inst.c] = Logical(i[0]);
+	return 1;
+}
+static int64_t integer1_op(State& state, Closure const& closure, Instruction const& inst) {
+	Integer i = As<Integer>(state, state.registers[inst.a]);
+	state.registers[inst.c] = Integer(i[0]);
+	return 1;
+}
+static int64_t double1_op(State& state, Closure const& closure, Instruction const& inst) {
+	Integer i = As<Integer>(state, state.registers[inst.a]);
+	state.registers[inst.c] = Double(i[0]);
+	return 1;
+}
+static int64_t complex1_op(State& state, Closure const& closure, Instruction const& inst) {
+	Integer i = As<Integer>(state, state.registers[inst.a]);
+	state.registers[inst.c] = Complex(i[0]);
+	return 1;
+}
+static int64_t character1_op(State& state, Closure const& closure, Instruction const& inst) {
+	Integer i = As<Integer>(state, state.registers[inst.a]);
+	state.registers[inst.c] = Character(i[0]);
+	return 1;
+}
+static int64_t raw1_op(State& state, Closure const& closure, Instruction const& inst) {
+	Integer i = As<Integer>(state, state.registers[inst.a]);
+	state.registers[inst.c] = Raw(i[0]);
+	return 1;
+}
 static int64_t ret_op(State& state, Closure const& closure, Instruction const& inst) {
 	// not used. Jumps to done label instead
 	return 0;

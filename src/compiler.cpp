@@ -34,6 +34,12 @@ static ByteCode op(Symbol const& s) {
 		case Symbol::E_acos: return ByteCode::acos; break;
 		case Symbol::E_asin: return ByteCode::asin; break;
 		case Symbol::E_atan: return ByteCode::atan; break;
+		case Symbol::E_Logical: return ByteCode::logical1; break;
+		case Symbol::E_Integer: return ByteCode::integer1; break;
+		case Symbol::E_Double: return ByteCode::double1; break;
+		case Symbol::E_Complex: return ByteCode::complex1; break;
+		case Symbol::E_Character: return ByteCode::character1; break;
+		case Symbol::E_Raw: return ByteCode::raw1; break;
 		default: throw RuntimeError("unexpected symbol used as an operator"); break;
 	}
 }
@@ -372,6 +378,12 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_acos: 
 	case Symbol::E_asin: 
 	case Symbol::E_atan:
+	case Symbol::E_Logical:
+	case Symbol::E_Integer:
+	case Symbol::E_Double:
+	case Symbol::E_Complex:
+	case Symbol::E_Character:
+	case Symbol::E_Raw:
 	{ 
 		uint64_t a = compile(call[1], closure);
 		closure.code().push_back(Instruction(op(func), a, 0, initialDepth));

@@ -1056,7 +1056,7 @@ static void yy_reduce(
         break;
       case 8: /* expr ::= LBRACE optnl statementlist optnl RBRACE */
 #line 76 "parser.y"
-{ yymsp[-2].minor.yy82->push_front(Symbol(0), yymsp[-4].minor.yy0); yygotominor.yy0 = Call(List(*yymsp[-2].minor.yy82));   yy_destructor(yypParser,44,&yymsp[0].minor);
+{ yymsp[-2].minor.yy82->push_front(Symbol::empty, yymsp[-4].minor.yy0); yygotominor.yy0 = Call(List(*yymsp[-2].minor.yy82));   yy_destructor(yypParser,44,&yymsp[0].minor);
 }
 #line 1062 "parser.c"
         break;
@@ -1091,7 +1091,7 @@ static void yy_reduce(
         break;
       case 37: /* expr ::= expr LPAREN optnl sublist optnl RPAREN */
 #line 108 "parser.y"
-{ yymsp[-2].minor.yy82->push_front(Symbol(0), yymsp[-5].minor.yy0); yygotominor.yy0 = Call(List(*yymsp[-2].minor.yy82));   yy_destructor(yypParser,36,&yymsp[-4].minor);
+{ yymsp[-2].minor.yy82->push_front(Symbol::empty, yymsp[-5].minor.yy0); yygotominor.yy0 = Call(List(*yymsp[-2].minor.yy82));   yy_destructor(yypParser,36,&yymsp[-4].minor);
   yy_destructor(yypParser,45,&yymsp[0].minor);
 }
 #line 1098 "parser.c"
@@ -1122,13 +1122,13 @@ static void yy_reduce(
         break;
       case 43: /* expr ::= expr LBB optnl sublist optnl RBB */
 #line 114 "parser.y"
-{ yymsp[-2].minor.yy82->push_front(Symbol(0), yymsp[-5].minor.yy0); yymsp[-2].minor.yy82->push_front(Symbol(0), yymsp[-4].minor.yy0); yygotominor.yy0 = Call(List(*yymsp[-2].minor.yy82));   yy_destructor(yypParser,47,&yymsp[0].minor);
+{ yymsp[-2].minor.yy82->push_front(Symbol::empty, yymsp[-5].minor.yy0); yymsp[-2].minor.yy82->push_front(Symbol::empty, yymsp[-4].minor.yy0); yygotominor.yy0 = Call(List(*yymsp[-2].minor.yy82));   yy_destructor(yypParser,47,&yymsp[0].minor);
 }
 #line 1128 "parser.c"
         break;
       case 44: /* expr ::= expr LBRACKET optnl sublist optnl RBRACKET */
 #line 115 "parser.y"
-{ yymsp[-2].minor.yy82->push_front(Symbol(0), yymsp[-5].minor.yy0); yymsp[-2].minor.yy82->push_front(Symbol(0), yymsp[-4].minor.yy0); yygotominor.yy0 = Call(List(*yymsp[-2].minor.yy82));   yy_destructor(yypParser,48,&yymsp[0].minor);
+{ yymsp[-2].minor.yy82->push_front(Symbol::empty, yymsp[-5].minor.yy0); yymsp[-2].minor.yy82->push_front(Symbol::empty, yymsp[-4].minor.yy0); yygotominor.yy0 = Call(List(*yymsp[-2].minor.yy82));   yy_destructor(yypParser,48,&yymsp[0].minor);
 }
 #line 1134 "parser.c"
         break;
@@ -1155,7 +1155,7 @@ static void yy_reduce(
         break;
       case 57: /* statementlist ::= statementlist SEMICOLON statement */
 #line 131 "parser.y"
-{ yygotominor.yy82 = yymsp[-2].minor.yy82; yygotominor.yy82->push_back(Symbol(0), yymsp[0].minor.yy0);   yy_destructor(yypParser,52,&yymsp[-1].minor);
+{ yygotominor.yy82 = yymsp[-2].minor.yy82; yygotominor.yy82->push_back(Symbol::empty, yymsp[0].minor.yy0);   yy_destructor(yypParser,52,&yymsp[-1].minor);
 }
 #line 1161 "parser.c"
         break;
@@ -1167,14 +1167,14 @@ static void yy_reduce(
         break;
       case 59: /* statementlist ::= statementlist NEWLINE statement */
 #line 133 "parser.y"
-{ yygotominor.yy82 = yymsp[-2].minor.yy82; yygotominor.yy82->push_back(Symbol(0), yymsp[0].minor.yy0);   yy_destructor(yypParser,51,&yymsp[-1].minor);
+{ yygotominor.yy82 = yymsp[-2].minor.yy82; yygotominor.yy82->push_back(Symbol::empty, yymsp[0].minor.yy0);   yy_destructor(yypParser,51,&yymsp[-1].minor);
 }
 #line 1173 "parser.c"
         break;
       case 60: /* statementlist ::= statement */
       case 71: /* sub ::= expr */ yytestcase(yyruleno==71);
 #line 134 "parser.y"
-{ yygotominor.yy82 = new Pairs(); yygotominor.yy82->push_back(Symbol(0), yymsp[0].minor.yy0); }
+{ yygotominor.yy82 = new Pairs(); yygotominor.yy82->push_back(Symbol::empty, yymsp[0].minor.yy0); }
 #line 1179 "parser.c"
         break;
       case 61: /* statementlist ::= */
@@ -1211,14 +1211,14 @@ static void yy_reduce(
         break;
       case 69: /* sub ::= NULL_CONST optnl EQ_ASSIGN */
 #line 145 "parser.y"
-{ yygotominor.yy82 = new Pairs(); yygotominor.yy82->push_back(Symbol(0), Value::NIL);   yy_destructor(yypParser,42,&yymsp[-2].minor);
+{ yygotominor.yy82 = new Pairs(); yygotominor.yy82->push_back(Symbol::empty, Value::NIL);   yy_destructor(yypParser,42,&yymsp[-2].minor);
   yy_destructor(yypParser,9,&yymsp[0].minor);
 }
 #line 1218 "parser.c"
         break;
       case 70: /* sub ::= NULL_CONST optnl EQ_ASSIGN optnl expr */
 #line 146 "parser.y"
-{ yygotominor.yy82 = new Pairs(); yygotominor.yy82->push_back(Symbol(0), yymsp[0].minor.yy0);   yy_destructor(yypParser,42,&yymsp[-4].minor);
+{ yygotominor.yy82 = new Pairs(); yygotominor.yy82->push_back(Symbol::empty, yymsp[0].minor.yy0);   yy_destructor(yypParser,42,&yymsp[-4].minor);
   yy_destructor(yypParser,9,&yymsp[-2].minor);
 }
 #line 1225 "parser.c"

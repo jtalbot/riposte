@@ -73,7 +73,7 @@ expr(A) ::= STR_CONST(B). { A = B; }
 expr(A) ::= NULL_CONST(B). { A = B; }
 expr(A) ::= SYMBOL(B). { A = B; }
 
-expr(A) ::= LBRACE(B) optnl statementlist(C) optnl RBRACE. { C->push_front(Symbol(0), B); A = Call(List(*C)); }
+expr(A) ::= LBRACE(B) optnl statementlist(C) optnl RBRACE. { C->push_front(Symbol::empty, B); A = Call(List(*C)); }
 expr(A) ::= LPAREN optnl statement(B) optnl RPAREN. { A = B; }
 
 expr(A) ::= MINUS(B) optnl expr(C). [UMINUS] { A = Call::c(B, C); }
@@ -105,14 +105,14 @@ expr(A) ::= expr(B) OR2(C) optnl expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) LEFT_ASSIGN(C) optnl expr(D). { A = Call::c(C, B, D); }
 expr(A) ::= expr(B) RIGHT_ASSIGN(C) optnl expr(D). { A = Call::c(C, D, B); }
 expr(A) ::= FUNCTION(B) optnl LPAREN optnl formallist(C) optnl RPAREN optnl statement(D).  { A = Call::c(B, PairList(List(*C)), D); }
-expr(A) ::= expr(B) LPAREN optnl sublist(C) optnl RPAREN. { C->push_front(Symbol(0), B); A = Call(List(*C)); } 
+expr(A) ::= expr(B) LPAREN optnl sublist(C) optnl RPAREN. { C->push_front(Symbol::empty, B); A = Call(List(*C)); } 
 expr(A) ::= IF(B) optnl LPAREN optnl expr(C) optnl RPAREN optnl statement(D). { A = Call::c(B, C, D); }
 expr(A) ::= IF(B) optnl LPAREN optnl expr(C) optnl RPAREN optnl statement(D) ELSE optnl statement(E). { A = Call::c(B, C, D, E); }
 expr(A) ::= FOR(B) optnl LPAREN optnl SYMBOL(C) optnl IN optnl expr(D) optnl RPAREN optnl statement(E). { A = Call::c(B, C, D, E); }
 expr(A) ::= WHILE(B) optnl LPAREN optnl expr(C) optnl RPAREN optnl statement(D). { A = Call::c(B, C, D); }
 expr(A) ::= REPEAT(B) optnl statement(C). { A = Call::c(B, C); }
-expr(A) ::= expr(B) LBB(C) optnl sublist(D) optnl RBB. { D->push_front(Symbol(0), B); D->push_front(Symbol(0), C); A = Call(List(*D)); }
-expr(A) ::= expr(B) LBRACKET(C) optnl sublist(D) optnl RBRACKET. { D->push_front(Symbol(0), B); D->push_front(Symbol(0), C); A = Call(List(*D)); }
+expr(A) ::= expr(B) LBB(C) optnl sublist(D) optnl RBB. { D->push_front(Symbol::empty, B); D->push_front(Symbol::empty, C); A = Call(List(*D)); }
+expr(A) ::= expr(B) LBRACKET(C) optnl sublist(D) optnl RBRACKET. { D->push_front(Symbol::empty, B); D->push_front(Symbol::empty, C); A = Call(List(*D)); }
 expr(A) ::= SYMBOL(B) NS_GET(C) symbolstr(D). { A = Call::c(C, B, D); }
 expr(A) ::= STR_CONST(B) NS_GET(C) symbolstr(D). { A = Call::c(C, B, D); }
 expr(A) ::= SYMBOL(B) NS_GET_INT(C) symbolstr(D). { A = Call::c(C, B, D); }
@@ -128,10 +128,10 @@ symbolstr(A) ::= SYMBOL(B). { A = B; }
 optnl ::= NEWLINE.
 optnl ::= .
 
-statementlist(A) ::= statementlist(B) SEMICOLON statement(C). { A = B; A->push_back(Symbol(0), C); }
+statementlist(A) ::= statementlist(B) SEMICOLON statement(C). { A = B; A->push_back(Symbol::empty, C); }
 statementlist(A) ::= statementlist(B) SEMICOLON. { A = B; }
-statementlist(A) ::= statementlist(B) NEWLINE statement(C). { A = B; A->push_back(Symbol(0), C); }
-statementlist(A) ::= statement(B). { A = new Pairs(); A->push_back(Symbol(0), B); }
+statementlist(A) ::= statementlist(B) NEWLINE statement(C). { A = B; A->push_back(Symbol::empty, C); }
+statementlist(A) ::= statement(B). { A = new Pairs(); A->push_back(Symbol::empty, B); }
 statementlist(A) ::= . { A = new Pairs(); }
 
 sublist(A) ::= sub(B). { A = B; }
@@ -142,9 +142,9 @@ sub(A) ::= SYMBOL(B) optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(B, Value::
 sub(A) ::= STR_CONST(B) optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(B, Value::NIL); }
 sub(A) ::= SYMBOL(B) optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(Symbol(B), C); }
 sub(A) ::= STR_CONST(B) optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(Symbol(B), C); }
-sub(A) ::= NULL_CONST optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(Symbol(0), Value::NIL); }
-sub(A) ::= NULL_CONST optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(Symbol(0), C); }
-sub(A) ::= expr(B). { A = new Pairs(); A->push_back(Symbol(0), B); }
+sub(A) ::= NULL_CONST optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(Symbol::empty, Value::NIL); }
+sub(A) ::= NULL_CONST optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(Symbol::empty, C); }
+sub(A) ::= expr(B). { A = new Pairs(); A->push_back(Symbol::empty, B); }
 
 formallist(A) ::= SYMBOL(B). { A = new Pairs(); A->push_back(Symbol(B), Value::NIL); }
 formallist(A) ::= SYMBOL(B) optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(Symbol(B), C); }

@@ -73,6 +73,12 @@
 	_(NA, "NA", p) \
 	_(istrue, "istrue", p) \
 	_(function, "function", p) \
+	_(logical1, "logical", p) \
+	_(integer1, "integer", p) \
+	_(double1, "double", p) \
+	_(complex1, "complex", p) \
+	_(character1, "character", p) \
+	_(raw1, "raw", p) \
 	_(ret, "ret", p)       /* ret must be the last instruction */
 	/*_(frame, "frame") \
 	_(rawfunction, "rawfunction") \
