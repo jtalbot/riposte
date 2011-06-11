@@ -126,7 +126,7 @@ int dostdin(State& state) {
 		}
 		if(state.warnings.size() > 0) {
 			std::cout << "There were " << intToStr(state.warnings.size()) << " warnings." << std::endl;
-			for(uint64_t i = 0; i < state.warnings.size() && i < 50; i++) {
+			for(int64_t i = 0; i < (int64_t)state.warnings.size() && i < 50; i++) {
 				std::cout << "(" << intToStr(i+1) << ") " << state.warnings[i] << std::endl;
 			}
 		}
@@ -157,7 +157,7 @@ static int dofile(const char * file, State& state, bool echo) {
 	if(value.type == Type::I_nil) return -1;
 	
 	Expression expressions(value);
-	for(uint64_t i = 0; i < expressions.length; i++) {
+	for(int64_t i = 0; i < expressions.length; i++) {
 		try {
 			Closure closure = Compiler::compile(state, expressions[i]);
 			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;

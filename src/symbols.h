@@ -82,16 +82,16 @@
 
 
 class SymbolTable {
-	std::map<std::string, uint64_t> symbolTable;
-	std::map<uint64_t, std::string> reverseSymbolTable;
-	uint64_t next;
+	std::map<std::string, int64_t> symbolTable;
+	std::map<int64_t, std::string> reverseSymbolTable;
+	int64_t next;
 public:
 	SymbolTable();
 
-	uint64_t in(std::string const& s) {
-		std::map<std::string, uint64_t>::const_iterator i = symbolTable.find(s);
+	int64_t in(std::string const& s) {
+		std::map<std::string, int64_t>::const_iterator i = symbolTable.find(s);
 		if(i == symbolTable.end()) {
-			uint64_t index = next++; // due to NA string which needs an index, but not an actual entry in the table.
+			int64_t index = next++; // due to NA string which needs an index, but not an actual entry in the table.
 			symbolTable[s] = index;
 			reverseSymbolTable[index] = s;
 			return index;
@@ -99,7 +99,7 @@ public:
 	
 	}
 
-	std::string const& out(uint64_t i) const {
+	std::string const& out(int64_t i) const {
 		return reverseSymbolTable.find(i)->second;
 	}
 

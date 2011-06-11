@@ -17,9 +17,9 @@ void sourceFile(State& state, std::string name) {
 
 	Parser parser(state);
 	Value value;
-	FILE* trace = fopen((name+"_trace").c_str(), "w");
+	FILE* trace = NULL;//fopen((name+"_trace").c_str(), "w");
 	parser.execute(code.c_str(), code.length(), true, value, trace);
-	fclose(trace);	
+	//fclose(trace);	
 	
 	Closure closure = Compiler::compile(state, value);
 	eval(state, closure);

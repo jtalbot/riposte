@@ -42,7 +42,7 @@ struct Zip1 {
 	static typename Op::RV eval(State& state, typename Op::AV const& a)
 	{
 		typename Op::RV r = typename Op::RV(a.length);
-		for(uint64_t i = 0; i < a.length; ++i) {
+		for(int64_t i = 0; i < a.length; ++i) {
 			r[i] = Op::eval(state, a[i]);
 		}
 		return r;
@@ -55,21 +55,21 @@ struct Zip2 {
 	{
 		if(a.length == b.length) {
 			typename Op::RV r(a.length);
-			for(uint64_t i = 0; i < a.length; ++i) {
+			for(int64_t i = 0; i < a.length; ++i) {
 				r[i] = Op::eval(state, a[i], b[i]);
 			}
 			return r;
 		}
 		else if(a.length == 1) {
 			typename Op::RV r(b.length);
-			for(uint64_t i = 0; i < b.length; ++i) {
+			for(int64_t i = 0; i < b.length; ++i) {
 				r[i] = Op::eval(state, a[0], b[i]);
 			}
 			return r;
 		}
 		else if(b.length == 1) {
 			typename Op::RV r(a.length);
-			for(uint64_t i = 0; i < a.length; ++i) {
+			for(int64_t i = 0; i < a.length; ++i) {
 				r[i] = Op::eval(state, a[i], b[0]);
 			}
 			return r;
@@ -79,8 +79,8 @@ struct Zip2 {
 		}
 		else if(a.length > b.length) {
 			typename Op::RV r(a.length);
-			uint64_t j = 0;
-			for(uint64_t i = 0; i < a.length; ++i) {
+			int64_t j = 0;
+			for(int64_t i = 0; i < a.length; ++i) {
 				r[i] = Op::eval(state, a[i], b[j]);
 				++j;
 				if(j >= b.length) j = 0;
@@ -89,8 +89,8 @@ struct Zip2 {
 		}
 		else {
 			typename Op::RV r(b.length);
-			uint64_t j = 0;
-			for(uint64_t i = 0; i < b.length; ++i) {
+			int64_t j = 0;
+			for(int64_t i = 0; i < b.length; ++i) {
 				r[i] = Op::eval(state, a[j], b[i]);
 				++j;
 				if(j >= a.length) j = 0;
@@ -105,7 +105,7 @@ struct FoldLeft {
 	static typename Op::RV eval(State& state, typename Op::AV const& a)
 	{
 		typename Op::R b = Op::Base;
-		for(uint64_t i = 0; i < a.length; ++i) {
+		for(int64_t i = 0; i < a.length; ++i) {
 			b = Op::eval(state, b, a[i]);
 		}
 		return Op::RV::c(b);
@@ -118,7 +118,7 @@ struct ScanLeft {
 	{
 		typename Op::R b = Op::Base;
 		typename Op::RV result(a.length);
-		for(uint64_t i = 0; i < a.length; ++i) {
+		for(int64_t i = 0; i < a.length; ++i) {
 			result[i] = b = Op::eval(state, b, a[i]);
 		}
 		return result;

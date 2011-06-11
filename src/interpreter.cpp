@@ -38,10 +38,10 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 		
 	// call arguments are not named, do posititional matching
 	if(!hasNames(arguments)) {
-		for(uint64_t i = 0; i < std::min(arguments.length, func.dots()); ++i) {
+		for(int64_t i = 0; i < std::min(arguments.length, func.dots()); ++i) {
 			fenv->assign(pnames[i], arguments[i]);
 		}
-		for(uint64_t i = std::min(arguments.length, func.dots()); i < parameters.length; ++i) {
+		for(int64_t i = std::min(arguments.length, func.dots()); i < parameters.length; ++i) {
 			if(!parameters[i].isNil()) fenv->assign(pnames[i], parameters[i]);
 		}
 		fenv->assign(Symbol::dots, Subset(arguments, func.dots(), std::max((int64_t)0, (int64_t)arguments.length-(int64_t)func.dots())));
@@ -50,17 +50,17 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 	else {
 		Character anames = getNames(arguments);
 		// populate environment with default values
-		for(uint64_t i = 0; i < parameters.length; ++i) {
+		for(int64_t i = 0; i < parameters.length; ++i) {
 			if(!parameters[i].isNil()) fenv->assign(pnames[i], parameters[i]);
 		}	
 		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
 		static char assignment[64], set[64];
-		for(uint64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
-		for(uint64_t i = 0; i < parameters.length; i++) set[i] = -1;
+		for(int64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
+		for(int64_t i = 0; i < parameters.length; i++) set[i] = -1;
 		// named args, search for complete matches
-		for(uint64_t i = 0; i < arguments.length; ++i) {
+		for(int64_t i = 0; i < arguments.length; ++i) {
 			if(anames[i] != Symbol::empty) {
-				for(uint64_t j = 0; j < parameters.length; ++j) {
+				for(int64_t j = 0; j < parameters.length; ++j) {
 					if(pnames[j] != Symbol::dots && anames[i] == pnames[j]) {
 						fenv->assign(pnames[j], arguments[i]);
 						assignment[i] = j;
@@ -71,10 +71,10 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 			}
 		}
 		// named args, search for incomplete matches
-		for(uint64_t i = 0; i < arguments.length; ++i) {
+		for(int64_t i = 0; i < arguments.length; ++i) {
 			if(anames[i] != Symbol::empty && assignment[i] == 0) {
 				std::string a = anames[i].toString(state);
-				for(uint64_t j = 0; j < parameters.length; ++j) {
+				for(int64_t j = 0; j < parameters.length; ++j) {
 					if(set[j] < 0 && pnames[j] != Symbol::dots &&
 						pnames[i].toString(state).compare( 0, a.size(), a ) == 0 ) {	
 						fenv->assign(pnames[j], arguments[i]);
@@ -86,8 +86,8 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 			}
 		}
 		// unnamed args, fill into first missing spot.
-		uint64_t firstEmpty = 0;
-		for(uint64_t i = 0; i < arguments.length; ++i) {
+		int64_t firstEmpty = 0;
+		for(int64_t i = 0; i < arguments.length; ++i) {
 			if(anames[i] == Symbol::empty) {
 				for(; firstEmpty < func.dots(); ++firstEmpty) {
 					if(set[firstEmpty] < 0) {
@@ -103,12 +103,12 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 		// put unused args into the dots
 		if(func.dots() < parameters.length) {
 			// count up the unassigned args
-			uint64_t unassigned = 0;
-			for(uint64_t j = 0; j < arguments.length; j++) if(assignment[j] < 0) unassigned++;
+			int64_t unassigned = 0;
+			for(int64_t j = 0; j < arguments.length; j++) if(assignment[j] < 0) unassigned++;
 			List values(unassigned);
 			Character names(unassigned);
-			uint64_t idx = 0;
-			for(uint64_t j = 0; j < arguments.length; j++) {
+			int64_t idx = 0;
+			for(int64_t j = 0; j < arguments.length; j++) {
 				if(assignment[j] < 0) {
 					values[idx] = arguments[j];
 					names[idx++] = anames[j];
@@ -142,7 +142,7 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 	
 	List arguments = Clone(call.arguments());
 	// Specialize the precompiled promises to evaluate in the current scope
-	for(uint64_t i = 0; i < arguments.length; i++) {
+	for(int64_t i = 0; i < arguments.length; i++) {
 		if(arguments[i].type == Type::I_promise)
 			arguments[i].env = (void*)state.global;
 	}
@@ -162,7 +162,7 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 			arguments = expanded;
 			if(hasNames(arguments) || hasNames(dots)) {
 				Character names(expanded.length);
-				for(uint64_t i = 0; i < names.length; i++) names[i] = 0;
+				for(int64_t i = 0; i < names.length; i++) names[i] = 0;
 				if(hasNames(arguments)) {
 					Character anames = getNames(arguments);
 					Insert(state, anames, 0, names, 0, call.dots());
@@ -581,7 +581,7 @@ void eval(State& state, Closure const& closure) {
 	/* Initialize threadedCode in closure if not yet done */
 	if(closure.threadedCode().size() == 0)
 	{
-		for(uint64_t i = 0; i < closure.code().size(); ++i) {
+		for(int64_t i = 0; i < (int64_t)closure.code().size(); ++i) {
 			Instruction const& inst = closure.code()[i];
 			closure.threadedCode().push_back(
 				Instruction(

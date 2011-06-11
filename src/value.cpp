@@ -39,7 +39,7 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 		inner->dots = parameters.length;
 		if(parameters.length > 0) {
 			Character names = getNames(parameters);
-			uint64_t i = 0;
+			int64_t i = 0;
 			for(;i < names.length; i++) if(Symbol(names[i]) == Symbol::dots) inner->dots = i;
 		}
 	}
@@ -49,7 +49,7 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 		inner->call = call;
 		inner->dots = call.length-1;
 		List arguments(call.length-1);
-		for(uint64_t i = 1; i < call.length; i++) {
+		for(int64_t i = 1; i < call.length; i++) {
 			if(call[i].type == Type::R_symbol && Symbol(call[i]) == Symbol::dots) {
 				arguments[i-1] = call[i];
 				inner->dots = i-1;

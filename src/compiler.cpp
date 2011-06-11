@@ -45,8 +45,8 @@ static ByteCode op(Symbol const& s) {
 	}
 }
 
-static void resolveLoopReferences(Closure& closure, uint64_t start, uint64_t end, uint64_t depth, uint64_t nextTarget, uint64_t breakTarget) {
-	for(uint64_t i = start; i < end; i++) {
+static void resolveLoopReferences(Closure& closure, int64_t start, int64_t end, int64_t depth, int64_t nextTarget, int64_t breakTarget) {
+	for(int64_t i = start; i < end; i++) {
 		if(closure.code()[i].bc == ByteCode::next && closure.code()[i].a == (int64_t)depth) {
 			closure.code()[i].a = nextTarget-i;
 		} else if(closure.code()[i].bc == ByteCode::break1 && closure.code()[i].a == (int64_t)depth) {
@@ -55,7 +55,7 @@ static void resolveLoopReferences(Closure& closure, uint64_t start, uint64_t end
 	}
 }
 
-uint64_t Compiler::compileConstant(Value const& expr, Closure& closure) {
+int64_t Compiler::compileConstant(Value const& expr, Closure& closure) {
 	if(expr.isNull()) closure.code().push_back(Instruction(ByteCode::null, 0, 0, registerDepth));
 	else if(expr.isLogical() && expr.length == 1 && Logical::isTrue(Logical(expr)[0])) closure.code().push_back(Instruction(ByteCode::true1, 0, 0, registerDepth));
 	else if(expr.isLogical() && expr.length == 1 && Logical::isFalse(Logical(expr)[0])) closure.code().push_back(Instruction(ByteCode::false1, 0, 0, registerDepth));
@@ -66,13 +66,13 @@ uint64_t Compiler::compileConstant(Value const& expr, Closure& closure) {
 	return registerDepth++;
 }
 
-uint64_t Compiler::compileSymbol(Symbol const& symbol, Closure& closure) {
+int64_t Compiler::compileSymbol(Symbol const& symbol, Closure& closure) {
 	closure.code().push_back(Instruction(ByteCode::get, symbol.i, 0, registerDepth));
 	return registerDepth++;
 }
 
-uint64_t Compiler::compileFunctionCall(Call const& call, Closure& closure) {
-	uint64_t initialDepth = registerDepth;
+int64_t Compiler::compileFunctionCall(Call const& call, Closure& closure) {
+	int64_t initialDepth = registerDepth;
 	// a standard call, not an op
 	compile(call[0], closure);
 	CompiledCall compiledCall(call, state);
@@ -83,13 +83,13 @@ uint64_t Compiler::compileFunctionCall(Call const& call, Closure& closure) {
 	return registerDepth++;
 }
 
-uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
-	uint64_t length = call.length;
+int64_t Compiler::compileCall(Call const& call, Closure& closure) {
+	int64_t length = call.length;
 	if(length == 0) {
 		throw CompileError("invalid empty call");
 	}
 
-	uint64_t initialDepth = registerDepth;
+	int64_t initialDepth = registerDepth;
 
 	Symbol func = Symbol::E_NA;
 	if(call[0].type == Type::R_symbol)
@@ -133,7 +133,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 			Call c(dest);
 			Call n(c.length+1);
 			
-			for(uint64_t i = 0; i < c.length; i++) { n[i] = c[i]; }
+			for(int64_t i = 0; i < c.length; i++) { n[i] = c[i]; }
 			Character nnames(c.length+1);
 			if(hasNames(c)) {
 				Insert(state, getNames(c), 0, nnames, 0, c.length);
@@ -147,14 +147,14 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		}
 		
 		// the source for the assignment
-		uint64_t source = compile(value, closure);
+		int64_t source = compile(value, closure);
 
 		if(dest.isSymbol())
 			closure.code().push_back(Instruction(ByteCode::assign, source, 0, Symbol(dest).i));
 	/*	
 		// any indexing code
 		bool indexed = false;
-		uint64_t index = 0;
+		int64_t index = 0;
 		if(v.type == Type::R_call && Symbol(Call(v)[0]) == Symbol::bracket) {
 			Call c(v);
 			index = compile(c[2], closure);
@@ -185,10 +185,10 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_bracketAssign: {
 		// if there's more than three parameters, we should call the library version...
 		if(call.length > 4) return compileFunctionCall(call, closure);
-		uint64_t dest = compile(call[1], closure);
+		int64_t dest = compile(call[1], closure);
 		assert(initialDepth == dest);
-		uint64_t index = compile(call[2], closure);
-		uint64_t value = compile(call[3], closure);
+		int64_t index = compile(call[2], closure);
+		int64_t value = compile(call[3], closure);
 		closure.code().push_back(Instruction(ByteCode::iassign, value, index, dest));
 		registerDepth = initialDepth;
 		return registerDepth++;
@@ -198,7 +198,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		//compile the default parameters	
 		List c = PairList(call[1]);
 		List parameters(c.length);
-		for(uint64_t i = 0; i < parameters.length; i++) {
+		for(int64_t i = 0; i < parameters.length; i++) {
 			if(!c[i].isNil()) {
 				parameters[i] = compile(c[i]);
 				parameters[i].type = Type::I_default;
@@ -224,7 +224,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_returnSym: 
 	{
 		// return always writes to the 0 register
-		uint64_t result;
+		int64_t result;
 		if(call.length == 1) {
 			closure.code().push_back(Instruction(ByteCode::null, 0, 0, 0));
 			result = registerDepth;
@@ -240,28 +240,28 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	{
 		// special case common i in m:n case
 		if(call[2].type == Type::R_call && Symbol(Call(call[2])[0]) == Symbol::colon) {
-			uint64_t lim1 = compile(Call(call[2])[1], closure);
-			uint64_t lim2 = compile(Call(call[2])[2], closure);
+			int64_t lim1 = compile(Call(call[2])[1], closure);
+			int64_t lim2 = compile(Call(call[2])[2], closure);
 			registerDepth = initialDepth+3; // save space for NULL result and loop variables 
 			if(lim2 != lim1+1) throw CompileError("limits aren't in adjacent registers");
 			closure.code().push_back(Instruction(ByteCode::iforbegin, 0, Symbol(call[1]).i, lim1));
 			loopDepth++;
-			uint64_t beginbody = closure.code().size();
+			int64_t beginbody = closure.code().size();
 			compile(call[3], closure);
-			uint64_t endbody = closure.code().size();
+			int64_t endbody = closure.code().size();
 			resolveLoopReferences(closure, beginbody, endbody, loopDepth, endbody, endbody+1);
 			loopDepth--;
 			closure.code().push_back(Instruction(ByteCode::iforend, beginbody-endbody, Symbol(call[1]).i, lim1));
 			closure.code()[beginbody-1].a = endbody-beginbody+1;
 		}
 		else {
-			uint64_t lim = compile(call[2], closure);
+			int64_t lim = compile(call[2], closure);
 			registerDepth = initialDepth+3; // save space for NULL result and loop variables
 			closure.code().push_back(Instruction(ByteCode::forbegin, 0, Symbol(call[1]).i, lim));
 			loopDepth++;
-			uint64_t beginbody = closure.code().size();
+			int64_t beginbody = closure.code().size();
 			compile(call[3], closure);
-			uint64_t endbody = closure.code().size();
+			int64_t endbody = closure.code().size();
 			resolveLoopReferences(closure, beginbody, endbody, loopDepth, endbody, endbody+1);
 			loopDepth--;
 			closure.code().push_back(Instruction(ByteCode::forend, beginbody-endbody, Symbol(call[1]).i, lim));
@@ -272,16 +272,16 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	} break;
 	case Symbol::E_whileSym: 
 	{
-		uint64_t lim = compile(call[1], closure);
+		int64_t lim = compile(call[1], closure);
 		registerDepth = initialDepth+1; // save space for NULL result
 		closure.code().push_back(Instruction(ByteCode::whilebegin, 0, lim, lim));
 		loopDepth++;
-		uint64_t beginbody = closure.code().size();
+		int64_t beginbody = closure.code().size();
 		compile(call[2], closure);
 		registerDepth = initialDepth+1; // save space for NULL result
-		uint64_t beforecond = closure.code().size();
-		uint64_t lim2 = compile(call[1], closure);
-		uint64_t endbody = closure.code().size();
+		int64_t beforecond = closure.code().size();
+		int64_t lim2 = compile(call[1], closure);
+		int64_t endbody = closure.code().size();
 		resolveLoopReferences(closure, beginbody, endbody, loopDepth, beforecond, endbody+1);
 		loopDepth--;
 		closure.code().push_back(Instruction(ByteCode::whileend, beginbody-endbody, lim2, lim));
@@ -294,9 +294,9 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		registerDepth = initialDepth+1; // save space for NULL result
 		closure.code().push_back(Instruction(ByteCode::repeatbegin, 0, 0, initialDepth));
 		loopDepth++;
-		uint64_t beginbody = closure.code().size();
+		int64_t beginbody = closure.code().size();
 		compile(call[1], closure);
-		uint64_t endbody = closure.code().size();
+		int64_t endbody = closure.code().size();
 		resolveLoopReferences(closure, beginbody, endbody, loopDepth, endbody, endbody+1);
 		loopDepth--;
 		closure.code().push_back(Instruction(ByteCode::repeatend, beginbody-endbody, 0, initialDepth));
@@ -319,21 +319,21 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_ifSym: 
 	{
 		closure.code().push_back(Instruction(ByteCode::null, 0, 0, registerDepth++));
-		uint64_t cond = compile(call[1], closure);
+		int64_t cond = compile(call[1], closure);
 		closure.code().push_back(Instruction(ByteCode::if1, 0, cond));
-		uint64_t begin1 = closure.code().size(), begin2 = 0;
+		int64_t begin1 = closure.code().size(), begin2 = 0;
 		registerDepth = initialDepth;
-		uint64_t result = compile(call[2], closure);
+		int64_t result = compile(call[2], closure);
 		if(call.length == 4) {
 			closure.code().push_back(Instruction(ByteCode::jmp, 0));
 			registerDepth = initialDepth;
 			begin2 = closure.code().size();
-			uint64_t result2 = compile(call[3], closure);
+			int64_t result2 = compile(call[3], closure);
 			if(result != result2 || result != initialDepth) throw CompileError("then and else blocks don't put the result in the same register");
 		}
 		else
 			begin2 = closure.code().size();
-		uint64_t end = closure.code().size();
+		int64_t end = closure.code().size();
 		closure.code()[begin1-1].a = begin2-begin1+1;
 		if(call.length == 4)
 			closure.code()[begin2-1].a = end-begin2+1;
@@ -342,13 +342,13 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	} break;
 	case Symbol::E_brace: 
 	{
-		uint64_t length = call.length;
+		int64_t length = call.length;
 		if(length == 0) {
 			closure.code().push_back(Instruction(ByteCode::null, 0, 0, registerDepth));
 			return registerDepth++;
 		} else {
-			uint64_t result = initialDepth;
-			for(uint64_t i = 1; i < length; i++) {
+			int64_t result = initialDepth;
+			for(int64_t i = 1; i < length; i++) {
 				registerDepth = initialDepth;
 				result = compile(call[i], closure);
 				//if(i < length-1)
@@ -365,11 +365,11 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_add: 
 	{
 		if(call.length == 2) {
-			uint64_t a = compile(call[1], closure);
+			int64_t a = compile(call[1], closure);
 			closure.code().push_back(Instruction(ByteCode::pos, a, 0, initialDepth));
 		} else if(call.length == 3) {
-			uint64_t a = compile(call[1], closure);
-			uint64_t b = compile(call[2], closure);
+			int64_t a = compile(call[1], closure);
+			int64_t b = compile(call[2], closure);
 			closure.code().push_back(Instruction(ByteCode::add, a, b, initialDepth));
 		}
 		registerDepth = initialDepth;
@@ -378,11 +378,11 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_sub: 
 	{
 		if(call.length == 2) {
-			uint64_t a = compile(call[1], closure);
+			int64_t a = compile(call[1], closure);
 			closure.code().push_back(Instruction(ByteCode::neg, a, 0, initialDepth));
 		} else if(call.length == 3) {
-			uint64_t a = compile(call[1], closure);
-			uint64_t b = compile(call[2], closure);
+			int64_t a = compile(call[1], closure);
+			int64_t b = compile(call[2], closure);
 			closure.code().push_back(Instruction(ByteCode::sub, a, b, initialDepth));
 		}
 		registerDepth = initialDepth;
@@ -404,8 +404,8 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_ge:
 	case Symbol::E_le:
 	{ 
-		uint64_t a = compile(call[1], closure);
-		uint64_t b = compile(call[2], closure);
+		int64_t a = compile(call[1], closure);
+		int64_t b = compile(call[2], closure);
 		closure.code().push_back(Instruction(op(func), a, b, initialDepth));
 		registerDepth = initialDepth;
 		return registerDepth++;
@@ -435,7 +435,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_Character:
 	case Symbol::E_Raw:
 	{ 
-		uint64_t a = compile(call[1], closure);
+		int64_t a = compile(call[1], closure);
 		closure.code().push_back(Instruction(op(func), a, 0, initialDepth));
 		registerDepth = initialDepth;
 		return registerDepth++;
@@ -444,13 +444,13 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_sland:
 	{
 		closure.code().push_back(Instruction(ByteCode::false1, 0, 0, registerDepth++));
-		uint64_t cond = compile(call[1], closure);
+		int64_t cond = compile(call[1], closure);
 		closure.code().push_back(Instruction(ByteCode::if1, 0, cond));
-		uint64_t begin1 = closure.code().size();
+		int64_t begin1 = closure.code().size();
 		registerDepth = initialDepth;
-		uint64_t cond2 = compile(call[2], closure);
+		int64_t cond2 = compile(call[2], closure);
 		closure.code().push_back(Instruction(ByteCode::istrue, cond2, 0, initialDepth));
-		uint64_t end = closure.code().size();
+		int64_t end = closure.code().size();
 		closure.code()[begin1-1].a = end-begin1+1;
 		registerDepth = initialDepth;
 		return registerDepth++;
@@ -458,20 +458,20 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_slor:
 	{
 		closure.code().push_back(Instruction(ByteCode::true1, 0, 0, registerDepth++));
-		uint64_t cond = compile(call[1], closure);
+		int64_t cond = compile(call[1], closure);
 		closure.code().push_back(Instruction(ByteCode::if0, 0, cond));
-		uint64_t begin1 = closure.code().size();
+		int64_t begin1 = closure.code().size();
 		registerDepth = initialDepth;
-		uint64_t cond2 = compile(call[2], closure);
+		int64_t cond2 = compile(call[2], closure);
 		closure.code().push_back(Instruction(ByteCode::istrue, cond2, 0, initialDepth));
-		uint64_t end = closure.code().size();
+		int64_t end = closure.code().size();
 		closure.code()[begin1-1].a = end-begin1+1;
 		registerDepth = initialDepth;
 		return registerDepth++;
 	} break;
 	case Symbol::E_UseMethod:
 	{
-		uint64_t generic = compile(call[1], closure);
+		int64_t generic = compile(call[1], closure);
 		if(call.length == 3) compile(call[2], closure);
 		closure.code().push_back(Instruction(ByteCode::UseMethod, generic, call.length==3 ? 1 : 0, initialDepth));
 		registerDepth = initialDepth;
@@ -484,11 +484,11 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	};
 }
 
-uint64_t Compiler::compileExpression(Expression const& values, Closure& closure) {
-	uint64_t initialDepth = registerDepth;
-	uint64_t result;
-	uint64_t length = values.length;
-	for(uint64_t i = 0; i < length; i++) {
+int64_t Compiler::compileExpression(Expression const& values, Closure& closure) {
+	int64_t initialDepth = registerDepth;
+	int64_t result;
+	int64_t length = values.length;
+	for(int64_t i = 0; i < length; i++) {
 		registerDepth = initialDepth;
 		result = compile(values[i], closure);
 		//if(i < length-1)
@@ -498,7 +498,7 @@ uint64_t Compiler::compileExpression(Expression const& values, Closure& closure)
 	return registerDepth++;
 }
 
-uint64_t Compiler::compile(Value const& expr, Closure& closure) {
+int64_t Compiler::compile(Value const& expr, Closure& closure) {
 	switch(expr.type.Enum())
 	{
 		case Type::E_R_symbol:
@@ -519,9 +519,9 @@ uint64_t Compiler::compile(Value const& expr, Closure& closure) {
 Closure Compiler::compile(Value const& expr) {
 	Closure closure;
 
-	uint64_t oldLoopDepth = loopDepth;
+	int64_t oldLoopDepth = loopDepth;
 	loopDepth = 0;
-	uint64_t oldRegisterDepth = registerDepth;
+	int64_t oldRegisterDepth = registerDepth;
 	registerDepth = 0;
 	compile(expr, closure);
 	closure.expression() = expr;

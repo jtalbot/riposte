@@ -7,7 +7,7 @@
 #include <iomanip>
 #include <math.h>
 
-std::string pad(std::string s, uint64_t width)
+std::string pad(std::string s, int64_t width)
 {
 	std::stringstream ss;
 	ss << std::setw(width) << s;
@@ -37,34 +37,34 @@ inline std::string toString(State const& state, Symbol const& a) {
 template<class T>
 std::string stringifyVector(State const& state, T const& v) {
 	std::string result = "";
-	uint64_t length = v.length;
+	int64_t length = v.length;
 	if(length == 0)
 		return std::string(v.type.toString()) + "(0)";
 
 	bool dots = false;
 	if(length > 100) { dots = true; length = 100; }
-	uint64_t maxlength = 1;
-	for(uint64_t i = 0; i < length; i++) {
-		maxlength = std::max((uint64_t)maxlength, (uint64_t)toString(state, v[i]).length());
+	int64_t maxlength = 1;
+	for(int64_t i = 0; i < length; i++) {
+		maxlength = std::max((int64_t)maxlength, (int64_t)toString(state, v[i]).length());
 	}
 	if(hasNames(v)) {
 		Character c = getNames(v);
-		for(uint64_t i = 0; i < length; i++) {
-			maxlength = std::max((uint64_t)maxlength, (uint64_t)c[i].toString(state).length());
+		for(int64_t i = 0; i < length; i++) {
+			maxlength = std::max((int64_t)maxlength, (int64_t)c[i].toString(state).length());
 		}
 	}
-	uint64_t indexwidth = intToStr(length+1).length();
-	uint64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
+	int64_t indexwidth = intToStr(length+1).length();
+	int64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
 	if(hasNames(v)) {
 		Character c = getNames(v);
-		for(uint64_t i = 0; i < length; i+=perline) {
+		for(int64_t i = 0; i < length; i+=perline) {
 			result = result + pad("", indexwidth+2);
-			for(uint64_t j = 0; j < perline && i+j < length; j++) {
+			for(int64_t j = 0; j < perline && i+j < length; j++) {
 				result = result + pad(c[i+j].toString(state), maxlength+1);
 			}
 			result = result + "\n";
 			result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
-			for(uint64_t j = 0; j < perline && i+j < length; j++) {
+			for(int64_t j = 0; j < perline && i+j < length; j++) {
 				result = result + pad(toString(state, v[i+j]), maxlength+1);
 			}
 	
@@ -73,9 +73,9 @@ std::string stringifyVector(State const& state, T const& v) {
 		}
 	}
 	else {
-		for(uint64_t i = 0; i < length; i+=perline) {
+		for(int64_t i = 0; i < length; i+=perline) {
 			result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
-			for(uint64_t j = 0; j < perline && i+j < length; j++) {
+			for(int64_t j = 0; j < perline && i+j < length; j++) {
 				result = result + pad(toString(state, v[i+j]), maxlength+1);
 			}
 	
@@ -112,12 +112,12 @@ std::string State::stringify(Value const& value) const {
 		{
 			List v(value);
 
-			uint64_t length = v.length;
+			int64_t length = v.length;
 			if(length > 100) { dots = true; length = 100; }
 			result = "";
 			if(hasNames(v)) {
 				Character n = getNames(v);
-				for(uint64_t i = 0; i < length; i++) {
+				for(int64_t i = 0; i < length; i++) {
 					if(n[i].toString(*this)=="")
 						result = result + "[[" + intToStr(i+1) + "]]\n";
 					else
@@ -126,7 +126,7 @@ std::string State::stringify(Value const& value) const {
 					if(i < length-1) result = result + "\n";
 				}
 			} else {
-				for(uint64_t i = 0; i < length; i++) {
+				for(int64_t i = 0; i < length; i++) {
 					result = result + "[[" + intToStr(i+1) + "]]\n";
 					result = result + stringify(v[i]) + "\n";
 					if(i < length-1) result = result + "\n";
@@ -142,7 +142,7 @@ std::string State::stringify(Value const& value) const {
 		}
 		case Type::E_R_function:
 		{
-			//result = "function: " + intToHexStr((uint64_t)value.p) /*+ "\n" + Function(*this).body().toString()*/;
+			//result = "function: " + intToHexStr((int64_t)value.p) /*+ "\n" + Function(*this).body().toString()*/;
 			result = (Function(value).str()[0]).toString(*this);
 			return result;
 		}
@@ -154,11 +154,11 @@ std::string State::stringify(Value const& value) const {
 		{
 			Closure b(value);
 			std::string r = "block:\nconstants: " + intToStr(b.constants().size()) + "\n";
-			for(uint64_t i = 0; i < b.constants().size(); i++)
+			for(int64_t i = 0; i < (int64_t)b.constants().size(); i++)
 				r = r + intToStr(i) + "=\t" + stringify(b.constants()[i]) + "\n";
 		
 			r = r + "code: " + intToStr(b.code().size()) + "\n";
-			for(uint64_t i = 0; i < b.code().size(); i++)
+			for(int64_t i = 0; i < (int64_t)b.code().size(); i++)
 				r = r + intToStr(i) + ":\t" + b.code()[i].toString() + "\n";
 		
 			return r;

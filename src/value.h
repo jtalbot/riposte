@@ -29,7 +29,7 @@ struct Value {
 		double d;
 	};
 	union {
-		uint64_t length;
+		int64_t length;
 		void* env;
 	};
 	Attributes* attributes;
@@ -77,7 +77,7 @@ struct State {
 // Value type implementations
 
 struct Symbol {
-	uint64_t i;
+	int64_t i;
 
 #define DECLARE_SYMBOLS(EnumType,ENUM_DEF) \
   enum EnumValue { \
@@ -88,7 +88,7 @@ struct Symbol {
 	DECLARE_SYMBOLS(Symbol,SYMBOLS_ENUM)
 
 	Symbol() : i(1) {}						// Defaults to the empty symbol...
-	Symbol(uint64_t index) : i(index) {}
+	Symbol(int64_t index) : i(index) {}
 	Symbol(State& state, std::string const& s) : i(state.symbols.in(s)) {}
 
 	Symbol(Value const& v) {
@@ -108,9 +108,9 @@ struct Symbol {
 	bool operator==(Symbol const& other) const { return i == other.i; }
 	bool operator!=(Symbol const& other) const { return i != other.i; }
 
-	bool operator==(uint64_t other) const { return i == other; }
+	bool operator==(int64_t other) const { return i == other; }
 
-	uint64_t Enum() const { return i; }
+	int64_t Enum() const { return i; }
 
 	bool isAssignable() const {
 		return !(*this == Symbol::NA || *this == Symbol::empty);
@@ -121,18 +121,18 @@ struct Symbol {
 // A generic vector representation. Only provides support to access length and void* of data.
 struct Vector {
 	void* _data;
-	uint64_t length, width;
+	int64_t length, width;
 	bool _packed;
 	Attributes* attributes;
 	Type type;
 
 	bool packed() const { return _packed; }
 	void* data() const { if(packed()) return (void*)&_data; else return _data; }
-	void* data(uint64_t i) const { if(packed()) return ((char*)&_data) + i*width; else return (char*)_data + i*width; }
+	void* data(int64_t i) const { if(packed()) return ((char*)&_data) + i*width; else return (char*)_data + i*width; }
 
 	Vector() : _data(0), length(0), width(0), _packed(true), attributes(0), type(Type::I_nil) {}
 	Vector(Value v);
-	Vector(Type t, uint64_t length);
+	Vector(Type t, int64_t length);
 
 	operator Value() const {
 		Value v = {{(int64_t)_data}, {length}, attributes, type};
@@ -146,18 +146,18 @@ struct VectorImpl {
 	static const Type type;
 	
 	ElementType* _data;
-	uint64_t length;
-	static const uint64_t width = sizeof(ElementType); 
+	int64_t length;
+	static const int64_t width = sizeof(ElementType); 
 	Attributes* attributes;
 
-	ElementType& operator[](uint64_t index) { return _data[index]; }
-	ElementType const& operator[](uint64_t index) const { return _data[index]; }
+	ElementType& operator[](int64_t index) { return _data[index]; }
+	ElementType const& operator[](int64_t index) const { return _data[index]; }
 	ElementType* data() const { return _data; }
-	ElementType* data(uint64_t i) const { return _data + i; }
+	ElementType* data(int64_t i) const { return _data + i; }
 
 	bool packed() const { return false; }
 
-	VectorImpl(uint64_t length) : _data(new (GC) Element[length]), length(length), attributes(0) {}
+	VectorImpl(int64_t length) : _data(new (GC) Element[length]), length(length), attributes(0) {}
 
 	VectorImpl(Value v) : _data((ElementType*)v.p), length(v.length), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
@@ -184,7 +184,7 @@ struct VectorImpl {
 	}
 
 protected:
-	VectorImpl(ElementType* _data, uint64_t length, Attributes* attributes) : _data(_data), length(length), attributes(attributes) {}
+	VectorImpl(ElementType* _data, int64_t length, Attributes* attributes) : _data(_data), length(length), attributes(attributes) {}
 };
 
 template<Type::EnumValue VectorType, typename ElementType>
@@ -199,18 +199,18 @@ struct PackedVectorImpl {
 		ElementType* _data;
 		ElementType packedData[sizeof(ElementType*)/sizeof(ElementType)];
 	};
-	uint64_t length;
-	static const uint64_t width = sizeof(ElementType);
+	int64_t length;
+	static const int64_t width = sizeof(ElementType);
 	Attributes* attributes;
 
-	ElementType& operator[](uint64_t index) { if(packed()) return packedData[index]; else return _data[index]; }
-	ElementType const& operator[](uint64_t index) const { if(packed()) return packedData[index]; else return _data[index]; }
+	ElementType& operator[](int64_t index) { if(packed()) return packedData[index]; else return _data[index]; }
+	ElementType const& operator[](int64_t index) const { if(packed()) return packedData[index]; else return _data[index]; }
 	ElementType* data() const { if(packed()) return &packedData[0]; else return _data; }
-	ElementType* data(uint64_t i) const { if(packed()) return &packedData[i]; else return _data + i; }
+	ElementType* data(int64_t i) const { if(packed()) return &packedData[i]; else return _data + i; }
 
-	bool packed() const { return length <= sizeof(int64_t)/sizeof(ElementType); }
+	bool packed() const { return length <= (int64_t)(sizeof(int64_t)/sizeof(ElementType)); }
 	
-	PackedVectorImpl(uint64_t length) : _data(0), length(length), attributes(0) {
+	PackedVectorImpl(int64_t length) : _data(0), length(length), attributes(0) {
 		if(!packed())
 			_data = new (GC) Element[length];
 	}
@@ -240,7 +240,7 @@ struct PackedVectorImpl {
 	}
 
 protected:
-	PackedVectorImpl(ElementType* _data, uint64_t length, Attributes* attributes) : _data(_data), length(length), attributes(attributes) {}
+	PackedVectorImpl(ElementType* _data, int64_t length, Attributes* attributes) : _data(_data), length(length), attributes(attributes) {}
 };
 
 template<Type::EnumValue VectorType, typename ElementType>
@@ -248,13 +248,13 @@ const Type PackedVectorImpl<VectorType, ElementType>::type = {VectorType};
 
 
 union _doublena {
-	uint64_t i;
+	int64_t i;
 	double d;
 };
 
 #define VECTOR_IMPL(Parent, Name, Type, type) \
 struct Name : public Parent<Type, type> \
-	{ Name(uint64_t length) : Parent<Type, type>(length) {} \
+	{ Name(int64_t length) : Parent<Type, type>(length) {} \
 	  Name(Value const& v) : Parent<Type, type>(v) {} \
 	  Name(Vector const& v) : Parent<Type, type>(v) {}
 /* note missing }; */
@@ -339,7 +339,7 @@ VECTOR_IMPL(VectorImpl, Expression, Type::E_R_expression, Value)
 	static Expression c(Value v0, Value v1) { Expression c(2); c[0] = v0; c[1] = v1; return c; }
 	static Expression c(Value v0, Value v1, Value v2) { Expression c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } };
 
-inline Vector::Vector(Type t, uint64_t length) {
+inline Vector::Vector(Type t, int64_t length) {
 	switch(t.Enum()) {
 		case Type::E_R_null: *this = Null::singleton; break;
 		case Type::E_R_logical: *this = Logical(length); break;	
@@ -401,7 +401,7 @@ public:
 	}
 
 	operator Value() const {
-		Value v = {{(int64_t)inner}, {(uint64_t)env}, 0, Type::I_closure};
+		Value v = {{(int64_t)inner}, {(int64_t)env}, 0, Type::I_closure};
 		return v;
 	}
 
@@ -424,7 +424,7 @@ class Function {
 private:
 	struct Inner : public gc {
 		List parameters;
-		uint64_t dots;
+		int64_t dots;
 		Value body;		// Not necessarily a Closure consider function(x) 2, body is the constant 2
 		Character str;
 		Environment* s;
@@ -454,7 +454,7 @@ public:
 	}
 
 	List const& parameters() const { return inner->parameters; }
-	uint64_t dots() const { return inner->dots; }
+	int64_t dots() const { return inner->dots; }
 	Value const& body() const { return inner->body; }
 	Character const& str() const { return inner->str; }
 	Environment* s() const { return inner->s; }
@@ -462,7 +462,7 @@ public:
 
 class CFunction {
 public:
-	typedef uint64_t (*Cffi)(State& s, Call const& call, List const& args);
+	typedef int64_t (*Cffi)(State& s, Call const& call, List const& args);
 	Cffi func;
 	CFunction(Cffi func) : func(func) {}
 	CFunction(Value const& v) {
@@ -482,7 +482,7 @@ class CompiledCall {
 	struct Inner : public gc {
 		Value call;
 		Value arguments; // a list of closures
-		uint64_t dots;
+		int64_t dots;
 	};
 
 	Inner* inner;
@@ -503,7 +503,7 @@ public:
 	
 	Call call() const { return Call(inner->call); }
 	List arguments() const { return List(inner->arguments); }
-	uint64_t dots() const { return inner->dots; }
+	int64_t dots() const { return inner->dots; }
 };
 
 class Environment : public gc {
@@ -685,18 +685,18 @@ struct Pairs {
 	};
 	std::deque<Pair, traceable_allocator<Value> > p;
 	
-	uint64_t length() const { return p.size(); }
+	int64_t length() const { return p.size(); }
 	void push_front(Symbol n, Value v) { Pair t = {n, v}; p.push_front(t); }
 	void push_back(Symbol n, Value v)  { Pair t = {n, v}; p.push_back(t); }
-	const Value& value(uint64_t i) const { return p[i].v; }
-	const Symbol& name(uint64_t i) const { return p[i].n; }
+	const Value& value(int64_t i) const { return p[i].v; }
+	const Symbol& name(int64_t i) const { return p[i].n; }
 	
 	List toList(bool forceNames) const {
 		List l(length());
-		for(uint64_t i = 0; i < length(); i++)
+		for(int64_t i = 0; i < length(); i++)
 			l[i] = value(i);
 		bool named = false;
-		for(uint64_t i = 0; i < length(); i++) {
+		for(int64_t i = 0; i < length(); i++) {
 			if(name(i) != Symbol::empty) {
 				named = true;
 				break;
@@ -704,7 +704,7 @@ struct Pairs {
 		}
 		if(named || forceNames) {
 			Character n(length());
-			for(uint64_t i = 0; i < length(); i++)
+			for(int64_t i = 0; i < length(); i++)
 				n[i] = name(i).i;
 			setNames(l, n);
 		}
