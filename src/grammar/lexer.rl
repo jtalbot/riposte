@@ -155,9 +155,12 @@ void Parser::token( int tok, Value v)
 			Parse(pParser, tok, v, this);
 	}
 
+	le = te;
+
 	if(tok == TOKEN_LPAREN) nesting.push(tok);
 	else if(tok == TOKEN_LBRACE) nesting.push(tok);
 	else if(tok == TOKEN_RPAREN || tok == TOKEN_RBRACE) nesting.pop();
+	else if(tok == TOKEN_FUNCTION) source.push(ts);
 
 	/* Count newlines and columns. Use for error reporting? */ 
 	for ( int i = 0; i < len; i ++ ) {
@@ -187,7 +190,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 
 	pParser = ParseAlloc(malloc);
 
-	ParseTrace(trace, 0);
+	/*ParseTrace(trace, 0);*/
 
 	const char *p = data;
 	const char *pe = data+len;

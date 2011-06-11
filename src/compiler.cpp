@@ -208,17 +208,14 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		}
 		closure.constants().push_back(parameters);
 
-		/*CompileState s(state);
-		s.inFunction = true;
-		for(uint64_t i = 0; i < n.length; i++) {
-			s.slots.push_back(Character(n)[i]);
-		}*/	
-
 		//compile the source for the body
 		Closure body = compile(call[2]);
 		closure.constants().push_back(body);
+
+		//push back the source code.
+		closure.constants().push_back(call[3]);
 	
-		closure.code().push_back(Instruction(ByteCode::function, closure.constants().size()-2, closure.constants().size()-1, initialDepth));
+		closure.code().push_back(Instruction(ByteCode::function, closure.constants().size()-3, closure.constants().size()-2, initialDepth));
 		registerDepth = initialDepth;
 		return registerDepth++;
 	} break;

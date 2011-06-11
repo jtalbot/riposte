@@ -30,8 +30,15 @@ uint64_t library(State& state, Call const& call, List const& args) {
 uint64_t function(State& state, Call const& call, List const& args) {
 	Value parameters = force(state, args[0]);
 	Value body = args[1];
-	state.registers[0] = 	
-		Function(parameters, body, Character::NA()/*force(state, args[2])*/, state.global);
+	if(args.length == 2)
+		state.registers[0] = 	
+			Function(parameters, body, Character::NA(), state.global);
+	else {
+		printf("making function with body\n");
+		state.registers[0] = 	
+			Function(parameters, body, force(state, args[2]), state.global);
+	
+	}
 	return 1;
 }
 

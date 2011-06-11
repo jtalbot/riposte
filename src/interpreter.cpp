@@ -459,7 +459,7 @@ static int64_t istrue_op(State& state, Closure const& closure, Instruction const
 	return 1;
 }
 static int64_t function_op(State& state, Closure const& closure, Instruction const& inst) {
-	state.registers[inst.c] = Function(closure.constants()[inst.a], closure.constants()[inst.b], Character::NA(), state.global);
+	state.registers[inst.c] = Function(closure.constants()[inst.a], closure.constants()[inst.b], closure.constants()[inst.b+1], state.global);
 	return 1;
 }
 static int64_t logical1_op(State& state, Closure const& closure, Instruction const& inst) {

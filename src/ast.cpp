@@ -1091,7 +1091,7 @@ static void yy_reduce(
         break;
       case 36: /* expr ::= FUNCTION optnl LPAREN optnl formallist optnl RPAREN optnl statement */
 #line 113 "parser.y"
-{ yygotominor.yy0 = Call::c(yymsp[-8].minor.yy0, PairList(yymsp[-4].minor.yy82->toList(true)), yymsp[0].minor.yy0);   yy_destructor(yypParser,36,&yymsp[-6].minor);
+{ yygotominor.yy0 = Call::c(yymsp[-8].minor.yy0, PairList(yymsp[-4].minor.yy82->toList(true)), yymsp[0].minor.yy0, parser->popSource());   yy_destructor(yypParser,36,&yymsp[-6].minor);
   yy_destructor(yypParser,45,&yymsp[-2].minor);
 }
 #line 1098 "parser.c"

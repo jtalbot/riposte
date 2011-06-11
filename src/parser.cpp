@@ -436,9 +436,12 @@ void Parser::token( int tok, Value v)
 			Parse(pParser, tok, v, this);
 	}
 
+	le = te;
+
 	if(tok == TOKEN_LPAREN) nesting.push(tok);
 	else if(tok == TOKEN_LBRACE) nesting.push(tok);
 	else if(tok == TOKEN_RPAREN || tok == TOKEN_RBRACE) nesting.pop();
+	else if(tok == TOKEN_FUNCTION) source.push(ts);
 
 	/* Count newlines and columns. Use for error reporting? */ 
 	for ( int i = 0; i < len; i ++ ) {
@@ -468,14 +471,14 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 
 	pParser = ParseAlloc(malloc);
 
-	ParseTrace(trace, 0);
+	/*ParseTrace(trace, 0);*/
 
 	const char *p = data;
 	const char *pe = data+len;
 	const char* eof = isEof ? pe : 0;
 	int cs, act;
 	
-#line 479 "../parser.cpp"
+#line 482 "../parser.cpp"
 	{
 	cs = Scanner_start;
 	ts = 0;
@@ -483,9 +486,9 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	act = 0;
 	}
 
-#line 197 "lexer.rl"
+#line 200 "lexer.rl"
 	
-#line 489 "../parser.cpp"
+#line 492 "../parser.cpp"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -506,7 +509,7 @@ _resume:
 #line 1 "NONE"
 	{ts = p;}
 	break;
-#line 510 "../parser.cpp"
+#line 513 "../parser.cpp"
 		}
 	}
 
@@ -952,7 +955,7 @@ _eof_trans:
 	}
 	}
 	break;
-#line 956 "../parser.cpp"
+#line 959 "../parser.cpp"
 		}
 	}
 
@@ -969,7 +972,7 @@ _again:
 #line 1 "NONE"
 	{act = 0;}
 	break;
-#line 973 "../parser.cpp"
+#line 976 "../parser.cpp"
 		}
 	}
 
@@ -989,7 +992,7 @@ _again:
 	_out: {}
 	}
 
-#line 198 "lexer.rl"
+#line 201 "lexer.rl"
 	int syntaxErrors = errors;
 	Parse(pParser, 0, Value::NIL, this);
 	ParseFree(pParser, free);
