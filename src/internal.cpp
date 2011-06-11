@@ -683,6 +683,11 @@ int64_t paste(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
+int64_t deparse(State& state, Call const& call, List const& args) {
+	Value v = force(state, args[0]);
+	state.registers[0]= Character::c(state, state.deparse(v));
+	return 1;
+}
 
 void addMathOps(State& state)
 {
@@ -809,5 +814,7 @@ void addMathOps(State& state)
 	
 	CFunction(paste).toValue(v);
 	env->assign(Symbol(state, "paste"), v);
+	CFunction(deparse).toValue(v);
+	env->assign(Symbol(state, "deparse"), v);
 }
 

@@ -67,7 +67,7 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 			}
 		}
 		if(hasNames(call)) {
-			setNames(arguments, Subset(getNames(call), 1, call.length-1));
+			setNames(arguments, Subset(Character(getNames(call)), 1, call.length-1));
 		}
 		inner->arguments = arguments;
 	}

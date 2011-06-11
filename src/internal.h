@@ -131,6 +131,15 @@ inline void Insert(State& state, Vector const& src, int64_t srcIndex, Vector& ds
 	memcpy(dst.data(dstIndex), as.data(srcIndex), length*as.width);
 }
 
+template<class T>
+inline T Subset(T const& src, int64_t start, int64_t length) {
+	if(length > 0 && start+length > src.length)
+		_error("subset index out of bounds");
+	T v(length);
+	memcpy(v.data(0), src.data(start), length*src.width);
+	return v;
+}
+
 inline Vector Subset(Vector const& src, int64_t start, int64_t length) {
 	if(length > 0 && start+length > src.length)
 		_error("subset index out of bounds");

@@ -72,6 +72,7 @@ struct State {
 	}
 
 	std::string stringify(Value const& v) const;
+	std::string deparse(Value const& v) const;
 };
 
 
