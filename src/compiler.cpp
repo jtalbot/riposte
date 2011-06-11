@@ -466,6 +466,14 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		registerDepth = initialDepth;
 		return registerDepth++;
 	} break;
+	case Symbol::E_UseMethod:
+	{
+		uint64_t generic = compile(call[1], closure);
+		uint64_t object = compile(call[2], closure);
+		closure.code().push_back(Instruction(ByteCode::UseMethod, generic, object, initialDepth));
+		registerDepth = initialDepth;
+		return registerDepth++;
+	} break;
 	default:
 	{
 		return compileFunctionCall(call, closure);

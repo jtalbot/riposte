@@ -32,97 +32,103 @@
 // Conclusion for now: heap allocate environments. 
 // Try to make that fast, maybe with a pooled allocator...
 
+static void MatchArgs(State& state, Environment* fenv, Function const& func, List const& arguments) {
+	List parameters = func.parameters();
+	Character pnames = getNames(parameters.attributes);
+		
+	// call arguments are not named, do posititional matching
+	if(Value(getNames(arguments.attributes)).isNull()) {
+		for(uint64_t i = 0; i < std::min(arguments.length, func.dots()); ++i) {
+			fenv->assign(pnames[i], arguments[i]);
+		}
+		for(uint64_t i = std::min(arguments.length, func.dots()); i < parameters.length; ++i) {
+			if(!parameters[i].isNil()) fenv->assign(pnames[i], parameters[i]);
+		}
+		fenv->assign(Symbol::dots, Subset(arguments, func.dots(), std::max((int64_t)0, (int64_t)arguments.length-(int64_t)func.dots())));
+	}
+	// call arguments are named, do matching by name
+	else {
+		// populate environment with default values
+		for(uint64_t i = 0; i < parameters.length; ++i) {
+			if(!parameters[i].isNil()) fenv->assign(pnames[i], parameters[i]);
+		}	
+		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
+		static char assignment[64], set[64];
+		for(uint64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
+		for(uint64_t i = 0; i < parameters.length; i++) set[i] = -1;
+		Character anames = getNames(arguments.attributes);
+		// named args, search for complete matches
+		for(uint64_t i = 0; i < arguments.length; ++i) {
+			if(anames[i] != Symbol::empty) {
+				for(uint64_t j = 0; j < parameters.length; ++j) {
+					if(pnames[j] != Symbol::dots && anames[i] == pnames[j]) {
+						fenv->assign(pnames[j], arguments[i]);
+						assignment[i] = j;
+						set[j] = i;
+						break;
+					}
+				}
+			}
+		}
+		// named args, search for incomplete matches
+		for(uint64_t i = 0; i < arguments.length; ++i) {
+			if(anames[i] != Symbol::empty && assignment[i] == 0) {
+				std::string a = anames[i].toString(state);
+				for(uint64_t j = 0; j < parameters.length; ++j) {
+					if(set[j] < 0 && pnames[j] != Symbol::dots &&
+						pnames[i].toString(state).compare( 0, a.size(), a ) == 0 ) {	
+						fenv->assign(pnames[j], arguments[i]);
+						assignment[i] = j;
+						set[j] = i;
+						break;
+					}
+				}
+			}
+		}
+		// unnamed args, fill into first missing spot.
+		uint64_t firstEmpty = 0;
+		for(uint64_t i = 0; i < arguments.length; ++i) {
+			if(anames[i] == Symbol::empty) {
+				for(; firstEmpty < func.dots(); ++firstEmpty) {
+					if(set[firstEmpty] < 0) {
+						printf("Unnamed match %s\n", pnames[firstEmpty].toString(state).c_str());
+						fenv->assign(pnames[firstEmpty], arguments[i]);
+						assignment[i] = firstEmpty;
+						set[firstEmpty] = i;
+						break;
+					}
+				}
+			}
+		}
+		// put unused args into the dots
+		if(func.dots() < parameters.length) {
+			// count up the unassigned args
+			uint64_t unassigned = 0;
+			for(uint64_t j = 0; j < arguments.length; j++) if(assignment[j] < 0) unassigned++;
+			List values(unassigned);
+			Character names(unassigned);
+			uint64_t idx = 0;
+			for(uint64_t j = 0; j < arguments.length; j++) {
+				if(assignment[j] < 0) {
+					values[idx] = arguments[j];
+					names[idx++] = anames[j];
+				}
+			}
+			setNames(values.attributes, names);
+			
+			fenv->assign(Symbol::dots, values);
+		}
+	}
+}
+
 static int64_t call_function(State& state, Function const& func, List const& arguments) {
 	if(func.body().type == Type::I_closure || func.body().type == Type::I_promise) {
 		//See note above about allocating Environment on heap...
 		Environment* fenv = new Environment(func.s(), state.global);
-			
-		List parameters = func.parameters();
-		Character pnames = getNames(parameters.attributes);
-		
-		// call arguments are not named, do posititional matching
-		if(Value(getNames(arguments.attributes)).isNull()) {
-			for(uint64_t i = 0; i < std::min(arguments.length, func.dots()); ++i) {
-				fenv->assign(pnames[i], arguments[i]);
-			}
-			for(uint64_t i = std::min(arguments.length, func.dots()); i < parameters.length; ++i) {
-				if(!parameters[i].isNil()) fenv->assign(pnames[i], parameters[i]);
-			}
-			fenv->assign(Symbol::dots, Subset(arguments, func.dots(), std::max((int64_t)0, (int64_t)arguments.length-(int64_t)func.dots())));
-		}
-		// call arguments are named, do matching by name
-		else {
-			// populate environment with default values
-			for(uint64_t i = 0; i < parameters.length; ++i) {
-				if(!parameters[i].isNil()) fenv->assign(pnames[i], parameters[i]);
-			}	
-			// we should be able to cache and reuse this assignment for pairs of functions and call sites.
-			static char assignment[64], set[64];
-			for(uint64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
-			for(uint64_t i = 0; i < parameters.length; i++) set[i] = -1;
-			Character anames = getNames(arguments.attributes);
-			// named args, search for complete matches
-			for(uint64_t i = 0; i < arguments.length; ++i) {
-				if(anames[i] != Symbol::empty) {
-					for(uint64_t j = 0; j < parameters.length; ++j) {
-						if(pnames[j] != Symbol::dots && anames[i] == pnames[j]) {
-							fenv->assign(pnames[j], arguments[i]);
-							assignment[i] = j;
-							set[j] = i;
-							break;
-						}
-					}
-				}
-			}
-			// named args, search for incomplete matches
-			for(uint64_t i = 0; i < arguments.length; ++i) {
-				if(anames[i] != Symbol::empty && assignment[i] == 0) {
-					std::string a = anames[i].toString(state);
-					for(uint64_t j = 0; j < parameters.length; ++j) {
-						if(set[j] < 0 && pnames[j] != Symbol::dots &&
-							pnames[i].toString(state).compare( 0, a.size(), a ) == 0 ) {	
-							fenv->assign(pnames[j], arguments[i]);
-							assignment[i] = j;
-							set[j] = i;
-							break;
-						}
-					}
-				}
-			}
-			// unnamed args, fill into first missing spot.
-			uint64_t firstEmpty = 0;
-			for(uint64_t i = 0; i < arguments.length; ++i) {
-				if(anames[i] == Symbol::empty) {
-					for(; firstEmpty < func.dots(); ++firstEmpty) {
-						if(set[firstEmpty] < 0) {
-							printf("Unnamed match %s\n", pnames[firstEmpty].toString(state).c_str());
-							fenv->assign(pnames[firstEmpty], arguments[i]);
-							assignment[i] = firstEmpty;
-							set[firstEmpty] = i;
-							break;
-						}
-					}
-				}
-			}
-			// put unused args into the dots
-			if(func.dots() < parameters.length) {
-				// count up the unassigned args
-				uint64_t unassigned = 0;
-				for(uint64_t j = 0; j < arguments.length; j++) if(assignment[j] < 0) unassigned++;
-				List values(unassigned);
-				Character names(unassigned);
-				uint64_t idx = 0;
-				for(uint64_t j = 0; j < arguments.length; j++) {
-					if(assignment[j] < 0) {
-						values[idx] = arguments[j];
-						names[idx++] = anames[j];
-					}
-				}
-				setNames(values.attributes, names);
-				
-				fenv->assign(Symbol::dots, values);
-			}
-		}
+		fenv->assign(Symbol(state, "..args"), arguments);
+
+		MatchArgs(state, fenv, func, arguments);
+	
 		eval(state, Closure(func.body()).bind(fenv));
 	}
 	else
@@ -188,6 +194,53 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 		_error(std::string("Non-function (") + func.type.toString() + ") as first parameter to call\n");
 		return 1;
 	}	
+}
+static int64_t UseMethod_op(State& state, Closure const& closure, Instruction const& inst) {
+	Value v = state.registers[inst.a];
+	Symbol generic;
+	if(v.isCharacter())
+		generic = Character(v)[0];
+	else
+		generic = Symbol(v);
+	Value object = state.registers[inst.b];
+
+	Value* old_registers = state.registers;
+	state.registers = &(state.registers[inst.c]);
+	
+	//Search for first method
+	Symbol method = Symbol(state, generic.toString(state) + "." + object.type.toString());
+	bool success = state.global->get(state, method, state.registers[0] /* because we've rebased the registers pointer*/);
+	
+	//Search for default
+	if(!success) {
+		method = Symbol(state, generic.toString(state) + ".default");
+		bool success = state.global->get(state, method, state.registers[0] /* because we've rebased the registers pointer*/);
+		if(!success) {
+			if(!success) throw RiposteError(std::string("no applicable method for '") + generic.toString(state) + "' applied to an object of class \"" + object.type.toString() + "\"");
+		}
+	}
+	state.registers = old_registers;
+
+	Function func = state.registers[inst.c];
+	
+	if(func.body().type == Type::I_closure || func.body().type == Type::I_promise) {
+		Value arguments;
+		state.global->get(state, Symbol(state, "..args"), arguments);
+		
+		Environment* fenv = new Environment(func.s(), state.global);
+		fenv->assign(Symbol(state, "..args"), arguments);
+
+		MatchArgs(state, fenv, func, arguments);
+
+		fenv->assign(Symbol(state, ".Generic"), generic);
+		fenv->assign(Symbol(state, ".Method"), method);
+		fenv->assign(Symbol(state, ".Class"), Symbol(state, object.type.toString()));
+	
+		eval(state, Closure(func.body()).bind(fenv));
+	}
+	else
+		state.registers[0] = func.body();
+	return 1;
 }
 static int64_t get_op(State& state, Closure const& closure, Instruction const& inst) {
 	Value* old_registers = state.registers;
