@@ -5,7 +5,8 @@
 // predefined symbols
 
 #define SYMBOLS_ENUM(_, p) 				\
-	_(NA, "", p) /* this should have the same string representation as something else so it will be masked in the string table. */ \
+	_(NA, "<NA>", p) /* this should have the same string representation as something else so it will be masked in the string table. */ \
+	_(NArep, "<NA>", p) \
 	_(empty, "", p) \
 	_(dots, "...", p) \
 	_(Logical, "logical", p)\

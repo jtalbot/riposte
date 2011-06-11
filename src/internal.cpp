@@ -34,7 +34,6 @@ int64_t function(State& state, Call const& call, List const& args) {
 		state.registers[0] = 	
 			Function(parameters, body, Character::NA(), state.global);
 	else {
-		printf("making function with body\n");
 		state.registers[0] = 	
 			Function(parameters, body, force(state, args[2]), state.global);
 	
@@ -448,6 +447,29 @@ int64_t lapply(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
+int64_t tlist(State& state, Call const& call, List const& args) {
+	int64_t length = args.length > 0 ? 1 : 0;
+	List a = Clone(args);
+	for(int64_t i = 0; i < a.length; i++) {
+		a[i] = force(state, a[i]);
+		if(a[i].isVector() && a[i].length != 0 && length != 0)
+			length = std::max(length, a[i].length);
+	}
+	List result(length);
+	for(int64_t i = 0; i < length; i++) {
+		List element(args.length);
+		for(int64_t j = 0; j < a.length; j++) {
+			if(a[j].isVector())
+				element[j] = Element2(Vector(a[j]), i%a[j].length);
+			else
+				element[j] = a[j];
+		}
+		result[i] = element;
+	}
+	state.registers[0] = result;
+	return 1;
+}
+
 int64_t source(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	Value file = force(state, args[0]);
@@ -764,11 +786,14 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "eval"), v);
 	CFunction(quote).toValue(v);
 	env->assign(Symbol(state, "quote"), v);
-	CFunction(lapply).toValue(v);
-	env->assign(Symbol(state, "lapply"), v);
 	CFunction(source).toValue(v);
 	env->assign(Symbol(state, "source"), v);
 
+	CFunction(lapply).toValue(v);
+	env->assign(Symbol(state, "lapply"), v);
+	CFunction(tlist).toValue(v);
+	env->assign(Symbol(state, "t.list"), v);
+	
 	CFunction(environment).toValue(v);
 	env->assign(Symbol(state, "environment"), v);
 	CFunction(parentframe).toValue(v);

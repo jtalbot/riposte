@@ -47,6 +47,7 @@ struct Value {
 	bool isSymbol() const { return type == Type::R_symbol; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
+	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isList(); }
 	static const Value NIL;
 };
 
