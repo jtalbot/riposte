@@ -27,11 +27,6 @@ struct FoldOp {
 	typedef X RV;
 	typedef typename X::Element A;
 	typedef typename X::Element R;
-	
-/*	static typename R eval(State& state, R const& r, A const& a) {
-		if(!AV::CheckNA || !AV::isNA(a)) return eval(state, r, a);
-		else return RV::NAelement;
-	}*/
 };
 
 template<class Op>
@@ -132,7 +127,7 @@ struct ScanLeft {
 
 template<class T>
 T Clone(T const& in) {
-	T out(in.length());
+	T out(in.length);
 	memcpy(out.data(), in.data(), in.length*in.width);
 	out.attributes = in.attributes;
 	return out;	

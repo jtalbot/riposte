@@ -116,15 +116,23 @@ inline void subAssign(State& state, Value const& a, Value const& i, Value const&
 	else _error("NYI: subset assign type");
 }
 
+template<class S, class D>
+inline void Insert(State& state, S const& src, uint64_t srcIndex, D& dst, uint64_t dstIndex, uint64_t length) {
+	if(length > 0 && srcIndex+length > src.length || dstIndex+length > dst.length)
+		_error("insert index out of bounds");
+	D as = As<D>(state, src);
+	memcpy(dst.data(dstIndex), as.data(srcIndex), length*as.width);
+}
+
 inline void Insert(State& state, Vector const& src, uint64_t srcIndex, Vector& dst, uint64_t dstIndex, uint64_t length) {
-	if(srcIndex+length > src.length || dstIndex+length > dst.length)
+	if(length > 0 && srcIndex+length > src.length || dstIndex+length > dst.length)
 		_error("insert index out of bounds");
 	Vector as = As(state, dst.type, src);
 	memcpy(dst.data(dstIndex), as.data(srcIndex), length*as.width);
 }
 
 inline Vector Subset(Vector const& src, uint64_t start, uint64_t length) {
-	if(start+length > src.length)
+	if(length > 0 && start+length > src.length)
 		_error("subset index out of bounds");
 	Vector v(src.type, length);
 	memcpy(v.data(0), src.data(start), length*src.width);

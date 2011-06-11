@@ -224,7 +224,7 @@ uint64_t flatten(State& state, Call const& call, List const& args) {
 	List from = force(state, args[0]);
 	uint64_t length = 0;
 	for(uint64_t i = 0; i < from.length; i++) length += from[i].length;
-	Vector out = List(length);
+	List out = List(length);
 	uint64_t j = 0;
 	for(uint64_t i = 0; i < from.length; i++) {
 		Insert(state, from[i], 0, out, j, from[i].length);

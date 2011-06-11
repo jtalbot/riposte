@@ -193,11 +193,14 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		//compile the default parameters	
 		List c = PairList(call[1]);
 		List parameters(c.length);
-		uint64_t j = 0;
 		for(uint64_t i = 0; i < parameters.length; i++) {
-			parameters[j] = compile(c[i]);
-			parameters[j].type = Type::I_default;
-			j++;
+			if(!c[i].isNil()) {
+				parameters[i] = compile(c[i]);
+				parameters[i].type = Type::I_default;
+			}
+			else {
+				parameters[i] = c[i];
+			}
 		}
 		Vector n = getNames(c.attributes);
 		if(n.type != Type::R_null) {

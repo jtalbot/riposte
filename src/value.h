@@ -35,6 +35,7 @@ struct Value {
 	Attributes* attributes;
 	Type type;
 
+	bool isNil() const { return type == Type::I_nil; }
 	bool isNull() const { return type == Type::R_null; }
 	bool isLogical() const { return type == Type::R_logical; }
 	bool isInteger() const { return type == Type::R_integer; }
@@ -480,7 +481,7 @@ void eval(State& state, Closure const& closure);
 class CompiledCall {
 	struct Inner : public gc {
 		Value call;
-		Value parameters; // a list of closures
+		Value arguments; // a list of closures
 		uint64_t dots;
 	};
 
@@ -501,7 +502,7 @@ public:
 	}
 	
 	Call call() const { return Call(inner->call); }
-	List parameters() const { return List(inner->parameters); }
+	List arguments() const { return List(inner->arguments); }
 	uint64_t dots() const { return inner->dots; }
 };
 
@@ -670,18 +671,18 @@ struct Pairs {
 	const Value& value(uint64_t i) const { return p[i].v; }
 	const Symbol& name(uint64_t i) const { return p[i].n; }
 	
-	operator List() const {
+	List toList(bool forceNames) const {
 		List l(length());
 		for(uint64_t i = 0; i < length(); i++)
 			l[i] = value(i);
 		bool named = false;
 		for(uint64_t i = 0; i < length(); i++) {
-			if(name(i).i != 0) {
+			if(name(i) != Symbol::empty) {
 				named = true;
 				break;
 			}
 		}
-		if(named) {
+		if(named || forceNames) {
 			Character n(length());
 			for(uint64_t i = 0; i < length(); i++)
 				n[i] = name(i).i;
