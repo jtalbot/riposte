@@ -1,5 +1,6 @@
 
 #include "compiler.h"
+#include "internal.h"
 
 static ByteCode op(Symbol const& s) {
 	switch(s.Enum()) {
@@ -93,14 +94,20 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	Symbol func = Symbol::E_NA;
 	if(call[0].type == Type::R_symbol)
 		func = Symbol(call[0]);
+	else if(call[0].type == Type::R_character && call[0].length > 0)
+		func = Character(call[0])[0];
 	
 	switch(func.Enum()) {
 
 	case Symbol::E_internal: 
 	{
+		// The riposte way... .Internal is a function on symbols, returning the internal function
 		if(call[1].type == Type::R_symbol) {
-			// The riposte way... .Internal is a function on symbols, returning the internal function
 			closure.code().push_back(Instruction(ByteCode::iget, Symbol(call[1]).i, initialDepth));
+			registerDepth = initialDepth;
+			return registerDepth++;
+		 } else if(call[1].type == Type::R_character && call[1].length > 0) {
+			closure.code().push_back(Instruction(ByteCode::iget, Character(call[1])[0].i, initialDepth));
 			registerDepth = initialDepth;
 			return registerDepth++;
 		} else if(call[1].type == Type::R_call) {
@@ -112,7 +119,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 			c[0] = ic;
 			return compile(c, closure);
 		} else {
-			throw CompileError(".Internal has invalid arguments");
+			throw CompileError(std::string(".Internal has invalid arguments (") + call[1].type.toString() + ")");
 		}
 	} break;
 	case Symbol::E_assign:
@@ -128,15 +135,13 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 			
 			for(uint64_t i = 0; i < c.length; i++) { n[i] = c[i]; }
 			Character nnames(c.length+1);
-			Vector vnames = getNames(c.attributes);
-			if(!Value(vnames).isNull()) {
-				Character cnames(vnames);
-				for(uint64_t i = 0; i < c.length; i++) { nnames[i] = cnames[i]; }
+			if(hasNames(c)) {
+				Insert(state, getNames(c), 0, nnames, 0, c.length);
 			}
 			n[0] = Symbol(state, Symbol(c[0]).toString(state) + "<-");
 			n[c.length] = value;
 			nnames[c.length] = Symbol(state, "value");
-			setNames(n.attributes, nnames);
+			setNames(n, nnames);
 			value = n; 
 			dest = c[1];
 		}
@@ -202,10 +207,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 				parameters[i] = c[i];
 			}
 		}
-		Vector n = getNames(c.attributes);
-		if(n.type != Type::R_null) {
-			setNames(parameters.attributes, n);
-		}
+		setNames(parameters, getNames(c));
 		closure.constants().push_back(parameters);
 
 		//compile the source for the body
@@ -316,6 +318,7 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	} break;
 	case Symbol::E_ifSym: 
 	{
+		closure.code().push_back(Instruction(ByteCode::null, 0, 0, registerDepth++));
 		uint64_t cond = compile(call[1], closure);
 		closure.code().push_back(Instruction(ByteCode::if1, 0, cond));
 		uint64_t begin1 = closure.code().size(), begin2 = 0;
@@ -469,8 +472,8 @@ uint64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_UseMethod:
 	{
 		uint64_t generic = compile(call[1], closure);
-		uint64_t object = compile(call[2], closure);
-		closure.code().push_back(Instruction(ByteCode::UseMethod, generic, object, initialDepth));
+		if(call.length == 3) compile(call[2], closure);
+		closure.code().push_back(Instruction(ByteCode::UseMethod, generic, call.length==3 ? 1 : 0, initialDepth));
 		registerDepth = initialDepth;
 		return registerDepth++;
 	} break;

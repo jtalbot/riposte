@@ -43,33 +43,45 @@ std::string stringifyVector(State const& state, T const& v) {
 
 	bool dots = false;
 	if(length > 100) { dots = true; length = 100; }
-	Value names = getNames(v.attributes);
 	uint64_t maxlength = 1;
 	for(uint64_t i = 0; i < length; i++) {
-		if(names.type == Type::R_character) {
-			Character c(names);
+		maxlength = std::max((uint64_t)maxlength, (uint64_t)toString(state, v[i]).length());
+	}
+	if(hasNames(v)) {
+		Character c = getNames(v);
+		for(uint64_t i = 0; i < length; i++) {
 			maxlength = std::max((uint64_t)maxlength, (uint64_t)c[i].toString(state).length());
 		}
-		maxlength = std::max((uint64_t)maxlength, (uint64_t)toString(state, v[i]).length());
 	}
 	uint64_t indexwidth = intToStr(length+1).length();
 	uint64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
-	for(uint64_t i = 0; i < length; i+=perline) {
-		if(names.type == Type::R_character) {
-			Character c(names);
+	if(hasNames(v)) {
+		Character c = getNames(v);
+		for(uint64_t i = 0; i < length; i+=perline) {
 			result = result + pad("", indexwidth+2);
 			for(uint64_t j = 0; j < perline && i+j < length; j++) {
 				result = result + pad(c[i+j].toString(state), maxlength+1);
 			}
 			result = result + "\n";
-		}
-		result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
-		for(uint64_t j = 0; j < perline && i+j < length; j++) {
-			result = result + pad(toString(state, v[i+j]), maxlength+1);
-		}
+			result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
+			for(uint64_t j = 0; j < perline && i+j < length; j++) {
+				result = result + pad(toString(state, v[i+j]), maxlength+1);
+			}
 	
-		if(i+perline < length)	
-			result = result + "\n";
+			if(i+perline < length)	
+				result = result + "\n";
+		}
+	}
+	else {
+		for(uint64_t i = 0; i < length; i+=perline) {
+			result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
+			for(uint64_t j = 0; j < perline && i+j < length; j++) {
+				result = result + pad(toString(state, v[i+j]), maxlength+1);
+			}
+	
+			if(i+perline < length)	
+				result = result + "\n";
+		}
 	}
 	if(dots) result = result + " ...";
 	return result;
@@ -99,13 +111,12 @@ std::string State::stringify(Value const& value) const {
 		case Type::E_R_pairlist:
 		{
 			List v(value);
-			Value names = getNames(v.attributes);
 
 			uint64_t length = v.length;
 			if(length > 100) { dots = true; length = 100; }
 			result = "";
-			if(names.type == Type::R_character) {
-				Character n(names);
+			if(hasNames(v)) {
+				Character n = getNames(v);
 				for(uint64_t i = 0; i < length; i++) {
 					if(n[i].toString(*this)=="")
 						result = result + "[[" + intToStr(i+1) + "]]\n";

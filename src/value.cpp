@@ -38,7 +38,7 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 		: inner(new Inner(parameters, body, str, s)), attributes(0) {
 		inner->dots = parameters.length;
 		if(parameters.length > 0) {
-			Character names(getNames(parameters.attributes));
+			Character names = getNames(parameters);
 			uint64_t i = 0;
 			for(;i < names.length; i++) if(Symbol(names[i]) == Symbol::dots) inner->dots = i;
 		}
@@ -66,9 +66,8 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 				arguments[i-1] = call[i];
 			}
 		}
-		Vector n = getNames(call.attributes);
-		if(n.type != Type::R_null) {
-			setNames(arguments.attributes, Subset(n, 1, call.length-1));
+		if(hasNames(call)) {
+			setNames(arguments, Subset(getNames(call), 1, call.length-1));
 		}
 		inner->arguments = arguments;
 	}

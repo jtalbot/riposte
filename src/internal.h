@@ -160,5 +160,19 @@ inline Value Element2(Vector const& src, uint64_t index)
 	else return Subset(src, index, 1);
 }
 
+inline Character klass(State& state, Value const& v)
+{
+	if(!hasClass(v)) {
+		Character c(1);
+		c[0] = Symbol(state, (v).type.toString());
+		return c;
+	}
+	else {
+		return getClass(v);
+	}
+	return 1;
+}
+
+
 #endif
 

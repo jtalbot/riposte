@@ -603,59 +603,79 @@ public:
 };
 
 struct Attributes : public gc {
-	Value names;
-	Value dim;
-	Value dimnames;
-	Value klass;
-	Attributes() : names(Null::singleton), dim(Null::singleton), 
-			dimnames(Null::singleton), klass(Null::singleton) {}
+	typedef std::map<Symbol, Value, std::less<Symbol>, gc_allocator<std::pair<Symbol, Value> > > Container;
+	Container container;
 };
 
-
-inline void setNames(Attributes*& attrs, Vector const& names) {
-	Attributes* a = new Attributes();
-	if(attrs != 0)
-		*a = *attrs;
-	a->names = names;
-	attrs = a;
+inline bool hasAttribute(Value const& v, Symbol s) {
+	return (v.attributes != 0) && v.attributes->container.find(s) != v.attributes->container.end();
 }
 
-inline Vector getNames(Attributes const* attrs) {
-	if(attrs == 0)
-		return Null::singleton;
-	else return attrs->names;
+inline bool hasNames(Value const& v) {
+	return hasAttribute(v, Symbol::names);
 }
 
-inline void setClass(Attributes*& attrs, Vector const& klass) {
-	Attributes* a = new Attributes();
-	if(attrs != 0)
-		*a = *attrs;
-	a->klass = klass;
-	attrs = a;
+inline bool hasClass(Value const& v) {
+	return hasAttribute(v, Symbol::classSym);
 }
 
-inline Vector getClass(Attributes const* attrs) {
-	if(attrs == 0)
-		return Null::singleton;
-	else return attrs->klass;
+inline bool hasDim(Value const& v) {
+	return hasAttribute(v, Symbol::dim);
 }
 
-inline void setDim(Attributes*& attrs, Vector const& dim) {
-	Attributes* a = new Attributes();
-	if(attrs != 0)
-		*a = *attrs;
-	a->dim = dim;
-	attrs = a;
+inline Value getAttribute(Value const& v, Symbol s) {
+	if(v.attributes == 0) return Null::singleton;
+	else {
+		Attributes::Container::const_iterator i = v.attributes->container.find(s);
+		if(i != v.attributes->container.end()) return i->second;
+		else return Null::singleton;
+	}
 }
 
-inline Vector getDim(Attributes const* attrs) {
-	if(attrs == 0)
-		return Null::singleton;
-	else return attrs->dim;
+inline Value getNames(Value const& v) {
+	return getAttribute(v, Symbol::names);
+}
+
+inline Value getClass(Value const& v) {
+	return getAttribute(v, Symbol::classSym);
+}
+
+inline Value getDim(Value const& v) {
+	return getAttribute(v, Symbol::dim);
+}
+
+template<class T, class A>
+inline T setAttribute(T& v, Symbol s, A const a) {
+	Attributes* attributes = new Attributes();
+	if(v.attributes != 0)
+		*attributes = *v.attributes;
+	v.attributes = attributes;
+	Value av = (Value)a;
+	if(av.isNull()) {
+		v.attributes->container.erase(s);
+	} else {
+		v.attributes->container[s] = av;
+	}
+	return v;
+}
+
+template<class T, class A>
+inline T setNames(T& v, A const a) {
+	return setAttribute(v, Symbol::names, a);
+}
+
+template<class T, class A>
+inline T setClass(T& v, A const a) {
+	return setAttribute(v, Symbol::classSym, a);
+}
+
+template<class T, class A>
+inline T setDim(T& v, A const a) {
+	return setAttribute(v, Symbol::dim, a);
 }
 
 inline bool isObject(Value const& v) {
-	return v.attributes != 0 && v.attributes->klass.isNull();// != Null::singleton;
+	return hasClass(v);
 }
 
 struct Pairs {
@@ -686,7 +706,7 @@ struct Pairs {
 			Character n(length());
 			for(uint64_t i = 0; i < length(); i++)
 				n[i] = name(i).i;
-			setNames(l.attributes, n);
+			setNames(l, n);
 		}
 		return l;
 	}

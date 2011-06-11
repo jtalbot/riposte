@@ -34,10 +34,10 @@
 
 static void MatchArgs(State& state, Environment* fenv, Function const& func, List const& arguments) {
 	List parameters = func.parameters();
-	Character pnames = getNames(parameters.attributes);
+	Character pnames = getNames(parameters);
 		
 	// call arguments are not named, do posititional matching
-	if(Value(getNames(arguments.attributes)).isNull()) {
+	if(!hasNames(arguments)) {
 		for(uint64_t i = 0; i < std::min(arguments.length, func.dots()); ++i) {
 			fenv->assign(pnames[i], arguments[i]);
 		}
@@ -48,6 +48,7 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 	}
 	// call arguments are named, do matching by name
 	else {
+		Character anames = getNames(arguments);
 		// populate environment with default values
 		for(uint64_t i = 0; i < parameters.length; ++i) {
 			if(!parameters[i].isNil()) fenv->assign(pnames[i], parameters[i]);
@@ -56,7 +57,6 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 		static char assignment[64], set[64];
 		for(uint64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
 		for(uint64_t i = 0; i < parameters.length; i++) set[i] = -1;
-		Character anames = getNames(arguments.attributes);
 		// named args, search for complete matches
 		for(uint64_t i = 0; i < arguments.length; ++i) {
 			if(anames[i] != Symbol::empty) {
@@ -114,7 +114,7 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 					names[idx++] = anames[j];
 				}
 			}
-			setNames(values.attributes, names);
+			setNames(values, names);
 			
 			fenv->assign(Symbol::dots, values);
 		}
@@ -160,21 +160,19 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 			Insert(state, dots, 0, expanded, call.dots(), dots.length);
 			Insert(state, arguments, call.dots(), expanded, call.dots()+dots.length, arguments.length-call.dots()-1);
 			arguments = expanded;
-			if( 	getNames(arguments.attributes).type != Type::R_null ||
-		    		getNames(dots.attributes).type != Type::R_null) {
-				
+			if(hasNames(arguments) || hasNames(dots)) {
 				Character names(expanded.length);
 				for(uint64_t i = 0; i < names.length; i++) names[i] = 0;
-				Vector anames = getNames(arguments.attributes);
-				if(anames.type != Type::R_null) {
-					Insert(state, Character(anames), 0, names, 0, call.dots());
-					Insert(state, Character(anames), call.dots(), names, call.dots()+dots.length, arguments.length-call.dots()-1);
+				if(hasNames(arguments)) {
+					Character anames = getNames(arguments);
+					Insert(state, anames, 0, names, 0, call.dots());
+					Insert(state, anames, call.dots(), names, call.dots()+dots.length, arguments.length-call.dots()-1);
 				}
-				Vector dnames = getNames(dots.attributes);
-				if(dnames.type != Type::R_null) {
-					Insert(state, Character(dnames), 0, names, call.dots(), dots.length);
+				if(hasNames(dots)) {
+					Character dnames = getNames(dots);
+					Insert(state, dnames, 0, names, call.dots(), dots.length);
 				}
-				setNames(arguments.attributes, names);
+				setNames(arguments, names);
 			}
 		}
 	}
@@ -202,21 +200,33 @@ static int64_t UseMethod_op(State& state, Closure const& closure, Instruction co
 		generic = Character(v)[0];
 	else
 		generic = Symbol(v);
-	Value object = state.registers[inst.b];
+	
+	Value arguments;
+	state.global->get(state, Symbol(state, "..args"), arguments);
+	
+	Value object;	
+	if(state.registers[inst.b].i == 1)
+		object = state.registers[inst.a+1];
+	else
+		object = force(state, List(arguments)[0]);
+
+	Character type = klass(state, object);
 
 	Value* old_registers = state.registers;
 	state.registers = &(state.registers[inst.c]);
 	
 	//Search for first method
-	Symbol method = Symbol(state, generic.toString(state) + "." + object.type.toString());
+	Symbol method = Symbol(state, generic.toString(state) + "." + type[0].toString(state));
+	printf("Searching for %s\n", method.toString(state).c_str());
 	bool success = state.global->get(state, method, state.registers[0] /* because we've rebased the registers pointer*/);
 	
 	//Search for default
 	if(!success) {
 		method = Symbol(state, generic.toString(state) + ".default");
 		bool success = state.global->get(state, method, state.registers[0] /* because we've rebased the registers pointer*/);
+	printf("Searching for %s\n", method.toString(state).c_str());
 		if(!success) {
-			if(!success) throw RiposteError(std::string("no applicable method for '") + generic.toString(state) + "' applied to an object of class \"" + object.type.toString() + "\"");
+			if(!success) throw RiposteError(std::string("no applicable method for '") + generic.toString(state) + "' applied to an object of class \"" + type[0].toString(state) + "\"");
 		}
 	}
 	state.registers = old_registers;
@@ -224,9 +234,6 @@ static int64_t UseMethod_op(State& state, Closure const& closure, Instruction co
 	Function func = state.registers[inst.c];
 	
 	if(func.body().type == Type::I_closure || func.body().type == Type::I_promise) {
-		Value arguments;
-		state.global->get(state, Symbol(state, "..args"), arguments);
-		
 		Environment* fenv = new Environment(func.s(), state.global);
 		fenv->assign(Symbol(state, "..args"), arguments);
 
@@ -234,7 +241,7 @@ static int64_t UseMethod_op(State& state, Closure const& closure, Instruction co
 
 		fenv->assign(Symbol(state, ".Generic"), generic);
 		fenv->assign(Symbol(state, ".Method"), method);
-		fenv->assign(Symbol(state, ".Class"), Symbol(state, object.type.toString()));
+		fenv->assign(Symbol(state, ".Class"), type);
 	
 		eval(state, Closure(func.body()).bind(fenv));
 	}

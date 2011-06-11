@@ -111,19 +111,46 @@ uint64_t mode(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
+uint64_t inherits(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 3);
+	Value x = force(state, args[0]);
+	Character what = force(state, args[1]);
+	Logical which = force(state, args[2]);
+	// NYI: which
+	Character c = klass(state, x);
+	bool inherits = false;
+	for(uint64_t i = 0; i < what.length && !inherits; i++) {
+		for(uint64_t j = 0; j < c.length && !inherits; j++) {
+			if(what[i] == c[j]) inherits = true;
+		}
+	}
+	state.registers[0] = Logical::c(inherits);
+	return 1;
+}
+
+uint64_t attr(State& state, Call const& call, List const& args)
+{
+	checkNumArgs(args, 3);
+	// NYI: exact
+	Value object = force(state, args[0]);
+	Character which = force(state, args[1]);
+	state.registers[0] = getAttribute(object, which[0]);
+	return 1;
+}
+
+uint64_t assignAttr(State& state, Call const& call, List const& args)
+{
+	checkNumArgs(args, 3);
+	Value object = force(state, args[0]);
+	Character which = force(state, args[1]);
+	state.registers[0] = setAttribute(object, which[0], force(state, args[2]));
+	return 1;
+}
+
 uint64_t klass(State& state, Call const& call, List const& args)
 {
 	checkNumArgs(args, 1);
-	Value v = force(state, args[0]);
-	Vector r = getClass(v.attributes);	
-	if(r.type == Type::R_null) {
-		Character c(1);
-		c[0] = Symbol(state, (v).type.toString());
-		state.registers[0] = c;
-	}
-	else {
-		state.registers[0] = r;
-	}
+	state.registers[0] = klass(state, force(state, args[0]));
 	return 1;
 }
 
@@ -131,18 +158,14 @@ uint64_t assignKlass(State& state, Call const& call, List const& args)
 {
 	checkNumArgs(args, 2);
 	Value v = force(state, args[0]);
-	Value k = force(state, args[1]);
-	setClass(v.attributes, k);
-	state.registers[0] = v;
+	state.registers[0] = setClass(v, As<Character>(state, force(state, args[1])));
 	return 1;
 }
 
 uint64_t names(State& state, Call const& call, List const& args)
 {
 	checkNumArgs(args, 1);
-	Value v = force(state, args[0]);
-	Value r = getNames(v.attributes);
-	state.registers[0] = r;	
+	state.registers[0] = getNames(force(state, args[0]));
 	return 1;
 }
 
@@ -150,18 +173,14 @@ uint64_t assignNames(State& state, Call const& call, List const& args)
 {
 	checkNumArgs(args, 2);
 	Value v = force(state, args[0]);
-	Value k = force(state, args[1]);
-	setNames(v.attributes, As<Character>(state,k));
-	state.registers[0] = v;
+	state.registers[0] = setNames(v, As<Character>(state, force(state, args[1])));
 	return 1;
 }
 
 uint64_t dim(State& state, Call const& call, List const& args)
 {
 	checkNumArgs(args, 1);
-	Value v = force(state, args[0]);
-	Value r = getDim(v.attributes);
-	state.registers[0]= r;	
+	state.registers[0] = getDim(force(state, args[0]));
 	return 1;
 }
 
@@ -169,9 +188,7 @@ uint64_t assignDim(State& state, Call const& call, List const& args)
 {
 	checkNumArgs(args, 2);
 	Value v = force(state, args[0]);
-	Value k = force(state, args[1]);
-	setDim(v.attributes, k);
-	state.registers[0] = v;
+	state.registers[0] = setDim(v, As<Integer>(state, force(state, args[1])));
 	return 1;
 }
 
@@ -199,10 +216,9 @@ uint64_t c(State& state, Call const& call, List const& Args) {
 		j += args[i].length;
 	}
 	
-	Vector n = getNames(Args.attributes);
-	if(n.type != Type::R_null)
+	if(hasNames(Args))
 	{
-		Character names(n);
+		Character names = getNames(Args);
 		Character outnames(total);
 		uint64_t j = 0;
 		for(uint64_t i = 0; i < args.size(); i++) {
@@ -211,7 +227,7 @@ uint64_t c(State& state, Call const& call, List const& Args) {
 				outnames[j] = names[i];
 			}
 		}
-		setNames(out.attributes, outnames);
+		setNames(out, outnames);
 	}
 	state.registers[0] = out;
 	return 1;
@@ -220,9 +236,7 @@ uint64_t c(State& state, Call const& call, List const& Args) {
 uint64_t list(State& state, Call const& call, List const& args) {
 	List out(args.length);
 	for(uint64_t i = 0; i < args.length; i++) out[i] = force(state, args[i]);
-	Vector n = getNames(args.attributes);
-	if(n.type != Type::R_null)
-		setNames(out.attributes, n);
+	out.attributes = args.attributes;
 	state.registers[0] = out;
 	return 1;
 }
@@ -340,20 +354,18 @@ uint64_t subset2(State& state, Call const& call, List const& args) {
 
         Value a = force(state, args[0]);
         Value b = force(state, args[1]);
-	if(b.type == Type::R_character) {
+	if(b.type == Type::R_character && hasNames(a)) {
 		Symbol i = Character(b)[0];
-		Value r = getNames(a.attributes);
-		if(r.type != Type::R_null) {
-			Character c(r);
-			uint64_t j = 0;
-			for(;j < c.length; j++) {
-				if(c[j] == i)
-					break;
-			}
-			if(j < c.length) {
-				state.registers[0] = Element2(a, j);
-				return 1;
-			}
+		Character c = getNames(a);
+		
+		uint64_t j = 0;
+		for(;j < c.length; j++) {
+			if(c[j] == i)
+				break;
+		}
+		if(j < c.length) {
+			state.registers[0] = Element2(a, j);
+			return 1;
 		}
 	}
 	else if(b.type == Type::R_integer) {
@@ -373,9 +385,8 @@ uint64_t dollar(State& state, Call const& call, List const& args) {
 
         Value a = force(state, args[0]);
         uint64_t i = Symbol(expression(args[1])).i;
-	Value r = getNames(a.attributes);
-	if(r.type != Type::R_null) {
-		Character c(r);
+	if(hasNames(a)) {
+		Character c = getNames(a);
 		uint64_t j = 0;
 		for(;j < c.length; j++) {
 			if(c[j] == i)
@@ -462,9 +473,8 @@ uint64_t switch_fn(State& state, Call const& call, List const& args) {
 	} else if(one.type == Type::R_double && Double(one).length == 1) {
 		int64_t i = (int64_t)Double(one)[0];
 		if(i >= 1 && (uint64_t)i <= args.length) {state.registers[0] = force(state, args[i]); return 1; }
-	} else if(one.type == Type::R_character && Character(one).length == 1 && 
-			getNames(args.attributes).type != Type::R_null) {
-		Character names(getNames(args.attributes));
+	} else if(one.type == Type::R_character && Character(one).length == 1 && hasNames(args)) {
+		Character names = getNames(args);
 		for(uint64_t i = 1; i < args.length; i++) {
 			if(names[i] == Character(one)[0]) {
 				while(args[i].type == Type::I_nil && i < args.length) i++;
@@ -685,12 +695,18 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "storage.mode"), v);
 	CFunction(mode).toValue(v);
 	env->assign(Symbol(state, "mode"), v);
+	CFunction(inherits).toValue(v);
+	env->assign(Symbol(state, "inherits"), v);
 
 	CFunction(sequence).toValue(v);
 	env->assign(Symbol(state, "seq"), v);
 	CFunction(repeat).toValue(v);
 	env->assign(Symbol(state, "rep"), v);
 	
+	CFunction(attr).toValue(v);
+	env->assign(Symbol(state, "attr"), v);
+	CFunction(assignAttr).toValue(v);
+	env->assign(Symbol(state, "attr<-"), v);
 	CFunction(klass).toValue(v);
 	env->assign(Symbol(state, "class"), v);
 	CFunction(assignKlass).toValue(v);
