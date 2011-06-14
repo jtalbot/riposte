@@ -33,20 +33,6 @@ int64_t library(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
-int64_t function(State& state, Call const& call, List const& args) {
-	Value parameters = force(state, args[0]);
-	Value body = args[1];
-	if(args.length == 2)
-		state.registers[0] = 	
-			Function(parameters, body, Character::NA(), state.global);
-	else {
-		state.registers[0] = 	
-			Function(parameters, body, force(state, args[2]), state.global);
-	
-	}
-	return 1;
-}
-
 int64_t rm(State& state, Call const& call, List const& args) {
 	for(int64_t i = 0; i < args.length; i++) 
 		if(expression(args[i]).type != Type::R_symbol && expression(args[i]).type != Type::R_character) 
@@ -94,28 +80,6 @@ int64_t repeat(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
-int64_t typeOf(State& state, Call const& call, List const& args) {
-	checkNumArgs(args, 1);
-	Character c(1);
-	c[0] = Symbol(state, force(state, args[0]).type.toString());
-	state.registers[0] = c;
-	return 1;
-}
-
-int64_t mode(State& state, Call const& call, List const& args) {
-	checkNumArgs(args, 1);
-	Character c(1);
-	Value v = force(state, args[0]);
-	if(v.type == Type::R_integer || v.type == Type::R_double)
-		c[0] = Symbol(state, "numeric");
-	else if(v.type == Type::R_symbol)
-		c[0] = Symbol(state, "name");
-	else
-		c[0] = Symbol(state, v.type.toString());
-	state.registers[0] = c;
-	return 1;
-}
-
 int64_t inherits(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 3);
 	Value x = force(state, args[0]);
@@ -152,90 +116,11 @@ int64_t assignAttr(State& state, Call const& call, List const& args)
 	return 1;
 }
 
-int64_t klass(State& state, Call const& call, List const& args)
-{
-	checkNumArgs(args, 1);
-	state.registers[0] = klass(state, force(state, args[0]));
-	return 1;
-}
-
-int64_t assignKlass(State& state, Call const& call, List const& args)
-{
-	checkNumArgs(args, 2);
-	Value v = force(state, args[0]);
-	state.registers[0] = setClass(v, As<Character>(state, force(state, args[1])));
-	return 1;
-}
-
-int64_t names(State& state, Call const& call, List const& args)
-{
-	checkNumArgs(args, 1);
-	state.registers[0] = getNames(force(state, args[0]));
-	return 1;
-}
-
-int64_t assignNames(State& state, Call const& call, List const& args)
-{
-	checkNumArgs(args, 2);
-	Value v = force(state, args[0]);
-	state.registers[0] = setNames(v, As<Character>(state, force(state, args[1])));
-	return 1;
-}
-
-int64_t dim(State& state, Call const& call, List const& args)
-{
-	checkNumArgs(args, 1);
-	state.registers[0] = getDim(force(state, args[0]));
-	return 1;
-}
-
-int64_t assignDim(State& state, Call const& call, List const& args)
-{
-	checkNumArgs(args, 2);
-	Value v = force(state, args[0]);
-	state.registers[0] = setDim(v, As<Integer>(state, force(state, args[1])));
-	return 1;
-}
-
 Type cTypeCast(Value const& v, Type t)
 {
 	Type r;
 	r.v = std::max(v.type.Enum(), t.Enum());
 	return r;
-}
-
-int64_t c(State& state, Call const& call, List const& Args) {
-	int64_t total = 0;
-	Type type = Type::R_null;
-	std::vector<Vector> args;
-	
-	for(int64_t i = 0; i < Args.length; i++) {
-		args.push_back(Vector(force(state, Args[i])));
-		total += args[i].length;
-		type = cTypeCast(args[i], type);
-	}
-	Vector out(type, total);
-	int64_t j = 0;
-	for(int64_t i = 0; i < (int64_t)args.size(); i++) {
-		Insert(state, args[i], 0, out, j, args[i].length);
-		j += args[i].length;
-	}
-	
-	if(hasNames(Args))
-	{
-		Character names = getNames(Args);
-		Character outnames(total);
-		int64_t j = 0;
-		for(int64_t i = 0; i < (int64_t)args.size(); i++) {
-			for(int64_t m = 0; m < args[i].length; m++, j++) {
-				// NYI: R makes these names distinct
-				outnames[j] = names[i];
-			}
-		}
-		setNames(out, outnames);
-	}
-	state.registers[0] = out;
-	return 1;
 }
 
 int64_t list(State& state, Call const& call, List const& args) {
@@ -267,65 +152,22 @@ int64_t unlist(State& state, Call const& call, List const& args) {
 		Insert(state, Vector(from[i]), 0, out, j, Vector(from[i]).length);
 		j += from[i].length;
 	}
-	state.registers[0] = out;
-	return 1;
-}
-
-int64_t flatten(State& state, Call const& call, List const& args) {
-	Value v = force(state, args[0]);
-	if(!v.isList()) {
-		state.registers[0] = v;
-		return 1;
-	}
-	List from = v;
-	int64_t length = 0;
-	for(int64_t i = 0; i < from.length; i++) length += from[i].length;
-	List out = List(length);
-	int64_t j = 0;
-	for(int64_t i = 0; i < from.length; i++) {
-		Insert(state, from[i], 0, out, j, from[i].length);
-		j += from[i].length;
+	if(hasNames(from))
+	{
+		Character names = getNames(from);
+		Character outnames(total);
+		int64_t j = 0;
+		for(int64_t i = 0; i < (int64_t)from.length; i++) {
+			for(int64_t m = 0; m < from[i].length; m++, j++) {
+				// NYI: R makes these names distinct
+				outnames[j] = names[i];
+			}
+		}
+		setNames(out, outnames);
 	}
 	state.registers[0] = out;
 	return 1;
 }
-
-int64_t vector(State& state, Call const& call, List const& args) {
-	checkNumArgs(args, 2);
-	Value mode = force(state, args[0]);
-	Value length = force(state, args[1]);
-	double l = asReal1(length);
-	Symbol m = Character(mode)[0];
-	if(m == Symbol::Logical) state.registers[0] = Logical((int64_t)l);
-	else if(m == Symbol::Integer) state.registers[0] = Integer((int64_t)l);
-	else if(m == Symbol::Double || m == Symbol::Numeric) state.registers[0] =  Double((int64_t)l);
-	else if(m == Symbol::Complex) state.registers[0] =  Complex((int64_t)l);
-	else if(m == Symbol::Character) state.registers[0] =  Character((int64_t)l);
-	else if(m == Symbol::Raw) state.registers[0] =  Raw((int64_t)l);
-	else _error("cannot make a vector of mode '" + m.toString(state) + "'");
-	return 1;
-}
-
-/*
-int64_t UseMethod(State& state, int64_t nargs)
-{
-	return 0;
-}
-
-int64_t plusOp(State& state, int64_t nargs) {
-	if(nargs == 1)
-		return unaryArith<Zip1, PosOp>(state, nargs);
-	else
-		return binaryArith<Zip2, AddOp>(state, nargs);
-}
-
-int64_t minusOp(State& state, int64_t nargs) {
-	if(nargs == 1)
-		return unaryArith<Zip1, NegOp>(state, nargs);
-	else
-		return binaryArith<Zip2, SubOp>(state, nargs);
-}
-*/
 
 Vector Subset(State& state, Vector const& a, Vector const& i)	{
 	if(i.type == Type::R_double || i.type == Type::R_integer) {
@@ -755,142 +597,65 @@ int64_t substitute(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
-void addMathOps(State& state)
+
+void importCoreLibrary(State& state)
 {
-	Value v;
 	Environment* env = state.path[0];
 
-	CFunction(max_fn).toValue(v);
-	env->assign(Symbol(state, "max"), v);
-	CFunction(min_fn).toValue(v);
-	env->assign(Symbol(state, "min"), v);
-	CFunction(sum_fn).toValue(v);
-	env->assign(Symbol(state, "sum"), v);
-	CFunction(prod_fn).toValue(v);
-	env->assign(Symbol(state, "prod"), v);
-	CFunction(cummax_fn).toValue(v);
-	env->assign(Symbol(state, "cummax"), v);
-	CFunction(cummin_fn).toValue(v);
-	env->assign(Symbol(state, "cummin"), v);
-	CFunction(cumsum_fn).toValue(v);
-	env->assign(Symbol(state, "cumsum"), v);
-	CFunction(cumprod_fn).toValue(v);
-	env->assign(Symbol(state, "cumprod"), v);
-	CFunction(any_fn).toValue(v);
-	env->assign(Symbol(state, "any"), v);
-	CFunction(all_fn).toValue(v);
-	env->assign(Symbol(state, "all"), v);
-	CFunction(nchar_fn).toValue(v);
-	env->assign(Symbol(state, "nchar"), v);
-	CFunction(nzchar_fn).toValue(v);
-	env->assign(Symbol(state, "nzchar"), v);
+	env->assign(Symbol(state,"max"), CFunction(max_fn));
+	env->assign(Symbol(state,"min"), CFunction(min_fn));
+	env->assign(Symbol(state,"sum"), CFunction(sum_fn));
+	env->assign(Symbol(state,"prod"), CFunction(prod_fn));
+	env->assign(Symbol(state,"cummax"), CFunction(cummax_fn));
+	env->assign(Symbol(state,"cummin"), CFunction(cummin_fn));
+	env->assign(Symbol(state,"cumsum"), CFunction(cumsum_fn));
+	env->assign(Symbol(state,"cumprod"), CFunction(cumprod_fn));
+	env->assign(Symbol(state,"any"), CFunction(any_fn));
+	env->assign(Symbol(state,"all"), CFunction(all_fn));
+	env->assign(Symbol(state,"nchar"), CFunction(nchar_fn));
+	env->assign(Symbol(state,"nzchar"), CFunction(nzchar_fn));
+	env->assign(Symbol(state,"is.na"), CFunction(isna_fn));
+	env->assign(Symbol(state,"is.nan"), CFunction(isnan_fn));
+	env->assign(Symbol(state,"is.finite"), CFunction(isfinite_fn));
+	env->assign(Symbol(state,"is.infinite"), CFunction(isinfinite_fn));
 	
-	CFunction(isna_fn).toValue(v);
-	env->assign(Symbol(state, "is.na"), v);
-	CFunction(isnan_fn).toValue(v);
-	env->assign(Symbol(state, "is.nan"), v);
-	CFunction(isfinite_fn).toValue(v);
-	env->assign(Symbol(state, "is.finite"), v);
-	CFunction(isinfinite_fn).toValue(v);
-	env->assign(Symbol(state, "is.infinite"), v);
+	env->assign(Symbol(state,"cat"), CFunction(cat));
+	env->assign(Symbol(state,"library"), CFunction(library));
+	env->assign(Symbol(state,"rm"), CFunction(rm));
+	env->assign(Symbol(state,"inherits"), CFunction(inherits));
 	
-	CFunction(cat).toValue(v);
-	env->assign(Symbol(state, "cat"), v);
-	CFunction(library).toValue(v);
-	env->assign(Symbol(state, "library"), v);
-	CFunction(function).toValue(v);
-	env->assign(Symbol(state, "function"), v);
-	CFunction(rm).toValue(v);
-	env->assign(Symbol(state, "rm"), v);
-	CFunction(typeOf).toValue(v);
-	env->assign(Symbol(state, "typeof"), v);
-	env->assign(Symbol(state, "storage.mode"), v);
-	CFunction(mode).toValue(v);
-	env->assign(Symbol(state, "mode"), v);
-	CFunction(inherits).toValue(v);
-	env->assign(Symbol(state, "inherits"), v);
+	env->assign(Symbol(state,"seq"), CFunction(sequence));
+	env->assign(Symbol(state,"rep"), CFunction(repeat));
+	
+	env->assign(Symbol(state,"attr"), CFunction(attr));
+	env->assign(Symbol(state,"attr<-"), CFunction(assignAttr));
+	
+	env->assign(Symbol(state,"list"), CFunction(list));
+	env->assign(Symbol(state,"unlist"), CFunction(unlist));
+	env->assign(Symbol(state,"length"), CFunction(length));
+	
+	env->assign(Symbol(state,"["), CFunction(subset));
+	env->assign(Symbol(state,"[["), CFunction(subset2));
+	env->assign(Symbol(state,"$"), CFunction(dollar));
 
-	CFunction(sequence).toValue(v);
-	env->assign(Symbol(state, "seq"), v);
-	CFunction(repeat).toValue(v);
-	env->assign(Symbol(state, "rep"), v);
-	
-	CFunction(attr).toValue(v);
-	env->assign(Symbol(state, "attr"), v);
-	CFunction(assignAttr).toValue(v);
-	env->assign(Symbol(state, "attr<-"), v);
-	CFunction(klass).toValue(v);
-	env->assign(Symbol(state, "class"), v);
-	CFunction(assignKlass).toValue(v);
-	env->assign(Symbol(state, "class<-"), v);
-	CFunction(names).toValue(v);
-	env->assign(Symbol(state, "names"), v);
-	CFunction(assignNames).toValue(v);
-	env->assign(Symbol(state, "names<-"), v);
-	CFunction(dim).toValue(v);
-	env->assign(Symbol(state, "dim"), v);
-	CFunction(assignDim).toValue(v);
-	env->assign(Symbol(state, "dim<-"), v);
-	
-	CFunction(c).toValue(v);
-	env->assign(Symbol(state, "c"), v);
-	CFunction(list).toValue(v);
-	env->assign(Symbol(state, "list"), v);
-	CFunction(unlist).toValue(v);
-	env->assign(Symbol(state, "unlist"), v);
-	CFunction(flatten).toValue(v);
-	env->assign(Symbol(state, "flatten"), v);
+	env->assign(Symbol(state,"switch"), CFunction(switch_fn));
 
-	CFunction(length).toValue(v);
-	env->assign(Symbol(state, "length"), v);
-	
-	CFunction(vector).toValue(v);
-	env->assign(Symbol(state, "vector"), v);
-	
-	CFunction(subset).toValue(v);
-	env->assign(Symbol(state, "["), v);
-	CFunction(subset2).toValue(v);
-	env->assign(Symbol(state, "[["), v);
-	CFunction(dollar).toValue(v);
-	env->assign(Symbol(state, "$"), v);
-/*
-	CFunction(stop).toValue(v);
-	env->assign(Symbol(state, "stop"), v);
-*/
-	
-	CFunction(switch_fn).toValue(v);
-	env->assign(Symbol(state, "switch"), v);
-	
-	CFunction(eval_fn).toValue(v);
-	env->assign(Symbol(state, "eval"), v);
-	CFunction(quote).toValue(v);
-	env->assign(Symbol(state, "quote"), v);
-	CFunction(source).toValue(v);
-	env->assign(Symbol(state, "source"), v);
+	env->assign(Symbol(state,"eval"), CFunction(eval_fn));
+	env->assign(Symbol(state,"quote"), CFunction(quote));
+	env->assign(Symbol(state,"source"), CFunction(source));
 
-	CFunction(lapply).toValue(v);
-	env->assign(Symbol(state, "lapply"), v);
-	CFunction(tlist).toValue(v);
-	env->assign(Symbol(state, "t.list"), v);
+	env->assign(Symbol(state,"lapply"), CFunction(lapply));
+	env->assign(Symbol(state,"t.list"), CFunction(tlist));
+
+	env->assign(Symbol(state,"environment"), CFunction(environment));
+	env->assign(Symbol(state,"parent.frame"), CFunction(parentframe));
+	env->assign(Symbol(state,"missing"), CFunction(missing));
 	
-	CFunction(environment).toValue(v);
-	env->assign(Symbol(state, "environment"), v);
-	CFunction(parentframe).toValue(v);
-	env->assign(Symbol(state, "parent.frame"), v);
+	env->assign(Symbol(state,"stop"), CFunction(stop_fn));
+	env->assign(Symbol(state,"warning"), CFunction(warning_fn));
 	
-	CFunction(missing).toValue(v);
-	env->assign(Symbol(state, "missing"), v);
-	
-	CFunction(stop_fn).toValue(v);
-	env->assign(Symbol(state, "stop"), v);
-	CFunction(warning_fn).toValue(v);
-	env->assign(Symbol(state, "warning"), v);
-	
-	CFunction(paste).toValue(v);
-	env->assign(Symbol(state, "paste"), v);
-	CFunction(deparse).toValue(v);
-	env->assign(Symbol(state, "deparse"), v);
-	CFunction(substitute).toValue(v);
-	env->assign(Symbol(state, "substitute"), v);
+	env->assign(Symbol(state,"paste"), CFunction(paste));
+	env->assign(Symbol(state,"deparse"), CFunction(deparse));
+	env->assign(Symbol(state,"substitute"), CFunction(substitute));
 }
 

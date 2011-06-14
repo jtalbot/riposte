@@ -82,6 +82,7 @@
 	_(seq_len, "seq_len", p) \
 	_(TRUE, "TRUE", p) \
 	_(FALSE, "FALSE", p) \
+	_(type, "typeof", p) \
 
 
 class SymbolTable {
@@ -94,7 +95,7 @@ public:
 	int64_t in(std::string const& s) {
 		std::map<std::string, int64_t>::const_iterator i = symbolTable.find(s);
 		if(i == symbolTable.end()) {
-			int64_t index = next++; // due to NA string which needs an index, but not an actual entry in the table.
+			int64_t index = next++;
 			symbolTable[s] = index;
 			reverseSymbolTable[index] = s;
 			return index;

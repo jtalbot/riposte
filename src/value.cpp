@@ -28,7 +28,7 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 		symbolTable[string] = EnumType::E_##name; \
 		reverseSymbolTable[EnumType::E_##name] = string;\
 		assert(next==EnumType::E_##name);\
-		next++; 
+		next++;\
 
 		SYMBOLS_ENUM(ENUM_STRING_TABLE,Symbol);
 	}

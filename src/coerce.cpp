@@ -43,6 +43,8 @@ int64_t aslist(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
+// Implement internally or as R library?
+/*
 int64_t isnull(State& state, Call const& call, List const& args) {
 	Value from = force(state, args[0]);
 	state.registers[0] = Logical::c(from.isNull());
@@ -84,41 +86,29 @@ int64_t islist(State& state, Call const& call, List const& args) {
 	state.registers[0] = Logical::c(from.isList());
 	return 1;
 }
+*/
 
 void importCoerceFunctions(State& state)
 {
-	Value v;
 	Environment* env = state.path[0];
 
-	CFunction(asnull).toValue(v);
-	env->assign(Symbol(state, "as.null"), v);
-	CFunction(aslogical).toValue(v);
-	env->assign(Symbol(state, "as.logical"), v);
-	CFunction(asinteger).toValue(v);
-	env->assign(Symbol(state, "as.integer"), v);
-	CFunction(asdouble).toValue(v);
-	env->assign(Symbol(state, "as.double"), v);
-	env->assign(Symbol(state, "as.numeric"), v);
-	CFunction(ascomplex).toValue(v);
-	env->assign(Symbol(state, "as.complex"), v);
-	CFunction(ascharacter).toValue(v);
-	env->assign(Symbol(state, "as.character"), v);
-	CFunction(aslist).toValue(v);
-	env->assign(Symbol(state, "as.list"), v);
+	env->assign(Symbol(state,"as.null"), CFunction(asnull));
+	env->assign(Symbol(state,"as.logical"), CFunction(aslogical));
+	env->assign(Symbol(state,"as.integer"), CFunction(asinteger));
+	env->assign(Symbol(state,"as.double"), CFunction(asdouble));
+	env->assign(Symbol(state,"as.numeric"), CFunction(asdouble));
+	env->assign(Symbol(state,"as.complex"), CFunction(ascomplex));
+	env->assign(Symbol(state,"as.character"), CFunction(ascharacter));
+	env->assign(Symbol(state,"as.list"), CFunction(aslist));
 
-	CFunction(isnull).toValue(v);
-	env->assign(Symbol(state, "is.null"), v);
-	CFunction(islogical).toValue(v);
-	env->assign(Symbol(state, "is.logical"), v);
-	CFunction(isinteger).toValue(v);
-	env->assign(Symbol(state, "is.integer"), v);
-	CFunction(isdouble).toValue(v);
-	env->assign(Symbol(state, "is.double"), v);
-	env->assign(Symbol(state, "is.real"), v);
-	CFunction(iscomplex).toValue(v);
-	env->assign(Symbol(state, "is.complex"), v);
-	CFunction(ischaracter).toValue(v);
-	env->assign(Symbol(state, "is.character"), v);
-	CFunction(islist).toValue(v);
-	env->assign(Symbol(state, "is.list"), v);
+/*
+	env->assign(Symbol(state,"is.null"), CFunction(isnull));
+	env->assign(Symbol(state,"is.logical"), CFunction(islogical));
+	env->assign(Symbol(state,"is.integer"), CFunction(isinteger));
+	env->assign(Symbol(state,"is.double"), CFunction(isdouble));
+	env->assign(Symbol(state,"is.real"), CFunction(isdouble));
+	env->assign(Symbol(state,"is.complex"), CFunction(iscomplex));
+	env->assign(Symbol(state,"is.character"), CFunction(ischaracter));
+	env->assign(Symbol(state,"is.list"), CFunction(islist));
+*/
 }

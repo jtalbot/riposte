@@ -50,3 +50,31 @@ is.vector <- function(x, mode="any") .Internal(switch)(mode,
 	any=is.atomic(x) || is.list(x) || is.expression(x),
 	FALSE)
 # is.vector is also defined to check whether or not there are any attributes other than names(?!)
+
+mode <- function(x)
+	switch(typeof(x),
+		integer="numeric",
+		double="numeric",
+		special="function",
+		builtin="function",
+		symbol="name",
+		language="call",
+		typeof(x))
+
+`mode<-` <- function(x, value) {
+	switch(value,
+		logical=as.logical(x), 
+		integer=as.integer(x),
+		double=as.double(x),
+		complex=as.complex(x),
+		raw=as.raw(x),
+		character=as.character(x),
+		list=as.list(x),
+		expression=as.expression(x),
+		name=as.name(x),
+		symbol=as.symbol(x), 
+		error("unsupported mode"))
+}
+
+storage.mode <- mode
+`storage.mode<-` <- `mode<-`

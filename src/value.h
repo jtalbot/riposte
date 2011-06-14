@@ -475,10 +475,12 @@ public:
 		assert(v.type == Type::R_cfunction);
 		func = (Cffi)v.p; 
 	}
-	void toValue(Value& v) const {
-		v.type = Type::R_cfunction;
+	operator Value() const {
+		Value v;
 		v.p = (void*)func;
+		v.type = Type::R_cfunction;
 		v.attributes = 0;
+		return v;
 	}
 };
 

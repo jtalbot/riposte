@@ -35,7 +35,6 @@
 static void MatchArgs(State& state, Environment* fenv, Function const& func, List const& arguments) {
 	List parameters = func.parameters();
 	Character pnames = getNames(parameters);
-
 	// call arguments are not named, do posititional matching
 	if(!hasNames(arguments)) {
 		for(int64_t i = 0; i < std::min(arguments.length, func.dots()); ++i) {
@@ -560,12 +559,21 @@ static int64_t complex1_op(State& state, Closure const& closure, Instruction con
 }
 static int64_t character1_op(State& state, Closure const& closure, Instruction const& inst) {
 	Integer i = As<Integer>(state, state.registers[inst.a]);
-	state.registers[inst.c] = Character(i[0]);
+	Character r = Character(i[0]);
+	for(int64_t j = 0; j < r.length; j++) r[j] = Symbol::empty;
+	state.registers[inst.c] = r;
 	return 1;
 }
 static int64_t raw1_op(State& state, Closure const& closure, Instruction const& inst) {
 	Integer i = As<Integer>(state, state.registers[inst.a]);
 	state.registers[inst.c] = Raw(i[0]);
+	return 1;
+}
+static int64_t type_op(State& state, Closure const& closure, Instruction const& inst) {
+	Character c(1);
+	// Should have a direct mapping from type to symbol.
+	c[0] = Symbol(state, state.registers[inst.a].type.toString());
+	state.registers[0] = c;
 	return 1;
 }
 static int64_t ret_op(State& state, Closure const& closure, Instruction const& inst) {

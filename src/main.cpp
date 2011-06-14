@@ -251,14 +251,25 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 	/* Create riposte environment */
 	Environment* baseenv = new Environment(0,0);
 	State state(new Environment(baseenv, baseenv), baseenv);
-	addMathOps(state);	
-	importCoerceFunctions(state);	
 
 	try {
+		importCoreLibrary(state);	
+		importCoerceFunctions(state);	
 		loadLibrary(state, "base");
+	} catch(RiposteError& error) { 
+		e_message("Error", "riposte", error.what().c_str());
+	} catch(RuntimeError& error) {
+		e_message("Error", "runtime", error.what().c_str());
 	} catch(CompileError& error) {
 		e_message("Error", "compiler", error.what().c_str());
 	}
+	if(state.warnings.size() > 0) {
+		std::cout << "There were " << intToStr(state.warnings.size()) << " warnings." << std::endl;
+		for(int64_t i = 0; i < (int64_t)state.warnings.size() && i < 50; i++) {
+			std::cout << "(" << intToStr(i+1) << ") " << state.warnings[i] << std::endl;
+		}
+	}
+	state.warnings.clear();
 /* Either execute the specified file or read interactively from stdin  */
 
    /* Load the file containing the script we are going to run */

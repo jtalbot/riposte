@@ -10,7 +10,7 @@
 #include <set>
 #include <algorithm>
 
-void addMathOps(State& state);
+void importCoreLibrary(State& state);
 
 inline Value force(State& state, Value v) { 
 	while(v.type == Type::I_promise) {

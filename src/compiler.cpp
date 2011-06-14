@@ -41,6 +41,7 @@ static ByteCode op(Symbol const& s) {
 		case Symbol::E_Complex: return ByteCode::complex1; break;
 		case Symbol::E_Character: return ByteCode::character1; break;
 		case Symbol::E_Raw: return ByteCode::raw1; break;
+		case Symbol::E_type: return ByteCode::type; break;
 		default: throw RuntimeError("unexpected symbol used as an operator"); break;
 	}
 }
@@ -135,6 +136,7 @@ int64_t Compiler::compileCall(Call const& call, Closure& closure) {
 			
 			for(int64_t i = 0; i < c.length; i++) { n[i] = c[i]; }
 			Character nnames(c.length+1);
+			for(int64_t i = 0; i < c.length; i++) { nnames[i] = Symbol::empty; }
 			if(hasNames(c)) {
 				Insert(state, getNames(c), 0, nnames, 0, c.length);
 			}
@@ -151,33 +153,6 @@ int64_t Compiler::compileCall(Call const& call, Closure& closure) {
 
 		if(dest.isSymbol())
 			closure.code().push_back(Instruction(ByteCode::assign, source, 0, Symbol(dest).i));
-	/*	
-		// any indexing code
-		bool indexed = false;
-		int64_t index = 0;
-		if(v.type == Type::R_call && Symbol(Call(v)[0]) == Symbol::bracket) {
-			Call c(v);
-			index = compile(c[2], closure);
-			v = c[1];
-			indexed = true;
-		}
-		
-		if(v.type == Type::R_call) {
-			Call c(v);
-			if(Symbol(c[0]) == Symbol::classSym)
-				bc = indexed ? ByteCode::iclassassign : ByteCode::classassign;
-			else if(Symbol(c[0]) == Symbol::names)
-				bc = indexed ? ByteCode::inamesassign : ByteCode::namesassign;
-			else if(Symbol(c[0]) == Symbol::dim)
-				bc = indexed ? ByteCode::idimassign : ByteCode::dimassign;
-			else
-				throw CompileError(std::string("invalid function on left side of assign: ") + Symbol(c[0]).toString(state));
-			v = c[1];
-		} else {
-			bc = indexed ? ByteCode::iassign : ByteCode::assign;
-		}
-		closure.code().push_back(Instruction(bc, Symbol(v).i, index, source));
-		*/
 		if(source != initialDepth) throw CompileError("unbalanced registers in assign");
 		registerDepth = initialDepth;
 		return registerDepth++;
@@ -443,6 +418,7 @@ int64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	case Symbol::E_Complex:
 	case Symbol::E_Character:
 	case Symbol::E_Raw:
+	case Symbol::E_type:
 	{ 
 		int64_t a = compile(call[1], closure);
 		closure.code().push_back(Instruction(op(func), a, 0, initialDepth));
