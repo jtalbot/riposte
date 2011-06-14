@@ -182,7 +182,7 @@ int64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		registerDepth = initialDepth;
 		return registerDepth++;
 	} break;
-	case Symbol::E_bracketAssign: {
+	case Symbol::E_bracketAssign: { 
 		// if there's more than three parameters, we should call the library version...
 		if(call.length > 4) return compileFunctionCall(call, closure);
 		int64_t dest = compile(call[1], closure);
@@ -190,6 +190,15 @@ int64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		int64_t index = compile(call[2], closure);
 		int64_t value = compile(call[3], closure);
 		closure.code().push_back(Instruction(ByteCode::iassign, value, index, dest));
+		registerDepth = initialDepth;
+		return registerDepth++;
+	} break;
+	case Symbol::E_bbAssign: {
+		int64_t dest = compile(call[1], closure);
+		assert(initialDepth == dest);
+		int64_t index = compile(call[2], closure);
+		int64_t value = compile(call[3], closure);
+		closure.code().push_back(Instruction(ByteCode::eassign, value, index, dest));
 		registerDepth = initialDepth;
 		return registerDepth++;
 	} break;

@@ -154,8 +154,10 @@ struct VectorImpl {
 
 	ElementType& operator[](int64_t index) { return _data[index]; }
 	ElementType const& operator[](int64_t index) const { return _data[index]; }
-	ElementType* data() const { return _data; }
-	ElementType* data(int64_t i) const { return _data + i; }
+	ElementType const* data() const { return _data; }
+	ElementType const* data(int64_t i) const { return _data + i; }
+	ElementType* data() { return _data; }
+	ElementType* data(int64_t i) { return _data + i; }
 
 	bool packed() const { return false; }
 
@@ -207,8 +209,10 @@ struct PackedVectorImpl {
 
 	ElementType& operator[](int64_t index) { if(packed()) return packedData[index]; else return _data[index]; }
 	ElementType const& operator[](int64_t index) const { if(packed()) return packedData[index]; else return _data[index]; }
-	ElementType* data() const { if(packed()) return &packedData[0]; else return _data; }
-	ElementType* data(int64_t i) const { if(packed()) return &packedData[i]; else return _data + i; }
+	ElementType const* data() const { if(packed()) return &packedData[0]; else return _data; }
+	ElementType const* data(int64_t i) const { if(packed()) return &packedData[i]; else return _data + i; }
+	ElementType* data() { if(packed()) return &packedData[0]; else return _data; }
+	ElementType* data(int64_t i) { if(packed()) return &packedData[i]; else return _data + i; }
 
 	bool packed() const { return length <= (int64_t)(sizeof(int64_t)/sizeof(ElementType)); }
 	

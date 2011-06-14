@@ -275,6 +275,20 @@ static int64_t iassign_op(State& state, Closure const& closure, Instruction cons
 	subAssign(state, state.registers[inst.c], state.registers[inst.b], state.registers[inst.a], state.registers[inst.c]);
 	return 1;
 }
+static int64_t eassign_op(State& state, Closure const& closure, Instruction const& inst) {
+	// a = value, b = index, c = dest 
+	Value v = state.registers[inst.c];
+	if(v.isList()) {
+		List r = Clone(List(v));
+		r[As<Integer>(state, state.registers[inst.b])[0]-1] = state.registers[inst.a];
+		state.registers[inst.c] = r;
+		return 1;
+	}
+	else {
+		subAssign(state, state.registers[inst.c], state.registers[inst.b], state.registers[inst.a], state.registers[inst.c]);
+		return 1;
+	}
+}
 static int64_t forbegin_op(State& state, Closure const& closure, Instruction const& inst) {
 	//TODO: need to keep a stack of these...
 	Value loopVector = state.registers[inst.c];

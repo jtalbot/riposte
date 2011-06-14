@@ -77,6 +77,7 @@
 	_(dim, "dim", p) \
 	_(classSym, "class", p) \
 	_(bracketAssign, "[<-", p) \
+	_(bbAssign, "[[<-", p) \
 	_(UseMethod, "UseMethod", p) \
 	_(seq_len, "seq_len", p) \
 	_(TRUE, "TRUE", p) \

@@ -13,6 +13,7 @@
 	_(iget, "iget", p) \
 	_(assign, "assign", p) \
 	_(iassign, "iassign", p) \
+	_(eassign, "eassign", p) \
 	_(forbegin, "forbegin", p) \
 	_(forend, "forend", p) \
 	_(iforbegin, "iforbegin", p) \

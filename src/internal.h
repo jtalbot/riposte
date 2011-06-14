@@ -97,7 +97,7 @@ struct SubsetAssign {
 		}
 
 		// should use max index here to extend vector if necessary	
-		A r = a;//Clone(a);	
+		A r = Clone(a);	
 		for(int64_t i = 0; i < d.length; i++) {	
 			int64_t idx = d[i];
 			if(idx != 0)
@@ -113,6 +113,8 @@ inline void subAssign(State& state, Value const& a, Value const& i, Value const&
 	else if(a.isInteger()) c = SubsetAssign<Integer>::eval(state, a, idx, As<Integer>(state, b));
 	else if(a.isLogical()) c = SubsetAssign<Logical>::eval(state, a, idx, As<Logical>(state, b));
 	else if(a.isCharacter()) c = SubsetAssign<Character>::eval(state, a, idx, As<Character>(state, b));
+	else if(a.isComplex()) c = SubsetAssign<Complex>::eval(state, a, idx, As<Complex>(state, b));
+	else if(a.isList()) c = SubsetAssign<List>::eval(state, a, idx, As<List>(state, b));
 	else _error("NYI: subset assign type");
 }
 

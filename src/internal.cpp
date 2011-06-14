@@ -16,6 +16,12 @@ void checkNumArgs(List const& args, int64_t nargs) {
 	else if(args.length < nargs) _error("too few arguments");
 }
 
+int64_t cat(State& state, Call const& call, List const& args) {
+	printf("%s\n", state.stringify(force(state, args[0])).c_str());
+	state.registers[0] = Null::singleton;
+	return 1;
+}
+
 int64_t library(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 
@@ -240,8 +246,38 @@ int64_t list(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
+int64_t unlist(State& state, Call const& call, List const& args) {
+	//checkNumArgs(args, 1);
+	Value v = force(state, args[0]);
+	if(!v.isList()) {
+		state.registers[0] = v;
+		return 1;
+	}
+	List from = v;
+	int64_t total = 0;
+	Type type = Type::R_null;
+	for(int64_t i = 0; i < from.length; i++) {
+		from[i] = force(state, from[i]);
+		total += from[i].length;
+		type = cTypeCast(from[i], type);
+	}
+	Vector out = Vector(type, total);
+	int64_t j = 0;
+	for(int64_t i = 0; i < from.length; i++) {
+		Insert(state, Vector(from[i]), 0, out, j, Vector(from[i]).length);
+		j += from[i].length;
+	}
+	state.registers[0] = out;
+	return 1;
+}
+
 int64_t flatten(State& state, Call const& call, List const& args) {
-	List from = force(state, args[0]);
+	Value v = force(state, args[0]);
+	if(!v.isList()) {
+		state.registers[0] = v;
+		return 1;
+	}
+	List from = v;
 	int64_t length = 0;
 	for(int64_t i = 0; i < from.length; i++) length += from[i].length;
 	List out = List(length);
@@ -758,6 +794,8 @@ void addMathOps(State& state)
 	CFunction(isinfinite_fn).toValue(v);
 	env->assign(Symbol(state, "is.infinite"), v);
 	
+	CFunction(cat).toValue(v);
+	env->assign(Symbol(state, "cat"), v);
 	CFunction(library).toValue(v);
 	env->assign(Symbol(state, "library"), v);
 	CFunction(function).toValue(v);
@@ -798,6 +836,8 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "c"), v);
 	CFunction(list).toValue(v);
 	env->assign(Symbol(state, "list"), v);
+	CFunction(unlist).toValue(v);
+	env->assign(Symbol(state, "unlist"), v);
 	CFunction(flatten).toValue(v);
 	env->assign(Symbol(state, "flatten"), v);
 
