@@ -28,6 +28,9 @@ static Character::Element Cast<Logical, Character>(State& state, Logical::Elemen
 template<>
 static List::Element Cast<Logical, List>(State& state, Logical::Element const& i) { return Logical::c(i); }
 
+template<>
+static Call::Element Cast<Logical, Call>(State& state, Logical::Element const& i) { return Logical::c(i); }
+
 
 template<>
 static Logical::Element Cast<Integer, Logical>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Logical::NAelement : i != 0 ? 1 : 0; }
@@ -43,6 +46,9 @@ static Character::Element Cast<Integer, Character>(State& state, Integer::Elemen
 
 template<>
 static List::Element Cast<Integer, List>(State& state, Integer::Element const& i) { return Integer::c(i); }
+
+template<>
+static Call::Element Cast<Integer, Call>(State& state, Integer::Element const& i) { return Integer::c(i); }
 
 
 template<>
@@ -60,6 +66,9 @@ static Character::Element Cast<Double, Character>(State& state, Double::Element 
 template<>
 static List::Element Cast<Double, List>(State& state, Double::Element const& i) { return Double::c(i); }
 
+template<>
+static Call::Element Cast<Double, Call>(State& state, Double::Element const& i) { return Double::c(i); }
+
 
 template<>
 static Logical::Element Cast<Complex, Logical>(State& state, Complex::Element const& i) { if(Complex::isNA(i)) return Logical::NAelement; else return i.real() != 0 || i.imag() != 0; }
@@ -76,6 +85,9 @@ static Character::Element Cast<Complex, Character>(State& state, Complex::Elemen
 template<>
 static List::Element Cast<Complex, List>(State& state, Complex::Element const& i) { return Complex::c(i); }
 
+template<>
+static Call::Element Cast<Complex, Call>(State& state, Complex::Element const& i) { return Complex::c(i); }
+
 
 template<>
 static Logical::Element Cast<Character, Logical>(State& state, Character::Element const& i) { if(i == Symbol::TRUE) return 1; else if(i == Symbol::FALSE) return 0; else return Logical::NAelement; }
@@ -91,6 +103,9 @@ static Complex::Element Cast<Character, Complex>(State& state, Character::Elemen
 
 template<>
 static List::Element Cast<Character, List>(State& state, Character::Element const& i) { return Character::c(i); }
+
+template<>
+static Call::Element Cast<Character, Call>(State& state, Character::Element const& i) { return Character::c(i); }
 
 
 template<class I, class O> 
@@ -111,7 +126,8 @@ O As(State& state, Value const& src) {
 		case Type::E_R_complex: return Zip1< CastOp<Complex, O> >::eval(state, src); break;
 		case Type::E_R_character: return Zip1< CastOp<Character, O> >::eval(state, src); break;
 		case Type::E_R_list: return Zip1< CastOp<List, O> >::eval(state, src); break;
-		default: _error("Invalid cast"); break;
+		case Type::E_R_call: return Zip1< CastOp<Call, O> >::eval(state, src); break;
+		default: _error(std::string("Invalid cast from ") + src.type.toString() + " to " + O::type.toString()); break;
 	};
 }
 template<>
@@ -130,7 +146,8 @@ inline Value As(State& state, Type type, Value const& src) {
 		case Type::E_R_complex: return As<Complex>(state, src); break;
 		case Type::E_R_character: return As<Character>(state, src); break;
 		case Type::E_R_list: return As<List>(state, src); break;
-		default: _error("Invalid cast"); break;
+		case Type::E_R_call: return As<Call>(state, src); break;
+		default: _error(std::string("Invalid cast from ") + src.type.toString() + " to " + type.toString()); break;
 	};
 }
 
@@ -152,6 +169,27 @@ static Complex::Element Cast<List, Complex>(State& state, List::Element const& i
 template<>
 static Character::Element Cast<List, Character>(State& state, List::Element const& i) { Character a = As<Character>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
 
+template<>
+static Call::Element Cast<List, Call>(State& state, Call::Element const& i) { return i; }
+
+
+template<>
+static Logical::Element Cast<Call, Logical>(State& state, Call::Element const& i) { Logical a = As<Logical>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+
+template<>
+static Integer::Element Cast<Call, Integer>(State& state, Call::Element const& i) { Integer a = As<Integer>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+
+template<>
+static Double::Element Cast<Call, Double>(State& state, Call::Element const& i) { Double a = As<Double>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+
+template<>
+static Complex::Element Cast<Call, Complex>(State& state, Call::Element const& i) { Complex a = As<Complex>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+
+template<>
+static Character::Element Cast<Call, Character>(State& state, Call::Element const& i) { Character a = As<Character>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+
+template<>
+static List::Element Cast<Call, List>(State& state, Call::Element const& i) { return i; }
 
 
 void importCoerceFunctions(State& state);

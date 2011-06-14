@@ -74,6 +74,7 @@
 	_(character1, "character", p) \
 	_(raw1, "raw", p) \
 	_(UseMethod, "UseMethod", p) \
+	_(seq, "seq", p) \
 	_(ret, "ret", p)       /* ret must be the last instruction */
 	/*_(frame, "frame") \
 	_(rawfunction, "rawfunction") \

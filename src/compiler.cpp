@@ -477,6 +477,13 @@ int64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		registerDepth = initialDepth;
 		return registerDepth++;
 	} break;
+	case Symbol::E_seq_len:
+	{
+		int64_t len = compile(call[1], closure);
+		closure.code().push_back(Instruction(ByteCode::seq, len, 0, initialDepth));
+		registerDepth = initialDepth;
+		return registerDepth++;
+	} break;
 	default:
 	{
 		return compileFunctionCall(call, closure);

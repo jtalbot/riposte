@@ -657,6 +657,21 @@ int64_t isnan_fn(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
+int64_t nchar_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 3);
+	Value a = force(state, args[0]);
+	// NYI: type or allowNA
+	unaryCharacter<Zip1, NcharOp>(state, a, state.registers[0]);
+	return 1;
+}
+
+int64_t nzchar_fn(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	Value a = force(state, args[0]);
+	unaryCharacter<Zip1, NzcharOp>(state, a, state.registers[0]);
+	return 1;
+}
+
 int64_t isfinite_fn(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
@@ -689,6 +704,21 @@ int64_t deparse(State& state, Call const& call, List const& args) {
 	return 1;
 }
 
+int64_t substitute(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 1);
+	state.registers[0] = expression(args[0]);
+	Value v = args[0];
+	while(v.type == Type::I_promise) v = Closure(v).expression();
+	
+	if(v.isSymbol()) {
+		Value r;
+		if(state.global->getRaw(v,r)) v = r;
+		while(v.type == Type::I_promise) v = Closure(v).expression();
+	}
+ 	state.registers[0] = v;
+	return 1;
+}
+
 void addMathOps(State& state)
 {
 	Value v;
@@ -714,6 +744,10 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "any"), v);
 	CFunction(all_fn).toValue(v);
 	env->assign(Symbol(state, "all"), v);
+	CFunction(nchar_fn).toValue(v);
+	env->assign(Symbol(state, "nchar"), v);
+	CFunction(nzchar_fn).toValue(v);
+	env->assign(Symbol(state, "nzchar"), v);
 	
 	CFunction(isna_fn).toValue(v);
 	env->assign(Symbol(state, "is.na"), v);
@@ -816,5 +850,7 @@ void addMathOps(State& state)
 	env->assign(Symbol(state, "paste"), v);
 	CFunction(deparse).toValue(v);
 	env->assign(Symbol(state, "deparse"), v);
+	CFunction(substitute).toValue(v);
+	env->assign(Symbol(state, "substitute"), v);
 }
 

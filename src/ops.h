@@ -85,6 +85,14 @@ struct LNotOp : UnaryOp<Logical, Logical> {
 	static LNotOp::R eval(State& state, LNotOp::A const& a) { return !a; }
 };
 
+struct NcharOp : UnaryOp<Character, Integer> {
+	static NcharOp::R eval(State& state, NcharOp::A const& a) { return (a == Symbol::NA) ? 2 : a.toString(state).length(); }
+};
+
+struct NzcharOp : UnaryOp<Character, Logical> {
+	static NzcharOp::R eval(State& state, NzcharOp::A const& a) { return a != Symbol::empty; }
+};
+
 #undef UNARY_OP 
 #undef NYI_UNARY_OP
 #undef NYI_COMPLEX_OP
@@ -248,6 +256,11 @@ void unaryLogical(State& state, Value const& a, Value& c) {
 		c = Logical(0);
 	else
 		_error("non-logical argument to unary logical operator");
+};
+
+template< template<class Op> class Lift, class Op > 
+void unaryCharacter(State& state, Value const& a, Value& c) {
+	c = Lift<Op>::eval(state, As<Character>(state, a));
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 

@@ -138,7 +138,6 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 static int64_t call_op(State& state, Closure const& closure, Instruction const& inst) {
 	Value func = state.registers[inst.c];
 	CompiledCall call(closure.constants()[inst.a]);
-	
 	List arguments = Clone(call.arguments());
 	// Specialize the precompiled promises to evaluate in the current scope
 	for(int64_t i = 0; i < arguments.length; i++) {
@@ -349,6 +348,11 @@ static int64_t colon_op(State& state, Closure const& closure, Instruction const&
 	double from = asReal1(state.registers[inst.a]);
 	double to = asReal1(state.registers[inst.b]);
 	state.registers[inst.c] = Sequence(from, to>from?1:-1, fabs(to-from)+1);
+	return 1;
+}
+static int64_t seq_op(State& state, Closure const& closure, Instruction const& inst) {
+	int64_t len = As<Integer>(state, state.registers[inst.a])[0];
+	state.registers[inst.c] = Sequence(len);
 	return 1;
 }
 static int64_t add_op(State& state, Closure const& closure, Instruction const& inst) {

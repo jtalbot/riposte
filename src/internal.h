@@ -148,6 +148,14 @@ inline Vector Subset(Vector const& src, int64_t start, int64_t length) {
 	return v;
 }
 
+inline Integer Sequence(int64_t length) {
+	Integer r(length);
+	for(int64_t i = 0; i < length; i++) {
+		r[i] = i+1;
+	}
+	return r;
+}
+
 inline Double Sequence(double from, double by, double len) {
 	Double r(len);
 	double j = 0;
@@ -173,7 +181,11 @@ inline Character klass(State& state, Value const& v)
 {
 	if(!hasClass(v)) {
 		Character c(1);
-		c[0] = Symbol(state, (v).type.toString());
+		if(v.type == Type::R_integer || v.type == Type::R_double)
+			c[0] = Symbol(state, "numeric");
+		else if(v.type == Type::R_symbol)
+			c[0] = Symbol(state, "name");
+		else c[0] = Symbol(state, (v).type.toString());
 		return c;
 	}
 	else {
