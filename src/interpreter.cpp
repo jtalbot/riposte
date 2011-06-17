@@ -123,10 +123,8 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 	if(func.body().type == Type::I_closure || func.body().type == Type::I_promise) {
 		//See note above about allocating Environment on heap...
 		Environment* fenv = new Environment(func.s(), state.global);
-		fenv->assign(Symbol(state, "..args"), arguments);
-
+		fenv->assign(Symbol::funargs, arguments);
 		MatchArgs(state, fenv, func, arguments);
-	
 		eval(state, Closure(func.body()).bind(fenv));
 	}
 	else
@@ -200,7 +198,7 @@ static int64_t UseMethod_op(State& state, Closure const& closure, Instruction co
 		generic = Symbol(v);
 	
 	Value arguments;
-	state.global->get(state, Symbol(state, "..args"), arguments);
+	state.global->get(state, Symbol::funargs, arguments);
 	
 	Value object;	
 	if(state.registers[inst.b].i == 1)
@@ -231,7 +229,7 @@ static int64_t UseMethod_op(State& state, Closure const& closure, Instruction co
 	
 	if(func.body().type == Type::I_closure || func.body().type == Type::I_promise) {
 		Environment* fenv = new Environment(func.s(), state.global);
-		fenv->assign(Symbol(state, "..args"), arguments);
+		fenv->assign(Symbol::funargs, arguments);
 
 		MatchArgs(state, fenv, func, arguments);
 

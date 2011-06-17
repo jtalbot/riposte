@@ -83,6 +83,7 @@
 	_(TRUE, "TRUE", p) \
 	_(FALSE, "FALSE", p) \
 	_(type, "typeof", p) \
+	_(funargs, "..funargs", p) \
 
 
 class SymbolTable {
