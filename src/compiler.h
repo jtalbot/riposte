@@ -16,8 +16,13 @@
 class Compiler {
 private:
 	State& state;
-	bool inFunction;
-	std::vector<int64_t> slots;
+
+	struct Scope {
+		std::vector<Symbol> symbols;
+		int64_t registers;
+	}; 
+
+	std::vector<Scope> scope;
 
 	int64_t registerDepth;
 	int64_t loopDepth;	

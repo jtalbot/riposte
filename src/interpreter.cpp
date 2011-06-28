@@ -32,26 +32,55 @@
 // Conclusion for now: heap allocate environments. 
 // Try to make that fast, maybe with a pooled allocator...
 
+static Value get(State& state, int64_t i) {
+	if(i >= 0) return state.registers[i];
+	else {
+		Value& value = state.registers[i];
+		if(value.type == Type::I_default) {
+			eval(state, Closure(value), state.global);
+			value = state.registers[0];
+		}
+		while(value.type == Type::I_promise) {
+			eval(state, Closure(value));
+			value = state.registers[0];
+		}
+		return value;
+	}
+}
+
+static void set(State& state, int64_t i, Value const& v) {
+	state.registers[i] = v;
+}
+
+static void setSlot(State& state, int64_t slot, Value const& v) {
+	set(state, -(slot+1), v);
+}
+
+static Value& out(State& state, int64_t slot) {
+	return state.registers[slot];
+}
+
 static void MatchArgs(State& state, Environment* fenv, Function const& func, List const& arguments) {
 	List parameters = func.parameters();
 	Character pnames = getNames(parameters);
+	// set defaults (often these will be completely overridden. Can we delay or skip?
+	for(int64_t i = 0; i < parameters.length; ++i) {
+		setSlot(state, i, parameters[i]);
+	}
 	// call arguments are not named, do posititional matching
 	if(!hasNames(arguments)) {
+		// override with arguments
 		for(int64_t i = 0; i < std::min(arguments.length, func.dots()); ++i) {
-			fenv->assign(pnames[i], arguments[i]);
+			setSlot(state, i, arguments[i]);
 		}
-		for(int64_t i = std::min(arguments.length, func.dots()); i < parameters.length; ++i) {
-			if(!parameters[i].isNil()) fenv->assign(pnames[i], parameters[i]);
+		// set dots if necessary
+		if(arguments.length-(int64_t)func.dots() > 0) {
+			setSlot(state, func.dots(), Subset(arguments, func.dots(), std::max((int64_t)0, (int64_t)arguments.length-(int64_t)func.dots())));
 		}
-		fenv->assign(Symbol::dots, Subset(arguments, func.dots(), std::max((int64_t)0, (int64_t)arguments.length-(int64_t)func.dots())));
 	}
 	// call arguments are named, do matching by name
 	else {
 		Character anames = getNames(arguments);
-		// populate environment with default values
-		for(int64_t i = 0; i < parameters.length; ++i) {
-			if(!parameters[i].isNil()) fenv->assign(pnames[i], parameters[i]);
-		}	
 		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
 		static char assignment[64], set[64];
 		for(int64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
@@ -61,7 +90,7 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 			if(anames[i] != Symbol::empty) {
 				for(int64_t j = 0; j < parameters.length; ++j) {
 					if(pnames[j] != Symbol::dots && anames[i] == pnames[j]) {
-						fenv->assign(pnames[j], arguments[i]);
+						setSlot(state, j, arguments[i]);
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -76,6 +105,7 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 				for(int64_t j = 0; j < parameters.length; ++j) {
 					if(set[j] < 0 && pnames[j] != Symbol::dots &&
 						pnames[i].toString(state).compare( 0, a.size(), a ) == 0 ) {	
+						setSlot(state, j, arguments[i]);
 						fenv->assign(pnames[j], arguments[i]);
 						assignment[i] = j;
 						set[j] = i;
@@ -90,7 +120,7 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 			if(anames[i] == Symbol::empty) {
 				for(; firstEmpty < func.dots(); ++firstEmpty) {
 					if(set[firstEmpty] < 0) {
-						fenv->assign(pnames[firstEmpty], arguments[i]);
+						setSlot(state, firstEmpty, arguments[i]);
 						assignment[i] = firstEmpty;
 						set[firstEmpty] = i;
 						break;
@@ -113,19 +143,33 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 				}
 			}
 			setNames(values, names);
-
-			fenv->assign(Symbol::dots, values);
+			setSlot(state, func.dots(), values);
 		}
 	}
 }
 
 static int64_t call_function(State& state, Function const& func, List const& arguments) {
 	if(func.body().type == Type::I_closure || func.body().type == Type::I_promise) {
+		static std::vector<Environment*, traceable_allocator<Environment*> > envs;
 		//See note above about allocating Environment on heap...
-		Environment* fenv = new Environment(func.s(), state.global);
-		fenv->assign(Symbol::funargs, arguments);
+		Environment* fenv;
+
+		if(envs.size() == 0)
+			fenv = new Environment(func.s(), state.global);
+		else {
+			fenv = envs.back();
+			envs.pop_back();
+			fenv->init(func.s(), state.global);
+		}
+
+		//fenv->assign(Symbol::funargs, arguments);
+		Value* old_registers = state.registers;
+		state.registers = &fenv->slots[16];
 		MatchArgs(state, fenv, func, arguments);
-		eval(state, Closure(func.body()).bind(fenv));
+		eval(state, func.body(), fenv);
+		state.registers = old_registers;
+		state.registers[0] = fenv->slots[16];
+		envs.push_back(fenv);
 	}
 	else
 		state.registers[0] = func.body();
@@ -135,7 +179,8 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 static int64_t call_op(State& state, Closure const& closure, Instruction const& inst) {
 	Value func = state.registers[inst.c];
 	CompiledCall call(closure.constants()[inst.a]);
-	List arguments = Clone(call.arguments());
+	//List arguments = Clone(call.arguments());
+	List arguments = call.arguments();
 	// Specialize the precompiled promises to evaluate in the current scope
 	for(int64_t i = 0; i < arguments.length; i++) {
 		if(arguments[i].type == Type::I_promise)
@@ -260,10 +305,15 @@ static int64_t iget_op(State& state, Closure const& closure, Instruction const& 
 	return 1;
 }
 static int64_t assign_op(State& state, Closure const& closure, Instruction const& inst) {
-	if(!Symbol(inst.c).isAssignable()) {
-		throw RiposteError("cannot assign to that symbol");
+	if(inst.c >= 0) {
+		if(!Symbol(inst.c).isAssignable()) {
+			throw RiposteError("cannot assign to that symbol");
+		}
+		state.global->assign(Symbol(inst.c), get(state, inst.a));
 	}
-	state.global->assign(Symbol(inst.c), state.registers[inst.a]);
+	else {
+		out(state, inst.c) = get(state, inst.a);	
+	}
 	// assign assumes that source is equal to destination
 	return 1;
 }
@@ -368,210 +418,210 @@ static int64_t seq_op(State& state, Closure const& closure, Instruction const& i
 }
 static int64_t add_op(State& state, Closure const& closure, Instruction const& inst) {
 	//if(!isObject(stack.peek()) && !isObject(stack.peek(1)))
-	binaryArith<Zip2, AddOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	//binaryArith<Zip2, AddOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryArith<Zip2, AddOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	//else
 	//	groupGeneric2(state, stack, closure, inst);
 	return 1;
 }
 static int64_t pos_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, PosOp>(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, PosOp>(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t sub_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryArith<Zip2, SubOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryArith<Zip2, SubOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t neg_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, NegOp>(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, NegOp>(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t mul_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryArith<Zip2, MulOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryArith<Zip2, MulOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t div_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryArith<Zip2, DivOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryArith<Zip2, DivOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t idiv_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryArith<Zip2, IDivOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryArith<Zip2, IDivOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t mod_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryArith<Zip2, ModOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryArith<Zip2, ModOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t pow_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryArith<Zip2, PowOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryArith<Zip2, PowOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t lnot_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryLogical<Zip1, LNotOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryLogical<Zip1, LNotOp>(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t land_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryLogical<Zip2, AndOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryLogical<Zip2, AndOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t lor_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryLogical<Zip2, OrOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryLogical<Zip2, OrOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t eq_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryOrdinal<Zip2, EqOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryOrdinal<Zip2, EqOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t neq_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryOrdinal<Zip2, NeqOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryOrdinal<Zip2, NeqOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t lt_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryOrdinal<Zip2, LTOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryOrdinal<Zip2, LTOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t le_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryOrdinal<Zip2, LEOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryOrdinal<Zip2, LEOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t gt_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryOrdinal<Zip2, GTOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryOrdinal<Zip2, GTOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t ge_op(State& state, Closure const& closure, Instruction const& inst) {
-	binaryOrdinal<Zip2, GEOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
+	binaryOrdinal<Zip2, GEOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
 static int64_t abs_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, AbsOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, AbsOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t sign_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, SignOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, SignOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t sqrt_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, SqrtOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, SqrtOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t floor_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, FloorOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, FloorOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t ceiling_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, CeilingOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, CeilingOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t trunc_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, TruncOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, TruncOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t round_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, RoundOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, RoundOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t signif_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, SignifOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, SignifOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t exp_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, ExpOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, ExpOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t log_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, LogOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, LogOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t cos_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, CosOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, CosOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t sin_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, SinOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, SinOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t tan_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, TanOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, TanOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t acos_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, ACosOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, ACosOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t asin_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, ASinOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, ASinOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t atan_op(State& state, Closure const& closure, Instruction const& inst) {
-	unaryArith<Zip1, ATanOp >(state,state.registers[inst.a], state.registers[inst.c]);
+	unaryArith<Zip1, ATanOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
 static int64_t jmp_op(State& state, Closure const& closure, Instruction const& inst) {
 	return (int64_t)inst.a;
 }
 static int64_t null_op(State& state, Closure const& closure, Instruction const& inst) {
-	state.registers[inst.c] = Null::singleton;
+	out(state, inst.c) = Null::singleton;
 	return 1;
 }
 static int64_t true1_op(State& state, Closure const& closure, Instruction const& inst) {
-	state.registers[inst.c] = Logical::True();
+	out(state, inst.c) = Logical::True();
 	return 1;
 }
 static int64_t false1_op(State& state, Closure const& closure, Instruction const& inst) {
-	state.registers[inst.c] = Logical::False();
+	out(state, inst.c) = Logical::False();
 	return 1;
 }
 static int64_t NA_op(State& state, Closure const& closure, Instruction const& inst) {
-	state.registers[inst.c] = Logical::NA();
+	out(state, inst.c) = Logical::NA();
 	return 1;
 }
 static int64_t istrue_op(State& state, Closure const& closure, Instruction const& inst) {
 	Logical l = As<Logical>(state, state.registers[inst.a]);
 	if(l.length == 0) _error("argument is of zero length");
-	if(l[0]) state.registers[inst.c] = Logical::True();
-	else state.registers[inst.c] = Logical::False();
+	out(state, inst.c) = l[0] ? Logical::True() : Logical::False();
 	return 1;
 }
 static int64_t function_op(State& state, Closure const& closure, Instruction const& inst) {
-	state.registers[inst.c] = Function(closure.constants()[inst.a], closure.constants()[inst.b], closure.constants()[inst.b+1], state.global);
+	out(state, inst.c) = Function(closure.constants()[inst.a], closure.constants()[inst.b], closure.constants()[inst.b+1], state.global);
 	return 1;
 }
 static int64_t logical1_op(State& state, Closure const& closure, Instruction const& inst) {
-	Integer i = As<Integer>(state, state.registers[inst.a]);
-	state.registers[inst.c] = Logical(i[0]);
+	Integer i = As<Integer>(state, get(state, inst.a));
+	out(state, inst.c) = Logical(i[0]);
 	return 1;
 }
 static int64_t integer1_op(State& state, Closure const& closure, Instruction const& inst) {
-	Integer i = As<Integer>(state, state.registers[inst.a]);
-	state.registers[inst.c] = Integer(i[0]);
+	Integer i = As<Integer>(state, get(state, inst.a));
+	out(state, inst.c) = Integer(i[0]);
 	return 1;
 }
 static int64_t double1_op(State& state, Closure const& closure, Instruction const& inst) {
-	Integer i = As<Integer>(state, state.registers[inst.a]);
-	state.registers[inst.c] = Double(i[0]);
+	Integer i = As<Integer>(state, get(state, inst.a));
+	out(state, inst.c) = Double(i[0]);
 	return 1;
 }
 static int64_t complex1_op(State& state, Closure const& closure, Instruction const& inst) {
-	Integer i = As<Integer>(state, state.registers[inst.a]);
-	state.registers[inst.c] = Complex(i[0]);
+	Integer i = As<Integer>(state, get(state, inst.a));
+	out(state, inst.c) = Complex(i[0]);
 	return 1;
 }
 static int64_t character1_op(State& state, Closure const& closure, Instruction const& inst) {
-	Integer i = As<Integer>(state, state.registers[inst.a]);
+	Integer i = As<Integer>(state, get(state, inst.a));
 	Character r = Character(i[0]);
 	for(int64_t j = 0; j < r.length; j++) r[j] = Symbol::empty;
-	state.registers[inst.c] = r;
+	out(state, inst.c) = r;
 	return 1;
 }
 static int64_t raw1_op(State& state, Closure const& closure, Instruction const& inst) {
-	Integer i = As<Integer>(state, state.registers[inst.a]);
-	state.registers[inst.c] = Raw(i[0]);
+	Integer i = As<Integer>(state, get(state, inst.a));
+	out(state, inst.c) = Raw(i[0]);
 	return 1;
 }
 static int64_t type_op(State& state, Closure const& closure, Instruction const& inst) {
 	Character c(1);
 	// Should have a direct mapping from type to symbol.
 	c[0] = Symbol(state, state.registers[inst.a].type.toString());
-	state.registers[0] = c;
+	out(state, inst.c) = c;
 	return 1;
 }
 static int64_t ret_op(State& state, Closure const& closure, Instruction const& inst) {
@@ -588,11 +638,17 @@ static int64_t ret_op(State& state, Closure const& closure, Instruction const& i
 //
 //
 
-//__attribute__((__noinline__,__noclone__)) 
 void eval(State& state, Closure const& closure) {
 	//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
+	if(closure.environment() != 0) eval(state, closure, closure.environment());	
+	else eval(state, closure, state.global);
+}
+
+//__attribute__((__noinline__,__noclone__)) 
+void eval(State& state, Closure const& closure, Environment* env) {
+	//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
 	Environment* oldenv = state.global;
-	if(closure.environment() != 0) state.global = closure.environment();	
+	state.global = env;	
 
 	Instruction const* pc;
 

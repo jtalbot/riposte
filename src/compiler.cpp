@@ -68,6 +68,14 @@ int64_t Compiler::compileConstant(Value const& expr, Closure& closure) {
 }
 
 int64_t Compiler::compileSymbol(Symbol const& symbol, Closure& closure) {
+	// search for symbol in variables list
+	if(scope.size() > 0) {
+		for(int64_t i = 0; i < scope.back().symbols.size(); i++) {
+			if(scope.back().symbols[i] == symbol) {
+				return  -(i+1);
+			}
+		}
+	}
 	closure.code().push_back(Instruction(ByteCode::get, symbol.i, 0, registerDepth));
 	return registerDepth++;
 }
@@ -151,8 +159,18 @@ int64_t Compiler::compileCall(Call const& call, Closure& closure) {
 		// the source for the assignment
 		int64_t source = compile(value, closure);
 
-		if(dest.isSymbol())
-			closure.code().push_back(Instruction(ByteCode::assign, source, 0, Symbol(dest).i));
+		assert(dest.isSymbol());
+		// check if destination is a reserved slot.
+		int64_t dest_i = Symbol(dest).i;
+		if(scope.size() > 0) {
+			for(int64_t i = 0; i < scope.back().symbols.size(); i++) {
+				if(scope.back().symbols[i] == dest) {
+					dest_i = -(i+1);
+				}
+			}
+		}
+		
+		closure.code().push_back(Instruction(ByteCode::assign, source, 0, dest_i));
 		if(source != initialDepth) throw CompileError("unbalanced registers in assign");
 		registerDepth = initialDepth;
 		return registerDepth++;
@@ -179,9 +197,11 @@ int64_t Compiler::compileCall(Call const& call, Closure& closure) {
 	} break;
 	case Symbol::E_function: 
 	{
+		Scope scope;
 		//compile the default parameters	
 		List c = PairList(call[1]);
 		List parameters(c.length);
+		Character names = getNames(c);
 		for(int64_t i = 0; i < parameters.length; i++) {
 			if(!c[i].isNil()) {
 				parameters[i] = compile(c[i]);
@@ -190,14 +210,16 @@ int64_t Compiler::compileCall(Call const& call, Closure& closure) {
 			else {
 				parameters[i] = c[i];
 			}
+			scope.symbols.push_back(names[i]);
 		}
-		setNames(parameters, getNames(c));
+		setNames(parameters, names);
 		closure.constants().push_back(parameters);
 
 		//compile the source for the body
+		this->scope.push_back(scope);
 		Closure body = compile(call[2]);
 		closure.constants().push_back(body);
-
+		this->scope.pop_back();
 		//push back the source code.
 		closure.constants().push_back(call[3]);
 	

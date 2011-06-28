@@ -485,6 +485,7 @@ public:
 };
 
 void eval(State& state, Closure const& closure);
+void eval(State& state, Closure const& closure, Environment* env);
 
 class CompiledCall {
 	struct Inner : public gc {
@@ -525,10 +526,13 @@ public:
 
 	Environment* staticParent() const { return s; }
 	Environment* dynamicParent() const { return d; }
+
+	Value slots[32];
 	
  	void init(Environment* s, Environment* d) {
 		this->s = s;
 		this->d = d;
+		container.clear();
 	}
 
 	bool getRaw(Symbol const& name, Value& value) const {

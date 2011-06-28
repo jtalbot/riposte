@@ -113,7 +113,7 @@ int dostdin(State& state) {
 			if(value.type == Type::I_nil) continue;
 			//std::cout << "Parsed: " << value.toString() << std::endl;
 			Closure closure = Compiler::compile(state, value);
-			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
+			std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
 			eval(state, closure);
 			result = state.registers[0];	
 			std::cout << state.stringify(result) << std::endl;
@@ -255,7 +255,7 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 	try {
 		importCoreLibrary(state);	
 		importCoerceFunctions(state);	
-		loadLibrary(state, "base");
+		//loadLibrary(state, "base");
 	} catch(RiposteError& error) { 
 		e_message("Error", "riposte", error.what().c_str());
 	} catch(RuntimeError& error) {
