@@ -22,8 +22,7 @@ void sourceFile(State& state, std::string name) {
 		parser.execute(code.c_str(), code.length(), true, value, trace);
 		//fclose(trace);	
 	
-		Closure closure = Compiler::compile(state, value);
-		eval(state, closure);
+		eval(state, Compiler::compile(state, value));
 	} catch(RiposteError& error) {
 		_warning(state, "Error: unable to load library " + name + ": " + error.what().c_str());
 	} catch(RuntimeError& error) {

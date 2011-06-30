@@ -31,17 +31,17 @@ private:
 		loopDepth = 0;
 	}
 	
-	Closure compile(Value const& expr); 				// compile into new closure
-	int64_t compile(Value const& expr, Closure& closure);		// compile into existing closure
+	Code* compile(Value const& expr); 			// compile into new code block
+	int64_t compile(Value const& expr, Code* code);		// compile into existing code block
 
-	int64_t compileConstant(Value const& expr, Closure& closure);
-	int64_t compileSymbol(Symbol const& symbol, Closure& closure); 
-	int64_t compileOp(Call const& call, Closure& closure); 
-	int64_t compileCall(Call const& call, Closure& closure); 
-	int64_t compileFunctionCall(Call const& call, Closure& closure); 
-	int64_t compileExpression(Expression const& values, Closure& closure);
+	int64_t compileConstant(Value const& expr, Code* code);
+	int64_t compileSymbol(Symbol const& symbol, Code* code); 
+	int64_t compileOp(Call const& call, Code* code); 
+	int64_t compileCall(Call const& call, Code* code); 
+	int64_t compileFunctionCall(Call const& call, Code* code); 
+	int64_t compileExpression(Expression const& values, Code* code);
 public:
-	static Closure compile(State& state, Value const& expr) {
+	static Code* compile(State& state, Value const& expr) {
 		Compiler compiler(state);
 		return compiler.compile(expr);
 	}

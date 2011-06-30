@@ -91,6 +91,7 @@ struct Symbol {
 
 	Symbol() : i(1) {}						// Defaults to the empty symbol...
 	Symbol(int64_t index) : i(index) {}
+	Symbol(SymbolTable& symbols, std::string const& s) : i(symbols.in(s)) {}
 	Symbol(State& state, std::string const& s) : i(state.symbols.in(s)) {}
 
 	Symbol(Value const& v) {
@@ -105,7 +106,8 @@ struct Symbol {
 		return v;
 	}
 
-	std::string const& toString(State const& state) const { return state.symbols.out(i); }
+	std::string const& toString(SymbolTable const& symbols) const { return symbols.out(i); }
+	std::string const& toString(State const& state) const { return toString(state.symbols); }
 	bool operator<(Symbol const& other) const { return i < other.i;	}
 	bool operator==(Symbol const& other) const { return i == other.i; }
 	bool operator!=(Symbol const& other) const { return i != other.i; }
@@ -379,49 +381,38 @@ inline Vector::Vector(Value v) {
 	};
 }
 
+struct Code : public gc {
+	Value expression;
+	std::vector<Value, traceable_allocator<Value> > constants;
+	std::vector<Instruction> bc;			// bytecode
+	mutable std::vector<Instruction> tbc;		// threaded bytecode
+};
+
 class Closure {
 private:
-	struct Inner : public gc {
-		Value expression;
-		std::vector<Value, traceable_allocator<Value> > constants;
-		std::vector<Instruction> code;
-		mutable std::vector<Instruction> threadedCode;
-	};
-	
-	Inner* inner;
+	Code* c;
 	Environment* env;	// if NULL, execute in current environment
-
-	Closure(Closure& c, Environment* environment) {
-		inner = c.inner;
-		env = environment;
-	} 
 public:
-	Closure() : inner(new Inner()), env(0) {}
+	Closure(Code* code, Environment* environment) : c(code), env(environment) {}
 	
 	Closure(Value const& v) {
 		assert(	v.type == Type::I_closure || 
 			v.type == Type::I_promise ||
 			v.type == Type::I_default); 
-		inner = (Inner*)v.p;
+		c = (Code*)v.p;
 		env = (Environment*)v.env;
 	}
 
 	operator Value() const {
-		Value v = {{(int64_t)inner}, {(int64_t)env}, 0, Type::I_closure};
+		Value v = {{(int64_t)c}, {(int64_t)env}, 0, Type::I_closure};
 		return v;
 	}
 
 	Closure bind(Environment* environment) {
-		return Closure(*this, environment);
+		return Closure(c, environment);
 	}
 
-	Value const& expression() const { return inner->expression; }
-	Value& expression() { return inner->expression; }
-	std::vector<Value, traceable_allocator<Value> > const& constants() const { return inner->constants; }
-	std::vector<Value, traceable_allocator<Value> >& constants() { return inner->constants; }
-	std::vector<Instruction> const& code() const { return inner->code; }
-	std::vector<Instruction>& code() { return inner->code; }
-	std::vector<Instruction>& threadedCode() const { return inner->threadedCode; }
+	Code* code() const { return c; }
 	Environment* environment() const { return env; }
 };
 
@@ -485,7 +476,8 @@ public:
 };
 
 void eval(State& state, Closure const& closure);
-void eval(State& state, Closure const& closure, Environment* env);
+void eval(State& state, Code const* code, Environment* environment); 
+void eval(State& state, Code const* code);
 
 class CompiledCall {
 	struct Inner : public gc {
@@ -570,7 +562,7 @@ public:
 	void getQuoted(Symbol const& name, Value& value) const {
 		getRaw(name, value);
 		if(value.type == Type::I_promise) {
-			value = Closure(value).expression();
+			value = Closure(value).code()->expression;
 		}
 	}
 

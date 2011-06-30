@@ -298,9 +298,7 @@ int64_t eval_fn(State& state, Call const& call, List const& args) {
 	Value expr = force(state, args[0]);
 	Value envir = force(state, args[1]);
 	//Value enclos = force(state, call[3]);
-	Closure closure = Compiler::compile(state, expr);
-	closure.bind(REnvironment(envir).ptr());
-	eval(state, closure);
+	eval(state, Compiler::compile(state, expr), REnvironment(envir).ptr());
 	return 1;
 }
 
@@ -316,8 +314,7 @@ int64_t lapply(State& state, Call const& call, List const& args) {
 	
 	for(int64_t i = 0; i < x.length; i++) {
 		apply[1] = x[i];
-		Closure closure = Compiler::compile(state, apply);
-		eval(state, closure);
+		eval(state, Compiler::compile(state, apply));
 		result[i] = state.registers[0];
 	}
 
@@ -360,8 +357,7 @@ int64_t source(State& state, Call const& call, List const& args) {
 	Value value;
 	parser.execute(code.c_str(), code.length(), true, value);	
 	
-	Closure closure = Compiler::compile(state, value);
-	eval(state, closure);
+	eval(state, Compiler::compile(state, value));
 	return 1;
 }
 
@@ -586,12 +582,12 @@ int64_t substitute(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	state.registers[0] = expression(args[0]);
 	Value v = args[0];
-	while(v.type == Type::I_promise) v = Closure(v).expression();
+	while(v.type == Type::I_promise) v = Closure(v).code()->expression;
 	
 	if(v.isSymbol()) {
 		Value r;
 		if(state.global->getRaw(v,r)) v = r;
-		while(v.type == Type::I_promise) v = Closure(v).expression();
+		while(v.type == Type::I_promise) v = Closure(v).code()->expression;
 	}
  	state.registers[0] = v;
 	return 1;

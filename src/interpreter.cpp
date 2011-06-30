@@ -37,7 +37,7 @@ static Value get(State& state, int64_t i) {
 	else {
 		Value& value = state.registers[i];
 		if(value.type == Type::I_default) {
-			eval(state, Closure(value), state.global);
+			eval(state, Closure(value).code(), state.global);
 			value = state.registers[0];
 		}
 		while(value.type == Type::I_promise) {
@@ -166,7 +166,7 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 		Value* old_registers = state.registers;
 		state.registers = &fenv->slots[16];
 		MatchArgs(state, fenv, func, arguments);
-		eval(state, func.body(), fenv);
+		eval(state, Closure(func.body()).code(), fenv);
 		state.registers = old_registers;
 		state.registers[0] = fenv->slots[16];
 		envs.push_back(fenv);
@@ -176,10 +176,9 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 	return 1;
 }
 
-static int64_t call_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t call_op(State& state, Code const* code, Instruction const& inst) {
 	Value func = state.registers[inst.c];
-	CompiledCall call(closure.constants()[inst.a]);
-	//List arguments = Clone(call.arguments());
+	CompiledCall call(code->constants[inst.a]);
 	List arguments = call.arguments();
 	// Specialize the precompiled promises to evaluate in the current scope
 	for(int64_t i = 0; i < arguments.length; i++) {
@@ -234,7 +233,7 @@ static int64_t call_op(State& state, Closure const& closure, Instruction const& 
 		return 1;
 	}	
 }
-static int64_t UseMethod_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t UseMethod_op(State& state, Code const* code, Instruction const& inst) {
 	Value v = state.registers[inst.a];
 	Symbol generic;
 	if(v.isCharacter())
@@ -288,7 +287,7 @@ static int64_t UseMethod_op(State& state, Closure const& closure, Instruction co
 		state.registers[0] = func.body();
 	return 1;
 }
-static int64_t get_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t get_op(State& state, Code const* code, Instruction const& inst) {
 	Value* old_registers = state.registers;
 	state.registers = &(state.registers[inst.c]);
 	bool success = state.global->get(state, Symbol(inst.a), state.registers[0] /* because we've rebased the registers pointer*/);
@@ -296,15 +295,15 @@ static int64_t get_op(State& state, Closure const& closure, Instruction const& i
 	if(!success) throw RiposteError(std::string("object '") + Symbol(inst.a).toString(state) + "' not found");
 	return 1;
 }
-static int64_t kget_op(State& state, Closure const& closure, Instruction const& inst) {
-	state.registers[inst.c] = closure.constants()[inst.a];
+static int64_t kget_op(State& state, Code const* code, Instruction const& inst) {
+	state.registers[inst.c] = code->constants[inst.a];
 	return 1;
 }
-static int64_t iget_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t iget_op(State& state, Code const* code, Instruction const& inst) {
 	state.path[0]->get(state, Symbol(inst.a), state.registers[inst.c]);
 	return 1;
 }
-static int64_t assign_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t assign_op(State& state, Code const* code, Instruction const& inst) {
 	if(inst.c >= 0) {
 		if(!Symbol(inst.c).isAssignable()) {
 			throw RiposteError("cannot assign to that symbol");
@@ -317,12 +316,12 @@ static int64_t assign_op(State& state, Closure const& closure, Instruction const
 	// assign assumes that source is equal to destination
 	return 1;
 }
-static int64_t iassign_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t iassign_op(State& state, Code const* code, Instruction const& inst) {
 	// a = value, b = index, c = dest 
 	subAssign(state, state.registers[inst.c], state.registers[inst.b], state.registers[inst.a], state.registers[inst.c]);
 	return 1;
 }
-static int64_t eassign_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t eassign_op(State& state, Code const* code, Instruction const& inst) {
 	// a = value, b = index, c = dest 
 	Value v = state.registers[inst.c];
 	if(v.isList()) {
@@ -336,7 +335,7 @@ static int64_t eassign_op(State& state, Closure const& closure, Instruction cons
 		return 1;
 	}
 }
-static int64_t forbegin_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t forbegin_op(State& state, Code const* code, Instruction const& inst) {
 	//TODO: need to keep a stack of these...
 	Value loopVector = state.registers[inst.c];
 	state.registers[inst.c] = Null::singleton;
@@ -346,13 +345,13 @@ static int64_t forbegin_op(State& state, Closure const& closure, Instruction con
 	state.global->assign(Symbol(inst.b), Element(loopVector, 0));
 	return 1;
 }
-static int64_t forend_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t forend_op(State& state, Code const* code, Instruction const& inst) {
 	if(++state.registers[inst.c+2].i < (int64_t)state.registers[inst.c+1].length) { 
 		state.global->assign(Symbol(inst.b), Element(state.registers[inst.c+1], state.registers[inst.c+2].i));
 		return inst.a; 
 	} else return 1;
 }
-static int64_t iforbegin_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t iforbegin_op(State& state, Code const* code, Instruction const& inst) {
 	double m = asReal1(state.registers[inst.c]);
 	double n = asReal1(state.registers[inst.c+1]);
 	state.registers[inst.c] = Null::singleton;
@@ -363,272 +362,283 @@ static int64_t iforbegin_op(State& state, Closure const& closure, Instruction co
 	state.global->assign(Symbol(inst.b), Integer::c(m));
 	return 1;
 }
-static int64_t iforend_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t iforend_op(State& state, Code const* code, Instruction const& inst) {
 	if((state.registers[inst.c+2].i+=state.registers[inst.c+1].i) < (int64_t)state.registers[inst.c+1].length) { 
 		state.global->assign(Symbol(inst.b), state.registers[inst.c+2]);
 		return inst.a; 
 	} else return 1;
 }
-static int64_t whilebegin_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t whilebegin_op(State& state, Code const* code, Instruction const& inst) {
 	Logical l(state.registers[inst.b]);
 	state.registers[inst.c] = Null::singleton;
 	if(l[0]) return 1;
 	else return inst.a;
 }
-static int64_t whileend_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t whileend_op(State& state, Code const* code, Instruction const& inst) {
 	Logical l(state.registers[inst.b]);
 	if(l[0]) return inst.a;
 	else return 1;
 }
-static int64_t repeatbegin_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t repeatbegin_op(State& state, Code const* code, Instruction const& inst) {
 	state.registers[inst.c] = Null::singleton;
 	return 1;
 }
-static int64_t repeatend_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t repeatend_op(State& state, Code const* code, Instruction const& inst) {
 	return inst.a;
 }
-static int64_t next_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t next_op(State& state, Code const* code, Instruction const& inst) {
 	return inst.a;
 }
-static int64_t break1_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t break1_op(State& state, Code const* code, Instruction const& inst) {
 	return inst.a;
 }
-static int64_t if1_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t if1_op(State& state, Code const* code, Instruction const& inst) {
 	Logical l = As<Logical>(state, state.registers[inst.b]);
 	if(l.length == 0) _error("if argument is of zero length");
 	if(l[0]) return 1;
 	else return inst.a;
 }
-static int64_t if0_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t if0_op(State& state, Code const* code, Instruction const& inst) {
 	Logical l = As<Logical>(state, state.registers[inst.b]);
 	if(l.length == 0) _error("if argument is of zero length");
 	if(!l[0]) return 1;
 	else return inst.a;
 }
-static int64_t colon_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t colon_op(State& state, Code const* code, Instruction const& inst) {
 	double from = asReal1(state.registers[inst.a]);
 	double to = asReal1(state.registers[inst.b]);
 	state.registers[inst.c] = Sequence(from, to>from?1:-1, fabs(to-from)+1);
 	return 1;
 }
-static int64_t seq_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t seq_op(State& state, Code const* code, Instruction const& inst) {
 	int64_t len = As<Integer>(state, state.registers[inst.a])[0];
 	state.registers[inst.c] = Sequence(len);
 	return 1;
 }
-static int64_t add_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t add_op(State& state, Code const* code, Instruction const& inst) {
 	//if(!isObject(stack.peek()) && !isObject(stack.peek(1)))
 	//binaryArith<Zip2, AddOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
 	binaryArith<Zip2, AddOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	//else
-	//	groupGeneric2(state, stack, closure, inst);
+	//	groupGeneric2(state, stack, code, inst);
 	return 1;
 }
-static int64_t pos_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t pos_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, PosOp>(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t sub_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t sub_op(State& state, Code const* code, Instruction const& inst) {
 	binaryArith<Zip2, SubOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t neg_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t neg_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, NegOp>(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t mul_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t mul_op(State& state, Code const* code, Instruction const& inst) {
 	binaryArith<Zip2, MulOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t div_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t div_op(State& state, Code const* code, Instruction const& inst) {
 	binaryArith<Zip2, DivOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t idiv_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t idiv_op(State& state, Code const* code, Instruction const& inst) {
 	binaryArith<Zip2, IDivOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t mod_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t mod_op(State& state, Code const* code, Instruction const& inst) {
 	binaryArith<Zip2, ModOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t pow_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t pow_op(State& state, Code const* code, Instruction const& inst) {
 	binaryArith<Zip2, PowOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t lnot_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t lnot_op(State& state, Code const* code, Instruction const& inst) {
 	unaryLogical<Zip1, LNotOp>(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t land_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t land_op(State& state, Code const* code, Instruction const& inst) {
 	binaryLogical<Zip2, AndOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t lor_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t lor_op(State& state, Code const* code, Instruction const& inst) {
 	binaryLogical<Zip2, OrOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t eq_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t eq_op(State& state, Code const* code, Instruction const& inst) {
 	binaryOrdinal<Zip2, EqOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t neq_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t neq_op(State& state, Code const* code, Instruction const& inst) {
 	binaryOrdinal<Zip2, NeqOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t lt_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t lt_op(State& state, Code const* code, Instruction const& inst) {
 	binaryOrdinal<Zip2, LTOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t le_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t le_op(State& state, Code const* code, Instruction const& inst) {
 	binaryOrdinal<Zip2, LEOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t gt_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t gt_op(State& state, Code const* code, Instruction const& inst) {
 	binaryOrdinal<Zip2, GTOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t ge_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t ge_op(State& state, Code const* code, Instruction const& inst) {
 	binaryOrdinal<Zip2, GEOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
 	return 1;
 }
-static int64_t abs_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t abs_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, AbsOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t sign_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t sign_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, SignOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t sqrt_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t sqrt_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, SqrtOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t floor_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t floor_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, FloorOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t ceiling_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t ceiling_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, CeilingOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t trunc_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t trunc_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, TruncOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t round_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t round_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, RoundOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t signif_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t signif_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, SignifOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t exp_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t exp_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, ExpOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t log_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t log_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, LogOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t cos_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t cos_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, CosOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t sin_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t sin_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, SinOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t tan_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t tan_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, TanOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t acos_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t acos_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, ACosOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t asin_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t asin_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, ASinOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t atan_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t atan_op(State& state, Code const* code, Instruction const& inst) {
 	unaryArith<Zip1, ATanOp >(state, get(state, inst.a), out(state, inst.c));
 	return 1;
 }
-static int64_t jmp_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t jmp_op(State& state, Code const* code, Instruction const& inst) {
 	return (int64_t)inst.a;
 }
-static int64_t null_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t null_op(State& state, Code const* code, Instruction const& inst) {
 	out(state, inst.c) = Null::singleton;
 	return 1;
 }
-static int64_t true1_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t true1_op(State& state, Code const* code, Instruction const& inst) {
 	out(state, inst.c) = Logical::True();
 	return 1;
 }
-static int64_t false1_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t false1_op(State& state, Code const* code, Instruction const& inst) {
 	out(state, inst.c) = Logical::False();
 	return 1;
 }
-static int64_t NA_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t NA_op(State& state, Code const* code, Instruction const& inst) {
 	out(state, inst.c) = Logical::NA();
 	return 1;
 }
-static int64_t istrue_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t istrue_op(State& state, Code const* code, Instruction const& inst) {
 	Logical l = As<Logical>(state, state.registers[inst.a]);
 	if(l.length == 0) _error("argument is of zero length");
 	out(state, inst.c) = l[0] ? Logical::True() : Logical::False();
 	return 1;
 }
-static int64_t function_op(State& state, Closure const& closure, Instruction const& inst) {
-	out(state, inst.c) = Function(closure.constants()[inst.a], closure.constants()[inst.b], closure.constants()[inst.b+1], state.global);
+static int64_t function_op(State& state, Code const* code, Instruction const& inst) {
+	out(state, inst.c) = Function(code->constants[inst.a], code->constants[inst.b], code->constants[inst.b+1], state.global);
 	return 1;
 }
-static int64_t logical1_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t logical1_op(State& state, Code const* code, Instruction const& inst) {
 	Integer i = As<Integer>(state, get(state, inst.a));
 	out(state, inst.c) = Logical(i[0]);
 	return 1;
 }
-static int64_t integer1_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t integer1_op(State& state, Code const* code, Instruction const& inst) {
 	Integer i = As<Integer>(state, get(state, inst.a));
 	out(state, inst.c) = Integer(i[0]);
 	return 1;
 }
-static int64_t double1_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t double1_op(State& state, Code const* code, Instruction const& inst) {
 	Integer i = As<Integer>(state, get(state, inst.a));
 	out(state, inst.c) = Double(i[0]);
 	return 1;
 }
-static int64_t complex1_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t complex1_op(State& state, Code const* code, Instruction const& inst) {
 	Integer i = As<Integer>(state, get(state, inst.a));
 	out(state, inst.c) = Complex(i[0]);
 	return 1;
 }
-static int64_t character1_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t character1_op(State& state, Code const* code, Instruction const& inst) {
 	Integer i = As<Integer>(state, get(state, inst.a));
 	Character r = Character(i[0]);
 	for(int64_t j = 0; j < r.length; j++) r[j] = Symbol::empty;
 	out(state, inst.c) = r;
 	return 1;
 }
-static int64_t raw1_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t raw1_op(State& state, Code const* code, Instruction const& inst) {
 	Integer i = As<Integer>(state, get(state, inst.a));
 	out(state, inst.c) = Raw(i[0]);
 	return 1;
 }
-static int64_t type_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t type_op(State& state, Code const* code, Instruction const& inst) {
 	Character c(1);
 	// Should have a direct mapping from type to symbol.
 	c[0] = Symbol(state, state.registers[inst.a].type.toString());
 	out(state, inst.c) = c;
 	return 1;
 }
-static int64_t ret_op(State& state, Closure const& closure, Instruction const& inst) {
+static int64_t ret_op(State& state, Code const* code, Instruction const& inst) {
 	// not used. Jumps to done label instead
 	return 0;
 }
 
+
+void eval(State& state, Closure const& closure) {
+	eval(state, closure.code(), closure.environment());
+}
+
+void eval(State& state, Code const* code, Environment* environment) {
+	Environment* oldenv = state.global;
+	state.global = environment;	
+	eval(state, code);
+	state.global = oldenv;
+}
 
 // 
 //
@@ -637,56 +647,44 @@ static int64_t ret_op(State& state, Closure const& closure, Instruction const& i
 #define THREADED_INTERPRETER
 //
 //
-
-void eval(State& state, Closure const& closure) {
-	//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
-	if(closure.environment() != 0) eval(state, closure, closure.environment());	
-	else eval(state, closure, state.global);
-}
-
 //__attribute__((__noinline__,__noclone__)) 
-void eval(State& state, Closure const& closure, Environment* env) {
-	//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
-	Environment* oldenv = state.global;
-	state.global = env;	
-
+void eval(State& state, Code const* code) {
 	Instruction const* pc;
 
 #ifdef THREADED_INTERPRETER
     #define LABELS_THREADED(name,type,p) (void*)&&name##_label,
 	static const void* labels[] = {BC_ENUM(LABELS_THREADED,0)};
 
-	/* Initialize threadedCode in closure if not yet done */
-	if(closure.threadedCode().size() == 0)
+	/* Initialize threaded bytecode if not yet done */
+	if(code->tbc.size() == 0)
 	{
-		for(int64_t i = 0; i < (int64_t)closure.code().size(); ++i) {
-			Instruction const& inst = closure.code()[i];
-			closure.threadedCode().push_back(
+		for(int64_t i = 0; i < (int64_t)code->bc.size(); ++i) {
+			Instruction const& inst = code->bc[i];
+			code->tbc.push_back(
 				Instruction(
 					inst.bc == ByteCode::ret ? (void*)&&DONE : labels[inst.bc.Enum()],
 					inst.a, inst.b, inst.c));
 		}
 	}
 
-	pc = &(closure.threadedCode()[0]);
+	pc = &(code->tbc[0]);
 	goto *(pc->ibc);
 	#define LABELED_OP(name,type,p) \
 		name##_label: \
-			pc += name##_op(state, closure, *pc); goto *(pc->ibc); 
+			pc += name##_op(state, code, *pc); goto *(pc->ibc); 
 	BC_ENUM(LABELED_OP,0)
 	DONE: {}	
 #else
-	pc = &(closure.code()[0]);
+	pc = &(code.code()[0]);
 	while(pc->bc != ByteCode::ret) {
 		Instruction const& inst = *pc;
 		switch(inst.bc.internal()) {
 			#define SWITCH_OP(name,type,p) \
-				case ByteCode::E##name: pc += name##_op(state, closure, inst); break;
+				case ByteCode::E##name: pc += name##_op(state, code, inst); break;
 			BC_ENUM(SWITCH_OP,0)
 		};
 	}
 #endif
-	state.global = oldenv;
 	state.registers[0] = state.registers[pc->c];
 }
 
