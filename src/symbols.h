@@ -84,6 +84,7 @@
 	_(FALSE, "FALSE", p) \
 	_(type, "typeof", p) \
 	_(funargs, "..funargs", p) \
+	_(value, "value", p) \
 
 
 class SymbolTable {

@@ -21,7 +21,7 @@ inline Value force(State& state, Value v) {
 }
 inline Value expression(Value const& v) { 
 	if(v.type == Type::I_promise)
-		return Closure(v).expression();
+		return Closure(v).code()->expression;
 	else return v; 
 }
 
@@ -184,7 +184,7 @@ inline Character klass(State& state, Value const& v)
 	if(!hasClass(v)) {
 		Character c(1);
 		if(v.type == Type::R_integer || v.type == Type::R_double)
-			c[0] = Symbol(state, "numeric");
+			c[0] = Symbol::Numeric;
 		else if(v.type == Type::R_symbol)
 			c[0] = Symbol(state, "name");
 		else c[0] = Symbol(state, (v).type.toString());

@@ -23,7 +23,7 @@ const Value Value::NIL = {{0}, {0}, 0, Type::I_nil};
 SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 
 	SymbolTable::SymbolTable() : next(0) {
-		// insert predefined symbols into table at known positions (corresponding to their enum value)
+		// insert predefined state into table at known positions (corresponding to their enum value)
 #define ENUM_STRING_TABLE(name, string, EnumType) \
 		symbolTable[string] = EnumType::E_##name; \
 		reverseSymbolTable[EnumType::E_##name] = string;\
@@ -57,7 +57,7 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 			   call[i].type == Type::R_symbol ||
 			   call[i].type == Type::I_promise ||
 			   call[i].type == Type::R_pairlist) {
-				arguments[i-1] = Compiler::compile(state, call[i]);
+				arguments[i-1] = Closure(Compiler::compile(state, call[i]),NULL);
 				arguments[i-1].type = Type::I_promise;
 			} else if(call[i].type == Type::I_closure) {
 				arguments[i-1] = call[i];

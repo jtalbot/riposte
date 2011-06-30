@@ -171,13 +171,13 @@ std::string State::stringify(Value const& value) const {
 		case Type::E_I_closure:
 		{
 			Closure b(value);
-			std::string r = "block:\nconstants: " + intToStr(b.constants().size()) + "\n";
-			for(int64_t i = 0; i < (int64_t)b.constants().size(); i++)
-				r = r + intToStr(i) + "=\t" + stringify(b.constants()[i]) + "\n";
+			std::string r = "block:\nconstants: " + intToStr(b.code()->constants.size()) + "\n";
+			for(int64_t i = 0; i < (int64_t)b.code()->constants.size(); i++)
+				r = r + intToStr(i) + "=\t" + stringify(b.code()->constants[i]) + "\n";
 		
-			r = r + "code: " + intToStr(b.code().size()) + "\n";
-			for(int64_t i = 0; i < (int64_t)b.code().size(); i++)
-				r = r + intToStr(i) + ":\t" + b.code()[i].toString() + "\n";
+			r = r + "code: " + intToStr(b.code()->bc.size()) + "\n";
+			for(int64_t i = 0; i < (int64_t)b.code()->bc.size(); i++)
+				r = r + intToStr(i) + ":\t" + b.code()->bc[i].toString() + "\n";
 		
 			return r;
 		}
