@@ -66,8 +66,11 @@ struct State {
 
 	SymbolTable symbols;
 	
+	bool recording_trace;
+
 	State(Environment* global, Environment* base) : registers(&Registers[0]) {
 		this->global = global;
+		recording_trace = false;
 		path.push_back(base);
 	}
 
