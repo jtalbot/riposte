@@ -19,6 +19,7 @@
 #include "enum.h"
 #include "symbols.h"
 #include "exceptions.h"
+#include "trace.h"
 
 struct Attributes;
 
@@ -66,11 +67,10 @@ struct State {
 
 	SymbolTable symbols;
 	
-	bool recording_trace;
+	TraceState tracing; //all state related to tracing compiler
 
 	State(Environment* global, Environment* base) : registers(&Registers[0]) {
 		this->global = global;
-		recording_trace = false;
 		path.push_back(base);
 	}
 
@@ -389,6 +389,7 @@ struct Code : public gc {
 	std::vector<Value, traceable_allocator<Value> > constants;
 	std::vector<Instruction> bc;			// bytecode
 	mutable std::vector<Instruction> tbc;		// threaded bytecode
+	std::vector<Trace *> traces;
 };
 
 class Closure {

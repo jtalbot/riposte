@@ -1,29 +1,80 @@
 #include "recording.h"
 #include "interpreter.h"
 
-static void unpatch_inst(Code const * code, Instruction const & inst) {
+
+void recording_unpatch_inst(Code const * code, Instruction const & inst) {
 	const_cast<Instruction&>(inst).ibc = interpreter_label_for(bytecode_for_threaded_inst(code,&inst),false);
 }
 
-static int64_t patch_inst(State& state,Code const * code, Instruction const & inst, int64_t offset) {
-	if(state.recording_trace) {
-		Instruction * next = const_cast<Instruction*>(&inst + offset);
-		next->ibc = interpreter_label_for(bytecode_for_threaded_inst(code,next),true);
-	}
+int64_t recording_patch_inst(State& state,Code const * code, Instruction const & inst, int64_t offset) {
+	Instruction * next = const_cast<Instruction*>(&inst + offset);
+	next->ibc = interpreter_label_for(bytecode_for_threaded_inst(code,next),true);
 	return offset;
 }
 
-#define ENTER_RECORDING_OP unpatch_inst(code,inst)
-#define LEAVE_RECORDING_OP(offset) return patch_inst(state,code,inst,offset)
+#define ENUM_ABORT_REASON(_,p) \
+	_(RETURN,"trace escaped calling scope",p) \
+	_(LENGTH,"trace too big",p) \
+	_(RECURSION,"trace encountered an invoke trace node",p) \
+	_(UNSUPPORTED_OP,"trace encountered unsupported op",p)
+
+
+DECLARE_ENUM(AbortReason,ENUM_ABORT_REASON)
+DEFINE_ENUM(AbortReason,ENUM_ABORT_REASON)
+DEFINE_ENUM_TO_STRING(AbortReason,ENUM_ABORT_REASON)
+
+//for brevity
+#define TRACE (state.tracing.current_trace)
+static void recording_abort(State & state, AbortReason reason) {
+	printf("trace aborted: %s\n",reason.toString());
+	TRACE = NULL; //Can I call delete on a gc'd object?
+}
+
+//do setup code that is common to all ops
+//in particular, we need to check:
+// -- have we aborted the trace on the previous instruction? if so, exit the recorder
+// -- do we need to abort due to conditions applying to all opcodes? if so, abort the trace, then exit the recorder
+// -- is the trace complete? if so, install the trace, and exit the recorder
+// -- otherwise, the recorder continues normally
+//returns true if we should continue recording
+static bool recording_enter_op(State& state,Code const * code, Instruction const & inst) {
+	recording_unpatch_inst(code,inst);
+	if(TRACE == NULL)
+		return false;
+	if((int64_t)TRACE->recorded_bcs.size() > state.tracing.max_length) {
+		recording_abort(state,AbortReason::LENGTH);
+		return false;
+	}
+	if(TRACE->depth == 0 && TRACE->recorded_bcs.size() > 0 && TRACE->trace_start == &inst) {
+		trace_compile_and_install(TRACE);
+		TRACE = NULL;
+		return false;
+	}
+	return true;
+}
+
+static int64_t recording_leave_op(State& state,Code const * code, Instruction const & inst,int64_t offset) {
+	return recording_patch_inst(state,code,inst,offset);
+}
+
+#define ENTER_RECORDING_OP \
+	do { \
+		if(!recording_enter_op(state,code,inst)) \
+			return 0; \
+	} while(0)
+
+#define LEAVE_RECORDING_OP(offset) return recording_leave_op(state,code,inst,offset)
 
 #define OP_NOT_IMPLEMENTED(bc) \
 	ENTER_RECORDING_OP; \
 	printf("recording " #bc "\n"); \
+	TRACE->recorded_bcs.push_back(inst); \
 int64_t offset = bc##_op(state,code,inst); \
 	LEAVE_RECORDING_OP(offset); \
 
 
 int64_t call_record(State& state, Code const* code, Instruction const& inst) {
+	state.tracing.current_trace->depth++;
 	OP_NOT_IMPLEMENTED(call);
 }
 int64_t get_record(State& state, Code const* code, Instruction const& inst) {
@@ -233,8 +284,17 @@ int64_t seq_record(State& state, Code const* code, Instruction const& inst) {
 int64_t type_record(State& state, Code const* code, Instruction const& inst) {
 	OP_NOT_IMPLEMENTED(type);
 }
+int64_t invoketrace_record(State& state, Code const* code, Instruction const& inst) {
+	ENTER_RECORDING_OP;
+	recording_abort(state,AbortReason::RECURSION);
+	return 0;
+}
 int64_t ret_record(State& state, Code const* code, Instruction const& inst) {
 	ENTER_RECORDING_OP;
-	printf("ret!\n");
-	return 0; //execute the ret operation again, but do not record it, this will cause eval to return.
+	if(TRACE->depth == 0)
+		recording_abort(state,AbortReason::RETURN);
+	else
+		TRACE->depth--;
+
+	return 0; //execute the ret operation again, but in non-recording mode, this will cause eval to return.
 }

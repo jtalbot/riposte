@@ -77,6 +77,7 @@
 	_(UseMethod, "UseMethod", p) \
 	_(seq, "seq", p) \
 	_(type, "type", p) \
+	_(invoketrace,"invoketrace",p) \
 	_(ret, "ret", p)       /* ret must be the last instruction */
 	/*_(frame, "frame") \
 	_(rawfunction, "rawfunction") \

@@ -9,6 +9,7 @@
 #include "ops.h"
 #include "internal.h"
 #include "recording.h"
+#include "interpreter.h"
 
 // (stack discipline is hard to prove in R, but can we do better?)
 // 1. If a function is returned, must assume that it contains upvalues to anything in either
@@ -131,6 +132,22 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 	else
 		state.registers[0] = func.body();
 	return 1;
+}
+
+//track the heat of back edge operations and invoke the recorder on hot traces
+#define PROFILE_TABLE_SIZE 1021
+static void profile_back_edge(State & state, Code const * code, Instruction const& inst, int64_t pcoffset) {
+	if(state.tracing.is_tracing())
+		return;
+	static int64_t hash_table[PROFILE_TABLE_SIZE];
+	assert(sizeof(Instruction) == 32);
+	int64_t value = ( (int64_t) &inst >> 5 ) % PROFILE_TABLE_SIZE;
+	int64_t heat = ++hash_table[value];
+	if(heat >= state.tracing.start_count) {
+		printf("beginning trace\n");
+		state.tracing.current_trace = new Trace(const_cast<Code*>(code),const_cast<Instruction*>(&inst + pcoffset));
+		recording_patch_inst(state,code,inst,pcoffset); //next instruction will enter trace recorder
+	}
 }
 
 int64_t call_op(State& state, Code const* code, Instruction const& inst) {
@@ -300,6 +317,7 @@ int64_t forbegin_op(State& state, Code const* code, Instruction const& inst) {
 int64_t forend_op(State& state, Code const* code, Instruction const& inst) {
 	if(++state.registers[inst.c+2].i < (int64_t)state.registers[inst.c+1].length) { 
 		state.global->assign(Symbol(inst.b), Element(state.registers[inst.c+1], state.registers[inst.c+2].i));
+		profile_back_edge(state,code,inst,inst.a);
 		return inst.a; 
 	} else return 1;
 }
@@ -317,6 +335,7 @@ int64_t iforbegin_op(State& state, Code const* code, Instruction const& inst) {
 int64_t iforend_op(State& state, Code const* code, Instruction const& inst) {
 	if((state.registers[inst.c+2].i+=state.registers[inst.c+1].i) < (int64_t)state.registers[inst.c+1].length) { 
 		state.global->assign(Symbol(inst.b), state.registers[inst.c+2]);
+		profile_back_edge(state,code,inst,inst.a);
 		return inst.a; 
 	} else return 1;
 }
@@ -328,8 +347,10 @@ int64_t whilebegin_op(State& state, Code const* code, Instruction const& inst) {
 }
 int64_t whileend_op(State& state, Code const* code, Instruction const& inst) {
 	Logical l(state.registers[inst.b]);
-	if(l[0]) return inst.a;
-	else return 1;
+	if(l[0]) {
+		profile_back_edge(state,code,inst,inst.a);
+		return inst.a;
+	} else return 1;
 }
 int64_t repeatbegin_op(State& state, Code const* code, Instruction const& inst) {
 	state.registers[inst.c] = Null::singleton;
@@ -575,6 +596,17 @@ int64_t type_op(State& state, Code const* code, Instruction const& inst) {
 	state.registers[0] = c;
 	return 1;
 }
+int64_t invoketrace_op(State& state, Code const * code, Instruction const & inst) {
+	printf("invoking trace\n");
+	Trace * trace = code->traces[inst.a];
+	//NYI: for now just run the old bytecode
+#define BC_SWITCH(bc,str,p) case ByteCode::E_##bc: return bc##_op(state,code,trace->trace_inst);
+	switch(trace->trace_inst.bc.Enum()) {
+		BC_ENUM(BC_SWITCH,0)
+	}
+#undef BC_SWITCH
+	return 1;
+}
 int64_t ret_op(State& state, Code const* code, Instruction const& inst) {
 	// not used. Jumps to done label instead
 	return 0;
@@ -635,8 +667,8 @@ void eval(State& state, Code const* code) {
 		}
 	}
 
-	if(state.recording_trace) {
-		//patch threaded interperter to enter the trace recorder
+	if(state.tracing.is_tracing()) {
+		//patch threaded interpreter to enter the trace recorder
 		code->tbc[0].ibc = interpreter_label_for(code->bc[0].bc,true);
 	}
 
