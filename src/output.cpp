@@ -187,13 +187,35 @@ std::string State::stringify(Value const& value) const {
 }
 std::string State::stringify(Trace const & t) const {
 	std::string r = "trace:\nconstants: " + intToStr(t.constants.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)t.constants.size(); i++)
+	for(size_t i = 0; i < t.constants.size(); i++)
 		r = r + intToStr(i) + "=\t" + stringify(t.constants[i]) + "\n";
 
 	r = r + "code: " + intToStr(t.recorded.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)t.recorded.size(); i++)
+	for(size_t i = 0; i < t.recorded.size(); i++)
 		r = r + intToStr(i) + ":\t" + t.recorded[i].toString() + "\n";
 
+	r = r + "exits: " + intToStr(t.exits.size()) + "\n";
+	for(size_t i = 0; i < t.exits.size(); i++) {
+		int32_t snapshot = t.exits[i].snapshot;
+		r = r + intToStr(i) + ":\t";
+		for(size_t j = 0; j < t.renaming_table.outputs.size(); j++) {
+			const RenamingTable::Entry & e = t.renaming_table.outputs[j];
+			if(e.location == RenamingTable::SLOT)
+				r = r + "s";
+			else
+				r = r + "v";
+			r = r + intToStr(e.id) + " -> ";
+			int32_t node;
+			if(t.renaming_table.get(e.location,e.id,snapshot,&node)) {
+				r = r + intToStr(node);
+			} else {
+				t.renaming_table.get(e.location,e.id,&node);
+				r = r + "u[" + intToStr(node) + "]";
+			}
+			r = r + "; ";
+		}
+		r = r + "\n";
+	}
 	return r;
 }
 

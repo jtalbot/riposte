@@ -15,7 +15,7 @@ struct TraceState {
 		//numbers are currently just for debugging
 		start_count = 2;
 		max_attempts = 3;
-		max_length = 10;
+		max_length = 100;
 		current_trace = NULL;
 	}
 
@@ -32,65 +32,96 @@ struct TraceState {
 
 struct RenamingTable {
 
+	enum {SLOT = 0, VARIABLE = 1};
+
 	struct Status {
-		Status() { flags = UNDEF; }
-		enum {
-			UNDEF = 0,
-			READ = 1, //do we read this into the trace externally?
-			WRITE = 2, //have we written to the variable during the trace?
-		};
-		int32_t flags;
-		int32_t node; //what IRNode defines its value (undefined if flags == 0)
+		int64_t id;
+		int32_t ir_node;
+
+		uint32_t location : 1; //SLOT or VARIABLE
+
+		uint32_t read : 1; //do we read this into the trace externally?
+		uint32_t write : 1; //have we written to the variable during the trace?
 	};
 
-	Status slots[1024]; //this will be updated to work with slots when slots are implemented, for now it refers to registers
-	std::map<int64_t,Status> variables;
+	struct Entry {
+		int64_t id;
+		uint32_t location : 1;
+	};
 
-	void assign_slot(int64_t slot_id,int32_t node) {
-		slots[slot_id].flags |= Status::WRITE;
-		slots[slot_id].node = node;
-	}
-	void assign_var(int64_t var_id, int32_t node) {
-		Status & v = variables[var_id];
-		v.flags |= Status::WRITE;
-		v.node = node;
-	}
-	//returns true if slot already exists, node points to definitions
-	//returns false if it did not exist, sets READ status indicating that it must be read from outside the trace, and sets it initial value to load_inst, the offset where the load instruction for the value should be inserted
-	bool get_slot(int64_t slot_id, int32_t load_inst, int32_t * node) {
-		Status & s = slots[slot_id];
-		return define_or_get(&s,load_inst,node);
-	}
-	bool get_var(int64_t var_id, int32_t load_inst, int32_t * node) {
-		Status & s= variables[var_id];
-		return define_or_get(&s,load_inst,node);
+	int32_t last_snapshot;
+	std::vector<Status> journal;
+	std::vector<Entry> outputs; //list of values that will be written when the trace completes
+
+	RenamingTable() {
+		last_snapshot = 0;
 	}
 
-	bool define_or_get(Status * s, int32_t load_inst, int32_t * node) {
-		if(s->flags == Status::UNDEF) {
-			s->flags |= Status::READ;
-			s->node = load_inst;
-			*node = load_inst;
-			return false;
-		} else {
-			*node = s->node;
+	bool lookup(uint32_t location, int64_t id, int32_t snapshot, int32_t * idx) const {
+		for(int32_t i = snapshot; i > 0; i--) {
+			const Status & s = journal[i - 1];
+			if(s.id == id && s.location == location) {
+				*idx = i - 1;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool get(uint32_t location, int64_t id, int32_t * node) const { return get(location,id,journal.size(),node); }
+	bool get(uint32_t location, int64_t id, int32_t snapshot, int32_t * node, bool * read = NULL, bool * write = NULL) const {
+		int32_t idx;
+		if(lookup(location,id,snapshot,&idx)) {
+			*node = journal[idx].ir_node;
+			if(read)
+				*read = journal[idx].read != 0;
+			if(write)
+				*write = journal[idx].write != 0;
 			return true;
+		} else
+			return false;
+	}
+	void assign(uint32_t location, int64_t id, int32_t node) {
+		int32_t idx;
+		if(lookup(location,id,journal.size(),&idx)) {
+			if(journal[idx].write == 0) { //only add to outputs the first time we set the write bit
+				Entry w = {id, location};
+				outputs.push_back(w);
+			}
+			Status * s;
+			if(idx >= last_snapshot) {
+				//no snapshots for this range have been requested, we can
+				//just make the update in place
+				s = &journal[idx];
+			} else {
+				//otherwise, make a copy
+				journal.push_back(journal[idx]);
+				s = &journal.back();
+			}
+			s->write = 1;
+			s->ir_node = node;
+		} else {
+			Status s = { id, node, location, 0, 1};
+			Entry w = { id, location };
+			journal.push_back(s);
+			outputs.push_back(w);
 		}
 	}
 
-	bool var_is_loop_invariant(int64_t var_id) {
-		return (variables[var_id].flags != (Status::WRITE | Status::READ));
+	void input(uint32_t location, int64_t id, int32_t node) {
+		Status s  = { id, node, location, 1, 0};
+		journal.push_back(s);
 	}
-	bool slot_is_loop_invariant(int64_t slot_id) {
-		return (slots[slot_id].flags != (Status::WRITE | Status::READ));
+
+	int32_t create_snapshot() {
+		//save a view of the renaming table, so we know how to store state when trace exits
+		last_snapshot = journal.size();
+		return last_snapshot;
 	}
-	typedef int Snapshot;
-	Snapshot create_snapshot() {
-		//NYI: save a view of the renaming table, so we know how to store state when trace exits
-		//this can be implemented with a snapshot being an offset, and the renaming table being implemented as
-		//a journal
-		return 0;
-	}
+};
+
+struct TraceExit {
+	int32_t snapshot;
 };
 
 struct Trace : public gc {
@@ -106,6 +137,7 @@ struct Trace : public gc {
 	RenamingTable renaming_table;
 
 	std::vector<Value>  constants;
+	std::vector<TraceExit> exits;
 	std::vector<IRNode> recorded;
 };
 

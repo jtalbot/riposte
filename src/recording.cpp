@@ -83,20 +83,20 @@ static void recording_end(State & state, RecordingStatus reason) {
 
 
 static RecordingStatus get_slot(State & state, int64_t slot_id, int32_t * node) {
-	int32_t next_id = TRACE->recorded.size();
-	if(!TRACE->renaming_table.get_slot(slot_id,next_id,node)) {
+	if(!TRACE->renaming_table.get(RenamingTable::SLOT,slot_id,node)) {
 		Value & value = state.Registers[slot_id];
-		EMITIR(sload,value,slot_id,0,NULL);
+		EMITIR(sload,value,slot_id,0,node);
+		TRACE->renaming_table.input(RenamingTable::SLOT,slot_id,*node);
 	}
 	return RecordingStatus::NO_ERROR;
 }
 
 static RecordingStatus get_var(State & state, int64_t var_id, int32_t * node) {
-	int32_t next_id = TRACE->recorded.size();
-	if(!TRACE->renaming_table.get_var(var_id,next_id,node)) {
+	if(!TRACE->renaming_table.get(RenamingTable::VARIABLE,var_id,node)) {
 		Value value;
 		state.global->get(state,Symbol(var_id),value);
-		EMITIR(vload,value,var_id,0,NULL);
+		EMITIR(vload,value,var_id,0,node);
+		TRACE->renaming_table.input(RenamingTable::VARIABLE,var_id,*node);
 	}
 	return RecordingStatus::NO_ERROR;
 }
@@ -128,7 +128,7 @@ RecordingStatus op##_record_impl(State & state, Code const * code, Instruction c
 		RECORDING_DO(get_slot(state,inst.a,&node_a)); \
 		RECORDING_DO(get_slot(state,inst.b,&node_b)); \
 		EMITIR(op,c,node_a,node_b,&output); \
-		TRACE->renaming_table.assign_slot(inst.c,output); \
+		TRACE->renaming_table.assign(RenamingTable::SLOT,inst.c,output); \
 		return RecordingStatus::NO_ERROR; \
 }
 
@@ -140,7 +140,7 @@ RecordingStatus get_record_impl(State & state, Code const * code, Instruction co
 	*offset = get_op(state,code,inst);
 	int32_t node;
 	RECORDING_DO(get_var(state,inst.a,&node));
-	TRACE->renaming_table.assign_slot(inst.c,node);
+	TRACE->renaming_table.assign(RenamingTable::SLOT,inst.c,node);
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -150,7 +150,7 @@ RecordingStatus kget_record_impl(State & state, Code const * code, Instruction c
 	TRACE->constants.push_back(value);
 	int32_t node;
 	EMITIR(kload,value,TRACE->constants.size() - 1,0,&node);
-	TRACE->renaming_table.assign_slot(inst.c,node);
+	TRACE->renaming_table.assign(RenamingTable::SLOT,inst.c,node);
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -162,7 +162,7 @@ RecordingStatus assign_record_impl(State & state, Code const * code, Instruction
 	*offset = assign_op(state,code,inst);
 	int32_t node;
 	RECORDING_DO(get_slot(state,inst.a,&node));
-	TRACE->renaming_table.assign_var(inst.c,node);
+	TRACE->renaming_table.assign(RenamingTable::VARIABLE,inst.c,node);
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -191,7 +191,9 @@ RecordingStatus whileend_record_impl(State & state, Code const * code, Instructi
 	*offset = whileend_op(state,code,inst);
 	int32_t node;
 	RECORDING_DO(get_predicate(state,inst.b,(*offset == 1),&node));
-	EMITIR(guard,IRType::Void(),node,0,NULL);
+	TraceExit e = { TRACE->renaming_table.create_snapshot() };
+	TRACE->exits.push_back(e);
+	EMITIR(guard,IRType::Void(),node,TRACE->exits.size() - 1,NULL);
 	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus repeatbegin_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
@@ -207,10 +209,22 @@ RecordingStatus break1_record_impl(State & state, Code const * code, Instruction
 	OP_NOT_IMPLEMENTED(break1);
 }
 RecordingStatus if1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(if1);
+	*offset = if1_op(state,code,inst);
+	int32_t node;
+	RECORDING_DO(get_predicate(state,inst.b,(*offset != 1),&node));
+	TraceExit e = { TRACE->renaming_table.create_snapshot() };
+	TRACE->exits.push_back(e);
+	EMITIR(guard,IRType::Void(),node,TRACE->exits.size() - 1,NULL);
+	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus if0_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(if0);
+	*offset = if0_op(state,code,inst);
+	int32_t node;
+	RECORDING_DO(get_predicate(state,inst.b,(*offset == 1),&node));
+	TraceExit e = { TRACE->renaming_table.create_snapshot() };
+	TRACE->exits.push_back(e);
+	EMITIR(guard,IRType::Void(),node,TRACE->exits.size() - 1,NULL);
+	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus colon_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	OP_NOT_IMPLEMENTED(colon);
@@ -295,7 +309,12 @@ RecordingStatus jmp_record_impl(State & state, Code const * code, Instruction co
 	OP_NOT_IMPLEMENTED(jmp);
 }
 RecordingStatus null_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(null);
+	*offset = null_op(state,code,inst);
+	Value & v = state.registers[inst.c];
+	int32_t node;
+	EMITIR(null,v,0,0,&node);
+	TRACE->renaming_table.assign(RenamingTable::SLOT,inst.c,node);
+	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus true1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	OP_NOT_IMPLEMENTED(true1);
