@@ -185,7 +185,17 @@ std::string State::stringify(Value const& value) const {
 			return value.type.toString();
 	};
 }
+std::string State::stringify(Trace const & t) const {
+	std::string r = "trace:\nconstants: " + intToStr(t.constants.size()) + "\n";
+	for(int64_t i = 0; i < (int64_t)t.constants.size(); i++)
+		r = r + intToStr(i) + "=\t" + stringify(t.constants[i]) + "\n";
 
+	r = r + "code: " + intToStr(t.recorded.size()) + "\n";
+	for(int64_t i = 0; i < (int64_t)t.recorded.size(); i++)
+		r = r + intToStr(i) + ":\t" + t.recorded[i].toString() + "\n";
+
+	return r;
+}
 
 template<class T> std::string deparse(State const& state, typename T::Element a) {
 	return "";

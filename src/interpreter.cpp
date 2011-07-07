@@ -143,8 +143,8 @@ static void profile_back_edge(State & state, Code const * code, Instruction cons
 	assert(sizeof(Instruction) == 32);
 	int64_t value = ( (int64_t) &inst >> 5 ) % PROFILE_TABLE_SIZE;
 	int64_t heat = ++hash_table[value];
-	if(heat >= state.tracing.start_count) {
-		printf("beginning trace\n");
+	if(heat >= state.tracing.start_count && heat < state.tracing.start_count + state.tracing.max_attempts) { //upper bound is to prevent trying many failed traces
+		printf("trace beginning at %s\n", code->bc[&inst + pcoffset - &code->tbc[0]].toString().c_str());
 		state.tracing.current_trace = new Trace(const_cast<Code*>(code),const_cast<Instruction*>(&inst + pcoffset));
 		recording_patch_inst(state,code,inst,pcoffset); //next instruction will enter trace recorder
 	}
@@ -597,7 +597,6 @@ int64_t type_op(State& state, Code const* code, Instruction const& inst) {
 	return 1;
 }
 int64_t invoketrace_op(State& state, Code const * code, Instruction const & inst) {
-	printf("invoking trace\n");
 	Trace * trace = code->traces[inst.a];
 	//NYI: for now just run the old bytecode
 #define BC_SWITCH(bc,str,p) case ByteCode::E_##bc: return bc##_op(state,code,trace->trace_inst);

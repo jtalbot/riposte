@@ -11,6 +11,8 @@
 	_(T_double, 	"double", p)		\
 	_(T_complex, 	"complex", p)		\
 	_(T_character, 	"character", p)		\
+	_(T_void,		"void",p)	\
+	_(T_unsupported, "unsupported",p)
 
 DECLARE_ENUM(IRScalarType,IR_TYPE)
 
@@ -72,15 +74,47 @@ DECLARE_ENUM(IRScalarType,IR_TYPE)
 
 DECLARE_ENUM(IROpCode,IR_ENUM)
 
+
+class Value;
+
 struct IRType {
+	IRType() {}
+	IRType(const Value & v);
+	IRType(IRScalarType base_type, bool isVector) {
+		this->base_type = base_type;
+		this->isVector = isVector;
+	}
 	IRScalarType base_type;
 	bool isVector;
+
+	std::string toString() const {
+		std::string bt = base_type.toString();
+		if(isVector) {
+			return "[" + bt + "]";
+		} else
+			return bt;
+	}
+
+	static IRType Void() { return IRType(IRScalarType::T_void,false); }
+	static IRType Bool() { return IRType(IRScalarType::T_logical,false); }
 };
 
 struct IRNode {
+	IRNode() {}
+	IRNode(IROpCode opcode, IRType const & typ, int64_t a, int64_t b, int64_t c) {
+		this->opcode = opcode;
+		this->typ = typ;
+		this->a = a;
+		this->b = b;
+		this->c = c;
+	}
 	IROpCode opcode;
 	IRType typ;
-	int64_t a,b; //a and b are inputs that refer to the offset of the IRNode that defined them
+	int64_t a,b,c; //3-op code, a is dest, a = b + c
+
+	std::string toString() const {
+		return std::string("") + opcode.toString() + "(" + typ.toString() + ")\t" + intToStr(a) + "\t" + intToStr(b) + "\t" + intToStr(c);
+	}
 };
 
 #endif /* IR_H_ */

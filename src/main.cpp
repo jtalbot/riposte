@@ -113,7 +113,7 @@ int dostdin(State& state) {
 			if(value.type == Type::I_nil) continue;
 			//std::cout << "Parsed: " << value.toString() << std::endl;
 			Code* code = Compiler::compile(state, value);
-			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
+			std::cout << "Compiled code: " << state.stringify(Closure(code,state.global)) << std::endl;
 			eval(state, code);
 			result = state.registers[0];	
 			std::cout << state.stringify(result) << std::endl;
