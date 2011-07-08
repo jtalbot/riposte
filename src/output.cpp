@@ -186,18 +186,33 @@ std::string State::stringify(Value const& value) const {
 	};
 }
 std::string State::stringify(Trace const & t) const {
-	std::string r = "trace:\nconstants: " + intToStr(t.constants.size()) + "\n";
-	for(size_t i = 0; i < t.constants.size(); i++)
-		r = r + intToStr(i) + "=\t" + stringify(t.constants[i]) + "\n";
 
-	r = r + "code: " + intToStr(t.recorded.size()) + "\n";
-	for(size_t i = 0; i < t.recorded.size(); i++)
-		r = r + intToStr(i) + ":\t" + t.recorded[i].toString() + "\n";
 
-	r = r + "exits: " + intToStr(t.exits.size()) + "\n";
+#define WRITE_OP(o,op) \
+	do { \
+		const IRNode & n = (op); \
+		std::string result = (n.flags() & IRNode::REF_R) != 0 ?  ( "r" + intToStr(o)  + " =") : ""; \
+		r = r + intToStr(i) + ":\t" + result + "\t" + n.toString() + "\n"; \
+	} while(0)
+#define WRITE_HEAD(name,size) \
+	(r = r + name + ": " + intToStr(size) + "\n")
+
+	std::string r = "trace:\n";
+
+	WRITE_HEAD("constants",t.constants.size());
+
+		for(size_t i = 0; i < t.constants.size(); i++)
+			r = r + intToStr(i) + "=\t" + stringify(t.constants[i]) + "\n";
+
+	WRITE_HEAD("recorded",t.recorded.size());
+
+	for(size_t i = 0; i < t.recorded.size(); i++) {
+		WRITE_OP(i,t.recorded[i]);
+	}
+	WRITE_HEAD("exits",t.exits.size());
 	for(size_t i = 0; i < t.exits.size(); i++) {
 		int32_t snapshot = t.exits[i].snapshot;
-		r = r + intToStr(i) + ":\t";
+		r = r + intToStr(i) + "[" + intToStr(t.exits[i].offset)  + "]:\t";
 		for(size_t j = 0; j < t.renaming_table.outputs.size(); j++) {
 			const RenamingTable::Entry & e = t.renaming_table.outputs[j];
 			if(e.location == RenamingTable::SLOT)
@@ -207,15 +222,29 @@ std::string State::stringify(Trace const & t) const {
 			r = r + intToStr(e.id) + " -> ";
 			IRef node;
 			if(t.renaming_table.get(e.location,e.id,snapshot,&node)) {
-				r = r + intToStr(node);
+				r = r + "r" + intToStr(node);
 			} else {
 				t.renaming_table.get(e.location,e.id,&node);
-				r = r + "u[" + intToStr(node) + "]";
+				r = r + "u[r" + intToStr(node) + "]";
 			}
 			r = r + "; ";
 		}
 		r = r + "\n";
 	}
+
+#define WRITE_CODE(arr) \
+	do { \
+	  WRITE_HEAD(#arr,t . arr . size()); \
+	  for(size_t i = 0; i < t . arr . size(); i++) { \
+		  WRITE_OP(t.arr[i], t.optimized[t.arr[i]]); \
+	  } \
+	} while(0)
+
+	WRITE_CODE(loads);
+	WRITE_CODE(phis);
+	WRITE_CODE(loop_header);
+	WRITE_CODE(loop_body);
+
 	return r;
 }
 

@@ -29,7 +29,7 @@ struct TraceState {
 	int64_t max_length; //how many IRNodes should we attempt to record before giving up
 };
 
-
+//maps interpreter values to the  irnode holding their value at a particular part of the trace
 struct RenamingTable {
 
 	enum {SLOT = 0, VARIABLE = 1};
@@ -50,7 +50,7 @@ struct RenamingTable {
 	};
 
 	size_t last_snapshot;
-	std::vector<Status> journal;
+	std::vector<Status> journal; //list of updates to the register assignment, old assignmens are kept if they are needed for a snapshot
 	std::vector<Entry> outputs; //list of values that will be written when the trace completes
 
 	RenamingTable() {
@@ -126,6 +126,7 @@ struct RenamingTable {
 
 struct TraceExit {
 	int32_t snapshot;
+	int64_t offset; //offset relative to trace_start where this guard should enter the interpreter
 };
 
 struct Trace : public gc {
@@ -142,12 +143,26 @@ struct Trace : public gc {
 
 	std::vector<Value>  constants;
 	std::vector<TraceExit> exits;
+	std::vector<IRNode> recorded; //IR as it was recorded, kept unoptimized so that adding side traces is easier
 
-	std::vector<IRNode> recorded;
+	std::vector<IRNode> optimized; //optimized IRNodes used in compilation
 
-	std::vector<IRNode> compiled;
+	/*
+	 *    loads (also load phi nodes)
+	 *    loop_header
+	 *      |<-------
+	 *    phis       |
+	 *    loop_body  |
+	 *      >-------->
+	 *
+	 */
 
-	void compile();
+	std::vector<IRef> loads;
+	std::vector<IRef> phis;
+	std::vector<IRef> loop_header;
+	std::vector<IRef> loop_body;
+
+	void compile(); //fills optimized code from recorded
 };
 
 class State;

@@ -357,6 +357,7 @@ int64_t repeatbegin_op(State& state, Code const* code, Instruction const& inst) 
 	return 1;
 }
 int64_t repeatend_op(State& state, Code const* code, Instruction const& inst) {
+	profile_back_edge(state,code,inst,inst.a);
 	return inst.a;
 }
 int64_t next_op(State& state, Code const* code, Instruction const& inst) {

@@ -56,9 +56,6 @@ DECLARE_ENUM(IRScalarType,IR_TYPE)
 	_(acos,       "acos",      p, ref, ref, ___) \
 	_(asin,       "asin",      p, ref, ref, ___) \
 	_(atan,       "atan",      p, ref, ref, ___) \
-	_(null,       "null",      p, ref, ___, ___) \
-	_(true1,      "true",      p, ref, ___, ___) \
-	_(false1,     "false",     p, ref, ___, ___) \
 	_(istrue,     "istrue",    p, ref, ref, ___) \
 	_(logical1,   "logical",   p, ref, ref, ___) \
 	_(integer1,   "integer",   p, ref, ref, ___) \
@@ -113,7 +110,9 @@ struct IRNode {
 	int64_t a, b; //3-op code, r is dest, r = a + b, where r is the position in the list of IRNodes where this op resides
 
 	std::string toString() const {
-		return std::string("") + opcode.toString() + "(" + typ.toString() +  ")\t" + intToStr(a) + "\t" + intToStr(b);
+		std::string aprefix = (flags() & REF_A) != 0 ? "r" : "";
+		std::string bprefix = (flags() & REF_B) != 0 ? "r" : "";
+		return std::string("") + opcode.toString() + "(" + typ.toString() +  ")\t" + aprefix + intToStr(a) + "\t" + bprefix + intToStr(b);
 	}
 	uint32_t flags() const;
 };

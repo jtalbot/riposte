@@ -13,9 +13,8 @@ Trace::Trace(Code * code, Instruction * trace_start)
 
 
 void trace_compile_and_install(State & state, Trace * trace) {
-	//NYI: compile trace
-	printf("compiling\n");
-	printf("%s\n",state.stringify(*trace).c_str());
+
+	//NYI: compile does not codegen, it only optimizes
 	trace->compile();
 
 	//patch trace into bytecode
@@ -39,14 +38,11 @@ void trace_compile_and_install(State & state, Trace * trace) {
 
 void Trace::compile() {
 
-	std::vector<IRNode> loads;
-	std::vector<IRNode> phis;
-	std::vector<IRNode> loop_header;
-	std::vector<IRNode> loop_body;
-	std::vector<bool> loop_invariant(recorded.size(),false);
+	optimized.insert(optimized.end(),recorded.begin(),recorded.end());
+	std::vector<bool> loop_invariant(optimized.size(),false);
 
-	for(size_t i = 0; i < recorded.size(); i++) {
-		IRNode node = recorded[i];
+	for(IRef i = 0; i < optimized.size(); i++) {
+		IRNode & node = optimized[i];
 		if(node.opcode == IROpCode::sload || node.opcode == IROpCode::vload) {
 			uint32_t location = node.opcode == IROpCode::sload ? RenamingTable::SLOT : RenamingTable::VARIABLE;
 			IRef var;
@@ -56,9 +52,9 @@ void Trace::compile() {
 			loop_invariant[i] = !write;
 			if(write) { //create phi node
 				node.b = var;
-				phis.push_back(node);
+				phis.push_back(i);
 			} else {
-				loads.push_back(node);
+				loads.push_back(i);
 			}
 
 		} else {
@@ -66,23 +62,12 @@ void Trace::compile() {
 					            && ( (node.flags() & IRNode::REF_B) == 0 || loop_invariant[node.b] );
 			if(loop_invariant[i]) {
 				if(node.opcode == IROpCode::guard) { //if we move a guard, we have to change the exit point
-					IRNode n = node;
-					n.a = -1; //no exit
-					n.b = 0; //exit offset is the trace instruction itself
+					node.b = -1; //exit offset is the trace instruction itself
 				}
-				loop_header.push_back(node);
+				loop_header.push_back(i);
 			} else {
-				loop_body.push_back(node);
+				loop_body.push_back(i);
 			}
 		}
 	}
-	recorded.clear();
-	recorded.insert(recorded.end(),loads.begin(),loads.end());
-	IRNode foo(IROpCode::null,IRType::Void(),0,0);
-	recorded.push_back(foo);
-	recorded.insert(recorded.end(),phis.begin(),phis.end());
-	recorded.push_back(foo);
-	recorded.insert(recorded.end(),loop_header.begin(),loop_header.end());
-	recorded.push_back(foo);
-	recorded.insert(recorded.end(),loop_body.begin(),loop_body.end());
 }

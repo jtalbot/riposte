@@ -116,6 +116,15 @@ static RecordingStatus get_predicate(State & state, int64_t slot_id, bool invert
 	return RecordingStatus::NO_ERROR;
 }
 
+//many opcodes turn into constant loads
+static RecordingStatus load_constant(State & state, int64_t dest_slot, const Value & value) {
+	TRACE->constants.push_back(value);
+	IRef node;
+	EMITIR(kload,value,TRACE->constants.size() - 1,0,&node);
+	TRACE->renaming_table.assign(RenamingTable::SLOT,dest_slot,node);
+	return RecordingStatus::NO_ERROR;
+}
+
 //all arithmetic binary ops share the same recording implementation
 #define BINARY_OP(op) \
 RecordingStatus op##_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) { \
@@ -127,6 +136,19 @@ RecordingStatus op##_record_impl(State & state, Code const * code, Instruction c
 		RECORDING_DO(get_slot(state,inst.a,&node_a)); \
 		RECORDING_DO(get_slot(state,inst.b,&node_b)); \
 		EMITIR(op,c,node_a,node_b,&output); \
+		TRACE->renaming_table.assign(RenamingTable::SLOT,inst.c,output); \
+		return RecordingStatus::NO_ERROR; \
+}
+
+//all unary arithmetic ops share the same implementation as well
+#define UNARY_OP(op) \
+RecordingStatus op##_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) { \
+		*offset = op##_op(state,code,inst); \
+		Value & c = state.registers[inst.c]; \
+		IRef node_a; \
+		IRef output; \
+		RECORDING_DO(get_slot(state,inst.a,&node_a)); \
+		EMITIR(op,c,node_a,0,&output); \
 		TRACE->renaming_table.assign(RenamingTable::SLOT,inst.c,output); \
 		return RecordingStatus::NO_ERROR; \
 }
@@ -145,11 +167,7 @@ RecordingStatus get_record_impl(State & state, Code const * code, Instruction co
 
 RecordingStatus kget_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	*offset = kget_op(state,code,inst);
-	Value & value = state.registers[inst.c];
-	TRACE->constants.push_back(value);
-	IRef node;
-	EMITIR(kload,value,TRACE->constants.size() - 1,0,&node);
-	TRACE->renaming_table.assign(RenamingTable::SLOT,inst.c,node);
+	RECORDING_DO(load_constant(state,inst.c,state.registers[inst.c]));
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -184,34 +202,49 @@ RecordingStatus iforend_record_impl(State & state, Code const * code, Instructio
 	OP_NOT_IMPLEMENTED(iforend);
 }
 RecordingStatus whilebegin_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(whilebegin);
+	*offset = whilebegin_op(state,code,inst);
+	RECORDING_DO(load_constant(state,inst.c,state.registers[inst.c]));
+	IRef node;
+	RECORDING_DO(get_predicate(state,inst.b,(*offset != 1),&node));
+	TraceExit e = { TRACE->renaming_table.create_snapshot(), &inst - TRACE->trace_start };
+	TRACE->exits.push_back(e);
+	EMITIR(guard,IRType::Void(),node,TRACE->exits.size() - 1,NULL);
+	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus whileend_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	*offset = whileend_op(state,code,inst);
 	IRef node;
 	RECORDING_DO(get_predicate(state,inst.b,(*offset == 1),&node));
-	TraceExit e = { TRACE->renaming_table.create_snapshot() };
+	TraceExit e = { TRACE->renaming_table.create_snapshot(), &inst - TRACE->trace_start };
 	TRACE->exits.push_back(e);
 	EMITIR(guard,IRType::Void(),node,TRACE->exits.size() - 1,NULL);
 	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus repeatbegin_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(repeatbegin);
+	*offset = repeatbegin_op(state,code,inst);
+	RECORDING_DO(load_constant(state,inst.c,state.registers[inst.c]));
+	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus repeatend_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(repeatend);
+	//this is just a constant jump, nothing to record
+	*offset = repeatend_op(state,code,inst);
+	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus next_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(next);
+	//this is just a constant jump, nothing to record
+	*offset = next_op(state,code,inst);
+	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus break1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(break1);
+	//this is just a constant jump, nothing to record
+	*offset = break1_op(state,code,inst);
+	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus if1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	*offset = if1_op(state,code,inst);
 	IRef node;
 	RECORDING_DO(get_predicate(state,inst.b,(*offset != 1),&node));
-	TraceExit e = { TRACE->renaming_table.create_snapshot() };
+	TraceExit e = { TRACE->renaming_table.create_snapshot(), &inst - TRACE->trace_start };
 	TRACE->exits.push_back(e);
 	EMITIR(guard,IRType::Void(),node,TRACE->exits.size() - 1,NULL);
 	return RecordingStatus::NO_ERROR;
@@ -220,7 +253,7 @@ RecordingStatus if0_record_impl(State & state, Code const * code, Instruction co
 	*offset = if0_op(state,code,inst);
 	IRef node;
 	RECORDING_DO(get_predicate(state,inst.b,(*offset == 1),&node));
-	TraceExit e = { TRACE->renaming_table.create_snapshot() };
+	TraceExit e = { TRACE->renaming_table.create_snapshot(), &inst - TRACE->trace_start };
 	TRACE->exits.push_back(e);
 	EMITIR(guard,IRType::Void(),node,TRACE->exits.size() - 1,NULL);
 	return RecordingStatus::NO_ERROR;
@@ -231,15 +264,11 @@ RecordingStatus colon_record_impl(State & state, Code const * code, Instruction 
 
 BINARY_OP(add)
 
-RecordingStatus pos_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(pos);
-}
+UNARY_OP(pos)
 
 BINARY_OP(sub)
 
-RecordingStatus neg_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(neg);
-}
+UNARY_OP(neg)
 
 BINARY_OP(mul)
 BINARY_OP(div)
@@ -256,97 +285,64 @@ BINARY_OP(lnot)
 BINARY_OP(land)
 BINARY_OP(lor)
 
-RecordingStatus abs_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(abs);
-}
-RecordingStatus sign_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(sign);
-}
-RecordingStatus sqrt_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(sqrt);
-}
-RecordingStatus floor_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(floor);
-}
-RecordingStatus ceiling_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(ceiling);
-}
-RecordingStatus trunc_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(trunc);
-}
-RecordingStatus round_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(round);
-}
-RecordingStatus signif_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(signif);
-}
-RecordingStatus exp_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(exp);
-}
-RecordingStatus log_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(log);
-}
-RecordingStatus cos_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(cos);
-}
-RecordingStatus sin_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(sin);
-}
-RecordingStatus tan_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(tan);
-}
-RecordingStatus acos_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(acos);
-}
-RecordingStatus asin_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(asin);
-}
-RecordingStatus atan_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(atan);
-}
+UNARY_OP(abs)
+UNARY_OP(sign)
+UNARY_OP(sqrt)
+UNARY_OP(floor)
+UNARY_OP(ceiling)
+UNARY_OP(trunc)
+UNARY_OP(round)
+UNARY_OP(signif)
+UNARY_OP(exp)
+UNARY_OP(log)
+UNARY_OP(cos)
+UNARY_OP(sin)
+UNARY_OP(tan)
+UNARY_OP(acos)
+UNARY_OP(asin)
+UNARY_OP(atan)
+UNARY_OP(istrue)
+UNARY_OP(logical1)
+UNARY_OP(integer1)
+UNARY_OP(double1)
+UNARY_OP(complex1)
+UNARY_OP(character1)
+
+
 RecordingStatus jmp_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(jmp);
+	//this is just a constant jump, nothing to record
+	*offset = next_op(state,code,inst);
+	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus null_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	*offset = null_op(state,code,inst);
-	Value & v = state.registers[inst.c];
-	IRef node;
-	EMITIR(null,v,0,0,&node);
-	TRACE->renaming_table.assign(RenamingTable::SLOT,inst.c,node);
+	RECORDING_DO(load_constant(state,inst.c,state.registers[inst.c]));
 	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus true1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(true1);
+	*offset = true1_op(state,code,inst);
+	RECORDING_DO(load_constant(state,inst.c,state.registers[inst.c]));
+	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus false1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(false1);
+	*offset = false1_op(state,code,inst);
+	RECORDING_DO(load_constant(state,inst.c,state.registers[inst.c]));
+	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus NA_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(NA);
+	*offset = NA_op(state,code,inst);
+	RECORDING_DO(load_constant(state,inst.c,state.registers[inst.c]));
+	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus istrue_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(istrue);
-}
+
 RecordingStatus function_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	OP_NOT_IMPLEMENTED(function);
 }
-RecordingStatus logical1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(logical1);
-}
-RecordingStatus integer1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(integer1);
-}
-RecordingStatus double1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(double1);
-}
-RecordingStatus complex1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(complex1);
-}
-RecordingStatus character1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(character1);
-}
+
 RecordingStatus raw1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(raw1);
+	*offset = raw1_op(state,code,inst);
+	RECORDING_DO(load_constant(state,inst.c,state.registers[inst.c]));
+	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus UseMethod_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	OP_NOT_IMPLEMENTED(UseMethod);
@@ -355,7 +351,10 @@ RecordingStatus seq_record_impl(State & state, Code const * code, Instruction co
 	OP_NOT_IMPLEMENTED(seq);
 }
 RecordingStatus type_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
-	OP_NOT_IMPLEMENTED(type);
+	//we type specialize, so this value is a constant
+	*offset = type_op(state,code,inst);
+	RECORDING_DO(load_constant(state,inst.c,state.registers[inst.c]));
+	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus invoketrace_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	return RecordingStatus::RECURSION;
