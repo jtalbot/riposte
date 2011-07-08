@@ -62,8 +62,8 @@ void Trace::compile() {
 			}
 
 		} else {
-			loop_invariant[i] =    (!(node.flags() & IRNode::REF_B == 0) || loop_invariant[node.b])
-					            && (!(node.flags() & IRNode::REF_C == 0) || loop_invariant[node.c]);
+			loop_invariant[i] =    ( (node.flags() & IRNode::REF_B) == 0 || loop_invariant[node.b] )
+					            && ( (node.flags() & IRNode::REF_C) == 0 || loop_invariant[node.c] );
 			if(loop_invariant[i]) {
 				if(node.opcode == IROpCode::guard) { //if we move a guard, we have to change the exit point
 					IRNode n = node;
@@ -78,7 +78,11 @@ void Trace::compile() {
 	}
 	recorded.clear();
 	recorded.insert(recorded.end(),loads.begin(),loads.end());
+	IRNode foo(IROpCode::null,IRType::Void(),0,0,0);
+	recorded.push_back(foo);
 	recorded.insert(recorded.end(),phis.begin(),phis.end());
+	recorded.push_back(foo);
 	recorded.insert(recorded.end(),loop_header.begin(),loop_header.end());
+	recorded.push_back(foo);
 	recorded.insert(recorded.end(),loop_body.begin(),loop_body.end());
 }
