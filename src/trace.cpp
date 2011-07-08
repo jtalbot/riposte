@@ -14,6 +14,9 @@ Trace::Trace(Code * code, Instruction * trace_start)
 
 void trace_compile_and_install(State & state, Trace * trace) {
 	//NYI: compile trace
+	printf("compiling\n");
+	printf("%s\n",state.stringify(*trace).c_str());
+	trace->compile();
 
 	//patch trace into bytecode
 	Code * code = trace->code;
@@ -31,4 +34,51 @@ void trace_compile_and_install(State & state, Trace * trace) {
 	inst->a = code->traces.size() - 1;
 	bc->bc = ByteCode::invoketrace;
 	bc->a = inst->a;
+}
+
+
+void Trace::compile() {
+
+	std::vector<IRNode> loads;
+	std::vector<IRNode> phis;
+	std::vector<IRNode> loop_header;
+	std::vector<IRNode> loop_body;
+	std::vector<bool> loop_invariant(recorded.size(),false);
+
+	for(size_t i = 0; i < recorded.size(); i++) {
+		IRNode node = recorded[i];
+		if(node.opcode == IROpCode::sload || node.opcode == IROpCode::vload) {
+			uint32_t location = node.opcode == IROpCode::sload ? RenamingTable::SLOT : RenamingTable::VARIABLE;
+			int32_t var;
+			bool read,write;
+			renaming_table.get(location,node.b,renaming_table.current_view(),&var,&read,&write);
+
+			loop_invariant[i] = !write;
+			if(write) { //create phi node
+				node.c = var;
+				phis.push_back(node);
+			} else {
+				loads.push_back(node);
+			}
+
+		} else {
+			loop_invariant[i] =    (!(node.flags() & IRNode::REF_B == 0) || loop_invariant[node.b])
+					            && (!(node.flags() & IRNode::REF_C == 0) || loop_invariant[node.c]);
+			if(loop_invariant[i]) {
+				if(node.opcode == IROpCode::guard) { //if we move a guard, we have to change the exit point
+					IRNode n = node;
+					n.b = -1; //no exit
+					n.c = 0; //exit offset is the trace instruction itself
+				}
+				loop_header.push_back(node);
+			} else {
+				loop_body.push_back(node);
+			}
+		}
+	}
+	recorded.clear();
+	recorded.insert(recorded.end(),loads.begin(),loads.end());
+	recorded.insert(recorded.end(),phis.begin(),phis.end());
+	recorded.insert(recorded.end(),loop_header.begin(),loop_header.end());
+	recorded.insert(recorded.end(),loop_body.begin(),loop_body.end());
 }

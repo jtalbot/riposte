@@ -57,6 +57,7 @@ struct RenamingTable {
 		last_snapshot = 0;
 	}
 
+
 	bool lookup(uint32_t location, int64_t id, int32_t snapshot, int32_t * idx) const {
 		for(int32_t i = snapshot; i > 0; i--) {
 			const Status & s = journal[i - 1];
@@ -68,7 +69,7 @@ struct RenamingTable {
 		return false;
 	}
 
-	bool get(uint32_t location, int64_t id, int32_t * node) const { return get(location,id,journal.size(),node); }
+	bool get(uint32_t location, int64_t id, int32_t * node) const { return get(location,id,current_view(),node); }
 	bool get(uint32_t location, int64_t id, int32_t snapshot, int32_t * node, bool * read = NULL, bool * write = NULL) const {
 		int32_t idx;
 		if(lookup(location,id,snapshot,&idx)) {
@@ -83,7 +84,7 @@ struct RenamingTable {
 	}
 	void assign(uint32_t location, int64_t id, int32_t node) {
 		int32_t idx;
-		if(lookup(location,id,journal.size(),&idx)) {
+		if(lookup(location,id,current_view(),&idx)) {
 			if(journal[idx].write == 0) { //only add to outputs the first time we set the write bit
 				Entry w = {id, location};
 				outputs.push_back(w);
@@ -113,9 +114,12 @@ struct RenamingTable {
 		journal.push_back(s);
 	}
 
+	int32_t current_view() const {
+		return journal.size();
+	}
 	int32_t create_snapshot() {
 		//save a view of the renaming table, so we know how to store state when trace exits
-		last_snapshot = journal.size();
+		last_snapshot = current_view();
 		return last_snapshot;
 	}
 };
@@ -138,7 +142,12 @@ struct Trace : public gc {
 
 	std::vector<Value>  constants;
 	std::vector<TraceExit> exits;
+
 	std::vector<IRNode> recorded;
+
+	std::vector<IRNode> compiled;
+
+	void compile();
 };
 
 class State;

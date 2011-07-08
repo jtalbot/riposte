@@ -85,7 +85,7 @@ static void recording_end(State & state, RecordingStatus reason) {
 static RecordingStatus get_slot(State & state, int64_t slot_id, int32_t * node) {
 	if(!TRACE->renaming_table.get(RenamingTable::SLOT,slot_id,node)) {
 		Value & value = state.Registers[slot_id];
-		EMITIR(sload,value,slot_id,0,node);
+		EMITIR(sload,value,slot_id,-1,node);
 		TRACE->renaming_table.input(RenamingTable::SLOT,slot_id,*node);
 	}
 	return RecordingStatus::NO_ERROR;
@@ -95,7 +95,7 @@ static RecordingStatus get_var(State & state, int64_t var_id, int32_t * node) {
 	if(!TRACE->renaming_table.get(RenamingTable::VARIABLE,var_id,node)) {
 		Value value;
 		state.global->get(state,Symbol(var_id),value);
-		EMITIR(vload,value,var_id,0,node);
+		EMITIR(vload,value,var_id,-1,node);
 		TRACE->renaming_table.input(RenamingTable::VARIABLE,var_id,*node);
 	}
 	return RecordingStatus::NO_ERROR;

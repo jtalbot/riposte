@@ -17,56 +17,56 @@
 DECLARE_ENUM(IRScalarType,IR_TYPE)
 
 #define IR_ENUM(_, p) 				\
-	_(vload,"vload",p) \
-	_(sload,"sload",p) \
-	_(iassign,"iassign",p) \
-	_(guard, "guard", p) \
-	_(move,"move",p) \
-	_(add, "add", p) \
-	_(pos, "pos", p) \
-	_(sub, "sub", p) \
-	_(neg, "neg", p) \
-	_(mul, "mul", p) \
-	_(div, "div", p) \
-	_(idiv, "idiv", p) \
-	_(mod, "mod", p) \
-	_(pow, "pow", p) \
-	_(lt, "lt", p) \
-	_(gt, "gt", p) \
-	_(eq, "eq", p) \
-	_(neq, "neq", p) \
-	_(ge, "ge", p) \
-	_(le, "le", p) \
-	_(lnot, "lnot", p) \
-	_(land, "land", p) \
-	_(lor, "lor", p) \
-	_(abs, "abs", p) \
-	_(sign, "sign", p) \
-	_(sqrt, "sqrt", p) \
-	_(floor, "floor", p) \
-	_(ceiling, "ceiling", p) \
-	_(trunc, "trunc", p) \
-	_(round, "round", p) \
-	_(signif, "signif", p) \
-	_(exp, "exp", p) \
-	_(log, "log", p) \
-	_(cos, "cos", p) \
-	_(sin, "sin", p) \
-	_(tan, "tan", p) \
-	_(acos, "acos", p) \
-	_(asin, "asin", p) \
-	_(atan, "atan", p) \
-	_(null, "null", p) \
-	_(true1, "true", p) \
-	_(false1, "false", p) \
-	_(istrue, "istrue", p) \
-	_(logical1, "logical", p) \
-	_(integer1, "integer", p) \
-	_(double1, "double", p) \
-	_(complex1, "complex", p) \
-	_(character1, "character", p) \
-	_(seq, "seq", p) \
-    _(kload,"kload",p)
+	_(vload,      "vload",     p, ref, ___, ___) \
+	_(sload,      "sload",     p, ref, ___, ___) \
+	_(iassign,    "iassign",   p, ___, ___, ___) \
+	_(guard,      "guard",     p, ___, ref, ___) \
+	_(move,       "move",      p, ref, ref, ___) \
+	_(add,        "add",       p, ref, ref, ref) \
+	_(pos,        "pos",       p, ref, ref, ___) \
+	_(sub,        "sub",       p, ref, ref, ref) \
+	_(neg,        "neg",       p, ref, ref, ___) \
+	_(mul,        "mul",       p, ref, ref, ref) \
+	_(div,        "div",       p, ref, ref, ref) \
+	_(idiv,       "idiv",      p, ref, ref, ref) \
+	_(mod,        "mod",       p, ref, ref, ref) \
+	_(pow,        "pow",       p, ref, ref, ref) \
+	_(lt,         "lt",        p, ref, ref, ref) \
+	_(gt,         "gt",        p, ref, ref, ref) \
+	_(eq,         "eq",        p, ref, ref, ref) \
+	_(neq,        "neq",       p, ref, ref, ref) \
+	_(ge,         "ge",        p, ref, ref, ref) \
+	_(le,         "le",        p, ref, ref, ref) \
+	_(lnot,       "lnot",      p, ref, ref, ___) \
+	_(land,       "land",      p, ref, ref, ref) \
+	_(lor,        "lor",       p, ref, ref, ref) \
+	_(abs,        "abs",       p, ref, ref, ___) \
+	_(sign,       "sign",      p, ref, ref, ___) \
+	_(sqrt,       "sqrt",      p, ref, ref, ___) \
+	_(floor,      "floor",     p, ref, ref, ___) \
+	_(ceiling,    "ceiling",   p, ref, ref, ___) \
+	_(trunc, "    trunc",      p, ref, ref, ___) \
+	_(round,      "round",     p, ref, ref, ___) \
+	_(signif,     "signif",    p, ref, ref, ___) \
+	_(exp,        "exp",       p, ref, ref, ___) \
+	_(log,        "log",       p, ref, ref, ___) \
+	_(cos,        "cos",       p, ref, ref, ___) \
+	_(sin,        "sin",       p, ref, ref, ___) \
+	_(tan,        "tan",       p, ref, ref, ___) \
+	_(acos,       "acos",      p, ref, ref, ___) \
+	_(asin,       "asin",      p, ref, ref, ___) \
+	_(atan,       "atan",      p, ref, ref, ___) \
+	_(null,       "null",      p, ref, ___, ___) \
+	_(true1,      "true",      p, ref, ___, ___) \
+	_(false1,     "false",     p, ref, ___, ___) \
+	_(istrue,     "istrue",    p, ref, ref, ___) \
+	_(logical1,   "logical",   p, ref, ref, ___) \
+	_(integer1,   "integer",   p, ref, ref, ___) \
+	_(double1,    "double",    p, ref, ref, ___) \
+	_(complex1,   "complex",   p, ref, ref, ___) \
+	_(character1, "character", p, ref, ref, ___) \
+	_(seq,        "seq",       p, ___, ___, ___) \
+    _(kload,      "kload",     p, ref, ___, ___)
 /*	_(type, "type", p) currently always constant folded into a kload  \
  	_(NA, "NA", p) will be included when we handle NA types \
     _(if1, "if1", p) will be included when we do trace merging
@@ -100,6 +100,7 @@ struct IRType {
 };
 
 struct IRNode {
+	enum {REF_A = 1, REF_B = 2,  REF_C = 4};
 	IRNode() {}
 	IRNode(IROpCode opcode, IRType const & typ, int64_t a, int64_t b, int64_t c) {
 		this->opcode = opcode;
@@ -115,6 +116,7 @@ struct IRNode {
 	std::string toString() const {
 		return std::string("") + opcode.toString() + "(" + typ.toString() + ")\t" + intToStr(a) + "\t" + intToStr(b) + "\t" + intToStr(c);
 	}
+	uint32_t flags() const;
 };
 
 #endif /* IR_H_ */
