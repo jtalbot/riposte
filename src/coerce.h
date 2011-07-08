@@ -14,98 +14,98 @@ static typename O::Element Cast(State& state, typename I::Element const& i) { re
 
 
 template<>
-static Integer::Element Cast<Logical, Integer>(State& state, Logical::Element const& i) { return Logical::isNA(i) ? Integer::NAelement : i ? 1 : 0; }
+Integer::Element Cast<Logical, Integer>(State& state, Logical::Element const& i) { return Logical::isNA(i) ? Integer::NAelement : i ? 1 : 0; }
 
 template<>
-static Double::Element Cast<Logical, Double>(State& state, Logical::Element const& i) { return Logical::isNA(i) ? Double::NAelement : i ? 1.0 : 0.0; }
+Double::Element Cast<Logical, Double>(State& state, Logical::Element const& i) { return Logical::isNA(i) ? Double::NAelement : i ? 1.0 : 0.0; }
 
 template<>
-static Complex::Element Cast<Logical, Complex>(State& state, Logical::Element const& i) { if(Logical::isNA(i)) return Complex::NAelement; else if(i) return std::complex<double>(1.0,0.0); else return std::complex<double>(0.0,0.0); }
+Complex::Element Cast<Logical, Complex>(State& state, Logical::Element const& i) { if(Logical::isNA(i)) return Complex::NAelement; else if(i) return std::complex<double>(1.0,0.0); else return std::complex<double>(0.0,0.0); }
 
 template<>
-static Character::Element Cast<Logical, Character>(State& state, Logical::Element const& i) { return Logical::isNA(i) ? Character::NAelement : i ? Symbol::TRUE : Symbol::FALSE; }
+Character::Element Cast<Logical, Character>(State& state, Logical::Element const& i) { return Logical::isNA(i) ? Character::NAelement : i ? Symbol::TRUE : Symbol::FALSE; }
 
 template<>
-static List::Element Cast<Logical, List>(State& state, Logical::Element const& i) { return Logical::c(i); }
+List::Element Cast<Logical, List>(State& state, Logical::Element const& i) { return Logical::c(i); }
 
 template<>
-static Call::Element Cast<Logical, Call>(State& state, Logical::Element const& i) { return Logical::c(i); }
-
-
-template<>
-static Logical::Element Cast<Integer, Logical>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Logical::NAelement : i != 0 ? 1 : 0; }
-
-template<>
-static Double::Element Cast<Integer, Double>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Double::NAelement : (Double::Element)i; }
-
-template<>
-static Complex::Element Cast<Integer, Complex>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Complex::NAelement : std::complex<double>(i, 0); }
-
-template<>
-static Character::Element Cast<Integer, Character>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Character::NAelement : Symbol(state, intToStr(i)); }
-
-template<>
-static List::Element Cast<Integer, List>(State& state, Integer::Element const& i) { return Integer::c(i); }
-
-template<>
-static Call::Element Cast<Integer, Call>(State& state, Integer::Element const& i) { return Integer::c(i); }
+Call::Element Cast<Logical, Call>(State& state, Logical::Element const& i) { return Logical::c(i); }
 
 
 template<>
-static Logical::Element Cast<Double, Logical>(State& state, Double::Element const& i) { return Double::isNA(i) ? Logical::NAelement : i != 0.0 ? 1 : 0; }
+Logical::Element Cast<Integer, Logical>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Logical::NAelement : i != 0 ? 1 : 0; }
 
 template<>
-static Integer::Element Cast<Double, Integer>(State& state, Double::Element const& i) { return Double::isNA(i) || i > std::numeric_limits<Integer::Element>::max() || i < std::numeric_limits<Integer::Element>::min() ? Integer::NAelement : i;  }
+Double::Element Cast<Integer, Double>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Double::NAelement : (Double::Element)i; }
 
 template<>
-static Complex::Element Cast<Double, Complex>(State& state, Double::Element const& i) { return Double::isNA(i) ? Complex::NAelement : std::complex<double>(i, 0);  }
+Complex::Element Cast<Integer, Complex>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Complex::NAelement : std::complex<double>(i, 0); }
 
 template<>
-static Character::Element Cast<Double, Character>(State& state, Double::Element const& i) { return Integer::isNA(i) ? Character::NAelement : Symbol(state, doubleToStr(i)); }
+Character::Element Cast<Integer, Character>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Character::NAelement : Symbol(state, intToStr(i)); }
 
 template<>
-static List::Element Cast<Double, List>(State& state, Double::Element const& i) { return Double::c(i); }
+List::Element Cast<Integer, List>(State& state, Integer::Element const& i) { return Integer::c(i); }
 
 template<>
-static Call::Element Cast<Double, Call>(State& state, Double::Element const& i) { return Double::c(i); }
-
-
-template<>
-static Logical::Element Cast<Complex, Logical>(State& state, Complex::Element const& i) { if(Complex::isNA(i)) return Logical::NAelement; else return i.real() != 0 || i.imag() != 0; }
-
-template<>
-static Integer::Element Cast<Complex, Integer>(State& state, Complex::Element const& i) { return (Complex::isNA(i) || i.real() > std::numeric_limits<Integer::Element>::max() || i.real() < std::numeric_limits<Integer::Element>::min() || i.imag() != 0) ? Integer::NAelement : i.real();  }
-
-template<>
-static Double::Element Cast<Complex, Double>(State& state, Complex::Element const& i) { if(Complex::isNA(i) || i.imag() != 0) return Double::NAelement; else return i.real(); }
-
-template<>
-static Character::Element Cast<Complex, Character>(State& state, Complex::Element const& i) { if(Complex::isNA(i)) return Character::NAelement; else return Symbol(state, complexToStr(i));}
-
-template<>
-static List::Element Cast<Complex, List>(State& state, Complex::Element const& i) { return Complex::c(i); }
-
-template<>
-static Call::Element Cast<Complex, Call>(State& state, Complex::Element const& i) { return Complex::c(i); }
+Call::Element Cast<Integer, Call>(State& state, Integer::Element const& i) { return Integer::c(i); }
 
 
 template<>
-static Logical::Element Cast<Character, Logical>(State& state, Character::Element const& i) { if(i == Symbol::TRUE) return 1; else if(i == Symbol::FALSE) return 0; else return Logical::NAelement; }
+Logical::Element Cast<Double, Logical>(State& state, Double::Element const& i) { return Double::isNA(i) ? Logical::NAelement : i != 0.0 ? 1 : 0; }
 
 template<>
-static Integer::Element Cast<Character, Integer>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Integer::NAelement; else {try{return strToInt(i.toString(state));} catch(...) {return Integer::NAelement;}} }
+Integer::Element Cast<Double, Integer>(State& state, Double::Element const& i) { return Double::isNA(i) || i > std::numeric_limits<Integer::Element>::max() || i < std::numeric_limits<Integer::Element>::min() ? Integer::NAelement : i;  }
 
 template<>
-static Double::Element Cast<Character, Double>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Double::NAelement; else {try{return strToDouble(i.toString(state));} catch(...) {return Double::NAelement;}} }
+Complex::Element Cast<Double, Complex>(State& state, Double::Element const& i) { return Double::isNA(i) ? Complex::NAelement : std::complex<double>(i, 0);  }
 
 template<>
-static Complex::Element Cast<Character, Complex>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Complex::NAelement; else {try{return strToComplex(i.toString(state));} catch(...) {return Complex::NAelement;}} }
+Character::Element Cast<Double, Character>(State& state, Double::Element const& i) { return Integer::isNA(i) ? Character::NAelement : Symbol(state, doubleToStr(i)); }
 
 template<>
-static List::Element Cast<Character, List>(State& state, Character::Element const& i) { return Character::c(i); }
+List::Element Cast<Double, List>(State& state, Double::Element const& i) { return Double::c(i); }
 
 template<>
-static Call::Element Cast<Character, Call>(State& state, Character::Element const& i) { return Character::c(i); }
+Call::Element Cast<Double, Call>(State& state, Double::Element const& i) { return Double::c(i); }
+
+
+template<>
+Logical::Element Cast<Complex, Logical>(State& state, Complex::Element const& i) { if(Complex::isNA(i)) return Logical::NAelement; else return i.real() != 0 || i.imag() != 0; }
+
+template<>
+Integer::Element Cast<Complex, Integer>(State& state, Complex::Element const& i) { return (Complex::isNA(i) || i.real() > std::numeric_limits<Integer::Element>::max() || i.real() < std::numeric_limits<Integer::Element>::min() || i.imag() != 0) ? Integer::NAelement : i.real();  }
+
+template<>
+Double::Element Cast<Complex, Double>(State& state, Complex::Element const& i) { if(Complex::isNA(i) || i.imag() != 0) return Double::NAelement; else return i.real(); }
+
+template<>
+Character::Element Cast<Complex, Character>(State& state, Complex::Element const& i) { if(Complex::isNA(i)) return Character::NAelement; else return Symbol(state, complexToStr(i));}
+
+template<>
+List::Element Cast<Complex, List>(State& state, Complex::Element const& i) { return Complex::c(i); }
+
+template<>
+Call::Element Cast<Complex, Call>(State& state, Complex::Element const& i) { return Complex::c(i); }
+
+
+template<>
+Logical::Element Cast<Character, Logical>(State& state, Character::Element const& i) { if(i == Symbol::TRUE) return 1; else if(i == Symbol::FALSE) return 0; else return Logical::NAelement; }
+
+template<>
+Integer::Element Cast<Character, Integer>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Integer::NAelement; else {try{return strToInt(i.toString(state));} catch(...) {return Integer::NAelement;}} }
+
+template<>
+Double::Element Cast<Character, Double>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Double::NAelement; else {try{return strToDouble(i.toString(state));} catch(...) {return Double::NAelement;}} }
+
+template<>
+Complex::Element Cast<Character, Complex>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Complex::NAelement; else {try{return strToComplex(i.toString(state));} catch(...) {return Complex::NAelement;}} }
+
+template<>
+List::Element Cast<Character, List>(State& state, Character::Element const& i) { return Character::c(i); }
+
+template<>
+Call::Element Cast<Character, Call>(State& state, Character::Element const& i) { return Character::c(i); }
 
 
 template<class I, class O> 
@@ -155,41 +155,41 @@ inline Value As(State& state, Type type, Value const& src) {
 // Use As, so have to be after...
 
 template<>
-static Logical::Element Cast<List, Logical>(State& state, List::Element const& i) { Logical a = As<Logical>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+Logical::Element Cast<List, Logical>(State& state, List::Element const& i) { Logical a = As<Logical>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
 
 template<>
-static Integer::Element Cast<List, Integer>(State& state, List::Element const& i) { Integer a = As<Integer>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+Integer::Element Cast<List, Integer>(State& state, List::Element const& i) { Integer a = As<Integer>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
 
 template<>
-static Double::Element Cast<List, Double>(State& state, List::Element const& i) { Double a = As<Double>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+Double::Element Cast<List, Double>(State& state, List::Element const& i) { Double a = As<Double>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
 
 template<>
-static Complex::Element Cast<List, Complex>(State& state, List::Element const& i) { Complex a = As<Complex>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+Complex::Element Cast<List, Complex>(State& state, List::Element const& i) { Complex a = As<Complex>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
 
 template<>
-static Character::Element Cast<List, Character>(State& state, List::Element const& i) { Character a = As<Character>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+Character::Element Cast<List, Character>(State& state, List::Element const& i) { Character a = As<Character>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
 
 template<>
-static Call::Element Cast<List, Call>(State& state, Call::Element const& i) { return i; }
+Call::Element Cast<List, Call>(State& state, Call::Element const& i) { return i; }
 
 
 template<>
-static Logical::Element Cast<Call, Logical>(State& state, Call::Element const& i) { Logical a = As<Logical>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+Logical::Element Cast<Call, Logical>(State& state, Call::Element const& i) { Logical a = As<Logical>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
 
 template<>
-static Integer::Element Cast<Call, Integer>(State& state, Call::Element const& i) { Integer a = As<Integer>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+Integer::Element Cast<Call, Integer>(State& state, Call::Element const& i) { Integer a = As<Integer>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
 
 template<>
-static Double::Element Cast<Call, Double>(State& state, Call::Element const& i) { Double a = As<Double>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+Double::Element Cast<Call, Double>(State& state, Call::Element const& i) { Double a = As<Double>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
 
 template<>
-static Complex::Element Cast<Call, Complex>(State& state, Call::Element const& i) { Complex a = As<Complex>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+Complex::Element Cast<Call, Complex>(State& state, Call::Element const& i) { Complex a = As<Complex>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
 
 template<>
-static Character::Element Cast<Call, Character>(State& state, Call::Element const& i) { Character a = As<Character>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+Character::Element Cast<Call, Character>(State& state, Call::Element const& i) { Character a = As<Character>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
 
 template<>
-static List::Element Cast<Call, List>(State& state, Call::Element const& i) { return i; }
+List::Element Cast<Call, List>(State& state, Call::Element const& i) { return i; }
 
 
 void importCoerceFunctions(State& state);

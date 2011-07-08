@@ -120,14 +120,14 @@ inline void subAssign(State& state, Value const& a, Value const& i, Value const&
 
 template<class S, class D>
 inline void Insert(State& state, S const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
-	if(length > 0 && srcIndex+length > src.length || dstIndex+length > dst.length)
+	if((length > 0 && srcIndex+length > src.length) || dstIndex+length > dst.length)
 		_error("insert index out of bounds");
 	D as = As<D>(state, src);
 	memcpy(dst.data(dstIndex), as.data(srcIndex), length*as.width);
 }
 
 inline void Insert(State& state, Vector const& src, int64_t srcIndex, Vector& dst, int64_t dstIndex, int64_t length) {
-	if(length > 0 && srcIndex+length > src.length || dstIndex+length > dst.length)
+	if((length > 0 && srcIndex+length > src.length) || dstIndex+length > dst.length)
 		_error("insert index out of bounds");
 	Vector as = As(state, dst.type, src);
 	memcpy(dst.data(dstIndex), as.data(srcIndex), length*as.width);
