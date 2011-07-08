@@ -137,6 +137,7 @@ static int64_t call_function(State& state, Function const& func, List const& arg
 //track the heat of back edge operations and invoke the recorder on hot traces
 #define PROFILE_TABLE_SIZE 1021
 static void profile_back_edge(State & state, Code const * code, Instruction const& inst, int64_t pcoffset) {
+#ifndef RIPOSTE_DISABLE_TRACING
 	if(state.tracing.is_tracing())
 		return;
 	static int64_t hash_table[PROFILE_TABLE_SIZE];
@@ -148,6 +149,7 @@ static void profile_back_edge(State & state, Code const * code, Instruction cons
 		state.tracing.current_trace = new Trace(const_cast<Code*>(code),const_cast<Instruction*>(&inst + pcoffset));
 		recording_patch_inst(state,code,inst,pcoffset); //next instruction will enter trace recorder
 	}
+#endif
 }
 
 int64_t call_op(State& state, Code const* code, Instruction const& inst) {
@@ -599,13 +601,21 @@ int64_t type_op(State& state, Code const* code, Instruction const& inst) {
 }
 int64_t invoketrace_op(State& state, Code const * code, Instruction const & inst) {
 	Trace * trace = code->traces[inst.a];
-	//NYI: for now just run the old bytecode
-#define BC_SWITCH(bc,str,p) case ByteCode::E_##bc: return bc##_op(state,code,trace->trace_inst);
-	switch(trace->trace_inst.bc.Enum()) {
-		BC_ENUM(BC_SWITCH,0)
+
+	int64_t offset;
+	TCStatus status = trace->compiled->execute(state,&offset);
+	if(status != TCStatus::SUCCESS) {
+		printf("trace: encountered error %s\n",status.toString());
 	}
+	if(status  != TCStatus::SUCCESS || offset == 0) { //we exited to the trace start instruction, invoke the orignal instruction here
+#define BC_SWITCH(bc,str,p) case ByteCode::E_##bc: return bc##_op(state,code,trace->trace_inst);
+		switch(trace->trace_inst.bc.Enum()) {
+			BC_ENUM(BC_SWITCH,0)
+		}
 #undef BC_SWITCH
-	return 1;
+	}
+
+	return offset;
 }
 int64_t ret_op(State& state, Code const* code, Instruction const& inst) {
 	// not used. Jumps to done label instead

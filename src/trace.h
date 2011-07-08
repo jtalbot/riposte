@@ -3,8 +3,10 @@
 #include <gc/gc_cpp.h>
 #include<vector>
 #include<map>
+#include<memory>
 #include "bc.h"
 #include "ir.h"
+#include "trace_compiler.h"
 
 struct Trace;
 struct Code;
@@ -136,6 +138,7 @@ struct Trace : public gc {
 	Instruction trace_inst; //copy of first instruction run by trace
 	                        //trace_start will be overwritten with a trace bytecode when it is installed
 	                        //trace_inst holds the old instruction to execution when we need to fallback to the interpreter
+	std::auto_ptr<TraceCompiler> compiled;
 
 	int64_t depth; //how many additional frames have been pushed since recording began
 
@@ -162,7 +165,7 @@ struct Trace : public gc {
 	std::vector<IRef> loop_header;
 	std::vector<IRef> loop_body;
 
-	void compile(); //fills optimized code from recorded
+	void optimize(); //fills optimized code from recorded
 };
 
 class State;

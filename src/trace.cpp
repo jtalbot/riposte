@@ -14,8 +14,15 @@ Trace::Trace(Code * code, Instruction * trace_start)
 
 void trace_compile_and_install(State & state, Trace * trace) {
 
-	//NYI: compile does not codegen, it only optimizes
-	trace->compile();
+	trace->optimize();
+
+	trace->compiled.reset( TraceCompiler::create(trace) );
+
+	TCStatus status = trace->compiled->compile();
+	if(TCStatus::SUCCESS != status) {
+		printf("trace: compiler error: %s\n",status.toString());
+		return;
+	}
 
 	//patch trace into bytecode
 	Code * code = trace->code;
@@ -36,8 +43,8 @@ void trace_compile_and_install(State & state, Trace * trace) {
 }
 
 
-void Trace::compile() {
-
+void Trace::optimize() {
+	optimized.clear();
 	optimized.insert(optimized.end(),recorded.begin(),recorded.end());
 	std::vector<bool> loop_invariant(optimized.size(),false);
 
