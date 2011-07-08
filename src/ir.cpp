@@ -22,13 +22,15 @@ IRType::IRType(Value const & value) {
 
 
 
+#define IR_r____ 0
 #define IR_a____ 0
 #define IR_b____ 0
-#define IR_c____ 0
+
+#define IR_r_ref (IRNode::REF_R)
 #define IR_a_ref (IRNode::REF_A)
 #define IR_b_ref (IRNode::REF_B)
-#define IR_c_ref (IRNode::REF_C)
-#define MAKE_IR_FLAGS(op,str,p,a,b,c) (IR_a_##a | IR_b_##b | IR_c_##c),
+
+#define MAKE_IR_FLAGS(op,str,p,r,a,b) (IR_r_##r | IR_a_##a | IR_b_##b),
 static uint32_t ir_enum_flags[] = {IR_ENUM(MAKE_IR_FLAGS,0) 0};
 
 

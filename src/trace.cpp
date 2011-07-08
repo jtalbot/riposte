@@ -49,26 +49,26 @@ void Trace::compile() {
 		IRNode node = recorded[i];
 		if(node.opcode == IROpCode::sload || node.opcode == IROpCode::vload) {
 			uint32_t location = node.opcode == IROpCode::sload ? RenamingTable::SLOT : RenamingTable::VARIABLE;
-			int32_t var;
+			IRef var;
 			bool read,write;
-			renaming_table.get(location,node.b,renaming_table.current_view(),&var,&read,&write);
+			renaming_table.get(location,node.a,renaming_table.current_view(),&var,&read,&write);
 
 			loop_invariant[i] = !write;
 			if(write) { //create phi node
-				node.c = var;
+				node.b = var;
 				phis.push_back(node);
 			} else {
 				loads.push_back(node);
 			}
 
 		} else {
-			loop_invariant[i] =    ( (node.flags() & IRNode::REF_B) == 0 || loop_invariant[node.b] )
-					            && ( (node.flags() & IRNode::REF_C) == 0 || loop_invariant[node.c] );
+			loop_invariant[i] =    ( (node.flags() & IRNode::REF_A) == 0 || loop_invariant[node.a] )
+					            && ( (node.flags() & IRNode::REF_B) == 0 || loop_invariant[node.b] );
 			if(loop_invariant[i]) {
 				if(node.opcode == IROpCode::guard) { //if we move a guard, we have to change the exit point
 					IRNode n = node;
-					n.b = -1; //no exit
-					n.c = 0; //exit offset is the trace instruction itself
+					n.a = -1; //no exit
+					n.b = 0; //exit offset is the trace instruction itself
 				}
 				loop_header.push_back(node);
 			} else {
@@ -78,7 +78,7 @@ void Trace::compile() {
 	}
 	recorded.clear();
 	recorded.insert(recorded.end(),loads.begin(),loads.end());
-	IRNode foo(IROpCode::null,IRType::Void(),0,0,0);
+	IRNode foo(IROpCode::null,IRType::Void(),0,0);
 	recorded.push_back(foo);
 	recorded.insert(recorded.end(),phis.begin(),phis.end());
 	recorded.push_back(foo);

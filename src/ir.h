@@ -100,23 +100,25 @@ struct IRType {
 };
 
 struct IRNode {
-	enum {REF_A = 1, REF_B = 2,  REF_C = 4};
+	enum {REF_R = 1, REF_A = 2,  REF_B = 4};
 	IRNode() {}
-	IRNode(IROpCode opcode, IRType const & typ, int64_t a, int64_t b, int64_t c) {
+	IRNode(IROpCode opcode, IRType const & typ, int64_t a, int64_t b) {
 		this->opcode = opcode;
 		this->typ = typ;
 		this->a = a;
 		this->b = b;
-		this->c = c;
 	}
 	IROpCode opcode;
 	IRType typ;
-	int64_t a,b,c; //3-op code, a is dest, a = b + c
+	int64_t a, b; //3-op code, r is dest, r = a + b, where r is the position in the list of IRNodes where this op resides
 
 	std::string toString() const {
-		return std::string("") + opcode.toString() + "(" + typ.toString() + ")\t" + intToStr(a) + "\t" + intToStr(b) + "\t" + intToStr(c);
+		return std::string("") + opcode.toString() + "(" + typ.toString() +  ")\t" + intToStr(a) + "\t" + intToStr(b);
 	}
 	uint32_t flags() const;
 };
+
+
+typedef size_t IRef;
 
 #endif /* IR_H_ */

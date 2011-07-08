@@ -32,19 +32,18 @@ DEFINE_ENUM_TO_STRING(RecordingStatus,ENUM_RECORDING_STATUS)
 //for brevity
 #define TRACE (state.tracing.current_trace)
 
-static RecordingStatus emitir(State & state, IROpCode op, IRType const & typ, int64_t b, int64_t c, int32_t * a) {
+static RecordingStatus emitir(State & state, IROpCode op, IRType const & typ, int64_t a, int64_t b, IRef * r) {
 	if(typ.base_type == IRScalarType::T_unsupported)
 		return RecordingStatus::UNSUPPORTED_TYPE;
-	int64_t next_op = TRACE->recorded.size();
-	TRACE->recorded.push_back(IRNode(op,typ,next_op,b,c));
-	if(a)
-		*a = next_op;
+	TRACE->recorded.push_back(IRNode(op,typ,a,b));
+	if(r)
+		*r = TRACE->recorded.size() - 1;
 	return RecordingStatus::NO_ERROR;
 }
 
-static RecordingStatus emitir(State & state, IROpCode op, Value const & v, int64_t b, int64_t c, int32_t * a) {
+static RecordingStatus emitir(State & state, IROpCode op, Value const & v, int64_t a, int64_t b, IRef * r) {
 	IRType typ(v);
-	return emitir(state,op,typ,b,c,a);
+	return emitir(state,op,typ,a,b,r);
 }
 
 #define EMITIR(op,v,b,c,aptr) RECORDING_DO(emitir(state,IROpCode :: op,v,b,c,aptr))
@@ -82,7 +81,7 @@ static void recording_end(State & state, RecordingStatus reason) {
 	return RecordingStatus::UNSUPPORTED_OP;
 
 
-static RecordingStatus get_slot(State & state, int64_t slot_id, int32_t * node) {
+static RecordingStatus get_slot(State & state, int64_t slot_id, IRef * node) {
 	if(!TRACE->renaming_table.get(RenamingTable::SLOT,slot_id,node)) {
 		Value & value = state.Registers[slot_id];
 		EMITIR(sload,value,slot_id,-1,node);
@@ -91,7 +90,7 @@ static RecordingStatus get_slot(State & state, int64_t slot_id, int32_t * node) 
 	return RecordingStatus::NO_ERROR;
 }
 
-static RecordingStatus get_var(State & state, int64_t var_id, int32_t * node) {
+static RecordingStatus get_var(State & state, int64_t var_id, IRef * node) {
 	if(!TRACE->renaming_table.get(RenamingTable::VARIABLE,var_id,node)) {
 		Value value;
 		state.global->get(state,Symbol(var_id),value);
@@ -102,8 +101,8 @@ static RecordingStatus get_var(State & state, int64_t var_id, int32_t * node) {
 }
 
 //convert slot_id into a scalar boolean, or if it already is one, just return it.
-static RecordingStatus get_predicate(State & state, int64_t slot_id, bool invert, int32_t * pnode) {
-	int32_t node;
+static RecordingStatus get_predicate(State & state, int64_t slot_id, bool invert, IRef * pnode) {
+	IRef node;
 	RECORDING_DO(get_slot(state,slot_id,&node));
 	IRType & typ = TRACE->recorded[node].typ;
 
@@ -122,9 +121,9 @@ static RecordingStatus get_predicate(State & state, int64_t slot_id, bool invert
 RecordingStatus op##_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) { \
 		*offset = op##_op(state,code,inst); \
 		Value & c = state.registers[inst.c]; \
-		int32_t node_a; \
-		int32_t node_b; \
-		int32_t output; \
+		IRef node_a; \
+		IRef node_b; \
+		IRef output; \
 		RECORDING_DO(get_slot(state,inst.a,&node_a)); \
 		RECORDING_DO(get_slot(state,inst.b,&node_b)); \
 		EMITIR(op,c,node_a,node_b,&output); \
@@ -138,7 +137,7 @@ RecordingStatus call_record_impl(State & state, Code const * code, Instruction c
 }
 RecordingStatus get_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	*offset = get_op(state,code,inst);
-	int32_t node;
+	IRef node;
 	RECORDING_DO(get_var(state,inst.a,&node));
 	TRACE->renaming_table.assign(RenamingTable::SLOT,inst.c,node);
 	return RecordingStatus::NO_ERROR;
@@ -148,7 +147,7 @@ RecordingStatus kget_record_impl(State & state, Code const * code, Instruction c
 	*offset = kget_op(state,code,inst);
 	Value & value = state.registers[inst.c];
 	TRACE->constants.push_back(value);
-	int32_t node;
+	IRef node;
 	EMITIR(kload,value,TRACE->constants.size() - 1,0,&node);
 	TRACE->renaming_table.assign(RenamingTable::SLOT,inst.c,node);
 	return RecordingStatus::NO_ERROR;
@@ -160,7 +159,7 @@ RecordingStatus iget_record_impl(State & state, Code const * code, Instruction c
 
 RecordingStatus assign_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	*offset = assign_op(state,code,inst);
-	int32_t node;
+	IRef node;
 	RECORDING_DO(get_slot(state,inst.a,&node));
 	TRACE->renaming_table.assign(RenamingTable::VARIABLE,inst.c,node);
 	return RecordingStatus::NO_ERROR;
@@ -189,7 +188,7 @@ RecordingStatus whilebegin_record_impl(State & state, Code const * code, Instruc
 }
 RecordingStatus whileend_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	*offset = whileend_op(state,code,inst);
-	int32_t node;
+	IRef node;
 	RECORDING_DO(get_predicate(state,inst.b,(*offset == 1),&node));
 	TraceExit e = { TRACE->renaming_table.create_snapshot() };
 	TRACE->exits.push_back(e);
@@ -210,7 +209,7 @@ RecordingStatus break1_record_impl(State & state, Code const * code, Instruction
 }
 RecordingStatus if1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	*offset = if1_op(state,code,inst);
-	int32_t node;
+	IRef node;
 	RECORDING_DO(get_predicate(state,inst.b,(*offset != 1),&node));
 	TraceExit e = { TRACE->renaming_table.create_snapshot() };
 	TRACE->exits.push_back(e);
@@ -219,7 +218,7 @@ RecordingStatus if1_record_impl(State & state, Code const * code, Instruction co
 }
 RecordingStatus if0_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	*offset = if0_op(state,code,inst);
-	int32_t node;
+	IRef node;
 	RECORDING_DO(get_predicate(state,inst.b,(*offset == 1),&node));
 	TraceExit e = { TRACE->renaming_table.create_snapshot() };
 	TRACE->exits.push_back(e);
@@ -311,7 +310,7 @@ RecordingStatus jmp_record_impl(State & state, Code const * code, Instruction co
 RecordingStatus null_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	*offset = null_op(state,code,inst);
 	Value & v = state.registers[inst.c];
-	int32_t node;
+	IRef node;
 	EMITIR(null,v,0,0,&node);
 	TRACE->renaming_table.assign(RenamingTable::SLOT,inst.c,node);
 	return RecordingStatus::NO_ERROR;

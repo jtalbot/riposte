@@ -36,7 +36,7 @@ struct RenamingTable {
 
 	struct Status {
 		int64_t id;
-		int32_t ir_node;
+		IRef ir_node;
 
 		uint32_t location : 1; //SLOT or VARIABLE
 
@@ -49,7 +49,7 @@ struct RenamingTable {
 		uint32_t location : 1;
 	};
 
-	int32_t last_snapshot;
+	size_t last_snapshot;
 	std::vector<Status> journal;
 	std::vector<Entry> outputs; //list of values that will be written when the trace completes
 
@@ -58,7 +58,7 @@ struct RenamingTable {
 	}
 
 
-	bool lookup(uint32_t location, int64_t id, int32_t snapshot, int32_t * idx) const {
+	bool lookup(uint32_t location, int64_t id, int32_t snapshot, size_t * idx) const {
 		for(int32_t i = snapshot; i > 0; i--) {
 			const Status & s = journal[i - 1];
 			if(s.id == id && s.location == location) {
@@ -69,9 +69,9 @@ struct RenamingTable {
 		return false;
 	}
 
-	bool get(uint32_t location, int64_t id, int32_t * node) const { return get(location,id,current_view(),node); }
-	bool get(uint32_t location, int64_t id, int32_t snapshot, int32_t * node, bool * read = NULL, bool * write = NULL) const {
-		int32_t idx;
+	bool get(uint32_t location, int64_t id, IRef * node) const { return get(location,id,current_view(),node); }
+	bool get(uint32_t location, int64_t id, int32_t snapshot, IRef * node, bool * read = NULL, bool * write = NULL) const {
+		size_t idx;
 		if(lookup(location,id,snapshot,&idx)) {
 			*node = journal[idx].ir_node;
 			if(read)
@@ -82,8 +82,8 @@ struct RenamingTable {
 		} else
 			return false;
 	}
-	void assign(uint32_t location, int64_t id, int32_t node) {
-		int32_t idx;
+	void assign(uint32_t location, int64_t id, IRef node) {
+		size_t idx;
 		if(lookup(location,id,current_view(),&idx)) {
 			if(journal[idx].write == 0) { //only add to outputs the first time we set the write bit
 				Entry w = {id, location};
@@ -109,7 +109,7 @@ struct RenamingTable {
 		}
 	}
 
-	void input(uint32_t location, int64_t id, int32_t node) {
+	void input(uint32_t location, int64_t id, IRef node) {
 		Status s  = { id, node, location, 1, 0};
 		journal.push_back(s);
 	}
