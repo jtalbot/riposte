@@ -9,9 +9,11 @@
 	_(call, "call", p) \
 	/*_(inlinecall, "inlinecall")*/ \
 	_(get, "get", p) \
+	_(sget, "sget", p) \
 	_(kget, "kget", p) \
 	_(iget, "iget", p) \
 	_(assign, "assign", p) \
+	_(sassign, "sassign", p) \
 	_(iassign, "iassign", p) \
 	_(eassign, "eassign", p) \
 	_(forbegin, "forbegin", p) \
@@ -77,7 +79,8 @@
 	_(UseMethod, "UseMethod", p) \
 	_(seq, "seq", p) \
 	_(type, "type", p) \
-	_(ret, "ret", p)       /* ret must be the last instruction */
+	_(ret, "ret", p) \
+	_(done, "done", p)       /* done must be the last instruction */
 	/*_(frame, "frame") \
 	_(rawfunction, "rawfunction") \
 	_(quote, "quote") \

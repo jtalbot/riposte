@@ -14,8 +14,7 @@ void importCoreLibrary(State& state);
 
 inline Value force(State& state, Value v) { 
 	while(v.type == Type::I_promise) {
-		eval(state, Closure(v)); 
-		v = state.registers[0]; 
+		v = eval(state, Closure(v)); 
 	} 
 	return v; 
 }
@@ -129,7 +128,7 @@ inline void Insert(State& state, S const& src, int64_t srcIndex, D& dst, int64_t
 inline void Insert(State& state, Vector const& src, int64_t srcIndex, Vector& dst, int64_t dstIndex, int64_t length) {
 	if(length > 0 && srcIndex+length > src.length || dstIndex+length > dst.length)
 		_error("insert index out of bounds");
-	Vector as = As(state, dst.type, src);
+	Vector as(As(state, dst.type, src));
 	memcpy(dst.data(dstIndex), as.data(srcIndex), length*as.width);
 }
 
@@ -186,8 +185,8 @@ inline Character klass(State& state, Value const& v)
 		if(v.type == Type::R_integer || v.type == Type::R_double)
 			c[0] = Symbol::Numeric;
 		else if(v.type == Type::R_symbol)
-			c[0] = Symbol(state, "name");
-		else c[0] = Symbol(state, (v).type.toString());
+			c[0] = Symbol::Name;
+		else c[0] = state.StrToSym((v).type.toString());
 		return c;
 	}
 	else {

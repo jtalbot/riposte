@@ -9,189 +9,85 @@
 #include "ops.h"
 #include "internal.h"
 
-// (stack discipline is hard to prove in R, but can we do better?)
-// 1. If a function is returned, must assume that it contains upvalues to anything in either
-//    its static scope (true upvalues) or dynamic scope (promises)
-// 2. Upvalues can be contained in eval'ed code! consider, function(x) return(function() eval(parse(text='x')))
-// 3. Functions can be held in any non-basic datatype (though lists seem like the obvious possibility)
-// 4. So by (2) can't statically check, 
-//		by (3) we'd have to traverse entire returned data structure to check for a function.
-// 5. More conservatively, we could flag the creation of any function within a scope,
-//		if that scope returns a non-basic type, we'd have to move the environment off the stack.
-//    ---but, what about updating references to the environment. Ugly since we don't know
-//	  ---which function is the problem or which upvalues will be used.
-//    How about: Upon creation of a function (call to `function`), we create a in heap
-//      forwarding frame for everything in the dynamic and static scope of the function.
-//      (In repeated use, they wouldn't have to be recreated.)
-//      When the function is created it points to the forwarder, which passes requests
-//      back to the stack implementation. When the stack instance is popped off the stack,
-//      all state is copied to the on-heap forwarder which becomes the true instance.
-//    Downside is that forwarders have to be created for all frames on stack even if the
-//      created function is never returned.
-//    Other downside is that accessing through forwarder adds an indirection.
-// Conclusion for now: heap allocate environments. 
-// Try to make that fast, maybe with a pooled allocator...
+static Instruction const* buildStackFrame(State& state, Environment* environment, Code const* code, Value* result, Instruction const* returnpc);
 
-static Value get(State& state, int64_t i) {
-	if(i >= 0) return state.registers[i];
-	else {
-		Value& value = state.registers[i];
-		if(value.type == Type::I_default) {
-			eval(state, Closure(value).code(), state.global);
-			value = state.registers[0];
-		}
-		while(value.type == Type::I_promise) {
-			eval(state, Closure(value));
-			value = state.registers[0];
-		}
-		return value;
+
+static Value force(State& state, Environment* environment, Value value)
+{
+	if(value.type == Type::I_default) {
+		value = eval(state, Closure(value).code(), environment);
 	}
-}
-
-static void set(State& state, int64_t i, Value const& v) {
-	state.registers[i] = v;
-}
-
-static void setSlot(State& state, int64_t slot, Value const& v) {
-	set(state, -(slot+1), v);
-}
-
-static Value& out(State& state, int64_t slot) {
-	return state.registers[slot];
-}
-
-static void MatchArgs(State& state, Environment* fenv, Function const& func, List const& arguments) {
-	List parameters = func.parameters();
-	Character pnames = getNames(parameters);
-	// set defaults (often these will be completely overridden. Can we delay or skip?
-	for(int64_t i = 0; i < parameters.length; ++i) {
-		setSlot(state, i, parameters[i]);
+	while(value.type == Type::I_promise) {
+		value = eval(state, Closure(value));
 	}
-	// call arguments are not named, do posititional matching
-	if(!hasNames(arguments)) {
-		// override with arguments
-		for(int64_t i = 0; i < std::min(arguments.length, func.dots()); ++i) {
-			setSlot(state, i, arguments[i]);
-		}
-		// set dots if necessary
-		if(arguments.length-(int64_t)func.dots() > 0) {
-			setSlot(state, func.dots(), Subset(arguments, func.dots(), std::max((int64_t)0, (int64_t)arguments.length-(int64_t)func.dots())));
-		}
-	}
-	// call arguments are named, do matching by name
-	else {
-		Character anames = getNames(arguments);
-		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
-		static char assignment[64], set[64];
-		for(int64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
-		for(int64_t i = 0; i < parameters.length; i++) set[i] = -1;
-		// named args, search for complete matches
-		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] != Symbol::empty) {
-				for(int64_t j = 0; j < parameters.length; ++j) {
-					if(pnames[j] != Symbol::dots && anames[i] == pnames[j]) {
-						setSlot(state, j, arguments[i]);
-						assignment[i] = j;
-						set[j] = i;
-						break;
-					}
-				}
-			}
-		}
-		// named args, search for incomplete matches
-		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] != Symbol::empty && assignment[i] == 0) {
-				std::string a = anames[i].toString(state);
-				for(int64_t j = 0; j < parameters.length; ++j) {
-					if(set[j] < 0 && pnames[j] != Symbol::dots &&
-						pnames[i].toString(state).compare( 0, a.size(), a ) == 0 ) {	
-						setSlot(state, j, arguments[i]);
-						fenv->assign(pnames[j], arguments[i]);
-						assignment[i] = j;
-						set[j] = i;
-						break;
-					}
-				}
-			}
-		}
-		// unnamed args, fill into first missing spot.
-		int64_t firstEmpty = 0;
-		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] == Symbol::empty) {
-				for(; firstEmpty < func.dots(); ++firstEmpty) {
-					if(set[firstEmpty] < 0) {
-						setSlot(state, firstEmpty, arguments[i]);
-						assignment[i] = firstEmpty;
-						set[firstEmpty] = i;
-						break;
-					}
-				}
-			}
-		}
-		// put unused args into the dots
-		if(func.dots() < parameters.length) {
-			// count up the unassigned args
-			int64_t unassigned = 0;
-			for(int64_t j = 0; j < arguments.length; j++) if(assignment[j] < 0) unassigned++;
-			List values(unassigned);
-			Character names(unassigned);
-			int64_t idx = 0;
-			for(int64_t j = 0; j < arguments.length; j++) {
-				if(assignment[j] < 0) {
-					values[idx] = arguments[j];
-					names[idx++] = anames[j];
-				}
-			}
-			setNames(values, names);
-			setSlot(state, func.dots(), values);
-		}
-	}
+	return value;
 }
 
-static int64_t call_function(State& state, Function const& func, List const& arguments) {
-	if(func.body().type == Type::I_closure || func.body().type == Type::I_promise) {
-		static std::vector<Environment*, traceable_allocator<Environment*> > envs;
-		//See note above about allocating Environment on heap...
-		Environment* fenv;
-
-		if(envs.size() == 0)
-			fenv = new Environment(func.s(), state.global);
-		else {
-			fenv = envs.back();
-			envs.pop_back();
-			fenv->init(func.s(), state.global);
-		}
-
-		//fenv->assign(Symbol::funargs, arguments);
-		Value* old_registers = state.registers;
-		state.registers = &fenv->slots[16];
-		MatchArgs(state, fenv, func, arguments);
-		eval(state, Closure(func.body()).code(), fenv);
-		state.registers = old_registers;
-		state.registers[0] = fenv->slots[16];
-		envs.push_back(fenv);
+// Get a Value by Symbol from the current environment
+static Value get(State& state, Symbol s) {
+	Environment* environment = state.frame().environment;
+	Value value = environment->get(s);
+	while(value.isNil() && environment->parent() != 0) {
+		environment = environment->parent();
+		value = environment->get(s);	
 	}
-	else
-		state.registers[0] = func.body();
-	return 1;
+	value = force(state, environment, value);
+	if(value.isNil()) throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
+	return value;
 }
 
-static int64_t call_op(State& state, Code const* code, Instruction const& inst) {
-	Value func = state.registers[inst.c];
-	CompiledCall call(code->constants[inst.a]);
+// Get a Value by slot from the current environment
+static Value sget(State& state, int64_t i) {
+	Environment* environment = state.frame().environment;
+	Value value = environment->get(i);
+	Symbol s = environment->slotName(i);
+	while(value.isNil() && environment->parent() != 0) {
+		environment = environment->parent();
+		value = environment->get(s);
+		printf("sget: looking for value %s, but got %s\n", state.SymToStr(s).c_str(), value.type.toString());
+	}
+	value = force(state, environment, value);
+	if(value.isNil()) throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
+	return value;
+}
+
+static void assign(Environment* env, Symbol s, Value v) {
+	env->assign(s, v);
+}
+
+static void sassign(Environment* env, int64_t i, Value v) {
+	env->get(i) = v;
+}
+
+static void assign(State& state, Symbol s, Value v) {
+	assign(state.frame().environment, s, v);
+}
+
+static void sassign(State& state, int64_t i, Value v) {
+	sassign(state.frame().environment, i, v);
+}
+
+static Value& reg(State& state, int64_t i) {
+	return *(state.base+i);
+}
+
+static Value constant(State& state, int64_t i) {
+	return state.frame().constants[i];
+}
+
+static List BuildArgs(State& state, CompiledCall& call) {
 	List arguments = call.arguments();
 	// Specialize the precompiled promises to evaluate in the current scope
 	for(int64_t i = 0; i < arguments.length; i++) {
 		if(arguments[i].type == Type::I_promise)
-			arguments[i].env = (void*)state.global;
+			arguments[i].env = (void*)state.frame().environment;
 	}
 
 	if(call.dots() < arguments.length) {
 		// Expand dots into the parameter list...
 		// If it's in the dots it must already be a promise, thus no need to make a promise again.
 		// Need to do the same for the names...
-		Value v;
-		state.global->get(state, Symbol::dots, v);
+		Value v = get(state, Symbol::dots);
 		if(!v.isNull()) {
 			List dots(v);
 			List expanded(arguments.length + dots.length - 1 /* -1 for dots that will be replaced */);
@@ -216,475 +112,618 @@ static int64_t call_op(State& state, Code const* code, Instruction const& inst) 
 		
 		}
 	}
-	if(func.type == Type::R_function) {
-		Value* old_registers = state.registers;
-		state.registers = &(state.registers[inst.c]);
-		call_function(state, Function(func), arguments);
-		state.registers = old_registers;
-		return 1;
-	} else if(func.type == Type::R_cfunction) {
-		Value* old_registers = state.registers;
-		state.registers = &(state.registers[inst.c]);
-		CFunction(func).func(state, call.call(), arguments);
-		state.registers = old_registers;
-		return 1;
+	return arguments;
+}
+
+static void MatchArgs(State& state, Environment* fenv, Function const& func, List const& arguments) {
+	List parameters = func.parameters();
+	Character pnames = getNames(parameters);
+
+	// set nils
+	for(int64_t i = 0; i < fenv->SlotCount(); i++)
+		fenv->get(i) = Value::Nil;
+
+	// set defaults (often these will be completely overridden. Can we delay or skip?
+	for(int64_t i = 0; i < parameters.length; ++i) {
+		sassign(fenv, i, parameters[i]);
+	}
+	// call arguments are not named, do posititional matching
+	if(!hasNames(arguments)) {
+		// override with arguments
+		for(int64_t i = 0; i < std::min(arguments.length, func.dots()); ++i) {
+			sassign(fenv, i, arguments[i]);
+		}
+		// set dots if necessary
+		if(arguments.length-(int64_t)func.dots() > 0) {
+			sassign(fenv, func.dots(), Subset(arguments, func.dots(), std::max((int64_t)0, (int64_t)arguments.length-(int64_t)func.dots())));
+		}
+	}
+	// call arguments are named, do matching by name
+	else {
+		Character anames = getNames(arguments);
+		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
+		static char assignment[64], set[64];
+		for(int64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
+		for(int64_t i = 0; i < parameters.length; i++) set[i] = -1;
+		// named args, search for complete matches
+		for(int64_t i = 0; i < arguments.length; ++i) {
+			if(anames[i] != Symbol::empty) {
+				for(int64_t j = 0; j < parameters.length; ++j) {
+					if(pnames[j] != Symbol::dots && anames[i] == pnames[j]) {
+						sassign(fenv, j, arguments[i]);
+						assignment[i] = j;
+						set[j] = i;
+						break;
+					}
+				}
+			}
+		}
+		// named args, search for incomplete matches
+		for(int64_t i = 0; i < arguments.length; ++i) {
+			if(anames[i] != Symbol::empty && assignment[i] == 0) {
+				std::string a = state.SymToStr(anames[i]);
+				for(int64_t j = 0; j < parameters.length; ++j) {
+					if(set[j] < 0 && pnames[j] != Symbol::dots &&
+						state.SymToStr(pnames[i]).compare( 0, a.size(), a ) == 0 ) {	
+						sassign(fenv, j, arguments[i]);
+						//fenv->assign(pnames[j], arguments[i]);
+						assignment[i] = j;
+						set[j] = i;
+						break;
+					}
+				}
+			}
+		}
+		// unnamed args, fill into first missing spot.
+		int64_t firstEmpty = 0;
+		for(int64_t i = 0; i < arguments.length; ++i) {
+			if(anames[i] == Symbol::empty) {
+				for(; firstEmpty < func.dots(); ++firstEmpty) {
+					if(set[firstEmpty] < 0) {
+						sassign(fenv, firstEmpty, arguments[i]);
+						assignment[i] = firstEmpty;
+						set[firstEmpty] = i;
+						break;
+					}
+				}
+			}
+		}
+		// put unused args into the dots
+		if(func.dots() < parameters.length) {
+			// count up the unassigned args
+			int64_t unassigned = 0;
+			for(int64_t j = 0; j < arguments.length; j++) if(assignment[j] < 0) unassigned++;
+			List values(unassigned);
+			Character names(unassigned);
+			int64_t idx = 0;
+			for(int64_t j = 0; j < arguments.length; j++) {
+				if(assignment[j] < 0) {
+					values[idx] = arguments[j];
+					names[idx++] = anames[j];
+				}
+			}
+			setNames(values, names);
+			sassign(fenv, func.dots(), values);
+		}
+	}
+}
+
+static Instruction const* call_op(State& state, Instruction const& inst) {
+	Value f = reg(state, inst.c);
+	CompiledCall call(constant(state, inst.a));
+	
+	List arguments = BuildArgs(state, call);
+
+	if(f.type == Type::R_function) {
+		Function func(f);
+		assert(func.body().type == Type::I_closure || func.body().type == Type::I_promise);
+
+		Environment* fenv;
+		if(state.environments.size() == 0) {
+			fenv = new Environment(func.s(), Closure(func.body()).code()->slotSymbols);
+		} else {
+			fenv = state.environments.back();
+			state.environments.pop_back();
+			fenv->init(func.s(), Closure(func.body()).code()->slotSymbols);
+		}
+	
+		//assign(fenv, Symbol::funargs, arguments);
+		MatchArgs(state, fenv, func, arguments);
+		return buildStackFrame(state, fenv, Closure(func.body()).code(), &reg(state, inst.c), &inst+1);
+	} else if(f.type == Type::R_cfunction) {
+		reg(state, inst.c) = CFunction(f).func(state, call.call(), arguments);
+		return &inst+1;
 	} else {
-		_error(std::string("Non-function (") + func.type.toString() + ") as first parameter to call\n");
-		return 1;
+		_error(std::string("Non-function (") + f.type.toString() + ") as first parameter to call\n");
+		return &inst+1;
 	}	
 }
-static int64_t UseMethod_op(State& state, Code const* code, Instruction const& inst) {
-	Value v = state.registers[inst.a];
+static Instruction const* UseMethod_op(State& state, Instruction const& inst) {
+	Value v = reg(state, inst.a);
 	Symbol generic;
 	if(v.isCharacter())
 		generic = Character(v)[0];
 	else
 		generic = Symbol(v);
 	
-	Value arguments;
-	state.global->get(state, Symbol::funargs, arguments);
+	Value arguments = get(state, Symbol::funargs);
 	
 	Value object;	
-	if(state.registers[inst.b].i == 1)
-		object = state.registers[inst.a+1];
+	if(reg(state, inst.b).i == 1)
+		object = reg(state, inst.a+1);
 	else
 		object = force(state, List(arguments)[0]);
 
 	Character type = klass(state, object);
 
-	Value* old_registers = state.registers;
-	state.registers = &(state.registers[inst.c]);
-	
 	//Search for first method
-	Symbol method = Symbol(state, generic.toString(state) + "." + type[0].toString(state));
-	bool success = state.global->get(state, method, state.registers[0] /* because we've rebased the registers pointer*/);
+	Symbol method = state.StrToSym(state.SymToStr(generic) + "." + state.SymToStr(type[0]));
+	Value function = get(state, method);
 	
 	//Search for default
-	if(!success) {
-		method = Symbol(state, generic.toString(state) + ".default");
-		bool success = state.global->get(state, method, state.registers[0] /* because we've rebased the registers pointer*/);
-		if(!success) {
-			if(!success) throw RiposteError(std::string("no applicable method for '") + generic.toString(state) + "' applied to an object of class \"" + type[0].toString(state) + "\"");
-		}
+	if(function.isNil()) {
+		method = state.StrToSym(state.SymToStr(generic) + ".default");
+		function = get(state, method);
+		if(function.isNil()) throw RiposteError(std::string("no applicable method for '") + state.SymToStr(generic) + "' applied to an object of class \"" + state.SymToStr(type[0]) + "\"");
 	}
-	state.registers = old_registers;
 
-	Function func = state.registers[inst.c];
-	
+	Function func = (Function)function;
 	if(func.body().type == Type::I_closure || func.body().type == Type::I_promise) {
-		Environment* fenv = new Environment(func.s(), state.global);
-		fenv->assign(Symbol::funargs, arguments);
+		Environment* fenv = new Environment(func.s());
+		assign(fenv, Symbol::funargs, arguments);
 
 		MatchArgs(state, fenv, func, arguments);
 
-		fenv->assign(Symbol(state, ".Generic"), generic);
-		fenv->assign(Symbol(state, ".Method"), method);
-		fenv->assign(Symbol(state, ".Class"), type);
-	
-		eval(state, Closure(func.body()).bind(fenv));
+		assign(fenv, state.StrToSym(".Generic"), generic);
+		assign(fenv, state.StrToSym(".Method"), method);
+		assign(fenv, state.StrToSym(".Class"), type);
+		
+		reg(state, inst.c) = eval(state, Closure(func.body()).bind(fenv));
 	}
 	else
-		state.registers[0] = func.body();
-	return 1;
+		reg(state, inst.c) = func.body();
+
+	return &inst+1;
 }
-static int64_t get_op(State& state, Code const* code, Instruction const& inst) {
-	Value* old_registers = state.registers;
-	state.registers = &(state.registers[inst.c]);
-	bool success = state.global->get(state, Symbol(inst.a), state.registers[0] /* because we've rebased the registers pointer*/);
-	state.registers = old_registers;
-	if(!success) throw RiposteError(std::string("object '") + Symbol(inst.a).toString(state) + "' not found");
-	return 1;
+static Instruction const* get_op(State& state, Instruction const& inst) {
+	reg(state, inst.c) = get(state, Symbol(inst.a));
+	return &inst+1;
 }
-static int64_t kget_op(State& state, Code const* code, Instruction const& inst) {
-	state.registers[inst.c] = code->constants[inst.a];
-	return 1;
+static Instruction const* sget_op(State& state, Instruction const& inst) {
+	reg(state, inst.c) = sget(state, inst.a);
+	return &inst+1;
 }
-static int64_t iget_op(State& state, Code const* code, Instruction const& inst) {
-	state.path[0]->get(state, Symbol(inst.a), state.registers[inst.c]);
-	return 1;
+static Instruction const* kget_op(State& state, Instruction const& inst) {
+	reg(state, inst.c) = constant(state, inst.a);
+	return &inst+1;
 }
-static int64_t assign_op(State& state, Code const* code, Instruction const& inst) {
-	if(inst.c >= 0) {
-		if(!Symbol(inst.c).isAssignable()) {
-			throw RiposteError("cannot assign to that symbol");
-		}
-		state.global->assign(Symbol(inst.c), get(state, inst.a));
-	}
-	else {
-		out(state, inst.c) = get(state, inst.a);	
-	}
-	// assign assumes that source is equal to destination
-	return 1;
+static Instruction const* iget_op(State& state, Instruction const& inst) {
+	reg(state, inst.c) = state.path[0]->get(Symbol(inst.a));
+	return &inst+1;
 }
-static int64_t iassign_op(State& state, Code const* code, Instruction const& inst) {
+static Instruction const* assign_op(State& state, Instruction const& inst) {
+	assign(state, Symbol(inst.a), reg(state, inst.c));
+	return &inst+1;
+}
+static Instruction const* sassign_op(State& state, Instruction const& inst) {
+	sassign(state, inst.a, reg(state, inst.c));
+	return &inst+1;
+}
+// everything else should be in registers
+
+static Instruction const* iassign_op(State& state, Instruction const& inst) {
 	// a = value, b = index, c = dest 
-	subAssign(state, state.registers[inst.c], state.registers[inst.b], state.registers[inst.a], state.registers[inst.c]);
-	return 1;
+	subAssign(state, reg(state,inst.c), reg(state,inst.b), reg(state,inst.a), reg(state,inst.c));
+	return &inst+1;
 }
-static int64_t eassign_op(State& state, Code const* code, Instruction const& inst) {
+static Instruction const* eassign_op(State& state, Instruction const& inst) {
 	// a = value, b = index, c = dest 
-	Value v = state.registers[inst.c];
+	Value v = reg(state, inst.c);
 	if(v.isList()) {
 		List r = Clone(List(v));
-		r[As<Integer>(state, state.registers[inst.b])[0]-1] = state.registers[inst.a];
-		state.registers[inst.c] = r;
-		return 1;
+		r[As<Integer>(state, reg(state,inst.b))[0]-1] = reg(state,inst.a);
+		reg(state, inst.c) = r;
+		return &inst+1;
 	}
 	else {
-		subAssign(state, state.registers[inst.c], state.registers[inst.b], state.registers[inst.a], state.registers[inst.c]);
-		return 1;
+		subAssign(state, reg(state,inst.c), reg(state,inst.b), reg(state,inst.a), reg(state,inst.c));
+		return &inst+1;
 	}
 }
-static int64_t forbegin_op(State& state, Code const* code, Instruction const& inst) {
+static Instruction const* forbegin_op(State& state, Instruction const& inst) {
 	//TODO: need to keep a stack of these...
-	Value loopVector = state.registers[inst.c];
-	state.registers[inst.c] = Null::singleton;
-	state.registers[inst.c+1] = loopVector;
-	state.registers[inst.c+2] = Integer::c(0);
-	if(state.registers[inst.c+2].i >= (int64_t)state.registers[inst.c+1].length) { return inst.a; }
-	state.global->assign(Symbol(inst.b), Element(loopVector, 0));
-	return 1;
+	Value loopVector = reg(state, inst.c);
+	reg(state, inst.c) = Null::singleton;
+	reg(state, inst.c+1) = loopVector;
+	reg(state, inst.c+2) = Integer::c(0);
+	if(reg(state, inst.c+2).i >= (int64_t)reg(state, inst.c+1).length) { return &inst+inst.a; }
+	assign(state, Symbol(inst.b), Element(Vector(loopVector), 0));
+	return &inst+1;
 }
-static int64_t forend_op(State& state, Code const* code, Instruction const& inst) {
-	if(++state.registers[inst.c+2].i < (int64_t)state.registers[inst.c+1].length) { 
-		state.global->assign(Symbol(inst.b), Element(state.registers[inst.c+1], state.registers[inst.c+2].i));
-		return inst.a; 
-	} else return 1;
+static Instruction const* forend_op(State& state, Instruction const& inst) {
+	if(++reg(state, inst.c+2).i < (int64_t)reg(state, inst.c+1).length) { 
+		assign(state, Symbol(inst.b), Element(Vector(reg(state, inst.c+1)), reg(state, inst.c+2).i));
+		return &inst+inst.a; 
+	} else return &inst+1;
 }
-static int64_t iforbegin_op(State& state, Code const* code, Instruction const& inst) {
-	double m = asReal1(state.registers[inst.c]);
-	double n = asReal1(state.registers[inst.c+1]);
-	state.registers[inst.c] = Null::singleton;
-	state.registers[inst.c+1] = Integer::c(n > m ? 1 : -1);
-	state.registers[inst.c+1].length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
-	state.registers[inst.c+2] = Integer::c((int64_t)m);
-	if(state.registers[inst.c+2].i >= (int64_t)state.registers[inst.c+1].length) { return inst.a; }
-	state.global->assign(Symbol(inst.b), Integer::c(m));
-	return 1;
+static Instruction const* iforbegin_op(State& state, Instruction const& inst) {
+	double m = asReal1(reg(state, inst.c));
+	double n = asReal1(reg(state, inst.c+1));
+	reg(state, inst.c) = Null::singleton;
+	reg(state, inst.c+1) = Integer::c(n > m ? 1 : -1);
+	reg(state, inst.c+1).length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
+	reg(state, inst.c+2) = Integer::c((int64_t)m);
+	if(reg(state, inst.c+2).i >= (int64_t)reg(state, inst.c+1).length) { return &inst+inst.a; }
+	assign(state, Symbol(inst.b), Integer::c(m));
+	return &inst+1;
 }
-static int64_t iforend_op(State& state, Code const* code, Instruction const& inst) {
-	if((state.registers[inst.c+2].i+=state.registers[inst.c+1].i) < (int64_t)state.registers[inst.c+1].length) { 
-		state.global->assign(Symbol(inst.b), state.registers[inst.c+2]);
-		return inst.a; 
-	} else return 1;
+static Instruction const* iforend_op(State& state, Instruction const& inst) {
+	if((reg(state, inst.c+2).i+=reg(state, inst.c+1).i) < (int64_t)reg(state, inst.c+1).length) { 
+		assign(state, Symbol(inst.b), reg(state, inst.c+2));
+		return &inst+inst.a; 
+	} else return &inst+1;
 }
-static int64_t whilebegin_op(State& state, Code const* code, Instruction const& inst) {
-	Logical l(state.registers[inst.b]);
-	state.registers[inst.c] = Null::singleton;
-	if(l[0]) return 1;
-	else return inst.a;
+static Instruction const* whilebegin_op(State& state, Instruction const& inst) {
+	Logical l(reg(state,inst.b));
+	reg(state, inst.c) = Null::singleton;
+	if(l[0]) return &inst+1;
+	else return &inst+inst.a;
 }
-static int64_t whileend_op(State& state, Code const* code, Instruction const& inst) {
-	Logical l(state.registers[inst.b]);
-	if(l[0]) return inst.a;
-	else return 1;
+static Instruction const* whileend_op(State& state, Instruction const& inst) {
+	Logical l(reg(state,inst.b));
+	if(l[0]) return &inst+inst.a;
+	else return &inst+1;
 }
-static int64_t repeatbegin_op(State& state, Code const* code, Instruction const& inst) {
-	state.registers[inst.c] = Null::singleton;
-	return 1;
+static Instruction const* repeatbegin_op(State& state, Instruction const& inst) {
+	reg(state,inst.c) = Null::singleton;
+	return &inst+1;
 }
-static int64_t repeatend_op(State& state, Code const* code, Instruction const& inst) {
-	return inst.a;
+static Instruction const* repeatend_op(State& state, Instruction const& inst) {
+	return &inst+inst.a;
 }
-static int64_t next_op(State& state, Code const* code, Instruction const& inst) {
-	return inst.a;
+static Instruction const* next_op(State& state, Instruction const& inst) {
+	return &inst+inst.a;
 }
-static int64_t break1_op(State& state, Code const* code, Instruction const& inst) {
-	return inst.a;
+static Instruction const* break1_op(State& state, Instruction const& inst) {
+	return &inst+inst.a;
 }
-static int64_t if1_op(State& state, Code const* code, Instruction const& inst) {
-	Logical l = As<Logical>(state, state.registers[inst.b]);
+static Instruction const* if1_op(State& state, Instruction const& inst) {
+	Logical l = As<Logical>(state, reg(state,inst.b));
 	if(l.length == 0) _error("if argument is of zero length");
-	if(l[0]) return 1;
-	else return inst.a;
+	if(l[0]) return &inst+1;
+	else return &inst+inst.a;
 }
-static int64_t if0_op(State& state, Code const* code, Instruction const& inst) {
-	Logical l = As<Logical>(state, state.registers[inst.b]);
+static Instruction const* if0_op(State& state, Instruction const& inst) {
+	Logical l = As<Logical>(state, reg(state, inst.b));
 	if(l.length == 0) _error("if argument is of zero length");
-	if(!l[0]) return 1;
-	else return inst.a;
+	if(!l[0]) return &inst+1;
+	else return &inst+inst.a;
 }
-static int64_t colon_op(State& state, Code const* code, Instruction const& inst) {
-	double from = asReal1(state.registers[inst.a]);
-	double to = asReal1(state.registers[inst.b]);
-	state.registers[inst.c] = Sequence(from, to>from?1:-1, fabs(to-from)+1);
-	return 1;
+static Instruction const* colon_op(State& state, Instruction const& inst) {
+	double from = asReal1(reg(state,inst.a));
+	double to = asReal1(reg(state,inst.b));
+	reg(state,inst.c) = Sequence(from, to>from?1:-1, fabs(to-from)+1);
+	return &inst+1;
 }
-static int64_t seq_op(State& state, Code const* code, Instruction const& inst) {
-	int64_t len = As<Integer>(state, state.registers[inst.a])[0];
-	state.registers[inst.c] = Sequence(len);
-	return 1;
+static Instruction const* seq_op(State& state, Instruction const& inst) {
+	int64_t len = As<Integer>(state, reg(state, inst.a))[0];
+	reg(state, inst.c) = Sequence(len);
+	return &inst+1;
 }
-static int64_t add_op(State& state, Code const* code, Instruction const& inst) {
-	//if(!isObject(stack.peek()) && !isObject(stack.peek(1)))
-	//binaryArith<Zip2, AddOp>(state, state.registers[inst.a], state.registers[inst.b], state.registers[inst.c]);
-	binaryArith<Zip2, AddOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	//else
-	//	groupGeneric2(state, stack, code, inst);
-	return 1;
+static Instruction const* add_op(State& state, Instruction const& inst) {
+	binaryArith<Zip2, AddOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t pos_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, PosOp>(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* pos_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, PosOp>(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t sub_op(State& state, Code const* code, Instruction const& inst) {
-	binaryArith<Zip2, SubOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* sub_op(State& state, Instruction const& inst) {
+	binaryArith<Zip2, SubOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t neg_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, NegOp>(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* neg_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, NegOp>(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t mul_op(State& state, Code const* code, Instruction const& inst) {
-	binaryArith<Zip2, MulOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* mul_op(State& state, Instruction const& inst) {
+	binaryArith<Zip2, MulOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t div_op(State& state, Code const* code, Instruction const& inst) {
-	binaryArith<Zip2, DivOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* div_op(State& state, Instruction const& inst) {
+	binaryArith<Zip2, DivOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t idiv_op(State& state, Code const* code, Instruction const& inst) {
-	binaryArith<Zip2, IDivOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* idiv_op(State& state, Instruction const& inst) {
+	binaryArith<Zip2, IDivOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t mod_op(State& state, Code const* code, Instruction const& inst) {
-	binaryArith<Zip2, ModOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* mod_op(State& state, Instruction const& inst) {
+	binaryArith<Zip2, ModOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t pow_op(State& state, Code const* code, Instruction const& inst) {
-	binaryArith<Zip2, PowOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* pow_op(State& state, Instruction const& inst) {
+	binaryArith<Zip2, PowOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t lnot_op(State& state, Code const* code, Instruction const& inst) {
-	unaryLogical<Zip1, LNotOp>(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* lnot_op(State& state, Instruction const& inst) {
+	unaryLogical<Zip1, LNotOp>(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t land_op(State& state, Code const* code, Instruction const& inst) {
-	binaryLogical<Zip2, AndOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* land_op(State& state, Instruction const& inst) {
+	binaryLogical<Zip2, AndOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t lor_op(State& state, Code const* code, Instruction const& inst) {
-	binaryLogical<Zip2, OrOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* lor_op(State& state, Instruction const& inst) {
+	binaryLogical<Zip2, OrOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t eq_op(State& state, Code const* code, Instruction const& inst) {
-	binaryOrdinal<Zip2, EqOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* eq_op(State& state, Instruction const& inst) {
+	binaryOrdinal<Zip2, EqOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t neq_op(State& state, Code const* code, Instruction const& inst) {
-	binaryOrdinal<Zip2, NeqOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* neq_op(State& state, Instruction const& inst) {
+	binaryOrdinal<Zip2, NeqOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t lt_op(State& state, Code const* code, Instruction const& inst) {
-	binaryOrdinal<Zip2, LTOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* lt_op(State& state, Instruction const& inst) {
+	binaryOrdinal<Zip2, LTOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t le_op(State& state, Code const* code, Instruction const& inst) {
-	binaryOrdinal<Zip2, LEOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* le_op(State& state, Instruction const& inst) {
+	binaryOrdinal<Zip2, LEOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t gt_op(State& state, Code const* code, Instruction const& inst) {
-	binaryOrdinal<Zip2, GTOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* gt_op(State& state, Instruction const& inst) {
+	binaryOrdinal<Zip2, GTOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t ge_op(State& state, Code const* code, Instruction const& inst) {
-	binaryOrdinal<Zip2, GEOp>(state, get(state, inst.a), get(state, inst.b), out(state, inst.c));
-	return 1;
+static Instruction const* ge_op(State& state, Instruction const& inst) {
+	binaryOrdinal<Zip2, GEOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t abs_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, AbsOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* abs_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, AbsOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t sign_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, SignOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* sign_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, SignOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t sqrt_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, SqrtOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* sqrt_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, SqrtOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t floor_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, FloorOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* floor_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, FloorOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t ceiling_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, CeilingOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* ceiling_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, CeilingOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t trunc_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, TruncOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* trunc_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, TruncOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t round_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, RoundOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* round_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, RoundOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t signif_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, SignifOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* signif_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, SignifOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t exp_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, ExpOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* exp_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, ExpOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t log_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, LogOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* log_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, LogOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t cos_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, CosOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* cos_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, CosOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t sin_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, SinOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* sin_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, SinOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t tan_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, TanOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* tan_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, TanOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t acos_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, ACosOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* acos_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, ACosOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t asin_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, ASinOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* asin_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, ASinOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t atan_op(State& state, Code const* code, Instruction const& inst) {
-	unaryArith<Zip1, ATanOp >(state, get(state, inst.a), out(state, inst.c));
-	return 1;
+static Instruction const* atan_op(State& state, Instruction const& inst) {
+	unaryArith<Zip1, ATanOp >(state, reg(state, inst.a), reg(state, inst.c));
+	return &inst+1;
 }
-static int64_t jmp_op(State& state, Code const* code, Instruction const& inst) {
-	return (int64_t)inst.a;
+static Instruction const* jmp_op(State& state, Instruction const& inst) {
+	return &inst+inst.a;
 }
-static int64_t null_op(State& state, Code const* code, Instruction const& inst) {
-	out(state, inst.c) = Null::singleton;
-	return 1;
+static Instruction const* null_op(State& state, Instruction const& inst) {
+	reg(state, inst.c) = Null::singleton;
+	return &inst+1;
 }
-static int64_t true1_op(State& state, Code const* code, Instruction const& inst) {
-	out(state, inst.c) = Logical::True();
-	return 1;
+static Instruction const* true1_op(State& state, Instruction const& inst) {
+	reg(state, inst.c) = Logical::True();
+	return &inst+1;
 }
-static int64_t false1_op(State& state, Code const* code, Instruction const& inst) {
-	out(state, inst.c) = Logical::False();
-	return 1;
+static Instruction const* false1_op(State& state, Instruction const& inst) {
+	reg(state, inst.c) = Logical::False();
+	return &inst+1;
 }
-static int64_t NA_op(State& state, Code const* code, Instruction const& inst) {
-	out(state, inst.c) = Logical::NA();
-	return 1;
+static Instruction const* NA_op(State& state, Instruction const& inst) {
+	reg(state, inst.c) = Logical::NA();
+	return &inst+1;
 }
-static int64_t istrue_op(State& state, Code const* code, Instruction const& inst) {
-	Logical l = As<Logical>(state, state.registers[inst.a]);
+static Instruction const* istrue_op(State& state, Instruction const& inst) {
+	Logical l = As<Logical>(state, reg(state, inst.a));
 	if(l.length == 0) _error("argument is of zero length");
-	out(state, inst.c) = l[0] ? Logical::True() : Logical::False();
-	return 1;
+	reg(state, inst.c) = l[0] ? Logical::True() : Logical::False();
+	return &inst+1;
 }
-static int64_t function_op(State& state, Code const* code, Instruction const& inst) {
-	out(state, inst.c) = Function(code->constants[inst.a], code->constants[inst.b], code->constants[inst.b+1], state.global);
-	return 1;
+static Instruction const* function_op(State& state, Instruction const& inst) {
+	reg(state, inst.c) = Function(constant(state, inst.a), constant(state, inst.b), constant(state, inst.b+1), state.frame().environment);
+	return &inst+1;
 }
-static int64_t logical1_op(State& state, Code const* code, Instruction const& inst) {
-	Integer i = As<Integer>(state, get(state, inst.a));
-	out(state, inst.c) = Logical(i[0]);
-	return 1;
+static Instruction const* logical1_op(State& state, Instruction const& inst) {
+	Integer i = As<Integer>(state, reg(state, inst.a));
+	reg(state, inst.c) = Logical(i[0]);
+	return &inst+1;
 }
-static int64_t integer1_op(State& state, Code const* code, Instruction const& inst) {
-	Integer i = As<Integer>(state, get(state, inst.a));
-	out(state, inst.c) = Integer(i[0]);
-	return 1;
+static Instruction const* integer1_op(State& state, Instruction const& inst) {
+	Integer i = As<Integer>(state, reg(state, inst.a));
+	reg(state, inst.c) = Integer(i[0]);
+	return &inst+1;
 }
-static int64_t double1_op(State& state, Code const* code, Instruction const& inst) {
-	Integer i = As<Integer>(state, get(state, inst.a));
-	out(state, inst.c) = Double(i[0]);
-	return 1;
+static Instruction const* double1_op(State& state, Instruction const& inst) {
+	Integer i = As<Integer>(state, reg(state, inst.a));
+	reg(state, inst.c) = Double(i[0]);
+	return &inst+1;
 }
-static int64_t complex1_op(State& state, Code const* code, Instruction const& inst) {
-	Integer i = As<Integer>(state, get(state, inst.a));
-	out(state, inst.c) = Complex(i[0]);
-	return 1;
+static Instruction const* complex1_op(State& state, Instruction const& inst) {
+	Integer i = As<Integer>(state, reg(state, inst.a));
+	reg(state, inst.c) = Complex(i[0]);
+	return &inst+1;
 }
-static int64_t character1_op(State& state, Code const* code, Instruction const& inst) {
-	Integer i = As<Integer>(state, get(state, inst.a));
+static Instruction const* character1_op(State& state, Instruction const& inst) {
+	Integer i = As<Integer>(state, reg(state, inst.a));
 	Character r = Character(i[0]);
 	for(int64_t j = 0; j < r.length; j++) r[j] = Symbol::empty;
-	out(state, inst.c) = r;
-	return 1;
+	reg(state, inst.c) = r;
+	return &inst+1;
 }
-static int64_t raw1_op(State& state, Code const* code, Instruction const& inst) {
-	Integer i = As<Integer>(state, get(state, inst.a));
-	out(state, inst.c) = Raw(i[0]);
-	return 1;
+static Instruction const* raw1_op(State& state, Instruction const& inst) {
+	Integer i = As<Integer>(state, reg(state, inst.a));
+	reg(state, inst.c) = Raw(i[0]);
+	return &inst+1;
 }
-static int64_t type_op(State& state, Code const* code, Instruction const& inst) {
+static Instruction const* type_op(State& state, Instruction const& inst) {
 	Character c(1);
 	// Should have a direct mapping from type to symbol.
-	c[0] = Symbol(state, state.registers[inst.a].type.toString());
-	out(state, inst.c) = c;
-	return 1;
+	c[0] = state.StrToSym(reg(state, inst.a).type.toString());
+	reg(state, inst.c) = c;
+	return &inst+1;
 }
-static int64_t ret_op(State& state, Code const* code, Instruction const& inst) {
-	// not used. Jumps to done label instead
+static Instruction const* ret_op(State& state, Instruction const& inst) {
+	*(state.frame().result) = reg(state, inst.c);
+	// this isn't going to work for promises or defaults!
+	if(reg(state, inst.c).isClosureSafe() && state.frame().environment != state.global)
+		state.environments.push_back(state.frame().environment);
+	state.base = state.frame().returnbase;
+	Instruction const* returnpc = state.frame().returnpc;
+	state.pop();
+	return returnpc;
+}
+static Instruction const* done_op(State& state, Instruction const& inst) {
+	// not used. When this instruction is hit, interpreter exits.
 	return 0;
 }
 
+//#define THREADED_INTERPRETER
 
-void eval(State& state, Closure const& closure) {
-	eval(state, closure.code(), closure.environment());
-}
 
-void eval(State& state, Code const* code, Environment* environment) {
-	Environment* oldenv = state.global;
-	state.global = environment;	
-	eval(state, code);
-	state.global = oldenv;
-}
+static const void** glabels = 0;
 
-// 
-//
-//    Main interpreter loop 
-//
-#define THREADED_INTERPRETER
-//
-//
-//__attribute__((__noinline__,__noclone__)) 
-void eval(State& state, Code const* code) {
-	Instruction const* pc;
+static Instruction const* buildStackFrame(State& state, Environment* environment, Code const* code, Value* result, Instruction const* returnpc) {
+	StackFrame& s = state.push();
+	s.environment = environment;
+	s.returnpc = returnpc;
+	s.returnbase = state.base;
+	s.result = result;
+	s.constants = &(code->constants[0]);
+	state.base -= 32;
+	if(state.base < state.registers)
+		throw RiposteError("Register overflow");
 
 #ifdef THREADED_INTERPRETER
-    #define LABELS_THREADED(name,type,p) (void*)&&name##_label,
-	static const void* labels[] = {BC_ENUM(LABELS_THREADED,0)};
-
-	/* Initialize threaded bytecode if not yet done */
+	// Initialize threaded bytecode if not yet done 
 	if(code->tbc.size() == 0)
 	{
 		for(int64_t i = 0; i < (int64_t)code->bc.size(); ++i) {
 			Instruction const& inst = code->bc[i];
 			code->tbc.push_back(
 				Instruction(
-					inst.bc == ByteCode::ret ? (void*)&&DONE : labels[inst.bc.Enum()],
+					inst.bc == ByteCode::done ? glabels[0] : glabels[inst.bc.Enum()+1],
 					inst.a, inst.b, inst.c));
 		}
 	}
+	return &(code->tbc[0]);
+#else
+	return &(code->bc[0]);
+#endif
+}
 
-	pc = &(code->tbc[0]);
+//
+//    Main interpreter loop 
+//
+//__attribute__((__noinline__,__noclone__)) 
+void interpret(State& state, Instruction const* pc) {
+#ifdef THREADED_INTERPRETER
+    #define LABELS_THREADED(name,type,p) (void*)&&name##_label,
+	static const void* labels[] = {&&DONE, BC_ENUM(LABELS_THREADED,0)};
+	if(glabels == 0) {
+		glabels = &labels[0];
+		return;
+	}
+
 	goto *(pc->ibc);
 	#define LABELED_OP(name,type,p) \
 		name##_label: \
-			pc += name##_op(state, code, *pc); goto *(pc->ibc); 
+			{ pc = name##_op(state, *pc); goto *(pc->ibc); } 
 	BC_ENUM(LABELED_OP,0)
-	DONE: {}	
+	DONE: {}
 #else
-	pc = &(code.code()[0]);
-	while(pc->bc != ByteCode::ret) {
-		Instruction const& inst = *pc;
-		switch(inst.bc.internal()) {
+	while(pc->bc != ByteCode::done) {
+		switch(pc->bc.Enum()) {
 			#define SWITCH_OP(name,type,p) \
-				case ByteCode::E##name: pc += name##_op(state, code, inst); break;
+				case ByteCode::E_##name: { pc = name##_op(state, *pc); } break;
 			BC_ENUM(SWITCH_OP,0)
 		};
 	}
 #endif
-	state.registers[0] = state.registers[pc->c];
+}
+
+// ensure glabels is inited before we need it.
+void interpreter_init(State& state) {
+	//Instruction const* old_pc;
+	//Instruction done(ByteCode::done);
+	//interpret(state, &done);
+}
+
+Value eval(State& state, Closure const& closure) {
+	return eval(state, closure.code(), closure.environment());
+}
+
+Value eval(State& state, Code const* code) {
+	return eval(state, code, state.frame().environment);
+}
+
+Value eval(State& state, Code const* code, Environment* environment) {
+	Value result;
+#ifdef THREADED_INTERPRETER
+	static const Instruction* done = new Instruction(glabels[0]);
+#else
+	static const Instruction* done = new Instruction(ByteCode::done);
+#endif
+	Value* old_base = state.base;
+
+	Instruction const* run = buildStackFrame(state, environment, code, &result, done);
+	try {
+		interpret(state, run);
+	} catch(...) {
+		state.base = old_base;
+		throw;
+	}
+	return result;
 }
 

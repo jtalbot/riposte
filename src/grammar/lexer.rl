@@ -48,15 +48,15 @@
 	
 	# Single and double-quoted string literals.
 	( "'" ( [^'\\\n] | /\\./ )* "'" ) 
-		{token( TOKEN_STR_CONST, Character::c(state, std::string(ts+1, te-ts-2)) );};
+		{token( TOKEN_STR_CONST, Character::c(state.StrToSym(std::string(ts+1, te-ts-2))) );};
 	( '"' ( [^"\\\n] | /\\./ )* '"' ) 
-		{token( TOKEN_STR_CONST, Character::c(state, std::string(ts+1, te-ts-2)) );};
+		{token( TOKEN_STR_CONST, Character::c(state.StrToSym(std::string(ts+1, te-ts-2))) );};
 
 	# Symbols.
 	( (('.' [a-zA-Z_.]) | [a-zA-Z_]) [a-zA-Z0-9_.]* ) 
-		{token( TOKEN_SYMBOL, Symbol(state, std::string(ts, te-ts)) );};
+		{token( TOKEN_SYMBOL, Symbol(state.StrToSym(std::string(ts, te-ts))) );};
 	( '`' ( [^`\\\n] | /\\./ )* '`' ) 
-		{token( TOKEN_SYMBOL, Symbol(state, std::string(ts+1, te-ts-2)) );};
+		{token( TOKEN_SYMBOL, Symbol(state.StrToSym(std::string(ts+1, te-ts-2))) );};
 
 	# Numeric literals.
 	( float exponent? ) 
@@ -116,7 +116,7 @@
 	'?' {token( TOKEN_QUESTION, Symbol::question );};
 	
 	# Special Operators.
-	('%' [^\n%]* '%') {token(TOKEN_SPECIALOP, Symbol(state, std::string(ts, te-ts)) ); };
+	('%' [^\n%]* '%') {token(TOKEN_SPECIALOP, Symbol(state.StrToSym(std::string(ts, te-ts))) ); };
 
 	# Separators.
 	',' {token( TOKEN_COMMA );};
@@ -144,7 +144,7 @@ void Parser::token( int tok, Value v)
 	// Do the lookahead to resolve the dangling else conflict
 	if(lastTokenWasNL) {
 		if(tok != TOKEN_ELSE && (nesting.size()==0 || nesting.top()!=TOKEN_LPAREN))
-			Parse(pParser, TOKEN_NEWLINE, Value::NIL, this);
+			Parse(pParser, TOKEN_NEWLINE, Value::Nil, this);
 		Parse(pParser, tok, v, this);
 		lastTokenWasNL = false;
 	}
@@ -183,7 +183,7 @@ Parser::Parser(State& state) : line(0), col(0), state(state), errors(0), complet
 
 int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* trace )
 {
-	out = Value::NIL;
+	out = Value::Nil;
 	errors = 0;
 	lastTokenWasNL = false;
 	complete = false;
@@ -199,7 +199,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	%% write init;
 	%% write exec;
 	int syntaxErrors = errors;
-	Parse(pParser, 0, Value::NIL, this);
+	Parse(pParser, 0, Value::Nil, this);
 	ParseFree(pParser, free);
 	errors = syntaxErrors;
 

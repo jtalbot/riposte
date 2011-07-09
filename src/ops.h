@@ -86,7 +86,7 @@ struct LNotOp : UnaryOp<Logical, Logical> {
 };
 
 struct NcharOp : UnaryOp<Character, Integer> {
-	static NcharOp::R eval(State& state, NcharOp::A const& a) { return (a == Symbol::NA) ? 2 : a.toString(state).length(); }
+	static NcharOp::R eval(State& state, NcharOp::A const& a) { return (a == Symbol::NA) ? 2 : state.SymToStr(a).length(); }
 };
 
 struct NzcharOp : UnaryOp<Character, Logical> {
@@ -154,10 +154,10 @@ struct Name<TComplex> : public BinaryOp<Complex, Complex, Logical> { \
 	static Name::R eval(State& state, Name::A const& a, Name::B const& b) { _error("invalid complex function"); } \
 };
 
-ORDINAL_OP(LTOp, a<b)	CHARACTER_ORDINAL_OP(LTOp, a.toString(state).compare(b.toString(state)) < 0)		INVALID_COMPLEX_OP(LTOp)
-ORDINAL_OP(GTOp, a>b)	CHARACTER_ORDINAL_OP(GTOp, a.toString(state).compare(b.toString(state)) > 0)		INVALID_COMPLEX_OP(GTOp)
-ORDINAL_OP(LEOp, a<=b)	CHARACTER_ORDINAL_OP(LEOp, a.toString(state).compare(b.toString(state)) <= 0)	INVALID_COMPLEX_OP(LEOp)
-ORDINAL_OP(GEOp, a>=b)	CHARACTER_ORDINAL_OP(GEOp, a.toString(state).compare(b.toString(state)) >= 0)	INVALID_COMPLEX_OP(GEOp)
+ORDINAL_OP(LTOp, a<b)	CHARACTER_ORDINAL_OP(LTOp, state.SymToStr(a).compare(state.SymToStr(b)) < 0)		INVALID_COMPLEX_OP(LTOp)
+ORDINAL_OP(GTOp, a>b)	CHARACTER_ORDINAL_OP(GTOp, state.SymToStr(a).compare(state.SymToStr(b)) > 0)		INVALID_COMPLEX_OP(GTOp)
+ORDINAL_OP(LEOp, a<=b)	CHARACTER_ORDINAL_OP(LEOp, state.SymToStr(a).compare(state.SymToStr(b)) <= 0)	INVALID_COMPLEX_OP(LEOp)
+ORDINAL_OP(GEOp, a>=b)	CHARACTER_ORDINAL_OP(GEOp, state.SymToStr(a).compare(state.SymToStr(b)) >= 0)	INVALID_COMPLEX_OP(GEOp)
 ORDINAL_OP(EqOp, a==b)	/* Character equality can just compare Symbols */
 ORDINAL_OP(NeqOp, a!=b) /* Character inequality can just compare Symbols */
 

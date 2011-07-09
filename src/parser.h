@@ -42,12 +42,12 @@ struct Parser {
 	Character popSource() {
 		assert(source.size() > 0);
 		std::string s(source.top(), le-source.top());
-		Character result = Character::c(state, rtrim(s));
+		Character result = Character::c(state.StrToSym(rtrim(s)));
 		source.pop();
 		return result;
 	}
 
-	void token( int tok, Value v=Value::NIL );
+	void token( int tok, Value v=Value::Nil );
 
 	Parser(State& state); 
 	int execute( const char* data, int len, bool isEof, Value& result, FILE* trace=NULL );

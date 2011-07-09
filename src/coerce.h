@@ -42,7 +42,7 @@ template<>
 static Complex::Element Cast<Integer, Complex>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Complex::NAelement : std::complex<double>(i, 0); }
 
 template<>
-static Character::Element Cast<Integer, Character>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Character::NAelement : Symbol(state, intToStr(i)); }
+static Character::Element Cast<Integer, Character>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Character::NAelement : state.StrToSym(intToStr(i)); }
 
 template<>
 static List::Element Cast<Integer, List>(State& state, Integer::Element const& i) { return Integer::c(i); }
@@ -61,7 +61,7 @@ template<>
 static Complex::Element Cast<Double, Complex>(State& state, Double::Element const& i) { return Double::isNA(i) ? Complex::NAelement : std::complex<double>(i, 0);  }
 
 template<>
-static Character::Element Cast<Double, Character>(State& state, Double::Element const& i) { return Integer::isNA(i) ? Character::NAelement : Symbol(state, doubleToStr(i)); }
+static Character::Element Cast<Double, Character>(State& state, Double::Element const& i) { return Integer::isNA(i) ? Character::NAelement : state.StrToSym(doubleToStr(i)); }
 
 template<>
 static List::Element Cast<Double, List>(State& state, Double::Element const& i) { return Double::c(i); }
@@ -80,7 +80,7 @@ template<>
 static Double::Element Cast<Complex, Double>(State& state, Complex::Element const& i) { if(Complex::isNA(i) || i.imag() != 0) return Double::NAelement; else return i.real(); }
 
 template<>
-static Character::Element Cast<Complex, Character>(State& state, Complex::Element const& i) { if(Complex::isNA(i)) return Character::NAelement; else return Symbol(state, complexToStr(i));}
+static Character::Element Cast<Complex, Character>(State& state, Complex::Element const& i) { if(Complex::isNA(i)) return Character::NAelement; else return state.StrToSym(complexToStr(i));}
 
 template<>
 static List::Element Cast<Complex, List>(State& state, Complex::Element const& i) { return Complex::c(i); }
@@ -93,13 +93,13 @@ template<>
 static Logical::Element Cast<Character, Logical>(State& state, Character::Element const& i) { if(i == Symbol::TRUE) return 1; else if(i == Symbol::FALSE) return 0; else return Logical::NAelement; }
 
 template<>
-static Integer::Element Cast<Character, Integer>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Integer::NAelement; else {try{return strToInt(i.toString(state));} catch(...) {return Integer::NAelement;}} }
+static Integer::Element Cast<Character, Integer>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Integer::NAelement; else {try{return strToInt(state.SymToStr(i));} catch(...) {return Integer::NAelement;}} }
 
 template<>
-static Double::Element Cast<Character, Double>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Double::NAelement; else {try{return strToDouble(i.toString(state));} catch(...) {return Double::NAelement;}} }
+static Double::Element Cast<Character, Double>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Double::NAelement; else {try{return strToDouble(state.SymToStr(i));} catch(...) {return Double::NAelement;}} }
 
 template<>
-static Complex::Element Cast<Character, Complex>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Complex::NAelement; else {try{return strToComplex(i.toString(state));} catch(...) {return Complex::NAelement;}} }
+static Complex::Element Cast<Character, Complex>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Complex::NAelement; else {try{return strToComplex(state.SymToStr(i));} catch(...) {return Complex::NAelement;}} }
 
 template<>
 static List::Element Cast<Character, List>(State& state, Character::Element const& i) { return Character::c(i); }

@@ -70,9 +70,10 @@ int64_t Compiler::compileConstant(Value const& expr, Code* code) {
 int64_t Compiler::compileSymbol(Symbol const& symbol, Code* code) {
 	// search for symbol in variables list
 	if(scope.size() > 0) {
-		for(int64_t i = 0; i < scope.back().symbols.size(); i++) {
+		for(uint64_t i = 0; i < scope.back().symbols.size(); i++) {
 			if(scope.back().symbols[i] == symbol) {
-				return  -(i+1);
+				code->bc.push_back(Instruction(ByteCode::sget, i, 0, registerDepth));
+				return registerDepth++;
 			}
 		}
 	}
@@ -100,7 +101,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 
 	int64_t initialDepth = registerDepth;
 
-	Symbol func = Symbol::E_NA;
+	Symbol func = Symbol::NA;
 	if(call[0].type == Type::R_symbol)
 		func = Symbol(call[0]);
 	else if(call[0].type == Type::R_character && call[0].length > 0)
@@ -148,7 +149,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 			if(hasNames(c)) {
 				Insert(state, getNames(c), 0, nnames, 0, c.length);
 			}
-			n[0] = Symbol(state, Symbol(c[0]).toString(state) + "<-");
+			n[0] = state.StrToSym(state.SymToStr(Symbol(c[0])) + "<-");
 			n[c.length] = value;
 			nnames[c.length] = Symbol::value;
 			setNames(n, nnames);
@@ -162,15 +163,25 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		assert(dest.isSymbol());
 		// check if destination is a reserved slot.
 		int64_t dest_i = Symbol(dest).i;
+		bool slot = false;
 		if(scope.size() > 0) {
-			for(int64_t i = 0; i < scope.back().symbols.size(); i++) {
-				if(scope.back().symbols[i] == dest) {
-					dest_i = -(i+1);
+			for(uint64_t i = 0; i < scope.back().symbols.size(); i++) {
+				if(scope.back().symbols[i] == Symbol(dest)) {
+					dest_i = i;
+					slot = true;
 				}
 			}
+			if(!slot && scope.back().symbols.size() < 32) {
+				scope.back().symbols.push_back(Symbol(dest));
+				dest_i = scope.back().symbols.size()-1;
+				slot = true;
+			}
 		}
-		
-		code->bc.push_back(Instruction(ByteCode::assign, source, 0, dest_i));
+	
+		if(slot)	
+			code->bc.push_back(Instruction(ByteCode::sassign, dest_i, 0, source));
+		else
+			code->bc.push_back(Instruction(ByteCode::assign, dest_i, 0, source));
 		
 		if(source != initialDepth) throw CompileError("unbalanced registers in assign");
 		registerDepth = initialDepth;
@@ -216,9 +227,15 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		setNames(parameters, names);
 		code->constants.push_back(parameters);
 
+		// to support UseMethod we always have to pass on the list of arguments
+		scope.symbols.push_back(Symbol::funargs);
+		
 		//compile the source for the body
 		this->scope.push_back(scope);
-		Closure body(compile(call[2]), NULL);
+		Code* functionCode = compile(call[2]);
+		functionCode->slotSymbols = this->scope.back().symbols;
+		functionCode->registers = 16;
+		Closure body(functionCode, NULL);
 		code->constants.push_back(body);
 		this->scope.pop_back();
 

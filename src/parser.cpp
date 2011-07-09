@@ -425,7 +425,7 @@ void Parser::token( int tok, Value v)
 	// Do the lookahead to resolve the dangling else conflict
 	if(lastTokenWasNL) {
 		if(tok != TOKEN_ELSE && (nesting.size()==0 || nesting.top()!=TOKEN_LPAREN))
-			Parse(pParser, TOKEN_NEWLINE, Value::NIL, this);
+			Parse(pParser, TOKEN_NEWLINE, Value::Nil, this);
 		Parse(pParser, tok, v, this);
 		lastTokenWasNL = false;
 	}
@@ -464,7 +464,7 @@ Parser::Parser(State& state) : line(0), col(0), state(state), errors(0), complet
 
 int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* trace )
 {
-	out = Value::NIL;
+	out = Value::Nil;
 	errors = 0;
 	lastTokenWasNL = false;
 	complete = false;
@@ -665,15 +665,15 @@ _eof_trans:
 	break;
 	case 25:
 #line 51 "lexer.rl"
-	{te = p+1;{token( TOKEN_STR_CONST, Character::c(state, std::string(ts+1, te-ts-2)) );}}
+	{te = p+1;{token( TOKEN_STR_CONST, Character::c(state.StrToSym(std::string(ts+1, te-ts-2))) );}}
 	break;
 	case 26:
 #line 53 "lexer.rl"
-	{te = p+1;{token( TOKEN_STR_CONST, Character::c(state, std::string(ts+1, te-ts-2)) );}}
+	{te = p+1;{token( TOKEN_STR_CONST, Character::c(state.StrToSym(std::string(ts+1, te-ts-2))) );}}
 	break;
 	case 27:
 #line 59 "lexer.rl"
-	{te = p+1;{token( TOKEN_SYMBOL, Symbol(state, std::string(ts+1, te-ts-2)) );}}
+	{te = p+1;{token( TOKEN_SYMBOL, Symbol(state.StrToSym(std::string(ts+1, te-ts-2))) );}}
 	break;
 	case 28:
 #line 66 "lexer.rl"
@@ -781,7 +781,7 @@ _eof_trans:
 	break;
 	case 54:
 #line 119 "lexer.rl"
-	{te = p+1;{token(TOKEN_SPECIALOP, Symbol(state, std::string(ts, te-ts)) ); }}
+	{te = p+1;{token(TOKEN_SPECIALOP, Symbol(state.StrToSym(std::string(ts, te-ts))) ); }}
 	break;
 	case 55:
 #line 122 "lexer.rl"
@@ -797,7 +797,7 @@ _eof_trans:
 	break;
 	case 58:
 #line 57 "lexer.rl"
-	{te = p;p--;{token( TOKEN_SYMBOL, Symbol(state, std::string(ts, te-ts)) );}}
+	{te = p;p--;{token( TOKEN_SYMBOL, Symbol(state.StrToSym(std::string(ts, te-ts))) );}}
 	break;
 	case 59:
 #line 63 "lexer.rl"
@@ -944,7 +944,7 @@ _eof_trans:
 	{{p = ((te))-1;}token( TOKEN_BREAK, Symbol::breakSym );}
 	break;
 	case 22:
-	{{p = ((te))-1;}token( TOKEN_SYMBOL, Symbol(state, std::string(ts, te-ts)) );}
+	{{p = ((te))-1;}token( TOKEN_SYMBOL, Symbol(state.StrToSym(std::string(ts, te-ts))) );}
 	break;
 	case 68:
 	{{p = ((te))-1;}token( TOKEN_NEWLINE );}
@@ -994,7 +994,7 @@ _again:
 
 #line 201 "lexer.rl"
 	int syntaxErrors = errors;
-	Parse(pParser, 0, Value::NIL, this);
+	Parse(pParser, 0, Value::Nil, this);
 	ParseFree(pParser, free);
 	errors = syntaxErrors;
 

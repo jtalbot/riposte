@@ -15,6 +15,7 @@
 	_(Double, "double", p)\
 	_(Complex, "complex", p)\
 	_(Character, "character", p)\
+	_(Name, "name", p) \
 	_(Raw, "raw", p)\
 	_(internal, ".Internal", p) \
 	_(assign, "<-", p) \
