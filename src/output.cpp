@@ -220,7 +220,7 @@ std::string State::stringify(Trace const & t) const {
 			else
 				r = r + "v";
 			r = r + intToStr(e.id) + " -> ";
-			IRef node;
+			IRef node = -1;
 			if(t.renaming_table.get(e.location,e.id,snapshot,&node)) {
 				r = r + "r" + intToStr(node);
 			} else {

@@ -6,7 +6,11 @@ CXXFLAGS := -Wall
 LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -lm -fpic -lgc
 
 ifeq ($(UNAME),Darwin)
-	CXXFLAGS += -I/opt/local/include
+	CXXFLAGS += -I/opt/local/include -DRIPOSTE_DISABLE_TRACE
+else
+	ARBB_HOME=/opt/intel/arbb/1.0.0.018
+	LFLAGS += -L$(ARBB_HOME)/lib/intel64 -larbb -ltbb
+	CXXFLAGS += -I$(ARBB_HOME)/include
 endif
 
 SRC := main.cpp type.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp ir.cpp recording.cpp trace.cpp trace_compiler.cpp

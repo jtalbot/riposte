@@ -14,8 +14,8 @@ IRType::IRType(Value const & value) {
 	case Type::E_R_logical: base_type = IRScalarType::T_logical; break;
 	case Type::E_R_integer: base_type = IRScalarType::T_integer; break;
 	case Type::E_R_double: base_type = IRScalarType::T_double; break;
-	case Type::E_R_complex: base_type = IRScalarType::T_complex; break;
-	case Type::E_R_character: base_type = IRScalarType::T_character; break;
+	//case Type::E_R_complex: base_type = IRScalarType::T_complex; break; (NYI in compiler)
+	//case Type::E_R_character: base_type = IRScalarType::T_character; break; (NYI in character)
 	default: base_type = IRScalarType::T_unsupported; break;
 	}
 

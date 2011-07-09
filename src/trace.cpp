@@ -15,7 +15,7 @@ Trace::Trace(Code * code, Instruction * trace_start)
 void trace_compile_and_install(State & state, Trace * trace) {
 
 	trace->optimize();
-
+	printf("trace:\n%s\n",state.stringify(*trace).c_str());
 	trace->compiled.reset( TraceCompiler::create(trace) );
 
 	TCStatus status = trace->compiled->compile();
@@ -29,7 +29,6 @@ void trace_compile_and_install(State & state, Trace * trace) {
 	Instruction * inst = trace->trace_start;
 
 	printf("trace: patching into bytecode: %s\n\n",trace->trace_inst.toString().c_str());
-	printf("%s\n",state.stringify(*trace).c_str());
 	code->traces.push_back(trace);
 
 	int64_t offset = trace->trace_start - &code->tbc[0];
@@ -53,7 +52,8 @@ void Trace::optimize() {
 		if(node.opcode == IROpCode::sload || node.opcode == IROpCode::vload) {
 			uint32_t location = node.opcode == IROpCode::sload ? RenamingTable::SLOT : RenamingTable::VARIABLE;
 			IRef var;
-			bool read,write;
+			bool read;
+			bool write = false;
 			renaming_table.get(location,node.a,renaming_table.current_view(),&var,&read,&write);
 
 			loop_invariant[i] = !write;

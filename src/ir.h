@@ -91,9 +91,13 @@ struct IRType {
 		} else
 			return bt;
 	}
-
+	bool operator==(IRType const& t) const { return base_type == t.base_type && isVector == t.isVector; } \
+    bool operator!=(IRType const& t) const { return !(*this == t); } \
+	//convience functions
 	static IRType Void() { return IRType(IRScalarType::T_void,false); }
 	static IRType Bool() { return IRType(IRScalarType::T_logical,false); }
+	static IRType Int() { return IRType(IRScalarType::T_integer,false); }
+	static IRType Double() { return IRType(IRScalarType::T_double,false); }
 };
 
 struct IRNode {
