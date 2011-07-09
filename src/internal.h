@@ -13,13 +13,13 @@
 void importCoreLibrary(State& state);
 
 inline Value force(State& state, Value v) { 
-	while(v.type == Type::I_promise) {
+	while(v.isPromise() || v.isDefault()) {
 		v = eval(state, Closure(v)); 
 	} 
 	return v; 
 }
 inline Value expression(Value const& v) { 
-	if(v.type == Type::I_promise)
+	if(v.isPromise() || v.isDefault())
 		return Closure(v).code()->expression;
 	else return v; 
 }

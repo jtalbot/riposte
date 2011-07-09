@@ -725,6 +725,7 @@ public:
 
 struct StackFrame {
 	Environment* environment;
+	bool ownEnvironment;
 	Value const* constants;
 
 	Instruction const* returnpc;

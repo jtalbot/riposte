@@ -57,13 +57,8 @@ static void resolveLoopReferences(Code* code, int64_t start, int64_t end, int64_
 }
 
 int64_t Compiler::compileConstant(Value const& expr, Code* code) {
-	if(expr.isNull()) code->bc.push_back(Instruction(ByteCode::null, 0, 0, registerDepth));
-	else if(expr.isLogical() && expr.length == 1 && Logical::isTrue(Logical(expr)[0])) code->bc.push_back(Instruction(ByteCode::true1, 0, 0, registerDepth));
-	else if(expr.isLogical() && expr.length == 1 && Logical::isFalse(Logical(expr)[0])) code->bc.push_back(Instruction(ByteCode::false1, 0, 0, registerDepth));
-	else {
-		code->constants.push_back(expr);
-		code->bc.push_back(Instruction(ByteCode::kget, code->constants.size()-1, 0, registerDepth));
-	}
+	code->constants.push_back(expr);
+	code->bc.push_back(Instruction(ByteCode::kget, code->constants.size()-1, 0, registerDepth));
 	return registerDepth++;
 }
 
@@ -84,11 +79,11 @@ int64_t Compiler::compileSymbol(Symbol const& symbol, Code* code) {
 int64_t Compiler::compileFunctionCall(Call const& call, Code* code) {
 	int64_t initialDepth = registerDepth;
 	// a standard call, not an op
-	compile(call[0], code);
+	int64_t function = compile(call[0], code);
 	CompiledCall compiledCall(call, state);
 	// insert call
 	code->constants.push_back(compiledCall);
-	code->bc.push_back(Instruction(ByteCode::call, code->constants.size()-1, 0, initialDepth));
+	code->bc.push_back(Instruction(ByteCode::call, function, code->constants.size()-1, initialDepth));
 	registerDepth = initialDepth;
 	return registerDepth++;
 }
@@ -251,7 +246,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		// return always writes to the 0 register
 		int64_t result;
 		if(call.length == 1) {
-			code->bc.push_back(Instruction(ByteCode::null, 0, 0, 0));
+			compile(Null::singleton, code);
 			result = registerDepth;
 		} else if(call.length == 2)
 			result = compile(call[1], code);
@@ -343,7 +338,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	} break;
 	case Symbol::E_ifSym: 
 	{
-		code->bc.push_back(Instruction(ByteCode::null, 0, 0, registerDepth++));
+		compile(Null::singleton, code);
 		int64_t cond = compile(call[1], code);
 		code->bc.push_back(Instruction(ByteCode::if1, 0, cond));
 		int64_t begin1 = code->bc.size(), begin2 = 0;
@@ -369,7 +364,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	{
 		int64_t length = call.length;
 		if(length == 0) {
-			code->bc.push_back(Instruction(ByteCode::null, 0, 0, registerDepth));
+			compile(Null::singleton, code);
 			return registerDepth++;
 		} else {
 			int64_t result = initialDepth;
@@ -466,10 +461,10 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		registerDepth = initialDepth;
 		return registerDepth++;
 	} break;
-	// Shortcut operators
+	// Shortcut operators, TODO: these don't handle NAs correctly yet
 	case Symbol::E_sland:
 	{
-		code->bc.push_back(Instruction(ByteCode::false1, 0, 0, registerDepth++));
+		compile(Logical::False(), code);
 		int64_t cond = compile(call[1], code);
 		code->bc.push_back(Instruction(ByteCode::if1, 0, cond));
 		int64_t begin1 = code->bc.size();
@@ -483,7 +478,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	} break;
 	case Symbol::E_slor:
 	{
-		code->bc.push_back(Instruction(ByteCode::true1, 0, 0, registerDepth++));
+		compile(Logical::True(), code);
 		int64_t cond = compile(call[1], code);
 		code->bc.push_back(Instruction(ByteCode::if0, 0, cond));
 		int64_t begin1 = code->bc.size();

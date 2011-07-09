@@ -7,7 +7,6 @@
 
 #define BC_ENUM(_, p) 				\
 	_(call, "call", p) \
-	/*_(inlinecall, "inlinecall")*/ \
 	_(get, "get", p) \
 	_(sget, "sget", p) \
 	_(kget, "kget", p) \
@@ -64,10 +63,6 @@
 	_(asin, "asin", p) \
 	_(atan, "atan", p) \
 	_(jmp, "jmp", p) \
-	_(null, "null", p) \
-	_(true1, "true", p) \
-	_(false1, "false", p) \
-	_(NA, "NA", p) \
 	_(istrue, "istrue", p) \
 	_(function, "function", p) \
 	_(logical1, "logical", p) \

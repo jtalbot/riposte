@@ -9,19 +9,8 @@
 #include "ops.h"
 #include "internal.h"
 
-static Instruction const* buildStackFrame(State& state, Environment* environment, Code const* code, Value* result, Instruction const* returnpc);
+static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Code const* code, Value* result, Instruction const* returnpc);
 
-
-static Value force(State& state, Environment* environment, Value value)
-{
-	if(value.type == Type::I_default) {
-		value = eval(state, Closure(value).code(), environment);
-	}
-	while(value.type == Type::I_promise) {
-		value = eval(state, Closure(value));
-	}
-	return value;
-}
 
 // Get a Value by Symbol from the current environment
 static Value get(State& state, Symbol s) {
@@ -31,7 +20,7 @@ static Value get(State& state, Symbol s) {
 		environment = environment->parent();
 		value = environment->get(s);	
 	}
-	value = force(state, environment, value);
+	value = force(state, value);
 	if(value.isNil()) throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
 	return value;
 }
@@ -44,9 +33,8 @@ static Value sget(State& state, int64_t i) {
 	while(value.isNil() && environment->parent() != 0) {
 		environment = environment->parent();
 		value = environment->get(s);
-		printf("sget: looking for value %s, but got %s\n", state.SymToStr(s).c_str(), value.type.toString());
 	}
-	value = force(state, environment, value);
+	value = force(state, value);
 	if(value.isNil()) throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
 	return value;
 }
@@ -76,70 +64,79 @@ static Value constant(State& state, int64_t i) {
 }
 
 static List BuildArgs(State& state, CompiledCall& call) {
+	// Expand dots into the parameter list...
+	// If it's in the dots it must already be a promise, thus no need to make a promise again.
+	// Need to do the same for the names...
 	List arguments = call.arguments();
-	// Specialize the precompiled promises to evaluate in the current scope
-	for(int64_t i = 0; i < arguments.length; i++) {
-		if(arguments[i].type == Type::I_promise)
-			arguments[i].env = (void*)state.frame().environment;
-	}
-
-	if(call.dots() < arguments.length) {
-		// Expand dots into the parameter list...
-		// If it's in the dots it must already be a promise, thus no need to make a promise again.
-		// Need to do the same for the names...
-		Value v = get(state, Symbol::dots);
-		if(!v.isNull()) {
-			List dots(v);
-			List expanded(arguments.length + dots.length - 1 /* -1 for dots that will be replaced */);
-			Insert(state, arguments, 0, expanded, 0, call.dots());
-			Insert(state, dots, 0, expanded, call.dots(), dots.length);
-			Insert(state, arguments, call.dots(), expanded, call.dots()+dots.length, arguments.length-call.dots()-1);
-			arguments = expanded;
-			if(hasNames(arguments) || hasNames(dots)) {
-				Character names(expanded.length);
-				for(int64_t i = 0; i < names.length; i++) names[i] = Symbol::empty;
-				if(hasNames(arguments)) {
-					Character anames = getNames(arguments);
-					Insert(state, anames, 0, names, 0, call.dots());
-					Insert(state, anames, call.dots(), names, call.dots()+dots.length, arguments.length-call.dots()-1);
-				}
-				if(hasNames(dots)) {
-					Character dnames = getNames(dots);
-					Insert(state, dnames, 0, names, call.dots(), dots.length);
-				}
-				setNames(arguments, names);
+	Value v = get(state, Symbol::dots);
+	if(!v.isNull()) {
+		List dots(v);
+		List expanded(arguments.length + dots.length - 1 /* -1 for dots that will be replaced */);
+		Insert(state, arguments, 0, expanded, 0, call.dots());
+		Insert(state, dots, 0, expanded, call.dots(), dots.length);
+		Insert(state, arguments, call.dots(), expanded, call.dots()+dots.length, arguments.length-call.dots()-1);
+		arguments = expanded;
+		if(hasNames(arguments) || hasNames(dots)) {
+			Character names(expanded.length);
+			for(int64_t i = 0; i < names.length; i++) names[i] = Symbol::empty;
+			if(hasNames(arguments)) {
+				Character anames = getNames(arguments);
+				Insert(state, anames, 0, names, 0, call.dots());
+				Insert(state, anames, call.dots(), names, call.dots()+dots.length, arguments.length-call.dots()-1);
 			}
-		
+			if(hasNames(dots)) {
+				Character dnames = getNames(dots);
+				Insert(state, dnames, 0, names, call.dots(), dots.length);
+			}
+			setNames(arguments, names);
 		}
+	
 	}
 	return arguments;
 }
 
-static void MatchArgs(State& state, Environment* fenv, Function const& func, List const& arguments) {
+inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* execution) {
+	Value& slot = env->get(i);
+	slot = v;
+	if(v.isPromise() || v.isDefault())
+		slot.env = execution;
+}
+
+static void MatchArgs(State& state, Environment* env, Environment* fenv, Function const& func, List const& arguments) {
 	List parameters = func.parameters();
 	Character pnames = getNames(parameters);
 
-	// set nils
-	for(int64_t i = 0; i < fenv->SlotCount(); i++)
-		fenv->get(i) = Value::Nil;
-
-	// set defaults (often these will be completely overridden. Can we delay or skip?
-	for(int64_t i = 0; i < parameters.length; ++i) {
-		sassign(fenv, i, parameters[i]);
-	}
 	// call arguments are not named, do posititional matching
 	if(!hasNames(arguments)) {
-		// override with arguments
-		for(int64_t i = 0; i < std::min(arguments.length, func.dots()); ++i) {
-			sassign(fenv, i, arguments[i]);
+		int64_t end = std::min(arguments.length, func.dots());
+		for(int64_t i = 0; i < end; ++i) {
+			argAssign(fenv, i, arguments[i], env);
 		}
 		// set dots if necessary
 		if(arguments.length-(int64_t)func.dots() > 0) {
+			// TODO: need to set env here too
 			sassign(fenv, func.dots(), Subset(arguments, func.dots(), std::max((int64_t)0, (int64_t)arguments.length-(int64_t)func.dots())));
+			end++;
+		}
+		// set defaults (often these will be completely overridden. Can we delay or skip?
+		for(int64_t i = end; i < parameters.length; ++i) {
+			argAssign(fenv, i, parameters[i], fenv);
+		}
+		// set nil slots
+		for(int64_t i = parameters.length; i < fenv->SlotCount(); i++) {
+			sassign(fenv, i, Value::Nil);
 		}
 	}
 	// call arguments are named, do matching by name
 	else {
+		// set defaults (often these will be completely overridden. Can we delay or skip?
+		for(int64_t i = 0; i < parameters.length; ++i) {
+			argAssign(fenv, i, parameters[i], fenv);
+		}
+		// set nils
+		for(int64_t i = parameters.length; i < fenv->SlotCount(); i++) {
+			fenv->get(i) = Value::Nil;
+		}
 		Character anames = getNames(arguments);
 		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
 		static char assignment[64], set[64];
@@ -150,7 +147,7 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 			if(anames[i] != Symbol::empty) {
 				for(int64_t j = 0; j < parameters.length; ++j) {
 					if(pnames[j] != Symbol::dots && anames[i] == pnames[j]) {
-						sassign(fenv, j, arguments[i]);
+						argAssign(fenv, j, arguments[i], env);
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -165,8 +162,7 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 				for(int64_t j = 0; j < parameters.length; ++j) {
 					if(set[j] < 0 && pnames[j] != Symbol::dots &&
 						state.SymToStr(pnames[i]).compare( 0, a.size(), a ) == 0 ) {	
-						sassign(fenv, j, arguments[i]);
-						//fenv->assign(pnames[j], arguments[i]);
+						argAssign(fenv, j, arguments[i], env);
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -180,7 +176,7 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 			if(anames[i] == Symbol::empty) {
 				for(; firstEmpty < func.dots(); ++firstEmpty) {
 					if(set[firstEmpty] < 0) {
-						sassign(fenv, firstEmpty, arguments[i]);
+						argAssign(fenv, firstEmpty, arguments[i], env);
 						assignment[i] = firstEmpty;
 						set[firstEmpty] = i;
 						break;
@@ -199,6 +195,8 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 			for(int64_t j = 0; j < arguments.length; j++) {
 				if(assignment[j] < 0) {
 					values[idx] = arguments[j];
+					if(values[idx].isPromise())
+						values[idx].env = env;
 					names[idx++] = anames[j];
 				}
 			}
@@ -209,10 +207,10 @@ static void MatchArgs(State& state, Environment* fenv, Function const& func, Lis
 }
 
 static Instruction const* call_op(State& state, Instruction const& inst) {
-	Value f = reg(state, inst.c);
-	CompiledCall call(constant(state, inst.a));
+	Value f = reg(state, inst.a);
+	CompiledCall call(constant(state, inst.b));
 	
-	List arguments = BuildArgs(state, call);
+	List arguments = call.dots() < call.arguments().length ? BuildArgs(state, call) : call.arguments();
 
 	if(f.type == Type::R_function) {
 		Function func(f);
@@ -228,8 +226,8 @@ static Instruction const* call_op(State& state, Instruction const& inst) {
 		}
 	
 		//assign(fenv, Symbol::funargs, arguments);
-		MatchArgs(state, fenv, func, arguments);
-		return buildStackFrame(state, fenv, Closure(func.body()).code(), &reg(state, inst.c), &inst+1);
+		MatchArgs(state, state.frame().environment, fenv, func, arguments);
+		return buildStackFrame(state, fenv, true, Closure(func.body()).code(), &reg(state, inst.c), &inst+1);
 	} else if(f.type == Type::R_cfunction) {
 		reg(state, inst.c) = CFunction(f).func(state, call.call(), arguments);
 		return &inst+1;
@@ -272,7 +270,7 @@ static Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 		Environment* fenv = new Environment(func.s());
 		assign(fenv, Symbol::funargs, arguments);
 
-		MatchArgs(state, fenv, func, arguments);
+		MatchArgs(state, state.frame().environment, fenv, func, arguments);
 
 		assign(fenv, state.StrToSym(".Generic"), generic);
 		assign(fenv, state.StrToSym(".Method"), method);
@@ -549,22 +547,6 @@ static Instruction const* atan_op(State& state, Instruction const& inst) {
 static Instruction const* jmp_op(State& state, Instruction const& inst) {
 	return &inst+inst.a;
 }
-static Instruction const* null_op(State& state, Instruction const& inst) {
-	reg(state, inst.c) = Null::singleton;
-	return &inst+1;
-}
-static Instruction const* true1_op(State& state, Instruction const& inst) {
-	reg(state, inst.c) = Logical::True();
-	return &inst+1;
-}
-static Instruction const* false1_op(State& state, Instruction const& inst) {
-	reg(state, inst.c) = Logical::False();
-	return &inst+1;
-}
-static Instruction const* NA_op(State& state, Instruction const& inst) {
-	reg(state, inst.c) = Logical::NA();
-	return &inst+1;
-}
 static Instruction const* istrue_op(State& state, Instruction const& inst) {
 	Logical l = As<Logical>(state, reg(state, inst.a));
 	if(l.length == 0) _error("argument is of zero length");
@@ -616,8 +598,10 @@ static Instruction const* type_op(State& state, Instruction const& inst) {
 }
 static Instruction const* ret_op(State& state, Instruction const& inst) {
 	*(state.frame().result) = reg(state, inst.c);
-	// this isn't going to work for promises or defaults!
-	if(reg(state, inst.c).isClosureSafe() && state.frame().environment != state.global)
+	// if this stack frame owns the environment, we can free it for reuse
+	// as long as we don't return a closure...
+	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
+	if(state.frame().ownEnvironment && reg(state, inst.c).isClosureSafe())
 		state.environments.push_back(state.frame().environment);
 	state.base = state.frame().returnbase;
 	Instruction const* returnpc = state.frame().returnpc;
@@ -634,9 +618,10 @@ static Instruction const* done_op(State& state, Instruction const& inst) {
 
 static const void** glabels = 0;
 
-static Instruction const* buildStackFrame(State& state, Environment* environment, Code const* code, Value* result, Instruction const* returnpc) {
+static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Code const* code, Value* result, Instruction const* returnpc) {
 	StackFrame& s = state.push();
 	s.environment = environment;
+	s.ownEnvironment = ownEnvironment;
 	s.returnpc = returnpc;
 	s.returnbase = state.base;
 	s.result = result;
@@ -717,7 +702,7 @@ Value eval(State& state, Code const* code, Environment* environment) {
 #endif
 	Value* old_base = state.base;
 
-	Instruction const* run = buildStackFrame(state, environment, code, &result, done);
+	Instruction const* run = buildStackFrame(state, environment, false, code, &result, done);
 	try {
 		interpret(state, run);
 	} catch(...) {
