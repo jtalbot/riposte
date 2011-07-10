@@ -269,7 +269,7 @@ struct TraceCompilerImpl : public TraceCompiler {
 				       //TODO: it may be possible to still recover some
 				       //of the results calculated before this guard by generating an exit path that would calculate all loop-dependent variables, before exiting to the original exit point
 			case L_BODY:
-				exit += exits.size(); //shift to exit will all nodes defined
+				exit += trace->exits.size(); //shift to exit will all nodes defined
 				/* fallthrough */
 			case L_FIRST: {
 				TraceExit & texit = exits[exit];
@@ -451,16 +451,22 @@ struct TraceCompilerImpl : public TraceCompiler {
 		for(size_t i = 0; i < trace->loop_body.size(); i++)
 			COMPILER_DO(emitir(trace->loop_body[i],L_FIRST,references,&if_depth));
 		//we now enter a loop
-		/*ARBB_RUN(arbb_begin_loop(fn,arbb_loop_while,&details));
+		ARBB_RUN(arbb_begin_loop(fn,arbb_loop_while,&details));
 		ARBB_RUN(arbb_begin_loop_block(fn,arbb_loop_block_cond,&details));
-		ARBB_RUN(arbb_loop_condition(fn,constantBool(true),&details));
+		{   //using a constant directly results in "CTE_OPERATOR_NOT_SUPPORTED OP_NOT_SUPPORT: The concrete operator is not supported yet not reach"
+			arbb_variable_t input = constantBool(true);
+			arbb_variable_t output;
+			ARBB_RUN(arbb_create_local(fn,&output,typeFor(IRType::Bool()),NULL,&details));
+			ARBB_RUN(arbb_op(fn,arbb_op_copy,&output,&input,NULL,NULL,&details));
+			ARBB_RUN(arbb_loop_condition(fn,output,&details));
+		}
 		ARBB_RUN(arbb_begin_loop_block(fn,arbb_loop_block_body,&details));
 		emitPhis(references);
 		for(size_t i = 0; i < trace->loop_body.size(); i++)
 			COMPILER_DO(emitir(trace->loop_body[i],L_BODY,references,&if_depth));
 
 		ARBB_RUN(arbb_end_loop(fn,&details));
-		*/
+
 		while(if_depth-- > 0)
 			ARBB_RUN(arbb_end_if(fn,&details)); //end all the else statements that the guards produced
 
@@ -488,7 +494,8 @@ struct TraceCompilerImpl : public TraceCompiler {
 	//for internal compiler error problems that are the result of bugs in the compiler
 	__attribute__ ((noreturn))
 	void panic(const char * file, int line, const char * txt, arbb_error_t error) {
-		printf("%s:%d: trace compiler: internal error %s (%s)\n",file,line,txt,arbb_get_error_message(details));
+		fprintf(stderr,"%s:%d: trace compiler: %d\n",file,line,(int)error);
+		fprintf(stderr,"details: %s\n",arbb_get_error_message(details));
 		exit(1);
 	}
 	__attribute__ ((noreturn))
