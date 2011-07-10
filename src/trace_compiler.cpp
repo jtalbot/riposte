@@ -9,6 +9,7 @@
 //for arbb operations that should only fail if there is a compiler bug
 #define ARBB_RUN(fn) \
 	do { \
+		/*printf("%s:%d: %s\n",__FILE__,__LINE__,#fn);*/ \
 		arbb_error_t e = (fn); \
 		if(arbb_error_none != e) \
 			panic(__FILE__,__LINE__,#fn,e); \
@@ -65,19 +66,40 @@
 
 struct TraceCompilerImpl : public TraceCompiler {
 
-	struct Output {
-		IRef definition;
-		RenamingTable::Entry interpreter_location;
-		arbb_type_t arbb_typ;
-		arbb_global_variable_t var;
-		arbb_global_variable_t length; //if typ is a vector this will hold the length of the vector
-	};
-
 	struct Input {
 		IRType typ;
-		RenamingTable::Entry interpreter_location;
 		arbb_type_t arbb_typ;
+		RenamingTable::Entry interpreter_location; //where does this variable come from?
 	};
+
+
+	//a structure tracking the type of each output variable from the arbb function
+	//a particular TraceExit will have one Output struct for each variable it needs
+	//to write the interpreter. Each Output has a reference to on OutputVar that will hold
+	//the value to write to the interpreter for this exit.
+
+	//A simpler approach would be to allocate one output var for each OutputVar for
+	//each output. However, arbb requires all outputs to be defined, making it undesirable to
+	//have a huge number of output variables that need to be assigned dummy values.  Instead
+	//we reuse OutputVars as much as possible. Multiple Output structs can refer to the same
+	//OutputVar as long as they are not in the same TraceExit.
+
+	struct OutputVar {
+		arbb_type_t arbb_typ;
+		IRType typ;
+	};
+
+	typedef size_t OVRef; //reference to an output variable
+
+	struct Output {
+		IRef definition; //the value that holds this variable for the current exit
+		RenamingTable::Entry interpreter_location;
+
+		OVRef var;
+		OVRef length; //if typ is a vector this will hold the length of the vector
+	};
+
+
 
 	struct TraceExit {
 		int64_t offset;
@@ -93,8 +115,9 @@ struct TraceCompilerImpl : public TraceCompiler {
 	std::vector<arbb_binding_t> bindings; //bindings produced by vector constants
 
 	std::vector<Input> inputs;
+	std::vector<OutputVar> output_variables;
 
-	arbb_global_variable_t exit_code;
+	OVRef exit_code;
 	std::vector<TraceExit> exits;
 
 
@@ -110,6 +133,7 @@ struct TraceCompilerImpl : public TraceCompiler {
 			case IRScalarType::E_T_complex: panic("NYI: complex"); break;
 			case IRScalarType::E_T_character: panic("NYI: character"); break;
 			case IRScalarType::E_T_void: panic("void type is not an arbb type"); break;
+			case IRScalarType::E_T_size: scalar = arbb_usize; break;
 			case IRScalarType::E_T_unsupported: panic("successful trace contains unsupported type."); break;
 		}
 		arbb_type_t scalar_arbb_type;
@@ -128,42 +152,56 @@ struct TraceCompilerImpl : public TraceCompiler {
 		return r;
 	}
 
-	arbb_type_t sizeType() {
-		arbb_type_t typ;
-		ARBB_RUN(arbb_get_scalar_type(ctx,&typ,arbb_usize,&details));
-		return typ;
+	arbb_variable_t varFor(OVRef ov) {
+		arbb_variable_t var;
+		ARBB_RUN(arbb_get_parameter(fn,&var,1,ov,&details));
+		return var;
 	}
-
 	TraceCompilerImpl(Trace * trace) {
 		this->trace = trace;
+	}
+
+	virtual ~TraceCompilerImpl() {}
+
+	OVRef getOrCreateOutputVar(IRType const & t, std::vector<bool> & allocation) {
+		for(size_t i = 0; i < output_variables.size(); i++) {
+			if(!allocation[i] && t == output_variables[i].typ) {
+				allocation[i] = true;
+				return i;
+			}
+		}
+		OutputVar v = { typeFor(t), t };
+		allocation.push_back(true);
+		output_variables.push_back(v);
+		return output_variables.size() - 1;
 	}
 
 	void addExit(::TraceExit const & e, bool in_body) {
 		exits.push_back(TraceExit());
 		TraceExit & exit = exits.back();
 		exit.offset = e.offset;
+		std::vector<bool> allocation(output_variables.size(),false);
+
+
 		for(size_t j = 0; j < trace->renaming_table.outputs.size(); j++) {
 			const RenamingTable::Entry & entry = trace->renaming_table.outputs[j];
 			IRef definition;
 			if(  trace->renaming_table.get(entry.location,entry.id,e.snapshot,&definition,NULL,NULL)
 			  || (in_body && trace->renaming_table.get(entry.location,entry.id,&definition))) {
 				IRType typ = get(definition).typ;
-				arbb_type_t artyp = typeFor(typ);
-				arbb_global_variable_t var,length;
-				arbb_binding_t null_binding; arbb_set_binding_null(&null_binding);
-				ARBB_RUN(arbb_create_global(ctx,&var,artyp,NULL,null_binding,NULL,&details));
+				OVRef var = getOrCreateOutputVar(typ,allocation);
+				OVRef length;
 				if(typ.isVector)
-					ARBB_RUN(arbb_create_global(ctx,&length,sizeType(),NULL,null_binding,NULL,&details));
-				Output output = { definition, entry, artyp ,var,length};
+					length = getOrCreateOutputVar(IRType::Size(),allocation);
+				Output output = { definition, entry, var,length};
 				exit.outputs.push_back(output);
 			}
-
 		}
 	}
 
 	void addInput(IRNode const & node) {
 		RenamingTable::Entry entry = { node.a, (node.opcode == IROpCode::sload) ? RenamingTable::SLOT : RenamingTable::VARIABLE };
-		Input input = { node.typ, entry, typeFor(node.typ) };
+		Input input = { node.typ, typeFor(node.typ),entry };
 		inputs.push_back(input);
 	}
 
@@ -185,6 +223,12 @@ struct TraceCompilerImpl : public TraceCompiler {
 		ARBB_RUN(arbb_create_constant(ctx,&gv,typeFor(IRType::Int()),&i,NULL,&details));
 		return varFor(gv);
 	}
+	arbb_variable_t constantSize(size_t i) {
+		arbb_global_variable_t gv;
+		ARBB_RUN(arbb_create_constant(ctx,&gv,typeFor(IRType::Size()),&i,NULL,&details));
+		return varFor(gv);
+	}
+
 	arbb_variable_t constantBool(bool b) {
 		arbb_global_variable_t gv;
 		ARBB_RUN(arbb_create_constant(ctx,&gv,typeFor(IRType::Bool()),&b,NULL,&details));
@@ -231,15 +275,20 @@ struct TraceCompilerImpl : public TraceCompiler {
 				TraceExit & texit = exits[exit];
 				for(size_t i = 0; i < texit.outputs.size(); i++) {
 					Output & o = texit.outputs[i];
-					outputs[0] = varFor(o.var);
+					outputs[0] = references[trace->optimized.size() + o.var];
 					inputs[0] = references[o.definition];
 					ARBB_RUN(arbb_op(fn,arbb_op_copy,outputs,inputs,NULL,NULL,&details));
+					if(get(o.definition).typ.isVector) {
+						//write the length as well
+						outputs[0] = varFor(o.length);
+						ARBB_RUN(arbb_op(fn,arbb_op_length,outputs,inputs,NULL,NULL,&details));
+					}
 				}
 			} break;
 			}
 
 			//write the exit code
-			outputs[0] = varFor(exit_code);
+			outputs[0] = references[trace->optimized.size() + exit_code];
 			inputs[0] = constantInt(exit);
 			ARBB_RUN(arbb_op(fn,arbb_op_copy,outputs,inputs,NULL,NULL,&details));
 
@@ -305,15 +354,35 @@ struct TraceCompilerImpl : public TraceCompiler {
 		}
 	}
 
+	//each output needs a bogus value because arbb needs all values defined at function exit
+	void initializeOutput(OVRef o, std::vector<arbb_variable_t> & references) {
+		OutputVar & ov = output_variables[o];
+		arbb_global_variable_t gv;
+		int64_t zero = 0;
+		ARBB_RUN(arbb_create_constant(ctx,&gv,typeFor(ov.typ.base()),&zero,NULL,&details));
+		arbb_variable_t local;
+		ARBB_RUN(arbb_create_local(fn,&local,ov.arbb_typ,NULL,&details));
+		arbb_variable_t output[] = { local };
+		arbb_variable_t input[2];
+		input[0] = varFor(gv);
+		if(ov.typ.isVector) {
+			input[1] = constantInt(0);
+			ARBB_RUN(arbb_op(fn,arbb_op_const_vector,output,input,NULL,NULL,&details));
+		} else {
+			ARBB_RUN(arbb_op(fn,arbb_op_copy,output,input,NULL,NULL,&details));
+		}
+		references.push_back(local);
+	}
+	void writeOutput(OVRef o, std::vector<arbb_variable_t> & references) {
+		arbb_variable_t input = references[trace->optimized.size() + o];
+		arbb_variable_t output = varFor(o);
+		ARBB_RUN(arbb_op(fn,arbb_op_copy,&output,&input,NULL,NULL,&details));
+	}
+
 	TCStatus compile() {
 		ARBB_RUN(arbb_get_default_context(&ctx,&details));
 
 
-		{	//create a variable to track which exit we took
-			arbb_binding_t null_binding;
-			arbb_set_binding_null(&null_binding);
-			ARBB_RUN(arbb_create_global(ctx,&exit_code,typeFor(IRType::Int()),NULL,null_binding,NULL,&details));
-		}
 		//for each TraceExit in the trace, we create two exit paths, the first path is for the first iteration of the trace when
 		//variables may not have been defined
 		for(size_t i = 0; i < trace->exits.size(); i++)
@@ -321,6 +390,11 @@ struct TraceCompilerImpl : public TraceCompiler {
 		for(size_t i = 0; i < trace->exits.size(); i++)
 			addExit(trace->exits[i],true);
 
+		{	//initialize exit variable
+			exit_code = output_variables.size();
+			OutputVar ov = { typeFor(IRType::Int()), IRType::Int()  };
+			output_variables.push_back(ov);
+		}
 
 		//create constants
 		for(size_t i = 0; i < trace->constants.size(); i++) {
@@ -335,13 +409,16 @@ struct TraceCompilerImpl : public TraceCompiler {
 			addInput(get(trace->phis[i]));
 
 
-		//construction function type from input types
+		//construction function type
 		arbb_type_t input_ts[inputs.size()];
 		for(size_t i = 0; i < inputs.size(); i++)
 			input_ts[i] = inputs[i].arbb_typ;
+		arbb_type_t output_ts[output_variables.size()];
+		for(size_t i = 0; i < output_variables.size(); i++)
+			output_ts[i] = output_variables[i].arbb_typ;
 
 		arbb_type_t fn_type;
-		ARBB_RUN(arbb_get_function_type(ctx,&fn_type,0,NULL,inputs.size(),input_ts,&details));
+		ARBB_RUN(arbb_get_function_type(ctx,&fn_type,output_variables.size(),output_ts,inputs.size(),input_ts,&details));
 
 		ARBB_RUN(arbb_begin_function(ctx,&fn,fn_type,NULL,true,&details));
 
@@ -360,6 +437,11 @@ struct TraceCompilerImpl : public TraceCompiler {
 			defineVariable( trace->loop_header[i], references);
 		for(size_t i = 0; i < trace->loop_body.size(); i++)
 			defineVariable( trace->loop_body[i], references);
+
+		//initialize output variables (they must be defined along all paths or arbb will fail)
+		for(size_t i = 0; i < output_variables.size(); i++) {
+			initializeOutput(i,references);
+		}
 
 		//emit code!
 		size_t if_depth = 0;
@@ -382,8 +464,11 @@ struct TraceCompilerImpl : public TraceCompiler {
 		while(if_depth-- > 0)
 			ARBB_RUN(arbb_end_if(fn,&details)); //end all the else statements that the guards produced
 
+		for(size_t i = 0; i < output_variables.size(); i++) {
+			writeOutput(i,references);
+		}
 		ARBB_RUN(arbb_end_function(fn,&details));
-		ARBB_RUN(arbb_compile(fn,&details));
+		//ARBB_RUN(arbb_compile(fn,&details));
 		{
 
 			arbb_string_t fn_str;

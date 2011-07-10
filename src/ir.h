@@ -12,6 +12,7 @@
 	_(T_complex, 	"complex", p)		\
 	_(T_character, 	"character", p)		\
 	_(T_void,		"void",p)	\
+	_(T_size,       "size",p) /*type that holds the size of vectors*/\
 	_(T_unsupported, "unsupported",p)
 
 DECLARE_ENUM(IRScalarType,IR_TYPE)
@@ -91,12 +92,16 @@ struct IRType {
 		} else
 			return bt;
 	}
+	IRType base() const {
+		return IRType(base_type,false);
+	}
 	bool operator==(IRType const& t) const { return base_type == t.base_type && isVector == t.isVector; } \
     bool operator!=(IRType const& t) const { return !(*this == t); } \
-	//convience functions
+	//utility functions
 	static IRType Void() { return IRType(IRScalarType::T_void,false); }
 	static IRType Bool() { return IRType(IRScalarType::T_logical,false); }
 	static IRType Int() { return IRType(IRScalarType::T_integer,false); }
+	static IRType Size() { return IRType(IRScalarType::T_size,false); }
 	static IRType Double() { return IRType(IRScalarType::T_double,false); }
 };
 
