@@ -158,6 +158,7 @@ struct TraceCompilerImpl : public TraceCompiler {
 		return var;
 	}
 	TraceCompilerImpl(Trace * trace) {
+		arbb_set_error_details_null(&details);
 		this->trace = trace;
 	}
 
