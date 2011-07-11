@@ -73,12 +73,12 @@ struct TraceCompilerImpl : public TraceCompiler {
 	};
 
 
-	//a structure tracking the type of each output variable from the arbb function
+	//a structure tracking the type of each output variable from the arbb function.
 	//a particular TraceExit will have one Output struct for each variable it needs
 	//to write the interpreter. Each Output has a reference to on OutputVar that will hold
 	//the value to write to the interpreter for this exit.
 
-	//A simpler approach would be to allocate one output var for each OutputVar for
+	//A simpler approach would be to allocate one output var for
 	//each output. However, arbb requires all outputs to be defined, making it undesirable to
 	//have a huge number of output variables that need to be assigned dummy values.  Instead
 	//we reuse OutputVars as much as possible. Multiple Output structs can refer to the same
@@ -331,11 +331,12 @@ struct TraceCompilerImpl : public TraceCompiler {
 				uint64_t length = vector.length;
 				uint64_t width = vector.width;
 				ARBB_RUN(arbb_create_dense_binding(ctx,&binding,vector._data,1,&length,&width,&details));
+				ARBB_RUN(arbb_create_global(ctx,result,typeFor(typ),NULL,binding,NULL,&details));
 			} else {
 				arbb_set_binding_null(&binding);
+				ARBB_RUN(arbb_create_global(ctx,result,typeFor(typ),NULL,binding,NULL,&details));
 				ARBB_RUN(arbb_write_scalar(ctx,varFor(*result),&v.p,&details));
 			}
-			ARBB_RUN(arbb_create_global(ctx,result,typeFor(typ),NULL,binding,NULL,&details));
 			if(pbinding)
 				*pbinding = binding;
 			return true;
@@ -474,7 +475,7 @@ struct TraceCompilerImpl : public TraceCompiler {
 			writeOutput(i,references);
 		}
 		ARBB_RUN(arbb_end_function(fn,&details));
-		//ARBB_RUN(arbb_compile(fn,&details));
+		ARBB_RUN(arbb_compile(fn,&details));
 		{
 
 			arbb_string_t fn_str;
@@ -485,9 +486,117 @@ struct TraceCompilerImpl : public TraceCompiler {
 
 		return TCStatus::SUCCESS;
 	}
+
+	void loadFromInterpreter(State & s, RenamingTable::Entry const & entry, Value * v) {
+		if(entry.location == RenamingTable::SLOT)
+			*v = s.registers[entry.id];
+		else
+			s.global->get(s,Symbol(entry.id),*v);
+	}
+	void constructValueFromData(IRType const & typ, int64_t length, void * data, Value * v) {
+		assert(!typ.isVector && "NYI - loading vector from trace");
+		switch(typ.base_type.Enum()) {
+			case IRScalarType::E_T_null: *v = Null::singleton; break;
+			case IRScalarType::E_T_logical: *v = Logical::c(*(bool*)data); break;
+			case IRScalarType::E_T_integer: *v = Integer::c(*(int64_t*)data); break;
+			case IRScalarType::E_T_double: *v = Double::c(*(double*)data); break;
+			case IRScalarType::E_T_complex: panic("NYI: complex"); break;
+			case IRScalarType::E_T_character: panic("NYI: character"); break;
+			case IRScalarType::E_T_void: panic("void type is not an arbb type"); break;
+			case IRScalarType::E_T_size: *v = Integer::c(*(size_t*)data); break;
+			case IRScalarType::E_T_unsupported: panic("successful trace contains unsupported type."); break;
+		}
+	}
+
+	void storeValue(State & s, Output const & o, arbb_global_variable_t * output_globals) {
+		IRType const & typ = get(o.definition).typ;
+		Value v;
+		if(typ.isVector) {
+			uint64_t length;
+			ARBB_RUN(arbb_read_scalar(ctx,varFor(output_globals[o.length]),&length,&details));
+			void * vdata;
+			uint64_t pitch;
+			ARBB_RUN(arbb_map_to_host(ctx,varFor(output_globals[o.var]),&vdata,&pitch,arbb_read_write_range,&details));
+			//value will own the arbb object
+			arbb_refcountable_t rc = arbb_global_variable_to_refcountable(output_globals[o.var]);
+			ARBB_RUN(arbb_acquire_ref(rc,&details));
+			constructValueFromData(typ,length,vdata,&v);
+		} else {
+			uint64_t sdata;
+			ARBB_RUN(arbb_read_scalar(ctx,varFor(output_globals[o.var]),&sdata,&details));
+			constructValueFromData(typ,1,&sdata,&v);
+		}
+		if(o.interpreter_location.location == RenamingTable::SLOT) {
+			s.registers[o.interpreter_location.id] = v;
+		} else {
+			s.global->assign(Symbol(o.interpreter_location.id),v);
+		}
+	}
+
 	TCStatus execute(State & s, int64_t * offset) {
-		//NYI - invoke the trace
-		*offset = 0;
+		//check type specializations of inputs before creating a bunch of arbb state that we would have to destroy.
+		for(size_t i = 0; i < inputs.size(); i++) {
+			Input & input = inputs[i];
+			Value v;
+			loadFromInterpreter(s,input.interpreter_location,&v);
+			if(input.typ != IRType(v)) {
+				*offset = 0;
+				return TCStatus::SUCCESS;
+			}
+		}
+
+		//create arbb variables to hold inputs
+		arbb_global_variable_t input_globals[inputs.size()];
+		arbb_variable_t input_vars[inputs.size()];
+		arbb_binding_t input_bindings[inputs.size()];
+		for(size_t i = 0; i < inputs.size(); i++) {
+			Input & input = inputs[i];
+			Value v;
+			loadFromInterpreter(s,input.interpreter_location,&v);
+			if(!loadValueGuarded(input.typ,v,&input_bindings[i],&input_globals[i]))
+				return TCStatus::RUNTIME_ERROR;
+			input_vars[i] = varFor(input_globals[i]);
+		}
+
+		//create arbb variables to hold output values
+		arbb_global_variable_t output_globals[output_variables.size()];
+		arbb_variable_t output_vars[output_variables.size()];
+		for(size_t i = 0; i < output_variables.size(); i++) {
+			OutputVar & ov = output_variables[i];
+			arbb_binding_t null_binding; arbb_set_binding_null(&null_binding);
+			ARBB_RUN(arbb_create_global(ctx,&output_globals[i],ov.arbb_typ,NULL,null_binding,NULL,&details));
+			output_vars[i] = varFor(output_globals[i]);
+		}
+
+		//execute the trace!
+		ARBB_RUN(arbb_execute(fn,output_vars,input_vars,&details));
+
+		//now we have to figure out what happened....
+		//first read the exit code
+		int64_t ec;
+		ARBB_RUN(arbb_read_scalar(ctx,output_vars[exit_code],&ec,&details));
+		if(ec == -1) {//we didn't make it out of the loop header, fall back to the interpter, and don't write any results out
+			*offset = 0;
+		} else { //success! write back the results to the interpreter
+			TraceExit & exit = exits[ec];
+			*offset = exit.offset;
+			for(size_t i = 0; i < exit.outputs.size(); i++) {
+				storeValue(s,exit.outputs[i],output_globals);
+			}
+		}
+		//free the global variables and bindings.
+		for(size_t i = 0; i < inputs.size(); i++) {
+			arbb_refcountable_t gv = arbb_global_variable_to_refcountable(input_globals[i]);
+			ARBB_RUN(arbb_release_ref(gv,&details));
+			if(!arbb_is_binding_null(input_bindings[i]))
+				ARBB_RUN(arbb_free_binding(ctx,input_bindings[i],&details));
+		}
+		for(size_t i = 0; i < output_variables.size(); i++) {
+			//release outputs, if an exit variable is still using the value, it will have called acquire on the reference
+			arbb_refcountable_t gv = arbb_global_variable_to_refcountable(output_globals[i]);
+			ARBB_RUN(arbb_release_ref(gv,&details));
+		}
+
 		return TCStatus::SUCCESS;
 	}
 
@@ -504,7 +613,6 @@ struct TraceCompilerImpl : public TraceCompiler {
 		exit(1);
 	}
 };
-
 
 #else
 
