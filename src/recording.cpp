@@ -134,6 +134,22 @@ static RecordingStatus load_constant(State & state, int64_t dest_slot, const Val
 	return RecordingStatus::NO_ERROR;
 }
 
+static RecordingStatus promote_types(State & state, IRef a, IRef b, IRef * ao, IRef * bo) {
+	IRType const & at = TRACE->recorded[a].typ;
+	IRType const & bt = TRACE->recorded[b].typ;
+	if(at.base_type.Enum() == bt.base_type.Enum()) {
+		*ao = a;
+		*bo = b;
+	} else if(at.base_type.Enum() < bt.base_type.Enum()){
+		EMITIR(cast,bt,a,0,ao);
+		*bo = b;
+	} else {
+		EMITIR(cast,at,b,0,bo);
+		*ao = a;
+	}
+	return RecordingStatus::NO_ERROR;
+}
+
 //all arithmetic binary ops share the same recording implementation
 #define BINARY_OP(op) \
 RecordingStatus op##_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) { \
@@ -144,7 +160,9 @@ RecordingStatus op##_record_impl(State & state, Code const * code, Instruction c
 		IRef output; \
 		RECORDING_DO(get_slot(state,inst.a,&node_a)); \
 		RECORDING_DO(get_slot(state,inst.b,&node_b)); \
-		EMITIR(op,c,node_a,node_b,&output); \
+		IRef node_a1,node_b1;\
+		RECORDING_DO(promote_types(state,node_a,node_b,&node_a1,&node_b1)); \
+		EMITIR(op,c,node_a1,node_b1,&output); \
 		TRACE->renaming_table.assign(RenamingTable::SLOT,inst.c,output); \
 		return RecordingStatus::NO_ERROR; \
 }
@@ -157,6 +175,7 @@ RecordingStatus op##_record_impl(State & state, Code const * code, Instruction c
 		IRef node_a; \
 		IRef output; \
 		RECORDING_DO(get_slot(state,inst.a,&node_a)); \
+		/* NYI - correct casting behavior between node_a's type and the type of output */ \
 		EMITIR(op,c,node_a,0,&output); \
 		TRACE->renaming_table.assign(RenamingTable::SLOT,inst.c,output); \
 		return RecordingStatus::NO_ERROR; \

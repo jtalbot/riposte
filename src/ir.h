@@ -4,6 +4,7 @@
 #include "enum.h"
 #include "common.h"
 
+//order matters since T_logical < T_integer < T_double < T_complex for subtyping rules
 #define IR_TYPE(_,p) \
 	_(T_null, 	"NULL", p)			\
 	_(T_logical, 	"logical", p)		\
@@ -20,6 +21,7 @@ DECLARE_ENUM(IRScalarType,IR_TYPE)
 #define IR_ENUM(_, p) 				\
 	_(vload,      "vload",     p, ref, ___, ___) \
 	_(sload,      "sload",     p, ref, ___, ___) \
+	_(cast,       "cast",      p, ref, ref, ___) \
 	_(iassign,    "iassign",   p, ___, ___, ___) \
 	_(guard,      "guard",     p, ___, ref, ___) \
 	_(move,       "move",      p, ref, ref, ___) \

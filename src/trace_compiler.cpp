@@ -29,6 +29,7 @@
 	_(asin,asin) \
 	_(atan,atan) \
 	_(ceiling,ceil) \
+	_(cast, cast) \
 	_(character1,cast) \
 	_(complex1,cast) \
 	_(cos,cos) \
@@ -411,7 +412,7 @@ struct TraceCompilerImpl : public TraceCompiler {
 			output_ts[i] = output_variables[i].arbb_typ;
 
 		arbb_type_t fn_type;
-		ARBB_RUN(arbb_get_function_type(ctx,&fn_type,output_variables.size(),output_ts,inputs.size(),input_ts,&details));
+		ARBB_RUN(arbb_get_function_type(ctx,&fn_type,output_variables.size(),output_ts,inputs.size(), inputs.size() == 0 ? NULL : input_ts ,&details));
 
 		ARBB_RUN(arbb_begin_function(ctx,&fn,fn_type,NULL,true,&details));
 
@@ -461,7 +462,7 @@ struct TraceCompilerImpl : public TraceCompiler {
 			writeOutput(i,references);
 		}
 		ARBB_RUN(arbb_end_function(fn,&details));
-		ARBB_RUN(arbb_compile(fn,&details));
+		//ARBB_RUN(arbb_compile(fn,&details));
 		{
 
 			arbb_string_t fn_str;
