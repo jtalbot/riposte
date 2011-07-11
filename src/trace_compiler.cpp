@@ -209,15 +209,6 @@ struct TraceCompilerImpl : public TraceCompiler {
 		return trace->optimized[ref];
 	}
 
-	void defineVariable(IRef ref, std::vector<arbb_variable_t> & references) {
-		IRNode const & node = get(ref);
-		if( node.opcode == IROpCode::kload ) {
-			references[ref] = varFor(constants[node.a]);
-		} else if( (node.flags() & IRNode::REF_R) != 0) {
-			ARBB_RUN(arbb_create_local(fn,&references[ref],typeFor(node.typ),NULL,&details));
-		}
-	}
-
 	arbb_variable_t constantInt(int64_t i) {
 		arbb_global_variable_t gv;
 		ARBB_RUN(arbb_create_constant(ctx,&gv,typeFor(IRType::Int()),&i,NULL,&details));
@@ -241,8 +232,6 @@ struct TraceCompilerImpl : public TraceCompiler {
 		printf("emitting %s\n",node.toString().c_str());
 		arbb_variable_t outputs[1];
 		arbb_variable_t inputs[2];
-		if(node.flags() & IRNode::REF_R)
-			outputs[0] = references[ref];
 		if(node.flags() & IRNode::REF_A)
 			inputs[0] = references[node.a];
 		if(node.flags() & IRNode::REF_B)
@@ -251,14 +240,16 @@ struct TraceCompilerImpl : public TraceCompiler {
 		switch(node.opcode.Enum()) {
 #define ELEMENT_WISE_OP(ir,arbb) \
 		case IROpCode::E_##ir: \
-			assert(!arbb_is_variable_null(outputs[0])); \
 			assert(!arbb_is_variable_null(inputs[0])); \
 			assert(!arbb_is_variable_null(inputs[1])); \
+			if(loc != L_BODY) \
+				ARBB_RUN(arbb_create_local(fn,&references[ref],typeFor(node.typ),NULL,&details)); \
+			outputs[0] = references[ref]; \
 			ARBB_RUN(arbb_op(fn,arbb_op_##arbb,outputs,inputs,NULL,NULL,&details)); \
 			break;
 		ARBB_MAPPING(ELEMENT_WISE_OP,0)
 		case IROpCode::E_kload:
-			//pass -- we already handled this by aliasing the variable in the references array to the global variable holding the constant
+			references[ref] = varFor(constants[node.a]); //just alias the ref to the constant's variable
 			break;
 		case IROpCode::E_guard: {
 			int64_t exit = node.b;
@@ -433,12 +424,6 @@ struct TraceCompilerImpl : public TraceCompiler {
 		for(size_t i = 0; i < trace->phis.size(); i++)
 			ARBB_RUN(arbb_get_parameter(fn,&references[ trace->phis[i] ],0,idx++,&details));
 
-		//define variables for non-load nodes if the instruction defines a variable
-		for(size_t i = 0; i < trace->loop_header.size(); i++)
-			defineVariable( trace->loop_header[i], references);
-		for(size_t i = 0; i < trace->loop_body.size(); i++)
-			defineVariable( trace->loop_body[i], references);
-
 		//initialize output variables (they must be defined along all paths or arbb will fail)
 		for(size_t i = 0; i < output_variables.size(); i++) {
 			initializeOutput(i,references);
@@ -493,19 +478,20 @@ struct TraceCompilerImpl : public TraceCompiler {
 		else
 			s.global->get(s,Symbol(entry.id),*v);
 	}
-	void constructValueFromData(IRType const & typ, int64_t length, void * data, Value * v) {
-		assert(!typ.isVector && "NYI - loading vector from trace");
-		switch(typ.base_type.Enum()) {
-			case IRScalarType::E_T_null: *v = Null::singleton; break;
-			case IRScalarType::E_T_logical: *v = Logical::c(*(bool*)data); break;
-			case IRScalarType::E_T_integer: *v = Integer::c(*(int64_t*)data); break;
-			case IRScalarType::E_T_double: *v = Double::c(*(double*)data); break;
+	void constructValueFromData(IRType const & irtyp, int64_t length, void * data, Value * v) {
+		Type typ;
+		switch(irtyp.base_type.Enum()) {
+			case IRScalarType::E_T_null: typ = Type::E_R_null; break;
+			case IRScalarType::E_T_logical: typ = Type::E_R_logical; break;
+			case IRScalarType::E_T_integer: typ = Type::E_R_integer; break;
+			case IRScalarType::E_T_double: typ = Type::E_R_double; break;
 			case IRScalarType::E_T_complex: panic("NYI: complex"); break;
 			case IRScalarType::E_T_character: panic("NYI: character"); break;
 			case IRScalarType::E_T_void: panic("void type is not an arbb type"); break;
-			case IRScalarType::E_T_size: *v = Integer::c(*(size_t*)data); break;
+			case IRScalarType::E_T_size: typ = Type::E_R_integer; break;
 			case IRScalarType::E_T_unsupported: panic("successful trace contains unsupported type."); break;
 		}
+		*v = Vector(typ,length,data);
 	}
 
 	void storeValue(State & s, Output const & o, arbb_global_variable_t * output_globals) {
@@ -522,10 +508,11 @@ struct TraceCompilerImpl : public TraceCompiler {
 			ARBB_RUN(arbb_acquire_ref(rc,&details));
 			constructValueFromData(typ,length,vdata,&v);
 		} else {
-			uint64_t sdata;
+			uint64_t sdata = 0;
 			ARBB_RUN(arbb_read_scalar(ctx,varFor(output_globals[o.var]),&sdata,&details));
 			constructValueFromData(typ,1,&sdata,&v);
 		}
+
 		if(o.interpreter_location.location == RenamingTable::SLOT) {
 			s.registers[o.interpreter_location.id] = v;
 		} else {

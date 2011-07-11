@@ -141,6 +141,7 @@ struct Vector {
 	Vector() : _data(0), length(0), width(0), _packed(true), attributes(0), type(Type::I_nil) {}
 	Vector(Value v);
 	Vector(Type t, int64_t length);
+	Vector(Type t, int64_t length, void * data);
 
 	operator Value() const {
 		Value v = {{(int64_t)_data}, {length}, attributes, type};
@@ -366,6 +367,33 @@ inline Vector::Vector(Type t, int64_t length) {
 		case Type::E_R_expression: *this = Expression(length); break;	
 		default: throw RuntimeError("attempt to create invalid vector type"); break;
 	};
+}
+inline Vector::Vector(Type t, int64_t length, void * data) {
+	uint64_t width;
+	switch(t.Enum()) {
+		case Type::E_R_null: width = Null::width; break;
+		case Type::E_R_logical: width = Logical::width; break;
+		case Type::E_R_integer: width = Integer::width; break;
+		case Type::E_R_double: width = Double::width; break;
+		case Type::E_R_complex: width = Complex::width; break;
+		case Type::E_R_character: width = Character::width; break;
+		case Type::E_R_raw: width = Raw::width; break;
+		case Type::E_R_list: width = List::width; break;
+		case Type::E_R_pairlist: width = PairList::width; break;
+		case Type::E_R_call: width = Call::width; break;
+		case Type::E_R_expression: width = Expression::width; break;
+		default: throw RuntimeError("attempt to create invalid vector type"); break;
+	};
+	Value v;
+	v.type = t;
+	v.length = length;
+	//CHECK: are the pointers to each member of a union the same value?
+	if(width * length <= sizeof(void*))
+		memcpy(&v.p,data,width * length);
+	else
+		v.p = data;
+	v.attributes = NULL;
+	*this = Vector(v);
 }
 
 inline Vector::Vector(Value v) {
