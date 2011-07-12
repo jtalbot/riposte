@@ -18,6 +18,7 @@ CND <- function(X) {
     w <- w * invSqrt2Pi * exp(-L * L * .5)
     #w <- ifelse(X > 0,1 - w,w)
     w <- w + ( (sign(X) + 1.0) / 2.0 ) * (-2.0 * w + 1.0)
+    return(w)
 }
 
 acc <- 0
