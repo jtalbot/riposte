@@ -86,6 +86,9 @@
 	_(type, "typeof", p) \
 	_(funargs, "..funargs", p) \
 	_(value, "value", p) \
+	_(dotGeneric, ".Generic", p) \
+	_(dotMethod, ".Method", p) \
+	_(dotClass, ".Class", p) \
 
 
 class SymbolTable {

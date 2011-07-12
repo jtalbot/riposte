@@ -11,9 +11,48 @@
 #include "value.h"
 
 // trim from end
-static inline std::string &rtrim(std::string &s) {
+static inline std::string& rtrim(std::string &s) {
         s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), s.end());
         return s;
+}
+
+static inline std::string& unescape(std::string& s) {
+	std::string::const_iterator i = s.begin();
+
+	// first do fast check for any escape sequences...
+	bool escaped = false;
+	while(i != s.end())
+		if(*i++ == '\\') escaped = true;
+
+	if(!escaped) return s;
+
+	std::string r;
+	i = s.begin();
+	while(i != s.end())
+	{
+		char c = *i++;
+		if(c == '\\' && i != s.end())
+		{
+			switch(*i++) {
+				case 'a': r += '\a'; break;
+				case 'b': r += '\b'; break;
+				case 'f': r += '\f'; break;
+				case 'n': r += '\n'; break;
+				case 'r': r += '\r'; break;
+				case 't': r += '\t'; break;
+				case 'v': r += '\v'; break;
+				case '\\': r += '\\'; break;
+				case '"': r += '"'; break;
+				case '\'': r += '\''; break;
+				case ' ': r += ' '; break;
+				case '\n': r += '\n'; break;
+				default: throw RiposteError(std::string("Unrecognized escape in \"") + s + "\""); break;
+			}
+		}
+		else r += c;
+	}
+	s = r;
+	return s;
 }
 
 struct Parser {

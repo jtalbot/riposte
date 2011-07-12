@@ -53,4 +53,10 @@ as.vector <- function(x, mode = "any") {
 		any = x)
 }
 
-
+cbind <- function(...) {
+	l <- list(...)
+	rows <- max(unlist(lapply(l, length)))
+	matrix <- unlist(l)
+	dim(matrix) <- c(rows, length(l))
+	matrix
+}

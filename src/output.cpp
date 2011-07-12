@@ -166,7 +166,7 @@ std::string State::stringify(Value const& value) const {
 		}
 		case Type::E_R_environment:
 		{
-			return "environment";
+			return std::string("environment <") + intToHexStr((uint64_t)REnvironment(value).ptr()) + "> (" + intToStr(REnvironment(value).ptr()->numVariables()) + " symbols defined)";
 		}
 		case Type::E_I_closure:
 		{

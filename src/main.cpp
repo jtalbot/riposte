@@ -114,7 +114,7 @@ int dostdin(State& state) {
 			Code* code = Compiler::compile(state, value, state.global);
 			//std::cout << "Compiled code: " << state.stringify(Closure(code,NULL)) << std::endl;
 			result = eval(state, code, state.global);
-			std::cout << state.stringify(result) << std::endl;
+			std::cout << state.stringify(result) << "\t\t" << intToStr(state.stack.size()) << std::endl;
 		} catch(RiposteError& error) { 
 			e_message("Error", "riposte", error.what().c_str());
 		} catch(RuntimeError& error) {
@@ -247,15 +247,21 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 #endif
 
 	/* Create riposte environment */
-	Environment* baseenv = new Environment();
-	State state(new Environment(baseenv), baseenv);
+	Environment* base = new Environment(0,0);
+	Environment* global = new Environment(base,0);
+	global->setDynamicParent(global);
 
-	interpreter_init(state);
+	State state(global, base);
 
 	try {
-		importCoreLibrary(state);	
-		importCoerceFunctions(state);	
-		//loadLibrary(state, "base");
+		std::cout << "global: " << std::hex << state.global << std::endl;
+		std::cout << "base: " << std::hex << base << std::endl;
+		importCoreLibrary(state, base);	
+		importCoerceFunctions(state, base);	
+		loadLibrary(state, "base");
+		
+		interpreter_init(state);
+
 	} catch(RiposteError& error) { 
 		e_message("Error", "riposte", error.what().c_str());
 	} catch(RuntimeError& error) {

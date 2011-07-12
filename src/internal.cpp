@@ -17,7 +17,13 @@ void checkNumArgs(List const& args, int64_t nargs) {
 }
 
 Value cat(State& state, Call const& call, List const& args) {
-	printf("%s\n", state.stringify(force(state, args[0])).c_str());
+	for(int64_t i = 0; i < args.length; i++) {
+		Character c = As<Character>(state, force(state, args[i]));
+		for(int64_t j = 0; j < c.length; j++) {
+			printf("%s", state.SymToStr(c[j]).c_str());
+			if(j < c.length-1) printf(" ");
+		}
+	}
 	return Null::singleton;
 }
 
@@ -274,10 +280,10 @@ Value quote(State& state, Call const& call, List const& args) {
 }
 
 Value eval_fn(State& state, Call const& call, List const& args) {
-	checkNumArgs(args, 2);
+	checkNumArgs(args, 3);
 	Value expr = force(state, args[0]);
 	Value envir = force(state, args[1]);
-	//Value enclos = force(state, call[3]);
+	//Value enclos = force(state, args[2]);
 	return eval(state, Compiler::compile(state, expr), REnvironment(envir).ptr());
 }
 
@@ -376,7 +382,12 @@ Value environment(State& state, Call const& call, List const& args) {
 Value parentframe(State& state, Call const& call, List const& args) {
 	checkNumArgs(args, 1);
 	int64_t i = (int64_t)asReal1(force(state, args[0]));
-	return REnvironment(state.frame(i).environment);
+	Environment* env = state.frame().environment;
+	while(i > 0 && env != env->DynamicParent()) {
+		env = env->DynamicParent();
+		i--;
+	}
+	return REnvironment(env);
 }
 
 Value stop_fn(State& state, Call const& call, List const& args) {
@@ -566,11 +577,36 @@ Value substitute(State& state, Call const& call, List const& args) {
  	return v;
 }
 
+Value type_of(State& state, Call const& call, List const& args) {
+	// Should have a direct mapping from type to symbol.
+	Value v = force(state, args[0]);
+	return Character::c(state.StrToSym(v.type.toString()));
+}
 
-void importCoreLibrary(State& state)
+Value get(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 2);
+	Character c = As<Character>(state, force(state, args[0]));
+	REnvironment e(force(state, args[1]));
+	Value v = e.ptr()->get(c[0]);
+	if(v.isNil())
+		return Null::singleton;
+	else
+		return v;
+}
+
+Value exists(State& state, Call const& call, List const& args) {
+	checkNumArgs(args, 2);
+	Character c = As<Character>(state, force(state, args[0]));
+	REnvironment e(force(state, args[1]));
+	Value v = e.ptr()->get(c[0]);
+	if(v.isNil())
+		return Logical::False();
+	else
+		return Logical::True();
+}
+
+void importCoreLibrary(State& state, Environment* env)
 {
-	Environment* env = state.path[0];
-
 	env->assign(state.StrToSym("max"), CFunction(max_fn));
 	env->assign(state.StrToSym("min"), CFunction(min_fn));
 	env->assign(state.StrToSym("sum"), CFunction(sum_fn));
@@ -626,5 +662,10 @@ void importCoreLibrary(State& state)
 	env->assign(state.StrToSym("paste"), CFunction(paste));
 	env->assign(state.StrToSym("deparse"), CFunction(deparse));
 	env->assign(state.StrToSym("substitute"), CFunction(substitute));
+	
+	env->assign(state.StrToSym("typeof"), CFunction(type_of));
+	
+	env->assign(state.StrToSym("get"), CFunction(get));
+	env->assign(state.StrToSym("exists"), CFunction(exists));
 }
 

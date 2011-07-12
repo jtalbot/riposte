@@ -552,7 +552,7 @@ inline Value getDim(Value const& v) {
 
 template<class T, class A>
 inline T setAttribute(T& v, Symbol s, A const a) {
-	Attributes* attributes = new Attributes();
+	Attributes* attributes = new (GC) Attributes();
 	if(v.attributes != 0)
 		*attributes = *v.attributes;
 	v.attributes = attributes;
@@ -623,6 +623,7 @@ struct Pairs {
  * Riposte execution environments are split into two parts:
  * 1) Environment -- the static part, exposed to the R level as an R environment, these may not obey stack discipline, thus allocated on heap, try to reuse to decrease allocation overhead.
  *     -static link to enclosing environment
+ *     -dynamic link to calling environment (necessary for promises which need to see original call stack)
  *     -slots storing variables that may be accessible by inner functions that may be returned 
  *		(for now, conservatively assume all variables are accessible)
  *     -names of slots
@@ -642,7 +643,7 @@ class Environment : public gc {
 private:
 	typedef std::map<Symbol, Value, std::less<Symbol>, gc_allocator<std::pair<Symbol, Value> > > Map;
 
-	Environment* staticParent;
+	Environment* staticParent, * dynamicParent;
 	Value slots[32];
 	Symbol slotNames[32];		// rather than duplicating, this could be a pointer?
 	unsigned char slotCount;
@@ -650,23 +651,35 @@ private:
 
 public:
 	
-	Environment(Environment* parent = 0) : staticParent(parent), slotCount(0) {}
+	Environment(Environment* staticParent,
+		    Environment* dynamicParent) : 
+			staticParent(staticParent), 
+			dynamicParent(dynamicParent), 
+			slotCount(0) {}
 
-	Environment(Environment* parent, std::vector<Symbol> const& slots) : staticParent(parent) {
+	Environment(Environment* staticParent, Environment* dynamicParent, std::vector<Symbol> const& slots) : 
+		staticParent(dynamicParent),
+		dynamicParent(dynamicParent) {
 		slotCount = slots.size();
 		for(unsigned char i = 0; i < slotCount; i++)
 			slotNames[i] = slots[i];
 	}
 
- 	void init(Environment* parent, std::vector<Symbol> const& slots) {
-		this->staticParent = parent;
+ 	void init(Environment* staticParent, Environment* dynamicParent, std::vector<Symbol> const& slots) {
+		this->staticParent = staticParent;
+		this->dynamicParent = dynamicParent;
 		slotCount = slots.size();
 		for(unsigned char i = 0; i < slotCount; i++)
 			slotNames[i] = slots[i];
 		overflow.clear();
 	}
 
-	Environment* parent() const { return staticParent; }
+	Environment* StaticParent() const { return staticParent; }
+	Environment* DynamicParent() const { return dynamicParent; }
+
+	void setDynamicParent(Environment* env) {
+		dynamicParent = env;
+	}
 
 	Value& get(int64_t i) {
 		assert(i < slotCount);
@@ -674,6 +687,8 @@ public:
 	}
 	Symbol slotName(int64_t i) { return slotNames[i]; }
 	int SlotCount() const { return slotCount; }
+
+	int numVariables() const { return slotCount + overflow.size(); }
 
 	Value get(Symbol const& name) const {
 		for(uint64_t i = 0; i < slotCount; i++) {
@@ -733,12 +748,13 @@ struct StackFrame {
 	Value* result;
 };
 
+#define DEFAULT_NUM_REGISTERS 10000
 
 struct State {
 	Value* registers;
 	Value* base;
 
-	std::vector<StackFrame> stack;
+	std::vector<StackFrame, traceable_allocator<StackFrame> > stack;
 	std::vector<Environment*, traceable_allocator<Environment*> > environments;
 
 	std::vector<Environment*, traceable_allocator<Environment*> > path;
@@ -750,15 +766,11 @@ struct State {
 	
 	State(Environment* global, Environment* base) {
 		this->global = global;
-		registers = new Value[10000];
-		this->base = registers+10000;
 		path.push_back(base);
+		registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
+		this->base = registers + DEFAULT_NUM_REGISTERS;
 	}
 
-	~State() {
-		delete [] registers;
-	}
-	
 	StackFrame& push() {
 		stack.push_back(StackFrame());
 		return stack.back();

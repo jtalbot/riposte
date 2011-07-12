@@ -46,11 +46,11 @@ static ByteCode op(Symbol const& s) {
 	}
 }
 
-static void resolveLoopReferences(Code* code, int64_t start, int64_t end, int64_t depth, int64_t nextTarget, int64_t breakTarget) {
+static void resolveLoopReferences(Code* code, int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget) {
 	for(int64_t i = start; i < end; i++) {
-		if(code->bc[i].bc == ByteCode::next && code->bc[i].a == (int64_t)depth) {
+		if(code->bc[i].bc == ByteCode::next && code->bc[i].a == 0) {
 			code->bc[i].a = nextTarget-i;
-		} else if(code->bc[i].bc == ByteCode::break1 && code->bc[i].a == (int64_t)depth) {
+		} else if(code->bc[i].bc == ByteCode::break1 && code->bc[i].a == 0) {
 			code->bc[i].a = breakTarget-i;
 		}
 	}
@@ -269,7 +269,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 			int64_t beginbody = code->bc.size();
 			compile(call[3], code);
 			int64_t endbody = code->bc.size();
-			resolveLoopReferences(code, beginbody, endbody, loopDepth, endbody, endbody+1);
+			resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
 			loopDepth--;
 			code->bc.push_back(Instruction(ByteCode::iforend, beginbody-endbody, Symbol(call[1]).i, lim1));
 			code->bc[beginbody-1].a = endbody-beginbody+1;
@@ -282,7 +282,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 			int64_t beginbody = code->bc.size();
 			compile(call[3], code);
 			int64_t endbody = code->bc.size();
-			resolveLoopReferences(code, beginbody, endbody, loopDepth, endbody, endbody+1);
+			resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
 			loopDepth--;
 			code->bc.push_back(Instruction(ByteCode::forend, beginbody-endbody, Symbol(call[1]).i, lim));
 			code->bc[beginbody-1].a = endbody-beginbody+1;
@@ -302,7 +302,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		int64_t beforecond = code->bc.size();
 		int64_t lim2 = compile(call[1], code);
 		int64_t endbody = code->bc.size();
-		resolveLoopReferences(code, beginbody, endbody, loopDepth, beforecond, endbody+1);
+		resolveLoopReferences(code, beginbody, endbody, beforecond, endbody+1);
 		loopDepth--;
 		code->bc.push_back(Instruction(ByteCode::whileend, beginbody-endbody, lim2, lim));
 		code->bc[beginbody-1].a = endbody-beginbody+2;
@@ -317,7 +317,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		int64_t beginbody = code->bc.size();
 		compile(call[1], code);
 		int64_t endbody = code->bc.size();
-		resolveLoopReferences(code, beginbody, endbody, loopDepth, endbody, endbody+1);
+		resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
 		loopDepth--;
 		code->bc.push_back(Instruction(ByteCode::repeatend, beginbody-endbody, 0, initialDepth));
 		code->bc[beginbody-1].a = endbody-beginbody+2;
@@ -327,13 +327,13 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	case Symbol::E_nextSym:
 	{
 		if(loopDepth == 0) throw CompileError("next used outside of loop");
-		code->bc.push_back(Instruction(ByteCode::next, loopDepth));
+		code->bc.push_back(Instruction(ByteCode::next, 0));
 		return registerDepth;
 	} break;
 	case Symbol::E_breakSym:
 	{
 		if(loopDepth == 0) throw CompileError("break used outside of loop");
-		code->bc.push_back(Instruction(ByteCode::break1, loopDepth));
+		code->bc.push_back(Instruction(ByteCode::break1, 0));
 		return registerDepth;
 	} break;
 	case Symbol::E_ifSym: 

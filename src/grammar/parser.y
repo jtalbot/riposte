@@ -117,7 +117,7 @@ expr(A) ::= IF(B) optnl LPAREN optnl expr(C) optnl RPAREN optnl statement(D) ELS
 expr(A) ::= FOR(B) optnl LPAREN optnl SYMBOL(C) optnl IN optnl expr(D) optnl RPAREN optnl statement(E). { A = Call::c(B, C, D, E); }
 expr(A) ::= WHILE(B) optnl LPAREN optnl expr(C) optnl RPAREN optnl statement(D). { A = Call::c(B, C, D); }
 expr(A) ::= REPEAT(B) optnl statement(C). { A = Call::c(B, C); }
-expr(A) ::= expr(B) LBB(C) optnl sublist(D) optnl RBB. { D->push_front(Symbol::empty, B); D->push_front(Symbol::empty, C); A = Call(D->toList(false)); }
+expr(A) ::= expr(B) LBB(C) optnl sublist(D) optnl RBRACKET RBRACKET. { D->push_front(Symbol::empty, B); D->push_front(Symbol::empty, C); A = Call(D->toList(false)); }
 expr(A) ::= expr(B) LBRACKET(C) optnl sublist(D) optnl RBRACKET. { D->push_front(Symbol::empty, B); D->push_front(Symbol::empty, C); A = Call(D->toList(false)); }
 expr(A) ::= SYMBOL(B) NS_GET(C) symbolstr(D). { A = Call::c(C, B, D); }
 expr(A) ::= STR_CONST(B) NS_GET(C) symbolstr(D). { A = Call::c(C, B, D); }

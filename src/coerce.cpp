@@ -81,10 +81,8 @@ Value islist(State& state, Call const& call, List const& args) {
 }
 */
 
-void importCoerceFunctions(State& state)
+void importCoerceFunctions(State& state, Environment* env)
 {
-	Environment* env = state.path[0];
-
 	env->assign(state.StrToSym("as.null"), CFunction(asnull));
 	env->assign(state.StrToSym("as.logical"), CFunction(aslogical));
 	env->assign(state.StrToSym("as.integer"), CFunction(asinteger));

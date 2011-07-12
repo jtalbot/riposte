@@ -16,11 +16,12 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 static Value get(State& state, Symbol s) {
 	Environment* environment = state.frame().environment;
 	Value value = environment->get(s);
-	while(value.isNil() && environment->parent() != 0) {
-		environment = environment->parent();
+	while(value.isNil() && environment->StaticParent() != 0) {
+		environment = environment->StaticParent();
 		value = environment->get(s);	
 	}
 	value = force(state, value);
+	environment->assign(s, value);
 	if(value.isNil()) throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
 	return value;
 }
@@ -29,12 +30,18 @@ static Value get(State& state, Symbol s) {
 static Value sget(State& state, int64_t i) {
 	Environment* environment = state.frame().environment;
 	Value value = environment->get(i);
+	if(!value.isNil()) {
+		value = force(state, value);
+		environment->get(i) = value;
+		return value;
+	}
 	Symbol s = environment->slotName(i);
-	while(value.isNil() && environment->parent() != 0) {
-		environment = environment->parent();
+	while(value.isNil() && environment->StaticParent() != 0) {
+		environment = environment->StaticParent();
 		value = environment->get(s);
 	}
 	value = force(state, value);
+	environment->assign(s, value);
 	if(value.isNil()) throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
 	return value;
 }
@@ -98,7 +105,7 @@ static List BuildArgs(State& state, CompiledCall& call) {
 inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* execution) {
 	Value& slot = env->get(i);
 	slot = v;
-	if(v.isPromise() || v.isDefault())
+	if((v.isPromise() || v.isDefault()) && slot.env == 0)
 		slot.env = execution;
 }
 
@@ -113,9 +120,14 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			argAssign(fenv, i, arguments[i], env);
 		}
 		// set dots if necessary
-		if(arguments.length-(int64_t)func.dots() > 0) {
-			// TODO: need to set env here too
-			sassign(fenv, func.dots(), Subset(arguments, func.dots(), std::max((int64_t)0, (int64_t)arguments.length-(int64_t)func.dots())));
+		if(func.dots() < parameters.length && arguments.length-func.dots() > 0) {
+			List dots(arguments.length - func.dots());
+			for(int64_t i = 0; i < arguments.length-func.dots(); i++) {
+				dots[i] = arguments[i+func.dots()];
+				if((dots[i].isPromise() || dots[i].isDefault()) && dots[i].env == 0)
+					dots[i].env = env;
+			}
+			sassign(fenv, func.dots(), dots);
 			end++;
 		}
 		// set defaults (often these will be completely overridden. Can we delay or skip?
@@ -195,7 +207,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			for(int64_t j = 0; j < arguments.length; j++) {
 				if(assignment[j] < 0) {
 					values[idx] = arguments[j];
-					if(values[idx].isPromise())
+					if(values[idx].isPromise() && values[idx].env == 0)
 						values[idx].env = env;
 					names[idx++] = anames[j];
 				}
@@ -218,17 +230,22 @@ static Instruction const* call_op(State& state, Instruction const& inst) {
 
 		Environment* fenv;
 		if(state.environments.size() == 0) {
-			fenv = new Environment(func.s(), Closure(func.body()).code()->slotSymbols);
+			fenv = new Environment(func.s(), state.frame().environment, Closure(func.body()).code()->slotSymbols);
 		} else {
 			fenv = state.environments.back();
 			state.environments.pop_back();
-			fenv->init(func.s(), Closure(func.body()).code()->slotSymbols);
+			fenv->init(func.s(), state.frame().environment, Closure(func.body()).code()->slotSymbols);
 		}
 	
 		//assign(fenv, Symbol::funargs, arguments);
 		MatchArgs(state, state.frame().environment, fenv, func, arguments);
 		return buildStackFrame(state, fenv, true, Closure(func.body()).code(), &reg(state, inst.c), &inst+1);
 	} else if(f.type == Type::R_cfunction) {
+		arguments = Clone(arguments);
+		for(int64_t i = 0; i < arguments.length; i++) {
+			if(arguments[i].isPromise() && arguments[i].env == 0)
+				arguments[i].env = state.frame().environment;
+		}
 		reg(state, inst.c) = CFunction(f).func(state, call.call(), arguments);
 		return &inst+1;
 	} else {
@@ -267,14 +284,14 @@ static Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 
 	Function func = (Function)function;
 	if(func.body().type == Type::I_closure || func.body().type == Type::I_promise) {
-		Environment* fenv = new Environment(func.s());
-		assign(fenv, Symbol::funargs, arguments);
-
+		Environment* fenv = new Environment(func.s(), state.frame().environment);
 		MatchArgs(state, state.frame().environment, fenv, func, arguments);
 
-		assign(fenv, state.StrToSym(".Generic"), generic);
-		assign(fenv, state.StrToSym(".Method"), method);
-		assign(fenv, state.StrToSym(".Class"), type);
+		assign(fenv, Symbol::funargs, arguments);
+
+		assign(fenv, Symbol::dotGeneric, generic);
+		assign(fenv, Symbol::dotMethod, method);
+		assign(fenv, Symbol::dotClass, type);
 		
 		reg(state, inst.c) = eval(state, Closure(func.body()).bind(fenv));
 	}
@@ -339,7 +356,7 @@ static Instruction const* forbegin_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 static Instruction const* forend_op(State& state, Instruction const& inst) {
-	if(++reg(state, inst.c+2).i < (int64_t)reg(state, inst.c+1).length) { 
+	if(++reg(state, inst.c+2).i < (int64_t)reg(state, inst.c+1).length) {
 		assign(state, Symbol(inst.b), Element(Vector(reg(state, inst.c+1)), reg(state, inst.c+2).i));
 		return &inst+inst.a; 
 	} else return &inst+1;
@@ -615,8 +632,9 @@ static Instruction const* done_op(State& state, Instruction const& inst) {
 
 //#define THREADED_INTERPRETER
 
-
+#ifdef THREADED_INTERPRETER
 static const void** glabels = 0;
+#endif
 
 static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Code const* code, Value* result, Instruction const* returnpc) {
 	StackFrame& s = state.push();
@@ -661,6 +679,8 @@ void interpret(State& state, Instruction const* pc) {
 		return;
 	}
 
+	if(pc == 0) return;
+
 	goto *(pc->ibc);
 	#define LABELED_OP(name,type,p) \
 		name##_label: \
@@ -680,9 +700,9 @@ void interpret(State& state, Instruction const* pc) {
 
 // ensure glabels is inited before we need it.
 void interpreter_init(State& state) {
-	//Instruction const* old_pc;
-	//Instruction done(ByteCode::done);
-	//interpret(state, &done);
+#ifdef THREADED_INTERPRETER
+	interpret(state, 0);
+#endif
 }
 
 Value eval(State& state, Closure const& closure) {
@@ -702,11 +722,14 @@ Value eval(State& state, Code const* code, Environment* environment) {
 #endif
 	Value* old_base = state.base;
 
+	int64_t stackSize = state.stack.size();
 	Instruction const* run = buildStackFrame(state, environment, false, code, &result, done);
 	try {
 		interpret(state, run);
 	} catch(...) {
 		state.base = old_base;
+		while((int64_t)state.stack.size() > stackSize)
+			state.pop();
 		throw;
 	}
 	return result;

@@ -281,7 +281,9 @@ void unaryFilter(State& state, Value const& a, Value& c) {
 
 template< template<class Op> class Lift, template<typename T> class Op > 
 void binaryArith(State& state, Value const& a, Value const& b, Value& c) {
-	if((a.isComplex() && b.isMathCoerce()) || (b.isComplex() && a.isMathCoerce()))
+	if(a.isDouble() && b.isDouble())
+		c = Lift< Op<TDouble> >::eval(state, a, b);
+	else if((a.isComplex() && b.isMathCoerce()) || (b.isComplex() && a.isMathCoerce()))
 		c = Lift< Op<TComplex> >::eval(state, As<Complex>(state, a), As<Complex>(state, b));
 	else if((a.isDouble() && b.isMathCoerce()) || (b.isDouble() && a.isMathCoerce()))
 		c = Lift< Op<TDouble> >::eval(state, As<Double>(state, a), As<Double>(state, b));
@@ -306,7 +308,7 @@ void binaryOrdinal(State& state, Value const& a, Value const& b, Value& c) {
 	else if((a.isDouble() && b.isMathCoerce()) || (b.isDouble() && a.isMathCoerce()))
 		c = Lift< Op<TDouble> >::eval(state, As<Double>(state, a), As<Double>(state, b));
 	else if(a.isMathCoerce() && b.isMathCoerce()) 
-		c = Lift< Op<TInteger> >::eval(state, a, b);
+		c = Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), As<Integer>(state, b));
 	else if(a.isCharacter() && b.isCharacter())
 		c = Lift< Op<TCharacter> >::eval(state, a, b);
 	else

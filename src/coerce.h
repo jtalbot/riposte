@@ -192,6 +192,6 @@ template<>
 static List::Element Cast<Call, List>(State& state, Call::Element const& i) { return i; }
 
 
-void importCoerceFunctions(State& state);
+void importCoerceFunctions(State& state, Environment* env);
 
 #endif

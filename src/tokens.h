@@ -44,10 +44,9 @@
 #define TOKEN_RBRACE                         44
 #define TOKEN_RPAREN                         45
 #define TOKEN_IN                             46
-#define TOKEN_RBB                            47
-#define TOKEN_RBRACKET                       48
-#define TOKEN_NEXT                           49
-#define TOKEN_BREAK                          50
-#define TOKEN_NEWLINE                        51
-#define TOKEN_SEMICOLON                      52
-#define TOKEN_COMMA                          53
+#define TOKEN_RBRACKET                       47
+#define TOKEN_NEXT                           48
+#define TOKEN_BREAK                          49
+#define TOKEN_NEWLINE                        50
+#define TOKEN_SEMICOLON                      51
+#define TOKEN_COMMA                          52
