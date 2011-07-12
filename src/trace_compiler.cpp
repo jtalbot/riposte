@@ -268,6 +268,7 @@ struct TraceCompilerImpl : public TraceCompiler {
 				TraceExit & texit = exits[exit];
 				for(size_t i = 0; i < texit.outputs.size(); i++) {
 					Output & o = texit.outputs[i];
+					printf("emitting output o%d(%s) <- r%d (%s)\n",(int)o.var, output_variables[o.var].typ.toString().c_str(), (int)o.definition, get(o.definition).typ.toString().c_str());
 					outputs[0] = references[trace->optimized.size() + o.var];
 					inputs[0] = references[o.definition];
 					ARBB_RUN(arbb_op(fn,arbb_op_copy,outputs,inputs,NULL,NULL,&details));
@@ -592,8 +593,8 @@ struct TraceCompilerImpl : public TraceCompiler {
 	//for internal compiler error problems that are the result of bugs in the compiler
 	__attribute__ ((noreturn))
 	void panic(const char * file, int line, const char * txt, arbb_error_t error) {
-		fprintf(stderr,"%s:%d: trace compiler: %d\n",file,line,(int)error);
-		fprintf(stderr,"details: %s\n",arbb_get_error_message(details));
+		printf("%s:%d: trace compiler: %d\n",file,line,(int)error);
+		printf("details: %s\n",arbb_get_error_message(details));
 		exit(1);
 	}
 	__attribute__ ((noreturn))
