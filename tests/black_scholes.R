@@ -1,3 +1,4 @@
+#adapted from https://github.com/ispc/ispc/tree/master/examples/options
 N_OPTIONS <- 65536
 N_BLACK_SCHOLES_ROUNDS <- 20
 S <- rep(100,1,N_OPTIONS)
@@ -30,3 +31,4 @@ for(i in 1:N_BLACK_SCHOLES_ROUNDS) {
 	acc <- acc + sum(result)
 }
 acc <- acc / (N_BLACK_SCHOLES_ROUNDS * N_OPTIONS)
+	

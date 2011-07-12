@@ -1,4 +1,4 @@
-
+#adapted from https://github.com/ispc/ispc/tree/master/examples/mandelbrot
 mandel <- function(c_re, c_im, count) {
 	z_re <- c_re
 	z_im <- c_im;
