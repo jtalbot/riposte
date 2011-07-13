@@ -19,6 +19,7 @@ private:
 
 	struct Scope {
 		std::vector<Symbol> symbols;
+		Value parameters;
 		int64_t registers;
 	}; 
 

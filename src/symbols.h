@@ -84,7 +84,6 @@
 	_(TRUE, "TRUE", p) \
 	_(FALSE, "FALSE", p) \
 	_(type, "typeof", p) \
-	_(funargs, "..funargs", p) \
 	_(value, "value", p) \
 	_(dotGeneric, ".Generic", p) \
 	_(dotMethod, ".Method", p) \

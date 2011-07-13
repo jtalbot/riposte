@@ -16,15 +16,16 @@ CND <- function(X) {
     invSqrt2Pi <- 0.39894228040
     w <- (0.31938153 * k - 0.356563782 * k2 + 1.781477937 * k3 + -1.821255978 * k4 + 1.330274429 * k5)
     w <- w * invSqrt2Pi * exp(-L * L * .5)
-    #w <- ifelse(X > 0,1 - w,w)
-    w <- w + ( (sign(X) + 1.0) / 2.0 ) * (-2.0 * w + 1.0)
+    w <- ifelse(X > 0,1 - w,w)
+    #w <- w + ( (sign(X) + 1.0) / 2.0 ) * (-2.0 * w + 1.0)
     return(w)
 }
 
 acc <- 0
+log10 <- log(10)
 for(i in 1:N_BLACK_SCHOLES_ROUNDS) {
 	#d1 <- (log10(S/X) + (r + v * v * .5) * T) / (v * sqrt(T))	
-	d1 <- (log(S/X) + (r + v * v * .5) * T) / (v * sqrt(T))
+	d1 <- (log(S/X)/log10 + (r + v * v * .5) * T) / (v * sqrt(T))
 	d2 <- d1 - v * sqrt(T)
 	result <- S * CND(d1) - X * exp(-r * T) * CND(d2)
 	acc <- acc + sum(result)

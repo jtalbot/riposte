@@ -22,7 +22,6 @@ static Value get(State& state, Symbol s) {
 	}
 	value = force(state, value);
 	environment->assign(s, value);
-	if(value.isNil()) throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
 	return value;
 }
 
@@ -42,7 +41,6 @@ static Value sget(State& state, int64_t i) {
 	}
 	value = force(state, value);
 	environment->assign(s, value);
-	if(value.isNil()) throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
 	return value;
 }
 
@@ -76,7 +74,7 @@ static List BuildArgs(State& state, CompiledCall& call) {
 	// Need to do the same for the names...
 	List arguments = call.arguments();
 	Value v = get(state, Symbol::dots);
-	if(!v.isNull()) {
+	if(!v.isNil()) {
 		List dots(v);
 		List expanded(arguments.length + dots.length - 1 /* -1 for dots that will be replaced */);
 		Insert(state, arguments, 0, expanded, 0, call.dots());
@@ -134,6 +132,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 		for(int64_t i = end; i < parameters.length; ++i) {
 			argAssign(fenv, i, parameters[i], fenv);
 		}
+		
 		// set nil slots
 		for(int64_t i = parameters.length; i < fenv->SlotCount(); i++) {
 			sassign(fenv, i, Value::Nil);
@@ -147,7 +146,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 		}
 		// set nils
 		for(int64_t i = parameters.length; i < fenv->SlotCount(); i++) {
-			fenv->get(i) = Value::Nil;
+			sassign(fenv, i, Value::Nil);
 		}
 		Character anames = getNames(arguments);
 		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
@@ -218,35 +217,31 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 	}
 }
 
+static Environment* CreateEnvironment(State& state, Environment* s, Environment* d, std::vector<Symbol> const& symbols) {
+	Environment* env;
+	if(state.environments.size() == 0) {
+		env = new Environment(s, d, symbols);
+	} else {
+		env = state.environments.back();
+		state.environments.pop_back();
+		env->init(s, d, symbols);
+	}
+	return env;
+}
+
 static Instruction const* call_op(State& state, Instruction const& inst) {
 	Value f = reg(state, inst.a);
 	CompiledCall call(constant(state, inst.b));
-	
 	List arguments = call.dots() < call.arguments().length ? BuildArgs(state, call) : call.arguments();
 
 	if(f.type == Type::R_function) {
 		Function func(f);
 		assert(func.body().type == Type::I_closure || func.body().type == Type::I_promise);
-
-		Environment* fenv;
-		if(state.environments.size() == 0) {
-			fenv = new Environment(func.s(), state.frame().environment, Closure(func.body()).code()->slotSymbols);
-		} else {
-			fenv = state.environments.back();
-			state.environments.pop_back();
-			fenv->init(func.s(), state.frame().environment, Closure(func.body()).code()->slotSymbols);
-		}
-	
-		//assign(fenv, Symbol::funargs, arguments);
+		Environment* fenv = CreateEnvironment(state, func.s(), state.frame().environment, Closure(func.body()).code()->slotSymbols);
 		MatchArgs(state, state.frame().environment, fenv, func, arguments);
 		return buildStackFrame(state, fenv, true, Closure(func.body()).code(), &reg(state, inst.c), &inst+1);
 	} else if(f.type == Type::R_cfunction) {
-		arguments = Clone(arguments);
-		for(int64_t i = 0; i < arguments.length; i++) {
-			if(arguments[i].isPromise() && arguments[i].env == 0)
-				arguments[i].env = state.frame().environment;
-		}
-		reg(state, inst.c) = CFunction(f).func(state, call.call(), arguments);
+		reg(state, inst.c) = CFunction(f).func(state, arguments);
 		return &inst+1;
 	} else {
 		_error(std::string("Non-function (") + f.type.toString() + ") as first parameter to call\n");
@@ -255,57 +250,48 @@ static Instruction const* call_op(State& state, Instruction const& inst) {
 }
 static Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 	Value v = reg(state, inst.a);
-	Symbol generic;
-	if(v.isCharacter())
-		generic = Character(v)[0];
-	else
-		generic = Symbol(v);
+	Symbol generic = v.isCharacter() ? Character(v)[0] : Symbol(v);
 	
-	Value arguments = get(state, Symbol::funargs);
+	CompiledCall call(constant(state, inst.b));
+	List arguments = call.dots() < call.arguments().length ? BuildArgs(state, call) : call.arguments();
 	
-	Value object;	
-	if(reg(state, inst.b).i == 1)
-		object = reg(state, inst.a+1);
-	else
-		object = force(state, List(arguments)[0]);
-
+	Value object = reg(state, inst.c);
 	Character type = klass(state, object);
 
-	//Search for first method
+	//Search for type-specific method
 	Symbol method = state.StrToSym(state.SymToStr(generic) + "." + state.SymToStr(type[0]));
-	Value function = get(state, method);
+	Value f = get(state, method);
 	
 	//Search for default
-	if(function.isNil()) {
+	if(f.isNil()) {
 		method = state.StrToSym(state.SymToStr(generic) + ".default");
-		function = get(state, method);
-		if(function.isNil()) throw RiposteError(std::string("no applicable method for '") + state.SymToStr(generic) + "' applied to an object of class \"" + state.SymToStr(type[0]) + "\"");
+		f = get(state, method);
 	}
 
-	Function func = (Function)function;
-	if(func.body().type == Type::I_closure || func.body().type == Type::I_promise) {
-		Environment* fenv = new Environment(func.s(), state.frame().environment);
+	if(f.type == Type::R_function) {
+		Function func(f);
+		assert(func.body().type == Type::I_closure || func.body().type == Type::I_promise);
+		Environment* fenv = CreateEnvironment(state, func.s(), state.frame().environment, Closure(func.body()).code()->slotSymbols);
 		MatchArgs(state, state.frame().environment, fenv, func, arguments);
-
-		assign(fenv, Symbol::funargs, arguments);
-
 		assign(fenv, Symbol::dotGeneric, generic);
 		assign(fenv, Symbol::dotMethod, method);
-		assign(fenv, Symbol::dotClass, type);
-		
-		reg(state, inst.c) = eval(state, Closure(func.body()).bind(fenv));
+		assign(fenv, Symbol::dotClass, type); 
+		return buildStackFrame(state, fenv, true, Closure(func.body()).code(), &reg(state, inst.c), &inst+1);
+	} else if(f.type == Type::R_cfunction) {
+		reg(state, inst.c) = CFunction(f).func(state, arguments);
+		return &inst+1;
+	} else {
+		_error(std::string("no applicable method for '") + state.SymToStr(generic) + "' applied to an object of class \"" + state.SymToStr(type[0]) + "\"");
 	}
-	else
-		reg(state, inst.c) = func.body();
-
-	return &inst+1;
 }
 static Instruction const* get_op(State& state, Instruction const& inst) {
 	reg(state, inst.c) = get(state, Symbol(inst.a));
+	if(reg(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(Symbol(inst.a)) + "' not found");
 	return &inst+1;
 }
 static Instruction const* sget_op(State& state, Instruction const& inst) {
 	reg(state, inst.c) = sget(state, inst.a);
+	if(reg(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(state.frame().environment->slotName(inst.a)) + "' not found");
 	return &inst+1;
 }
 static Instruction const* kget_op(State& state, Instruction const& inst) {
@@ -314,6 +300,7 @@ static Instruction const* kget_op(State& state, Instruction const& inst) {
 }
 static Instruction const* iget_op(State& state, Instruction const& inst) {
 	reg(state, inst.c) = state.path[0]->get(Symbol(inst.a));
+	if(reg(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(Symbol(inst.a)) + "' not found");
 	return &inst+1;
 }
 static Instruction const* assign_op(State& state, Instruction const& inst) {
@@ -637,6 +624,7 @@ static const void** glabels = 0;
 #endif
 
 static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Code const* code, Value* result, Instruction const* returnpc) {
+	//std::cout << "Compiled code: " << state.stringify(Closure((Code*)code,NULL)) << std::endl;
 	StackFrame& s = state.push();
 	s.environment = environment;
 	s.ownEnvironment = ownEnvironment;

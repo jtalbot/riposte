@@ -439,7 +439,7 @@ public:
 
 class CFunction {
 public:
-	typedef Value (*Cffi)(State& s, Call const& call, List const& args);
+	typedef Value (*Cffi)(State& s, List const& args);
 	Cffi func;
 	explicit CFunction(Cffi func) : func(func) {}
 	explicit CFunction(Value const& v) {

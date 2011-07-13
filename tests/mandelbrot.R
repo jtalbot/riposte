@@ -16,8 +16,8 @@ mandel <- function(c_re, c_im, count) {
 }
 
 
-width <- 18
-height <- 51
+width <- 32
+height <- 102
 x0 <- -2
 x1 <- 1
 y0 <- -1

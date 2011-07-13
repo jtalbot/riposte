@@ -114,7 +114,7 @@ int dostdin(State& state) {
 			Code* code = Compiler::compile(state, value, state.global);
 			//std::cout << "Compiled code: " << state.stringify(Closure(code,NULL)) << std::endl;
 			result = eval(state, code, state.global);
-			std::cout << state.stringify(result) << "\t\t" << intToStr(state.stack.size()) << std::endl;
+			std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) { 
 			e_message("Error", "riposte", error.what().c_str());
 		} catch(RuntimeError& error) {
@@ -254,8 +254,6 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 	State state(global, base);
 
 	try {
-		std::cout << "global: " << std::hex << state.global << std::endl;
-		std::cout << "base: " << std::hex << base << std::endl;
 		importCoreLibrary(state, base);	
 		importCoerceFunctions(state, base);	
 		loadLibrary(state, "base");

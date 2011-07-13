@@ -209,6 +209,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		List c = PairList(call[1]);
 		List parameters(c.length);
 		Character names = getNames(c);
+		scope.parameters = names;
 		for(int64_t i = 0; i < parameters.length; i++) {
 			if(!c[i].isNil()) {
 				parameters[i] = Closure(compile(c[i]),NULL);
@@ -222,9 +223,6 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		setNames(parameters, names);
 		code->constants.push_back(parameters);
 
-		// to support UseMethod we always have to pass on the list of arguments
-		scope.symbols.push_back(Symbol::funargs);
-		
 		//compile the source for the body
 		this->scope.push_back(scope);
 		Code* functionCode = compile(call[2]);
@@ -492,9 +490,23 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	} break;
 	case Symbol::E_UseMethod:
 	{
+		if(scope.size() == 0)
+			throw CompileError("Attempt to use UseMethod outside of function");
+		
+		// This doesn't match R's behavior. R always uses the original value of the first argument, not the most recent value. Blah.
+		int64_t object = (call.length == 3) ? compile(call[2], code) : compile(scope.back().symbols[0], code); 
+		
 		int64_t generic = compile(call[1], code);
-		if(call.length == 3) compile(call[2], code);
-		code->bc.push_back(Instruction(ByteCode::UseMethod, generic, call.length==3 ? 1 : 0, initialDepth));
+		
+		Character p(scope.back().parameters);
+		Call gcall(p.length+1);
+		for(int64_t i = 0; i < p.length; i++) gcall[i+1] = p[i];
+		CompiledCall compiledCall(gcall, state);
+		code->constants.push_back(compiledCall);
+	
+		int64_t arguments = code->constants.size()-1;	
+		
+		code->bc.push_back(Instruction(ByteCode::UseMethod, generic, arguments, object));
 		registerDepth = initialDepth;
 		return registerDepth++;
 	} break;
