@@ -9,7 +9,8 @@
 #include <fstream>
 #include <sys/stat.h>
 
-void sourceFile(State& state, std::string name) {
+void sourceFile(State& state, std::string name, Environment* env) {
+	//std::cout << "Sourcing " << name << std::endl;
 	try {
 		std::ifstream t(name.c_str());
 		std::stringstream buffer;
@@ -21,21 +22,20 @@ void sourceFile(State& state, std::string name) {
 		FILE* trace = NULL;//fopen((name+"_trace").c_str(), "w");
 		parser.execute(code.c_str(), code.length(), true, value, trace);
 		//fclose(trace);	
-	
-		eval(state, Compiler::compile(state, value));
+		eval(state, Compiler::compile(state, value), env);
 	} catch(RiposteError& error) {
-		_warning(state, "Error: unable to load library " + name + ": " + error.what().c_str());
+		_warning(state, "unable to load library " + name + ": " + error.what().c_str());
 	} catch(RuntimeError& error) {
-		_warning(state, "Error: unable to load library " + name + ": " + error.what().c_str());
+		_warning(state, "unable to load library " + name + ": " + error.what().c_str());
 	} catch(CompileError& error) {
-		_warning(state, "Error: unable to load library " + name + ": " + error.what().c_str());
+		_warning(state, "unable to load library " + name + ": " + error.what().c_str());
 	}
 }
 
 
 void loadLibrary(State& state, std::string library_name) {
-	Environment* global = state.global;
-	state.global = new Environment(state.path.back(), state.path.back());
+	Environment* env = new Environment(state.path.back(), 0);
+	env->setDynamicParent(env);
 	
 	std::string path = std::string("library/")+library_name+("/R/");
 
@@ -49,12 +49,12 @@ void loadLibrary(State& state, std::string library_name) {
 			std::string name = file->d_name;
 			if(!S_ISDIR(info.st_mode) && 
 				(name.length()>2 && name.substr(name.length()-2,2)==".R")) {
-				sourceFile(state, path+name);
+				sourceFile(state, path+name, env);
 			}
 		}
 	}
 
-	state.path.push_back(state.global);
-	global->init(state.global, state.global);
-	state.global = global;
+	state.path.push_back(env);
+	std::vector<Symbol> s;
+	state.global->init(state.path.back(), state.global, s);
 }

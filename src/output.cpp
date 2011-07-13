@@ -36,7 +36,7 @@ template<> std::string stringify<Complex>(State const& state, Complex::Element a
 }  
 
 template<> std::string stringify<Character>(State const& state, Character::Element a) {
-	return Character::isNA(a) ? "NA" : std::string("\"") + a.toString(state) + "\"";
+	return Character::isNA(a) ? "NA" : std::string("\"") + state.SymToStr(a) + "\"";
 }  
 
 template<> std::string stringify<List>(State const& state, List::Element a) {
@@ -68,7 +68,7 @@ std::string stringifyVector(State const& state, T const& v) {
 	if(hasNames(v)) {
 		Character c = getNames(v);
 		for(int64_t i = 0; i < length; i++) {
-			maxlength = std::max((int64_t)maxlength, (int64_t)c[i].toString(state).length());
+			maxlength = std::max((int64_t)maxlength, (int64_t)state.SymToStr(c[i]).length());
 		}
 	}
 	int64_t indexwidth = intToStr(length+1).length();
@@ -78,7 +78,7 @@ std::string stringifyVector(State const& state, T const& v) {
 		for(int64_t i = 0; i < length; i+=perline) {
 			result = result + pad("", indexwidth+2);
 			for(int64_t j = 0; j < perline && i+j < length; j++) {
-				result = result + pad(c[i+j].toString(state), maxlength+1);
+				result = result + pad(state.SymToStr(c[i+j]), maxlength+1);
 			}
 			result = result + "\n";
 			result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
@@ -136,10 +136,10 @@ std::string State::stringify(Value const& value) const {
 			if(hasNames(v)) {
 				Character n = getNames(v);
 				for(int64_t i = 0; i < length; i++) {
-					if(n[i].toString(*this)=="")
+					if(SymToStr(n[i])=="")
 						result = result + "[[" + intToStr(i+1) + "]]\n";
 					else
-						result = result + "$" + n[i].toString(*this) + "\n";
+						result = result + "$" + SymToStr(n[i]) + "\n";
 					result = result + stringify(v[i]) + "\n";
 					if(i < length-1) result = result + "\n";
 				}
@@ -155,18 +155,18 @@ std::string State::stringify(Value const& value) const {
 		}
 		case Type::E_R_symbol:
 		{
-			result = "`" + Symbol(value).toString(*this) + "`";
+			result = "`" + SymToStr(Symbol(value)) + "`";
 			return result;
 		}
 		case Type::E_R_function:
 		{
 			//result = "function: " + intToHexStr((int64_t)value.p) /*+ "\n" + Function(*this).body().toString()*/;
-			result = (Function(value).str()[0]).toString(*this);
+			result = SymToStr(Symbol(Function(value).str()[0]));
 			return result;
 		}
 		case Type::E_R_environment:
 		{
-			return "environment";
+			return std::string("environment <") + intToHexStr((uint64_t)REnvironment(value).ptr()) + "> (" + intToStr(REnvironment(value).ptr()->numVariables()) + " symbols defined)";
 		}
 		case Type::E_I_closure:
 		{
@@ -208,7 +208,7 @@ template<> std::string deparse<Complex>(State const& state, Complex::Element a) 
 }  
 
 template<> std::string deparse<Character>(State const& state, Character::Element a) {
-	return Character::isNA(a) ? "NA_character_" : std::string("\"") + a.toString(state) + "\"";
+	return Character::isNA(a) ? "NA_character_" : std::string("\"") + state.SymToStr(a) + "\"";
 }  
 
 template<> std::string deparse<List>(State const& state, List::Element a) {
@@ -229,7 +229,7 @@ std::string deparseVectorBody(State const& state, T const& v) {
 	if(hasNames(v)) {
 		Character c = getNames(v);
 		for(int64_t i = 0; i < v.length; i++) {
-			result = result + c[i].toString(state) + " = " + deparse<T>(state, v[i]);
+			result = result + state.SymToStr(c[i]) + " = " + deparse<T>(state, v[i]);
 			if(i < v.length-1) result = result + ", ";
 		}
 	}
@@ -287,9 +287,9 @@ std::string State::deparse(Value const& value) const {
 		case Type::E_R_expression:
 			return deparseVector(*this, Expression(value));
 		case Type::E_R_symbol:
-			return Symbol(value).toString(*this); // NYI: need to check if this should be backticked.
+			return SymToStr(Symbol(value)); // NYI: need to check if this should be backticked.
 		case Type::E_R_function:
-			return (Function(value).str()[0]).toString(*this);
+			return SymToStr(Symbol(Function(value).str()[0]));
 		case Type::E_R_environment:
 			return "environment";
 		default:

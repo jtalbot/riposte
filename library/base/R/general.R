@@ -8,7 +8,7 @@ mapply <- function(FUN, ...) {
 paste <- function(..., sep = " ", collapse = NULL) {
 	r <- mapply(function(x) .Internal(paste)(x, sep), ...)
 	if(!is.null(collapse)) .Internal(paste)(r, collapse)
-	else r
+	else unlist(r)
 }
 
 anyDuplicated <- function(x) {
@@ -19,8 +19,6 @@ anyDuplicated <- function(x) {
 	}
 	0 
 }
-
-c <- function(...) unlist(list(...))
 
 make.names <- function(x) {
 	x
@@ -39,3 +37,5 @@ dim <- function(x) attr(x, 'dim')
 }
 class <- function(x) attr(x, 'class')
 `class<-` <- function(x, value) attr(x, 'class') <- as.character(value)
+dimnames <- function(x) attr(x, 'dimnames')
+`dimnames<-` <- function(x, value) attr(x, 'dimnames') <- value   #NYI: check length and dim

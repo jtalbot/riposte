@@ -86,7 +86,7 @@ struct LNotOp : UnaryOp<Logical, Logical> {
 };
 
 struct NcharOp : UnaryOp<Character, Integer> {
-	static NcharOp::R eval(State& state, NcharOp::A const& a) { return (a == Symbol::NA) ? 2 : a.toString(state).length(); }
+	static NcharOp::R eval(State& state, NcharOp::A const& a) { return (a == Symbol::NA) ? 2 : state.SymToStr(a).length(); }
 };
 
 struct NzcharOp : UnaryOp<Character, Logical> {
@@ -154,10 +154,10 @@ struct Name<TComplex> : public BinaryOp<Complex, Complex, Logical> { \
 	static Name::R eval(State& state, Name::A const& a, Name::B const& b) { _error("invalid complex function"); } \
 };
 
-ORDINAL_OP(LTOp, a<b)	CHARACTER_ORDINAL_OP(LTOp, a.toString(state).compare(b.toString(state)) < 0)		INVALID_COMPLEX_OP(LTOp)
-ORDINAL_OP(GTOp, a>b)	CHARACTER_ORDINAL_OP(GTOp, a.toString(state).compare(b.toString(state)) > 0)		INVALID_COMPLEX_OP(GTOp)
-ORDINAL_OP(LEOp, a<=b)	CHARACTER_ORDINAL_OP(LEOp, a.toString(state).compare(b.toString(state)) <= 0)	INVALID_COMPLEX_OP(LEOp)
-ORDINAL_OP(GEOp, a>=b)	CHARACTER_ORDINAL_OP(GEOp, a.toString(state).compare(b.toString(state)) >= 0)	INVALID_COMPLEX_OP(GEOp)
+ORDINAL_OP(LTOp, a<b)	CHARACTER_ORDINAL_OP(LTOp, state.SymToStr(a).compare(state.SymToStr(b)) < 0)		INVALID_COMPLEX_OP(LTOp)
+ORDINAL_OP(GTOp, a>b)	CHARACTER_ORDINAL_OP(GTOp, state.SymToStr(a).compare(state.SymToStr(b)) > 0)		INVALID_COMPLEX_OP(GTOp)
+ORDINAL_OP(LEOp, a<=b)	CHARACTER_ORDINAL_OP(LEOp, state.SymToStr(a).compare(state.SymToStr(b)) <= 0)	INVALID_COMPLEX_OP(LEOp)
+ORDINAL_OP(GEOp, a>=b)	CHARACTER_ORDINAL_OP(GEOp, state.SymToStr(a).compare(state.SymToStr(b)) >= 0)	INVALID_COMPLEX_OP(GEOp)
 ORDINAL_OP(EqOp, a==b)	/* Character equality can just compare Symbols */
 ORDINAL_OP(NeqOp, a!=b) /* Character inequality can just compare Symbols */
 
@@ -281,7 +281,9 @@ void unaryFilter(State& state, Value const& a, Value& c) {
 
 template< template<class Op> class Lift, template<typename T> class Op > 
 void binaryArith(State& state, Value const& a, Value const& b, Value& c) {
-	if((a.isComplex() && b.isMathCoerce()) || (b.isComplex() && a.isMathCoerce()))
+	if(a.isDouble() && b.isDouble())
+		c = Lift< Op<TDouble> >::eval(state, a, b);
+	else if((a.isComplex() && b.isMathCoerce()) || (b.isComplex() && a.isMathCoerce()))
 		c = Lift< Op<TComplex> >::eval(state, As<Complex>(state, a), As<Complex>(state, b));
 	else if((a.isDouble() && b.isMathCoerce()) || (b.isDouble() && a.isMathCoerce()))
 		c = Lift< Op<TDouble> >::eval(state, As<Double>(state, a), As<Double>(state, b));
@@ -306,7 +308,7 @@ void binaryOrdinal(State& state, Value const& a, Value const& b, Value& c) {
 	else if((a.isDouble() && b.isMathCoerce()) || (b.isDouble() && a.isMathCoerce()))
 		c = Lift< Op<TDouble> >::eval(state, As<Double>(state, a), As<Double>(state, b));
 	else if(a.isMathCoerce() && b.isMathCoerce()) 
-		c = Lift< Op<TInteger> >::eval(state, a, b);
+		c = Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), As<Integer>(state, b));
 	else if(a.isCharacter() && b.isCharacter())
 		c = Lift< Op<TCharacter> >::eval(state, a, b);
 	else

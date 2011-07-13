@@ -5,6 +5,7 @@
 #include <map>
 #include <iostream>
 #include <vector>
+#include <stack>
 #include <deque>
 #include <assert.h>
 #include <limits>
@@ -45,35 +46,17 @@ struct Value {
 	bool isList() const { return type == Type::R_list; }
 	bool isCall() const { return type == Type::R_call; }
 	bool isSymbol() const { return type == Type::R_symbol; }
+	bool isPromise() const { return type == Type::I_promise; }
+	bool isDefault() const { return type == Type::I_default; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isList(); }
-	static const Value NIL;
+	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isSymbol() || (isList() && length==0); }
+	static const Value Nil;
 };
 
 class Environment;
-
-// The riposte state
-struct State {
-	Value Registers[1024];
-	Value* registers;
-	
-	std::vector<Environment*, traceable_allocator<Environment*> > path;
-	Environment* global;
-
-	// reset at the beginning of a call to eval
-	std::vector<std::string> warnings;
-
-	SymbolTable symbols;
-	
-	State(Environment* global, Environment* base) : registers(&Registers[0]) {
-		this->global = global;
-		path.push_back(base);
-	}
-
-	std::string stringify(Value const& v) const;
-	std::string deparse(Value const& v) const;
-};
+class State;
 
 
 // Value type implementations
@@ -90,11 +73,9 @@ struct Symbol {
 	DECLARE_SYMBOLS(Symbol,SYMBOLS_ENUM)
 
 	Symbol() : i(1) {}						// Defaults to the empty symbol...
-	Symbol(int64_t index) : i(index) {}
-	Symbol(SymbolTable& symbols, std::string const& s) : i(symbols.in(s)) {}
-	Symbol(State& state, std::string const& s) : i(state.symbols.in(s)) {}
+	explicit Symbol(int64_t index) : i(index) {}
 
-	Symbol(Value const& v) {
+	explicit Symbol(Value const& v) {
 		assert(v.type == Type::R_symbol); 
 		i = v.i;
 	}
@@ -106,8 +87,6 @@ struct Symbol {
 		return v;
 	}
 
-	std::string const& toString(SymbolTable const& symbols) const { return symbols.out(i); }
-	std::string const& toString(State const& state) const { return toString(state.symbols); }
 	bool operator<(Symbol const& other) const { return i < other.i;	}
 	bool operator==(Symbol const& other) const { return i == other.i; }
 	bool operator!=(Symbol const& other) const { return i != other.i; }
@@ -135,8 +114,8 @@ struct Vector {
 	void* data(int64_t i) const { if(packed()) return ((char*)&_data) + i*width; else return (char*)_data + i*width; }
 
 	Vector() : _data(0), length(0), width(0), _packed(true), attributes(0), type(Type::I_nil) {}
-	Vector(Value v);
-	Vector(Type t, int64_t length);
+	explicit Vector(Value v);
+	explicit Vector(Type t, int64_t length);
 
 	operator Value() const {
 		Value v = {{(int64_t)_data}, {length}, attributes, type};
@@ -163,13 +142,13 @@ struct VectorImpl {
 
 	bool packed() const { return false; }
 
-	VectorImpl(int64_t length) : _data(new (GC) Element[length]), length(length), attributes(0) {}
+	explicit VectorImpl(int64_t length) : _data(new (GC) Element[length]), length(length), attributes(0) {}
 
-	VectorImpl(Value v) : _data((ElementType*)v.p), length(v.length), attributes(v.attributes) {
+	explicit VectorImpl(Value v) : _data((ElementType*)v.p), length(v.length), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
 	}
 	
-	VectorImpl(Vector v) : _data((ElementType*)v._data), length(v.length), attributes(v.attributes) {
+	explicit VectorImpl(Vector v) : _data((ElementType*)v._data), length(v.length), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
 	}
 
@@ -218,16 +197,16 @@ struct PackedVectorImpl {
 
 	bool packed() const { return length <= (int64_t)(sizeof(int64_t)/sizeof(ElementType)); }
 	
-	PackedVectorImpl(int64_t length) : _data(0), length(length), attributes(0) {
+	explicit PackedVectorImpl(int64_t length) : _data(0), length(length), attributes(0) {
 		if(!packed())
 			_data = new (GC) Element[length];
 	}
 
-	PackedVectorImpl(Value v) : _data((ElementType*)v.p), length(v.length), attributes(v.attributes) {
+	explicit PackedVectorImpl(Value v) : _data((ElementType*)v.p), length(v.length), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
 	}
 	
-	PackedVectorImpl(Vector v) : _data((ElementType*)v._data), length(v.length), attributes(v.attributes) {
+	explicit PackedVectorImpl(Vector v) : _data((ElementType*)v._data), length(v.length), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
 	}
 
@@ -314,7 +293,6 @@ VECTOR_IMPL(VectorImpl, Complex, Type::E_R_complex, std::complex<double>)
 	const static std::complex<double> NAelement;
 	static Complex NA() { static Complex na = Complex::c(NAelement); return na; } };
 VECTOR_IMPL(VectorImpl, Character, Type::E_R_character, Symbol)
-	static Character c(State& state, std::string const& s) { Character c(1); c[0] = Symbol(state, s); return c; }
 	static Character c(Symbol const& s) { Character c(1); c[0] = s; return c; }
 	static bool isNA(Symbol const& c) { return c == Symbol::NA; }
 	static bool isNaN(Symbol const& c) { return false; }
@@ -330,19 +308,19 @@ VECTOR_IMPL(VectorImpl, List, Type::E_R_list, Value)
 	static List c(Value v0, Value v1, Value v2) { List c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; }
 	const static Value NAelement; };
 VECTOR_IMPL(VectorImpl, PairList, Type::E_R_pairlist, Value) 
-	PairList(List v) : VectorImpl<Type::E_R_pairlist, Value>(v.data(), v.length, v.attributes) {}
+	explicit PairList(List v) : VectorImpl<Type::E_R_pairlist, Value>(v.data(), v.length, v.attributes) {}
 	static PairList c(Value v0) { PairList c(1); c[0] = v0; return c; }
 	static PairList c(Value v0, Value v1) { PairList c(2); c[0] = v0; c[1] = v1; return c; }
 	static PairList c(Value v0, Value v1, Value v2) { PairList c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; }
 	operator List() {Value v = *this; v.type = Type::R_list; return List(v);} };
 VECTOR_IMPL(VectorImpl, Call, Type::E_R_call, Value) 
-	Call(List v) : VectorImpl<Type::E_R_call, Value>(v.data(), v.length, v.attributes) {}
+	explicit Call(List v) : VectorImpl<Type::E_R_call, Value>(v.data(), v.length, v.attributes) {}
 	static Call c(Value v0) { Call c(1); c[0] = v0; return c; }
 	static Call c(Value v0, Value v1) { Call c(2); c[0] = v0; c[1] = v1; return c; }
 	static Call c(Value v0, Value v1, Value v2) { Call c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; }
 	static Call c(Value v0, Value v1, Value v2, Value v3) { Call c(4); c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; return c; } };
 VECTOR_IMPL(VectorImpl, Expression, Type::E_R_expression, Value) 
-	Expression(List v) : VectorImpl<Type::E_R_expression, Value>(v.data(), v.length, v.attributes) {}
+	explicit Expression(List v) : VectorImpl<Type::E_R_expression, Value>(v.data(), v.length, v.attributes) {}
 	static Expression c(Value v0) { Expression c(1); c[0] = v0; return c; }
 	static Expression c(Value v0, Value v1) { Expression c(2); c[0] = v0; c[1] = v1; return c; }
 	static Expression c(Value v0, Value v1, Value v2) { Expression c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } };
@@ -383,6 +361,8 @@ inline Vector::Vector(Value v) {
 
 struct Code : public gc {
 	Value expression;
+	std::vector<Symbol> slotSymbols;
+	int64_t registers;
 	std::vector<Value, traceable_allocator<Value> > constants;
 	std::vector<Instruction> bc;			// bytecode
 	mutable std::vector<Instruction> tbc;		// threaded bytecode
@@ -393,9 +373,9 @@ private:
 	Code* c;
 	Environment* env;	// if NULL, execute in current environment
 public:
-	Closure(Code* code, Environment* environment) : c(code), env(environment) {}
+	explicit Closure(Code* code, Environment* environment) : c(code), env(environment) {}
 	
-	Closure(Value const& v) {
+	explicit Closure(Value const& v) {
 		assert(	v.type == Type::I_closure || 
 			v.type == Type::I_promise ||
 			v.type == Type::I_default); 
@@ -434,9 +414,9 @@ private:
 public:
 	Attributes* attributes;
 
-	Function(List const& parameters, Value const& body, Character const& str, Environment* s); 
+	explicit Function(List const& parameters, Value const& body, Character const& str, Environment* s); 
 	
-	Function(Value const& v) {
+	explicit Function(Value const& v) {
 		assert(v.type == Type::R_function);
 		inner = (Inner*)v.p; 
 		attributes = v.attributes;
@@ -459,10 +439,10 @@ public:
 
 class CFunction {
 public:
-	typedef int64_t (*Cffi)(State& s, Call const& call, List const& args);
+	typedef Value (*Cffi)(State& s, List const& args);
 	Cffi func;
-	CFunction(Cffi func) : func(func) {}
-	CFunction(Value const& v) {
+	explicit CFunction(Cffi func) : func(func) {}
+	explicit CFunction(Value const& v) {
 		assert(v.type == Type::R_cfunction);
 		func = (Cffi)v.p; 
 	}
@@ -475,10 +455,6 @@ public:
 	}
 };
 
-void eval(State& state, Closure const& closure);
-void eval(State& state, Code const* code, Environment* environment); 
-void eval(State& state, Code const* code);
-
 class CompiledCall {
 	struct Inner : public gc {
 		Value call;
@@ -488,9 +464,9 @@ class CompiledCall {
 
 	Inner* inner;
 public:
-	CompiledCall(Call const& call, State& state);
+	explicit CompiledCall(Call const& call, State& state);
 
-	CompiledCall(Value const& v) {
+	explicit CompiledCall(Value const& v) {
 		assert(v.type == Type::I_compiledcall);
 		inner = (Inner*)v.p; 
 	}
@@ -507,85 +483,14 @@ public:
 	int64_t dots() const { return inner->dots; }
 };
 
-class Environment : public gc {
-private:
-	Environment *s, *d;		// static and dynamic scopes respectively
-	typedef std::map<Symbol, Value, std::less<Symbol>, gc_allocator<std::pair<Symbol, Value> > > Container;
-	Container container;
-public:
-	Environment() : s(0), d(0) {}
-	Environment(Environment* s, Environment* d) : s(s), d(d) {}
-
-	Environment* staticParent() const { return s; }
-	Environment* dynamicParent() const { return d; }
-	
- 	void init(Environment* s, Environment* d) {
-		this->s = s;
-		this->d = d;
-	}
-
-	bool getRaw(Symbol const& name, Value& value) const {
-		Container::const_iterator i = container.find(name);
-		if(i != container.end()) {
-			value = i->second;
-			return true;
-		}
-		return false;
-	}
-
-	bool get(State& state, Symbol const& name, Value& value) {
-		Container::const_iterator i = container.find(name);
-		if(i != container.end()) {
-			value = i->second;
-			if(value.type == Type::I_promise) {
-				while(value.type == Type::I_promise) {
-					eval(state, Closure(value));
-					value = state.registers[0];
-				}
-				container[name] = value;
-			} else if(value.type == Type::I_default) {
-				eval(state, Closure(value).bind(this));
-				container[name] = value = state.registers[0];
-			}
-			return true;
-		} else if(s != 0) {
-			return s->get(state, name, value);
-		} else {
-			value = Null::singleton;
-			return false;
-		}
-	}
-
-	void getQuoted(Symbol const& name, Value& value) const {
-		getRaw(name, value);
-		if(value.type == Type::I_promise) {
-			value = Closure(value).code()->expression;
-		}
-	}
-
-	void getCode(Symbol const& name, Closure& closure) const {
-		Value value;
-		getRaw(name, value);
-		closure = Closure(value);
-	}
-
-	void assign(Symbol const& name, Value const& value) {
-		container[name] = value;
-	}
-
-	void rm(Symbol const& name) {
-		container.erase(name);
-	}
-};
-
 class REnvironment {
 private:
 	Environment* env;
 public:
 	Attributes* attributes;
-	REnvironment(Environment* env) : env(env), attributes(0) {
+	explicit REnvironment(Environment* env) : env(env), attributes(0) {
 	}
-	REnvironment(Value const& v) {
+	explicit REnvironment(Value const& v) {
 		assert(v.type == Type::R_environment);
 		env = (Environment*)v.p;
 		attributes = v.attributes;
@@ -647,7 +552,7 @@ inline Value getDim(Value const& v) {
 
 template<class T, class A>
 inline T setAttribute(T& v, Symbol s, A const a) {
-	Attributes* attributes = new Attributes();
+	Attributes* attributes = new (GC) Attributes();
 	if(v.attributes != 0)
 		*attributes = *v.attributes;
 	v.attributes = attributes;
@@ -706,11 +611,200 @@ struct Pairs {
 		if(named || forceNames) {
 			Character n(length());
 			for(int64_t i = 0; i < length(); i++)
-				n[i] = name(i).i;
+				n[i] = Symbol(name(i).i);
 			setNames(l, n);
 		}
 		return l;
 	}
 };
+
+
+/*
+ * Riposte execution environments are split into two parts:
+ * 1) Environment -- the static part, exposed to the R level as an R environment, these may not obey stack discipline, thus allocated on heap, try to reuse to decrease allocation overhead.
+ *     -static link to enclosing environment
+ *     -dynamic link to calling environment (necessary for promises which need to see original call stack)
+ *     -slots storing variables that may be accessible by inner functions that may be returned 
+ *		(for now, conservatively assume all variables are accessible)
+ *     -names of slots
+ *     -map storing overflow variables or variables that are created dynamically 
+ * 		(e.g. assign() in a nested function call)
+ *
+ * 2) Stack Frame -- the dynamic part, not exposed at the R level, these obey stack discipline
+ *     -pointer to associated Environment
+ *     -pointer to Stack Frame of calling function (the dynamic link)
+ *     -pointer to constant file
+ *     -pointer to registers
+ *     -return PC
+ *     -result register pointer
+ */
+
+class Environment : public gc {
+private:
+	typedef std::map<Symbol, Value, std::less<Symbol>, gc_allocator<std::pair<Symbol, Value> > > Map;
+
+	Environment* staticParent, * dynamicParent;
+	Value slots[32];
+	Symbol slotNames[32];		// rather than duplicating, this could be a pointer?
+	unsigned char slotCount;
+	Map overflow;
+
+public:
+	
+	Environment(Environment* staticParent,
+		    Environment* dynamicParent) : 
+			staticParent(staticParent), 
+			dynamicParent(dynamicParent), 
+			slotCount(0) {}
+
+	Environment(Environment* staticParent, Environment* dynamicParent, std::vector<Symbol> const& slots) : 
+		staticParent(dynamicParent),
+		dynamicParent(dynamicParent) {
+		slotCount = slots.size();
+		for(unsigned char i = 0; i < slotCount; i++)
+			slotNames[i] = slots[i];
+	}
+
+ 	void init(Environment* staticParent, Environment* dynamicParent, std::vector<Symbol> const& slots) {
+		this->staticParent = staticParent;
+		this->dynamicParent = dynamicParent;
+		slotCount = slots.size();
+		for(unsigned char i = 0; i < slotCount; i++)
+			slotNames[i] = slots[i];
+		overflow.clear();
+	}
+
+	Environment* StaticParent() const { return staticParent; }
+	Environment* DynamicParent() const { return dynamicParent; }
+
+	void setDynamicParent(Environment* env) {
+		dynamicParent = env;
+	}
+
+	Value& get(int64_t i) {
+		assert(i < slotCount);
+		return slots[i];
+	}
+	Symbol slotName(int64_t i) { return slotNames[i]; }
+	int SlotCount() const { return slotCount; }
+
+	int numVariables() const { return slotCount + overflow.size(); }
+
+	Value get(Symbol const& name) const {
+		for(uint64_t i = 0; i < slotCount; i++) {
+			if(slotNames[i] == name) {
+				return slots[i];
+			}
+		}
+		Map::const_iterator i = overflow.find(name);
+		if(i != overflow.end()) {
+			return i->second;
+		} else {
+			return Value::Nil;
+		}
+	}
+
+	Value getQuoted(Symbol const& name) const {
+		Value value = get(name);
+		if(value.type == Type::I_promise) {
+			value = Closure(value).code()->expression;
+		}
+		return value;
+	}
+
+	Closure getCode(Symbol const& name) const {
+		Value value = get(name);
+		return Closure(value);
+	}
+
+	void assign(Symbol const& name, Value const& value) {
+		for(uint64_t i = 0; i < slotCount; i++) {
+			if(slotNames[i] == name) {
+				slots[i] = value;
+				return;
+			}
+		}
+		overflow[name] = value;
+	}
+
+	void rm(Symbol const& name) {
+		for(uint64_t i = 0; i < slotCount; i++) {
+			if(slotNames[i] == name) {
+				slots[i] = Value::Nil;
+				return;
+			}
+		}
+		overflow.erase(name);
+	}
+};
+
+struct StackFrame {
+	Environment* environment;
+	bool ownEnvironment;
+	Value const* constants;
+
+	Instruction const* returnpc;
+	Value* returnbase;
+	Value* result;
+};
+
+#define DEFAULT_NUM_REGISTERS 10000
+
+struct State {
+	Value* registers;
+	Value* base;
+
+	std::vector<StackFrame, traceable_allocator<StackFrame> > stack;
+	std::vector<Environment*, traceable_allocator<Environment*> > environments;
+
+	std::vector<Environment*, traceable_allocator<Environment*> > path;
+	Environment* global;
+
+	SymbolTable symbols;
+	
+	std::vector<std::string> warnings;
+	
+	State(Environment* global, Environment* base) {
+		this->global = global;
+		path.push_back(base);
+		registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
+		this->base = registers + DEFAULT_NUM_REGISTERS;
+	}
+
+	StackFrame& push() {
+		stack.push_back(StackFrame());
+		return stack.back();
+	}
+
+	void pop() {
+		stack.pop_back();
+	}
+
+	StackFrame& frame() {
+		return stack.back();
+	}
+
+	StackFrame& frame(int fromBack) {
+		return stack[stack.size()-fromBack-1];
+	}
+
+	std::string stringify(Value const& v) const;
+	std::string deparse(Value const& v) const;
+
+	Symbol StrToSym(std::string s) {
+		return Symbol(symbols.in(s));
+	}
+
+	std::string const& SymToStr(Symbol s) const {
+		return symbols.out(s.i);
+	}
+};
+
+
+
+Value eval(State& state, Closure const& closure);
+Value eval(State& state, Code const* code, Environment* environment); 
+Value eval(State& state, Code const* code);
+void interpreter_init(State& state);
 
 #endif

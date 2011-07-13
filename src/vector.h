@@ -53,6 +53,11 @@ template< class Op >
 struct Zip2 {
 	static typename Op::RV eval(State& state, typename Op::AV const& a, typename Op::BV const& b)
 	{
+		if(a.length == 1 && b.length == 1) {
+			typename Op::RV r(1);
+			r[0] = Op::eval(state, a[0], b[0]);
+			return r;
+		}
 		if(a.length == b.length) {
 			typename Op::RV r(a.length);
 			for(int64_t i = 0; i < a.length; ++i) {

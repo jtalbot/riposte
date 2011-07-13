@@ -15,6 +15,7 @@
 	_(Double, "double", p)\
 	_(Complex, "complex", p)\
 	_(Character, "character", p)\
+	_(Name, "name", p) \
 	_(Raw, "raw", p)\
 	_(internal, ".Internal", p) \
 	_(assign, "<-", p) \
@@ -83,8 +84,10 @@
 	_(TRUE, "TRUE", p) \
 	_(FALSE, "FALSE", p) \
 	_(type, "typeof", p) \
-	_(funargs, "..funargs", p) \
 	_(value, "value", p) \
+	_(dotGeneric, ".Generic", p) \
+	_(dotMethod, ".Method", p) \
+	_(dotClass, ".Class", p) \
 
 
 class SymbolTable {

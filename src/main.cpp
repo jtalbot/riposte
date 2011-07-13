@@ -59,7 +59,7 @@ static void d_message(const int level, const char* ifmt, const char *msg)
  }
  
 Value parsetty(State& state) {
-	Value ppr = Value::NIL;
+	Value ppr = Value::Nil;
 	int i = 0;
 	int is_tty = isatty(fileno(stdin));
 	char code[8192];
@@ -78,7 +78,7 @@ Value parsetty(State& state) {
                     // EOF exit
                     l_message(0,"EOF");
                     die = 1;
-                    return Value::NIL;
+                    return Value::Nil;
                   }
 		i = strlen(code);
 		if(i == 1)
@@ -92,7 +92,7 @@ Value parsetty(State& state) {
         // if not a terminal echo the parse so as to interleave with output
 	if (!is_tty) fprintf(stdout,"%s",code); 
 	if (status == -1)
-		return Value::NIL;
+		return Value::Nil;
 	return ppr;
 }
 
@@ -100,8 +100,7 @@ int dostdin(State& state) {
 	int rc = 0;
 
 	printf("\n");
-	printf("A Quick Riposte!   (Fast R)\n\n");
-	printf("Justin Talbot\n");
+	printf("Riposte   (A Fast Interpreter and (soon) JIT for R)\n\n");
 	printf("Stanford University\n");
 	printf("rockit@graphics.stanford.edu\n");
 	printf("\n");
@@ -112,10 +111,9 @@ int dostdin(State& state) {
 			value = parsetty(state);
 			if(value.type == Type::I_nil) continue;
 			//std::cout << "Parsed: " << value.toString() << std::endl;
-			Code* code = Compiler::compile(state, value);
-			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
-			eval(state, code);
-			result = state.registers[0];	
+			Code* code = Compiler::compile(state, value, state.global);
+			//std::cout << "Compiled code: " << state.stringify(Closure(code,NULL)) << std::endl;
+			result = eval(state, code, state.global);
 			std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) { 
 			e_message("Error", "riposte", error.what().c_str());
@@ -159,10 +157,9 @@ static int dofile(const char * file, State& state, bool echo) {
 	Expression expressions(value);
 	for(int64_t i = 0; i < expressions.length; i++) {
 		try {
-			Code* code = Compiler::compile(state, expressions[i]);
-			//std::cout << "Compiled code: " << state.stringify(closure) << std::endl;
-			eval(state, code);
-			Value result = state.registers[0];
+			Code* code = Compiler::compile(state, expressions[i], state.global);
+			//std::cout << "Compiled code: " << state.stringify(Closure(code,NULL)) << std::endl;
+			Value result = eval(state, code, state.global);
 			if(echo)
 				std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) {
@@ -240,6 +237,7 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 
 	//printf(">> %d\n", sizeof(Value));
 	//printf(">> %d\n", sizeof(Instruction));
+	//printf(">> %d\n", sizeof(Environment::Container));
 
 	/* start garbage collector */
 	GC_INIT();
@@ -249,13 +247,19 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 #endif
 
 	/* Create riposte environment */
-	Environment* baseenv = new Environment(0,0);
-	State state(new Environment(baseenv, baseenv), baseenv);
+	Environment* base = new Environment(0,0);
+	Environment* global = new Environment(base,0);
+	global->setDynamicParent(global);
+
+	State state(global, base);
 
 	try {
-		importCoreLibrary(state);	
-		importCoerceFunctions(state);	
+		importCoreLibrary(state, base);	
+		importCoerceFunctions(state, base);	
 		loadLibrary(state, "base");
+		
+		interpreter_init(state);
+
 	} catch(RiposteError& error) { 
 		e_message("Error", "riposte", error.what().c_str());
 	} catch(RuntimeError& error) {
