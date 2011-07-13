@@ -76,14 +76,6 @@
 	_(type, "type", p) \
 	_(ret, "ret", p) \
 	_(done, "done", p)       /* done must be the last instruction */
-	/*_(frame, "frame") \
-	_(rawfunction, "rawfunction") \
-	_(quote, "quote") \
-	_(force, "force") \
-	_(forceall, "forceall") \
-	_(code, "code") \
-	_(slot, "slot") \
-	_(zip2, "zip2") \*/
 
 DECLARE_ENUM(ByteCode, BC_ENUM)
 

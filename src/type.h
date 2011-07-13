@@ -35,46 +35,8 @@
 	_(I_promise,	"promise", p)		\
 	_(I_default,	"default", p)		\
 	_(I_closure, 	"closure", p) \
-	_(I_genericfunction, 	"genericfunction", p) \
 	_(I_nil, 		"NIL", p)			\
 
 DECLARE_ENUM(Type, TYPE_ENUM)
-
-inline bool isPackedVector(Type const& t) {
-	return  t == Type::R_logical ||
-			t == Type::R_integer ||
-			t == Type::R_double ||
-			t == Type::R_character ||
-			t == Type::R_raw;
-}
-
-inline bool isAtomicVector(Type const& t) {
-	return  t == Type::R_logical ||
-			t == Type::R_integer ||
-			t == Type::R_double ||
-			t == Type::R_character ||
-			t == Type::R_raw ||
-			t == Type::R_complex;
-}
-
-inline bool isListVector(Type const& t) {
-	return  t == Type::R_list ||
-			t == Type::R_expression ||
-			t == Type::R_call ||
-			t == Type::R_pairlist;
-}
-
-inline bool isVector(Type const& t) {
-	return  t == Type::R_logical ||
-			t == Type::R_integer ||
-			t == Type::R_double ||
-			t == Type::R_character ||
-			t == Type::R_raw ||
-			t == Type::R_complex ||
-			t == Type::R_list ||
-			t == Type::R_expression ||
-			t == Type::R_call ||
-			t == Type::R_pairlist;
-}
 
 #endif
