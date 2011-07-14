@@ -178,6 +178,11 @@ struct TraceCompilerImpl : public TraceCompiler {
 		return output_variables.size() - 1;
 	}
 
+
+	bool entryIsLive(::TraceExit const & exit, RenamingTable::Entry const & e) {
+		return e.location != RenamingTable::SLOT|| e.id < exit.n_live_registers;
+	}
+
 	void addExit(::TraceExit const & e, bool in_body) {
 		exits.push_back(TraceExit());
 		TraceExit & exit = exits.back();
@@ -188,8 +193,9 @@ struct TraceCompilerImpl : public TraceCompiler {
 		for(size_t j = 0; j < trace->renaming_table.outputs.size(); j++) {
 			const RenamingTable::Entry & entry = trace->renaming_table.outputs[j];
 			IRef definition;
-			if(  trace->renaming_table.get(entry.location,entry.id,e.snapshot,&definition,NULL,NULL)
-			  || (in_body && trace->renaming_table.get(entry.location,entry.id,&definition))) {
+
+			if( entryIsLive(e,entry)
+				&& trace->renaming_table.get(entry.location,entry.id,e.snapshot,in_body,&definition,NULL,NULL) ) {
 				IRType typ = get(definition).typ;
 				OVRef var = getOrCreateOutputVar(typ,allocation);
 				OVRef length;

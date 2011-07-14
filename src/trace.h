@@ -71,8 +71,8 @@ struct RenamingTable {
 		return false;
 	}
 
-	bool get(uint32_t location, int64_t id, IRef * node) const { return get(location,id,current_view(),node); }
-	bool get(uint32_t location, int64_t id, int32_t snapshot, IRef * node, bool * read = NULL, bool * write = NULL) const {
+	bool get(uint32_t location, int64_t id, IRef * node) const { return get(location,id,current_view(),false,node,NULL,NULL); }
+	bool get(uint32_t location, int64_t id, int32_t snapshot, bool in_body, IRef * node, bool * read, bool * write) const {
 		size_t idx;
 		if(lookup(location,id,snapshot,&idx)) {
 			*node = journal[idx].ir_node;
@@ -81,7 +81,9 @@ struct RenamingTable {
 			if(write)
 				*write = journal[idx].write != 0;
 			return true;
-		} else
+		} else if(in_body && current_view() != snapshot) //the value can be defined in the previous loop iteration so continue the search starting from the end of the loop
+			return get(location,id,current_view(),false,node,read,write);
+		else
 			return false;
 	}
 	void assign(uint32_t location, int64_t id, IRef node) {
@@ -128,7 +130,9 @@ struct RenamingTable {
 
 struct TraceExit {
 	int32_t snapshot;
+	int32_t n_live_registers; //0-n_live_registers are live out of the guard, others can be considered dead
 	int64_t offset; //offset relative to trace_start where this guard should enter the interpreter
+
 };
 
 struct Trace : public gc {

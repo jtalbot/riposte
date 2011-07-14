@@ -215,13 +215,16 @@ std::string State::stringify(Trace const & t) const {
 		r = r + intToStr(i) + "[" + intToStr(t.exits[i].offset)  + "]:\t";
 		for(size_t j = 0; j < t.renaming_table.outputs.size(); j++) {
 			const RenamingTable::Entry & e = t.renaming_table.outputs[j];
-			if(e.location == RenamingTable::SLOT)
+			if(e.location == RenamingTable::SLOT) {
+				if(e.id >= t.exits[i].n_live_registers) //register is dead so it is not an output
+					continue;
 				r = r + "s";
-			else
+			} else {
 				r = r + "v";
+			}
 			r = r + intToStr(e.id) + " -> ";
 			IRef node = -1;
-			if(t.renaming_table.get(e.location,e.id,snapshot,&node)) {
+			if(t.renaming_table.get(e.location,e.id,snapshot,false,&node,NULL,NULL)) {
 				r = r + "r" + intToStr(node);
 			} else {
 				t.renaming_table.get(e.location,e.id,&node);

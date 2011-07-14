@@ -116,10 +116,10 @@ static RecordingStatus get_predicate(State & state, int64_t slot_id, bool invert
 	return RecordingStatus::NO_ERROR;
 }
 
-static RecordingStatus insert_guard(State & state, int64_t slot_id, bool invert, const Instruction * other_branch) {
+static RecordingStatus insert_guard(State & state, int64_t slot_id, bool invert, const Instruction * other_branch, int64_t n_live_registers) {
 	IRef node;
 	RECORDING_DO(get_predicate(state,slot_id,invert,&node));
-	TraceExit e = { TRACE->renaming_table.create_snapshot(), other_branch - TRACE->trace_start };
+	TraceExit e = { TRACE->renaming_table.create_snapshot(), n_live_registers, other_branch - TRACE->trace_start };
 	TRACE->exits.push_back(e);
 	EMITIR(guard,IRType::Void(),node,TRACE->exits.size() - 1,NULL);
 	return RecordingStatus::NO_ERROR;
@@ -233,13 +233,13 @@ RecordingStatus whilebegin_record_impl(State & state, Code const * code, Instruc
 	*offset = whilebegin_op(state,code,inst);
 	RECORDING_DO(load_constant(state,inst.c,state.registers[inst.c]));
 	const Instruction * other_branch = &inst + ((*offset == 1) ? inst.a : 1);
-	RECORDING_DO(insert_guard(state,inst.b,(*offset == 1),other_branch));
+	RECORDING_DO(insert_guard(state,inst.b,(*offset == 1),other_branch,std::max(inst.b,inst.c)));
 	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus whileend_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	*offset = whileend_op(state,code,inst);
 	const Instruction * other_branch = &inst + ( (*offset == 1) ? inst.a : 1 );
-	RECORDING_DO(insert_guard(state,inst.b,*offset != 1,other_branch));
+	RECORDING_DO(insert_guard(state,inst.b,*offset != 1,other_branch,inst.b));
 	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus repeatbegin_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
@@ -265,13 +265,13 @@ RecordingStatus break1_record_impl(State & state, Code const * code, Instruction
 RecordingStatus if1_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	*offset = if1_op(state,code,inst);
 	const Instruction * other_branch = &inst + ((*offset == 1) ? inst.a : 1);
-	RECORDING_DO(insert_guard(state,inst.b,(*offset == 1),other_branch));
+	RECORDING_DO(insert_guard(state,inst.b,(*offset == 1),other_branch,inst.b));
 	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus if0_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {
 	*offset = if0_op(state,code,inst);
 	const Instruction * other_branch = &inst + ((*offset == 1) ? inst.a : 1);
-	RECORDING_DO(insert_guard(state,inst.b,(*offset != 1),other_branch));
+	RECORDING_DO(insert_guard(state,inst.b,(*offset != 1),other_branch,inst.b));
 	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus colon_record_impl(State & state, Code const * code, Instruction const & inst, int64_t * offset) {

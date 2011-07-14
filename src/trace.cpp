@@ -54,7 +54,7 @@ void Trace::optimize() {
 			IRef var;
 			bool read;
 			bool write = false;
-			renaming_table.get(location,node.a,renaming_table.current_view(),&var,&read,&write);
+			renaming_table.get(location,node.a,renaming_table.current_view(),false,&var,&read,&write);
 
 			loop_invariant[i] = !write;
 			if(write) { //create phi node
