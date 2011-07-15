@@ -637,11 +637,13 @@ Instruction const * invoketrace_op(State& state, Instruction const & inst) {
 	if(status  != TCStatus::SUCCESS || offset == 0) { //we exited to the trace start instruction, invoke the original instruction here
 		Instruction invoketrace = inst;
 		const_cast<Instruction&>(inst) = trace->trace_inst;
-#define BC_SWITCH(bc,str,p) case ByteCode::E_##bc: return bc##_op(state,inst);
+		Instruction const * pc;
+#define BC_SWITCH(bc,str,p) case ByteCode::E_##bc: pc = bc##_op(state,inst); break;
 		switch(trace->trace_inst.bc.Enum()) {
 			BC_ENUM(BC_SWITCH,0)
 		}
 		const_cast<Instruction&>(inst) = invoketrace;
+		return pc;
 #undef BC_SWITCH
 	}
 

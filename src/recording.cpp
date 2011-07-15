@@ -369,7 +369,7 @@ RecordingStatus ret_record(State & state, Instruction const & inst, Instruction 
 	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus done_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	return RecordingStatus::RECURSION;
+	return RecordingStatus::RETURN;
 }
 
 
