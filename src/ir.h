@@ -20,6 +20,7 @@ DECLARE_ENUM(IRScalarType,IR_TYPE)
 
 #define IR_ENUM(_, p) 				\
 	_(vload,      "vload",     p, ref, ___, ___) \
+	_(rload,      "rload",     p, ref, ___, ___) \
 	_(sload,      "sload",     p, ref, ___, ___) \
 	_(cast,       "cast",      p, ref, ref, ___) \
 	_(iassign,    "iassign",   p, ___, ___, ___) \

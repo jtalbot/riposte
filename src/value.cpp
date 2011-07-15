@@ -17,7 +17,7 @@ const std::complex<double> Complex::NAelement = std::complex<double>(doublena.d,
 const bool Integer::CheckNA = true;
 const int64_t Integer::NAelement = std::numeric_limits<int64_t>::min();
 const Value List::NAelement = Null::singleton;
-const Value Value::NIL = {{0}, {0}, 0, Type::I_nil}; 
+const Value Value::Nil = {{0}, {0}, 0, Type::I_nil}; 
 
 #define ENUM_CONST_CONSTRUCT(name, string, EnumType) const EnumType EnumType::name(EnumType::E_##name);
 SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)

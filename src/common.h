@@ -19,10 +19,10 @@ static inline std::string intToStr( int64_t n )
     return result.str();
 }
 
-static inline std::string intToHexStr( int64_t n )
+static inline std::string intToHexStr( uint64_t n )
 {
     std::ostringstream result;
-    result << std::hex << n;
+    result << "0x" << std::hex << n;
     return result.str();
 }
 

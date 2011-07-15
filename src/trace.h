@@ -34,13 +34,13 @@ struct TraceState {
 //maps interpreter values to the  irnode holding their value at a particular part of the trace
 struct RenamingTable {
 
-	enum {SLOT = 0, VARIABLE = 1};
+	enum {REG = 0, VARIABLE = 1, SLOT = 2};
 
 	struct Status {
 		int64_t id;
 		IRef ir_node;
 
-		uint32_t location : 1; //SLOT or VARIABLE
+		uint32_t location : 2; //REG or SLOT or VARIABLE
 
 		uint32_t read : 1; //do we read this into the trace externally?
 		uint32_t write : 1; //have we written to the variable during the trace?
@@ -48,7 +48,7 @@ struct RenamingTable {
 
 	struct Entry {
 		int64_t id;
-		uint32_t location : 1;
+		uint32_t location : 2;
 	};
 
 	size_t last_snapshot;
@@ -125,6 +125,14 @@ struct RenamingTable {
 		//save a view of the renaming table, so we know how to store state when trace exits
 		last_snapshot = current_view();
 		return last_snapshot;
+	}
+	bool locationFor(IROpCode code, uint32_t * location) {
+		switch(code.Enum()) {
+		case IROpCode::E_rload: *location = REG; return true;
+		case IROpCode::E_sload: *location = SLOT; return true;
+		case IROpCode::E_vload: *location = VARIABLE; return true;
+		default: return false;
+		}
 	}
 };
 

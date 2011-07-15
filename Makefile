@@ -5,10 +5,12 @@ CXX := g++
 CXXFLAGS := -Wall
 LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -lm -fpic -lgc
 
-ifeq ($(UNAME),Darwin)
+ARBB_HOME=/opt/intel/arbb/1.0.0.018
+ARBB_EXISTS=$(shell test -d $(ARBB_HOME); echo $$?)
+
+ifeq ($(ARBB_EXISTS),1)
 	CXXFLAGS += -I/opt/local/include -DRIPOSTE_DISABLE_TRACING
 else
-	ARBB_HOME=/opt/intel/arbb/1.0.0.018
 	LFLAGS += -L$(ARBB_HOME)/lib/intel64 -larbb -ltbb
 	CXXFLAGS += -I$(ARBB_HOME)/include
 endif

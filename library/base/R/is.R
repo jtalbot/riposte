@@ -18,8 +18,8 @@ is.primitive <- function(x) .Internal(typeof)(x) == "builtin"
 is.object <- function(x) "NYI"
 
 is.numeric <- function(x) is.double(x) || is.integer(x)    #should also dispatch generic
-is.matrix <- function(x) "NYI"
-is.array <- function(x) "NYI"
+is.matrix <- function(x) is.numeric(dim(x))
+is.array <- is.matrix
 
 is.atomic <- function(x) .Internal(switch)(typeof(x), logical=,integer=,double=,complex=,character=,raw=,NULL=TRUE,FALSE)
 is.recursive <- function(x) !(is.atomic(x) || is.symbol(x))
@@ -78,3 +78,11 @@ mode <- function(x)
 
 storage.mode <- mode
 `storage.mode<-` <- `mode<-`
+
+as.environment <- function(x)
+	switch(typeof(x),
+		environment=x,
+		double=,
+		integer=parent.frame(2),
+		error("unsupported cast to environment")) 
+

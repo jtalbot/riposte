@@ -7,11 +7,12 @@
 
 #define BC_ENUM(_, p) 				\
 	_(call, "call", p) \
-	/*_(inlinecall, "inlinecall")*/ \
 	_(get, "get", p) \
+	_(sget, "sget", p) \
 	_(kget, "kget", p) \
 	_(iget, "iget", p) \
 	_(assign, "assign", p) \
+	_(sassign, "sassign", p) \
 	_(iassign, "iassign", p) \
 	_(eassign, "eassign", p) \
 	_(forbegin, "forbegin", p) \
@@ -62,10 +63,6 @@
 	_(asin, "asin", p) \
 	_(atan, "atan", p) \
 	_(jmp, "jmp", p) \
-	_(null, "null", p) \
-	_(true1, "true", p) \
-	_(false1, "false", p) \
-	_(NA, "NA", p) \
 	_(istrue, "istrue", p) \
 	_(function, "function", p) \
 	_(logical1, "logical", p) \
@@ -78,15 +75,8 @@
 	_(seq, "seq", p) \
 	_(type, "type", p) \
 	_(invoketrace,"invoketrace",p) \
-	_(ret, "ret", p)       /* ret must be the last instruction */
-	/*_(frame, "frame") \
-	_(rawfunction, "rawfunction") \
-	_(quote, "quote") \
-	_(force, "force") \
-	_(forceall, "forceall") \
-	_(code, "code") \
-	_(slot, "slot") \
-	_(zip2, "zip2") \*/
+	_(ret, "ret", p) \
+	_(done, "done", p)       /* done must be the last instruction */
 
 DECLARE_ENUM(ByteCode, BC_ENUM)
 

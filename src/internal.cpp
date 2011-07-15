@@ -16,35 +16,38 @@ void checkNumArgs(List const& args, int64_t nargs) {
 	else if(args.length < nargs) _error("too few arguments");
 }
 
-int64_t cat(State& state, Call const& call, List const& args) {
-	printf("%s\n", state.stringify(force(state, args[0])).c_str());
-	state.registers[0] = Null::singleton;
-	return 1;
+Value cat(State& state, List const& args) {
+	for(int64_t i = 0; i < args.length; i++) {
+		Character c = As<Character>(state, force(state, args[i]));
+		for(int64_t j = 0; j < c.length; j++) {
+			printf("%s", state.SymToStr(c[j]).c_str());
+			if(j < c.length-1) printf(" ");
+		}
+	}
+	return Null::singleton;
 }
 
-int64_t library(State& state, Call const& call, List const& args) {
+Value library(State& state, List const& args) {
 	checkNumArgs(args, 1);
 
 	Character from = As<Character>(state, force(state, args[0]));
 	if(from.length > 0) {
-		loadLibrary(state, from[0].toString(state));
+		loadLibrary(state, state.SymToStr(from[0]));
 	}
-	state.registers[0] = Null::singleton;
-	return 1;
+	return Null::singleton;
 }
 
-int64_t rm(State& state, Call const& call, List const& args) {
+Value rm(State& state, List const& args) {
 	for(int64_t i = 0; i < args.length; i++) 
 		if(expression(args[i]).type != Type::R_symbol && expression(args[i]).type != Type::R_character) 
 			_error("rm() arguments must be symbols or character vectors");
 	for(int64_t i = 0; i < args.length; i++) {
-		state.global->rm(expression(args[i]));
+		state.frame().environment->rm(Symbol(expression(args[i])));
 	}
-	state.registers[0] = Null::singleton;
-	return 1;
+	return Null::singleton;
 }
 
-int64_t sequence(State& state, Call const& call, List const& args) {
+Value sequence(State& state, List const& args) {
 	checkNumArgs(args, 3);
 
 	Value from = force(state, args[0]);
@@ -55,11 +58,10 @@ int64_t sequence(State& state, Call const& call, List const& args) {
 	double b = asReal1(by);
 	double l = asReal1(len);
 
-	state.registers[0] = Sequence(f, b, l);	
-	return 1;
+	return Sequence(f, b, l);	
 }
 
-int64_t repeat(State& state, Call const& call, List const& args) {
+Value repeat(State& state, List const& args) {
 	checkNumArgs(args, 3);
 	Value from = force(state, args[0]);
 	assert(args.length == 3);
@@ -76,11 +78,10 @@ int64_t repeat(State& state, Call const& call, List const& args) {
 	for(int64_t i = 0; i < l; i++) {
 		r[i] = v;
 	}
-	state.registers[0] = r;
-	return 1;
+	return r;
 }
 
-int64_t inherits(State& state, Call const& call, List const& args) {
+Value inherits(State& state, List const& args) {
 	checkNumArgs(args, 3);
 	Value x = force(state, args[0]);
 	Character what = force(state, args[1]);
@@ -93,27 +94,24 @@ int64_t inherits(State& state, Call const& call, List const& args) {
 			if(what[i] == c[j]) inherits = true;
 		}
 	}
-	state.registers[0] = Logical::c(inherits);
-	return 1;
+	return Logical::c(inherits);
 }
 
-int64_t attr(State& state, Call const& call, List const& args)
+Value attr(State& state, List const& args)
 {
 	checkNumArgs(args, 3);
 	// NYI: exact
 	Value object = force(state, args[0]);
 	Character which = force(state, args[1]);
-	state.registers[0] = getAttribute(object, which[0]);
-	return 1;
+	return getAttribute(object, which[0]);
 }
 
-int64_t assignAttr(State& state, Call const& call, List const& args)
+Value assignAttr(State& state, List const& args)
 {
 	checkNumArgs(args, 3);
 	Value object = force(state, args[0]);
 	Character which = force(state, args[1]);
-	state.registers[0] = setAttribute(object, which[0], force(state, args[2]));
-	return 1;
+	return setAttribute(object, which[0], force(state, args[2]));
 }
 
 Type cTypeCast(Value const& v, Type t)
@@ -123,20 +121,18 @@ Type cTypeCast(Value const& v, Type t)
 	return r;
 }
 
-int64_t list(State& state, Call const& call, List const& args) {
+Value list(State& state, List const& args) {
 	List out(args.length);
 	for(int64_t i = 0; i < args.length; i++) out[i] = force(state, args[i]);
 	out.attributes = args.attributes;
-	state.registers[0] = out;
-	return 1;
+	return out;
 }
 
-int64_t unlist(State& state, Call const& call, List const& args) {
-	//checkNumArgs(args, 1);
+Value unlist(State& state, List const& args) {
+	checkNumArgs(args, 1);
 	Value v = force(state, args[0]);
 	if(!v.isList()) {
-		state.registers[0] = v;
-		return 1;
+		return v;
 	}
 	List from = v;
 	int64_t total = 0;
@@ -165,8 +161,7 @@ int64_t unlist(State& state, Call const& call, List const& args) {
 		}
 		setNames(out, outnames);
 	}
-	state.registers[0] = out;
-	return 1;
+	return out;
 }
 
 Vector Subset(State& state, Vector const& a, Vector const& i)	{
@@ -186,7 +181,8 @@ Vector Subset(State& state, Vector const& a, Vector const& i)	{
 				case Type::E_R_logical: return SubsetInclude<Logical>::eval(state, a, index, positive); break;
 				case Type::E_R_character: return SubsetInclude<Character>::eval(state, a, index, positive); break;
 				case Type::E_R_list: return SubsetInclude<List>::eval(state, a, index, positive); break;
-				default: _error("NYI"); break;
+				case Type::E_R_null: return a;
+				default: _error(std::string("NYI: Subset of ") + a.type.toString()); break;
 			};
 		}
 		else if(negative > 0) {
@@ -196,7 +192,8 @@ Vector Subset(State& state, Vector const& a, Vector const& i)	{
 				case Type::E_R_logical: return SubsetExclude<Logical>::eval(state, a, index, negative); break;
 				case Type::E_R_character: return SubsetExclude<Character>::eval(state, a, index, negative); break;
 				case Type::E_R_list: return SubsetExclude<List>::eval(state, a, index, negative); break;
-				default: _error("NYI"); break;
+				case Type::E_R_null: return a;
+				default: _error(std::string("NYI: Subset of ") + a.type.toString()); break;
 			};	
 		}
 		else {
@@ -211,22 +208,22 @@ Vector Subset(State& state, Vector const& a, Vector const& i)	{
 			case Type::E_R_logical: return SubsetLogical<Logical>::eval(state, a, index); break;
 			case Type::E_R_character: return SubsetLogical<Character>::eval(state, a, index); break;
 			case Type::E_R_list: return SubsetLogical<List>::eval(state, a, index); break;
-			default: _error("NYI"); break;
+			case Type::E_R_null: return a;
+			default: _error(std::string("NYI: Subset of ") + a.type.toString()); break;
 		};	
 	}
 	_error("NYI indexing type");
 	return Null::singleton;
 }
 
-int64_t subset(State& state, Call const& call, List const& args) {
+Value subset(State& state, List const& args) {
 	checkNumArgs(args, 2);
         Vector a = Vector(force(state, args[0]));
         Vector i = Vector(force(state, args[1]));
-	state.registers[0] = Subset(state, a,i);
-        return 1;
+	return Subset(state, a,i);
 }
 
-int64_t subset2(State& state, Call const& call, List const& args) {
+Value subset2(State& state, List const& args) {
 	checkNumArgs(args, 2);
 
         Value a = force(state, args[0]);
@@ -241,23 +238,19 @@ int64_t subset2(State& state, Call const& call, List const& args) {
 				break;
 		}
 		if(j < c.length) {
-			state.registers[0] = Element2(a, j);
-			return 1;
+			return Element2(Vector(a), j);
 		}
 	}
 	else if(b.type == Type::R_integer) {
-		state.registers[0] = Element2(a, Integer(b)[0]-1);
-		return 1;
+		return Element2(Vector(a), Integer(b)[0]-1);
 	}
 	else if(b.type == Type::R_double) {
-		state.registers[0] = Element2(a, (int64_t)Double(b)[0]-1);
-		return 1;
+		return Element2(Vector(a), (int64_t)Double(b)[0]-1);
 	}
-	state.registers[0] = Null::singleton;
-	return 1;
+	return Null::singleton;
 } 
 
-int64_t dollar(State& state, Call const& call, List const& args) {
+Value dollar(State& state, List const& args) {
 	checkNumArgs(args, 2);
 
         Value a = force(state, args[0]);
@@ -270,39 +263,34 @@ int64_t dollar(State& state, Call const& call, List const& args) {
 				break;
 		}
 		if(j < c.length) {
-			state.registers[0] = Element2(a, j);
-			return 1;
+			return Element2(Vector(a), j);
 		}
 	}
-	state.registers[0] = Null::singleton;
-	return 1;
+	return Null::singleton;
 } 
 
-int64_t length(State& state, Call const& call, List const& args) {
+Value length(State& state, List const& args) {
 	checkNumArgs(args, 1);
-	Vector a = force(state, args[0]);
+	Vector a(force(state, args[0]));
 	Integer i(1);
 	i[0] = a.length;
-	state.registers[0] = i;
-	return 1;
+	return i;
 }
 
-int64_t quote(State& state, Call const& call, List const& args) {
+Value quote(State& state, List const& args) {
 	checkNumArgs(args, 1);
-	state.registers[0] = expression(args[0]);
-	return 1;
+	return expression(args[0]);
 }
 
-int64_t eval_fn(State& state, Call const& call, List const& args) {
-	checkNumArgs(args, 2);
+Value eval_fn(State& state, List const& args) {
+	checkNumArgs(args, 3);
 	Value expr = force(state, args[0]);
 	Value envir = force(state, args[1]);
-	//Value enclos = force(state, call[3]);
-	eval(state, Compiler::compile(state, expr), REnvironment(envir).ptr());
-	return 1;
+	//Value enclos = force(state, args[2]);
+	return eval(state, Compiler::compile(state, expr), REnvironment(envir).ptr());
 }
 
-int64_t lapply(State& state, Call const& call, List const& args) {
+Value lapply(State& state, List const& args) {
 	checkNumArgs(args, 2);
 	List x = As<List>(state, force(state, args[0]));
 	Value func = force(state, args[1]);
@@ -311,18 +299,17 @@ int64_t lapply(State& state, Call const& call, List const& args) {
 	apply[0] = func;
 
 	List result(x.length);
-	
+	// TODO: should have a way to make a simple function call without compiling,
+	// or should have a fast case for compilation
 	for(int64_t i = 0; i < x.length; i++) {
 		apply[1] = x[i];
-		eval(state, Compiler::compile(state, apply));
-		result[i] = state.registers[0];
+		result[i] = eval(state, Compiler::compile(state, apply));
 	}
 
-	state.registers[0] = result;
-	return 1;
+	return result;
 }
 
-int64_t tlist(State& state, Call const& call, List const& args) {
+Value tlist(State& state, List const& args) {
 	int64_t length = args.length > 0 ? 1 : 0;
 	List a = Clone(args);
 	for(int64_t i = 0; i < a.length; i++) {
@@ -341,14 +328,13 @@ int64_t tlist(State& state, Call const& call, List const& args) {
 		}
 		result[i] = element;
 	}
-	state.registers[0] = result;
-	return 1;
+	return result;
 }
 
-int64_t source(State& state, Call const& call, List const& args) {
+Value source(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value file = force(state, args[0]);
-	std::ifstream t(Character(file)[0].toString(state).c_str());
+	std::ifstream t(state.SymToStr(Character(file)[0]).c_str());
 	std::stringstream buffer;
 	buffer << t.rdbuf();
 	std::string code = buffer.str();
@@ -357,301 +343,333 @@ int64_t source(State& state, Call const& call, List const& args) {
 	Value value;
 	parser.execute(code.c_str(), code.length(), true, value);	
 	
-	eval(state, Compiler::compile(state, value));
-	return 1;
+	return eval(state, Compiler::compile(state, value));
 }
 
-int64_t switch_fn(State& state, Call const& call, List const& args) {
+Value switch_fn(State& state, List const& args) {
 	Value one = force(state, args[0]);
 	if(one.type == Type::R_integer && Integer(one).length == 1) {
 		int64_t i = Integer(one)[0];
-		if(i >= 1 && (int64_t)i <= args.length) {state.registers[0] = force(state, args[i]); return 1; }
+		if(i >= 1 && (int64_t)i <= args.length) {return force(state, args[i]);}
 	} else if(one.type == Type::R_double && Double(one).length == 1) {
 		int64_t i = (int64_t)Double(one)[0];
-		if(i >= 1 && (int64_t)i <= args.length) {state.registers[0] = force(state, args[i]); return 1; }
+		if(i >= 1 && (int64_t)i <= args.length) {return force(state, args[i]);}
 	} else if(one.type == Type::R_character && Character(one).length == 1 && hasNames(args)) {
 		Character names = getNames(args);
 		for(int64_t i = 1; i < args.length; i++) {
 			if(names[i] == Character(one)[0]) {
 				while(args[i].type == Type::I_nil && i < args.length) i++;
-				state.registers[0] = i < args.length ? force(state, args[i]) : (Value)(Null::singleton);
-				return 1;
+				return i < args.length ? force(state, args[i]) : (Value)(Null::singleton);
 			}
 		}
 		for(int64_t i = 1; i < args.length; i++) {
 			if(names[i] == Symbol::empty) {
-				state.registers[0] = force(state, args[i]);
-				return 1;
+				return force(state, args[i]);
 			}
 		}
 	}
-	state.registers[0] = Null::singleton;
-	return 1;
+	return Null::singleton;
 }
 
-int64_t environment(State& state, Call const& call, List const& args) {
+Value environment(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value e = force(state, args[0]);
 	if(e.type == Type::R_null) {
-		state.registers[0] = REnvironment(state.global);
-		return 1;
+		return REnvironment(state.frame().environment);
 	}
 	else if(e.type == Type::R_function) {
-		state.registers[0] = REnvironment(Function(e).s());
-		return 1;
+		return REnvironment(Function(e).s());
 	}
-	state.registers[0] = Null::singleton;
-	return 1;
+	return Null::singleton;
 }
 
-int64_t parentframe(State& state, Call const& call, List const& args) {
+Value parentframe(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	int64_t i = (int64_t)asReal1(force(state, args[0]));
-	Environment* e = state.global;
-	for(int64_t j = 0; j < i-1 && e != NULL; j++) {
-		e = e->dynamicParent();
+	Environment* env = state.frame().environment;
+	while(i > 0 && env != env->DynamicParent()) {
+		env = env->DynamicParent();
+		i--;
 	}
-	state.registers[0] = REnvironment(e);
-	return 1;
+	return REnvironment(env);
 }
 
-int64_t stop_fn(State& state, Call const& call, List const& args) {
+Value stop_fn(State& state, List const& args) {
 	// this should stop whether or not the arguments are correct...
 	std::string message = "user stop";
 	if(args.length > 0) {
 		if(args[0].type == Type::R_character && Character(args[0]).length > 0) {
-			message = Character(args[0])[0].toString(state);
+			message = state.SymToStr(Character(args[0])[0]);
 		}
 	}
 	_error(message);
-	return 0;
+	return Null::singleton;
 }
 
-int64_t warning_fn(State& state, Call const& call, List const& args) {
+Value warning_fn(State& state, List const& args) {
 	std::string message = "user warning";
 	if(args.length > 0) {
 		if(args[0].type == Type::R_character && Character(args[0]).length > 0) {
-			message = Character(args[0])[0].toString(state);
+			message = state.SymToStr(Character(args[0])[0]);
 		}
 	}
 	_warning(state, message);
-	state.registers[0] = Character::c(state, message);
-	return 1;
+	return Character::c(state.StrToSym(message));
 } 
 
-int64_t missing(State& state, Call const& call, List const& args) {
-	Symbol s = expression(args[0]); 
-	Value v;
-	bool success = state.global->getRaw(s, v);
-	state.registers[0] =  (!success || v.type == Type::I_default) ? Logical::True() : Logical::False();
-	return 1;
+Value missing(State& state, List const& args) {
+	Symbol s(expression(args[0])); 
+	Value v =  state.frame().environment->get(s);
+	return (v.isNil() || v.type == Type::I_default) ? Logical::True() : Logical::False();
 }
 
-int64_t max_fn(State& state, Call const& call, List const& args) {
+Value max_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryArith<FoldLeft, MaxOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryArith<FoldLeft, MaxOp>(state, a, result);
+	return result;
 }
 
-int64_t min_fn(State& state, Call const& call, List const& args) {
+Value min_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryArith<FoldLeft, MinOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryArith<FoldLeft, MinOp>(state, a, result);
+	return result;
 }
 
-int64_t sum_fn(State& state, Call const& call, List const& args) {
+Value sum_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryArith<FoldLeft, SumOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryArith<FoldLeft, SumOp>(state, a, result);
+	return result;
 }
 
-int64_t prod_fn(State& state, Call const& call, List const& args) {
+Value prod_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryArith<FoldLeft, ProdOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryArith<FoldLeft, ProdOp>(state, a, result);
+	return result;
 }
 
-int64_t cummax_fn(State& state, Call const& call, List const& args) {
+Value cummax_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryArith<ScanLeft, MaxOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryArith<ScanLeft, MaxOp>(state, a, result);
+	return result;
 }
 
-int64_t cummin_fn(State& state, Call const& call, List const& args) {
+Value cummin_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryArith<ScanLeft, MinOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryArith<ScanLeft, MinOp>(state, a, result);
+	return result;
 }
 
-int64_t cumsum_fn(State& state, Call const& call, List const& args) {
+Value cumsum_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryArith<ScanLeft, SumOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryArith<ScanLeft, SumOp>(state, a, result);
+	return result;
 }
 
-int64_t cumprod_fn(State& state, Call const& call, List const& args) {
+Value cumprod_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryArith<ScanLeft, ProdOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryArith<ScanLeft, ProdOp>(state, a, result);
+	return result;
 }
 
-int64_t any_fn(State& state, Call const& call, List const& args) {
+Value any_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryLogical<FoldLeft, AnyOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryLogical<FoldLeft, AnyOp>(state, a, result);
+	return result;
 }
 
-int64_t all_fn(State& state, Call const& call, List const& args) {
+Value all_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryLogical<FoldLeft, AllOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryLogical<FoldLeft, AllOp>(state, a, result);
+	return result;
 }
 
-int64_t isna_fn(State& state, Call const& call, List const& args) {
+Value isna_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryFilter<Zip1, IsNAOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryFilter<Zip1, IsNAOp>(state, a, result);
+	return result;
 }
 
-int64_t isnan_fn(State& state, Call const& call, List const& args) {
+Value isnan_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryFilter<Zip1, IsNaNOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryFilter<Zip1, IsNaNOp>(state, a, result);
+	return result;
 }
 
-int64_t nchar_fn(State& state, Call const& call, List const& args) {
+Value nchar_fn(State& state, List const& args) {
 	checkNumArgs(args, 3);
 	Value a = force(state, args[0]);
 	// NYI: type or allowNA
-	unaryCharacter<Zip1, NcharOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryCharacter<Zip1, NcharOp>(state, a, result);
+	return result;
 }
 
-int64_t nzchar_fn(State& state, Call const& call, List const& args) {
+Value nzchar_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryCharacter<Zip1, NzcharOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryCharacter<Zip1, NzcharOp>(state, a, result);
+	return result;
 }
 
-int64_t isfinite_fn(State& state, Call const& call, List const& args) {
+Value isfinite_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryFilter<Zip1, IsFiniteOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryFilter<Zip1, IsFiniteOp>(state, a, result);
+	return result;
 }
 
-int64_t isinfinite_fn(State& state, Call const& call, List const& args) {
+Value isinfinite_fn(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
-	unaryFilter<Zip1, IsInfiniteOp>(state, a, state.registers[0]);
-	return 1;
+	Value result;
+	unaryFilter<Zip1, IsInfiniteOp>(state, a, result);
+	return result;
 }
 
-int64_t paste(State& state, Call const& call, List const& args) {
+Value paste(State& state, List const& args) {
 	Character a = As<Character>(state, force(state, args[0]));
 	Character sep = As<Character>(state, force(state, args[1]));
 	std::string result = "";
 	for(int64_t i = 0; i+1 < a.length; i++) {
-		result = result + a[i].toString(state) + sep[0].toString(state);
+		result = result + state.SymToStr(a[i]) + state.SymToStr(sep[0]);
 	}
-	if(a.length > 0) result = result + a[a.length-1].toString(state);
-	state.registers[0] = Character::c(state, result);
-	return 1;
+	if(a.length > 0) result = result + state.SymToStr(a[a.length-1]);
+	return Character::c(state.StrToSym(result));
 }
 
-int64_t deparse(State& state, Call const& call, List const& args) {
+Value deparse(State& state, List const& args) {
 	Value v = force(state, args[0]);
-	state.registers[0]= Character::c(state, state.deparse(v));
-	return 1;
+	return Character::c(state.StrToSym(state.deparse(v)));
 }
 
-int64_t substitute(State& state, Call const& call, List const& args) {
+Value substitute(State& state, List const& args) {
 	checkNumArgs(args, 1);
-	state.registers[0] = expression(args[0]);
 	Value v = args[0];
 	while(v.type == Type::I_promise) v = Closure(v).code()->expression;
 	
 	if(v.isSymbol()) {
-		Value r;
-		if(state.global->getRaw(v,r)) v = r;
+		Value r = state.frame().environment->get(Symbol(v));
+		if(!r.isNil()) v = r;
 		while(v.type == Type::I_promise) v = Closure(v).code()->expression;
 	}
- 	state.registers[0] = v;
-	return 1;
+ 	return v;
 }
 
+Value type_of(State& state, List const& args) {
+	// Should have a direct mapping from type to symbol.
+	Value v = force(state, args[0]);
+	return Character::c(state.StrToSym(v.type.toString()));
+}
 
-void importCoreLibrary(State& state)
+Value get(State& state, List const& args) {
+	checkNumArgs(args, 2);
+	Character c = As<Character>(state, force(state, args[0]));
+	REnvironment e(force(state, args[1]));
+	Value v = e.ptr()->get(c[0]);
+	if(v.isNil())
+		return Null::singleton;
+	else
+		return v;
+}
+
+Value exists(State& state, List const& args) {
+	checkNumArgs(args, 2);
+	Character c = As<Character>(state, force(state, args[0]));
+	REnvironment e(force(state, args[1]));
+	Value v = e.ptr()->get(c[0]);
+	if(v.isNil())
+		return Logical::False();
+	else
+		return Logical::True();
+}
+
+void importCoreLibrary(State& state, Environment* env)
 {
-	Environment* env = state.path[0];
+	env->assign(state.StrToSym("max"), CFunction(max_fn));
+	env->assign(state.StrToSym("min"), CFunction(min_fn));
+	env->assign(state.StrToSym("sum"), CFunction(sum_fn));
+	env->assign(state.StrToSym("prod"), CFunction(prod_fn));
+	env->assign(state.StrToSym("cummax"), CFunction(cummax_fn));
+	env->assign(state.StrToSym("cummin"), CFunction(cummin_fn));
+	env->assign(state.StrToSym("cumsum"), CFunction(cumsum_fn));
+	env->assign(state.StrToSym("cumprod"), CFunction(cumprod_fn));
+	env->assign(state.StrToSym("any"), CFunction(any_fn));
+	env->assign(state.StrToSym("all"), CFunction(all_fn));
+	env->assign(state.StrToSym("nchar"), CFunction(nchar_fn));
+	env->assign(state.StrToSym("nzchar"), CFunction(nzchar_fn));
+	env->assign(state.StrToSym("is.na"), CFunction(isna_fn));
+	env->assign(state.StrToSym("is.nan"), CFunction(isnan_fn));
+	env->assign(state.StrToSym("is.finite"), CFunction(isfinite_fn));
+	env->assign(state.StrToSym("is.infinite"), CFunction(isinfinite_fn));
+	
+	env->assign(state.StrToSym("cat"), CFunction(cat));
+	env->assign(state.StrToSym("library"), CFunction(library));
+	env->assign(state.StrToSym("rm"), CFunction(rm));
+	env->assign(state.StrToSym("inherits"), CFunction(inherits));
+	
+	env->assign(state.StrToSym("seq"), CFunction(sequence));
+	env->assign(state.StrToSym("rep"), CFunction(repeat));
+	
+	env->assign(state.StrToSym("attr"), CFunction(attr));
+	env->assign(state.StrToSym("attr<-"), CFunction(assignAttr));
+	
+	env->assign(state.StrToSym("list"), CFunction(list));
+	env->assign(state.StrToSym("unlist"), CFunction(unlist));
+	env->assign(state.StrToSym("length"), CFunction(length));
+	
+	env->assign(state.StrToSym("["), CFunction(subset));
+	env->assign(state.StrToSym("[["), CFunction(subset2));
+	env->assign(state.StrToSym("$"), CFunction(dollar));
 
-	env->assign(Symbol(state,"max"), CFunction(max_fn));
-	env->assign(Symbol(state,"min"), CFunction(min_fn));
-	env->assign(Symbol(state,"sum"), CFunction(sum_fn));
-	env->assign(Symbol(state,"prod"), CFunction(prod_fn));
-	env->assign(Symbol(state,"cummax"), CFunction(cummax_fn));
-	env->assign(Symbol(state,"cummin"), CFunction(cummin_fn));
-	env->assign(Symbol(state,"cumsum"), CFunction(cumsum_fn));
-	env->assign(Symbol(state,"cumprod"), CFunction(cumprod_fn));
-	env->assign(Symbol(state,"any"), CFunction(any_fn));
-	env->assign(Symbol(state,"all"), CFunction(all_fn));
-	env->assign(Symbol(state,"nchar"), CFunction(nchar_fn));
-	env->assign(Symbol(state,"nzchar"), CFunction(nzchar_fn));
-	env->assign(Symbol(state,"is.na"), CFunction(isna_fn));
-	env->assign(Symbol(state,"is.nan"), CFunction(isnan_fn));
-	env->assign(Symbol(state,"is.finite"), CFunction(isfinite_fn));
-	env->assign(Symbol(state,"is.infinite"), CFunction(isinfinite_fn));
-	
-	env->assign(Symbol(state,"cat"), CFunction(cat));
-	env->assign(Symbol(state,"library"), CFunction(library));
-	env->assign(Symbol(state,"rm"), CFunction(rm));
-	env->assign(Symbol(state,"inherits"), CFunction(inherits));
-	
-	env->assign(Symbol(state,"seq"), CFunction(sequence));
-	env->assign(Symbol(state,"rep"), CFunction(repeat));
-	
-	env->assign(Symbol(state,"attr"), CFunction(attr));
-	env->assign(Symbol(state,"attr<-"), CFunction(assignAttr));
-	
-	env->assign(Symbol(state,"list"), CFunction(list));
-	env->assign(Symbol(state,"unlist"), CFunction(unlist));
-	env->assign(Symbol(state,"length"), CFunction(length));
-	
-	env->assign(Symbol(state,"["), CFunction(subset));
-	env->assign(Symbol(state,"[["), CFunction(subset2));
-	env->assign(Symbol(state,"$"), CFunction(dollar));
+	env->assign(state.StrToSym("switch"), CFunction(switch_fn));
 
-	env->assign(Symbol(state,"switch"), CFunction(switch_fn));
+	env->assign(state.StrToSym("eval"), CFunction(eval_fn));
+	env->assign(state.StrToSym("quote"), CFunction(quote));
+	env->assign(state.StrToSym("source"), CFunction(source));
 
-	env->assign(Symbol(state,"eval"), CFunction(eval_fn));
-	env->assign(Symbol(state,"quote"), CFunction(quote));
-	env->assign(Symbol(state,"source"), CFunction(source));
+	env->assign(state.StrToSym("lapply"), CFunction(lapply));
+	env->assign(state.StrToSym("t.list"), CFunction(tlist));
 
-	env->assign(Symbol(state,"lapply"), CFunction(lapply));
-	env->assign(Symbol(state,"t.list"), CFunction(tlist));
-
-	env->assign(Symbol(state,"environment"), CFunction(environment));
-	env->assign(Symbol(state,"parent.frame"), CFunction(parentframe));
-	env->assign(Symbol(state,"missing"), CFunction(missing));
+	env->assign(state.StrToSym("environment"), CFunction(environment));
+	env->assign(state.StrToSym("parent.frame"), CFunction(parentframe));
+	env->assign(state.StrToSym("missing"), CFunction(missing));
 	
-	env->assign(Symbol(state,"stop"), CFunction(stop_fn));
-	env->assign(Symbol(state,"warning"), CFunction(warning_fn));
+	env->assign(state.StrToSym("stop"), CFunction(stop_fn));
+	env->assign(state.StrToSym("warning"), CFunction(warning_fn));
 	
-	env->assign(Symbol(state,"paste"), CFunction(paste));
-	env->assign(Symbol(state,"deparse"), CFunction(deparse));
-	env->assign(Symbol(state,"substitute"), CFunction(substitute));
+	env->assign(state.StrToSym("paste"), CFunction(paste));
+	env->assign(state.StrToSym("deparse"), CFunction(deparse));
+	env->assign(state.StrToSym("substitute"), CFunction(substitute));
+	
+	env->assign(state.StrToSym("typeof"), CFunction(type_of));
+	
+	env->assign(state.StrToSym("get"), CFunction(get));
+	env->assign(state.StrToSym("exists"), CFunction(exists));
 }
 

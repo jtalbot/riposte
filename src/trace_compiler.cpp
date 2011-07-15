@@ -5,6 +5,7 @@
 #include "arbb_vmapi.h"
 #include "stdlib.h"
 #include "value.h"
+#include "interpreter.h"
 
 //for arbb operations that should only fail if there is a compiler bug
 #define ARBB_RUN(fn) \
@@ -180,7 +181,7 @@ struct TraceCompilerImpl : public TraceCompiler {
 
 
 	bool entryIsLive(::TraceExit const & exit, RenamingTable::Entry const & e) {
-		return e.location != RenamingTable::SLOT|| e.id < exit.n_live_registers;
+		return e.location != RenamingTable::REG || e.id < exit.n_live_registers;
 	}
 
 	void addExit(::TraceExit const & e, bool in_body) {
@@ -208,7 +209,9 @@ struct TraceCompilerImpl : public TraceCompiler {
 	}
 
 	void addInput(IRNode const & node) {
-		RenamingTable::Entry entry = { node.a, (node.opcode == IROpCode::sload) ? RenamingTable::SLOT : RenamingTable::VARIABLE };
+		uint32_t location;
+		trace->renaming_table.locationFor(node.opcode,&location);
+		RenamingTable::Entry entry = { node.a, location };
 		Input input = { node.typ, typeFor(node.typ),entry };
 		inputs.push_back(input);
 	}
@@ -482,10 +485,12 @@ struct TraceCompilerImpl : public TraceCompiler {
 	}
 
 	void loadFromInterpreter(State & s, RenamingTable::Entry const & entry, Value * v) {
-		if(entry.location == RenamingTable::SLOT)
-			*v = s.registers[entry.id];
+		if(entry.location == RenamingTable::REG)
+			*v = interpreter_reg(s,entry.id);
+		else if(entry.location == RenamingTable::VARIABLE)
+			*v = interpreter_get(s,Symbol(entry.id));
 		else
-			s.global->get(s,Symbol(entry.id),*v);
+			*v = interpreter_sget(s,entry.id);
 	}
 	void constructValueFromData(IRType const & irtyp, int64_t length, void * data, Value * v) {
 		Type typ;
@@ -522,10 +527,12 @@ struct TraceCompilerImpl : public TraceCompiler {
 			constructValueFromData(typ,1,&sdata,&v);
 		}
 
-		if(o.interpreter_location.location == RenamingTable::SLOT) {
-			s.registers[o.interpreter_location.id] = v;
+		if(o.interpreter_location.location == RenamingTable::REG) {
+			interpreter_reg(s,o.interpreter_location.id) = v;
+		} else if(o.interpreter_location.location == RenamingTable::VARIABLE) {
+			interpreter_assign(s,Symbol(o.interpreter_location.id),v);
 		} else {
-			s.global->assign(Symbol(o.interpreter_location.id),v);
+			interpreter_sassign(s,o.interpreter_location.id,v);
 		}
 	}
 

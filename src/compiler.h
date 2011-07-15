@@ -16,8 +16,14 @@
 class Compiler {
 private:
 	State& state;
-	bool inFunction;
-	std::vector<int64_t> slots;
+
+	struct Scope {
+		std::vector<Symbol> symbols;
+		Value parameters;
+		int64_t registers;
+	}; 
+
+	std::vector<Scope> scope;
 
 	int64_t registerDepth;
 	int64_t loopDepth;	
@@ -26,7 +32,7 @@ private:
 		loopDepth = 0;
 	}
 	
-	Code* compile(Value const& expr); 			// compile into new code block
+	Code* compile(Value const& expr);			// compile function block, code ends with return
 	int64_t compile(Value const& expr, Code* code);		// compile into existing code block
 
 	int64_t compileConstant(Value const& expr, Code* code);
@@ -37,6 +43,11 @@ private:
 	int64_t compileExpression(Expression const& values, Code* code);
 public:
 	static Code* compile(State& state, Value const& expr) {
+		Compiler compiler(state);
+		return compiler.compile(expr);
+	}
+	
+	static Code* compile(State& state, Value const& expr, Environment* env) {
 		Compiler compiler(state);
 		return compiler.compile(expr);
 	}
