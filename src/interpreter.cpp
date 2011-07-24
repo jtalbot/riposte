@@ -13,7 +13,6 @@
 
 static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Code const* code, Value* result, Instruction const* returnpc);
 
-
 // Get a Value by Symbol from the current environment
 static Value get(State& state, Symbol s) {
 	Environment* environment = state.frame().environment;
@@ -22,8 +21,10 @@ static Value get(State& state, Symbol s) {
 		environment = environment->StaticParent();
 		value = environment->get(s);
 	}
-	value = force(state, value);
-	environment->assign(s, value);
+	if(value.isClosure()) {
+		value = force(state, value);
+		environment->assign(s, value);
+	}
 	return value;
 }
 
@@ -112,7 +113,7 @@ static List BuildArgs(State& state, CompiledCall& call) {
 inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* execution) {
 	Value& slot = env->get(i);
 	slot = v;
-	if((v.isPromise() || v.isDefault()) && slot.env == 0)
+	if(v.isClosure() && slot.env == 0)
 		slot.env = execution;
 }
 
@@ -131,7 +132,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			List dots(arguments.length - func.dots());
 			for(int64_t i = 0; i < arguments.length-func.dots(); i++) {
 				dots[i] = arguments[i+func.dots()];
-				if((dots[i].isPromise() || dots[i].isDefault()) && dots[i].env == 0)
+				if(dots[i].isClosure() && dots[i].env == 0)
 					dots[i].env = env;
 			}
 			sassign(fenv, func.dots(), dots);
@@ -215,7 +216,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			for(int64_t j = 0; j < arguments.length; j++) {
 				if(assignment[j] < 0) {
 					values[idx] = arguments[j];
-					if(values[idx].isPromise() && values[idx].env == 0)
+					if(values[idx].isClosure() && values[idx].env == 0)
 						values[idx].env = env;
 					names[idx++] = anames[j];
 				}
@@ -263,7 +264,7 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 
 	if(f.type == Type::R_function) {
 		Function func(f);
-		assert(func.body().type == Type::I_closure || func.body().type == Type::I_promise);
+		assert(func.body().isClosure());
 		Environment* fenv = CreateEnvironment(state, func.s(), state.frame().environment, Closure(func.body()).code()->slotSymbols);
 		MatchArgs(state, state.frame().environment, fenv, func, arguments);
 		return buildStackFrame(state, fenv, true, Closure(func.body()).code(), &reg(state, inst.c), &inst+1);
@@ -297,7 +298,7 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 
 	if(f.type == Type::R_function) {
 		Function func(f);
-		assert(func.body().type == Type::I_closure || func.body().type == Type::I_promise);
+		assert(func.body().isClosure());
 		Environment* fenv = CreateEnvironment(state, func.s(), state.frame().environment, Closure(func.body()).code()->slotSymbols);
 		MatchArgs(state, state.frame().environment, fenv, func, arguments);
 		assign(fenv, Symbol::dotGeneric, generic);
@@ -311,15 +312,37 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 		_error(std::string("no applicable method for '") + state.SymToStr(generic) + "' applied to an object of class \"" + state.SymToStr(type[0]) + "\"");
 	}
 }
+Instruction const* get_flat(State& state, Symbol s, Value& value, Environment* environment, Instruction const& inst)
+{
+	while(value.isNil()) {
+		environment = environment->StaticParent();
+		if(environment == NULL)
+			throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
+		value = environment->get(s);
+	}
+	if(!value.isClosure()) {
+		return &inst+1;
+	}
+	else {
+		return buildStackFrame(state, Closure(value).environment(),
+			false, Closure(value).code(), &environment->getLocation(s), &inst);
+	}
+}
 Instruction const* get_op(State& state, Instruction const& inst) {
-	reg(state, inst.c) = get(state, Symbol(inst.a));
+	Environment* environment = state.frame().environment;
+	reg(state, inst.c) = environment->get(Symbol(inst.a));
+	return get_flat(state, Symbol(inst.a), reg(state, inst.c), environment, inst);
+	/*reg(state, inst.c) = get(state, Symbol(inst.a));
 	if(reg(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(Symbol(inst.a)) + "' not found");
-	return &inst+1;
+	return &inst+1;*/
 }
 Instruction const* sget_op(State& state, Instruction const& inst) {
-	reg(state, inst.c) = sget(state, inst.a);
+	Environment* environment = state.frame().environment;
+	reg(state, inst.c) = environment->get(inst.a);
+	return get_flat(state, environment->slotName(inst.a), reg(state, inst.c), environment, inst);
+	/*reg(state, inst.c) = sget(state, inst.a);
 	if(reg(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(state.frame().environment->slotName(inst.a)) + "' not found");
-	return &inst+1;
+	return &inst+1;*/
 }
 Instruction const* kget_op(State& state, Instruction const& inst) {
 	reg(state, inst.c) = constant(state, inst.a);

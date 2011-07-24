@@ -13,7 +13,7 @@
 void importCoreLibrary(State& state, Environment* env);
 
 inline Value force(State& state, Value v) { 
-	while(v.isPromise() || v.isDefault()) {
+	while(v.isClosure()) {
 		Environment* env = Closure(v).environment();
 		v = eval(state, Closure(v).code(), 
 			env != 0 ? env : state.frame().environment); 
@@ -21,7 +21,7 @@ inline Value force(State& state, Value v) {
 	return v; 
 }
 inline Value expression(Value const& v) { 
-	if(v.isPromise() || v.isDefault())
+	if(v.isClosure())
 		return Closure(v).code()->expression;
 	else return v; 
 }

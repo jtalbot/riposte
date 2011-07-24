@@ -213,7 +213,6 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		for(int64_t i = 0; i < parameters.length; i++) {
 			if(!c[i].isNil()) {
 				parameters[i] = Closure(compile(c[i]),NULL);
-				parameters[i].type = Type::I_default;
 			}
 			else {
 				parameters[i] = c[i];

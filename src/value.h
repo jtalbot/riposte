@@ -47,8 +47,7 @@ struct Value {
 	bool isList() const { return type == Type::R_list; }
 	bool isCall() const { return type == Type::R_call; }
 	bool isSymbol() const { return type == Type::R_symbol; }
-	bool isPromise() const { return type == Type::I_promise; }
-	bool isDefault() const { return type == Type::I_default; }
+	bool isClosure() const { return type == Type::I_closure; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isList(); }
@@ -407,9 +406,7 @@ public:
 	explicit Closure(Code* code, Environment* environment) : c(code), env(environment) {}
 	
 	explicit Closure(Value const& v) {
-		assert(	v.type == Type::I_closure || 
-			v.type == Type::I_promise ||
-			v.type == Type::I_default); 
+		assert(v.type == Type::I_closure); 
 		c = (Code*)v.p;
 		env = (Environment*)v.env;
 	}
@@ -721,7 +718,7 @@ public:
 
 	int numVariables() const { return slotCount + overflow.size(); }
 
-	Value get(Symbol const& name) const {
+	Value get(Symbol const& name) const { 
 		for(uint64_t i = 0; i < slotCount; i++) {
 			if(slotNames[i] == name) {
 				return slots[i];
@@ -735,9 +732,23 @@ public:
 		}
 	}
 
+	Value& getLocation(Symbol const& name) {
+		for(uint64_t i = 0; i < slotCount; i++) {
+			if(slotNames[i] == name) {
+				return slots[i];
+			}
+		}
+		Map::iterator i = overflow.find(name);
+		if(i != overflow.end()) {
+			return i->second;
+		} else {
+			throw RiposteError("variable not found in getLocation");
+		}
+	}
+
 	Value getQuoted(Symbol const& name) const {
 		Value value = get(name);
-		if(value.type == Type::I_promise) {
+		if(value.type == Type::I_closure) {
 			value = Closure(value).code()->expression;
 		}
 		return value;

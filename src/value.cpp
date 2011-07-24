@@ -55,13 +55,8 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 				inner->dots = i-1;
 			} else if(call[i].type == Type::R_call ||
 			   call[i].type == Type::R_symbol ||
-			   call[i].type == Type::I_promise ||
 			   call[i].type == Type::R_pairlist) {
 				arguments[i-1] = Closure(Compiler::compile(state, call[i]),NULL);
-				arguments[i-1].type = Type::I_promise;
-			} else if(call[i].type == Type::I_closure) {
-				arguments[i-1] = call[i];
-				arguments[i-1].type = Type::I_promise;
 			} else {
 				arguments[i-1] = call[i];
 			}
