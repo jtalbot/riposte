@@ -25,7 +25,7 @@ default: debug
 debug: CXXFLAGS += -DDEBUG -O0 -g
 debug: $(EXECUTABLE)
 
-release: CXXFLAGS += -DNDEBUG -O3 -g
+release: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize
 release: $(EXECUTABLE)
 
 OBJECTS := $(patsubst %.cpp,bin/%.o,$(SRC))

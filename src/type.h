@@ -31,7 +31,6 @@
 									\
 	/* Now the internal types, not necessarily matching R */ \
 	_(I_compiledcall,"compiled call", p)			\
-	_(I_dots,			"...", p)			\
 	_(I_closure, 	"closure", p) \
 	_(I_nil, 		"NIL", p)			\
 

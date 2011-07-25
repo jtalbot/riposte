@@ -181,34 +181,35 @@ template<Type::EnumValue VectorType, typename ElementType>
 struct PackedVectorImpl {
 	typedef ElementType Element;
 	static const Type type;
-	
+
 	union {
 		ElementType* _data;
 		ElementType packedData[sizeof(ElementType*)/sizeof(ElementType)];
 	};
 	int64_t length;
 	static const int64_t width = sizeof(ElementType);
+	ElementType* ptr;	
 	Attributes* attributes;
-
-	ElementType& operator[](int64_t index) { if(packed()) return packedData[index]; else return _data[index]; }
-	ElementType const& operator[](int64_t index) const { if(packed()) return packedData[index]; else return _data[index]; }
-	ElementType const* data() const { if(packed()) return &packedData[0]; else return _data; }
-	ElementType const* data(int64_t i) const { if(packed()) return &packedData[i]; else return _data + i; }
-	ElementType* data() { if(packed()) return &packedData[0]; else return _data; }
-	ElementType* data(int64_t i) { if(packed()) return &packedData[i]; else return _data + i; }
-
+	
+	ElementType& operator[](int64_t index) { return ptr[index]; }
+	ElementType const& operator[](int64_t index) const { return ptr[index]; }
+	ElementType const* data() const { return ptr; }
+	ElementType const* data(int64_t i) const { return ptr + i; }
+	ElementType* data() { return ptr; }
+	ElementType* data(int64_t i) { return ptr + i; }
 	bool packed() const { return length <= (int64_t)(sizeof(int64_t)/sizeof(ElementType)); }
 	
-	explicit PackedVectorImpl(int64_t length) : _data(0), length(length), attributes(0) {
+	explicit PackedVectorImpl(int64_t length) : _data(0), length(length), ptr(0), attributes(0) {
 		if(!packed())
 			_data = new (GC) Element[length];
+		ptr = packed() ? &packedData[0] : _data;
 	}
 
-	explicit PackedVectorImpl(Value v) : _data((ElementType*)v.p), length(v.length), attributes(v.attributes) {
+	explicit PackedVectorImpl(Value v) : _data((ElementType*)v.p), length(v.length), ptr(packed() ? &packedData[0] : _data), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
 	}
 	
-	explicit PackedVectorImpl(Vector v) : _data((ElementType*)v._data), length(v.length), attributes(v.attributes) {
+	explicit PackedVectorImpl(Vector v) : _data((ElementType*)v._data), length(v.length), ptr(packed() ? &packedData[0] : _data), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
 	}
 
@@ -229,7 +230,7 @@ struct PackedVectorImpl {
 	}
 
 protected:
-	PackedVectorImpl(ElementType* _data, int64_t length, Attributes* attributes) : _data(_data), length(length), attributes(attributes) {}
+	PackedVectorImpl(ElementType* _data, int64_t length, Attributes* attributes) : _data(_data), length(length), ptr(packed() ? &packedData[0] : _data), attributes(attributes) {}
 };
 
 template<Type::EnumValue VectorType, typename ElementType>
