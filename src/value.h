@@ -201,7 +201,7 @@ struct PackedVectorImpl {
 	
 	explicit PackedVectorImpl(int64_t length) : _data(0), length(length), ptr(0), attributes(0) {
 		if(!packed())
-			_data = new (GC) Element[length];
+			_data = new (PointerFreeGC) Element[length];
 		ptr = packed() ? &packedData[0] : _data;
 	}
 
