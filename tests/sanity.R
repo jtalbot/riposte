@@ -9,8 +9,11 @@ fail <- 0
 	"done"
 }
 
-PassIfTrue <- function(x) { if(x) cat("PASS\n") else { cat("FAIL\n"); fail <- fail + 1 } }
-PassIfFalse <- function(x) { if(x) { cat("FAIL\n"); fail <- fail + 1 } else cat("PASS\n") }
+{
+	PassIfTrue <- function(x) { if(x) cat("PASS\n") else { cat("FAIL\n"); fail <- fail + 1 } }
+	PassIfFalse <- function(x) { if(x) { cat("FAIL\n"); fail <- fail + 1 } else cat("PASS\n") }
+	"defined PassIfTrue and PassIfFalse"
+}
 
 {
 	cat("Testing basic equality of built in types\n--------------------------------\n")

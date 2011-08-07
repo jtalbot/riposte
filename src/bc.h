@@ -46,6 +46,8 @@
 	_(lnot, "lnot", p) \
 	_(land, "land", p) \
 	_(lor, "lor", p) \
+	_(sland, "sland", p) \
+	_(slor, "slor", p) \
 	_(abs, "abs", p) \
 	_(sign, "sign", p) \
 	_(sqrt, "sqrt", p) \
@@ -63,7 +65,6 @@
 	_(asin, "asin", p) \
 	_(atan, "atan", p) \
 	_(jmp, "jmp", p) \
-	_(istrue, "istrue", p) \
 	_(function, "function", p) \
 	_(logical1, "logical", p) \
 	_(integer1, "integer", p) \

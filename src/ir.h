@@ -44,6 +44,8 @@ DECLARE_ENUM(IRScalarType,IR_TYPE)
 	_(lnot,       "lnot",      p, ref, ref, ___) \
 	_(land,       "land",      p, ref, ref, ref) \
 	_(lor,        "lor",       p, ref, ref, ref) \
+	_(sland,       "sland",      p, ref, ref, ref) \
+	_(slor,        "slor",       p, ref, ref, ref) \
 	_(abs,        "abs",       p, ref, ref, ___) \
 	_(sign,       "sign",      p, ref, ref, ___) \
 	_(sqrt,       "sqrt",      p, ref, ref, ___) \

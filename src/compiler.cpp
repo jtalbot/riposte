@@ -19,6 +19,8 @@ static ByteCode op(Symbol const& s) {
 		case Symbol::E_lnot: return ByteCode::lnot; break;
 		case Symbol::E_land: return ByteCode::land; break;
 		case Symbol::E_lor: return ByteCode::lor; break;
+		case Symbol::E_sland: return ByteCode::sland; break;
+		case Symbol::E_slor: return ByteCode::slor; break;
 		case Symbol::E_abs: return ByteCode::abs; break;
 		case Symbol::E_sign: return ByteCode::sign; break;
 		case Symbol::E_sqrt: return ByteCode::sqrt; break;
@@ -449,6 +451,8 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	case Symbol::E_mod:
 	case Symbol::E_land:
 	case Symbol::E_lor:
+	case Symbol::E_slor:
+	case Symbol::E_sland:
 	case Symbol::E_eq:
 	case Symbol::E_neq:
 	case Symbol::E_lt:
@@ -495,11 +499,6 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		code->bc.push_back(Instruction(op(func), a, 0, result));
 		return result; 
 	} break;
-	case Symbol::E_slor:
-	case Symbol::E_sland:
-	{
-		throw CompileError("Not yet implemented slor and sland");
-	};
 	case Symbol::E_UseMethod:
 	{
 		if(scopes.back().topLevel)

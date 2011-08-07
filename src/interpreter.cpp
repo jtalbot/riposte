@@ -601,11 +601,35 @@ Instruction const* atan_op(State& state, Instruction const& inst) {
 Instruction const* jmp_op(State& state, Instruction const& inst) {
 	return &inst+inst.a;
 }
-Instruction const* istrue_op(State& state, Instruction const& inst) {
+Instruction const* sland_op(State& state, Instruction const& inst) {
 	Logical l = As<Logical>(state, reg(state, inst.a));
-	if(l.length == 0) _error("argument is of zero length");
-	reg(state, inst.c) = l[0] ? Logical::True() : Logical::False();
-	return &inst+1;
+	if(l.length == 0) _error("argument to && is zero length");
+	if(Logical::isFalse(l[0])) {
+		reg(state, inst.c) = Logical::False();
+		return &inst+1;
+	} else {
+		Logical r = As<Logical>(state, reg(state, inst.b));
+		if(r.length == 0) _error("argument to && is zero length");
+		if(Logical::isFalse(r[0])) reg(state, inst.c) = Logical::False();
+		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) reg(state, inst.c) = Logical::NA();
+		else reg(state, inst.c) = Logical::True();
+		return &inst+1;
+	}
+}
+Instruction const* slor_op(State& state, Instruction const& inst) {
+	Logical l = As<Logical>(state, reg(state, inst.a));
+	if(l.length == 0) _error("argument to || is zero length");
+	if(Logical::isTrue(l[0])) {
+		reg(state, inst.c) = Logical::True();
+		return &inst+1;
+	} else {
+		Logical r = As<Logical>(state, reg(state, inst.b));
+		if(r.length == 0) _error("argument to || is zero length");
+		if(Logical::isTrue(r[0])) reg(state, inst.c) = Logical::True();
+		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) reg(state, inst.c) = Logical::NA();
+		else reg(state, inst.c) = Logical::False();
+		return &inst+1;
+	}
 }
 Instruction const* function_op(State& state, Instruction const& inst) {
 	reg(state, inst.c) = Function(constant(state, inst.a), constant(state, inst.b), constant(state, inst.b+1), state.frame().environment);
