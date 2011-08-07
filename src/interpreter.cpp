@@ -171,7 +171,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 		}
 		// named args, search for incomplete matches
 		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] != Symbol::empty && assignment[i] == 0) {
+			if(anames[i] != Symbol::empty && assignment[i] < 0) {
 				std::string a = state.SymToStr(anames[i]);
 				for(int64_t j = 0; j < parameters.length; ++j) {
 					if(set[j] < 0 && pnames[j] != Symbol::dots &&
@@ -333,20 +333,22 @@ Instruction const* get_flat(State& state, Symbol s, Value& value, Environment* e
 	}
 }
 Instruction const* get_op(State& state, Instruction const& inst) {
-	Environment* environment = state.frame().environment;
+	/*Environment* environment = state.frame().environment;
 	reg(state, inst.c) = environment->get(Symbol(inst.a));
 	return get_flat(state, Symbol(inst.a), reg(state, inst.c), environment, inst);
-	/*reg(state, inst.c) = get(state, Symbol(inst.a));
+	*/
+	reg(state, inst.c) = get(state, Symbol(inst.a));
 	if(reg(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(Symbol(inst.a)) + "' not found");
-	return &inst+1;*/
+	return &inst+1;
 }
 Instruction const* sget_op(State& state, Instruction const& inst) {
-	Environment* environment = state.frame().environment;
+	/*Environment* environment = state.frame().environment;
 	reg(state, inst.c) = environment->get(inst.a);
 	return get_flat(state, environment->slotName(inst.a), reg(state, inst.c), environment, inst);
-	/*reg(state, inst.c) = sget(state, inst.a);
+	*/
+	reg(state, inst.c) = sget(state, inst.a);
 	if(reg(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(state.frame().environment->slotName(inst.a)) + "' not found");
-	return &inst+1;*/
+	return &inst+1;
 }
 Instruction const* kget_op(State& state, Instruction const& inst) {
 	reg(state, inst.c) = constant(state, inst.a);
@@ -387,41 +389,36 @@ Instruction const* eassign_op(State& state, Instruction const& inst) {
 	}
 }
 Instruction const* forbegin_op(State& state, Instruction const& inst) {
-	//TODO: need to keep a stack of these...
-	Value loopVector = reg(state, inst.c);
-	reg(state, inst.c) = Null::singleton;
-	reg(state, inst.c+1) = loopVector;
-	reg(state, inst.c+2) = Integer::c(0);
-	if(reg(state, inst.c+2).i >= (int64_t)reg(state, inst.c+1).length) { return &inst+inst.a; }
-	assign(state, Symbol(inst.b), Element(Vector(loopVector), 0));
+	// inst.c-1 holds the loopVector
+	reg(state, inst.c) = Integer::c(0);
+	if(reg(state, inst.c).i >= (int64_t)reg(state, inst.c-1).length) { return &inst+inst.a; }
+	assign(state, Symbol(inst.b), Element(Vector(reg(state, inst.c-1)), 0));
 	return &inst+1;
 }
 Instruction const* forend_op(State& state, Instruction const& inst) {
-	if(++reg(state, inst.c+2).i < (int64_t)reg(state, inst.c+1).length) {
-		assign(state, Symbol(inst.b), Element(Vector(reg(state, inst.c+1)), reg(state, inst.c+2).i));
+	if(++reg(state, inst.c).i < (int64_t)reg(state, inst.c-1).length) {
+		assign(state, Symbol(inst.b), Element(Vector(reg(state, inst.c-1)), reg(state, inst.c).i));
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;
 }
 Instruction const* iforbegin_op(State& state, Instruction const& inst) {
-	double m = asReal1(reg(state, inst.c));
-	double n = asReal1(reg(state, inst.c+1));
-	reg(state, inst.c) = Null::singleton;
-	reg(state, inst.c+1) = Integer::c(n > m ? 1 : -1);
-	reg(state, inst.c+1).length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
-	reg(state, inst.c+2) = Integer::c((int64_t)m);
-	if(reg(state, inst.c+2).i >= (int64_t)reg(state, inst.c+1).length) { return &inst+inst.a; }
+	double m = asReal1(reg(state, inst.c-1));
+	double n = asReal1(reg(state, inst.c));
+	reg(state, inst.c-1) = Integer::c(n > m ? 1 : -1);
+	reg(state, inst.c-1).length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
+	reg(state, inst.c) = Integer::c((int64_t)m);
+	if(reg(state, inst.c).i >= (int64_t)reg(state, inst.c-1).length) { return &inst+inst.a; }
 	assign(state, Symbol(inst.b), Integer::c(m));
 	return &inst+1;
 }
 Instruction const* iforend_op(State& state, Instruction const& inst) {
-	if((reg(state, inst.c+2).i+=reg(state, inst.c+1).i) < (int64_t)reg(state, inst.c+1).length) { 
-		assign(state, Symbol(inst.b), reg(state, inst.c+2));
+	if((reg(state, inst.c).i+=reg(state, inst.c-1).i) < (int64_t)reg(state, inst.c-1).length) { 
+		assign(state, Symbol(inst.b), reg(state, inst.c));
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;
 }
 Instruction const* whilebegin_op(State& state, Instruction const& inst) {
 	Logical l(reg(state,inst.b));
-	reg(state, inst.c) = Null::singleton;
 	if(l[0]) return &inst+1;
 	else return &inst+inst.a;
 }
@@ -431,7 +428,6 @@ Instruction const* whileend_op(State& state, Instruction const& inst) {
 	else return &inst+1;
 }
 Instruction const* repeatbegin_op(State& state, Instruction const& inst) {
-	reg(state,inst.c) = Null::singleton;
 	return &inst+1;
 }
 Instruction const* repeatend_op(State& state, Instruction const& inst) {
@@ -709,7 +705,7 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 	s.returnbase = state.base;
 	s.result = result;
 	s.code= code;
-	state.base -= 32;
+	state.base -= code->registers;
 	if(state.base < state.registers)
 		throw RiposteError("Register overflow");
 
@@ -779,6 +775,7 @@ Value eval(State& state, Code const* code) {
 }
 
 Value eval(State& state, Code const* code, Environment* environment) {
+	//std::cout << "Executing: " << state.stringify(Closure((Code*)code,NULL)) << std::endl;
 	Value result;
 #ifdef THREADED_INTERPRETER
 	static const Instruction* done = new Instruction(glabels[0]);
@@ -786,7 +783,6 @@ Value eval(State& state, Code const* code, Environment* environment) {
 	static const Instruction* done = new Instruction(ByteCode::done);
 #endif
 	Value* old_base = state.base;
-
 	int64_t stackSize = state.stack.size();
 	Instruction const* run = buildStackFrame(state, environment, false, code, &result, done);
 	try {

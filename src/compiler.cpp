@@ -58,25 +58,28 @@ static void resolveLoopReferences(Code* code, int64_t start, int64_t end, int64_
 
 int64_t Compiler::compileConstant(Value const& expr, Code* code) {
 	code->constants.push_back(expr);
-	code->bc.push_back(Instruction(ByteCode::kget, code->constants.size()-1, 0, registerDepth));
-	return registerDepth++;
+	int64_t reg = scopes.back().allocRegister(Register::CONSTANT);
+	code->bc.push_back(Instruction(ByteCode::kget, code->constants.size()-1, 0, reg));
+	return reg;
 }
 
 int64_t Compiler::compileSymbol(Symbol const& symbol, Code* code) {
 	// search for symbol in variables list
-	if(scope.size() > 0) {
-		for(uint64_t i = 0; i < scope.back().symbols.size(); i++) {
-			if(scope.back().symbols[i] == symbol) {
-				code->bc.push_back(Instruction(ByteCode::sget, i, 0, registerDepth));
-				return registerDepth++;
+	if(!scopes.back().topLevel) {
+		for(uint64_t i = 0; i < scopes.back().symbols.size(); i++) {
+			if(scopes.back().symbols[i] == symbol) {
+				int64_t reg = scopes.back().allocRegister(Register::VARIABLE);
+				code->bc.push_back(Instruction(ByteCode::sget, i, 0, reg));
+				return reg;
 			}
 		}
 	}
-	code->bc.push_back(Instruction(ByteCode::get, symbol.i, 0, registerDepth));
-	return registerDepth++;
+	int64_t reg = scopes.back().allocRegister(Register::VARIABLE);
+	code->bc.push_back(Instruction(ByteCode::get, symbol.i, 0, reg));
+	return reg;
 }
 
-static CompiledCall makeCall(State& state, Call const& call) {
+CompiledCall Compiler::makeCall(Call const& call) {
 	// compute compiled call...precompiles promise code and some necessary values
 	int64_t dots = call.length-1;
 	List arguments(call.length-1);
@@ -87,7 +90,8 @@ static CompiledCall makeCall(State& state, Call const& call) {
 		} else if(call[i].type == Type::R_call ||
 		   call[i].type == Type::R_symbol ||
 		   call[i].type == Type::R_pairlist) {
-			arguments[i-1] = Closure(Compiler::compile(state, call[i]),NULL);
+			// promises should have access to the slots of the enclosing scope, but have their own register assignments
+			arguments[i-1] = Closure(Compiler::compile(call[i]),NULL);
 		} else {
 			arguments[i-1] = call[i];
 		}
@@ -101,17 +105,14 @@ static CompiledCall makeCall(State& state, Call const& call) {
 
 // a standard call, not an op
 int64_t Compiler::compileFunctionCall(Call const& call, Code* code) {
-	int64_t initialDepth = registerDepth;
-	
+	int64_t liveIn = scopes.back().live();
 	int64_t function = compile(call[0], code);
-	
-	CompiledCall compiledCall(makeCall(state, call));
-
-	// insert call
+	CompiledCall compiledCall(makeCall(call));
 	code->constants.push_back(compiledCall);
-	code->bc.push_back(Instruction(ByteCode::call, function, code->constants.size()-1, initialDepth));
-	registerDepth = initialDepth;
-	return registerDepth++;
+	scopes.back().deadAfter(liveIn);
+	int64_t result = scopes.back().allocRegister(Register::TEMP);
+	code->bc.push_back(Instruction(ByteCode::call, function, code->constants.size()-1, result));
+	return result;
 }
 
 int64_t Compiler::compileCall(Call const& call, Code* code) {
@@ -120,7 +121,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		throw CompileError("invalid empty call");
 	}
 
-	int64_t initialDepth = registerDepth;
+	int64_t liveIn = scopes.back().live();
 
 	Symbol func = Symbol::NA;
 	if(call[0].type == Type::R_symbol)
@@ -134,13 +135,13 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	{
 		// The riposte way... .Internal is a function on symbols, returning the internal function
 		if(call[1].type == Type::R_symbol) {
-			code->bc.push_back(Instruction(ByteCode::iget, Symbol(call[1]).i, initialDepth));
-			registerDepth = initialDepth;
-			return registerDepth++;
+			int64_t reg = scopes.back().allocRegister(Register::VARIABLE);
+			code->bc.push_back(Instruction(ByteCode::iget, Symbol(call[1]).i, reg));
+			return reg;
 		 } else if(call[1].type == Type::R_character && call[1].length > 0) {
-			code->bc.push_back(Instruction(ByteCode::iget, Character(call[1])[0].i, initialDepth));
-			registerDepth = initialDepth;
-			return registerDepth++;
+			int64_t reg = scopes.back().allocRegister(Register::VARIABLE);
+			code->bc.push_back(Instruction(ByteCode::iget, Character(call[1])[0].i, reg));
+			return reg;
 		} else if(call[1].type == Type::R_call) {
 			// The R way... .Internal is a function on calls
 			Call c = call[1];
@@ -185,52 +186,50 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		// check if destination is a reserved slot.
 		int64_t dest_i = Symbol(dest).i;
 		bool slot = false;
-		if(scope.size() > 0) {
-			for(uint64_t i = 0; i < scope.back().symbols.size(); i++) {
-				if(scope.back().symbols[i] == Symbol(dest)) {
+		if(!scopes.back().topLevel) {
+			for(uint64_t i = 0; i < scopes.back().symbols.size(); i++) {
+				if(scopes.back().symbols[i] == Symbol(dest)) {
 					dest_i = i;
 					slot = true;
 				}
 			}
-			if(!slot && scope.back().symbols.size() < 32) {
-				scope.back().symbols.push_back(Symbol(dest));
-				dest_i = scope.back().symbols.size()-1;
+			if(!slot && scopes.back().symbols.size() < 32) {
+				scopes.back().symbols.push_back(Symbol(dest));
+				dest_i = scopes.back().symbols.size()-1;
 				slot = true;
 			}
 		}
 	
-		if(slot)	
+		if(slot)
 			code->bc.push_back(Instruction(ByteCode::sassign, dest_i, 0, source));
 		else
 			code->bc.push_back(Instruction(ByteCode::assign, dest_i, 0, source));
-		
-		if(source != initialDepth) throw CompileError("unbalanced registers in assign");
-		registerDepth = initialDepth;
-		return registerDepth++;
+	
+		scopes.back().deadAfter(source);	
+		return source;
 	} break;
 	case Symbol::E_bracketAssign: { 
 		// if there's more than three parameters, we should call the library version...
 		if(call.length > 4) return compileFunctionCall(call, code);
 		int64_t dest = compile(call[1], code);
-		assert(initialDepth == dest);
 		int64_t index = compile(call[2], code);
 		int64_t value = compile(call[3], code);
 		code->bc.push_back(Instruction(ByteCode::iassign, value, index, dest));
-		registerDepth = initialDepth;
-		return registerDepth++;
+		scopes.back().deadAfter(dest);	
+		return dest;
 	} break;
 	case Symbol::E_bbAssign: {
 		int64_t dest = compile(call[1], code);
-		assert(initialDepth == dest);
 		int64_t index = compile(call[2], code);
 		int64_t value = compile(call[3], code);
 		code->bc.push_back(Instruction(ByteCode::eassign, value, index, dest));
-		registerDepth = initialDepth;
-		return registerDepth++;
+		scopes.back().deadAfter(dest);	
+		return dest;
 	} break;
 	case Symbol::E_function: 
 	{
 		Scope scope;
+		scope.topLevel = false;
 		//compile the default parameters	
 		List c = PairList(call[1]);
 		List parameters(c.length);
@@ -249,130 +248,132 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		code->constants.push_back(parameters);
 
 		//compile the source for the body
-		this->scope.push_back(scope);
+		scopes.push_back(scope);
 		Code* functionCode = compile(call[2]);
-		functionCode->slotSymbols = this->scope.back().symbols;
-		functionCode->registers = 16;
+		functionCode->slotSymbols.swap(scopes.back().symbols);
 		Closure body(functionCode, NULL);
 		code->constants.push_back(body);
-		this->scope.pop_back();
+		scopes.pop_back();
 
 		//push back the source code.
 		code->constants.push_back(call[3]);
-	
-		code->bc.push_back(Instruction(ByteCode::function, code->constants.size()-3, code->constants.size()-2, initialDepth));
-		registerDepth = initialDepth;
-		return registerDepth++;
+
+		scopes.back().deadAfter(liveIn);	
+		int64_t reg = scopes.back().allocRegister(Register::CONSTANT);	
+		code->bc.push_back(Instruction(ByteCode::function, code->constants.size()-3, code->constants.size()-2, reg));
+		return reg;
 	} break;
 	case Symbol::E_returnSym: 
 	{
-		// return always writes to the 0 register
 		int64_t result;
 		if(call.length == 1) {
-			compile(Null::singleton, code);
-			result = registerDepth;
+			result = compile(Null::singleton, code);
 		} else if(call.length == 2)
 			result = compile(call[1], code);
 		else
 			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
 		code->bc.push_back(Instruction(ByteCode::ret, 0, 0, result));
-		registerDepth = 0;
-		return registerDepth++;
+		scopes.back().deadAfter(result);
+		return result;
 	} break;
 	case Symbol::E_forSym: 
 	{
+		int64_t result = compile(Null::singleton, code);
 		// special case common i in m:n case
 		if(call[2].type == Type::R_call && Symbol(Call(call[2])[0]) == Symbol::colon) {
 			int64_t lim1 = compile(Call(call[2])[1], code);
 			int64_t lim2 = compile(Call(call[2])[2], code);
-			registerDepth = initialDepth+3; // save space for NULL result and loop variables 
-			if(lim2 != lim1+1) throw CompileError("limits aren't in adjacent registers");
-			code->bc.push_back(Instruction(ByteCode::iforbegin, 0, Symbol(call[1]).i, lim1));
+			if(lim1+1 != lim2) throw CompileError("limits aren't in adjacent registers");
+			code->bc.push_back(Instruction(ByteCode::iforbegin, 0, Symbol(call[1]).i, lim2));
 			loopDepth++;
 			int64_t beginbody = code->bc.size();
 			compile(call[3], code);
 			int64_t endbody = code->bc.size();
 			resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
 			loopDepth--;
-			code->bc.push_back(Instruction(ByteCode::iforend, beginbody-endbody, Symbol(call[1]).i, lim1));
+			code->bc.push_back(Instruction(ByteCode::iforend, beginbody-endbody, Symbol(call[1]).i, lim2));
 			code->bc[beginbody-1].a = endbody-beginbody+1;
 		}
 		else {
-			int64_t lim = compile(call[2], code);
-			registerDepth = initialDepth+3; // save space for NULL result and loop variables
-			code->bc.push_back(Instruction(ByteCode::forbegin, 0, Symbol(call[1]).i, lim));
+			int64_t loop_vector = compile(call[2], code);
+			int64_t loop_var = scopes.back().allocRegister(Register::VARIABLE);	// save space for loop variable
+			if(loop_var != loop_vector+1) throw CompileError("limits aren't in adjacent registers");
+			code->bc.push_back(Instruction(ByteCode::forbegin, 0, Symbol(call[1]).i, loop_var));
 			loopDepth++;
 			int64_t beginbody = code->bc.size();
 			compile(call[3], code);
 			int64_t endbody = code->bc.size();
 			resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
 			loopDepth--;
-			code->bc.push_back(Instruction(ByteCode::forend, beginbody-endbody, Symbol(call[1]).i, lim));
+			code->bc.push_back(Instruction(ByteCode::forend, beginbody-endbody, Symbol(call[1]).i, loop_var));
 			code->bc[beginbody-1].a = endbody-beginbody+1;
 		}
-		registerDepth = initialDepth;
-		return registerDepth++;
+		scopes.back().deadAfter(result);
+		return result;
 	} break;
 	case Symbol::E_whileSym: 
 	{
+		int64_t result = compile(Null::singleton, code);
 		int64_t lim = compile(call[1], code);
-		registerDepth = initialDepth+1; // save space for NULL result
-		code->bc.push_back(Instruction(ByteCode::whilebegin, 0, lim, lim));
+		code->bc.push_back(Instruction(ByteCode::whilebegin, 0, lim, result));
 		loopDepth++;
 		int64_t beginbody = code->bc.size();
 		compile(call[2], code);
-		registerDepth = initialDepth+1; // save space for NULL result
 		int64_t beforecond = code->bc.size();
 		int64_t lim2 = compile(call[1], code);
 		int64_t endbody = code->bc.size();
 		resolveLoopReferences(code, beginbody, endbody, beforecond, endbody+1);
 		loopDepth--;
-		code->bc.push_back(Instruction(ByteCode::whileend, beginbody-endbody, lim2, lim));
+		code->bc.push_back(Instruction(ByteCode::whileend, beginbody-endbody, lim2, result));
 		code->bc[beginbody-1].a = endbody-beginbody+2;
-		registerDepth = initialDepth;
-		return registerDepth++;
+		scopes.back().deadAfter(result);
+		return result;
 	} break;
 	case Symbol::E_repeatSym: 
 	{
-		registerDepth = initialDepth+1; // save space for NULL result
-		code->bc.push_back(Instruction(ByteCode::repeatbegin, 0, 0, initialDepth));
+		int64_t result = compile(Null::singleton, code);
+		code->bc.push_back(Instruction(ByteCode::repeatbegin, 0, 0, result));
 		loopDepth++;
 		int64_t beginbody = code->bc.size();
 		compile(call[1], code);
 		int64_t endbody = code->bc.size();
 		resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
 		loopDepth--;
-		code->bc.push_back(Instruction(ByteCode::repeatend, beginbody-endbody, 0, initialDepth));
+		code->bc.push_back(Instruction(ByteCode::repeatend, beginbody-endbody, 0, result));
 		code->bc[beginbody-1].a = endbody-beginbody+2;
-		registerDepth = initialDepth;
-		return registerDepth++;
+		scopes.back().deadAfter(result);
+		return result;
 	} break;
 	case Symbol::E_nextSym:
 	{
 		if(loopDepth == 0) throw CompileError("next used outside of loop");
-		code->bc.push_back(Instruction(ByteCode::next, 0));
-		return registerDepth;
+		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		code->bc.push_back(Instruction(ByteCode::next, 0, 0, result));
+		return result;
 	} break;
 	case Symbol::E_breakSym:
 	{
 		if(loopDepth == 0) throw CompileError("break used outside of loop");
-		code->bc.push_back(Instruction(ByteCode::break1, 0));
-		return registerDepth;
+		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		code->bc.push_back(Instruction(ByteCode::break1, 0, 0, result));
+		return result;
 	} break;
 	case Symbol::E_ifSym: 
 	{
-		compile(Null::singleton, code);
+		int64_t resultT, resultF;
+		if(call.length == 3)
+			resultF = compile(Null::singleton, code);
 		int64_t cond = compile(call[1], code);
-		code->bc.push_back(Instruction(ByteCode::if1, 0, cond));
+		code->bc.push_back(Instruction(ByteCode::if1, 0, cond, liveIn));
 		int64_t begin1 = code->bc.size(), begin2 = 0;
-		registerDepth = initialDepth;
-		int64_t result = compile(call[2], code);
+		scopes.back().deadAfter(liveIn);
+		resultT = compile(call[2], code);
+
 		if(call.length == 4) {
 			code->bc.push_back(Instruction(ByteCode::jmp, 0));
-			registerDepth = initialDepth;
+			scopes.back().deadAfter(liveIn);
 			begin2 = code->bc.size();
-			int64_t result2 = compile(call[3], code);
-			if(result != result2 || result != initialDepth) throw CompileError("then and else blocks don't put the result in the same register");
+			resultF = compile(call[3], code);
 		}
 		else
 			begin2 = code->bc.size();
@@ -380,56 +381,64 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		code->bc[begin1-1].a = begin2-begin1+1;
 		if(call.length == 4)
 			code->bc[begin2-1].a = end-begin2+1;
-		registerDepth = initialDepth;
-		return registerDepth++;
+	
+		// TODO: if this can ever happen, should probably just insert a move into the lower numbered register	
+		if(resultT != resultF) throw CompileError(std::string("then and else blocks don't put the result in the same register ") + intToStr(resultT) + " " + intToStr(resultF));
+		scopes.back().deadAfter(resultT);
+		return resultT;
 	} break;
 	case Symbol::E_brace: 
 	{
 		int64_t length = call.length;
-		if(length == 0) {
-			compile(Null::singleton, code);
-			return registerDepth++;
+		if(length <= 1) {
+			return compile(Null::singleton, code);
 		} else {
-			int64_t result = initialDepth;
+			int64_t result;
 			for(int64_t i = 1; i < length; i++) {
-				registerDepth = initialDepth;
+				scopes.back().deadAfter(liveIn);
 				result = compile(call[i], code);
-				//if(i < length-1)
-				//	code->bc.push_back(Instruction(ByteCode::pop));
 			}
+			scopes.back().deadAfter(result);
 			return result;
 		}
 	} break;
 	case Symbol::E_paren: 
 	{
-		compile(call[1], code);
-		return registerDepth;
+		return compile(call[1], code);
 	} break;
 	case Symbol::E_add: 
 	{
+		int64_t result;
 		if(call.length == 2) {
 			int64_t a = compile(call[1], code);
-			code->bc.push_back(Instruction(ByteCode::pos, a, 0, initialDepth));
+			scopes.back().deadAfter(liveIn);
+			result = scopes.back().allocRegister(Register::TEMP);
+			code->bc.push_back(Instruction(ByteCode::pos, a, 0, result));
 		} else if(call.length == 3) {
 			int64_t a = compile(call[1], code);
 			int64_t b = compile(call[2], code);
-			code->bc.push_back(Instruction(ByteCode::add, a, b, initialDepth));
+			scopes.back().deadAfter(liveIn);
+			result = scopes.back().allocRegister(Register::TEMP);
+			code->bc.push_back(Instruction(ByteCode::add, a, b, result));
 		}
-		registerDepth = initialDepth;
-		return registerDepth++;
+		return result;
 	} break;
 	case Symbol::E_sub: 
 	{
+		int64_t result;
 		if(call.length == 2) {
 			int64_t a = compile(call[1], code);
-			code->bc.push_back(Instruction(ByteCode::neg, a, 0, initialDepth));
+			scopes.back().deadAfter(liveIn);
+			result = scopes.back().allocRegister(Register::TEMP);
+			code->bc.push_back(Instruction(ByteCode::neg, a, 0, result));
 		} else if(call.length == 3) {
 			int64_t a = compile(call[1], code);
 			int64_t b = compile(call[2], code);
-			code->bc.push_back(Instruction(ByteCode::sub, a, b, initialDepth));
+			scopes.back().deadAfter(liveIn);
+			result = scopes.back().allocRegister(Register::TEMP);
+			code->bc.push_back(Instruction(ByteCode::sub, a, b, result));
 		}
-		registerDepth = initialDepth;
-		return registerDepth++;
+		return result;
 	} break;
 	// Binary operators
 	case Symbol::E_colon:
@@ -449,9 +458,10 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	{ 
 		int64_t a = compile(call[1], code);
 		int64_t b = compile(call[2], code);
-		code->bc.push_back(Instruction(op(func), a, b, initialDepth));
-		registerDepth = initialDepth;
-		return registerDepth++;
+		scopes.back().deadAfter(liveIn);
+		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		code->bc.push_back(Instruction(op(func), a, b, result));
+		return result;
 	} break;
 	// Unary operators
 	case Symbol::E_lnot: 
@@ -480,68 +490,46 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	case Symbol::E_type:
 	{ 
 		int64_t a = compile(call[1], code);
-		code->bc.push_back(Instruction(op(func), a, 0, initialDepth));
-		registerDepth = initialDepth;
-		return registerDepth++;
-	} break;
-	// Shortcut operators, TODO: these don't handle NAs correctly yet
-	case Symbol::E_sland:
-	{
-		compile(Logical::False(), code);
-		int64_t cond = compile(call[1], code);
-		code->bc.push_back(Instruction(ByteCode::if1, 0, cond));
-		int64_t begin1 = code->bc.size();
-		registerDepth = initialDepth;
-		int64_t cond2 = compile(call[2], code);
-		code->bc.push_back(Instruction(ByteCode::istrue, cond2, 0, initialDepth));
-		int64_t end = code->bc.size();
-		code->bc[begin1-1].a = end-begin1+1;
-		registerDepth = initialDepth;
-		return registerDepth++;
+		scopes.back().deadAfter(liveIn);
+		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		code->bc.push_back(Instruction(op(func), a, 0, result));
+		return result; 
 	} break;
 	case Symbol::E_slor:
+	case Symbol::E_sland:
 	{
-		compile(Logical::True(), code);
-		int64_t cond = compile(call[1], code);
-		code->bc.push_back(Instruction(ByteCode::if0, 0, cond));
-		int64_t begin1 = code->bc.size();
-		registerDepth = initialDepth;
-		int64_t cond2 = compile(call[2], code);
-		code->bc.push_back(Instruction(ByteCode::istrue, cond2, 0, initialDepth));
-		int64_t end = code->bc.size();
-		code->bc[begin1-1].a = end-begin1+1;
-		registerDepth = initialDepth;
-		return registerDepth++;
-	} break;
+		throw CompileError("Not yet implemented slor and sland");
+	};
 	case Symbol::E_UseMethod:
 	{
-		if(scope.size() == 0)
+		if(scopes.back().topLevel)
 			throw CompileError("Attempt to use UseMethod outside of function");
 		
 		// This doesn't match R's behavior. R always uses the original value of the first argument, not the most recent value. Blah.
-		int64_t object = (call.length == 3) ? compile(call[2], code) : compile(scope.back().symbols[0], code); 
+		int64_t object = (call.length == 3) ? compile(call[2], code) : compile(scopes.back().symbols[0], code); 
 		
 		int64_t generic = compile(call[1], code);
 		
-		Character p(scope.back().parameters);
+		Character p(scopes.back().parameters);
 		Call gcall(p.length+1);
 		for(int64_t i = 0; i < p.length; i++) gcall[i+1] = p[i];
-		CompiledCall compiledCall(makeCall(state, gcall));
+		CompiledCall compiledCall(makeCall(gcall));
 
 		code->constants.push_back(compiledCall);
 	
 		int64_t arguments = code->constants.size()-1;	
 		
 		code->bc.push_back(Instruction(ByteCode::UseMethod, generic, arguments, object));
-		registerDepth = initialDepth;
-		return registerDepth++;
+		scopes.back().deadAfter(object);
+		return object;
 	} break;
 	case Symbol::E_seq_len:
 	{
 		int64_t len = compile(call[1], code);
-		code->bc.push_back(Instruction(ByteCode::seq, len, 0, initialDepth));
-		registerDepth = initialDepth;
-		return registerDepth++;
+		scopes.back().deadAfter(liveIn);
+		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		code->bc.push_back(Instruction(ByteCode::seq, len, 0, result));
+		return result;
 	} break;
 	default:
 	{
@@ -551,17 +539,14 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 }
 
 int64_t Compiler::compileExpression(Expression const& values, Code* code) {
-	int64_t initialDepth = registerDepth;
+	int64_t liveIn = scopes.back().live();
 	int64_t result;
-	int64_t length = values.length;
-	for(int64_t i = 0; i < length; i++) {
-		registerDepth = initialDepth;
+	for(int64_t i = 0; i < values.length; i++) {
+		scopes.back().deadAfter(liveIn);
 		result = compile(values[i], code);
-		//if(i < length-1)
-		//	code->bc.push_back(Instruction(ByteCode::pop));
 	}
-	registerDepth = initialDepth;
-	return registerDepth++;
+	scopes.back().deadAfter(result);
+	return result;
 }
 
 int64_t Compiler::compile(Value const& expr, Code* code) {
@@ -587,13 +572,20 @@ Code* Compiler::compile(Value const& expr) {
 
 	int64_t oldLoopDepth = loopDepth;
 	loopDepth = 0;
-	int64_t oldRegisterDepth = registerDepth;
-	registerDepth = 0;
-	compile(expr, code);
+	
+	std::vector<Register> oldRegisters;
+	oldRegisters.swap(scopes.back().registers);
+	int64_t oldMaxRegister = scopes.back().maxRegister;
+	
+	int64_t result = compile(expr, code);
+
+	code->registers = scopes.back().maxRegister+1;
 	code->expression = expr;
 	// insert return statement at end of code
-	code->bc.push_back(Instruction(ByteCode::ret));
-	registerDepth = oldRegisterDepth;
+	code->bc.push_back(Instruction(ByteCode::ret, 0, 0, result));
+	
+	oldRegisters.swap(scopes.back().registers);
+	scopes.back().maxRegister = oldMaxRegister;	
 	loopDepth = oldLoopDepth;
 
 	return code;	
