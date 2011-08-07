@@ -1,7 +1,6 @@
 
 #include "value.h"
 #include "internal.h"
-#include "compiler.h"
 
 _doublena doublena = {0x7fff000000001953};
 
@@ -42,28 +41,5 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 			int64_t i = 0;
 			for(;i < names.length; i++) if(Symbol(names[i]) == Symbol::dots) inner->dots = i;
 		}
-	}
-
-	CompiledCall::CompiledCall(Call const& call, State& state) {
-		inner = new Inner();
-		inner->call = call;
-		inner->dots = call.length-1;
-		List arguments(call.length-1);
-		for(int64_t i = 1; i < call.length; i++) {
-			if(call[i].type == Type::R_symbol && Symbol(call[i]) == Symbol::dots) {
-				arguments[i-1] = call[i];
-				inner->dots = i-1;
-			} else if(call[i].type == Type::R_call ||
-			   call[i].type == Type::R_symbol ||
-			   call[i].type == Type::R_pairlist) {
-				arguments[i-1] = Closure(Compiler::compile(state, call[i]),NULL);
-			} else {
-				arguments[i-1] = call[i];
-			}
-		}
-		if(hasNames(call)) {
-			setNames(arguments, Subset(Character(getNames(call)), 1, call.length-1));
-		}
-		inner->arguments = arguments;
 	}
 

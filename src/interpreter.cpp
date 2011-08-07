@@ -121,6 +121,11 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 	List parameters = func.parameters();
 	Character pnames = getNames(parameters);
 
+	// Set to nil slots beyond the parameters
+	for(int64_t i = parameters.length; i < fenv->SlotCount(); i++) {
+		sassign(fenv, i, Value::Nil);
+	}
+
 	// call arguments are not named, do posititional matching
 	if(!hasNames(arguments)) {
 		int64_t end = std::min(arguments.length, func.dots());
@@ -138,37 +143,25 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			sassign(fenv, func.dots(), dots);
 			end++;
 		}
-		// set defaults (often these will be completely overridden. Can we delay or skip?
+		// set defaults
 		for(int64_t i = end; i < parameters.length; ++i) {
 			argAssign(fenv, i, parameters[i], fenv);
 		}
 		
-		// set nil slots
-		for(int64_t i = parameters.length; i < fenv->SlotCount(); i++) {
-			sassign(fenv, i, Value::Nil);
-		}
 	}
 	// call arguments are named, do matching by name
 	else {
-		// set defaults (often these will be completely overridden. Can we delay or skip?
-		for(int64_t i = 0; i < parameters.length; ++i) {
-			argAssign(fenv, i, parameters[i], fenv);
-		}
-		// set nils
-		for(int64_t i = parameters.length; i < fenv->SlotCount(); i++) {
-			sassign(fenv, i, Value::Nil);
-		}
-		Character anames = getNames(arguments);
 		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
 		static char assignment[64], set[64];
 		for(int64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
-		for(int64_t i = 0; i < parameters.length; i++) set[i] = -1;
+		for(int64_t i = 0; i < parameters.length; i++) set[i] = -(i+1);
+		
+		Character anames = getNames(arguments);
 		// named args, search for complete matches
 		for(int64_t i = 0; i < arguments.length; ++i) {
 			if(anames[i] != Symbol::empty) {
 				for(int64_t j = 0; j < parameters.length; ++j) {
 					if(pnames[j] != Symbol::dots && anames[i] == pnames[j]) {
-						argAssign(fenv, j, arguments[i], env);
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -182,8 +175,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 				std::string a = state.SymToStr(anames[i]);
 				for(int64_t j = 0; j < parameters.length; ++j) {
 					if(set[j] < 0 && pnames[j] != Symbol::dots &&
-						state.SymToStr(pnames[i]).compare( 0, a.size(), a ) == 0 ) {	
-						argAssign(fenv, j, arguments[i], env);
+						state.SymToStr(pnames[j]).compare( 0, a.size(), a ) == 0 ) {	
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -197,7 +189,6 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			if(anames[i] == Symbol::empty) {
 				for(; firstEmpty < func.dots(); ++firstEmpty) {
 					if(set[firstEmpty] < 0) {
-						argAssign(fenv, firstEmpty, arguments[i], env);
 						assignment[i] = firstEmpty;
 						set[firstEmpty] = i;
 						break;
@@ -205,20 +196,33 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 				}
 			}
 		}
-		// put unused args into the dots
+		
+		// count up unused parameters and assign names
+		Character names(0); 
+		int64_t unassigned = 0;
 		if(func.dots() < parameters.length) {
 			// count up the unassigned args
-			int64_t unassigned = 0;
 			for(int64_t j = 0; j < arguments.length; j++) if(assignment[j] < 0) unassigned++;
+			names = Character(unassigned);
+			int64_t idx = 0;
+			for(int64_t j = 0; j < arguments.length; j++) if(assignment[j] < 0) names[idx++] = anames[j];
+		}
+
+		// stuff that can't be cached...
+
+		// assign all the arguments
+		for(int64_t j = 0; j < parameters.length; ++j) if(j != func.dots()) argAssign(fenv, j, set[j]>=0 ? arguments[set[j]] : parameters[-(set[j]+1)], env);
+
+		// put unused args into the dots
+		if(func.dots() < parameters.length) {
 			List values(unassigned);
-			Character names(unassigned);
 			int64_t idx = 0;
 			for(int64_t j = 0; j < arguments.length; j++) {
 				if(assignment[j] < 0) {
 					values[idx] = arguments[j];
 					if(values[idx].isClosure() && values[idx].env == 0)
 						values[idx].env = env;
-					names[idx++] = anames[j];
+					idx++;
 				}
 			}
 			setNames(values, names);
@@ -789,8 +793,7 @@ Value eval(State& state, Code const* code, Environment* environment) {
 		interpret(state, run);
 	} catch(...) {
 		state.base = old_base;
-		while((int64_t)state.stack.size() > stackSize)
-			state.pop();
+		state.stack.resize(stackSize);
 		throw;
 	}
 	return result;

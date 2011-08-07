@@ -144,7 +144,7 @@ struct VectorImpl {
 
 	bool packed() const { return false; }
 
-	explicit VectorImpl(int64_t length) : _data(new (GC) Element[length]), length(length), attributes(0) {}
+	explicit VectorImpl(int64_t length) : _data(length == 0 ? 0 : new (GC) Element[length]), length(length), attributes(0) {}
 
 	explicit VectorImpl(Value v) : _data((ElementType*)v.p), length(v.length), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
@@ -493,7 +493,12 @@ class CompiledCall {
 
 	Inner* inner;
 public:
-	explicit CompiledCall(Call const& call, State& state);
+	explicit CompiledCall(Call const& call, List const& arguments, int64_t dots) {
+		inner = new Inner();
+		inner->call = call;
+		inner->arguments = arguments;
+		inner->dots = dots;
+	}
 
 	explicit CompiledCall(Value const& v) {
 		assert(v.type == Type::I_compiledcall);

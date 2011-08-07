@@ -76,11 +76,37 @@ int64_t Compiler::compileSymbol(Symbol const& symbol, Code* code) {
 	return registerDepth++;
 }
 
+static CompiledCall makeCall(State& state, Call const& call) {
+	// compute compiled call...precompiles promise code and some necessary values
+	int64_t dots = call.length-1;
+	List arguments(call.length-1);
+	for(int64_t i = 1; i < call.length; i++) {
+		if(call[i].type == Type::R_symbol && Symbol(call[i]) == Symbol::dots) {
+			arguments[i-1] = call[i];
+			dots = i-1;
+		} else if(call[i].type == Type::R_call ||
+		   call[i].type == Type::R_symbol ||
+		   call[i].type == Type::R_pairlist) {
+			arguments[i-1] = Closure(Compiler::compile(state, call[i]),NULL);
+		} else {
+			arguments[i-1] = call[i];
+		}
+	}
+	if(hasNames(call)) {
+		setNames(arguments, Subset(Character(getNames(call)), 1, call.length-1));
+		// reserve room for cached name matching...
+	}
+	return CompiledCall(call, arguments, dots);
+}
+
+// a standard call, not an op
 int64_t Compiler::compileFunctionCall(Call const& call, Code* code) {
 	int64_t initialDepth = registerDepth;
-	// a standard call, not an op
+	
 	int64_t function = compile(call[0], code);
-	CompiledCall compiledCall(call, state);
+	
+	CompiledCall compiledCall(makeCall(state, call));
+
 	// insert call
 	code->constants.push_back(compiledCall);
 	code->bc.push_back(Instruction(ByteCode::call, function, code->constants.size()-1, initialDepth));
@@ -106,7 +132,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 
 	case Symbol::E_internal: 
 	{
-		// The riposte way... .Internal is a function on state, returning the internal function
+		// The riposte way... .Internal is a function on symbols, returning the internal function
 		if(call[1].type == Type::R_symbol) {
 			code->bc.push_back(Instruction(ByteCode::iget, Symbol(call[1]).i, initialDepth));
 			registerDepth = initialDepth;
@@ -500,7 +526,8 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		Character p(scope.back().parameters);
 		Call gcall(p.length+1);
 		for(int64_t i = 0; i < p.length; i++) gcall[i+1] = p[i];
-		CompiledCall compiledCall(gcall, state);
+		CompiledCall compiledCall(makeCall(state, gcall));
+
 		code->constants.push_back(compiledCall);
 	
 		int64_t arguments = code->constants.size()-1;	
