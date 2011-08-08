@@ -57,6 +57,8 @@ private:
 	int64_t compileExpression(Expression const& values, Code* code);
 	
 	CompiledCall makeCall(Call const& call);
+
+	void emit(Code* code, ByteCode bc, int64_t a, int64_t b, int64_t c);
 public:
 	static Code* compile(State& state, Value const& expr) {
 		Compiler compiler(state);
