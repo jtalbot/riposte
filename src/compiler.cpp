@@ -366,7 +366,9 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	} break;
 	case Symbol::E_ifSym: 
 	{
-		int64_t resultT, resultF;
+		int64_t resultT=0, resultF=0;
+		if(call.length != 3 && call.length != 4)	
+			throw CompileError("invalid if statement");
 		if(call.length == 3)
 			resultF = compile(Null::singleton, code);
 		int64_t cond = compile(call[1], code);
@@ -414,7 +416,9 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	} break;
 	case Symbol::E_add: 
 	{
-		int64_t result;
+		int64_t result = 0;
+		if(call.length != 2 && call.length != 3)
+			throw CompileError("invalid addition");
 		if(call.length == 2) {
 			int64_t a = compile(call[1], code);
 			scopes.back().deadAfter(liveIn);
@@ -431,7 +435,9 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	} break;
 	case Symbol::E_sub: 
 	{
-		int64_t result;
+		int64_t result = 0;
+		if(call.length != 2 && call.length != 3)
+			throw CompileError("invalid addition");
 		if(call.length == 2) {
 			int64_t a = compile(call[1], code);
 			scopes.back().deadAfter(liveIn);
@@ -543,7 +549,9 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 
 int64_t Compiler::compileExpression(Expression const& values, Code* code) {
 	int64_t liveIn = scopes.back().live();
-	int64_t result;
+	int64_t result = 0;
+	if(values.length == 0) 
+		throw CompileError("invalid empty expression");
 	for(int64_t i = 0; i < values.length; i++) {
 		scopes.back().deadAfter(liveIn);
 		result = compile(values[i], code);
