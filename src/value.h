@@ -166,6 +166,19 @@ struct VectorImpl {
 		return *this;
 	}
 
+	// Cross type cast (between vectors with the same storage type), use carefully
+	// Mainly used for casting between Lists, Calls, and Expressions
+	template<Type::EnumValue T>
+	VectorImpl(VectorImpl<T, ElementType, Recursive> const& other) {
+		length = other.length;
+		_data = other._data;
+		attributes = other.attributes;
+		if(packed()) {
+                        memcpy(pack, other.pack, packLength*sizeof(ElementType));
+			_data = pack;
+		}
+	}
+
 	explicit VectorImpl(int64_t length) 
 		: length(length), 
 		_data(
@@ -233,11 +246,13 @@ union _doublena {
 	double d;
 };
 
-#define VECTOR_IMPL(Name, Type, Element, Recursive) 				\
-struct Name : public VectorImpl<Type, Element, Recursive> { 			\
-	Name(int64_t length) : VectorImpl<Type, Element, Recursive>(length) {} 	\
-	Name(Value const& v) : VectorImpl<Type, Element, Recursive>(v) {} 	\
-	Name(Vector const& v) : VectorImpl<Type, Element, Recursive>(v) {} 	\
+#define VECTOR_IMPL(Name, VectorType, Element, Recursive) 				\
+struct Name : public VectorImpl<VectorType, Element, Recursive> { 			\
+	explicit Name(int64_t length) : VectorImpl<VectorType, Element, Recursive>(length) {} 	\
+	Name(Value const& v) : VectorImpl<VectorType, Element, Recursive>(v) {} 	\
+	explicit Name(Vector const& v) : VectorImpl<VectorType, Element, Recursive>(v) {} 	\
+	template<Type::EnumValue T> \
+	explicit Name(VectorImpl<T, Element, Recursive> const& other) : VectorImpl<VectorType, Element, Recursive>(other) {} \
 	static Name c() { Name c(0); return c; } \
 	static Name c(Element v0) { Name c(1); c[0] = v0; return c; } \
 	static Name c(Element v0, Element v1) { Name c(2); c[0] = v0; c[1] = v1; return c; } \
@@ -311,9 +326,6 @@ VECTOR_IMPL(List, Type::E_R_list, Value, true)
 };
 
 VECTOR_IMPL(PairList, Type::E_R_pairlist, Value, true) 
-	explicit PairList(List v) : VectorImpl<Type::E_R_pairlist, Value, true>(v.data(), v.length, v.attributes) {}
-	operator List() {Value v = *this; v.type = Type::R_list; return List(v);} 
-	
 	static bool isNA(Value c) { return false; }
 	static bool isNaN(Value c) { return false; }
 	static bool isFinite(Value c) { return false; }
@@ -321,8 +333,6 @@ VECTOR_IMPL(PairList, Type::E_R_pairlist, Value, true)
 };
 
 VECTOR_IMPL(Call, Type::E_R_call, Value, true) 
-	explicit Call(List v) : VectorImpl<Type::E_R_call, Value, true>(v.data(), v.length, v.attributes) {}
-	
 	static bool isNA(Value c) { return false; }
 	static bool isNaN(Value c) { return false; }
 	static bool isFinite(Value c) { return false; }
@@ -330,8 +340,6 @@ VECTOR_IMPL(Call, Type::E_R_call, Value, true)
 };
 
 VECTOR_IMPL(Expression, Type::E_R_expression, Value, true) 
-	explicit Expression(List v) : VectorImpl<Type::E_R_expression, Value, true>(v.data(), v.length, v.attributes) {}
-	
 	static bool isNA(Value c) { return false; }
 	static bool isNaN(Value c) { return false; }
 	static bool isFinite(Value c) { return false; }

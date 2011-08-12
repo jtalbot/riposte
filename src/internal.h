@@ -194,7 +194,6 @@ inline Character klass(State& state, Value const& v)
 	else {
 		return getClass(v);
 	}
-	return 1;
 }
 
 

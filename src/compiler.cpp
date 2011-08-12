@@ -237,7 +237,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		Scope scope;
 		scope.topLevel = false;
 		//compile the default parameters	
-		List c = PairList(call[1]);
+		List c = List(PairList(call[1]));
 		List parameters(c.length);
 		Character names = getNames(c);
 		scope.parameters = names;

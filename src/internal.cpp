@@ -176,22 +176,22 @@ Vector Subset(State& state, Vector const& a, Vector const& i)	{
 			_error("mixed subscripts not allowed");
 		else if(positive > 0) {
 			switch(a.type.Enum()) {
-				case Type::E_R_double: return SubsetInclude<Double>::eval(state, a, index, positive); break;
-				case Type::E_R_integer: return SubsetInclude<Integer>::eval(state, a, index, positive); break;
-				case Type::E_R_logical: return SubsetInclude<Logical>::eval(state, a, index, positive); break;
-				case Type::E_R_character: return SubsetInclude<Character>::eval(state, a, index, positive); break;
-				case Type::E_R_list: return SubsetInclude<List>::eval(state, a, index, positive); break;
+				case Type::E_R_double: return SubsetInclude<Double>::eval(state, Double(a), index, positive); break;
+				case Type::E_R_integer: return SubsetInclude<Integer>::eval(state, Integer(a), index, positive); break;
+				case Type::E_R_logical: return SubsetInclude<Logical>::eval(state, Logical(a), index, positive); break;
+				case Type::E_R_character: return SubsetInclude<Character>::eval(state, Character(a), index, positive); break;
+				case Type::E_R_list: return SubsetInclude<List>::eval(state, List(a), index, positive); break;
 				case Type::E_R_null: return a;
 				default: _error(std::string("NYI: Subset of ") + a.type.toString()); break;
 			};
 		}
 		else if(negative > 0) {
 			switch(a.type.Enum()) {
-				case Type::E_R_double: return SubsetExclude<Double>::eval(state, a, index, negative); break;
-				case Type::E_R_integer: return SubsetExclude<Integer>::eval(state, a, index, negative); break;
-				case Type::E_R_logical: return SubsetExclude<Logical>::eval(state, a, index, negative); break;
-				case Type::E_R_character: return SubsetExclude<Character>::eval(state, a, index, negative); break;
-				case Type::E_R_list: return SubsetExclude<List>::eval(state, a, index, negative); break;
+				case Type::E_R_double: return SubsetExclude<Double>::eval(state, Double(a), index, negative); break;
+				case Type::E_R_integer: return SubsetExclude<Integer>::eval(state, Integer(a), index, negative); break;
+				case Type::E_R_logical: return SubsetExclude<Logical>::eval(state, Logical(a), index, negative); break;
+				case Type::E_R_character: return SubsetExclude<Character>::eval(state, Character(a), index, negative); break;
+				case Type::E_R_list: return SubsetExclude<List>::eval(state, List(a), index, negative); break;
 				case Type::E_R_null: return a;
 				default: _error(std::string("NYI: Subset of ") + a.type.toString()); break;
 			};	
@@ -203,11 +203,11 @@ Vector Subset(State& state, Vector const& a, Vector const& i)	{
 	else if(i.type == Type::R_logical) {
 		Logical index = Logical(i);
 		switch(a.type.Enum()) {
-			case Type::E_R_double: return SubsetLogical<Double>::eval(state, a, index); break;
-			case Type::E_R_integer: return SubsetLogical<Integer>::eval(state, a, index); break;
-			case Type::E_R_logical: return SubsetLogical<Logical>::eval(state, a, index); break;
-			case Type::E_R_character: return SubsetLogical<Character>::eval(state, a, index); break;
-			case Type::E_R_list: return SubsetLogical<List>::eval(state, a, index); break;
+			case Type::E_R_double: return SubsetLogical<Double>::eval(state, Double(a), index); break;
+			case Type::E_R_integer: return SubsetLogical<Integer>::eval(state, Integer(a), index); break;
+			case Type::E_R_logical: return SubsetLogical<Logical>::eval(state, Logical(a), index); break;
+			case Type::E_R_character: return SubsetLogical<Character>::eval(state, Character(a), index); break;
+			case Type::E_R_list: return SubsetLogical<List>::eval(state, List(a), index); break;
 			case Type::E_R_null: return a;
 			default: _error(std::string("NYI: Subset of ") + a.type.toString()); break;
 		};	
