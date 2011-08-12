@@ -95,12 +95,12 @@ static List BuildArgs(State& state, CompiledCall& call) {
 			Character names(expanded.length);
 			for(int64_t i = 0; i < names.length; i++) names[i] = Symbol::empty;
 			if(hasNames(arguments)) {
-				Character anames = getNames(arguments);
+				Character anames = Character(getNames(arguments));
 				Insert(state, anames, 0, names, 0, call.dots());
 				Insert(state, anames, call.dots(), names, call.dots()+dots.length, arguments.length-call.dots()-1);
 			}
 			if(hasNames(dots)) {
-				Character dnames = getNames(dots);
+				Character dnames = Character(getNames(dots));
 				Insert(state, dnames, 0, names, call.dots(), dots.length);
 			}
 			setNames(arguments, names);
@@ -119,7 +119,7 @@ inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* 
 
 static void MatchArgs(State& state, Environment* env, Environment* fenv, Function const& func, List const& arguments) {
 	List parameters = func.parameters();
-	Character pnames = getNames(parameters);
+	Character pnames = Character(getNames(parameters));
 
 	// Set to nil slots beyond the parameters
 	for(int64_t i = parameters.length; i < fenv->SlotCount(); i++) {
@@ -156,7 +156,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 		for(int64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
 		for(int64_t i = 0; i < parameters.length; i++) set[i] = -(i+1);
 		
-		Character anames = getNames(arguments);
+		Character anames = Character(getNames(arguments));
 		// named args, search for complete matches
 		for(int64_t i = 0; i < arguments.length; ++i) {
 			if(anames[i] != Symbol::empty) {
@@ -632,7 +632,7 @@ Instruction const* slor_op(State& state, Instruction const& inst) {
 	}
 }
 Instruction const* function_op(State& state, Instruction const& inst) {
-	reg(state, inst.c) = Function(constant(state, inst.a), constant(state, inst.b), constant(state, inst.b+1), state.frame().environment);
+	reg(state, inst.c) = Function(List(constant(state, inst.a)), constant(state, inst.b), Character(constant(state, inst.b+1)), state.frame().environment);
 	return &inst+1;
 }
 Instruction const* logical1_op(State& state, Instruction const& inst) {

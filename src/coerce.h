@@ -125,16 +125,16 @@ struct CastOp : public UnaryOp<I, O> {
 template<class O>
 O As(State& state, Value const& src) {
 	if(src.type == O::type)
-		return src;
+		return O(src);
 	switch(src.type.Enum()) {
 		case Type::E_R_null: return O(0); break;
-		case Type::E_R_double: return Zip1< CastOp<Double, O> >::eval(state, src); break;
-		case Type::E_R_integer: return Zip1< CastOp<Integer, O> >::eval(state, src); break;
-		case Type::E_R_logical: return Zip1< CastOp<Logical, O> >::eval(state, src); break;
-		case Type::E_R_complex: return Zip1< CastOp<Complex, O> >::eval(state, src); break;
-		case Type::E_R_character: return Zip1< CastOp<Character, O> >::eval(state, src); break;
-		case Type::E_R_list: return Zip1< CastOp<List, O> >::eval(state, src); break;
-		case Type::E_R_call: return Zip1< CastOp<Call, O> >::eval(state, src); break;
+		case Type::E_R_double: return Zip1< CastOp<Double, O> >::eval(state, Double(src)); break;
+		case Type::E_R_integer: return Zip1< CastOp<Integer, O> >::eval(state, Integer(src)); break;
+		case Type::E_R_logical: return Zip1< CastOp<Logical, O> >::eval(state, Logical(src)); break;
+		case Type::E_R_complex: return Zip1< CastOp<Complex, O> >::eval(state, Complex(src)); break;
+		case Type::E_R_character: return Zip1< CastOp<Character, O> >::eval(state, Character(src)); break;
+		case Type::E_R_list: return Zip1< CastOp<List, O> >::eval(state, List(src)); break;
+		case Type::E_R_call: return Zip1< CastOp<Call, O> >::eval(state, Call(src)); break;
 		default: _error(std::string("Invalid cast from ") + src.type.toString() + " to " + O::type.toString()); break;
 	};
 }

@@ -84,8 +84,8 @@ Value repeat(State& state, List const& args) {
 Value inherits(State& state, List const& args) {
 	checkNumArgs(args, 3);
 	Value x = force(state, args[0]);
-	Character what = force(state, args[1]);
-	Logical which = force(state, args[2]);
+	Character what = Character(force(state, args[1]));
+	Logical which = Logical(force(state, args[2]));
 	// NYI: which
 	Character c = klass(state, x);
 	bool inherits = false;
@@ -102,7 +102,7 @@ Value attr(State& state, List const& args)
 	checkNumArgs(args, 3);
 	// NYI: exact
 	Value object = force(state, args[0]);
-	Character which = force(state, args[1]);
+	Character which = Character(force(state, args[1]));
 	return getAttribute(object, which[0]);
 }
 
@@ -110,7 +110,7 @@ Value assignAttr(State& state, List const& args)
 {
 	checkNumArgs(args, 3);
 	Value object = force(state, args[0]);
-	Character which = force(state, args[1]);
+	Character which = Character(force(state, args[1]));
 	return setAttribute(object, which[0], force(state, args[2]));
 }
 
@@ -134,7 +134,7 @@ Value unlist(State& state, List const& args) {
 	if(!v.isList()) {
 		return v;
 	}
-	List from = v;
+	List from = List(v);
 	int64_t total = 0;
 	Type type = Type::R_null;
 	for(int64_t i = 0; i < from.length; i++) {
@@ -150,7 +150,7 @@ Value unlist(State& state, List const& args) {
 	}
 	if(hasNames(from))
 	{
-		Character names = getNames(from);
+		Character names = Character(getNames(from));
 		Character outnames(total);
 		int64_t j = 0;
 		for(int64_t i = 0; i < (int64_t)from.length; i++) {
@@ -230,7 +230,7 @@ Value subset2(State& state, List const& args) {
         Value b = force(state, args[1]);
 	if(b.type == Type::R_character && hasNames(a)) {
 		Symbol i = Character(b)[0];
-		Character c = getNames(a);
+		Character c = Character(getNames(a));
 		
 		int64_t j = 0;
 		for(;j < c.length; j++) {
@@ -256,7 +256,7 @@ Value dollar(State& state, List const& args) {
         Value a = force(state, args[0]);
         int64_t i = Symbol(expression(args[1])).i;
 	if(hasNames(a)) {
-		Character c = getNames(a);
+		Character c = Character(getNames(a));
 		int64_t j = 0;
 		for(;j < c.length; j++) {
 			if(c[j] == i)
@@ -355,7 +355,7 @@ Value switch_fn(State& state, List const& args) {
 		int64_t i = (int64_t)Double(one)[0];
 		if(i >= 1 && (int64_t)i <= args.length) {return force(state, args[i]);}
 	} else if(one.type == Type::R_character && Character(one).length == 1 && hasNames(args)) {
-		Character names = getNames(args);
+		Character names = Character(getNames(args));
 		for(int64_t i = 1; i < args.length; i++) {
 			if(names[i] == Character(one)[0]) {
 				while(args[i].type == Type::I_nil && i < args.length) i++;

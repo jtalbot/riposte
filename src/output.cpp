@@ -66,7 +66,7 @@ std::string stringifyVector(State const& state, T const& v) {
 		maxlength = std::max((int64_t)maxlength, (int64_t)stringify<T>(state, v[i]).length());
 	}
 	if(hasNames(v)) {
-		Character c = getNames(v);
+		Character c = Character(getNames(v));
 		for(int64_t i = 0; i < length; i++) {
 			maxlength = std::max((int64_t)maxlength, (int64_t)state.SymToStr(c[i]).length());
 		}
@@ -74,7 +74,7 @@ std::string stringifyVector(State const& state, T const& v) {
 	int64_t indexwidth = intToStr(length+1).length();
 	int64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
 	if(hasNames(v)) {
-		Character c = getNames(v);
+		Character c = Character(getNames(v));
 		for(int64_t i = 0; i < length; i+=perline) {
 			result = result + pad("", indexwidth+2);
 			for(int64_t j = 0; j < perline && i+j < length; j++) {
@@ -134,7 +134,7 @@ std::string State::stringify(Value const& value) const {
 			if(length > 100) { dots = true; length = 100; }
 			result = "";
 			if(hasNames(v)) {
-				Character n = getNames(v);
+				Character n = Character(getNames(v));
 				for(int64_t i = 0; i < length; i++) {
 					if(SymToStr(n[i])=="")
 						result = result + "[[" + intToStr(i+1) + "]]\n";
@@ -290,7 +290,7 @@ template<class T>
 std::string deparseVectorBody(State const& state, T const& v) {
 	std::string result = "";
 	if(hasNames(v)) {
-		Character c = getNames(v);
+		Character c = Character(getNames(v));
 		for(int64_t i = 0; i < v.length; i++) {
 			result = result + state.SymToStr(c[i]) + " = " + deparse<T>(state, v[i]);
 			if(i < v.length-1) result = result + ", ";

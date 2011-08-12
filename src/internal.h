@@ -110,12 +110,12 @@ struct SubsetAssign {
 
 inline void subAssign(State& state, Value const& a, Value const& i, Value const& b, Value& c) {
 	Integer idx = As<Integer>(state, i);
-	if(a.isDouble()) c = SubsetAssign<Double>::eval(state, a, idx, As<Double>(state, b));
-	else if(a.isInteger()) c = SubsetAssign<Integer>::eval(state, a, idx, As<Integer>(state, b));
-	else if(a.isLogical()) c = SubsetAssign<Logical>::eval(state, a, idx, As<Logical>(state, b));
-	else if(a.isCharacter()) c = SubsetAssign<Character>::eval(state, a, idx, As<Character>(state, b));
-	else if(a.isComplex()) c = SubsetAssign<Complex>::eval(state, a, idx, As<Complex>(state, b));
-	else if(a.isList()) c = SubsetAssign<List>::eval(state, a, idx, As<List>(state, b));
+	if(a.isDouble()) c = SubsetAssign<Double>::eval(state, Double(a), idx, As<Double>(state, b));
+	else if(a.isInteger()) c = SubsetAssign<Integer>::eval(state, Integer(a), idx, As<Integer>(state, b));
+	else if(a.isLogical()) c = SubsetAssign<Logical>::eval(state, Logical(a), idx, As<Logical>(state, b));
+	else if(a.isCharacter()) c = SubsetAssign<Character>::eval(state, Character(a), idx, As<Character>(state, b));
+	else if(a.isComplex()) c = SubsetAssign<Complex>::eval(state, Complex(a), idx, As<Complex>(state, b));
+	else if(a.isList()) c = SubsetAssign<List>::eval(state, List(a), idx, As<List>(state, b));
 	else _error("NYI: subset assign type");
 }
 
@@ -192,7 +192,7 @@ inline Character klass(State& state, Value const& v)
 		return c;
 	}
 	else {
-		return getClass(v);
+		return Character(getClass(v));
 	}
 }
 

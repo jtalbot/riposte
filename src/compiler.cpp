@@ -150,7 +150,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 			return reg;
 		} else if(call[1].type == Type::R_call) {
 			// The R way... .Internal is a function on calls
-			Call c = call[1];
+			Call c = Call(call[1]);
 			Call ic(2);
 			ic[0] = Symbol::internal;
 			ic[1] = c[0];
@@ -239,7 +239,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		//compile the default parameters	
 		List c = List(PairList(call[1]));
 		List parameters(c.length);
-		Character names = getNames(c);
+		Character names = Character(getNames(c));
 		scope.parameters = names;
 		for(int64_t i = 0; i < parameters.length; i++) {
 			if(!c[i].isNil()) {

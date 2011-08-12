@@ -249,7 +249,7 @@ union _doublena {
 #define VECTOR_IMPL(Name, VectorType, Element, Recursive) 				\
 struct Name : public VectorImpl<VectorType, Element, Recursive> { 			\
 	explicit Name(int64_t length) : VectorImpl<VectorType, Element, Recursive>(length) {} 	\
-	Name(Value const& v) : VectorImpl<VectorType, Element, Recursive>(v) {} 	\
+	explicit Name(Value const& v) : VectorImpl<VectorType, Element, Recursive>(v) {} 	\
 	explicit Name(Vector const& v) : VectorImpl<VectorType, Element, Recursive>(v) {} 	\
 	template<Type::EnumValue T> \
 	explicit Name(VectorImpl<T, Element, Recursive> const& other) : VectorImpl<VectorType, Element, Recursive>(other) {} \

@@ -54,7 +54,7 @@ SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
 		: inner(new Inner(parameters, body, str, s)), attributes(0) {
 		inner->dots = parameters.length;
 		if(parameters.length > 0) {
-			Character names = getNames(parameters);
+			Character names = Character(getNames(parameters));
 			int64_t i = 0;
 			for(;i < names.length; i++) if(Symbol(names[i]) == Symbol::dots) inner->dots = i;
 		}

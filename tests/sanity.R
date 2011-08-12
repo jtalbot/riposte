@@ -10,8 +10,8 @@ fail <- 0
 }
 
 {
-	PassIfTrue <- function(x) { if(x) cat("PASS\n") else { cat("FAIL\n"); fail <- fail + 1 } }
-	PassIfFalse <- function(x) { if(x) { cat("FAIL\n"); fail <- fail + 1 } else cat("PASS\n") }
+	PassIfTrue <- function(x) { fail<-fail+1; if(x) { cat("PASS\n"); fail<-fail-1 } else cat("FAIL\n") }
+	PassIfFalse <- function(x) { fail<-fail+1; if(x) cat("FAIL\n") else { cat("PASS\n"); fail<-fail-1 } }
 	"defined PassIfTrue and PassIfFalse"
 }
 
