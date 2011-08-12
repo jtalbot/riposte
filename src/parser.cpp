@@ -886,7 +886,7 @@ _eof_trans:
 	{{cs = 0; goto _again;}}
 	break;
 	case 1:
-	{{p = ((te))-1;}token( TOKEN_NULL_CONST, Null::singleton );}
+	{{p = ((te))-1;}token( TOKEN_NULL_CONST, Null::Singleton() );}
 	break;
 	case 3:
 	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Logical::True() );}

@@ -160,7 +160,6 @@ std::string State::stringify(Value const& value) const {
 		}
 		case Type::E_R_function:
 		{
-			//result = "function: " + intToHexStr((int64_t)value.p) /*+ "\n" + Function(*this).body().toString()*/;
 			result = SymToStr(Symbol(Function(value).str()[0]));
 			return result;
 		}

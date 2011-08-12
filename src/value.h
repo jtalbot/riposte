@@ -130,28 +130,54 @@ struct VectorImpl {
 	typedef ElementType Element;
 	static const int64_t width = sizeof(ElementType); 
 	static const Type type;
+	static const int64_t packLength = sizeof(ElementType)/sizeof(void*);
 
 	int64_t length;
 	ElementType* _data;
 	Attributes* attributes;
-	ElementType pack[sizeof(ElementType)/sizeof(void*)];
+	ElementType pack[packLength];
 
 	ElementType& operator[](int64_t index) { return _data[index]; }
 	ElementType const& operator[](int64_t index) const { return _data[index]; }
 	ElementType const* data() const { return _data; }
-	ElementType const* data(int64_t i) const { return _data + i; }
+	ElementType const* data(int64_t index) const { return _data + index; }
 	ElementType* data() { return _data; }
-	ElementType* data(int64_t i) { return _data + i; }
+	ElementType* data(int64_t index) { return _data + index; }
+
+	// need to override copy constructor and operator= so the data pointer gets updated.
+	VectorImpl(VectorImpl<VectorType, ElementType, Recursive> const& other) {
+		length = other.length;
+		_data = other._data;
+		attributes = other.attributes;
+		if(packed()) {
+                        memcpy(pack, &other.pack, packLength*sizeof(ElementType));
+			_data = pack;
+		}
+	}
+
+	VectorImpl& operator=(VectorImpl const& other) {
+		length = other.length;
+		_data = other._data;
+		attributes = other.attributes;
+		if(packed()) {
+                        memcpy(pack, &other.pack, packLength*sizeof(ElementType));
+			_data = pack;
+		}
+		return *this;
+	}
 
 	explicit VectorImpl(int64_t length) 
 		: length(length), 
-		_data(packed() ? pack : length == 0 ? 0 : Recursive ? new (GC) Element[length] : new (PointerFreeGC) Element[length]), 
+		_data(
+			packed() ? pack : 
+			length == 0 ? 0 : 
+			Recursive ? new (GC) Element[length] : new (PointerFreeGC) Element[length]), 
 		attributes(0) {}
 
 	explicit VectorImpl(Value v) : length(v.length), _data((ElementType*)v.p), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
                 if(packed()) {
-                        memcpy(pack, &v.p, sizeof(void*));
+                        memcpy(pack, &v.p, packLength*sizeof(ElementType));
                         _data = pack;
                 }
 	}
@@ -160,7 +186,7 @@ struct VectorImpl {
 		: length(v.length), _data((ElementType*)v._data), attributes(v.attributes) {
 		assert(v.type.Enum() == VectorType); 
                 if(packed()) {
-                        memcpy(pack, &v._data, sizeof(void*));
+                        memcpy(pack, &v._data, packLength*sizeof(ElementType));
                         _data = pack;
                 }
 	}
@@ -188,7 +214,8 @@ struct VectorImpl {
 	}
 
 protected:
-	VectorImpl(ElementType* _data, int64_t length, Attributes* attributes) : length(length), _data(_data), attributes(attributes) {}
+	VectorImpl(ElementType* _data, int64_t length, Attributes* attributes) 
+		: length(length), _data(_data), attributes(attributes) {}
 
 	bool packed() const {
 		return  sizeof(ElementType) <= sizeof(void*) &&
@@ -206,95 +233,114 @@ union _doublena {
 	double d;
 };
 
-#define VECTOR_IMPL(Name, Type, type, Recursive) \
-struct Name : public VectorImpl<Type, type, Recursive> \
-	{ Name(int64_t length) : VectorImpl<Type, type, Recursive>(length) {} \
-	  Name(Value const& v) : VectorImpl<Type, type, Recursive>(v) {} \
-	  Name(Vector const& v) : VectorImpl<Type, type, Recursive>(v) {}
+#define VECTOR_IMPL(Name, Type, Element, Recursive) 				\
+struct Name : public VectorImpl<Type, Element, Recursive> { 			\
+	Name(int64_t length) : VectorImpl<Type, Element, Recursive>(length) {} 	\
+	Name(Value const& v) : VectorImpl<Type, Element, Recursive>(v) {} 	\
+	Name(Vector const& v) : VectorImpl<Type, Element, Recursive>(v) {} 	\
+	static Name c() { Name c(0); return c; } \
+	static Name c(Element v0) { Name c(1); c[0] = v0; return c; } \
+	static Name c(Element v0, Element v1) { Name c(2); c[0] = v0; c[1] = v1; return c; } \
+	static Name c(Element v0, Element v1, Element v2) { Name c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } \
+	static Name c(Element v0, Element v1, Element v2, Element v3) { Name c(4); c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; return c; } \
+	const static bool CheckNA; 						\
+	const static Element NAelement; \
+	static Name NA() { static Name na = Name::c(NAelement); return na; } 
 /* note missing }; */
 
 VECTOR_IMPL(Null, Type::E_R_null, unsigned char, false) 
-	const static Null singleton; };
+	static Null Singleton() { static Null s = Null::c(); return s; } 
+};
+
 VECTOR_IMPL(Logical, Type::E_R_logical, unsigned char, false)
-	static Logical c(unsigned char c) { Logical r(1); r[0] = c; return r; }
-	static bool isNA(unsigned char c) { return c == NAelement; }
+	static Logical True() { static Logical t = Logical::c(1); return t; }
+	static Logical False() { static Logical f = Logical::c(0); return f; } 
+	
 	static bool isTrue(unsigned char c) { return c == 1; }
 	static bool isFalse(unsigned char c) { return c == 0; }
+	static bool isNA(unsigned char c) { return c == NAelement; }
 	static bool isNaN(unsigned char c) { return false; }
 	static bool isFinite(unsigned char c) { return false; }
 	static bool isInfinite(unsigned char c) { return false; }
-	const static bool CheckNA;
-	const static unsigned char NAelement;
-	static Logical NA() { static Logical na = Logical::c(NAelement); return na; }
-	static Logical True() { static Logical t = Logical::c(1); return t; }
-	static Logical False() { static Logical f = Logical::c(0); return f; } };
+};
+
 VECTOR_IMPL(Integer, Type::E_R_integer, int64_t, false)
-	static Integer c(double c) { Integer r(1); r[0] = c; return r; }
 	static bool isNA(int64_t c) { return c == NAelement; }
 	static bool isNaN(int64_t c) { return false; }
 	static bool isFinite(int64_t c) { return c != NAelement; }
 	static bool isInfinite(int64_t c) { return false; }
-	const static bool CheckNA;
-	const static int64_t NAelement;
-	static Integer NA() { static Integer na = Integer::c(NAelement); return na; } }; 
+}; 
+
 VECTOR_IMPL(Double, Type::E_R_double, double, false)
-	static Double c(double c) { Double r(1); r[0] = c; return r; }
+	static Double Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
+	static Double NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
+	static Double NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } 
+	
 	static bool isNA(double c) { _doublena a, b; a.d = c; b.d = NAelement; return a.i==b.i; }
 	static bool isNaN(double c) { return (c != c) && !isNA(c); }
 	static bool isFinite(double c) { return c == c && c != std::numeric_limits<double>::infinity() && c != -std::numeric_limits<double>::infinity(); }
 	static bool isInfinite(double c) { return c == std::numeric_limits<double>::infinity() || c == -std::numeric_limits<double>::infinity(); }
-	const static bool CheckNA;
-	const static double NAelement;
-	static Double NA() { static Double na = Double::c(NAelement); return na; }
-	static Double Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
-	static Double NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
-	static Double NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } };
+};
+
 VECTOR_IMPL(Complex, Type::E_R_complex, std::complex<double>, false)
-	static Complex c(double r, double i=0) { Complex c(1); c[0] = std::complex<double>(r,i); return c; }
-	static Complex c(std::complex<double> c) { Complex r(1); r[0] = c; return r; } 
 	static bool isNA(std::complex<double> c) { _doublena a, b, t ; a.d = c.real(); b.d = c.imag(); t.d = Double::NAelement; return a.i==t.i || b.i==t.i; }
 	static bool isNaN(std::complex<double> c) { return Double::isNaN(c.real()) || Double::isNaN(c.imag()); }
 	static bool isFinite(std::complex<double> c) { return Double::isFinite(c.real()) && Double::isFinite(c.imag()); }
 	static bool isInfinite(std::complex<double> c) { return Double::isInfinite(c.real()) || Double::isInfinite(c.imag()); }
-	const static bool CheckNA;
-	const static std::complex<double> NAelement;
-	static Complex NA() { static Complex na = Complex::c(NAelement); return na; } };
+};
+
 VECTOR_IMPL(Character, Type::E_R_character, Symbol, false)
-	static Character c(Symbol const& s) { Character c(1); c[0] = s; return c; }
-	static bool isNA(Symbol const& c) { return c == Symbol::NA; }
-	static bool isNaN(Symbol const& c) { return false; }
-	static bool isFinite(Symbol const& c) { return false; }
-	static bool isInfinite(Symbol const& c) { return false; }
-	const static bool CheckNA;
-	const static Symbol NAelement;
-	static Character NA() { static Character na = Character::c(NAelement); return na; } };
-VECTOR_IMPL(Raw, Type::E_R_raw, unsigned char, false) };
+	static bool isNA(Symbol c) { return c == Symbol::NA; }
+	static bool isNaN(Symbol c) { return false; }
+	static bool isFinite(Symbol c) { return false; }
+	static bool isInfinite(Symbol c) { return false; }
+};
+
+VECTOR_IMPL(Raw, Type::E_R_raw, unsigned char, false) 
+	static bool isNA(unsigned char c) { return false; }
+	static bool isNaN(unsigned char c) { return false; }
+	static bool isFinite(unsigned char c) { return false; }
+	static bool isInfinite(unsigned char c) { return false; }
+};
+
 VECTOR_IMPL(List, Type::E_R_list, Value, true) 
-	static List c(Value v0) { List c(1); c[0] = v0; return c; }
-	static List c(Value v0, Value v1) { List c(2); c[0] = v0; c[1] = v1; return c; }
-	static List c(Value v0, Value v1, Value v2) { List c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; }
-	const static Value NAelement; };
+	static bool isNA(Value c) { return false; }
+	static bool isNaN(Value c) { return false; }
+	static bool isFinite(Value c) { return false; }
+	static bool isInfinite(Value c) { return false; }
+};
+
 VECTOR_IMPL(PairList, Type::E_R_pairlist, Value, true) 
 	explicit PairList(List v) : VectorImpl<Type::E_R_pairlist, Value, true>(v.data(), v.length, v.attributes) {}
-	static PairList c(Value v0) { PairList c(1); c[0] = v0; return c; }
-	static PairList c(Value v0, Value v1) { PairList c(2); c[0] = v0; c[1] = v1; return c; }
-	static PairList c(Value v0, Value v1, Value v2) { PairList c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; }
-	operator List() {Value v = *this; v.type = Type::R_list; return List(v);} };
+	operator List() {Value v = *this; v.type = Type::R_list; return List(v);} 
+	
+	static bool isNA(Value c) { return false; }
+	static bool isNaN(Value c) { return false; }
+	static bool isFinite(Value c) { return false; }
+	static bool isInfinite(Value c) { return false; }
+};
+
 VECTOR_IMPL(Call, Type::E_R_call, Value, true) 
 	explicit Call(List v) : VectorImpl<Type::E_R_call, Value, true>(v.data(), v.length, v.attributes) {}
-	static Call c(Value v0) { Call c(1); c[0] = v0; return c; }
-	static Call c(Value v0, Value v1) { Call c(2); c[0] = v0; c[1] = v1; return c; }
-	static Call c(Value v0, Value v1, Value v2) { Call c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; }
-	static Call c(Value v0, Value v1, Value v2, Value v3) { Call c(4); c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; return c; } };
+	
+	static bool isNA(Value c) { return false; }
+	static bool isNaN(Value c) { return false; }
+	static bool isFinite(Value c) { return false; }
+	static bool isInfinite(Value c) { return false; }
+};
+
 VECTOR_IMPL(Expression, Type::E_R_expression, Value, true) 
 	explicit Expression(List v) : VectorImpl<Type::E_R_expression, Value, true>(v.data(), v.length, v.attributes) {}
-	static Expression c(Value v0) { Expression c(1); c[0] = v0; return c; }
-	static Expression c(Value v0, Value v1) { Expression c(2); c[0] = v0; c[1] = v1; return c; }
-	static Expression c(Value v0, Value v1, Value v2) { Expression c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } };
+	
+	static bool isNA(Value c) { return false; }
+	static bool isNaN(Value c) { return false; }
+	static bool isFinite(Value c) { return false; }
+	static bool isInfinite(Value c) { return false; }
+};
 
 inline Vector::Vector(Type t, int64_t length) {
 	switch(t.Enum()) {
-		case Type::E_R_null: *this = Null::singleton; break;
+		case Type::E_R_null: *this = Null::Singleton(); break;
 		case Type::E_R_logical: *this = Logical(length); break;	
 		case Type::E_R_integer: *this = Integer(length); break;	
 		case Type::E_R_double: *this = Double(length); break;	
@@ -338,7 +384,7 @@ inline Vector::Vector(Type t, int64_t length, void * data) {
 
 inline Vector::Vector(Value v) {
 	switch(v.type.Enum()) {
-		case Type::E_R_null: *this = Null::singleton; break;
+		case Type::E_R_null: *this = Null::Singleton(); break;
 		case Type::E_R_logical: *this = Logical(v); break;	
 		case Type::E_R_integer: *this = Integer(v); break;	
 		case Type::E_R_double: *this = Double(v); break;	
@@ -407,7 +453,7 @@ private:
 public:
 	Attributes* attributes;
 
-	explicit Function(List const& parameters, Value const& body, Character const& str, Environment* s); 
+	explicit Function(List const& parameters, Value const& body, Character const& str, Environment* s);
 	
 	explicit Function(Value const& v) {
 		assert(v.type == Type::R_function);
@@ -528,11 +574,11 @@ inline bool hasDim(Value const& v) {
 }
 
 inline Value getAttribute(Value const& v, Symbol s) {
-	if(v.attributes == 0) return Null::singleton;
+	if(v.attributes == 0) return Null::Singleton();
 	else {
 		Attributes::Container::const_iterator i = v.attributes->container.find(s);
 		if(i != v.attributes->container.end()) return i->second;
-		else return Null::singleton;
+		else return Null::Singleton();
 	}
 }
 

@@ -24,7 +24,7 @@ Value cat(State& state, List const& args) {
 			if(j < c.length-1) printf(" ");
 		}
 	}
-	return Null::singleton;
+	return Null::Singleton();
 }
 
 Value library(State& state, List const& args) {
@@ -34,7 +34,7 @@ Value library(State& state, List const& args) {
 	if(from.length > 0) {
 		loadLibrary(state, state.SymToStr(from[0]));
 	}
-	return Null::singleton;
+	return Null::Singleton();
 }
 
 Value rm(State& state, List const& args) {
@@ -44,7 +44,7 @@ Value rm(State& state, List const& args) {
 	for(int64_t i = 0; i < args.length; i++) {
 		state.frame().environment->rm(Symbol(expression(args[i])));
 	}
-	return Null::singleton;
+	return Null::Singleton();
 }
 
 Value sequence(State& state, List const& args) {
@@ -213,7 +213,7 @@ Vector Subset(State& state, Vector const& a, Vector const& i)	{
 		};	
 	}
 	_error("NYI indexing type");
-	return Null::singleton;
+	return Null::Singleton();
 }
 
 Value subset(State& state, List const& args) {
@@ -247,7 +247,7 @@ Value subset2(State& state, List const& args) {
 	else if(b.type == Type::R_double) {
 		return Element2(Vector(a), (int64_t)Double(b)[0]-1);
 	}
-	return Null::singleton;
+	return Null::Singleton();
 } 
 
 Value dollar(State& state, List const& args) {
@@ -266,7 +266,7 @@ Value dollar(State& state, List const& args) {
 			return Element2(Vector(a), j);
 		}
 	}
-	return Null::singleton;
+	return Null::Singleton();
 } 
 
 Value length(State& state, List const& args) {
@@ -359,7 +359,7 @@ Value switch_fn(State& state, List const& args) {
 		for(int64_t i = 1; i < args.length; i++) {
 			if(names[i] == Character(one)[0]) {
 				while(args[i].type == Type::I_nil && i < args.length) i++;
-				return i < args.length ? force(state, args[i]) : (Value)(Null::singleton);
+				return i < args.length ? force(state, args[i]) : (Value)(Null::Singleton());
 			}
 		}
 		for(int64_t i = 1; i < args.length; i++) {
@@ -368,7 +368,7 @@ Value switch_fn(State& state, List const& args) {
 			}
 		}
 	}
-	return Null::singleton;
+	return Null::Singleton();
 }
 
 Value environment(State& state, List const& args) {
@@ -380,7 +380,7 @@ Value environment(State& state, List const& args) {
 	else if(e.type == Type::R_function) {
 		return REnvironment(Function(e).s());
 	}
-	return Null::singleton;
+	return Null::Singleton();
 }
 
 Value parentframe(State& state, List const& args) {
@@ -403,7 +403,7 @@ Value stop_fn(State& state, List const& args) {
 		}
 	}
 	_error(message);
-	return Null::singleton;
+	return Null::Singleton();
 }
 
 Value warning_fn(State& state, List const& args) {
@@ -593,7 +593,7 @@ Value get(State& state, List const& args) {
 	REnvironment e(force(state, args[1]));
 	Value v = e.ptr()->get(c[0]);
 	if(v.isNil())
-		return Null::singleton;
+		return Null::Singleton();
 	else
 		return v;
 }

@@ -140,7 +140,7 @@ O As(State& state, Value const& src) {
 }
 template<>
 inline Null As<Null>(State& state, Value const& src) {
-	return Null::singleton;
+	return Null::Singleton();
 }
 
 inline Value As(State& state, Type type, Value const& src) {

@@ -3,20 +3,37 @@
 #include "internal.h"
 
 _doublena doublena = {0x7fff000000001953};
+const Value Value::Nil = {{0}, {0}, 0, Type::I_nil}; 
 
-const Null Null::singleton = Null(0);
-const bool Character::CheckNA = true;
-const Symbol Character::NAelement = Symbol::NA;
+const bool Null::CheckNA = false;
+const unsigned char Null::NAelement = 255;
+
 const bool Logical::CheckNA = true;
 const unsigned char Logical::NAelement = 255;
-const bool Double::CheckNA = false;
-const double Double::NAelement = doublena.d;
-const bool Complex::CheckNA = false;
-const std::complex<double> Complex::NAelement = std::complex<double>(doublena.d, doublena.d);
+
 const bool Integer::CheckNA = true;
 const int64_t Integer::NAelement = std::numeric_limits<int64_t>::min();
-const Value List::NAelement = Null::singleton;
-const Value Value::Nil = {{0}, {0}, 0, Type::I_nil}; 
+
+const bool Double::CheckNA = false;
+const double Double::NAelement = doublena.d;
+
+const bool Complex::CheckNA = false;
+const std::complex<double> Complex::NAelement = std::complex<double>(doublena.d, doublena.d);
+
+const bool Character::CheckNA = true;
+const Symbol Character::NAelement = Symbol::NA;
+
+const bool List::CheckNA = false;
+const Value List::NAelement = Null::Singleton();
+
+const bool PairList::CheckNA = false;
+const Value PairList::NAelement = Null::Singleton();
+
+const bool Call::CheckNA = false;
+const Value Call::NAelement = Null::Singleton();
+
+const bool Expression::CheckNA = false;
+const Value Expression::NAelement = Null::Singleton();
 
 #define ENUM_CONST_CONSTRUCT(name, string, EnumType) const EnumType EnumType::name(EnumType::E_##name);
 SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)

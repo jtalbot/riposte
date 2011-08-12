@@ -143,6 +143,9 @@ fail <- 0
 	"done"
 }
 
+#can it print out a function?
+f <- function(x,y) x+y
+
 if(fail == 0)
 	"SUCCESS! All sanity checks passed"
 else

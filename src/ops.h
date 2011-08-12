@@ -246,7 +246,7 @@ void unaryArith(State& state, Value const& a, Value& c) {
 	else if(a.isMathCoerce())
 		c = Lift< Op<TInteger> >::eval(state, As<Integer>(state, a));
 	else if(a.isNull())
-		c = Null::singleton;
+		c = Null::Singleton();
 	else 
 		_error("non-numeric argument to unary numeric operator");
 };
@@ -280,6 +280,8 @@ void unaryFilter(State& state, Value const& a, Value& c) {
 		c = Lift< Op<Character> >::eval(state, a);
 	else if(a.isNull())
 		c = Logical(0);
+	else if(a.isList())
+		c = Lift< Op<List> >::eval(state, a);
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 

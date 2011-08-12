@@ -26,7 +26,7 @@
 	main := |*
 
 	# Keywords.
-	'NULL' 	{token( TOKEN_NULL_CONST, Null::singleton );};
+	'NULL' 	{token( TOKEN_NULL_CONST, Null::Singleton() );};
 	'NA' 	{token( TOKEN_NUM_CONST, Logical::NA() );};
 	'TRUE' 	{token( TOKEN_NUM_CONST, Logical::True() );};
 	'FALSE'	{token( TOKEN_NUM_CONST, Logical::False() );};

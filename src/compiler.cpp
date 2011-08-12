@@ -273,7 +273,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	{
 		int64_t result;
 		if(call.length == 1) {
-			result = compile(Null::singleton, code);
+			result = compile(Null::Singleton(), code);
 		} else if(call.length == 2)
 			result = compile(call[1], code);
 		else
@@ -284,7 +284,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	} break;
 	case Symbol::E_forSym: 
 	{
-		int64_t result = compile(Null::singleton, code);
+		int64_t result = compile(Null::Singleton(), code);
 		// special case common i in m:n case
 		if(call[2].type == Type::R_call && Symbol(Call(call[2])[0]) == Symbol::colon) {
 			int64_t lim1 = compile(Call(call[2])[1], code);
@@ -319,7 +319,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	} break;
 	case Symbol::E_whileSym: 
 	{
-		int64_t result = compile(Null::singleton, code);
+		int64_t result = compile(Null::Singleton(), code);
 		int64_t lim = compile(call[1], code);
 		emit(code, ByteCode::whilebegin, 0, lim, result);
 		loopDepth++;
@@ -337,7 +337,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	} break;
 	case Symbol::E_repeatSym: 
 	{
-		int64_t result = compile(Null::singleton, code);
+		int64_t result = compile(Null::Singleton(), code);
 		emit(code, ByteCode::repeatbegin, 0, 0, result);
 		loopDepth++;
 		int64_t beginbody = code->bc.size();
@@ -370,7 +370,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		if(call.length != 3 && call.length != 4)	
 			throw CompileError("invalid if statement");
 		if(call.length == 3)
-			resultF = compile(Null::singleton, code);
+			resultF = compile(Null::Singleton(), code);
 		int64_t cond = compile(call[1], code);
 		emit(code, ByteCode::if1, 0, cond, liveIn);
 		int64_t begin1 = code->bc.size(), begin2 = 0;
@@ -399,7 +399,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	{
 		int64_t length = call.length;
 		if(length <= 1) {
-			return compile(Null::singleton, code);
+			return compile(Null::Singleton(), code);
 		} else {
 			int64_t result;
 			for(int64_t i = 1; i < length; i++) {
