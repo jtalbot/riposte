@@ -122,6 +122,27 @@ fail <- 0
 	"done"
 }
 
+{
+	cat("Testing some basic vector operations\n-----------------------\n")
+	a <- c(1,2,3)
+	PassIfTrue(a[1] == 1)
+	PassIfTrue(a[3] == 3)
+	PassIfTrue((a+1)[1] == 2)
+	PassIfTrue((a+1)[3] == 4)
+	PassIfTrue(sum(a) == 6)
+	
+	b <- c(TRUE, FALSE)
+	PassIfTrue(b[1])
+	PassIfFalse(b[2])
+	PassIfFalse(b[[2]])
+
+	l <- list(a, b, 4)
+	PassIfTrue(l[[3]] == 4)
+	PassIfTrue(l[[1]][1] == 1)
+
+	"done"
+}
+
 if(fail == 0)
 	"SUCCESS! All sanity checks passed"
 else
