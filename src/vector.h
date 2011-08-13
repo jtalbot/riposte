@@ -106,6 +106,21 @@ struct Zip2 {
 };
 
 template< class Op >
+struct Zip2N {
+	static typename Op::RV eval(State& state, int64_t N, typename Op::AV const& a, typename Op::BV const& b)
+	{
+		typename Op::RV r(N);
+		int64_t j = 0, k = 0;
+		for(int64_t i = 0; i < N; i++) {
+			r[i] = Op::eval(state, a[j++], b[k++]);
+			if(j >= a.length) j = 0;
+			if(k >= b.length) k = 0;
+		}
+		return r;
+	}
+};
+
+template< class Op >
 struct FoldLeft {
 	static typename Op::RV eval(State& state, typename Op::AV const& a)
 	{

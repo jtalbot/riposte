@@ -11,7 +11,7 @@ const MinOp<TComplex>::A MinOp<TComplex>::Base = std::complex<double>(0,0);
 const AnyOp::A AnyOp::Base = 0;
 const AllOp::A AllOp::Base = 1;
 
-void checkNumArgs(List const& args, int64_t nargs) {
+static void checkNumArgs(List const& args, int64_t nargs) {
 	if(args.length > nargs) _error("unused argument(s)");
 	else if(args.length < nargs) _error("too few arguments");
 }
