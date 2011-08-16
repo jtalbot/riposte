@@ -126,11 +126,11 @@ struct RenamingTable {
 		last_snapshot = current_view();
 		return last_snapshot;
 	}
-	bool locationFor(IROpCode code, uint32_t * location) {
-		switch(code.Enum()) {
-		case IROpCode::E_rload: *location = REG; return true;
-		case IROpCode::E_sload: *location = SLOT; return true;
-		case IROpCode::E_vload: *location = VARIABLE; return true;
+	bool locationFor(IROpCode::Enum code, uint32_t * location) {
+		switch(code) {
+		case IROpCode::rload: *location = REG; return true;
+		case IROpCode::sload: *location = SLOT; return true;
+		case IROpCode::vload: *location = VARIABLE; return true;
 		default: return false;
 		}
 	}

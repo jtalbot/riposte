@@ -4,36 +4,62 @@
 
 #include "enum.h"
 
-#define TYPE_ENUM(_, p) 				\
+#define TYPES(_) 				\
 	/* First the R visible types */	\
 	/*   In the "standard casting order */  \
-	_(R_null, 	"NULL", p)			\
-	_(R_raw, 	"raw", p)			\
-	_(R_logical, 	"logical", p)		\
-	_(R_integer, 	"integer", p)		\
-	_(R_double, 	"double", p)		\
-	_(R_complex, 	"complex", p)		\
-	_(R_character, 	"character", p)		\
-	_(R_list,	"list", p)			\
-	_(R_expression,	"expression", p)		\
-	_(R_symbol,	"symbol", p)		\
-	_(R_pairlist,	"pairlist", p)		\
-	_(R_function,	"function", p)		\
-	_(R_environment,"environment", p)		\
+	_(Null, 	"NULL")		\
+	_(Raw, 		"raw")		\
+	_(Logical, 	"logical")	\
+	_(Integer, 	"integer")	\
+	_(Double, 	"double")	\
+	_(Complex, 	"complex")	\
+	_(Character, 	"character")	\
+	_(List,		"list")		\
+	_(Expression,	"expression")	\
+	_(Symbol,	"symbol")	\
+	_(PairList,	"pairlist")	\
+	_(Function,	"function")	\
+	_(Environment,	"environment")	\
 	/* Note: no user-visible promise type in riposte */ \
-	_(R_call,	"call", p)		\
+	_(Call,		"call")		\
 	/* Note: specials are treated the same as normal functions right now */ \
-	_(R_cfunction,	"builtin", p)		\
-	_(R_any,	"any", p)	/* If there are no objects of this type, how can typeof return it? */	\
-	_(R_externalptr,"externalptr", p)		\
-	_(R_weakref,	"weakref", p)		\
-	_(R_S4, 	"S4", p)			\
+	_(BuiltIn,	"builtin")	\
+	_(Any,	"any")	/* If there are no objects of this type, how can typeof return it? */	\
+	_(Externalptr,	"externalptr")	\
+	_(Weakref,	"weakref")	\
+	_(S4, 		"S4")		\
 									\
-	/* Now the internal types, not necessarily matching R */ \
-	_(I_compiledcall,"compiled call", p)			\
-	_(I_closure, 	"closure", p) \
-	_(I_nil, 		"NIL", p)			\
+	/* Now the internal types, not necessarily matching R. Order is important here. */ \
+	_(CompiledCall,	"compiled call")\
+	_(Closure, 	"closure") 	\
+	_(Nil,		"NIL")		\
 
-DECLARE_ENUM(Type, TYPE_ENUM)
+DECLARE_ENUM(Type, TYPES)
+
+// just the vector types
+#define VECTOR_TYPES(_)	\
+	_(Null) 	\
+	_(Raw) 		\
+	_(Logical) 	\
+	_(Integer) 	\
+	_(Double) 	\
+	_(Complex) 	\
+	_(Character) 	\
+	_(List) 	\
+	_(PairList) 	\
+	_(Call) 	\
+	_(Expression) 	\
+
+#define VECTOR_TYPES_NOT_NULL(_)	\
+	_(Raw) 		\
+	_(Logical) 	\
+	_(Integer) 	\
+	_(Double) 	\
+	_(Complex) 	\
+	_(Character) 	\
+	_(List) 	\
+	_(PairList) 	\
+	_(Call) 	\
+	_(Expression) 	\
 
 #endif

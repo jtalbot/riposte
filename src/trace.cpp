@@ -20,9 +20,9 @@ void trace_compile_and_install(State & state, Trace * trace) {
 	printf("trace:\n%s\n",state.stringify(*trace).c_str());
 	trace->compiled.reset( TraceCompiler::create(trace) );
 
-	TCStatus status = trace->compiled->compile();
+	TCStatus::Enum status = trace->compiled->compile();
 	if(TCStatus::SUCCESS != status) {
-		printf("trace: compiler error: %s\n",status.toString());
+		printf("trace: compiler error: %s\n",TCStatus::toString(status));
 		return;
 	}
 

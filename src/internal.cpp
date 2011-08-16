@@ -39,7 +39,7 @@ Value library(State& state, List const& args) {
 
 Value rm(State& state, List const& args) {
 	for(int64_t i = 0; i < args.length; i++) 
-		if(expression(args[i]).type != Type::R_symbol && expression(args[i]).type != Type::R_character) 
+		if(!expression(args[i]).isSymbol() && !expression(args[i]).isCharacter()) 
 			_error("rm() arguments must be symbols or character vectors");
 	for(int64_t i = 0; i < args.length; i++) {
 		state.frame.environment->rm(Symbol(expression(args[i])));
@@ -114,10 +114,10 @@ Value assignAttr(State& state, List const& args)
 	return setAttribute(object, which[0], force(state, args[2]));
 }
 
-Type cTypeCast(Value const& v, Type t)
+Type::Enum cTypeCast(Value const& v, Type::Enum t)
 {
-	Type r;
-	r.v = std::max(v.type.Enum(), t.Enum());
+	Type::Enum r;
+	r = std::max(v.type, t);
 	return r;
 }
 
@@ -136,7 +136,7 @@ Value unlist(State& state, List const& args) {
 	}
 	List from = List(v);
 	int64_t total = 0;
-	Type type = Type::R_null;
+	Type::Enum type = Type::Null;
 	for(int64_t i = 0; i < from.length; i++) {
 		from[i] = force(state, from[i]);
 		total += from[i].length;
@@ -165,7 +165,7 @@ Value unlist(State& state, List const& args) {
 }
 
 Vector Subset(State& state, Vector const& a, Vector const& i)	{
-	if(i.type == Type::R_double || i.type == Type::R_integer) {
+	if(Value(i).isDouble() || Value(i).isInteger()) {
 		Integer index = As<Integer>(state, i);
 		int64_t positive = 0, negative = 0;
 		for(int64_t i = 0; i < index.length; i++) {
@@ -175,41 +175,35 @@ Vector Subset(State& state, Vector const& a, Vector const& i)	{
 		if(positive > 0 && negative > 0)
 			_error("mixed subscripts not allowed");
 		else if(positive > 0) {
-			switch(a.type.Enum()) {
-				case Type::E_R_double: return SubsetInclude<Double>::eval(state, Double(a), index, positive); break;
-				case Type::E_R_integer: return SubsetInclude<Integer>::eval(state, Integer(a), index, positive); break;
-				case Type::E_R_logical: return SubsetInclude<Logical>::eval(state, Logical(a), index, positive); break;
-				case Type::E_R_character: return SubsetInclude<Character>::eval(state, Character(a), index, positive); break;
-				case Type::E_R_list: return SubsetInclude<List>::eval(state, List(a), index, positive); break;
-				case Type::E_R_null: return a;
-				default: _error(std::string("NYI: Subset of ") + a.type.toString()); break;
+			switch(a.type) {
+				case Type::Null: return a; break;
+				#define CASE(Name,...) case Type::Name: return SubsetInclude<Name>::eval(state, Name(a), index, positive); break;
+				VECTOR_TYPES_NOT_NULL(CASE)
+				#undef CASE
+				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
 			};
 		}
 		else if(negative > 0) {
-			switch(a.type.Enum()) {
-				case Type::E_R_double: return SubsetExclude<Double>::eval(state, Double(a), index, negative); break;
-				case Type::E_R_integer: return SubsetExclude<Integer>::eval(state, Integer(a), index, negative); break;
-				case Type::E_R_logical: return SubsetExclude<Logical>::eval(state, Logical(a), index, negative); break;
-				case Type::E_R_character: return SubsetExclude<Character>::eval(state, Character(a), index, negative); break;
-				case Type::E_R_list: return SubsetExclude<List>::eval(state, List(a), index, negative); break;
-				case Type::E_R_null: return a;
-				default: _error(std::string("NYI: Subset of ") + a.type.toString()); break;
+			switch(a.type) {
+				case Type::Null: return a; break;
+				#define CASE(Name) case Type::Name: return SubsetExclude<Name>::eval(state, Name(a), index, negative); break;
+				VECTOR_TYPES_NOT_NULL(CASE)
+				#undef CASE
+				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
 			};	
 		}
 		else {
 			return Vector(a.type, 0);
 		}
 	}
-	else if(i.type == Type::R_logical) {
+	else if(Value(i).isLogical()) {
 		Logical index = Logical(i);
-		switch(a.type.Enum()) {
-			case Type::E_R_double: return SubsetLogical<Double>::eval(state, Double(a), index); break;
-			case Type::E_R_integer: return SubsetLogical<Integer>::eval(state, Integer(a), index); break;
-			case Type::E_R_logical: return SubsetLogical<Logical>::eval(state, Logical(a), index); break;
-			case Type::E_R_character: return SubsetLogical<Character>::eval(state, Character(a), index); break;
-			case Type::E_R_list: return SubsetLogical<List>::eval(state, List(a), index); break;
-			case Type::E_R_null: return a;
-			default: _error(std::string("NYI: Subset of ") + a.type.toString()); break;
+		switch(a.type) {
+			case Type::Null: return a; break;
+			#define CASE(Name) case Type::Name: return SubsetLogical<Name>::eval(state, Name(a), index); break;
+			VECTOR_TYPES_NOT_NULL(CASE)
+			#undef CASE
+			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
 		};	
 	}
 	_error("NYI indexing type");
@@ -228,7 +222,7 @@ Value subset2(State& state, List const& args) {
 
         Value a = force(state, args[0]);
         Value b = force(state, args[1]);
-	if(b.type == Type::R_character && hasNames(a)) {
+	if(b.isCharacter() && hasNames(a)) {
 		Symbol i = Character(b)[0];
 		Character c = Character(getNames(a));
 		
@@ -241,10 +235,10 @@ Value subset2(State& state, List const& args) {
 			return Element2(Vector(a), j);
 		}
 	}
-	else if(b.type == Type::R_integer) {
+	else if(b.isInteger()) {
 		return Element2(Vector(a), Integer(b)[0]-1);
 	}
-	else if(b.type == Type::R_double) {
+	else if(b.isDouble()) {
 		return Element2(Vector(a), (int64_t)Double(b)[0]-1);
 	}
 	return Null::Singleton();
@@ -348,17 +342,17 @@ Value source(State& state, List const& args) {
 
 Value switch_fn(State& state, List const& args) {
 	Value one = force(state, args[0]);
-	if(one.type == Type::R_integer && Integer(one).length == 1) {
+	if(one.isInteger() && Integer(one).length == 1) {
 		int64_t i = Integer(one)[0];
 		if(i >= 1 && (int64_t)i <= args.length) {return force(state, args[i]);}
-	} else if(one.type == Type::R_double && Double(one).length == 1) {
+	} else if(one.isDouble() && Double(one).length == 1) {
 		int64_t i = (int64_t)Double(one)[0];
 		if(i >= 1 && (int64_t)i <= args.length) {return force(state, args[i]);}
-	} else if(one.type == Type::R_character && Character(one).length == 1 && hasNames(args)) {
+	} else if(one.isCharacter() && Character(one).length == 1 && hasNames(args)) {
 		Character names = Character(getNames(args));
 		for(int64_t i = 1; i < args.length; i++) {
 			if(names[i] == Character(one)[0]) {
-				while(args[i].type == Type::I_nil && i < args.length) i++;
+				while(args[i].isNil() && i < args.length) i++;
 				return i < args.length ? force(state, args[i]) : (Value)(Null::Singleton());
 			}
 		}
@@ -374,10 +368,10 @@ Value switch_fn(State& state, List const& args) {
 Value environment(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value e = force(state, args[0]);
-	if(e.type == Type::R_null) {
+	if(e.isNull()) {
 		return REnvironment(state.frame.environment);
 	}
-	else if(e.type == Type::R_function) {
+	else if(e.isFunction()) {
 		return REnvironment(Function(e).s());
 	}
 	return Null::Singleton();
@@ -398,7 +392,7 @@ Value stop_fn(State& state, List const& args) {
 	// this should stop whether or not the arguments are correct...
 	std::string message = "user stop";
 	if(args.length > 0) {
-		if(args[0].type == Type::R_character && Character(args[0]).length > 0) {
+		if(args[0].isCharacter() && Character(args[0]).length > 0) {
 			message = state.SymToStr(Character(args[0])[0]);
 		}
 	}
@@ -409,7 +403,7 @@ Value stop_fn(State& state, List const& args) {
 Value warning_fn(State& state, List const& args) {
 	std::string message = "user warning";
 	if(args.length > 0) {
-		if(args[0].type == Type::R_character && Character(args[0]).length > 0) {
+		if(args[0].isCharacter() && Character(args[0]).length > 0) {
 			message = state.SymToStr(Character(args[0])[0]);
 		}
 	}
@@ -584,7 +578,7 @@ Value substitute(State& state, List const& args) {
 Value type_of(State& state, List const& args) {
 	// Should have a direct mapping from type to symbol.
 	Value v = force(state, args[0]);
-	return Character::c(state.StrToSym(v.type.toString()));
+	return Character::c(state.StrToSym(Type::toString(v.type)));
 }
 
 Value get(State& state, List const& args) {

@@ -6,11 +6,19 @@
 #include <sstream>
 #include <complex>
 #include <iostream>
+#include <iomanip>
 #include <stdexcept>
 #include <sys/time.h>
 #include <stdio.h>
 
 #define TIMING
+
+static inline std::string rawToStr( unsigned char n )
+{
+	std::ostringstream result;
+	result << std::hex << std::setfill('0') << std::setw(2) << n;
+	return result.str();
+}
 
 static inline std::string intToStr( int64_t n )
 {

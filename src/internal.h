@@ -26,7 +26,11 @@ inline Value expression(Value const& v) {
 	else return v; 
 }
 
-inline double asReal1(Value const& v) { if(v.type != Type::R_double && v.type != Type::R_integer) _error("Can't cast argument to number"); if(v.type == Type::R_integer) return Integer(v)[0]; else return Double(v)[0]; }
+inline double asReal1(Value const& v) { 
+	if(v.isInteger()) return Integer(v)[0]; 
+	else if(v.isDouble()) return Double(v)[0]; 
+	else _error("Can't cast argument to number"); 
+}
 
 template< class A >
 struct SubsetInclude {
@@ -153,13 +157,10 @@ inline Vector Subset(Vector const& src, int64_t start, int64_t length) {
 
 void Element(Value const& v, int64_t index, Value& out) __attribute__((always_inline));
 inline void Element(Value const& v, int64_t index, Value& out) {
-	switch(v.type.Enum()) {
-		case Type::E_R_double: Double::c(Double(v)[index]); break;
-		case Type::E_R_integer: out = Integer::c(Integer(v)[index]); break;
-		case Type::E_R_logical: out = Logical::c(Logical(v)[index]); break;
-		case Type::E_R_character: out = Character::c(Character(v)[index]); break;
-		case Type::E_R_complex: out = Complex::c(Complex(v)[index]); break;
-		case Type::E_R_list: out = List::c(List(v)[index]); break;
+	switch(v.type) {
+		#define CASE(Name) case Type::Name: out = Name::c(Name(v)[index]); break;
+		VECTOR_TYPES(CASE)
+		#undef CASE
 		default: _error("NYI: Element of this type"); break;
 	};
 }
@@ -189,7 +190,7 @@ inline Vector Element(Vector const& src, int64_t index)
 
 inline Value Element2(Vector const& src, int64_t index)
 {
-	if(src.type == Type::R_list) return List(src)[index];
+	if(((Value)src).isListLike()) return List(src)[index];
 	else return Subset(src, index, 1);
 }
 
@@ -197,11 +198,11 @@ inline Character klass(State& state, Value const& v)
 {
 	if(!hasClass(v)) {
 		Character c(1);
-		if(v.type == Type::R_integer || v.type == Type::R_double)
+		if(v.isInteger() || v.isDouble())
 			c[0] = Symbol::Numeric;
-		else if(v.type == Type::R_symbol)
+		else if(v.isSymbol())
 			c[0] = Symbol::Name;
-		else c[0] = state.StrToSym((v).type.toString());
+		else c[0] = state.StrToSym(Type::toString(v.type));
 		return c;
 	}
 	else {

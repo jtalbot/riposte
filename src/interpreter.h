@@ -4,10 +4,10 @@
 #include "bc.h"
 #include "value.h"
 
-#define DECLARE_INTERPRETER_FNS(bc,name,p) \
+#define DECLARE_INTERPRETER_FNS(bc,name) \
 		Instruction const * bc##_op(State& state, Instruction const& inst);
 
-BC_ENUM(DECLARE_INTERPRETER_FNS,0)
+BYTECODES(DECLARE_INTERPRETER_FNS)
 
 Value & interpreter_reg(State & state, int64_t i);
 Value interpreter_get(State & state, Symbol s);

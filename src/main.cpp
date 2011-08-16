@@ -109,7 +109,7 @@ int dostdin(State& state) {
 		try { 
 			Value value, result;
 			value = parsetty(state);
-			if(value.type == Type::I_nil) continue;
+			if(value.isNil()) continue;
 			//std::cout << "Parsed: " << value.toString() << std::endl;
 			Code* code = Compiler::compile(state, value, state.global);
 			//std::cout << "Compiled code: " << state.stringify(Closure(code,NULL)) << std::endl;
@@ -152,7 +152,7 @@ static int dofile(const char * file, State& state, bool echo) {
 	Value value;
 	parser.execute(code.c_str(), code.length(), true, value);	
 	
-	if(value.type == Type::I_nil) return -1;
+	if(value.isNil()) return -1;
 	
 	Expression expressions(value);
 	for(int64_t i = 0; i < expressions.length; i++) {

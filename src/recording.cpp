@@ -2,23 +2,22 @@
 #include "interpreter.h"
 #include "ir.h"
 
-#define ENUM_RECORDING_STATUS(_,p) \
-	_(NO_ERROR,"NO_ERROR",p) \
-	_(FOUND_LOOP,"trace has found the loop, and can be compiled",p) \
-	_(RETURN,"trace escaped calling scope",p) \
-	_(LENGTH,"trace too big",p) \
-	_(RECURSION,"trace encountered an invoke trace node",p) \
-	_(UNSUPPORTED_OP,"trace encountered unsupported op",p) \
-	_(UNSUPPORTED_TYPE,"trace encountered an unsupported type",p) \
+#define ENUM_RECORDING_STATUS(_) \
+	_(NO_ERROR,"NO_ERROR") \
+	_(FOUND_LOOP,"trace has found the loop, and can be compiled") \
+	_(RETURN,"trace escaped calling scope") \
+	_(LENGTH,"trace too big") \
+	_(RECURSION,"trace encountered an invoke trace node") \
+	_(UNSUPPORTED_OP,"trace encountered unsupported op") \
+	_(UNSUPPORTED_TYPE,"trace encountered an unsupported type") \
 
 DECLARE_ENUM(RecordingStatus,ENUM_RECORDING_STATUS)
-DEFINE_ENUM(RecordingStatus,ENUM_RECORDING_STATUS)
 DEFINE_ENUM_TO_STRING(RecordingStatus,ENUM_RECORDING_STATUS)
 
 //for brevity
 #define TRACE (state.tracing.current_trace)
 
-static RecordingStatus emitir(State & state, IROpCode op, IRType const & typ, int64_t a, int64_t b, IRef * r) {
+static RecordingStatus::Enum emitir(State & state, IROpCode::Enum op, IRType const & typ, int64_t a, int64_t b, IRef * r) {
 	if(typ.base_type == IRScalarType::T_unsupported)
 		return RecordingStatus::UNSUPPORTED_TYPE;
 	TRACE->recorded.push_back(IRNode(op,typ,a,b));
@@ -27,21 +26,21 @@ static RecordingStatus emitir(State & state, IROpCode op, IRType const & typ, in
 	return RecordingStatus::NO_ERROR;
 }
 
-static RecordingStatus emitir(State & state, IROpCode op, Value const & v, int64_t a, int64_t b, IRef * r) {
+static RecordingStatus::Enum emitir(State & state, IROpCode::Enum op, Value const & v, int64_t a, int64_t b, IRef * r) {
 	IRType typ(v);
 	return emitir(state,op,typ,a,b,r);
 }
 
-#define EMITIR(op,v,b,c,aptr) RECORDING_DO(emitir(state,IROpCode :: op,v,b,c,aptr))
+#define EMITIR(op,v,b,c,aptr) RECORDING_DO(emitir(state,IROpCode::op,v,b,c,aptr))
 
-static void recording_end(State & state, RecordingStatus reason) {
-	switch(reason.Enum()) {
-	case RecordingStatus::E_FOUND_LOOP:
+static void recording_end(State & state, RecordingStatus::Enum reason) {
+	switch(reason) {
+	case RecordingStatus::FOUND_LOOP:
 		trace_compile_and_install(state,TRACE);
 		TRACE = NULL;
 		break;
 	default:
-		printf("trace aborted: %s\n",reason.toString());
+		printf("trace aborted: %s\n",RecordingStatus::toString(reason));
 		delete TRACE;
 		TRACE = NULL;
 		break;
@@ -51,7 +50,7 @@ static void recording_end(State & state, RecordingStatus reason) {
 //attempt to execute fn, otherwise return error code
 #define RECORDING_DO(fn) \
 	do { \
-		RecordingStatus s = fn; \
+		RecordingStatus::Enum s = fn; \
 		if(RecordingStatus::NO_ERROR != s) { \
 			return s; \
 		} \
@@ -64,7 +63,7 @@ static void recording_end(State & state, RecordingStatus reason) {
 	return RecordingStatus::UNSUPPORTED_OP;
 
 
-static RecordingStatus get_reg(State & state, int64_t slot_id, IRef * node) {
+static RecordingStatus::Enum get_reg(State & state, int64_t slot_id, IRef * node) {
 	if(!TRACE->renaming_table.get(RenamingTable::REG,slot_id,node)) {
 		Value & value = interpreter_reg(state,slot_id);
 		EMITIR(rload,value,slot_id,-1,node);
@@ -73,14 +72,14 @@ static RecordingStatus get_reg(State & state, int64_t slot_id, IRef * node) {
 	return RecordingStatus::NO_ERROR;
 }
 
-static RecordingStatus get_var(State & state, Value & value, int64_t var_id, IRef * node) {
+static RecordingStatus::Enum get_var(State & state, Value & value, int64_t var_id, IRef * node) {
 	if(!TRACE->renaming_table.get(RenamingTable::VARIABLE,var_id,node)) {
 		EMITIR(vload,value,var_id,-1,node);
 		TRACE->renaming_table.input(RenamingTable::VARIABLE,var_id,*node);
 	}
 	return RecordingStatus::NO_ERROR;
 }
-static RecordingStatus get_slot(State & state, Value & value, int64_t slot_id, IRef * node) {
+static RecordingStatus::Enum get_slot(State & state, Value & value, int64_t slot_id, IRef * node) {
 	if(!TRACE->renaming_table.get(RenamingTable::SLOT,slot_id,node)) {
 		EMITIR(sload,value,slot_id,-1,node);
 		TRACE->renaming_table.input(RenamingTable::SLOT,slot_id,*node);
@@ -89,7 +88,7 @@ static RecordingStatus get_slot(State & state, Value & value, int64_t slot_id, I
 }
 
 //convert slot_id into a scalar boolean, or if it already is one, just return it.
-static RecordingStatus get_predicate(State & state, int64_t slot_id, bool invert, IRef * pnode) {
+static RecordingStatus::Enum get_predicate(State & state, int64_t slot_id, bool invert, IRef * pnode) {
 	IRef node;
 	RECORDING_DO(get_reg(state,slot_id,&node));
 	IRType & typ = TRACE->recorded[node].typ;
@@ -104,7 +103,7 @@ static RecordingStatus get_predicate(State & state, int64_t slot_id, bool invert
 	return RecordingStatus::NO_ERROR;
 }
 
-static RecordingStatus insert_guard(State & state, int64_t slot_id, bool invert, const Instruction * other_branch, int64_t n_live_registers) {
+static RecordingStatus::Enum insert_guard(State & state, int64_t slot_id, bool invert, const Instruction * other_branch, int64_t n_live_registers) {
 	IRef node;
 	RECORDING_DO(get_predicate(state,slot_id,invert,&node));
 	TraceExit e = { TRACE->renaming_table.create_snapshot(), n_live_registers, other_branch - TRACE->trace_start };
@@ -114,7 +113,7 @@ static RecordingStatus insert_guard(State & state, int64_t slot_id, bool invert,
 }
 
 //many opcodes turn into constant loads
-static RecordingStatus load_constant(State & state, int64_t dest_slot, const Value & value) {
+static RecordingStatus::Enum load_constant(State & state, int64_t dest_slot, const Value & value) {
 	TRACE->constants.push_back(value);
 	IRef node;
 	EMITIR(kload,value,TRACE->constants.size() - 1,0,&node);
@@ -122,13 +121,13 @@ static RecordingStatus load_constant(State & state, int64_t dest_slot, const Val
 	return RecordingStatus::NO_ERROR;
 }
 
-static RecordingStatus promote_types(State & state, IRef a, IRef b, IRef * ao, IRef * bo) {
+static RecordingStatus::Enum promote_types(State & state, IRef a, IRef b, IRef * ao, IRef * bo) {
 	IRType const & at = TRACE->recorded[a].typ;
 	IRType const & bt = TRACE->recorded[b].typ;
-	if(at.base_type.Enum() == bt.base_type.Enum()) {
+	if(at.base_type == bt.base_type) {
 		*ao = a;
 		*bo = b;
-	} else if(at.base_type.Enum() < bt.base_type.Enum()){
+	} else if(at.base_type < bt.base_type){
 		EMITIR(cast,bt,a,0,ao);
 		*bo = b;
 	} else {
@@ -140,7 +139,7 @@ static RecordingStatus promote_types(State & state, IRef a, IRef b, IRef * ao, I
 
 //all arithmetic binary ops share the same recording implementation
 #define BINARY_OP(op) \
-RecordingStatus op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
+RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
 		IRef node_a; \
 		IRef node_b; \
 		RECORDING_DO(get_reg(state,inst.a,&node_a)); \
@@ -157,7 +156,7 @@ RecordingStatus op##_record(State & state, Instruction const & inst, Instruction
 
 //all unary arithmetic ops share the same implementation as well
 #define UNARY_OP(op) \
-RecordingStatus op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
+RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
 		IRef node_a; \
 		RECORDING_DO(get_reg(state,inst.a,&node_a)); \
 		*pc = op##_op(state,inst); \
@@ -169,18 +168,18 @@ RecordingStatus op##_record(State & state, Instruction const & inst, Instruction
 		return RecordingStatus::NO_ERROR; \
 }
 
-RecordingStatus call_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum call_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	state.tracing.current_trace->depth++;
 	OP_NOT_IMPLEMENTED(call);
 }
-RecordingStatus get_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = get_op(state,inst);
 	IRef node;
 	RECORDING_DO(get_var(state,interpreter_reg(state,inst.c),inst.a,&node));
 	TRACE->renaming_table.assign(RenamingTable::REG,inst.c,node);
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus sget_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum sget_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = sget_op(state,inst);
 	IRef node;
 	RECORDING_DO(get_slot(state,interpreter_reg(state,inst.c),inst.a,&node));
@@ -188,24 +187,24 @@ RecordingStatus sget_record(State & state, Instruction const & inst, Instruction
 	return RecordingStatus::NO_ERROR;
 }
 
-RecordingStatus kget_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum kget_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = kget_op(state,inst);
 	RECORDING_DO(load_constant(state,inst.c,interpreter_reg(state,inst.c)));
 	return RecordingStatus::NO_ERROR;
 }
 
-RecordingStatus iget_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum iget_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(iget);
 }
 
-RecordingStatus assign_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = assign_op(state,inst);
 	IRef node;
 	RECORDING_DO(get_reg(state,inst.c,&node));
 	TRACE->renaming_table.assign(RenamingTable::VARIABLE,inst.a,node);
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus sassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum sassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = sassign_op(state,inst);
 	IRef node;
 	RECORDING_DO(get_reg(state,inst.c,&node));
@@ -213,25 +212,25 @@ RecordingStatus sassign_record(State & state, Instruction const & inst, Instruct
 	return RecordingStatus::NO_ERROR;
 }
 
-RecordingStatus iassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum iassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(iassign);
 }
-RecordingStatus eassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum eassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(eassign);
 }
-RecordingStatus forbegin_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum forbegin_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(forbegin);
 }
-RecordingStatus forend_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum forend_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(forend);
 }
-RecordingStatus iforbegin_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum iforbegin_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(iforbegin);
 }
-RecordingStatus iforend_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum iforend_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(iforend);
 }
-RecordingStatus whilebegin_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum whilebegin_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = whilebegin_op(state,inst);
 	int64_t offset = *pc - &inst;
 	RECORDING_DO(load_constant(state,inst.c,interpreter_reg(state,inst.c)));
@@ -239,48 +238,48 @@ RecordingStatus whilebegin_record(State & state, Instruction const & inst, Instr
 	RECORDING_DO(insert_guard(state,inst.b,(offset == 1),other_branch,std::max(inst.b,inst.c)));
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus whileend_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum whileend_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = whileend_op(state,inst);
 	int64_t offset = *pc - &inst;
 	const Instruction * other_branch = &inst + ( (offset == 1) ? inst.a : 1 );
 	RECORDING_DO(insert_guard(state,inst.b,offset != 1,other_branch,inst.b));
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus repeatbegin_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum repeatbegin_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = repeatbegin_op(state,inst);
 	RECORDING_DO(load_constant(state,inst.c,interpreter_reg(state,inst.c)));
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus repeatend_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum repeatend_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	//this is just a constant jump, nothing to record
 	*pc = repeatend_op(state,inst);
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus next_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum next_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	//this is just a constant jump, nothing to record
 	*pc = next_op(state,inst);
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus break1_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum break1_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	//this is just a constant jump, nothing to record
 	*pc = break1_op(state,inst);
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus if1_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum if1_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = if1_op(state,inst);
 	int64_t offset = *pc - &inst;
 	const Instruction * other_branch = &inst + ((offset == 1) ? inst.a : 1);
 	RECORDING_DO(insert_guard(state,inst.b,(offset == 1),other_branch,inst.b));
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus if0_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum if0_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = if0_op(state,inst);
 	int64_t offset = *pc - &inst;
 	const Instruction * other_branch = &inst + ((offset == 1) ? inst.a : 1);
 	RECORDING_DO(insert_guard(state,inst.b,(offset != 1),other_branch,inst.b));
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus colon_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum colon_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(colon);
 }
 
@@ -332,36 +331,36 @@ UNARY_OP(complex1)
 UNARY_OP(character1)
 
 
-RecordingStatus jmp_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum jmp_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	//this is just a constant jump, nothing to record
 	*pc = next_op(state,inst);
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus function_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum function_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(function);
 }
 
-RecordingStatus raw1_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum raw1_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = raw1_op(state,inst);
 	RECORDING_DO(load_constant(state,inst.c,interpreter_reg(state,inst.c)));
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus UseMethod_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum UseMethod_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(UseMethod);
 }
-RecordingStatus seq_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum seq_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(seq);
 }
-RecordingStatus type_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum type_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	//we type specialize, so this value is a constant
 	*pc = type_op(state,inst);
 	RECORDING_DO(load_constant(state,inst.c,interpreter_reg(state,inst.c)));
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus invoketrace_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum invoketrace_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	return RecordingStatus::RECURSION;
 }
-RecordingStatus ret_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum ret_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = ret_op(state,inst);
 	if(TRACE->depth == 0)
 		return RecordingStatus::RETURN;
@@ -369,7 +368,7 @@ RecordingStatus ret_record(State & state, Instruction const & inst, Instruction 
 		TRACE->depth--;
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus done_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum done_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	return RecordingStatus::RETURN;
 }
 
@@ -379,7 +378,7 @@ RecordingStatus done_record(State & state, Instruction const & inst, Instruction
 // -- is the trace complete? if so, install the trace, and exit the recorder
 // -- otherwise, the recorder continues normally
 //returns true if we should continue recording
-static RecordingStatus recording_check_conditions(State& state, Instruction const * inst) {
+static RecordingStatus::Enum recording_check_conditions(State& state, Instruction const * inst) {
 	if((int64_t)TRACE->recorded.size() > state.tracing.max_length) {
 		return RecordingStatus::LENGTH;
 	}
@@ -390,12 +389,12 @@ static RecordingStatus recording_check_conditions(State& state, Instruction cons
 }
 
 Instruction const * recording_interpret(State& state, Instruction const* pc) {
-	RecordingStatus status;
+	RecordingStatus::Enum status = RecordingStatus::NO_ERROR;
 	state.tracing.current_trace = new Trace(const_cast<Code*>(state.frame.code),const_cast<Instruction*>(pc));
 	while(true) {
-#define RUN_RECORD(name,str,p) case ByteCode::E_##name: { status = name##_record(state, *pc,&pc); } break;
-		switch(pc->bc.Enum()) {
-			BC_ENUM(RUN_RECORD,0)
+#define RUN_RECORD(name,str) case ByteCode::name: { status = name##_record(state, *pc,&pc); } break;
+		switch(pc->bc) {
+			BYTECODES(RUN_RECORD)
 		}
 #undef RUN_RECORD
 		if(   RecordingStatus::NO_ERROR != status

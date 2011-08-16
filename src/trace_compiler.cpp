@@ -621,10 +621,10 @@ struct TraceCompilerImpl : public TraceCompiler {
 
 struct TraceCompilerImpl : public TraceCompiler {
 	TraceCompilerImpl(Trace * trace) {}
-	TCStatus compile() {
+	TCStatus::Enum compile() {
 		return TCStatus::DISABLED;
 	}
-	TCStatus execute(State & s, int64_t * offset) {
+	TCStatus::Enum execute(State & s, int64_t * offset) {
 		*offset = 0;
 		return TCStatus::DISABLED;
 	}
@@ -632,7 +632,6 @@ struct TraceCompilerImpl : public TraceCompiler {
 
 #endif
 
-DEFINE_ENUM(TCStatus,ENUM_TC_STATUS)
 DEFINE_ENUM_TO_STRING(TCStatus,ENUM_TC_STATUS)
 TraceCompiler * TraceCompiler::create(Trace * t) {
 	return new TraceCompilerImpl(t);

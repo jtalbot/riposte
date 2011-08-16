@@ -3,10 +3,13 @@
 #include "internal.h"
 
 _doublena doublena = {0x7fff000000001953};
-const Value Value::Nil = {{0}, 0, {0}, Type::I_nil}; 
+const Value Value::Nil = Value::Make(Type::Nil, 0, (int64_t)0, 0); 
 
 const bool Null::CheckNA = false;
 const unsigned char Null::NAelement = 255;
+
+const bool Raw::CheckNA = false;
+const unsigned char Raw::NAelement = 255;
 
 const bool Logical::CheckNA = true;
 const unsigned char Logical::NAelement = 255;
@@ -35,28 +38,17 @@ const Value Call::NAelement = Null::Singleton();
 const bool Expression::CheckNA = false;
 const Value Expression::NAelement = Null::Singleton();
 
-#define ENUM_CONST_CONSTRUCT(name, string, EnumType) const EnumType EnumType::name(EnumType::E_##name);
-SYMBOLS_ENUM(ENUM_CONST_CONSTRUCT, Symbol)
+#define CONST_DEFN(name, string, ...) const Symbol Symbol::name(String::name);
+STRINGS(CONST_DEFN)
+#undef CONST_DEFN
 
-	SymbolTable::SymbolTable() : next(0) {
-		// insert predefined state into table at known positions (corresponding to their enum value)
-#define ENUM_STRING_TABLE(name, string, EnumType) \
-		symbolTable[string] = EnumType::E_##name; \
-		reverseSymbolTable[EnumType::E_##name] = string;\
-		assert(next==EnumType::E_##name);\
-		next++;\
-
-		SYMBOLS_ENUM(ENUM_STRING_TABLE,Symbol);
+Function::Function(List const& parameters, Value const& body, Character const& str, Environment* s) 
+	: inner(new Inner(parameters, body, str, s)), attributes(0) {
+	inner->dots = parameters.length;
+	if(parameters.length > 0) {
+		Character names = Character(getNames(parameters));
+		int64_t i = 0;
+		for(;i < names.length; i++) if(Symbol(names[i]) == Symbol::dots) inner->dots = i;
 	}
-
-
-	Function::Function(List const& parameters, Value const& body, Character const& str, Environment* s) 
-		: inner(new Inner(parameters, body, str, s)), attributes(0) {
-		inner->dots = parameters.length;
-		if(parameters.length > 0) {
-			Character names = Character(getNames(parameters));
-			int64_t i = 0;
-			for(;i < names.length; i++) if(Symbol(names[i]) == Symbol::dots) inner->dots = i;
-		}
-	}
+}
 

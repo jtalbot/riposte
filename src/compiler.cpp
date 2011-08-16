@@ -2,53 +2,53 @@
 #include "compiler.h"
 #include "internal.h"
 
-static ByteCode op(Symbol const& s) {
-	switch(s.Enum()) {
-		case Symbol::E_colon: return ByteCode::colon; break;
-		case Symbol::E_mul: return ByteCode::mul; break;
-		case Symbol::E_div: return ByteCode::div; break;
-		case Symbol::E_idiv: return ByteCode::idiv; break;
-		case Symbol::E_mod: return ByteCode::mod; break;
-		case Symbol::E_pow: return ByteCode::pow; break;
-		case Symbol::E_lt: return ByteCode::lt; break;
-		case Symbol::E_gt: return ByteCode::gt; break;
-		case Symbol::E_eq: return ByteCode::eq; break;
-		case Symbol::E_neq: return ByteCode::neq; break;
-		case Symbol::E_ge: return ByteCode::ge; break;
-		case Symbol::E_le: return ByteCode::le; break;
-		case Symbol::E_lnot: return ByteCode::lnot; break;
-		case Symbol::E_land: return ByteCode::land; break;
-		case Symbol::E_lor: return ByteCode::lor; break;
-		case Symbol::E_sland: return ByteCode::sland; break;
-		case Symbol::E_slor: return ByteCode::slor; break;
-		case Symbol::E_abs: return ByteCode::abs; break;
-		case Symbol::E_sign: return ByteCode::sign; break;
-		case Symbol::E_sqrt: return ByteCode::sqrt; break;
-		case Symbol::E_floor: return ByteCode::floor; break;
-		case Symbol::E_ceiling: return ByteCode::ceiling; break;
-		case Symbol::E_trunc: return ByteCode::trunc; break;
-		case Symbol::E_round: return ByteCode::round; break;
-		case Symbol::E_signif: return ByteCode::signif; break;
-		case Symbol::E_exp: return ByteCode::exp; break;
-		case Symbol::E_log: return ByteCode::log; break;
-		case Symbol::E_cos: return ByteCode::cos; break;
-		case Symbol::E_sin: return ByteCode::sin; break;
-		case Symbol::E_tan: return ByteCode::tan; break;
-		case Symbol::E_acos: return ByteCode::acos; break;
-		case Symbol::E_asin: return ByteCode::asin; break;
-		case Symbol::E_atan: return ByteCode::atan; break;
-		case Symbol::E_Logical: return ByteCode::logical1; break;
-		case Symbol::E_Integer: return ByteCode::integer1; break;
-		case Symbol::E_Double: return ByteCode::double1; break;
-		case Symbol::E_Complex: return ByteCode::complex1; break;
-		case Symbol::E_Character: return ByteCode::character1; break;
-		case Symbol::E_Raw: return ByteCode::raw1; break;
-		case Symbol::E_type: return ByteCode::type; break;
+static ByteCode::Enum op(Symbol const& s) {
+	switch(s.i) {
+		case String::colon: return ByteCode::colon; break;
+		case String::mul: return ByteCode::mul; break;
+		case String::div: return ByteCode::div; break;
+		case String::idiv: return ByteCode::idiv; break;
+		case String::mod: return ByteCode::mod; break;
+		case String::pow: return ByteCode::pow; break;
+		case String::lt: return ByteCode::lt; break;
+		case String::gt: return ByteCode::gt; break;
+		case String::eq: return ByteCode::eq; break;
+		case String::neq: return ByteCode::neq; break;
+		case String::ge: return ByteCode::ge; break;
+		case String::le: return ByteCode::le; break;
+		case String::lnot: return ByteCode::lnot; break;
+		case String::land: return ByteCode::land; break;
+		case String::lor: return ByteCode::lor; break;
+		case String::sland: return ByteCode::sland; break;
+		case String::slor: return ByteCode::slor; break;
+		case String::abs: return ByteCode::abs; break;
+		case String::sign: return ByteCode::sign; break;
+		case String::sqrt: return ByteCode::sqrt; break;
+		case String::floor: return ByteCode::floor; break;
+		case String::ceiling: return ByteCode::ceiling; break;
+		case String::trunc: return ByteCode::trunc; break;
+		case String::round: return ByteCode::round; break;
+		case String::signif: return ByteCode::signif; break;
+		case String::exp: return ByteCode::exp; break;
+		case String::log: return ByteCode::log; break;
+		case String::cos: return ByteCode::cos; break;
+		case String::sin: return ByteCode::sin; break;
+		case String::tan: return ByteCode::tan; break;
+		case String::acos: return ByteCode::acos; break;
+		case String::asin: return ByteCode::asin; break;
+		case String::atan: return ByteCode::atan; break;
+		case String::Logical: return ByteCode::logical1; break;
+		case String::Integer: return ByteCode::integer1; break;
+		case String::Double: return ByteCode::double1; break;
+		case String::Complex: return ByteCode::complex1; break;
+		case String::Character: return ByteCode::character1; break;
+		case String::Raw: return ByteCode::raw1; break;
+		case String::type: return ByteCode::type; break;
 		default: throw RuntimeError("unexpected symbol used as an operator"); break;
 	}
 }
 
-void Compiler::emit(Code* code, ByteCode bc, int64_t a, int64_t b, int64_t c) {
+void Compiler::emit(Code* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c) {
 	code->bc.push_back(Instruction(bc, a, b, c));
 }
 
@@ -107,12 +107,10 @@ CompiledCall Compiler::makeCall(Call const& call) {
 	int64_t dots = call.length-1;
 	List arguments(call.length-1);
 	for(int64_t i = 1; i < call.length; i++) {
-		if(call[i].type == Type::R_symbol && Symbol(call[i]) == Symbol::dots) {
+		if(call[i].isSymbol() && Symbol(call[i]) == String::dots) {
 			arguments[i-1] = call[i];
 			dots = i-1;
-		} else if(call[i].type == Type::R_call ||
-		   call[i].type == Type::R_symbol ||
-		   call[i].type == Type::R_pairlist) {
+		} else if(call[i].isCall() || call[i].isSymbol() || call[i].isPairList()) {
 			// promises should have access to the slots of the enclosing scope, but have their own register assignments
 			arguments[i-1] = Closure(Compiler::compile(call[i]),NULL);
 		} else {
@@ -147,38 +145,38 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 	int64_t liveIn = scopes.back().live();
 
 	Symbol func = Symbol::NA;
-	if(call[0].type == Type::R_symbol)
+	if(call[0].isSymbol())
 		func = Symbol(call[0]);
-	else if(call[0].type == Type::R_character && call[0].length > 0)
+	else if(call[0].isCharacter() && call[0].length > 0)
 		func = Character(call[0])[0];
 	
-	switch(func.Enum()) {
+	switch(func.i) {
 
-	case Symbol::E_internal: 
+	case String::internal: 
 	{
 		// The riposte way... .Internal is a function on symbols, returning the internal function
-		if(call[1].type == Type::R_symbol) {
+		if(call[1].isSymbol()) {
 			int64_t reg = scopes.back().allocRegister(Register::VARIABLE);
 			emit(code, ByteCode::iget, Symbol(call[1]).i, 0, reg);
 			return reg;
-		 } else if(call[1].type == Type::R_character && call[1].length > 0) {
+		 } else if(call[1].isCharacter() && call[1].length > 0) {
 			int64_t reg = scopes.back().allocRegister(Register::VARIABLE);
 			emit(code, ByteCode::iget, Character(call[1])[0].i, 0, reg);
 			return reg;
-		} else if(call[1].type == Type::R_call) {
+		} else if(call[1].isCall()) {
 			// The R way... .Internal is a function on calls
 			Call c = Call(call[1]);
 			Call ic(2);
-			ic[0] = Symbol::internal;
+			ic[0] = Symbol(String::internal);
 			ic[1] = c[0];
 			c[0] = ic;
 			return compile(c, code);
 		} else {
-			throw CompileError(std::string(".Internal has invalid arguments (") + call[1].type.toString() + ")");
+			throw CompileError(std::string(".Internal has invalid arguments (") + Type::toString(call[1].type) + ")");
 		}
 	} break;
-	case Symbol::E_assign:
-	case Symbol::E_eqassign: 
+	case String::assign:
+	case String::eqassign: 
 	{
 		Value dest = call[1];
 		
@@ -216,7 +214,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		scopes.back().deadAfter(source);	
 		return source;
 	} break;
-	case Symbol::E_bracketAssign: { 
+	case String::bracketAssign: { 
 		// if there's more than three parameters, we should call the library version...
 		if(call.length > 4) return compileFunctionCall(call, code);
 		int64_t dest = compile(call[1], code);
@@ -226,7 +224,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		scopes.back().deadAfter(dest);	
 		return dest;
 	} break;
-	case Symbol::E_bbAssign: {
+	case String::bbAssign: {
 		int64_t dest = compile(call[1], code);
 		int64_t index = compile(call[2], code);
 		int64_t value = compile(call[3], code);
@@ -234,7 +232,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		scopes.back().deadAfter(dest);	
 		return dest;
 	} break;
-	case Symbol::E_function: 
+	case String::function: 
 	{
 		Scope scope;
 		scope.topLevel = false;
@@ -271,7 +269,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		emit(code, ByteCode::function, code->constants.size()-3, code->constants.size()-2, reg);
 		return reg;
 	} break;
-	case Symbol::E_returnSym: 
+	case String::returnSym: 
 	{
 		int64_t result;
 		if(call.length == 1) {
@@ -284,11 +282,11 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		scopes.back().deadAfter(result);
 		return result;
 	} break;
-	case Symbol::E_forSym: 
+	case String::forSym: 
 	{
 		int64_t result = compile(Null::Singleton(), code);
 		// special case common i in m:n case
-		if(call[2].type == Type::R_call && Symbol(Call(call[2])[0]) == Symbol::colon) {
+		if(call[2].isCall() && Symbol(Call(call[2])[0]) == String::colon) {
 			int64_t lim1 = compile(Call(call[2])[1], code);
 			int64_t lim2 = compile(Call(call[2])[2], code);
 			if(lim1+1 != lim2) throw CompileError("limits aren't in adjacent registers");
@@ -323,7 +321,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		scopes.back().deadAfter(result);
 		return result;
 	} break;
-	case Symbol::E_whileSym: 
+	case String::whileSym: 
 	{
 		int64_t result = compile(Null::Singleton(), code);
 		int64_t lim = compile(call[1], code);
@@ -341,7 +339,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		scopes.back().deadAfter(result);
 		return result;
 	} break;
-	case Symbol::E_repeatSym: 
+	case String::repeatSym: 
 	{
 		int64_t result = compile(Null::Singleton(), code);
 		emit(code, ByteCode::repeatbegin, 0, 0, result);
@@ -356,21 +354,21 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		scopes.back().deadAfter(result);
 		return result;
 	} break;
-	case Symbol::E_nextSym:
+	case String::nextSym:
 	{
 		if(loopDepth == 0) throw CompileError("next used outside of loop");
 		int64_t result = scopes.back().allocRegister(Register::TEMP);
 		emit(code, ByteCode::next, 0, 0, result);
 		return result;
 	} break;
-	case Symbol::E_breakSym:
+	case String::breakSym:
 	{
 		if(loopDepth == 0) throw CompileError("break used outside of loop");
 		int64_t result = scopes.back().allocRegister(Register::TEMP);
 		emit(code, ByteCode::break1, 0, 0, result);
 		return result;
 	} break;
-	case Symbol::E_ifSym: 
+	case String::ifSym: 
 	{
 		int64_t resultT=0, resultF=0;
 		if(call.length != 3 && call.length != 4)	
@@ -401,7 +399,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		scopes.back().deadAfter(resultT);
 		return resultT;
 	} break;
-	case Symbol::E_brace: 
+	case String::brace: 
 	{
 		int64_t length = call.length;
 		if(length <= 1) {
@@ -416,11 +414,11 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 			return result;
 		}
 	} break;
-	case Symbol::E_paren: 
+	case String::paren: 
 	{
 		return compile(call[1], code);
 	} break;
-	case Symbol::E_add: 
+	case String::add: 
 	{
 		int64_t result = 0;
 		if(call.length != 2 && call.length != 3)
@@ -439,7 +437,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		}
 		return result;
 	} break;
-	case Symbol::E_sub: 
+	case String::sub: 
 	{
 		int64_t result = 0;
 		if(call.length != 2 && call.length != 3)
@@ -459,22 +457,22 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		return result;
 	} break;
 	// Binary operators
-	case Symbol::E_colon:
-	case Symbol::E_mul: 
-	case Symbol::E_div: 
-	case Symbol::E_idiv: 
-	case Symbol::E_pow: 
-	case Symbol::E_mod:
-	case Symbol::E_land:
-	case Symbol::E_lor:
-	case Symbol::E_slor:
-	case Symbol::E_sland:
-	case Symbol::E_eq:
-	case Symbol::E_neq:
-	case Symbol::E_lt:
-	case Symbol::E_gt:
-	case Symbol::E_ge:
-	case Symbol::E_le:
+	case String::colon:
+	case String::mul: 
+	case String::div: 
+	case String::idiv: 
+	case String::pow: 
+	case String::mod:
+	case String::land:
+	case String::lor:
+	case String::slor:
+	case String::sland:
+	case String::eq:
+	case String::neq:
+	case String::lt:
+	case String::gt:
+	case String::ge:
+	case String::le:
 	{ 
 		int64_t a = compile(call[1], code);
 		int64_t b = compile(call[2], code);
@@ -484,30 +482,30 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		return result;
 	} break;
 	// Unary operators
-	case Symbol::E_lnot: 
-	case Symbol::E_abs: 
-	case Symbol::E_sign: 
-	case Symbol::E_sqrt: 
-	case Symbol::E_floor: 
-	case Symbol::E_ceiling: 
-	case Symbol::E_trunc: 
-	case Symbol::E_round: 
-	case Symbol::E_signif: 
-	case Symbol::E_exp: 
-	case Symbol::E_log: 
-	case Symbol::E_cos: 
-	case Symbol::E_sin: 
-	case Symbol::E_tan: 
-	case Symbol::E_acos: 
-	case Symbol::E_asin: 
-	case Symbol::E_atan:
-	case Symbol::E_Logical:
-	case Symbol::E_Integer:
-	case Symbol::E_Double:
-	case Symbol::E_Complex:
-	case Symbol::E_Character:
-	case Symbol::E_Raw:
-	case Symbol::E_type:
+	case String::lnot: 
+	case String::abs: 
+	case String::sign: 
+	case String::sqrt: 
+	case String::floor: 
+	case String::ceiling: 
+	case String::trunc: 
+	case String::round: 
+	case String::signif: 
+	case String::exp: 
+	case String::log: 
+	case String::cos: 
+	case String::sin: 
+	case String::tan: 
+	case String::acos: 
+	case String::asin: 
+	case String::atan:
+	case String::Logical:
+	case String::Integer:
+	case String::Double:
+	case String::Complex:
+	case String::Character:
+	case String::Raw:
+	case String::type:
 	{ 
 		int64_t a = compile(call[1], code);
 		scopes.back().deadAfter(liveIn);
@@ -515,7 +513,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		emit(code, op(func), a, 0, result);
 		return result; 
 	} break;
-	case Symbol::E_UseMethod:
+	case String::UseMethod:
 	{
 		if(scopes.back().topLevel)
 			throw CompileError("Attempt to use UseMethod outside of function");
@@ -538,7 +536,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		scopes.back().deadAfter(object);
 		return object;
 	} break;
-	case Symbol::E_seq_len:
+	case String::seq_len:
 	{
 		int64_t len = compile(call[1], code);
 		scopes.back().deadAfter(liveIn);
@@ -567,15 +565,15 @@ int64_t Compiler::compileExpression(Expression const& values, Code* code) {
 }
 
 int64_t Compiler::compile(Value const& expr, Code* code) {
-	switch(expr.type.Enum())
+	switch(expr.type)
 	{
-		case Type::E_R_symbol:
+		case Type::Symbol:
 			return compileSymbol(Symbol(expr), code);
 			break;
-		case Type::E_R_call:
+		case Type::Call:
 			return compileCall(Call(expr), code);
 			break;
-		case Type::E_R_expression:
+		case Type::Expression:
 			return compileExpression(Expression(expr), code);
 			break;
 		default:

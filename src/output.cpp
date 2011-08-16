@@ -23,6 +23,10 @@ template<> std::string stringify<Logical>(State const& state, Logical::Element a
 	return Logical::isNA(a) ? "NA" : (a ? "TRUE" : "FALSE");
 }  
 
+template<> std::string stringify<Raw>(State const& state, Raw::Element a) {
+	return rawToStr(a);
+}  
+
 template<> std::string stringify<Integer>(State const& state, Integer::Element a) {
 	return Integer::isNA(a) ? "NA" : std::string("") + intToStr(a) + std::string("L");
 }  
@@ -57,7 +61,7 @@ std::string stringifyVector(State const& state, T const& v) {
 	std::string result = "";
 	int64_t length = v.length;
 	if(length == 0)
-		return std::string(v.type.toString()) + "(0)";
+		return std::string(Type::toString(v.type)) + "(0)";
 
 	bool dots = false;
 	if(length > 100) { dots = true; length = 100; }
@@ -108,25 +112,25 @@ std::string stringifyVector(State const& state, T const& v) {
 std::string State::stringify(Value const& value) const {
 	std::string result = "[1]";
 	bool dots = false;
-	switch(value.type.Enum())
+	switch(value.type)
 	{
-		case Type::E_R_null:
+		case Type::Null:
 			return "NULL";
-		case Type::E_R_raw:
-			return "raw";
-		case Type::E_R_logical:
+		case Type::Raw:
+			return stringifyVector(*this, Raw(value));
+		case Type::Logical:
 			return stringifyVector(*this, Logical(value));
-		case Type::E_R_integer:
+		case Type::Integer:
 			return stringifyVector(*this, Integer(value));
-		case Type::E_R_double:
+		case Type::Double:
 			return stringifyVector(*this, Double(value));
-		case Type::E_R_complex:		
+		case Type::Complex:		
 			return stringifyVector(*this, Complex(value));
-		case Type::E_R_character:
+		case Type::Character:
 			return stringifyVector(*this, Character(value));
 		
-		case Type::E_R_list:
-		case Type::E_R_pairlist:
+		case Type::List:
+		case Type::PairList:
 		{
 			List v(value);
 
@@ -153,21 +157,21 @@ std::string State::stringify(Value const& value) const {
 			if(dots) result = result + " ...\n\n";
 			return result;
 		}
-		case Type::E_R_symbol:
+		case Type::Symbol:
 		{
 			result = "`" + SymToStr(Symbol(value)) + "`";
 			return result;
 		}
-		case Type::E_R_function:
+		case Type::Function:
 		{
 			result = SymToStr(Symbol(Function(value).str()[0]));
 			return result;
 		}
-		case Type::E_R_environment:
+		case Type::Environment:
 		{
 			return std::string("environment <") + intToHexStr((uint64_t)REnvironment(value).ptr()) + "> (" + intToStr(REnvironment(value).ptr()->numVariables()) + " symbols defined)";
 		}
-		case Type::E_I_closure:
+		case Type::Closure:
 		{
 			Closure b(value);
 			std::string r = "block:\nconstants: " + intToStr(b.code()->constants.size()) + "\n";
@@ -181,7 +185,7 @@ std::string State::stringify(Value const& value) const {
 			return r;
 		}
 		default:
-			return value.type.toString();
+			return Type::toString(value.type);
 	};
 }
 std::string State::stringify(Trace const & t) const {
@@ -309,7 +313,7 @@ std::string deparseVectorBody(State const& state, T const& v) {
 
 template<class T>
 std::string deparseVector(State const& state, T const& v) {
-	if(v.length == 0) return std::string(v.type.toString()) + "(0)";
+	if(v.length == 0) return std::string(Type::toString(v.type)) + "(0)";
 	if(v.length == 1) return deparseVectorBody(state, v);
 	else return "c(" + deparseVectorBody(state, v) + ")";
 }
@@ -325,38 +329,21 @@ std::string deparseVector<Expression>(State const& state, Expression const& v) {
 }
 
 std::string State::deparse(Value const& value) const {
-	switch(value.type.Enum())
+	switch(value.type)
 	{
-		case Type::E_R_null:
+		case Type::Null:
 			return "NULL";
-		case Type::E_R_raw:
-			return "raw";
-		case Type::E_R_logical:
-			return deparseVector(*this, Logical(value));
-		case Type::E_R_integer:
-			return deparseVector(*this, Integer(value));
-		case Type::E_R_double:
-			return deparseVector(*this, Double(value));
-		case Type::E_R_complex:		
-			return deparseVector(*this, Complex(value));
-		case Type::E_R_character:
-			return deparseVector(*this, Character(value));
-		case Type::E_R_list:
-			return deparseVector(*this, List(value));
-		case Type::E_R_pairlist:
-			return deparseVector(*this, PairList(value));
-		case Type::E_R_call:
-			return deparseVector(*this, Call(value));
-		case Type::E_R_expression:
-			return deparseVector(*this, Expression(value));
-		case Type::E_R_symbol:
+		#define CASE(Name) case Type::Name: return deparseVector(*this, Name(value)); break;
+		VECTOR_TYPES_NOT_NULL(CASE)
+		#undef CASE
+		case Type::Symbol:
 			return SymToStr(Symbol(value)); // NYI: need to check if this should be backticked.
-		case Type::E_R_function:
+		case Type::Function:
 			return SymToStr(Symbol(Function(value).str()[0]));
-		case Type::E_R_environment:
+		case Type::Environment:
 			return "environment";
 		default:
-			return value.type.toString();
+			return Type::toString(value.type);
 	};
 }
 

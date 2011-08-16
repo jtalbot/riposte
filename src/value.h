@@ -25,33 +25,48 @@
 struct Attributes;
 
 struct Value {
+	Type::Enum type:8;
+	int64_t length:56;
 	union {
 		int64_t i;
 		void* p;
-		double d;
 	};
-	int64_t length;
 	union {
 		void* env;
 		Attributes* attributes;
 	};
-	Type type;
 
-	bool isNil() const { return type.v == Type::E_I_nil; }
-	bool isNull() const { return type.v == Type::E_R_null; }
-	bool isLogical() const { return type.v == Type::E_R_logical; }
-	bool isInteger() const { return type.v == Type::E_R_integer; }
-	bool isDouble() const { return type.v == Type::E_R_double; }
-	bool isComplex() const { return type.v == Type::E_R_complex; }
-	bool isCharacter() const { return type.v == Type::E_R_character; }
-	bool isList() const { return type.v == Type::E_R_list; }
-	bool isCall() const { return type.v == Type::E_R_call; }
-	bool isSymbol() const { return type.v == Type::E_R_symbol; }
-	bool isClosure() const { return type.v == Type::E_I_closure; }
+	static Value Make(Type::Enum type, int64_t length, int64_t data, void* extra) {
+		Value v = {type, length, {data}, {extra}};
+		return v;
+	}
+
+	static Value Make(Type::Enum type, int64_t length, void* data, void* extra) {
+		Value v = {type, length, {(int64_t)data}, {extra}};
+		return v;
+	}
+
+	bool isNil() const { return type == Type::Nil; }
+	bool isNull() const { return type == Type::Null; }
+	bool isLogical() const { return type == Type::Logical; }
+	bool isInteger() const { return type == Type::Integer; }
+	bool isDouble() const { return type == Type::Double; }
+	bool isComplex() const { return type == Type::Complex; }
+	bool isCharacter() const { return type == Type::Character; }
+	bool isList() const { return type == Type::List; }
+	bool isPairList() const { return type == Type::PairList; }
+	bool isCall() const { return type == Type::Call; }
+	bool isExpression() const { return type == Type::Expression; }
+	bool isSymbol() const { return type == Type::Symbol; }
+	bool isClosure() const { return type == Type::Closure; }
+	bool isFunction() const { return type == Type::Function; }
+	bool isBuiltIn() const { return type == Type::BuiltIn; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isList(); }
 	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isSymbol() || (isList() && length==0); }
+	bool isListLike() const { return isList() || isPairList() || isCall() || isExpression(); }
+	bool isConcrete() const { return type <= Type::CompiledCall; }
 	static const Value Nil;
 };
 
@@ -64,27 +79,21 @@ class State;
 struct Symbol {
 	int64_t i;
 
-#define DECLARE_SYMBOLS(EnumType,ENUM_DEF) \
-  enum EnumValue { \
-    ENUM_DEF(ENUM_VALUE,0) \
-  }; \
-  ENUM_DEF(ENUM_CONST,EnumType) \
+	// make constant members matching built in strings
+	#define CONST_DECLARE(name, string, ...) static const Symbol name;
+	STRINGS(CONST_DECLARE)
+	#undef CONST_DECLARE
 
-	DECLARE_SYMBOLS(Symbol,SYMBOLS_ENUM)
-
-	Symbol() : i(1) {}						// Defaults to the empty symbol...
+	Symbol() : i(1) {} // Defaults to the empty symbol...
 	explicit Symbol(int64_t index) : i(index) {}
 
 	explicit Symbol(Value const& v) {
-		assert(v.type == Type::R_symbol); 
+		assert(v.type == Type::Symbol); 
 		i = v.i;
 	}
 
 	operator Value() const {
-		Value v;
-		v.type = Type::R_symbol;
-		v.i = i;
-		return v;
+		return Value::Make(Type::Symbol, 0, i, 0);
 	}
 
 	bool operator<(Symbol const& other) const { return i < other.i;	}
@@ -92,8 +101,6 @@ struct Symbol {
 	bool operator!=(Symbol const& other) const { return i != other.i; }
 
 	bool operator==(int64_t other) const { return i == other; }
-
-	int64_t Enum() const { return i; }
 
 	bool isAssignable() const {
 		return !(*this == Symbol::NA || *this == Symbol::empty);
@@ -107,29 +114,28 @@ struct Vector {
 	int64_t length, width;
 	bool _packed;
 	Attributes* attributes;
-	Type type;
+	Type::Enum type;
 
 	bool packed() const { return _packed; }
 	void* data() const { if(packed()) return (void*)&_data; else return _data; }
 	void* data(int64_t i) const { if(packed()) return ((char*)&_data) + i*width; else return (char*)_data + i*width; }
 
-	Vector() : _data(0), length(0), width(0), _packed(true), attributes(0), type(Type::I_nil) {}
+	Vector() : _data(0), length(0), width(0), _packed(true), attributes(0), type(Type::Nil) {}
 
 	explicit Vector(Value v);
-	explicit Vector(Type t, int64_t length);
-	explicit Vector(Type t, int64_t length, void * data);
+	explicit Vector(Type::Enum t, int64_t length);
+	explicit Vector(Type::Enum t, int64_t length, void * data);
 
 	operator Value() const {
-		Value v = {{(int64_t)_data}, length, {attributes}, type};
-		return v;
+		return Value::Make(type, length, _data, attributes);
 	}
 };
 
-template<Type::EnumValue VectorType, typename ElementType, bool Recursive>
+template<Type::Enum VectorType, typename ElementType, bool Recursive>
 struct VectorImpl {
 	typedef ElementType Element;
 	static const int64_t width = sizeof(ElementType); 
-	static const Type type;
+	static const Type::Enum type = VectorType;
 	static const int64_t packLength = sizeof(ElementType)/sizeof(void*);
 
 	int64_t length;
@@ -168,7 +174,7 @@ struct VectorImpl {
 
 	// Cross type cast (between vectors with the same storage type), use carefully
 	// Mainly used for casting between Lists, Calls, and Expressions
-	template<Type::EnumValue T>
+	template<Type::Enum T>
 	VectorImpl(VectorImpl<T, ElementType, Recursive> const& other) {
 		length = other.length;
 		_data = other._data;
@@ -205,7 +211,7 @@ struct VectorImpl {
 	}
 
 	operator Value() const {
-		Value v = {{(int64_t)_data}, length, {attributes}, {VectorType}};
+		Value v = Value::Make(VectorType, length, _data, attributes);
                 if(packed()) {
                         memcpy(&v.p, pack, sizeof(void*));
                 }
@@ -237,22 +243,18 @@ protected:
 
 };
 
-template<Type::EnumValue VectorType, typename ElementType, bool Recursive>
-const Type VectorImpl<VectorType, ElementType, Recursive>::type = {VectorType};
-
-
 union _doublena {
 	int64_t i;
 	double d;
 };
 
-#define VECTOR_IMPL(Name, VectorType, Element, Recursive) 				\
-struct Name : public VectorImpl<VectorType, Element, Recursive> { 			\
-	explicit Name(int64_t length) : VectorImpl<VectorType, Element, Recursive>(length) {} 	\
-	explicit Name(Value const& v) : VectorImpl<VectorType, Element, Recursive>(v) {} 	\
-	explicit Name(Vector const& v) : VectorImpl<VectorType, Element, Recursive>(v) {} 	\
-	template<Type::EnumValue T> \
-	explicit Name(VectorImpl<T, Element, Recursive> const& other) : VectorImpl<VectorType, Element, Recursive>(other) {} \
+#define VECTOR_IMPL(Name, Element, Recursive) 				\
+struct Name : public VectorImpl<Type::Name, Element, Recursive> { 			\
+	explicit Name(int64_t length) : VectorImpl<Type::Name, Element, Recursive>(length) {} 	\
+	explicit Name(Value const& v) : VectorImpl<Type::Name, Element, Recursive>(v) {} 	\
+	explicit Name(Vector const& v) : VectorImpl<Type::Name, Element, Recursive>(v) {} 	\
+	template<Type::Enum T> \
+	explicit Name(VectorImpl<T, Element, Recursive> const& other) : VectorImpl<Type::Name, Element, Recursive>(other) {} \
 	static Name c() { Name c(0); return c; } \
 	static Name c(Element v0) { Name c(1); c[0] = v0; return c; } \
 	static Name c(Element v0, Element v1) { Name c(2); c[0] = v0; c[1] = v1; return c; } \
@@ -263,11 +265,11 @@ struct Name : public VectorImpl<VectorType, Element, Recursive> { 			\
 	static Name NA() { static Name na = Name::c(NAelement); return na; } 
 /* note missing }; */
 
-VECTOR_IMPL(Null, Type::E_R_null, unsigned char, false) 
+VECTOR_IMPL(Null, unsigned char, false) 
 	static Null Singleton() { static Null s = Null::c(); return s; } 
 };
 
-VECTOR_IMPL(Logical, Type::E_R_logical, unsigned char, false)
+VECTOR_IMPL(Logical, unsigned char, false)
 	static Logical True() { static Logical t = Logical::c(1); return t; }
 	static Logical False() { static Logical f = Logical::c(0); return f; } 
 	
@@ -279,14 +281,14 @@ VECTOR_IMPL(Logical, Type::E_R_logical, unsigned char, false)
 	static bool isInfinite(unsigned char c) { return false; }
 };
 
-VECTOR_IMPL(Integer, Type::E_R_integer, int64_t, false)
+VECTOR_IMPL(Integer, int64_t, false)
 	static bool isNA(int64_t c) { return c == NAelement; }
 	static bool isNaN(int64_t c) { return false; }
 	static bool isFinite(int64_t c) { return c != NAelement; }
 	static bool isInfinite(int64_t c) { return false; }
 }; 
 
-VECTOR_IMPL(Double, Type::E_R_double, double, false)
+VECTOR_IMPL(Double, double, false)
 	static Double Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
 	static Double NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
 	static Double NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } 
@@ -297,85 +299,70 @@ VECTOR_IMPL(Double, Type::E_R_double, double, false)
 	static bool isInfinite(double c) { return c == std::numeric_limits<double>::infinity() || c == -std::numeric_limits<double>::infinity(); }
 };
 
-VECTOR_IMPL(Complex, Type::E_R_complex, std::complex<double>, false)
+VECTOR_IMPL(Complex, std::complex<double>, false)
 	static bool isNA(std::complex<double> c) { _doublena a, b, t ; a.d = c.real(); b.d = c.imag(); t.d = Double::NAelement; return a.i==t.i || b.i==t.i; }
 	static bool isNaN(std::complex<double> c) { return Double::isNaN(c.real()) || Double::isNaN(c.imag()); }
 	static bool isFinite(std::complex<double> c) { return Double::isFinite(c.real()) && Double::isFinite(c.imag()); }
 	static bool isInfinite(std::complex<double> c) { return Double::isInfinite(c.real()) || Double::isInfinite(c.imag()); }
 };
 
-VECTOR_IMPL(Character, Type::E_R_character, Symbol, false)
+VECTOR_IMPL(Character, Symbol, false)
 	static bool isNA(Symbol c) { return c == Symbol::NA; }
 	static bool isNaN(Symbol c) { return false; }
 	static bool isFinite(Symbol c) { return false; }
 	static bool isInfinite(Symbol c) { return false; }
 };
 
-VECTOR_IMPL(Raw, Type::E_R_raw, unsigned char, false) 
+VECTOR_IMPL(Raw, unsigned char, false) 
 	static bool isNA(unsigned char c) { return false; }
 	static bool isNaN(unsigned char c) { return false; }
 	static bool isFinite(unsigned char c) { return false; }
 	static bool isInfinite(unsigned char c) { return false; }
 };
 
-VECTOR_IMPL(List, Type::E_R_list, Value, true) 
+VECTOR_IMPL(List, Value, true) 
 	static bool isNA(Value c) { return false; }
 	static bool isNaN(Value c) { return false; }
 	static bool isFinite(Value c) { return false; }
 	static bool isInfinite(Value c) { return false; }
 };
 
-VECTOR_IMPL(PairList, Type::E_R_pairlist, Value, true) 
+VECTOR_IMPL(PairList, Value, true) 
 	static bool isNA(Value c) { return false; }
 	static bool isNaN(Value c) { return false; }
 	static bool isFinite(Value c) { return false; }
 	static bool isInfinite(Value c) { return false; }
 };
 
-VECTOR_IMPL(Call, Type::E_R_call, Value, true) 
+VECTOR_IMPL(Call, Value, true) 
 	static bool isNA(Value c) { return false; }
 	static bool isNaN(Value c) { return false; }
 	static bool isFinite(Value c) { return false; }
 	static bool isInfinite(Value c) { return false; }
 };
 
-VECTOR_IMPL(Expression, Type::E_R_expression, Value, true) 
+VECTOR_IMPL(Expression, Value, true) 
 	static bool isNA(Value c) { return false; }
 	static bool isNaN(Value c) { return false; }
 	static bool isFinite(Value c) { return false; }
 	static bool isInfinite(Value c) { return false; }
 };
 
-inline Vector::Vector(Type t, int64_t length) {
-	switch(t.Enum()) {
-		case Type::E_R_null: *this = Null::Singleton(); break;
-		case Type::E_R_logical: *this = Logical(length); break;	
-		case Type::E_R_integer: *this = Integer(length); break;	
-		case Type::E_R_double: *this = Double(length); break;	
-		case Type::E_R_complex: *this = Complex(length); break;	
-		case Type::E_R_character: *this = Character(length); break;	
-		case Type::E_R_raw: *this = Raw(length); break;	
-		case Type::E_R_list: *this = List(length); break;	
-		case Type::E_R_pairlist: *this = PairList(length); break;	
-		case Type::E_R_call: *this = Call(length); break;	
-		case Type::E_R_expression: *this = Expression(length); break;	
+inline Vector::Vector(Type::Enum t, int64_t length) {
+	switch(t) {
+		case Type::Null: *this = Null::Singleton(); break;
+		#define CASE(Name, ...) case Type::Name: *this = Name(length); break;
+		VECTOR_TYPES_NOT_NULL(CASE)
+		#undef CASE
 		default: throw RuntimeError("attempt to create invalid vector type"); break;
 	};
 }
-inline Vector::Vector(Type t, int64_t length, void * data) {
+inline Vector::Vector(Type::Enum t, int64_t length, void * data) {
 	uint64_t width;
-	switch(t.Enum()) {
-		case Type::E_R_null: width = Null::width; break;
-		case Type::E_R_logical: width = Logical::width; break;
-		case Type::E_R_integer: width = Integer::width; break;
-		case Type::E_R_double: width = Double::width; break;
-		case Type::E_R_complex: width = Complex::width; break;
-		case Type::E_R_character: width = Character::width; break;
-		case Type::E_R_raw: width = Raw::width; break;
-		case Type::E_R_list: width = List::width; break;
-		case Type::E_R_pairlist: width = PairList::width; break;
-		case Type::E_R_call: width = Call::width; break;
-		case Type::E_R_expression: width = Expression::width; break;
+	switch(t) {
+		#define CASE(Name,...) case Type::Name: width = Name::width; break;
+		VECTOR_TYPES(CASE)
+		#undef CASE
 		default: throw RuntimeError("attempt to create invalid vector type"); break;
 	};
 	Value v;
@@ -391,18 +378,11 @@ inline Vector::Vector(Type t, int64_t length, void * data) {
 }
 
 inline Vector::Vector(Value v) {
-	switch(v.type.Enum()) {
-		case Type::E_R_null: *this = Null::Singleton(); break;
-		case Type::E_R_logical: *this = Logical(v); break;	
-		case Type::E_R_integer: *this = Integer(v); break;	
-		case Type::E_R_double: *this = Double(v); break;	
-		case Type::E_R_complex: *this = Complex(v); break;	
-		case Type::E_R_character: *this = Character(v); break;	
-		case Type::E_R_raw: *this = Raw(v); break;	
-		case Type::E_R_list: *this = List(v); break;	
-		case Type::E_R_pairlist: *this = PairList(v); break;	
-		case Type::E_R_call: *this = Call(v); break;	
-		case Type::E_R_expression: *this = Expression(v); break;	
+	switch(v.type) {
+		case Type::Null: *this = Null::Singleton(); break;
+		#define CASE(Name, ...) case Type::Name: *this = Name(v); break;
+		VECTOR_TYPES_NOT_NULL(CASE)
+		#undef CASE
 		default: throw RuntimeError("attempt to create invalid vector type"); break;
 	};
 }
@@ -431,8 +411,7 @@ public:
 	}
 
 	operator Value() const {
-		Value v = {{(int64_t)c}, 0, {(Attributes*)env}, Type::I_closure};
-		return v;
+		return Value::Make(Type::Closure, 0, (void*)c, (void*)env);
 	}
 
 	Closure bind(Environment* environment) {
@@ -470,11 +449,7 @@ public:
 	}
 
 	operator Value() const {
-		Value v;
-		v.p = inner;
-		v.attributes = attributes;
-		v.type = Type::R_function;
-		return v;
+		return Value::Make(Type::Function, 0, (void*)inner, attributes);
 	}
 
 	List const& parameters() const { return inner->parameters; }
@@ -494,11 +469,7 @@ public:
 		func = (Cffi)v.p; 
 	}
 	operator Value() const {
-		Value v;
-		v.p = (void*)func;
-		v.type = Type::R_cfunction;
-		v.attributes = 0;
-		return v;
+		return Value::Make(Type::BuiltIn, 0, (void*)func, 0);
 	}
 };
 
@@ -519,15 +490,12 @@ public:
 	}
 
 	explicit CompiledCall(Value const& v) {
-		assert(v.type == Type::I_compiledcall);
+		assert(v.type == Type::CompiledCall);
 		inner = (Inner*)v.p; 
 	}
 
 	operator Value() const {
-		Value v;
-		v.p = inner;
-		v.type = Type::I_compiledcall;
-		return v;
+		return Value::Make(Type::CompiledCall, 0, (void*)inner, 0);
 	}
 	
 	Call call() const { return Call(inner->call); }
@@ -543,17 +511,13 @@ public:
 	explicit REnvironment(Environment* env) : env(env), attributes(0) {
 	}
 	explicit REnvironment(Value const& v) {
-		assert(v.type == Type::R_environment);
+		assert(v.type == Type::Environment);
 		env = (Environment*)v.p;
 		attributes = v.attributes;
 	}
 	
 	operator Value() const {
-		Value v;
-		v.type = Type::R_environment;
-		v.p = env;
-		v.attributes = attributes;
-		return v;
+		return Value::Make(Type::Environment, 0, (void*)env, attributes);
 	}
 	Environment* ptr() const {
 		return env;
@@ -827,7 +791,7 @@ struct State {
 	std::vector<Environment*, traceable_allocator<Environment*> > path;
 	Environment* global;
 
-	SymbolTable symbols;
+	StringTable strings;
 	
 	std::vector<std::string> warnings;
 	
@@ -863,11 +827,11 @@ struct State {
 	std::string deparse(Value const& v) const;
 
 	Symbol StrToSym(std::string s) {
-		return Symbol(symbols.in(s));
+		return Symbol(strings.in(s));
 	}
 
 	std::string const& SymToStr(Symbol s) const {
-		return symbols.out(s.i);
+		return strings.out(s.i);
 	}
 };
 

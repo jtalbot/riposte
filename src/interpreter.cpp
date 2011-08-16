@@ -266,17 +266,17 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 	CompiledCall call(constant(state, inst.b));
 	List arguments = call.dots() < call.arguments().length ? BuildArgs(state, call) : call.arguments();
 
-	if(f.type == Type::R_function) {
+	if(f.isFunction()) {
 		Function func(f);
 		assert(func.body().isClosure());
 		Environment* fenv = CreateEnvironment(state, func.s(), state.frame.environment, Closure(func.body()).code()->slotSymbols);
 		MatchArgs(state, state.frame.environment, fenv, func, arguments);
 		return buildStackFrame(state, fenv, true, Closure(func.body()).code(), &REG(state, inst.c), &inst+1);
-	} else if(f.type == Type::R_cfunction) {
+	} else if(f.isBuiltIn()) {
 		REG(state, inst.c) = CFunction(f).func(state, arguments);
 		return &inst+1;
 	} else {
-		_error(std::string("Non-function (") + f.type.toString() + ") as first parameter to call\n");
+		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
 		return &inst+1;
 	}	
 }
@@ -300,7 +300,7 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 		f = get(state, method);
 	}
 
-	if(f.type == Type::R_function) {
+	if(f.isFunction()) {
 		Function func(f);
 		assert(func.body().isClosure());
 		Environment* fenv = CreateEnvironment(state, func.s(), state.frame.environment, Closure(func.body()).code()->slotSymbols);
@@ -309,7 +309,7 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 		assign(fenv, Symbol::dotMethod, method);
 		assign(fenv, Symbol::dotClass, type); 
 		return buildStackFrame(state, fenv, true, Closure(func.body()).code(), &REG(state, inst.c), &inst+1);
-	} else if(f.type == Type::R_cfunction) {
+	} else if(f.isBuiltIn()) {
 		REG(state, inst.c) = CFunction(f).func(state, arguments);
 		return &inst+1;
 	} else {
@@ -350,7 +350,7 @@ Instruction const* sget_op(State& state, Instruction const& inst)
 	*/
 	Value& dest = REG(state, inst.c);
 	dest = state.frame.environment->get(inst.a);
-	if(dest.type.v >= Type::E_I_closure) {
+	if(!dest.isConcrete()) {
 		if(dest.isNil()) {
 			dest = get(state, state.frame.environment->slotName(inst.a));
 			if(dest.isNil())
@@ -413,7 +413,7 @@ Instruction const* forend_op(State& state, Instruction const& inst) {
 	if((REG(state,inst.c).i) < REG(state,inst.c-1).length) {
 		Value v;
 		Element(REG(state, inst.c-1), REG(state, inst.c).i, v);
-		//assign(state, Symbol(inst.b), v);
+		assign(state, Symbol(inst.b), v);
 		REG(state, inst.c).i++;
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;
@@ -689,24 +689,24 @@ Instruction const* raw1_op(State& state, Instruction const& inst) {
 Instruction const* type_op(State& state, Instruction const& inst) {
 	Character c(1);
 	// Should have a direct mapping from type to symbol.
-	c[0] = state.StrToSym(REG(state, inst.a).type.toString());
+	c[0] = state.StrToSym(Type::toString(REG(state, inst.a).type));
 	REG(state, inst.c) = c;
 	return &inst+1;
 }
 Instruction const * invoketrace_op(State& state, Instruction const & inst) {
 	Trace * trace = state.frame.code->traces[inst.a];
 	int64_t offset;
-	TCStatus status = trace->compiled->execute(state,&offset);
+	TCStatus::Enum status = trace->compiled->execute(state,&offset);
 	if(status != TCStatus::SUCCESS) {
-		printf("trace: encountered error %s\n",status.toString());
+		printf("trace: encountered error %s\n",TCStatus::toString(status));
 	}
 	if(status  != TCStatus::SUCCESS || offset == 0) { //we exited to the trace start instruction, invoke the original instruction here
 		Instruction invoketrace = inst;
 		const_cast<Instruction&>(inst) = trace->trace_inst;
 		Instruction const * pc;
-#define BC_SWITCH(bc,str,p) case ByteCode::E_##bc: pc = bc##_op(state,inst); break;
-		switch(trace->trace_inst.bc.Enum()) {
-			BC_ENUM(BC_SWITCH,0)
+#define BC_SWITCH(bc,str) case ByteCode::bc: pc = bc##_op(state,inst); break;
+		switch(trace->trace_inst.bc) {
+			BYTECODES(BC_SWITCH)
 		}
 		const_cast<Instruction&>(inst) = invoketrace;
 		return pc;
@@ -760,7 +760,7 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 			Instruction const& inst = code->bc[i];
 			code->tbc.push_back(
 				Instruction(
-					inst.bc == ByteCode::done ? glabels[0] : glabels[inst.bc.Enum()+1],
+					inst.bc == ByteCode::done ? glabels[0] : glabels[inst.bc+1],
 					inst.a, inst.b, inst.c));
 		}
 	}
@@ -776,23 +776,23 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 //__attribute__((__noinline__,__noclone__)) 
 void interpret(State& state, Instruction const* pc) {
 #ifdef THREADED_INTERPRETER
-    #define LABELS_THREADED(name,type,p) (void*)&&name##_label,
-	static const void* labels[] = {&&DONE, BC_ENUM(LABELS_THREADED,0)};
+    #define LABELS_THREADED(name,type) (void*)&&name##_label,
+	static const void* labels[] = {&&DONE, BYTECODES(LABELS_THREADED)};
 	glabels = &labels[0];
 	if(pc == 0) return;
 
 	goto *(pc->ibc);
-	#define LABELED_OP(name,type,p) \
+	#define LABELED_OP(name,type) \
 		name##_label: \
 			{ pc = name##_op(state, *pc); goto *(pc->ibc); } 
-	BC_ENUM(LABELED_OP,0)
+	BYTECODES(LABELED_OP)
 	DONE: {}
 #else
 	while(pc->bc != ByteCode::done) {
 		switch(pc->bc.Enum()) {
-			#define SWITCH_OP(name,type,p) \
-				case ByteCode::E_##name: { pc = name##_op(state, *pc); } break;
-			BC_ENUM(SWITCH_OP,0)
+			#define SWITCH_OP(name,type) \
+				case ByteCode::name: { pc = name##_op(state, *pc); } break;
+			BYTECODES(SWITCH_OP,0)
 		};
 	}
 #endif
