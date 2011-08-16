@@ -235,7 +235,7 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 
       d_message(1,NULL,"Command option processing complete");
 
-	//printf(">> %d\n", sizeof(Value));
+	printf(">> %d\n", sizeof(Value));
 	//printf(">> %d\n", sizeof(Instruction));
 	//printf(">> %d\n", sizeof(Environment::Container));
 
@@ -245,7 +245,6 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 #ifdef USE_CALLGRIND
 	CALLGRIND_START_INSTRUMENTATION
 #endif
-
 	/* Create riposte environment */
 	Environment* base = new Environment(0,0);
 	Environment* global = new Environment(base,0);
@@ -253,12 +252,12 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 
 	State state(global, base);
 
+	interpreter_init(state);
+
 	try {
 		importCoreLibrary(state, base);	
 		importCoerceFunctions(state, base);	
 		loadLibrary(state, "base");
-		
-		interpreter_init(state);
 
 	} catch(RiposteError& error) { 
 		e_message("Error", "riposte", error.what().c_str());

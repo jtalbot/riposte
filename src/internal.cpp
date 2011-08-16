@@ -42,7 +42,7 @@ Value rm(State& state, List const& args) {
 		if(expression(args[i]).type != Type::R_symbol && expression(args[i]).type != Type::R_character) 
 			_error("rm() arguments must be symbols or character vectors");
 	for(int64_t i = 0; i < args.length; i++) {
-		state.frame().environment->rm(Symbol(expression(args[i])));
+		state.frame.environment->rm(Symbol(expression(args[i])));
 	}
 	return Null::Singleton();
 }
@@ -315,7 +315,7 @@ Value tlist(State& state, List const& args) {
 	for(int64_t i = 0; i < a.length; i++) {
 		a[i] = force(state, a[i]);
 		if(a[i].isVector() && a[i].length != 0 && length != 0)
-			length = std::max(length, a[i].length);
+			length = std::max(length, (int64_t)a[i].length);
 	}
 	List result(length);
 	for(int64_t i = 0; i < length; i++) {
@@ -375,7 +375,7 @@ Value environment(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value e = force(state, args[0]);
 	if(e.type == Type::R_null) {
-		return REnvironment(state.frame().environment);
+		return REnvironment(state.frame.environment);
 	}
 	else if(e.type == Type::R_function) {
 		return REnvironment(Function(e).s());
@@ -386,7 +386,7 @@ Value environment(State& state, List const& args) {
 Value parentframe(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	int64_t i = (int64_t)asReal1(force(state, args[0]));
-	Environment* env = state.frame().environment;
+	Environment* env = state.frame.environment;
 	while(i > 0 && env != env->DynamicParent()) {
 		env = env->DynamicParent();
 		i--;
@@ -419,8 +419,8 @@ Value warning_fn(State& state, List const& args) {
 
 Value missing(State& state, List const& args) {
 	Symbol s(expression(args[0])); 
-	Value v =  state.frame().environment->get(s);
-	return (v.isNil() || (v.isClosure() && Closure(v).environment() == state.frame().environment)) ? Logical::True() : Logical::False();
+	Value v =  state.frame.environment->get(s);
+	return (v.isNil() || (v.isClosure() && Closure(v).environment() == state.frame.environment)) ? Logical::True() : Logical::False();
 }
 
 Value max_fn(State& state, List const& args) {
@@ -574,7 +574,7 @@ Value substitute(State& state, List const& args) {
 	while(v.isClosure()) v = Closure(v).code()->expression;
 	
 	if(v.isSymbol()) {
-		Value r = state.frame().environment->get(Symbol(v));
+		Value r = state.frame.environment->get(Symbol(v));
 		if(!r.isNil()) v = r;
 		while(v.isClosure()) v = Closure(v).code()->expression;
 	}
@@ -607,6 +607,23 @@ Value exists(State& state, List const& args) {
 		return Logical::False();
 	else
 		return Logical::True();
+}
+
+#include <sys/time.h>
+
+uint64_t readTime()
+{
+  timeval time_tt;
+  gettimeofday(&time_tt, NULL);
+  return (uint64_t)time_tt.tv_sec * 1000 * 1000 + (uint64_t)time_tt.tv_usec;
+}
+
+Value systemtime(State& state, List const& args) {
+	checkNumArgs(args, 1);
+	uint64_t s = readTime();
+	force(state, args[0]);
+	uint64_t e = readTime();
+	return Double::c((e-s)/(1000000.0));
 }
 
 void importCoreLibrary(State& state, Environment* env)
@@ -671,5 +688,7 @@ void importCoreLibrary(State& state, Environment* env)
 	
 	env->assign(state.StrToSym("get"), CFunction(get));
 	env->assign(state.StrToSym("exists"), CFunction(exists));
+
+	env->assign(state.StrToSym("system.time"), CFunction(systemtime));
 }
 

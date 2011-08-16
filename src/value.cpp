@@ -3,7 +3,7 @@
 #include "internal.h"
 
 _doublena doublena = {0x7fff000000001953};
-const Value Value::Nil = {{0}, {0}, 0, Type::I_nil}; 
+const Value Value::Nil = {{0}, 0, {0}, Type::I_nil}; 
 
 const bool Null::CheckNA = false;
 const unsigned char Null::NAelement = 255;

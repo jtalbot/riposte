@@ -16,9 +16,9 @@ inline Value force(State& state, Value v) {
 	while(v.isClosure()) {
 		Environment* env = Closure(v).environment();
 		v = eval(state, Closure(v).code(), 
-			env != 0 ? env : state.frame().environment); 
+			env != 0 ? env : state.frame.environment); 
 	} 
-	return v; 
+	return v;
 }
 inline Value expression(Value const& v) { 
 	if(v.isClosure())
@@ -149,6 +149,19 @@ inline Vector Subset(Vector const& src, int64_t start, int64_t length) {
 	Vector v(src.type, length);
 	memcpy(v.data(0), src.data(start), length*src.width);
 	return v;
+}
+
+void Element(Value const& v, int64_t index, Value& out) __attribute__((always_inline));
+inline void Element(Value const& v, int64_t index, Value& out) {
+	switch(v.type.Enum()) {
+		case Type::E_R_double: Double::c(Double(v)[index]); break;
+		case Type::E_R_integer: out = Integer::c(Integer(v)[index]); break;
+		case Type::E_R_logical: out = Logical::c(Logical(v)[index]); break;
+		case Type::E_R_character: out = Character::c(Character(v)[index]); break;
+		case Type::E_R_complex: out = Complex::c(Complex(v)[index]); break;
+		case Type::E_R_list: out = List::c(List(v)[index]); break;
+		default: _error("NYI: Element of this type"); break;
+	};
 }
 
 inline Integer Sequence(int64_t length) {

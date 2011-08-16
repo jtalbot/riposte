@@ -11,71 +11,71 @@
 #include "interpreter.h"
 #include "recording.h"
 
+#define ALWAYS_INLINE __attribute__((always_inline))
+
 static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Code const* code, Value* result, Instruction const* returnpc);
+
+Instruction const* kget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+Instruction const* sget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+Instruction const* forend_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+
+
+inline void forcePromise(State& state, Value& v) { 
+	while(v.isClosure()) {
+		Environment* env = Closure(v).environment();
+		v = eval(state, Closure(v).code(), 
+			env != 0 ? env : state.frame.environment); 
+	} 
+}
 
 // Get a Value by Symbol from the current environment
 static Value get(State& state, Symbol s) {
-	Environment* environment = state.frame().environment;
+	Environment* environment = state.frame.environment;
 	Value value = environment->get(s);
 	while(value.isNil() && environment->StaticParent() != 0) {
 		environment = environment->StaticParent();
 		value = environment->get(s);
 	}
 	if(value.isClosure()) {
-		value = force(state, value);
+		forcePromise(state, value);
 		environment->assign(s, value);
 	}
 	return value;
 }
 
 // Get a Value by slot from the current environment
-static Value sget(State& state, int64_t i) {
-	Environment* environment = state.frame().environment;
-	Value value = environment->get(i);
-	if(!value.isNil()) {
-		value = force(state, value);
-		environment->get(i) = value;
-		return value;
-	}
-	Symbol s = environment->slotName(i);
-	while(value.isNil() && environment->StaticParent() != 0) {
-		environment = environment->StaticParent();
-		value = environment->get(s);
-	}
-	value = force(state, value);
-	environment->assign(s, value);
+static Value& sget(State& state, int64_t i) {
+	Value& value = state.frame.environment->get(i);
+	if(value.isClosure()) forcePromise(state, value);
 	return value;
 }
 
-static void assign(Environment* env, Symbol s, Value v) {
+static void assign(Environment* env, Symbol s, Value const& v) {
 	env->assign(s, v);
 }
 
-static void sassign(Environment* env, int64_t i, Value v) {
+static void sassign(Environment* env, int64_t i, Value const& v) {
 	env->get(i) = v;
 }
 
-static void assign(State& state, Symbol s, Value v) {
-	assign(state.frame().environment, s, v);
+static void assign(State& state, Symbol s, Value const& v) {
+	assign(state.frame.environment, s, v);
 }
 
-static void sassign(State& state, int64_t i, Value v) {
-	sassign(state.frame().environment, i, v);
+static void sassign(State& state, int64_t i, Value const& v) {
+	sassign(state.frame.environment, i, v);
 }
 
-static Value& reg(State& state, int64_t i) {
-	return *(state.base + i);
-}
+#define REG(state, i) (*(state.base+i))
 
-
-Value & interpreter_reg(State & state, int64_t i) { return reg(state,i); }
+Value & interpreter_reg(State & state, int64_t i) { return REG(state,i); }
 Value interpreter_get(State & state, Symbol s) { return get(state,s); }
 Value interpreter_sget(State & state, int64_t i) { return sget(state,i); }
 void interpreter_assign(State & state, Symbol s, Value v) { assign(state,s,v); }
 void interpreter_sassign(State & state, int64_t s, Value v) { sassign(state,s,v); }
 
-static Value constant(State& state, int64_t i) {
-	return state.frame().code->constants[i];
+static Value const& constant(State& state, int64_t i) {
+	return state.frame.code->constants[i];
 }
 
 static List BuildArgs(State& state, CompiledCall& call) {
@@ -262,18 +262,18 @@ static Instruction const * profile_back_edge(State & state, Instruction const * 
 }
 
 Instruction const* call_op(State& state, Instruction const& inst) {
-	Value f = reg(state, inst.a);
+	Value f = REG(state, inst.a);
 	CompiledCall call(constant(state, inst.b));
 	List arguments = call.dots() < call.arguments().length ? BuildArgs(state, call) : call.arguments();
 
 	if(f.type == Type::R_function) {
 		Function func(f);
 		assert(func.body().isClosure());
-		Environment* fenv = CreateEnvironment(state, func.s(), state.frame().environment, Closure(func.body()).code()->slotSymbols);
-		MatchArgs(state, state.frame().environment, fenv, func, arguments);
-		return buildStackFrame(state, fenv, true, Closure(func.body()).code(), &reg(state, inst.c), &inst+1);
+		Environment* fenv = CreateEnvironment(state, func.s(), state.frame.environment, Closure(func.body()).code()->slotSymbols);
+		MatchArgs(state, state.frame.environment, fenv, func, arguments);
+		return buildStackFrame(state, fenv, true, Closure(func.body()).code(), &REG(state, inst.c), &inst+1);
 	} else if(f.type == Type::R_cfunction) {
-		reg(state, inst.c) = CFunction(f).func(state, arguments);
+		REG(state, inst.c) = CFunction(f).func(state, arguments);
 		return &inst+1;
 	} else {
 		_error(std::string("Non-function (") + f.type.toString() + ") as first parameter to call\n");
@@ -281,13 +281,13 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 	}	
 }
 Instruction const* UseMethod_op(State& state, Instruction const& inst) {
-	Value v = reg(state, inst.a);
+	Value v = REG(state, inst.a);
 	Symbol generic = v.isCharacter() ? Character(v)[0] : Symbol(v);
 	
 	CompiledCall call(constant(state, inst.b));
 	List arguments = call.dots() < call.arguments().length ? BuildArgs(state, call) : call.arguments();
 	
-	Value object = reg(state, inst.c);
+	Value object = REG(state, inst.c);
 	Character type = klass(state, object);
 
 	//Search for type-specific method
@@ -303,14 +303,14 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 	if(f.type == Type::R_function) {
 		Function func(f);
 		assert(func.body().isClosure());
-		Environment* fenv = CreateEnvironment(state, func.s(), state.frame().environment, Closure(func.body()).code()->slotSymbols);
-		MatchArgs(state, state.frame().environment, fenv, func, arguments);
+		Environment* fenv = CreateEnvironment(state, func.s(), state.frame.environment, Closure(func.body()).code()->slotSymbols);
+		MatchArgs(state, state.frame.environment, fenv, func, arguments);
 		assign(fenv, Symbol::dotGeneric, generic);
 		assign(fenv, Symbol::dotMethod, method);
 		assign(fenv, Symbol::dotClass, type); 
-		return buildStackFrame(state, fenv, true, Closure(func.body()).code(), &reg(state, inst.c), &inst+1);
+		return buildStackFrame(state, fenv, true, Closure(func.body()).code(), &REG(state, inst.c), &inst+1);
 	} else if(f.type == Type::R_cfunction) {
-		reg(state, inst.c) = CFunction(f).func(state, arguments);
+		REG(state, inst.c) = CFunction(f).func(state, arguments);
 		return &inst+1;
 	} else {
 		_error(std::string("no applicable method for '") + state.SymToStr(generic) + "' applied to an object of class \"" + state.SymToStr(type[0]) + "\"");
@@ -333,97 +333,116 @@ Instruction const* get_flat(State& state, Symbol s, Value& value, Environment* e
 	}
 }
 Instruction const* get_op(State& state, Instruction const& inst) {
-	/*Environment* environment = state.frame().environment;
-	reg(state, inst.c) = environment->get(Symbol(inst.a));
-	return get_flat(state, Symbol(inst.a), reg(state, inst.c), environment, inst);
+	/*Environment* environment = state.frame.environment;
+	REG(state, inst.c) = environment->get(Symbol(inst.a));
+	return get_flat(state, Symbol(inst.a), REG(state, inst.c), environment, inst);
 	*/
-	reg(state, inst.c) = get(state, Symbol(inst.a));
-	if(reg(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(Symbol(inst.a)) + "' not found");
+	REG(state, inst.c) = get(state, Symbol(inst.a));
+	if(REG(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(Symbol(inst.a)) + "' not found");
 	return &inst+1;
 }
-Instruction const* sget_op(State& state, Instruction const& inst) {
-	/*Environment* environment = state.frame().environment;
-	reg(state, inst.c) = environment->get(inst.a);
-	return get_flat(state, environment->slotName(inst.a), reg(state, inst.c), environment, inst);
+
+Instruction const* sget_op(State& state, Instruction const& inst)
+{
+	/*Environment* environment = state.frame.environment;
+	REG(state, inst.c) = environment->get(inst.a);
+	return get_flat(state, environment->slotName(inst.a), REG(state, inst.c), environment, inst);
 	*/
-	reg(state, inst.c) = sget(state, inst.a);
-	if(reg(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(state.frame().environment->slotName(inst.a)) + "' not found");
+	Value& dest = REG(state, inst.c);
+	dest = state.frame.environment->get(inst.a);
+	if(dest.type.v >= Type::E_I_closure) {
+		if(dest.isNil()) {
+			dest = get(state, state.frame.environment->slotName(inst.a));
+			if(dest.isNil())
+				_error(std::string("object '") + state.SymToStr(state.frame.environment->slotName(inst.a)) + "' not found");
+		}
+		if(dest.isClosure()) 
+			forcePromise(state, dest);
+	}
 	return &inst+1;
 }
+
 Instruction const* kget_op(State& state, Instruction const& inst) {
-	reg(state, inst.c) = constant(state, inst.a);
+	REG(state, inst.c) = constant(state, inst.a);
 	return &inst+1;
 }
 Instruction const* iget_op(State& state, Instruction const& inst) {
-	reg(state, inst.c) = state.path[0]->get(Symbol(inst.a));
-	if(reg(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(Symbol(inst.a)) + "' not found");
+	REG(state, inst.c) = state.path[0]->get(Symbol(inst.a));
+	if(REG(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(Symbol(inst.a)) + "' not found");
 	return &inst+1;
 }
 Instruction const* assign_op(State& state, Instruction const& inst) {
-	assign(state, Symbol(inst.a), reg(state, inst.c));
+	assign(state, Symbol(inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* sassign_op(State& state, Instruction const& inst) {
-	sassign(state, inst.a, reg(state, inst.c));
+	sassign(state, inst.a, REG(state, inst.c));
 	return &inst+1;
 }
 // everything else should be in registers
 
 Instruction const* iassign_op(State& state, Instruction const& inst) {
 	// a = value, b = index, c = dest 
-	subAssign(state, reg(state,inst.c), reg(state,inst.b), reg(state,inst.a), reg(state,inst.c));
+	subAssign(state, REG(state,inst.c), REG(state,inst.b), REG(state,inst.a), REG(state,inst.c));
 	return &inst+1;
 }
 Instruction const* eassign_op(State& state, Instruction const& inst) {
 	// a = value, b = index, c = dest 
-	Value v = reg(state, inst.c);
+	Value v = REG(state, inst.c);
 	if(v.isList()) {
 		List r = Clone(List(v));
-		r[As<Integer>(state, reg(state,inst.b))[0]-1] = reg(state,inst.a);
-		reg(state, inst.c) = r;
+		r[As<Integer>(state, REG(state,inst.b))[0]-1] = REG(state,inst.a);
+		REG(state, inst.c) = r;
 		return &inst+1;
 	}
 	else {
-		subAssign(state, reg(state,inst.c), reg(state,inst.b), reg(state,inst.a), reg(state,inst.c));
+		subAssign(state, REG(state,inst.c), REG(state,inst.b), REG(state,inst.a), REG(state,inst.c));
 		return &inst+1;
 	}
 }
 Instruction const* forbegin_op(State& state, Instruction const& inst) {
 	// inst.c-1 holds the loopVector
-	reg(state, inst.c) = Integer::c(0);
-	if(reg(state, inst.c).i >= (int64_t)reg(state, inst.c-1).length) { return &inst+inst.a; }
-	assign(state, Symbol(inst.b), Element(Vector(reg(state, inst.c-1)), 0));
+	if((int64_t)REG(state, inst.c-1).length <= 0) { return &inst+inst.a; }
+	REG(state, inst.c) = Integer::c(1);
+	Value v;
+	Element(REG(state, inst.c-1), 0, v);
+	assign(state, Symbol(inst.b), v);
 	return &inst+1;
 }
 Instruction const* forend_op(State& state, Instruction const& inst) {
-	if(++reg(state, inst.c).i < (int64_t)reg(state, inst.c-1).length) {
-		assign(state, Symbol(inst.b), Element(Vector(reg(state, inst.c-1)), reg(state, inst.c).i));
+	if((REG(state,inst.c).i) < REG(state,inst.c-1).length) {
+		Value v;
+		Element(REG(state, inst.c-1), REG(state, inst.c).i, v);
+		//assign(state, Symbol(inst.b), v);
+		REG(state, inst.c).i++;
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;
 }
 Instruction const* iforbegin_op(State& state, Instruction const& inst) {
-	double m = asReal1(reg(state, inst.c-1));
-	double n = asReal1(reg(state, inst.c));
-	reg(state, inst.c-1) = Integer::c(n > m ? 1 : -1);
-	reg(state, inst.c-1).length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
-	reg(state, inst.c) = Integer::c((int64_t)m);
-	if(reg(state, inst.c).i >= (int64_t)reg(state, inst.c-1).length) { return &inst+inst.a; }
+	double m = asReal1(REG(state, inst.c-1));
+	double n = asReal1(REG(state, inst.c));
+	REG(state, inst.c-1) = Integer::c(n > m ? 1 : -1);
+	REG(state, inst.c-1).length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
+	REG(state, inst.c) = Integer::c((int64_t)m);
+	if(REG(state, inst.c).i >= (int64_t)REG(state, inst.c-1).length) { return &inst+inst.a; }
 	assign(state, Symbol(inst.b), Integer::c(m));
+	REG(state, inst.c).i += REG(state, inst.c-1).i;
 	return &inst+1;
 }
 Instruction const* iforend_op(State& state, Instruction const& inst) {
-	if((reg(state, inst.c).i+=reg(state, inst.c-1).i) < (int64_t)reg(state, inst.c-1).length) { 
-		assign(state, Symbol(inst.b), reg(state, inst.c));
+	if(REG(state, inst.c).i < REG(state, inst.c-1).length) { 
+		assign(state, Symbol(inst.b), REG(state, inst.c));
+		REG(state, inst.c).i += REG(state, inst.c-1).i;
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;
 }
 Instruction const* whilebegin_op(State& state, Instruction const& inst) {
-	Logical l(reg(state,inst.b));
+	Logical l(REG(state,inst.b));
 	if(l[0]) return &inst+1;
 	else return &inst+inst.a;
 }
 Instruction const* whileend_op(State& state, Instruction const& inst) {
-	Logical l(reg(state,inst.b));
+	Logical l(REG(state,inst.b));
 	if(l[0]) return profile_back_edge(state,&inst+inst.a);
 	else return &inst+1;
 }
@@ -440,242 +459,242 @@ Instruction const* break1_op(State& state, Instruction const& inst) {
 	return &inst+inst.a;
 }
 Instruction const* if1_op(State& state, Instruction const& inst) {
-	Logical l = As<Logical>(state, reg(state,inst.b));
+	Logical l = As<Logical>(state, REG(state,inst.b));
 	if(l.length == 0) _error("if argument is of zero length");
 	if(l[0]) return &inst+1;
 	else return &inst+inst.a;
 }
 Instruction const* if0_op(State& state, Instruction const& inst) {
-	Logical l = As<Logical>(state, reg(state, inst.b));
+	Logical l = As<Logical>(state, REG(state, inst.b));
 	if(l.length == 0) _error("if argument is of zero length");
 	if(!l[0]) return &inst+1;
 	else return &inst+inst.a;
 }
 Instruction const* colon_op(State& state, Instruction const& inst) {
-	double from = asReal1(reg(state,inst.a));
-	double to = asReal1(reg(state,inst.b));
-	reg(state,inst.c) = Sequence(from, to>from?1:-1, fabs(to-from)+1);
+	double from = asReal1(REG(state,inst.a));
+	double to = asReal1(REG(state,inst.b));
+	REG(state,inst.c) = Sequence(from, to>from?1:-1, fabs(to-from)+1);
 	return &inst+1;
 }
 Instruction const* seq_op(State& state, Instruction const& inst) {
-	int64_t len = As<Integer>(state, reg(state, inst.a))[0];
-	reg(state, inst.c) = Sequence(len);
+	int64_t len = As<Integer>(state, REG(state, inst.a))[0];
+	REG(state, inst.c) = Sequence(len);
 	return &inst+1;
 }
 Instruction const* add_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, AddOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryArith<Zip2, AddOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* pos_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, PosOp>(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, PosOp>(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* sub_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, SubOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryArith<Zip2, SubOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* neg_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, NegOp>(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, NegOp>(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* mul_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, MulOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryArith<Zip2, MulOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* div_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, DivOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryArith<Zip2, DivOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* idiv_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, IDivOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryArith<Zip2, IDivOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* mod_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, ModOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryArith<Zip2, ModOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* pow_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, PowOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryArith<Zip2, PowOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* lnot_op(State& state, Instruction const& inst) {
-	unaryLogical<Zip1, LNotOp>(state, reg(state, inst.a), reg(state, inst.c));
+	unaryLogical<Zip1, LNotOp>(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* land_op(State& state, Instruction const& inst) {
-	binaryLogical<Zip2, AndOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryLogical<Zip2, AndOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* lor_op(State& state, Instruction const& inst) {
-	binaryLogical<Zip2, OrOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryLogical<Zip2, OrOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* eq_op(State& state, Instruction const& inst) {
-	binaryOrdinal<Zip2, EqOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryOrdinal<Zip2, EqOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* neq_op(State& state, Instruction const& inst) {
-	binaryOrdinal<Zip2, NeqOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryOrdinal<Zip2, NeqOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* lt_op(State& state, Instruction const& inst) {
-	binaryOrdinal<Zip2, LTOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryOrdinal<Zip2, LTOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* le_op(State& state, Instruction const& inst) {
-	binaryOrdinal<Zip2, LEOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryOrdinal<Zip2, LEOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* gt_op(State& state, Instruction const& inst) {
-	binaryOrdinal<Zip2, GTOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryOrdinal<Zip2, GTOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* ge_op(State& state, Instruction const& inst) {
-	binaryOrdinal<Zip2, GEOp>(state, reg(state, inst.a), reg(state, inst.b), reg(state, inst.c));
+	binaryOrdinal<Zip2, GEOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* abs_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, AbsOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, AbsOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* sign_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, SignOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, SignOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* sqrt_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, SqrtOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, SqrtOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* floor_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, FloorOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, FloorOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* ceiling_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, CeilingOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, CeilingOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* trunc_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, TruncOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, TruncOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* round_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, RoundOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, RoundOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* signif_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, SignifOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, SignifOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* exp_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, ExpOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, ExpOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* log_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, LogOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, LogOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* cos_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, CosOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, CosOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* sin_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, SinOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, SinOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* tan_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, TanOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, TanOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* acos_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, ACosOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, ACosOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* asin_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, ASinOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, ASinOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* atan_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, ATanOp >(state, reg(state, inst.a), reg(state, inst.c));
+	unaryArith<Zip1, ATanOp >(state, REG(state, inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* jmp_op(State& state, Instruction const& inst) {
 	return &inst+inst.a;
 }
 Instruction const* sland_op(State& state, Instruction const& inst) {
-	Logical l = As<Logical>(state, reg(state, inst.a));
+	Logical l = As<Logical>(state, REG(state, inst.a));
 	if(l.length == 0) _error("argument to && is zero length");
 	if(Logical::isFalse(l[0])) {
-		reg(state, inst.c) = Logical::False();
+		REG(state, inst.c) = Logical::False();
 		return &inst+1;
 	} else {
-		Logical r = As<Logical>(state, reg(state, inst.b));
+		Logical r = As<Logical>(state, REG(state, inst.b));
 		if(r.length == 0) _error("argument to && is zero length");
-		if(Logical::isFalse(r[0])) reg(state, inst.c) = Logical::False();
-		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) reg(state, inst.c) = Logical::NA();
-		else reg(state, inst.c) = Logical::True();
+		if(Logical::isFalse(r[0])) REG(state, inst.c) = Logical::False();
+		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) REG(state, inst.c) = Logical::NA();
+		else REG(state, inst.c) = Logical::True();
 		return &inst+1;
 	}
 }
 Instruction const* slor_op(State& state, Instruction const& inst) {
-	Logical l = As<Logical>(state, reg(state, inst.a));
+	Logical l = As<Logical>(state, REG(state, inst.a));
 	if(l.length == 0) _error("argument to || is zero length");
 	if(Logical::isTrue(l[0])) {
-		reg(state, inst.c) = Logical::True();
+		REG(state, inst.c) = Logical::True();
 		return &inst+1;
 	} else {
-		Logical r = As<Logical>(state, reg(state, inst.b));
+		Logical r = As<Logical>(state, REG(state, inst.b));
 		if(r.length == 0) _error("argument to || is zero length");
-		if(Logical::isTrue(r[0])) reg(state, inst.c) = Logical::True();
-		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) reg(state, inst.c) = Logical::NA();
-		else reg(state, inst.c) = Logical::False();
+		if(Logical::isTrue(r[0])) REG(state, inst.c) = Logical::True();
+		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) REG(state, inst.c) = Logical::NA();
+		else REG(state, inst.c) = Logical::False();
 		return &inst+1;
 	}
 }
 Instruction const* function_op(State& state, Instruction const& inst) {
-	reg(state, inst.c) = Function(List(constant(state, inst.a)), constant(state, inst.b), Character(constant(state, inst.b+1)), state.frame().environment);
+	REG(state, inst.c) = Function(List(constant(state, inst.a)), constant(state, inst.b), Character(constant(state, inst.b+1)), state.frame.environment);
 	return &inst+1;
 }
 Instruction const* logical1_op(State& state, Instruction const& inst) {
-	Integer i = As<Integer>(state, reg(state, inst.a));
-	reg(state, inst.c) = Logical(i[0]);
+	Integer i = As<Integer>(state, REG(state, inst.a));
+	REG(state, inst.c) = Logical(i[0]);
 	return &inst+1;
 }
 Instruction const* integer1_op(State& state, Instruction const& inst) {
-	Integer i = As<Integer>(state, reg(state, inst.a));
-	reg(state, inst.c) = Integer(i[0]);
+	Integer i = As<Integer>(state, REG(state, inst.a));
+	REG(state, inst.c) = Integer(i[0]);
 	return &inst+1;
 }
 Instruction const* double1_op(State& state, Instruction const& inst) {
-	Integer i = As<Integer>(state, reg(state, inst.a));
-	reg(state, inst.c) = Double(i[0]);
+	Integer i = As<Integer>(state, REG(state, inst.a));
+	REG(state, inst.c) = Double(i[0]);
 	return &inst+1;
 }
 Instruction const* complex1_op(State& state, Instruction const& inst) {
-	Integer i = As<Integer>(state, reg(state, inst.a));
-	reg(state, inst.c) = Complex(i[0]);
+	Integer i = As<Integer>(state, REG(state, inst.a));
+	REG(state, inst.c) = Complex(i[0]);
 	return &inst+1;
 }
 Instruction const* character1_op(State& state, Instruction const& inst) {
-	Integer i = As<Integer>(state, reg(state, inst.a));
+	Integer i = As<Integer>(state, REG(state, inst.a));
 	Character r = Character(i[0]);
 	for(int64_t j = 0; j < r.length; j++) r[j] = Symbol::empty;
-	reg(state, inst.c) = r;
+	REG(state, inst.c) = r;
 	return &inst+1;
 }
 Instruction const* raw1_op(State& state, Instruction const& inst) {
-	Integer i = As<Integer>(state, reg(state, inst.a));
-	reg(state, inst.c) = Raw(i[0]);
+	Integer i = As<Integer>(state, REG(state, inst.a));
+	REG(state, inst.c) = Raw(i[0]);
 	return &inst+1;
 }
 Instruction const* type_op(State& state, Instruction const& inst) {
 	Character c(1);
 	// Should have a direct mapping from type to symbol.
-	c[0] = state.StrToSym(reg(state, inst.a).type.toString());
-	reg(state, inst.c) = c;
+	c[0] = state.StrToSym(REG(state, inst.a).type.toString());
+	REG(state, inst.c) = c;
 	return &inst+1;
 }
 Instruction const * invoketrace_op(State& state, Instruction const & inst) {
-	Trace * trace = state.frame().code->traces[inst.a];
+	Trace * trace = state.frame.code->traces[inst.a];
 	int64_t offset;
 	TCStatus status = trace->compiled->execute(state,&offset);
 	if(status != TCStatus::SUCCESS) {
@@ -698,14 +717,14 @@ Instruction const * invoketrace_op(State& state, Instruction const & inst) {
 }
 
 Instruction const* ret_op(State& state, Instruction const& inst) {
-	*(state.frame().result) = reg(state, inst.c);
+	*(state.frame.result) = REG(state, inst.c);
 	// if this stack frame owns the environment, we can free it for reuse
 	// as long as we don't return a closure...
 	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
-	if(state.frame().ownEnvironment && reg(state, inst.c).isClosureSafe())
-		state.environments.push_back(state.frame().environment);
-	state.base = state.frame().returnbase;
-	Instruction const* returnpc = state.frame().returnpc;
+	if(state.frame.ownEnvironment && REG(state, inst.c).isClosureSafe())
+		state.environments.push_back(state.frame.environment);
+	state.base = state.frame.returnbase;
+	Instruction const* returnpc = state.frame.returnpc;
 	state.pop();
 	return returnpc;
 }
@@ -714,7 +733,7 @@ Instruction const* done_op(State& state, Instruction const& inst) {
 	return 0;
 }
 
-//#define THREADED_INTERPRETER
+#define THREADED_INTERPRETER
 
 #ifdef THREADED_INTERPRETER
 static const void** glabels = 0;
@@ -759,11 +778,7 @@ void interpret(State& state, Instruction const* pc) {
 #ifdef THREADED_INTERPRETER
     #define LABELS_THREADED(name,type,p) (void*)&&name##_label,
 	static const void* labels[] = {&&DONE, BC_ENUM(LABELS_THREADED,0)};
-	if(glabels == 0) {
-		glabels = &labels[0];
-		return;
-	}
-
+	glabels = &labels[0];
 	if(pc == 0) return;
 
 	goto *(pc->ibc);
@@ -795,7 +810,7 @@ Value eval(State& state, Closure const& closure) {
 }
 
 Value eval(State& state, Code const* code) {
-	return eval(state, code, state.frame().environment);
+	return eval(state, code, state.frame.environment);
 }
 
 Value eval(State& state, Code const* code, Environment* environment) {

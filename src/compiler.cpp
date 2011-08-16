@@ -62,6 +62,23 @@ static void resolveLoopReferences(Code* code, int64_t start, int64_t end, int64_
 	}
 }
 
+int64_t Compiler::getSlot(Symbol s) {
+	// check if destination is a reserved slot.
+	int64_t slot = -1;
+	if(!scopes.back().topLevel) {
+		for(uint64_t i = 0; i < scopes.back().symbols.size(); i++) {
+			if(scopes.back().symbols[i] == s) {
+				slot = i;
+			}
+		}
+		if(slot < 0 && scopes.back().symbols.size() < 32) {
+			scopes.back().symbols.push_back(s);
+			slot = scopes.back().symbols.size()-1;
+		}
+	}
+	return slot;
+}
+
 int64_t Compiler::compileConstant(Value const& expr, Code* code) {
 	code->constants.push_back(expr);
 	int64_t reg = scopes.back().allocRegister(Register::CONSTANT);
@@ -189,27 +206,12 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		int64_t source = compile(value, code);
 
 		assert(dest.isSymbol());
-		// check if destination is a reserved slot.
-		int64_t dest_i = Symbol(dest).i;
-		bool slot = false;
-		if(!scopes.back().topLevel) {
-			for(uint64_t i = 0; i < scopes.back().symbols.size(); i++) {
-				if(scopes.back().symbols[i] == Symbol(dest)) {
-					dest_i = i;
-					slot = true;
-				}
-			}
-			if(!slot && scopes.back().symbols.size() < 32) {
-				scopes.back().symbols.push_back(Symbol(dest));
-				dest_i = scopes.back().symbols.size()-1;
-				slot = true;
-			}
-		}
+		int64_t slot = getSlot(Symbol(dest));
 	
-		if(slot)
-			emit(code, ByteCode::sassign, dest_i, 0, source);
+		if(slot >= 0)
+			emit(code, ByteCode::sassign, slot, 0, source);
 		else
-			emit(code, ByteCode::assign, dest_i, 0, source);
+			emit(code, ByteCode::assign, Symbol(dest).i, 0, source);
 	
 		scopes.back().deadAfter(source);	
 		return source;
@@ -290,6 +292,8 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 			int64_t lim1 = compile(Call(call[2])[1], code);
 			int64_t lim2 = compile(Call(call[2])[2], code);
 			if(lim1+1 != lim2) throw CompileError("limits aren't in adjacent registers");
+			//int64_t slot = getSlot(Symbol(call[1]));
+			//if(slot < 0) throw CompileError("for loop variable not allocated to slot");
 			emit(code, ByteCode::iforbegin, 0, Symbol(call[1]).i, lim2);
 			loopDepth++;
 			int64_t beginbody = code->bc.size();
@@ -304,6 +308,8 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 			int64_t loop_vector = compile(call[2], code);
 			int64_t loop_var = scopes.back().allocRegister(Register::VARIABLE);	// save space for loop variable
 			if(loop_var != loop_vector+1) throw CompileError("limits aren't in adjacent registers");
+			//int64_t slot = getSlot(Symbol(call[1]));
+			//if(slot < 0) throw CompileError("for loop variable not allocated to slot");
 			emit(code, ByteCode::forbegin, 0, Symbol(call[1]).i, loop_var);
 			loopDepth++;
 			int64_t beginbody = code->bc.size();

@@ -146,6 +146,16 @@ fail <- 0
 #can it print out a function?
 f <- function(x,y) x+y
 
+{
+	cat("Tricky bugs\n-----------------------\n")
+	f <- function(x, y) {z <- 0; x+z}
+	PassIfTrue(f(4,5) == 4) 
+	z <- 10
+	f <- function(x, y) {z <- 0; rm(z); x+z}
+	PassIfTrue(f(4,5) == 14)
+}
+
+
 if(fail == 0)
 	"SUCCESS! All sanity checks passed"
 else

@@ -30,24 +30,24 @@ struct Value {
 		void* p;
 		double d;
 	};
+	int64_t length;
 	union {
-		int64_t length;
 		void* env;
+		Attributes* attributes;
 	};
-	Attributes* attributes;
 	Type type;
 
-	bool isNil() const { return type == Type::I_nil; }
-	bool isNull() const { return type == Type::R_null; }
-	bool isLogical() const { return type == Type::R_logical; }
-	bool isInteger() const { return type == Type::R_integer; }
-	bool isDouble() const { return type == Type::R_double; }
-	bool isComplex() const { return type == Type::R_complex; }
-	bool isCharacter() const { return type == Type::R_character; }
-	bool isList() const { return type == Type::R_list; }
-	bool isCall() const { return type == Type::R_call; }
-	bool isSymbol() const { return type == Type::R_symbol; }
-	bool isClosure() const { return type == Type::I_closure; }
+	bool isNil() const { return type.v == Type::E_I_nil; }
+	bool isNull() const { return type.v == Type::E_R_null; }
+	bool isLogical() const { return type.v == Type::E_R_logical; }
+	bool isInteger() const { return type.v == Type::E_R_integer; }
+	bool isDouble() const { return type.v == Type::E_R_double; }
+	bool isComplex() const { return type.v == Type::E_R_complex; }
+	bool isCharacter() const { return type.v == Type::E_R_character; }
+	bool isList() const { return type.v == Type::E_R_list; }
+	bool isCall() const { return type.v == Type::E_R_call; }
+	bool isSymbol() const { return type.v == Type::E_R_symbol; }
+	bool isClosure() const { return type.v == Type::E_I_closure; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isList(); }
@@ -120,7 +120,7 @@ struct Vector {
 	explicit Vector(Type t, int64_t length, void * data);
 
 	operator Value() const {
-		Value v = {{(int64_t)_data}, {length}, attributes, type};
+		Value v = {{(int64_t)_data}, length, {attributes}, type};
 		return v;
 	}
 };
@@ -205,7 +205,7 @@ struct VectorImpl {
 	}
 
 	operator Value() const {
-		Value v = {{(int64_t)_data}, {length}, attributes, {VectorType}};
+		Value v = {{(int64_t)_data}, length, {attributes}, {VectorType}};
                 if(packed()) {
                         memcpy(&v.p, pack, sizeof(void*));
                 }
@@ -431,7 +431,7 @@ public:
 	}
 
 	operator Value() const {
-		Value v = {{(int64_t)c}, {(int64_t)env}, 0, Type::I_closure};
+		Value v = {{(int64_t)c}, 0, {(Attributes*)env}, Type::I_closure};
 		return v;
 	}
 
@@ -772,7 +772,7 @@ public:
 
 	Value getQuoted(Symbol const& name) const {
 		Value value = get(name);
-		if(value.type == Type::I_closure) {
+		if(value.isClosure()) {
 			value = Closure(value).code()->expression;
 		}
 		return value;
@@ -821,6 +821,7 @@ struct State {
 	Value* base;
 
 	std::vector<StackFrame, traceable_allocator<StackFrame> > stack;
+	StackFrame frame;
 	std::vector<Environment*, traceable_allocator<Environment*> > environments;
 
 	std::vector<Environment*, traceable_allocator<Environment*> > path;
@@ -840,21 +841,22 @@ struct State {
 	}
 
 	StackFrame& push() {
-		stack.push_back(StackFrame());
-		return stack.back();
+		stack.push_back(frame);
+		return frame;
 	}
 
 	void pop() {
+		frame = stack.back();
 		stack.pop_back();
 	}
 
-	StackFrame& frame() {
-		return stack.back();
-	}
+	//StackFrame& frame() {
+	//	return stack.back();
+	//}
 
-	StackFrame& frame(int fromBack) {
-		return stack[stack.size()-fromBack-1];
-	}
+	//StackFrame& frame(int fromBack) {
+	//	return stack[stack.size()-fromBack-1];
+	//}
 
 	std::string stringify(Value const& v) const;
 	std::string stringify(Trace const & t) const;

@@ -59,6 +59,7 @@ private:
 	CompiledCall makeCall(Call const& call);
 
 	void emit(Code* code, ByteCode bc, int64_t a, int64_t b, int64_t c);
+	int64_t getSlot(Symbol s);
 public:
 	static Code* compile(State& state, Value const& expr) {
 		Compiler compiler(state);
