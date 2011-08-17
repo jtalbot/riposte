@@ -165,7 +165,7 @@ Value unlist(State& state, List const& args) {
 }
 
 Vector Subset(State& state, Vector const& a, Vector const& i)	{
-	if(Value(i).isDouble() || Value(i).isInteger()) {
+	if(i.isDouble() || i.isInteger()) {
 		Integer index = As<Integer>(state, i);
 		int64_t positive = 0, negative = 0;
 		for(int64_t i = 0; i < index.length; i++) {
@@ -196,7 +196,7 @@ Vector Subset(State& state, Vector const& a, Vector const& i)	{
 			return Vector(a.type, 0);
 		}
 	}
-	else if(Value(i).isLogical()) {
+	else if(i.isLogical()) {
 		Logical index = Logical(i);
 		switch(a.type) {
 			case Type::Null: return a; break;

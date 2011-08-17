@@ -94,9 +94,8 @@ struct Symbol {
 	Symbol() : i(1) {} // Defaults to the empty symbol...
 	explicit Symbol(int64_t index) : i(index) {}
 
-	explicit Symbol(Value const& v) {
+	explicit Symbol(Value const& v) : i(v.i) {
 		assert(v.type == Type::Symbol); 
-		i = v.i;
 	}
 
 	operator Value() const {
@@ -108,33 +107,37 @@ struct Symbol {
 	bool operator!=(Symbol const& other) const { return i != other.i; }
 
 	bool operator==(int64_t other) const { return i == other; }
-
-	bool isAssignable() const {
-		return !(*this == Symbol::NA || *this == Symbol::empty);
-	}
 };
 
 
 // A generic vector representation. Only provides support to access length and void* of data.
-struct Vector {
-	void* _data;
-	int64_t length, width;
-	bool _packed;
-	Attributes* attributes;
-	Type::Enum type;
+struct Vector : public Value {
 
-	bool packed() const { return _packed; }
-	void* data() const { if(packed()) return (void*)&_data; else return _data; }
-	void* data(int64_t i) const { if(packed()) return ((char*)&_data) + i*width; else return (char*)_data + i*width; }
+	bool pack;
+	unsigned char width;
 
-	Vector() : _data(0), length(0), width(0), _packed(true), attributes(0), type(Type::Nil) {}
+	bool packed() const { return pack; }
+	void* data() const { if(pack) return (void*)&p; else return p; }
+	void* data(int64_t i) const { 
+		if(pack) return ((char*)&p) + i*width; else return (char*)p + i*width; 
+	}
 
-	explicit Vector(Value v);
+	Vector() {}
+
+	explicit Vector(Value const& v);
 	explicit Vector(Type::Enum t, int64_t length);
-	explicit Vector(Type::Enum t, int64_t length, void * data);
+	explicit Vector(Type::Enum t, int64_t length, void* data);
+
+	static Vector Make(Type::Enum type, int64_t length, void* data, void* extra, bool packed, unsigned char width) {
+		Vector v;
+		v.type = type; v.length = length;
+		v.p = data; v.env = extra;
+		v.pack = packed; v.width = width;
+		return v;
+	}
 
 	operator Value() const {
-		return Value::Make(type, length, _data, attributes);
+		return Value::Make(type, length, p, attributes);
 	}
 };
 
@@ -200,7 +203,8 @@ struct VectorImpl {
 			Recursive ? new (GC) Element[length] : new (PointerFreeGC) Element[length]), 
 		attributes(0) {}
 
-	explicit VectorImpl(Value v) : length(v.length), _data((ElementType*)v.p), attributes(v.attributes) {
+	explicit VectorImpl(Value const& v) 
+		: length(v.length), _data((ElementType*)v.p), attributes(v.attributes) {
 		assert(v.type == VectorType); 
                 if(packed()) {
                         memcpy(pack, &v.p, packLength*sizeof(ElementType));
@@ -208,11 +212,11 @@ struct VectorImpl {
                 }
 	}
 
-	explicit VectorImpl(Vector v) 
-		: length(v.length), _data((ElementType*)v._data), attributes(v.attributes) {
+	explicit VectorImpl(Vector const& v) 
+		: length(v.length), _data((ElementType*)v.p), attributes(v.attributes) {
 		assert(v.type == VectorType); 
                 if(packed()) {
-                        memcpy(pack, &v._data, packLength*sizeof(ElementType));
+                        memcpy(pack, &v.p, packLength*sizeof(ElementType));
                         _data = pack;
                 }
 	}
@@ -226,27 +230,17 @@ struct VectorImpl {
 	}
 
 	operator Vector() const {
-		Vector v;
-		v._data = _data;
+		Vector v = Vector::Make(VectorType, length, _data, attributes, packed(), width);
                 if(packed()) {
-                        memcpy(&v._data, &pack, sizeof(void*));
+                        memcpy(&v.p, &pack, sizeof(void*));
                 }
-		v.length = length;
-		v.width = width;
-		v._packed = packed();
-		v.attributes = attributes;
-		v.type = VectorType;
 		return v;
 	}
 
 protected:
-	VectorImpl(ElementType* _data, int64_t length, Attributes* attributes) 
-		: length(length), _data(_data), attributes(attributes) {}
-
 	bool packed() const {
 		return sizeof(ElementType) <= sizeof(void*) && length <= (int64_t)(sizeof(ElementType)/sizeof(void*));
 	}
-
 };
 
 union _doublena {
@@ -383,7 +377,7 @@ inline Vector::Vector(Type::Enum t, int64_t length, void * data) {
 	*this = Vector(v);
 }
 
-inline Vector::Vector(Value v) {
+inline Vector::Vector(Value const& v) {
 	switch(v.type) {
 		case Type::Null: *this = Null::Singleton(); break;
 		#define CASE(Name, ...) case Type::Name: *this = Name(v); break;

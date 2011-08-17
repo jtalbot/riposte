@@ -236,6 +236,7 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
       d_message(1,NULL,"Command option processing complete");
 
 	printf(">> %d\n", sizeof(Value));
+	printf(">> %d\n", sizeof(Attributes::Container));
 	//printf(">> %d\n", sizeof(Instruction));
 	//printf(">> %d\n", sizeof(Environment::Container));
 
