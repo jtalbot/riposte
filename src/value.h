@@ -25,6 +25,7 @@
 struct Attributes;
 
 struct Value {
+	
 	Type::Enum type:8;
 	int64_t length:56;
 	union {
