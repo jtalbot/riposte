@@ -31,8 +31,8 @@
 									\
 	/* Now the internal types, not necessarily matching R. Order is important here. */ \
 	_(CompiledCall,	"compiled call")\
-	_(Closure, 	"closure") 	\
-	_(Nil,		"NIL")		\
+	_(Promise, 	"promise") 	\
+	_(Nil,		"nil")		\
 
 DECLARE_ENUM(Type, TYPES)
 

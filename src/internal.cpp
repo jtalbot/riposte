@@ -372,7 +372,7 @@ Value environment(State& state, List const& args) {
 		return REnvironment(state.frame.environment);
 	}
 	else if(e.isFunction()) {
-		return REnvironment(Function(e).s());
+		return REnvironment(Function(e).environment());
 	}
 	return Null::Singleton();
 }
@@ -414,7 +414,7 @@ Value warning_fn(State& state, List const& args) {
 Value missing(State& state, List const& args) {
 	Symbol s(expression(args[0])); 
 	Value v =  state.frame.environment->get(s);
-	return (v.isNil() || (v.isClosure() && Closure(v).environment() == state.frame.environment)) ? Logical::True() : Logical::False();
+	return (v.isNil() || (v.isPromise() && Function(v).environment() == state.frame.environment)) ? Logical::True() : Logical::False();
 }
 
 Value max_fn(State& state, List const& args) {
@@ -565,12 +565,12 @@ Value deparse(State& state, List const& args) {
 Value substitute(State& state, List const& args) {
 	checkNumArgs(args, 1);
 	Value v = args[0];
-	while(v.isClosure()) v = Closure(v).code()->expression;
+	while(v.isPromise()) v = Function(v).code()->expression;
 	
 	if(v.isSymbol()) {
 		Value r = state.frame.environment->get(Symbol(v));
 		if(!r.isNil()) v = r;
-		while(v.isClosure()) v = Closure(v).code()->expression;
+		while(v.isPromise()) v = Function(v).code()->expression;
 	}
  	return v;
 }

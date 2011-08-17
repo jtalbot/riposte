@@ -3,7 +3,6 @@
 #include "internal.h"
 
 _doublena doublena = {0x7fff000000001953};
-const Value Value::Nil = Value::Make(Type::Nil, 0, (int64_t)0, 0); 
 
 const bool Null::CheckNA = false;
 const unsigned char Null::NAelement = 255;
@@ -41,14 +40,4 @@ const Value Expression::NAelement = Null::Singleton();
 #define CONST_DEFN(name, string, ...) const Symbol Symbol::name(String::name);
 STRINGS(CONST_DEFN)
 #undef CONST_DEFN
-
-Function::Function(List const& parameters, Value const& body, Character const& str, Environment* s) 
-	: inner(new Inner(parameters, body, str, s)), attributes(0) {
-	inner->dots = parameters.length;
-	if(parameters.length > 0) {
-		Character names = Character(getNames(parameters));
-		int64_t i = 0;
-		for(;i < names.length; i++) if(Symbol(names[i]) == Symbol::dots) inner->dots = i;
-	}
-}
 

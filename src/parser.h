@@ -86,7 +86,7 @@ struct Parser {
 		return result;
 	}
 
-	void token( int tok, Value v=Value::Nil );
+	void token( int tok, Value v=Nil );
 
 	Parser(State& state); 
 	int execute( const char* data, int len, bool isEof, Value& result, FILE* trace=NULL );

@@ -1205,7 +1205,7 @@ static void yy_reduce(
       case 65: /* sub ::= SYMBOL optnl EQ_ASSIGN */
       case 66: /* sub ::= STR_CONST optnl EQ_ASSIGN */ yytestcase(yyruleno==66);
 #line 147 "parser.y"
-{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(Symbol(yymsp[-2].minor.yy0), Value::Nil);   yy_destructor(yypParser,9,&yymsp[0].minor);
+{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(Symbol(yymsp[-2].minor.yy0), Nil);   yy_destructor(yypParser,9,&yymsp[0].minor);
 }
 #line 1211 "parser.c"
         break;
@@ -1219,7 +1219,7 @@ static void yy_reduce(
         break;
       case 69: /* sub ::= NULL_CONST optnl EQ_ASSIGN */
 #line 151 "parser.y"
-{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(Symbol::empty, Value::Nil);   yy_destructor(yypParser,42,&yymsp[-2].minor);
+{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(Symbol::empty, Nil);   yy_destructor(yypParser,42,&yymsp[-2].minor);
   yy_destructor(yypParser,9,&yymsp[0].minor);
 }
 #line 1226 "parser.c"
@@ -1233,12 +1233,12 @@ static void yy_reduce(
         break;
       case 73: /* formallist ::= SYMBOL */
 #line 156 "parser.y"
-{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(Symbol(yymsp[0].minor.yy0), Value::Nil); }
+{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(Symbol(yymsp[0].minor.yy0), Nil); }
 #line 1238 "parser.c"
         break;
       case 75: /* formallist ::= formallist optnl COMMA optnl SYMBOL */
 #line 158 "parser.y"
-{ yygotominor.yy122 = yymsp[-4].minor.yy122; yygotominor.yy122->push_back(Symbol(yymsp[0].minor.yy0), Value::Nil);   yy_destructor(yypParser,52,&yymsp[-2].minor);
+{ yygotominor.yy122 = yymsp[-4].minor.yy122; yygotominor.yy122->push_back(Symbol(yymsp[0].minor.yy0), Nil);   yy_destructor(yypParser,52,&yymsp[-2].minor);
 }
 #line 1244 "parser.c"
         break;

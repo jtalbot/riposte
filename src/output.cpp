@@ -164,14 +164,14 @@ std::string State::stringify(Value const& value) const {
 		}
 		case Type::Function:
 		{
-			result = SymToStr(Symbol(Function(value).str()[0]));
+			result = SymToStr(Function(value).string());
 			return result;
 		}
 		case Type::Environment:
 		{
 			return std::string("environment <") + intToHexStr((uint64_t)REnvironment(value).ptr()) + "> (" + intToStr(REnvironment(value).ptr()->numVariables()) + " symbols defined)";
 		}
-		case Type::Closure:
+		/*case Type::Closure:
 		{
 			Closure b(value);
 			std::string r = "block:\nconstants: " + intToStr(b.code()->constants.size()) + "\n";
@@ -183,7 +183,7 @@ std::string State::stringify(Value const& value) const {
 				r = r + intToStr(i) + ":\t" + b.code()->bc[i].toString() + "\n";
 		
 			return r;
-		}
+		}*/
 		default:
 			return Type::toString(value.type);
 	};
@@ -339,7 +339,7 @@ std::string State::deparse(Value const& value) const {
 		case Type::Symbol:
 			return SymToStr(Symbol(value)); // NYI: need to check if this should be backticked.
 		case Type::Function:
-			return SymToStr(Symbol(Function(value).str()[0]));
+			return SymToStr(Function(value).string());
 		case Type::Environment:
 			return "environment";
 		default:

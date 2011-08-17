@@ -21,9 +21,9 @@ Instruction const* forend_op(State& state, Instruction const& inst) ALWAYS_INLIN
 
 
 inline void forcePromise(State& state, Value& v) { 
-	while(v.isClosure()) {
-		Environment* env = Closure(v).environment();
-		v = eval(state, Closure(v).code(), 
+	while(v.isPromise()) {
+		Environment* env = Function(v).environment();
+		v = eval(state, Function(v).code(), 
 			env != 0 ? env : state.frame.environment); 
 	} 
 }
@@ -36,7 +36,7 @@ static Value get(State& state, Symbol s) {
 		environment = environment->StaticParent();
 		value = environment->get(s);
 	}
-	if(value.isClosure()) {
+	if(value.isPromise()) {
 		forcePromise(state, value);
 		environment->assign(s, value);
 	}
@@ -46,7 +46,7 @@ static Value get(State& state, Symbol s) {
 // Get a Value by slot from the current environment
 static Value& sget(State& state, int64_t i) {
 	Value& value = state.frame.environment->get(i);
-	if(value.isClosure()) forcePromise(state, value);
+	if(value.isPromise()) forcePromise(state, value);
 	return value;
 }
 
@@ -113,7 +113,7 @@ static List BuildArgs(State& state, CompiledCall& call) {
 inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* execution) {
 	Value& slot = env->get(i);
 	slot = v;
-	if(v.isClosure() && slot.env == 0)
+	if(v.isPromise() && slot.env == 0)
 		slot.env = execution;
 }
 
@@ -123,7 +123,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 
 	// Set to nil slots beyond the parameters
 	for(int64_t i = parameters.length; i < fenv->SlotCount(); i++) {
-		sassign(fenv, i, Value::Nil);
+		sassign(fenv, i, Nil);
 	}
 
 	// call arguments are not named, do posititional matching
@@ -137,7 +137,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			List dots(arguments.length - func.dots());
 			for(int64_t i = 0; i < arguments.length-func.dots(); i++) {
 				dots[i] = arguments[i+func.dots()];
-				if(dots[i].isClosure() && dots[i].env == 0)
+				if(dots[i].isPromise() && dots[i].env == 0)
 					dots[i].env = env;
 			}
 			sassign(fenv, func.dots(), dots);
@@ -220,7 +220,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			for(int64_t j = 0; j < arguments.length; j++) {
 				if(assignment[j] < 0) {
 					values[idx] = arguments[j];
-					if(values[idx].isClosure() && values[idx].env == 0)
+					if(values[idx].isPromise() && values[idx].env == 0)
 						values[idx].env = env;
 					idx++;
 				}
@@ -268,10 +268,9 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 
 	if(f.isFunction()) {
 		Function func(f);
-		assert(func.body().isClosure());
-		Environment* fenv = CreateEnvironment(state, func.s(), state.frame.environment, Closure(func.body()).code()->slotSymbols);
+		Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, func.code()->slotSymbols);
 		MatchArgs(state, state.frame.environment, fenv, func, arguments);
-		return buildStackFrame(state, fenv, true, Closure(func.body()).code(), &REG(state, inst.c), &inst+1);
+		return buildStackFrame(state, fenv, true, func.code(), &REG(state, inst.c), &inst+1);
 	} else if(f.isBuiltIn()) {
 		REG(state, inst.c) = CFunction(f).func(state, arguments);
 		return &inst+1;
@@ -303,12 +302,12 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 	if(f.isFunction()) {
 		Function func(f);
 		assert(func.body().isClosure());
-		Environment* fenv = CreateEnvironment(state, func.s(), state.frame.environment, Closure(func.body()).code()->slotSymbols);
+		Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, func.code()->slotSymbols);
 		MatchArgs(state, state.frame.environment, fenv, func, arguments);
 		assign(fenv, Symbol::dotGeneric, generic);
 		assign(fenv, Symbol::dotMethod, method);
 		assign(fenv, Symbol::dotClass, type); 
-		return buildStackFrame(state, fenv, true, Closure(func.body()).code(), &REG(state, inst.c), &inst+1);
+		return buildStackFrame(state, fenv, true, func.code(), &REG(state, inst.c), &inst+1);
 	} else if(f.isBuiltIn()) {
 		REG(state, inst.c) = CFunction(f).func(state, arguments);
 		return &inst+1;
@@ -324,12 +323,12 @@ Instruction const* get_flat(State& state, Symbol s, Value& value, Environment* e
 			throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
 		value = environment->get(s);
 	}
-	if(!value.isClosure()) {
+	if(!value.isPromise()) {
 		return &inst+1;
 	}
 	else {
-		return buildStackFrame(state, Closure(value).environment(),
-			false, Closure(value).code(), &environment->getLocation(s), &inst);
+		return buildStackFrame(state, Function(value).environment(),
+			false, Function(value).code(), &environment->getLocation(s), &inst);
 	}
 }
 Instruction const* get_op(State& state, Instruction const& inst) {
@@ -356,7 +355,7 @@ Instruction const* sget_op(State& state, Instruction const& inst)
 			if(dest.isNil())
 				_error(std::string("object '") + state.SymToStr(state.frame.environment->slotName(inst.a)) + "' not found");
 		}
-		if(dest.isClosure()) 
+		if(dest.isPromise()) 
 			forcePromise(state, dest);
 	}
 	return &inst+1;
@@ -651,7 +650,7 @@ Instruction const* slor_op(State& state, Instruction const& inst) {
 	}
 }
 Instruction const* function_op(State& state, Instruction const& inst) {
-	REG(state, inst.c) = Function(List(constant(state, inst.a)), constant(state, inst.b), Character(constant(state, inst.b+1)), state.frame.environment);
+	REG(state, inst.c) = Function(state.frame.code->code[inst.a], state.frame.environment);
 	return &inst+1;
 }
 Instruction const* logical1_op(State& state, Instruction const& inst) {
@@ -703,7 +702,7 @@ Instruction const * invoketrace_op(State& state, Instruction const & inst) {
 	if(status  != TCStatus::SUCCESS || offset == 0) { //we exited to the trace start instruction, invoke the original instruction here
 		Instruction invoketrace = inst;
 		const_cast<Instruction&>(inst) = trace->trace_inst;
-		Instruction const * pc;
+		Instruction const * pc = 0;
 #define BC_SWITCH(bc,str) case ByteCode::bc: pc = bc##_op(state,inst); break;
 		switch(trace->trace_inst.bc) {
 			BYTECODES(BC_SWITCH)
@@ -805,8 +804,8 @@ void interpreter_init(State& state) {
 #endif
 }
 
-Value eval(State& state, Closure const& closure) {
-	return eval(state, closure.code(), closure.environment());
+Value eval(State& state, Function const& function) {
+	return eval(state, function.code(), function.environment());
 }
 
 Value eval(State& state, Code const* code) {

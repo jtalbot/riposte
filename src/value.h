@@ -58,7 +58,7 @@ struct Value {
 	bool isCall() const { return type == Type::Call; }
 	bool isExpression() const { return type == Type::Expression; }
 	bool isSymbol() const { return type == Type::Symbol; }
-	bool isClosure() const { return type == Type::Closure; }
+	bool isPromise() const { return type == Type::Promise; }
 	bool isFunction() const { return type == Type::Function; }
 	bool isBuiltIn() const { return type == Type::BuiltIn; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
@@ -67,12 +67,18 @@ struct Value {
 	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isSymbol() || (isList() && length==0); }
 	bool isListLike() const { return isList() || isPairList() || isCall() || isExpression(); }
 	bool isConcrete() const { return type <= Type::CompiledCall; }
-	static const Value Nil;
 };
 
 class Environment;
 class State;
 
+struct NilValue {
+	operator Value() const {
+		return Value::Make(Type::Nil, 0, (int64_t)0, 0);
+	}
+};
+
+static const NilValue Nil = {};
 
 // Value type implementations
 
@@ -185,16 +191,16 @@ struct VectorImpl {
 		}
 	}
 
-	explicit VectorImpl(int64_t length) 
+	explicit VectorImpl(int64_t length=0) 
 		: length(length), 
 		_data(
-			packed() ? pack : 
+			packed() ? pack :
 			length == 0 ? 0 : 
 			Recursive ? new (GC) Element[length] : new (PointerFreeGC) Element[length]), 
 		attributes(0) {}
 
 	explicit VectorImpl(Value v) : length(v.length), _data((ElementType*)v.p), attributes(v.attributes) {
-		assert(v.type.Enum() == VectorType); 
+		assert(v.type == VectorType); 
                 if(packed()) {
                         memcpy(pack, &v.p, packLength*sizeof(ElementType));
                         _data = pack;
@@ -203,7 +209,7 @@ struct VectorImpl {
 
 	explicit VectorImpl(Vector v) 
 		: length(v.length), _data((ElementType*)v._data), attributes(v.attributes) {
-		assert(v.type.Enum() == VectorType); 
+		assert(v.type == VectorType); 
                 if(packed()) {
                         memcpy(pack, &v._data, packLength*sizeof(ElementType));
                         _data = pack;
@@ -237,8 +243,7 @@ protected:
 		: length(length), _data(_data), attributes(attributes) {}
 
 	bool packed() const {
-		return  sizeof(ElementType) <= sizeof(void*) &&
-			length <= (int64_t)(sizeof(ElementType)/sizeof(void*));
+		return sizeof(ElementType) <= sizeof(void*) && length <= (int64_t)(sizeof(ElementType)/sizeof(void*));
 	}
 
 };
@@ -250,7 +255,7 @@ union _doublena {
 
 #define VECTOR_IMPL(Name, Element, Recursive) 				\
 struct Name : public VectorImpl<Type::Name, Element, Recursive> { 			\
-	explicit Name(int64_t length) : VectorImpl<Type::Name, Element, Recursive>(length) {} 	\
+	explicit Name(int64_t length=0) : VectorImpl<Type::Name, Element, Recursive>(length) {} 	\
 	explicit Name(Value const& v) : VectorImpl<Type::Name, Element, Recursive>(v) {} 	\
 	explicit Name(Vector const& v) : VectorImpl<Type::Name, Element, Recursive>(v) {} 	\
 	template<Type::Enum T> \
@@ -389,74 +394,48 @@ inline Vector::Vector(Value v) {
 
 struct Code : public gc {
 	Value expression;
+	Symbol string;
+
+	List parameters;
+	int64_t dots;
+	
 	std::vector<Symbol> slotSymbols;
 	int64_t registers;
+
 	std::vector<Value, traceable_allocator<Value> > constants;
+	std::vector<Code*, traceable_allocator<Code*> > code; 	// constant code blocks that are nested in this code block (e.g. a nested function definition or a lazy parameter expression). Not stored in constants since it is only loaded by the 'function' op.
+
 	std::vector<Instruction> bc;			// bytecode
 	mutable std::vector<Instruction> tbc;		// threaded bytecode
 	std::vector<Trace *> traces;
 };
 
-class Closure {
-private:
-	Code* c;
-	Environment* env;	// if NULL, execute in current environment
-public:
-	explicit Closure(Code* code, Environment* environment) : c(code), env(environment) {}
-	
-	explicit Closure(Value const& v) {
-		assert(v.type == Type::I_closure); 
-		c = (Code*)v.p;
-		env = (Environment*)v.env;
-	}
-
-	operator Value() const {
-		return Value::Make(Type::Closure, 0, (void*)c, (void*)env);
-	}
-
-	Closure bind(Environment* environment) {
-		return Closure(c, environment);
-	}
-
-	Code* code() const { return c; }
-	Environment* environment() const { return env; }
-};
-
-
 class Function {
 private:
-	struct Inner : public gc {
-		List parameters;
-		int64_t dots;
-		Value body;		// Not necessarily a Closure consider function(x) 2, body is the constant 2
-		Character str;
-		Environment* s;
-		Inner(List const& parameters, Value const& body, Character const& str, Environment* s) 
-			: parameters(parameters), body(body), str(str), s(s) {}
-	};
-	
-	Inner* inner;
-	
+	Code* _code;
+	Environment* _env;
 public:
-	Attributes* attributes;
-
-	explicit Function(List const& parameters, Value const& body, Character const& str, Environment* s);
+	explicit Function(Code* code, Environment* env)
+		: _code(code), _env(env) {}
 	
-	explicit Function(Value const& v) {
-		assert(v.type == Type::R_function);
-		inner = (Inner*)v.p; 
-		attributes = v.attributes;
+	explicit Function(Value const& v) : _code((Code*)v.p), _env((Environment*)v.env) {
+		assert(v.type.isFunction() || v.type.isPromise());
 	}
 
 	operator Value() const {
-		return Value::Make(Type::Function, 0, (void*)inner, attributes);
+		return Value::Make(Type::Function, 0, (void*)_code, (void*)_env);
 	}
 
-	List const& parameters() const { return inner->parameters; }
-	int64_t dots() const { return inner->dots; }
-	Value const& body() const { return inner->body; }
-	Character const& str() const { return inner->str; }
-	Environment* s() const { return inner->s; }
+	Value AsPromise() const {
+		return Value::Make(Type::Promise, 0, (void*)_code, (void*)_env);
+	}
+
+	List const& parameters() const { return _code->parameters; }
+	int64_t dots() const { return _code->dots; }
+	Symbol const& string() const { return _code->string; }
+	
+	Code* code() const { return _code; }
+	Environment* environment() const { return _env; }
 };
 
 class CFunction {
@@ -465,7 +444,7 @@ public:
 	Cffi func;
 	explicit CFunction(Cffi func) : func(func) {}
 	explicit CFunction(Value const& v) {
-		assert(v.type == Type::R_cfunction);
+		assert(v.type.isBuiltIn());
 		func = (Cffi)v.p; 
 	}
 	operator Value() const {
@@ -716,7 +695,7 @@ public:
 		if(i != overflow.end()) {
 			return i->second;
 		} else {
-			return Value::Nil;
+			return Nil;
 		}
 	}
 
@@ -736,15 +715,15 @@ public:
 
 	Value getQuoted(Symbol const& name) const {
 		Value value = get(name);
-		if(value.isClosure()) {
-			value = Closure(value).code()->expression;
+		if(value.isPromise()) {
+			value = Function(value).code()->expression;
 		}
 		return value;
 	}
 
-	Closure getCode(Symbol const& name) const {
+	Function getCode(Symbol const& name) const {
 		Value value = get(name);
-		return Closure(value);
+		return Function(value);
 	}
 
 	void assign(Symbol const& name, Value const& value) {
@@ -760,7 +739,7 @@ public:
 	void rm(Symbol const& name) {
 		for(uint64_t i = 0; i < slotCount; i++) {
 			if(slotNames[i] == name) {
-				slots[i] = Value::Nil;
+				slots[i] = Nil;
 				return;
 			}
 		}
@@ -837,7 +816,7 @@ struct State {
 
 
 
-Value eval(State& state, Closure const& closure);
+Value eval(State& state, Function const& function);
 Value eval(State& state, Code const* code, Environment* environment); 
 Value eval(State& state, Code const* code);
 void interpreter_init(State& state);

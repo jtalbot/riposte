@@ -59,7 +59,7 @@ static void d_message(const int level, const char* ifmt, const char *msg)
  }
  
 Value parsetty(State& state) {
-	Value ppr = Value::Nil;
+	Value ppr = Nil;
 	int i = 0;
 	int is_tty = isatty(fileno(stdin));
 	char code[8192];
@@ -78,7 +78,7 @@ Value parsetty(State& state) {
                     // EOF exit
                     l_message(0,"EOF");
                     die = 1;
-                    return Value::Nil;
+                    return Nil;
                   }
 		i = strlen(code);
 		if(i == 1)
@@ -92,7 +92,7 @@ Value parsetty(State& state) {
         // if not a terminal echo the parse so as to interleave with output
 	if (!is_tty) fprintf(stdout,"%s",code); 
 	if (status == -1)
-		return Value::Nil;
+		return Nil;
 	return ppr;
 }
 

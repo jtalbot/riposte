@@ -112,7 +112,7 @@ CompiledCall Compiler::makeCall(Call const& call) {
 			dots = i-1;
 		} else if(call[i].isCall() || call[i].isSymbol() || call[i].isPairList()) {
 			// promises should have access to the slots of the enclosing scope, but have their own register assignments
-			arguments[i-1] = Closure(Compiler::compile(call[i]),NULL);
+			arguments[i-1] = Function(Compiler::compile(call[i]),NULL).AsPromise();
 		} else {
 			arguments[i-1] = call[i];
 		}
@@ -243,7 +243,7 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		scope.parameters = names;
 		for(int64_t i = 0; i < parameters.length; i++) {
 			if(!c[i].isNil()) {
-				parameters[i] = Closure(compile(c[i]),NULL);
+				parameters[i] = Function(compile(c[i]),NULL).AsPromise();
 			}
 			else {
 				parameters[i] = c[i];
@@ -251,22 +251,28 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 			scope.symbols.push_back(names[i]);
 		}
 		setNames(parameters, names);
-		code->constants.push_back(parameters);
 
 		//compile the source for the body
 		scopes.push_back(scope);
 		Code* functionCode = compile(call[2]);
 		functionCode->slotSymbols.swap(scopes.back().symbols);
-		Closure body(functionCode, NULL);
-		code->constants.push_back(body);
 		scopes.pop_back();
 
-		//push back the source code.
-		code->constants.push_back(call[3]);
+		// Populate function info
+		functionCode->parameters = parameters;
+		functionCode->string = Symbol(call[3]);
 
+		functionCode->dots = parameters.length;
+		if(parameters.length > 0) {
+			for(int64_t i = 0;i < names.length; i++) 
+				if(names[i] == Symbol::dots) functionCode->dots = i;
+		}
+
+		code->code.push_back(functionCode);
+		
 		scopes.back().deadAfter(liveIn);	
 		int64_t reg = scopes.back().allocRegister(Register::CONSTANT);	
-		emit(code, ByteCode::function, code->constants.size()-3, code->constants.size()-2, reg);
+		emit(code, ByteCode::function, code->code.size()-1, 0, reg);
 		return reg;
 	} break;
 	case String::returnSym: 
