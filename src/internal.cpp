@@ -622,67 +622,67 @@ Value systemtime(State& state, List const& args) {
 
 void importCoreLibrary(State& state, Environment* env)
 {
-	env->assign(state.StrToSym("max"), CFunction(max_fn));
-	env->assign(state.StrToSym("min"), CFunction(min_fn));
-	env->assign(state.StrToSym("sum"), CFunction(sum_fn));
-	env->assign(state.StrToSym("prod"), CFunction(prod_fn));
-	env->assign(state.StrToSym("cummax"), CFunction(cummax_fn));
-	env->assign(state.StrToSym("cummin"), CFunction(cummin_fn));
-	env->assign(state.StrToSym("cumsum"), CFunction(cumsum_fn));
-	env->assign(state.StrToSym("cumprod"), CFunction(cumprod_fn));
-	env->assign(state.StrToSym("any"), CFunction(any_fn));
-	env->assign(state.StrToSym("all"), CFunction(all_fn));
-	env->assign(state.StrToSym("nchar"), CFunction(nchar_fn));
-	env->assign(state.StrToSym("nzchar"), CFunction(nzchar_fn));
-	env->assign(state.StrToSym("is.na"), CFunction(isna_fn));
-	env->assign(state.StrToSym("is.nan"), CFunction(isnan_fn));
-	env->assign(state.StrToSym("is.finite"), CFunction(isfinite_fn));
-	env->assign(state.StrToSym("is.infinite"), CFunction(isinfinite_fn));
+	env->assign(state.StrToSym("max"), BuiltIn(max_fn));
+	env->assign(state.StrToSym("min"), BuiltIn(min_fn));
+	env->assign(state.StrToSym("sum"), BuiltIn(sum_fn));
+	env->assign(state.StrToSym("prod"), BuiltIn(prod_fn));
+	env->assign(state.StrToSym("cummax"), BuiltIn(cummax_fn));
+	env->assign(state.StrToSym("cummin"), BuiltIn(cummin_fn));
+	env->assign(state.StrToSym("cumsum"), BuiltIn(cumsum_fn));
+	env->assign(state.StrToSym("cumprod"), BuiltIn(cumprod_fn));
+	env->assign(state.StrToSym("any"), BuiltIn(any_fn));
+	env->assign(state.StrToSym("all"), BuiltIn(all_fn));
+	env->assign(state.StrToSym("nchar"), BuiltIn(nchar_fn));
+	env->assign(state.StrToSym("nzchar"), BuiltIn(nzchar_fn));
+	env->assign(state.StrToSym("is.na"), BuiltIn(isna_fn));
+	env->assign(state.StrToSym("is.nan"), BuiltIn(isnan_fn));
+	env->assign(state.StrToSym("is.finite"), BuiltIn(isfinite_fn));
+	env->assign(state.StrToSym("is.infinite"), BuiltIn(isinfinite_fn));
 	
-	env->assign(state.StrToSym("cat"), CFunction(cat));
-	env->assign(state.StrToSym("library"), CFunction(library));
-	env->assign(state.StrToSym("rm"), CFunction(rm));
-	env->assign(state.StrToSym("inherits"), CFunction(inherits));
+	env->assign(state.StrToSym("cat"), BuiltIn(cat));
+	env->assign(state.StrToSym("library"), BuiltIn(library));
+	env->assign(state.StrToSym("rm"), BuiltIn(rm));
+	env->assign(state.StrToSym("inherits"), BuiltIn(inherits));
 	
-	env->assign(state.StrToSym("seq"), CFunction(sequence));
-	env->assign(state.StrToSym("rep"), CFunction(repeat));
+	env->assign(state.StrToSym("seq"), BuiltIn(sequence));
+	env->assign(state.StrToSym("rep"), BuiltIn(repeat));
 	
-	env->assign(state.StrToSym("attr"), CFunction(attr));
-	env->assign(state.StrToSym("attr<-"), CFunction(assignAttr));
+	env->assign(state.StrToSym("attr"), BuiltIn(attr));
+	env->assign(state.StrToSym("attr<-"), BuiltIn(assignAttr));
 	
-	env->assign(state.StrToSym("list"), CFunction(list));
-	env->assign(state.StrToSym("unlist"), CFunction(unlist));
-	env->assign(state.StrToSym("length"), CFunction(length));
+	env->assign(state.StrToSym("list"), BuiltIn(list));
+	env->assign(state.StrToSym("unlist"), BuiltIn(unlist));
+	env->assign(state.StrToSym("length"), BuiltIn(length));
 	
-	env->assign(state.StrToSym("["), CFunction(subset));
-	env->assign(state.StrToSym("[["), CFunction(subset2));
-	env->assign(state.StrToSym("$"), CFunction(dollar));
+	env->assign(state.StrToSym("["), BuiltIn(subset));
+	env->assign(state.StrToSym("[["), BuiltIn(subset2));
+	env->assign(state.StrToSym("$"), BuiltIn(dollar));
 
-	env->assign(state.StrToSym("switch"), CFunction(switch_fn));
+	env->assign(state.StrToSym("switch"), BuiltIn(switch_fn));
 
-	env->assign(state.StrToSym("eval"), CFunction(eval_fn));
-	env->assign(state.StrToSym("quote"), CFunction(quote));
-	env->assign(state.StrToSym("source"), CFunction(source));
+	env->assign(state.StrToSym("eval"), BuiltIn(eval_fn));
+	env->assign(state.StrToSym("quote"), BuiltIn(quote));
+	env->assign(state.StrToSym("source"), BuiltIn(source));
 
-	env->assign(state.StrToSym("lapply"), CFunction(lapply));
-	env->assign(state.StrToSym("t.list"), CFunction(tlist));
+	env->assign(state.StrToSym("lapply"), BuiltIn(lapply));
+	env->assign(state.StrToSym("t.list"), BuiltIn(tlist));
 
-	env->assign(state.StrToSym("environment"), CFunction(environment));
-	env->assign(state.StrToSym("parent.frame"), CFunction(parentframe));
-	env->assign(state.StrToSym("missing"), CFunction(missing));
+	env->assign(state.StrToSym("environment"), BuiltIn(environment));
+	env->assign(state.StrToSym("parent.frame"), BuiltIn(parentframe));
+	env->assign(state.StrToSym("missing"), BuiltIn(missing));
 	
-	env->assign(state.StrToSym("stop"), CFunction(stop_fn));
-	env->assign(state.StrToSym("warning"), CFunction(warning_fn));
+	env->assign(state.StrToSym("stop"), BuiltIn(stop_fn));
+	env->assign(state.StrToSym("warning"), BuiltIn(warning_fn));
 	
-	env->assign(state.StrToSym("paste"), CFunction(paste));
-	env->assign(state.StrToSym("deparse"), CFunction(deparse));
-	env->assign(state.StrToSym("substitute"), CFunction(substitute));
+	env->assign(state.StrToSym("paste"), BuiltIn(paste));
+	env->assign(state.StrToSym("deparse"), BuiltIn(deparse));
+	env->assign(state.StrToSym("substitute"), BuiltIn(substitute));
 	
-	env->assign(state.StrToSym("typeof"), CFunction(type_of));
+	env->assign(state.StrToSym("typeof"), BuiltIn(type_of));
 	
-	env->assign(state.StrToSym("get"), CFunction(get));
-	env->assign(state.StrToSym("exists"), CFunction(exists));
+	env->assign(state.StrToSym("get"), BuiltIn(get));
+	env->assign(state.StrToSym("exists"), BuiltIn(exists));
 
-	env->assign(state.StrToSym("system.time"), CFunction(systemtime));
+	env->assign(state.StrToSym("system.time"), BuiltIn(systemtime));
 }
 

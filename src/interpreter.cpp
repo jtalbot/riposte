@@ -78,30 +78,30 @@ static Value const& constant(State& state, int64_t i) {
 	return state.frame.code->constants[i];
 }
 
-static List BuildArgs(State& state, CompiledCall& call) {
+static List BuildArgs(State& state, CompiledCall const& call) {
 	// Expand dots into the parameter list...
 	// If it's in the dots it must already be a promise, thus no need to make a promise again.
 	// Need to do the same for the names...
-	List arguments = call.arguments();
+	List arguments = call.arguments;
 	Value v = get(state, Symbol::dots);
 	if(!v.isNil()) {
 		List dots(v);
 		List expanded(arguments.length + dots.length - 1 /* -1 for dots that will be replaced */);
-		Insert(state, arguments, 0, expanded, 0, call.dots());
-		Insert(state, dots, 0, expanded, call.dots(), dots.length);
-		Insert(state, arguments, call.dots(), expanded, call.dots()+dots.length, arguments.length-call.dots()-1);
+		Insert(state, arguments, 0, expanded, 0, call.dots);
+		Insert(state, dots, 0, expanded, call.dots, dots.length);
+		Insert(state, arguments, call.dots, expanded, call.dots+dots.length, arguments.length-call.dots-1);
 		arguments = expanded;
 		if(hasNames(arguments) || hasNames(dots)) {
 			Character names(expanded.length);
 			for(int64_t i = 0; i < names.length; i++) names[i] = Symbol::empty;
 			if(hasNames(arguments)) {
 				Character anames = Character(getNames(arguments));
-				Insert(state, anames, 0, names, 0, call.dots());
-				Insert(state, anames, call.dots(), names, call.dots()+dots.length, arguments.length-call.dots()-1);
+				Insert(state, anames, 0, names, 0, call.dots);
+				Insert(state, anames, call.dots, names, call.dots+dots.length, arguments.length-call.dots-1);
 			}
 			if(hasNames(dots)) {
 				Character dnames = Character(getNames(dots));
-				Insert(state, dnames, 0, names, call.dots(), dots.length);
+				Insert(state, dnames, 0, names, call.dots, dots.length);
 			}
 			setNames(arguments, names);
 		}
@@ -263,8 +263,8 @@ static Instruction const * profile_back_edge(State & state, Instruction const * 
 
 Instruction const* call_op(State& state, Instruction const& inst) {
 	Value f = REG(state, inst.a);
-	CompiledCall call(constant(state, inst.b));
-	List arguments = call.dots() < call.arguments().length ? BuildArgs(state, call) : call.arguments();
+	CompiledCall const& call = state.frame.code->calls[inst.b];
+	List arguments = call.dots < call.arguments.length ? BuildArgs(state, call) : call.arguments;
 
 	if(f.isFunction()) {
 		Function func(f);
@@ -272,7 +272,7 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 		MatchArgs(state, state.frame.environment, fenv, func, arguments);
 		return buildStackFrame(state, fenv, true, func.code(), &REG(state, inst.c), &inst+1);
 	} else if(f.isBuiltIn()) {
-		REG(state, inst.c) = CFunction(f).func(state, arguments);
+		REG(state, inst.c) = BuiltIn(f).func(state, arguments);
 		return &inst+1;
 	} else {
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
@@ -283,8 +283,8 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 	Value v = REG(state, inst.a);
 	Symbol generic = v.isCharacter() ? Character(v)[0] : Symbol(v);
 	
-	CompiledCall call(constant(state, inst.b));
-	List arguments = call.dots() < call.arguments().length ? BuildArgs(state, call) : call.arguments();
+	CompiledCall const& call = state.frame.code->calls[inst.b];
+	List arguments = call.dots < call.arguments.length ? BuildArgs(state, call) : call.arguments;
 	
 	Value object = REG(state, inst.c);
 	Character type = klass(state, object);
@@ -309,7 +309,7 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 		assign(fenv, Symbol::dotClass, type); 
 		return buildStackFrame(state, fenv, true, func.code(), &REG(state, inst.c), &inst+1);
 	} else if(f.isBuiltIn()) {
-		REG(state, inst.c) = CFunction(f).func(state, arguments);
+		REG(state, inst.c) = BuiltIn(f).func(state, arguments);
 		return &inst+1;
 	} else {
 		_error(std::string("no applicable method for '") + state.SymToStr(generic) + "' applied to an object of class \"" + state.SymToStr(type[0]) + "\"");

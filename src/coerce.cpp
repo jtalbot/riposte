@@ -83,23 +83,23 @@ Value islist(State& state, List const& args) {
 
 void importCoerceFunctions(State& state, Environment* env)
 {
-	env->assign(state.StrToSym("as.null"), CFunction(asnull));
-	env->assign(state.StrToSym("as.logical"), CFunction(aslogical));
-	env->assign(state.StrToSym("as.integer"), CFunction(asinteger));
-	env->assign(state.StrToSym("as.double"), CFunction(asdouble));
-	env->assign(state.StrToSym("as.numeric"), CFunction(asdouble));
-	env->assign(state.StrToSym("as.complex"), CFunction(ascomplex));
-	env->assign(state.StrToSym("as.character"), CFunction(ascharacter));
-	env->assign(state.StrToSym("as.list"), CFunction(aslist));
+	env->assign(state.StrToSym("as.null"), BuiltIn(asnull));
+	env->assign(state.StrToSym("as.logical"), BuiltIn(aslogical));
+	env->assign(state.StrToSym("as.integer"), BuiltIn(asinteger));
+	env->assign(state.StrToSym("as.double"), BuiltIn(asdouble));
+	env->assign(state.StrToSym("as.numeric"), BuiltIn(asdouble));
+	env->assign(state.StrToSym("as.complex"), BuiltIn(ascomplex));
+	env->assign(state.StrToSym("as.character"), BuiltIn(ascharacter));
+	env->assign(state.StrToSym("as.list"), BuiltIn(aslist));
 
 /*
-	env->assign(state.StrToSym("is.null"), CFunction(isnull));
-	env->assign(state.StrToSym("is.logical"), CFunction(islogical));
-	env->assign(state.StrToSym("is.integer"), CFunction(isinteger));
-	env->assign(state.StrToSym("is.double"), CFunction(isdouble));
-	env->assign(state.StrToSym("is.real"), CFunction(isdouble));
-	env->assign(state.StrToSym("is.complex"), CFunction(iscomplex));
-	env->assign(state.StrToSym("is.character"), CFunction(ischaracter));
-	env->assign(state.StrToSym("is.list"), CFunction(islist));
+	env->assign(state.StrToSym("is.null"), BuiltIn(isnull));
+	env->assign(state.StrToSym("is.logical"), BuiltIn(islogical));
+	env->assign(state.StrToSym("is.integer"), BuiltIn(isinteger));
+	env->assign(state.StrToSym("is.double"), BuiltIn(isdouble));
+	env->assign(state.StrToSym("is.real"), BuiltIn(isdouble));
+	env->assign(state.StrToSym("is.complex"), BuiltIn(iscomplex));
+	env->assign(state.StrToSym("is.character"), BuiltIn(ischaracter));
+	env->assign(state.StrToSym("is.list"), BuiltIn(islist));
 */
 }

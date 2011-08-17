@@ -66,7 +66,7 @@ struct Value {
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isList(); }
 	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isSymbol() || (isList() && length==0); }
 	bool isListLike() const { return isList() || isPairList() || isCall() || isExpression(); }
-	bool isConcrete() const { return type <= Type::CompiledCall; }
+	bool isConcrete() const { return type < Type::Promise; }
 };
 
 class Environment;
@@ -392,6 +392,15 @@ inline Vector::Vector(Value v) {
 	};
 }
 
+struct CompiledCall : public gc {
+	Call call;
+	List arguments;
+	int64_t dots;
+	
+	explicit CompiledCall(Call const& call, List const& arguments, int64_t dots) 
+		: call(call), arguments(arguments), dots(dots) {}
+};
+
 struct Code : public gc {
 	Value expression;
 	Symbol string;
@@ -404,6 +413,7 @@ struct Code : public gc {
 
 	std::vector<Value, traceable_allocator<Value> > constants;
 	std::vector<Code*, traceable_allocator<Code*> > code; 	// constant code blocks that are nested in this code block (e.g. a nested function definition or a lazy parameter expression). Not stored in constants since it is only loaded by the 'function' op.
+	std::vector<CompiledCall, traceable_allocator<CompiledCall> > calls; // nested calls
 
 	std::vector<Instruction> bc;			// bytecode
 	mutable std::vector<Instruction> tbc;		// threaded bytecode
@@ -438,48 +448,18 @@ public:
 	Environment* environment() const { return _env; }
 };
 
-class CFunction {
+class BuiltIn {
 public:
-	typedef Value (*Cffi)(State& s, List const& args);
-	Cffi func;
-	explicit CFunction(Cffi func) : func(func) {}
-	explicit CFunction(Value const& v) {
+	typedef Value (*BuiltInFunctionPtr)(State& s, List const& args);
+	BuiltInFunctionPtr func;
+	explicit BuiltIn(BuiltInFunctionPtr func) : func(func) {}
+	explicit BuiltIn(Value const& v) {
 		assert(v.type.isBuiltIn());
-		func = (Cffi)v.p; 
+		func = (BuiltInFunctionPtr)v.p; 
 	}
 	operator Value() const {
 		return Value::Make(Type::BuiltIn, 0, (void*)func, 0);
 	}
-};
-
-class CompiledCall {
-	struct Inner : public gc {
-		Value call;
-		Value arguments; // a list of closures
-		int64_t dots;
-	};
-
-	Inner* inner;
-public:
-	explicit CompiledCall(Call const& call, List const& arguments, int64_t dots) {
-		inner = new Inner();
-		inner->call = call;
-		inner->arguments = arguments;
-		inner->dots = dots;
-	}
-
-	explicit CompiledCall(Value const& v) {
-		assert(v.type == Type::CompiledCall);
-		inner = (Inner*)v.p; 
-	}
-
-	operator Value() const {
-		return Value::Make(Type::CompiledCall, 0, (void*)inner, 0);
-	}
-	
-	Call call() const { return Call(inner->call); }
-	List arguments() const { return List(inner->arguments); }
-	int64_t dots() const { return inner->dots; }
 };
 
 class REnvironment {

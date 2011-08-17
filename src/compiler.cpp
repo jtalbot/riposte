@@ -128,11 +128,10 @@ CompiledCall Compiler::makeCall(Call const& call) {
 int64_t Compiler::compileFunctionCall(Call const& call, Code* code) {
 	int64_t liveIn = scopes.back().live();
 	int64_t function = compile(call[0], code);
-	CompiledCall compiledCall(makeCall(call));
-	code->constants.push_back(compiledCall);
+	code->calls.push_back(makeCall(call));
 	scopes.back().deadAfter(liveIn);
 	int64_t result = scopes.back().allocRegister(Register::VARIABLE);
-	emit(code, ByteCode::call, function, code->constants.size()-1, result);
+	emit(code, ByteCode::call, function, code->calls.size()-1, result);
 	return result;
 }
 
@@ -532,13 +531,9 @@ int64_t Compiler::compileCall(Call const& call, Code* code) {
 		Character p(scopes.back().parameters);
 		Call gcall(p.length+1);
 		for(int64_t i = 0; i < p.length; i++) gcall[i+1] = p[i];
-		CompiledCall compiledCall(makeCall(gcall));
-
-		code->constants.push_back(compiledCall);
+		code->calls.push_back(makeCall(gcall));
 	
-		int64_t arguments = code->constants.size()-1;	
-		
-		emit(code, ByteCode::UseMethod, generic, arguments, object);
+		emit(code, ByteCode::UseMethod, generic, code->calls.size()-1, object);
 		scopes.back().deadAfter(object);
 		return object;
 	} break;

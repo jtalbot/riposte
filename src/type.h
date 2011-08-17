@@ -30,7 +30,6 @@
 	_(S4, 		"S4")		\
 									\
 	/* Now the internal types, not necessarily matching R. Order is important here. */ \
-	_(CompiledCall,	"compiled call")\
 	_(Promise, 	"promise") 	\
 	_(Nil,		"nil")		\
 
