@@ -142,16 +142,11 @@ Value unlist(State& state, List const& args) {
 		total += from[i].length;
 		type = cTypeCast(from[i], type);
 	}
-	Vector out = Vector(type, total);
-	int64_t j = 0;
-	for(int64_t i = 0; i < from.length; i++) {
-		Insert(state, Vector(from[i]), 0, out, j, Vector(from[i]).length);
-		j += from[i].length;
-	}
+	Character outnames;
 	if(hasNames(from))
 	{
 		Character names = Character(getNames(from));
-		Character outnames(total);
+		outnames = Character(total);
 		int64_t j = 0;
 		for(int64_t i = 0; i < (int64_t)from.length; i++) {
 			for(int64_t m = 0; m < from[i].length; m++, j++) {
@@ -159,12 +154,25 @@ Value unlist(State& state, List const& args) {
 				outnames[j] = names[i];
 			}
 		}
-		setNames(out, outnames);
 	}
-	return out;
+	int64_t j = 0;
+	switch(type) {
+		#define CASE(Name) \
+			case Type::Name: { \
+				Name out(total); \
+				for(int64_t i = 0; i < from.length; i++) { \
+					Insert(state, from[i], 0, out, j, from[i].length); \
+					j += from[i].length; \
+				} \
+				if(hasNames(from)) setNames(out, outnames); \
+				return out; } break;
+		VECTOR_TYPES(CASE)
+		#undef CASE
+		default: _error("NYI: Insert into this type"); break;
+	};
 }
 
-Vector Subset(State& state, Vector const& a, Vector const& i)	{
+Value Subset(State& state, Value const& a, Value const& i)	{
 	if(i.isDouble() || i.isInteger()) {
 		Integer index = As<Integer>(state, i);
 		int64_t positive = 0, negative = 0;
@@ -193,7 +201,13 @@ Vector Subset(State& state, Vector const& a, Vector const& i)	{
 			};	
 		}
 		else {
-			return Vector(a.type, 0);
+			switch(a.type) {
+				case Type::Null: return a; break;
+				#define CASE(Name) case Type::Name: return Name(0); break;
+				VECTOR_TYPES_NOT_NULL(CASE)
+				#undef CASE
+				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
+			};	
 		}
 	}
 	else if(i.isLogical()) {
@@ -212,8 +226,8 @@ Vector Subset(State& state, Vector const& a, Vector const& i)	{
 
 Value subset(State& state, List const& args) {
 	checkNumArgs(args, 2);
-        Vector a = Vector(force(state, args[0]));
-        Vector i = Vector(force(state, args[1]));
+        Value a = force(state, args[0]);
+        Value i = force(state, args[1]);
 	return Subset(state, a,i);
 }
 
@@ -222,6 +236,7 @@ Value subset2(State& state, List const& args) {
 
         Value a = force(state, args[0]);
         Value b = force(state, args[1]);
+	Value result;
 	if(b.isCharacter() && hasNames(a)) {
 		Symbol i = Character(b)[0];
 		Character c = Character(getNames(a));
@@ -232,16 +247,19 @@ Value subset2(State& state, List const& args) {
 				break;
 		}
 		if(j < c.length) {
-			return Element2(Vector(a), j);
+			Element2(a, j, result);
 		}
 	}
 	else if(b.isInteger()) {
-		return Element2(Vector(a), Integer(b)[0]-1);
+		Element2(a, Integer(b)[0]-1, result);
 	}
 	else if(b.isDouble()) {
-		return Element2(Vector(a), (int64_t)Double(b)[0]-1);
+		Element2(a, (int64_t)Double(b)[0]-1, result);
 	}
-	return Null::Singleton();
+	else {
+		result = Null::Singleton();
+	}
+	return result;
 } 
 
 Value dollar(State& state, List const& args) {
@@ -257,7 +275,9 @@ Value dollar(State& state, List const& args) {
 				break;
 		}
 		if(j < c.length) {
-			return Element2(Vector(a), j);
+			Value result;
+			Element2(a, j, result);
+			return result;
 		}
 	}
 	return Null::Singleton();
@@ -265,7 +285,7 @@ Value dollar(State& state, List const& args) {
 
 Value length(State& state, List const& args) {
 	checkNumArgs(args, 1);
-	Vector a(force(state, args[0]));
+	Value a = force(state, args[0]);
 	Integer i(1);
 	i[0] = a.length;
 	return i;
@@ -316,7 +336,7 @@ Value tlist(State& state, List const& args) {
 		List element(args.length);
 		for(int64_t j = 0; j < a.length; j++) {
 			if(a[j].isVector())
-				element[j] = Element2(Vector(a[j]), i%a[j].length);
+				Element2(a[j], i%a[j].length, element[j]);
 			else
 				element[j] = a[j];
 		}

@@ -110,37 +110,6 @@ struct Symbol {
 };
 
 
-// A generic vector representation. Only provides support to access length and void* of data.
-struct Vector : public Value {
-
-	bool pack;
-	unsigned char width;
-
-	bool packed() const { return pack; }
-	void* data() const { if(pack) return (void*)&p; else return p; }
-	void* data(int64_t i) const { 
-		if(pack) return ((char*)&p) + i*width; else return (char*)p + i*width; 
-	}
-
-	Vector() {}
-
-	explicit Vector(Value const& v);
-	explicit Vector(Type::Enum t, int64_t length);
-	explicit Vector(Type::Enum t, int64_t length, void* data);
-
-	static Vector Make(Type::Enum type, int64_t length, void* data, void* extra, bool packed, unsigned char width) {
-		Vector v;
-		v.type = type; v.length = length;
-		v.p = data; v.env = extra;
-		v.pack = packed; v.width = width;
-		return v;
-	}
-
-	operator Value() const {
-		return Value::Make(type, length, p, attributes);
-	}
-};
-
 template<Type::Enum VectorType, typename ElementType, bool Recursive>
 struct VectorImpl {
 	typedef ElementType Element;
@@ -212,27 +181,10 @@ struct VectorImpl {
                 }
 	}
 
-	explicit VectorImpl(Vector const& v) 
-		: length(v.length), _data((ElementType*)v.p), attributes(v.attributes) {
-		assert(v.type == VectorType); 
-                if(packed()) {
-                        memcpy(pack, &v.p, packLength*sizeof(ElementType));
-                        _data = pack;
-                }
-	}
-
 	operator Value() const {
 		Value v = Value::Make(VectorType, length, _data, attributes);
                 if(packed()) {
                         memcpy(&v.p, pack, sizeof(void*));
-                }
-		return v;
-	}
-
-	operator Vector() const {
-		Vector v = Vector::Make(VectorType, length, _data, attributes, packed(), width);
-                if(packed()) {
-                        memcpy(&v.p, &pack, sizeof(void*));
                 }
 		return v;
 	}
@@ -252,7 +204,6 @@ union _doublena {
 struct Name : public VectorImpl<Type::Name, Element, Recursive> { 			\
 	explicit Name(int64_t length=0) : VectorImpl<Type::Name, Element, Recursive>(length) {} 	\
 	explicit Name(Value const& v) : VectorImpl<Type::Name, Element, Recursive>(v) {} 	\
-	explicit Name(Vector const& v) : VectorImpl<Type::Name, Element, Recursive>(v) {} 	\
 	template<Type::Enum T> \
 	explicit Name(VectorImpl<T, Element, Recursive> const& other) : VectorImpl<Type::Name, Element, Recursive>(other) {} \
 	static Name c() { Name c(0); return c; } \
@@ -347,45 +298,6 @@ VECTOR_IMPL(Expression, Value, true)
 	static bool isFinite(Value c) { return false; }
 	static bool isInfinite(Value c) { return false; }
 };
-
-inline Vector::Vector(Type::Enum t, int64_t length) {
-	switch(t) {
-		case Type::Null: *this = Null::Singleton(); break;
-		#define CASE(Name, ...) case Type::Name: *this = Name(length); break;
-		VECTOR_TYPES_NOT_NULL(CASE)
-		#undef CASE
-		default: throw RuntimeError("attempt to create invalid vector type"); break;
-	};
-}
-inline Vector::Vector(Type::Enum t, int64_t length, void * data) {
-	uint64_t width;
-	switch(t) {
-		#define CASE(Name,...) case Type::Name: width = Name::width; break;
-		VECTOR_TYPES(CASE)
-		#undef CASE
-		default: throw RuntimeError("attempt to create invalid vector type"); break;
-	};
-	Value v;
-	v.type = t;
-	v.length = length;
-	//CHECK: are the pointers to each member of a union the same value?
-	if(width * length <= sizeof(void*))
-		memcpy(&v.p,data,width * length);
-	else
-		v.p = data;
-	v.attributes = NULL;
-	*this = Vector(v);
-}
-
-inline Vector::Vector(Value const& v) {
-	switch(v.type) {
-		case Type::Null: *this = Null::Singleton(); break;
-		#define CASE(Name, ...) case Type::Name: *this = Name(v); break;
-		VECTOR_TYPES_NOT_NULL(CASE)
-		#undef CASE
-		default: throw RuntimeError("attempt to create invalid vector type"); break;
-	};
-}
 
 struct CompiledCall : public gc {
 	Call call;

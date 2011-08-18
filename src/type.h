@@ -55,4 +55,19 @@ DECLARE_ENUM(Type, TYPES)
 	_(Call) 	\
 	_(Expression) 	\
 
+#define ATOMIC_VECTOR_TYPES(_) \
+	_(Null)		\
+	_(Raw)		\
+	_(Logical)	\
+	_(Integer)	\
+	_(Double)	\
+	_(Complex)	\
+	_(Character)	\
+
+#define LISTLIKE_VECTOR_TYPES(_) \
+	_(List)		\
+	_(PairList)	\
+	_(Call)		\
+	_(Expression)	\
+
 #endif

@@ -153,12 +153,4 @@ T Clone(T const& in) {
 	return out;	
 }
 
-inline Vector Clone(Vector const& in) {
-	Vector out(in.type, in.length);
-	memcpy(out.data(), in.data(), in.length*in.width);
-	out.attributes = in.attributes;
-	return out;
-}
-
-
 #endif

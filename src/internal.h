@@ -123,19 +123,36 @@ inline void subAssign(State& state, Value const& a, Value const& i, Value const&
 	else _error("NYI: subset assign type");
 }
 
-template<class S, class D>
-inline void Insert(State& state, S const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
+template<class D>
+inline void Insert(State& state, D const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
 	if((length > 0 && srcIndex+length > src.length) || dstIndex+length > dst.length)
 		_error("insert index out of bounds");
-	D as = As<D>(state, src);
-	memcpy(dst.data(dstIndex), as.data(srcIndex), length*as.width);
+	memcpy(dst.data(dstIndex), src.data(srcIndex), length*src.width);
 }
 
-inline void Insert(State& state, Vector const& src, int64_t srcIndex, Vector& dst, int64_t dstIndex, int64_t length) {
-	if((length > 0 && srcIndex+length > src.length) || dstIndex+length > dst.length)
-		_error("insert index out of bounds");
-	Vector as(As(state, dst.type, src));
-	memcpy(dst.data(dstIndex), as.data(srcIndex), length*as.width);
+template<class S, class D>
+inline void Insert(State& state, S const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
+	D as = As<D>(state, src);
+	Insert(state, as, srcIndex, dst, dstIndex, length);
+}
+
+template<class D>
+inline void Insert(State& state, Value const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
+	switch(src.type) {
+		#define CASE(Name) case Type::Name: Insert(state, Name(src), srcIndex, dst, dstIndex, length); break;
+		VECTOR_TYPES(CASE)
+		#undef CASE
+		default: _error("NYI: Insert into this type"); break;
+	};
+}
+
+inline void Insert(State& state, Value const& src, int64_t srcIndex, Value& dst, int64_t dstIndex, int64_t length) {
+	switch(dst.type) {
+		#define CASE(Name) case Type::Name: { Name as(dst); Insert(state, src, srcIndex, as, dstIndex, length); } break;
+		VECTOR_TYPES(CASE)
+		#undef CASE
+		default: _error("NYI: Insert into this type"); break;
+	};
 }
 
 template<class T>
@@ -147,19 +164,23 @@ inline T Subset(T const& src, int64_t start, int64_t length) {
 	return v;
 }
 
-inline Vector Subset(Vector const& src, int64_t start, int64_t length) {
-	if(length > 0 && start+length > src.length)
-		_error("subset index out of bounds");
-	Vector v(src.type, length);
-	memcpy(v.data(0), src.data(start), length*src.width);
-	return v;
-}
-
 void Element(Value const& v, int64_t index, Value& out) __attribute__((always_inline));
 inline void Element(Value const& v, int64_t index, Value& out) {
 	switch(v.type) {
 		#define CASE(Name) case Type::Name: out = Name::c(Name(v)[index]); break;
 		VECTOR_TYPES(CASE)
+		#undef CASE
+		default: _error("NYI: Element of this type"); break;
+	};
+}
+
+inline void Element2(Value const& v, int64_t index, Value& out) {
+	switch(v.type) {
+		#define CASE(Name) case Type::Name: out = Name::c(Name(v)[index]); break;
+		ATOMIC_VECTOR_TYPES(CASE)
+		#undef CASE
+		#define CASE(Name) case Type::Name: out = Name(v)[index]; break;
+		LISTLIKE_VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: Element of this type"); break;
 	};
@@ -181,17 +202,6 @@ inline Double Sequence(double from, double by, double len) {
 		j = j + by;
 	}
 	return r;
-}
-
-inline Vector Element(Vector const& src, int64_t index)
-{
-	return Subset(src, index, 1);
-}
-
-inline Value Element2(Vector const& src, int64_t index)
-{
-	if(((Value)src).isListLike()) return List(src)[index];
-	else return Subset(src, index, 1);
 }
 
 inline Character klass(State& state, Value const& v)
