@@ -677,7 +677,7 @@ _eof_trans:
 	break;
 	case 28:
 #line 66 "lexer.rl"
-	{te = p+1;{token( TOKEN_NUM_CONST, Complex::c(0, atof(std::string(ts, te-ts-1).c_str())) );}}
+	{te = p+1;{token( TOKEN_NUM_CONST, Complex::c(std::complex<double>(0, atof(std::string(ts, te-ts-1).c_str()))) );}}
 	break;
 	case 29:
 #line 69 "lexer.rl"

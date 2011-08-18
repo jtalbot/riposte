@@ -111,7 +111,7 @@ struct Symbol {
 
 
 template<Type::Enum VectorType, typename ElementType, bool Recursive>
-struct VectorImpl {
+struct Vector {
 	typedef ElementType Element;
 	static const int64_t width = sizeof(ElementType); 
 	static const Type::Enum type = VectorType;
@@ -130,7 +130,7 @@ struct VectorImpl {
 	ElementType* data(int64_t index) { return _data + index; }
 
 	// need to override copy constructor and operator= so the data pointer gets updated.
-	VectorImpl(VectorImpl<VectorType, ElementType, Recursive> const& other) {
+	Vector(Vector<VectorType, ElementType, Recursive> const& other) {
 		length = other.length;
 		_data = other._data;
 		attributes = other.attributes;
@@ -140,7 +140,7 @@ struct VectorImpl {
 		}
 	}
 
-	VectorImpl& operator=(VectorImpl const& other) {
+	Vector& operator=(Vector const& other) {
 		length = other.length;
 		_data = other._data;
 		attributes = other.attributes;
@@ -154,7 +154,7 @@ struct VectorImpl {
 	// Cross type cast (between vectors with the same storage type), use carefully
 	// Mainly used for casting between Lists, Calls, and Expressions
 	template<Type::Enum T>
-	VectorImpl(VectorImpl<T, ElementType, Recursive> const& other) {
+	Vector(Vector<T, ElementType, Recursive> const& other) {
 		length = other.length;
 		_data = other._data;
 		attributes = other.attributes;
@@ -164,7 +164,7 @@ struct VectorImpl {
 		}
 	}
 
-	explicit VectorImpl(int64_t length=0) 
+	explicit Vector(int64_t length=0) 
 		: length(length), 
 		_data(
 			packed() ? pack :
@@ -172,7 +172,7 @@ struct VectorImpl {
 			Recursive ? new (GC) Element[length] : new (PointerFreeGC) Element[length]), 
 		attributes(0) {}
 
-	explicit VectorImpl(Value const& v) 
+	explicit Vector(Value const& v) 
 		: length(v.length), _data((ElementType*)v.p), attributes(v.attributes) {
 		assert(v.type == VectorType); 
                 if(packed()) {
@@ -201,11 +201,11 @@ union _doublena {
 };
 
 #define VECTOR_IMPL(Name, Element, Recursive) 				\
-struct Name : public VectorImpl<Type::Name, Element, Recursive> { 			\
-	explicit Name(int64_t length=0) : VectorImpl<Type::Name, Element, Recursive>(length) {} 	\
-	explicit Name(Value const& v) : VectorImpl<Type::Name, Element, Recursive>(v) {} 	\
+struct Name : public Vector<Type::Name, Element, Recursive> { 			\
+	explicit Name(int64_t length=0) : Vector<Type::Name, Element, Recursive>(length) {} 	\
+	explicit Name(Value const& v) : Vector<Type::Name, Element, Recursive>(v) {} 	\
 	template<Type::Enum T> \
-	explicit Name(VectorImpl<T, Element, Recursive> const& other) : VectorImpl<Type::Name, Element, Recursive>(other) {} \
+	explicit Name(Vector<T, Element, Recursive> const& other) : Vector<Type::Name, Element, Recursive>(other) {} \
 	static Name c() { Name c(0); return c; } \
 	static Name c(Element v0) { Name c(1); c[0] = v0; return c; } \
 	static Name c(Element v0, Element v1) { Name c(2); c[0] = v0; c[1] = v1; return c; } \
