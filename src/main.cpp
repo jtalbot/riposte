@@ -59,7 +59,7 @@ static void d_message(const int level, const char* ifmt, const char *msg)
  }
  
 Value parsetty(State& state) {
-	Value ppr = Nil;
+	Value ppr = Value::Nil();
 	int i = 0;
 	int is_tty = isatty(fileno(stdin));
 	char code[8192];
@@ -78,7 +78,7 @@ Value parsetty(State& state) {
                     // EOF exit
                     l_message(0,"EOF");
                     die = 1;
-                    return Nil;
+                    return Value::Nil();
                   }
 		i = strlen(code);
 		if(i == 1)
@@ -92,7 +92,7 @@ Value parsetty(State& state) {
         // if not a terminal echo the parse so as to interleave with output
 	if (!is_tty) fprintf(stdout,"%s",code); 
 	if (status == -1)
-		return Nil;
+		return Value::Nil();
 	return ppr;
 }
 
@@ -236,7 +236,7 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
       d_message(1,NULL,"Command option processing complete");
 
 	printf(">> %d\n", sizeof(Value));
-	printf(">> %d\n", sizeof(Attributes::Container));
+	printf(">> %d\n", sizeof(Double));
 	//printf(">> %d\n", sizeof(Instruction));
 	//printf(">> %d\n", sizeof(Environment::Container));
 

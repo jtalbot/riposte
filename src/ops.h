@@ -240,11 +240,11 @@ struct AllOp : FoldOp<Logical> {
 template< template<class Op> class Lift, template<typename T> class Op > 
 void unaryArith(State& state, Value const& a, Value& c) {
 	if(a.isDouble())
-		c = Lift< Op<TDouble> >::eval(state, Double(a));
+		Lift< Op<TDouble> >::eval(state, (Double const&)a, c);
 	else if(a.isComplex())
-		c = Lift< Op<TComplex> >::eval(state, Complex(a));
+		Lift< Op<TComplex> >::eval(state, (Complex const&)a, c);
 	else if(a.isMathCoerce())
-		c = Lift< Op<TInteger> >::eval(state, As<Integer>(state, a));
+		Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), c);
 	else if(a.isNull())
 		c = Null::Singleton();
 	else 
@@ -254,7 +254,7 @@ void unaryArith(State& state, Value const& a, Value& c) {
 template< template<class Op> class Lift, class Op > 
 void unaryLogical(State& state, Value const& a, Value& c) {
 	if(a.isLogicalCoerce())
-		c = Lift<Op>::eval(state, As<Logical>(state, a));
+		Lift<Op>::eval(state, As<Logical>(state, a), c);
 	else if(a.isNull())
 		c = Logical(0);
 	else
@@ -263,37 +263,38 @@ void unaryLogical(State& state, Value const& a, Value& c) {
 
 template< template<class Op> class Lift, class Op > 
 void unaryCharacter(State& state, Value const& a, Value& c) {
-	c = Lift<Op>::eval(state, As<Character>(state, a));
+	Lift<Op>::eval(state, As<Character>(state, a), c);
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 
 void unaryFilter(State& state, Value const& a, Value& c) {
 	if(a.isDouble())
-		c = Lift< Op<Double> >::eval(state, Double(a));
+		Lift< Op<Double> >::eval(state, (Double const&)a, c);
 	else if(a.isComplex())
-		c = Lift< Op<Complex> >::eval(state, Complex(a));
+		Lift< Op<Complex> >::eval(state, (Complex const&)a, c);
 	else if(a.isInteger())
-		c = Lift< Op<Integer> >::eval(state, Integer(a));
+		Lift< Op<Integer> >::eval(state, (Integer const&)a, c);
 	else if(a.isLogical())
-		c = Lift< Op<Logical> >::eval(state, Logical(a));
+		Lift< Op<Logical> >::eval(state, (Logical const&)a, c);
 	else if(a.isCharacter())
-		c = Lift< Op<Character> >::eval(state, Character(a));
+		Lift< Op<Character> >::eval(state, (Character const&)a, c);
 	else if(a.isNull())
-		c = Logical(0);
+		Logical(0);
 	else if(a.isList())
-		c = Lift< Op<List> >::eval(state, List(a));
+		Lift< Op<List> >::eval(state, (List const&)a, c);
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 
 void binaryArith(State& state, Value const& a, Value const& b, Value& c) {
-	if(a.isDouble() && b.isDouble())
-		c = Lift< Op<TDouble> >::eval(state, Double(a), Double(b));
+	if(a.isDouble() && b.isDouble()) {
+		Lift< Op<TDouble> >::eval(state, (Double const&)a, (Double const&)b, c);
+	}
 	else if((a.isComplex() && b.isMathCoerce()) || (b.isComplex() && a.isMathCoerce()))
-		c = Lift< Op<TComplex> >::eval(state, As<Complex>(state, a), As<Complex>(state, b));
+		Lift< Op<TComplex> >::eval(state, As<Complex>(state, a), As<Complex>(state, b), c);
 	else if((a.isDouble() && b.isMathCoerce()) || (b.isDouble() && a.isMathCoerce()))
-		c = Lift< Op<TDouble> >::eval(state, As<Double>(state, a), As<Double>(state, b));
+		Lift< Op<TDouble> >::eval(state, As<Double>(state, a), As<Double>(state, b), c);
 	else if(a.isMathCoerce() && b.isMathCoerce()) 
-		c = Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), As<Integer>(state, b));
+		Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), As<Integer>(state, b), c);
 	else 
 		_error("non-numeric argument to binary numeric operator");
 }
@@ -301,7 +302,7 @@ void binaryArith(State& state, Value const& a, Value const& b, Value& c) {
 template< template<class Op> class Lift, class Op > 
 void binaryLogical(State& state, Value const& a, Value const& b, Value& c) {
 	if(a.isLogicalCoerce() && b.isLogicalCoerce()) 
-		c = Lift<Op>::eval(state, As<Logical>(state, a), As<Logical>(state, b));
+		Lift<Op>::eval(state, As<Logical>(state, a), As<Logical>(state, b), c);
 	else 
 		_error("non-logical argument to binary logical operator");
 }
@@ -309,13 +310,13 @@ void binaryLogical(State& state, Value const& a, Value const& b, Value& c) {
 template< template<class Op> class Lift, template<typename T> class Op > 
 void binaryOrdinal(State& state, Value const& a, Value const& b, Value& c) {
 	if((a.isComplex() && b.isMathCoerce()) || (b.isComplex() && a.isMathCoerce()))
-		c = Lift< Op<TComplex> >::eval(state, As<Complex>(state, a), As<Complex>(state, b));
+		Lift< Op<TComplex> >::eval(state, As<Complex>(state, a), As<Complex>(state, b), c);
 	else if((a.isDouble() && b.isMathCoerce()) || (b.isDouble() && a.isMathCoerce()))
-		c = Lift< Op<TDouble> >::eval(state, As<Double>(state, a), As<Double>(state, b));
+		Lift< Op<TDouble> >::eval(state, As<Double>(state, a), As<Double>(state, b), c);
 	else if(a.isMathCoerce() && b.isMathCoerce()) 
-		c = Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), As<Integer>(state, b));
+		Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), As<Integer>(state, b),c );
 	else if(a.isCharacter() && b.isCharacter())
-		c = Lift< Op<TCharacter> >::eval(state, Character(a), Character(b));
+		Lift< Op<TCharacter> >::eval(state, Character(a), Character(b), c);
 	else
 		_error("non-ordinal argument to ordinal operator");
 }

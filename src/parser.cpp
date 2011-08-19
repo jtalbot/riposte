@@ -425,7 +425,7 @@ void Parser::token( int tok, Value v)
 	// Do the lookahead to resolve the dangling else conflict
 	if(lastTokenWasNL) {
 		if(tok != TOKEN_ELSE && (nesting.size()==0 || nesting.top()!=TOKEN_LPAREN))
-			Parse(pParser, TOKEN_NEWLINE, Nil, this);
+			Parse(pParser, TOKEN_NEWLINE, Value::Nil(), this);
 		Parse(pParser, tok, v, this);
 		lastTokenWasNL = false;
 	}
@@ -464,7 +464,7 @@ Parser::Parser(State& state) : line(0), col(0), state(state), errors(0), complet
 
 int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* trace )
 {
-	out = Nil;
+	out = Value::Nil();
 	errors = 0;
 	lastTokenWasNL = false;
 	complete = false;
@@ -990,7 +990,7 @@ _again:
 
 #line 200 "lexer.rl"
 	int syntaxErrors = errors;
-	Parse(pParser, 0, Nil, this);
+	Parse(pParser, 0, Value::Nil(), this);
 	ParseFree(pParser, free);
 	errors = syntaxErrors;
 

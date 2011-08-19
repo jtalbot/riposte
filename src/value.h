@@ -26,11 +26,19 @@ struct Attributes;
 
 struct Value {
 	
-	Type::Enum type:8;
-	int64_t length:56;
 	union {
-		int64_t i;
+		struct {
+			Type::Enum type:8;
+			unsigned char flags:8;
+			int64_t length:48;
+		};
+		int64_t header;
+	};
+	union {
 		void* p;
+		int64_t i;
+		double d;
+		unsigned char c;
 	};
 	union {
 		void* env;
@@ -38,13 +46,17 @@ struct Value {
 	};
 
 	static Value Make(Type::Enum type, int64_t length, int64_t data, void* extra) {
-		Value v = {type, length, {data}, {extra}};
+		Value v = {{{type, 0, length}}, {(void*)data}, {extra}};
 		return v;
 	}
 
 	static Value Make(Type::Enum type, int64_t length, void* data, void* extra) {
-		Value v = {type, length, {(int64_t)data}, {extra}};
+		Value v = {{{type, 0, length}}, {data}, {extra}};
 		return v;
+	}
+
+	static void Init(Value& v, Type::Enum type, int64_t length) {
+		v.header =  type + (length<<16);
 	}
 
 	bool isNil() const { return type == Type::Nil; }
@@ -68,18 +80,15 @@ struct Value {
 	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isSymbol() || (isList() && length==0); }
 	bool isListLike() const { return isList() || isPairList() || isCall() || isExpression(); }
 	bool isConcrete() const { return type < Type::Promise; }
+
+	template<class T> T& scalar() { throw "not allowed"; }
+	template<class T> T const& scalar() const { throw "not allowed"; }
+
+	static Value const& Nil() { static const Value v = { {{Type::Nil, 0, 0}}, {0}, {0} }; return v; }
 };
 
 class Environment;
 class State;
-
-struct NilValue {
-	operator Value() const {
-		return Value::Make(Type::Nil, 0, (int64_t)0, 0);
-	}
-};
-
-static const NilValue Nil = {};
 
 // Value type implementations
 
@@ -109,89 +118,90 @@ struct Symbol {
 	bool operator==(int64_t other) const { return i == other; }
 };
 
+template<> inline int64_t& Value::scalar<int64_t>() { return i; }
+template<> inline double& Value::scalar<double>() { return d; }
+template<> inline unsigned char& Value::scalar<unsigned char>() { return c; }
+template<> inline Symbol& Value::scalar<Symbol>() { return (Symbol&)i; }
 
-template<Type::Enum VectorType, typename ElementType, bool Recursive>
-struct Vector {
+template<> inline int64_t const& Value::scalar<int64_t>() const { return i; }
+template<> inline double const& Value::scalar<double>() const { return d; }
+template<> inline unsigned char const& Value::scalar<unsigned char>() const { return c; }
+template<> inline Symbol const& Value::scalar<Symbol>() const { return (Symbol const&) i; }
+
+
+template<Type::Enum VType, typename ElementType, bool Recursive,
+	bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive>
+struct Vector : public Value {
 	typedef ElementType Element;
 	static const int64_t width = sizeof(ElementType); 
-	static const Type::Enum type = VectorType;
-	static const int64_t packLength = sizeof(ElementType)/sizeof(void*);
+	static const Type::Enum VectorType = VType;
 
-	int64_t length;
-	ElementType* _data;
-	Attributes* attributes;
-	ElementType pack[packLength];
-
-	ElementType& operator[](int64_t index) { return _data[index]; }
-	ElementType const& operator[](int64_t index) const { return _data[index]; }
-	ElementType const* data() const { return _data; }
-	ElementType const* data(int64_t index) const { return _data + index; }
-	ElementType* data() { return _data; }
-	ElementType* data(int64_t index) { return _data + index; }
-
-	// need to override copy constructor and operator= so the data pointer gets updated.
-	Vector(Vector<VectorType, ElementType, Recursive> const& other) {
-		length = other.length;
-		_data = other._data;
-		attributes = other.attributes;
-		if(packed()) {
-                        memcpy(pack, &other.pack, packLength*sizeof(ElementType));
-			_data = pack;
-		}
+	bool isScalar() const {
+		return length == 1;
 	}
 
-	Vector& operator=(Vector const& other) {
-		length = other.length;
-		_data = other._data;
-		attributes = other.attributes;
-		if(packed()) {
-                        memcpy(pack, &other.pack, packLength*sizeof(ElementType));
-			_data = pack;
-		}
-		return *this;
-	}
+	ElementType& s() { return canPack ? Value::scalar<ElementType>() : *(ElementType*)p; }
+	ElementType const& s() const { return canPack ? Value::scalar<ElementType>() : *(ElementType const*)p; }
+
+	ElementType const* v() const { return (canPack && isScalar()) ? &Value::scalar<ElementType>() : (ElementType const*)p; }
+	ElementType* v() { return (canPack && isScalar()) ? &Value::scalar<ElementType>() : (ElementType*)p; }
+	
+	ElementType& operator[](int64_t index) { return v()[index]; }
+	ElementType const& operator[](int64_t index) const { return v()[index]; }
+
 
 	// Cross type cast (between vectors with the same storage type), use carefully
 	// Mainly used for casting between Lists, Calls, and Expressions
 	template<Type::Enum T>
 	Vector(Vector<T, ElementType, Recursive> const& other) {
-		length = other.length;
-		_data = other._data;
+		Value::Init(*this, VectorType, other.length);
+		p = other.p;
 		attributes = other.attributes;
-		if(packed()) {
-                        memcpy(pack, other.pack, packLength*sizeof(ElementType));
-			_data = pack;
+	}
+
+	explicit Vector(int64_t length=0) {
+		Value::Init(*this, VectorType, length);
+		if(canPack && length > 1)
+			p = Recursive ? new (GC) Element[length] : 
+				new (PointerFreeGC) Element[length];
+		else if(!canPack && length > 0)
+			p = Recursive ? new (GC) Element[length] : 
+				new (PointerFreeGC) Element[length];
+		attributes = 0;
+	}
+
+	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
+		Value::Init(v, VectorType, length);
+		if(canPack && length > 1)
+			v.p = Recursive ? new (GC) Element[length] : 
+				new (PointerFreeGC) Element[length];
+		else if(!canPack && length > 0)
+			v.p = Recursive ? new (GC) Element[length] : 
+				new (PointerFreeGC) Element[length];
+		v.attributes = 0;
+		return (Vector<VType, ElementType, Recursive>&)v;
+	}
+
+	static void InitScalar(Value& v, ElementType const& d) {
+		Value::Init(v, VectorType, 1);
+		if(canPack)
+			v.scalar<ElementType>() = d;
+		else {
+			v.p = Recursive ? new (GC) Element[1] : new (PointerFreeGC) Element[1];
+			*(Element*)v.p = d;
 		}
 	}
 
-	explicit Vector(int64_t length=0) 
-		: length(length), 
-		_data(
-			packed() ? pack :
-			length == 0 ? 0 : 
-			Recursive ? new (GC) Element[length] : new (PointerFreeGC) Element[length]), 
-		attributes(0) {}
-
-	explicit Vector(Value const& v) 
-		: length(v.length), _data((ElementType*)v.p), attributes(v.attributes) {
-		assert(v.type == VectorType); 
-                if(packed()) {
-                        memcpy(pack, &v.p, packLength*sizeof(ElementType));
-                        _data = pack;
-                }
+	explicit Vector(Value const& v) {
+		assert(v.type == VType);
+		type = v.type;
+		length = v.length;
+		p = v.p;
+		attributes = v.attributes; 
 	}
 
 	operator Value() const {
-		Value v = Value::Make(VectorType, length, _data, attributes);
-                if(packed()) {
-                        memcpy(&v.p, pack, sizeof(void*));
-                }
-		return v;
-	}
-
-protected:
-	bool packed() const {
-		return sizeof(ElementType) <= sizeof(void*) && length <= (int64_t)(sizeof(ElementType)/sizeof(void*));
+		return Value::Make(type, length, p, attributes);
 	}
 };
 
@@ -211,16 +221,19 @@ struct Name : public Vector<Type::Name, Element, Recursive> { 			\
 	static Name c(Element v0, Element v1) { Name c(2); c[0] = v0; c[1] = v1; return c; } \
 	static Name c(Element v0, Element v1, Element v2) { Name c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } \
 	static Name c(Element v0, Element v1, Element v2, Element v3) { Name c(4); c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; return c; } \
-	const static bool CheckNA; 						\
 	const static Element NAelement; \
-	static Name NA() { static Name na = Name::c(NAelement); return na; } 
+	static Name NA() { static Name na = Name::c(NAelement); return na; }  \
+	static Name& Init(Value& v, int64_t length) { return (Name&)Vector<Type::Name, Element, Recursive>::Init(v, length); } \
+	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); }
 /* note missing }; */
 
 VECTOR_IMPL(Null, unsigned char, false) 
+	static const bool CheckNA = false;
 	static Null Singleton() { static Null s = Null::c(); return s; } 
 };
 
 VECTOR_IMPL(Logical, unsigned char, false)
+	static const bool CheckNA = true;
 	static Logical True() { static Logical t = Logical::c(1); return t; }
 	static Logical False() { static Logical f = Logical::c(0); return f; } 
 	
@@ -233,6 +246,7 @@ VECTOR_IMPL(Logical, unsigned char, false)
 };
 
 VECTOR_IMPL(Integer, int64_t, false)
+	static const bool CheckNA = true;
 	static bool isNA(int64_t c) { return c == NAelement; }
 	static bool isNaN(int64_t c) { return false; }
 	static bool isFinite(int64_t c) { return c != NAelement; }
@@ -240,6 +254,7 @@ VECTOR_IMPL(Integer, int64_t, false)
 }; 
 
 VECTOR_IMPL(Double, double, false)
+	static const bool CheckNA = false;
 	static Double Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
 	static Double NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
 	static Double NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } 
@@ -251,6 +266,7 @@ VECTOR_IMPL(Double, double, false)
 };
 
 VECTOR_IMPL(Complex, std::complex<double>, false)
+	static const bool CheckNA = false;
 	static bool isNA(std::complex<double> c) { _doublena a, b, t ; a.d = c.real(); b.d = c.imag(); t.d = Double::NAelement; return a.i==t.i || b.i==t.i; }
 	static bool isNaN(std::complex<double> c) { return Double::isNaN(c.real()) || Double::isNaN(c.imag()); }
 	static bool isFinite(std::complex<double> c) { return Double::isFinite(c.real()) && Double::isFinite(c.imag()); }
@@ -258,6 +274,7 @@ VECTOR_IMPL(Complex, std::complex<double>, false)
 };
 
 VECTOR_IMPL(Character, Symbol, false)
+	static const bool CheckNA = true;
 	static bool isNA(Symbol c) { return c == Symbol::NA; }
 	static bool isNaN(Symbol c) { return false; }
 	static bool isFinite(Symbol c) { return false; }
@@ -265,6 +282,7 @@ VECTOR_IMPL(Character, Symbol, false)
 };
 
 VECTOR_IMPL(Raw, unsigned char, false) 
+	static const bool CheckNA = false;
 	static bool isNA(unsigned char c) { return false; }
 	static bool isNaN(unsigned char c) { return false; }
 	static bool isFinite(unsigned char c) { return false; }
@@ -272,6 +290,7 @@ VECTOR_IMPL(Raw, unsigned char, false)
 };
 
 VECTOR_IMPL(List, Value, true) 
+	static const bool CheckNA = false;
 	static bool isNA(Value c) { return false; }
 	static bool isNaN(Value c) { return false; }
 	static bool isFinite(Value c) { return false; }
@@ -279,6 +298,7 @@ VECTOR_IMPL(List, Value, true)
 };
 
 VECTOR_IMPL(PairList, Value, true) 
+	static const bool CheckNA = false;
 	static bool isNA(Value c) { return false; }
 	static bool isNaN(Value c) { return false; }
 	static bool isFinite(Value c) { return false; }
@@ -286,6 +306,7 @@ VECTOR_IMPL(PairList, Value, true)
 };
 
 VECTOR_IMPL(Call, Value, true) 
+	static const bool CheckNA = false;
 	static bool isNA(Value c) { return false; }
 	static bool isNaN(Value c) { return false; }
 	static bool isFinite(Value c) { return false; }
@@ -293,6 +314,7 @@ VECTOR_IMPL(Call, Value, true)
 };
 
 VECTOR_IMPL(Expression, Value, true) 
+	static const bool CheckNA = false;
 	static bool isNA(Value c) { return false; }
 	static bool isNaN(Value c) { return false; }
 	static bool isFinite(Value c) { return false; }
@@ -336,7 +358,7 @@ public:
 		: _code(code), _env(env) {}
 	
 	explicit Function(Value const& v) : _code((Code*)v.p), _env((Environment*)v.env) {
-		assert(v.type.isFunction() || v.type.isPromise());
+		assert(v.isFunction() || v.isPromise());
 	}
 
 	operator Value() const {
@@ -361,7 +383,7 @@ public:
 	BuiltInFunctionPtr func;
 	explicit BuiltIn(BuiltInFunctionPtr func) : func(func) {}
 	explicit BuiltIn(Value const& v) {
-		assert(v.type.isBuiltIn());
+		assert(v.isBuiltIn());
 		func = (BuiltInFunctionPtr)v.p; 
 	}
 	operator Value() const {
@@ -572,7 +594,7 @@ public:
 
 	int numVariables() const { return slotCount + overflow.size(); }
 
-	Value get(Symbol const& name) const { 
+	Value const& get(Symbol const& name) const { 
 		for(uint64_t i = 0; i < slotCount; i++) {
 			if(slotNames[i] == name) {
 				return slots[i];
@@ -582,7 +604,16 @@ public:
 		if(i != overflow.end()) {
 			return i->second;
 		} else {
-			return Nil;
+			return Value::Nil();
+		}
+	}
+
+	Value const& hget(Symbol const& name) const { 
+		Map::const_iterator i = overflow.find(name);
+		if(i != overflow.end()) {
+			return i->second;
+		} else {
+			return Value::Nil();
 		}
 	}
 
@@ -613,6 +644,10 @@ public:
 		return Function(value);
 	}
 
+	void hassign(Symbol const& name, Value const& value) {
+		overflow[name] = value;
+	}
+
 	void assign(Symbol const& name, Value const& value) {
 		for(uint64_t i = 0; i < slotCount; i++) {
 			if(slotNames[i] == name) {
@@ -626,7 +661,7 @@ public:
 	void rm(Symbol const& name) {
 		for(uint64_t i = 0; i < slotCount; i++) {
 			if(slotNames[i] == name) {
-				slots[i] = Nil;
+				slots[i] = Value::Nil();
 				return;
 			}
 		}

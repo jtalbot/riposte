@@ -78,15 +78,15 @@ struct Parser {
 	// To provide user with function source have to track beginning locations
 	// Parser pops when function rule is reduced
 	std::stack<const char*> source;
-	Character popSource() {
+	Symbol popSource() {
 		assert(source.size() > 0);
 		std::string s(source.top(), le-source.top());
-		Character result = Character::c(state.StrToSym(rtrim(s)));
+		Symbol result = state.StrToSym(rtrim(s));
 		source.pop();
 		return result;
 	}
 
-	void token( int tok, Value v=Nil );
+	void token( int tok, Value v=Value::Nil() );
 
 	Parser(State& state); 
 	int execute( const char* data, int len, bool isEof, Value& result, FILE* trace=NULL );

@@ -39,21 +39,71 @@ struct NAFold : public Op {
 
 template< class Op >
 struct Zip1 {
-	static typename Op::RV eval(State& state, typename Op::AV const& a)
+	static void eval(State& state, typename Op::AV const& a, Value& out)
 	{
-		typename Op::RV r = typename Op::RV(a.length);
-		for(int64_t i = 0; i < a.length; ++i) {
-			r[i] = Op::eval(state, a[i]);
+		if(a.isScalar()) {
+			Op::RV::InitScalar(out, Op::eval(state, a.s()));
 		}
-		return r;
+		else {
+			typename Op::RV r(a.length);
+			typename Op::R* re = r.v();
+			typename Op::A const* ae = a.v();
+			int64_t length = a.length;
+			for(int64_t i = 0; i < length; ++i) {
+				re[i] = Op::eval(state, ae[i]);
+			}
+			out = (Value&)r;
+		}
 	}
 };
 
 template< class Op >
 struct Zip2 {
-	static typename Op::RV eval(State& state, typename Op::AV const& a, typename Op::BV const& b)
+	static void eval(State& state, typename Op::AV const& a, typename Op::BV const& b, Value& out)
 	{
-		if(a.length == 1 && b.length == 1) {
+		if(a.isScalar() && b.isScalar()) {
+			Op::RV::InitScalar(out, Op::eval(state, a.s(), b.s()));
+		}
+		else if(b.isScalar()) {
+			typename Op::RV r(a.length);
+			typename Op::R* re = r.v();
+			typename Op::A const* ae = a.v();
+			typename Op::B be = b.s();
+			int64_t length = a.length;
+			for(int64_t i = 0; i < length; ++i) {
+				re[i] = Op::eval(state, ae[i], be);
+			}
+			out = (Value&)r;
+		}
+		else if(a.isScalar()) {
+			typename Op::RV r(b.length);
+			typename Op::R* re = r.v();
+			typename Op::A ae = a.s();
+			typename Op::B const* be = b.v();
+			int64_t length = b.length;
+			for(int64_t i = 0; i < length; ++i) {
+				re[i] = Op::eval(state, ae, be[i]);
+			}
+			out = (Value&)r;
+		}
+		else if(a.length == b.length) {
+			typename Op::RV r(a.length);
+			typename Op::R* re = r.v();
+			typename Op::A const* ae = a.v();
+			typename Op::B const* be = b.v();
+			int64_t length = a.length;
+			for(int64_t i = 0; i < length; ++i) {
+				re[i] = Op::eval(state, ae[i], be[i]);
+			}
+			out = (Value&)r;
+		}
+		else if(a.length == 0 || b.length == 0) {
+			Op::RV::Init(out, 0);
+		}
+		else {
+			throw RiposteError("NYI: ops between vectors of different lengths");
+		}
+		/*if(a.length == 1 && b.length == 1) {
 			typename Op::RV r(1);
 			r[0] = Op::eval(state, a[0], b[0]);
 			return r;
@@ -101,54 +151,62 @@ struct Zip2 {
 				if(j >= a.length) j = 0;
 			}
 			return r;
-		}
+		}*/
 	}
 };
 
 template< class Op >
 struct Zip2N {
-	static typename Op::RV eval(State& state, int64_t N, typename Op::AV const& a, typename Op::BV const& b)
+	static void eval(State& state, int64_t N, typename Op::AV const& a, typename Op::BV const& b, Value& out)
 	{
+		typename Op::A const* ae = a.v();
+		typename Op::B const* be = b.v();
 		typename Op::RV r(N);
+		typename Op::R* re = r.v();
 		int64_t j = 0, k = 0;
 		for(int64_t i = 0; i < N; i++) {
-			r[i] = Op::eval(state, a[j++], b[k++]);
+			re[i] = Op::eval(state, ae[j++], be[k++]);
 			if(j >= a.length) j = 0;
 			if(k >= b.length) k = 0;
 		}
-		return r;
+		out = (Value&)r;
 	}
 };
 
 template< class Op >
 struct FoldLeft {
-	static typename Op::RV eval(State& state, typename Op::AV const& a)
+	static void eval(State& state, typename Op::AV const& a, Value& out)
 	{
+		typename Op::A const* ae = a.v();
 		typename Op::R b = Op::Base;
-		for(int64_t i = 0; i < a.length; ++i) {
-			b = Op::eval(state, b, a[i]);
+		int64_t length = a.length;
+		for(int64_t i = 0; i < length; ++i) {
+			b = Op::eval(state, b, ae[i]);
 		}
-		return Op::RV::c(b);
+		Op::RV::InitScalar(out, b);
 	}
 };
 
 template< class Op >
 struct ScanLeft {
-	static typename Op::RV eval(State& state, typename Op::AV const& a)
+	static void eval(State& state, typename Op::AV const& a, Value& out)
 	{
+		typename Op::A const* ae = a.v();
 		typename Op::R b = Op::Base;
-		typename Op::RV result(a.length);
-		for(int64_t i = 0; i < a.length; ++i) {
-			result[i] = b = Op::eval(state, b, a[i]);
+		typename Op::RV r(a.length);
+		typename Op::R* re = r.v();
+		int64_t length = a.length;
+		for(int64_t i = 0; i < length; ++i) {
+			re[i] = b = Op::eval(state, b, ae[i]);
 		}
-		return result;
+		out = (Value&)r;
 	}
 };
 
 template<class T>
 T Clone(T const& in) {
 	T out(in.length);
-	memcpy(out.data(), in.data(), in.length*in.width);
+	memcpy(out.v(), in.v(), in.length*in.width);
 	out.attributes = in.attributes;
 	return out;	
 }

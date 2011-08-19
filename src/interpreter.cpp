@@ -17,7 +17,9 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 
 Instruction const* kget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 Instruction const* sget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+Instruction const* get_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 Instruction const* forend_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+Instruction const* add_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 
 
 inline void forcePromise(State& state, Value& v) { 
@@ -123,7 +125,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 
 	// Set to nil slots beyond the parameters
 	for(int64_t i = parameters.length; i < fenv->SlotCount(); i++) {
-		sassign(fenv, i, Nil);
+		sassign(fenv, i, Value::Nil());
 	}
 
 	// call arguments are not named, do posititional matching
@@ -301,7 +303,6 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 
 	if(f.isFunction()) {
 		Function func(f);
-		assert(func.body().isClosure());
 		Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, func.code()->slotSymbols);
 		MatchArgs(state, state.frame.environment, fenv, func, arguments);
 		assign(fenv, Symbol::dotGeneric, generic);
@@ -336,8 +337,24 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 	REG(state, inst.c) = environment->get(Symbol(inst.a));
 	return get_flat(state, Symbol(inst.a), REG(state, inst.c), environment, inst);
 	*/
-	REG(state, inst.c) = get(state, Symbol(inst.a));
-	if(REG(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(Symbol(inst.a)) + "' not found");
+	//REG(state, inst.c) = hget(state, Symbol(inst.a));
+
+	Value& dest = REG(state, inst.c);
+	Environment* environment = state.frame.environment;
+	Symbol s(inst.a);
+	dest = environment->hget(s);
+	if(!dest.isConcrete()) {
+		while(dest.isNil() && environment->StaticParent() != 0) {
+			environment = environment->StaticParent();
+			dest = environment->get(s);
+		}
+		if(dest.isPromise()) {
+			forcePromise(state, dest);
+			environment->assign(s, dest);
+		}
+		else if(dest.isNil()) 
+			throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
+	}
 	return &inst+1;
 }
 
@@ -348,15 +365,20 @@ Instruction const* sget_op(State& state, Instruction const& inst)
 	return get_flat(state, environment->slotName(inst.a), REG(state, inst.c), environment, inst);
 	*/
 	Value& dest = REG(state, inst.c);
-	dest = state.frame.environment->get(inst.a);
+	Environment* environment = state.frame.environment;
+	dest = environment->get(inst.a);
 	if(!dest.isConcrete()) {
-		if(dest.isNil()) {
-			dest = get(state, state.frame.environment->slotName(inst.a));
-			if(dest.isNil())
-				_error(std::string("object '") + state.SymToStr(state.frame.environment->slotName(inst.a)) + "' not found");
+		Symbol s(state.frame.environment->slotName(inst.a));
+		while(dest.isNil() && environment->StaticParent() != 0) {
+			environment = environment->StaticParent();
+			dest = environment->get(s);
 		}
-		if(dest.isPromise()) 
+		if(dest.isPromise()) {
 			forcePromise(state, dest);
+			environment->assign(s, dest);
+		}
+		else if(dest.isNil()) 
+			throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
 	}
 	return &inst+1;
 }
@@ -371,7 +393,7 @@ Instruction const* iget_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* assign_op(State& state, Instruction const& inst) {
-	assign(state, Symbol(inst.a), REG(state, inst.c));
+	state.frame.environment->hassign(Symbol(inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* sassign_op(State& state, Instruction const& inst) {
@@ -405,14 +427,14 @@ Instruction const* forbegin_op(State& state, Instruction const& inst) {
 	REG(state, inst.c) = Integer::c(1);
 	Value v;
 	Element(REG(state, inst.c-1), 0, v);
-	assign(state, Symbol(inst.b), v);
+	state.frame.environment->hassign(Symbol(inst.b), v);
 	return &inst+1;
 }
 Instruction const* forend_op(State& state, Instruction const& inst) {
 	if((REG(state,inst.c).i) < REG(state,inst.c-1).length) {
 		Value v;
 		Element(REG(state, inst.c-1), REG(state, inst.c).i, v);
-		assign(state, Symbol(inst.b), v);
+		state.frame.environment->hassign(Symbol(inst.b), v);
 		REG(state, inst.c).i++;
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;
@@ -424,13 +446,13 @@ Instruction const* iforbegin_op(State& state, Instruction const& inst) {
 	REG(state, inst.c-1).length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
 	REG(state, inst.c) = Integer::c((int64_t)m);
 	if(REG(state, inst.c).i >= (int64_t)REG(state, inst.c-1).length) { return &inst+inst.a; }
-	assign(state, Symbol(inst.b), Integer::c(m));
+	state.frame.environment->hassign(Symbol(inst.b), Integer::c(m));
 	REG(state, inst.c).i += REG(state, inst.c-1).i;
 	return &inst+1;
 }
 Instruction const* iforend_op(State& state, Instruction const& inst) {
 	if(REG(state, inst.c).i < REG(state, inst.c-1).length) { 
-		assign(state, Symbol(inst.b), REG(state, inst.c));
+		state.frame.environment->hassign(Symbol(inst.b), REG(state, inst.c));
 		REG(state, inst.c).i += REG(state, inst.c-1).i;
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;

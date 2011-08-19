@@ -43,6 +43,7 @@ fail <- 0
 	cat("Testing basic math ops\n-----------------------\n")
 	PassIfTrue(0 + 0 == 0)
 	PassIfTrue(0 + 1 == 1)
+	PassIfTrue(1 + 1 == 2)
 	PassIfTrue(+1 == 1)
 	PassIfTrue(0 - 5 == -5)
 	PassIfTrue(-5 == -5)

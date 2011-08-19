@@ -16,25 +16,30 @@ struct CastOp : public UnaryOp<I, O> {
 	static typename CastOp::R eval(State& state, typename CastOp::A const& i) { return Cast<typename CastOp::AV, typename CastOp::RV>(state, i); }
 };
 
-
 template<class O>
-O As(State& state, Value const& src) {
-	if(src.type == O::type)
-		return O(src);
+void As(State& state, Value const& src, O& out) {
+	if(src.type == O::VectorType)
+		out = (O const&)src;
 	switch(src.type) {
-		case Type::Null: return O(0); break;
-		#define CASE(Name,...) case Type::Name: return Zip1< CastOp<Name, O> >::eval(state, Name(src)); break;
+		case Type::Null: O(0); break;
+		#define CASE(Name,...) case Type::Name: Zip1< CastOp<Name, O> >::eval(state, (Name const&)src, out); break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
-		default: _error(std::string("Invalid cast from ") + Type::toString(src.type) + " to " + Type::toString(O::type)); break;
+		default: _error(std::string("Invalid cast from ") + Type::toString(src.type) + " to " + Type::toString(O::VectorType)); break;
 	};
 }
 
 template<>
-inline Null As<Null>(State& state, Value const& src) {
-       return Null::Singleton();
+inline void As<Null>(State& state, Value const& src, Null& out) {
+       out = Null::Singleton();
 }
 
+template<class O>
+O As(State& state, Value const& src) {
+	O out;
+	As<O>(state, src, out);
+	return O(out);
+}
 
 inline Value As(State& state, Type::Enum type, Value const& src) {
 	if(src.type == type)

@@ -20,6 +20,11 @@ SRC := main.cpp type.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cp
 
 EXECUTABLE := bin/riposte
 
+OBJECTS := $(patsubst %.cpp,bin/%.o,$(SRC))
+DEPENDENCIES := $(patsubst %.cpp,bin/%.d,$(SRC))
+
+ASM := $(patsubst %.cpp,bin/%.s,$(SRC))
+
 default: debug
 
 debug: CXXFLAGS += -DDEBUG -O0 -g
@@ -28,14 +33,17 @@ debug: $(EXECUTABLE)
 release: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize 
 release: $(EXECUTABLE)
 
-OBJECTS := $(patsubst %.cpp,bin/%.o,$(SRC))
-DEPENDENCIES := $(patsubst %.cpp,bin/%.d,$(SRC))
+asm: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize 
+asm: $(ASM)
 
 $(EXECUTABLE): $(OBJECTS)
 	$(CXX) $(LFLAGS) -o $@ $^ $(LIBS)
 
 bin/%.o: src/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@ 
+
+bin/%.s: src/%.cpp
+	$(CXX) $(CXXFLAGS) -S -c $< -o $@ 
 
 clean:
 	rm -rf $(EXECUTABLE) $(OBJECTS) $(DEPENDENCIES)

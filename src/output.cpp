@@ -61,7 +61,7 @@ std::string stringifyVector(State const& state, T const& v) {
 	std::string result = "";
 	int64_t length = v.length;
 	if(length == 0)
-		return std::string(Type::toString(v.type)) + "(0)";
+		return std::string(Type::toString(v.VectorType)) + "(0)";
 
 	bool dots = false;
 	if(length > 100) { dots = true; length = 100; }
@@ -313,7 +313,7 @@ std::string deparseVectorBody(State const& state, T const& v) {
 
 template<class T>
 std::string deparseVector(State const& state, T const& v) {
-	if(v.length == 0) return std::string(Type::toString(v.type)) + "(0)";
+	if(v.length == 0) return std::string(Type::toString(v.VectorType)) + "(0)";
 	if(v.length == 1) return deparseVectorBody(state, v);
 	else return "c(" + deparseVectorBody(state, v) + ")";
 }
