@@ -89,11 +89,11 @@ struct LNotOp : UnaryOp<Logical, Logical> {
 };
 
 struct NcharOp : UnaryOp<Character, Integer> {
-	static NcharOp::R eval(State& state, NcharOp::A const& a) { return (a == Symbol::NA) ? 2 : state.SymToStr(a).length(); }
+	static NcharOp::R eval(State& state, NcharOp::A const& a) { return (a == Symbols::NA) ? 2 : state.SymToStr(a).length(); }
 };
 
 struct NzcharOp : UnaryOp<Character, Logical> {
-	static NzcharOp::R eval(State& state, NzcharOp::A const& a) { return a != Symbol::empty; }
+	static NzcharOp::R eval(State& state, NzcharOp::A const& a) { return a != Symbols::empty; }
 };
 
 #undef UNARY_OP 

@@ -36,15 +36,15 @@
 	'NA_real_'	{token( TOKEN_NUM_CONST, Double::NA() );};
 	'NA_character_'	{token( TOKEN_STR_CONST, Character::NA() );};
 	'NA_complex_'	{token( TOKEN_NUM_CONST, Complex::NA() );};
-	'function'	{token( TOKEN_FUNCTION, Symbol::function );};
-	'while'	{token( TOKEN_WHILE, Symbol::whileSym );};
-	'repeat'	{token( TOKEN_REPEAT, Symbol::repeatSym );};
-	'for'	{token( TOKEN_FOR, Symbol::forSym );};
-	'if'	{token( TOKEN_IF, Symbol::ifSym );};
+	'function'	{token( TOKEN_FUNCTION, Symbols::function );};
+	'while'	{token( TOKEN_WHILE, Symbols::whileSym );};
+	'repeat'	{token( TOKEN_REPEAT, Symbols::repeatSym );};
+	'for'	{token( TOKEN_FOR, Symbols::forSym );};
+	'if'	{token( TOKEN_IF, Symbols::ifSym );};
 	'in'	{token( TOKEN_IN );};
 	'else'	{token( TOKEN_ELSE );};
-	'next'	{token( TOKEN_NEXT, Symbol::nextSym );};
-	'break'	{token( TOKEN_BREAK, Symbol::breakSym );};
+	'next'	{token( TOKEN_NEXT, Symbols::nextSym );};
+	'break'	{token( TOKEN_BREAK, Symbols::breakSym );};
 	
 	# Single and double-quoted string literals.
 	( "'" ( [^'\\\n] | /\\./ )* "'" ) 
@@ -77,42 +77,42 @@
 		{token( TOKEN_NUM_CONST );};
 
 	# Operators. 
-	'=' {token( TOKEN_EQ_ASSIGN, Symbol::eqassign );};
-	'+' {token( TOKEN_PLUS, Symbol::add );};
-	'-' {token( TOKEN_MINUS, Symbol::sub );};
-	'^' {token( TOKEN_POW, Symbol::pow );};
-	'/' {token( TOKEN_DIVIDE, Symbol::div );};
-	'*' {token( TOKEN_TIMES, Symbol::mul );};
-	'**' {token( TOKEN_POW, Symbol::pow );};
-	'~' {token( TOKEN_TILDE, Symbol::tilde );};
-	'$' {token( TOKEN_DOLLAR, Symbol::dollar );};
-	'@' {token( TOKEN_AT, Symbol::at );};
-	'!' {token( TOKEN_NOT, Symbol::lnot );};
-	':' {token( TOKEN_COLON, Symbol::colon );};
-	'::' {token( TOKEN_NS_GET, Symbol::nsget );};
-	':::' {token( TOKEN_NS_GET_INT, Symbol::nsgetint );};
-	'&' {token( TOKEN_AND, Symbol::land );};
-	'|' {token( TOKEN_OR, Symbol::lor );};
-	'{' {token( TOKEN_LBRACE, Symbol::brace );};
+	'=' {token( TOKEN_EQ_ASSIGN, Symbols::eqassign );};
+	'+' {token( TOKEN_PLUS, Symbols::add );};
+	'-' {token( TOKEN_MINUS, Symbols::sub );};
+	'^' {token( TOKEN_POW, Symbols::pow );};
+	'/' {token( TOKEN_DIVIDE, Symbols::div );};
+	'*' {token( TOKEN_TIMES, Symbols::mul );};
+	'**' {token( TOKEN_POW, Symbols::pow );};
+	'~' {token( TOKEN_TILDE, Symbols::tilde );};
+	'$' {token( TOKEN_DOLLAR, Symbols::dollar );};
+	'@' {token( TOKEN_AT, Symbols::at );};
+	'!' {token( TOKEN_NOT, Symbols::lnot );};
+	':' {token( TOKEN_COLON, Symbols::colon );};
+	'::' {token( TOKEN_NS_GET, Symbols::nsget );};
+	':::' {token( TOKEN_NS_GET_INT, Symbols::nsgetint );};
+	'&' {token( TOKEN_AND, Symbols::land );};
+	'|' {token( TOKEN_OR, Symbols::lor );};
+	'{' {token( TOKEN_LBRACE, Symbols::brace );};
 	'}' {token( TOKEN_RBRACE );};
-	'(' {token( TOKEN_LPAREN, Symbol::paren );};
+	'(' {token( TOKEN_LPAREN, Symbols::paren );};
 	')' {token( TOKEN_RPAREN );};
-	'[' {token( TOKEN_LBRACKET, Symbol::bracket );};
-	'[[' {token( TOKEN_LBB, Symbol::bb );};
+	'[' {token( TOKEN_LBRACKET, Symbols::bracket );};
+	'[[' {token( TOKEN_LBB, Symbols::bb );};
 	']' {token( TOKEN_RBRACKET );};
-	'<' {token( TOKEN_LT, Symbol::lt );};
-	'>' {token( TOKEN_GT, Symbol::gt );};
-	'<=' {token( TOKEN_LE, Symbol::le );};
-	'>=' {token( TOKEN_GE, Symbol::ge );};
-	'==' {token( TOKEN_EQ, Symbol::eq );};
-	'!=' {token( TOKEN_NE, Symbol::neq );};
-	'&&' {token( TOKEN_AND2, Symbol::sland );};
-	'||' {token( TOKEN_OR2, Symbol::slor );};
-	'<-' {token( TOKEN_LEFT_ASSIGN, Symbol::assign );};
-	'->' {token( TOKEN_RIGHT_ASSIGN, Symbol::assign );};
-	'->>' {token( TOKEN_RIGHT_ASSIGN, Symbol::assign2 );};
-	'<<-' {token( TOKEN_LEFT_ASSIGN, Symbol::assign2 );};
-	'?' {token( TOKEN_QUESTION, Symbol::question );};
+	'<' {token( TOKEN_LT, Symbols::lt );};
+	'>' {token( TOKEN_GT, Symbols::gt );};
+	'<=' {token( TOKEN_LE, Symbols::le );};
+	'>=' {token( TOKEN_GE, Symbols::ge );};
+	'==' {token( TOKEN_EQ, Symbols::eq );};
+	'!=' {token( TOKEN_NE, Symbols::neq );};
+	'&&' {token( TOKEN_AND2, Symbols::sland );};
+	'||' {token( TOKEN_OR2, Symbols::slor );};
+	'<-' {token( TOKEN_LEFT_ASSIGN, Symbols::assign );};
+	'->' {token( TOKEN_RIGHT_ASSIGN, Symbols::assign );};
+	'->>' {token( TOKEN_RIGHT_ASSIGN, Symbols::assign2 );};
+	'<<-' {token( TOKEN_LEFT_ASSIGN, Symbols::assign2 );};
+	'?' {token( TOKEN_QUESTION, Symbols::question );};
 	
 	# Special Operators.
 	('%' [^\n%]* '%') {token(TOKEN_SPECIALOP, Symbol(state.StrToSym(std::string(ts, te-ts))) ); };

@@ -190,6 +190,7 @@ inline void Element(Value const& v, int64_t index, Value& out) {
 	};
 }
 
+void Element2(Value const& v, int64_t index, Value& out) __attribute__((always_inline));
 inline void Element2(Value const& v, int64_t index, Value& out) {
 	switch(v.type) {
 		#define CASE(Name) case Type::Name: Name::InitScalar(out, ((Name const&)v)[index]); break;
@@ -222,18 +223,24 @@ inline Double Sequence(double from, double by, double len) {
 
 inline Character klass(State& state, Value const& v)
 {
-	if(!hasClass(v)) {
-		Character c(1);
-		if(v.isInteger() || v.isDouble())
-			c[0] = Symbol::Numeric;
-		else if(v.isSymbol())
-			c[0] = Symbol::Name;
-		else c[0] = state.StrToSym(Type::toString(v.type));
-		return c;
+	Type::Enum type;
+	if(v.isObject()) {
+		if(((Object const&)v).hasClass())
+			return Character(((Object const&)v).getClass());
+		else
+			type = ((Object const&)v).base().type;
 	}
 	else {
-		return Character(getClass(v));
+		type = v.type;
 	}
+			
+	Character c(1);
+	if(type == Type::Integer || type == Type::Double)
+		c[0] = Symbols::Numeric;
+	else if(type == Type::Symbol)
+		c[0] = Symbols::Name;
+	else c[0] = state.StrToSym(Type::toString(type));
+	return c;
 }
 
 

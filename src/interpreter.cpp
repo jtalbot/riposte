@@ -27,7 +27,7 @@ inline void forcePromise(State& state, Value& v) {
 		Environment* env = Function(v).environment();
 		v = eval(state, Function(v).code(), 
 			env != 0 ? env : state.frame.environment); 
-	} 
+	}
 }
 
 // Get a Value by Symbol from the current environment
@@ -80,36 +80,41 @@ static Value const& constant(State& state, int64_t i) {
 	return state.frame.code->constants[i];
 }
 
-static List BuildArgs(State& state, CompiledCall const& call) {
+static void ExpandDots(State& state, List& arguments, Character& names, int64_t dots) {
 	// Expand dots into the parameter list...
 	// If it's in the dots it must already be a promise, thus no need to make a promise again.
 	// Need to do the same for the names...
-	List arguments = call.arguments;
-	Value v = get(state, Symbol::dots);
-	if(!v.isNil()) {
-		List dots(v);
-		List expanded(arguments.length + dots.length - 1 /* -1 for dots that will be replaced */);
-		Insert(state, arguments, 0, expanded, 0, call.dots);
-		Insert(state, dots, 0, expanded, call.dots, dots.length);
-		Insert(state, arguments, call.dots, expanded, call.dots+dots.length, arguments.length-call.dots-1);
-		arguments = expanded;
-		if(hasNames(arguments) || hasNames(dots)) {
-			Character names(expanded.length);
-			for(int64_t i = 0; i < names.length; i++) names[i] = Symbol::empty;
-			if(hasNames(arguments)) {
-				Character anames = Character(getNames(arguments));
-				Insert(state, anames, 0, names, 0, call.dots);
-				Insert(state, anames, call.dots, names, call.dots+dots.length, arguments.length-call.dots-1);
-			}
-			if(hasNames(dots)) {
-				Character dnames = Character(getNames(dots));
-				Insert(state, dnames, 0, names, call.dots, dots.length);
-			}
-			setNames(arguments, names);
+	if(dots < arguments.length) {
+
+		Value vararg = get(state, Symbols::dots);
+		Character vnames(0);
+		if(vararg.isObject()) {
+			vnames = Character(((Object const&)vararg).getNames());
+			vararg = ((Object const&)vararg).base();
 		}
-	
+
+		if(!vararg.isNil()) {
+			List expanded(arguments.length + vararg.length - 1 /* -1 for dots that will be replaced */);
+			Insert(state, arguments, 0, expanded, 0, dots);
+			Insert(state, vararg, 0, expanded, dots, vararg.length);
+			Insert(state, arguments, dots, expanded, dots+vararg.length, arguments.length-dots-1);
+			arguments = expanded;
+			if(names.length > 0 || vnames.length > 0) {
+				Character enames(expanded.length);
+				for(int64_t i = 0; i < names.length; i++) enames[i] = Symbols::empty;
+
+				if(names.length > 0) {
+					Insert(state, names, 0, enames, 0, dots);
+					Insert(state, names, dots, enames, dots+vararg.length, arguments.length-dots-1);
+				}
+				if(vnames.length > 0) {
+					Insert(state, vnames, 0, names, dots, vararg.length);
+				}
+				names = enames;
+			}
+
+		}
 	}
-	return arguments;
 }
 
 inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* execution) {
@@ -119,9 +124,9 @@ inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* 
 		slot.env = execution;
 }
 
-static void MatchArgs(State& state, Environment* env, Environment* fenv, Function const& func, List const& arguments) {
+static void MatchArgs(State& state, Environment* env, Environment* fenv, Function const& func, List const& arguments, Character const& anames) {
 	List parameters = func.parameters();
-	Character pnames = Character(getNames(parameters));
+	Character pnames = func.names();
 
 	// Set to nil slots beyond the parameters
 	for(int64_t i = parameters.length; i < fenv->SlotCount(); i++) {
@@ -129,7 +134,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 	}
 
 	// call arguments are not named, do posititional matching
-	if(!hasNames(arguments)) {
+	if(anames.length == 0) {
 		int64_t end = std::min(arguments.length, func.dots());
 		for(int64_t i = 0; i < end; ++i) {
 			argAssign(fenv, i, arguments[i], env);
@@ -158,12 +163,11 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 		for(int64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
 		for(int64_t i = 0; i < parameters.length; i++) set[i] = -(i+1);
 		
-		Character anames = Character(getNames(arguments));
 		// named args, search for complete matches
 		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] != Symbol::empty) {
+			if(anames[i] != Symbols::empty) {
 				for(int64_t j = 0; j < parameters.length; ++j) {
-					if(pnames[j] != Symbol::dots && anames[i] == pnames[j]) {
+					if(pnames[j] != Symbols::dots && anames[i] == pnames[j]) {
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -173,10 +177,10 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 		}
 		// named args, search for incomplete matches
 		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] != Symbol::empty && assignment[i] < 0) {
+			if(anames[i] != Symbols::empty && assignment[i] < 0) {
 				std::string a = state.SymToStr(anames[i]);
 				for(int64_t j = 0; j < parameters.length; ++j) {
-					if(set[j] < 0 && pnames[j] != Symbol::dots &&
+					if(set[j] < 0 && pnames[j] != Symbols::dots &&
 						state.SymToStr(pnames[j]).compare( 0, a.size(), a ) == 0 ) {	
 						assignment[i] = j;
 						set[j] = i;
@@ -188,7 +192,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 		// unnamed args, fill into first missing spot.
 		int64_t firstEmpty = 0;
 		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] == Symbol::empty) {
+			if(anames[i] == Symbols::empty) {
 				for(; firstEmpty < func.dots(); ++firstEmpty) {
 					if(set[firstEmpty] < 0) {
 						assignment[i] = firstEmpty;
@@ -227,8 +231,9 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 					idx++;
 				}
 			}
-			setNames(values, names);
-			sassign(fenv, func.dots(), values);
+			Value v;
+			Object::InitWithNames(v, values, names);
+			sassign(fenv, func.dots(), v);
 		}
 	}
 }
@@ -266,15 +271,17 @@ static Instruction const * profile_back_edge(State & state, Instruction const * 
 Instruction const* call_op(State& state, Instruction const& inst) {
 	Value f = REG(state, inst.a);
 	CompiledCall const& call = state.frame.code->calls[inst.b];
-	List arguments = call.dots < call.arguments.length ? BuildArgs(state, call) : call.arguments;
+	List arguments = call.arguments;
+	Character names = call.names;
+	ExpandDots(state, arguments, names, call.dots);
 
 	if(f.isFunction()) {
 		Function func(f);
 		Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, func.code()->slotSymbols);
-		MatchArgs(state, state.frame.environment, fenv, func, arguments);
+		MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
 		return buildStackFrame(state, fenv, true, func.code(), &REG(state, inst.c), &inst+1);
 	} else if(f.isBuiltIn()) {
-		REG(state, inst.c) = BuiltIn(f).func(state, arguments);
+		REG(state, inst.c) = BuiltIn(f).func(state, arguments, names);
 		return &inst+1;
 	} else {
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
@@ -286,7 +293,9 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 	Symbol generic = v.isCharacter() ? Character(v)[0] : Symbol(v);
 	
 	CompiledCall const& call = state.frame.code->calls[inst.b];
-	List arguments = call.dots < call.arguments.length ? BuildArgs(state, call) : call.arguments;
+	List arguments = call.arguments;
+	Character names = call.names;
+	ExpandDots(state, arguments, names, call.dots);
 	
 	Value object = REG(state, inst.c);
 	Character type = klass(state, object);
@@ -304,13 +313,13 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 	if(f.isFunction()) {
 		Function func(f);
 		Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, func.code()->slotSymbols);
-		MatchArgs(state, state.frame.environment, fenv, func, arguments);
-		assign(fenv, Symbol::dotGeneric, generic);
-		assign(fenv, Symbol::dotMethod, method);
-		assign(fenv, Symbol::dotClass, type); 
+		MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
+		assign(fenv, Symbols::dotGeneric, generic);
+		assign(fenv, Symbols::dotMethod, method);
+		assign(fenv, Symbols::dotClass, type); 
 		return buildStackFrame(state, fenv, true, func.code(), &REG(state, inst.c), &inst+1);
 	} else if(f.isBuiltIn()) {
-		REG(state, inst.c) = BuiltIn(f).func(state, arguments);
+		REG(state, inst.c) = BuiltIn(f).func(state, arguments, names);
 		return &inst+1;
 	} else {
 		_error(std::string("no applicable method for '") + state.SymToStr(generic) + "' applied to an object of class \"" + state.SymToStr(type[0]) + "\"");
@@ -422,20 +431,16 @@ Instruction const* eassign_op(State& state, Instruction const& inst) {
 	}
 }
 Instruction const* forbegin_op(State& state, Instruction const& inst) {
-	// inst.c-1 holds the loopVector
-	if((int64_t)REG(state, inst.c-1).length <= 0) { return &inst+inst.a; }
-	REG(state, inst.c) = Integer::c(1);
-	Value v;
-	Element(REG(state, inst.c-1), 0, v);
-	state.frame.environment->hassign(Symbol(inst.b), v);
+	// inst.b-1 holds the loopVector
+	if((int64_t)REG(state, inst.b-1).length <= 0) { return &inst+inst.a; }
+	Integer::InitScalar(REG(state, inst.b), 1);
+	Element2(REG(state, inst.b-1), 0, REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* forend_op(State& state, Instruction const& inst) {
-	if((REG(state,inst.c).i) < REG(state,inst.c-1).length) {
-		Value v;
-		Element(REG(state, inst.c-1), REG(state, inst.c).i, v);
-		state.frame.environment->hassign(Symbol(inst.b), v);
-		REG(state, inst.c).i++;
+	if((REG(state,inst.b).i) < REG(state,inst.b-1).length) {
+		Element2(REG(state, inst.b-1), REG(state, inst.b).i, REG(state, inst.c));
+		REG(state, inst.b).i++;
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;
 }
@@ -698,7 +703,7 @@ Instruction const* complex1_op(State& state, Instruction const& inst) {
 Instruction const* character1_op(State& state, Instruction const& inst) {
 	Integer i = As<Integer>(state, REG(state, inst.a));
 	Character r = Character(i[0]);
-	for(int64_t j = 0; j < r.length; j++) r[j] = Symbol::empty;
+	for(int64_t j = 0; j < r.length; j++) r[j] = Symbols::empty;
 	REG(state, inst.c) = r;
 	return &inst+1;
 }
@@ -714,6 +719,10 @@ Instruction const* type_op(State& state, Instruction const& inst) {
 	REG(state, inst.c) = c;
 	return &inst+1;
 }
+/*Instruction const* element2_op(State& state, Instruction const& inst) {
+	Element2(REG(state, inst.a), REG(state, inst.b).i, REG(state, inst.c));
+	return &inst+1;
+}*/
 Instruction const * invoketrace_op(State& state, Instruction const & inst) {
 	Trace * trace = state.frame.code->traces[inst.a];
 	int64_t offset;
@@ -754,6 +763,18 @@ Instruction const* done_op(State& state, Instruction const& inst) {
 	return 0;
 }
 
+
+static void printCode(State const& state, Code const* code) {
+	std::string r = "block:\nconstants: " + intToStr(code->constants.size()) + "\n";
+	for(int64_t i = 0; i < (int64_t)code->constants.size(); i++)
+		r = r + intToStr(i) + "=\t" + state.stringify(code->constants[i]) + "\n";
+
+	r = r + "code: " + intToStr(code->bc.size()) + "\n";
+	for(int64_t i = 0; i < (int64_t)code->bc.size(); i++)
+		r = r + intToStr(i) + ":\t" + code->bc[i].toString() + "\n";
+
+	std::cout << r << std::endl;
+}
 #define THREADED_INTERPRETER
 
 #ifdef THREADED_INTERPRETER
@@ -761,7 +782,7 @@ static const void** glabels = 0;
 #endif
 
 static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Code const* code, Value* result, Instruction const* returnpc) {
-	//std::cout << "Compiled code: " << state.stringify(Closure((Code*)code,NULL)) << std::endl;
+	//printCode(state, code);
 	StackFrame& s = state.push();
 	s.environment = environment;
 	s.ownEnvironment = ownEnvironment;
@@ -835,7 +856,6 @@ Value eval(State& state, Code const* code) {
 }
 
 Value eval(State& state, Code const* code, Environment* environment) {
-	//std::cout << "Executing: " << state.stringify(Closure((Code*)code,NULL)) << std::endl;
 	Value result;
 #ifdef THREADED_INTERPRETER
 	static const Instruction* done = new Instruction(glabels[0]);

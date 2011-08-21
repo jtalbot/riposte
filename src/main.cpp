@@ -96,6 +96,18 @@ Value parsetty(State& state) {
 	return ppr;
 }
 
+static void printCode(State const& state, Code const* code) {
+	std::string r = "block:\nconstants: " + intToStr(code->constants.size()) + "\n";
+	for(int64_t i = 0; i < (int64_t)code->constants.size(); i++)
+		r = r + intToStr(i) + "=\t" + state.stringify(code->constants[i]) + "\n";
+
+	r = r + "code: " + intToStr(code->bc.size()) + "\n";
+	for(int64_t i = 0; i < (int64_t)code->bc.size(); i++)
+		r = r + intToStr(i) + ":\t" + code->bc[i].toString() + "\n";
+
+	std::cout << r << std::endl;
+}
+
 int dostdin(State& state) {
 	int rc = 0;
 
@@ -151,24 +163,20 @@ static int dofile(const char * file, State& state, bool echo) {
 	Parser parser(state);
 	Value value;
 	parser.execute(code.c_str(), code.length(), true, value);	
-	
+
 	if(value.isNil()) return -1;
-	
-	Expression expressions(value);
-	for(int64_t i = 0; i < expressions.length; i++) {
-		try {
-			Code* code = Compiler::compile(state, expressions[i], state.global);
-			//std::cout << "Compiled code: " << state.stringify(Closure(code,NULL)) << std::endl;
-			Value result = eval(state, code, state.global);
-			if(echo)
-				std::cout << state.stringify(result) << std::endl;
-		} catch(RiposteError& error) {
-			e_message("Error", "riposte", error.what().c_str());
-		} catch(RuntimeError& error) {
-			e_message("Error", "runtime", error.what().c_str());
-		} catch(CompileError& error) {
-			e_message("Error", "compiler", error.what().c_str());
-		}
+
+	try {
+		Code* code = Compiler::compile(state, value, state.global);
+		Value result = eval(state, code, state.global);
+		if(echo)
+			std::cout << state.stringify(result) << std::endl;
+	} catch(RiposteError& error) {
+		e_message("Error", "riposte", error.what().c_str());
+	} catch(RuntimeError& error) {
+		e_message("Error", "runtime", error.what().c_str());
+	} catch(CompileError& error) {
+		e_message("Error", "compiler", error.what().c_str());
 	}
 
 	return rc;

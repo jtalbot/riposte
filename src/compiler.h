@@ -51,12 +51,11 @@ private:
 
 	int64_t compileConstant(Value const& expr, Code* code);
 	int64_t compileSymbol(Symbol const& symbol, Code* code); 
-	int64_t compileOp(Call const& call, Code* code); 
-	int64_t compileCall(Call const& call, Code* code); 
-	int64_t compileFunctionCall(Call const& call, Code* code); 
-	int64_t compileExpression(Expression const& values, Code* code);
+	int64_t compileCall(List const& call, Character const& names, Code* code); 
+	int64_t compileFunctionCall(List const& call, Character const& names, Code* code); 
+	int64_t compileExpression(List const& values, Code* code);
 	
-	CompiledCall makeCall(Call const& call);
+	CompiledCall makeCall(List const& call, Character const& names);
 
 	void emit(Code* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c);
 	int64_t getSlot(Symbol s);

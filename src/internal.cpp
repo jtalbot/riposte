@@ -16,7 +16,7 @@ static void checkNumArgs(List const& args, int64_t nargs) {
 	else if(args.length < nargs) _error("too few arguments");
 }
 
-Value cat(State& state, List const& args) {
+Value cat(State& state, List const& args, Character const& names) {
 	for(int64_t i = 0; i < args.length; i++) {
 		Character c = As<Character>(state, force(state, args[i]));
 		for(int64_t j = 0; j < c.length; j++) {
@@ -27,7 +27,7 @@ Value cat(State& state, List const& args) {
 	return Null::Singleton();
 }
 
-Value library(State& state, List const& args) {
+Value library(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 
 	Character from = As<Character>(state, force(state, args[0]));
@@ -37,7 +37,7 @@ Value library(State& state, List const& args) {
 	return Null::Singleton();
 }
 
-Value rm(State& state, List const& args) {
+Value rm(State& state, List const& args, Character const& names) {
 	for(int64_t i = 0; i < args.length; i++) 
 		if(!expression(args[i]).isSymbol() && !expression(args[i]).isCharacter()) 
 			_error("rm() arguments must be symbols or character vectors");
@@ -47,7 +47,7 @@ Value rm(State& state, List const& args) {
 	return Null::Singleton();
 }
 
-Value sequence(State& state, List const& args) {
+Value sequence(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 3);
 
 	Value from = force(state, args[0]);
@@ -61,7 +61,7 @@ Value sequence(State& state, List const& args) {
 	return Sequence(f, b, l);	
 }
 
-Value repeat(State& state, List const& args) {
+Value repeat(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 3);
 	Value from = force(state, args[0]);
 	assert(args.length == 3);
@@ -81,7 +81,7 @@ Value repeat(State& state, List const& args) {
 	return r;
 }
 
-Value inherits(State& state, List const& args) {
+Value inherits(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 3);
 	Value x = force(state, args[0]);
 	Character what = Character(force(state, args[1]));
@@ -97,21 +97,32 @@ Value inherits(State& state, List const& args) {
 	return Logical::c(inherits);
 }
 
-Value attr(State& state, List const& args)
+Value attr(State& state, List const& args, Character const& names)
 {
 	checkNumArgs(args, 3);
 	// NYI: exact
 	Value object = force(state, args[0]);
-	Character which = Character(force(state, args[1]));
-	return getAttribute(object, which[0]);
+	if(object.isObject()) {
+		Character which = Character(force(state, args[1]));
+		return ((Object const&)object).getAttribute(which[0]);
+	}
+	else {
+		return Value::Nil();
+	}
 }
 
-Value assignAttr(State& state, List const& args)
+Value assignAttr(State& state, List const& args, Character const& names)
 {
 	checkNumArgs(args, 3);
 	Value object = force(state, args[0]);
 	Character which = Character(force(state, args[1]));
-	return setAttribute(object, which[0], force(state, args[2]));
+	if(!object.isObject()) {
+		Value v;
+		Object::Init(v, object);
+		object = v;
+	}
+	((Object&)object).setAttribute(which[0], force(state, args[2]));
+	return object;
 }
 
 Type::Enum cTypeCast(Value const& v, Type::Enum t)
@@ -121,14 +132,13 @@ Type::Enum cTypeCast(Value const& v, Type::Enum t)
 	return r;
 }
 
-Value list(State& state, List const& args) {
+Value list(State& state, List const& args, Character const& names) {
 	List out(args.length);
 	for(int64_t i = 0; i < args.length; i++) out[i] = force(state, args[i]);
-	out.attributes = args.attributes;
 	return out;
 }
 
-Value unlist(State& state, List const& args) {
+Value unlist(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value v = force(state, args[0]);
 	if(!v.isList()) {
@@ -143,7 +153,7 @@ Value unlist(State& state, List const& args) {
 		type = cTypeCast(from[i], type);
 	}
 	Character outnames;
-	if(hasNames(from))
+	/*if(hasNames(from))
 	{
 		Character names = Character(getNames(from));
 		outnames = Character(total);
@@ -154,7 +164,7 @@ Value unlist(State& state, List const& args) {
 				outnames[j] = names[i];
 			}
 		}
-	}
+	}*/
 	int64_t j = 0;
 	switch(type) {
 		#define CASE(Name) \
@@ -164,7 +174,7 @@ Value unlist(State& state, List const& args) {
 					Insert(state, from[i], 0, out, j, from[i].length); \
 					j += from[i].length; \
 				} \
-				if(hasNames(from)) setNames(out, outnames); \
+				/*if(hasNames(from)) setNames(out, outnames);*/ \
 				return out; } break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
@@ -224,22 +234,22 @@ Value Subset(State& state, Value const& a, Value const& i)	{
 	return Null::Singleton();
 }
 
-Value subset(State& state, List const& args) {
+Value subset(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 2);
         Value a = force(state, args[0]);
         Value i = force(state, args[1]);
 	return Subset(state, a,i);
 }
 
-Value subset2(State& state, List const& args) {
+Value subset2(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 2);
 
         Value a = force(state, args[0]);
         Value b = force(state, args[1]);
 	Value result;
-	if(b.isCharacter() && hasNames(a)) {
+	if(b.isCharacter() && a.isObject() && ((Object const&)a).hasNames()) {
 		Symbol i = Character(b)[0];
-		Character c = Character(getNames(a));
+		Character c = Character(((Object const&)a).getNames());
 		
 		int64_t j = 0;
 		for(;j < c.length; j++) {
@@ -262,13 +272,13 @@ Value subset2(State& state, List const& args) {
 	return result;
 } 
 
-Value dollar(State& state, List const& args) {
+Value dollar(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 2);
 
         Value a = force(state, args[0]);
         int64_t i = Symbol(expression(args[1])).i;
-	if(hasNames(a)) {
-		Character c = Character(getNames(a));
+	if(a.isObject() && ((Object const&)a).hasNames()) {
+		Character c = Character(((Object const&)a).getNames());
 		int64_t j = 0;
 		for(;j < c.length; j++) {
 			if(c[j] == i)
@@ -283,7 +293,7 @@ Value dollar(State& state, List const& args) {
 	return Null::Singleton();
 } 
 
-Value length(State& state, List const& args) {
+Value length(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Integer i(1);
@@ -291,12 +301,12 @@ Value length(State& state, List const& args) {
 	return i;
 }
 
-Value quote(State& state, List const& args) {
+Value quote(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	return expression(args[0]);
 }
 
-Value eval_fn(State& state, List const& args) {
+Value eval_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 3);
 	Value expr = force(state, args[0]);
 	Value envir = force(state, args[1]);
@@ -304,12 +314,12 @@ Value eval_fn(State& state, List const& args) {
 	return eval(state, Compiler::compile(state, expr), REnvironment(envir).ptr());
 }
 
-Value lapply(State& state, List const& args) {
+Value lapply(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 2);
 	List x = As<List>(state, force(state, args[0]));
 	Value func = force(state, args[1]);
 
-	Call apply(2);
+	List apply(2);
 	apply[0] = func;
 
 	List result(x.length);
@@ -317,13 +327,13 @@ Value lapply(State& state, List const& args) {
 	// or should have a fast case for compilation
 	for(int64_t i = 0; i < x.length; i++) {
 		apply[1] = x[i];
-		result[i] = eval(state, Compiler::compile(state, apply));
+		result[i] = eval(state, Compiler::compile(state, CreateCall(apply)));
 	}
 
 	return result;
 }
 
-Value tlist(State& state, List const& args) {
+Value tlist(State& state, List const& args, Character const& names) {
 	int64_t length = args.length > 0 ? 1 : 0;
 	List a = Clone(args);
 	for(int64_t i = 0; i < a.length; i++) {
@@ -345,7 +355,7 @@ Value tlist(State& state, List const& args) {
 	return result;
 }
 
-Value source(State& state, List const& args) {
+Value source(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value file = force(state, args[0]);
 	std::ifstream t(state.SymToStr(Character(file)[0]).c_str());
@@ -360,7 +370,7 @@ Value source(State& state, List const& args) {
 	return eval(state, Compiler::compile(state, value));
 }
 
-Value switch_fn(State& state, List const& args) {
+Value switch_fn(State& state, List const& args, Character const& names) {
 	Value one = force(state, args[0]);
 	if(one.isInteger() && Integer(one).length == 1) {
 		int64_t i = Integer(one)[0];
@@ -368,8 +378,8 @@ Value switch_fn(State& state, List const& args) {
 	} else if(one.isDouble() && Double(one).length == 1) {
 		int64_t i = (int64_t)Double(one)[0];
 		if(i >= 1 && (int64_t)i <= args.length) {return force(state, args[i]);}
-	} else if(one.isCharacter() && Character(one).length == 1 && hasNames(args)) {
-		Character names = Character(getNames(args));
+	} else if(one.isCharacter() && Character(one).length == 1 && args.isObject() && ((Object const&)args).hasNames()) {
+		Character names = Character(((Object const&)args).getNames());
 		for(int64_t i = 1; i < args.length; i++) {
 			if(names[i] == Character(one)[0]) {
 				while(args[i].isNil() && i < args.length) i++;
@@ -377,7 +387,7 @@ Value switch_fn(State& state, List const& args) {
 			}
 		}
 		for(int64_t i = 1; i < args.length; i++) {
-			if(names[i] == Symbol::empty) {
+			if(names[i] == Symbols::empty) {
 				return force(state, args[i]);
 			}
 		}
@@ -385,7 +395,7 @@ Value switch_fn(State& state, List const& args) {
 	return Null::Singleton();
 }
 
-Value environment(State& state, List const& args) {
+Value environment(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value e = force(state, args[0]);
 	if(e.isNull()) {
@@ -397,7 +407,7 @@ Value environment(State& state, List const& args) {
 	return Null::Singleton();
 }
 
-Value parentframe(State& state, List const& args) {
+Value parentframe(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	int64_t i = (int64_t)asReal1(force(state, args[0]));
 	Environment* env = state.frame.environment;
@@ -408,7 +418,7 @@ Value parentframe(State& state, List const& args) {
 	return REnvironment(env);
 }
 
-Value stop_fn(State& state, List const& args) {
+Value stop_fn(State& state, List const& args, Character const& names) {
 	// this should stop whether or not the arguments are correct...
 	std::string message = "user stop";
 	if(args.length > 0) {
@@ -420,7 +430,7 @@ Value stop_fn(State& state, List const& args) {
 	return Null::Singleton();
 }
 
-Value warning_fn(State& state, List const& args) {
+Value warning_fn(State& state, List const& args, Character const& names) {
 	std::string message = "user warning";
 	if(args.length > 0) {
 		if(args[0].isCharacter() && Character(args[0]).length > 0) {
@@ -431,13 +441,13 @@ Value warning_fn(State& state, List const& args) {
 	return Character::c(state.StrToSym(message));
 } 
 
-Value missing(State& state, List const& args) {
+Value missing(State& state, List const& args, Character const& names) {
 	Symbol s(expression(args[0])); 
 	Value v =  state.frame.environment->get(s);
 	return (v.isNil() || (v.isPromise() && Function(v).environment() == state.frame.environment)) ? Logical::True() : Logical::False();
 }
 
-Value max_fn(State& state, List const& args) {
+Value max_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -445,7 +455,7 @@ Value max_fn(State& state, List const& args) {
 	return result;
 }
 
-Value min_fn(State& state, List const& args) {
+Value min_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -453,7 +463,7 @@ Value min_fn(State& state, List const& args) {
 	return result;
 }
 
-Value sum_fn(State& state, List const& args) {
+Value sum_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -461,7 +471,7 @@ Value sum_fn(State& state, List const& args) {
 	return result;
 }
 
-Value prod_fn(State& state, List const& args) {
+Value prod_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -469,7 +479,7 @@ Value prod_fn(State& state, List const& args) {
 	return result;
 }
 
-Value cummax_fn(State& state, List const& args) {
+Value cummax_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -477,7 +487,7 @@ Value cummax_fn(State& state, List const& args) {
 	return result;
 }
 
-Value cummin_fn(State& state, List const& args) {
+Value cummin_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -485,7 +495,7 @@ Value cummin_fn(State& state, List const& args) {
 	return result;
 }
 
-Value cumsum_fn(State& state, List const& args) {
+Value cumsum_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -493,7 +503,7 @@ Value cumsum_fn(State& state, List const& args) {
 	return result;
 }
 
-Value cumprod_fn(State& state, List const& args) {
+Value cumprod_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -501,7 +511,7 @@ Value cumprod_fn(State& state, List const& args) {
 	return result;
 }
 
-Value any_fn(State& state, List const& args) {
+Value any_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -509,7 +519,7 @@ Value any_fn(State& state, List const& args) {
 	return result;
 }
 
-Value all_fn(State& state, List const& args) {
+Value all_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -517,7 +527,7 @@ Value all_fn(State& state, List const& args) {
 	return result;
 }
 
-Value isna_fn(State& state, List const& args) {
+Value isna_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -525,7 +535,7 @@ Value isna_fn(State& state, List const& args) {
 	return result;
 }
 
-Value isnan_fn(State& state, List const& args) {
+Value isnan_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -533,7 +543,7 @@ Value isnan_fn(State& state, List const& args) {
 	return result;
 }
 
-Value nchar_fn(State& state, List const& args) {
+Value nchar_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 3);
 	Value a = force(state, args[0]);
 	// NYI: type or allowNA
@@ -542,7 +552,7 @@ Value nchar_fn(State& state, List const& args) {
 	return result;
 }
 
-Value nzchar_fn(State& state, List const& args) {
+Value nzchar_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -550,7 +560,7 @@ Value nzchar_fn(State& state, List const& args) {
 	return result;
 }
 
-Value isfinite_fn(State& state, List const& args) {
+Value isfinite_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -558,7 +568,7 @@ Value isfinite_fn(State& state, List const& args) {
 	return result;
 }
 
-Value isinfinite_fn(State& state, List const& args) {
+Value isinfinite_fn(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value a = force(state, args[0]);
 	Value result;
@@ -566,7 +576,7 @@ Value isinfinite_fn(State& state, List const& args) {
 	return result;
 }
 
-Value paste(State& state, List const& args) {
+Value paste(State& state, List const& args, Character const& names) {
 	Character a = As<Character>(state, force(state, args[0]));
 	Character sep = As<Character>(state, force(state, args[1]));
 	std::string result = "";
@@ -577,12 +587,12 @@ Value paste(State& state, List const& args) {
 	return Character::c(state.StrToSym(result));
 }
 
-Value deparse(State& state, List const& args) {
+Value deparse(State& state, List const& args, Character const& names) {
 	Value v = force(state, args[0]);
 	return Character::c(state.StrToSym(state.deparse(v)));
 }
 
-Value substitute(State& state, List const& args) {
+Value substitute(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value v = args[0];
 	while(v.isPromise()) v = Function(v).code()->expression;
@@ -595,13 +605,13 @@ Value substitute(State& state, List const& args) {
  	return v;
 }
 
-Value type_of(State& state, List const& args) {
+Value type_of(State& state, List const& args, Character const& names) {
 	// Should have a direct mapping from type to symbol.
 	Value v = force(state, args[0]);
 	return Character::c(state.StrToSym(Type::toString(v.type)));
 }
 
-Value get(State& state, List const& args) {
+Value get(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 2);
 	Character c = As<Character>(state, force(state, args[0]));
 	REnvironment e(force(state, args[1]));
@@ -612,7 +622,7 @@ Value get(State& state, List const& args) {
 		return v;
 }
 
-Value exists(State& state, List const& args) {
+Value exists(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 2);
 	Character c = As<Character>(state, force(state, args[0]));
 	REnvironment e(force(state, args[1]));
@@ -632,7 +642,7 @@ uint64_t readTime()
   return (uint64_t)time_tt.tv_sec * 1000 * 1000 + (uint64_t)time_tt.tv_usec;
 }
 
-Value systemtime(State& state, List const& args) {
+Value systemtime(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	uint64_t s = readTime();
 	force(state, args[0]);

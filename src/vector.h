@@ -207,7 +207,6 @@ template<class T>
 T Clone(T const& in) {
 	T out(in.length);
 	memcpy(out.v(), in.v(), in.length*in.width);
-	out.attributes = in.attributes;
 	return out;	
 }
 

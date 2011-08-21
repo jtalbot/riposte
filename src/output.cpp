@@ -47,17 +47,8 @@ template<> std::string stringify<List>(State const& state, List::Element a) {
 	return state.stringify(a);
 }  
 
-template<> std::string stringify<Call>(State const& state, Call::Element a) {
-	return state.stringify(a);
-}  
-
-template<> std::string stringify<Expression>(State const& state, Expression::Element a) {
-	return state.stringify(a);
-}  
-
-
 template<class T>
-std::string stringifyVector(State const& state, T const& v) {
+std::string stringifyVector(State const& state, T const& v, Value const& names) {
 	std::string result = "";
 	int64_t length = v.length;
 	if(length == 0)
@@ -69,16 +60,16 @@ std::string stringifyVector(State const& state, T const& v) {
 	for(int64_t i = 0; i < length; i++) {
 		maxlength = std::max((int64_t)maxlength, (int64_t)stringify<T>(state, v[i]).length());
 	}
-	if(hasNames(v)) {
-		Character c = Character(getNames(v));
+	if(names.isCharacter()) {
+		Character c = Character(names);
 		for(int64_t i = 0; i < length; i++) {
 			maxlength = std::max((int64_t)maxlength, (int64_t)state.SymToStr(c[i]).length());
 		}
 	}
 	int64_t indexwidth = intToStr(length+1).length();
 	int64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
-	if(hasNames(v)) {
-		Character c = Character(getNames(v));
+	if(names.isCharacter()) {
+		Character c = Character(names);
 		for(int64_t i = 0; i < length; i+=perline) {
 			result = result + pad("", indexwidth+2);
 			for(int64_t j = 0; j < perline && i+j < length; j++) {
@@ -109,7 +100,7 @@ std::string stringifyVector(State const& state, T const& v) {
 	return result;
 }
 
-std::string State::stringify(Value const& value) const {
+std::string stringify(State const& state, Value const& value, Value const& names) {
 	std::string result = "[1]";
 	bool dots = false;
 	switch(value.type)
@@ -117,40 +108,39 @@ std::string State::stringify(Value const& value) const {
 		case Type::Null:
 			return "NULL";
 		case Type::Raw:
-			return stringifyVector(*this, Raw(value));
+			return stringifyVector(state, Raw(value), names);
 		case Type::Logical:
-			return stringifyVector(*this, Logical(value));
+			return stringifyVector(state, Logical(value), names);
 		case Type::Integer:
-			return stringifyVector(*this, Integer(value));
+			return stringifyVector(state, Integer(value), names);
 		case Type::Double:
-			return stringifyVector(*this, Double(value));
+			return stringifyVector(state, Double(value), names);
 		case Type::Complex:		
-			return stringifyVector(*this, Complex(value));
+			return stringifyVector(state, Complex(value), names);
 		case Type::Character:
-			return stringifyVector(*this, Character(value));
+			return stringifyVector(state, Character(value), names);
 		
 		case Type::List:
-		case Type::PairList:
 		{
 			List v(value);
 
 			int64_t length = v.length;
 			if(length > 100) { dots = true; length = 100; }
 			result = "";
-			if(hasNames(v)) {
-				Character n = Character(getNames(v));
+			if(names.isCharacter()) {
+				Character n = Character(names);
 				for(int64_t i = 0; i < length; i++) {
-					if(SymToStr(n[i])=="")
+					if(state.SymToStr(n[i])=="")
 						result = result + "[[" + intToStr(i+1) + "]]\n";
 					else
-						result = result + "$" + SymToStr(n[i]) + "\n";
-					result = result + stringify(v[i]) + "\n";
+						result = result + "$" + state.SymToStr(n[i]) + "\n";
+					result = result + state.stringify(v[i]) + "\n";
 					if(i < length-1) result = result + "\n";
 				}
 			} else {
 				for(int64_t i = 0; i < length; i++) {
 					result = result + "[[" + intToStr(i+1) + "]]\n";
-					result = result + stringify(v[i]) + "\n";
+					result = result + state.stringify(v[i]) + "\n";
 					if(i < length-1) result = result + "\n";
 				}
 			}
@@ -159,35 +149,35 @@ std::string State::stringify(Value const& value) const {
 		}
 		case Type::Symbol:
 		{
-			result = "`" + SymToStr(Symbol(value)) + "`";
+			result = "`" + state.SymToStr(Symbol(value)) + "`";
 			return result;
 		}
 		case Type::Function:
 		{
-			result = SymToStr(Function(value).string());
+			result = state.SymToStr(Function(value).string());
 			return result;
 		}
 		case Type::Environment:
 		{
 			return std::string("environment <") + intToHexStr((uint64_t)REnvironment(value).ptr()) + "> (" + intToStr(REnvironment(value).ptr()->numVariables()) + " symbols defined)";
 		}
-		/*case Type::Closure:
+		case Type::Object:
 		{
-			Closure b(value);
-			std::string r = "block:\nconstants: " + intToStr(b.code()->constants.size()) + "\n";
-			for(int64_t i = 0; i < (int64_t)b.code()->constants.size(); i++)
-				r = r + intToStr(i) + "=\t" + stringify(b.code()->constants[i]) + "\n";
-		
-			r = r + "code: " + intToStr(b.code()->bc.size()) + "\n";
-			for(int64_t i = 0; i < (int64_t)b.code()->bc.size(); i++)
-				r = r + intToStr(i) + ":\t" + b.code()->bc[i].toString() + "\n";
-		
-			return r;
-		}*/
+			result = stringify(state, ((Object const&)value).base(), ((Object const&)value).getNames());
+			if(((Object const&)value).hasClass()) result += "\nclass: " + state.stringify(((Object const&)value).getClass());
+			return result;
+		}
 		default:
 			return Type::toString(value.type);
 	};
 }
+
+
+std::string State::stringify(Value const& value) const {
+	return ::stringify(*this, value, Value::Nil());
+}
+
+
 std::string State::stringify(Trace const & t) const {
 
 
@@ -282,19 +272,11 @@ template<> std::string deparse<List>(State const& state, List::Element a) {
 	return state.deparse(a);
 }  
 
-template<> std::string deparse<Call>(State const& state, Call::Element a) {
-	return state.deparse(a);
-}  
-
-template<> std::string deparse<Expression>(State const& state, Expression::Element a) {
-	return state.deparse(a);
-}  
-
 template<class T>
-std::string deparseVectorBody(State const& state, T const& v) {
+std::string deparseVectorBody(State const& state, T const& v, Value const& names) {
 	std::string result = "";
-	if(hasNames(v)) {
-		Character c = Character(getNames(v));
+	if(names.isCharacter()) {
+		Character c = Character(names);
 		for(int64_t i = 0; i < v.length; i++) {
 			result = result + state.SymToStr(c[i]) + " = " + deparse<T>(state, v[i]);
 			if(i < v.length-1) result = result + ", ";
@@ -312,38 +294,43 @@ std::string deparseVectorBody(State const& state, T const& v) {
 
 
 template<class T>
-std::string deparseVector(State const& state, T const& v) {
+std::string deparseVector(State const& state, T const& v, Value const& names) {
 	if(v.length == 0) return std::string(Type::toString(v.VectorType)) + "(0)";
-	if(v.length == 1) return deparseVectorBody(state, v);
-	else return "c(" + deparseVectorBody(state, v) + ")";
+	if(v.length == 1 && !names.isCharacter()) return deparseVectorBody(state, v, names);
+	else return "c(" + deparseVectorBody(state, v, names) + ")";
+}
+/*
+template<>
+std::string deparseVector<Call>(State const& state, Call const& v, Value const& names) {
+	return state.deparse(Call(v)[0]) + "(" + deparseVectorBody(state, Subset(v, 1, v.length-1), names) + ")";
 }
 
 template<>
-std::string deparseVector<Call>(State const& state, Call const& v) {
-	return state.deparse(Call(v)[0]) + "(" + deparseVectorBody(state, Subset(v, 1, v.length-1)) + ")";
+std::string deparseVector<Expression>(State const& state, Expression const& v, Value const& names) {
+	return "expression(" + deparseVectorBody(state, v, names) + ")";
 }
-
-template<>
-std::string deparseVector<Expression>(State const& state, Expression const& v) {
-	return "expression(" + deparseVectorBody(state, v) + ")";
-}
-
-std::string State::deparse(Value const& value) const {
+*/
+std::string deparse(State const& state, Value const& value, Value const& names) {
 	switch(value.type)
 	{
 		case Type::Null:
 			return "NULL";
-		#define CASE(Name) case Type::Name: return deparseVector(*this, Name(value)); break;
+		#define CASE(Name) case Type::Name: return deparseVector(state, Name(value), names); break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
 		case Type::Symbol:
-			return SymToStr(Symbol(value)); // NYI: need to check if this should be backticked.
+			return state.SymToStr(Symbol(value)); // NYI: need to check if this should be backticked.
 		case Type::Function:
-			return SymToStr(Function(value).string());
+			return state.SymToStr(Function(value).string());
 		case Type::Environment:
 			return "environment";
+		case Type::Object:
+			return deparse(state, ((Object const&)value).base(), ((Object const&)value).getNames());
 		default:
 			return Type::toString(value.type);
 	};
 }
 
+std::string State::deparse(Value const& value) const {
+	return ::deparse(*this, value, Value::Nil());
+}

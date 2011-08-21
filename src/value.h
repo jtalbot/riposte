@@ -10,7 +10,7 @@
 #include <assert.h>
 #include <limits>
 #include <complex>
-
+#define GC_DEBUG
 #include <gc/gc_cpp.h>
 #include <gc/gc_allocator.h>
 
@@ -21,8 +21,6 @@
 #include "symbols.h"
 #include "exceptions.h"
 #include "trace.h"
-
-struct Attributes;
 
 struct Value {
 	
@@ -40,18 +38,15 @@ struct Value {
 		double d;
 		unsigned char c;
 	};
-	union {
-		void* env;
-		Attributes* attributes;
-	};
+	void* env;
 
 	static Value Make(Type::Enum type, int64_t length, int64_t data, void* extra) {
-		Value v = {{{type, 0, length}}, {(void*)data}, {extra}};
+		Value v = {{{type, 0, length}}, {(void*)data}, extra};
 		return v;
 	}
 
 	static Value Make(Type::Enum type, int64_t length, void* data, void* extra) {
-		Value v = {{{type, 0, length}}, {data}, {extra}};
+		Value v = {{{type, 0, length}}, {data}, extra};
 		return v;
 	}
 
@@ -67,24 +62,21 @@ struct Value {
 	bool isComplex() const { return type == Type::Complex; }
 	bool isCharacter() const { return type == Type::Character; }
 	bool isList() const { return type == Type::List; }
-	bool isPairList() const { return type == Type::PairList; }
-	bool isCall() const { return type == Type::Call; }
-	bool isExpression() const { return type == Type::Expression; }
 	bool isSymbol() const { return type == Type::Symbol; }
 	bool isPromise() const { return type == Type::Promise; }
 	bool isFunction() const { return type == Type::Function; }
 	bool isBuiltIn() const { return type == Type::BuiltIn; }
+	bool isObject() const { return type == Type::Object; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isList(); }
 	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isSymbol() || (isList() && length==0); }
-	bool isListLike() const { return isList() || isPairList() || isCall() || isExpression(); }
 	bool isConcrete() const { return type < Type::Promise; }
 
 	template<class T> T& scalar() { throw "not allowed"; }
 	template<class T> T const& scalar() const { throw "not allowed"; }
 
-	static Value const& Nil() { static const Value v = { {{Type::Nil, 0, 0}}, {0}, {0} }; return v; }
+	static Value const& Nil() { static const Value v = { {{Type::Nil, 0, 0}}, {0}, 0 }; return v; }
 };
 
 class Environment;
@@ -94,11 +86,6 @@ class State;
 
 struct Symbol {
 	int64_t i;
-
-	// make constant members matching built in strings
-	#define CONST_DECLARE(name, string, ...) static const Symbol name;
-	STRINGS(CONST_DECLARE)
-	#undef CONST_DECLARE
 
 	Symbol() : i(1) {} // Defaults to the empty symbol...
 	explicit Symbol(int64_t index) : i(index) {}
@@ -117,6 +104,13 @@ struct Symbol {
 
 	bool operator==(int64_t other) const { return i == other; }
 };
+
+// make constant members matching built in strings
+namespace Symbols {
+	#define CONST_DECLARE(name, string, ...) static const ::Symbol name(String::name);
+	STRINGS(CONST_DECLARE)
+	#undef CONST_DECLARE
+}
 
 template<> inline int64_t& Value::scalar<int64_t>() { return i; }
 template<> inline double& Value::scalar<double>() { return d; }
@@ -149,16 +143,6 @@ struct Vector : public Value {
 	ElementType& operator[](int64_t index) { return v()[index]; }
 	ElementType const& operator[](int64_t index) const { return v()[index]; }
 
-
-	// Cross type cast (between vectors with the same storage type), use carefully
-	// Mainly used for casting between Lists, Calls, and Expressions
-	template<Type::Enum T>
-	Vector(Vector<T, ElementType, Recursive> const& other) {
-		Value::Init(*this, VectorType, other.length);
-		p = other.p;
-		attributes = other.attributes;
-	}
-
 	explicit Vector(int64_t length=0) {
 		Value::Init(*this, VectorType, length);
 		if(canPack && length > 1)
@@ -167,7 +151,6 @@ struct Vector : public Value {
 		else if(!canPack && length > 0)
 			p = Recursive ? new (GC) Element[length] : 
 				new (PointerFreeGC) Element[length];
-		attributes = 0;
 	}
 
 	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
@@ -178,7 +161,6 @@ struct Vector : public Value {
 		else if(!canPack && length > 0)
 			v.p = Recursive ? new (GC) Element[length] : 
 				new (PointerFreeGC) Element[length];
-		v.attributes = 0;
 		return (Vector<VType, ElementType, Recursive>&)v;
 	}
 
@@ -194,14 +176,15 @@ struct Vector : public Value {
 
 	explicit Vector(Value const& v) {
 		assert(v.type == VType);
-		type = v.type;
+		type = VType;
 		length = v.length;
 		p = v.p;
-		attributes = v.attributes; 
 	}
 
 	operator Value() const {
-		return Value::Make(type, length, p, attributes);
+		Value v;
+		return Value::Init(type, length, p);
+		return v;
 	}
 };
 
@@ -275,7 +258,7 @@ VECTOR_IMPL(Complex, std::complex<double>, false)
 
 VECTOR_IMPL(Character, Symbol, false)
 	static const bool CheckNA = true;
-	static bool isNA(Symbol c) { return c == Symbol::NA; }
+	static bool isNA(Symbol c) { return c == Symbols::NA; }
 	static bool isNaN(Symbol c) { return false; }
 	static bool isFinite(Symbol c) { return false; }
 	static bool isInfinite(Symbol c) { return false; }
@@ -297,37 +280,15 @@ VECTOR_IMPL(List, Value, true)
 	static bool isInfinite(Value c) { return false; }
 };
 
-VECTOR_IMPL(PairList, Value, true) 
-	static const bool CheckNA = false;
-	static bool isNA(Value c) { return false; }
-	static bool isNaN(Value c) { return false; }
-	static bool isFinite(Value c) { return false; }
-	static bool isInfinite(Value c) { return false; }
-};
-
-VECTOR_IMPL(Call, Value, true) 
-	static const bool CheckNA = false;
-	static bool isNA(Value c) { return false; }
-	static bool isNaN(Value c) { return false; }
-	static bool isFinite(Value c) { return false; }
-	static bool isInfinite(Value c) { return false; }
-};
-
-VECTOR_IMPL(Expression, Value, true) 
-	static const bool CheckNA = false;
-	static bool isNA(Value c) { return false; }
-	static bool isNaN(Value c) { return false; }
-	static bool isFinite(Value c) { return false; }
-	static bool isInfinite(Value c) { return false; }
-};
-
 struct CompiledCall : public gc {
-	Call call;
+	List call;
+
 	List arguments;
+	Character names;
 	int64_t dots;
 	
-	explicit CompiledCall(Call const& call, List const& arguments, int64_t dots) 
-		: call(call), arguments(arguments), dots(dots) {}
+	explicit CompiledCall(List const& call, List const& arguments, Character const& names, int64_t dots) 
+		: call(call), arguments(arguments), names(names), dots(dots) {}
 };
 
 struct Code : public gc {
@@ -335,14 +296,15 @@ struct Code : public gc {
 	Symbol string;
 
 	List parameters;
+	Character names;
 	int64_t dots;
 	
 	std::vector<Symbol> slotSymbols;
 	int64_t registers;
 
 	std::vector<Value, traceable_allocator<Value> > constants;
-	std::vector<Code*, traceable_allocator<Code*> > code; 	// constant code blocks that are nested in this code block (e.g. a nested function definition or a lazy parameter expression). Not stored in constants since it is only loaded by the 'function' op.
-	std::vector<CompiledCall, traceable_allocator<CompiledCall> > calls; // nested calls
+	std::vector<Code*, traceable_allocator<Code*> > code; 	
+	std::vector<CompiledCall, traceable_allocator<CompiledCall> > calls; 
 
 	std::vector<Instruction> bc;			// bytecode
 	mutable std::vector<Instruction> tbc;		// threaded bytecode
@@ -370,6 +332,7 @@ public:
 	}
 
 	List const& parameters() const { return _code->parameters; }
+	Character const& names() const { return _code->names; }
 	int64_t dots() const { return _code->dots; }
 	Symbol const& string() const { return _code->string; }
 	
@@ -379,7 +342,7 @@ public:
 
 class BuiltIn {
 public:
-	typedef Value (*BuiltInFunctionPtr)(State& s, List const& args);
+	typedef Value (*BuiltInFunctionPtr)(State& s, List const& args, Character const& names);
 	BuiltInFunctionPtr func;
 	explicit BuiltIn(BuiltInFunctionPtr func) : func(func) {}
 	explicit BuiltIn(Value const& v) {
@@ -395,97 +358,101 @@ class REnvironment {
 private:
 	Environment* env;
 public:
-	Attributes* attributes;
-	explicit REnvironment(Environment* env) : env(env), attributes(0) {
+	explicit REnvironment(Environment* env) : env(env) {
 	}
 	explicit REnvironment(Value const& v) {
 		assert(v.type == Type::Environment);
 		env = (Environment*)v.p;
-		attributes = v.attributes;
 	}
 	
 	operator Value() const {
-		return Value::Make(Type::Environment, 0, (void*)env, attributes);
+		Value v;
+		Value::Init(v, Type::Environment, 0);
+		v.p = (void*)env;
+		return v;
 	}
 	Environment* ptr() const {
 		return env;
 	}
 };
 
-struct Attributes : public gc {
+struct Object : public Value {
 	typedef std::map<Symbol, Value, std::less<Symbol>, gc_allocator<std::pair<Symbol, Value> > > Container;
-	Container container;
+
+	struct Inner : public gc {
+		Value base;
+		Container attributes;
+	};
+
+	Value& base() { return ((Inner*)p)->base; }
+	Value const& base() const { return ((Inner*)p)->base; }
+	Container& attributes() { return ((Inner*)p)->attributes; }
+	Container const& attributes() const { return ((Inner*)p)->attributes; }
+
+	static void Init(Value& v, Value const& _base) {
+		Value::Init(v, Type::Object, 0);
+		Inner* inner = new Inner();
+		inner->base = _base;
+		v.p = (void*)inner;
+	}
+
+	static void InitWithNames(Value& v, Value const& _base, Value const& _names) {
+		Init(v, _base);
+		if(!_names.isNil())
+			((Object&)v).setNames(_names);
+	}
+	
+	static void Init(Value& v, Value const& _base, Value const& _names, Value const& className) {
+		InitWithNames(v, _base, _names);
+		((Object&)v).setClass(className);
+	}
+
+	bool hasAttribute(Symbol s) const {
+		return attributes().find(s) != attributes().end();
+	}
+
+	bool hasNames() const { return hasAttribute(Symbols::names); }
+	bool hasClass() const { return hasAttribute(Symbols::classSym); }
+	bool hasDim() const   { return hasAttribute(Symbols::dim); }
+
+	Value const& getAttribute(Symbol s) const {
+		Container::const_iterator i = attributes().find(s);
+		if(i != attributes().end()) return i->second;
+		else return Value::Nil();
+	}
+
+	Value getNames() const { return getAttribute(Symbols::names); }
+	Value getClass() const { return getAttribute(Symbols::classSym); }
+	Value getDim() const { return getAttribute(Symbols::dim); }
+
+	void setAttribute(Symbol s, Value const& v) {
+		attributes()[s] = v;
+	}
+	
+	void setNames(Value const& v) { setAttribute(Symbols::names, v); }
+	void setClass(Value const& v) { setAttribute(Symbols::classSym, v); }
+	void setDim(Value const& v)  { setAttribute(Symbols::dim, v); }
+
+	Symbol className() const {
+		if(!hasClass()) {
+			return Symbol(base().type);
+		}
+		else {
+			return Character(getClass())[0];
+		}
+	}
 };
 
-inline bool hasAttribute(Value const& v, Symbol s) {
-	return (v.attributes != 0) && v.attributes->container.find(s) != v.attributes->container.end();
-}
-
-inline bool hasNames(Value const& v) {
-	return hasAttribute(v, Symbol::names);
-}
-
-inline bool hasClass(Value const& v) {
-	return hasAttribute(v, Symbol::classSym);
-}
-
-inline bool hasDim(Value const& v) {
-	return hasAttribute(v, Symbol::dim);
-}
-
-inline Value getAttribute(Value const& v, Symbol s) {
-	if(v.attributes == 0) return Null::Singleton();
-	else {
-		Attributes::Container::const_iterator i = v.attributes->container.find(s);
-		if(i != v.attributes->container.end()) return i->second;
-		else return Null::Singleton();
-	}
-}
-
-inline Value getNames(Value const& v) {
-	return getAttribute(v, Symbol::names);
-}
-
-inline Value getClass(Value const& v) {
-	return getAttribute(v, Symbol::classSym);
-}
-
-inline Value getDim(Value const& v) {
-	return getAttribute(v, Symbol::dim);
-}
-
-template<class T, class A>
-inline T setAttribute(T& v, Symbol s, A const a) {
-	Attributes* attributes = new (GC) Attributes();
-	if(v.attributes != 0)
-		*attributes = *v.attributes;
-	v.attributes = attributes;
-	Value av = (Value)a;
-	if(av.isNull()) {
-		v.attributes->container.erase(s);
-	} else {
-		v.attributes->container[s] = av;
-	}
+inline Value CreateExpression(List const& list) {
+	Value v;
+	Object::Init(v, list, Value::Nil(), Character::c(Symbols::Expression));
 	return v;
 }
 
-template<class T, class A>
-inline T setNames(T& v, A const a) {
-	return setAttribute(v, Symbol::names, a);
-}
-
-template<class T, class A>
-inline T setClass(T& v, A const a) {
-	return setAttribute(v, Symbol::classSym, a);
-}
-
-template<class T, class A>
-inline T setDim(T& v, A const a) {
-	return setAttribute(v, Symbol::dim, a);
-}
-
-inline bool isObject(Value const& v) {
-	return hasClass(v);
+inline Value CreateCall(List const& list, Value const& names = Value::Nil()) {
+	Value v;
+	Object::Init(v, list, names, Character::c(Symbols::Call));
+	return v;
 }
 
 struct Pairs {
@@ -496,18 +463,22 @@ struct Pairs {
 	std::deque<Pair, traceable_allocator<Value> > p;
 	
 	int64_t length() const { return p.size(); }
-	void push_front(Symbol n, Value v) { Pair t = {n, v}; p.push_front(t); }
-	void push_back(Symbol n, Value v)  { Pair t = {n, v}; p.push_back(t); }
+	void push_front(Symbol n, Value const& v) { Pair t = {n, v}; p.push_front(t); }
+	void push_back(Symbol n, Value const& v)  { Pair t = {n, v}; p.push_back(t); }
 	const Value& value(int64_t i) const { return p[i].v; }
 	const Symbol& name(int64_t i) const { return p[i].n; }
-	
-	List toList(bool forceNames) const {
+
+	List values() const {
 		List l(length());
 		for(int64_t i = 0; i < length(); i++)
 			l[i] = value(i);
+		return l;
+	}
+
+	Value names(bool forceNames) const {
 		bool named = false;
 		for(int64_t i = 0; i < length(); i++) {
-			if(name(i) != Symbol::empty) {
+			if(name(i) != Symbols::empty) {
 				named = true;
 				break;
 			}
@@ -516,9 +487,9 @@ struct Pairs {
 			Character n(length());
 			for(int64_t i = 0; i < length(); i++)
 				n[i] = Symbol(name(i).i);
-			setNames(l, n);
+			return n;
 		}
-		return l;
+		else return Value::Nil();
 	}
 };
 

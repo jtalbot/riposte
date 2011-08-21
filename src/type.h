@@ -15,15 +15,13 @@
 	_(Complex, 	"complex")	\
 	_(Character, 	"character")	\
 	_(List,		"list")		\
-	_(PairList,	"pairlist")	\
-	_(Call,		"call")		\
-	_(Expression,	"expression")	\
 	_(Function,	"function")	\
 	_(BuiltIn,	"builtin")	\
 	_(Symbol,	"symbol")	\
 	_(Environment,	"environment")	\
 					\
 	/* Now the internal types, not necessarily matching R. Order is important here. */ \
+	_(Object,	"object")	\
 	_(Promise, 	"promise") 	\
 	_(Nil,		"nil")		\
 
@@ -39,9 +37,6 @@ DECLARE_ENUM(Type, TYPES)
 	_(Complex) 	\
 	_(Character) 	\
 	_(List) 	\
-	_(PairList) 	\
-	_(Call) 	\
-	_(Expression) 	\
 
 #define VECTOR_TYPES_NOT_NULL(_)	\
 	_(Raw) 		\
@@ -51,9 +46,6 @@ DECLARE_ENUM(Type, TYPES)
 	_(Complex) 	\
 	_(Character) 	\
 	_(List) 	\
-	_(PairList) 	\
-	_(Call) 	\
-	_(Expression) 	\
 
 #define ATOMIC_VECTOR_TYPES(_) \
 	_(Null)		\
@@ -66,8 +58,5 @@ DECLARE_ENUM(Type, TYPES)
 
 #define LISTLIKE_VECTOR_TYPES(_) \
 	_(List)		\
-	_(PairList)	\
-	_(Call)		\
-	_(Expression)	\
 
 #endif

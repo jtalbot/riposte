@@ -27,7 +27,7 @@ namespace EnumType { \
     switch(e) \
     { \
       ENUM_DEF(ENUM_TO_STRING) \
-      default: return ""; \
+      default: throw "Attempt to cast invalid type to string"; \
     } \
   } \
 }
