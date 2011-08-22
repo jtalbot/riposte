@@ -411,7 +411,7 @@ static const int Scanner_en_main = 17;
 #line 130 "lexer.rl"
 
 
-void Parser::token( int tok, Value v)
+void Parser::token(int tok, Value v)
 {
 	const char *data = ts;
 	int len = te - ts;

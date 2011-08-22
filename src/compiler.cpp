@@ -42,11 +42,11 @@ static ByteCode::Enum op(Symbol const& s) {
 	}
 }
 
-void Compiler::emit(Code* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c) {
+void Compiler::emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c) {
 	code->bc.push_back(Instruction(bc, a, b, c));
 }
 
-static void resolveLoopReferences(Code* code, int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget) {
+static void resolveLoopReferences(Prototype* code, int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget) {
 	for(int64_t i = start; i < end; i++) {
 		if(code->bc[i].bc == ByteCode::next && code->bc[i].a == 0) {
 			code->bc[i].a = nextTarget-i;
@@ -73,14 +73,14 @@ int64_t Compiler::getSlot(Symbol s) {
 	return slot;
 }
 
-int64_t Compiler::compileConstant(Value const& expr, Code* code) {
+int64_t Compiler::compileConstant(Value const& expr, Prototype* code) {
 	code->constants.push_back(expr);
 	int64_t reg = scopes.back().allocRegister(Register::CONSTANT);
 	emit(code, ByteCode::kget, code->constants.size()-1, 0, reg);
 	return reg;
 }
 
-int64_t Compiler::compileSymbol(Symbol const& symbol, Code* code) {
+int64_t Compiler::compileSymbol(Symbol const& symbol, Prototype* code) {
 	// search for symbol in variables list
 	if(!scopes.back().topLevel) {
 		for(uint64_t i = 0; i < scopes.back().symbols.size(); i++) {
@@ -129,7 +129,7 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 }
 
 // a standard call, not an op
-int64_t Compiler::compileFunctionCall(List const& call, Character const& names, Code* code) {
+int64_t Compiler::compileFunctionCall(List const& call, Character const& names, Prototype* code) {
 	int64_t liveIn = scopes.back().live();
 	int64_t function = compile(call[0], code);
 	code->calls.push_back(makeCall(call, names));
@@ -139,7 +139,7 @@ int64_t Compiler::compileFunctionCall(List const& call, Character const& names, 
 	return result;
 }
 
-int64_t Compiler::compileCall(List const& call, Character const& names, Code* code) {
+int64_t Compiler::compileCall(List const& call, Character const& names, Prototype* code) {
 	int64_t length = call.length;
 	if(length == 0) {
 		throw CompileError("invalid empty call");
@@ -263,7 +263,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Code* co
 
 		//compile the source for the body
 		scopes.push_back(scope);
-		Code* functionCode = compile(call[2]);
+		Prototype* functionCode = compile(call[2]);
 		functionCode->slotSymbols.swap(scopes.back().symbols);
 		scopes.pop_back();
 
@@ -278,11 +278,11 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Code* co
 				if(names[i] == Symbols::dots) functionCode->dots = i;
 		}
 
-		code->code.push_back(functionCode);
+		code->prototypes.push_back(functionCode);
 		
 		scopes.back().deadAfter(liveIn);	
 		int64_t reg = scopes.back().allocRegister(Register::CONSTANT);	
-		emit(code, ByteCode::function, code->code.size()-1, 0, reg);
+		emit(code, ByteCode::function, code->prototypes.size()-1, 0, reg);
 		return reg;
 	} break;
 	case String::returnSym: 
@@ -566,7 +566,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Code* co
 	};
 }
 
-int64_t Compiler::compileExpression(List const& values, Code* code) {
+int64_t Compiler::compileExpression(List const& values, Prototype* code) {
 	int64_t liveIn = scopes.back().live();
 	int64_t result = 0;
 	if(values.length == 0) 
@@ -579,7 +579,7 @@ int64_t Compiler::compileExpression(List const& values, Code* code) {
 	return result;
 }
 
-int64_t Compiler::compile(Value const& expr, Code* code) {
+int64_t Compiler::compile(Value const& expr, Prototype* code) {
 	switch(expr.type)
 	{
 		case Type::Symbol:
@@ -608,8 +608,9 @@ int64_t Compiler::compile(Value const& expr, Code* code) {
 	};
 }
 
-Code* Compiler::compile(Value const& expr) {
-	Code* code = new Code();
+Prototype* Compiler::compile(Value const& expr) {
+	Prototype* code = new Prototype();
+	assert(((int64_t)code) % 16 == 0); // our type packing assumes that this is true
 
 	int64_t oldLoopDepth = loopDepth;
 	loopDepth = 0;

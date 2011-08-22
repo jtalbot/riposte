@@ -9,7 +9,7 @@
 #include "trace_compiler.h"
 
 struct Trace;
-struct Code;
+struct Prototype;
 //member of State, manages information for all traces
 //and the currently recording trace (if any)
 struct TraceState {
@@ -144,8 +144,8 @@ struct TraceExit {
 };
 
 struct Trace : public gc {
-	Trace(Code * code, Instruction * trace_start);
-	Code * code; //code segment in which trace begins
+	Trace(Prototype * code, Instruction * trace_start);
+	Prototype * code; //code segment in which trace begins
 	Instruction * trace_start; //pointer to first instruction recorded by trace
 	Instruction trace_inst; //copy of first instruction run by trace
 	                        //trace_start will be overwritten with a trace bytecode when it is installed

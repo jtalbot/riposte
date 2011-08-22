@@ -3,7 +3,7 @@
 
 
 
-Trace::Trace(Code * code, Instruction * trace_start)
+Trace::Trace(Prototype * code, Instruction * trace_start)
 : trace_inst(*trace_start) {
 	this->code = code;
 	this->trace_start = trace_start;
@@ -27,7 +27,7 @@ void trace_compile_and_install(State & state, Trace * trace) {
 	}
 
 	//patch trace into bytecode
-	Code * code = trace->code;
+	Prototype * code = trace->code;
 	Instruction * inst = trace->trace_start;
 
 	printf("trace: patching into bytecode: %s\n\n",trace->trace_inst.toString().c_str());

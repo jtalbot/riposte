@@ -129,7 +129,7 @@
 	*|;
 }%%
 
-void Parser::token( int tok, Value v)
+void Parser::token(int tok, Value v)
 {
 	const char *data = ts;
 	int len = te - ts;

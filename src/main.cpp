@@ -96,7 +96,7 @@ Value parsetty(State& state) {
 	return ppr;
 }
 
-static void printCode(State const& state, Code const* code) {
+static void printCode(State const& state, Prototype const* code) {
 	std::string r = "block:\nconstants: " + intToStr(code->constants.size()) + "\n";
 	for(int64_t i = 0; i < (int64_t)code->constants.size(); i++)
 		r = r + intToStr(i) + "=\t" + state.stringify(code->constants[i]) + "\n";
@@ -123,9 +123,9 @@ int dostdin(State& state) {
 			value = parsetty(state);
 			if(value.isNil()) continue;
 			//std::cout << "Parsed: " << value.toString() << std::endl;
-			Code* code = Compiler::compile(state, value, state.global);
+			Prototype* proto = Compiler::compile(state, value, state.global);
 			//std::cout << "Compiled code: " << state.stringify(Closure(code,NULL)) << std::endl;
-			result = eval(state, code, state.global);
+			result = eval(state, proto, state.global);
 			std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) { 
 			e_message("Error", "riposte", error.what().c_str());
@@ -167,8 +167,8 @@ static int dofile(const char * file, State& state, bool echo) {
 	if(value.isNil()) return -1;
 
 	try {
-		Code* code = Compiler::compile(state, value, state.global);
-		Value result = eval(state, code, state.global);
+		Prototype* proto = Compiler::compile(state, value, state.global);
+		Value result = eval(state, proto, state.global);
 		if(echo)
 			std::cout << state.stringify(result) << std::endl;
 	} catch(RiposteError& error) {
@@ -245,6 +245,7 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 
 	printf(">> %d\n", sizeof(Value));
 	printf(">> %d\n", sizeof(Double));
+	printf(">> %d\n", sizeof(Prototype));
 	//printf(">> %d\n", sizeof(Instruction));
 	//printf(">> %d\n", sizeof(Environment::Container));
 

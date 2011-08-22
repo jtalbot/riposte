@@ -26,9 +26,9 @@ struct Value {
 	
 	union {
 		struct {
-			Type::Enum type:8;
-			unsigned char flags:8;
-			int64_t length:48;
+			Type::Enum type:4;
+			//unsigned char flags:0;
+			int64_t length:60;
 		};
 		int64_t header;
 	};
@@ -38,20 +38,19 @@ struct Value {
 		double d;
 		unsigned char c;
 	};
-	void* env;
 
-	static Value Make(Type::Enum type, int64_t length, int64_t data, void* extra) {
-		Value v = {{{type, 0, length}}, {(void*)data}, extra};
+	static Value Make(Type::Enum type, int64_t length, int64_t data) {
+		Value v = {{{type, length}}, {(void*)data}};
 		return v;
 	}
 
-	static Value Make(Type::Enum type, int64_t length, void* data, void* extra) {
-		Value v = {{{type, 0, length}}, {data}, extra};
+	static Value Make(Type::Enum type, int64_t length, void* data) {
+		Value v = {{{type, length}}, {data}};
 		return v;
 	}
 
 	static void Init(Value& v, Type::Enum type, int64_t length) {
-		v.header =  type + (length<<16);
+		v.header =  type + (length<<4);
 	}
 
 	bool isNil() const { return type == Type::Nil; }
@@ -76,7 +75,7 @@ struct Value {
 	template<class T> T& scalar() { throw "not allowed"; }
 	template<class T> T const& scalar() const { throw "not allowed"; }
 
-	static Value const& Nil() { static const Value v = { {{Type::Nil, 0, 0}}, {0}, 0 }; return v; }
+	static Value const& Nil() { static const Value v = { {{Type::Nil, 0}}, {0} }; return v; }
 };
 
 class Environment;
@@ -95,7 +94,7 @@ struct Symbol {
 	}
 
 	operator Value() const {
-		return Value::Make(Type::Symbol, 0, i, 0);
+		return Value::Make(Type::Symbol, 0, i);
 	}
 
 	bool operator<(Symbol const& other) const { return i < other.i;	}
@@ -291,19 +290,19 @@ struct CompiledCall : public gc {
 		: call(call), arguments(arguments), names(names), dots(dots) {}
 };
 
-struct Code : public gc {
+struct Prototype : public gc {
 	Value expression;
 	Symbol string;
 
 	List parameters;
 	Character names;
-	int64_t dots;
 	
 	std::vector<Symbol> slotSymbols;
-	int64_t registers;
+	int dots;
+	int registers;
 
 	std::vector<Value, traceable_allocator<Value> > constants;
-	std::vector<Code*, traceable_allocator<Code*> > code; 	
+	std::vector<Prototype*, traceable_allocator<Prototype*> > prototypes; 	
 	std::vector<CompiledCall, traceable_allocator<CompiledCall> > calls; 
 
 	std::vector<Instruction> bc;			// bytecode
@@ -313,31 +312,41 @@ struct Code : public gc {
 
 class Function {
 private:
-	Code* _code;
-	Environment* _env;
+	Prototype* proto;
+	Environment* env;
 public:
-	explicit Function(Code* code, Environment* env)
-		: _code(code), _env(env) {}
+	explicit Function(Prototype* proto, Environment* env)
+		: proto(proto), env(env) {}
 	
-	explicit Function(Value const& v) : _code((Code*)v.p), _env((Environment*)v.env) {
+	explicit Function(Value const& v) {
 		assert(v.isFunction() || v.isPromise());
+		proto = (Prototype*)(v.length << 4);
+		env = (Environment*)v.p;
 	}
 
 	operator Value() const {
-		return Value::Make(Type::Function, 0, (void*)_code, (void*)_env);
+		Value v;
+		v.header = (int64_t)proto + Type::Function;
+		v.p = env;
+		return v;
+		//return Value::Make(Type::Function, 0, (void*)proto, (void*)env);
 	}
 
 	Value AsPromise() const {
-		return Value::Make(Type::Promise, 0, (void*)_code, (void*)_env);
+		Value v;
+		v.header = (int64_t)proto + Type::Promise;
+		v.p = env;
+		return v;
+		//return Value::Make(Type::Promise, 0, (void*)proto, (void*)env);
 	}
 
-	List const& parameters() const { return _code->parameters; }
-	Character const& names() const { return _code->names; }
-	int64_t dots() const { return _code->dots; }
-	Symbol const& string() const { return _code->string; }
+	List const& parameters() const { return proto->parameters; }
+	Character const& names() const { return proto->names; }
+	int64_t dots() const { return proto->dots; }
+	Symbol const& string() const { return proto->string; }
 	
-	Code* code() const { return _code; }
-	Environment* environment() const { return _env; }
+	Prototype* prototype() const { return proto; }
+	Environment* environment() const { return env; }
 };
 
 class BuiltIn {
@@ -350,7 +359,7 @@ public:
 		func = (BuiltInFunctionPtr)v.p; 
 	}
 	operator Value() const {
-		return Value::Make(Type::BuiltIn, 0, (void*)func, 0);
+		return Value::Make(Type::BuiltIn, 0, (void*)func);
 	}
 };
 
@@ -377,7 +386,7 @@ public:
 };
 
 struct Object : public Value {
-	typedef std::map<Symbol, Value, std::less<Symbol>, gc_allocator<std::pair<Symbol, Value> > > Container;
+	typedef std::map<Symbol, Value, std::less<Symbol>, traceable_allocator<std::pair<Symbol, Value> > > Container;
 
 	struct Inner : public gc {
 		Value base;
@@ -390,6 +399,7 @@ struct Object : public Value {
 	Container const& attributes() const { return ((Inner*)p)->attributes; }
 
 	static void Init(Value& v, Value const& _base) {
+		assert(_base.isList());
 		Value::Init(v, Type::Object, 0);
 		Inner* inner = new Inner();
 		inner->base = _base;
@@ -415,7 +425,7 @@ struct Object : public Value {
 	bool hasClass() const { return hasAttribute(Symbols::classSym); }
 	bool hasDim() const   { return hasAttribute(Symbols::dim); }
 
-	Value const& getAttribute(Symbol s) const {
+	Value getAttribute(Symbol s) const {
 		Container::const_iterator i = attributes().find(s);
 		if(i != attributes().end()) return i->second;
 		else return Value::Nil();
@@ -516,11 +526,11 @@ struct Pairs {
 
 class Environment : public gc {
 private:
-	typedef std::map<Symbol, Value, std::less<Symbol>, gc_allocator<std::pair<Symbol, Value> > > Map;
+	typedef std::map<Symbol, Value, std::less<Symbol>, traceable_allocator<std::pair<Symbol, Value> > > Map;
 
-	Environment* staticParent, * dynamicParent;
 	Value slots[32];
 	Symbol slotNames[32];		// rather than duplicating, this could be a pointer?
+	Environment* staticParent, * dynamicParent;
 	unsigned char slotCount;
 	Map overflow;
 
@@ -605,7 +615,7 @@ public:
 	Value getQuoted(Symbol const& name) const {
 		Value value = get(name);
 		if(value.isPromise()) {
-			value = Function(value).code()->expression;
+			value = Function(value).prototype()->expression;
 		}
 		return value;
 	}
@@ -643,7 +653,7 @@ public:
 struct StackFrame {
 	Environment* environment;
 	bool ownEnvironment;
-	Code const* code;
+	Prototype const* prototype;
 
 	Instruction const* returnpc;
 	Value* returnbase;
@@ -653,8 +663,8 @@ struct StackFrame {
 #define DEFAULT_NUM_REGISTERS 10000
 
 struct State {
-	Value* registers;
 	Value* base;
+	Value* registers;
 
 	std::vector<StackFrame, traceable_allocator<StackFrame> > stack;
 	StackFrame frame;
@@ -710,8 +720,8 @@ struct State {
 
 
 Value eval(State& state, Function const& function);
-Value eval(State& state, Code const* code, Environment* environment); 
-Value eval(State& state, Code const* code);
+Value eval(State& state, Prototype const* prototype, Environment* environment); 
+Value eval(State& state, Prototype const* prototype);
 void interpreter_init(State& state);
 
 #endif

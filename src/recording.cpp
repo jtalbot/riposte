@@ -390,7 +390,7 @@ static RecordingStatus::Enum recording_check_conditions(State& state, Instructio
 
 Instruction const * recording_interpret(State& state, Instruction const* pc) {
 	RecordingStatus::Enum status = RecordingStatus::NO_ERROR;
-	state.tracing.current_trace = new Trace(const_cast<Code*>(state.frame.code),const_cast<Instruction*>(pc));
+	state.tracing.current_trace = new Trace(const_cast<Prototype*>(state.frame.prototype),const_cast<Instruction*>(pc));
 	while(true) {
 #define RUN_RECORD(name,str) case ByteCode::name: { status = name##_record(state, *pc,&pc); } break;
 		switch(pc->bc) {

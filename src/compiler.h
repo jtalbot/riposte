@@ -46,21 +46,21 @@ private:
 		loopDepth = 0;
 	}
 	
-	Code* compile(Value const& expr);			// compile function block, code ends with return
-	int64_t compile(Value const& expr, Code* code);		// compile into existing code block
+	Prototype* compile(Value const& expr);			// compile function block, code ends with return
+	int64_t compile(Value const& expr, Prototype* code);		// compile into existing code block
 
-	int64_t compileConstant(Value const& expr, Code* code);
-	int64_t compileSymbol(Symbol const& symbol, Code* code); 
-	int64_t compileCall(List const& call, Character const& names, Code* code); 
-	int64_t compileFunctionCall(List const& call, Character const& names, Code* code); 
-	int64_t compileExpression(List const& values, Code* code);
+	int64_t compileConstant(Value const& expr, Prototype* code);
+	int64_t compileSymbol(Symbol const& symbol, Prototype* code); 
+	int64_t compileCall(List const& call, Character const& names, Prototype* code); 
+	int64_t compileFunctionCall(List const& call, Character const& names, Prototype* code); 
+	int64_t compileExpression(List const& values, Prototype* code);
 	
 	CompiledCall makeCall(List const& call, Character const& names);
 
-	void emit(Code* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c);
+	void emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c);
 	int64_t getSlot(Symbol s);
 public:
-	static Code* compile(State& state, Value const& expr) {
+	static Prototype* compile(State& state, Value const& expr) {
 		Compiler compiler(state);
 		Scope scope;
 		scope.topLevel = true;
@@ -68,7 +68,7 @@ public:
 		return compiler.compile(expr);
 	}
 	
-	static Code* compile(State& state, Value const& expr, Environment* env) {
+	static Prototype* compile(State& state, Value const& expr, Environment* env) {
 		Compiler compiler(state);
 		Scope scope;
 		scope.topLevel = true;

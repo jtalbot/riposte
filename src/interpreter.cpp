@@ -13,7 +13,7 @@
 
 #define ALWAYS_INLINE __attribute__((always_inline))
 
-static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Code const* code, Value* result, Instruction const* returnpc);
+static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc);
 
 Instruction const* kget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 Instruction const* sget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
@@ -25,7 +25,7 @@ Instruction const* add_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 inline void forcePromise(State& state, Value& v) { 
 	while(v.isPromise()) {
 		Environment* env = Function(v).environment();
-		v = eval(state, Function(v).code(), 
+		v = eval(state, Function(v).prototype(), 
 			env != 0 ? env : state.frame.environment); 
 	}
 }
@@ -77,7 +77,7 @@ void interpreter_assign(State & state, Symbol s, Value v) { assign(state,s,v); }
 void interpreter_sassign(State & state, int64_t s, Value v) { sassign(state,s,v); }
 
 static Value const& constant(State& state, int64_t i) {
-	return state.frame.code->constants[i];
+	return state.frame.prototype->constants[i];
 }
 
 static void ExpandDots(State& state, List& arguments, Character& names, int64_t dots) {
@@ -120,8 +120,8 @@ static void ExpandDots(State& state, List& arguments, Character& names, int64_t 
 inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* execution) {
 	Value& slot = env->get(i);
 	slot = v;
-	if(v.isPromise() && slot.env == 0)
-		slot.env = execution;
+	if(v.isPromise() && slot.p == 0)
+		slot.p = execution;
 }
 
 static void MatchArgs(State& state, Environment* env, Environment* fenv, Function const& func, List const& arguments, Character const& anames) {
@@ -144,8 +144,8 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			List dots(arguments.length - func.dots());
 			for(int64_t i = 0; i < arguments.length-func.dots(); i++) {
 				dots[i] = arguments[i+func.dots()];
-				if(dots[i].isPromise() && dots[i].env == 0)
-					dots[i].env = env;
+				if(dots[i].isPromise() && dots[i].p == 0)
+					dots[i].p = env;
 			}
 			sassign(fenv, func.dots(), dots);
 			end++;
@@ -226,8 +226,8 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			for(int64_t j = 0; j < arguments.length; j++) {
 				if(assignment[j] < 0) {
 					values[idx] = arguments[j];
-					if(values[idx].isPromise() && values[idx].env == 0)
-						values[idx].env = env;
+					if(values[idx].isPromise() && values[idx].p == 0)
+						values[idx].p = env;
 					idx++;
 				}
 			}
@@ -270,16 +270,16 @@ static Instruction const * profile_back_edge(State & state, Instruction const * 
 
 Instruction const* call_op(State& state, Instruction const& inst) {
 	Value f = REG(state, inst.a);
-	CompiledCall const& call = state.frame.code->calls[inst.b];
+	CompiledCall const& call = state.frame.prototype->calls[inst.b];
 	List arguments = call.arguments;
 	Character names = call.names;
 	ExpandDots(state, arguments, names, call.dots);
 
 	if(f.isFunction()) {
 		Function func(f);
-		Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, func.code()->slotSymbols);
+		Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, func.prototype()->slotSymbols);
 		MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
-		return buildStackFrame(state, fenv, true, func.code(), &REG(state, inst.c), &inst+1);
+		return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
 	} else if(f.isBuiltIn()) {
 		REG(state, inst.c) = BuiltIn(f).func(state, arguments, names);
 		return &inst+1;
@@ -292,7 +292,7 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 	Value v = REG(state, inst.a);
 	Symbol generic = v.isCharacter() ? Character(v)[0] : Symbol(v);
 	
-	CompiledCall const& call = state.frame.code->calls[inst.b];
+	CompiledCall const& call = state.frame.prototype->calls[inst.b];
 	List arguments = call.arguments;
 	Character names = call.names;
 	ExpandDots(state, arguments, names, call.dots);
@@ -312,12 +312,12 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 
 	if(f.isFunction()) {
 		Function func(f);
-		Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, func.code()->slotSymbols);
+		Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, func.prototype()->slotSymbols);
 		MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
 		assign(fenv, Symbols::dotGeneric, generic);
 		assign(fenv, Symbols::dotMethod, method);
 		assign(fenv, Symbols::dotClass, type); 
-		return buildStackFrame(state, fenv, true, func.code(), &REG(state, inst.c), &inst+1);
+		return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
 	} else if(f.isBuiltIn()) {
 		REG(state, inst.c) = BuiltIn(f).func(state, arguments, names);
 		return &inst+1;
@@ -338,7 +338,7 @@ Instruction const* get_flat(State& state, Symbol s, Value& value, Environment* e
 	}
 	else {
 		return buildStackFrame(state, Function(value).environment(),
-			false, Function(value).code(), &environment->getLocation(s), &inst);
+			false, Function(value).prototype(), &environment->getLocation(s), &inst);
 	}
 }
 Instruction const* get_op(State& state, Instruction const& inst) {
@@ -376,7 +376,7 @@ Instruction const* sget_op(State& state, Instruction const& inst)
 	Value& dest = REG(state, inst.c);
 	Environment* environment = state.frame.environment;
 	dest = environment->get(inst.a);
-	if(!dest.isConcrete()) {
+	if(__builtin_expect(!dest.isConcrete(),false)) {
 		Symbol s(state.frame.environment->slotName(inst.a));
 		while(dest.isNil() && environment->StaticParent() != 0) {
 			environment = environment->StaticParent();
@@ -677,7 +677,7 @@ Instruction const* slor_op(State& state, Instruction const& inst) {
 	}
 }
 Instruction const* function_op(State& state, Instruction const& inst) {
-	REG(state, inst.c) = Function(state.frame.code->code[inst.a], state.frame.environment);
+	REG(state, inst.c) = Function(state.frame.prototype->prototypes[inst.a], state.frame.environment);
 	return &inst+1;
 }
 Instruction const* logical1_op(State& state, Instruction const& inst) {
@@ -724,7 +724,7 @@ Instruction const* type_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }*/
 Instruction const * invoketrace_op(State& state, Instruction const & inst) {
-	Trace * trace = state.frame.code->traces[inst.a];
+	Trace * trace = state.frame.prototype->traces[inst.a];
 	int64_t offset;
 	TCStatus::Enum status = trace->compiled->execute(state,&offset);
 	if(status != TCStatus::SUCCESS) {
@@ -764,14 +764,14 @@ Instruction const* done_op(State& state, Instruction const& inst) {
 }
 
 
-static void printCode(State const& state, Code const* code) {
-	std::string r = "block:\nconstants: " + intToStr(code->constants.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)code->constants.size(); i++)
-		r = r + intToStr(i) + "=\t" + state.stringify(code->constants[i]) + "\n";
+static void printCode(State const& state, Prototype const* prototype) {
+	std::string r = "block:\nconstants: " + intToStr(prototype->constants.size()) + "\n";
+	for(int64_t i = 0; i < (int64_t)prototype->constants.size(); i++)
+		r = r + intToStr(i) + "=\t" + state.stringify(prototype->constants[i]) + "\n";
 
-	r = r + "code: " + intToStr(code->bc.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)code->bc.size(); i++)
-		r = r + intToStr(i) + ":\t" + code->bc[i].toString() + "\n";
+	r = r + "code: " + intToStr(prototype->bc.size()) + "\n";
+	for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++)
+		r = r + intToStr(i) + ":\t" + prototype->bc[i].toString() + "\n";
 
 	std::cout << r << std::endl;
 }
@@ -781,7 +781,7 @@ static void printCode(State const& state, Code const* code) {
 static const void** glabels = 0;
 #endif
 
-static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Code const* code, Value* result, Instruction const* returnpc) {
+static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc) {
 	//printCode(state, code);
 	StackFrame& s = state.push();
 	s.environment = environment;
@@ -789,26 +789,26 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 	s.returnpc = returnpc;
 	s.returnbase = state.base;
 	s.result = result;
-	s.code= code;
-	state.base -= code->registers;
+	s.prototype = prototype;
+	state.base -= prototype->registers;
 	if(state.base < state.registers)
 		throw RiposteError("Register overflow");
 
 #ifdef THREADED_INTERPRETER
 	// Initialize threaded bytecode if not yet done 
-	if(code->tbc.size() == 0)
+	if(prototype->tbc.size() == 0)
 	{
-		for(int64_t i = 0; i < (int64_t)code->bc.size(); ++i) {
-			Instruction const& inst = code->bc[i];
-			code->tbc.push_back(
+		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); ++i) {
+			Instruction const& inst = prototype->bc[i];
+			prototype->tbc.push_back(
 				Instruction(
 					inst.bc == ByteCode::done ? glabels[0] : glabels[inst.bc+1],
 					inst.a, inst.b, inst.c));
 		}
 	}
-	return &(code->tbc[0]);
+	return &(prototype->tbc[0]);
 #else
-	return &(code->bc[0]);
+	return &(prototype->bc[0]);
 #endif
 }
 
@@ -848,14 +848,14 @@ void interpreter_init(State& state) {
 }
 
 Value eval(State& state, Function const& function) {
-	return eval(state, function.code(), function.environment());
+	return eval(state, function.prototype(), function.environment());
 }
 
-Value eval(State& state, Code const* code) {
-	return eval(state, code, state.frame.environment);
+Value eval(State& state, Prototype const* prototype) {
+	return eval(state, prototype, state.frame.environment);
 }
 
-Value eval(State& state, Code const* code, Environment* environment) {
+Value eval(State& state, Prototype const* prototype, Environment* environment) {
 	Value result;
 #ifdef THREADED_INTERPRETER
 	static const Instruction* done = new Instruction(glabels[0]);
@@ -864,7 +864,7 @@ Value eval(State& state, Code const* code, Environment* environment) {
 #endif
 	Value* old_base = state.base;
 	int64_t stackSize = state.stack.size();
-	Instruction const* run = buildStackFrame(state, environment, false, code, &result, done);
+	Instruction const* run = buildStackFrame(state, environment, false, prototype, &result, done);
 	try {
 		interpret(state, run);
 	} catch(...) {

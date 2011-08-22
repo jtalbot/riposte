@@ -595,12 +595,12 @@ Value deparse(State& state, List const& args, Character const& names) {
 Value substitute(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	Value v = args[0];
-	while(v.isPromise()) v = Function(v).code()->expression;
+	while(v.isPromise()) v = Function(v).prototype()->expression;
 	
 	if(v.isSymbol()) {
 		Value r = state.frame.environment->get(Symbol(v));
 		if(!r.isNil()) v = r;
-		while(v.isPromise()) v = Function(v).code()->expression;
+		while(v.isPromise()) v = Function(v).prototype()->expression;
 	}
  	return v;
 }
