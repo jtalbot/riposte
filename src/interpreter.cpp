@@ -373,10 +373,15 @@ Instruction const* sget_op(State& state, Instruction const& inst)
 	REG(state, inst.c) = environment->get(inst.a);
 	return get_flat(state, environment->slotName(inst.a), REG(state, inst.c), environment, inst);
 	*/
-	Value& dest = REG(state, inst.c);
-	Environment* environment = state.frame.environment;
-	dest = environment->get(inst.a);
-	if(__builtin_expect(!dest.isConcrete(),false)) {
+	Value const& src = state.frame.environment->get(inst.a);
+	if(__builtin_expect(src.isConcrete(), true)) {
+		REG(state, inst.c) = src;
+		return &inst+1;
+	}
+	else {
+		Value& dest = REG(state, inst.c);
+		Environment* environment = state.frame.environment;
+		dest = src;
 		Symbol s(state.frame.environment->slotName(inst.a));
 		while(dest.isNil() && environment->StaticParent() != 0) {
 			environment = environment->StaticParent();
@@ -388,8 +393,8 @@ Instruction const* sget_op(State& state, Instruction const& inst)
 		}
 		else if(dest.isNil()) 
 			throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
+		return &inst+1;
 	}
-	return &inst+1;
 }
 
 Instruction const* kget_op(State& state, Instruction const& inst) {
