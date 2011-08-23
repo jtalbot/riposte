@@ -620,8 +620,6 @@ struct StackFrame {
 #define DEFAULT_NUM_REGISTERS 10000
 
 struct State {
-	int64_t* header;
-	int64_t* body;
 	Value* base;
 	Value* registers;
 
