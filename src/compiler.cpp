@@ -38,6 +38,12 @@ static ByteCode::Enum op(Symbol const& s) {
 		case String::asin: return ByteCode::asin; break;
 		case String::atan: return ByteCode::atan; break;
 		case String::type: return ByteCode::type; break;
+		case String::Logical: return ByteCode::logical1; break;	 	
+		case String::Integer: return ByteCode::integer1; break;
+		case String::Double: return ByteCode::double1; break;
+		case String::Complex: return ByteCode::complex1; break;
+		case String::Character: return ByteCode::character1; break;
+		case String::Raw: return ByteCode::raw1; break;
 		default: throw RuntimeError("unexpected symbol used as an operator"); break;
 	}
 }
@@ -220,8 +226,27 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		scopes.back().deadAfter(source);	
 		return source;
 	} break;
+	case String::bracket: {
+		if(call.length != 3) return compileFunctionCall(call, names, code);
+		int64_t value = compile(call[1], code);
+		int64_t index = compile(call[2], code);
+		scopes.back().deadAfter(liveIn);	
+		int64_t reg = scopes.back().allocRegister(Register::CONSTANT);	
+		emit(code, ByteCode::subset, value, index, reg);
+		scopes.back().deadAfter(reg);	
+		return reg;
+	} break;
+	case String::bb: {
+		if(call.length != 3) return compileFunctionCall(call, names, code);
+		int64_t value = compile(call[1], code);
+		int64_t index = compile(call[2], code);
+		scopes.back().deadAfter(liveIn);	
+		int64_t reg = scopes.back().allocRegister(Register::CONSTANT);	
+		emit(code, ByteCode::subset2, value, index, reg);
+		scopes.back().deadAfter(reg);	
+		return reg;
+	} break;
 	case String::bracketAssign: { 
-		// if there aren't exactly three parameters, we should call the library version...
 		if(call.length != 4) return compileFunctionCall(call, names, code);
 		int64_t dest = compile(call[1], code);
 		int64_t index = compile(call[2], code);
@@ -231,6 +256,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		return dest;
 	} break;
 	case String::bbAssign: {
+		if(call.length != 4) return compileFunctionCall(call, names, code);
 		int64_t dest = compile(call[1], code);
 		int64_t index = compile(call[2], code);
 		int64_t value = compile(call[3], code);
@@ -523,6 +549,12 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	case String::asin: 
 	case String::atan:
 	case String::type:
+	case String::Logical:
+	case String::Integer:
+	case String::Double:
+	case String::Complex:
+	case String::Character:
+	case String::Raw:
 	{
 		// if there isn't exactly one parameters, we should call the library version...
 		if(call.length != 2) return compileFunctionCall(call, names, code);

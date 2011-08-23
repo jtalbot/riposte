@@ -10,7 +10,7 @@
 #include <assert.h>
 #include <limits>
 #include <complex>
-#define GC_DEBUG
+
 #include <gc/gc_cpp.h>
 #include <gc/gc_allocator.h>
 
@@ -51,6 +51,7 @@ struct Value {
 	bool isDouble1() const { return header == (1<<4) + Type::Double; }
 	bool isComplex() const { return type == Type::Complex; }
 	bool isCharacter() const { return type == Type::Character; }
+	bool isCharacter1() const { return header == (1<<4) + Type::Character; }
 	bool isList() const { return type == Type::List; }
 	bool isSymbol() const { return type == Type::Symbol; }
 	bool isPromise() const { return type == Type::Promise && !isNil(); }

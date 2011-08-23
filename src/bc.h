@@ -15,6 +15,8 @@
 	_(sassign, "sassign") \
 	_(iassign, "iassign") \
 	_(eassign, "eassign") \
+	_(subset, "subset") \
+	_(subset2, "subset2") \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
 	_(iforbegin, "iforbegin") \

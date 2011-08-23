@@ -399,22 +399,21 @@ Instruction const* sassign_op(State& state, Instruction const& inst) {
 
 Instruction const* iassign_op(State& state, Instruction const& inst) {
 	// a = value, b = index, c = dest 
-	subAssign(state, REG(state,inst.c), REG(state,inst.b), REG(state,inst.a), REG(state,inst.c));
+	SubsetAssign(state, REG(state,inst.c), REG(state,inst.b), REG(state,inst.a), REG(state,inst.c));
 	return &inst+1;
 }
 Instruction const* eassign_op(State& state, Instruction const& inst) {
-	// a = value, b = index, c = dest 
-	Value v = REG(state, inst.c);
-	if(v.isList()) {
-		List r = Clone(List(v));
-		r[As<Integer>(state, REG(state,inst.b))[0]-1] = REG(state,inst.a);
-		REG(state, inst.c) = r;
-		return &inst+1;
-	}
-	else {
-		subAssign(state, REG(state,inst.c), REG(state,inst.b), REG(state,inst.a), REG(state,inst.c));
-		return &inst+1;
-	}
+	// a = value, b = index, c = dest
+	Subset2Assign(state, REG(state,inst.c), REG(state,inst.b), REG(state,inst.a), REG(state,inst.c));
+	return &inst+1; 
+}
+Instruction const* subset_op(State& state, Instruction const& inst) {
+	Subset(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
+	return &inst+1;
+}
+Instruction const* subset2_op(State& state, Instruction const& inst) {
+	Subset2(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
+	return &inst+1;
 }
 Instruction const* forbegin_op(State& state, Instruction const& inst) {
 	// inst.b-1 holds the loopVector
@@ -706,10 +705,6 @@ Instruction const* type_op(State& state, Instruction const& inst) {
 	REG(state, inst.c) = c;
 	return &inst+1;
 }
-/*Instruction const* element2_op(State& state, Instruction const& inst) {
-	Element2(REG(state, inst.a), REG(state, inst.b).i, REG(state, inst.c));
-	return &inst+1;
-}*/
 Instruction const * invoketrace_op(State& state, Instruction const & inst) {
 	Trace * trace = state.frame.prototype->traces[inst.a];
 	int64_t offset;

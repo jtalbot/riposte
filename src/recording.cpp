@@ -218,6 +218,12 @@ RecordingStatus::Enum iassign_record(State & state, Instruction const & inst, In
 RecordingStatus::Enum eassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(eassign);
 }
+RecordingStatus::Enum subset_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	OP_NOT_IMPLEMENTED(iassign);
+}
+RecordingStatus::Enum subset2_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	OP_NOT_IMPLEMENTED(iassign);
+}
 RecordingStatus::Enum forbegin_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(forbegin);
 }

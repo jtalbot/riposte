@@ -182,7 +182,78 @@ Value unlist(State& state, List const& args, Character const& names) {
 	};
 }
 
-Value Subset(State& state, Value const& a, Value const& i)	{
+
+template< class A >
+struct SubsetInclude {
+	static void eval(State& state, A const& a, Integer const& d, int64_t nonzero, Value& out)
+	{
+		A r(nonzero);
+		int64_t j = 0;
+		typename A::Element const* ae = a.v();
+		typename Integer::Element const* de = d.v();
+		typename A::Element* re = r.v();
+		int64_t length = d.length;
+		for(int64_t i = 0; i < length; i++) {
+			if(Integer::isNA(de[i])) re[j++] = A::NAelement;	
+			else if(de[i] != 0) re[j++] = ae[de[i]-1];
+		}
+		out = r;
+	}
+};
+
+template< class A >
+struct SubsetExclude {
+	static void eval(State& state, A const& a, Integer const& d, int64_t nonzero, Value& out)
+	{
+		std::set<Integer::Element> index; 
+		typename A::Element const* ae = a.v();
+		typename Integer::Element const* de = d.v();
+		int64_t length = d.length;
+		for(int64_t i = 0; i < length; i++) if(-de[i] > 0 && -de[i] < (int64_t)a.length) index.insert(-de[i]);
+		// iterate through excluded elements copying intervening ranges.
+		A r(a.length-index.size());
+		typename A::Element* re = r.v();
+		int64_t start = 1;
+		int64_t k = 0;
+		for(std::set<Integer::Element>::const_iterator i = index.begin(); i != index.end(); ++i) {
+			int64_t end = *i;
+			for(int64_t j = start; j < end; j++) re[k++] = ae[j-1];
+			start = end+1;
+		}
+		for(int64_t j = start; j <= a.length; j++) re[k++] = ae[j-1];
+		out = r;
+	}
+};
+
+template< class A >
+struct SubsetLogical {
+	static void eval(State& state, A const& a, Logical const& d, Value& out)
+	{
+		typename A::Element const* ae = a.v();
+		typename Logical::Element const* de = d.v();
+		// determine length
+		int64_t length = 0;
+		if(d.length > 0) {
+			int64_t j = 0;
+			int64_t maxlength = std::max(a.length, d.length);
+			for(int64_t i = 0; i < maxlength; i++) {
+				if(!Logical::isFalse(de[j])) length++;
+				if(++j >= d.length) j = 0;
+			}
+		}
+		A r(length);
+		typename A::Element* re = r.v();
+		int64_t j = 0, k = 0;
+		for(int64_t i = 0; i < std::max(a.length, d.length) && k < length; i++) {
+			if(i >= a.length || Logical::isNA(de[j])) re[k++] = A::NAelement;
+			else if(Logical::isTrue(de[j])) re[k++] = ae[i];
+			if(++j >= d.length) j = 0;
+		}
+		out = r;
+	}
+};
+
+void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble() || i.isInteger()) {
 		Integer index = As<Integer>(state, i);
 		int64_t positive = 0, negative = 0;
@@ -194,28 +265,28 @@ Value Subset(State& state, Value const& a, Value const& i)	{
 			_error("mixed subscripts not allowed");
 		else if(positive > 0) {
 			switch(a.type) {
-				case Type::Null: return a; break;
-				#define CASE(Name,...) case Type::Name: return SubsetInclude<Name>::eval(state, Name(a), index, positive); break;
-				VECTOR_TYPES_NOT_NULL(CASE)
-				#undef CASE
+				case Type::Null: out = Null::Singleton(); break;
+#define CASE(Name,...) case Type::Name: SubsetInclude<Name>::eval(state, Name(a), index, positive, out); break;
+						 VECTOR_TYPES_NOT_NULL(CASE)
+#undef CASE
 				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
 			};
 		}
 		else if(negative > 0) {
 			switch(a.type) {
-				case Type::Null: return a; break;
-				#define CASE(Name) case Type::Name: return SubsetExclude<Name>::eval(state, Name(a), index, negative); break;
-				VECTOR_TYPES_NOT_NULL(CASE)
-				#undef CASE
+				case Type::Null: out = Null::Singleton(); break;
+#define CASE(Name) case Type::Name: SubsetExclude<Name>::eval(state, Name(a), index, negative, out); break;
+						 VECTOR_TYPES_NOT_NULL(CASE)
+#undef CASE
 				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
 			};	
 		}
 		else {
 			switch(a.type) {
-				case Type::Null: return a; break;
-				#define CASE(Name) case Type::Name: return Name(0); break;
-				VECTOR_TYPES_NOT_NULL(CASE)
-				#undef CASE
+				case Type::Null: out = Null::Singleton(); break;
+#define CASE(Name) case Type::Name: out = Name(0); break;
+						 VECTOR_TYPES_NOT_NULL(CASE)
+#undef CASE
 				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
 			};	
 		}
@@ -223,27 +294,29 @@ Value Subset(State& state, Value const& a, Value const& i)	{
 	else if(i.isLogical()) {
 		Logical index = Logical(i);
 		switch(a.type) {
-			case Type::Null: return a; break;
-			#define CASE(Name) case Type::Name: return SubsetLogical<Name>::eval(state, Name(a), index); break;
-			VECTOR_TYPES_NOT_NULL(CASE)
-			#undef CASE
+			case Type::Null: out = Null::Singleton(); break;
+#define CASE(Name) case Type::Name: SubsetLogical<Name>::eval(state, Name(a), index, out); break;
+					 VECTOR_TYPES_NOT_NULL(CASE)
+#undef CASE
 			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
 		};	
 	}
-	_error("NYI indexing type");
-	return Null::Singleton();
+	else {
+		_error("NYI indexing type");
+	}
 }
 
 Value subset(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 2);
         Value a = force(state, args[0]);
         Value i = force(state, args[1]);
-	return Subset(state, a,i);
+	Value v;
+	Subset(state, a, i, v);
+	return v;
 }
 
 Value subset2(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 2);
-
         Value a = force(state, args[0]);
         Value b = force(state, args[1]);
 	Value result;
@@ -292,6 +365,53 @@ Value dollar(State& state, List const& args, Character const& names) {
 	}
 	return Null::Singleton();
 } 
+
+template< class A  >
+struct SubsetAssignT {
+	static A eval(State& state, A const& a, Integer const& d, A const& b)
+	{
+		typename A::Element const* be = b.v();
+		typename Integer::Element const* de = d.v();
+
+		// compute max index 
+		int64_t outlength = 0;
+		int64_t length = d.length;
+		for(int64_t i = 0; i < length; i++) {
+			outlength = std::max((int64_t)outlength, de[i]);
+		}
+
+		// should use max index here to extend vector if necessary	
+		//A r = Clone(a);	
+		A r = a;
+		typename A::Element* re = r.v();
+		for(int64_t i = 0; i < length; i++) {	
+			int64_t idx = de[i];
+			if(idx != 0)
+				re[idx-1] = be[i];
+		}
+		return r;
+	}
+};
+
+void SubsetAssignSlow(State& state, Value const& a, Value const& i, Value const& b, Value& c) {
+	Integer idx = As<Integer>(state, i);
+	switch(a.type) {
+		#define CASE(Name) case Type::Name: c = SubsetAssignT<Name>::eval(state, (Name const&)a, idx, As<Name>(state, b)); break;
+		VECTOR_TYPES(CASE)
+		#undef CASE
+		default: _error("NYI: subset assign type"); break;
+	};
+}
+
+void Subset2AssignSlow(State& state, Value const& a, Value const& i, Value const& b, Value& c) {
+	Integer idx = As<Integer>(state, i);
+	switch(a.type) {
+		#define CASE(Name) case Type::Name: c = SubsetAssignT<Name>::eval(state, (Name const&)a, idx, As<Name>(state, b)); break;
+		VECTOR_TYPES(CASE)
+		#undef CASE
+		default: _error("NYI: subset assign type"); break;
+	};
+}
 
 Value length(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
