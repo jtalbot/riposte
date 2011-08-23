@@ -27,7 +27,6 @@ struct Value {
 	union {
 		struct {
 			Type::Enum type:4;
-			//unsigned char flags:0;
 			int64_t length:60;
 		};
 		int64_t header;
@@ -39,30 +38,22 @@ struct Value {
 		unsigned char c;
 	};
 
-	static Value Make(Type::Enum type, int64_t length, int64_t data) {
-		Value v = {{{type, length}}, {(void*)data}};
-		return v;
-	}
-
-	static Value Make(Type::Enum type, int64_t length, void* data) {
-		Value v = {{{type, length}}, {data}};
-		return v;
-	}
-
 	static void Init(Value& v, Type::Enum type, int64_t length) {
 		v.header =  type + (length<<4);
 	}
 
-	bool isNil() const { return type == Type::Nil; }
+	bool isNil() const { return header == 0; }
 	bool isNull() const { return type == Type::Null; }
 	bool isLogical() const { return type == Type::Logical; }
 	bool isInteger() const { return type == Type::Integer; }
+	bool isInteger1() const { return header == (1<<4) + Type::Integer; }
 	bool isDouble() const { return type == Type::Double; }
+	bool isDouble1() const { return header == (1<<4) + Type::Double; }
 	bool isComplex() const { return type == Type::Complex; }
 	bool isCharacter() const { return type == Type::Character; }
 	bool isList() const { return type == Type::List; }
 	bool isSymbol() const { return type == Type::Symbol; }
-	bool isPromise() const { return type == Type::Promise; }
+	bool isPromise() const { return type == Type::Promise && !isNil(); }
 	bool isFunction() const { return type == Type::Function; }
 	bool isBuiltIn() const { return type == Type::BuiltIn; }
 	bool isObject() const { return type == Type::Object; }
@@ -70,14 +61,15 @@ struct Value {
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isList(); }
 	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isSymbol() || (isList() && length==0); }
-	bool isConcrete() const { return type < Type::Promise; }
+	bool isConcrete() const { return type != Type::Promise; }
 
 	template<class T> T& scalar() { throw "not allowed"; }
 	template<class T> T const& scalar() const { throw "not allowed"; }
 
-	static Value const& Nil() { static const Value v = { {{Type::Nil, 0}}, {0} }; return v; }
+	static Value const& Nil() { static const Value v = { {{Type::Promise, 0}}, {0} }; return v; }
 };
 
+class Prototype;
 class Environment;
 class State;
 
@@ -94,13 +86,14 @@ struct Symbol {
 	}
 
 	operator Value() const {
-		return Value::Make(Type::Symbol, 0, i);
+		Value v;
+		Value::Init(v, Type::Symbol, 0);
+		v.i = i;
+		return v;
 	}
 
-	bool operator<(Symbol const& other) const { return i < other.i;	}
 	bool operator==(Symbol const& other) const { return i == other.i; }
 	bool operator!=(Symbol const& other) const { return i != other.i; }
-
 	bool operator==(int64_t other) const { return i == other; }
 };
 
@@ -196,8 +189,6 @@ union _doublena {
 struct Name : public Vector<Type::Name, Element, Recursive> { 			\
 	explicit Name(int64_t length=0) : Vector<Type::Name, Element, Recursive>(length) {} 	\
 	explicit Name(Value const& v) : Vector<Type::Name, Element, Recursive>(v) {} 	\
-	template<Type::Enum T> \
-	explicit Name(Vector<T, Element, Recursive> const& other) : Vector<Type::Name, Element, Recursive>(other) {} \
 	static Name c() { Name c(0); return c; } \
 	static Name c(Element v0) { Name c(1); c[0] = v0; return c; } \
 	static Name c(Element v0, Element v1) { Name c(2); c[0] = v0; c[1] = v1; return c; } \
@@ -279,36 +270,6 @@ VECTOR_IMPL(List, Value, true)
 	static bool isInfinite(Value c) { return false; }
 };
 
-struct CompiledCall : public gc {
-	List call;
-
-	List arguments;
-	Character names;
-	int64_t dots;
-	
-	explicit CompiledCall(List const& call, List const& arguments, Character const& names, int64_t dots) 
-		: call(call), arguments(arguments), names(names), dots(dots) {}
-};
-
-struct Prototype : public gc {
-	Value expression;
-	Symbol string;
-
-	List parameters;
-	Character names;
-	
-	std::vector<Symbol> slotSymbols;
-	int dots;
-	int registers;
-
-	std::vector<Value, traceable_allocator<Value> > constants;
-	std::vector<Prototype*, traceable_allocator<Prototype*> > prototypes; 	
-	std::vector<CompiledCall, traceable_allocator<CompiledCall> > calls; 
-
-	std::vector<Instruction> bc;			// bytecode
-	mutable std::vector<Instruction> tbc;		// threaded bytecode
-	std::vector<Trace *> traces;
-};
 
 class Function {
 private:
@@ -329,7 +290,6 @@ public:
 		v.header = (int64_t)proto + Type::Function;
 		v.p = env;
 		return v;
-		//return Value::Make(Type::Function, 0, (void*)proto, (void*)env);
 	}
 
 	Value AsPromise() const {
@@ -337,14 +297,8 @@ public:
 		v.header = (int64_t)proto + Type::Promise;
 		v.p = env;
 		return v;
-		//return Value::Make(Type::Promise, 0, (void*)proto, (void*)env);
 	}
 
-	List const& parameters() const { return proto->parameters; }
-	Character const& names() const { return proto->names; }
-	int64_t dots() const { return proto->dots; }
-	Symbol const& string() const { return proto->string; }
-	
 	Prototype* prototype() const { return proto; }
 	Environment* environment() const { return env; }
 };
@@ -359,7 +313,10 @@ public:
 		func = (BuiltInFunctionPtr)v.p; 
 	}
 	operator Value() const {
-		return Value::Make(Type::BuiltIn, 0, (void*)func);
+		Value v;
+		Value::Init(v, Type::BuiltIn, 0);
+		v.p = (void*)func;
+		return v;
 	}
 };
 
@@ -386,7 +343,7 @@ public:
 };
 
 struct Object : public Value {
-	typedef std::map<Symbol, Value, std::less<Symbol>, traceable_allocator<std::pair<Symbol, Value> > > Container;
+	typedef std::map<int64_t, Value, std::less<int64_t>, traceable_allocator<std::pair<int64_t, Value> > > Container;
 
 	struct Inner : public gc {
 		Value base;
@@ -418,7 +375,7 @@ struct Object : public Value {
 	}
 
 	bool hasAttribute(Symbol s) const {
-		return attributes().find(s) != attributes().end();
+		return attributes().find(s.i) != attributes().end();
 	}
 
 	bool hasNames() const { return hasAttribute(Symbols::names); }
@@ -426,7 +383,7 @@ struct Object : public Value {
 	bool hasDim() const   { return hasAttribute(Symbols::dim); }
 
 	Value getAttribute(Symbol s) const {
-		Container::const_iterator i = attributes().find(s);
+		Container::const_iterator i = attributes().find(s.i);
 		if(i != attributes().end()) return i->second;
 		else return Value::Nil();
 	}
@@ -436,7 +393,7 @@ struct Object : public Value {
 	Value getDim() const { return getAttribute(Symbols::dim); }
 
 	void setAttribute(Symbol s, Value const& v) {
-		attributes()[s] = v;
+		attributes()[s.i] = v;
 	}
 	
 	void setNames(Value const& v) { setAttribute(Symbols::names, v); }
@@ -465,44 +422,44 @@ inline Value CreateCall(List const& list, Value const& names = Value::Nil()) {
 	return v;
 }
 
-struct Pairs {
-	struct Pair {
-		Symbol n;
-		Value v;
-	};
-	std::deque<Pair, traceable_allocator<Value> > p;
+
+
+
+////////////////////////////////////////////////////////////////////
+// VM data structures
+///////////////////////////////////////////////////////////////////
+
+
+struct CompiledCall : public gc {
+	List call;
+
+	List arguments;
+	Character names;
+	int64_t dots;
 	
-	int64_t length() const { return p.size(); }
-	void push_front(Symbol n, Value const& v) { Pair t = {n, v}; p.push_front(t); }
-	void push_back(Symbol n, Value const& v)  { Pair t = {n, v}; p.push_back(t); }
-	const Value& value(int64_t i) const { return p[i].v; }
-	const Symbol& name(int64_t i) const { return p[i].n; }
-
-	List values() const {
-		List l(length());
-		for(int64_t i = 0; i < length(); i++)
-			l[i] = value(i);
-		return l;
-	}
-
-	Value names(bool forceNames) const {
-		bool named = false;
-		for(int64_t i = 0; i < length(); i++) {
-			if(name(i) != Symbols::empty) {
-				named = true;
-				break;
-			}
-		}
-		if(named || forceNames) {
-			Character n(length());
-			for(int64_t i = 0; i < length(); i++)
-				n[i] = Symbol(name(i).i);
-			return n;
-		}
-		else return Value::Nil();
-	}
+	explicit CompiledCall(List const& call, List const& arguments, Character const& names, int64_t dots) 
+		: call(call), arguments(arguments), names(names), dots(dots) {}
 };
 
+struct Prototype : public gc {
+	Value expression;
+	Symbol string;
+
+	List parameters;
+	Character names;
+	
+	std::vector<Symbol> slotSymbols;
+	int dots;
+	int registers;
+
+	std::vector<Value, traceable_allocator<Value> > constants;
+	std::vector<Prototype*, traceable_allocator<Prototype*> > prototypes; 	
+	std::vector<CompiledCall, traceable_allocator<CompiledCall> > calls; 
+
+	std::vector<Instruction> bc;			// bytecode
+	mutable std::vector<Instruction> tbc;		// threaded bytecode
+	std::vector<Trace *> traces;
+};
 
 /*
  * Riposte execution environments are split into two parts:
@@ -526,7 +483,7 @@ struct Pairs {
 
 class Environment : public gc {
 private:
-	typedef std::map<Symbol, Value, std::less<Symbol>, traceable_allocator<std::pair<Symbol, Value> > > Map;
+	typedef std::map<int64_t, Value, std::less<int64_t>, traceable_allocator<std::pair<Symbol, Value> > > Map;
 
 	Value slots[32];
 	Symbol slotNames[32];		// rather than duplicating, this could be a pointer?
@@ -581,7 +538,7 @@ public:
 				return slots[i];
 			}
 		}
-		Map::const_iterator i = overflow.find(name);
+		Map::const_iterator i = overflow.find(name.i);
 		if(i != overflow.end()) {
 			return i->second;
 		} else {
@@ -590,7 +547,7 @@ public:
 	}
 
 	Value const& hget(Symbol const& name) const { 
-		Map::const_iterator i = overflow.find(name);
+		Map::const_iterator i = overflow.find(name.i);
 		if(i != overflow.end()) {
 			return i->second;
 		} else {
@@ -604,7 +561,7 @@ public:
 				return slots[i];
 			}
 		}
-		Map::iterator i = overflow.find(name);
+		Map::iterator i = overflow.find(name.i);
 		if(i != overflow.end()) {
 			return i->second;
 		} else {
@@ -626,7 +583,7 @@ public:
 	}
 
 	void hassign(Symbol const& name, Value const& value) {
-		overflow[name] = value;
+		overflow[name.i] = value;
 	}
 
 	void assign(Symbol const& name, Value const& value) {
@@ -636,7 +593,7 @@ public:
 				return;
 			}
 		}
-		overflow[name] = value;
+		overflow[name.i] = value;
 	}
 
 	void rm(Symbol const& name) {
@@ -646,7 +603,7 @@ public:
 				return;
 			}
 		}
-		overflow.erase(name);
+		overflow.erase(name.i);
 	}
 };
 
@@ -663,6 +620,8 @@ struct StackFrame {
 #define DEFAULT_NUM_REGISTERS 10000
 
 struct State {
+	int64_t* header;
+	int64_t* body;
 	Value* base;
 	Value* registers;
 
@@ -695,14 +654,6 @@ struct State {
 		frame = stack.back();
 		stack.pop_back();
 	}
-
-	//StackFrame& frame() {
-	//	return stack.back();
-	//}
-
-	//StackFrame& frame(int fromBack) {
-	//	return stack[stack.size()-fromBack-1];
-	//}
 
 	std::string stringify(Value const& v) const;
 	std::string stringify(Trace const & t) const;

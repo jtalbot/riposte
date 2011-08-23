@@ -10,8 +10,6 @@
 #include <set>
 #include <algorithm>
 
-void importCoreLibrary(State& state, Environment* env);
-
 inline Value force(State& state, Value v) { 
 	while(v.isPromise()) {
 		Environment* env = Function(v).environment();

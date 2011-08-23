@@ -5,7 +5,10 @@
 #include "enum.h"
 
 #define TYPES(_) 			\
-	/* First the R visible types */	\
+	/* First the internal types. Order is important here. The 'Nil' value is an invalid promise object with the header = 0*/ \
+	_(Promise, 	"promise") 	\
+	_(Object,	"object")	\
+	/* The R visible types */	\
 	/*   In the "standard casting order" */  \
 	_(Null, 	"NULL")		\
 	_(Raw, 		"raw")		\
@@ -20,10 +23,6 @@
 	_(Symbol,	"symbol")	\
 	_(Environment,	"environment")	\
 					\
-	/* Now the internal types, not necessarily matching R. Order is important here. */ \
-	_(Object,	"object")	\
-	_(Promise, 	"promise") 	\
-	_(Nil,		"nil")		\
 
 DECLARE_ENUM(Type, TYPES)
 

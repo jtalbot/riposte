@@ -6,4 +6,9 @@
 
 void loadLibrary(State& state, std::string name);
 
+
+void importCoreFunctions(State& state, Environment* env);
+void importCoerceFunctions(State& state, Environment* env);
+
+
 #endif

@@ -7,8 +7,6 @@
 
 #include <limits>
 
-void importCoerceFunctions(State& state, Environment* env);
-
 // Casting functions between types
 template<typename I, typename O>
 static typename O::Element Cast(State& state, typename I::Element const& i) { return (typename O::Element)i; }

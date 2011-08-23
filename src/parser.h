@@ -92,6 +92,44 @@ struct Parser {
 	int execute( const char* data, int len, bool isEof, Value& result, FILE* trace=NULL );
 };
 
+struct Pairs {
+	struct Pair {
+		Symbol n;
+		Value v;        
+	};        
+	std::deque<Pair, traceable_allocator<Value> > p;
+	int64_t length() const { return p.size(); }        
+	void push_front(Symbol n, Value const& v) { Pair t = {n, v}; p.push_front(t); } 
+	void push_back(Symbol n, Value const& v)  { Pair t = {n, v}; p.push_back(t); }        
+	const Value& value(int64_t i) const { return p[i].v; }
+	const Symbol& name(int64_t i) const { return p[i].n; }
+
+	List values() const {
+		List l(length());
+		for(int64_t i = 0; i < length(); i++)
+			l[i] = value(i);
+		return l;
+	}
+
+	Value names(bool forceNames) const {
+		bool named = false;
+		for(int64_t i = 0; i < length(); i++) {                        
+			if(name(i) != Symbols::empty) {
+				named = true;
+				break;                        
+			}                
+		}                
+		if(named || forceNames) {
+			Character n(length());                        
+			for(int64_t i = 0; i < length(); i++)
+				n[i] = Symbol(name(i).i);
+			return n;
+		}
+		else return Value::Nil();
+	}
+};
+
+
 
 #endif
 

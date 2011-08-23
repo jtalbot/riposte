@@ -650,7 +650,7 @@ Value systemtime(State& state, List const& args, Character const& names) {
 	return Double::c((e-s)/(1000000.0));
 }
 
-void importCoreLibrary(State& state, Environment* env)
+void importCoreFunctions(State& state, Environment* env)
 {
 	env->assign(state.StrToSym("max"), BuiltIn(max_fn));
 	env->assign(state.StrToSym("min"), BuiltIn(min_fn));

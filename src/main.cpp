@@ -8,18 +8,11 @@
 #include <fstream>
 #include <iostream>
 
-//#define MATHLIB_STANDALONE
-//extern "C" {
-//#include <Rmath.h>
-//}
-
 #ifdef USE_CALLGRIND
 	#include <valgrind/callgrind.h>
 #endif
 
 #include "value.h"
-#include "internal.h"
-#include "coerce.h"
 #include "parser.h"
 #include "compiler.h"
 #include "library.h"
@@ -31,32 +24,32 @@ static int verbose = 0;
 
 /* debug messages */
 static void d_message(const int level, const char* ifmt, const char *msg)
- {
-   char*  fmt;
-   if (debug < level) return;
-   fprintf(stderr,"DEBUG: ");
-   fmt = (char *)ifmt;
-   if (!fmt) 
-      fmt = (char *)"%s\n";
-   fprintf(stderr, fmt, msg);
-   fflush(stderr);
- }
+{
+	char*  fmt;
+	if (debug < level) return;
+	fprintf(stderr,"DEBUG: ");
+	fmt = (char *)ifmt;
+	if (!fmt) 
+		fmt = (char *)"%s\n";
+	fprintf(stderr, fmt, msg);
+	fflush(stderr);
+}
  
  /* error messages */
  static void e_message(const char *severity,const char *source, const char *msg)
- {
-   fprintf(stderr, "%s: (%s) ",severity,source);
-   fprintf(stderr, "%s\n", msg);
-   fflush(stderr);
- }
+{
+	fprintf(stderr, "%s: (%s) ",severity,source);
+	fprintf(stderr, "%s\n", msg);
+	fflush(stderr);
+}
  
  /* verbose  messages */
  static void l_message(const int level, const char *msg)
- {
-   if (level > verbose) return;
-   fprintf(stderr, "%s\n", msg);
-   fflush(stderr);
- }
+{
+	if (level > verbose) return;
+	fprintf(stderr, "%s\n", msg);
+	fflush(stderr);
+}
  
 Value parsetty(State& state) {
 	Value ppr = Value::Nil();
@@ -184,70 +177,64 @@ static int dofile(const char * file, State& state, bool echo) {
 
 static void usage()
 {
-  l_message(0,"usage: riposte [--filename Rscript]");
+	l_message(0,"usage: riposte [--filename Rscript]");
 }
 
 int
 main(int argc, char** argv)
 {
-    int rc;
-  
-/*  getopt parsing  */
+	int rc;
 
-int ch;
-int fd = -1;
-char * filename = NULL;
-bool echo = true; 
+	/*  getopt parsing  */
 
-static struct option longopts[] = {
-             { "debug",     0,     NULL,           'd' },
-             { "file",      1,     NULL,           'f' },
-             { "help",      0,     NULL,           'h' },
-             { "verbose",   0,     NULL,           'v' },
-             { "quiet",     0,     NULL,           'q' },
-             { NULL,        0,     NULL,            0 }
-     };
+	int ch;
+	int fd = -1;
+	char * filename = NULL;
+	bool echo = true; 
 
-/*  Parse commandline options  */
+	static struct option longopts[] = {
+		{ "debug",     0,     NULL,           'd' },
+		{ "file",      1,     NULL,           'f' },
+		{ "help",      0,     NULL,           'h' },
+		{ "verbose",   0,     NULL,           'v' },
+		{ "quiet",     0,     NULL,           'q' },
+		{ NULL,        0,     NULL,            0 }
+	};
 
-while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
-             switch (ch) {
-             case 'd':
-                     debug++;
-                     break;
-             case 'f':
-                     if (0 != strcmp("-",filename = optarg))
-			{
-                     	if ((fd = open(optarg, O_RDONLY, 0)) == -1)
-                             err(1, "unable to open %s", filename);
-                        }
-                     break;
-             case 'h':
-                     usage();
-                     exit (-1);
-                     break;
-             case 'v':
-                     verbose++;
-                     break;
-             case 'q':
-                     echo = false;
-                     break;
-             default:
-                     usage();
-                     exit (-1);
-     }
+	/*  Parse commandline options  */
 
-     argc -= optind;
-     argv += optind;
+	while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
+		switch (ch) {
+			case 'd':
+				debug++;
+				break;
+			case 'f':
+				if (0 != strcmp("-",filename = optarg))
+				{
+					if ((fd = open(optarg, O_RDONLY, 0)) == -1)
+						err(1, "unable to open %s", filename);
+				}
+				break;
+			case 'h':
+				usage();
+				exit (-1);
+				break;
+			case 'v':
+				verbose++;
+				break;
+			case 'q':
+				echo = false;
+				break;
+			default:
+				usage();
+				exit (-1);
+		}
+
+	argc -= optind;
+	argv += optind;
 
 
-      d_message(1,NULL,"Command option processing complete");
-
-	printf(">> %d\n", sizeof(Value));
-	printf(">> %d\n", sizeof(Double));
-	printf(">> %d\n", sizeof(Prototype));
-	//printf(">> %d\n", sizeof(Instruction));
-	//printf(">> %d\n", sizeof(Environment::Container));
+	d_message(1,NULL,"Command option processing complete");
 
 	/* start garbage collector */
 	GC_INIT();
@@ -255,8 +242,8 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 #ifdef USE_CALLGRIND
 	CALLGRIND_START_INSTRUMENTATION
 #endif
-	/* Create riposte environment */
-	Environment* base = new Environment(0,0);
+		/* Create riposte environment */
+		Environment* base = new Environment(0,0);
 	Environment* global = new Environment(base,0);
 	global->setDynamicParent(global);
 
@@ -265,7 +252,7 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 	interpreter_init(state);
 
 	try {
-		importCoreLibrary(state, base);	
+		importCoreFunctions(state, base);	
 		importCoerceFunctions(state, base);	
 		loadLibrary(state, "base");
 
@@ -283,22 +270,22 @@ while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 		}
 	}
 	state.warnings.clear();
-/* Either execute the specified file or read interactively from stdin  */
+	/* Either execute the specified file or read interactively from stdin  */
 
-   /* Load the file containing the script we are going to run */
+	/* Load the file containing the script we are going to run */
 	if(-1 != fd) {
-	  close(fd);    /* will reopen in R for parsing */
-          d_message(1,"source(%s)\n",filename);
-	  rc = dofile(filename,state,echo); 
+		close(fd);    /* will reopen in R for parsing */
+		d_message(1,"source(%s)\n",filename);
+		rc = dofile(filename,state,echo); 
 	} else {
-	  rc = dostdin(state);
+		rc = dostdin(state);
 	}
 
-    /* Session over */
+	/* Session over */
 
-        fflush(stdout);
-        fflush(stderr);
-    
+	fflush(stdout);
+	fflush(stderr);
+
 	return rc;
 }
 

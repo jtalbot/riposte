@@ -285,7 +285,7 @@ void unaryFilter(State& state, Value const& a, Value& c) {
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void binaryArith(State& state, Value const& a, Value const& b, Value& c) {
+void binaryArithSlow(State& state, Value const& a, Value const& b, Value& c) {
 	if(a.isDouble() && b.isDouble()) {
 		Lift< Op<TDouble> >::eval(state, (Double const&)a, (Double const&)b, c);
 	}
@@ -299,6 +299,25 @@ void binaryArith(State& state, Value const& a, Value const& b, Value& c) {
 		_error("non-numeric argument to binary numeric operator");
 }
 
+template< template<class Op> class Lift, template<typename T> class Op > 
+void binaryArith(State& state, Value const& a, Value const& b, Value& c) __attribute__((always_inline));
+
+template< template<class Op> class Lift, template<typename T> class Op > 
+void binaryArith(State& state, Value const& a, Value const& b, Value& c) {
+	if(a.isDouble1()) {
+		if(b.isDouble1()) 
+			{ Double::InitScalar(c, Op<TDouble>::eval(state, a.d, b.d)); return; }
+		else if(b.isInteger1())	
+			{ Double::InitScalar(c, Op<TDouble>::eval(state, a.d, (double)b.i));return; }
+	}
+	else if(a.isInteger1()) {
+		if(b.isDouble1()) 
+			{ Double::InitScalar(c, Op<TDouble>::eval(state, (double)a.i, b.d)); return; }
+		else if(b.isInteger1())	
+			{ Integer::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return;}
+	}
+	binaryArithSlow<Lift, Op>(state, a, b, c);
+}
 template< template<class Op> class Lift, class Op > 
 void binaryLogical(State& state, Value const& a, Value const& b, Value& c) {
 	if(a.isLogicalCoerce() && b.isLogicalCoerce()) 

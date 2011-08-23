@@ -2,7 +2,6 @@
 #include "value.h"
 #include "type.h"
 #include "bc.h"
-#include "internal.h"
 
 #include <sstream>
 #include <iomanip>
@@ -154,7 +153,7 @@ std::string stringify(State const& state, Value const& value, Value const& names
 		}
 		case Type::Function:
 		{
-			result = state.SymToStr(Function(value).string());
+			result = state.SymToStr(Function(value).prototype()->string);
 			return result;
 		}
 		case Type::Environment:
@@ -321,7 +320,7 @@ std::string deparse(State const& state, Value const& value, Value const& names) 
 		case Type::Symbol:
 			return state.SymToStr(Symbol(value)); // NYI: need to check if this should be backticked.
 		case Type::Function:
-			return state.SymToStr(Function(value).string());
+			return state.SymToStr(Function(value).prototype()->string);
 		case Type::Environment:
 			return "environment";
 		case Type::Object:
