@@ -744,7 +744,7 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 			Instruction const& inst = prototype->bc[i];
 			prototype->tbc.push_back(
 				Instruction(
-					inst.bc == ByteCode::done ? glabels[0] : glabels[inst.bc+1],
+					glabels[inst.bc],
 					inst.a, inst.b, inst.c));
 		}
 	}
@@ -761,16 +761,16 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 void interpret(State& state, Instruction const* pc) {
 #ifdef THREADED_INTERPRETER
     #define LABELS_THREADED(name,type) (void*)&&name##_label,
-	static const void* labels[] = {&&DONE, BYTECODES(LABELS_THREADED)};
-	glabels = &labels[0];
+	static const void* labels[] = {BYTECODES(LABELS_THREADED)};
+	glabels = labels;
 	if(pc == 0) return;
 
 	goto *(pc->ibc);
 	#define LABELED_OP(name,type) \
 		name##_label: \
 			{ pc = name##_op(state, *pc); goto *(pc->ibc); } 
-	BYTECODES(LABELED_OP)
-	DONE: {}
+	STANDARD_BYTECODES(LABELED_OP)
+	done_label: {}
 #else
 	while(pc->bc != ByteCode::done) {
 		switch(pc->bc.Enum()) {
@@ -800,7 +800,7 @@ Value eval(State& state, Prototype const* prototype) {
 Value eval(State& state, Prototype const* prototype, Environment* environment) {
 	Value result;
 #ifdef THREADED_INTERPRETER
-	static const Instruction* done = new Instruction(glabels[0]);
+	static const Instruction* done = new Instruction(glabels[ByteCode::done]);
 #else
 	static const Instruction* done = new Instruction(ByteCode::done);
 #endif
