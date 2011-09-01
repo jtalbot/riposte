@@ -236,7 +236,7 @@ RecordingStatus::Enum iforbegin_record(State & state, Instruction const & inst, 
 RecordingStatus::Enum iforend_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	OP_NOT_IMPLEMENTED(iforend);
 }
-RecordingStatus::Enum whilebegin_record(State & state, Instruction const & inst, Instruction const ** pc) {
+/*RecordingStatus::Enum whilebegin_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = whilebegin_op(state,inst);
 	int64_t offset = *pc - &inst;
 	RECORDING_DO(load_constant(state,inst.c,interpreter_reg(state,inst.c)));
@@ -260,26 +260,16 @@ RecordingStatus::Enum repeatend_record(State & state, Instruction const & inst, 
 	//this is just a constant jump, nothing to record
 	*pc = repeatend_op(state,inst);
 	return RecordingStatus::NO_ERROR;
-}
-RecordingStatus::Enum next_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	//this is just a constant jump, nothing to record
-	*pc = next_op(state,inst);
-	return RecordingStatus::NO_ERROR;
-}
-RecordingStatus::Enum break1_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	//this is just a constant jump, nothing to record
-	*pc = break1_op(state,inst);
-	return RecordingStatus::NO_ERROR;
-}
-RecordingStatus::Enum if1_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	*pc = if1_op(state,inst);
+}*/
+RecordingStatus::Enum jt_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	*pc = jt_op(state,inst);
 	int64_t offset = *pc - &inst;
 	const Instruction * other_branch = &inst + ((offset == 1) ? inst.a : 1);
 	RECORDING_DO(insert_guard(state,inst.b,(offset == 1),other_branch,inst.b));
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus::Enum if0_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	*pc = if0_op(state,inst);
+RecordingStatus::Enum jf_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	*pc = jf_op(state,inst);
 	int64_t offset = *pc - &inst;
 	const Instruction * other_branch = &inst + ((offset == 1) ? inst.a : 1);
 	RECORDING_DO(insert_guard(state,inst.b,(offset != 1),other_branch,inst.b));
@@ -339,7 +329,7 @@ UNARY_OP(character1)
 
 RecordingStatus::Enum jmp_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	//this is just a constant jump, nothing to record
-	*pc = next_op(state,inst);
+	*pc = jmp_op(state,inst);
 	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus::Enum function_record(State & state, Instruction const & inst, Instruction const ** pc) {

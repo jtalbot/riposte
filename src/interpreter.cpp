@@ -448,38 +448,16 @@ Instruction const* iforend_op(State& state, Instruction const& inst) {
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;
 }
-Instruction const* whilebegin_op(State& state, Instruction const& inst) {
-	Logical l(REG(state,inst.b));
-	if(l[0]) return &inst+1;
-	else return &inst+inst.a;
-}
-Instruction const* whileend_op(State& state, Instruction const& inst) {
-	Logical l(REG(state,inst.b));
-	if(l[0]) return profile_back_edge(state,&inst+inst.a);
+Instruction const* jt_op(State& state, Instruction const& inst) {
+	Logical l = As<Logical>(state, REG(state,inst.b));
+	if(l.length == 0) _error("condition is of zero length");
+	if(l[0]) return &inst+inst.a;
 	else return &inst+1;
 }
-Instruction const* repeatbegin_op(State& state, Instruction const& inst) {
-	return &inst+1;
-}
-Instruction const* repeatend_op(State& state, Instruction const& inst) {
-	return profile_back_edge(state,&inst+inst.a);
-}
-Instruction const* next_op(State& state, Instruction const& inst) {
-	return &inst+inst.a;
-}
-Instruction const* break1_op(State& state, Instruction const& inst) {
-	return &inst+inst.a;
-}
-Instruction const* if1_op(State& state, Instruction const& inst) {
-	Logical l = As<Logical>(state, REG(state,inst.b));
-	if(l.length == 0) _error("if argument is of zero length");
-	if(l[0]) return &inst+1;
-	else return &inst+inst.a;
-}
-Instruction const* if0_op(State& state, Instruction const& inst) {
+Instruction const* jf_op(State& state, Instruction const& inst) {
 	Logical l = As<Logical>(state, REG(state, inst.b));
-	if(l.length == 0) _error("if argument is of zero length");
-	if(!l[0]) return &inst+1;
+	if(l.length == 0) _error("condition is of zero length");
+	if(l[0]) return &inst+1;
 	else return &inst+inst.a;
 }
 Instruction const* colon_op(State& state, Instruction const& inst) {

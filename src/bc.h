@@ -6,23 +6,17 @@
 #include "common.h"
 
 #define CONTROL_FLOW_BYTECODES(_) 	\
+	_(jt, "jt") \
+	_(jf, "jf") \
+	_(jmp, "jmp") \
 	_(call, "call") \
+	_(UseMethod, "UseMethod") \
+	_(ret, "ret") \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
 	_(iforbegin, "iforbegin") \
 	_(iforend, "iforend") \
-	_(whilebegin, "whilebegin") \
-	_(whileend, "whileend") \
-	_(repeatbegin, "repeatbegin") \
-	_(repeatend, "repeatend") \
-	_(next, "next") \
-	_(break1, "break1") \
-	_(if1, "if1") \
-	_(if0, "if0") \
-	_(jmp, "jmp") \
-	_(UseMethod, "UseMethod") \
 	_(invoketrace,"invoketrace") \
-	_(ret, "ret") \
 
 #define MEMORY_ACCESS_BYTECODES(_) \
 	_(get, "get") \

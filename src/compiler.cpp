@@ -54,9 +54,9 @@ void Compiler::emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b, in
 
 static void resolveLoopReferences(Prototype* code, int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget) {
 	for(int64_t i = start; i < end; i++) {
-		if(code->bc[i].bc == ByteCode::next && code->bc[i].a == 0) {
+		if(code->bc[i].bc == ByteCode::jmp && code->bc[i].a == 0 && code->bc[i].b == 1) {
 			code->bc[i].a = nextTarget-i;
-		} else if(code->bc[i].bc == ByteCode::break1 && code->bc[i].a == 0) {
+		} else if(code->bc[i].bc == ByteCode::jmp && code->bc[i].a == 0 && code->bc[i].b == 2) {
 			code->bc[i].a = breakTarget-i;
 		}
 	}
@@ -370,49 +370,52 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	} break;
 	case String::whileSym: 
 	{
-		int64_t result = compile(Null::Singleton(), code);
-		int64_t lim = compile(call[1], code);
-		emit(code, ByteCode::whilebegin, 0, lim, result);
+		int64_t head_condition = compile(call[1], code);
+		emit(code, ByteCode::jf, 0, head_condition, liveIn);
 		loopDepth++;
+		
 		int64_t beginbody = code->bc.size();
 		compile(call[2], code);
-		int64_t beforecond = code->bc.size();
-		int64_t lim2 = compile(call[1], code);
+		int64_t tail = code->bc.size();
+		int64_t tail_condition = compile(call[1], code);
 		int64_t endbody = code->bc.size();
-		resolveLoopReferences(code, beginbody, endbody, beforecond, endbody+1);
-		loopDepth--;
-		emit(code, ByteCode::whileend, beginbody-endbody, lim2, result);
+		
+		emit(code, ByteCode::jt, beginbody-endbody, tail_condition, liveIn);
+		resolveLoopReferences(code, beginbody, endbody, tail, endbody+1);
 		code->bc[beginbody-1].a = endbody-beginbody+2;
-		scopes.back().deadAfter(result);
+		
+		loopDepth--;
+		scopes.back().deadAfter(liveIn);
+		int64_t result = compile(Null::Singleton(), code);
 		return result;
 	} break;
 	case String::repeatSym: 
 	{
-		int64_t result = compile(Null::Singleton(), code);
-		emit(code, ByteCode::repeatbegin, 0, 0, result);
 		loopDepth++;
+
 		int64_t beginbody = code->bc.size();
 		compile(call[1], code);
 		int64_t endbody = code->bc.size();
 		resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
+		
 		loopDepth--;
-		emit(code, ByteCode::repeatend, beginbody-endbody, 0, result);
-		code->bc[beginbody-1].a = endbody-beginbody+2;
-		scopes.back().deadAfter(result);
+		emit(code, ByteCode::jmp, beginbody-endbody, 0, liveIn);
+		scopes.back().deadAfter(liveIn);
+		int64_t result = compile(Null::Singleton(), code);
 		return result;
 	} break;
 	case String::nextSym:
 	{
 		if(loopDepth == 0) throw CompileError("next used outside of loop");
-		int64_t result = scopes.back().allocRegister(Register::TEMP);
-		emit(code, ByteCode::next, 0, 0, result);
+		int64_t result = scopes.back().allocRegister(Register::TEMP);	
+		emit(code, ByteCode::jmp, 0, 1, result);
 		return result;
 	} break;
 	case String::breakSym:
 	{
 		if(loopDepth == 0) throw CompileError("break used outside of loop");
-		int64_t result = scopes.back().allocRegister(Register::TEMP);
-		emit(code, ByteCode::break1, 0, 0, result);
+		int64_t result = scopes.back().allocRegister(Register::TEMP);	
+		emit(code, ByteCode::jmp, 0, 2, result);
 		return result;
 	} break;
 	case String::ifSym: 
@@ -423,7 +426,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		if(call.length == 3)
 			resultF = compile(Null::Singleton(), code);
 		int64_t cond = compile(call[1], code);
-		emit(code, ByteCode::if1, 0, cond, liveIn);
+		emit(code, ByteCode::jf, 0, cond, liveIn);
 		int64_t begin1 = code->bc.size(), begin2 = 0;
 		scopes.back().deadAfter(liveIn);
 		resultT = compile(call[2], code);
