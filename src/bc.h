@@ -14,8 +14,6 @@
 	_(ret, "ret") \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
-	_(iforbegin, "iforbegin") \
-	_(iforend, "iforend") \
 	_(invoketrace,"invoketrace") \
 
 #define MEMORY_ACCESS_BYTECODES(_) \
@@ -81,7 +79,7 @@
 	_(type, "type") \
 
 #define SPECIAL_BYTECODES(_) 	\
-	_(done, "done")       /* done must be the last instruction */
+	_(done, "done") 
 
 #define BYTECODES(_) \
 	CONTROL_FLOW_BYTECODES(_) \

@@ -430,24 +430,6 @@ Instruction const* forend_op(State& state, Instruction const& inst) {
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;
 }
-Instruction const* iforbegin_op(State& state, Instruction const& inst) {
-	double m = asReal1(REG(state, inst.c-1));
-	double n = asReal1(REG(state, inst.c));
-	REG(state, inst.c-1) = Integer::c(n > m ? 1 : -1);
-	REG(state, inst.c-1).length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
-	REG(state, inst.c) = Integer::c((int64_t)m);
-	if(REG(state, inst.c).i >= (int64_t)REG(state, inst.c-1).length) { return &inst+inst.a; }
-	state.frame.environment->hassign(Symbol(inst.b), Integer::c(m));
-	REG(state, inst.c).i += REG(state, inst.c-1).i;
-	return &inst+1;
-}
-Instruction const* iforend_op(State& state, Instruction const& inst) {
-	if(REG(state, inst.c).i < REG(state, inst.c-1).length) { 
-		state.frame.environment->hassign(Symbol(inst.b), REG(state, inst.c));
-		REG(state, inst.c).i += REG(state, inst.c-1).i;
-		return profile_back_edge(state,&inst+inst.a);
-	} else return &inst+1;
-}
 Instruction const* jt_op(State& state, Instruction const& inst) {
 	Logical l = As<Logical>(state, REG(state,inst.b));
 	if(l.length == 0) _error("condition is of zero length");

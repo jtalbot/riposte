@@ -327,46 +327,27 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	} break;
 	case String::forSym: 
 	{
+		int64_t loop_vector = compile(call[2], code);
+		int64_t loop_counter = scopes.back().allocRegister(Register::VARIABLE);	// save space for loop counter
+		int64_t loop_variable = scopes.back().allocRegister(Register::VARIABLE);
+		int64_t slot = getSlot(Symbol(call[1]));
+
+		if(loop_counter != loop_vector+1) throw CompileError("limits aren't in adjacent registers");
+		emit(code, ByteCode::forbegin, 0, loop_counter, loop_variable);
+		loopDepth++;
+		int64_t beginbody = code->bc.size();
+
+		if(slot >= 0) emit(code, ByteCode::sassign, slot, 0, loop_variable);
+		else emit(code, ByteCode::assign, Symbol(call[1]).i, 0, loop_variable); 	
+		compile(call[3], code);
+
+		int64_t endbody = code->bc.size();
+		resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
+		loopDepth--;
+		emit(code, ByteCode::forend, beginbody-endbody, loop_counter , loop_variable);
+		code->bc[beginbody-1].a = endbody-beginbody+1;
+		scopes.back().deadAfter(liveIn);
 		int64_t result = compile(Null::Singleton(), code);
-		// special case common i in m:n case
-		/*if(call[2].isCall() && Symbol(Call(call[2])[0]) == String::colon) {
-			int64_t lim1 = compile(Call(call[2])[1], code);
-			int64_t lim2 = compile(Call(call[2])[2], code);
-			if(lim1+1 != lim2) throw CompileError("limits aren't in adjacent registers");
-			//int64_t slot = getSlot(Symbol(call[1]));
-			//if(slot < 0) throw CompileError("for loop variable not allocated to slot");
-			emit(code, ByteCode::iforbegin, 0, Symbol(call[1]).i, lim2);
-			loopDepth++;
-			int64_t beginbody = code->bc.size();
-			compile(call[3], code);
-			int64_t endbody = code->bc.size();
-			resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
-			loopDepth--;
-			emit(code, ByteCode::iforend, beginbody-endbody, Symbol(call[1]).i, lim2);
-			code->bc[beginbody-1].a = endbody-beginbody+1;
-		}
-		else {*/
-			int64_t loop_vector = compile(call[2], code);
-			int64_t loop_counter = scopes.back().allocRegister(Register::VARIABLE);	// save space for loop counter
-			int64_t loop_variable = scopes.back().allocRegister(Register::VARIABLE);
-			int64_t slot = getSlot(Symbol(call[1]));
-			
-			if(loop_counter != loop_vector+1) throw CompileError("limits aren't in adjacent registers");
-			emit(code, ByteCode::forbegin, 0, loop_counter, loop_variable);
-			loopDepth++;
-			int64_t beginbody = code->bc.size();
-
-			if(slot >= 0) emit(code, ByteCode::sassign, slot, 0, loop_variable);
-			else emit(code, ByteCode::assign, Symbol(call[1]).i, 0, loop_variable); 	
-			compile(call[3], code);
-
-			int64_t endbody = code->bc.size();
-			resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
-			loopDepth--;
-			emit(code, ByteCode::forend, beginbody-endbody, loop_counter , loop_variable);
-			code->bc[beginbody-1].a = endbody-beginbody+1;
-		//}
-		scopes.back().deadAfter(result);
 		return result;
 	} break;
 	case String::whileSym: 
