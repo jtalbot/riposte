@@ -123,7 +123,7 @@ expr(A) ::= SYMBOL(B) NS_GET(C) symbolstr(D). { A = CreateCall(List::c(C, B, D))
 expr(A) ::= STR_CONST(B) NS_GET(C) symbolstr(D). { A = CreateCall(List::c(C, B, D)); }
 expr(A) ::= SYMBOL(B) NS_GET_INT(C) symbolstr(D). { A = CreateCall(List::c(C, B, D)); }
 expr(A) ::= STR_CONST(B) NS_GET_INT(C) symbolstr(D). { A = CreateCall(List::c(C, B, D)); }
-expr(A) ::= expr(B) DOLLAR(C) optnl symbolstr(D). { A = CreateCall(List::c(C, B, D)); }
+expr(A) ::= expr(B) DOLLAR(C) optnl symbolstr(D). { if(D.isSymbol()) D = Character::c(Symbol(D)); A = CreateCall(List::c(C, B, D)); }
 expr(A) ::= expr(B) AT(C) optnl symbolstr(D). { A = CreateCall(List::c(C, B, D)); }
 expr(A) ::= NEXT(B). { A = CreateCall(List::c(B)); }
 expr(A) ::= BREAK(B). { A = CreateCall(List::c(B)); }

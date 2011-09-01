@@ -135,7 +135,13 @@ Type::Enum cTypeCast(Value const& v, Type::Enum t)
 Value list(State& state, List const& args, Character const& names) {
 	List out(args.length);
 	for(int64_t i = 0; i < args.length; i++) out[i] = force(state, args[i]);
-	return out;
+	if(names.length != args.length) {
+		return out;
+	} else {
+		Value v;
+		Object::InitWithNames(v, out, names);
+		return v;
+	}
 }
 
 Value unlist(State& state, List const& args, Character const& names) {
@@ -305,66 +311,6 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 		_error("NYI indexing type");
 	}
 }
-
-Value subset(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 2);
-        Value a = force(state, args[0]);
-        Value i = force(state, args[1]);
-	Value v;
-	Subset(state, a, i, v);
-	return v;
-}
-
-Value subset2(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 2);
-        Value a = force(state, args[0]);
-        Value b = force(state, args[1]);
-	Value result;
-	if(b.isCharacter() && a.isObject() && ((Object const&)a).hasNames()) {
-		Symbol i = Character(b)[0];
-		Character c = Character(((Object const&)a).getNames());
-		
-		int64_t j = 0;
-		for(;j < c.length; j++) {
-			if(c[j] == i)
-				break;
-		}
-		if(j < c.length) {
-			Element2(a, j, result);
-		}
-	}
-	else if(b.isInteger()) {
-		Element2(a, Integer(b)[0]-1, result);
-	}
-	else if(b.isDouble()) {
-		Element2(a, (int64_t)Double(b)[0]-1, result);
-	}
-	else {
-		result = Null::Singleton();
-	}
-	return result;
-} 
-
-Value dollar(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 2);
-
-        Value a = force(state, args[0]);
-        int64_t i = Symbol(expression(args[1])).i;
-	if(a.isObject() && ((Object const&)a).hasNames()) {
-		Character c = Character(((Object const&)a).getNames());
-		int64_t j = 0;
-		for(;j < c.length; j++) {
-			if(c[j] == i)
-				break;
-		}
-		if(j < c.length) {
-			Value result;
-			Element2(a, j, result);
-			return result;
-		}
-	}
-	return Null::Singleton();
-} 
 
 template< class A  >
 struct SubsetAssignT {
@@ -804,10 +750,6 @@ void importCoreFunctions(State& state, Environment* env)
 	env->assign(state.StrToSym("unlist"), BuiltIn(unlist));
 	env->assign(state.StrToSym("length"), BuiltIn(length));
 	
-	env->assign(state.StrToSym("["), BuiltIn(subset));
-	env->assign(state.StrToSym("[["), BuiltIn(subset2));
-	env->assign(state.StrToSym("$"), BuiltIn(dollar));
-
 	env->assign(state.StrToSym("switch"), BuiltIn(switch_fn));
 
 	env->assign(state.StrToSym("eval"), BuiltIn(eval_fn));

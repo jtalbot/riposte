@@ -40,16 +40,23 @@ inline void Element(Value const& v, int64_t index, Value& out) {
 	};
 }
 
-void Element2(Value const& v, int64_t index, Value& out) __attribute__((always_inline));
 inline void Element2(Value const& v, int64_t index, Value& out) {
-	if(index < 0 || index > v.length) _error("Out-of-range index");
 	switch(v.type) {
-		#define CASE(Name) case Type::Name: Name::InitScalar(out, ((Name const&)v)[index]); break;
+		#define CASE(Name) case Type::Name: \
+			if(index < 0 || index >= v.length) \
+				_error("Out-of-range index"); \
+			Name::InitScalar(out, ((Name const&)v)[index]); \
+			break;
 		ATOMIC_VECTOR_TYPES(CASE)
 		#undef CASE
-		#define CASE(Name) case Type::Name: out = ((Name const&)v)[index]; break;
-		LISTLIKE_VECTOR_TYPES(CASE)
-		#undef CASE
+		case Type::List: 
+			if(index < 0 || index >= v.length) 
+				_error("Out-of-range index"); 
+			out = ((List const&)v)[index]; 
+			break;
+		case Type::Object: 
+			Element2(((Object const&)v).base(), index, out); 
+			break;
 		default: _error("NYI: Element of this type"); break;
 	};
 }

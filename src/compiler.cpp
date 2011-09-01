@@ -236,7 +236,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		scopes.back().deadAfter(reg);	
 		return reg;
 	} break;
-	case String::bb: {
+	case String::bb: 
+	case String::dollar: {
 		if(call.length != 3) return compileFunctionCall(call, names, code);
 		int64_t value = compile(call[1], code);
 		int64_t index = compile(call[2], code);
