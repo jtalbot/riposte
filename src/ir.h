@@ -6,15 +6,15 @@
 
 //order matters since T_logical < T_integer < T_double < T_complex for subtyping rules
 #define IR_TYPE(_) \
-	_(T_null, 	"NULL")			\
-	_(T_logical, 	"logical")		\
-	_(T_integer, 	"integer")		\
-	_(T_double, 	"double")		\
-	_(T_complex, 	"complex")		\
-	_(T_character, 	"character")		\
-	_(T_void,		"void")	\
-	_(T_size,       "size") /*type that holds the size of vectors*/\
-	_(T_unsupported, "unsupported")
+	_(T_null, 	"NULL", sizeof(int))			\
+	_(T_logical, 	"logical", sizeof(bool))		\
+	_(T_integer, 	"integer", sizeof(int))		\
+	_(T_double, 	"double", sizeof(double))		\
+	_(T_complex, 	"complex", sizeof(double)*2 )		\
+	_(T_character, 	"character", sizeof(char))		\
+	_(T_void,		"void",0)	\
+	_(T_size,       "size",sizeof(size_t)) /*type that holds the size of vectors*/\
+	_(T_unsupported, "unsupported", 0)
 
 DECLARE_ENUM(IRScalarType,IR_TYPE)
 
@@ -99,6 +99,12 @@ struct IRType {
 	}
 	IRType base() const {
 		return IRType(base_type,false);
+	}
+	size_t width() const {
+#define GET_WIDTH(x,y,w) w,
+		static size_t widths[] = { IR_TYPE(GET_WIDTH) 0 };
+#undef GET_WIDTH
+		return widths[base_type];
 	}
 	bool operator==(IRType const& t) const { return base_type == t.base_type && isVector == t.isVector; } \
     bool operator!=(IRType const& t) const { return !(*this == t); } \

@@ -17,7 +17,7 @@
 	} while(0)
 #define COMPILER_DO(fn) \
 	do { \
-		TCStatus s = (fn); \
+		TCStatus::Enum s = (fn); \
 		if(TCStatus::SUCCESS != s) \
 			return s; \
 	} while(0)
@@ -127,16 +127,16 @@ struct TraceCompilerImpl : public TraceCompiler {
 
 	arbb_type_t typeFor(IRType const & typ) {
 		arbb_scalar_type_t scalar;
-		switch(typ.base_type.Enum()) {
-			case IRScalarType::E_T_null: scalar = arbb_i32; break;
-			case IRScalarType::E_T_logical: scalar = arbb_boolean; break;
-			case IRScalarType::E_T_integer: scalar = arbb_i64; break;
-			case IRScalarType::E_T_double: scalar = arbb_f64; break;
-			case IRScalarType::E_T_complex: panic("NYI: complex"); break;
-			case IRScalarType::E_T_character: panic("NYI: character"); break;
-			case IRScalarType::E_T_void: panic("void type is not an arbb type"); break;
-			case IRScalarType::E_T_size: scalar = arbb_usize; break;
-			case IRScalarType::E_T_unsupported: panic("successful trace contains unsupported type."); break;
+		switch(typ.base_type) {
+			case IRScalarType::T_null: scalar = arbb_i32; break;
+			case IRScalarType::T_logical: scalar = arbb_boolean; break;
+			case IRScalarType::T_integer: scalar = arbb_i64; break;
+			case IRScalarType::T_double: scalar = arbb_f64; break;
+			case IRScalarType::T_complex: panic("NYI: complex"); break;
+			case IRScalarType::T_character: panic("NYI: character"); break;
+			case IRScalarType::T_void: panic("void type is not an arbb type"); break;
+			case IRScalarType::T_size: scalar = arbb_usize; break;
+			case IRScalarType::T_unsupported: panic("successful trace contains unsupported type."); break;
 		}
 		arbb_type_t scalar_arbb_type;
 		ARBB_RUN(arbb_get_scalar_type(ctx,&scalar_arbb_type,scalar,&details));
@@ -238,7 +238,7 @@ struct TraceCompilerImpl : public TraceCompiler {
 	}
 
 	enum Location { L_HEADER, L_FIRST, L_BODY };
-	TCStatus emitir(IRef ref, Location loc, std::vector<arbb_variable_t> & references, size_t * if_depth) {
+	TCStatus::Enum emitir(IRef ref, Location loc, std::vector<arbb_variable_t> & references, size_t * if_depth) {
 		IRNode const & node = get(ref);
 		printf("emitting %s\n",node.toString().c_str());
 		arbb_variable_t outputs[1];
@@ -248,9 +248,9 @@ struct TraceCompilerImpl : public TraceCompiler {
 		if(node.flags() & IRNode::REF_B)
 			inputs[1] = references[node.b];
 
-		switch(node.opcode.Enum()) {
+		switch(node.opcode) {
 #define ELEMENT_WISE_OP(ir,arbb) \
-		case IROpCode::E_##ir: \
+		case IROpCode :: ir : \
 			assert(!arbb_is_variable_null(inputs[0])); \
 			assert(!arbb_is_variable_null(inputs[1])); \
 			if(loc != L_BODY) \
@@ -259,10 +259,10 @@ struct TraceCompilerImpl : public TraceCompiler {
 			ARBB_RUN(arbb_op(fn,arbb_op_##arbb,outputs,inputs,NULL,NULL,&details)); \
 			break;
 		ARBB_MAPPING(ELEMENT_WISE_OP,0)
-		case IROpCode::E_kload:
+		case IROpCode::kload:
 			references[ref] = varFor(constants[node.a]); //just alias the ref to the constant's variable
 			break;
-		case IROpCode::E_guard: {
+		case IROpCode::guard: {
 			int64_t exit = node.b;
 			ARBB_RUN(arbb_if(fn,references[node.a],&details));
 			switch(loc) {
@@ -306,7 +306,7 @@ struct TraceCompilerImpl : public TraceCompiler {
 			}
 		} break;
 		default:
-			printf("trace compiler: unsupported op %s\n",node.opcode.toString());
+			printf("trace compiler: unsupported op %s\n", IROpCode::toString(node.opcode));
 			return TCStatus::UNSUPPORTED_IR;
 			break;
 		}
@@ -330,10 +330,9 @@ struct TraceCompilerImpl : public TraceCompiler {
 		arbb_binding_t binding;
 		if(typ == vtyp) {
 			if(typ.isVector) {
-				Vector vector(v);
-				uint64_t length = vector.length;
-				uint64_t width = vector.width;
-				ARBB_RUN(arbb_create_dense_binding(ctx,&binding,vector._data,1,&length,&width,&details));
+				uint64_t length = v.length;
+				uint64_t width = vtyp.width();
+				ARBB_RUN(arbb_create_dense_binding(ctx,&binding,v.p,1,&length,&width,&details));
 				ARBB_RUN(arbb_create_global(ctx,result,typeFor(typ),NULL,binding,NULL,&details));
 			} else {
 				arbb_set_binding_null(&binding);
@@ -383,7 +382,7 @@ struct TraceCompilerImpl : public TraceCompiler {
 		ARBB_RUN(arbb_op(fn,arbb_op_copy,&output,&input,NULL,NULL,&details));
 	}
 
-	TCStatus compile() {
+	TCStatus::Enum compile() {
 		ARBB_RUN(arbb_get_default_context(&ctx,&details));
 
 
@@ -493,19 +492,20 @@ struct TraceCompilerImpl : public TraceCompiler {
 			*v = interpreter_sget(s,entry.id);
 	}
 	void constructValueFromData(IRType const & irtyp, int64_t length, void * data, Value * v) {
-		Type typ;
-		switch(irtyp.base_type.Enum()) {
-			case IRScalarType::E_T_null: typ = Type::E_R_null; break;
-			case IRScalarType::E_T_logical: typ = Type::E_R_logical; break;
-			case IRScalarType::E_T_integer: typ = Type::E_R_integer; break;
-			case IRScalarType::E_T_double: typ = Type::E_R_double; break;
-			case IRScalarType::E_T_complex: panic("NYI: complex"); break;
-			case IRScalarType::E_T_character: panic("NYI: character"); break;
-			case IRScalarType::E_T_void: panic("void type is not an arbb type"); break;
-			case IRScalarType::E_T_size: typ = Type::E_R_integer; break;
-			case IRScalarType::E_T_unsupported: panic("successful trace contains unsupported type."); break;
+		Type::Enum typ;
+		switch(irtyp.base_type) {
+			case IRScalarType::T_null: typ = Type::Null; break;
+			case IRScalarType::T_logical: typ = Type::Logical; break;
+			case IRScalarType::T_integer: typ = Type::Integer; break;
+			case IRScalarType::T_double: typ = Type::Double; break;
+			case IRScalarType::T_complex: panic("NYI: complex"); break;
+			case IRScalarType::T_character: panic("NYI: character"); break;
+			case IRScalarType::T_void: panic("void type is not an arbb type"); break;
+			case IRScalarType::T_size: typ = Type::Integer; break;
+			case IRScalarType::T_unsupported: panic("successful trace contains unsupported type."); break;
 		}
-		*v = Vector(typ,length,data);
+		Value::Init(*v,typ,length);
+		v->p = data;
 	}
 
 	void storeValue(State & s, Output const & o, arbb_global_variable_t * output_globals) {
@@ -536,7 +536,7 @@ struct TraceCompilerImpl : public TraceCompiler {
 		}
 	}
 
-	TCStatus execute(State & s, int64_t * offset) {
+	TCStatus::Enum execute(State & s, int64_t * offset) {
 		//check type specializations of inputs before creating a bunch of arbb state that we would have to destroy.
 		for(size_t i = 0; i < inputs.size(); i++) {
 			Input & input = inputs[i];

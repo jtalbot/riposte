@@ -6,6 +6,7 @@
 #include "coerce.h"
 #include "exceptions.h"
 #include <cmath>
+#include <stdlib.h>
 
 struct TLogical {
 	typedef Logical Self;
@@ -52,7 +53,7 @@ struct T<TComplex> : public UnaryOp<TComplex::Self, TComplex::Self> { \
 UNARY_OP(PosOp, Self, Self, a)
 UNARY_OP(NegOp, Self, Self, -a)
 inline double Abs(double a) { return fabs(a); }
-inline int64_t Abs(int64_t a) { return abs(a); }
+inline int64_t Abs(int64_t a) { return llabs(a); }
 inline std::complex<double> Abs(std::complex<double> const& a) { return std::complex<double>(sqrt(a.real()*a.real() + a.imag()*a.imag()), 0); }
 UNARY_OP(AbsOp, Self, Self, Abs(a))
 UNARY_OP(SignOp, Self, Up, a > 0 ? 1 : (a < 0 ? -1 : 0))	NYI_COMPLEX_OP(SignOp)

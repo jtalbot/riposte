@@ -261,7 +261,7 @@ static Instruction const * profile_back_edge(State & state, Instruction const * 
 	int64_t value = ( (int64_t) inst >> 5 ) % PROFILE_TABLE_SIZE;
 	int64_t heat = ++hash_table[value];
 	if(heat >= state.tracing.start_count && heat < state.tracing.start_count + state.tracing.max_attempts) { //upper bound is to prevent trying many failed traces
-		printf("trace beginning at %s\n", inst->bc.toString());
+		printf("trace beginning at %s\n",   ByteCode::toString(inst->bc));
 		return recording_interpret(state,inst);
 	} else return inst;
 #else
@@ -791,10 +791,10 @@ void interpret(State& state, Instruction const* pc) {
 	DONE: {}
 #else
 	while(pc->bc != ByteCode::done) {
-		switch(pc->bc.Enum()) {
+		switch(pc->bc) {
 			#define SWITCH_OP(name,type) \
 				case ByteCode::name: { pc = name##_op(state, *pc); } break;
-			BYTECODES(SWITCH_OP,0)
+			BYTECODES(SWITCH_OP)
 		};
 	}
 #endif
