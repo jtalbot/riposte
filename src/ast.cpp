@@ -1202,7 +1202,7 @@ static void yy_reduce(
         break;
       case 63: /* sublist ::= sublist optnl COMMA optnl sub */
 #line 144 "parser.y"
-{ yygotominor.yy122 = yymsp[-4].minor.yy122; if(yymsp[0].minor.yy122->length() == 1) yygotominor.yy122->push_back(yymsp[0].minor.yy122->name(0), yymsp[0].minor.yy122->value(0));   yy_destructor(yypParser,52,&yymsp[-2].minor);
+{ yygotominor.yy122 = yymsp[-4].minor.yy122; if(yygotominor.yy122->length() == 0) yygotominor.yy122->push_back(Symbols::empty, Value::Nil()); if(yymsp[0].minor.yy122->length() == 1) yygotominor.yy122->push_back(yymsp[0].minor.yy122->name(0), yymsp[0].minor.yy122->value(0)); else if(yymsp[0].minor.yy122->length() == 0) yygotominor.yy122->push_back(Symbols::empty, Value::Nil());   yy_destructor(yypParser,52,&yymsp[-2].minor);
 }
 #line 1208 "parser.c"
         break;

@@ -119,6 +119,20 @@ fail <- 0
 	PassIfTrue(g(1,2,3) == 1)
 	PassIfTrue(h(1,2,3) == 100)
 	PassIfTrue(i(1,2,3) == 2)
+
+	cat("Missing parameters...\n")
+	f <- function(x=4,y=2) x/y
+	PassIfTrue(f() == 2)
+	PassIfTrue(f(8) == 4)
+	PassIfTrue(f(x=8) == 4)
+	PassIfTrue(f(y=1) == 4)
+	PassIfTrue(f(10,) == 5)
+	PassIfTrue(f(x=10,) == 5)
+	PassIfTrue(f(,1) == 4)
+	PassIfTrue(f(,y=1) == 4)
+	PassIfTrue(f(y=1,) == 4)
+	PassIfTrue(f(,x=10) == 5)
+	PassIfTrue(f(,) == 2)
 	
 	"done"
 }

@@ -129,17 +129,23 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 	Character const& pnames = func.prototype()->names;
 	int64_t fdots = func.prototype()->dots;
 
-	// Set to nil slots beyond the parameters
+	// Set to nil slots beyond the defaults
 	for(int64_t i = parameters.length; i < fenv->SlotCount(); i++) {
 		sassign(fenv, i, Value::Nil());
 	}
 
 	// call arguments are not named, do posititional matching
 	if(anames.length == 0) {
+		// set defaults
+		for(int64_t i = 0; i < parameters.length; ++i) {
+			argAssign(fenv, i, parameters[i], fenv);
+		}
+		
 		int64_t end = std::min(arguments.length, fdots);
 		for(int64_t i = 0; i < end; ++i) {
-			argAssign(fenv, i, arguments[i], env);
+			if(!arguments[i].isNil()) { argAssign(fenv, i, arguments[i], env); }
 		}
+
 		// set dots if necessary
 		if(fdots < parameters.length && arguments.length-fdots > 0) {
 			List dots(arguments.length - fdots);
@@ -151,11 +157,6 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			sassign(fenv, fdots, dots);
 			end++;
 		}
-		// set defaults
-		for(int64_t i = end; i < parameters.length; ++i) {
-			argAssign(fenv, i, parameters[i], fenv);
-		}
-		
 	}
 	// call arguments are named, do matching by name
 	else {
@@ -218,7 +219,11 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 		// stuff that can't be cached...
 
 		// assign all the arguments
-		for(int64_t j = 0; j < parameters.length; ++j) if(j != fdots) argAssign(fenv, j, set[j]>=0 ? arguments[set[j]] : parameters[-(set[j]+1)], env);
+		for(int64_t j = 0; j < parameters.length; ++j) { 
+			if(j != fdots) { 
+				argAssign(fenv, j, set[j]>=0 && !arguments[set[j]].isNil() ? arguments[set[j]] : parameters[j], env);
+			}
+		}
 
 		// put unused args into the dots
 		if(fdots < parameters.length) {
