@@ -1,80 +1,92 @@
 #include "trace.h"
 #include "interpreter.h"
 
+#include "math.h"
+#include <stdlib.h>
 
-
-Trace::Trace(Prototype * code, Instruction * trace_start)
-: trace_inst(*trace_start) {
-	this->code = code;
-	this->trace_start = trace_start;
-#ifdef THREAED_INTERPRETER
-#error  "Need to get bytecode for trace_inst"
-#endif
+void Trace::reset() {
+	n_nodes = n_recorded = length = n_outputs = 0;
 }
 
-
-
-void trace_compile_and_install(State & state, Trace * trace) {
-
-	trace->optimize();
-	printf("trace:\n%s\n",state.stringify(*trace).c_str());
-	trace->compiled.reset( TraceCompiler::create(trace) );
-
-	TCStatus::Enum status = trace->compiled->compile();
-	if(TCStatus::SUCCESS != status) {
-		printf("trace: compiler error: %s\n",TCStatus::toString(status));
-		return;
-	}
-
-	//patch trace into bytecode
-	Prototype * code = trace->code;
-	Instruction * inst = trace->trace_start;
-
-	printf("trace: patching into bytecode: %s\n\n",trace->trace_inst.toString().c_str());
-	code->traces.push_back(trace);
-
-	//currently we assume inst is not a threaded instruction
-	inst->bc = ByteCode::invoketrace;
-	inst->a = code->traces.size() - 1;
-#ifdef THREAED_INTERPRETER
-#error  "Need to get patch the threaded bytecodes as well as the non-thread ones"
-#endif
-}
-
-
-void Trace::optimize() {
-	optimized.clear();
-	optimized.insert(optimized.end(),recorded.begin(),recorded.end());
-	std::vector<bool> loop_invariant(optimized.size(),false);
-
-	for(IRef i = 0; i < optimized.size(); i++) {
-		IRNode & node = optimized[i];
-		uint32_t location;
-		if(renaming_table.locationFor(node.opcode,&location)) {
-			IRef var;
-			bool read;
-			bool write = false;
-			renaming_table.get(location,node.a,renaming_table.current_view(),false,&var,&read,&write);
-
-			loop_invariant[i] = !write;
-			if(write) { //create phi node
-				node.b = var;
-				phis.push_back(i);
-			} else {
-				loads.push_back(i);
-			}
-
+void Trace::execute(State & state) {
+	//remove outputs that have been killed
+	for(size_t i = 0; i < n_outputs; ) {
+		Output & o = outputs[i];
+		if(o.location->header != Type::Future || (uint64_t) o.location->i != o.ref) {
+			o = outputs[--n_outputs];
 		} else {
-			loop_invariant[i] =    ( (node.flags() & IRNode::REF_A) == 0 || loop_invariant[node.a] )
-					            && ( (node.flags() & IRNode::REF_B) == 0 || loop_invariant[node.b] );
-			if(loop_invariant[i]) {
-				if(node.opcode == IROpCode::guard) { //if we move a guard, we have to change the exit point
-					node.b = -1; //exit offset is the trace instruction itself
-				}
-				loop_header.push_back(i);
-			} else {
-				loop_body.push_back(i);
+			i++;
+		}
+	}
+	printf("executing trace:\n%s\n",toString().c_str());
+	//allocate outputs
+	for(size_t i = 0; i < n_outputs; i++) {
+		Output & o = outputs[i];
+		*o.location = Double(length);
+	}
+	
+	for(size_t i = 0; i < length; i += TRACE_VECTOR_WIDTH) {
+		for(size_t j = 0; j < n_nodes; j++) {
+			IRNode & node = nodes[j];		
+#define BINARY_IMPL(op,nm,body) \
+case IROpCode :: op : { \
+	double * av = registers[node.a]; \
+	double * bv = registers[node.b]; \
+	double * cv = registers[j]; \
+	for(size_t z = 0; z < TRACE_VECTOR_WIDTH; z++) { \
+		double a = av[z]; \
+		double b = bv[z]; \
+		cv[z] = body; \
+	} \
+} break;
+#define UNARY_IMPL(op,nm,body) \
+case IROpCode :: op : { \
+	double * av = registers[node.a]; \
+	double * cv = registers[j]; \
+	for(size_t z = 0; z < TRACE_VECTOR_WIDTH; z++) { \
+		double a = av[z]; \
+		cv[z] = body; \
+	} \
+} break;
+	
+			switch(node.opcode) {
+				IR_BINARY(BINARY_IMPL)
+				IR_UNARY(UNARY_IMPL)
+				case IROpCode::vload: {
+					double * cv = registers[j];
+					for(size_t z = 0; z < TRACE_VECTOR_WIDTH; z++)
+						cv[z] = node.reg_a[i + z];
+				} break;
+				case IROpCode::broadcast: {
+					double * cv = registers[j];
+					for(size_t z = 0; z < TRACE_VECTOR_WIDTH; z++)
+						cv[z] = node.const_a;
+				} break;
+			}
+		}
+		//write outputs
+		for(size_t j = 0; j < n_outputs; j++) {
+			Output & o = outputs[j];
+			double * ov = (double *) o.location->p;
+			double * av = registers[o.ref];
+			for(size_t z = 0; z < TRACE_VECTOR_WIDTH; z++) {
+				ov[i + z] = av[z];
 			}
 		}
 	}
+}
+
+std::string Trace::toString() {
+	std::ostringstream out;
+	out << "recorded: \n";
+	for(size_t j = 0; j < n_nodes; j++) {
+		IRNode & node = nodes[j];
+		out << node.toString() << "\n";
+	}
+	out << "outputs: \n";
+	for(size_t i = 0; i < n_outputs; i++) {
+		Output & o = outputs[i];
+		out << o.ref << "\n";
+	}
+	return out.str();
 }

@@ -4,6 +4,6 @@
 #include "value.h"
 
 
-Instruction const * recording_interpret(State& state, Instruction const* pc);
+Instruction const * recording_interpret(State& state, Instruction const* pc, size_t length);
 
 #endif

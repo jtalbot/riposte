@@ -166,6 +166,8 @@ std::string stringify(State const& state, Value const& value, Value const& names
 			if(((Object const&)value).hasClass()) result += "\nclass: " + state.stringify(((Object const&)value).getClass());
 			return result;
 		}
+		case Type::Future:
+			return std::string("future") + intToStr(value.i);
 		default:
 			return Type::toString(value.type);
 	};
@@ -178,69 +180,7 @@ std::string State::stringify(Value const& value) const {
 
 
 std::string State::stringify(Trace const & t) const {
-
-
-#define WRITE_OP(o,op) \
-	do { \
-		const IRNode & n = (op); \
-		std::string result = (n.flags() & IRNode::REF_R) != 0 ?  ( "r" + intToStr(o)  + " =") : ""; \
-		r = r + intToStr(i) + ":\t" + result + "\t" + n.toString() + "\n"; \
-	} while(0)
-#define WRITE_HEAD(name,size) \
-	(r = r + name + ": " + intToStr(size) + "\n")
-
-	std::string r = "trace:\n";
-
-	WRITE_HEAD("constants",t.constants.size());
-
-		for(size_t i = 0; i < t.constants.size(); i++)
-			r = r + intToStr(i) + "=\t" + stringify(t.constants[i]) + "\n";
-
-	WRITE_HEAD("recorded",t.recorded.size());
-
-	for(size_t i = 0; i < t.recorded.size(); i++) {
-		WRITE_OP(i,t.recorded[i]);
-	}
-	WRITE_HEAD("exits",t.exits.size());
-	for(size_t i = 0; i < t.exits.size(); i++) {
-		int32_t snapshot = t.exits[i].snapshot;
-		r = r + intToStr(i) + "[" + intToStr(t.exits[i].offset)  + "]:\t";
-		for(size_t j = 0; j < t.renaming_table.outputs.size(); j++) {
-			const RenamingTable::Entry & e = t.renaming_table.outputs[j];
-			if(e.location == RenamingTable::REG) {
-				if(e.id >= t.exits[i].n_live_registers) //register is dead so it is not an output
-					continue;
-				r = r + "r";
-			} else {
-				r = r + "v";
-			}
-			r = r + intToStr(e.id) + " -> ";
-			IRef node = -1;
-			if(t.renaming_table.get(e.location,e.id,snapshot,false,&node,NULL,NULL)) {
-				r = r + "r" + intToStr(node);
-			} else {
-				t.renaming_table.get(e.location,e.id,&node);
-				r = r + "u[r" + intToStr(node) + "]";
-			}
-			r = r + "; ";
-		}
-		r = r + "\n";
-	}
-
-#define WRITE_CODE(arr) \
-	do { \
-	  WRITE_HEAD(#arr,t . arr . size()); \
-	  for(size_t i = 0; i < t . arr . size(); i++) { \
-		  WRITE_OP(t.arr[i], t.optimized[t.arr[i]]); \
-	  } \
-	} while(0)
-
-	WRITE_CODE(loads);
-	WRITE_CODE(phis);
-	WRITE_CODE(loop_header);
-	WRITE_CODE(loop_body);
-
-	return r;
+	return "NYI";
 }
 
 template<class T> std::string deparse(State const& state, typename T::Element a) {

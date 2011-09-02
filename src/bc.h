@@ -16,7 +16,6 @@
 	_(forend, "forend") \
 	_(iforbegin, "iforbegin") \
 	_(iforend, "iforend") \
-	_(invoketrace,"invoketrace") \
 
 #define MEMORY_ACCESS_BYTECODES(_) \
 	_(get, "get") \

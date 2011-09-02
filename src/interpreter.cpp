@@ -251,22 +251,9 @@ static Environment* CreateEnvironment(State& state, Environment* s, Environment*
 	return env;
 }
 //track the heat of back edge operations and invoke the recorder on hot traces
-#define PROFILE_TABLE_SIZE 1021
+//unused until we begin tracing loops again
 static Instruction const * profile_back_edge(State & state, Instruction const * inst) {
-#ifndef RIPOSTE_DISABLE_TRACING
-	if(state.tracing.is_tracing())
-		return inst;
-	static int64_t hash_table[PROFILE_TABLE_SIZE];
-	assert(sizeof(Instruction) == 32);
-	int64_t value = ( (int64_t) inst >> 5 ) % PROFILE_TABLE_SIZE;
-	int64_t heat = ++hash_table[value];
-	if(heat >= state.tracing.start_count && heat < state.tracing.start_count + state.tracing.max_attempts) { //upper bound is to prevent trying many failed traces
-		printf("trace beginning at %s\n",   ByteCode::toString(inst->bc));
-		return recording_interpret(state,inst);
-	} else return inst;
-#else
 	return inst;
-#endif
 }
 
 Instruction const* call_op(State& state, Instruction const& inst) {
@@ -472,8 +459,17 @@ Instruction const* seq_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* add_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, AddOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
+	Value & a =  REG(state, inst.a);
+	Value & b =  REG(state, inst.b);
+	Value & c = REG(state, inst.c);
+	if(a.isDouble() && a.length > TRACE_VECTOR_WIDTH && a.length % TRACE_VECTOR_WIDTH == 0) {
+		return recording_interpret(state,&inst,a.length);
+	} else if (b.isDouble() && b.length > TRACE_VECTOR_WIDTH && b.length % TRACE_VECTOR_WIDTH == 0) {
+		return recording_interpret(state,&inst,b.length);
+	} else {
+		binaryArith<Zip2, AddOp>(state,a, b, c);
+		return &inst+1;
+	}
 }
 Instruction const* pos_op(State& state, Instruction const& inst) {
 	unaryArith<Zip1, PosOp>(state, REG(state, inst.a), REG(state, inst.c));
@@ -683,28 +679,6 @@ Instruction const* type_op(State& state, Instruction const& inst) {
 	REG(state, inst.c) = c;
 	return &inst+1;
 }
-Instruction const * invoketrace_op(State& state, Instruction const & inst) {
-	Trace * trace = state.frame.prototype->traces[inst.a];
-	int64_t offset;
-	TCStatus::Enum status = trace->compiled->execute(state,&offset);
-	if(status != TCStatus::SUCCESS) {
-		printf("trace: encountered error %s\n",TCStatus::toString(status));
-	}
-	if(status  != TCStatus::SUCCESS || offset == 0) { //we exited to the trace start instruction, invoke the original instruction here
-		Instruction invoketrace = inst;
-		const_cast<Instruction&>(inst) = trace->trace_inst;
-		Instruction const * pc = 0;
-#define BC_SWITCH(bc,str) case ByteCode::bc: pc = bc##_op(state,inst); break;
-		switch(trace->trace_inst.bc) {
-			BYTECODES(BC_SWITCH)
-		}
-		const_cast<Instruction&>(inst) = invoketrace;
-		return pc;
-#undef BC_SWITCH
-	}
-
-	return &inst + offset;
-}
 
 Instruction const* ret_op(State& state, Instruction const& inst) {
 	*(state.frame.result) = REG(state, inst.c);
@@ -735,7 +709,7 @@ static void printCode(State const& state, Prototype const* prototype) {
 
 	std::cout << r << std::endl;
 }
-#define THREADED_INTERPRETER
+//#define THREADED_INTERPRETER
 
 #ifdef THREADED_INTERPRETER
 static const void** glabels = 0;

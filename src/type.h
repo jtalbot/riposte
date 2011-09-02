@@ -22,7 +22,7 @@
 	_(BuiltIn,	"builtin")	\
 	_(Symbol,	"symbol")	\
 	_(Environment,	"environment")	\
-					\
+	_(Future, "future")				\
 
 DECLARE_ENUM(Type, TYPES)
 

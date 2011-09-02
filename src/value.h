@@ -58,6 +58,7 @@ struct Value {
 	bool isFunction() const { return type == Type::Function; }
 	bool isBuiltIn() const { return type == Type::BuiltIn; }
 	bool isObject() const { return type == Type::Object; }
+	bool isFuture() const { return type == Type::Future; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isList(); }
@@ -176,7 +177,8 @@ struct Vector : public Value {
 
 	operator Value() const {
 		Value v;
-		return Value::Init(type, length, p);
+		Value::Init(v,type, length);
+		v.p = p;
 		return v;
 	}
 };
@@ -184,6 +186,13 @@ struct Vector : public Value {
 union _doublena {
 	int64_t i;
 	double d;
+};
+
+struct Future : public Value {
+	static void Init(Value & f, IRef ref) {
+		Value::Init(f,Type::Future,0);
+		f.i = ref;
+	}
 };
 
 #define VECTOR_IMPL(Name, Element, Recursive) 				\
@@ -459,7 +468,6 @@ struct Prototype : public gc {
 
 	std::vector<Instruction> bc;			// bytecode
 	mutable std::vector<Instruction> tbc;		// threaded bytecode
-	std::vector<Trace *> traces;
 };
 
 /*
@@ -583,8 +591,8 @@ public:
 		return Function(value);
 	}
 
-	void hassign(Symbol const& name, Value const& value) {
-		overflow[name.i] = value;
+	Value & hassign(Symbol const& name, Value const& value) {
+		return overflow[name.i] = value;
 	}
 
 	void assign(Symbol const& name, Value const& value) {
