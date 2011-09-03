@@ -13,8 +13,8 @@ struct Prototype;
 //and the currently recording trace (if any)
 
 #define TRACE_MAX_NODES (128)
-#define TRACE_MAX_VECTOR_REGISTERS TRACE_MAX_NODES
-#define TRACE_VECTOR_WIDTH (64)
+#define TRACE_MAX_VECTOR_REGISTERS (32)
+#define TRACE_VECTOR_WIDTH (8)
 //maximum number of instructions to record before dropping out of the
 //recording interpreter
 #define TRACE_MAX_RECORDED (256)
@@ -28,7 +28,7 @@ struct Trace {
 	size_t n_nodes;
 	size_t n_recorded;
 
-	size_t length;
+	int64_t length;
 
 	struct Output {
 		IRef ref;

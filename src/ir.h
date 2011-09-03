@@ -75,14 +75,10 @@ DECLARE_ENUM(IRScalarType,IR_TYPE)
 	_(atan,       "atan",      atan(a)) \
 	_(abs,        "abs",       abs(a)) \
 	
-#define IR_SPECIAL(_) \
-	_(broadcast,  "broadcast") \
-    _(vload,	  "vload") \
 
 #define IR_ENUM(_) 	\
 	IR_BINARY(_) \
 	IR_UNARY(_) \
-	IR_SPECIAL(_) \
 
 	
     
@@ -138,28 +134,53 @@ struct IRType {
 };
 
 struct IRNode {
+	enum InputType { I_REG = 0, I_INPUT = 1, I_CONST = 2, I_UNUSED = 3 };
+	enum { R_OUTPUT = (1 << 4) };
 	IRNode() {}
-	IRNode(IROpCode::Enum opcode, int64_t a, int64_t b) {
-		this->opcode = opcode;
-		this->a = a;
-		this->b = b;
-	}
+
 	IROpCode::Enum opcode;
+
+
+	//TODO: this can be compacted into a flags array once we settle on what values we need to store
+	bool is_output;
+	InputType atyp;
+	InputType btyp;
+
 
 	//3-op code, r is dest, r = a + b, where r is the position in the list of IRNodes where this op resides
 	union {
-		int64_t a;
-		double * reg_a; //reg_a holds the register allocated value where a resides (currently we are not register allocating)
-		double const_a;
+		double * reg_r;
 	};
-	union {
-		int64_t b;
-		//double * reg_b;
+
+	union InputReg {
+		int64_t i;
+		double * p;
+		double d;
 	};
+	InputReg a;
+	InputReg b;
+
 
 	std::string toString() const {
 		std::ostringstream out;
-		out << IROpCode::toString(opcode) << "\t" << a <<  "(" << const_a << ")" << "\t" << b;
+		out << IROpCode::toString(opcode) << "\t";
+
+		if(atyp == I_REG)
+			out << "r" << a.i;
+		else if(atyp == I_INPUT)
+			out << "$" << a.p;
+		else if(atyp == I_CONST)
+			out << a.d;
+
+		out << "\t";
+
+		if(btyp == I_REG)
+			out << "r" << b.i;
+		else if(btyp == I_INPUT)
+			out << "$" << b.p;
+		else if(btyp == I_CONST)
+			out << b.d;
+
 		return out.str();
 	}
 };

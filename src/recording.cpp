@@ -4,6 +4,7 @@
 
 #define ENUM_RECORDING_STATUS(_) \
 	_(NO_ERROR,"NO_ERROR") \
+	_(FALLBACK, "trace falling back to normal interpreter but not exiting") \
 	_(RESOURCE, "trace ran out of resources") \
 	_(UNSUPPORTED_OP,"trace encountered unsupported op") \
 	_(UNSUPPORTED_TYPE,"trace encountered an unsupported type") \
@@ -24,35 +25,23 @@ static RecordingStatus::Enum reserve(State & state, size_t num_nodes, size_t num
 		return RecordingStatus::NO_ERROR;
 }
 
-//a function must call reserve before making any calls to emitir/emitconst
-static IRef emitir(State & state, IROpCode::Enum op, int64_t a, int64_t b) {
-	IRNode & n = TRACE.nodes[TRACE.n_nodes];
-	n.opcode = op;
-	n.a = a;
-	n.b = b;
-	return TRACE.n_nodes++;
-}
-static IRef broadcast(State & state, double s) {
-	IRNode & n = TRACE.nodes[TRACE.n_nodes];
-	n.opcode = IROpCode::broadcast;
-	n.const_a = s;
-	n.b = 0;
-	return TRACE.n_nodes++;
-}
-static IRef vload(State & state, double * s) {
-	IRNode & n = TRACE.nodes[TRACE.n_nodes];
-	n.opcode = IROpCode::vload;
-	n.reg_a = s;
-	n.b = 0;
-	return TRACE.n_nodes++;
-}
-
 static void add_output(State & state, Value & v) {
 	Trace::Output & out = TRACE.outputs[TRACE.n_outputs++];
 	out.location = &v;
 	out.ref = v.i;
 }
 
+IRef emitir(State & state, IROpCode::Enum opcode, IRNode::InputType atyp, void * a, IRNode::InputType btyp, void * b) {
+	IRNode & n = TRACE.nodes[TRACE.n_nodes];
+	n.atyp = atyp;
+	n.btyp = btyp;
+	n.is_output = false;
+	n.opcode = opcode;
+	n.a.p = (double*) a;
+	n.b.p = (double*) b;
+	n.reg_r = NULL;
+	return TRACE.n_nodes++;
+}
 
 //attempt to execute fn, otherwise return error code
 #define RECORDING_DO(fn) \
@@ -66,22 +55,14 @@ static void add_output(State & state, Value & v) {
 #define RESERVE(nodes,outputs) RECORDING_DO(reserve(state,nodes,outputs))
 #define REG(state, i) (*(state.base+i))
 
-#define OP_NOT_IMPLEMENTED(bc) \
-	return RecordingStatus::UNSUPPORTED_OP
+#define OP_NOT_IMPLEMENTED(op) \
+RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
+	return RecordingStatus::UNSUPPORTED_OP; \
+} \
 
 
-//all arithmetic binary ops share the same recording implementation
-#define BINARY_OP(op) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
-	OP_NOT_IMPLEMENTED(op); \
-}
-//all unary arithmetic ops share the same implementation as well
-#define UNARY_OP(op) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
-		OP_NOT_IMPLEMENTED(op); \
-	}
+OP_NOT_IMPLEMENTED(call)
 
-RecordingStatus::Enum call_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(call);
-}
 RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	RESERVE(0,1);
 	*pc = get_op(state,inst);
@@ -91,18 +72,16 @@ RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instru
 	}
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus::Enum sget_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(sget);
-}
+
+OP_NOT_IMPLEMENTED(sget);
 
 RecordingStatus::Enum kget_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = kget_op(state,inst);
 	return RecordingStatus::NO_ERROR;
 }
 
-RecordingStatus::Enum iget_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(iget);
-}
+
+OP_NOT_IMPLEMENTED(iget)
 
 RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	RESERVE(0,1);
@@ -114,148 +93,141 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 	return RecordingStatus::NO_ERROR;
 }
 
-RecordingStatus::Enum sassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(sassign);
-}
+OP_NOT_IMPLEMENTED(sassign)
+OP_NOT_IMPLEMENTED(eassign)
+OP_NOT_IMPLEMENTED(iassign)
+OP_NOT_IMPLEMENTED(subset)
+OP_NOT_IMPLEMENTED(subset2)
 
-RecordingStatus::Enum iassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(iassign);
-}
-RecordingStatus::Enum eassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(eassign);
-}
-RecordingStatus::Enum subset_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(iassign);
-}
-RecordingStatus::Enum subset2_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(iassign);
-}
-RecordingStatus::Enum forbegin_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(forbegin);
-}
-RecordingStatus::Enum forend_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(forend);
-}
-RecordingStatus::Enum iforbegin_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(iforbegin);
-}
-RecordingStatus::Enum iforend_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(iforend);
-}
+OP_NOT_IMPLEMENTED(forbegin)
 
-RecordingStatus::Enum jt_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(jt);
-}
-RecordingStatus::Enum jf_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(jf);
-}
-RecordingStatus::Enum colon_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(colon);
-}
+OP_NOT_IMPLEMENTED(forend)
+
+OP_NOT_IMPLEMENTED(iforbegin)
+
+OP_NOT_IMPLEMENTED(iforend)
+
+OP_NOT_IMPLEMENTED(jt)
+OP_NOT_IMPLEMENTED(jf)
+
+OP_NOT_IMPLEMENTED(colon)
+
 
 void assign(State & state, Value & r, IRef ref) {
 	Future::Init(r,ref);
 	add_output(state,r);
 }
 
-RecordingStatus::Enum trace_input(State & state, Value & i, IRef * r) {
-	if(i.isDouble1()) {
-		*r = broadcast(state,i.d);
-		return RecordingStatus::NO_ERROR;
-	} else if(i.isDouble() && TRACE.length == (uint64_t) i.length) {
-		*r = vload(state,(double *) i.p);
-		//assign(state,i,*r);
-		return RecordingStatus::NO_ERROR;
+RecordingStatus::Enum get_register_type(State & state, Value & v, IRNode::InputType * typ) {
+	if(v.isDouble1()) {
+		*typ = IRNode::I_CONST;
+	} else if(v.isFuture()) {
+		*typ = IRNode::I_REG;
+	} else if(v.isDouble() && v.length == TRACE.length) {
+		*typ = IRNode::I_INPUT;
 	} else return RecordingStatus::UNSUPPORTED_TYPE;
+	return RecordingStatus::NO_ERROR;
 }
 
-RecordingStatus::Enum add_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum binary_record(IROpCode::Enum opcode, State & state, Instruction const & inst) {
 	Value & r = REG(state,inst.c);
 	Value & a = REG(state,inst.a);
 	Value & b = REG(state,inst.b);
-	if(a.header == Type::Future) {
-		if(b.header == Type::Future) {
-			RESERVE(1,1);
-			assign(state,r,emitir(state,IROpCode::add,a.i,b.i));
-			(*pc)++;
-		} else {
-			RESERVE(2,2);
-			IRef bref;
-			RECORDING_DO(trace_input(state,b,&bref));
-			assign(state,r,emitir(state,IROpCode::add,a.i,bref));
-			(*pc)++;
-		}
-	} else if(b.header == Type::Future) {
-		RESERVE(2,2);
-		IRef aref;
-		RECORDING_DO(trace_input(state,a,&aref));
-		assign(state,r,emitir(state,IROpCode::add,aref,b.i));
-		(*pc)++;
-	} else if( (uint64_t) a.length == TRACE.length || (uint64_t) b.length == TRACE.length) {
-		RESERVE(3,3);
-		IRef aref,bref;
-		RECORDING_DO(trace_input(state,a,&aref));
-		RECORDING_DO(trace_input(state,b,&bref));
-		assign(state,r,emitir(state,IROpCode::add,aref,bref));
-		(*pc)++;
+	if(a.isFuture()) {
+		IRNode::InputType benc;
+		RECORDING_DO(get_register_type(state,b,&benc));
+		RESERVE(1,1);
+		assign(state,r,emitir(state,opcode,IRNode::I_REG,a.p,benc,b.p));
+	} else if(b.isFuture()) {
+		IRNode::InputType aenc;
+		RECORDING_DO(get_register_type(state,a,&aenc));
+		RESERVE(1,1);
+		assign(state,r,emitir(state,opcode,aenc,a.p,IRNode::I_REG,b.p));
+	} else if(b.length == TRACE.length || a.length == TRACE.length) {
+		IRNode::InputType aenc;
+		IRNode::InputType benc;
+		RecordingStatus::Enum ar = get_register_type(state,a,&aenc);
+		RecordingStatus::Enum br = get_register_type(state,b,&benc);
+	    if(RecordingStatus::NO_ERROR == ar && RecordingStatus::NO_ERROR == br) {
+	    	RESERVE(1,1);
+	    	assign(state,r,emitir(state,opcode,aenc,a.p,benc,b.p));
+		} else
+	    	return RecordingStatus::FALLBACK;
 	} else {
-		*pc = add_op(state,inst);
+		return RecordingStatus::FALLBACK;
 	}
 	return RecordingStatus::NO_ERROR;
 }
 
-RecordingStatus::Enum sqrt_record(State & state, Instruction const & inst, Instruction const ** pc) {
+RecordingStatus::Enum unary_record(IROpCode::Enum opcode, State & state, Instruction const & inst) {
 	Value & r = REG(state,inst.c);
 	Value & a = REG(state,inst.a);
 	if(a.header == Type::Future) {
 		RESERVE(1,1);
-		assign(state,r,emitir(state,IROpCode::sqrt,a.i,0));
-		(*pc)++;
-	} else if((uint64_t)a.length == TRACE.length) {
-		RESERVE(2,2);
-		IRef aref;
-		RECORDING_DO(trace_input(state,a,&aref));
-		assign(state,r,emitir(state,IROpCode::sqrt,aref,0));
-		(*pc)++;
+		assign(state,r,emitir(state,opcode,IRNode::I_REG,a.p,IRNode::I_UNUSED,NULL));
+	} else if(a.isDouble() && a.length == TRACE.length) {
+		RESERVE(1,1);
+		assign(state,r,emitir(state,opcode,IRNode::I_INPUT,a.p,IRNode::I_UNUSED,NULL));
 	} else {
-		*pc = sqrt_op(state,inst);
+		return RecordingStatus::FALLBACK;
 	}
 	return RecordingStatus::NO_ERROR;
 }
 
+//all arithmetic binary ops share the same recording implementation
+#define BINARY_OP(op) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
+	RecordingStatus::Enum status = binary_record(IROpCode :: op, state, inst);\
+	if(RecordingStatus::FALLBACK == status) { \
+		*pc = op##_op(state,inst); \
+		return RecordingStatus::NO_ERROR; \
+	} \
+	(*pc)++; \
+	return status; \
+}
+//all unary arithmetic ops share the same implementation as well
+#define UNARY_OP(op) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
+	RecordingStatus::Enum status = unary_record(IROpCode :: op, state, inst);\
+	if(RecordingStatus::FALLBACK == status) { \
+		*pc = op##_op(state,inst); \
+		return RecordingStatus::NO_ERROR; \
+	} \
+	(*pc)++; \
+	return status; \
+}
 
-UNARY_OP(pos)
 
-//BINARY_OP(add)
+OP_NOT_IMPLEMENTED(pos)
+
+BINARY_OP(add)
 BINARY_OP(sub)
 
 UNARY_OP(neg)
 
 BINARY_OP(mul)
 BINARY_OP(div)
-BINARY_OP(idiv)
-BINARY_OP(mod)
+OP_NOT_IMPLEMENTED(idiv)
+OP_NOT_IMPLEMENTED(mod)
 BINARY_OP(pow)
-BINARY_OP(lt)
-BINARY_OP(gt)
-BINARY_OP(eq)
-BINARY_OP(neq)
-BINARY_OP(le)
-BINARY_OP(ge)
-BINARY_OP(lnot)
-BINARY_OP(land)
-BINARY_OP(lor)
-BINARY_OP(sland)
-BINARY_OP(slor)
+OP_NOT_IMPLEMENTED(lt)
+OP_NOT_IMPLEMENTED(gt)
+OP_NOT_IMPLEMENTED(eq)
+OP_NOT_IMPLEMENTED(neq)
+OP_NOT_IMPLEMENTED(le)
+OP_NOT_IMPLEMENTED(ge)
+OP_NOT_IMPLEMENTED(lnot)
+OP_NOT_IMPLEMENTED(land)
+OP_NOT_IMPLEMENTED(lor)
+OP_NOT_IMPLEMENTED(sland)
+OP_NOT_IMPLEMENTED(slor)
 
 UNARY_OP(abs)
-UNARY_OP(sign)
-//UNARY_OP(sqrt)
+OP_NOT_IMPLEMENTED(sign)
+UNARY_OP(sqrt)
 UNARY_OP(floor)
 UNARY_OP(ceiling)
-UNARY_OP(trunc)
+OP_NOT_IMPLEMENTED(trunc)
 UNARY_OP(round)
-UNARY_OP(signif)
+OP_NOT_IMPLEMENTED(signif)
 UNARY_OP(exp)
 UNARY_OP(log)
 UNARY_OP(cos)
@@ -264,11 +236,11 @@ UNARY_OP(tan)
 UNARY_OP(acos)
 UNARY_OP(asin)
 UNARY_OP(atan)
-UNARY_OP(logical1)
-UNARY_OP(integer1)
-UNARY_OP(double1)
-UNARY_OP(complex1)
-UNARY_OP(character1)
+OP_NOT_IMPLEMENTED(logical1)
+OP_NOT_IMPLEMENTED(integer1)
+OP_NOT_IMPLEMENTED(double1)
+OP_NOT_IMPLEMENTED(complex1)
+OP_NOT_IMPLEMENTED(character1)
 
 
 RecordingStatus::Enum jmp_record(State & state, Instruction const & inst, Instruction const ** pc) {
@@ -276,29 +248,15 @@ RecordingStatus::Enum jmp_record(State & state, Instruction const & inst, Instru
 	*pc = jmp_op(state,inst);
 	return RecordingStatus::NO_ERROR;
 }
-RecordingStatus::Enum function_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(function);
-}
 
-RecordingStatus::Enum raw1_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(raw1);
-}
-RecordingStatus::Enum UseMethod_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(UseMethod);
-}
-RecordingStatus::Enum seq_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(seq);
-}
-RecordingStatus::Enum type_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(type);
-}
+OP_NOT_IMPLEMENTED(function)
+OP_NOT_IMPLEMENTED(raw1)
+OP_NOT_IMPLEMENTED(UseMethod)
 
-RecordingStatus::Enum ret_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(ret);
-}
-RecordingStatus::Enum done_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	OP_NOT_IMPLEMENTED(done);
-}
+OP_NOT_IMPLEMENTED(seq)
+OP_NOT_IMPLEMENTED(type)
+OP_NOT_IMPLEMENTED(ret)
+OP_NOT_IMPLEMENTED(done)
 
 
 //check trace exit conditions
