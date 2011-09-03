@@ -21,14 +21,21 @@ void Trace::execute(State & state) {
 	//remove outputs that have been killed, allocate space for valid onces
 	for(size_t i = 0; i < n_outputs; ) {
 		Output & o = outputs[i];
-		if(o.location->header != Type::Future || (uint64_t) o.location->i != o.ref) {
+
+		const Value & loc = (o.is_variable) ? state.frame.environment->hget(Symbol(o.variable)) : *o.location;
+		if(loc.header != Type::Future || (uint64_t) loc.i != o.ref) {
 			o = outputs[--n_outputs];
 		} else {
 			nodes[o.ref].is_output = true;
 			if(nodes[o.ref].reg_r == NULL) //if this is the first VM value that refers to this output, allocate space for it in the VM
 				nodes[o.ref].reg_r = new (GC) double[length];
-			Value::Init(*o.location,Type::Double,length);
-			o.location->p = nodes[o.ref].reg_r;
+			Value v;
+			Value::Init(v,Type::Double,length);
+			v.p = nodes[o.ref].reg_r;
+			if(o.is_variable)
+				state.frame.environment->hassign(Symbol(o.variable),v);
+			else
+				*(o.location) = v;
 			i++;
 		}
 	}
@@ -54,7 +61,7 @@ void Trace::execute(State & state) {
 			IRNode & def = nodes[n.a.i];
 			if(def.is_output) { //since 'a' refers to an output, the interpreter will need to advance the memory reference on each iteration
 				                //we set a's type to I_VECTOR so it knows to do this
-				n.atyp = IRNode::I_INPUT;
+				n.atyp = IRNode::I_VECTOR;
 			} else if(def.reg_r == NULL) { //no register has be assigned to the def. This is the first encountered use so we allocate a register for it
 				//allocate a register
 				//TODO: we need to make sure we can't run out of registers
@@ -71,7 +78,7 @@ void Trace::execute(State & state) {
 		if(n.btyp == IRNode::I_REG) {
 			IRNode & def = nodes[n.b.i];
 			if(def.is_output) {
-				n.btyp = IRNode::I_INPUT;
+				n.btyp = IRNode::I_VECTOR;
 			} else {
 				//allocate a register
 				//TODO: we need to make sure we can't run out of register
@@ -100,7 +107,7 @@ case IROpCode :: op : { \
 		} \
 		if(node.is_output) \
 			node.reg_r += TRACE_VECTOR_WIDTH; \
-		if(node.btyp == IRNode::I_INPUT) \
+		if(node.btyp == IRNode::I_VECTOR) \
 			node.b.p += TRACE_VECTOR_WIDTH; \
 	} else if(node.btyp == IRNode::I_CONST) { \
 		double * av = node.a.p; \
@@ -112,7 +119,7 @@ case IROpCode :: op : { \
 		} \
 		if(node.is_output) \
 			node.reg_r += TRACE_VECTOR_WIDTH; \
-		if(node.atyp == IRNode::I_INPUT) \
+		if(node.atyp == IRNode::I_VECTOR) \
 			node.a.p += TRACE_VECTOR_WIDTH; \
 	} else { \
 		double * av = node.a.p; \
@@ -125,9 +132,9 @@ case IROpCode :: op : { \
 		} \
 		if(node.is_output) \
 			node.reg_r += TRACE_VECTOR_WIDTH; \
-		if(node.atyp == IRNode::I_INPUT) \
+		if(node.atyp == IRNode::I_VECTOR) \
 			node.a.p += TRACE_VECTOR_WIDTH; \
-		if(node.btyp == IRNode::I_INPUT) \
+		if(node.btyp == IRNode::I_VECTOR) \
 			node.b.p += TRACE_VECTOR_WIDTH; \
 	} \
 } break;

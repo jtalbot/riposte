@@ -134,7 +134,7 @@ struct IRType {
 };
 
 struct IRNode {
-	enum InputType { I_REG = 0, I_INPUT = 1, I_CONST = 2, I_UNUSED = 3 };
+	enum InputType { I_REG = 0, I_VECTOR = 1, I_CONST = 2, I_UNUSED = 3 };
 	enum { R_OUTPUT = (1 << 4) };
 	IRNode() {}
 
@@ -167,7 +167,7 @@ struct IRNode {
 
 		if(atyp == I_REG)
 			out << "r" << a.i;
-		else if(atyp == I_INPUT)
+		else if(atyp == I_VECTOR)
 			out << "$" << a.p;
 		else if(atyp == I_CONST)
 			out << a.d;
@@ -176,7 +176,7 @@ struct IRNode {
 
 		if(btyp == I_REG)
 			out << "r" << b.i;
-		else if(btyp == I_INPUT)
+		else if(btyp == I_VECTOR)
 			out << "$" << b.p;
 		else if(btyp == I_CONST)
 			out << b.d;

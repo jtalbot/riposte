@@ -32,7 +32,11 @@ struct Trace {
 
 	struct Output {
 		IRef ref;
-		Value * location; //will pointers to output locations stay valid throughout the trace?
+		bool is_variable;
+		union {
+			Value * location; //will pointers to output locations stay valid throughout the trace?
+			int64_t variable;
+		};
 	};
 
 	Output outputs[TRACE_MAX_NODES];
