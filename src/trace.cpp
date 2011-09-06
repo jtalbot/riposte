@@ -148,7 +148,7 @@ case IROpCode :: op : { \
 	} \
 } break;
 	
-			switch(node.opcode) {
+			switch(node.op.code) {
 				IR_BINARY(BINARY_IMPL)
 				IR_UNARY(UNARY_IMPL)
 			}

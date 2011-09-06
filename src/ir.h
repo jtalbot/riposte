@@ -86,6 +86,20 @@ DECLARE_ENUM(IRScalarType,IR_TYPE)
 DECLARE_ENUM(IROpCode,IR_ENUM)
 
 
+struct IROp {
+	enum Encoding { E_SCALAR, E_VECTOR };
+	enum Type { T_INT, T_DOUBLE };
+	union {
+		uint16_t op;
+		struct {
+			Encoding a_enc : 1;
+			Encoding b_enc : 1;
+			Type     typ   : 1;
+			IROpCode::Enum code : 13;
+		};
+	};
+};
+
 class Value;
 
 struct IRType {
@@ -138,7 +152,7 @@ struct IRNode {
 	enum { R_OUTPUT = (1 << 4) };
 	IRNode() {}
 
-	IROpCode::Enum opcode;
+	IROp op;
 
 
 	//TODO: this can be compacted into a flags array once we settle on what values we need to store
@@ -163,7 +177,7 @@ struct IRNode {
 
 	std::string toString() const {
 		std::ostringstream out;
-		out << IROpCode::toString(opcode) << "\t";
+		out << IROpCode::toString(op.code) << "\t";
 
 		if(atyp == I_REG)
 			out << "r" << a.i;

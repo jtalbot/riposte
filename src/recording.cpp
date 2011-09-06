@@ -43,7 +43,7 @@ IRef emitir(State & state, IROpCode::Enum opcode, IRNode::InputType atyp, void *
 	n.atyp = atyp;
 	n.btyp = btyp;
 	n.is_output = false;
-	n.opcode = opcode;
+	n.op.code = opcode;
 	n.a.p = (double*) a;
 	n.b.p = (double*) b;
 	n.reg_r = NULL;
