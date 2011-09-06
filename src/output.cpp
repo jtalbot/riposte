@@ -133,13 +133,15 @@ std::string stringify(State const& state, Value const& value, Value const& names
 						result = result + "[[" + intToStr(i+1) + "]]\n";
 					else
 						result = result + "$" + state.SymToStr(n[i]) + "\n";
-					result = result + state.stringify(v[i]) + "\n";
+					if(!List::isNA(v[i])) result = result + state.stringify(v[i]);
+					result = result + "\n";
 					if(i < length-1) result = result + "\n";
 				}
 			} else {
 				for(int64_t i = 0; i < length; i++) {
 					result = result + "[[" + intToStr(i+1) + "]]\n";
-					result = result + state.stringify(v[i]) + "\n";
+					if(!List::isNA(v[i])) result = result + state.stringify(v[i]);
+					result = result + "\n";
 					if(i < length-1) result = result + "\n";
 				}
 			}

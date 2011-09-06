@@ -20,16 +20,5 @@ const std::complex<double> Complex::NAelement = std::complex<double>(doublena.d,
 
 const Symbol Character::NAelement = Symbols::NA;
 
-const Value List::NAelement = Null::Singleton();
+const Value List::NAelement = Value::Nil();
 
-//const Value PairList::NAelement = Null::Singleton();
-
-//const Value Call::NAelement = Null::Singleton();
-
-//const Value Expression::NAelement = Null::Singleton();
-
-//namespace Symbols {
-//#define CONST_DEFN(name, string, ...) const Symbol name(String::name);
-//STRINGS(CONST_DEFN)
-//#undef CONST_DEFN
-//}

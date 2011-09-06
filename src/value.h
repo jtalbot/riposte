@@ -265,10 +265,10 @@ VECTOR_IMPL(Raw, unsigned char, false)
 
 VECTOR_IMPL(List, Value, true) 
 	static const bool CheckNA = false;
-	static bool isNA(Value c) { return false; }
-	static bool isNaN(Value c) { return false; }
-	static bool isFinite(Value c) { return false; }
-	static bool isInfinite(Value c) { return false; }
+	static bool isNA(Value const& c) { return c.isNil(); }
+	static bool isNaN(Value const& c) { return false; }
+	static bool isFinite(Value const& c) { return false; }
+	static bool isInfinite(Value const& c) { return false; }
 };
 
 
@@ -357,7 +357,6 @@ struct Object : public Value {
 	Container const& attributes() const { return ((Inner*)p)->attributes; }
 
 	static void Init(Value& v, Value const& _base) {
-		assert(_base.isList());
 		Value::Init(v, Type::Object, 0);
 		Inner* inner = new Inner();
 		inner->base = _base;

@@ -141,7 +141,7 @@ int64_t Compiler::compileFunctionCall(List const& call, Character const& names, 
 	code->calls.push_back(makeCall(call, names));
 	scopes.back().deadAfter(liveIn);
 	int64_t result = scopes.back().allocRegister(Register::VARIABLE);
-	emit(code, ByteCode::call, function, code->calls.size()-1, result);
+	emit(code, ByteCode::call, function, -code->calls.size(), result);
 	return result;
 }
 
@@ -574,6 +574,15 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		scopes.back().deadAfter(liveIn);
 		int64_t result = scopes.back().allocRegister(Register::TEMP);
 		emit(code, ByteCode::seq, len, 0, result);
+		return result;
+	} break;
+	case String::docall:
+	{
+		int64_t what = compile(call[1], code);
+		int64_t args = compile(call[2], code);
+		scopes.back().deadAfter(liveIn);
+		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		emit(code, ByteCode::call, what, args, result);
 		return result;
 	} break;
 	default:

@@ -138,6 +138,28 @@ fail <- 0
 }
 
 {
+	cat("Testing vector indexing operations\n------------------------\n")
+	a <- c(10,20,30)
+	PassIfTrue(a[1] == 10)
+	PassIfTrue(a[3] == 30)
+	PassIfTrue(a[[2]] == 20)
+	PassIfTrue(a[c(1,2)] == c(10,20))
+	PassIfTrue(a[c(3,3)] == c(30,30))
+	a <- c(1,2,3,4)
+	dim(a) <- c(2,2)
+	PassIfTrue(a[[1,1]] == 1)
+	PassIfTrue(a[[2,1]] == 2)
+	PassIfTrue(a[[1,2]] == 3)
+	PassIfTrue(a[[2,2]] == 4)
+	#PassIfTrue(a[1,1] == 1)
+	#PassIfTrue(a[2,1] == 2)
+	#PassIfTrue(a[1,2] == 3)
+	#PassIfTrue(a[1,] == c(1,3))
+	#PassIfTrue(a[,1] == c(1,2))
+	"done"
+}
+
+{
 	cat("Testing some basic vector operations\n-----------------------\n")
 	a <- c(1,2,3)
 	PassIfTrue(a[1] == 1)

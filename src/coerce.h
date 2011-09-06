@@ -179,22 +179,22 @@ SPECIALIZED_STATIC List::Element Cast<Raw, List>(State& state, Raw::Element cons
 
 
 template<>
-SPECIALIZED_STATIC Raw::Element Cast<List, Raw>(State& state, List::Element const& i) { Raw a = As<Raw>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+SPECIALIZED_STATIC Raw::Element Cast<List, Raw>(State& state, List::Element const& i) { Raw a = As<Raw>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to raw"); }
 
 template<>
-SPECIALIZED_STATIC Logical::Element Cast<List, Logical>(State& state, List::Element const& i) { Logical a = As<Logical>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+SPECIALIZED_STATIC Logical::Element Cast<List, Logical>(State& state, List::Element const& i) { Logical a = As<Logical>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to logical"); }
 
 template<>
-SPECIALIZED_STATIC Integer::Element Cast<List, Integer>(State& state, List::Element const& i) { Integer a = As<Integer>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+SPECIALIZED_STATIC Integer::Element Cast<List, Integer>(State& state, List::Element const& i) { Integer a = As<Integer>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to integer"); }
 
 template<>
-SPECIALIZED_STATIC Double::Element Cast<List, Double>(State& state, List::Element const& i) { Double a = As<Double>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+SPECIALIZED_STATIC Double::Element Cast<List, Double>(State& state, List::Element const& i) { Double a = As<Double>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to double"); }
 
 template<>
-SPECIALIZED_STATIC Complex::Element Cast<List, Complex>(State& state, List::Element const& i) { Complex a = As<Complex>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+SPECIALIZED_STATIC Complex::Element Cast<List, Complex>(State& state, List::Element const& i) { Complex a = As<Complex>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to complex"); }
 
 template<>
-SPECIALIZED_STATIC Character::Element Cast<List, Character>(State& state, List::Element const& i) { Character a = As<Character>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast"); }
+SPECIALIZED_STATIC Character::Element Cast<List, Character>(State& state, List::Element const& i) { Character a = As<Character>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to character"); }
 
 
 #endif

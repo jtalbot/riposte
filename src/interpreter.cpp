@@ -276,11 +276,24 @@ static Instruction const * profile_back_edge(State & state, Instruction const * 
 
 Instruction const* call_op(State& state, Instruction const& inst) {
 	Value f = REG(state, inst.a);
-	CompiledCall const& call = state.frame.prototype->calls[inst.b];
-	List arguments = call.arguments;
-	Character names = call.names;
-	if(call.dots < arguments.length)
-		ExpandDots(state, arguments, names, call.dots);
+	List arguments;
+	Character names;
+	if(inst.b < 0) {
+		CompiledCall const& call = state.frame.prototype->calls[-(inst.b+1)];
+		arguments = call.arguments;
+		names = call.names;
+		if(call.dots < arguments.length)
+			ExpandDots(state, arguments, names, call.dots);
+	} else {
+		Value const& reg = REG(state, inst.b);
+		if(reg.isObject()) {
+			arguments = List(((Object const&)reg).base());
+			names = Character(((Object const&)reg).getNames());
+		}
+		else {
+			arguments = List(reg);
+		}
+	}
 
 	if(f.isFunction()) {
 		Function func(f);

@@ -51,7 +51,9 @@ inline void Element2(Value const& v, int64_t index, Value& out) {
 		#undef CASE
 		case Type::List: 
 			if(index < 0 || index >= v.length) 
-				_error("Out-of-range index"); 
+				_error("Out-of-range index");
+			else if(List::isNA(((List const&)v)[index]))
+				_error("Extracting missing element");
 			out = ((List const&)v)[index]; 
 			break;
 		case Type::Object: 
