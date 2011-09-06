@@ -4,18 +4,6 @@
 #include "enum.h"
 #include "common.h"
 
-//order matters since T_logical < T_integer < T_double < T_complex for subtyping rules
-#define IR_TYPE(_) \
-	/*_(T_logical, 	"logical", sizeof(bool))*/		\
-	/*_(T_integer, 	"integer", sizeof(int))*/		\
-	_(T_double, 	"double", sizeof(double))		\
-	/*_(T_complex, 	"complex", sizeof(double)*2 )*/		\
-	/*_(T_character, 	"character", sizeof(char))*/	\
-	/*_(T_size,       "size",sizeof(size_t)) */ /*type that holds the size of vectors*/\
-	_(T_unsupported, "unsupported", 0)
-
-DECLARE_ENUM(IRScalarType,IR_TYPE)
-
 			\
 /*	_(vload,      "vload",     ref, ___, ___) \
 	_(rload,      "rload",     ref, ___, ___) \
@@ -86,6 +74,14 @@ DECLARE_ENUM(IRScalarType,IR_TYPE)
 DECLARE_ENUM(IROpCode,IR_ENUM)
 
 
+
+inline static bool IROpCode_is_binary(IROpCode::Enum code) {
+#define IR_COUNT(...) 1 +
+	const int n_binary = IR_BINARY(IR_COUNT) 0;
+#undef IR_COUNT
+	return code < n_binary;
+}
+
 struct IROp {
 	enum Encoding { E_SCALAR, E_VECTOR };
 	enum Type { T_INT, T_DOUBLE };
@@ -102,69 +98,25 @@ struct IROp {
 
 class Value;
 
-struct IRType {
-	IRType() {}
-	IRType(const Value & v);
-	IRType(char data) {
-		this->data = data;
-	}
-	IRType(IRScalarType::Enum base_type, bool isVector) {
-		this->data = 0;
-		this->base_type = base_type;
-		this->isVector = isVector;
-	}
-
-	union {
-		struct {
-			IRScalarType::Enum base_type : 4;
-			unsigned isVector : 1;
-		};
-		char data;
-	};
-
-	std::string toString() const {
-		std::string bt = IRScalarType::toString(base_type);
-		if(isVector) {
-			return "[" + bt + "]";
-		} else
-			return bt;
-	}
-	IRType base() const {
-		return IRType(base_type,false);
-	}
-	size_t width() const {
-#define GET_WIDTH(x,y,w) w,
-		static size_t widths[] = { IR_TYPE(GET_WIDTH) 0 };
-#undef GET_WIDTH
-		return widths[base_type];
-	}
-	bool operator==(IRType const& t) const { return data == t.data; } \
-    bool operator!=(IRType const& t) const { return !(*this == t); } \
-	//utility functions
-	//static IRType Bool() { return IRType(IRScalarType::T_logical,false); }
-	//static IRType Int() { return IRType(IRScalarType::T_integer,false); }
-	//static IRType Size() { return IRType(IRScalarType::T_size,false); }
-	static IRType Double() { return IRType(IRScalarType::T_double,false); }
-};
-
 struct IRNode {
-	enum InputType { I_REG = 0, I_VECTOR = 1, I_CONST = 2, I_UNUSED = 3 };
-	enum { R_OUTPUT = (1 << 4) };
 	IRNode() {}
 
 	IROp op;
 
-
-	//TODO: this can be compacted into a flags array once we settle on what values we need to store
-	bool is_output;
-	InputType atyp;
-	InputType btyp;
-
+	//for flags that are not part of the op encoding
+	union {
+		uint16_t flags;
+		struct {
+			bool r_external : 1;
+			bool a_external : 1;
+			bool b_external : 1;
+		};
+	};
 
 	//3-op code, r is dest, r = a + b, where r is the position in the list of IRNodes where this op resides
 	union {
-		double * reg_r;
-	};
+		double * p;
+	} r;
 
 	union InputReg {
 		int64_t i;
@@ -174,26 +126,34 @@ struct IRNode {
 	InputReg a;
 	InputReg b;
 
+	bool usesRegA() {
+		return !a_external && op.a_enc == IROp::E_VECTOR;
+	}
+	bool usesRegB() {
+		return IROpCode_is_binary(op.code) && !b_external && op.b_enc == IROp::E_VECTOR;
+	}
 
 	std::string toString() const {
 		std::ostringstream out;
 		out << IROpCode::toString(op.code) << "\t";
 
-		if(atyp == I_REG)
-			out << "r" << a.i;
-		else if(atyp == I_VECTOR)
+		if(a_external)
 			out << "$" << a.p;
-		else if(atyp == I_CONST)
+		else if(op.a_enc == IROp::E_SCALAR)
 			out << a.d;
+		else
+			out << "r" << a.i;
 
 		out << "\t";
 
-		if(btyp == I_REG)
-			out << "r" << b.i;
-		else if(btyp == I_VECTOR)
+		if(b_external)
 			out << "$" << b.p;
-		else if(btyp == I_CONST)
+		else if(op.b_enc == IROp::E_SCALAR)
 			out << b.d;
+		else if(IROpCode_is_binary(op.code))
+			out << "r" << b.i;
+		else
+			out << "_";
 
 		return out.str();
 	}

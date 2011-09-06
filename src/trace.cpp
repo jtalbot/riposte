@@ -26,12 +26,12 @@ void Trace::execute(State & state) {
 		if(loc.header != Type::Future || (uint64_t) loc.i != o.ref) {
 			o = outputs[--n_outputs];
 		} else {
-			nodes[o.ref].is_output = true;
-			if(nodes[o.ref].reg_r == NULL) //if this is the first VM value that refers to this output, allocate space for it in the VM
-				nodes[o.ref].reg_r = new (GC) double[length];
+			nodes[o.ref].r_external = true;
+			if(nodes[o.ref].r.p == NULL) //if this is the first VM value that refers to this output, allocate space for it in the VM
+				nodes[o.ref].r.p = new (GC) double[length];
 			Value v;
 			Value::Init(v,Type::Double,length);
-			v.p = nodes[o.ref].reg_r;
+			v.p = nodes[o.ref].r.p;
 			if(o.is_variable)
 				state.frame.environment->hassign(Symbol(o.variable),v);
 			else
@@ -50,35 +50,35 @@ void Trace::execute(State & state) {
 	uint32_t free_regs = ~0;
 	for(size_t i = n_nodes; i > 0; i--) {
 		IRNode & n = nodes[i - 1];
-		if(!n.is_output) { //outputs do not get assigned registers, we use the memory previous allocated for them to hold intermediates
+		if(!n.r_external) { //outputs do not get assigned registers, we use the memory previous allocated for them to hold intermediates
 			//handle the def of node n by freeing allocated register
-			int reg = (n.reg_r - registers[0]) / TRACE_VECTOR_WIDTH;
+			int reg = (n.r.p - registers[0]) / TRACE_VECTOR_WIDTH;
 			//printf("freeing register %d\n",reg);
 			free_regs |= (1 << reg);
 			//print_regs(free_regs);
 		}
-		if(n.atyp == IRNode::I_REG) { //a is a register, handle the use of a
+		if( n.usesRegA() ){ //a is a register, handle the use of a
 			IRNode & def = nodes[n.a.i];
-			if(def.is_output) { //since 'a' refers to an output, the interpreter will need to advance the memory reference on each iteration
+			if(def.r_external) { //since 'a' refers to an output, the interpreter will need to advance the memory reference on each iteration
 				                //we set a's type to I_VECTOR so it knows to do this
-				n.atyp = IRNode::I_VECTOR;
-			} else if(def.reg_r == NULL) { //no register has be assigned to the def. This is the first encountered use so we allocate a register for it
+				n.a_external = true;
+			} else if(def.r.p == NULL) { //no register has be assigned to the def. This is the first encountered use so we allocate a register for it
 				//allocate a register
 				//TODO: we need to make sure we can't run out of registers
 				int reg = ffs(free_regs) - 1;
 				//printf("allocated register %d\n",reg);
 				free_regs &= ~(1 << reg);
 				//print_regs(free_regs);
-				def.reg_r = registers[reg];
+				def.r.p = registers[reg];
 			}
 			//replace the reference to the node with the pointer to where the values will be stored, this is either a register, part of an input array, or part of an output array
-			n.a.p = def.reg_r;
+			n.a.p = def.r.p;
 		}
 		//we handle the use of b similar to the use of a
-		if(n.btyp == IRNode::I_REG) {
+		if(n.usesRegB()) {
 			IRNode & def = nodes[n.b.i];
-			if(def.is_output) {
-				n.btyp = IRNode::I_VECTOR;
+			if(def.r_external) {
+				n.b_external = true;
 			} else {
 				//allocate a register
 				//TODO: we need to make sure we can't run out of register
@@ -86,66 +86,70 @@ void Trace::execute(State & state) {
 				//printf("allocated register %d\n",reg);
 				free_regs &= ~(1 << reg);
 				//print_regs(free_regs);
-				def.reg_r = registers[reg];
+				def.r.p = registers[reg];
 			}
-			n.b.p = def.reg_r;
+			n.b.p = def.r.p;
 		}
 	}
 	
 	for(int64_t i = 0; i < length; i += TRACE_VECTOR_WIDTH) {
 		for(size_t j = 0; j < n_nodes; j++) {
 			IRNode & node = nodes[j];		
-#define BINARY_IMPL(op,nm,body) \
-case IROpCode :: op : { \
-	if(node.atyp == IRNode::I_CONST) { \
+#define BINARY_IMPL(opcode,nm,body) \
+case IROpCode :: opcode : { \
+	if(node.op.a_enc == IROp::E_SCALAR) { \
 		double a = node.a.d; \
 		double * bv = node.b.p; \
-		double * cv = node.reg_r; \
+		double * cv = node.r.p; \
 		for(size_t z = 0; z < TRACE_VECTOR_WIDTH; z++) { \
 			double b = bv[z]; \
 			cv[z] = body; \
 		} \
-		if(node.is_output) \
-			node.reg_r += TRACE_VECTOR_WIDTH; \
-		if(node.btyp == IRNode::I_VECTOR) \
+		if(node.r_external) \
+			node.r.p += TRACE_VECTOR_WIDTH; \
+		if(node.b_external) \
 			node.b.p += TRACE_VECTOR_WIDTH; \
-	} else if(node.btyp == IRNode::I_CONST) { \
+	} else if(node.op.b_enc == IROp::E_SCALAR) { \
 		double * av = node.a.p; \
 		double b = node.b.d; \
-		double * cv = node.reg_r; \
+		double * cv = node.r.p; \
 		for(size_t z = 0; z < TRACE_VECTOR_WIDTH; z++) { \
 			double a = av[z]; \
 			cv[z] = body; \
 		} \
-		if(node.is_output) \
-			node.reg_r += TRACE_VECTOR_WIDTH; \
-		if(node.atyp == IRNode::I_VECTOR) \
+		if(node.r_external) \
+			node.r.p += TRACE_VECTOR_WIDTH; \
+		if(node.a_external) \
 			node.a.p += TRACE_VECTOR_WIDTH; \
 	} else { \
 		double * av = node.a.p; \
 		double * bv = node.b.p; \
-		double * cv = node.reg_r; \
+		double * cv = node.r.p; \
 		for(size_t z = 0; z < TRACE_VECTOR_WIDTH; z++) { \
 			double a = av[z]; \
 			double b = bv[z]; \
 			cv[z] = body; \
 		} \
-		if(node.is_output) \
-			node.reg_r += TRACE_VECTOR_WIDTH; \
-		if(node.atyp == IRNode::I_VECTOR) \
+		if(node.r_external) \
+			node.r.p += TRACE_VECTOR_WIDTH; \
+		if(node.a_external) \
 			node.a.p += TRACE_VECTOR_WIDTH; \
-		if(node.btyp == IRNode::I_VECTOR) \
+		if(node.b_external) \
 			node.b.p += TRACE_VECTOR_WIDTH; \
 	} \
 } break;
 #define UNARY_IMPL(op,nm,body) \
 case IROpCode :: op : { \
 	double * av = node.a.p; \
-	double * cv = node.reg_r; \
+	double * cv = node.r.p; \
 	for(size_t z = 0; z < TRACE_VECTOR_WIDTH; z++) { \
 		double a = av[z]; \
 		cv[z] = body; \
 	} \
+	if(node.r_external) \
+		node.r.p += TRACE_VECTOR_WIDTH; \
+	if(node.a_external) \
+		node.a.p += TRACE_VECTOR_WIDTH; \
 } break;
 	
 			switch(node.op.code) {

@@ -38,15 +38,35 @@ static void add_voutput(State & state, Symbol s, IRef i) {
 	out.ref = i;
 }
 
-IRef emitir(State & state, IROpCode::Enum opcode, IRNode::InputType atyp, void * a, IRNode::InputType btyp, void * b) {
+
+struct InputValue {
+	IROp::Encoding encoding;
+	bool is_external;
+	void * data;
+};
+
+IRef emitir(State & state, IROpCode::Enum opcode,
+		                   const InputValue & a,
+		                   const InputValue & b) {
 	IRNode & n = TRACE.nodes[TRACE.n_nodes];
-	n.atyp = atyp;
-	n.btyp = btyp;
-	n.is_output = false;
+
+	n.op.a_enc = a.encoding;
+	n.a_external = a.is_external;
+	n.a.p = (double *) a.data;
+
+	n.op.b_enc = b.encoding;
+	n.b_external = b.is_external;
+	n.b.p = (double *) b.data;
+
+	n.op.typ = IROp::T_DOUBLE;
+
+
+	n.r_external = false;
+	n.r.p = NULL;
+
 	n.op.code = opcode;
-	n.a.p = (double*) a;
-	n.b.p = (double*) b;
-	n.reg_r = NULL;
+
+
 	return TRACE.n_nodes++;
 }
 
@@ -126,13 +146,17 @@ void assign(State & state, Value & r, IRef ref) {
 	add_output(state,r);
 }
 
-RecordingStatus::Enum get_register_type(State & state, Value & v, IRNode::InputType * typ) {
+RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret) {
+	ret->data = v.p;
 	if(v.isDouble1()) {
-		*typ = IRNode::I_CONST;
+		ret->encoding = IROp::E_SCALAR;
+		ret->is_external = false;
 	} else if(v.isFuture()) {
-		*typ = IRNode::I_REG;
+		ret->encoding = IROp::E_VECTOR;
+		ret->is_external = false;
 	} else if(v.isDouble() && v.length == TRACE.length) {
-		*typ = IRNode::I_VECTOR;
+		ret->encoding = IROp::E_VECTOR;
+		ret->is_external = true;
 	} else return RecordingStatus::UNSUPPORTED_TYPE;
 	return RecordingStatus::NO_ERROR;
 }
@@ -142,23 +166,25 @@ RecordingStatus::Enum binary_record(IROpCode::Enum opcode, State & state, Instru
 	Value & a = REG(state,inst.a);
 	Value & b = REG(state,inst.b);
 	if(a.isFuture()) {
-		IRNode::InputType benc;
-		RECORDING_DO(get_register_type(state,b,&benc));
+		InputValue aenc = { IROp::E_VECTOR, false, a.p };
+		InputValue benc;
+		RECORDING_DO(get_input(state,b,&benc));
 		RESERVE(1,1);
-		assign(state,r,emitir(state,opcode,IRNode::I_REG,a.p,benc,b.p));
+		assign(state,r,emitir(state,opcode,aenc,benc));
 	} else if(b.isFuture()) {
-		IRNode::InputType aenc;
-		RECORDING_DO(get_register_type(state,a,&aenc));
+		InputValue aenc;
+		RECORDING_DO(get_input(state,a,&aenc));
+		InputValue benc = { IROp::E_VECTOR, false, b.p };
 		RESERVE(1,1);
-		assign(state,r,emitir(state,opcode,aenc,a.p,IRNode::I_REG,b.p));
+		assign(state,r,emitir(state,opcode,aenc,benc));
 	} else if(b.length == TRACE.length || a.length == TRACE.length) {
-		IRNode::InputType aenc;
-		IRNode::InputType benc;
-		RecordingStatus::Enum ar = get_register_type(state,a,&aenc);
-		RecordingStatus::Enum br = get_register_type(state,b,&benc);
+		InputValue aenc;
+		InputValue benc;
+		RecordingStatus::Enum ar = get_input(state,a,&aenc);
+		RecordingStatus::Enum br = get_input(state,b,&benc);
 	    if(RecordingStatus::NO_ERROR == ar && RecordingStatus::NO_ERROR == br) {
 	    	RESERVE(1,1);
-	    	assign(state,r,emitir(state,opcode,aenc,a.p,benc,b.p));
+	    	assign(state,r,emitir(state,opcode,aenc,benc));
 		} else
 	    	return RecordingStatus::FALLBACK;
 	} else {
@@ -172,10 +198,14 @@ RecordingStatus::Enum unary_record(IROpCode::Enum opcode, State & state, Instruc
 	Value & a = REG(state,inst.a);
 	if(a.header == Type::Future) {
 		RESERVE(1,1);
-		assign(state,r,emitir(state,opcode,IRNode::I_REG,a.p,IRNode::I_UNUSED,NULL));
+		InputValue aenc = {IROp::E_VECTOR, false, a.p};
+		InputValue benc = {IROp::E_VECTOR, false, NULL};
+		assign(state,r,emitir(state,opcode,aenc,benc));
 	} else if(a.isDouble() && a.length == TRACE.length) {
 		RESERVE(1,1);
-		assign(state,r,emitir(state,opcode,IRNode::I_VECTOR,a.p,IRNode::I_UNUSED,NULL));
+		InputValue aenc = {IROp::E_VECTOR, true, a.p};
+		InputValue benc = {IROp::E_VECTOR, false, NULL};
+		assign(state,r,emitir(state,opcode,aenc,benc));
 	} else {
 		return RecordingStatus::FALLBACK;
 	}
