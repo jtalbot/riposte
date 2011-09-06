@@ -41,27 +41,27 @@
 */
 	
 #define IR_BINARY(_) \
-	_(add,        "add",       a + b) \
-	_(sub,        "sub",       a - b) \
-	_(mul,        "mul",       a * b) \
-	_(div,        "div",       a / b) \
-	_(pow,        "pow",       pow(a,b) ) \
+	_(add,        "add",       AddOp) \
+	_(sub,        "sub",       SubOp) \
+	_(mul,        "mul",       MulOp) \
+	_(div,        "div",       DivOp) \
+	_(pow,        "pow",       PowOp) \
 	
 #define IR_UNARY(_) \
-	_(neg,        "neg",       - a) \
-	_(sqrt,       "sqrt",     sqrt(a) ) \
-	_(floor,      "floor",     floor(a)) \
-	_(ceiling,    "ceiling",   ceil(a)) \
-	_(round,      "round",     rint(a)) \
-	_(exp,        "exp",       exp(a)) \
-	_(log,        "log",       log(a)) \
-	_(cos,        "cos",       cos(a)) \
-	_(sin,        "sin",       sin(a)) \
-	_(tan,        "tan",       tan(a)) \
-	_(acos,       "acos",      acos(a)) \
-	_(asin,       "asin",      asin(a)) \
-	_(atan,       "atan",      atan(a)) \
-	_(abs,        "abs",       abs(a)) \
+	_(neg,        "neg",       NegOp) \
+	_(sqrt,       "sqrt",      SqrtOp) \
+	_(floor,      "floor",     FloorOp) \
+	_(ceiling,    "ceiling",   CeilingOp) \
+	_(round,      "round",     RoundOp) \
+	_(exp,        "exp",       ExpOp) \
+	_(log,        "log",       LogOp) \
+	_(cos,        "cos",       CosOp) \
+	_(sin,        "sin",       SinOp) \
+	_(tan,        "tan",       TanOp) \
+	_(acos,       "acos",      ACosOp) \
+	_(asin,       "asin",      ASinOp) \
+	_(atan,       "atan",      ATanOp) \
+	_(abs,        "abs",       AbsOp) \
 	
 
 #define IR_ENUM(_) 	\

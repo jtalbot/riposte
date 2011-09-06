@@ -37,6 +37,48 @@ struct NAFold : public Op {
 	}
 };
 
+template< class Op, int64_t N >
+struct Map1 {
+	static void eval(State& state, typename Op::A const* a, typename Op::R* r) {
+		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, a[i]);
+	}
+};
+
+template< class Op, int64_t N >
+struct Map2VV {
+	static void eval(State& state, typename Op::A const* a, typename Op::B const* b, typename Op::R* r) {
+		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, a[i], b[i]);
+	}
+};
+
+template< class Op, int64_t N >
+struct Map2SV {
+	static void eval(State& state, typename Op::A const& a, typename Op::B const* b, typename Op::R* r) {
+		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, a, b[i]);
+	}
+};
+
+template< class Op, int64_t N >
+struct Map2VS {
+	static void eval(State& state, typename Op::A const* a, typename Op::B const& b, typename Op::R* r) {
+		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, a[i], b);
+	}
+};
+
+template< class Op, int64_t N >
+struct FoldLeftT {
+	static void eval(State& state, typename Op::A const* a, typename Op::R& r) {
+		for(int64_t i = 0; i < N; ++i) r = Op::eval(state, r, a[i]);
+	}
+};
+
+template< class Op, int64_t N >
+struct ScanLeftT {
+	static void eval(State& state, typename Op::A const* a, typename Op::R& b, typename Op::R* r) {
+		for(int64_t i = 0; i < N; ++i) r[i] = b = Op::eval(b, a[i]);
+	}
+};
+
 template< class Op >
 struct Zip1 {
 	static void eval(State& state, typename Op::AV const& a, Value& out)
@@ -100,58 +142,36 @@ struct Zip2 {
 		else if(a.length == 0 || b.length == 0) {
 			Op::RV::Init(out, 0);
 		}
-		else {
-			throw RiposteError("NYI: ops between vectors of different lengths");
-		}
-		/*if(a.length == 1 && b.length == 1) {
-			typename Op::RV r(1);
-			r[0] = Op::eval(state, a[0], b[0]);
-			return r;
-		}
-		if(a.length == b.length) {
-			typename Op::RV r(a.length);
-			for(int64_t i = 0; i < a.length; ++i) {
-				r[i] = Op::eval(state, a[i], b[i]);
-			}
-			return r;
-		}
-		else if(a.length == 1) {
-			typename Op::RV r(b.length);
-			for(int64_t i = 0; i < b.length; ++i) {
-				r[i] = Op::eval(state, a[0], b[i]);
-			}
-			return r;
-		}
-		else if(b.length == 1) {
-			typename Op::RV r(a.length);
-			for(int64_t i = 0; i < a.length; ++i) {
-				r[i] = Op::eval(state, a[i], b[0]);
-			}
-			return r;
-		}
-		else if(a.length == 0 || b.length == 0) {
-			return typename Op::RV(0);
-		}
 		else if(a.length > b.length) {
 			typename Op::RV r(a.length);
+			typename Op::R* re = r.v();
+			typename Op::A const* ae = a.v();
+			typename Op::B const* be = b.v();
+			int64_t alength = a.length;
+			int64_t blength = b.length;
 			int64_t j = 0;
-			for(int64_t i = 0; i < a.length; ++i) {
-				r[i] = Op::eval(state, a[i], b[j]);
+			for(int64_t i = 0; i < alength; ++i) {
+				re[i] = Op::eval(state, ae[i], be[j]);
 				++j;
-				if(j >= b.length) j = 0;
+				if(j >= blength) j = 0;
 			}
-			return r;
+			out = (Value&)r;
 		}
 		else {
 			typename Op::RV r(b.length);
+			typename Op::R* re = r.v();
+			typename Op::A const* ae = a.v();
+			typename Op::B const* be = b.v();
+			int64_t alength = a.length;
+			int64_t blength = b.length;
 			int64_t j = 0;
-			for(int64_t i = 0; i < b.length; ++i) {
-				r[i] = Op::eval(state, a[j], b[i]);
+			for(int64_t i = 0; i < blength; ++i) {
+				re[i] = Op::eval(state, ae[j], be[i]);
 				++j;
-				if(j >= a.length) j = 0;
+				if(j >= alength) j = 0;
 			}
-			return r;
-		}*/
+			out = (Value&)r;
+		}
 	}
 };
 

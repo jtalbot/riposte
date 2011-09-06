@@ -1,7 +1,8 @@
 #include "trace.h"
 #include "interpreter.h"
+#include "vector.h"
+#include "ops.h"
 
-#include "math.h"
 #include <stdlib.h>
 
 void Trace::reset() {
@@ -95,16 +96,13 @@ void Trace::execute(State & state) {
 	for(int64_t i = 0; i < length; i += TRACE_VECTOR_WIDTH) {
 		for(size_t j = 0; j < n_nodes; j++) {
 			IRNode & node = nodes[j];		
-#define BINARY_IMPL(opcode,nm,body) \
+#define BINARY_IMPL(opcode,nm,OP) \
 case IROpCode :: opcode : { \
 	if(node.op.a_enc == IROp::E_SCALAR) { \
 		double a = node.a.d; \
 		double * bv = node.b.p; \
 		double * cv = node.r.p; \
-		for(size_t z = 0; z < TRACE_VECTOR_WIDTH; z++) { \
-			double b = bv[z]; \
-			cv[z] = body; \
-		} \
+		Map2SV< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, a, bv, cv); \
 		if(node.r_external) \
 			node.r.p += TRACE_VECTOR_WIDTH; \
 		if(node.b_external) \
@@ -113,10 +111,7 @@ case IROpCode :: opcode : { \
 		double * av = node.a.p; \
 		double b = node.b.d; \
 		double * cv = node.r.p; \
-		for(size_t z = 0; z < TRACE_VECTOR_WIDTH; z++) { \
-			double a = av[z]; \
-			cv[z] = body; \
-		} \
+		Map2VS< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, av, b, cv); \
 		if(node.r_external) \
 			node.r.p += TRACE_VECTOR_WIDTH; \
 		if(node.a_external) \
@@ -125,11 +120,7 @@ case IROpCode :: opcode : { \
 		double * av = node.a.p; \
 		double * bv = node.b.p; \
 		double * cv = node.r.p; \
-		for(size_t z = 0; z < TRACE_VECTOR_WIDTH; z++) { \
-			double a = av[z]; \
-			double b = bv[z]; \
-			cv[z] = body; \
-		} \
+		Map2VV< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, av, bv, cv); \
 		if(node.r_external) \
 			node.r.p += TRACE_VECTOR_WIDTH; \
 		if(node.a_external) \
@@ -138,14 +129,11 @@ case IROpCode :: opcode : { \
 			node.b.p += TRACE_VECTOR_WIDTH; \
 	} \
 } break;
-#define UNARY_IMPL(op,nm,body) \
-case IROpCode :: op : { \
+#define UNARY_IMPL(opcode,nm,OP) \
+case IROpCode :: opcode : { \
 	double * av = node.a.p; \
 	double * cv = node.r.p; \
-	for(size_t z = 0; z < TRACE_VECTOR_WIDTH; z++) { \
-		double a = av[z]; \
-		cv[z] = body; \
-	} \
+	Map1< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, av, cv); \
 	if(node.r_external) \
 		node.r.p += TRACE_VECTOR_WIDTH; \
 	if(node.a_external) \
