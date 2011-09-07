@@ -53,14 +53,14 @@ struct Map2VV {
 
 template< class Op, int64_t N >
 struct Map2SV {
-	static void eval(State& state, typename Op::A const& a, typename Op::B const* b, typename Op::R* r) {
+	static void eval(State& state, typename Op::A const a, typename Op::B const* b, typename Op::R* r) {
 		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, a, b[i]);
 	}
 };
 
 template< class Op, int64_t N >
 struct Map2VS {
-	static void eval(State& state, typename Op::A const* a, typename Op::B const& b, typename Op::R* r) {
+	static void eval(State& state, typename Op::A const* a, typename Op::B const b, typename Op::R* r) {
 		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, a[i], b);
 	}
 };

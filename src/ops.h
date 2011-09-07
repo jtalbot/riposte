@@ -33,7 +33,7 @@ struct TCharacter {
 #define UNARY_OP(Name, T1, T2, Func) \
 template<typename T> \
 struct Name : public UnaryOp<typename T::T1, typename T::T2> {\
-	static typename Name::R eval(State& state, typename Name::A const& a) {\
+	static typename Name::R eval(State& state, typename Name::A const a) {\
 		if(!Name::AV::isCheckedNA(a)) return (Func);\
 		else return Name::RV::NAelement;\
 	}\
@@ -42,12 +42,12 @@ struct Name : public UnaryOp<typename T::T1, typename T::T2> {\
 #define NYI_UNARY_OP(Name, T1, T2) \
 template<typename T> \
 struct Name : public UnaryOp<typename T::T1, typename T::T2> {\
-	static typename Name::R eval(State& state, typename Name::A const& a) { _error("NYI: "#Name); } \
+	static typename Name::R eval(State& state, typename Name::A const a) { _error("NYI: "#Name); } \
 };
 
 #define NYI_COMPLEX_OP(T) template<> \
 struct T<TComplex> : public UnaryOp<TComplex::Self, TComplex::Self> { \
-	static T::R eval(State& state, T::A const& a) { _error("unimplemented complex function"); } \
+	static T::R eval(State& state, T::A const a) { _error("unimplemented complex function"); } \
 };
 
 UNARY_OP(PosOp, Self, Self, a)
@@ -75,7 +75,7 @@ UNARY_OP(ATanOp, Self, Up, atan(a))				NYI_COMPLEX_OP(ATanOp)
 #define UNARY_FILTER_OP(Name, Func) \
 template<typename T> \
 struct Name : public UnaryOp<T, Logical> {\
-	static typename Name::R eval(State& state, typename Name::A const& a) {\
+	static typename Name::R eval(State& state, typename Name::A const a) {\
 		return (Func);\
 	}\
 };
@@ -87,17 +87,17 @@ UNARY_FILTER_OP(IsInfiniteOp, IsInfiniteOp::AV::isInfinite(a))
 
 template<typename T> 
 struct LNotOp : UnaryOp<Logical, Logical> {
-	static typename LNotOp::R eval(State& state, typename LNotOp::A const& a) { return !a; }
+	static typename LNotOp::R eval(State& state, typename LNotOp::A const a) { return !a; }
 };
 
 template<typename T>
 struct NcharOp : UnaryOp<Character, Integer> {
-	static typename NcharOp::R eval(State& state, typename NcharOp::A const& a) { return (a == Symbols::NA) ? 2 : state.SymToStr(a).length(); }
+	static typename NcharOp::R eval(State& state, typename NcharOp::A const a) { return (a == Symbols::NA) ? 2 : state.SymToStr(a).length(); }
 };
 
 template<typename T>
 struct NzcharOp : UnaryOp<Character, Logical> {
-	static typename NzcharOp::R eval(State& state, typename NzcharOp::A const& a) { return a != Symbols::empty; }
+	static typename NzcharOp::R eval(State& state, typename NzcharOp::A const a) { return a != Symbols::empty; }
 };
 
 #undef UNARY_OP 
@@ -108,7 +108,7 @@ struct NzcharOp : UnaryOp<Character, Logical> {
 #define BINARY_OP(Name, T1, T2, T3, Func) \
 template<typename T> \
 struct Name : public BinaryOp<typename T::T1, typename T::T2, typename T::T3> {\
-	static typename Name::R eval(State& state, typename Name::A const& a, typename Name::B const& b) { \
+	static typename Name::R eval(State& state, typename Name::A const a, typename Name::B const b) { \
 		if(!Name::AV::isCheckedNA(a) && !Name::BV::isCheckedNA(b)) return (Func); \
 		else return Name::RV::NAelement; \
 	} \
@@ -116,7 +116,7 @@ struct Name : public BinaryOp<typename T::T1, typename T::T2, typename T::T3> {\
 
 #define NYI_COMPLEX_OP(T) template<> \
 struct T<TComplex> : public BinaryOp<Complex, Complex, Complex> { \
-	static T::R eval(State& state, T::A const& a, T::B const& b) { _error("unimplemented complex function"); } \
+	static T::R eval(State& state, T::A const a, T::B const b) { _error("unimplemented complex function"); } \
 };
 
 BINARY_OP(AddOp, Self, Self, Self, a+b)
@@ -140,7 +140,7 @@ BINARY_OP(PMaxOp, Self, Self, Self, std::max(a,b))		NYI_COMPLEX_OP(PMaxOp)
 #define ORDINAL_OP(Name, Func) \
 template<typename T> \
 struct Name : public BinaryOp<typename T::Self, typename T::Self, Logical> {\
-	static typename Name::R eval(State& state, typename Name::A const& a, typename Name::B const& b) { \
+	static typename Name::R eval(State& state, typename Name::A const a, typename Name::B const b) { \
 		if(!Name::AV::isNA(a) && !Name::BV::isNA(b)) return (Func); \
 		else return Name::RV::NAelement; \
 	} \
@@ -149,7 +149,7 @@ struct Name : public BinaryOp<typename T::Self, typename T::Self, Logical> {\
 #define CHARACTER_ORDINAL_OP(Name, Func) \
 template<> \
 struct Name<TCharacter> : public BinaryOp<Character, Character, Logical> {\
-	static Name::R eval(State& state, Name::A const& a, Name::B const& b) { \
+	static Name::R eval(State& state, Name::A const a, Name::B const b) { \
 		if(!Name::AV::isNA(a) && !Name::BV::isNA(b)) return (Func); \
 		else return Name::RV::NAelement; \
 	} \
@@ -158,7 +158,7 @@ struct Name<TCharacter> : public BinaryOp<Character, Character, Logical> {\
 #define INVALID_COMPLEX_OP(Name) \
 template<> \
 struct Name<TComplex> : public BinaryOp<Complex, Complex, Logical> { \
-	static Name::R eval(State& state, Name::A const& a, Name::B const& b) { _error("invalid complex function"); } \
+	static Name::R eval(State& state, Name::A const a, Name::B const b) { _error("invalid complex function"); } \
 };
 
 ORDINAL_OP(LTOp, a<b)	CHARACTER_ORDINAL_OP(LTOp, state.SymToStr(a).compare(state.SymToStr(b)) < 0)		INVALID_COMPLEX_OP(LTOp)
@@ -175,7 +175,7 @@ ORDINAL_OP(NeqOp, a!=b) /* Character inequality can just compare Symbols */
 // Logical binary ops
 template<typename T>
 struct AndOp : BinaryOp<Logical, Logical, Logical> {
-	static typename AndOp::R eval(State& state, typename AndOp::A const& a, typename AndOp::B const& b) {
+	static typename AndOp::R eval(State& state, typename AndOp::A const a, typename AndOp::B const b) {
 		if(AV::isNA(a)) return b ? RV::NAelement : 0;
 		else if(BV::isNA(b)) return a ? RV::NAelement : 0;
 		else return a && b ? 1 : 0;
@@ -184,7 +184,7 @@ struct AndOp : BinaryOp<Logical, Logical, Logical> {
 
 template<typename T>
 struct OrOp : BinaryOp<Logical, Logical, Logical> {
-	static typename OrOp::R eval(State& state, typename OrOp::A const& a, typename OrOp::B const& b) {
+	static typename OrOp::R eval(State& state, typename OrOp::A const a, typename OrOp::B const b) {
 		if(AV::isNA(a)) return b ? 1 : RV::NAelement;
 		else if(BV::isNA(b)) return a ? 1 : RV::NAelement;
 		return (a || b) ? 1 : 0;
@@ -199,7 +199,7 @@ struct OrOp : BinaryOp<Logical, Logical, Logical> {
 template<typename T> \
 struct Name : FoldOp<typename T::Self> { \
 	static const typename Name::A Base; \
-	static typename Name::R eval(State& state, typename Name::R const& a, typename Name::A const& b) { \
+	static typename Name::R eval(State& state, typename Name::R const a, typename Name::A const b) { \
 		return (Func); \
 	} \
 }; \
@@ -209,7 +209,7 @@ const typename Name<T>::A Name<T>::Base = Initial;
 #define INVALID_COMPLEX_FUNCTION(T) template<> \
 struct T<TComplex> : public BinaryOp<Complex, Complex, Complex> { \
 	static const T::A Base; \
-	static T::R eval(State& state, T::A const& a, T::B const& b) { _error("invalid complex function"); } \
+	static T::R eval(State& state, T::A const a, T::B const b) { _error("invalid complex function"); } \
 }; 
 
 template<typename T>

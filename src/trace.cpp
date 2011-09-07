@@ -31,7 +31,7 @@ void Trace::execute(State & state) {
 			if(nodes[o.ref].r.p == NULL) //if this is the first VM value that refers to this output, allocate space for it in the VM
 				nodes[o.ref].r.p = new (GC) double[length];
 			Value v;
-			Value::Init(v,Type::Double,length);
+			Value::Init(v,o.typ,length);
 			v.p = nodes[o.ref].r.p;
 			if(o.is_variable)
 				state.frame.environment->hassign(Symbol(o.variable),v);
