@@ -2,6 +2,7 @@
 #include "interpreter.h"
 #include "vector.h"
 #include "ops.h"
+#include "sse.h"
 
 #include <stdlib.h>
 

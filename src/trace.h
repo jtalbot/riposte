@@ -15,7 +15,7 @@ struct Prototype;
 
 #define TRACE_MAX_NODES (128)
 #define TRACE_MAX_VECTOR_REGISTERS (32)
-#define TRACE_VECTOR_WIDTH (8)
+#define TRACE_VECTOR_WIDTH (16)
 //maximum number of instructions to record before dropping out of the
 //recording interpreter
 #define TRACE_MAX_RECORDED (256)
