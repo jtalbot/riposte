@@ -82,17 +82,9 @@ void coerce(State & state, Type::Enum result_type, InputValue & a) {
 //this emits an opcode assuming that a and b are the same type
 void emitir(State & state, IROpCode::Enum opcode,
 						   Type::Enum ret_type,
-		                   InputValue a,
-		                   InputValue b,
+		                   const InputValue & a,
+		                   const InputValue & b,
 		                   Value & v) {
-
-
-	Type::Enum arg_type = std::max(a.typ,b.typ);
-
-	if(a.typ != arg_type)
-		coerce(state,arg_type,a);
-	if(b.typ != arg_type)
-		coerce(state,arg_type,b);
 
 	IRNode & n = TRACE.nodes[TRACE.n_nodes];
 
@@ -234,6 +226,11 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum opcode, St
 	RecordingStatus::Enum br = get_input(state,b,&benc,&can_fallback);
 	if(RecordingStatus::NO_ERROR == ar && RecordingStatus::NO_ERROR == br) {
 		RESERVE(2,1);
+		Type::Enum arg_type = std::max(aenc.typ,benc.typ);
+		if(aenc.typ != arg_type)
+			coerce(state,arg_type,aenc);
+		if(benc.typ != arg_type)
+			coerce(state,arg_type,benc);
 		emitir(state,opcode,resultType(bc,aenc.typ,benc.typ),aenc,benc,r);
 		return RecordingStatus::NO_ERROR;
 	} else {
