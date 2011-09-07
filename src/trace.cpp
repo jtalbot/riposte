@@ -114,14 +114,13 @@ void Trace::execute(State & state) {
 		Map2VV< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, node.a.p, node.b.p, node.r.p); break; \
 
 #define UNARY_CASE(opcode, typea) \
-	((IROpCode::opcode << 4) + (typea << 2))
+	((IROpCode::opcode << 4) + (typea << 2) + 3)
 
 #define UNARY_IMPL(opcode,nm,OP) \
 	case UNARY_CASE(opcode, IROp::T_INT): \
 		Map1< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, (OP<TInteger>::R*)node.r.p); break; \
 	case UNARY_CASE(opcode, IROp::T_DOUBLE): \
-		Map1< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, node.a.p, node.r.p); break; \
-			
+		Map1< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, node.a.p, node.r.p); break; 
 			switch(node.op.op) {
 				IR_BINARY(BINARY_IMPL)
 				IR_UNARY(UNARY_IMPL)

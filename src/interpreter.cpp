@@ -459,10 +459,23 @@ Instruction const* seq_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 
+bool isRecordable(Value const& a) {
+	return (a.isDouble() || a.isInteger()) 
+		&& a.length > TRACE_VECTOR_WIDTH 
+		&& a.length % TRACE_VECTOR_WIDTH == 0;
+}
+
 
 #define OP(name, string, Op) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
-	unaryArith<Zip1, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+	Value & a =  REG(state, inst.a);	\
+	Value & c = REG(state, inst.c);	\
+	if(a.isDouble1()) { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d)); return &inst+1; } \
+	else if(a.isInteger1()) { Op<TDouble>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i)); return &inst+1; } \
+	if(isRecordable(a)) \
+		return recording_interpret(state, &inst, a.length); \
+	\
+	unaryArith<Zip1, Op>(state, a, c); \
 	return &inst+1; \
 }
 UNARY_ARITH_MAP_BYTECODES(OP)
@@ -477,21 +490,32 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 UNARY_LOGICAL_MAP_BYTECODES(OP)
 #undef OP
 
-
 #define OP(name, string, Op) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
 	Value & a =  REG(state, inst.a);	\
 	Value & b =  REG(state, inst.b);	\
 	Value & c = REG(state, inst.c);	\
-	if(a.isDouble() && a.length > TRACE_VECTOR_WIDTH && a.length % TRACE_VECTOR_WIDTH == 0) {	\
-		return recording_interpret(state,&inst,a.length);	\
-	} else if (b.isDouble() && b.length > TRACE_VECTOR_WIDTH && b.length % TRACE_VECTOR_WIDTH == 0) {	\
-		return recording_interpret(state,&inst,b.length);	\
-	} else {	\
-		binaryArith<Zip2, Op>(state,a, b, c);	\
-		return &inst+1;	\
-	} \
-} 
+        if(a.isDouble1()) {			\
+                if(b.isDouble1())		\
+                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d, b.d)); return &inst+1; }	\
+                else if(b.isInteger1())	\
+                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d, (double)b.i));return &inst+1; }	\
+        }	\
+        else if(a.isInteger1()) {	\
+                if(b.isDouble1())	\
+                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, (double)a.i, b.d)); return &inst+1; }	\
+                else if(b.isInteger1())	\
+                        { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return &inst+1;} \
+        } \
+	\
+	if(isRecordable(a)) \
+		return recording_interpret(state, &inst, a.length);	\
+	if(isRecordable(b)) \
+		return recording_interpret(state, &inst, b.length);	\
+        \
+	binaryArithSlow<Zip2, Op>(state, a, b, c);	\
+	return &inst+1;	\
+}
 BINARY_ARITH_MAP_BYTECODES(OP)
 #undef OP
 

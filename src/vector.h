@@ -32,7 +32,7 @@ struct FoldOp {
 template<class Op>
 struct NAFold : public Op {
 	static typename Op::R eval(State& state, typename Op::R const& r, typename Op::A const& a) {
-		if(!Op::AV::CheckNA || !Op::AV::isNA(a)) return Op::eval(state, r, a);
+		if(!Op::AV::isCheckedNA(a)) return Op::eval(state, r, a);
 		else return Op::RV::NAelement;
 	}
 };

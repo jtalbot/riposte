@@ -34,7 +34,7 @@ struct TCharacter {
 template<typename T> \
 struct Name : public UnaryOp<typename T::T1, typename T::T2> {\
 	static typename Name::R eval(State& state, typename Name::A const& a) {\
-		if(!Name::AV::CheckNA || !Name::AV::isNA(a)) return (Func);\
+		if(!Name::AV::isCheckedNA(a)) return (Func);\
 		else return Name::RV::NAelement;\
 	}\
 };
@@ -109,7 +109,7 @@ struct NzcharOp : UnaryOp<Character, Logical> {
 template<typename T> \
 struct Name : public BinaryOp<typename T::T1, typename T::T2, typename T::T3> {\
 	static typename Name::R eval(State& state, typename Name::A const& a, typename Name::B const& b) { \
-		if((!Name::AV::CheckNA || !Name::AV::isNA(a)) && (!Name::BV::CheckNA || !Name::BV::isNA(b))) return (Func); \
+		if(!Name::AV::isCheckedNA(a) && !Name::BV::isCheckedNA(b)) return (Func); \
 		else return Name::RV::NAelement; \
 	} \
 };
