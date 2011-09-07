@@ -29,45 +29,53 @@
 	_(subset, "subset") \
 	_(subset2, "subset2") \
 
-#define MATH_BYTECODES(_) \
-	_(add, "add") \
-	_(pos, "pos") \
-	_(sub, "sub") \
-	_(neg, "neg") \
-	_(mul, "mul") \
-	_(div, "div") \
-	_(idiv, "idiv") \
-	_(mod, "mod") \
-	_(pow, "pow") \
-	_(lt, "lt") \
-	_(gt, "gt") \
-	_(eq, "eq") \
-	_(neq, "neq") \
-	_(ge, "ge") \
-	_(le, "le") \
-	_(lnot, "lnot") \
-	_(land, "land") \
-	_(lor, "lor") \
-	_(sland, "sland") \
-	_(slor, "slor") \
-	_(abs, "abs") \
-	_(sign, "sign") \
-	_(sqrt, "sqrt") \
-	_(floor, "floor") \
-	_(ceiling, "ceiling") \
-	_(trunc, "trunc") \
-	_(round, "round") \
-	_(signif, "signif") \
-	_(exp, "exp") \
-	_(log, "log") \
-	_(cos, "cos") \
-	_(sin, "sin") \
-	_(tan, "tan") \
-	_(acos, "acos") \
-	_(asin, "asin") \
-	_(atan, "atan") \
+#define UNARY_ARITH_MAP_BYTECODES(_) \
+	_(pos, "pos", 	PosOp) \
+	_(neg, "neg", 	NegOp) \
+	_(abs, "abs", 	AbsOp) \
+	_(sign, "sign",	SignOp) \
+	_(sqrt, "sqrt",	SqrtOp) \
+	_(floor, "floor",	FloorOp) \
+	_(ceiling, "ceiling",	CeilingOp) \
+	_(trunc, "trunc",	TruncOp) \
+	_(round, "round",	RoundOp) \
+	_(signif, "signif",	SignifOp) \
+	_(exp, "exp",	ExpOp) \
+	_(log, "log",	LogOp) \
+	_(cos, "cos",	CosOp) \
+	_(sin, "sin",	SinOp) \
+	_(tan, "tan",	TanOp) \
+	_(acos, "acos",	ACosOp) \
+	_(asin, "asin",	ASinOp) \
+	_(atan, "atan",	ATanOp) \
+
+#define UNARY_LOGICAL_MAP_BYTECODES(_) \
+	_(lnot, "lnot",	LNotOp) \
+
+#define BINARY_ARITH_MAP_BYTECODES(_) \
+	_(add, "add",	AddOp) \
+	_(sub, "sub",	SubOp) \
+	_(mul, "mul",	MulOp) \
+	_(div, "div",	DivOp) \
+	_(idiv, "idiv",	IDivOp) \
+	_(mod, "mod",	ModOp) \
+	_(pow, "pow",	PowOp) \
+
+#define BINARY_LOGICAL_MAP_BYTECODES(_) \
+	_(land, "land",	AndOp) \
+	_(lor, "lor",	OrOp) \
+
+#define BINARY_ORDINAL_MAP_BYTECODES(_) \
+	_(eq, "eq",	EqOp) \
+	_(neq, "neq",	NeqOp) \
+	_(gt, "gt",	GTOp) \
+	_(ge, "ge",	GEOp) \
+	_(lt, "lt",	LTOp) \
+	_(le, "le",	LEOp) \
 
 #define UTILITY_BYTECODES(_)\
+	_(sland, "sland") \
+	_(slor, "slor") \
 	_(colon, "colon") \
 	_(function, "function") \
 	_(logical1, "logical") \
@@ -82,10 +90,17 @@
 #define SPECIAL_BYTECODES(_) 	\
 	_(done, "done")       /* done must be the last instruction */
 
+#define MAP_BYTECODES(_) \
+	UNARY_ARITH_MAP_BYTECODES(_) \
+	UNARY_LOGICAL_MAP_BYTECODES(_) \
+	BINARY_ARITH_MAP_BYTECODES(_) \
+	BINARY_LOGICAL_MAP_BYTECODES(_) \
+	BINARY_ORDINAL_MAP_BYTECODES(_) \
+
 #define BYTECODES(_) \
 	CONTROL_FLOW_BYTECODES(_) \
 	MEMORY_ACCESS_BYTECODES(_) \
-	MATH_BYTECODES(_) \
+	MAP_BYTECODES(_) \
 	UTILITY_BYTECODES(_) \
 	SPECIAL_BYTECODES(_)	
 

@@ -318,7 +318,7 @@ Instruction const * recording_interpret(State& state, Instruction const* pc, siz
 	state.tracing.begin_tracing();
 	TRACE.length = length;
 	while(true) {
-#define RUN_RECORD(name,str) case ByteCode::name: { printf("rec " #name "\n"); status = name##_record(state, *pc,&pc); } break;
+#define RUN_RECORD(name,str,...) case ByteCode::name: { printf("rec " #name "\n"); status = name##_record(state, *pc,&pc); } break;
 		switch(pc->bc) {
 			BYTECODES(RUN_RECORD)
 		}

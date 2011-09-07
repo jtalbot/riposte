@@ -85,16 +85,19 @@ UNARY_FILTER_OP(IsNaNOp, IsNaNOp::AV::isNaN(a))
 UNARY_FILTER_OP(IsFiniteOp, IsFiniteOp::AV::isFinite(a))
 UNARY_FILTER_OP(IsInfiniteOp, IsInfiniteOp::AV::isInfinite(a))
 
+template<typename T> 
 struct LNotOp : UnaryOp<Logical, Logical> {
-	static LNotOp::R eval(State& state, LNotOp::A const& a) { return !a; }
+	static typename LNotOp::R eval(State& state, typename LNotOp::A const& a) { return !a; }
 };
 
+template<typename T>
 struct NcharOp : UnaryOp<Character, Integer> {
-	static NcharOp::R eval(State& state, NcharOp::A const& a) { return (a == Symbols::NA) ? 2 : state.SymToStr(a).length(); }
+	static typename NcharOp::R eval(State& state, typename NcharOp::A const& a) { return (a == Symbols::NA) ? 2 : state.SymToStr(a).length(); }
 };
 
+template<typename T>
 struct NzcharOp : UnaryOp<Character, Logical> {
-	static NzcharOp::R eval(State& state, NzcharOp::A const& a) { return a != Symbols::empty; }
+	static typename NzcharOp::R eval(State& state, typename NzcharOp::A const& a) { return a != Symbols::empty; }
 };
 
 #undef UNARY_OP 
@@ -170,16 +173,18 @@ ORDINAL_OP(NeqOp, a!=b) /* Character inequality can just compare Symbols */
 #undef INVALID_COMPLEX_OP
 
 // Logical binary ops
+template<typename T>
 struct AndOp : BinaryOp<Logical, Logical, Logical> {
-	static AndOp::R eval(State& state, AndOp::A const& a, AndOp::B const& b) {
+	static typename AndOp::R eval(State& state, typename AndOp::A const& a, typename AndOp::B const& b) {
 		if(AV::isNA(a)) return b ? RV::NAelement : 0;
 		else if(BV::isNA(b)) return a ? RV::NAelement : 0;
 		else return a && b ? 1 : 0;
 	}
 };
 
+template<typename T>
 struct OrOp : BinaryOp<Logical, Logical, Logical> {
-	static OrOp::R eval(State& state, OrOp::A const& a, OrOp::B const& b) {
+	static typename OrOp::R eval(State& state, typename OrOp::A const& a, typename OrOp::B const& b) {
 		if(AV::isNA(a)) return b ? 1 : RV::NAelement;
 		else if(BV::isNA(b)) return a ? 1 : RV::NAelement;
 		return (a || b) ? 1 : 0;
@@ -195,8 +200,7 @@ template<typename T> \
 struct Name : FoldOp<typename T::Self> { \
 	static const typename Name::A Base; \
 	static typename Name::R eval(State& state, typename Name::R const& a, typename Name::A const& b) { \
-		if(!Name::AV::CheckNA || !Name::AV::isNA(b)) return (Func); \
-		else return Name::RV::NAelement; \
+		return (Func); \
 	} \
 }; \
 template<typename T> \
@@ -222,18 +226,10 @@ FOLD_OP(MaxOp, riposte_max(a,b), -std::numeric_limits<typename MaxOp<T>::A>::inf
 INVALID_COMPLEX_FUNCTION(MaxOp);
 FOLD_OP(MinOp, riposte_min(a,b), std::numeric_limits<typename MaxOp<T>::A>::infinity()) 
 INVALID_COMPLEX_FUNCTION(MinOp);
-FOLD_OP(SumOp, a+b, 0) 
-FOLD_OP(ProdOp, a*b, 1) 
-
-struct AnyOp : FoldOp<Logical> {
-	static const AnyOp::A Base;
-	static AnyOp::R eval(State& state, AnyOp::R const& a, AnyOp::A const& b) { return OrOp::eval(state, a,b); }
-};
-
-struct AllOp : FoldOp<Logical> {
-	static const AllOp::A Base;
-	static AllOp::R eval(State& state, AllOp::R const& a, AllOp::A const& b) { return AndOp::eval(state, a,b); }
-};
+FOLD_OP(SumOp, AddOp<T>::eval(state, a, b), 0) 
+FOLD_OP(ProdOp, MulOp<T>::eval(state, a, b), 1) 
+FOLD_OP(AnyOp, OrOp<TLogical>::eval(state, a, b), 0)
+FOLD_OP(AllOp, AndOp<TLogical>::eval(state, a, b), 1)
 
 #undef FOLD_OP
 #undef INVALID_COMPLEX_FUNCTION
@@ -252,19 +248,19 @@ void unaryArith(State& state, Value const& a, Value& c) {
 		_error("non-numeric argument to unary numeric operator");
 };
 
-template< template<class Op> class Lift, class Op > 
+template< template<class Op> class Lift, template<typename T> class Op > 
 void unaryLogical(State& state, Value const& a, Value& c) {
 	if(a.isLogicalCoerce())
-		Lift<Op>::eval(state, As<Logical>(state, a), c);
+		Lift< Op<TLogical> >::eval(state, As<Logical>(state, a), c);
 	else if(a.isNull())
 		c = Logical(0);
 	else
 		_error("non-logical argument to unary logical operator");
 };
 
-template< template<class Op> class Lift, class Op > 
+template< template<class Op> class Lift, template<typename T> class Op > 
 void unaryCharacter(State& state, Value const& a, Value& c) {
-	Lift<Op>::eval(state, As<Character>(state, a), c);
+	Lift< Op<TCharacter> >::eval(state, As<Character>(state, a), c);
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 
@@ -319,10 +315,10 @@ void binaryArith(State& state, Value const& a, Value const& b, Value& c) {
 	}
 	binaryArithSlow<Lift, Op>(state, a, b, c);
 }
-template< template<class Op> class Lift, class Op > 
+template< template<class Op> class Lift, template<typename T> class Op > 
 void binaryLogical(State& state, Value const& a, Value const& b, Value& c) {
 	if(a.isLogicalCoerce() && b.isLogicalCoerce()) 
-		Lift<Op>::eval(state, As<Logical>(state, a), As<Logical>(state, b), c);
+		Lift< Op<TLogical> >::eval(state, As<Logical>(state, a), As<Logical>(state, b), c);
 	else 
 		_error("non-logical argument to binary logical operator");
 }
@@ -340,6 +336,22 @@ void binaryOrdinal(State& state, Value const& a, Value const& b, Value& c) {
 	else
 		_error("non-ordinal argument to ordinal operator");
 }
+
+// Figure out the output...
+inline Type::Enum resultType(ByteCode::Enum bc, Type::Enum input) {
+	switch(bc) {
+#define CASE(name, str, Op) \
+	case ByteCode::name: \
+		if(input == Type::Integer) return Op<TInteger>::RV::VectorType; \
+		else if(input == Type::Double) return Op<TDouble>::RV::VectorType; \
+		else _error("Unknown type"); \
+		break;
+MAP_BYTECODES(CASE)
+#undef CASE
+	default:
+		_error("Not a map type");
+	};
+} 
 
 
 #endif

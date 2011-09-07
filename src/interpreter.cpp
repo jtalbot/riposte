@@ -458,151 +458,59 @@ Instruction const* seq_op(State& state, Instruction const& inst) {
 	REG(state, inst.c) = Sequence(len);
 	return &inst+1;
 }
-Instruction const* add_op(State& state, Instruction const& inst) {
-	Value & a =  REG(state, inst.a);
-	Value & b =  REG(state, inst.b);
-	Value & c = REG(state, inst.c);
-	if(a.isDouble() && a.length > TRACE_VECTOR_WIDTH && a.length % TRACE_VECTOR_WIDTH == 0) {
-		return recording_interpret(state,&inst,a.length);
-	} else if (b.isDouble() && b.length > TRACE_VECTOR_WIDTH && b.length % TRACE_VECTOR_WIDTH == 0) {
-		return recording_interpret(state,&inst,b.length);
-	} else {
-		binaryArith<Zip2, AddOp>(state,a, b, c);
-		return &inst+1;
-	}
+
+
+#define OP(name, string, Op) \
+Instruction const* name##_op(State& state, Instruction const& inst) { \
+	unaryArith<Zip1, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+	return &inst+1; \
 }
-Instruction const* pos_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, PosOp>(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
+UNARY_ARITH_MAP_BYTECODES(OP)
+#undef OP
+
+
+#define OP(name, string, Op) \
+Instruction const* name##_op(State& state, Instruction const& inst) { \
+	unaryLogical<Zip1, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+	return &inst+1; \
 }
-Instruction const* sub_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, SubOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
+UNARY_LOGICAL_MAP_BYTECODES(OP)
+#undef OP
+
+
+#define OP(name, string, Op) \
+Instruction const* name##_op(State& state, Instruction const& inst) { \
+	Value & a =  REG(state, inst.a);	\
+	Value & b =  REG(state, inst.b);	\
+	Value & c = REG(state, inst.c);	\
+	if(a.isDouble() && a.length > TRACE_VECTOR_WIDTH && a.length % TRACE_VECTOR_WIDTH == 0) {	\
+		return recording_interpret(state,&inst,a.length);	\
+	} else if (b.isDouble() && b.length > TRACE_VECTOR_WIDTH && b.length % TRACE_VECTOR_WIDTH == 0) {	\
+		return recording_interpret(state,&inst,b.length);	\
+	} else {	\
+		binaryArith<Zip2, Op>(state,a, b, c);	\
+		return &inst+1;	\
+	} \
+} 
+BINARY_ARITH_MAP_BYTECODES(OP)
+#undef OP
+
+#define OP(name, string, Op) \
+Instruction const* name##_op(State& state, Instruction const& inst) { \
+	binaryLogical<Zip2, Op>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c)); \
+	return &inst+1; \
 }
-Instruction const* neg_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, NegOp>(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
+BINARY_LOGICAL_MAP_BYTECODES(OP)
+#undef OP
+
+#define OP(name, string, Op) \
+Instruction const* name##_op(State& state, Instruction const& inst) { \
+	binaryOrdinal<Zip2, Op>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c)); \
+	return &inst+1; \
 }
-Instruction const* mul_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, MulOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* div_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, DivOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* idiv_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, IDivOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* mod_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, ModOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* pow_op(State& state, Instruction const& inst) {
-	binaryArith<Zip2, PowOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* lnot_op(State& state, Instruction const& inst) {
-	unaryLogical<Zip1, LNotOp>(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* land_op(State& state, Instruction const& inst) {
-	binaryLogical<Zip2, AndOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* lor_op(State& state, Instruction const& inst) {
-	binaryLogical<Zip2, OrOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* eq_op(State& state, Instruction const& inst) {
-	binaryOrdinal<Zip2, EqOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* neq_op(State& state, Instruction const& inst) {
-	binaryOrdinal<Zip2, NeqOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* lt_op(State& state, Instruction const& inst) {
-	binaryOrdinal<Zip2, LTOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* le_op(State& state, Instruction const& inst) {
-	binaryOrdinal<Zip2, LEOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* gt_op(State& state, Instruction const& inst) {
-	binaryOrdinal<Zip2, GTOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* ge_op(State& state, Instruction const& inst) {
-	binaryOrdinal<Zip2, GEOp>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* abs_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, AbsOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* sign_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, SignOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* sqrt_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, SqrtOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* floor_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, FloorOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* ceiling_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, CeilingOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* trunc_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, TruncOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* round_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, RoundOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* signif_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, SignifOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* exp_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, ExpOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* log_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, LogOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* cos_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, CosOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* sin_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, SinOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* tan_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, TanOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* acos_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, ACosOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* asin_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, ASinOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* atan_op(State& state, Instruction const& inst) {
-	unaryArith<Zip1, ATanOp >(state, REG(state, inst.a), REG(state, inst.c));
-	return &inst+1;
-}
+BINARY_ORDINAL_MAP_BYTECODES(OP)
+#undef OP
+
 Instruction const* jmp_op(State& state, Instruction const& inst) {
 	return &inst+inst.a;
 }
@@ -758,7 +666,7 @@ void interpret(State& state, Instruction const* pc) {
 	if(pc == 0) return;
 
 	goto *(pc->ibc);
-	#define LABELED_OP(name,type) \
+	#define LABELED_OP(name,type,...) \
 		name##_label: \
 			{ pc = name##_op(state, *pc); goto *(pc->ibc); } 
 	BYTECODES(LABELED_OP)
@@ -766,7 +674,7 @@ void interpret(State& state, Instruction const* pc) {
 #else
 	while(pc->bc != ByteCode::done) {
 		switch(pc->bc) {
-			#define SWITCH_OP(name,type) \
+			#define SWITCH_OP(name,type,...) \
 				case ByteCode::name: { pc = name##_op(state, *pc); } break;
 			BYTECODES(SWITCH_OP)
 		};

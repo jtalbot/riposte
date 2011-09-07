@@ -4,7 +4,7 @@
 #include "bc.h"
 #include "value.h"
 
-#define DECLARE_INTERPRETER_FNS(bc,name) \
+#define DECLARE_INTERPRETER_FNS(bc,name,...) \
 		Instruction const * bc##_op(State& state, Instruction const& inst);
 
 BYTECODES(DECLARE_INTERPRETER_FNS)
