@@ -24,7 +24,7 @@ void Trace::execute(State & state) {
 		Output & o = outputs[i];
 
 		const Value & loc = (o.is_variable) ? state.frame.environment->hget(Symbol(o.variable)) : *o.location;
-		if(loc.header != Type::Future || (uint64_t) loc.i != o.ref) {
+		if(loc.header != Type::Future || loc.future.ref != o.ref) {
 			o = outputs[--n_outputs];
 		} else {
 			nodes[o.ref].r_external = true;

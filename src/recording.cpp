@@ -1,6 +1,7 @@
 #include "recording.h"
 #include "interpreter.h"
 #include "ir.h"
+#include "ops.h"
 
 #define ENUM_RECORDING_STATUS(_) \
 	_(NO_ERROR,"NO_ERROR") \
@@ -29,7 +30,8 @@ static void add_output(State & state, Value & v) {
 	Trace::Output & out = TRACE.outputs[TRACE.n_outputs++];
 	out.is_variable = false;
 	out.location = &v;
-	out.ref = v.i;
+	out.ref = v.future.ref;
+	out.typ = v.future.typ;
 }
 static void add_voutput(State & state, Symbol s, IRef i) {
 	Trace::Output & out = TRACE.outputs[TRACE.n_outputs++];
@@ -41,33 +43,39 @@ static void add_voutput(State & state, Symbol s, IRef i) {
 
 struct InputValue {
 	IROp::Encoding encoding;
+	Type::Enum typ;
 	bool is_external;
 	void * data;
 };
 
-IRef emitir(State & state, IROpCode::Enum opcode,
+static InputValue InputValue_unused = {IROp::E_VECTOR, Type::Integer, false, NULL};
+
+//this emits an opcode assuming that a and b are the same type
+void emitir(State & state, IROpCode::Enum opcode,
+						   Type::Enum ret_type,
 		                   const InputValue & a,
-		                   const InputValue & b) {
+		                   const InputValue & b,
+		                   Value & v) {
 	IRNode & n = TRACE.nodes[TRACE.n_nodes];
 
 	n.op.a_enc = a.encoding;
+	n.op.a_typ = (a.typ == Type::Integer) ? IROp::T_INT : IROp::T_DOUBLE;
 	n.a_external = a.is_external;
 	n.a.p = (double *) a.data;
 
 	n.op.b_enc = b.encoding;
+	n.op.b_typ = (b.typ == Type::Integer) ? IROp::T_INT : IROp::T_DOUBLE;
 	n.b_external = b.is_external;
 	n.b.p = (double *) b.data;
-
-	n.op.typ = IROp::T_DOUBLE;
-
 
 	n.r_external = false;
 	n.r.p = NULL;
 
 	n.op.code = opcode;
 
-
-	return TRACE.n_nodes++;
+	//TODO: replace binary OR with a function that calculates output types from input types
+	Future::Init(v, ret_type,TRACE.n_nodes++);
+	add_output(state,v);
 }
 
 //attempt to execute fn, otherwise return error code
@@ -115,7 +123,7 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 	Symbol s(inst.a);
 	Value & r = state.frame.environment->hassign(s, REG(state, inst.c));
 	if(r.header == Type::Future) {
-		add_voutput(state,s,r.i);
+		add_voutput(state,s,r.future.ref);
 	}
 	(*pc)++;
 	return RecordingStatus::NO_ERROR;
@@ -141,80 +149,79 @@ OP_NOT_IMPLEMENTED(jf)
 OP_NOT_IMPLEMENTED(colon)
 
 
-void assign(State & state, Value & r, IRef ref) {
-	Future::Init(r,ref);
-	add_output(state,r);
+RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret, bool * can_fallback) {
+
+	//encode the type;
+	switch(v.type) {
+	case Type::Integer: /* fallthrough */
+	case Type::Double:
+		ret->typ = v.type;
+		//encode the data (for vectors this copies the pointer, for scalars this copies the value from the Value object)
+		ret->data = v.p;
+		//scalar or vector?
+		if(v.length == 1) {
+			ret->is_external = false;
+			ret->encoding = IROp::E_SCALAR;
+		} else if(v.length == TRACE.length) {
+			ret->encoding = IROp::E_VECTOR;
+			ret->is_external = true;
+		} else {
+			return RecordingStatus::UNSUPPORTED_TYPE;
+		}
+		return RecordingStatus::NO_ERROR;
+		break;
+	case Type::Future:
+		ret->encoding = IROp::E_VECTOR;
+		ret->typ = v.future.typ;
+		ret->data = (void*) v.future.ref;
+		ret->is_external = false;
+		*can_fallback = false;
+		return RecordingStatus::NO_ERROR;
+		break;
+	default:
+		return RecordingStatus::UNSUPPORTED_TYPE;
+		break;
+	}
 }
 
-RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret) {
-	ret->data = v.p;
-	if(v.isDouble1()) {
-		ret->encoding = IROp::E_SCALAR;
-		ret->is_external = false;
-	} else if(v.isFuture()) {
-		ret->encoding = IROp::E_VECTOR;
-		ret->is_external = false;
-	} else if(v.isDouble() && v.length == TRACE.length) {
-		ret->encoding = IROp::E_VECTOR;
-		ret->is_external = true;
-	} else return RecordingStatus::UNSUPPORTED_TYPE;
-	return RecordingStatus::NO_ERROR;
-}
-
-RecordingStatus::Enum binary_record(IROpCode::Enum opcode, State & state, Instruction const & inst) {
+RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum opcode, State & state, Instruction const & inst) {
 	Value & r = REG(state,inst.c);
 	Value & a = REG(state,inst.a);
 	Value & b = REG(state,inst.b);
-	if(a.isFuture()) {
-		InputValue aenc = { IROp::E_VECTOR, false, a.p };
-		InputValue benc;
-		RECORDING_DO(get_input(state,b,&benc));
-		RESERVE(1,1);
-		assign(state,r,emitir(state,opcode,aenc,benc));
-	} else if(b.isFuture()) {
-		InputValue aenc;
-		RECORDING_DO(get_input(state,a,&aenc));
-		InputValue benc = { IROp::E_VECTOR, false, b.p };
-		RESERVE(1,1);
-		assign(state,r,emitir(state,opcode,aenc,benc));
-	} else if(b.length == TRACE.length || a.length == TRACE.length) {
-		InputValue aenc;
-		InputValue benc;
-		RecordingStatus::Enum ar = get_input(state,a,&aenc);
-		RecordingStatus::Enum br = get_input(state,b,&benc);
-	    if(RecordingStatus::NO_ERROR == ar && RecordingStatus::NO_ERROR == br) {
-	    	RESERVE(1,1);
-	    	assign(state,r,emitir(state,opcode,aenc,benc));
-		} else
-	    	return RecordingStatus::FALLBACK;
+
+	bool can_fallback = true;
+	InputValue aenc;
+	InputValue benc;
+	RecordingStatus::Enum ar = get_input(state,a,&aenc,&can_fallback);
+	RecordingStatus::Enum br = get_input(state,b,&benc,&can_fallback);
+	if(RecordingStatus::NO_ERROR == ar && RecordingStatus::NO_ERROR == br) {
+		emitir(state,opcode,resultType(bc,aenc.typ,benc.typ),aenc,benc,r);
+		return RecordingStatus::NO_ERROR;
 	} else {
-		return RecordingStatus::FALLBACK;
+		return (can_fallback) ? RecordingStatus::FALLBACK : RecordingStatus::UNSUPPORTED_TYPE;
 	}
-	return RecordingStatus::NO_ERROR;
+
 }
 
-RecordingStatus::Enum unary_record(IROpCode::Enum opcode, State & state, Instruction const & inst) {
+RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum opcode, State & state, Instruction const & inst) {
 	Value & r = REG(state,inst.c);
 	Value & a = REG(state,inst.a);
-	if(a.header == Type::Future) {
-		RESERVE(1,1);
-		InputValue aenc = {IROp::E_VECTOR, false, a.p};
-		InputValue benc = {IROp::E_VECTOR, false, NULL};
-		assign(state,r,emitir(state,opcode,aenc,benc));
-	} else if(a.isDouble() && a.length == TRACE.length) {
-		RESERVE(1,1);
-		InputValue aenc = {IROp::E_VECTOR, true, a.p};
-		InputValue benc = {IROp::E_VECTOR, false, NULL};
-		assign(state,r,emitir(state,opcode,aenc,benc));
+	bool can_fallback = true;
+	InputValue aenc;
+	RecordingStatus::Enum ar = get_input(state,a,&aenc,&can_fallback);
+
+	if(RecordingStatus::NO_ERROR == ar) {
+		emitir(state,opcode,resultType(bc,aenc.typ),aenc,InputValue_unused,r);
+		return RecordingStatus::NO_ERROR;
 	} else {
-		return RecordingStatus::FALLBACK;
+		return (can_fallback) ? RecordingStatus::FALLBACK : RecordingStatus::UNSUPPORTED_TYPE;
 	}
-	return RecordingStatus::NO_ERROR;
+
 }
 
 //all arithmetic binary ops share the same recording implementation
 #define BINARY_OP(op) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
-	RecordingStatus::Enum status = binary_record(IROpCode :: op, state, inst);\
+	RecordingStatus::Enum status = binary_record(ByteCode :: op, IROpCode :: op, state, inst);\
 	if(RecordingStatus::FALLBACK == status) { \
 		*pc = op##_op(state,inst); \
 		return RecordingStatus::NO_ERROR; \
@@ -224,7 +231,7 @@ RecordingStatus::Enum unary_record(IROpCode::Enum opcode, State & state, Instruc
 }
 //all unary arithmetic ops share the same implementation as well
 #define UNARY_OP(op) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
-	RecordingStatus::Enum status = unary_record(IROpCode :: op, state, inst);\
+	RecordingStatus::Enum status = unary_record(ByteCode :: op , IROpCode :: op, state, inst);\
 	if(RecordingStatus::FALLBACK == status) { \
 		*pc = op##_op(state,inst); \
 		return RecordingStatus::NO_ERROR; \

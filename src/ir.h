@@ -90,7 +90,8 @@ struct IROp {
 		struct {
 			Encoding a_enc : 1;
 			Encoding b_enc : 1;
-			Type     typ   : 1;
+			Type     a_typ : 1;
+			Type	 b_typ : 1;
 			IROpCode::Enum code : 13;
 		};
 	};

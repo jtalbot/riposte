@@ -352,7 +352,9 @@ MAP_BYTECODES(CASE)
 		_error("Not a map type");
 	};
 } 
-
+inline Type::Enum resultType(ByteCode::Enum bc, Type::Enum a, Type::Enum b) {
+	return resultType(bc,std::max(a,b));
+}
 
 #endif
 

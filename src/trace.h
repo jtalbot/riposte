@@ -6,6 +6,7 @@
 #include<memory>
 #include "bc.h"
 #include "ir.h"
+#include "type.h"
 
 struct Trace;
 struct Prototype;
@@ -32,6 +33,7 @@ struct Trace {
 
 	struct Output {
 		IRef ref;
+		Type::Enum typ;
 		bool is_variable;
 		union {
 			Value * location; //will pointers to output locations stay valid throughout the trace?

@@ -36,6 +36,10 @@ struct Value {
 		int64_t i;
 		double d;
 		unsigned char c;
+		struct {
+			Type::Enum typ;
+			uint32_t ref;
+		} future;
 	};
 
 	static void Init(Value& v, Type::Enum type, int64_t length) {
@@ -189,9 +193,10 @@ union _doublena {
 };
 
 struct Future : public Value {
-	static void Init(Value & f, IRef ref) {
+	static void Init(Value & f, Type::Enum typ, IRef ref) {
 		Value::Init(f,Type::Future,0);
-		f.i = ref;
+		f.future.ref = ref;
+		f.future.typ = typ;
 	}
 };
 
