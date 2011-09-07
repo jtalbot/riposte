@@ -45,28 +45,66 @@ struct InputValue {
 	IROp::Encoding encoding;
 	Type::Enum typ;
 	bool is_external;
-	void * data;
+	IRNode::InputReg data;
 };
 
-static InputValue InputValue_unused = {IROp::E_VECTOR, Type::Integer, false, NULL};
+static const InputValue InputValue_unused = {IROp::E_VECTOR, Type::Integer, false, { NULL } };
+
+void coerce(State & state, Type::Enum result_type, InputValue & a) {
+	IRNode & n = TRACE.nodes[TRACE.n_nodes];
+
+	if(a.encoding == IROp::E_VECTOR) {
+		n.op.a_enc = a.encoding;
+		n.op.a_typ = IROp::T_INT;
+		n.a_external = a.is_external;
+		n.a.p = a.data.p;
+
+		n.op.b_enc = InputValue_unused.encoding;
+		n.op.b_typ = IROp::T_DOUBLE; //coerse op holds the result type in n.op.b_typ
+		n.b_external = InputValue_unused.is_external;
+		n.b.p = InputValue_unused.data.p;
+
+		n.r_external = false;
+		n.r.p =  NULL;
+		n.op.code = IROpCode::coerce;
+		IRef result = TRACE.n_nodes++;
+
+		a.data.i = result;
+
+	} else {
+		//no need to issues a scalar conversion, just promote the integer data to a double
+		a.data.d = a.data.i;
+	}
+	a.typ = result_type;
+	a.is_external = false;
+}
 
 //this emits an opcode assuming that a and b are the same type
 void emitir(State & state, IROpCode::Enum opcode,
 						   Type::Enum ret_type,
-		                   const InputValue & a,
-		                   const InputValue & b,
+		                   InputValue a,
+		                   InputValue b,
 		                   Value & v) {
+
+
+	Type::Enum arg_type = std::max(a.typ,b.typ);
+
+	if(a.typ != arg_type)
+		coerce(state,arg_type,a);
+	if(b.typ != arg_type)
+		coerce(state,arg_type,b);
+
 	IRNode & n = TRACE.nodes[TRACE.n_nodes];
 
 	n.op.a_enc = a.encoding;
 	n.op.a_typ = (a.typ == Type::Integer) ? IROp::T_INT : IROp::T_DOUBLE;
 	n.a_external = a.is_external;
-	n.a.p = (double *) a.data;
+	n.a.p = a.data.p;
 
 	n.op.b_enc = b.encoding;
 	n.op.b_typ = (b.typ == Type::Integer) ? IROp::T_INT : IROp::T_DOUBLE;
 	n.b_external = b.is_external;
-	n.b.p = (double *) b.data;
+	n.b.p = b.data.p;
 
 	n.r_external = false;
 	n.r.p = NULL;
@@ -157,7 +195,7 @@ RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret, bool
 	case Type::Double:
 		ret->typ = v.type;
 		//encode the data (for vectors this copies the pointer, for scalars this copies the value from the Value object)
-		ret->data = v.p;
+		ret->data.p = (double *) v.p;
 		//scalar or vector?
 		if(v.length == 1) {
 			ret->is_external = false;
@@ -173,7 +211,7 @@ RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret, bool
 	case Type::Future:
 		ret->encoding = IROp::E_VECTOR;
 		ret->typ = v.future.typ;
-		ret->data = (void*) v.future.ref;
+		ret->data.i = v.future.ref;
 		ret->is_external = false;
 		*can_fallback = false;
 		return RecordingStatus::NO_ERROR;
@@ -195,6 +233,7 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum opcode, St
 	RecordingStatus::Enum ar = get_input(state,a,&aenc,&can_fallback);
 	RecordingStatus::Enum br = get_input(state,b,&benc,&can_fallback);
 	if(RecordingStatus::NO_ERROR == ar && RecordingStatus::NO_ERROR == br) {
+		RESERVE(2,1);
 		emitir(state,opcode,resultType(bc,aenc.typ,benc.typ),aenc,benc,r);
 		return RecordingStatus::NO_ERROR;
 	} else {
@@ -211,6 +250,7 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum opcode, Sta
 	RecordingStatus::Enum ar = get_input(state,a,&aenc,&can_fallback);
 
 	if(RecordingStatus::NO_ERROR == ar) {
+		RESERVE(1,1);
 		emitir(state,opcode,resultType(bc,aenc.typ),aenc,InputValue_unused,r);
 		return RecordingStatus::NO_ERROR;
 	} else {

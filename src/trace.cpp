@@ -125,7 +125,12 @@ void Trace::execute(State & state) {
 			switch(node.op.op) {
 				IR_BINARY(BINARY_IMPL)
 				IR_UNARY(UNARY_IMPL)
-				default: _error("Invalid op code short vector machine");
+				case (IROpCode::coerce << 4) + (IROp::T_DOUBLE << 3) + (IROp::T_INT << 2) + 3:
+					Map1< CastOp<Integer, Double> , TRACE_VECTOR_WIDTH>::eval(state, (int64_t*)node.a.p, node.r.p);
+				break;
+				default:
+					printf("%d (%s)(%d)\n",(int)node.op.op, IROpCode::toString(node.op.code), (int) node.op.a_typ);
+					_error("Invalid op code short vector machine");
 			}
 			if(node.r_external) \
 				node.r.p += TRACE_VECTOR_WIDTH; \

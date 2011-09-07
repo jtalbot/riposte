@@ -460,9 +460,17 @@ Instruction const* seq_op(State& state, Instruction const& inst) {
 }
 
 bool isRecordable(Value const& a) {
-	return (a.isDouble() || a.isInteger()) 
-		&& a.length > TRACE_VECTOR_WIDTH 
+	return (a.isDouble() || a.isInteger())
+		&& a.length > TRACE_VECTOR_WIDTH
 		&& a.length % TRACE_VECTOR_WIDTH == 0;
+}
+bool isRecordable(Value const& a, Value const& b) {
+	return (a.isDouble() || a.isInteger())
+		&& (b.isDouble() || b.isInteger())
+		&& a.length > TRACE_VECTOR_WIDTH
+		&& a.length % TRACE_VECTOR_WIDTH == 0
+		&& a.length == b.length;
+
 }
 
 
@@ -508,11 +516,9 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
                         { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return &inst+1;} \
         } \
 	\
-	if(isRecordable(a)) \
+	if(isRecordable(a,b)) \
 		return recording_interpret(state, &inst, a.length);	\
-	if(isRecordable(b)) \
-		return recording_interpret(state, &inst, b.length);	\
-        \
+    \
 	binaryArithSlow<Zip2, Op>(state, a, b, c);	\
 	return &inst+1;	\
 }

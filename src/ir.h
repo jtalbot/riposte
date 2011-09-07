@@ -67,7 +67,7 @@
 #define IR_ENUM(_) 	\
 	IR_BINARY(_) \
 	IR_UNARY(_) \
-
+	_(coerce, "coerce") \
 	
     
 
@@ -136,7 +136,20 @@ struct IRNode {
 
 	std::string toString() const {
 		std::ostringstream out;
-		out << IROpCode::toString(op.code) << "\t";
+		out << IROpCode::toString(op.code);
+
+		if(op.a_typ == IROp::T_INT)
+			out << "_i";
+		else
+			out << "_d";
+
+		if(op.b_typ == IROp::T_INT)
+					out << "i";
+				else
+					out << "d";
+
+		out << "(" << op.op << ")";
+		out << "\t";
 
 		if(a_external)
 			out << "$" << a.p;
