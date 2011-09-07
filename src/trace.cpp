@@ -95,55 +95,44 @@ void Trace::execute(State & state) {
 	
 	for(int64_t i = 0; i < length; i += TRACE_VECTOR_WIDTH) {
 		for(size_t j = 0; j < n_nodes; j++) {
-			IRNode & node = nodes[j];		
+			IRNode & node = nodes[j];
+#define BINARY_CASE(opcode, typea, typeb, sva, svb) \
+	((IROpCode::opcode << 4) + (typeb << 3) + (typea << 2) + (svb << 1) + sva)
+
 #define BINARY_IMPL(opcode,nm,OP) \
-case IROpCode :: opcode : { \
-	if(node.op.a_enc == IROp::E_SCALAR) { \
-		double a = node.a.d; \
-		double * bv = node.b.p; \
-		double * cv = node.r.p; \
-		Map2SV< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, a, bv, cv); \
-		if(node.r_external) \
-			node.r.p += TRACE_VECTOR_WIDTH; \
-		if(node.b_external) \
-			node.b.p += TRACE_VECTOR_WIDTH; \
-	} else if(node.op.b_enc == IROp::E_SCALAR) { \
-		double * av = node.a.p; \
-		double b = node.b.d; \
-		double * cv = node.r.p; \
-		Map2VS< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, av, b, cv); \
-		if(node.r_external) \
-			node.r.p += TRACE_VECTOR_WIDTH; \
-		if(node.a_external) \
-			node.a.p += TRACE_VECTOR_WIDTH; \
-	} else { \
-		double * av = node.a.p; \
-		double * bv = node.b.p; \
-		double * cv = node.r.p; \
-		Map2VV< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, av, bv, cv); \
-		if(node.r_external) \
-			node.r.p += TRACE_VECTOR_WIDTH; \
-		if(node.a_external) \
-			node.a.p += TRACE_VECTOR_WIDTH; \
-		if(node.b_external) \
-			node.b.p += TRACE_VECTOR_WIDTH; \
-	} \
-} break;
+	case BINARY_CASE(opcode, IROp::T_INT, IROp::T_INT, IROp::E_SCALAR, IROp::E_VECTOR): \
+		Map2SV< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, node.a.i, (int64_t*)node.b.p, (OP<TInteger>::R*)node.r.p); break; \
+	case BINARY_CASE(opcode, IROp::T_INT, IROp::T_INT, IROp::E_VECTOR, IROp::E_SCALAR): \
+		Map2VS< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, node.b.i, (OP<TInteger>::R*)node.r.p); break; \
+	case BINARY_CASE(opcode, IROp::T_INT, IROp::T_INT, IROp::E_VECTOR, IROp::E_VECTOR): \
+		Map2VV< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, (int64_t*)node.b.p, (OP<TInteger>::R*)node.r.p); break; \
+	case BINARY_CASE(opcode, IROp::T_DOUBLE, IROp::T_DOUBLE, IROp::E_SCALAR, IROp::E_VECTOR): \
+		Map2SV< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, node.a.d, node.b.p, node.r.p); break; \
+	case BINARY_CASE(opcode, IROp::T_DOUBLE, IROp::T_DOUBLE, IROp::E_VECTOR, IROp::E_SCALAR): \
+		Map2VS< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, node.a.p, node.b.d, node.r.p); break; \
+	case BINARY_CASE(opcode, IROp::T_DOUBLE, IROp::T_DOUBLE, IROp::E_VECTOR, IROp::E_VECTOR): \
+		Map2VV< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, node.a.p, node.b.p, node.r.p); break; \
+
+#define UNARY_CASE(opcode, typea) \
+	((IROpCode::opcode << 4) + (typea << 2))
+
 #define UNARY_IMPL(opcode,nm,OP) \
-case IROpCode :: opcode : { \
-	double * av = node.a.p; \
-	double * cv = node.r.p; \
-	Map1< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, av, cv); \
-	if(node.r_external) \
-		node.r.p += TRACE_VECTOR_WIDTH; \
-	if(node.a_external) \
-		node.a.p += TRACE_VECTOR_WIDTH; \
-} break;
-	
-			switch(node.op.code) {
+	case UNARY_CASE(opcode, IROp::T_INT): \
+		Map1< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, (OP<TInteger>::R*)node.r.p); break; \
+	case UNARY_CASE(opcode, IROp::T_DOUBLE): \
+		Map1< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, node.a.p, node.r.p); break; \
+			
+			switch(node.op.op) {
 				IR_BINARY(BINARY_IMPL)
 				IR_UNARY(UNARY_IMPL)
+				default: _error("Invalid op code short vector machine");
 			}
+			if(node.r_external) \
+				node.r.p += TRACE_VECTOR_WIDTH; \
+			if(node.op.a_enc == IROp::E_VECTOR && node.a_external) \
+				node.a.p += TRACE_VECTOR_WIDTH; \
+			if(node.op.b_enc == IROp::E_VECTOR && node.b_external) \
+				node.b.p += TRACE_VECTOR_WIDTH; \
 		}
 	}
 }
