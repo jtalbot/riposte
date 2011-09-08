@@ -541,6 +541,54 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 BINARY_ORDINAL_MAP_BYTECODES(OP)
 #undef OP
 
+#define OP(name, string, Op) \
+Instruction const* name##_op(State& state, Instruction const& inst) { \
+	unaryArith<FoldLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+	return &inst+1; \
+}
+ARITH_FOLD_BYTECODES(OP)
+#undef OP
+
+#define OP(name, string, Op) \
+Instruction const* name##_op(State& state, Instruction const& inst) { \
+	unaryLogical<FoldLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+	return &inst+1; \
+}
+LOGICAL_FOLD_BYTECODES(OP)
+#undef OP
+
+#define OP(name, string, Op) \
+Instruction const* name##_op(State& state, Instruction const& inst) { \
+	unaryOrdinal<FoldLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+	return &inst+1; \
+}
+ORDINAL_FOLD_BYTECODES(OP)
+#undef OP
+
+#define OP(name, string, Op) \
+Instruction const* name##_op(State& state, Instruction const& inst) { \
+	unaryArith<ScanLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+	return &inst+1; \
+}
+ARITH_SCAN_BYTECODES(OP)
+#undef OP
+
+#define OP(name, string, Op) \
+Instruction const* name##_op(State& state, Instruction const& inst) { \
+	unaryLogical<ScanLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+	return &inst+1; \
+}
+LOGICAL_SCAN_BYTECODES(OP)
+#undef OP
+
+#define OP(name, string, Op) \
+Instruction const* name##_op(State& state, Instruction const& inst) { \
+	unaryOrdinal<ScanLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+	return &inst+1; \
+}
+ORDINAL_SCAN_BYTECODES(OP)
+#undef OP
+
 Instruction const* jmp_op(State& state, Instruction const& inst) {
 	return &inst+inst.a;
 }
@@ -654,7 +702,7 @@ static const void** glabels = 0;
 #endif
 
 static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc) {
-	//printCode(state, code);
+	printCode(state, prototype);
 	StackFrame& s = state.push();
 	s.environment = environment;
 	s.ownEnvironment = ownEnvironment;

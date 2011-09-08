@@ -198,7 +198,7 @@ struct FoldLeft {
 	static void eval(State& state, typename Op::AV const& a, Value& out)
 	{
 		typename Op::A const* ae = a.v();
-		typename Op::R b = Op::Base;
+		typename Op::R b = Op::base();
 		int64_t length = a.length;
 		for(int64_t i = 0; i < length; ++i) {
 			b = Op::eval(state, b, ae[i]);
@@ -212,7 +212,7 @@ struct ScanLeft {
 	static void eval(State& state, typename Op::AV const& a, Value& out)
 	{
 		typename Op::A const* ae = a.v();
-		typename Op::R b = Op::Base;
+		typename Op::R b = Op::base();
 		typename Op::RV r(a.length);
 		typename Op::R* re = r.v();
 		int64_t length = a.length;

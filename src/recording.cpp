@@ -345,6 +345,19 @@ OP_NOT_IMPLEMENTED(double1)
 OP_NOT_IMPLEMENTED(complex1)
 OP_NOT_IMPLEMENTED(character1)
 
+OP_NOT_IMPLEMENTED(sum)
+OP_NOT_IMPLEMENTED(prod)
+OP_NOT_IMPLEMENTED(min)
+OP_NOT_IMPLEMENTED(max)
+OP_NOT_IMPLEMENTED(any)
+OP_NOT_IMPLEMENTED(all)
+
+OP_NOT_IMPLEMENTED(cumsum)
+OP_NOT_IMPLEMENTED(cumprod)
+OP_NOT_IMPLEMENTED(cummin)
+OP_NOT_IMPLEMENTED(cummax)
+OP_NOT_IMPLEMENTED(cumany)
+OP_NOT_IMPLEMENTED(cumall)
 
 RecordingStatus::Enum jmp_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	//this is just a constant jump, nothing to record

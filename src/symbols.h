@@ -88,6 +88,18 @@
 	_(acos, 	"acos") \
 	_(asin, 	"asin") \
 	_(atan, 	"atan") \
+	_(sum,		"sum") \
+	_(prod,		"prod") \
+	_(min,		"min") \
+	_(max,		"max") \
+	_(any,		"any") \
+	_(all,		"all") \
+	_(cumsum,	"cumsum") \
+	_(cumprod,	"cumprod") \
+	_(cummin,	"cummin") \
+	_(cummax,	"cummax") \
+	_(cumany,	"cumany") \
+	_(cumall,	"cumall") \
 	_(names, 	"names") \
 	_(dim, 		"dim") \
 	_(classSym, 	"class") \
