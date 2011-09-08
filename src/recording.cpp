@@ -26,18 +26,12 @@ static RecordingStatus::Enum reserve(State & state, size_t num_nodes, size_t num
 		return RecordingStatus::NO_ERROR;
 }
 
-static void add_output(State & state, Value & v) {
+static void add_output(State & state, Trace::Output::Location location_type, int64_t location, Value & v) {
 	Trace::Output & out = TRACE.outputs[TRACE.n_outputs++];
-	out.is_variable = false;
-	out.location = &v;
-	out.ref = v.future.ref;
+	out.location_type = location_type;
+	out.location = location;
 	out.typ = v.future.typ;
-}
-static void add_voutput(State & state, Symbol s, IRef i) {
-	Trace::Output & out = TRACE.outputs[TRACE.n_outputs++];
-	out.is_variable = true;
-	out.variable = s.i;
-	out.ref = i;
+	out.ref = v.future.ref;
 }
 
 
@@ -78,13 +72,13 @@ void coerce(State & state, Type::Enum result_type, InputValue & a) {
 	a.typ = result_type;
 	a.is_external = false;
 }
-
+#define REG(state, i) (*(state.base+i))
 //this emits an opcode assuming that a and b are the same type
 void emitir(State & state, IROpCode::Enum opcode,
 						   Type::Enum ret_type,
 		                   const InputValue & a,
 		                   const InputValue & b,
-		                   Value & v) {
+		                   int64_t r) {
 
 	IRNode & n = TRACE.nodes[TRACE.n_nodes];
 
@@ -104,8 +98,10 @@ void emitir(State & state, IROpCode::Enum opcode,
 	n.op.code = opcode;
 
 	//TODO: replace binary OR with a function that calculates output types from input types
+	Value & v = REG(state,r);
 	Future::Init(v, ret_type,TRACE.n_nodes++);
-	add_output(state,v);
+	add_output(state,Trace::Output::E_REG,r,v);
+	TRACE.max_live_register = r;
 }
 
 //attempt to execute fn, otherwise return error code
@@ -118,7 +114,7 @@ void emitir(State & state, IROpCode::Enum opcode,
 	} while(0)
 
 #define RESERVE(nodes,outputs) RECORDING_DO(reserve(state,nodes,outputs))
-#define REG(state, i) (*(state.base+i))
+
 
 #define OP_NOT_IMPLEMENTED(op) \
 RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
@@ -133,8 +129,9 @@ RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instru
 	*pc = get_op(state,inst);
 	Value & r = REG(state,inst.c);
 	if(r.header == Type::Future) {
-		add_output(state,r);	
+		add_output(state,Trace::Output::E_REG,inst.c,r);
 	}
+	TRACE.max_live_register = inst.c;
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -143,8 +140,9 @@ RecordingStatus::Enum sget_record(State & state, Instruction const & inst, Instr
 	*pc = sget_op(state,inst);
 	Value & r = REG(state,inst.c);
 	if(r.header == Type::Future) {
-		add_output(state,r);
+		add_output(state,Trace::Output::E_REG,inst.c,r);
 	}
+	TRACE.max_live_register = inst.c;
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -158,11 +156,11 @@ OP_NOT_IMPLEMENTED(iget)
 
 RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	RESERVE(0,1);
-	Symbol s(inst.a);
-	Value & r = state.frame.environment->hassign(s, REG(state, inst.c));
+	Value & r = state.frame.environment->hassign(Symbol(inst.a), REG(state, inst.c));
 	if(r.header == Type::Future) {
-		add_voutput(state,s,r.future.ref);
+		add_output(state,Trace::Output::E_VAR,inst.a,r);
 	}
+	TRACE.max_live_register = inst.c;
 	(*pc)++;
 	return RecordingStatus::NO_ERROR;
 }
@@ -172,8 +170,9 @@ RecordingStatus::Enum sassign_record(State & state, Instruction const & inst, In
 	Value & v = state.frame.environment->get(inst.a);
 	if(v.header == Type::Future) {
 		RESERVE(0,1);
-		add_output(state,v);
+		add_output(state,Trace::Output::E_SLOT,inst.a,v);
 	}
+	TRACE.max_live_register = inst.c;
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -234,7 +233,6 @@ RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret, bool
 }
 
 RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum opcode, State & state, Instruction const & inst) {
-	Value & r = REG(state,inst.c);
 	Value & a = REG(state,inst.a);
 	Value & b = REG(state,inst.b);
 
@@ -251,7 +249,7 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum opcode, St
 			coerce(state,arg_type,aenc);
 		if(benc.typ != arg_type)
 			coerce(state,arg_type,benc);
-		emitir(state,opcode,resultType(bc,aenc.typ,benc.typ),aenc,benc,r);
+		emitir(state,opcode,resultType(bc,aenc.typ,benc.typ),aenc,benc,inst.c);
 		return RecordingStatus::NO_ERROR;
 	} else {
 		return (can_fallback) ? RecordingStatus::FALLBACK : RecordingStatus::UNSUPPORTED_TYPE;
@@ -260,7 +258,6 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum opcode, St
 }
 
 RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum opcode, State & state, Instruction const & inst) {
-	Value & r = REG(state,inst.c);
 	Value & a = REG(state,inst.a);
 	bool can_fallback = true;
 	bool should_record = false;
@@ -269,7 +266,7 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum opcode, Sta
 
 	if(should_record && RecordingStatus::NO_ERROR == ar) {
 		RESERVE(1,1);
-		emitir(state,opcode,resultType(bc,aenc.typ),aenc,InputValue_unused,r);
+		emitir(state,opcode,resultType(bc,aenc.typ),aenc,InputValue_unused,inst.c);
 		return RecordingStatus::NO_ERROR;
 	} else {
 		return (can_fallback) ? RecordingStatus::FALLBACK : RecordingStatus::UNSUPPORTED_TYPE;

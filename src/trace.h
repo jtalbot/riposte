@@ -32,17 +32,16 @@ struct Trace {
 	int64_t length;
 
 	struct Output {
+		enum Location { E_SLOT, E_REG, E_VAR };
+		Location location_type;
 		IRef ref;
 		Type::Enum typ;
-		bool is_variable;
-		union {
-			Value * location; //will pointers to output locations stay valid throughout the trace?
-			int64_t variable;
-		};
+		int64_t location;
 	};
 
 	Output outputs[TRACE_MAX_NODES];
 	size_t n_outputs;
+	int64_t max_live_register;
 
 	void reset();
 	void execute(State & state);

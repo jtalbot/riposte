@@ -156,7 +156,7 @@ struct IRNode {
 		else if(op.a_enc == IROp::E_SCALAR)
 			out << a.d;
 		else
-			out << "r" << a.i;
+			out << "n" << a.i;
 
 		out << "\t";
 
@@ -165,7 +165,7 @@ struct IRNode {
 		else if(op.b_enc == IROp::E_SCALAR)
 			out << b.d;
 		else if(IROpCode_is_binary(op.code))
-			out << "r" << b.i;
+			out << "n" << b.i;
 		else
 			out << "_";
 

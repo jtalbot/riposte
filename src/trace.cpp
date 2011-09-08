@@ -7,7 +7,7 @@
 #include <stdlib.h>
 
 void Trace::reset() {
-	n_nodes = n_recorded = length = n_outputs = 0;
+	n_nodes = n_recorded = length = n_outputs = max_live_register = 0;
 }
 
 
@@ -19,13 +19,43 @@ static void print_regs(int foo) {
 			printf("0");
 	printf("\n");
 }
+
+#define REG(state, i) (*(state.base+i))
+
+static const Value & get_output_value(State & state, const Trace::Output & o) {
+	switch(o.location_type) {
+	case Trace::Output::E_REG:
+		return REG(state,o.location);
+	case Trace::Output::E_SLOT:
+		return state.frame.environment->get(o.location);
+	default:
+	case Trace::Output::E_VAR:
+		return state.frame.environment->hget(Symbol(o.location));
+	}
+}
+static void set_output_value(State & state, const Trace::Output & o, const Value & v) {
+	switch(o.location_type) {
+	case Trace::Output::E_REG:
+		REG(state,o.location) = v;
+		return;
+	case Trace::Output::E_SLOT:
+		state.frame.environment->get(o.location) = v;
+		return;
+	case Trace::Output::E_VAR:
+		state.frame.environment->hassign(Symbol(o.location),v);
+		return;
+	}
+}
+
 void Trace::execute(State & state) {
 	//remove outputs that have been killed, allocate space for valid onces
 	for(size_t i = 0; i < n_outputs; ) {
 		Output & o = outputs[i];
 
-		const Value & loc = (o.is_variable) ? state.frame.environment->hget(Symbol(o.variable)) : *o.location;
-		if(loc.header != Type::Future || loc.future.ref != o.ref) {
+		const Value & loc = get_output_value(state,o);
+		if(loc.header != Type::Future ||
+		   loc.future.ref != o.ref ||
+		   (o.location_type == Trace::Output::E_REG && o.location > max_live_register)) {
 			o = outputs[--n_outputs];
 		} else {
 			nodes[o.ref].r_external = true;
@@ -34,10 +64,7 @@ void Trace::execute(State & state) {
 			Value v;
 			Value::Init(v,o.typ,length);
 			v.p = nodes[o.ref].r.p;
-			if(o.is_variable)
-				state.frame.environment->hassign(Symbol(o.variable),v);
-			else
-				*(o.location) = v;
+			set_output_value(state,o,v);
 			i++;
 		}
 	}
@@ -147,17 +174,21 @@ std::string Trace::toString(State & state) {
 	out << "recorded: \n";
 	for(size_t j = 0; j < n_nodes; j++) {
 		IRNode & node = nodes[j];
-		out << "r" << j << ": " << node.toString() << "\n";
+		out << "n" << j << ": " << node.toString() << "\n";
 	}
 	out << "outputs: \n";
 	for(size_t i = 0; i < n_outputs; i++) {
 
 		Output & o = outputs[i];
-		if(o.is_variable)
-			out << "v" << o.variable << " ";
-		else
-			out << "r" <<    o.location - state.base << " ";
-		out << o.ref << "\n";
+		switch(o.location_type) {
+		case Trace::Output::E_REG:
+			out << "r" << o.location; break;
+		case Trace::Output::E_SLOT:
+			out << "s" << o.location; break;
+		case Trace::Output::E_VAR:
+			out << "v" << o.location; break;
+		}
+		out << " = o" << o.ref << "\n";
 	}
 	return out.str();
 }
