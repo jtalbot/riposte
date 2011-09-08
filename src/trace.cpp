@@ -30,7 +30,7 @@ void Trace::execute(State & state) {
 		} else {
 			nodes[o.ref].r_external = true;
 			if(nodes[o.ref].r.p == NULL) //if this is the first VM value that refers to this output, allocate space for it in the VM
-				nodes[o.ref].r.p = new (GC) double[length];
+				nodes[o.ref].r.p = new (PointerFreeGC) double[length];
 			Value v;
 			Value::Init(v,o.typ,length);
 			v.p = nodes[o.ref].r.p;

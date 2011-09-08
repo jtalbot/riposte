@@ -10,12 +10,11 @@ invSqrt2Pi <- 0.39894228040
 log10 <- log(10)
 
 CND <- function(X) {
-    L <- abs(X)
-    k <- 1.0 / (1.0 + 0.2316419 * L)
+    k <- 1.0 / (1.0 + 0.2316419 * abs(X))
     w <- (((((1.330274429*k) - 1.821255978)*k + 1.781477937)*k - 0.356563782)*k + 0.31938153)*k
-    w <- w * invSqrt2Pi * exp(L * L * -.5)
-    #Xgt0 <- X > 0
-    #w[Xgt0] <- (1-w)[Xgt0]
+    w <- w * invSqrt2Pi * exp(X * X * -.5)
+   #Xgt0 <- X > 0
+   #w[Xgt0] <- (1-w)[Xgt0]
     w
     #w <- ifelse(X > 0,1 - w,w)
 }
