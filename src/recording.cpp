@@ -179,7 +179,7 @@ OP_NOT_IMPLEMENTED(jf)
 OP_NOT_IMPLEMENTED(colon)
 
 
-RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret, bool * can_fallback) {
+RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret, bool * can_fallback, bool * should_record) {
 
 	//encode the type;
 	switch(v.type) {
@@ -195,6 +195,7 @@ RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret, bool
 		} else if(v.length == TRACE.length) {
 			ret->encoding = IROp::E_VECTOR;
 			ret->is_external = true;
+			*should_record = true;
 		} else {
 			return RecordingStatus::UNSUPPORTED_TYPE;
 		}
@@ -206,6 +207,7 @@ RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret, bool
 		ret->data.i = v.future.ref;
 		ret->is_external = false;
 		*can_fallback = false;
+		*should_record = true;
 		return RecordingStatus::NO_ERROR;
 		break;
 	default:
@@ -220,11 +222,12 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum opcode, St
 	Value & b = REG(state,inst.b);
 
 	bool can_fallback = true;
+	bool should_record = false;
 	InputValue aenc;
 	InputValue benc;
-	RecordingStatus::Enum ar = get_input(state,a,&aenc,&can_fallback);
-	RecordingStatus::Enum br = get_input(state,b,&benc,&can_fallback);
-	if(RecordingStatus::NO_ERROR == ar && RecordingStatus::NO_ERROR == br) {
+	RecordingStatus::Enum ar = get_input(state,a,&aenc,&can_fallback,&should_record);
+	RecordingStatus::Enum br = get_input(state,b,&benc,&can_fallback,&should_record);
+	if(should_record && RecordingStatus::NO_ERROR == ar && RecordingStatus::NO_ERROR == br) {
 		RESERVE(2,1);
 		Type::Enum arg_type = std::max(aenc.typ,benc.typ);
 		if(aenc.typ != arg_type)
@@ -243,10 +246,11 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum opcode, Sta
 	Value & r = REG(state,inst.c);
 	Value & a = REG(state,inst.a);
 	bool can_fallback = true;
+	bool should_record = false;
 	InputValue aenc;
-	RecordingStatus::Enum ar = get_input(state,a,&aenc,&can_fallback);
+	RecordingStatus::Enum ar = get_input(state,a,&aenc,&can_fallback,&should_record);
 
-	if(RecordingStatus::NO_ERROR == ar) {
+	if(should_record && RecordingStatus::NO_ERROR == ar) {
 		RESERVE(1,1);
 		emitir(state,opcode,resultType(bc,aenc.typ),aenc,InputValue_unused,r);
 		return RecordingStatus::NO_ERROR;
@@ -362,7 +366,7 @@ Instruction const * recording_interpret(State& state, Instruction const* pc, siz
 	state.tracing.begin_tracing();
 	TRACE.length = length;
 	while(true) {
-#define RUN_RECORD(name,str,...) case ByteCode::name: { printf("rec " #name "\n"); status = name##_record(state, *pc,&pc); } break;
+#define RUN_RECORD(name,str,...) case ByteCode::name: { /*printf("rec " #name "\n");*/ status = name##_record(state, *pc,&pc); } break;
 		switch(pc->bc) {
 			BYTECODES(RUN_RECORD)
 		}
