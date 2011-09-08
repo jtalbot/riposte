@@ -188,7 +188,7 @@ std::string Trace::toString(State & state) {
 		case Trace::Output::E_VAR:
 			out << "v" << o.location; break;
 		}
-		out << " = o" << o.ref << "\n";
+		out << " = n" << o.ref << "\n";
 	}
 	return out.str();
 }
