@@ -28,6 +28,10 @@ struct TCharacter {
 	typedef Character Self;
 	typedef Character Up;
 };
+struct TList {
+	typedef List Self;
+	typedef List Up;
+};
 
 // Unary operators
 #define UNARY_OP(Name, T1, T2, Func) \
@@ -74,7 +78,7 @@ UNARY_OP(ATanOp, Self, Up, atan(a))				NYI_COMPLEX_OP(ATanOp)
 
 #define UNARY_FILTER_OP(Name, Func) \
 template<typename T> \
-struct Name : public UnaryOp<T, Logical> {\
+struct Name : public UnaryOp<typename T::Self, Logical> {\
 	static typename Name::R eval(State& state, typename Name::A const a) {\
 		return (Func);\
 	}\
@@ -119,6 +123,26 @@ struct T<TComplex> : public BinaryOp<Complex, Complex, Complex> { \
 	static T::R eval(State& state, T::A const a, T::B const b) { _error("unimplemented complex function"); } \
 };
 
+inline double riposte_max(State& state, double a, double b) { 
+	if(a!=a) return a; if(b!=b) return b; return a > b ? a : b; 
+}
+inline int64_t riposte_max(State& state, int64_t a, int64_t b) { 
+	return a > b ? a : b;
+}
+inline Symbol riposte_max(State& state, Symbol a, Symbol b) {
+	return state.SymToStr(a) > state.SymToStr(b) ? a : b;
+} 
+
+inline double riposte_min(State& state, double a, double b) { 
+	if(a!=a) return a; if(b!=b) return b; return a < b ? a : b; 
+}
+inline int64_t riposte_min(State& state, int64_t a, int64_t b) { 
+	return a < b ? a : b;
+}
+inline Symbol riposte_min(State& state, Symbol a, Symbol b) {
+	return state.SymToStr(a) < state.SymToStr(b) ? a : b;
+} 
+
 BINARY_OP(AddOp, Self, Self, Self, a+b)
 BINARY_OP(SubOp, Self, Self, Self, a-b)
 BINARY_OP(MulOp, Self, Self, Self, a*b)
@@ -130,8 +154,8 @@ BINARY_OP(PowOp, Self, Self, Up, pow(a,b))
 inline double Mod(double a, double b) { return a - IDiv(a,b) * b; /* TODO: Replace with ugly R version */ }
 inline int64_t Mod(int64_t a, int64_t b) { return a % b; }
 BINARY_OP(ModOp, Self, Self, Self, Mod(a,b))			NYI_COMPLEX_OP(ModOp)
-BINARY_OP(PMinOp, Self, Self, Self, std::min(a,b))		NYI_COMPLEX_OP(PMinOp)
-BINARY_OP(PMaxOp, Self, Self, Self, std::max(a,b))		NYI_COMPLEX_OP(PMaxOp)
+BINARY_OP(PMinOp, Self, Self, Self, riposte_min(state, a,b))		NYI_COMPLEX_OP(PMinOp)
+BINARY_OP(PMaxOp, Self, Self, Self, riposte_max(state, a,b))		NYI_COMPLEX_OP(PMaxOp)
 
 #undef BINARY_OP
 #undef NYI_COMPLEX_OP
@@ -198,33 +222,32 @@ struct OrOp : BinaryOp<Logical, Logical, Logical> {
 #define FOLD_OP(Name, Func, Initial) \
 template<typename T> \
 struct Name : FoldOp<typename T::Self> { \
-	static const typename Name::A Base; \
+	static typename Name::A base() { return Initial; } \
 	static typename Name::R eval(State& state, typename Name::R const a, typename Name::A const b) { \
 		return (Func); \
 	} \
 }; \
-template<typename T> \
-const typename Name<T>::A Name<T>::Base = Initial; 
+
+#define CHARACTER_FOLD_OP(Name, Func, Initial) \
+template<> \
+struct Name<TCharacter> : FoldOp<Character> { \
+	static Name::A base() { return Initial; } \
+	static Name::R eval(State& state, Name::R const a, Name::A const b) { \
+		return (Func); \
+	} \
+}; \
 
 #define INVALID_COMPLEX_FUNCTION(T) template<> \
 struct T<TComplex> : public BinaryOp<Complex, Complex, Complex> { \
-	static const T::A Base; \
+	static T::A base() { _error("invalid complex function"); } \
 	static T::R eval(State& state, T::A const a, T::B const b) { _error("invalid complex function"); } \
 }; 
 
-template<typename T>
-T riposte_max(T a, T b) { return std::max(a, b); }
-template<>
-inline double riposte_max<double>(double a, double b) { if(a!=a) return a; if(b!=b) return b; return a > b ? a : b; }
-
-template<typename T>
-T riposte_min(T a, T b) { return std::min(a, b); }
-template<>
-inline double riposte_min<double>(double a, double b) { if(a!=a) return a; if(b!=b) return b; return a < b ? a : b; }
-
-FOLD_OP(MaxOp, riposte_max(a,b), -std::numeric_limits<typename MaxOp<T>::A>::infinity()) 
+FOLD_OP(MaxOp, PMaxOp<T>::eval(state, a, b), -std::numeric_limits<typename MaxOp<T>::A>::infinity())
+CHARACTER_FOLD_OP(MaxOp, PMaxOp<TCharacter>::eval(state, a, b), Symbols::empty) 
 INVALID_COMPLEX_FUNCTION(MaxOp);
-FOLD_OP(MinOp, riposte_min(a,b), std::numeric_limits<typename MaxOp<T>::A>::infinity()) 
+FOLD_OP(MinOp, PMinOp<T>::eval(state, a, b), std::numeric_limits<typename MaxOp<T>::A>::infinity()) 
+CHARACTER_FOLD_OP(MinOp, PMinOp<TCharacter>::eval(state, a, b), Symbols::empty) 
 INVALID_COMPLEX_FUNCTION(MinOp);
 FOLD_OP(SumOp, AddOp<T>::eval(state, a, b), 0) 
 FOLD_OP(ProdOp, MulOp<T>::eval(state, a, b), 1) 
@@ -259,6 +282,26 @@ void unaryLogical(State& state, Value const& a, Value& c) {
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 
+void unaryOrdinal(State& state, Value const& a, Value& c) {
+	if(a.isDouble())
+		Lift< Op<TDouble> >::eval(state, (Double const&)a, c);
+	else if(a.isComplex())
+		Lift< Op<TComplex> >::eval(state, (Complex const&)a, c);
+	else if(a.isInteger())
+		Lift< Op<TInteger> >::eval(state, (Integer const&)a, c);
+	else if(a.isLogical())
+		Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), c);
+	else if(a.isCharacter())
+		Lift< Op<TCharacter> >::eval(state, (Character const&)a, c);
+	else if(a.isNull()) {
+		Double::InitScalar(c, Op<TDouble>::base());
+		_warning(state, "no non-missing arguments to min; returning Inf");
+	}
+	else
+		_error("non-ordinal argument to ordinal operator");
+}
+
+template< template<class Op> class Lift, template<typename T> class Op > 
 void unaryCharacter(State& state, Value const& a, Value& c) {
 	Lift< Op<TCharacter> >::eval(state, As<Character>(state, a), c);
 };
@@ -266,19 +309,19 @@ void unaryCharacter(State& state, Value const& a, Value& c) {
 template< template<class Op> class Lift, template<typename T> class Op > 
 void unaryFilter(State& state, Value const& a, Value& c) {
 	if(a.isDouble())
-		Lift< Op<Double> >::eval(state, (Double const&)a, c);
+		Lift< Op<TDouble> >::eval(state, (Double const&)a, c);
 	else if(a.isComplex())
-		Lift< Op<Complex> >::eval(state, (Complex const&)a, c);
+		Lift< Op<TComplex> >::eval(state, (Complex const&)a, c);
 	else if(a.isInteger())
-		Lift< Op<Integer> >::eval(state, (Integer const&)a, c);
+		Lift< Op<TInteger> >::eval(state, (Integer const&)a, c);
 	else if(a.isLogical())
-		Lift< Op<Logical> >::eval(state, (Logical const&)a, c);
+		Lift< Op<TLogical> >::eval(state, (Logical const&)a, c);
 	else if(a.isCharacter())
-		Lift< Op<Character> >::eval(state, (Character const&)a, c);
+		Lift< Op<TCharacter> >::eval(state, (Character const&)a, c);
 	else if(a.isNull())
 		Logical(0);
 	else if(a.isList())
-		Lift< Op<List> >::eval(state, (List const&)a, c);
+		Lift< Op<TList> >::eval(state, (List const&)a, c);
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 

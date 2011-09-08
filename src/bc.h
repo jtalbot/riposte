@@ -73,6 +73,30 @@
 	_(lt, "lt",	LTOp) \
 	_(le, "le",	LEOp) \
 
+#define ARITH_FOLD_BYTECODES(_) \
+	_(sum, "sum",	SumOp) \
+	_(prod, "prod",	ProdOp) \
+
+#define ORDINAL_FOLD_BYTECODES(_) \
+	_(min, "min",	MinOp) \
+	_(max, "max",	MaxOp) \
+
+#define LOGICAL_FOLD_BYTECODES(_) \
+	_(any, "any",	AnyOp) \
+	_(all, "all",	AllOp) \
+
+#define ARITH_SCAN_BYTECODES(_) \
+	_(cumsum, "cumsum",	SumOp) \
+	_(cumprod, "cumprod",	ProdOp) \
+
+#define ORDINAL_SCAN_BYTECODES(_) \
+	_(cummin, "cummin",	MinOp) \
+	_(cummax, "cummax",	MaxOp) \
+
+#define LOGICAL_SCAN_BYTECODES(_) \
+	_(cumany, "cumany",	AnyOp) \
+	_(cumall, "cumall",	AllOp) \
+
 #define UTILITY_BYTECODES(_)\
 	_(sland, "sland") \
 	_(slor, "slor") \
@@ -97,10 +121,22 @@
 	BINARY_LOGICAL_MAP_BYTECODES(_) \
 	BINARY_ORDINAL_MAP_BYTECODES(_) \
 
+#define FOLD_BYTECODES(_) \
+	ARITH_FOLD_BYTECODES(_) \
+	ORDINAL_FOLD_BYTECODES(_) \
+	LOGICAL_FOLD_BYTECODES(_) \
+
+#define SCAN_BYTECODES(_) \
+	ARITH_SCAN_BYTECODES(_) \
+	ORDINAL_SCAN_BYTECODES(_) \
+	LOGICAL_SCAN_BYTECODES(_) \
+
 #define BYTECODES(_) \
 	CONTROL_FLOW_BYTECODES(_) \
 	MEMORY_ACCESS_BYTECODES(_) \
 	MAP_BYTECODES(_) \
+	FOLD_BYTECODES(_) \
+	SCAN_BYTECODES(_) \
 	UTILITY_BYTECODES(_) \
 	SPECIAL_BYTECODES(_)	
 

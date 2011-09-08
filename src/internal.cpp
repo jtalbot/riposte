@@ -6,9 +6,6 @@
 #include <math.h>
 #include <fstream>
 
-const MaxOp<TComplex>::A MaxOp<TComplex>::Base = std::complex<double>(0,0);
-const MinOp<TComplex>::A MinOp<TComplex>::Base = std::complex<double>(0,0);
-
 static void checkNumArgs(List const& args, int64_t nargs) {
 	if(args.length > nargs) _error("unused argument(s)");
 	else if(args.length < nargs) _error("too few arguments");

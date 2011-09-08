@@ -37,6 +37,18 @@ static ByteCode::Enum op(Symbol const& s) {
 		case String::acos: return ByteCode::acos; break;
 		case String::asin: return ByteCode::asin; break;
 		case String::atan: return ByteCode::atan; break;
+		case String::sum: return ByteCode::sum; break;
+		case String::prod: return ByteCode::prod; break;
+		case String::min: return ByteCode::min; break;
+		case String::max: return ByteCode::max; break;
+		case String::any: return ByteCode::any; break;
+		case String::all: return ByteCode::all; break;
+		case String::cumsum: return ByteCode::cumsum; break;
+		case String::cumprod: return ByteCode::cumprod; break;
+		case String::cummin: return ByteCode::cummin; break;
+		case String::cummax: return ByteCode::cummax; break;
+		case String::cumany: return ByteCode::cumany; break;
+		case String::cumall: return ByteCode::cumall; break;
 		case String::type: return ByteCode::type; break;
 		case String::Logical: return ByteCode::logical1; break;	 	
 		case String::Integer: return ByteCode::integer1; break;
@@ -551,6 +563,18 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	case String::acos: 
 	case String::asin: 
 	case String::atan:
+	case String::sum:
+	case String::prod:
+	case String::min:
+	case String::max:
+	case String::any:
+	case String::all:
+	case String::cumsum:
+	case String::cumprod:
+	case String::cummin:
+	case String::cummax:
+	case String::cumany:
+	case String::cumall:
 	case String::type:
 	case String::Logical:
 	case String::Integer:
@@ -559,7 +583,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	case String::Character:
 	case String::Raw:
 	{
-		// if there isn't exactly one parameters, we should call the library version...
+		// if there isn't exactly one parameter, we should call the library version...
 		if(call.length != 2) return compileFunctionCall(call, names, code);
 		int64_t a = compile(call[1], code);
 		scopes.back().deadAfter(liveIn);
