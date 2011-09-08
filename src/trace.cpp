@@ -83,6 +83,7 @@ void Trace::execute(State & state) {
 			//handle the def of node n by freeing allocated register
 			int reg = (n.r.p - registers[0]) / TRACE_VECTOR_WIDTH;
 			//printf("freeing register %d\n",reg);
+			//printf("n%d: reg%d\n",i,reg);
 			free_regs |= (1 << reg);
 			//print_regs(free_regs);
 		}
@@ -95,7 +96,7 @@ void Trace::execute(State & state) {
 				//allocate a register
 				//TODO: we need to make sure we can't run out of registers
 				int reg = ffs(free_regs) - 1;
-				//printf("allocated register %d\n",reg);
+				//printf("n%d = register %d\n",n.a.i,reg);
 				free_regs &= ~(1 << reg);
 				//print_regs(free_regs);
 				def.r.p = registers[reg];
@@ -108,11 +109,11 @@ void Trace::execute(State & state) {
 			IRNode & def = nodes[n.b.i];
 			if(def.r_external) {
 				n.b_external = true;
-			} else {
+			} else if (def.r.p == NULL) {
 				//allocate a register
 				//TODO: we need to make sure we can't run out of register
 				int reg = ffs(free_regs) - 1;
-				//printf("allocated register %d\n",reg);
+				//printf("n%d = register %d\n",n.b.i,reg);
 				free_regs &= ~(1 << reg);
 				//print_regs(free_regs);
 				def.r.p = registers[reg];
@@ -159,6 +160,7 @@ void Trace::execute(State & state) {
 					printf("%d (%s)(%d)\n",(int)node.op.op, IROpCode::toString(node.op.code), (int) node.op.a_typ);
 					_error("Invalid op code short vector machine");
 			}
+			//if(i == 0) printf("n%d: %f\n", (int)j, node.r.p[0]);
 			if(node.r_external) \
 				node.r.p += TRACE_VECTOR_WIDTH; \
 			if(node.op.a_enc == IROp::E_VECTOR && node.a_external) \
