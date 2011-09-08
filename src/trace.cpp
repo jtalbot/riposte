@@ -42,7 +42,7 @@ void Trace::execute(State & state) {
 		}
 	}
 
-	//printf("executing trace:\n%s\n",toString().c_str());
+	//printf("executing trace:\n%s\n",toString(state).c_str());
 
 	//register allocate
 	//we got backward through the trace so we see all uses before the def
@@ -142,7 +142,7 @@ void Trace::execute(State & state) {
 	}
 }
 
-std::string Trace::toString() {
+std::string Trace::toString(State & state) {
 	std::ostringstream out;
 	out << "recorded: \n";
 	for(size_t j = 0; j < n_nodes; j++) {
@@ -151,7 +151,12 @@ std::string Trace::toString() {
 	}
 	out << "outputs: \n";
 	for(size_t i = 0; i < n_outputs; i++) {
+
 		Output & o = outputs[i];
+		if(o.is_variable)
+			out << "v" << o.variable << " ";
+		else
+			out << "r" <<    o.location - state.base << " ";
 		out << o.ref << "\n";
 	}
 	return out.str();

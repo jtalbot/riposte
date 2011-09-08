@@ -46,7 +46,7 @@ struct Trace {
 
 	void reset();
 	void execute(State & state);
-	std::string toString();
+	std::string toString(State & state);
 };
 
 struct TraceState {

@@ -138,7 +138,15 @@ RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instru
 	return RecordingStatus::NO_ERROR;
 }
 
-OP_NOT_IMPLEMENTED(sget);
+RecordingStatus::Enum sget_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	RESERVE(0,1);
+	*pc = sget_op(state,inst);
+	Value & r = REG(state,inst.c);
+	if(r.header == Type::Future) {
+		add_output(state,r);
+	}
+	return RecordingStatus::NO_ERROR;
+}
 
 RecordingStatus::Enum kget_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = kget_op(state,inst);
@@ -159,7 +167,16 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 	return RecordingStatus::NO_ERROR;
 }
 
-OP_NOT_IMPLEMENTED(sassign)
+RecordingStatus::Enum sassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	*pc = sassign_op(state,inst);
+	Value & v = state.frame.environment->get(inst.a);
+	if(v.header == Type::Future) {
+		RESERVE(0,1);
+		add_output(state,v);
+	}
+	return RecordingStatus::NO_ERROR;
+}
+
 OP_NOT_IMPLEMENTED(eassign)
 OP_NOT_IMPLEMENTED(iassign)
 OP_NOT_IMPLEMENTED(subset)
