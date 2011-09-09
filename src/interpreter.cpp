@@ -15,12 +15,13 @@
 
 static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc);
 
-Instruction const* kget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-Instruction const* sget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-Instruction const* get_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-Instruction const* forend_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-Instruction const* add_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-
+#ifndef __ICC
+extern Instruction const* kget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* sget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* get_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* forend_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* add_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+#endif
 
 inline void forcePromise(State& state, Value& v) { 
 	while(v.isPromise()) {

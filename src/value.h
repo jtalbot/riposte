@@ -62,7 +62,7 @@ struct Value {
 	bool isFunction() const { return type == Type::Function; }
 	bool isBuiltIn() const { return type == Type::BuiltIn; }
 	bool isObject() const { return type == Type::Object; }
-	bool isFuture() const { return type == Type::Future; }
+	bool isFuture() const { return header == Type::Future; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isList(); }

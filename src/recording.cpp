@@ -9,6 +9,7 @@
 	_(RESOURCE, "trace ran out of resources") \
 	_(UNSUPPORTED_OP,"trace encountered unsupported op") \
 	_(UNSUPPORTED_TYPE,"trace encountered an unsupported type") \
+	_(INTERPRETER_DEPENDENCY, "non-traceable op requires the value of a future")
 
 DECLARE_ENUM(RecordingStatus,ENUM_RECORDING_STATUS)
 DEFINE_ENUM_TO_STRING(RecordingStatus,ENUM_RECORDING_STATUS)
@@ -20,7 +21,7 @@ DEFINE_ENUM_TO_STRING(RecordingStatus,ENUM_RECORDING_STATUS)
 static RecordingStatus::Enum reserve(State & state, size_t num_nodes, size_t num_outputs) {
 	if(TRACE.n_nodes + num_nodes >= TRACE_MAX_NODES)
 		return RecordingStatus::RESOURCE;
-	else if(TRACE.n_outputs + num_outputs >= TRACE_MAX_NODES)
+	else if(TRACE.n_outputs + num_outputs >= TRACE_MAX_OUTPUTS)
 		return RecordingStatus::RESOURCE;
 	else
 		return RecordingStatus::NO_ERROR;
@@ -72,6 +73,7 @@ void coerce(State & state, Type::Enum result_type, InputValue & a) {
 	a.typ = result_type;
 	a.is_external = false;
 }
+
 #define REG(state, i) (*(state.base+i))
 //this emits an opcode assuming that a and b are the same type
 void emitir(State & state, IROpCode::Enum opcode,
@@ -79,7 +81,6 @@ void emitir(State & state, IROpCode::Enum opcode,
 		                   const InputValue & a,
 		                   const InputValue & b,
 		                   int64_t r) {
-
 	IRNode & n = TRACE.nodes[TRACE.n_nodes];
 
 	n.op.a_enc = a.encoding;
@@ -128,7 +129,7 @@ RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instru
 	RESERVE(0,1);
 	*pc = get_op(state,inst);
 	Value & r = REG(state,inst.c);
-	if(r.header == Type::Future) {
+	if(r.isFuture()) {
 		add_output(state,Trace::Output::E_REG,inst.c,r);
 	}
 	TRACE.max_live_register = inst.c;
@@ -139,7 +140,7 @@ RecordingStatus::Enum sget_record(State & state, Instruction const & inst, Instr
 	RESERVE(0,1);
 	*pc = sget_op(state,inst);
 	Value & r = REG(state,inst.c);
-	if(r.header == Type::Future) {
+	if(r.isFuture()) {
 		add_output(state,Trace::Output::E_REG,inst.c,r);
 	}
 	TRACE.max_live_register = inst.c;
@@ -157,7 +158,7 @@ OP_NOT_IMPLEMENTED(iget)
 RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	RESERVE(0,1);
 	Value & r = state.frame.environment->hassign(Symbol(inst.a), REG(state, inst.c));
-	if(r.header == Type::Future) {
+	if(r.isFuture()) {
 		add_output(state,Trace::Output::E_VAR,inst.a,r);
 	}
 	TRACE.max_live_register = inst.c;
@@ -168,7 +169,7 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 RecordingStatus::Enum sassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = sassign_op(state,inst);
 	Value & v = state.frame.environment->get(inst.a);
-	if(v.header == Type::Future) {
+	if(v.isFuture()) {
 		RESERVE(0,1);
 		add_output(state,Trace::Output::E_SLOT,inst.a,v);
 	}
@@ -176,24 +177,43 @@ RecordingStatus::Enum sassign_record(State & state, Instruction const & inst, In
 	return RecordingStatus::NO_ERROR;
 }
 
-OP_NOT_IMPLEMENTED(eassign)
-OP_NOT_IMPLEMENTED(iassign)
-OP_NOT_IMPLEMENTED(subset)
-OP_NOT_IMPLEMENTED(subset2)
 
-OP_NOT_IMPLEMENTED(forbegin)
+#define CHECK_REG(r) (REG(state,r).isFuture())
+//temporary defines to generate code for checked interpret
+#define A CHECK_REG(inst.a) ||
+#define B CHECK_REG(inst.b) ||
+#define C CHECK_REG(inst.c) ||
+#define B_1 CHECK_REG(inst.b - 1) ||
+#define C_1 CHECK_REG(inst.c - 1) ||
 
-OP_NOT_IMPLEMENTED(forend)
+//all operations that first verify their inputs are not futures, and then call into the scalar interpreter to fulfill them
+#define CHECKED_INTERPRET(op, checks) \
+		RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
+			if(checks false) \
+				return RecordingStatus::INTERPRETER_DEPENDENCY; \
+			*pc = op##_op(state,inst); \
+			return RecordingStatus::NO_ERROR; \
+		} \
 
-OP_NOT_IMPLEMENTED(iforbegin)
-
-OP_NOT_IMPLEMENTED(iforend)
-
-OP_NOT_IMPLEMENTED(jt)
-OP_NOT_IMPLEMENTED(jf)
-
-OP_NOT_IMPLEMENTED(colon)
-
+CHECKED_INTERPRET(eassign, A B C)
+CHECKED_INTERPRET(iassign, A B C)
+CHECKED_INTERPRET(jt, B)
+CHECKED_INTERPRET(jf, B)
+CHECKED_INTERPRET(subset, A B C)
+CHECKED_INTERPRET(subset2, A B C)
+CHECKED_INTERPRET(colon, A B C)
+CHECKED_INTERPRET(forbegin, B_1)
+CHECKED_INTERPRET(forend, B_1)
+CHECKED_INTERPRET(iforbegin, C C_1)
+CHECKED_INTERPRET(iforend, C C_1)
+CHECKED_INTERPRET(seq, A)
+CHECKED_INTERPRET(UseMethod, A C)
+#undef A
+#undef B
+#undef B_1
+#undef C
+#undef C_1
+#undef CHECKED_INTERPRET
 
 RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret, bool * can_fallback, bool * should_record) {
 
@@ -355,6 +375,8 @@ OP_NOT_IMPLEMENTED(cummin)
 OP_NOT_IMPLEMENTED(cummax)
 OP_NOT_IMPLEMENTED(cumany)
 OP_NOT_IMPLEMENTED(cumall)
+OP_NOT_IMPLEMENTED(raw1)
+
 
 RecordingStatus::Enum jmp_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	//this is just a constant jump, nothing to record
@@ -362,12 +384,24 @@ RecordingStatus::Enum jmp_record(State & state, Instruction const & inst, Instru
 	return RecordingStatus::NO_ERROR;
 }
 
-OP_NOT_IMPLEMENTED(function)
-OP_NOT_IMPLEMENTED(raw1)
-OP_NOT_IMPLEMENTED(UseMethod)
+RecordingStatus::Enum function_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	*pc = function_op(state,inst);
+	return RecordingStatus::NO_ERROR;
+}
 
-OP_NOT_IMPLEMENTED(seq)
-OP_NOT_IMPLEMENTED(type)
+
+//we can extract the type from the future so we can continue a trace beyond a type-check
+RecordingStatus::Enum type_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	Character c(1);
+	// Should have a direct mapping from type to symbol.
+	Value & a = REG(state, inst.a);
+	Type::Enum atyp = (a.isFuture()) ? a.future.typ : a.type;
+	c[0] = state.StrToSym(Type::toString(atyp));
+	REG(state, inst.c) = c;
+	(*pc)++;
+	return RecordingStatus::NO_ERROR;
+}
+
 OP_NOT_IMPLEMENTED(ret)
 OP_NOT_IMPLEMENTED(done)
 

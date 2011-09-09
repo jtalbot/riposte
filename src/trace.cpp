@@ -69,7 +69,7 @@ void Trace::execute(State & state) {
 		}
 	}
 
-	//printf("executing trace:\n%s\n",toString(state).c_str());
+	printf("executing trace:\n%s\n",toString(state).c_str());
 
 	//register allocate
 	//we got backward through the trace so we see all uses before the def
