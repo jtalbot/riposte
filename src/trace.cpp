@@ -69,7 +69,7 @@ void Trace::execute(State & state) {
 		}
 	}
 
-	printf("executing trace:\n%s\n",toString(state).c_str());
+	//printf("executing trace:\n%s\n",toString(state).c_str());
 
 	//register allocate
 	//we got backward through the trace so we see all uses before the def
@@ -160,13 +160,12 @@ void Trace::execute(State & state) {
 					printf("%d (%s)(%d)\n",(int)node.op.op, IROpCode::toString(node.op.code), (int) node.op.a_typ);
 					_error("Invalid op code short vector machine");
 			}
-			//if(i == 0) printf("n%d: %f\n", (int)j, node.r.p[0]);
-			if(node.r_external) \
-				node.r.p += TRACE_VECTOR_WIDTH; \
-			if(node.op.a_enc == IROp::E_VECTOR && node.a_external) \
-				node.a.p += TRACE_VECTOR_WIDTH; \
-			if(node.op.b_enc == IROp::E_VECTOR && node.b_external) \
-				node.b.p += TRACE_VECTOR_WIDTH; \
+			if(node.r_external) 
+				node.r.p += TRACE_VECTOR_WIDTH; 
+			if(node.a_external) 
+				node.a.p += TRACE_VECTOR_WIDTH; 
+			if(node.b_external) 
+				node.b.p += TRACE_VECTOR_WIDTH; 
 		}
 	}
 }

@@ -124,6 +124,7 @@ std::string stringify(State const& state, Value const& value, Value const& names
 			List v(value);
 
 			int64_t length = v.length;
+			if(length == 0) return "list()";
 			if(length > 100) { dots = true; length = 100; }
 			result = "";
 			if(names.isCharacter()) {

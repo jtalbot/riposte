@@ -105,14 +105,9 @@ struct IRNode {
 	IROp op;
 
 	//for flags that are not part of the op encoding
-	union {
-		uint16_t flags;
-		struct {
-			bool r_external : 1;
-			bool a_external : 1;
-			bool b_external : 1;
-		};
-	};
+	bool r_external;
+	bool a_external;
+	bool b_external;
 
 	//3-op code, r is dest, r = a + b, where r is the position in the list of IRNodes where this op resides
 	union {
