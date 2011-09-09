@@ -3,7 +3,7 @@ UNAME := $(shell uname -s)
  
 CXX := g++
 CXXFLAGS := -Wall
-LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -lm -fpic -lgc -g
+LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
 
 ENABLE_TRACING=0
 ARBB_HOME=/opt/intel/arbb/1.0.0.018
@@ -33,6 +33,10 @@ debug: $(EXECUTABLE)
 release: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize 
 release: $(EXECUTABLE)
 
+irelease: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize
+irelease: CXX := icc
+irelease: $(EXECUTABLE)
+          
 asm: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize 
 asm: $(ASM)
 
