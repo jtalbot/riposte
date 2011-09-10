@@ -7,6 +7,7 @@
 #include "bc.h"
 #include "ir.h"
 #include "type.h"
+#include "recording.h"
 
 struct Trace;
 struct Prototype;
@@ -22,6 +23,7 @@ struct Prototype;
 #define TRACE_MAX_RECORDED (1024)
 
 struct State;
+struct Environment;
 struct Trace {
 
 	double registers[TRACE_MAX_VECTOR_REGISTERS][TRACE_VECTOR_WIDTH];
@@ -32,16 +34,24 @@ struct Trace {
 
 	int64_t length;
 
+	struct Location {
+		enum Type { SLOT, REG, VAR};
+		Type type;
+		union {
+			Environment * environment; //pointer to environment for slots and variables
+			Value * base; //pointer to base register for registers
+		};
+		int64_t id;
+	};
 	struct Output {
-		enum Location { E_SLOT, E_REG, E_VAR };
-		Location location_type;
-		IRef ref;
-		Type::Enum typ;
-		int64_t location;
+		Location location; //location where an output might exist
+		                   //if that location is live and contains a future then that is a live output
+		IRef ref; //(used only to enable pretty printing) value of the output in the trace code,
 	};
 
 	Output outputs[TRACE_MAX_OUTPUTS];
 	size_t n_outputs;
+	Value * max_live_register_base;
 	int64_t max_live_register;
 
 	void reset();
@@ -58,14 +68,19 @@ struct TraceState {
 
 	bool is_tracing() const { return active; }
 
-	void begin_tracing() {
+	Instruction const * begin_tracing(State & state, Instruction const * inst, size_t length) {
 		current_trace.reset();
+		current_trace.length = length;
 		active = true;
+		return recording_interpret(state,inst);
+
 	}
 
 	void end_tracing(State & state) {
-		active = false;
-		current_trace.execute(state);
+		if(active) {
+			active = false;
+			current_trace.execute(state);
+		}
 	}
 };
 

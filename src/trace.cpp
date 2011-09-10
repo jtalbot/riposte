@@ -7,7 +7,8 @@
 #include <stdlib.h>
 
 void Trace::reset() {
-	n_nodes = n_recorded = length = n_outputs = max_live_register = 0;
+	n_nodes = n_recorded = length = n_outputs = 0;
+	max_live_register = NULL;
 }
 
 
@@ -22,49 +23,63 @@ static void print_regs(int foo) {
 
 #define REG(state, i) (*(state.base+i))
 
-static const Value & get_output_value(State & state, const Trace::Output & o) {
-	switch(o.location_type) {
-	case Trace::Output::E_REG:
-		return REG(state,o.location);
-	case Trace::Output::E_SLOT:
-		return state.frame.environment->get(o.location);
+static const Value & get_output_value(State & state, const Trace::Location & l) {
+	switch(l.type) {
+	case Trace::Location::REG:
+		return l.base[l.id];
+	case Trace::Location::SLOT:
+		return l.environment->get(l.id);
 	default:
-	case Trace::Output::E_VAR:
-		return state.frame.environment->hget(Symbol(o.location));
+	case Trace::Location::VAR:
+		return l.environment->hget(Symbol(l.id));
 	}
 }
-static void set_output_value(State & state, const Trace::Output & o, const Value & v) {
-	switch(o.location_type) {
-	case Trace::Output::E_REG:
-		REG(state,o.location) = v;
+static void set_output_value(State & state, const Trace::Location & l, const Value & v) {
+	switch(l.type) {
+	case Trace::Location::REG:
+		l.base[l.id] = v;
 		return;
-	case Trace::Output::E_SLOT:
-		state.frame.environment->get(o.location) = v;
+	case Trace::Location::SLOT:
+		l.environment->get(l.id) = v;
 		return;
-	case Trace::Output::E_VAR:
-		state.frame.environment->hassign(Symbol(o.location),v);
+	case Trace::Location::VAR:
+		l.environment->hassign(Symbol(l.id),v);
 		return;
 	}
+}
+
+static bool is_location_dead(Trace & trace, const Trace::Location & l) {
+	return l.type == Trace::Location::REG &&
+	( l.base < trace.max_live_register_base ||
+	  ( l.base == trace.max_live_register_base &&
+	    l.id > trace.max_live_register
+	  )
+	);
 }
 
 void Trace::execute(State & state) {
-	//remove outputs that have been killed, allocate space for valid onces
+
+	//check list of recorded output locations for live futures
+	//for each live future found, replace the future with a concrete object
+	//the data for the object will be filled in by the trace interpreter
 	for(size_t i = 0; i < n_outputs; ) {
 		Output & o = outputs[i];
 
-		const Value & loc = get_output_value(state,o);
-		if(loc.header != Type::Future ||
-		   loc.future.ref != o.ref ||
-		   (o.location_type == Trace::Output::E_REG && o.location > max_live_register)) {
+		const Value & loc = get_output_value(state,o.location);
+		if(is_location_dead(*this,o.location) ||
+		   loc.header != Type::Future ) {
 			o = outputs[--n_outputs];
 		} else {
-			nodes[o.ref].r_external = true;
-			if(nodes[o.ref].r.p == NULL) //if this is the first VM value that refers to this output, allocate space for it in the VM
-				nodes[o.ref].r.p = new (PointerFreeGC) double[length];
+			IRef ref = loc.future.ref;
+			o.ref = ref; //only for prettying printing...
+			Type::Enum typ = loc.future.typ;
+			nodes[ref].r_external = true;
+			if(nodes[ref].r.p == NULL) //if this is the first VM value that refers to this output, allocate space for it in the VM
+				nodes[ref].r.p = new (PointerFreeGC) double[length];
 			Value v;
-			Value::Init(v,o.typ,length);
-			v.p = nodes[o.ref].r.p;
-			set_output_value(state,o,v);
+			Value::Init(v,typ,length);
+			v.p = nodes[ref].r.p;
+			set_output_value(state,o.location,v);
 			i++;
 		}
 	}
@@ -181,15 +196,15 @@ std::string Trace::toString(State & state) {
 	for(size_t i = 0; i < n_outputs; i++) {
 
 		Output & o = outputs[i];
-		switch(o.location_type) {
-		case Trace::Output::E_REG:
-			out << "r" << o.location; break;
-		case Trace::Output::E_SLOT:
-			out << "s" << o.location; break;
-		case Trace::Output::E_VAR:
-			out << "v" << o.location; break;
+		switch(o.location.type) {
+		case Trace::Location::REG:
+			out << "r" << o.location.id; break;
+		case Trace::Location::SLOT:
+			out << "s" << o.location.id; break;
+		case Trace::Location::VAR:
+			out << "v" << o.location.id; break;
 		}
-		out << " = n" << o.ref << "\n";
+		out << "(" << o.location.environment << ") = n" << o.ref << "\n";
 	}
 	return out.str();
 }

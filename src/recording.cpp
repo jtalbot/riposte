@@ -27,14 +27,20 @@ static RecordingStatus::Enum reserve(State & state, size_t num_nodes, size_t num
 		return RecordingStatus::NO_ERROR;
 }
 
-static void add_output(State & state, Trace::Output::Location location_type, int64_t location, Value & v) {
+static void add_output(State & state, Trace::Location::Type location_type, int64_t id, Value & v) {
 	Trace::Output & out = TRACE.outputs[TRACE.n_outputs++];
-	out.location_type = location_type;
-	out.location = location;
-	out.typ = v.future.typ;
-	out.ref = v.future.ref;
+	out.location.type = location_type;
+	out.location.id = id;
+	if(location_type == Trace::Location::REG)
+		out.location.base = state.base;
+	else
+		out.location.environment = state.frame.environment;
 }
 
+static void set_max_live_register(State & state, int64_t r) {
+	TRACE.max_live_register_base = state.base;
+	TRACE.max_live_register = r;
+}
 
 struct InputValue {
 	IROp::Encoding encoding;
@@ -82,7 +88,6 @@ void emitir(State & state, IROpCode::Enum opcode,
 		                   const InputValue & b,
 		                   int64_t r) {
 	IRNode & n = TRACE.nodes[TRACE.n_nodes];
-
 	n.op.a_enc = a.encoding;
 	n.op.a_typ = (a.typ == Type::Integer) ? IROp::T_INT : IROp::T_DOUBLE;
 	n.a_external = a.is_external;
@@ -101,8 +106,8 @@ void emitir(State & state, IROpCode::Enum opcode,
 	//TODO: replace binary OR with a function that calculates output types from input types
 	Value & v = REG(state,r);
 	Future::Init(v, ret_type,TRACE.n_nodes++);
-	add_output(state,Trace::Output::E_REG,r,v);
-	TRACE.max_live_register = r;
+	add_output(state,Trace::Location::REG,r,v);
+	set_max_live_register(state,r);
 }
 
 //attempt to execute fn, otherwise return error code
@@ -123,27 +128,33 @@ RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instr
 } \
 
 
-OP_NOT_IMPLEMENTED(call)
-
 RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	RESERVE(0,1);
-	*pc = get_op(state,inst);
+	*pc = get_op(state,inst); // danger! can recursively invoke the recorder
+	                          // if the trace is no longer active we bail out now
+	if(!state.tracing.is_tracing())
+		return RecordingStatus::UNSUPPORTED_OP;
+
 	Value & r = REG(state,inst.c);
 	if(r.isFuture()) {
-		add_output(state,Trace::Output::E_REG,inst.c,r);
+		add_output(state,Trace::Location::REG,inst.c,r);
 	}
-	TRACE.max_live_register = inst.c;
+	set_max_live_register(state,inst.c);
 	return RecordingStatus::NO_ERROR;
 }
 
 RecordingStatus::Enum sget_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	RESERVE(0,1);
-	*pc = sget_op(state,inst);
+	*pc = sget_op(state,inst); // danger! can recursively invoke the recorder
+							   // if the trace is no longer active we bail out now
+	if(!state.tracing.is_tracing())
+		return RecordingStatus::UNSUPPORTED_OP;
+
 	Value & r = REG(state,inst.c);
 	if(r.isFuture()) {
-		add_output(state,Trace::Output::E_REG,inst.c,r);
+		add_output(state,Trace::Location::REG,inst.c,r);
 	}
-	TRACE.max_live_register = inst.c;
+	set_max_live_register(state,inst.c);
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -159,9 +170,9 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 	RESERVE(0,1);
 	Value & r = state.frame.environment->hassign(Symbol(inst.a), REG(state, inst.c));
 	if(r.isFuture()) {
-		add_output(state,Trace::Output::E_VAR,inst.a,r);
+		add_output(state,Trace::Location::VAR,inst.a,r);
 	}
-	TRACE.max_live_register = inst.c;
+	set_max_live_register(state,inst.c);
 	(*pc)++;
 	return RecordingStatus::NO_ERROR;
 }
@@ -171,9 +182,9 @@ RecordingStatus::Enum sassign_record(State & state, Instruction const & inst, In
 	Value & v = state.frame.environment->get(inst.a);
 	if(v.isFuture()) {
 		RESERVE(0,1);
-		add_output(state,Trace::Output::E_SLOT,inst.a,v);
+		add_output(state,Trace::Location::SLOT,inst.a,v);
 	}
-	TRACE.max_live_register = inst.c;
+	set_max_live_register(state,inst.c);
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -208,6 +219,7 @@ CHECKED_INTERPRET(iforbegin, C C_1)
 CHECKED_INTERPRET(iforend, C C_1)
 CHECKED_INTERPRET(seq, A)
 CHECKED_INTERPRET(UseMethod, A C)
+CHECKED_INTERPRET(call, A)
 #undef A
 #undef B
 #undef B_1
@@ -401,9 +413,21 @@ RecordingStatus::Enum type_record(State & state, Instruction const & inst, Instr
 	(*pc)++;
 	return RecordingStatus::NO_ERROR;
 }
+RecordingStatus::Enum ret_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	//danger: ret op writes a (potentially) future output somewhere
+	//but it doesn't go directly to a reg/slot/or variable so we can't record it here
+	//we need to either change the behavior of ret op so it can only writes to slots/reg/variables
+	//or ensure that we record the output somewhere else
 
-OP_NOT_IMPLEMENTED(ret)
-OP_NOT_IMPLEMENTED(done)
+	//currently we simply do not support returning from a function
+	//*pc = ret_op(state,inst);
+	return RecordingStatus::UNSUPPORTED_OP;
+
+}
+//not called, interpreter will exit beforehand
+RecordingStatus::Enum done_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	return RecordingStatus::NO_ERROR;
+}
 
 
 //check trace exit conditions
@@ -418,15 +442,10 @@ static RecordingStatus::Enum recording_check_conditions(State& state, Instructio
 	}
 	return RecordingStatus::NO_ERROR;
 }
-void recording_end(State & state, RecordingStatus::Enum status) {
-	state.tracing.end_tracing(state);
-}
 
-Instruction const * recording_interpret(State& state, Instruction const* pc, size_t length) {
+Instruction const * recording_interpret(State& state, Instruction const* pc) {
 	RecordingStatus::Enum status = RecordingStatus::NO_ERROR;
-	state.tracing.begin_tracing();
-	TRACE.length = length;
-	while(true) {
+	while( pc->bc != ByteCode::done) {
 #define RUN_RECORD(name,str,...) case ByteCode::name: { /*printf("rec " #name "\n");*/ status = name##_record(state, *pc,&pc); } break;
 		switch(pc->bc) {
 			BYTECODES(RUN_RECORD)
@@ -434,9 +453,9 @@ Instruction const * recording_interpret(State& state, Instruction const* pc, siz
 #undef RUN_RECORD
 		if(   RecordingStatus::NO_ERROR != status
 		   || RecordingStatus::NO_ERROR != (status = recording_check_conditions(state,pc))) {
-			recording_end(state,status);
+			state.tracing.end_tracing(state);
 			return pc;
 		}
 	}
-	return NULL;
+	return pc;
 }

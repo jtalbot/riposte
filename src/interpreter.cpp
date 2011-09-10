@@ -482,7 +482,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 	if(a.isDouble1()) { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d)); return &inst+1; } \
 	else if(a.isInteger1()) { Op<TDouble>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i)); return &inst+1; } \
 	if(isRecordable(a)) \
-		return recording_interpret(state, &inst, a.length); \
+		return state.tracing.begin_tracing(state, &inst, a.length); \
 	\
 	unaryArith<Zip1, Op>(state, a, c); \
 	return &inst+1; \
@@ -518,7 +518,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
         } \
 	\
 	if(isRecordable(a,b)) \
-		return recording_interpret(state, &inst, a.length);	\
+		return state.tracing.begin_tracing(state, &inst, a.length);	\
     \
 	binaryArithSlow<Zip2, Op>(state, a, b, c);	\
 	return &inst+1;	\
@@ -738,6 +738,8 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 //
 //__attribute__((__noinline__,__noclone__)) 
 void interpret(State& state, Instruction const* pc) {
+	if(state.tracing.is_tracing())
+		pc = recording_interpret(state,pc);
 #ifdef THREADED_INTERPRETER
     #define LABELS_THREADED(name,type) (void*)&&name##_label,
 	static const void* labels[] = {&&DONE, BYTECODES(LABELS_THREADED)};
