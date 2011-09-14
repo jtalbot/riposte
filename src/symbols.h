@@ -114,6 +114,7 @@
 	_(dotGeneric, 	".Generic") \
 	_(dotMethod, 	".Method") \
 	_(dotClass, 	".Class") \
+	_(docall,	"do.call") \
 
 DECLARE_ENUM(String, STRINGS)
 

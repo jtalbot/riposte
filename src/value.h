@@ -372,7 +372,6 @@ struct Object : public Value {
 	Container const& attributes() const { return ((Inner*)p)->attributes; }
 
 	static void Init(Value& v, Value const& _base) {
-		assert(_base.isList());
 		Value::Init(v, Type::Object, 0);
 		Inner* inner = new Inner();
 		inner->base = _base;

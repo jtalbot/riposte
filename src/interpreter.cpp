@@ -71,12 +71,18 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 	Character const& parameters = func.prototype()->parameters;
 	int64_t fdots = func.prototype()->dots;
 
+	// set defaults
+	for(int64_t i = 0; i < defaults.length; ++i) {
+		argAssign(fenv, i, defaults[i], fenv, parameters);
+	}
+
 	// call arguments are not named, do posititional matching
 	if(anames.length == 0) {
 		int64_t end = std::min(arguments.length, fdots);
 		for(int64_t i = 0; i < end; ++i) {
-			argAssign(fenv, i, arguments[i], env, parameters);
+			if(!arguments[i].isNil()) argAssign(fenv, i, arguments[i], env, parameters);
 		}
+
 		// set dots if necessary
 		if(fdots < parameters.length) {
 			int64_t idx = 1;
@@ -87,19 +93,14 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			}
 			end++;
 		}
-		// set defaults
-		for(int64_t i = end; i < defaults.length; ++i) {
-			argAssign(fenv, i, defaults[i], fenv, parameters);
-		}
-		
 	}
 	// call arguments are named, do matching by name
 	else {
 		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
 		static char assignment[64], set[64];
 		for(int64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
-		for(int64_t i = 0; i < defaults.length; i++) set[i] = -(i+1);
-		
+		for(int64_t i = 0; i < parameters.length; i++) set[i] = -(i+1);
+
 		// named args, search for complete matches
 		for(int64_t i = 0; i < arguments.length; ++i) {
 			if(anames[i] != Symbols::empty) {
@@ -118,7 +119,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 				std::string a = state.SymToStr(anames[i]);
 				for(int64_t j = 0; j < parameters.length; ++j) {
 					if(set[j] < 0 && j != fdots &&
-						state.SymToStr(parameters[j]).compare( 0, a.size(), a ) == 0 ) {	
+							state.SymToStr(parameters[j]).compare( 0, a.size(), a ) == 0 ) {	
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -139,11 +140,11 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 				}
 			}
 		}
-		
+
 		// stuff that can't be cached...
 
 		// assign all the arguments
-		for(int64_t j = 0; j < parameters.length; ++j) if(j != fdots) argAssign(fenv, j, set[j]>=0 ? arguments[set[j]] : defaults[-(set[j]+1)], env, parameters);
+		for(int64_t j = 0; j < parameters.length; ++j) if(j != fdots && set[j] >= 0 && !arguments[set[j]].isNil()) argAssign(fenv, j, arguments[set[j]], env, parameters);
 
 		// put unused args into the dots
 		if(fdots < parameters.length) {
@@ -178,11 +179,24 @@ static Instruction const * profile_back_edge(State & state, Instruction const * 
 
 Instruction const* call_op(State& state, Instruction const& inst) {
 	Value f = REG(state, inst.a);
-	CompiledCall const& call = state.frame.prototype->calls[inst.b];
-	List arguments = call.arguments;
-	Character names = call.names;
-	if(call.dots < arguments.length)
-		ExpandDots(state, arguments, names, call.dots);
+	List arguments;
+	Character names;
+	if(inst.b < 0) {
+		CompiledCall const& call = state.frame.prototype->calls[-(inst.b+1)];
+		arguments = call.arguments;
+		names = call.names;
+		if(call.dots < arguments.length)
+			ExpandDots(state, arguments, names, call.dots);
+	} else {
+		Value const& reg = REG(state, inst.b);
+		if(reg.isObject()) {
+			arguments = List(((Object const&)reg).base());
+			names = Character(((Object const&)reg).getNames());
+		}
+		else {
+			arguments = List(reg);
+		}
+	}
 
 	if(f.isFunction()) {
 		Function func(f);
@@ -657,7 +671,7 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 			Instruction const& inst = prototype->bc[i];
 			prototype->tbc.push_back(
 				Instruction(
-					inst.bc == ByteCode::done ? glabels[0] : glabels[inst.bc+1],
+					glabels[inst.bc],
 					inst.a, inst.b, inst.c));
 		}
 	}
@@ -676,16 +690,18 @@ void interpret(State& state, Instruction const* pc) {
 		pc = recording_interpret(state,pc);
 #ifdef THREADED_INTERPRETER
     #define LABELS_THREADED(name,type,...) (void*)&&name##_label,
-	static const void* labels[] = {&&DONE, BYTECODES(LABELS_THREADED)};
-	glabels = &labels[0];
-	if(pc == 0) return;
+	static const void* labels[] = {BYTECODES(LABELS_THREADED)};
+	if(pc == 0) { 
+		glabels = labels;
+		return;
+	}
 
 	goto *(pc->ibc);
 	#define LABELED_OP(name,type,...) \
 		name##_label: \
 			{ pc = name##_op(state, *pc); goto *(pc->ibc); } 
-	BYTECODES(LABELED_OP)
-	DONE: {}
+	STANDARD_BYTECODES(LABELED_OP)
+	done_label: {}
 #else
 	while(pc->bc != ByteCode::done) {
 		switch(pc->bc) {
@@ -714,7 +730,7 @@ Value eval(State& state, Prototype const* prototype) {
 
 Value eval(State& state, Prototype const* prototype, Environment* environment) {
 #ifdef THREADED_INTERPRETER
-	static const Instruction* done = new Instruction(glabels[0]);
+	static const Instruction* done = new Instruction(glabels[ByteCode::done]);
 #else
 	static const Instruction* done = new Instruction(ByteCode::done);
 #endif

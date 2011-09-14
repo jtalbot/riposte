@@ -108,7 +108,7 @@
 	_(type, "type") \
 
 #define SPECIAL_BYTECODES(_) 	\
-	_(done, "done")       /* done must be the last instruction */
+	_(done, "done") 
 
 #define MAP_BYTECODES(_) \
 	UNARY_ARITH_MAP_BYTECODES(_) \
@@ -127,13 +127,16 @@
 	ORDINAL_SCAN_BYTECODES(_) \
 	LOGICAL_SCAN_BYTECODES(_) \
 
-#define BYTECODES(_) \
+#define STANDARD_BYTECODES(_) \
 	CONTROL_FLOW_BYTECODES(_) \
 	MEMORY_ACCESS_BYTECODES(_) \
 	MAP_BYTECODES(_) \
 	FOLD_BYTECODES(_) \
 	SCAN_BYTECODES(_) \
 	UTILITY_BYTECODES(_) \
+
+#define BYTECODES(_) \
+	STANDARD_BYTECODES(_) \
 	SPECIAL_BYTECODES(_)	
 
 DECLARE_ENUM(ByteCode, BYTECODES)

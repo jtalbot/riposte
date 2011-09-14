@@ -128,7 +128,7 @@ int64_t Compiler::compileFunctionCall(List const& call, Character const& names, 
 	code->calls.push_back(makeCall(call, names));
 	scopes.back().deadAfter(liveIn);
 	int64_t result = scopes.back().allocRegister(Register::VARIABLE);
-	emit(code, ByteCode::call, function, code->calls.size()-1, result);
+	emit(code, ByteCode::call, function, -code->calls.size(), result);
 	return result;
 }
 
@@ -220,7 +220,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		scopes.back().deadAfter(reg);	
 		return reg;
 	} break;
-	case String::bb: {
+	case String::bb: 
+	case String::dollar: {
 		if(call.length != 3) return compileFunctionCall(call, names, code);
 		int64_t value = compile(call[1], code);
 		int64_t index = compile(call[2], code);
@@ -305,7 +306,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	} break;
 	case String::forSym: 
 	{
-		int64_t result = compile(Null::Singleton(), code);
 		// special case common i in m:n case
 		/*if(call[2].isCall() && Symbol(Call(call[2])[0]) == String::colon) {
 			int64_t lim1 = compile(Call(call[2])[1], code);
@@ -343,7 +343,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			emit(code, ByteCode::forend, beginbody-endbody, loop_counter , loop_variable);
 			code->bc[beginbody-1].a = endbody-beginbody+1;
 		//}
-		scopes.back().deadAfter(result);
+		scopes.back().deadAfter(liveIn);
+		int64_t result = compile(Null::Singleton(), code);
 		return result;
 	} break;
 	case String::whileSym: 
@@ -584,6 +585,15 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		scopes.back().deadAfter(liveIn);
 		int64_t result = scopes.back().allocRegister(Register::TEMP);
 		emit(code, ByteCode::seq, len, 0, result);
+		return result;
+	} break;
+	case String::docall:
+	{
+		int64_t what = compile(call[1], code);
+		int64_t args = compile(call[2], code);
+		scopes.back().deadAfter(liveIn);
+		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		emit(code, ByteCode::call, what, args, result);
 		return result;
 	} break;
 	default:

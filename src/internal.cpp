@@ -13,10 +13,12 @@ static void checkNumArgs(List const& args, int64_t nargs) {
 
 Value cat(State& state, List const& args, Character const& names) {
 	for(int64_t i = 0; i < args.length; i++) {
-		Character c = As<Character>(state, force(state, args[i]));
-		for(int64_t j = 0; j < c.length; j++) {
-			printf("%s", state.SymToStr(c[j]).c_str());
-			if(j < c.length-1) printf(" ");
+		if(!List::isNA(args[i])) {
+			Character c = As<Character>(state, force(state, args[i]));
+			for(int64_t j = 0; j < c.length; j++) {
+				printf("%s", state.SymToStr(c[j]).c_str());
+				if(j < c.length-1) printf(" ");
+			}
 		}
 	}
 	return Null::Singleton();
@@ -130,7 +132,13 @@ Type::Enum cTypeCast(Value const& v, Type::Enum t)
 Value list(State& state, List const& args, Character const& names) {
 	List out(args.length);
 	for(int64_t i = 0; i < args.length; i++) out[i] = force(state, args[i]);
-	return out;
+	if(names.length == 0) {
+		return out;
+	} else {
+		Value v;
+		Object::InitWithNames(v, out, names);
+		return v;
+	}
 }
 
 Value unlist(State& state, List const& args, Character const& names) {
@@ -204,7 +212,7 @@ struct SubsetExclude {
 		typename A::Element const* ae = a.v();
 		typename Integer::Element const* de = d.v();
 		int64_t length = d.length;
-		for(int64_t i = 0; i < length; i++) if(-de[i] > 0 && -de[i] < (int64_t)a.length) index.insert(-de[i]);
+		for(int64_t i = 0; i < length; i++) if(-de[i] > 0 && -de[i] <= (int64_t)a.length) index.insert(-de[i]);
 		// iterate through excluded elements copying intervening ranges.
 		A r(a.length-index.size());
 		typename A::Element* re = r.v();
@@ -261,7 +269,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 		else if(positive > 0) {
 			switch(a.type) {
 				case Type::Null: out = Null::Singleton(); break;
-#define CASE(Name,...) case Type::Name: SubsetInclude<Name>::eval(state, Name(a), index, positive, out); break;
+#define CASE(Name,...) case Type::Name: SubsetInclude<Name>::eval(state, (Name const&)a, index, positive, out); break;
 						 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
@@ -270,7 +278,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 		else if(negative > 0) {
 			switch(a.type) {
 				case Type::Null: out = Null::Singleton(); break;
-#define CASE(Name) case Type::Name: SubsetExclude<Name>::eval(state, Name(a), index, negative, out); break;
+#define CASE(Name) case Type::Name: SubsetExclude<Name>::eval(state, (Name const&)a, index, negative, out); break;
 						 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
@@ -290,7 +298,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 		Logical index = Logical(i);
 		switch(a.type) {
 			case Type::Null: out = Null::Singleton(); break;
-#define CASE(Name) case Type::Name: SubsetLogical<Name>::eval(state, Name(a), index, out); break;
+#define CASE(Name) case Type::Name: SubsetLogical<Name>::eval(state, (Name const&)a, index, out); break;
 					 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
@@ -301,69 +309,9 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 	}
 }
 
-Value subset(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 2);
-        Value a = force(state, args[0]);
-        Value i = force(state, args[1]);
-	Value v;
-	Subset(state, a, i, v);
-	return v;
-}
-
-Value subset2(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 2);
-        Value a = force(state, args[0]);
-        Value b = force(state, args[1]);
-	Value result;
-	if(b.isCharacter() && a.isObject() && ((Object const&)a).hasNames()) {
-		Symbol i = Character(b)[0];
-		Character c = Character(((Object const&)a).getNames());
-		
-		int64_t j = 0;
-		for(;j < c.length; j++) {
-			if(c[j] == i)
-				break;
-		}
-		if(j < c.length) {
-			Element2(a, j, result);
-		}
-	}
-	else if(b.isInteger()) {
-		Element2(a, Integer(b)[0]-1, result);
-	}
-	else if(b.isDouble()) {
-		Element2(a, (int64_t)Double(b)[0]-1, result);
-	}
-	else {
-		result = Null::Singleton();
-	}
-	return result;
-} 
-
-Value dollar(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 2);
-
-        Value a = force(state, args[0]);
-        int64_t i = Symbol(expression(args[1])).i;
-	if(a.isObject() && ((Object const&)a).hasNames()) {
-		Character c = Character(((Object const&)a).getNames());
-		int64_t j = 0;
-		for(;j < c.length; j++) {
-			if(c[j] == i)
-				break;
-		}
-		if(j < c.length) {
-			Value result;
-			Element2(a, j, result);
-			return result;
-		}
-	}
-	return Null::Singleton();
-} 
-
 template< class A  >
-struct SubsetAssignT {
-	static A eval(State& state, A const& a, Integer const& d, A const& b)
+struct SubsetAssignInclude {
+	static void eval(State& state, A const& a, Integer const& d, A const& b, Value& out)
 	{
 		typename A::Element const* be = b.v();
 		typename Integer::Element const* de = d.v();
@@ -384,24 +332,61 @@ struct SubsetAssignT {
 			if(idx != 0)
 				re[idx-1] = be[i];
 		}
-		return r;
+		out = r;
+	}
+};
+
+template< class A >
+struct SubsetAssignLogical {
+	static void eval(State& state, A const& a, Logical const& d, A const& b, Value& out)
+	{
+		typename A::Element const* be = b.v();
+		typename Logical::Element const* de = d.v();
+		
+		// determine length
+		int64_t length = std::max(a.length, d.length);
+		//A r = Clone(a);
+		A r = a;
+		typename A::Element* re = r.v();
+		int64_t j = 0, k = 0;
+		for(int64_t i = 0; i < length; i++) {
+			if(i >= a.length && !Logical::isTrue(de[j])) re[i] = A::NAelement;
+			else if(Logical::isTrue(de[j])) re[i] = be[k++];
+			if(++j >= d.length) j = 0;
+			if(k >= b.length) k = 0;
+		}
+		out = r;
 	}
 };
 
 void SubsetAssignSlow(State& state, Value const& a, Value const& i, Value const& b, Value& c) {
-	Integer idx = As<Integer>(state, i);
-	switch(a.type) {
-		#define CASE(Name) case Type::Name: c = SubsetAssignT<Name>::eval(state, (Name const&)a, idx, As<Name>(state, b)); break;
-		VECTOR_TYPES(CASE)
-		#undef CASE
-		default: _error("NYI: subset assign type"); break;
-	};
+	if(i.isDouble() || i.isInteger()) {
+		Integer idx = As<Integer>(state, i);
+		switch(a.type) {
+#define CASE(Name) case Type::Name: SubsetAssignInclude<Name>::eval(state, (Name const&)a, idx, As<Name>(state, b), c); break;
+			VECTOR_TYPES_NOT_NULL(CASE)
+#undef CASE
+			default: _error("NYI: subset assign type"); break;
+		};
+	}
+	else if(i.isLogical()) {
+		Logical index = Logical(i);
+		switch(a.type) {
+#define CASE(Name) case Type::Name: SubsetAssignLogical<Name>::eval(state, (Name const&)a, index, As<Name>(state, b), c); break;
+					 VECTOR_TYPES_NOT_NULL(CASE)
+#undef CASE
+			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
+		};	
+	}
+	else {
+		_error("NYI indexing type");
+	}
 }
 
 void Subset2AssignSlow(State& state, Value const& a, Value const& i, Value const& b, Value& c) {
 	Integer idx = As<Integer>(state, i);
 	switch(a.type) {
-		#define CASE(Name) case Type::Name: c = SubsetAssignT<Name>::eval(state, (Name const&)a, idx, As<Name>(state, b)); break;
+		#define CASE(Name) case Type::Name: SubsetAssignInclude<Name>::eval(state, (Name const&)a, idx, As<Name>(state, b), c); break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: subset assign type"); break;
@@ -798,10 +783,6 @@ void importCoreFunctions(State& state, Environment* env)
 	env->assign(state.StrToSym("unlist"), BuiltIn(unlist));
 	env->assign(state.StrToSym("length"), BuiltIn(length));
 	
-	env->assign(state.StrToSym("["), BuiltIn(subset));
-	env->assign(state.StrToSym("[["), BuiltIn(subset2));
-	env->assign(state.StrToSym("$"), BuiltIn(dollar));
-
 	env->assign(state.StrToSym("switch"), BuiltIn(switch_fn));
 
 	env->assign(state.StrToSym("eval"), BuiltIn(eval_fn));

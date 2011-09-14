@@ -119,7 +119,43 @@ fail <- 0
 	PassIfTrue(g(1,2,3) == 1)
 	PassIfTrue(h(1,2,3) == 100)
 	PassIfTrue(i(1,2,3) == 2)
+
+	cat("Missing parameters...\n")
+	f <- function(x=4,y=2) x/y
+	PassIfTrue(f() == 2)
+	PassIfTrue(f(8) == 4)
+	PassIfTrue(f(x=8) == 4)
+	PassIfTrue(f(y=1) == 4)
+	PassIfTrue(f(10,) == 5)
+	PassIfTrue(f(x=10,) == 5)
+	PassIfTrue(f(,1) == 4)
+	PassIfTrue(f(,y=1) == 4)
+	PassIfTrue(f(y=1,) == 4)
+	PassIfTrue(f(,x=10) == 5)
+	PassIfTrue(f(,) == 2)
 	
+	"done"
+}
+
+{
+	cat("Testing vector indexing operations\n------------------------\n")
+	a <- c(10,20,30)
+	PassIfTrue(a[1] == 10)
+	PassIfTrue(a[3] == 30)
+	PassIfTrue(a[[2]] == 20)
+	PassIfTrue(a[c(1,2)] == c(10,20))
+	PassIfTrue(a[c(3,3)] == c(30,30))
+	a <- c(1,2,3,4)
+	dim(a) <- c(2,2)
+	PassIfTrue(a[[1,1]] == 1)
+	PassIfTrue(a[[2,1]] == 2)
+	PassIfTrue(a[[1,2]] == 3)
+	PassIfTrue(a[[2,2]] == 4)
+	#PassIfTrue(a[1,1] == 1)
+	#PassIfTrue(a[2,1] == 2)
+	#PassIfTrue(a[1,2] == 3)
+	#PassIfTrue(a[1,] == c(1,3))
+	#PassIfTrue(a[,1] == c(1,2))
 	"done"
 }
 

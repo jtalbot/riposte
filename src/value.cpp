@@ -20,7 +20,7 @@ const std::complex<double> Complex::NAelement = std::complex<double>(doublena.d,
 
 const Symbol Character::NAelement = Symbols::NA;
 
-const Value List::NAelement = Null::Singleton();
+const Value List::NAelement = Value::Nil();
 
 uint64_t Environment::globalRevision = 1;
 
