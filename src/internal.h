@@ -11,7 +11,7 @@
 #include <algorithm>
 
 inline Value force(State& state, Value v) { 
-	while(v.isPromise()) {
+	if(v.isPromise()) {
 		Environment* env = Function(v).environment();
 		v = eval(state, Function(v).prototype(), 
 			env != 0 ? env : state.frame.environment); 

@@ -25,13 +25,13 @@ private:
 	};
 
 	struct Scope {
+		Environment* env;
 		bool topLevel;
 		std::vector<Register> registers;
 		int64_t maxRegister;
-		std::vector<Symbol> symbols;
-		Value parameters;
+		Character parameters;
 
-		Scope() : topLevel(false), maxRegister(-1) {}
+		Scope() : env(0), topLevel(false), maxRegister(-1) {}
 
 		int64_t live() const { return registers.size()-1; }
 		int64_t allocRegister(Register::Type type) { int64_t r = registers.size(); registers.push_back(Register(type)); maxRegister = maxRegister > r ? maxRegister : r; return r; }
@@ -58,17 +58,8 @@ private:
 	CompiledCall makeCall(List const& call, Character const& names);
 
 	void emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c);
-	int64_t getSlot(Symbol s);
 public:
 	static Prototype* compile(State& state, Value const& expr) {
-		Compiler compiler(state);
-		Scope scope;
-		scope.topLevel = true;
-		compiler.scopes.push_back(scope);
-		return compiler.compile(expr);
-	}
-	
-	static Prototype* compile(State& state, Value const& expr, Environment* env) {
 		Compiler compiler(state);
 		Scope scope;
 		scope.topLevel = true;

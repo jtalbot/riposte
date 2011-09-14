@@ -116,7 +116,7 @@ int dostdin(State& state) {
 			value = parsetty(state);
 			if(value.isNil()) continue;
 			//std::cout << "Parsed: " << value.toString() << std::endl;
-			Prototype* proto = Compiler::compile(state, value, state.global);
+			Prototype* proto = Compiler::compile(state, value);
 			//std::cout << "Compiled code: " << state.stringify(Closure(code,NULL)) << std::endl;
 			result = eval(state, proto, state.global);
 			std::cout << state.stringify(result) << std::endl;
@@ -160,7 +160,7 @@ static int dofile(const char * file, State& state, bool echo) {
 	if(value.isNil()) return -1;
 
 	try {
-		Prototype* proto = Compiler::compile(state, value, state.global);
+		Prototype* proto = Compiler::compile(state, value);
 		Value result = eval(state, proto, state.global);
 		if(echo)
 			std::cout << state.stringify(result) << std::endl;
@@ -243,9 +243,8 @@ main(int argc, char** argv)
 	CALLGRIND_START_INSTRUMENTATION
 #endif
 		/* Create riposte environment */
-		Environment* base = new Environment(0,0);
-	Environment* global = new Environment(base,0);
-	global->setDynamicParent(global);
+	Environment* base = new Environment(0);
+	Environment* global = new Environment(base);
 
 	State state(global, base);
 

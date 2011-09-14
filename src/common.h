@@ -135,5 +135,17 @@ static inline void print_time_elapsed (char const* prompt, timespec const& begin
 #endif
 }
 
+static inline uint64_t nextPow2(uint64_t i) {
+       i--;
+       i |= i >> 1;
+       i |= i >> 2;
+       i |= i >> 4;
+       i |= i >> 8;
+       i |= i >> 16;
+       i |= i >> 32;
+       i++;
+       return i;
+}
+
 
 #endif

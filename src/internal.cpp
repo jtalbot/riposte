@@ -526,9 +526,8 @@ Value parentframe(State& state, List const& args, Character const& names) {
 	checkNumArgs(args, 1);
 	int64_t i = (int64_t)asReal1(force(state, args[0]));
 	Environment* env = state.frame.environment;
-	while(i > 0 && env != env->DynamicParent()) {
-		env = env->DynamicParent();
-		i--;
+	if(i > 0) {
+		env = state.stack[std::max(0ULL, state.stack.size()-i)].environment;
 	}
 	return REnvironment(env);
 }

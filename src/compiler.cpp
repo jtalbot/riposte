@@ -74,23 +74,6 @@ static void resolveLoopReferences(Prototype* code, int64_t start, int64_t end, i
 	}
 }
 
-int64_t Compiler::getSlot(Symbol s) {
-	// check if destination is a reserved slot.
-	int64_t slot = -1;
-	if(!scopes.back().topLevel) {
-		for(uint64_t i = 0; i < scopes.back().symbols.size(); i++) {
-			if(scopes.back().symbols[i] == s) {
-				slot = i;
-			}
-		}
-		if(slot < 0 && scopes.back().symbols.size() < 32) {
-			scopes.back().symbols.push_back(s);
-			slot = scopes.back().symbols.size()-1;
-		}
-	}
-	return slot;
-}
-
 int64_t Compiler::compileConstant(Value const& expr, Prototype* code) {
 	code->constants.push_back(expr);
 	int64_t reg = scopes.back().allocRegister(Register::CONSTANT);
@@ -99,18 +82,10 @@ int64_t Compiler::compileConstant(Value const& expr, Prototype* code) {
 }
 
 int64_t Compiler::compileSymbol(Symbol const& symbol, Prototype* code) {
-	// search for symbol in variables list
-	if(!scopes.back().topLevel) {
-		for(uint64_t i = 0; i < scopes.back().symbols.size(); i++) {
-			if(scopes.back().symbols[i] == symbol) {
-				int64_t reg = scopes.back().allocRegister(Register::VARIABLE);
-				emit(code, ByteCode::sget, i, 0, reg);
-				return reg;
-			}
-		}
-	}
 	int64_t reg = scopes.back().allocRegister(Register::VARIABLE);
 	emit(code, ByteCode::get, symbol.i, 0, reg);
+	emit(code, ByteCode::assign, symbol.i, 0, reg);
+	emit(code, ByteCode::get, 0, 0, 0);
 	return reg;
 }
 
@@ -228,14 +203,11 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t source = compile(value, code);
 
 		assert(dest.isSymbol());
-		int64_t slot = getSlot(Symbol(dest));
 	
-		if(slot >= 0)
-			emit(code, ByteCode::sassign, slot, 0, source);
-		else
-			emit(code, ByteCode::assign, Symbol(dest).i, 0, source);
+		emit(code, ByteCode::assign, Symbol(dest).i, 0, source);
+		emit(code, ByteCode::assign, 0, 0, 0);
 	
-		scopes.back().deadAfter(source);	
+		scopes.back().deadAfter(source);
 		return source;
 	} break;
 	case String::bracket: {
@@ -283,38 +255,33 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		//compile the default parameters
 		assert(call[1].isObject());
 		List c = List(((Object const&)call[1]).base());
-		Character names = ((Object const&)call[1]).hasNames() ? 
+		Character parameters = ((Object const&)call[1]).hasNames() ? 
 			Character(((Object const&)call[1]).getNames()) :
 			Character(0);
 		
-		List parameters(c.length);
-		scope.parameters = names;
-		for(int64_t i = 0; i < parameters.length; i++) {
+		List defaults(c.length);
+		scope.parameters = parameters;
+		for(int64_t i = 0; i < defaults.length; i++) {
 			if(!c[i].isNil()) {
-				parameters[i] = Function(compile(c[i]),NULL).AsPromise();
+				defaults[i] = Function(compile(c[i]),NULL).AsPromise();
 			}
 			else {
-				parameters[i] = c[i];
+				defaults[i] = c[i];
 			}
-			scope.symbols.push_back(names[i]);
 		}
 
 		//compile the source for the body
 		scopes.push_back(scope);
 		Prototype* functionCode = compile(call[2]);
-		functionCode->slotSymbols.swap(scopes.back().symbols);
 		scopes.pop_back();
 
 		// Populate function info
 		functionCode->parameters = parameters;
-		functionCode->names = names;
+		functionCode->defaults = defaults;
 		functionCode->string = Symbol(call[3]);
-
 		functionCode->dots = parameters.length;
-		if(parameters.length > 0) {
-			for(int64_t i = 0;i < names.length; i++) 
-				if(names[i] == Symbols::dots) functionCode->dots = i;
-		}
+		for(int64_t i = 0; i < parameters.length; i++) 
+			if(parameters[i] == Symbols::dots) functionCode->dots = i;
 
 		code->prototypes.push_back(functionCode);
 		
@@ -360,15 +327,14 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			int64_t loop_vector = compile(call[2], code);
 			int64_t loop_counter = scopes.back().allocRegister(Register::VARIABLE);	// save space for loop counter
 			int64_t loop_variable = scopes.back().allocRegister(Register::VARIABLE);
-			int64_t slot = getSlot(Symbol(call[1]));
 			
 			if(loop_counter != loop_vector+1) throw CompileError("limits aren't in adjacent registers");
 			emit(code, ByteCode::forbegin, 0, loop_counter, loop_variable);
 			loopDepth++;
 			int64_t beginbody = code->bc.size();
 
-			if(slot >= 0) emit(code, ByteCode::sassign, slot, 0, loop_variable);
-			else emit(code, ByteCode::assign, Symbol(call[1]).i, 0, loop_variable); 	
+			emit(code, ByteCode::assign, Symbol(call[1]).i, 0, loop_variable);
+			emit(code, ByteCode::assign, 0, 0, loop_variable);
 			compile(call[3], code);
 
 			int64_t endbody = code->bc.size();
@@ -597,16 +563,18 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			throw CompileError("Attempt to use UseMethod outside of function");
 		
 		// This doesn't match R's behavior. R always uses the original value of the first argument, not the most recent value. Blah.
-		int64_t object = (call.length == 3) ? compile(call[2], code) : compile(scopes.back().symbols[0], code); 
-		
-		int64_t generic = compile(call[1], code);
+		int64_t object = (call.length == 3) 
+			? compile(call[2], code) : compile(scopes.back().parameters[0], code); 
+		if(!call[1].isCharacter1())
+			throw CompileError("First parameter to UseMethod must be a string");
+		Symbol generic = ((Character const&)call[1])[0];
 		
 		Character p(scopes.back().parameters);
 		List gcall(p.length+1);
 		for(int64_t i = 0; i < p.length; i++) gcall[i+1] = p[i];
 		code->calls.push_back(makeCall(gcall, Character(0)));
 	
-		emit(code, ByteCode::UseMethod, generic, code->calls.size()-1, object);
+		emit(code, ByteCode::UseMethod, generic.i, code->calls.size()-1, object);
 		scopes.back().deadAfter(object);
 		return object;
 	} break;

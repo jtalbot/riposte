@@ -34,8 +34,7 @@ void sourceFile(State& state, std::string name, Environment* env) {
 
 
 void loadLibrary(State& state, std::string library_name) {
-	Environment* env = new Environment(state.path.back(), 0);
-	env->setDynamicParent(env);
+	Environment* env = new Environment(state.path.back());
 	
 	std::string path = std::string("library/")+library_name+("/R/");
 
@@ -55,6 +54,5 @@ void loadLibrary(State& state, std::string library_name) {
 	}
 
 	state.path.push_back(env);
-	std::vector<Symbol> s;
-	state.global->init(state.path.back(), state.global, s);
+	state.global->init(state.path.back());
 }

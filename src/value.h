@@ -84,7 +84,7 @@ class State;
 struct Symbol {
 	int64_t i;
 
-	Symbol() : i(1) {} // Defaults to the empty symbol...
+	Symbol() : i(String::NA) {}
 	explicit Symbol(int64_t index) : i(index) {}
 
 	explicit Symbol(Value const& v) : i(v.i) {
@@ -461,13 +461,12 @@ struct Prototype : public gc {
 	Value expression;
 	Symbol string;
 
-	List parameters;
-	Character names;
-	
-	std::vector<Symbol> slotSymbols;
-	int dots;
-	int registers;
+	Character parameters;
+	List defaults;
 
+	int dots;
+
+	int registers;
 	std::vector<Value, traceable_allocator<Value> > constants;
 	std::vector<Prototype*, traceable_allocator<Prototype*> > prototypes; 	
 	std::vector<CompiledCall, traceable_allocator<CompiledCall> > calls; 
@@ -498,127 +497,134 @@ struct Prototype : public gc {
 
 class Environment : public gc {
 private:
-	typedef std::map<int64_t, Value, std::less<int64_t>, traceable_allocator<std::pair<Symbol, Value> > > Map;
+	static const uint64_t inlineSize = 16;
 
-	Value slots[32];
-	Symbol slotNames[32];		// rather than duplicating, this could be a pointer?
-	Environment* staticParent, * dynamicParent;
-	unsigned char slotCount;
-	Map overflow;
+	Environment* staticParent;
+	struct NamedValue { Symbol n; Value v; };
+	NamedValue* values;
+	NamedValue inlineValues[inlineSize];
+	uint64_t size, load, live;
+
+	uint64_t revision;
+	static uint64_t globalRevision;
+	
+	// empty slots have a Name = Symbols::NA
+	// deleted slots have a non-NA name and a Nil value
+	bool initHash(uint64_t s) {
+		s = nextPow2(s);
+		if(s > size) {		// should rehash on shrinking sometimes, when?
+			size = s;
+			values = new (GC) NamedValue[size];
+			clear();
+			return true;
+		}
+		return false;
+	}
+
+	// for now, do linear probing
+	// this returns the location of the Symbol s (or where it was stored before being deleted).
+	// or, if s doesn't exist, the location at which s should be inserted.
+	uint64_t find(Symbol s) const {
+		int64_t i = s.i & (size-1);	// hash this?
+		while(values[i].n != s && values[i].n != Symbols::NA) {
+			i = (i+1) & (size-1);
+		}
+		return i; 
+	}
+	
+	void rehash(uint64_t s) {
+		uint64_t old_size = size;
+		NamedValue* old_values = values;
+		if(!initHash(s)) return;		// if it didn't have to reallocate, just return
+		// otherwise, copy over previous non-deleted values...
+		for(uint64_t i = 0; i < old_size; i++) {
+			if(old_values[i].n != Symbols::NA && !old_values[i].v.isNil()) {
+				values[find(old_values[i].n)] = old_values[i];
+				load++; live++; 
+			}
+		}
+	}
+
+	void clear() {
+		for(uint64_t i = 0; i < size; i++) values[i].n = Symbols::NA;
+		load = 0;
+		live = 0;
+		revision = ++globalRevision;
+	}
 
 public:
+	std::vector<Symbol> dots;
+
+	Environment(Environment* staticParent=0) : 
+			staticParent(staticParent),
+			values(inlineValues), size(inlineSize), 
+			load(0), live(0), revision(++globalRevision) {
+		for(uint64_t i = 0; i < size; i++) 
+			values[i].n = Symbols::NA;
+	}
+
+	void init(Environment* s) {
+		staticParent = s;
+		clear();
+		dots.clear();
+	}
 	
-	Environment(Environment* staticParent,
-		    Environment* dynamicParent) : 
-			staticParent(staticParent), 
-			dynamicParent(dynamicParent), 
-			slotCount(0) {}
-
-	Environment(Environment* staticParent, Environment* dynamicParent, std::vector<Symbol> const& slots) : 
-		staticParent(dynamicParent),
-		dynamicParent(dynamicParent) {
-		slotCount = slots.size();
-		for(unsigned char i = 0; i < slotCount; i++)
-			slotNames[i] = slots[i];
-	}
-
- 	void init(Environment* staticParent, Environment* dynamicParent, std::vector<Symbol> const& slots) {
-		this->staticParent = staticParent;
-		this->dynamicParent = dynamicParent;
-		slotCount = slots.size();
-		for(unsigned char i = 0; i < slotCount; i++)
-			slotNames[i] = slots[i];
-		overflow.clear();
-	}
-
 	Environment* StaticParent() const { return staticParent; }
-	Environment* DynamicParent() const { return dynamicParent; }
 
-	void setDynamicParent(Environment* env) {
-		dynamicParent = env;
+	Value const& get(Symbol const& name) const {
+		uint64_t i = find(name);
+		if(values[i].n != Symbols::NA) return values[i].v;
+		else return Value::Nil();
 	}
 
-	Value& get(int64_t i) {
-		assert(i < slotCount);
-		return slots[i];
-	}
-	Symbol slotName(int64_t i) { return slotNames[i]; }
-	int SlotCount() const { return slotCount; }
-
-	int numVariables() const { return slotCount + overflow.size(); }
-
-	Value const& get(Symbol const& name) const { 
-		for(uint64_t i = 0; i < slotCount; i++) {
-			if(slotNames[i] == name) {
-				return slots[i];
-			}
-		}
-		Map::const_iterator i = overflow.find(name.i);
-		if(i != overflow.end()) {
-			return i->second;
-		} else {
-			return Value::Nil();
-		}
-	}
-
-	Value const& hget(Symbol const& name) const { 
-		Map::const_iterator i = overflow.find(name.i);
-		if(i != overflow.end()) {
-			return i->second;
-		} else {
-			return Value::Nil();
-		}
-	}
-
-	Value& getLocation(Symbol const& name) {
-		for(uint64_t i = 0; i < slotCount; i++) {
-			if(slotNames[i] == name) {
-				return slots[i];
-			}
-		}
-		Map::iterator i = overflow.find(name.i);
-		if(i != overflow.end()) {
-			return i->second;
-		} else {
-			throw RiposteError("variable not found in getLocation");
-		}
-	}
-
-	Value getQuoted(Symbol const& name) const {
-		Value value = get(name);
-		if(value.isPromise()) {
-			value = Function(value).prototype()->expression;
-		}
-		return value;
-	}
-
-	Function getCode(Symbol const& name) const {
-		Value value = get(name);
-		return Function(value);
-	}
-
-	Value & hassign(Symbol const& name, Value const& value) {
-		return overflow[name.i] = value;
-	}
-
-	void assign(Symbol const& name, Value const& value) {
-		for(uint64_t i = 0; i < slotCount; i++) {
-			if(slotNames[i] == name) {
-				slots[i] = value;
-				return;
-			}
-		}
-		overflow[name.i] = value;
+	// for makePointer to work, assign must create an entry even when value.isNil()
+	uint64_t assign(Symbol const& name, Value const& value) {
+		uint64_t i = find(name);
+		if(values[i].n == Symbols::NA) { load++; live++; }
+		if(value.isNil()) { live--; }
+		if((load * 2) > size) rehash(size * 2);
+		i = find(name);
+		values[i] = (NamedValue) { name, value };
+		return i;
 	}
 
 	void rm(Symbol const& name) {
-		for(uint64_t i = 0; i < slotCount; i++) {
-			if(slotNames[i] == name) {
-				slots[i] = Value::Nil();
-				return;
-			}
-		}
-		overflow.erase(name.i);
+		assign(name, Value::Nil());
+	}
+
+	// Pointers are for Inline Caching
+	struct Pointer {
+		Environment* env;
+		Symbol name;
+		uint64_t revision;
+		uint64_t index;
+	};
+
+	// making a pointer creates a location for the value if it doesn't already exist...
+	Pointer makePointer(Symbol name) {
+		uint64_t i = find(name);
+		if(values[i].n == Symbols::NA) i = assign(name, Value::Nil());
+		return (Pointer) { this, name, revision, i };
+	}
+
+	Value const& get(Pointer const& p) {
+		if(p.revision == revision) return values[p.index].v;
+		else return get(p.name);
+	}
+
+	void assign(Pointer const& p, Value const& value) {
+		if(p.revision == revision) values[p.index].v = value;
+		else assign(p.name, value);
+	}
+
+	bool validRevision(uint64_t i) { return i >= revision; }
+	
+	Value const& get(uint64_t index) const {
+		return values[index].v;
+	}
+
+	void assign(uint64_t index, Value const& value) {
+		values[index].v = value;
 	}
 };
 
@@ -676,8 +682,9 @@ struct State {
 		return Symbol(strings.in(s));
 	}
 
-	std::string const& SymToStr(Symbol s) const {
-		return strings.out(s.i);
+	std::string SymToStr(Symbol s) const {
+		if(s.i < 0) return std::string("..") + intToStr(-s.i);
+		else return strings.out(s.i);
 	}
 };
 

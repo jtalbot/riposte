@@ -30,7 +30,7 @@ static const Value & get_output_value(State & state, const Trace::Output & o) {
 		return state.frame.environment->get(o.location);
 	default:
 	case Trace::Output::E_VAR:
-		return state.frame.environment->hget(Symbol(o.location));
+		return state.frame.environment->get(Symbol(o.location));
 	}
 }
 static void set_output_value(State & state, const Trace::Output & o, const Value & v) {
@@ -39,10 +39,10 @@ static void set_output_value(State & state, const Trace::Output & o, const Value
 		REG(state,o.location) = v;
 		return;
 	case Trace::Output::E_SLOT:
-		state.frame.environment->get(o.location) = v;
+		state.frame.environment->assign(o.location, v);
 		return;
 	case Trace::Output::E_VAR:
-		state.frame.environment->hassign(Symbol(o.location),v);
+		state.frame.environment->assign(Symbol(o.location),v);
 		return;
 	}
 }

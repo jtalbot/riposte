@@ -136,7 +136,7 @@ RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instru
 	return RecordingStatus::NO_ERROR;
 }
 
-RecordingStatus::Enum sget_record(State & state, Instruction const & inst, Instruction const ** pc) {
+/*RecordingStatus::Enum sget_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	RESERVE(0,1);
 	*pc = sget_op(state,inst);
 	Value & r = REG(state,inst.c);
@@ -145,7 +145,7 @@ RecordingStatus::Enum sget_record(State & state, Instruction const & inst, Instr
 	}
 	TRACE.max_live_register = inst.c;
 	return RecordingStatus::NO_ERROR;
-}
+}*/
 
 RecordingStatus::Enum kget_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = kget_op(state,inst);
@@ -157,7 +157,8 @@ OP_NOT_IMPLEMENTED(iget)
 
 RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	RESERVE(0,1);
-	Value & r = state.frame.environment->hassign(Symbol(inst.a), REG(state, inst.c));
+	state.frame.environment->assign(Symbol(inst.a), REG(state, inst.c));
+	Value& r = REG(state, inst.c); // This is wrong!
 	if(r.isFuture()) {
 		add_output(state,Trace::Output::E_VAR,inst.a,r);
 	}
@@ -165,7 +166,7 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 	(*pc)++;
 	return RecordingStatus::NO_ERROR;
 }
-
+/*
 RecordingStatus::Enum sassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = sassign_op(state,inst);
 	Value & v = state.frame.environment->get(inst.a);
@@ -176,7 +177,7 @@ RecordingStatus::Enum sassign_record(State & state, Instruction const & inst, In
 	TRACE.max_live_register = inst.c;
 	return RecordingStatus::NO_ERROR;
 }
-
+*/
 
 #define CHECK_REG(r) (REG(state,r).isFuture())
 //temporary defines to generate code for checked interpret
@@ -204,8 +205,8 @@ CHECKED_INTERPRET(subset2, A B C)
 CHECKED_INTERPRET(colon, A B C)
 CHECKED_INTERPRET(forbegin, B_1)
 CHECKED_INTERPRET(forend, B_1)
-CHECKED_INTERPRET(iforbegin, C C_1)
-CHECKED_INTERPRET(iforend, C C_1)
+//CHECKED_INTERPRET(iforbegin, C C_1)
+//CHECKED_INTERPRET(iforend, C C_1)
 CHECKED_INTERPRET(seq, A)
 CHECKED_INTERPRET(UseMethod, A C)
 #undef A

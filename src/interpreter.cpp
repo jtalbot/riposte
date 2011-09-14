@@ -10,6 +10,7 @@
 #include "internal.h"
 #include "interpreter.h"
 #include "recording.h"
+#include "compiler.h"
 
 #define ALWAYS_INLINE __attribute__((always_inline))
 
@@ -17,144 +18,78 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 
 #ifndef __ICC
 extern Instruction const* kget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* sget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* get_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* assign_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* forend_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* add_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 #endif
 
-inline void forcePromise(State& state, Value& v) { 
-	while(v.isPromise()) {
-		Environment* env = Function(v).environment();
-		v = eval(state, Function(v).prototype(), 
-			env != 0 ? env : state.frame.environment); 
-	}
-}
-
-// Get a Value by Symbol from the current environment
-static Value get(State& state, Symbol s) {
-	Environment* environment = state.frame.environment;
-	Value value = environment->get(s);
-	while(value.isNil() && environment->StaticParent() != 0) {
-		environment = environment->StaticParent();
-		value = environment->get(s);
-	}
-	if(value.isPromise()) {
-		forcePromise(state, value);
-		environment->assign(s, value);
-	}
-	return value;
-}
-
-// Get a Value by slot from the current environment
-static Value& sget(State& state, int64_t i) {
-	Value& value = state.frame.environment->get(i);
-	if(value.isPromise()) forcePromise(state, value);
-	return value;
-}
-
-static void assign(Environment* env, Symbol s, Value const& v) {
-	env->assign(s, v);
-}
-
-static void sassign(Environment* env, int64_t i, Value const& v) {
-	env->get(i) = v;
-}
-
-static void assign(State& state, Symbol s, Value const& v) {
-	assign(state.frame.environment, s, v);
-}
-
-static void sassign(State& state, int64_t i, Value const& v) {
-	sassign(state.frame.environment, i, v);
-}
-
 #define REG(state, i) (*(state.base+i))
 
-Value & interpreter_reg(State & state, int64_t i) { return REG(state,i); }
-Value interpreter_get(State & state, Symbol s) { return get(state,s); }
-Value interpreter_sget(State & state, int64_t i) { return sget(state,i); }
-void interpreter_assign(State & state, Symbol s, Value v) { assign(state,s,v); }
-void interpreter_sassign(State & state, int64_t s, Value v) { sassign(state,s,v); }
-
-static Value const& constant(State& state, int64_t i) {
-	return state.frame.prototype->constants[i];
-}
-
 static void ExpandDots(State& state, List& arguments, Character& names, int64_t dots) {
+	Environment* environment = state.frame.environment;
+	uint64_t dotslength = environment->dots.size();
 	// Expand dots into the parameter list...
-	// If it's in the dots it must already be a promise, thus no need to make a promise again.
-	// Need to do the same for the names...
 	if(dots < arguments.length) {
+		List a(arguments.length + dotslength - 1);
+		for(int64_t i = 0; i < dots; i++) a[i] = arguments[i];
+		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(state, Symbol(-(i-dots+1))), NULL).AsPromise(); } // TODO: should cache these.
+		for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) a[i] = arguments[i-dotslength];
 
-		Value vararg = get(state, Symbols::dots);
-		Character vnames(0);
-		if(vararg.isObject()) {
-			vnames = Character(((Object const&)vararg).getNames());
-			vararg = ((Object const&)vararg).base();
-		}
+		arguments = a;
+		
+		uint64_t named = 0;
+		for(uint64_t i = 0; i < dotslength; i++) if(environment->dots[i] != Symbols::empty) named++;
 
-		if(!vararg.isNil()) {
-			List expanded(arguments.length + vararg.length - 1 /* -1 for dots that will be replaced */);
-			Insert(state, arguments, 0, expanded, 0, dots);
-			Insert(state, vararg, 0, expanded, dots, vararg.length);
-			Insert(state, arguments, dots, expanded, dots+vararg.length, arguments.length-dots-1);
-			arguments = expanded;
-			if(names.length > 0 || vnames.length > 0) {
-				Character enames(expanded.length);
-				for(int64_t i = 0; i < names.length; i++) enames[i] = Symbols::empty;
-
-				if(names.length > 0) {
-					Insert(state, names, 0, enames, 0, dots);
-					Insert(state, names, dots, enames, dots+vararg.length, arguments.length-dots-1);
-				}
-				if(vnames.length > 0) {
-					Insert(state, vnames, 0, names, dots, vararg.length);
-				}
-				names = enames;
+		if(names.length > 0 || named > 0) {
+			Character n(arguments.length + dotslength - 1);
+			for(int64_t i = 0; i < n.length; i++) n[i] = Symbols::empty;
+			if(names.length > 0) {
+				for(int64_t i = 0; i < dots; i++) n[i] = names[i];
+				for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) n[i] = names[i-dotslength];
 			}
-
+			if(named > 0) {
+				for(uint64_t i = dots; i < dots+dotslength; i++) n[i] = environment->dots[i]; 
+			}
+			names = n;
 		}
 	}
 }
 
-inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* execution) {
-	Value& slot = env->get(i);
-	slot = v;
-	if(v.isPromise() && slot.p == 0)
-		slot.p = execution;
+inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* execution, Character const& parameters) {
+	Value w = v;
+	if(w.isPromise() && w.p == 0) w.p = execution;
+	if(i >= 0)
+		env->assign(parameters[i], w);
+	else {
+		env->assign(Symbol(i), w);
+	}
 }
 
 static void MatchArgs(State& state, Environment* env, Environment* fenv, Function const& func, List const& arguments, Character const& anames) {
-	List const& parameters = func.prototype()->parameters;
-	Character const& pnames = func.prototype()->names;
+	List const& defaults = func.prototype()->defaults;
+	Character const& parameters = func.prototype()->parameters;
 	int64_t fdots = func.prototype()->dots;
-
-	// Set to nil slots beyond the parameters
-	for(int64_t i = parameters.length; i < fenv->SlotCount(); i++) {
-		sassign(fenv, i, Value::Nil());
-	}
 
 	// call arguments are not named, do posititional matching
 	if(anames.length == 0) {
 		int64_t end = std::min(arguments.length, fdots);
 		for(int64_t i = 0; i < end; ++i) {
-			argAssign(fenv, i, arguments[i], env);
+			argAssign(fenv, i, arguments[i], env, parameters);
 		}
 		// set dots if necessary
-		if(fdots < parameters.length && arguments.length-fdots > 0) {
-			List dots(arguments.length - fdots);
-			for(int64_t i = 0; i < arguments.length-fdots; i++) {
-				dots[i] = arguments[i+fdots];
-				if(dots[i].isPromise() && dots[i].p == 0)
-					dots[i].p = env;
+		if(fdots < parameters.length) {
+			int64_t idx = 1;
+			for(int64_t i = fdots; i < arguments.length; i++) {
+				argAssign(fenv, -idx, arguments[i], env, parameters);
+				fenv->dots.push_back(Symbols::empty);
+				idx++;
 			}
-			sassign(fenv, fdots, dots);
 			end++;
 		}
 		// set defaults
-		for(int64_t i = end; i < parameters.length; ++i) {
-			argAssign(fenv, i, parameters[i], fenv);
+		for(int64_t i = end; i < defaults.length; ++i) {
+			argAssign(fenv, i, defaults[i], fenv, parameters);
 		}
 		
 	}
@@ -163,13 +98,13 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
 		static char assignment[64], set[64];
 		for(int64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
-		for(int64_t i = 0; i < parameters.length; i++) set[i] = -(i+1);
+		for(int64_t i = 0; i < defaults.length; i++) set[i] = -(i+1);
 		
 		// named args, search for complete matches
 		for(int64_t i = 0; i < arguments.length; ++i) {
 			if(anames[i] != Symbols::empty) {
 				for(int64_t j = 0; j < parameters.length; ++j) {
-					if(pnames[j] != Symbols::dots && anames[i] == pnames[j]) {
+					if(j != fdots && anames[i] == parameters[j]) {
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -182,8 +117,8 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			if(anames[i] != Symbols::empty && assignment[i] < 0) {
 				std::string a = state.SymToStr(anames[i]);
 				for(int64_t j = 0; j < parameters.length; ++j) {
-					if(set[j] < 0 && pnames[j] != Symbols::dots &&
-						state.SymToStr(pnames[j]).compare( 0, a.size(), a ) == 0 ) {	
+					if(set[j] < 0 && j != fdots &&
+						state.SymToStr(parameters[j]).compare( 0, a.size(), a ) == 0 ) {	
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -205,49 +140,33 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			}
 		}
 		
-		// count up unused parameters and assign names
-		Character names(0); 
-		int64_t unassigned = 0;
-		if(fdots < parameters.length) {
-			// count up the unassigned args
-			for(int64_t j = 0; j < arguments.length; j++) if(assignment[j] < 0) unassigned++;
-			names = Character(unassigned);
-			int64_t idx = 0;
-			for(int64_t j = 0; j < arguments.length; j++) if(assignment[j] < 0) names[idx++] = anames[j];
-		}
-
 		// stuff that can't be cached...
 
 		// assign all the arguments
-		for(int64_t j = 0; j < parameters.length; ++j) if(j != fdots) argAssign(fenv, j, set[j]>=0 ? arguments[set[j]] : parameters[-(set[j]+1)], env);
+		for(int64_t j = 0; j < parameters.length; ++j) if(j != fdots) argAssign(fenv, j, set[j]>=0 ? arguments[set[j]] : defaults[-(set[j]+1)], env, parameters);
 
 		// put unused args into the dots
 		if(fdots < parameters.length) {
-			List values(unassigned);
-			int64_t idx = 0;
-			for(int64_t j = 0; j < arguments.length; j++) {
-				if(assignment[j] < 0) {
-					values[idx] = arguments[j];
-					if(values[idx].isPromise() && values[idx].p == 0)
-						values[idx].p = env;
+			int64_t idx = 1;
+			for(int64_t i = 0; i < arguments.length; i++) {
+				if(assignment[i] < 0) {
+					argAssign(fenv, -idx, arguments[i], env, parameters);
+					fenv->dots.push_back(anames[i]);
 					idx++;
 				}
 			}
-			Value v;
-			Object::InitWithNames(v, values, names);
-			sassign(fenv, fdots, v);
 		}
 	}
 }
 
-static Environment* CreateEnvironment(State& state, Environment* s, Environment* d, std::vector<Symbol> const& symbols) {
+static Environment* CreateEnvironment(State& state, Environment* s) {
 	Environment* env;
 	if(state.environments.size() == 0) {
-		env = new Environment(s, d, symbols);
+		env = new Environment(s);
 	} else {
 		env = state.environments.back();
 		state.environments.pop_back();
-		env->init(s, d, symbols);
+		env->init(s);
 	}
 	return env;
 }
@@ -267,7 +186,7 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 
 	if(f.isFunction()) {
 		Function func(f);
-		Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, func.prototype()->slotSymbols);
+		Environment* fenv = CreateEnvironment(state, func.environment());
 		MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
 		return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
 	} else if(f.isBuiltIn()) {
@@ -278,9 +197,25 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 		return &inst+1;
 	}	
 }
+
+// Get a Value by Symbol from the current environment,
+//  TODO: UseMethod also should search in some cached library locations.
+static Value UseMethodSearch(State& state, Symbol s) {
+	Environment* environment = state.frame.environment;
+	Value value = environment->get(s);
+	while(value.isNil() && environment->StaticParent() != 0) {
+		environment = environment->StaticParent();
+		value = environment->get(s);
+	}
+	if(value.isPromise()) {
+		value = force(state, value);
+		environment->assign(s, value);
+	}
+	return value;
+}
+
 Instruction const* UseMethod_op(State& state, Instruction const& inst) {
-	Value v = REG(state, inst.a);
-	Symbol generic = v.isCharacter() ? Character(v)[0] : Symbol(v);
+	Symbol generic(inst.a);
 	
 	CompiledCall const& call = state.frame.prototype->calls[inst.b];
 	List arguments = call.arguments;
@@ -293,21 +228,21 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 
 	//Search for type-specific method
 	Symbol method = state.StrToSym(state.SymToStr(generic) + "." + state.SymToStr(type[0]));
-	Value f = get(state, method);
+	Value f = UseMethodSearch(state, method);
 	
 	//Search for default
 	if(f.isNil()) {
 		method = state.StrToSym(state.SymToStr(generic) + ".default");
-		f = get(state, method);
+		f = UseMethodSearch(state, method);
 	}
 
 	if(f.isFunction()) {
 		Function func(f);
-		Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, func.prototype()->slotSymbols);
-		MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
-		assign(fenv, Symbols::dotGeneric, generic);
-		assign(fenv, Symbols::dotMethod, method);
-		assign(fenv, Symbols::dotClass, type); 
+		Environment* fenv = CreateEnvironment(state, func.environment());
+		MatchArgs(state, state.frame.environment, fenv, func, arguments, names);	
+		fenv->assign(Symbols::dotGeneric, generic);
+		fenv->assign(Symbols::dotMethod, method);
+		fenv->assign(Symbols::dotClass, type); 
 		return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
 	} else if(f.isBuiltIn()) {
 		REG(state, inst.c) = BuiltIn(f).func(state, arguments, names);
@@ -316,58 +251,53 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 		_error(std::string("no applicable method for '") + state.SymToStr(generic) + "' applied to an object of class \"" + state.SymToStr(type[0]) + "\"");
 	}
 }
-Instruction const* get_op(State& state, Instruction const& inst) {
-	Symbol s(inst.a);
-	Value const& src = state.frame.environment->hget(s);
-	if(__builtin_expect(src.isConcrete(), true)) {
-		REG(state, inst.c) = src;
-		return &inst+1;
-	}
-	else {
-		Value& dest = REG(state, inst.c);
-		dest = src;
-		Environment* environment = state.frame.environment;
-		while(dest.isNil() && environment->StaticParent() != 0) {
-			environment = environment->StaticParent();
-			dest = environment->get(s);
-		}
-		if(dest.isPromise()) {
-			forcePromise(state, dest);
-			environment->assign(s, dest);
-		}
-		else if(dest.isNil()) 
-			throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
-		return &inst+1;
-	}
-}
 
-Instruction const* sget_op(State& state, Instruction const& inst) {
-	Value const& src = state.frame.environment->get(inst.a);
-	if(__builtin_expect(src.isConcrete(), true)) {
+Instruction const* get_op(State& state, Instruction const& inst) {
+	// gets are always generated as a sequence of 3 instructions...
+	//	1) the get with source symbol in a and dest register in c.
+	//	2) an assign with dest symbol in a and source register in c.
+	//		(for use by the promise evaluation. If no promise, step over this instruction.)
+	//	3) an invalid instruction containing inline caching info.	
+
+	// check if we can get the value through inline caching...
+	bool ic = state.frame.environment->validRevision((&inst+2)->b);
+	Value const& src = ic ?
+		state.frame.environment->get((&inst+2)->a) :
+		state.frame.environment->get(Symbol(inst.a));
+	if(__builtin_expect(ic && src.isConcrete(), true)) {
 		REG(state, inst.c) = src;
-		return &inst+1;
-	}
-	else {
+		return &inst+3;
+	} 
+	if(src.isConcrete()) {
+		Environment::Pointer p = state.frame.environment->makePointer(Symbol(inst.a));
+		((Instruction*)(&inst+2))->a = p.index;
+		((Instruction*)(&inst+2))->b = p.revision;
+		REG(state, inst.c) = src;
+		return &inst+3;
+	} else {
+		Symbol s(inst.a);
 		Value& dest = REG(state, inst.c);
 		dest = src;
 		Environment* environment = state.frame.environment;
-		Symbol s(state.frame.environment->slotName(inst.a));
 		while(dest.isNil() && environment->StaticParent() != 0) {
 			environment = environment->StaticParent();
 			dest = environment->get(s);
 		}
 		if(dest.isPromise()) {
-			forcePromise(state, dest);
-			environment->assign(s, dest);
+			Environment* env = Function(dest).environment();
+			if(env == 0) env = state.frame.environment;
+			Prototype* prototype = Function(dest).prototype();
+			return buildStackFrame(state, env, false, prototype, &dest, &inst+1);
 		}
 		else if(dest.isNil()) 
 			throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
-		return &inst+1;
+		else
+			return &inst+3;
 	}
 }
 
 Instruction const* kget_op(State& state, Instruction const& inst) {
-	REG(state, inst.c) = constant(state, inst.a);
+	REG(state, inst.c) = state.frame.prototype->constants[inst.a];
 	return &inst+1;
 }
 Instruction const* iget_op(State& state, Instruction const& inst) {
@@ -376,12 +306,16 @@ Instruction const* iget_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* assign_op(State& state, Instruction const& inst) {
-	state.frame.environment->hassign(Symbol(inst.a), REG(state, inst.c));
-	return &inst+1;
-}
-Instruction const* sassign_op(State& state, Instruction const& inst) {
-	sassign(state, inst.a, REG(state, inst.c));
-	return &inst+1;
+	// check if we can assign through inline caching
+	if(state.frame.environment->validRevision((&inst+1)->b))
+		state.frame.environment->assign((&inst+1)->a, REG(state, inst.c));
+	else {
+		state.frame.environment->assign(Symbol(inst.a), REG(state, inst.c));
+		Environment::Pointer p = state.frame.environment->makePointer(Symbol(inst.a));
+		((Instruction*)(&inst+1))->a = p.index;
+		((Instruction*)(&inst+1))->b = p.revision;
+	}
+	return &inst+2;
 }
 // everything else should be in registers
 
@@ -418,7 +352,7 @@ Instruction const* forend_op(State& state, Instruction const& inst) {
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;
 }
-Instruction const* iforbegin_op(State& state, Instruction const& inst) {
+/*Instruction const* iforbegin_op(State& state, Instruction const& inst) {
 	double m = asReal1(REG(state, inst.c-1));
 	double n = asReal1(REG(state, inst.c));
 	REG(state, inst.c-1) = Integer::c(n > m ? 1 : -1);
@@ -435,7 +369,7 @@ Instruction const* iforend_op(State& state, Instruction const& inst) {
 		REG(state, inst.c).i += REG(state, inst.c-1).i;
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;
-}
+}*/
 Instruction const* jt_op(State& state, Instruction const& inst) {
 	Logical l = As<Logical>(state, REG(state,inst.b));
 	if(l.length == 0) _error("condition is of zero length");
@@ -696,7 +630,7 @@ static void printCode(State const& state, Prototype const* prototype) {
 
 	std::cout << r << std::endl;
 }
-//#define THREADED_INTERPRETER
+#define THREADED_INTERPRETER
 
 #ifdef THREADED_INTERPRETER
 static const void** glabels = 0;
@@ -739,7 +673,7 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 //__attribute__((__noinline__,__noclone__)) 
 void interpret(State& state, Instruction const* pc) {
 #ifdef THREADED_INTERPRETER
-    #define LABELS_THREADED(name,type) (void*)&&name##_label,
+    #define LABELS_THREADED(name,type,...) (void*)&&name##_label,
 	static const void* labels[] = {&&DONE, BYTECODES(LABELS_THREADED)};
 	glabels = &labels[0];
 	if(pc == 0) return;
@@ -777,22 +711,30 @@ Value eval(State& state, Prototype const* prototype) {
 }
 
 Value eval(State& state, Prototype const* prototype, Environment* environment) {
-	Value result;
 #ifdef THREADED_INTERPRETER
 	static const Instruction* done = new Instruction(glabels[0]);
 #else
 	static const Instruction* done = new Instruction(ByteCode::done);
 #endif
-	Value* old_base = state.base;
 	int64_t stackSize = state.stack.size();
-	Instruction const* run = buildStackFrame(state, environment, false, prototype, &result, done);
+	// Build a half-hearted stack frame for the result. Necessary for the trace recorder.
+	StackFrame& s = state.push();
+	s.environment = 0;
+	s.prototype = 0;
+	s.returnbase = state.base;
+	state.base -= 1;
+	Value* result = state.base;
+	
+	Instruction const* run = buildStackFrame(state, environment, false, prototype, result, done);
 	try {
 		interpret(state, run);
+		state.base = s.returnbase;
+		state.pop();
 	} catch(...) {
-		state.base = old_base;
+		state.base = s.returnbase;
 		state.stack.resize(stackSize);
 		throw;
 	}
-	return result;
+	return *result;
 }
 

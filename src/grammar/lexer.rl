@@ -53,11 +53,13 @@
 		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.StrToSym(unescape(s))) );};
 
 	# Symbols.
+	( '..' digit+ )
+		{std::string s(ts+2, te-ts-2); token( TOKEN_SYMBOL, Symbol(-strToInt(s)));};
+
 	( (('.' [a-zA-Z_.]) | [a-zA-Z_]) [a-zA-Z0-9_.]* ) 
 		{token( TOKEN_SYMBOL, Symbol(state.StrToSym(std::string(ts, te-ts))) );};
 	( '`' ( [^`\\\n] | /\\./ )* '`' ) 
 		{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, Symbol(state.StrToSym(unescape(s))) );};
-
 	# Numeric literals.
 	( float exponent? ) 
 		{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );};

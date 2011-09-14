@@ -14,16 +14,12 @@
 	_(ret, "ret") \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
-	_(iforbegin, "iforbegin") \
-	_(iforend, "iforend") \
 
 #define MEMORY_ACCESS_BYTECODES(_) \
 	_(get, "get") \
-	_(sget, "sget") \
 	_(kget, "kget") \
 	_(iget, "iget") \
 	_(assign, "assign") \
-	_(sassign, "sassign") \
 	_(iassign, "iassign") \
 	_(eassign, "eassign") \
 	_(subset, "subset") \

@@ -159,7 +159,7 @@ std::string stringify(State const& state, Value const& value, Value const& names
 		}
 		case Type::Environment:
 		{
-			return std::string("environment <") + intToHexStr((uint64_t)REnvironment(value).ptr()) + "> (" + intToStr(REnvironment(value).ptr()->numVariables()) + " symbols defined)";
+			return std::string("environment <") + intToHexStr((uint64_t)REnvironment(value).ptr());// + "> (" + intToStr(REnvironment(value).ptr()->numVariables()) + " symbols defined)";
 		}
 		case Type::Object:
 		{

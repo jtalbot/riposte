@@ -87,7 +87,7 @@ fail <- 0
 
 {
 	cat("Testing parameter passing rules\n------------------------\n")
-	f <- function(x)
+	f <- function(x) x
 	a <- 1
 	PassIfTrue(f(1) == 1)
 	PassIfTrue(f(a) == 1)
@@ -154,6 +154,7 @@ f <- function(x,y) x+y
 	z <- 10
 	f <- function(x, y) {z <- 0; rm(z); x+z}
 	PassIfTrue(f(4,5) == 14)
+	PassIfTrue(is.null(c()))
 }
 
 

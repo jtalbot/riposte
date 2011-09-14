@@ -297,8 +297,10 @@ void unaryOrdinal(State& state, Value const& a, Value& c) {
 		Double::InitScalar(c, Op<TDouble>::base());
 		_warning(state, "no non-missing arguments to min; returning Inf");
 	}
-	else
+	else {
+		printf("1: %s\n", Type::toString(a.type));
 		_error("non-ordinal argument to ordinal operator");
+	}
 }
 
 template< template<class Op> class Lift, template<typename T> class Op > 
@@ -376,8 +378,10 @@ void binaryOrdinal(State& state, Value const& a, Value const& b, Value& c) {
 		Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), As<Integer>(state, b),c );
 	else if(a.isCharacter() && b.isCharacter())
 		Lift< Op<TCharacter> >::eval(state, Character(a), Character(b), c);
-	else
+	else {
+		printf("2: %s\n", Type::toString(a.type));
 		_error("non-ordinal argument to ordinal operator");
+	}
 }
 
 // Figure out the output...
