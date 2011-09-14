@@ -2,15 +2,15 @@
 UNAME := $(shell uname -s)
  
 CXX := g++
-CXXFLAGS := -Wall
+CXXFLAGS := -Wall -DRIPOSTE_DISABLE_TRACING
 LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
 
-ENABLE_TRACING=0
+ENABLE_ARBB=0
 ARBB_HOME=/opt/intel/arbb/1.0.0.018
 ARBB_EXISTS=$(shell test -d $(ARBB_HOME); echo $$?)
 
-ifeq ($(ENABLE_TRACING),0)
-	CXXFLAGS += -I/opt/local/include -DRIPOSTE_DISABLE_TRACING
+ifeq ($(ENABLE_ARBB),0)
+	CXXFLAGS += -I/opt/local/include
 else
 	LFLAGS += -L$(ARBB_HOME)/lib/intel64 -larbb -ltbb
 	CXXFLAGS += -I$(ARBB_HOME)/include

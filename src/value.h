@@ -66,7 +66,7 @@ struct Value {
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isList(); }
-	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isSymbol() || (isList() && length==0); }
+	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isComplex() || isCharacter() || isSymbol() || (isList() && length==0); }
 	bool isConcrete() const { return type != Type::Promise; }
 
 	template<class T> T& scalar() { throw "not allowed"; }
