@@ -40,6 +40,12 @@ inline void Element(Value const& v, int64_t index, Value& out) {
 	};
 }
 
+void Element2(Value const& v, int64_t index, Value& out) __attribute__((always_inline));
+
+inline void Element2Slow(Object const& v, int64_t index, Value& out) {
+	Element2(v.base(), index, out); 
+}
+
 inline void Element2(Value const& v, int64_t index, Value& out) {
 	switch(v.type) {
 		#define CASE(Name) case Type::Name: \
@@ -57,7 +63,7 @@ inline void Element2(Value const& v, int64_t index, Value& out) {
 			out = ((List const&)v)[index]; 
 			break;
 		case Type::Object: 
-			Element2(((Object const&)v).base(), index, out); 
+			Element2Slow(((Object const&)v), index, out); 
 			break;
 		default: _error("NYI: Element of this type"); break;
 	};

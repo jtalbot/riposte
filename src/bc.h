@@ -143,16 +143,11 @@ DECLARE_ENUM(ByteCode, BYTECODES)
 
 struct Instruction {
 	int64_t a, b, c;
-	union {
-		ByteCode::Enum bc;
-		void const* ibc;
-	};
+	ByteCode::Enum bc;
+	mutable void const* ibc;
 
 	Instruction(ByteCode::Enum bc, int64_t a=0, int64_t b=0, int64_t c=0) :
-		a(a), b(b), c(c), bc(bc) {}
-	
-	Instruction(void const* ibc, int64_t a=0, int64_t b=0, int64_t c=0) :
-		a(a), b(b), c(c), ibc(ibc) {}
+		a(a), b(b), c(c), bc(bc), ibc(0) {}
 	
 	std::string toString() const {
 		return std::string("") + ByteCode::toString(bc) + "\t" + intToStr(a) + "\t" + intToStr(b) + "\t" + intToStr(c);

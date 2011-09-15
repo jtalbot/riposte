@@ -12,6 +12,7 @@
 #include "recording.h"
 #include "compiler.h"
 
+#define USE_THREADED_INTERPRETER
 #define ALWAYS_INLINE __attribute__((always_inline))
 
 static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc);
@@ -644,9 +645,8 @@ static void printCode(State const& state, Prototype const* prototype) {
 
 	std::cout << r << std::endl;
 }
-//#define THREADED_INTERPRETER
 
-#ifdef THREADED_INTERPRETER
+#ifdef USE_THREADED_INTERPRETER
 static const void** glabels = 0;
 #endif
 
@@ -663,22 +663,17 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 	if(state.base < state.registers)
 		throw RiposteError("Register overflow");
 
-#ifdef THREADED_INTERPRETER
+#ifdef USE_THREADED_INTERPRETER
 	// Initialize threaded bytecode if not yet done 
-	if(prototype->tbc.size() == 0)
+	if(prototype->bc[0].ibc == 0)
 	{
 		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); ++i) {
 			Instruction const& inst = prototype->bc[i];
-			prototype->tbc.push_back(
-				Instruction(
-					glabels[inst.bc],
-					inst.a, inst.b, inst.c));
+			inst.ibc = glabels[inst.bc];
 		}
 	}
-	return &(prototype->tbc[0]);
-#else
-	return &(prototype->bc[0]);
 #endif
+	return &(prototype->bc[0]);
 }
 
 //
@@ -687,7 +682,7 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 //__attribute__((__noinline__,__noclone__)) 
 void interpret(State& state, Instruction const* pc) {
 
-#ifdef THREADED_INTERPRETER
+#ifdef USE_THREADED_INTERPRETER
     #define LABELS_THREADED(name,type,...) (void*)&&name##_label,
 	static const void* labels[] = {BYTECODES(LABELS_THREADED)};
 	if(pc == 0) { 
@@ -714,7 +709,7 @@ void interpret(State& state, Instruction const* pc) {
 
 // ensure glabels is inited before we need it.
 void interpreter_init(State& state) {
-#ifdef THREADED_INTERPRETER
+#ifdef USE_THREADED_INTERPRETER
 	interpret(state, 0);
 #endif
 }
@@ -728,10 +723,9 @@ Value eval(State& state, Prototype const* prototype) {
 }
 
 Value eval(State& state, Prototype const* prototype, Environment* environment) {
-#ifdef THREADED_INTERPRETER
-	static const Instruction* done = new Instruction(glabels[ByteCode::done]);
-#else
 	static const Instruction* done = new Instruction(ByteCode::done);
+#ifdef USE_THREADED_INTERPRETER
+	done->ibc = glabels[ByteCode::done];
 #endif
 	int64_t stackSize = state.stack.size();
 	// Build a half-hearted stack frame for the result. Necessary for the trace recorder.
