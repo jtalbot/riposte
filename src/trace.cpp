@@ -1,4 +1,3 @@
-#include "trace.h"
 #include "interpreter.h"
 #include "vector.h"
 #include "ops.h"
@@ -143,6 +142,11 @@ void Trace::execute(State & state) {
 		IRNode & n = nodes[i - 1];
 		if(!n.r_external) { //outputs do not get assigned registers, we use the memory previous allocated for them to hold intermediates
 			//handle the def of node n by freeing allocated register
+
+			if(n.r.p == NULL) { //a register was never allocated for this node because this def has no uses.  This means that this op is dead code.
+				              // currently we just allocate a register for it, but we can also just replace it with a nop once the interpreter supports nops.
+				n.r.p = registers[Allocator_allocate(&free_reg)];
+			}
 			int reg = (n.r.p - registers[0]) / TRACE_VECTOR_WIDTH;
 			Allocator_free(&free_reg,reg);
 		}
