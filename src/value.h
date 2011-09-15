@@ -20,7 +20,10 @@
 #include "enum.h"
 #include "symbols.h"
 #include "exceptions.h"
-#include "trace.h"
+
+
+#include "ir.h"
+#include "recording.h"
 
 struct Value {
 	
@@ -635,6 +638,82 @@ struct StackFrame {
 	Instruction const* returnpc;
 	Value* returnbase;
 	Value* result;
+};
+
+#define TRACE_MAX_NODES (128)
+#define TRACE_MAX_OUTPUTS (128)
+#define TRACE_MAX_VECTOR_REGISTERS (32)
+#define TRACE_VECTOR_WIDTH (64)
+//maximum number of instructions to record before dropping out of the
+//recording interpreter
+#define TRACE_MAX_RECORDED (1024)
+
+struct Trace {
+	double registers [TRACE_MAX_VECTOR_REGISTERS][TRACE_VECTOR_WIDTH] __attribute__ ((aligned (16))); //for sse alignment
+
+	IRNode nodes[TRACE_MAX_NODES] ;
+	size_t n_nodes;
+	size_t n_recorded;
+
+	int64_t length;
+
+	struct Location {
+		enum Type {REG, VAR};
+		Type type;
+		Environment::Pointer pointer; //fat pointer to environment location
+		//if type == REG, pointer.env points to the base pointer
+		//and pointer.index is its offset
+		//this should go into a union but Environment::Pointer can't go in a union since Symbol has a constructor...
+	};
+	struct Output {
+		Location location; //location where an output might exist
+		                   //if that location is live and contains a future then that is a live output
+		IRef ref; //(used only to enable pretty printing) value of the output in the trace code,
+	};
+
+	Output outputs[TRACE_MAX_OUTPUTS];
+	size_t n_outputs;
+	Value * max_live_register_base;
+	int64_t max_live_register;
+
+	void reset();
+	void execute(State & state);
+	std::string toString(State & state);
+};
+
+//member of State, manages information for all traces
+//and the currently recording trace (if any)
+
+struct TraceState {
+	TraceState() {
+		active = false;
+		enabled = true;
+		verbose = false;
+	}
+
+	bool enabled;
+	bool verbose;
+	bool active;
+
+	Trace current_trace;
+
+
+	bool is_tracing() const { return active; }
+
+	Instruction const * begin_tracing(State & state, Instruction const * inst, size_t length) {
+		current_trace.reset();
+		current_trace.length = length;
+		active = true;
+		return recording_interpret(state,inst);
+
+	}
+
+	void end_tracing(State & state) {
+		if(active) {
+			active = false;
+			current_trace.execute(state);
+		}
+	}
 };
 
 #define DEFAULT_NUM_REGISTERS 10000

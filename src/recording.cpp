@@ -27,14 +27,16 @@ static RecordingStatus::Enum reserve(State & state, size_t num_nodes, size_t num
 		return RecordingStatus::NO_ERROR;
 }
 
-static void add_output(State & state, Trace::Location::Type location_type, int64_t id, Value & v) {
+static void add_reg_output(State & state, int64_t id) {
 	Trace::Output & out = TRACE.outputs[TRACE.n_outputs++];
-	out.location.type = location_type;
-	out.location.id = id;
-	if(location_type == Trace::Location::REG)
-		out.location.base = state.base;
-	else
-		out.location.environment = state.frame.environment;
+	out.location.type = Trace::Location::REG;
+	out.location.pointer.env = (Environment*) state.base;
+	out.location.pointer.index = id;
+}
+static void add_var_output(State & state, const Environment::Pointer & p) {
+	Trace::Output & out = TRACE.outputs[TRACE.n_outputs++];
+	out.location.type = Trace::Location::VAR;
+	out.location.pointer = p;
 }
 
 static void set_max_live_register(State & state, int64_t r) {
@@ -106,7 +108,7 @@ void emitir(State & state, IROpCode::Enum opcode,
 	//TODO: replace binary OR with a function that calculates output types from input types
 	Value & v = REG(state,r);
 	Future::Init(v, ret_type,TRACE.n_nodes++);
-	add_output(state,Trace::Location::REG,r,v);
+	add_reg_output(state,r);
 	set_max_live_register(state,r);
 }
 
@@ -130,33 +132,16 @@ RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instr
 
 RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	RESERVE(0,1);
-	*pc = get_op(state,inst); // danger! can recursively invoke the recorder
-	                          // if the trace is no longer active we bail out now
-	if(!state.tracing.is_tracing())
-		return RecordingStatus::UNSUPPORTED_OP;
 
+	*pc = get_op(state,inst);
 	Value & r = REG(state,inst.c);
+
 	if(r.isFuture()) {
-		add_output(state,Trace::Location::REG,inst.c,r);
+		add_reg_output(state,inst.c);
 	}
 	set_max_live_register(state,inst.c);
 	return RecordingStatus::NO_ERROR;
 }
-
-/*RecordingStatus::Enum sget_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	RESERVE(0,1);
-	*pc = sget_op(state,inst); // danger! can recursively invoke the recorder
-							   // if the trace is no longer active we bail out now
-	if(!state.tracing.is_tracing())
-		return RecordingStatus::UNSUPPORTED_OP;
-
-	Value & r = REG(state,inst.c);
-	if(r.isFuture()) {
-		add_output(state,Trace::Location::REG,inst.c,r);
-	}
-	set_max_live_register(state,inst.c);
-	return RecordingStatus::NO_ERROR;
-}*/
 
 RecordingStatus::Enum kget_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	*pc = kget_op(state,inst);
@@ -168,27 +153,19 @@ OP_NOT_IMPLEMENTED(iget)
 
 RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	RESERVE(0,1);
-	state.frame.environment->assign(Symbol(inst.a), REG(state, inst.c));
-	Value& r = REG(state, inst.c); // This is wrong!
+	*pc = assign_op(state,inst);
+	Value& r = REG(state, inst.c);
 	if(r.isFuture()) {
-		add_output(state,Trace::Location::VAR,inst.a,r);
-	}
-	set_max_live_register(state,inst.c);
-	(*pc)++;
-	return RecordingStatus::NO_ERROR;
-}
-/*
-RecordingStatus::Enum sassign_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	*pc = sassign_op(state,inst);
-	Value & v = state.frame.environment->get(inst.a);
-	if(v.isFuture()) {
-		RESERVE(0,1);
-		add_output(state,Trace::Location::SLOT,inst.a,v);
+		//Note: this call to makePointer is redundant:
+		//if the variable is cached then we could construct the Pointer from the cache
+		//otherwise the inline cache is updated, which involves creating a pointer
+
+		//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
+		add_var_output(state,state.frame.environment->makePointer(Symbol(inst.a)));
 	}
 	set_max_live_register(state,inst.c);
 	return RecordingStatus::NO_ERROR;
 }
-*/
 
 #define CHECK_REG(r) (REG(state,r).isFuture())
 //temporary defines to generate code for checked interpret
@@ -216,8 +193,6 @@ CHECKED_INTERPRET(subset2, A B C)
 CHECKED_INTERPRET(colon, A B C)
 CHECKED_INTERPRET(forbegin, B_1)
 CHECKED_INTERPRET(forend, B_1)
-//CHECKED_INTERPRET(iforbegin, C C_1)
-//CHECKED_INTERPRET(iforend, C C_1)
 CHECKED_INTERPRET(seq, A)
 CHECKED_INTERPRET(UseMethod, A C)
 CHECKED_INTERPRET(call, A)
@@ -415,19 +390,23 @@ RecordingStatus::Enum type_record(State & state, Instruction const & inst, Instr
 	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus::Enum ret_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	//danger: ret op writes a (potentially) future output somewhere
-	//but it doesn't go directly to a reg/slot/or variable so we can't record it here
-	//we need to either change the behavior of ret op so it can only writes to slots/reg/variables
-	//or ensure that we record the output somewhere else
+	//ret writes a value into a register of the caller's frame. If this value is a future we need to
+	//record it as a potential output location
+	Value * result = state.frame.result;
+	int64_t offset = result - state.frame.returnbase;
+	int64_t max_live = state.frame.returnbase - state.base;
+	*pc = ret_op(state,inst); //warning: ret_op will change 'frame'
 
-	//currently we simply do not support returning from a function
-	//*pc = ret_op(state,inst);
-	return RecordingStatus::UNSUPPORTED_OP;
+	if(result->isFuture())
+		add_reg_output(state,offset);
+	set_max_live_register(state,max_live);
 
-}
-//not called, interpreter will exit beforehand
-RecordingStatus::Enum done_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	return RecordingStatus::NO_ERROR;
+}
+
+//done forces the trace to flush to ensure that there are no futures when the interpreter exits
+RecordingStatus::Enum done_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	return RecordingStatus::UNSUPPORTED_OP;
 }
 
 
@@ -446,8 +425,8 @@ static RecordingStatus::Enum recording_check_conditions(State& state, Instructio
 
 Instruction const * recording_interpret(State& state, Instruction const* pc) {
 	RecordingStatus::Enum status = RecordingStatus::NO_ERROR;
-	while( pc->bc != ByteCode::done) {
-#define RUN_RECORD(name,str,...) case ByteCode::name: { /*printf("rec " #name "\n");*/ status = name##_record(state, *pc,&pc); } break;
+	while( true ) {
+#define RUN_RECORD(name,str,...) case ByteCode::name: {  /* printf("rec " #name "\n"); */ status = name##_record(state, *pc,&pc); } break;
 		switch(pc->bc) {
 			BYTECODES(RUN_RECORD)
 		}

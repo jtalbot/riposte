@@ -9,10 +9,6 @@
 
 BYTECODES(DECLARE_INTERPRETER_FNS)
 
-/*Value & interpreter_reg(State & state, int64_t i);
-Value interpreter_get(State & state, Symbol s);
-Value interpreter_sget(State & state, int64_t i);
-void interpreter_assign(State & state, Symbol s, Value v);
-void interpreter_sassign(State & state, int64_t s, Value v);
-*/
+Instruction const* get_with_environment(State& state, Instruction const& inst, Environment ** env_p);
+
 #endif

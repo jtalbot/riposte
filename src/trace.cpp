@@ -24,13 +24,11 @@ std::string Trace::toString(State & state) {
 		Output & o = outputs[i];
 		switch(o.location.type) {
 		case Trace::Location::REG:
-			out << "r" << o.location.id; break;
-		case Trace::Location::SLOT:
-			out << "s" << o.location.id; break;
+			out << "r" << o.location.pointer.index; break;
 		case Trace::Location::VAR:
-			out << "v" << o.location.id; break;
+			out << "v" << o.location.pointer.name.i; break;
 		}
-		out << "(" << o.location.environment << ") = n" << o.ref << "\n";
+		out << " = n" << o.ref << "\n";
 	}
 	return out.str();
 }
@@ -40,33 +38,28 @@ std::string Trace::toString(State & state) {
 static const Value & get_location_value(State & state, const Trace::Location & l) {
 	switch(l.type) {
 	case Trace::Location::REG:
-		return l.base[l.id];
-	case Trace::Location::SLOT:
-		return l.environment->get(l.id);
+		return ( (Value*) l.pointer.env)[l.pointer.index];
 	default:
 	case Trace::Location::VAR:
-		return l.environment->get(Symbol(l.id));
+		return l.pointer.env->get(l.pointer);
 	}
 }
 static void set_location_value(State & state, const Trace::Location & l, const Value & v) {
 	switch(l.type) {
 	case Trace::Location::REG:
-		l.base[l.id] = v;
-		return;
-	case Trace::Location::SLOT:
-		l.environment->assign(l.id, v);
+		((Value*)l.pointer.env)[l.pointer.index] = v;
 		return;
 	case Trace::Location::VAR:
-		l.environment->assign(Symbol(l.id),v);
+		l.pointer.env->assign(l.pointer,v);
 		return;
 	}
 }
 
 static bool is_location_dead(Trace & trace, const Trace::Location & l) {
 	return l.type == Trace::Location::REG &&
-	( l.base < trace.max_live_register_base ||
-	  ( l.base == trace.max_live_register_base &&
-	    l.id > trace.max_live_register
+	( ((Value*)l.pointer.env) < trace.max_live_register_base ||
+	  ( ((Value*)l.pointer.env) == trace.max_live_register_base &&
+	    (int64_t) l.pointer.index > trace.max_live_register
 	  )
 	);
 }
@@ -136,7 +129,8 @@ void Trace::execute(State & state) {
 		}
 	}
 
-	//printf("executing trace:\n%s\n",toString(state).c_str());
+	if(state.tracing.verbose)
+		printf("executing trace:\n%s\n",toString(state).c_str());
 
 	//register allocate
 	//we got backward through the trace so we see all uses before the def

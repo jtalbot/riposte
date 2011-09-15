@@ -429,7 +429,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 	Value & c = REG(state, inst.c);	\
 	if(a.isDouble1()) { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d)); return &inst+1; } \
 	else if(a.isInteger1()) { Op<TDouble>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i)); return &inst+1; } \
-	if(isRecordable(a)) \
+	if(state.tracing.enabled && isRecordable(a)) \
 		return state.tracing.begin_tracing(state, &inst, a.length); \
 	\
 	unaryArith<Zip1, Op>(state, a, c); \
@@ -465,7 +465,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
                         { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return &inst+1;} \
         } \
 	\
-	if(isRecordable(a,b)) \
+	if(state.tracing.enabled && isRecordable(a,b)) \
 		return state.tracing.begin_tracing(state, &inst, a.length);	\
     \
 	binaryArithSlow<Zip2, Op>(state, a, b, c);	\
@@ -644,7 +644,7 @@ static void printCode(State const& state, Prototype const* prototype) {
 
 	std::cout << r << std::endl;
 }
-#define THREADED_INTERPRETER
+//#define THREADED_INTERPRETER
 
 #ifdef THREADED_INTERPRETER
 static const void** glabels = 0;
@@ -686,8 +686,7 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 //
 //__attribute__((__noinline__,__noclone__)) 
 void interpret(State& state, Instruction const* pc) {
-	if(state.tracing.is_tracing())
-		pc = recording_interpret(state,pc);
+
 #ifdef THREADED_INTERPRETER
     #define LABELS_THREADED(name,type,...) (void*)&&name##_label,
 	static const void* labels[] = {BYTECODES(LABELS_THREADED)};

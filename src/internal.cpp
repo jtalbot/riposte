@@ -512,7 +512,7 @@ Value parentframe(State& state, List const& args, Character const& names) {
 	int64_t i = (int64_t)asReal1(force(state, args[0]));
 	Environment* env = state.frame.environment;
 	if(i > 0) {
-		env = state.stack[std::max(0ULL, state.stack.size()-i)].environment;
+		env = state.stack[std::max(0ULL, (unsigned long long) state.stack.size()-i)].environment;
 	}
 	return REnvironment(env);
 }
@@ -749,6 +749,17 @@ Value systemtime(State& state, List const& args, Character const& names) {
 	return Double::c((e-s)/(1000000.0));
 }
 
+Value traceconfig(State & state, List const& args, Character const& names) {
+	checkNumArgs(args,2);
+	Logical e = As<Logical>(state, force(state,args[0]));
+	if(e.length == 0) _error("condition is of zero length");
+	Logical v = As<Logical>(state, force(state,args[1]));
+	if(v.length == 0) _error("condition is of zero length");
+	state.tracing.enabled = e[0];
+	state.tracing.verbose = v[0];
+	return Null::Singleton();
+}
+
 void importCoreFunctions(State& state, Environment* env)
 {
 	env->assign(state.StrToSym("max"), BuiltIn(max_fn));
@@ -809,5 +820,6 @@ void importCoreFunctions(State& state, Environment* env)
 	env->assign(state.StrToSym("exists"), BuiltIn(exists));
 
 	env->assign(state.StrToSym("system.time"), BuiltIn(systemtime));
+	env->assign(state.StrToSym("trace.config"), BuiltIn(traceconfig));
 }
 
