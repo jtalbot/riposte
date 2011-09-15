@@ -579,22 +579,27 @@ public:
 		else return Value::Nil();
 	}
 
-	// for makePointer to work, assign must create an entry even when value.isNil()
 	uint64_t assign(Symbol const& name, Value const& value) {
+		if(value.isNil()) { return -1; }
 		uint64_t i = find(name);
 		if(values[i].n == Symbols::NA) { load++; live++; }
-		if(value.isNil()) { live--; }
-		if((load * 2) > size) rehash(size * 2);
-		i = find(name);
+		if((load * 2) > size) {
+			rehash(size * 2);
+			i = find(name);
+		}
 		values[i] = (NamedValue) { name, value };
 		return i;
 	}
 
 	void rm(Symbol const& name) {
-		assign(name, Value::Nil());
+		uint64_t i = find(name);
+		if(values[i].n != Symbols::NA) {
+			live--;
+			values[i].v = Value::Nil();
+			revision = ++globalRevision;
+		}
 	}
 
-	// Pointers are for Inline Caching
 	struct Pointer {
 		Environment* env;
 		Symbol name;
@@ -602,10 +607,10 @@ public:
 		uint64_t index;
 	};
 
-	// making a pointer creates a location for the value if it doesn't already exist...
+	// making a pointer only works if the entry already exists 
 	Pointer makePointer(Symbol name) {
 		uint64_t i = find(name);
-		if(values[i].n == Symbols::NA) i = assign(name, Value::Nil());
+		if(values[i].n == Symbols::NA) _error("Making pointer to non-existant variable"); 
 		return (Pointer) { this, name, revision, i };
 	}
 

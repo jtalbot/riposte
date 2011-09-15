@@ -273,16 +273,15 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 	//	2) an assign with dest symbol in a and source register in c.
 	//		(for use by the promise evaluation. If no promise, step over this instruction.)
 	//	3) an invalid instruction containing inline caching info.	
-
+	
 	// check if we can get the value through inline caching...
 	bool ic = state.frame.environment->validRevision((&inst+2)->b);
-	Value const& src = ic ?
-		state.frame.environment->get((&inst+2)->a) :
-		state.frame.environment->get(Symbol(inst.a));
-	if(__builtin_expect(ic && src.isConcrete(), true)) {
-		REG(state, inst.c) = src;
+	if(__builtin_expect(ic, true)) {
+		REG(state, inst.c) = state.frame.environment->get((&inst+2)->a);
 		return &inst+3;
 	} 
+	
+	Value const& src = state.frame.environment->get(Symbol(inst.a));
 	if(src.isConcrete()) {
 		Environment::Pointer p = state.frame.environment->makePointer(Symbol(inst.a));
 		((Instruction*)(&inst+2))->a = p.index;
