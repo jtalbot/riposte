@@ -204,22 +204,16 @@ void Trace::execute(State & state) {
 	case UNARY_CASE(opcode, IROp::T_DOUBLE): \
 		Map1< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, (double*)node.a.p, (OP<TDouble>::R*)node.r.p); break; 
 
-#define FOLD_CASE(opcode, typea) \
-	((IROpCode::opcode << 4) + (typea << 2) + 3)
-
 #define FOLD_IMPL(opcode,nm,OP) \
-	case FOLD_CASE(opcode, IROp::T_INT): \
+	case UNARY_CASE(opcode, IROp::T_INT): \
 		FoldLeftT< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, node.r.i); break; \
-	case FOLD_CASE(opcode, IROp::T_DOUBLE): \
+	case UNARY_CASE(opcode, IROp::T_DOUBLE): \
 		FoldLeftT< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, (double*)node.a.p, node.r.d); break; 
 
-#define SCAN_CASE(opcode, typea) \
-	((IROpCode::opcode << 4) + (typea << 2) + 3)
-
 #define SCAN_IMPL(opcode,nm,OP) \
-	case FOLD_CASE(opcode, IROp::T_INT): \
+	case UNARY_CASE(opcode, IROp::T_INT): \
 		ScanLeftT< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, node.b.i, (OP<TInteger>::R*)node.r.p); break; \
-	case FOLD_CASE(opcode, IROp::T_DOUBLE): \
+	case UNARY_CASE(opcode, IROp::T_DOUBLE): \
 		ScanLeftT< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, (double*)node.a.p, node.b.d, (OP<TDouble>::R*)node.r.p); break; 
 
 			switch(node.op.op) {
