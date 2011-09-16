@@ -117,7 +117,7 @@ void Trace::execute(State & state) {
 			IRef ref = loc.future.ref;
 			o.ref = ref; //record where the value come from
 			Type::Enum typ = loc.future.typ;
-			nodes[ref].r_external = true;
+			if(loc.length == length) nodes[ref].r_external = true;
 			if(loc.length == length && nodes[ref].r.p == NULL) {//if this is the first VM value that refers to this output, and it is non-scalar, allocate space for it in the VM
 				nodes[ref].r.p = new (PointerFreeGC) double[length];
 			}
@@ -206,9 +206,9 @@ void Trace::execute(State & state) {
 
 #define FOLD_IMPL(opcode,nm,OP) \
 	case UNARY_CASE(opcode, IROp::T_INT): \
-		FoldLeftT< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, node.r.i); break; \
+		if(i == 0) node.r.i = OP<TInteger>::base(); node.r.i = FoldLeftT< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, node.r.i); break; \
 	case UNARY_CASE(opcode, IROp::T_DOUBLE): \
-		FoldLeftT< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, (double*)node.a.p, node.r.d); break; 
+		if(i == 0) node.r.d = OP<TDouble>::base(); node.r.d = FoldLeftT< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, (double*)node.a.p, node.r.d); break; 
 
 #define SCAN_IMPL(opcode,nm,OP) \
 	case UNARY_CASE(opcode, IROp::T_INT): \
@@ -225,7 +225,7 @@ void Trace::execute(State & state) {
 					Map1< CastOp<Integer, Double> , TRACE_VECTOR_WIDTH>::eval(state, (int64_t*)node.a.p, (double*)node.r.p);
 				break;
 				case (IROpCode::seq << 4) + (IROp::T_INT << 3) + (IROp::T_INT << 2) + 0:
-					Sequence<TRACE_VECTOR_WIDTH>(i*node.b.i, node.b.i, (int64_t*)node.r.p); 
+					Sequence<TRACE_VECTOR_WIDTH>(i*node.b.i+1, node.b.i, (int64_t*)node.r.p); 
 				break;
 				default:
 					printf("%d (%s)(%d)\n",(int)node.op.op, IROpCode::toString(node.op.code), (int) node.op.a_typ);

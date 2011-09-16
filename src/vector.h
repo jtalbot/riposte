@@ -67,8 +67,9 @@ struct Map2VS {
 
 template< class Op, int64_t N >
 struct FoldLeftT {
-	static void eval(State& state, typename Op::A const* a, typename Op::R& r) {
+	static typename Op::R eval(State& state, typename Op::A const* a, typename Op::R r) {
 		for(int64_t i = 0; i < N; ++i) r = Op::eval(state, r, a[i]);
+		return r;
 	}
 };
 
