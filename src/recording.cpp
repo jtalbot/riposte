@@ -193,7 +193,7 @@ CHECKED_INTERPRET(subset2, A B C)
 CHECKED_INTERPRET(colon, A B C)
 CHECKED_INTERPRET(forbegin, B_1)
 CHECKED_INTERPRET(forend, B_1)
-CHECKED_INTERPRET(seq, A)
+//CHECKED_INTERPRET(seq, A)
 CHECKED_INTERPRET(UseMethod, A C)
 CHECKED_INTERPRET(call, A)
 #undef A
@@ -303,7 +303,6 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum opcode, Sta
 	return status; \
 }
 
-
 OP_NOT_IMPLEMENTED(pos)
 
 BINARY_OP(add)
@@ -409,8 +408,32 @@ RecordingStatus::Enum done_record(State & state, Instruction const & inst, Instr
 	return RecordingStatus::UNSUPPORTED_OP;
 }
 
+RecordingStatus::Enum seq_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	Value & a = REG(state,inst.a);
+	Value & b = REG(state,inst.b);
 
-//check trace exit conditions
+	if(a.isFuture() || b.isFuture()) {
+		// don't increment the pc
+		return RecordingStatus::UNSUPPORTED_OP;
+	}
+        int64_t len = As<Integer>(state, REG(state, inst.a))[0];
+        int64_t step = As<Integer>(state, REG(state, inst.b))[0];
+	
+	IRNode::InputReg ai, bi;
+	ai.i = len;
+	bi.i = step;
+
+	InputValue av = {IROp::E_SCALAR,Type::Integer,false,ai};
+	InputValue bv = {IROp::E_SCALAR,Type::Integer,false,bi};
+
+	RESERVE(1,1);
+	emitir(state, IROpCode::seq, Type::Integer, av, bv, inst.c);
+	
+	(*pc)++;
+	return RecordingStatus::NO_ERROR;
+}
+
+//check trace exit condition
 // -- do we need to abort due to conditions applying to all opcodes? if so, abort the trace, then exit the recorder
 // -- is the trace complete? if so, install the trace, and exit the recorder
 // -- otherwise, the recorder continues normally

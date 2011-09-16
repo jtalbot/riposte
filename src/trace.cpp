@@ -147,7 +147,7 @@ void Trace::execute(State & state) {
 				              // currently we just allocate a register for it, but we can also just replace it with a nop once the interpreter supports nops.
 				n.r.p = registers[Allocator_allocate(&free_reg)];
 			}
-			int reg = (n.r.p - registers[0]) / TRACE_VECTOR_WIDTH;
+			int reg = ((double*)n.r.p - registers[0]) / TRACE_VECTOR_WIDTH;
 			Allocator_free(&free_reg,reg);
 		}
 		if( n.usesRegA() ){ //a is a register, handle the use of a
@@ -189,11 +189,11 @@ void Trace::execute(State & state) {
 	case BINARY_CASE(opcode, IROp::T_INT, IROp::T_INT, IROp::E_VECTOR, IROp::E_VECTOR): \
 		Map2VV< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, (int64_t*)node.b.p, (OP<TInteger>::R*)node.r.p); break; \
 	case BINARY_CASE(opcode, IROp::T_DOUBLE, IROp::T_DOUBLE, IROp::E_SCALAR, IROp::E_VECTOR): \
-		Map2SV< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, node.a.d, node.b.p, node.r.p); break; \
+		Map2SV< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, node.a.d, (double*)node.b.p, (OP<TDouble>::R*)node.r.p); break; \
 	case BINARY_CASE(opcode, IROp::T_DOUBLE, IROp::T_DOUBLE, IROp::E_VECTOR, IROp::E_SCALAR): \
-		Map2VS< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, node.a.p, node.b.d, node.r.p); break; \
+		Map2VS< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, (double*)node.a.p, node.b.d, (OP<TDouble>::R*)node.r.p); break; \
 	case BINARY_CASE(opcode, IROp::T_DOUBLE, IROp::T_DOUBLE, IROp::E_VECTOR, IROp::E_VECTOR): \
-		Map2VV< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, node.a.p, node.b.p, node.r.p); break; \
+		Map2VV< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, (double*)node.a.p, (double*)node.b.p, (OP<TDouble>::R*)node.r.p); break; \
 
 #define UNARY_CASE(opcode, typea) \
 	((IROpCode::opcode << 4) + (typea << 2) + 3)
@@ -202,12 +202,36 @@ void Trace::execute(State & state) {
 	case UNARY_CASE(opcode, IROp::T_INT): \
 		Map1< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, (OP<TInteger>::R*)node.r.p); break; \
 	case UNARY_CASE(opcode, IROp::T_DOUBLE): \
-		Map1< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, node.a.p, node.r.p); break; 
+		Map1< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, (double*)node.a.p, (OP<TDouble>::R*)node.r.p); break; 
+
+#define FOLD_CASE(opcode, typea) \
+	((IROpCode::opcode << 4) + (typea << 2) + 3)
+
+#define FOLD_IMPL(opcode,nm,OP) \
+	case FOLD_CASE(opcode, IROp::T_INT): \
+		FoldLeftT< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, node.r.i); break; \
+	case FOLD_CASE(opcode, IROp::T_DOUBLE): \
+		FoldLeftT< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, (double*)node.a.p, node.r.d); break; 
+
+#define SCAN_CASE(opcode, typea) \
+	((IROpCode::opcode << 4) + (typea << 2) + 3)
+
+#define SCAN_IMPL(opcode,nm,OP) \
+	case FOLD_CASE(opcode, IROp::T_INT): \
+		ScanLeftT< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, node.b.i, (OP<TInteger>::R*)node.r.p); break; \
+	case FOLD_CASE(opcode, IROp::T_DOUBLE): \
+		ScanLeftT< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, (double*)node.a.p, node.b.d, (OP<TDouble>::R*)node.r.p); break; 
+
 			switch(node.op.op) {
 				IR_BINARY(BINARY_IMPL)
 				IR_UNARY(UNARY_IMPL)
+				IR_FOLD(FOLD_IMPL)
+				IR_SCAN(SCAN_IMPL)
 				case (IROpCode::coerce << 4) + (IROp::T_DOUBLE << 3) + (IROp::T_INT << 2) + 3:
-					Map1< CastOp<Integer, Double> , TRACE_VECTOR_WIDTH>::eval(state, (int64_t*)node.a.p, node.r.p);
+					Map1< CastOp<Integer, Double> , TRACE_VECTOR_WIDTH>::eval(state, (int64_t*)node.a.p, (double*)node.r.p);
+				break;
+				case (IROpCode::seq << 4) + (IROp::T_INT << 3) + (IROp::T_INT << 2) + 0:
+					Sequence<TRACE_VECTOR_WIDTH>(i*node.b.i, node.b.i, (int64_t*)node.r.p); 
 				break;
 				default:
 					printf("%d (%s)(%d)\n",(int)node.op.op, IROpCode::toString(node.op.code), (int) node.op.a_typ);
