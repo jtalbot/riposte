@@ -394,9 +394,11 @@ inline Type::Enum resultType(ByteCode::Enum bc, Type::Enum input) {
 		else _error("Unknown type"); \
 		break;
 MAP_BYTECODES(CASE)
+FOLD_BYTECODES(CASE)
+SCAN_BYTECODES(CASE)
 #undef CASE
 	default:
-		_error("Not a map type");
+		_error("Not a known op in resultType");
 	};
 } 
 inline Type::Enum resultType(ByteCode::Enum bc, Type::Enum a, Type::Enum b) {

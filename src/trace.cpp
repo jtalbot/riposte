@@ -212,9 +212,9 @@ void Trace::execute(State & state) {
 
 #define SCAN_IMPL(opcode,nm,OP) \
 	case UNARY_CASE(opcode, IROp::T_INT): \
-		ScanLeftT< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, node.b.i, (OP<TInteger>::R*)node.r.p); break; \
+		if(i == 0) node.b.i = OP<TInteger>::base(); node.b.i = ScanLeftT< OP<TInteger>, TRACE_VECTOR_WIDTH >::eval(state, (int64_t*)node.a.p, node.b.i, (OP<TInteger>::R*)node.r.p); break; \
 	case UNARY_CASE(opcode, IROp::T_DOUBLE): \
-		ScanLeftT< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, (double*)node.a.p, node.b.d, (OP<TDouble>::R*)node.r.p); break; 
+		if(i == 0) node.b.d = OP<TDouble>::base(); node.b.i = ScanLeftT< OP<TDouble>, TRACE_VECTOR_WIDTH >::eval(state, (double*)node.a.p, node.b.d, (OP<TDouble>::R*)node.r.p); break; 
 
 			switch(node.op.op) {
 				IR_BINARY(BINARY_IMPL)
