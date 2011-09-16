@@ -175,6 +175,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	} break;
 	case String::assign:
 	case String::eqassign: 
+	case String::assign2: 
 	{
 		Value dest = call[1];
 		
@@ -204,7 +205,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 
 		assert(dest.isSymbol());
 	
-		emit(code, ByteCode::assign, Symbol(dest).i, 0, source);
+		emit(code, func.i == String::assign2 ? ByteCode::assign2 : ByteCode::assign, Symbol(dest).i, 0, source);
 		emit(code, ByteCode::assign, 0, 0, 0);
 	
 		scopes.back().deadAfter(source);

@@ -20,6 +20,7 @@
 	_(kget, "kget") \
 	_(iget, "iget") \
 	_(assign, "assign") \
+	_(assign2, "assign2") \
 	_(iassign, "iassign") \
 	_(eassign, "eassign") \
 	_(subset, "subset") \

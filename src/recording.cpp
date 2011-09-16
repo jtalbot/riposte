@@ -167,6 +167,8 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 	return RecordingStatus::NO_ERROR;
 }
 
+OP_NOT_IMPLEMENTED(assign2)
+
 #define CHECK_REG(r) (REG(state,r).isFuture())
 //temporary defines to generate code for checked interpret
 #define A CHECK_REG(inst.a) ||
