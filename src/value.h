@@ -65,7 +65,7 @@ struct Value {
 	bool isFunction() const { return type == Type::Function; }
 	bool isBuiltIn() const { return type == Type::BuiltIn; }
 	bool isObject() const { return type == Type::Object; }
-	bool isFuture() const { return header == Type::Future; }
+	bool isFuture() const { return type == Type::Future; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isList(); }
@@ -196,8 +196,8 @@ union _doublena {
 };
 
 struct Future : public Value {
-	static void Init(Value & f, Type::Enum typ, IRef ref) {
-		Value::Init(f,Type::Future,0);
+	static void Init(Value & f, Type::Enum typ,int64_t length, IRef ref) {
+		Value::Init(f,Type::Future,length);
 		f.future.ref = ref;
 		f.future.typ = typ;
 	}

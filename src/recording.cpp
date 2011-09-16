@@ -86,6 +86,7 @@ void coerce(State & state, Type::Enum result_type, InputValue & a) {
 //this emits an opcode assuming that a and b are the same type
 void emitir(State & state, IROpCode::Enum opcode,
 						   Type::Enum ret_type,
+						   int64_t ret_length,
 		                   const InputValue & a,
 		                   const InputValue & b,
 		                   int64_t r) {
@@ -107,7 +108,7 @@ void emitir(State & state, IROpCode::Enum opcode,
 
 	//TODO: replace binary OR with a function that calculates output types from input types
 	Value & v = REG(state,r);
-	Future::Init(v, ret_type,TRACE.n_nodes++);
+	Future::Init(v, ret_type,ret_length,TRACE.n_nodes++);
 	add_reg_output(state,r);
 	set_max_live_register(state,r);
 }
@@ -226,13 +227,17 @@ RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret, bool
 		return RecordingStatus::NO_ERROR;
 		break;
 	case Type::Future:
-		ret->encoding = IROp::E_VECTOR;
-		ret->typ = v.future.typ;
-		ret->data.i = v.future.ref;
-		ret->is_external = false;
 		*can_fallback = false;
 		*should_record = true;
-		return RecordingStatus::NO_ERROR;
+		if(v.length != TRACE.length) {
+			return RecordingStatus::UNSUPPORTED_TYPE;
+		} else {
+			ret->encoding = IROp::E_VECTOR;
+			ret->typ = v.future.typ;
+			ret->data.i = v.future.ref;
+			ret->is_external = false;
+			return RecordingStatus::NO_ERROR;
+		}
 		break;
 	default:
 		return RecordingStatus::UNSUPPORTED_TYPE;
@@ -257,7 +262,7 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum opcode, St
 			coerce(state,arg_type,aenc);
 		if(benc.typ != arg_type)
 			coerce(state,arg_type,benc);
-		emitir(state,opcode,resultType(bc,aenc.typ,benc.typ),aenc,benc,inst.c);
+		emitir(state,opcode,resultType(bc,aenc.typ,benc.typ),TRACE.length,aenc,benc,inst.c);
 		return RecordingStatus::NO_ERROR;
 	} else {
 		return (can_fallback) ? RecordingStatus::FALLBACK : RecordingStatus::UNSUPPORTED_TYPE;
@@ -274,7 +279,7 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum opcode, Sta
 
 	if(should_record && RecordingStatus::NO_ERROR == ar) {
 		RESERVE(1,1);
-		emitir(state,opcode,resultType(bc,aenc.typ),aenc,InputValue_unused,inst.c);
+		emitir(state,opcode,resultType(bc,aenc.typ),TRACE.length,aenc,InputValue_unused,inst.c);
 		return RecordingStatus::NO_ERROR;
 	} else {
 		return (can_fallback) ? RecordingStatus::FALLBACK : RecordingStatus::UNSUPPORTED_TYPE;

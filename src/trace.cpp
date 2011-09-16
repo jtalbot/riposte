@@ -115,14 +115,14 @@ void Trace::execute(State & state) {
 			o = outputs[--n_outputs];
 		} else {
 			IRef ref = loc.future.ref;
-			o.ref = ref; //only for pretty printing...
+			o.ref = ref; //record where the value come from
 			Type::Enum typ = loc.future.typ;
 			nodes[ref].r_external = true;
-			if(nodes[ref].r.p == NULL) //if this is the first VM value that refers to this output, allocate space for it in the VM
+			if(loc.length == length && nodes[ref].r.p == NULL) {//if this is the first VM value that refers to this output, and it is non-scalar, allocate space for it in the VM
 				nodes[ref].r.p = new (PointerFreeGC) double[length];
+			}
 			Value v;
-			Value::Init(v,typ,length);
-			v.p = nodes[ref].r.p;
+			Value::Init(v,typ,loc.length); //initialize the type of the output value, the actual value (i.e. v.p) will be set after it is calculed in the trace
 			set_location_value(state,o.location,v);
 			i++;
 		}
@@ -220,6 +220,18 @@ void Trace::execute(State & state) {
 			if(node.b_external) 
 				node.b.p += TRACE_VECTOR_WIDTH; 
 		}
+	}
+
+
+	//write values back to outputs
+	for(size_t i = 0; i < n_outputs; i++) {
+		Output & o = outputs[i];
+		Value v = get_location_value(state,o.location);
+		if(v.length > 1)
+			v.p = nodes[o.ref].r.p - length; //copy pointer, adjust for shift added by interpreter
+		else
+			v.p = nodes[o.ref].r.p; //copy scalar value, no adjustment
+		set_location_value(state,o.location,v);
 	}
 }
 #else
