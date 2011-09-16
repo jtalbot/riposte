@@ -219,10 +219,10 @@ inline T Subset(T const& src, int64_t start, int64_t length) {
 }
 
 
-inline Integer Sequence(int64_t length) {
+inline Integer Sequence(int64_t length, int64_t start, int64_t step) {
 	Integer r(length);
-	for(int64_t i = 0; i < length; i++) {
-		r[i] = i+1;
+	for(int64_t i = 0, j = start; i < length; i++, j+=step) {
+		r[i] = j;
 	}
 	return r;
 }

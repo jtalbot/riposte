@@ -273,16 +273,15 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 	//	2) an assign with dest symbol in a and source register in c.
 	//		(for use by the promise evaluation. If no promise, step over this instruction.)
 	//	3) an invalid instruction containing inline caching info.	
-
+	
 	// check if we can get the value through inline caching...
 	bool ic = state.frame.environment->validRevision((&inst+2)->b);
-	Value const& src = ic ?
-		state.frame.environment->get((&inst+2)->a) :
-		state.frame.environment->get(Symbol(inst.a));
-	if(__builtin_expect(ic && src.isConcrete(), true)) {
-		REG(state, inst.c) = src;
+	if(__builtin_expect(ic, true)) {
+		REG(state, inst.c) = state.frame.environment->get((&inst+2)->a);
 		return &inst+3;
 	} 
+	
+	Value const& src = state.frame.environment->get(Symbol(inst.a));
 	if(src.isConcrete()) {
 		Environment::Pointer p = state.frame.environment->makePointer(Symbol(inst.a));
 		((Instruction*)(&inst+2))->a = p.index;
@@ -403,16 +402,14 @@ Instruction const* colon_op(State& state, Instruction const& inst) {
 	REG(state,inst.c) = Sequence(from, to>from?1:-1, fabs(to-from)+1);
 	return &inst+1;
 }
-Instruction const* seq_op(State& state, Instruction const& inst) {
-	int64_t len = As<Integer>(state, REG(state, inst.a))[0];
-	REG(state, inst.c) = Sequence(len);
-	return &inst+1;
-}
 
+bool isRecordable(Type::Enum type, int64_t length) {
+	return (type == Type::Double || type == Type::Integer)
+		&& length > TRACE_VECTOR_WIDTH
+		&& length % TRACE_VECTOR_WIDTH == 0;
+}
 bool isRecordable(Value const& a) {
-	return (a.isDouble() || a.isInteger())
-		&& a.length > TRACE_VECTOR_WIDTH
-		&& a.length % TRACE_VECTOR_WIDTH == 0;
+	return isRecordable(a.type, a.length);
 }
 bool isRecordable(Value const& a, Value const& b) {
 	bool valid_types =   (a.isDouble() || a.isInteger())
@@ -423,6 +420,16 @@ bool isRecordable(Value const& a, Value const& b) {
 	return valid_types && compatible_lengths && should_record_length;
 }
 
+Instruction const* seq_op(State& state, Instruction const& inst) {
+	int64_t len = As<Integer>(state, REG(state, inst.a))[0];
+	int64_t step = As<Integer>(state, REG(state, inst.b))[0];
+	if(state.tracing.enabled && isRecordable(Type::Integer, len))
+		return state.tracing.begin_tracing(state, &inst, len);
+	else {
+		REG(state, inst.c) = Sequence(len, 1, step);
+		return &inst+1;
+	}
+}
 
 #define OP(name, string, Op) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \

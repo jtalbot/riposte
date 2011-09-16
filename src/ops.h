@@ -403,6 +403,13 @@ inline Type::Enum resultType(ByteCode::Enum bc, Type::Enum a, Type::Enum b) {
 	return resultType(bc,std::max(a,b));
 }
 
+template<int Len>
+inline void Sequence(int64_t start, int64_t step, int64_t* dest) {
+	for(int64_t i = 0, j = start; i < Len; i++, j += step) {
+		dest[i] = j;
+	}
+}
+
 
 #endif
 

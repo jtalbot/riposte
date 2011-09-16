@@ -75,7 +75,7 @@ struct FoldLeftT {
 template< class Op, int64_t N >
 struct ScanLeftT {
 	static void eval(State& state, typename Op::A const* a, typename Op::R& b, typename Op::R* r) {
-		for(int64_t i = 0; i < N; ++i) r[i] = b = Op::eval(b, a[i]);
+		for(int64_t i = 0; i < N; ++i) r[i] = b = Op::eval(state, b, a[i]);
 	}
 };
 

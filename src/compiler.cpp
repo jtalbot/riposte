@@ -582,9 +582,10 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	case String::seq_len:
 	{
 		int64_t len = compile(call[1], code);
+		int64_t step = compile(Integer::c(1), code);
 		scopes.back().deadAfter(liveIn);
 		int64_t result = scopes.back().allocRegister(Register::TEMP);
-		emit(code, ByteCode::seq, len, 0, result);
+		emit(code, ByteCode::seq, len, step, result);
 		return result;
 	} break;
 	case String::docall:

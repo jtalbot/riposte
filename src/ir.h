@@ -62,13 +62,23 @@
 	_(asin,       "asin",      ASinOp) \
 	_(atan,       "atan",      ATanOp) \
 	_(abs,        "abs",       AbsOp) \
-	
+
+#define IR_FOLD(_) \
+	_(sum,        "sum",       SumOp) \
+	_(prod,       "prod",      ProdOp) \
+
+#define IR_SCAN(_) \
+	_(cumsum,     "cumsum",    SumOp) \
+	_(cumprod,    "cumprod",   ProdOp) \
 
 #define IR_ENUM(_) 	\
 	IR_BINARY(_) \
 	IR_UNARY(_) \
+	IR_FOLD(_) \
+	IR_SCAN(_) \
 	_(coerce, "coerce") \
-	
+	_(seq, "seq") 
+
     
 
 DECLARE_ENUM(IROpCode,IR_ENUM)
@@ -110,10 +120,7 @@ struct IRNode {
 	bool b_external;
 
 	//3-op code, r is dest, r = a + b, where r is the position in the list of IRNodes where this op resides
-	union {
-		double * p;
-	} r;
-
+	
 	union InputReg {
 		int64_t i;
 		double * p;
@@ -121,6 +128,7 @@ struct IRNode {
 	};
 	InputReg a;
 	InputReg b;
+	InputReg r;
 
 	bool usesRegA() {
 		return !a_external && op.a_enc == IROp::E_VECTOR;
