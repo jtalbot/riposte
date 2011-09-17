@@ -168,6 +168,8 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 	return RecordingStatus::NO_ERROR;
 }
 
+OP_NOT_IMPLEMENTED(assign2)
+
 #define CHECK_REG(r) (REG(state,r).isFuture())
 //temporary defines to generate code for checked interpret
 #define A CHECK_REG(inst.a) ||
@@ -194,7 +196,6 @@ CHECKED_INTERPRET(subset2, A B C)
 CHECKED_INTERPRET(colon, A B C)
 CHECKED_INTERPRET(forbegin, B_1)
 CHECKED_INTERPRET(forend, B_1)
-//CHECKED_INTERPRET(seq, A)
 CHECKED_INTERPRET(UseMethod, A C)
 #undef A
 #undef B
@@ -294,6 +295,22 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum opcode, Sta
 
 }
 
+RecordingStatus::Enum fold_record(ByteCode::Enum bc, IROpCode::Enum opcode, State & state, Instruction const & inst) {
+	Value & a = REG(state,inst.a);
+	bool can_fallback = true;
+	bool should_record = false;
+	InputValue aenc;
+	RecordingStatus::Enum ar = get_input(state,a,&aenc,&can_fallback,&should_record);
+
+	if(should_record && RecordingStatus::NO_ERROR == ar) {
+		RESERVE(1,1);
+		emitir(state,opcode,resultType(bc,aenc.typ),1,aenc,InputValue_unused,inst.c);
+		return RecordingStatus::NO_ERROR;
+	} else {
+		return (can_fallback) ? RecordingStatus::FALLBACK : RecordingStatus::UNSUPPORTED_TYPE;
+	}
+}
+
 //all arithmetic binary ops share the same recording implementation
 #define BINARY_OP(op,...) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
 	RecordingStatus::Enum status = binary_record(ByteCode :: op, IROpCode :: op, state, inst);\
@@ -314,6 +331,15 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum opcode, Sta
 	} \
 	if(RecordingStatus::NO_ERROR == status) \
 		(*pc)++; \
+	return status; \
+}
+#define FOLD_OP(op) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
+	RecordingStatus::Enum status = fold_record(ByteCode :: op , IROpCode :: op, state, inst);\
+	if(RecordingStatus::FALLBACK == status) { \
+		*pc = op##_op(state,inst); \
+		return RecordingStatus::NO_ERROR; \
+	} \
+	(*pc)++; \
 	return status; \
 }
 
@@ -337,21 +363,21 @@ OP_NOT_IMPLEMENTED(integer1)
 OP_NOT_IMPLEMENTED(double1)
 OP_NOT_IMPLEMENTED(complex1)
 OP_NOT_IMPLEMENTED(character1)
+OP_NOT_IMPLEMENTED(raw1)
 
-OP_NOT_IMPLEMENTED(sum)
-OP_NOT_IMPLEMENTED(prod)
+FOLD_OP(sum)
+FOLD_OP(prod)
 OP_NOT_IMPLEMENTED(min)
 OP_NOT_IMPLEMENTED(max)
 OP_NOT_IMPLEMENTED(any)
 OP_NOT_IMPLEMENTED(all)
 
-OP_NOT_IMPLEMENTED(cumsum)
-OP_NOT_IMPLEMENTED(cumprod)
+UNARY_OP(cumsum)
+UNARY_OP(cumprod)
 OP_NOT_IMPLEMENTED(cummin)
 OP_NOT_IMPLEMENTED(cummax)
 OP_NOT_IMPLEMENTED(cumany)
 OP_NOT_IMPLEMENTED(cumall)
-OP_NOT_IMPLEMENTED(raw1)
 
 
 RecordingStatus::Enum jmp_record(State & state, Instruction const & inst, Instruction const ** pc) {

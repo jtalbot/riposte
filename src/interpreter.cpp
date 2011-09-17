@@ -325,9 +325,27 @@ Instruction const* assign_op(State& state, Instruction const& inst) {
 		state.frame.environment->assign((&inst+1)->a, REG(state, inst.c));
 	else {
 		state.frame.environment->assign(Symbol(inst.a), REG(state, inst.c));
+		
 		Environment::Pointer p = state.frame.environment->makePointer(Symbol(inst.a));
 		((Instruction*)(&inst+1))->a = p.index;
 		((Instruction*)(&inst+1))->b = p.revision;
+	}
+	return &inst+2;
+}
+Instruction const* assign2_op(State& state, Instruction const& inst) {
+	// TODO: Make inline caching work for assign2
+	Symbol s(inst.a);
+	// search through environments for destination...
+	Environment* environment = state.frame.environment;
+	Value value = environment->get(s);
+	while(value.isNil() && environment->StaticParent() != 0) {
+		environment = environment->StaticParent();
+		value = environment->get(s);
+	}
+	if(!value.isNil()) {
+		environment->assign(s, REG(state, inst.c));
+	} else {
+		state.global->assign(s, REG(state, inst.c));
 	}
 	return &inst+2;
 }
