@@ -474,7 +474,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
         } \
 	\
 	if(state.tracing.enabled && isRecordable(a,b)) \
-		return state.tracing.begin_tracing(state, &inst, a.length);	\
+		return state.tracing.begin_tracing(state, &inst, std::max(a.length,b.length));	\
     \
 	binaryArithSlow<Zip2, Op>(state, a, b, c);	\
 	return &inst+1;	\

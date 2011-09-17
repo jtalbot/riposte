@@ -3,7 +3,7 @@
 
 #include "enum.h"
 #include "common.h"
-
+#include "bc.h"
 			\
 /*	_(vload,      "vload",     ref, ___, ___) \
 	_(rload,      "rload",     ref, ___, ___) \
@@ -41,27 +41,10 @@
 */
 	
 #define IR_BINARY(_) \
-	_(add,        "add",       AddOp) \
-	_(sub,        "sub",       SubOp) \
-	_(mul,        "mul",       MulOp) \
-	_(div,        "div",       DivOp) \
-	_(pow,        "pow",       PowOp) \
+	BINARY_ARITH_MAP_BYTECODES(_)
 	
 #define IR_UNARY(_) \
-	_(neg,        "neg",       NegOp) \
-	_(sqrt,       "sqrt",      SqrtOp) \
-	_(floor,      "floor",     FloorOp) \
-	_(ceiling,    "ceiling",   CeilingOp) \
-	_(round,      "round",     RoundOp) \
-	_(exp,        "exp",       ExpOp) \
-	_(log,        "log",       LogOp) \
-	_(cos,        "cos",       CosOp) \
-	_(sin,        "sin",       SinOp) \
-	_(tan,        "tan",       TanOp) \
-	_(acos,       "acos",      ACosOp) \
-	_(asin,       "asin",      ASinOp) \
-	_(atan,       "atan",      ATanOp) \
-	_(abs,        "abs",       AbsOp) \
+	UNARY_ARITH_MAP_BYTECODES(_)
 
 #define IR_FOLD(_) \
 	_(sum,        "sum",       SumOp) \

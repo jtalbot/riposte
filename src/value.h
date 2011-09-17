@@ -706,6 +706,9 @@ struct TraceState {
 	bool is_tracing() const { return active; }
 
 	Instruction const * begin_tracing(State & state, Instruction const * inst, size_t length) {
+		if(active) {
+			_error("recursive record\n");
+		}
 		current_trace.reset();
 		current_trace.length = length;
 		active = true;

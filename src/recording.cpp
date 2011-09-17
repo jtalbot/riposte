@@ -196,13 +196,20 @@ CHECKED_INTERPRET(forbegin, B_1)
 CHECKED_INTERPRET(forend, B_1)
 //CHECKED_INTERPRET(seq, A)
 CHECKED_INTERPRET(UseMethod, A C)
-CHECKED_INTERPRET(call, A)
 #undef A
 #undef B
 #undef B_1
 #undef C
 #undef C_1
 #undef CHECKED_INTERPRET
+
+RecordingStatus::Enum call_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	Value & a = REG(state,inst.a);
+	if(a.isFuture() || a.isBuiltIn()) //built-ins may recursive call eval and do other nasty things so we do not want them called from the recorder with an active trace
+		return RecordingStatus::UNSUPPORTED_OP;
+	*pc = call_op(state,inst);
+	return RecordingStatus::NO_ERROR;
+}
 
 RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret, bool * can_fallback, bool * should_record) {
 
@@ -288,38 +295,31 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum opcode, Sta
 }
 
 //all arithmetic binary ops share the same recording implementation
-#define BINARY_OP(op) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
+#define BINARY_OP(op,...) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
 	RecordingStatus::Enum status = binary_record(ByteCode :: op, IROpCode :: op, state, inst);\
 	if(RecordingStatus::FALLBACK == status) { \
 		*pc = op##_op(state,inst); \
 		return RecordingStatus::NO_ERROR; \
 	} \
-	(*pc)++; \
+	if(RecordingStatus::NO_ERROR == status) \
+		(*pc)++; \
 	return status; \
 }
 //all unary arithmetic ops share the same implementation as well
-#define UNARY_OP(op) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
+#define UNARY_OP(op,...) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
 	RecordingStatus::Enum status = unary_record(ByteCode :: op , IROpCode :: op, state, inst);\
 	if(RecordingStatus::FALLBACK == status) { \
 		*pc = op##_op(state,inst); \
 		return RecordingStatus::NO_ERROR; \
 	} \
-	(*pc)++; \
+	if(RecordingStatus::NO_ERROR == status) \
+		(*pc)++; \
 	return status; \
 }
 
-OP_NOT_IMPLEMENTED(pos)
+IR_BINARY(BINARY_OP)
+IR_UNARY(UNARY_OP)
 
-BINARY_OP(add)
-BINARY_OP(sub)
-
-UNARY_OP(neg)
-
-BINARY_OP(mul)
-BINARY_OP(div)
-OP_NOT_IMPLEMENTED(idiv)
-OP_NOT_IMPLEMENTED(mod)
-BINARY_OP(pow)
 OP_NOT_IMPLEMENTED(lt)
 OP_NOT_IMPLEMENTED(gt)
 OP_NOT_IMPLEMENTED(eq)
@@ -332,22 +332,6 @@ OP_NOT_IMPLEMENTED(lor)
 OP_NOT_IMPLEMENTED(sland)
 OP_NOT_IMPLEMENTED(slor)
 
-UNARY_OP(abs)
-OP_NOT_IMPLEMENTED(sign)
-UNARY_OP(sqrt)
-UNARY_OP(floor)
-UNARY_OP(ceiling)
-OP_NOT_IMPLEMENTED(trunc)
-UNARY_OP(round)
-OP_NOT_IMPLEMENTED(signif)
-UNARY_OP(exp)
-UNARY_OP(log)
-UNARY_OP(cos)
-UNARY_OP(sin)
-UNARY_OP(tan)
-UNARY_OP(acos)
-UNARY_OP(asin)
-UNARY_OP(atan)
 OP_NOT_IMPLEMENTED(logical1)
 OP_NOT_IMPLEMENTED(integer1)
 OP_NOT_IMPLEMENTED(double1)
@@ -454,16 +438,18 @@ static RecordingStatus::Enum recording_check_conditions(State& state, Instructio
 Instruction const * recording_interpret(State& state, Instruction const* pc) {
 	RecordingStatus::Enum status = RecordingStatus::NO_ERROR;
 	while( true ) {
-#define RUN_RECORD(name,str,...) case ByteCode::name: {  /* printf("rec " #name "\n"); */ status = name##_record(state, *pc,&pc); } break;
+#define RUN_RECORD(name,str,...) case ByteCode::name: {  /* printf("rec " #name);*/ status = name##_record(state, *pc,&pc); } break;
 		switch(pc->bc) {
 			BYTECODES(RUN_RECORD)
 		}
 #undef RUN_RECORD
 		if(   RecordingStatus::NO_ERROR != status
 		   || RecordingStatus::NO_ERROR != (status = recording_check_conditions(state,pc))) {
+			//printf(" x:%s\n",RecordingStatus::toString(status));
 			state.tracing.end_tracing(state);
 			return pc;
 		}
+		//printf(" .\n");
 	}
 	return pc;
 }
