@@ -39,7 +39,7 @@ template<> std::string stringify<Complex>(State const& state, Complex::Element a
 }  
 
 template<> std::string stringify<Character>(State const& state, Character::Element a) {
-	return Character::isNA(a) ? "NA" : std::string("\"") + state.SymToStr(a) + "\"";
+	return Character::isNA(a) ? "NA" : std::string("\"") + state.externStr(a) + "\"";
 }  
 
 template<> std::string stringify<List>(State const& state, List::Element a) {
@@ -62,7 +62,7 @@ std::string stringifyVector(State const& state, T const& v, Value const& names) 
 	if(names.isCharacter()) {
 		Character c = Character(names);
 		for(int64_t i = 0; i < length; i++) {
-			maxlength = std::max((int64_t)maxlength, (int64_t)state.SymToStr(c[i]).length());
+			maxlength = std::max((int64_t)maxlength, (int64_t)state.externStr(c[i]).length());
 		}
 	}
 	int64_t indexwidth = intToStr(length+1).length();
@@ -72,7 +72,7 @@ std::string stringifyVector(State const& state, T const& v, Value const& names) 
 		for(int64_t i = 0; i < length; i+=perline) {
 			result = result + pad("", indexwidth+2);
 			for(int64_t j = 0; j < perline && i+j < length; j++) {
-				result = result + pad(state.SymToStr(c[i+j]), maxlength+1);
+				result = result + pad(state.externStr(c[i+j]), maxlength+1);
 			}
 			result = result + "\n";
 			result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
@@ -130,10 +130,10 @@ std::string stringify(State const& state, Value const& value, Value const& names
 			if(names.isCharacter()) {
 				Character n = Character(names);
 				for(int64_t i = 0; i < length; i++) {
-					if(state.SymToStr(n[i])=="")
+					if(state.externStr(n[i])=="")
 						result = result + "[[" + intToStr(i+1) + "]]\n";
 					else
-						result = result + "$" + state.SymToStr(n[i]) + "\n";
+						result = result + "$" + state.externStr(n[i]) + "\n";
 					if(!List::isNA(v[i])) result = result + state.stringify(v[i]);
 					result = result + "\n";
 					if(i < length-1) result = result + "\n";
@@ -151,12 +151,12 @@ std::string stringify(State const& state, Value const& value, Value const& names
 		}
 		case Type::Symbol:
 		{
-			result = "`" + state.SymToStr(Symbol(value)) + "`";
+			result = "`" + state.externStr(Symbol(value)) + "`";
 			return result;
 		}
 		case Type::Function:
 		{
-			result = state.SymToStr(Function(value).prototype()->string);
+			result = state.externStr(Function(value).prototype()->string);
 			return result;
 		}
 		case Type::Environment:
@@ -207,7 +207,7 @@ template<> std::string deparse<Complex>(State const& state, Complex::Element a) 
 }  
 
 template<> std::string deparse<Character>(State const& state, Character::Element a) {
-	return Character::isNA(a) ? "NA_character_" : std::string("\"") + state.SymToStr(a) + "\"";
+	return Character::isNA(a) ? "NA_character_" : std::string("\"") + state.externStr(a) + "\"";
 }  
 
 template<> std::string deparse<List>(State const& state, List::Element a) {
@@ -220,7 +220,7 @@ std::string deparseVectorBody(State const& state, T const& v, Value const& names
 	if(names.isCharacter()) {
 		Character c = Character(names);
 		for(int64_t i = 0; i < v.length; i++) {
-			result = result + state.SymToStr(c[i]) + " = " + deparse<T>(state, v[i]);
+			result = result + state.externStr(c[i]) + " = " + deparse<T>(state, v[i]);
 			if(i < v.length-1) result = result + ", ";
 		}
 	}
@@ -261,9 +261,9 @@ std::string deparse(State const& state, Value const& value, Value const& names) 
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
 		case Type::Symbol:
-			return state.SymToStr(Symbol(value)); // NYI: need to check if this should be backticked.
+			return state.externStr(Symbol(value)); // NYI: need to check if this should be backticked.
 		case Type::Function:
-			return state.SymToStr(Function(value).prototype()->string);
+			return state.externStr(Function(value).prototype()->string);
 		case Type::Environment:
 			return "environment";
 		case Type::Object:

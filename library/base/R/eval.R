@@ -15,7 +15,7 @@
 #  http://www.r-project.org/Licenses/
 
 .GlobalEnv <- environment()
-parent.frame <- function(n = 1) .Internal(parent.frame(n+1))
+parent.frame <- function(n = 1) .Internal(parent.frame(n))
 
 eval <-
     function(expr, envir = parent.frame(),

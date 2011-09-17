@@ -94,7 +94,7 @@ inline void Subset2(State& state, Value const& a, Value const& i, Value& out) {
 	}
 	else if(i.isCharacter1() && a.isObject() && ((Object const&)a).hasNames()) {
 		Character c = Character(((Object const&)a).getNames());
-		Symbol const* data = c.v();
+		String const* data = c.v();
 		int64_t length = c.length;
 		for(int64_t j = 0; j < length; j++) {
 			if(data[j].i == i.i) {
@@ -252,10 +252,10 @@ inline Character klass(State& state, Value const& v)
 			
 	Character c(1);
 	if(type == Type::Integer || type == Type::Double)
-		c[0] = Symbols::Numeric;
+		c[0] = Strings::Numeric;
 	else if(type == Type::Symbol)
-		c[0] = Symbols::Name;
-	else c[0] = state.StrToSym(Type::toString(type));
+		c[0] = Strings::Name;
+	else c[0] = state.internStr(Type::toString(type));
 	return c;
 }
 

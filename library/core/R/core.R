@@ -1,7 +1,5 @@
 
-c <- function(...) unlist(list(...))
-
-environment <- function(fun=NULL) .Internal(environment)(fun)
+c <- function(...) .Internal(unlist(list(...)))
 
 ifelse <- function(test, yes, no) {
 	if(!any(test)) no
@@ -10,6 +8,18 @@ ifelse <- function(test, yes, no) {
 		if(!all(test)) yes[!test] <- no
 		tmp
 	}
+}
+
+`attr` <- function(x, which, exact=FALSE) {
+	.Internal(attr(x, which, exact))
+}
+
+`attr<-` <- function(x, which, value) {
+	.Internal(`attr<-`(x, which, value))
+}
+
+`rm` <- function(...) {
+	.Internal(remove(list(...)))
 }
 
 #`[` <- function(x, ..., drop = TRUE) {

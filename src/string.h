@@ -110,47 +110,63 @@
 	_(TRUE, 	"TRUE") \
 	_(FALSE, 	"FALSE") \
 	_(type, 	"typeof") \
+	_(length, 	"length") \
 	_(value, 	"value") \
 	_(dotGeneric, 	".Generic") \
 	_(dotMethod, 	".Method") \
 	_(dotClass, 	".Class") \
 	_(docall,	"do.call") \
+	_(list,		"list") \
 
-DECLARE_ENUM(String, STRINGS)
+DECLARE_ENUM(EStrings, STRINGS)
+
+struct String {
+	int64_t i;
+	bool operator==(String o) const { return i == o.i; }
+	bool operator!=(String o) const { return i != o.i; }
+	bool operator<(String o) const { return i < o.i; }
+	bool operator>(String o) const { return i > o.i; }
+	static String Init(int64_t i) { return (String){i}; }
+};
+
+namespace Strings {
+       #define CONST_DECLARE(name, string, ...) static const ::String name = String::Init(EStrings::name);
+       STRINGS(CONST_DECLARE)
+       #undef CONST_DECLARE
+}
+
 
 class StringTable {
-	std::map<std::string, int64_t> stringTable;
-	std::map<int64_t, std::string> reverseStringTable;
+	std::map<std::string, String> stringTable;
+	std::map<String, std::string> reverseStringTable;
 	int64_t next;
 public:
 	StringTable() : next(0) {
 		// insert predefined strings into table at known positions (corresponding to their enum value)
 	#define ENUM_STRING_TABLE(name, string) \
-		stringTable[string] = String::name; \
-		reverseStringTable[String::name] = string;\
-		assert(next==String::name);\
+		stringTable[string] = Strings::name; \
+		reverseStringTable[Strings::name] = string;\
+		assert(next==Strings::name.i);\
 		next++;\
 
 		STRINGS(ENUM_STRING_TABLE);
 	}
 
-
-
-	int64_t in(std::string const& s) {
-		std::map<std::string, int64_t>::const_iterator i = stringTable.find(s);
+	String in(std::string const& s) {
+		std::map<std::string, String>::const_iterator i = stringTable.find(s);
 		if(i == stringTable.end()) {
 			int64_t index = next++;
-			stringTable[s] = index;
-			reverseStringTable[index] = s;
-			return index;
+			stringTable[s] = String::Init(index);
+			reverseStringTable[String::Init(index)] = s;
+			return String::Init(index);
 		} else return i->second;
 	
 	}
 
-	std::string const& out(int64_t i) const {
-		return reverseStringTable.find(i)->second;
+	std::string out(String i) const {
+		if(i.i < 0) return std::string("..") + intToStr(-i.i);
+		else return reverseStringTable.find(i)->second;
 	}
-
 };
 
 #endif

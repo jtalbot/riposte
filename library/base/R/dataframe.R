@@ -27,17 +27,14 @@
 ## and c(NA, n < 0) automatic row names.
 
 .row_names_info <- function(x, type = 1L)
-    if(type == 0L) attr(x, "row.names")
-    else length(attr(x, "row.names"))
-    #.Call("R_shortRowNames", x, type, PACKAGE = "base")
+    .Call("R_shortRowNames", x, type, PACKAGE = "base")
 
 row.names <- function(x) UseMethod("row.names")
 row.names.data.frame <- function(x) as.character(attr(x, "row.names"))
 row.names.default <- function(x) if(!is.null(dim(x))) rownames(x)# else NULL
 
 .set_row_names <- function(n)
-    seq_len(n)
-    #if(n > 0) c(NA_integer_, -n) else integer()
+    if(n > 0) c(NA_integer_, -n) else integer()
 
 `row.names<-` <- function(x, value) UseMethod("row.names<-")
 
@@ -434,7 +431,6 @@ data.frame <-
 	vlist[[i]] <- xi
     }
     nr <- max(nrows)
-    value <- unlist(vlist, recursive=FALSE, use.names=FALSE)
     for(i in seq_len(n)[nrows < nr]) {
 	xi <- vlist[[i]]
 	if(nrows[i] > 0L && (nr %% nrows[i] == 0L)) {
@@ -463,6 +459,7 @@ data.frame <-
 	stop("arguments imply differing number of rows: ",
              paste(unique(nrows), collapse = ", "))
     }
+    value <- unlist(vlist, recursive=FALSE, use.names=FALSE)
     ## unlist() drops i-th component if it has 0 columns
     vnames <- unlist(vnames[ncols > 0L])
     noname <- !nzchar(vnames)

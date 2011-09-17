@@ -14,17 +14,14 @@
 #  A copy of the GNU General Public License is available at
 #  http://www.r-project.org/Licenses/
 
-matrix <- function(data=NA, nrow=1, ncol=1, byrow=FALSE, dim.names=NULL)
+matrix <- function(data=NA, nrow=1, ncol=1, byrow=FALSE, dimnames=NULL)
 {
     ## avoid copying to strip attributes in simple cases
     if (is.object(data) || !is.atomic(data)) data <- as.vector(data)
     ## NB: the defaults are not really nrow=1, ncol=1: missing values
     ## are treated differently, using length(data).
-    #.Internal(matrix(data, nrow, ncol, byrow, dimnames,
-    #                 missing(nrow), missing(ncol)))
-
-    dim(data) <- c(nrow, ncol)
-    dimnames(data) <- dim.names
+    .Internal(matrix(data, nrow, ncol, byrow, dimnames,
+                     missing(nrow), missing(ncol)))
 }
 
 nrow <- function(x) dim(x)[1L]

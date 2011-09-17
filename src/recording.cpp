@@ -162,7 +162,7 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 		//otherwise the inline cache is updated, which involves creating a pointer
 
 		//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
-		add_var_output(state,state.frame.environment->makePointer(Symbol(inst.a)));
+		add_var_output(state,state.frame.environment->makePointer(String::Init(inst.a)));
 	}
 	set_max_live_register(state,inst.c);
 	return RecordingStatus::NO_ERROR;
@@ -198,6 +198,7 @@ CHECKED_INTERPRET(forbegin, B_1)
 CHECKED_INTERPRET(forend, B_1)
 CHECKED_INTERPRET(UseMethod, A C)
 CHECKED_INTERPRET(call, A)
+OP_NOT_IMPLEMENTED(icall)
 #undef A
 #undef B
 #undef B_1
@@ -374,6 +375,7 @@ UNARY_OP(tan)
 UNARY_OP(acos)
 UNARY_OP(asin)
 UNARY_OP(atan)
+OP_NOT_IMPLEMENTED(list)
 OP_NOT_IMPLEMENTED(logical1)
 OP_NOT_IMPLEMENTED(integer1)
 OP_NOT_IMPLEMENTED(double1)
@@ -414,9 +416,13 @@ RecordingStatus::Enum type_record(State & state, Instruction const & inst, Instr
 	// Should have a direct mapping from type to symbol.
 	Value & a = REG(state, inst.a);
 	Type::Enum atyp = (a.isFuture()) ? a.future.typ : a.type;
-	c[0] = state.StrToSym(Type::toString(atyp));
+	c[0] = state.internStr(Type::toString(atyp));
 	REG(state, inst.c) = c;
 	(*pc)++;
+	return RecordingStatus::NO_ERROR;
+}
+RecordingStatus::Enum length_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	*pc = length_op(state, inst);
 	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus::Enum ret_record(State & state, Instruction const & inst, Instruction const ** pc) {

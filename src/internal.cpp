@@ -6,83 +6,69 @@
 #include <math.h>
 #include <fstream>
 
-static void checkNumArgs(List const& args, int64_t nargs) {
-	if(args.length > nargs) _error("unused argument(s)");
-	else if(args.length < nargs) _error("too few arguments");
+template<typename T>
+T const& Cast(Value const& v) {
+	if(v.type != T::VectorType) _error("incorrect type passed to internal function");
+	return (T const&)v;
 }
 
-Value cat(State& state, List const& args, Character const& names) {
-	for(int64_t i = 0; i < args.length; i++) {
-		if(!List::isNA(args[i])) {
-			Character c = As<Character>(state, force(state, args[i]));
+void cat(State& state, Value const* args, Value& result) {
+	List const& a = Cast<List>(args[0]);
+	for(int64_t i = 0; i < a.length; i++) {
+		if(!List::isNA(a[i])) {
+			Character c = As<Character>(state, force(state, a[i]));
 			for(int64_t j = 0; j < c.length; j++) {
-				printf("%s", state.SymToStr(c[j]).c_str());
+				printf("%s", state.externStr(c[j]).c_str());
 				if(j < c.length-1) printf(" ");
 			}
 		}
 	}
-	return Null::Singleton();
+	result = Null::Singleton();
 }
 
-Value library(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-
-	Character from = As<Character>(state, force(state, args[0]));
+void library(State& state, Value const* args, Value& result) {
+	Character from = As<Character>(state, args[0]);
 	if(from.length > 0) {
-		loadLibrary(state, state.SymToStr(from[0]));
+		loadLibrary(state, state.externStr(from[0]));
 	}
-	return Null::Singleton();
+	result = Null::Singleton();
 }
 
-Value rm(State& state, List const& args, Character const& names) {
-	for(int64_t i = 0; i < args.length; i++) 
-		if(!expression(args[i]).isSymbol() && !expression(args[i]).isCharacter()) 
+void remove(State& state, Value const* args, Value& result) {
+	List const& list = Cast<List>(args[0]);
+	for(int64_t i = 0; i < list.length; i++) 
+		if(!expression(list[i]).isSymbol() && !expression(list[i]).isCharacter()) 
 			_error("rm() arguments must be symbols or character vectors");
-	for(int64_t i = 0; i < args.length; i++) {
-		state.frame.environment->rm(Symbol(expression(args[i])));
+	for(int64_t i = 0; i < list.length; i++) {
+		state.frame.environment->rm(Symbol(expression(list[i])));
 	}
-	return Null::Singleton();
+	result = Null::Singleton();
 }
 
-Value sequence(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 3);
+void sequence(State& state, Value const* args, Value& result) {
+	double from = asReal1(args[0]);
+	double by = asReal1(args[1]);
+	double len = asReal1(args[2]);
 
-	Value from = force(state, args[0]);
-	Value by   = force(state, args[1]);
-	Value len  = force(state, args[2]);
-
-	double f = asReal1(from);
-	double b = asReal1(by);
-	double l = asReal1(len);
-
-	return Sequence(f, b, l);	
+	result = Sequence(from, by, len);	
 }
 
-Value repeat(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 3);
-	Value from = force(state, args[0]);
-	assert(args.length == 3);
-	
-	Value vec  = force(state, args[0]);
-	Value each = force(state, args[1]);
-	Value len  = force(state, args[2]);
-	
-	double v = asReal1(vec);
-	//double e = asReal1(each);
-	double l = asReal1(len);
+void repeat(State& state, Value const* args, Value& result) {
+	double v = asReal1(args[0]);
+	//double e = asReal1(args[1]);
+	double l = asReal1(args[2]);
 	
 	Double r(l);
 	for(int64_t i = 0; i < l; i++) {
 		r[i] = v;
 	}
-	return r;
+	result = r;
 }
 
-Value inherits(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 3);
-	Value x = force(state, args[0]);
-	Character what = Character(force(state, args[1]));
-	Logical which = Logical(force(state, args[2]));
+void inherits(State& state, Value const* args, Value& result) {
+	Value x = args[0];
+	Character what = Cast<Character>(args[1]);
+	Logical which = Cast<Logical>(args[2]);
 	// NYI: which
 	Character c = klass(state, x);
 	bool inherits = false;
@@ -91,35 +77,33 @@ Value inherits(State& state, List const& args, Character const& names) {
 			if(what[i] == c[j]) inherits = true;
 		}
 	}
-	return Logical::c(inherits);
+	result = Logical::c(inherits);
 }
 
-Value attr(State& state, List const& args, Character const& names)
+void attr(State& state, Value const* args, Value& result)
 {
-	checkNumArgs(args, 3);
 	// NYI: exact
-	Value object = force(state, args[0]);
+	Value object = args[0];
 	if(object.isObject()) {
-		Character which = Character(force(state, args[1]));
-		return ((Object const&)object).getAttribute(which[0]);
+		Character which = Cast<Character>(args[1]);
+		result = ((Object const&)object).getAttribute(which[0]);
 	}
 	else {
-		return Value::Nil();
+		result = Value::Nil();
 	}
 }
 
-Value assignAttr(State& state, List const& args, Character const& names)
+void assignAttr(State& state, Value const* args, Value& result)
 {
-	checkNumArgs(args, 3);
-	Value object = force(state, args[0]);
-	Character which = Character(force(state, args[1]));
+	Value object = args[0];
+	Character which = Cast<Character>(args[1]);
 	if(!object.isObject()) {
 		Value v;
 		Object::Init(v, object);
 		object = v;
 	}
-	((Object&)object).setAttribute(which[0], force(state, args[2]));
-	return object;
+	((Object&)object).setAttribute(which[0], args[2]);
+	result = object;
 }
 
 Type::Enum cTypeCast(Value const& v, Type::Enum t)
@@ -128,8 +112,8 @@ Type::Enum cTypeCast(Value const& v, Type::Enum t)
 	r = std::max(v.type, t);
 	return r;
 }
-
-Value list(State& state, List const& args, Character const& names) {
+/*
+void list(State& state, Value const* args, Value& result) {
 	List out(args.length);
 	for(int64_t i = 0; i < args.length; i++) out[i] = force(state, args[i]);
 	if(names.length == 0) {
@@ -140,14 +124,14 @@ Value list(State& state, List const& args, Character const& names) {
 		return v;
 	}
 }
-
-Value unlist(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value v = force(state, args[0]);
+*/
+void unlist(State& state, Value const* args, Value& result) {
+	Value v = args[0];
 	if(!v.isList()) {
-		return v;
+		result = v;
+		return;
 	}
-	List from = List(v);
+	List from = Cast<List>(v);
 	int64_t total = 0;
 	Type::Enum type = Type::Null;
 	for(int64_t i = 0; i < from.length; i++) {
@@ -178,7 +162,7 @@ Value unlist(State& state, List const& args, Character const& names) {
 					j += from[i].length; \
 				} \
 				/*if(hasNames(from)) setNames(out, outnames);*/ \
-				return out; } break;
+				result = out; } break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: Insert into this type"); break;
@@ -393,47 +377,38 @@ void Subset2AssignSlow(State& state, Value const& a, Value const& i, Value const
 	};
 }
 
-Value length(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Integer i(1);
-	i[0] = a.length;
-	return i;
+void length(State& state, Value const* args, Value& result) {
+	result = Integer::c(args[0].length);
 }
 
-Value quote(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	return expression(args[0]);
+void quote(State& state, Value const* args, Value& result) {
+	// TODO: make op
+	result = expression(args[0]);
 }
 
-Value eval_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 3);
-	Value expr = force(state, args[0]);
-	Value envir = force(state, args[1]);
-	//Value enclos = force(state, args[2]);
-	return eval(state, Compiler::compile(state, expr), REnvironment(envir).ptr());
+void eval_fn(State& state, Value const* args, Value& result) {
+	result = eval(state, Compiler::compile(state, args[0]), REnvironment(args[1]).ptr());
 }
 
-Value lapply(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 2);
-	List x = As<List>(state, force(state, args[0]));
-	Value func = force(state, args[1]);
+void lapply(State& state, Value const* args, Value& result) {
+	List x = As<List>(state, args[0]);
+	Value func = args[1];
 
 	List apply(2);
 	apply[0] = func;
 
-	List result(x.length);
+	List r(x.length);
 	// TODO: should have a way to make a simple function call without compiling,
 	// or should have a fast case for compilation
 	for(int64_t i = 0; i < x.length; i++) {
 		apply[1] = x[i];
-		result[i] = eval(state, Compiler::compile(state, CreateCall(apply)));
+		r[i] = eval(state, Compiler::compile(state, CreateCall(apply)));
 	}
 
-	return result;
+	result = r;
 }
-
-Value tlist(State& state, List const& args, Character const& names) {
+/*
+void tlist(State& state, Value const* args, Value& result) {
 	int64_t length = args.length > 0 ? 1 : 0;
 	List a = Clone(args);
 	for(int64_t i = 0; i < a.length; i++) {
@@ -441,7 +416,7 @@ Value tlist(State& state, List const& args, Character const& names) {
 		if(a[i].isVector() && a[i].length != 0 && length != 0)
 			length = std::max(length, (int64_t)a[i].length);
 	}
-	List result(length);
+	List r(length);
 	for(int64_t i = 0; i < length; i++) {
 		List element(args.length);
 		for(int64_t j = 0; j < a.length; j++) {
@@ -450,15 +425,14 @@ Value tlist(State& state, List const& args, Character const& names) {
 			else
 				element[j] = a[j];
 		}
-		result[i] = element;
+		r[i] = element;
 	}
-	return result;
+	result = r;
 }
-
-Value source(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value file = force(state, args[0]);
-	std::ifstream t(state.SymToStr(Character(file)[0]).c_str());
+*/
+void source(State& state, Value const* args, Value& result) {
+	Character file = Cast<Character>(args[0]);
+	std::ifstream t(state.externStr(file[0]).c_str());
 	std::stringstream buffer;
 	buffer << t.rdbuf();
 	std::string code = buffer.str();
@@ -467,10 +441,11 @@ Value source(State& state, List const& args, Character const& names) {
 	Value value;
 	parser.execute(code.c_str(), code.length(), true, value);	
 	
-	return eval(state, Compiler::compile(state, value));
+	result = eval(state, Compiler::compile(state, value));
 }
 
-Value switch_fn(State& state, List const& args, Character const& names) {
+/*
+void switch_fn(State& state, Value const* args, Value& result) {
 	Value one = force(state, args[0]);
 	if(one.isInteger() && Integer(one).length == 1) {
 		int64_t i = Integer(one)[0];
@@ -492,207 +467,91 @@ Value switch_fn(State& state, List const& args, Character const& names) {
 			}
 		}
 	}
-	return Null::Singleton();
+	result = Null::Singleton();
 }
+*/
 
-Value environment(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value e = force(state, args[0]);
+void environment(State& state, Value const* args, Value& result) {
+	Value e = args[0];
 	if(e.isNull()) {
-		return REnvironment(state.frame.environment);
+		result = REnvironment(state.frame.environment);
 	}
 	else if(e.isFunction()) {
-		return REnvironment(Function(e).environment());
+		result = REnvironment(Function(e).environment());
 	}
-	return Null::Singleton();
+	result = Null::Singleton();
 }
 
-Value parentframe(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	int64_t i = (int64_t)asReal1(force(state, args[0]));
+void parentframe(State& state, Value const* args, Value& result) {
+	int64_t i = (int64_t)asReal1(args[0]);
 	Environment* env = state.frame.environment;
 	if(i > 0) {
 		env = state.stack[std::max(0ULL, (unsigned long long) state.stack.size()-i)].environment;
 	}
-	return REnvironment(env);
+	result = REnvironment(env);
 }
 
-Value stop_fn(State& state, List const& args, Character const& names) {
+void stop_fn(State& state, Value const* args, Value& result) {
 	// this should stop whether or not the arguments are correct...
-	std::string message = "user stop";
-	if(args.length > 0) {
-		if(args[0].isCharacter() && Character(args[0]).length > 0) {
-			message = state.SymToStr(Character(args[0])[0]);
-		}
-	}
+	std::string message = state.externStr(Cast<Character>(args[0])[0]);
 	_error(message);
-	return Null::Singleton();
+	result = Null::Singleton();
 }
 
-Value warning_fn(State& state, List const& args, Character const& names) {
-	std::string message = "user warning";
-	if(args.length > 0) {
-		if(args[0].isCharacter() && Character(args[0]).length > 0) {
-			message = state.SymToStr(Character(args[0])[0]);
-		}
-	}
+void warning_fn(State& state, Value const* args, Value& result) {
+	std::string message = state.externStr(Cast<Character>(args[0])[0]);
 	_warning(state, message);
-	return Character::c(state.StrToSym(message));
+	result = Character::c(state.internStr(message));
 } 
-
-Value missing(State& state, List const& args, Character const& names) {
+/*
+void missing(State& state, Value const* args, Value& result) {
 	Symbol s(expression(args[0])); 
 	Value v =  state.frame.environment->get(s);
-	return (v.isNil() || (v.isPromise() && Function(v).environment() == state.frame.environment)) ? Logical::True() : Logical::False();
+	result = (v.isNil() || (v.isPromise() && Function(v).environment() == state.frame.environment)) ? Logical::True() : Logical::False();
+}
+*/
+void isna_fn(State& state, Value const* args, Value& result) {
+	unaryFilter<Zip1, IsNAOp>(state, args[0], result);
 }
 
-Value max_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryArith<FoldLeft, MaxOp>(state, a, result);
-	return result;
+void isnan_fn(State& state, Value const* args, Value& result) {
+	unaryFilter<Zip1, IsNaNOp>(state, args[0], result);
 }
 
-Value min_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryArith<FoldLeft, MinOp>(state, a, result);
-	return result;
-}
-
-Value sum_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryArith<FoldLeft, SumOp>(state, a, result);
-	return result;
-}
-
-Value prod_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryArith<FoldLeft, ProdOp>(state, a, result);
-	return result;
-}
-
-Value cummax_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryArith<ScanLeft, MaxOp>(state, a, result);
-	return result;
-}
-
-Value cummin_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryArith<ScanLeft, MinOp>(state, a, result);
-	return result;
-}
-
-Value cumsum_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryArith<ScanLeft, SumOp>(state, a, result);
-	return result;
-}
-
-Value cumprod_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryArith<ScanLeft, ProdOp>(state, a, result);
-	return result;
-}
-
-Value any_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryLogical<FoldLeft, AnyOp>(state, a, result);
-	return result;
-}
-
-Value all_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryLogical<FoldLeft, AllOp>(state, a, result);
-	return result;
-}
-
-Value isna_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryFilter<Zip1, IsNAOp>(state, a, result);
-	return result;
-}
-
-Value isnan_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryFilter<Zip1, IsNaNOp>(state, a, result);
-	return result;
-}
-
-Value nchar_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 3);
-	Value a = force(state, args[0]);
+void nchar_fn(State& state, Value const* args, Value& result) {
 	// NYI: type or allowNA
-	Value result;
-	unaryCharacter<Zip1, NcharOp>(state, a, result);
-	return result;
+	unaryCharacter<Zip1, NcharOp>(state, args[0], result);
 }
 
-Value nzchar_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryCharacter<Zip1, NzcharOp>(state, a, result);
-	return result;
+void nzchar_fn(State& state, Value const* args, Value& result) {
+	unaryCharacter<Zip1, NzcharOp>(state, args[0], result);
 }
 
-Value isfinite_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryFilter<Zip1, IsFiniteOp>(state, a, result);
-	return result;
+void isfinite_fn(State& state, Value const* args, Value& result) {
+	unaryFilter<Zip1, IsFiniteOp>(state, args[0], result);
 }
 
-Value isinfinite_fn(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
-	Value a = force(state, args[0]);
-	Value result;
-	unaryFilter<Zip1, IsInfiniteOp>(state, a, result);
-	return result;
+void isinfinite_fn(State& state, Value const* args, Value& result) {
+	unaryFilter<Zip1, IsInfiniteOp>(state, args[0], result);
 }
 
-Value paste(State& state, List const& args, Character const& names) {
-	Character a = As<Character>(state, force(state, args[0]));
-	Character sep = As<Character>(state, force(state, args[1]));
-	std::string result = "";
+void paste(State& state, Value const* args, Value& result) {
+	Character a = As<Character>(state, args[0]);
+	Character sep = As<Character>(state, args[1]);
+	std::string r = "";
 	for(int64_t i = 0; i+1 < a.length; i++) {
-		result = result + state.SymToStr(a[i]) + state.SymToStr(sep[0]);
+		r = r + state.externStr(a[i]) + state.externStr(sep[0]);
 	}
-	if(a.length > 0) result = result + state.SymToStr(a[a.length-1]);
-	return Character::c(state.StrToSym(result));
+	if(a.length > 0) r = r + state.externStr(a[a.length-1]);
+	result = Character::c(state.internStr(r));
 }
 
-Value deparse(State& state, List const& args, Character const& names) {
+void deparse(State& state, Value const* args, Value& result) {
 	Value v = force(state, args[0]);
-	return Character::c(state.StrToSym(state.deparse(v)));
+	result = Character::c(state.internStr(state.deparse(v)));
 }
 
-Value substitute(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
+void substitute(State& state, Value const* args, Value& result) {
 	Value v = args[0];
 	while(v.isPromise()) v = Function(v).prototype()->expression;
 	
@@ -701,35 +560,22 @@ Value substitute(State& state, List const& args, Character const& names) {
 		if(!r.isNil()) v = r;
 		while(v.isPromise()) v = Function(v).prototype()->expression;
 	}
- 	return v;
+ 	result = v;
 }
 
-Value type_of(State& state, List const& args, Character const& names) {
+void type_of(State& state, Value const* args, Value& result) {
 	// Should have a direct mapping from type to symbol.
-	Value v = force(state, args[0]);
-	return Character::c(state.StrToSym(Type::toString(v.type)));
+	result = Character::c(state.internStr(Type::toString(args[0].type)));
 }
 
-Value get(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 2);
-	Character c = As<Character>(state, force(state, args[0]));
-	REnvironment e(force(state, args[1]));
+void exists(State& state, Value const* args, Value& result) {
+	Character c = As<Character>(state, args[0]);
+	REnvironment e(args[1]);
 	Value v = e.ptr()->get(c[0]);
 	if(v.isNil())
-		return Null::Singleton();
+		result = Logical::False();
 	else
-		return v;
-}
-
-Value exists(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 2);
-	Character c = As<Character>(state, force(state, args[0]));
-	REnvironment e(force(state, args[1]));
-	Value v = e.ptr()->get(c[0]);
-	if(v.isNil())
-		return Logical::False();
-	else
-		return Logical::True();
+		result = Logical::True();
 }
 
 #include <sys/time.h>
@@ -741,85 +587,68 @@ uint64_t readTime()
   return (uint64_t)time_tt.tv_sec * 1000 * 1000 + (uint64_t)time_tt.tv_usec;
 }
 
-Value systemtime(State& state, List const& args, Character const& names) {
-	checkNumArgs(args, 1);
+void proctime(State& state, Value const* args, Value& result) {
 	uint64_t s = readTime();
-	force(state, args[0]);
-	uint64_t e = readTime();
-	return Double::c((e-s)/(1000000.0));
+	result = Double::c(s/(1000000.0));
 }
 
-Value traceconfig(State & state, List const& args, Character const& names) {
-	checkNumArgs(args,2);
-	Logical e = As<Logical>(state, force(state,args[0]));
+void traceconfig(State & state, Value const* args, Value& result) {
+	Logical e = As<Logical>(state, args[0]);
 	if(e.length == 0) _error("condition is of zero length");
-	Logical v = As<Logical>(state, force(state,args[1]));
+	Logical v = As<Logical>(state, args[1]);
 	if(v.length == 0) _error("condition is of zero length");
 	state.tracing.enabled = e[0];
 	state.tracing.verbose = v[0];
-	return Null::Singleton();
+	result = Null::Singleton();
 }
 
 void importCoreFunctions(State& state, Environment* env)
 {
-	env->assign(state.StrToSym("max"), BuiltIn(max_fn));
-	env->assign(state.StrToSym("min"), BuiltIn(min_fn));
-	env->assign(state.StrToSym("sum"), BuiltIn(sum_fn));
-	env->assign(state.StrToSym("prod"), BuiltIn(prod_fn));
-	env->assign(state.StrToSym("cummax"), BuiltIn(cummax_fn));
-	env->assign(state.StrToSym("cummin"), BuiltIn(cummin_fn));
-	env->assign(state.StrToSym("cumsum"), BuiltIn(cumsum_fn));
-	env->assign(state.StrToSym("cumprod"), BuiltIn(cumprod_fn));
-	env->assign(state.StrToSym("any"), BuiltIn(any_fn));
-	env->assign(state.StrToSym("all"), BuiltIn(all_fn));
-	env->assign(state.StrToSym("nchar"), BuiltIn(nchar_fn));
-	env->assign(state.StrToSym("nzchar"), BuiltIn(nzchar_fn));
-	env->assign(state.StrToSym("is.na"), BuiltIn(isna_fn));
-	env->assign(state.StrToSym("is.nan"), BuiltIn(isnan_fn));
-	env->assign(state.StrToSym("is.finite"), BuiltIn(isfinite_fn));
-	env->assign(state.StrToSym("is.infinite"), BuiltIn(isinfinite_fn));
+	state.registerInternalFunction(state.internStr("nchar"), (nchar_fn), 1);
+	state.registerInternalFunction(state.internStr("nzchar"), (nzchar_fn), 1);
+	state.registerInternalFunction(state.internStr("is.na"), (isna_fn), 1);
+	state.registerInternalFunction(state.internStr("is.nan"), (isnan_fn), 1);
+	state.registerInternalFunction(state.internStr("is.finite"), (isfinite_fn), 1);
+	state.registerInternalFunction(state.internStr("is.infinite"), (isinfinite_fn), 1);
 	
-	env->assign(state.StrToSym("cat"), BuiltIn(cat));
-	env->assign(state.StrToSym("library"), BuiltIn(library));
-	env->assign(state.StrToSym("rm"), BuiltIn(rm));
-	env->assign(state.StrToSym("inherits"), BuiltIn(inherits));
+	state.registerInternalFunction(state.internStr("cat"), (cat), 1);
+	state.registerInternalFunction(state.internStr("library"), (library), 1);
+	state.registerInternalFunction(state.internStr("remove"), (remove), 1);
+	state.registerInternalFunction(state.internStr("inherits"), (inherits), 1);
 	
-	env->assign(state.StrToSym("seq"), BuiltIn(sequence));
-	env->assign(state.StrToSym("rep"), BuiltIn(repeat));
+	state.registerInternalFunction(state.internStr("seq"), (sequence), 3);
+	state.registerInternalFunction(state.internStr("rep"), (repeat), 3);
 	
-	env->assign(state.StrToSym("attr"), BuiltIn(attr));
-	env->assign(state.StrToSym("attr<-"), BuiltIn(assignAttr));
+	state.registerInternalFunction(state.internStr("attr"), (attr), 3);
+	state.registerInternalFunction(state.internStr("attr<-"), (assignAttr), 3);
 	
-	env->assign(state.StrToSym("list"), BuiltIn(list));
-	env->assign(state.StrToSym("unlist"), BuiltIn(unlist));
-	env->assign(state.StrToSym("length"), BuiltIn(length));
+	//state.registerInternalFunction(state.internStr("list"), (list));
+	state.registerInternalFunction(state.internStr("unlist"), (unlist), 1);
+	state.registerInternalFunction(state.internStr("length"), (length), 1);
 	
-	env->assign(state.StrToSym("switch"), BuiltIn(switch_fn));
+	state.registerInternalFunction(state.internStr("eval"), (eval_fn), 2);
+	state.registerInternalFunction(state.internStr("quote"), (quote), 1);
+	state.registerInternalFunction(state.internStr("source"), (source), 1);
 
-	env->assign(state.StrToSym("eval"), BuiltIn(eval_fn));
-	env->assign(state.StrToSym("quote"), BuiltIn(quote));
-	env->assign(state.StrToSym("source"), BuiltIn(source));
+	state.registerInternalFunction(state.internStr("lapply"), (lapply), 2);
+	//state.registerInternalFunction(state.internStr("t.list"), (tlist));
 
-	env->assign(state.StrToSym("lapply"), BuiltIn(lapply));
-	env->assign(state.StrToSym("t.list"), BuiltIn(tlist));
+	state.registerInternalFunction(state.internStr("environment"), (environment), 1);
+	state.registerInternalFunction(state.internStr("parent.frame"), (parentframe), 1);
+	//state.registerInternalFunction(state.internStr("missing"), (missing), 1);
+	
+	state.registerInternalFunction(state.internStr("stop"), (stop_fn), 1);
+	state.registerInternalFunction(state.internStr("warning"), (warning_fn), 1);
+	
+	state.registerInternalFunction(state.internStr("paste"), (paste), 2);
+	state.registerInternalFunction(state.internStr("deparse"), (deparse), 1);
+	state.registerInternalFunction(state.internStr("substitute"), (substitute), 1);
+	
+	state.registerInternalFunction(state.internStr("typeof"), (type_of), 1);
+	
+	state.registerInternalFunction(state.internStr("exists"), (exists), 2);
 
-	env->assign(state.StrToSym("environment"), BuiltIn(environment));
-	env->assign(state.StrToSym("parent.frame"), BuiltIn(parentframe));
-	env->assign(state.StrToSym("missing"), BuiltIn(missing));
-	
-	env->assign(state.StrToSym("stop"), BuiltIn(stop_fn));
-	env->assign(state.StrToSym("warning"), BuiltIn(warning_fn));
-	
-	env->assign(state.StrToSym("paste"), BuiltIn(paste));
-	env->assign(state.StrToSym("deparse"), BuiltIn(deparse));
-	env->assign(state.StrToSym("substitute"), BuiltIn(substitute));
-	
-	env->assign(state.StrToSym("typeof"), BuiltIn(type_of));
-	
-	env->assign(state.StrToSym("get"), BuiltIn(get));
-	env->assign(state.StrToSym("exists"), BuiltIn(exists));
-
-	env->assign(state.StrToSym("system.time"), BuiltIn(systemtime));
-	env->assign(state.StrToSym("trace.config"), BuiltIn(traceconfig));
+	state.registerInternalFunction(state.internStr("proc.time"), (proctime), 0);
+	state.registerInternalFunction(state.internStr("trace.config"), (traceconfig), 2);
 }
 

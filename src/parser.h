@@ -78,10 +78,10 @@ struct Parser {
 	// To provide user with function source have to track beginning locations
 	// Parser pops when function rule is reduced
 	std::stack<const char*> source;
-	Symbol popSource() {
+	String popSource() {
 		assert(source.size() > 0);
 		std::string s(source.top(), le-source.top());
-		Symbol result = state.StrToSym(rtrim(s));
+		String result = state.internStr(rtrim(s));
 		source.pop();
 		return result;
 	}
@@ -94,15 +94,15 @@ struct Parser {
 
 struct Pairs {
 	struct Pair {
-		Symbol n;
+		String n;
 		Value v;        
 	};        
 	std::deque<Pair, traceable_allocator<Value> > p;
 	int64_t length() const { return p.size(); }        
-	void push_front(Symbol n, Value const& v) { Pair t = {n, v}; p.push_front(t); } 
-	void push_back(Symbol n, Value const& v)  { Pair t = {n, v}; p.push_back(t); }        
+	void push_front(String n, Value const& v) { Pair t = {n, v}; p.push_front(t); } 
+	void push_back(String n, Value const& v)  { Pair t = {n, v}; p.push_back(t); }        
 	const Value& value(int64_t i) const { return p[i].v; }
-	const Symbol& name(int64_t i) const { return p[i].n; }
+	const String& name(int64_t i) const { return p[i].n; }
 
 	List values() const {
 		List l(length());
@@ -114,7 +114,7 @@ struct Pairs {
 	Value names(bool forceNames) const {
 		bool named = false;
 		for(int64_t i = 0; i < length(); i++) {                        
-			if(name(i) != Symbols::empty) {
+			if(name(i) != Strings::empty) {
 				named = true;
 				break;                        
 			}                
@@ -122,7 +122,7 @@ struct Pairs {
 		if(named || forceNames) {
 			Character n(length());                        
 			for(int64_t i = 0; i < length(); i++)
-				n[i] = Symbol(name(i).i);
+				n[i] = name(i);
 			return n;
 		}
 		else return Value::Nil();

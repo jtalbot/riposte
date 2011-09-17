@@ -2,16 +2,16 @@ fail <- 0
 
 {
 	cat("Testing if statement\n-------------\n")
-	if(TRUE) cat("PASS\n") else cat ("FAIL\n")
-	if(FALSE) cat("FAIL\n") else cat ("PASS\n")
-	if(1) cat("PASS\n") else cat("FAIL\n")
-	if(is.null(if(FALSE) 1)) cat("PASS\n") else cat("FAIL\n")
+	if(TRUE) cat("PASS\n") else cat ("--FAIL\n")
+	if(FALSE) cat("--FAIL\n") else cat ("PASS\n")
+	if(1) cat("PASS\n") else cat("--FAIL\n")
+	if(is.null(if(FALSE) 1)) cat("PASS\n") else cat("--FAIL\n")
 	"done"
 }
 
 {
-	PassIfTrue <- function(x) { fail<-fail+1; if(x) { cat("PASS\n"); fail<-fail-1 } else cat("FAIL\n") }
-	PassIfFalse <- function(x) { fail<-fail+1; if(x) cat("FAIL\n") else { cat("PASS\n"); fail<-fail-1 } }
+	PassIfTrue <- function(x) { fail<<-fail+1; if(x) { cat("PASS\n"); fail<<-fail-1 } else cat("--FAIL\n") }
+	PassIfFalse <- function(x) { fail<<-fail+1; if(x) cat("--FAIL\n") else { cat("PASS\n"); fail<<-fail-1 } }
 	"defined PassIfTrue and PassIfFalse"
 }
 
@@ -67,8 +67,10 @@ fail <- 0
 	for(i in 1:10) a <- a+1
 	PassIfTrue(a == 10)
 	PassIfTrue(i == 10)
-	a <- 1:10
-	for(i in a) 1
+	a <- 0
+	b <- 1:10
+	for(i in b) a <- a+i
+	PassIfTrue(a == 55)
 	PassIfTrue(i == 10)
 
 	a <- 0

@@ -14,27 +14,19 @@
 #  A copy of the GNU General Public License is available at
 #  http://www.r-project.org/Licenses/
 
-vector <- function(mode = "logical", length = 0)
-	switch(mode,
-		logical=logical(length),
-		integer=integer(length),
-		double=double(length),
-		numeric=double(length),
-		character=character(length),
-		complex=complex(length),
-		raw=raw(length),
-		stop("cannot make a vector of mode 'NYI'"))
-real <- function(length) double(length)
-numeric <- function(length) double(length)
-
-# This function is currently not working since "complex" is interpreted as an op code.
+vector <- function(mode = "logical", length = 0).Internal(vector(mode,length))
+logical <- function(length = 0) vector("logical", length)
+character <- function(length = 0) vector("character", length)
+integer <- function(length = 0) vector("integer", length)
+double <- function(length = 0) vector("double", length)
+real <- double
+numeric <- double
 complex <- function(length.out = 0,
 		    real = numeric(), imaginary = numeric(),
 		    modulus = 1, argument = 0) {
     if(missing(modulus) && missing(argument)) {
 	## assume 'real' and 'imaginary'
-	n <- max(length.out, length(real), length(imaginary))
-	vector("complex", n) + real + imaginary*1i
+	.Internal(complex(length.out, real, imaginary))
     } else {
 	n <- max(length.out, length(argument), length(modulus))
 	rep(modulus,length.out=n) *
@@ -42,21 +34,5 @@ complex <- function(length.out = 0,
     }
 }
 
-as.vector <- function(x, mode = "any") {
-	switch(mode,
-		logical = .Internal(as.logical)(x),
-		integer = .Internal(as.integer)(x),
-		double  = .Internal(as.double)(x),
-		numeric = .Internal(as.double)(x),
-		complex = .Internal(as.complex)(x),
-		character = .Internal(as.character)(x),
-		any = x)
-}
-
-cbind <- function(...) {
-	l <- list(...)
-	rows <- max(unlist(lapply(l, length)))
-	matrix <- unlist(l)
-	dim(matrix) <- c(rows, length(l))
-	matrix
-}
+single <- function(length = 0)
+    structure(vector("double", length), Csingle=TRUE)

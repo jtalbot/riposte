@@ -10,6 +10,7 @@
 	_(jf, "jf") \
 	_(jmp, "jmp") \
 	_(call, "call") \
+	_(icall, "icall") \
 	_(UseMethod, "UseMethod") \
 	_(ret, "ret") \
 	_(forbegin, "forbegin") \
@@ -107,6 +108,8 @@
 	_(raw1, "raw") \
 	_(seq, "seq") \
 	_(type, "type") \
+	_(list, "list") \
+	_(length, "length")
 
 #define SPECIAL_BYTECODES(_) 	\
 	_(done, "done") 

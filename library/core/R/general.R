@@ -1,13 +1,17 @@
 
 force <- function(x) x
 
+list <- function(...) list(...)
+
+cat <- function(...) .Internal(cat(list(...)))
+
 mapply <- function(FUN, ...) {
 	lapply(t.list(...), FUN)
 }
 
 paste <- function(..., sep = " ", collapse = NULL) {
-	r <- mapply(function(x) .Internal(paste)(x, sep), ...)
-	if(!is.null(collapse)) .Internal(paste)(r, collapse)
+	r <- mapply(function(x) .Internal(paste(x, sep)), ...)
+	if(!is.null(collapse)) .Internal(paste(r, collapse))
 	else unlist(r)
 }
 

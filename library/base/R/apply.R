@@ -30,6 +30,7 @@ apply <- function(X, MARGIN, FUN, ...)
     ds <- seq_len(dl)
 
     ## Extract the margins and associated dimnames
+
     if (is.character(MARGIN)) {
         if(is.null(dnn <- names(dn))) # names(NULL) is NULL
            stop("'X' must have named dimnames")
@@ -37,7 +38,6 @@ apply <- function(X, MARGIN, FUN, ...)
         if (any(is.na(MARGIN)))
             stop("not all elements of 'MARGIN' are names of dimensions")
     }
-    
     s.call <- ds[-MARGIN]
     s.ans  <- ds[MARGIN]
     d.call <- d[-MARGIN]
