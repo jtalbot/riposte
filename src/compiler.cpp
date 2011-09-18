@@ -61,8 +61,9 @@ static ByteCode::Enum op(Symbol const& s) {
 	}
 }
 
-void Compiler::emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c) {
+int64_t Compiler::emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c) {
 	code->bc.push_back(Instruction(bc, a, b, c));
+	return code->bc.size()-1;
 }
 
 static void resolveLoopReferences(Prototype* code, int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget) {
@@ -417,7 +418,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t begin1 = code->bc.size(), begin2 = 0;
 		scopes.back().deadAfter(liveIn);
 		resultT = compile(call[2], code);
-
+		
 		if(call.length == 4) {
 			emit(code, ByteCode::jmp, 0, 0, 0);
 			scopes.back().deadAfter(liveIn);
@@ -435,6 +436,39 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		if(resultT != resultF) throw CompileError(std::string("then and else blocks don't put the result in the same register ") + intToStr(resultT) + " " + intToStr(resultF));
 		scopes.back().deadAfter(resultT);
 		return resultT;
+	} break;
+	case EStrings::switchSym:
+	{
+		if(call.length == 0) _error("'EXPR' is missing");
+		int64_t c = compile(call[1], code);
+		int64_t n = call.length-2;
+		int64_t branch = emit(code, ByteCode::branch, c, n, 0);
+		for(int64_t i = 2; i < call.length; i++) {
+			emit(code, ByteCode::branch, names.length > i ? names[i].i : Strings::empty.i, 0, 0);
+		}
+		scopes.back().deadAfter(liveIn);
+		
+		std::vector<int64_t> jmps;
+		int64_t result = compile(Null::Singleton(), code);
+		jmps.push_back(emit(code, ByteCode::jmp, 0, 0, 0));	
+		
+		for(int64_t i = 1; i <= n; i++) {
+			code->bc[branch+i].c = code->bc.size()-branch;
+			scopes.back().deadAfter(liveIn);
+			if(!call[i+1].isNil()) {
+				int64_t r = compile(call[i+1], code);
+				if(r != result) throw CompileError(std::string("switch statement doesn't put all its results in the same register"));
+				if(i < n)
+					jmps.push_back(emit(code, ByteCode::jmp, 0, 0, 0));
+			} else if(i == n) {
+				compile(Null::Singleton(), code);
+			}
+		}
+		for(int64_t i = 0; i < jmps.size(); i++) {
+			code->bc[jmps[i]].a = code->bc.size()-jmps[i];
+		}
+		scopes.back().deadAfter(result);
+		return result;
 	} break;
 	case EStrings::brace: 
 	{
@@ -662,9 +696,10 @@ int64_t Compiler::compile(Value const& expr, Prototype* code) {
 				}
 			}
 			break;
-		default:
-			return compileConstant(expr, code);
-			break;
+		default: {
+			int64_t i = compileConstant(expr, code);
+			return i;
+		}	break;
 	};
 }
 

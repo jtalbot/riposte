@@ -5,6 +5,12 @@ list <- function(...) list(...)
 
 cat <- function(...) .Internal(cat(list(...)))
 
+system.time <- function(expr) {
+	start <- .Internal(proc.time())
+	expr
+	.Internal(proc.time())-start
+}
+
 mapply <- function(FUN, ...) {
 	lapply(t.list(...), FUN)
 }

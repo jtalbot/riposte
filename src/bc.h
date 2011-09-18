@@ -9,6 +9,7 @@
 	_(jt, "jt") \
 	_(jf, "jf") \
 	_(jmp, "jmp") \
+	_(branch, "branch") \
 	_(call, "call") \
 	_(icall, "icall") \
 	_(UseMethod, "UseMethod") \
@@ -19,7 +20,6 @@
 #define MEMORY_ACCESS_BYTECODES(_) \
 	_(get, "get") \
 	_(kget, "kget") \
-	_(iget, "iget") \
 	_(assign, "assign") \
 	_(assign2, "assign2") \
 	_(iassign, "iassign") \

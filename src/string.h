@@ -43,6 +43,7 @@
 	_(nextSym, 	"next") \
 	_(breakSym,	"break") \
 	_(ifSym, 	"if") \
+	_(switchSym, 	"switch") \
 	_(brace, 	"{") \
 	_(paren, 	"(") \
 	_(add, 		"+") \

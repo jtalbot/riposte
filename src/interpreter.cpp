@@ -413,6 +413,29 @@ Instruction const* jf_op(State& state, Instruction const& inst) {
 	if(l[0]) return &inst+1;
 	else return &inst+inst.a;
 }
+Instruction const* branch_op(State& state, Instruction const& inst) {
+	Value const& c = REG(state, inst.a);
+	int64_t index = -1;
+	if(c.isDouble1()) index = (int64_t)c.d;
+	else if(c.isInteger1()) index = c.i;
+	else if(c.isLogical1()) index = c.i;
+	else if(c.isCharacter1()) {
+		for(int64_t i = 1; i <= inst.b; i++) {
+			if((&inst+i)->a == c.s.i) {
+				index = i;
+				break;
+			}
+			if(index < 0 && (&inst+i)->a == Strings::empty.i) {
+				index = i;
+			}
+		}
+	}
+	if(index >= 1 && index <= inst.b) {
+		return &inst + ((&inst+index)->c);
+	} else {
+		return &inst+1+inst.b;
+	}
+}
 Instruction const* colon_op(State& state, Instruction const& inst) {
 	double from = asReal1(REG(state,inst.a));
 	double to = asReal1(REG(state,inst.b));
@@ -688,6 +711,7 @@ Instruction const* length_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* ret_op(State& state, Instruction const& inst) {
+	printf("in ret\n");
 	*(state.frame.result) = REG(state, inst.c);
 	// if this stack frame owns the environment, we can free it for reuse
 	// as long as we don't return a closure...
@@ -722,7 +746,7 @@ static const void** glabels = 0;
 #endif
 
 static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc) {
-	//printCode(state, prototype);
+	printCode(state, prototype);
 	StackFrame& s = state.push();
 	s.environment = environment;
 	s.ownEnvironment = ownEnvironment;

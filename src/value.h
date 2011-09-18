@@ -54,6 +54,7 @@ struct Value {
 	bool isNull() const { return type == Type::Null; }
 	bool isLogical() const { return type == Type::Logical; }
 	bool isInteger() const { return type == Type::Integer; }
+	bool isLogical1() const { return header == (1<<4) + Type::Logical; }
 	bool isInteger1() const { return header == (1<<4) + Type::Integer; }
 	bool isDouble() const { return type == Type::Double; }
 	bool isDouble1() const { return header == (1<<4) + Type::Double; }
@@ -120,10 +121,7 @@ struct Symbol : public Value {
 	}
 
 	operator Value() const {
-		Value v;
-		Value::Init(v, Type::Symbol, 1);
-		v.s = s;
-		return v;
+		return *(Value*)this;
 	}
 
 	bool operator==(Symbol const& other) const { return s == other.s; }
@@ -192,10 +190,7 @@ struct Vector : public Value {
 	}
 
 	operator Value() const {
-		Value v;
-		Value::Init(v,type, length);
-		v.p = p;
-		return v;
+		return (Value&)*this;
 	}
 };
 
