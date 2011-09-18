@@ -118,6 +118,8 @@
 	_(dotClass, 	".Class") \
 	_(docall,	"do.call") \
 	_(list,		"list") \
+	_(missing,	"missing") \
+	_(quote,	"quote") \
 
 DECLARE_ENUM(EStrings, STRINGS)
 

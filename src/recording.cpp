@@ -426,6 +426,10 @@ RecordingStatus::Enum length_record(State & state, Instruction const & inst, Ins
 	*pc = length_op(state, inst);
 	return RecordingStatus::NO_ERROR;
 }
+RecordingStatus::Enum missing_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	*pc = length_op(state, inst);
+	return RecordingStatus::NO_ERROR;
+}
 RecordingStatus::Enum ret_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	//ret writes a value into a register of the caller's frame. If this value is a future we need to
 	//record it as a potential output location

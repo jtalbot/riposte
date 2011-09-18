@@ -710,8 +710,15 @@ Instruction const* length_op(State& state, Instruction const& inst) {
 		Integer::InitScalar(REG(state, inst.c), 1);
 	return &inst+1;
 }
+Instruction const* missing_op(State& state, Instruction const& inst) {
+	// This could be inline cached...or implemented in terms of something else?
+	String s = String::Init(inst.a);
+	Value const& v = state.frame.environment->get(s);
+	bool missing = v.isNil() || (v.isPromise() && Function(v).environment() == state.frame.environment);
+	Logical::InitScalar(REG(state, inst.c), missing);
+	return &inst+1;
+}
 Instruction const* ret_op(State& state, Instruction const& inst) {
-	printf("in ret\n");
 	*(state.frame.result) = REG(state, inst.c);
 	// if this stack frame owns the environment, we can free it for reuse
 	// as long as we don't return a closure...
@@ -746,7 +753,7 @@ static const void** glabels = 0;
 #endif
 
 static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc) {
-	printCode(state, prototype);
+	//printCode(state, prototype);
 	StackFrame& s = state.push();
 	s.environment = environment;
 	s.ownEnvironment = ownEnvironment;
@@ -822,7 +829,9 @@ Value eval(State& state, Prototype const* prototype, Environment* environment) {
 #ifdef USE_THREADED_INTERPRETER
 	done->ibc = glabels[ByteCode::done];
 #endif
+	Value* old_base = state.base;
 	int64_t stackSize = state.stack.size();
+	
 	// Build a half-hearted stack frame for the result. Necessary for the trace recorder.
 	StackFrame& s = state.push();
 	s.environment = 0;
@@ -834,10 +843,10 @@ Value eval(State& state, Prototype const* prototype, Environment* environment) {
 	Instruction const* run = buildStackFrame(state, environment, false, prototype, result, done);
 	try {
 		interpret(state, run);
-		state.base = s.returnbase;
+		state.base = old_base;
 		state.pop();
 	} catch(...) {
-		state.base = s.returnbase;
+		state.base = old_base;
 		state.stack.resize(stackSize);
 		throw;
 	}

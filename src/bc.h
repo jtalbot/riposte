@@ -109,7 +109,8 @@
 	_(seq, "seq") \
 	_(type, "type") \
 	_(list, "list") \
-	_(length, "length")
+	_(length, "length") \
+	_(missing, "missing") 
 
 #define SPECIAL_BYTECODES(_) 	\
 	_(done, "done") 

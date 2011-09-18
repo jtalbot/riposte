@@ -464,7 +464,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 				compile(Null::Singleton(), code);
 			}
 		}
-		for(int64_t i = 0; i < jmps.size(); i++) {
+		for(int64_t i = 0; i < (int64_t)jmps.size(); i++) {
 			code->bc[jmps[i]].a = code->bc.size()-jmps[i];
 		}
 		scopes.back().deadAfter(result);
@@ -652,6 +652,21 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		emit(code, ByteCode::list, counter, storage, result); 
 		scopes.back().deadAfter(result);
 		return result;
+	} break;
+	case EStrings::missing:
+	{
+		if(call.length != 2) _error("missing requires one argument");
+		if(!call[1].isSymbol() && !call[1].isCharacter1()) _error("wrong parameter to missing");
+		Symbol s(call[1]);
+		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		emit(code, ByteCode::missing, s.i, 0, result); 
+		scopes.back().deadAfter(result);
+		return result;
+	} break;
+	case EStrings::quote:
+	{
+		if(call.length != 2) _error("quote requires one argument");
+		return compileConstant(call[1], code);
 	} break;
 	default:
 	{

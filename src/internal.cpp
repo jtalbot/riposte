@@ -16,7 +16,7 @@ void cat(State& state, Value const* args, Value& result) {
 	List const& a = Cast<List>(args[0]);
 	for(int64_t i = 0; i < a.length; i++) {
 		if(!List::isNA(a[i])) {
-			Character c = As<Character>(state, force(state, a[i]));
+			Character c = As<Character>(state, a[i]);
 			for(int64_t j = 0; j < c.length; j++) {
 				printf("%s", state.externStr(c[j]).c_str());
 				if(j < c.length-1) printf(" ");
@@ -112,19 +112,6 @@ Type::Enum cTypeCast(Value const& v, Type::Enum t)
 	r = std::max(v.type, t);
 	return r;
 }
-/*
-void list(State& state, Value const* args, Value& result) {
-	List out(args.length);
-	for(int64_t i = 0; i < args.length; i++) out[i] = force(state, args[i]);
-	if(names.length == 0) {
-		return out;
-	} else {
-		Value v;
-		Object::InitWithNames(v, out, names);
-		return v;
-	}
-}
-*/
 void unlist(State& state, Value const* args, Value& result) {
 	Value v = args[0];
 	if(!v.isList()) {
@@ -135,7 +122,6 @@ void unlist(State& state, Value const* args, Value& result) {
 	int64_t total = 0;
 	Type::Enum type = Type::Null;
 	for(int64_t i = 0; i < from.length; i++) {
-		from[i] = force(state, from[i]);
 		total += from[i].length;
 		type = cTypeCast(from[i], type);
 	}
@@ -381,11 +367,6 @@ void length(State& state, Value const* args, Value& result) {
 	result = Integer::c(args[0].length);
 }
 
-void quote(State& state, Value const* args, Value& result) {
-	// TODO: make op
-	result = expression(args[0]);
-}
-
 void eval_fn(State& state, Value const* args, Value& result) {
 	result = eval(state, Compiler::compile(state, args[0]), REnvironment(args[1]).ptr());
 }
@@ -444,33 +425,6 @@ void source(State& state, Value const* args, Value& result) {
 	result = eval(state, Compiler::compile(state, value));
 }
 
-/*
-void switch_fn(State& state, Value const* args, Value& result) {
-	Value one = force(state, args[0]);
-	if(one.isInteger() && Integer(one).length == 1) {
-		int64_t i = Integer(one)[0];
-		if(i >= 1 && (int64_t)i <= args.length) {return force(state, args[i]);}
-	} else if(one.isDouble() && Double(one).length == 1) {
-		int64_t i = (int64_t)Double(one)[0];
-		if(i >= 1 && (int64_t)i <= args.length) {return force(state, args[i]);}
-	} else if(one.isCharacter() && Character(one).length == 1 && args.isObject() && ((Object const&)args).hasNames()) {
-		Character names = Character(((Object const&)args).getNames());
-		for(int64_t i = 1; i < args.length; i++) {
-			if(names[i] == Character(one)[0]) {
-				while(args[i].isNil() && i < args.length) i++;
-				return i < args.length ? force(state, args[i]) : (Value)(Null::Singleton());
-			}
-		}
-		for(int64_t i = 1; i < args.length; i++) {
-			if(names[i] == Symbols::empty) {
-				return force(state, args[i]);
-			}
-		}
-	}
-	result = Null::Singleton();
-}
-*/
-
 void environment(State& state, Value const* args, Value& result) {
 	Value e = args[0];
 	if(e.isNull()) {
@@ -503,13 +457,6 @@ void warning_fn(State& state, Value const* args, Value& result) {
 	_warning(state, message);
 	result = Character::c(state.internStr(message));
 } 
-/*
-void missing(State& state, Value const* args, Value& result) {
-	Symbol s(expression(args[0])); 
-	Value v =  state.frame.environment->get(s);
-	result = (v.isNil() || (v.isPromise() && Function(v).environment() == state.frame.environment)) ? Logical::True() : Logical::False();
-}
-*/
 void isna_fn(State& state, Value const* args, Value& result) {
 	unaryFilter<Zip1, IsNAOp>(state, args[0], result);
 }
@@ -622,12 +569,10 @@ void importCoreFunctions(State& state, Environment* env)
 	state.registerInternalFunction(state.internStr("attr"), (attr), 3);
 	state.registerInternalFunction(state.internStr("attr<-"), (assignAttr), 3);
 	
-	//state.registerInternalFunction(state.internStr("list"), (list));
 	state.registerInternalFunction(state.internStr("unlist"), (unlist), 1);
 	state.registerInternalFunction(state.internStr("length"), (length), 1);
 	
-	state.registerInternalFunction(state.internStr("eval"), (eval_fn), 2);
-	state.registerInternalFunction(state.internStr("quote"), (quote), 1);
+	state.registerInternalFunction(state.internStr("eval"), (eval_fn), 3);
 	state.registerInternalFunction(state.internStr("source"), (source), 1);
 
 	state.registerInternalFunction(state.internStr("lapply"), (lapply), 2);
@@ -635,7 +580,6 @@ void importCoreFunctions(State& state, Environment* env)
 
 	state.registerInternalFunction(state.internStr("environment"), (environment), 1);
 	state.registerInternalFunction(state.internStr("parent.frame"), (parentframe), 1);
-	//state.registerInternalFunction(state.internStr("missing"), (missing), 1);
 	
 	state.registerInternalFunction(state.internStr("stop"), (stop_fn), 1);
 	state.registerInternalFunction(state.internStr("warning"), (warning_fn), 1);
@@ -646,7 +590,7 @@ void importCoreFunctions(State& state, Environment* env)
 	
 	state.registerInternalFunction(state.internStr("typeof"), (type_of), 1);
 	
-	state.registerInternalFunction(state.internStr("exists"), (exists), 2);
+	state.registerInternalFunction(state.internStr("exists"), (exists), 4);
 
 	state.registerInternalFunction(state.internStr("proc.time"), (proctime), 0);
 	state.registerInternalFunction(state.internStr("trace.config"), (traceconfig), 2);

@@ -129,7 +129,7 @@ int dostdin(State& state) {
 		}
 		if(state.warnings.size() > 0) {
 			std::cout << "There were " << intToStr(state.warnings.size()) << " warnings." << std::endl;
-			for(int64_t i = 0; i < (int64_t)state.warnings.size() && i < 50; i++) {
+			for(int64_t i = 0; i < (int64_t)state.warnings.size(); i++) {
 				std::cout << "(" << intToStr(i+1) << ") " << state.warnings[i] << std::endl;
 			}
 		}
@@ -254,7 +254,7 @@ main(int argc, char** argv)
 		importCoreFunctions(state, base);	
 		importCoerceFunctions(state, base);	
 		loadLibrary(state, "core");
-		//loadLibrary(state, "base");
+		loadLibrary(state, "base");
 
 	} catch(RiposteError& error) { 
 		e_message("Error", "riposte", error.what().c_str());
@@ -265,7 +265,7 @@ main(int argc, char** argv)
 	}
 	if(state.warnings.size() > 0) {
 		std::cout << "There were " << intToStr(state.warnings.size()) << " warnings." << std::endl;
-		for(int64_t i = 0; i < (int64_t)state.warnings.size() && i < 50; i++) {
+		for(int64_t i = 0; i < (int64_t)state.warnings.size(); i++) {
 			std::cout << "(" << intToStr(i+1) << ") " << state.warnings[i] << std::endl;
 		}
 	}
