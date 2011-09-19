@@ -22,5 +22,5 @@ const String Character::NAelement = Strings::NA;
 
 const Value List::NAelement = Value::Nil();
 
-uint64_t Environment::globalRevision = 1;
+uint64_t Dictionary::globalRevision = 1;
 

@@ -8,6 +8,11 @@
 #include <stack>
 #include <algorithm>
 #include <locale>
+
+#include <gc/gc.h>
+#include <gc/gc_cpp.h>
+#include <gc/gc_allocator.h>
+
 #include "value.h"
 
 // trim from end

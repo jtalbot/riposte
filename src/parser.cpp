@@ -472,7 +472,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	lastTokenWasNL = false;
 	complete = false;
 
-	pParser = ParseAlloc(malloc);
+	pParser = ParseAlloc(GC_malloc);
 
 	/*ParseTrace(trace, 0);*/
 
@@ -1001,7 +1001,7 @@ _again:
 #line 202 "lexer.rl"
 	int syntaxErrors = errors;
 	Parse(pParser, 0, Value::Nil(), this);
-	ParseFree(pParser, free);
+	ParseFree(pParser, GC_free);
 	errors = syntaxErrors;
 
 	if( cs == Scanner_error && syntaxErrors == 0) {

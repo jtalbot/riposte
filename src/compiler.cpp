@@ -140,8 +140,8 @@ int64_t Compiler::compileInternalFunctionCall(Object const& o, Prototype* code) 
 	Symbol func(call[0]);
 	std::map<String, int64_t>::const_iterator itr = state.internalFunctionIndex.find(func);
 	if(itr == state.internalFunctionIndex.end()) {
-		_warning(state, std::string("Unimplemented internal function ") + state.externStr(func));
-		return compile(o, code);
+		_error(std::string("Unimplemented internal function ") + state.externStr(func));
+		//return compile(o, code);
 	}
 	int64_t function = itr->second;
 	// check parameter count

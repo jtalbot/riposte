@@ -225,8 +225,9 @@ static Value UseMethodSearch(State& state, String s) {
 		value = environment->get(s);
 	}
 	if(value.isPromise()) {
-		value = force(state, value);
-		environment->assign(s, value);
+		//value = force(state, value);
+		//environment->assign(s, value);
+		_error("UseMethod does not yet support evaluating promises");
 	}
 	return value;
 }

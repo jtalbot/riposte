@@ -10,14 +10,6 @@
 #include <set>
 #include <algorithm>
 
-inline Value force(State& state, Value v) { 
-	if(v.isPromise()) {
-		Environment* env = Function(v).environment();
-		v = eval(state, Function(v).prototype(), 
-			env != 0 ? env : state.frame.environment); 
-	} 
-	return v;
-}
 inline Value expression(Value const& v) { 
 	if(v.isPromise())
 		return Function(v).prototype()->expression;

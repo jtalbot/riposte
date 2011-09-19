@@ -34,17 +34,6 @@ void library(State& state, Value const* args, Value& result) {
 	result = Null::Singleton();
 }
 
-void remove(State& state, Value const* args, Value& result) {
-	List const& list = Cast<List>(args[0]);
-	for(int64_t i = 0; i < list.length; i++) 
-		if(!expression(list[i]).isSymbol() && !expression(list[i]).isCharacter()) 
-			_error("rm() arguments must be symbols or character vectors");
-	for(int64_t i = 0; i < list.length; i++) {
-		state.frame.environment->rm(Symbol(expression(list[i])));
-	}
-	result = Null::Singleton();
-}
-
 void sequence(State& state, Value const* args, Value& result) {
 	double from = asReal1(args[0]);
 	double by = asReal1(args[1]);
@@ -494,8 +483,7 @@ void paste(State& state, Value const* args, Value& result) {
 }
 
 void deparse(State& state, Value const* args, Value& result) {
-	Value v = force(state, args[0]);
-	result = Character::c(state.internStr(state.deparse(v)));
+	result = Character::c(state.internStr(state.deparse(args[0])));
 }
 
 void substitute(State& state, Value const* args, Value& result) {
@@ -560,8 +548,7 @@ void importCoreFunctions(State& state, Environment* env)
 	
 	state.registerInternalFunction(state.internStr("cat"), (cat), 1);
 	state.registerInternalFunction(state.internStr("library"), (library), 1);
-	state.registerInternalFunction(state.internStr("remove"), (remove), 1);
-	state.registerInternalFunction(state.internStr("inherits"), (inherits), 1);
+	state.registerInternalFunction(state.internStr("inherits"), (inherits), 3);
 	
 	state.registerInternalFunction(state.internStr("seq"), (sequence), 3);
 	state.registerInternalFunction(state.internStr("rep"), (repeat), 3);

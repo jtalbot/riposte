@@ -10,18 +10,6 @@ ifelse <- function(test, yes, no) {
 	}
 }
 
-`attr` <- function(x, which, exact=FALSE) {
-	.Internal(attr(x, which, exact))
-}
-
-`attr<-` <- function(x, which, value) {
-	.Internal(`attr<-`(x, which, value))
-}
-
-`rm` <- function(...) {
-	.Internal(remove(list(...)))
-}
-
 #`[` <- function(x, ..., drop = TRUE) {
 #	i <- list(...)
 #	d <- dim(x)
