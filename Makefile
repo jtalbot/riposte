@@ -52,6 +52,16 @@ bin/%.s: src/%.cpp
 clean:
 	rm -rf $(EXECUTABLE) $(OBJECTS) $(DEPENDENCIES)
 
+coverage: CXXFLAGS += -fprofile-arcs -ftest-coverage
+coverage: LFLAGS += -fprofile-arcs -ftest-coverage
+coverage: debug
+	bin/riposte -f tests/coverage.R
+	gcov -o bin $(SRC) > /dev/null
+
+coverage_clean:	clean
+	rm -f *.gcov bin/*.gcda bin/*.gcno
+
+
 # dependency rules
 bin/%.d:	src/%.cpp
 	@$(CXX) $(CXXFLAGS) -MM -MT '$@ $(@:.d=.o)' $< -o $@

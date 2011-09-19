@@ -23,9 +23,9 @@ std::string Trace::toString(State & state) {
 		Output & o = outputs[i];
 		switch(o.location.type) {
 		case Trace::Location::REG:
-			out << "r" << o.location.pointer.index; break;
+			out << "r[" << o.location.pointer.index << "]"; break;
 		case Trace::Location::VAR:
-			out << "v" << o.location.pointer.name.i; break;
+			out << state.SymToStr(o.location.pointer.name); break;
 		}
 		out << " = n" << o.ref << "\n";
 	}

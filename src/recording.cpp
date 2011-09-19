@@ -339,7 +339,8 @@ RecordingStatus::Enum fold_record(ByteCode::Enum bc, IROpCode::Enum opcode, Stat
 		*pc = op##_op(state,inst); \
 		return RecordingStatus::NO_ERROR; \
 	} \
-	(*pc)++; \
+	if(RecordingStatus::NO_ERROR == status) \
+		(*pc)++; \
 	return status; \
 }
 
@@ -471,7 +472,8 @@ Instruction const * recording_interpret(State& state, Instruction const* pc) {
 #undef RUN_RECORD
 		if(   RecordingStatus::NO_ERROR != status
 		   || RecordingStatus::NO_ERROR != (status = recording_check_conditions(state,pc))) {
-			//printf(" x:%s\n",RecordingStatus::toString(status));
+			if(state.tracing.verbose)
+				printf("%s op ended trace: %s\n",ByteCode::toString(pc->bc),RecordingStatus::toString(status));
 			state.tracing.end_tracing(state);
 			return pc;
 		}
