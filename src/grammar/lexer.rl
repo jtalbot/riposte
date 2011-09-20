@@ -36,30 +36,30 @@
 	'NA_real_'	{token( TOKEN_NUM_CONST, Double::NA() );};
 	'NA_character_'	{token( TOKEN_STR_CONST, Character::NA() );};
 	'NA_complex_'	{token( TOKEN_NUM_CONST, Complex::NA() );};
-	'function'	{token( TOKEN_FUNCTION, Symbols::function );};
-	'while'	{token( TOKEN_WHILE, Symbols::whileSym );};
-	'repeat'	{token( TOKEN_REPEAT, Symbols::repeatSym );};
-	'for'	{token( TOKEN_FOR, Symbols::forSym );};
-	'if'	{token( TOKEN_IF, Symbols::ifSym );};
+	'function'	{token( TOKEN_FUNCTION, Symbol(Strings::function) );};
+	'while'	{token( TOKEN_WHILE, Symbol(Strings::whileSym) );};
+	'repeat'	{token( TOKEN_REPEAT, Symbol(Strings::repeatSym) );};
+	'for'	{token( TOKEN_FOR, Symbol(Strings::forSym) );};
+	'if'	{token( TOKEN_IF, Symbol(Strings::ifSym) );};
 	'in'	{token( TOKEN_IN );};
 	'else'	{token( TOKEN_ELSE );};
-	'next'	{token( TOKEN_NEXT, Symbols::nextSym );};
-	'break'	{token( TOKEN_BREAK, Symbols::breakSym );};
+	'next'	{token( TOKEN_NEXT, Symbol(Strings::nextSym) );};
+	'break'	{token( TOKEN_BREAK, Symbol(Strings::breakSym) );};
 	
 	# Single and double-quoted string literals.
 	( "'" ( [^'\\\n] | /\\./ )* "'" ) 
-		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.StrToSym(unescape(s))) );};
+		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.internStr(unescape(s))) );};
 	( '"' ( [^"\\\n] | /\\./ )* '"' ) 
-		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.StrToSym(unescape(s))) );};
+		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.internStr(unescape(s))) );};
 
 	# Symbols.
 	( '..' digit+ )
-		{std::string s(ts+2, te-ts-2); token( TOKEN_SYMBOL, Symbol(-strToInt(s)));};
+		{std::string s(ts+2, te-ts-2); token( TOKEN_SYMBOL, Symbol(String::Init(-strToInt(s))));};
 
-	( (('.' [a-zA-Z_.]) | [a-zA-Z_]) [a-zA-Z0-9_.]* ) 
-		{token( TOKEN_SYMBOL, Symbol(state.StrToSym(std::string(ts, te-ts))) );};
+	( ('.' ([a-zA-Z_.] [a-zA-Z0-9_.]*)?) | [a-zA-Z] [a-zA-Z0-9_.]* ) 
+		{token( TOKEN_SYMBOL, Symbol(state.internStr(std::string(ts, te-ts))) );};
 	( '`' ( [^`\\\n] | /\\./ )* '`' ) 
-		{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, Symbol(state.StrToSym(unescape(s))) );};
+		{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, Symbol(state.internStr(unescape(s))) );};
 	# Numeric literals.
 	( float exponent? ) 
 		{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );};
@@ -79,45 +79,45 @@
 		{token( TOKEN_NUM_CONST );};
 
 	# Operators. 
-	'=' {token( TOKEN_EQ_ASSIGN, Symbols::eqassign );};
-	'+' {token( TOKEN_PLUS, Symbols::add );};
-	'-' {token( TOKEN_MINUS, Symbols::sub );};
-	'^' {token( TOKEN_POW, Symbols::pow );};
-	'/' {token( TOKEN_DIVIDE, Symbols::div );};
-	'*' {token( TOKEN_TIMES, Symbols::mul );};
-	'**' {token( TOKEN_POW, Symbols::pow );};
-	'~' {token( TOKEN_TILDE, Symbols::tilde );};
-	'$' {token( TOKEN_DOLLAR, Symbols::dollar );};
-	'@' {token( TOKEN_AT, Symbols::at );};
-	'!' {token( TOKEN_NOT, Symbols::lnot );};
-	':' {token( TOKEN_COLON, Symbols::colon );};
-	'::' {token( TOKEN_NS_GET, Symbols::nsget );};
-	':::' {token( TOKEN_NS_GET_INT, Symbols::nsgetint );};
-	'&' {token( TOKEN_AND, Symbols::land );};
-	'|' {token( TOKEN_OR, Symbols::lor );};
-	'{' {token( TOKEN_LBRACE, Symbols::brace );};
+	'=' {token( TOKEN_EQ_ASSIGN, Symbol(Strings::eqassign) );};
+	'+' {token( TOKEN_PLUS, Symbol(Strings::add) );};
+	'-' {token( TOKEN_MINUS, Symbol(Strings::sub) );};
+	'^' {token( TOKEN_POW, Symbol(Strings::pow) );};
+	'/' {token( TOKEN_DIVIDE, Symbol(Strings::div) );};
+	'*' {token( TOKEN_TIMES, Symbol(Strings::mul) );};
+	'**' {token( TOKEN_POW, Symbol(Strings::pow) );};
+	'~' {token( TOKEN_TILDE, Symbol(Strings::tilde) );};
+	'$' {token( TOKEN_DOLLAR, Symbol(Strings::dollar) );};
+	'@' {token( TOKEN_AT, Symbol(Strings::at) );};
+	'!' {token( TOKEN_NOT, Symbol(Strings::lnot) );};
+	':' {token( TOKEN_COLON, Symbol(Strings::colon) );};
+	'::' {token( TOKEN_NS_GET, Symbol(Strings::nsget) );};
+	':::' {token( TOKEN_NS_GET_INT, Symbol(Strings::nsgetint) );};
+	'&' {token( TOKEN_AND, Symbol(Strings::land) );};
+	'|' {token( TOKEN_OR, Symbol(Strings::lor) );};
+	'{' {token( TOKEN_LBRACE, Symbol(Strings::brace) );};
 	'}' {token( TOKEN_RBRACE );};
-	'(' {token( TOKEN_LPAREN, Symbols::paren );};
+	'(' {token( TOKEN_LPAREN, Symbol(Strings::paren) );};
 	')' {token( TOKEN_RPAREN );};
-	'[' {token( TOKEN_LBRACKET, Symbols::bracket );};
-	'[[' {token( TOKEN_LBB, Symbols::bb );};
+	'[' {token( TOKEN_LBRACKET, Symbol(Strings::bracket) );};
+	'[[' {token( TOKEN_LBB, Symbol(Strings::bb) );};
 	']' {token( TOKEN_RBRACKET );};
-	'<' {token( TOKEN_LT, Symbols::lt );};
-	'>' {token( TOKEN_GT, Symbols::gt );};
-	'<=' {token( TOKEN_LE, Symbols::le );};
-	'>=' {token( TOKEN_GE, Symbols::ge );};
-	'==' {token( TOKEN_EQ, Symbols::eq );};
-	'!=' {token( TOKEN_NE, Symbols::neq );};
-	'&&' {token( TOKEN_AND2, Symbols::sland );};
-	'||' {token( TOKEN_OR2, Symbols::slor );};
-	'<-' {token( TOKEN_LEFT_ASSIGN, Symbols::assign );};
-	'->' {token( TOKEN_RIGHT_ASSIGN, Symbols::assign );};
-	'->>' {token( TOKEN_RIGHT_ASSIGN, Symbols::assign2 );};
-	'<<-' {token( TOKEN_LEFT_ASSIGN, Symbols::assign2 );};
-	'?' {token( TOKEN_QUESTION, Symbols::question );};
+	'<' {token( TOKEN_LT, Symbol(Strings::lt) );};
+	'>' {token( TOKEN_GT, Symbol(Strings::gt) );};
+	'<=' {token( TOKEN_LE, Symbol(Strings::le) );};
+	'>=' {token( TOKEN_GE, Symbol(Strings::ge) );};
+	'==' {token( TOKEN_EQ, Symbol(Strings::eq) );};
+	'!=' {token( TOKEN_NE, Symbol(Strings::neq) );};
+	'&&' {token( TOKEN_AND2, Symbol(Strings::sland) );};
+	'||' {token( TOKEN_OR2, Symbol(Strings::slor) );};
+	'<-' {token( TOKEN_LEFT_ASSIGN, Symbol(Strings::assign) );};
+	'->' {token( TOKEN_RIGHT_ASSIGN, Symbol(Strings::assign) );};
+	'->>' {token( TOKEN_RIGHT_ASSIGN, Symbol(Strings::assign2) );};
+	'<<-' {token( TOKEN_LEFT_ASSIGN, Symbol(Strings::assign2) );};
+	'?' {token( TOKEN_QUESTION, Symbol(Strings::question) );};
 	
 	# Special Operators.
-	('%' [^\n%]* '%') {token(TOKEN_SPECIALOP, Symbol(state.StrToSym(std::string(ts, te-ts))) ); };
+	('%' [^\n%]* '%') {token(TOKEN_SPECIALOP, Symbol(state.internStr(std::string(ts, te-ts))) ); };
 
 	# Separators.
 	',' {token( TOKEN_COMMA );};
@@ -189,7 +189,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	lastTokenWasNL = false;
 	complete = false;
 
-	pParser = ParseAlloc(malloc);
+	pParser = ParseAlloc(GC_malloc);
 
 	/*ParseTrace(trace, 0);*/
 
@@ -201,7 +201,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	%% write exec;
 	int syntaxErrors = errors;
 	Parse(pParser, 0, Value::Nil(), this);
-	ParseFree(pParser, free);
+	ParseFree(pParser, GC_free);
 	errors = syntaxErrors;
 
 	if( cs == Scanner_error && syntaxErrors == 0) {

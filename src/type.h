@@ -19,7 +19,6 @@
 	_(Character, 	"character")	\
 	_(List,		"list")		\
 	_(Function,	"function")	\
-	_(BuiltIn,	"builtin")	\
 	_(Symbol,	"symbol")	\
 	_(Environment,	"environment")	\
 	_(Future, "future")				\

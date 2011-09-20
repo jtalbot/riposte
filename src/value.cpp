@@ -2,7 +2,7 @@
 #include "value.h"
 #include "internal.h"
 
-DEFINE_ENUM_TO_STRING(String, STRINGS)
+DEFINE_ENUM_TO_STRING(EStrings, STRINGS)
 
 _doublena doublena = {0x7fff000000001953};
 
@@ -18,9 +18,9 @@ const double Double::NAelement = doublena.d;
 
 const std::complex<double> Complex::NAelement = std::complex<double>(doublena.d, doublena.d);
 
-const Symbol Character::NAelement = Symbols::NA;
+const String Character::NAelement = Strings::NA;
 
 const Value List::NAelement = Value::Nil();
 
-uint64_t Environment::globalRevision = 1;
+uint64_t Dictionary::globalRevision = 1;
 

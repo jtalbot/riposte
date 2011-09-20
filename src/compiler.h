@@ -53,11 +53,12 @@ private:
 	int64_t compileSymbol(Symbol const& symbol, Prototype* code); 
 	int64_t compileCall(List const& call, Character const& names, Prototype* code); 
 	int64_t compileFunctionCall(List const& call, Character const& names, Prototype* code); 
+	int64_t compileInternalFunctionCall(Object const& o, Prototype* code); 
 	int64_t compileExpression(List const& values, Prototype* code);
 	
 	CompiledCall makeCall(List const& call, Character const& names);
 
-	void emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c);
+	int64_t emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c);
 public:
 	static Prototype* compile(State& state, Value const& expr) {
 		Compiler compiler(state);

@@ -34,17 +34,17 @@ static void ExpandDots(State& state, List& arguments, Character& names, int64_t 
 	if(dots < arguments.length) {
 		List a(arguments.length + dotslength - 1);
 		for(int64_t i = 0; i < dots; i++) a[i] = arguments[i];
-		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(state, Symbol(-(i-dots+1))), NULL).AsPromise(); } // TODO: should cache these.
+		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(state, Symbol(String::Init(-(i-dots+1)))), NULL).AsPromise(); } // TODO: should cache these.
 		for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) a[i] = arguments[i-dotslength];
 
 		arguments = a;
 		
 		uint64_t named = 0;
-		for(uint64_t i = 0; i < dotslength; i++) if(environment->dots[i] != Symbols::empty) named++;
+		for(uint64_t i = 0; i < dotslength; i++) if(environment->dots[i] != Strings::empty) named++;
 
 		if(names.length > 0 || named > 0) {
 			Character n(arguments.length + dotslength - 1);
-			for(int64_t i = 0; i < n.length; i++) n[i] = Symbols::empty;
+			for(int64_t i = 0; i < n.length; i++) n[i] = Strings::empty;
 			if(names.length > 0) {
 				for(int64_t i = 0; i < dots; i++) n[i] = names[i];
 				for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) n[i] = names[i-dotslength];
@@ -63,7 +63,7 @@ inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* 
 	if(i >= 0)
 		env->assign(parameters[i], w);
 	else {
-		env->assign(Symbol(i), w);
+		env->assign(String::Init(i), w);
 	}
 }
 
@@ -89,7 +89,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			int64_t idx = 1;
 			for(int64_t i = fdots; i < arguments.length; i++) {
 				argAssign(fenv, -idx, arguments[i], env, parameters);
-				fenv->dots.push_back(Symbols::empty);
+				fenv->dots.push_back(Strings::empty);
 				idx++;
 			}
 			end++;
@@ -104,7 +104,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 
 		// named args, search for complete matches
 		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] != Symbols::empty) {
+			if(anames[i] != Strings::empty) {
 				for(int64_t j = 0; j < parameters.length; ++j) {
 					if(j != fdots && anames[i] == parameters[j]) {
 						assignment[i] = j;
@@ -116,11 +116,11 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 		}
 		// named args, search for incomplete matches
 		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] != Symbols::empty && assignment[i] < 0) {
-				std::string a = state.SymToStr(anames[i]);
+			if(anames[i] != Strings::empty && assignment[i] < 0) {
+				std::string a = state.externStr(anames[i]);
 				for(int64_t j = 0; j < parameters.length; ++j) {
 					if(set[j] < 0 && j != fdots &&
-							state.SymToStr(parameters[j]).compare( 0, a.size(), a ) == 0 ) {	
+							state.externStr(parameters[j]).compare( 0, a.size(), a ) == 0 ) {	
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -131,7 +131,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 		// unnamed args, fill into first missing spot.
 		int64_t firstEmpty = 0;
 		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] == Symbols::empty) {
+			if(anames[i] == Strings::empty) {
 				for(; firstEmpty < fdots; ++firstEmpty) {
 					if(set[firstEmpty] < 0) {
 						assignment[i] = firstEmpty;
@@ -161,15 +161,15 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 	}
 }
 
-static Environment* CreateEnvironment(State& state, Environment* s) {
+static Environment* CreateEnvironment(State& state, Environment* l, Environment* d, Value const& call) {
 	Environment* env;
 	if(state.environments.size() == 0) {
-		env = new Environment(s);
+		env = new Environment();
 	} else {
 		env = state.environments.back();
 		state.environments.pop_back();
-		env->init(s);
 	}
+	env->init(l, d, call);
 	return env;
 }
 //track the heat of back edge operations and invoke the recorder on hot traces
@@ -180,14 +180,22 @@ static Instruction const * profile_back_edge(State & state, Instruction const * 
 
 Instruction const* call_op(State& state, Instruction const& inst) {
 	Value f = REG(state, inst.a);
+	if(!f.isFunction())
+		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
+	Function func(f);
+	
+	// TODO: using inst.b < 0 to indicate a normal call means that do.call can never use a ..# variable. Not common, but would surely be unexpected for users. Probably best to just have a separate op for do.call?
+	
 	List arguments;
 	Character names;
+	Environment* fenv;
 	if(inst.b < 0) {
 		CompiledCall const& call = state.frame.prototype->calls[-(inst.b+1)];
 		arguments = call.arguments;
 		names = call.names;
 		if(call.dots < arguments.length)
 			ExpandDots(state, arguments, names, call.dots);
+		fenv = CreateEnvironment(state, func.environment(), state.frame.environment, call.call);
 	} else {
 		Value const& reg = REG(state, inst.b);
 		if(reg.isObject()) {
@@ -197,74 +205,68 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 		else {
 			arguments = List(reg);
 		}
+		fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton());
 	}
 
-	if(f.isFunction()) {
-		Function func(f);
-		Environment* fenv = CreateEnvironment(state, func.environment());
-		MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
-		return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
-	} else if(f.isBuiltIn()) {
-		REG(state, inst.c) = BuiltIn(f).func(state, arguments, names);
-		return &inst+1;
-	} else {
-		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
-		return &inst+1;
-	}	
+	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
+	return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
+}
+
+Instruction const* icall_op(State& state, Instruction const& inst) {
+	state.internalFunctions[inst.a].ptr(state, &REG(state, inst.b), REG(state, inst.c));
+	return &inst+1;
 }
 
 // Get a Value by Symbol from the current environment,
 //  TODO: UseMethod also should search in some cached library locations.
-static Value UseMethodSearch(State& state, Symbol s) {
+static Value UseMethodSearch(State& state, String s) {
 	Environment* environment = state.frame.environment;
 	Value value = environment->get(s);
-	while(value.isNil() && environment->StaticParent() != 0) {
-		environment = environment->StaticParent();
+	while(value.isNil() && environment->LexicalScope() != 0) {
+		environment = environment->LexicalScope();
 		value = environment->get(s);
 	}
 	if(value.isPromise()) {
-		value = force(state, value);
-		environment->assign(s, value);
+		//value = force(state, value);
+		//environment->assign(s, value);
+		_error("UseMethod does not yet support evaluating promises");
 	}
 	return value;
 }
 
 Instruction const* UseMethod_op(State& state, Instruction const& inst) {
-	Symbol generic(inst.a);
-	
+	String generic = String::Init(inst.a);
+
 	CompiledCall const& call = state.frame.prototype->calls[inst.b];
 	List arguments = call.arguments;
 	Character names = call.names;
 	if(call.dots < arguments.length)
 		ExpandDots(state, arguments, names, call.dots);
-	
+
 	Value object = REG(state, inst.c);
 	Character type = klass(state, object);
 
 	//Search for type-specific method
-	Symbol method = state.StrToSym(state.SymToStr(generic) + "." + state.SymToStr(type[0]));
+	String method = state.internStr(state.externStr(generic) + "." + state.externStr(type[0]));
 	Value f = UseMethodSearch(state, method);
-	
+
 	//Search for default
 	if(f.isNil()) {
-		method = state.StrToSym(state.SymToStr(generic) + ".default");
+		method = state.internStr(state.externStr(generic) + ".default");
 		f = UseMethodSearch(state, method);
 	}
 
-	if(f.isFunction()) {
-		Function func(f);
-		Environment* fenv = CreateEnvironment(state, func.environment());
-		MatchArgs(state, state.frame.environment, fenv, func, arguments, names);	
-		fenv->assign(Symbols::dotGeneric, generic);
-		fenv->assign(Symbols::dotMethod, method);
-		fenv->assign(Symbols::dotClass, type); 
-		return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
-	} else if(f.isBuiltIn()) {
-		REG(state, inst.c) = BuiltIn(f).func(state, arguments, names);
-		return &inst+1;
-	} else {
-		_error(std::string("no applicable method for '") + state.SymToStr(generic) + "' applied to an object of class \"" + state.SymToStr(type[0]) + "\"");
+	if(!f.isFunction()) { 
+		_error(std::string("no applicable method for '") + state.externStr(generic) + "' applied to an object of class \"" + state.externStr(type[0]) + "\"");
 	}
+
+	Function func(f);
+	Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, call.call);
+	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);	
+	fenv->assign(Strings::dotGeneric, Symbol(generic));
+	fenv->assign(Strings::dotMethod, Symbol(method));
+	fenv->assign(Strings::dotClass, type); 
+	return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
 }
 
 Instruction const* get_op(State& state, Instruction const& inst) {
@@ -281,20 +283,20 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 		return &inst+3;
 	} 
 	
-	Value const& src = state.frame.environment->get(Symbol(inst.a));
+	String s = String::Init(inst.a);
+	Value const& src = state.frame.environment->get(s);
 	if(src.isConcrete()) {
-		Environment::Pointer p = state.frame.environment->makePointer(Symbol(inst.a));
+		Environment::Pointer p = state.frame.environment->makePointer(s);
 		((Instruction*)(&inst+2))->a = p.index;
 		((Instruction*)(&inst+2))->b = p.revision;
 		REG(state, inst.c) = src;
 		return &inst+3;
 	} else {
-		Symbol s(inst.a);
 		Value& dest = REG(state, inst.c);
 		dest = src;
 		Environment* environment = state.frame.environment;
-		while(dest.isNil() && environment->StaticParent() != 0) {
-			environment = environment->StaticParent();
+		while(dest.isNil() && environment->LexicalScope() != 0) {
+			environment = environment->LexicalScope();
 			dest = environment->get(s);
 		}
 		if(dest.isPromise()) {
@@ -304,7 +306,7 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 			return buildStackFrame(state, env, false, prototype, &dest, &inst+1);
 		}
 		else if(dest.isNil()) 
-			throw RiposteError(std::string("object '") + state.SymToStr(s) + "' not found");
+			throw RiposteError(std::string("object '") + state.externStr(s) + "' not found");
 		else
 			return &inst+3;
 	}
@@ -315,8 +317,8 @@ Instruction const* kget_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* iget_op(State& state, Instruction const& inst) {
-	REG(state, inst.c) = state.path[0]->get(Symbol(inst.a));
-	if(REG(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.SymToStr(Symbol(inst.a)) + "' not found");
+	REG(state, inst.c) = state.path[0]->get(inst.a);
+	if(REG(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.externStr(String::Init(inst.a)) + "' not found");
 	return &inst+1;
 }
 Instruction const* assign_op(State& state, Instruction const& inst) {
@@ -324,9 +326,9 @@ Instruction const* assign_op(State& state, Instruction const& inst) {
 	if(state.frame.environment->validRevision((&inst+1)->b))
 		state.frame.environment->assign((&inst+1)->a, REG(state, inst.c));
 	else {
-		state.frame.environment->assign(Symbol(inst.a), REG(state, inst.c));
+		state.frame.environment->assign(String::Init(inst.a), REG(state, inst.c));
 		
-		Environment::Pointer p = state.frame.environment->makePointer(Symbol(inst.a));
+		Environment::Pointer p = state.frame.environment->makePointer(String::Init(inst.a));
 		((Instruction*)(&inst+1))->a = p.index;
 		((Instruction*)(&inst+1))->b = p.revision;
 	}
@@ -334,12 +336,12 @@ Instruction const* assign_op(State& state, Instruction const& inst) {
 }
 Instruction const* assign2_op(State& state, Instruction const& inst) {
 	// TODO: Make inline caching work for assign2
-	Symbol s(inst.a);
+	String s = String::Init(inst.a);
 	// search through environments for destination...
 	Environment* environment = state.frame.environment;
 	Value value = environment->get(s);
-	while(value.isNil() && environment->StaticParent() != 0) {
-		environment = environment->StaticParent();
+	while(value.isNil() && environment->LexicalScope() != 0) {
+		environment = environment->LexicalScope();
 		value = environment->get(s);
 	}
 	if(!value.isNil()) {
@@ -414,11 +416,75 @@ Instruction const* jf_op(State& state, Instruction const& inst) {
 	if(l[0]) return &inst+1;
 	else return &inst+inst.a;
 }
+Instruction const* branch_op(State& state, Instruction const& inst) {
+	Value const& c = REG(state, inst.a);
+	int64_t index = -1;
+	if(c.isDouble1()) index = (int64_t)c.d;
+	else if(c.isInteger1()) index = c.i;
+	else if(c.isLogical1()) index = c.i;
+	else if(c.isCharacter1()) {
+		for(int64_t i = 1; i <= inst.b; i++) {
+			if((&inst+i)->a == c.s.i) {
+				index = i;
+				break;
+			}
+			if(index < 0 && (&inst+i)->a == Strings::empty.i) {
+				index = i;
+			}
+		}
+	}
+	if(index >= 1 && index <= inst.b) {
+		return &inst + ((&inst+index)->c);
+	} else {
+		return &inst+1+inst.b;
+	}
+}
 Instruction const* colon_op(State& state, Instruction const& inst) {
 	double from = asReal1(REG(state,inst.a));
 	double to = asReal1(REG(state,inst.b));
 	REG(state,inst.c) = Sequence(from, to>from?1:-1, fabs(to-from)+1);
 	return &inst+1;
+}
+Instruction const* list_op(State& state, Instruction const& inst) {
+	std::vector<String> const& dots = state.frame.environment->dots;
+	// First time through, make a result vector...
+	if(REG(state, inst.a).i == 0) {
+		REG(state, inst.c) = List(dots.size());
+	}
+	// Otherwise populate result vector with next element
+	else {
+		state.frame.environment->assign(String::Init(-REG(state, inst.a).i), REG(state, inst.b));
+		((List&)REG(state, inst.c))[REG(state, inst.a).i-1] = REG(state, inst.b);
+	}
+
+	// If we're all done, check to see if we need to add names and then exit
+	if(REG(state, inst.a).i == (int64_t)dots.size()) {
+		bool nonEmptyName = false;
+		for(int i = 0; i < (int64_t)dots.size(); i++) 
+			if(dots[i] != Strings::empty) nonEmptyName = true;
+		if(nonEmptyName) {
+			// TODO: should really just use the names in the dots directly
+			Character names(dots.size());
+			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
+				names[i] = dots[i];
+			Object::InitWithNames(REG(state, inst.c), REG(state, inst.c), names);
+		}
+		return &inst+1;
+	}
+
+	// Not done yet, increment counter, evaluate next ..#
+	REG(state, inst.a).i++;
+	Value const& src = state.frame.environment->get(String::Init(-REG(state, inst.a).i));
+	if(!src.isPromise()) {
+		REG(state, inst.b) = src;
+		return &inst;
+	}
+	else {
+		Environment* env = Function(src).environment();
+		if(env == 0) env = state.frame.environment;
+		Prototype* prototype = Function(src).prototype();
+		return buildStackFrame(state, env, false, prototype, &REG(state, inst.b), &inst);
+	}
 }
 
 bool isRecordable(Type::Enum type, int64_t length) {
@@ -624,7 +690,7 @@ Instruction const* complex1_op(State& state, Instruction const& inst) {
 Instruction const* character1_op(State& state, Instruction const& inst) {
 	Integer i = As<Integer>(state, REG(state, inst.a));
 	Character r = Character(i[0]);
-	for(int64_t j = 0; j < r.length; j++) r[j] = Symbols::empty;
+	for(int64_t j = 0; j < r.length; j++) r[j] = Strings::empty;
 	REG(state, inst.c) = r;
 	return &inst+1;
 }
@@ -636,11 +702,25 @@ Instruction const* raw1_op(State& state, Instruction const& inst) {
 Instruction const* type_op(State& state, Instruction const& inst) {
 	Character c(1);
 	// Should have a direct mapping from type to symbol.
-	c[0] = state.StrToSym(Type::toString(REG(state, inst.a).type));
+	c[0] = state.internStr(Type::toString(REG(state, inst.a).type));
 	REG(state, inst.c) = c;
 	return &inst+1;
 }
-
+Instruction const* length_op(State& state, Instruction const& inst) {
+	if(REG(state,inst.a).isVector())
+		Integer::InitScalar(REG(state, inst.c), REG(state,inst.a).length);
+	else
+		Integer::InitScalar(REG(state, inst.c), 1);
+	return &inst+1;
+}
+Instruction const* missing_op(State& state, Instruction const& inst) {
+	// This could be inline cached...or implemented in terms of something else?
+	String s = String::Init(inst.a);
+	Value const& v = state.frame.environment->get(s);
+	bool missing = v.isNil() || (v.isPromise() && Function(v).environment() == state.frame.environment);
+	Logical::InitScalar(REG(state, inst.c), missing);
+	return &inst+1;
+}
 Instruction const* ret_op(State& state, Instruction const& inst) {
 	*(state.frame.result) = REG(state, inst.c);
 	// if this stack frame owns the environment, we can free it for reuse
@@ -752,7 +832,9 @@ Value eval(State& state, Prototype const* prototype, Environment* environment) {
 #ifdef USE_THREADED_INTERPRETER
 	done->ibc = glabels[ByteCode::done];
 #endif
+	Value* old_base = state.base;
 	int64_t stackSize = state.stack.size();
+	
 	// Build a half-hearted stack frame for the result. Necessary for the trace recorder.
 	StackFrame& s = state.push();
 	s.environment = 0;
@@ -764,10 +846,10 @@ Value eval(State& state, Prototype const* prototype, Environment* environment) {
 	Instruction const* run = buildStackFrame(state, environment, false, prototype, result, done);
 	try {
 		interpret(state, run);
-		state.base = s.returnbase;
+		state.base = old_base;
 		state.pop();
 	} catch(...) {
-		state.base = s.returnbase;
+		state.base = old_base;
 		state.stack.resize(stackSize);
 		throw;
 	}

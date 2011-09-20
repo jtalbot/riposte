@@ -44,12 +44,12 @@ complex <- function(length.out = 0,
 
 as.vector <- function(x, mode = "any") {
 	switch(mode,
-		logical = .Internal(as.logical)(x),
-		integer = .Internal(as.integer)(x),
-		double  = .Internal(as.double)(x),
-		numeric = .Internal(as.double)(x),
-		complex = .Internal(as.complex)(x),
-		character = .Internal(as.character)(x),
+		logical = .Internal(as.logical(x)),
+		integer = .Internal(as.integer(x)),
+		double  = .Internal(as.double(x)),
+		numeric = .Internal(as.double(x)),
+		complex = .Internal(as.complex(x)),
+		character = .Internal(as.character(x)),
 		any = x)
 }
 

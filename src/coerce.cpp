@@ -1,80 +1,73 @@
 
 #include "internal.h"
 
-Value asnull(State& state, List const& args, Character const& names) {
-	Value from = force(state, args[0]);
-	return As<Null>(state, from);
+void asnull(State& state, Value const* args, Value& result) {
+	result = As<Null>(state, args[0]);
 }
 
-Value aslogical(State& state, List const& args, Character const& names) {
-	Value from = force(state, args[0]);
-	return As<Logical>(state, from);
+void aslogical(State& state, Value const* args, Value& result) {
+	result = As<Logical>(state, args[0]);
 }
 
-Value asinteger(State& state, List const& args, Character const& names) {
-	Value from = force(state, args[0]);
-	return As<Integer>(state, from);
+void asinteger(State& state, Value const* args, Value& result) {
+	result = As<Integer>(state, args[0]);
 }
 
-Value asdouble(State& state, List const& args, Character const& names) {
-	Value from = force(state, args[0]);
-	return As<Double>(state, from);
+void asdouble(State& state, Value const* args, Value& result) {
+	result = As<Double>(state, args[0]);
 }
 
-Value ascomplex(State& state, List const& args, Character const& names) {
-	Value from = force(state, args[0]);
-	return As<Complex>(state, from);
+void ascomplex(State& state, Value const* args, Value& result) {
+	result = As<Complex>(state, args[0]);
 }
 
-Value ascharacter(State& state, List const& args, Character const& names) {
-	Value from = force(state, args[0]);
-	return As<Character>(state, from);
+void ascharacter(State& state, Value const* args, Value& result) {
+	result = As<Character>(state, args[0]);
 }
 
-Value aslist(State& state, List const& args, Character const& names) {
-	Value from = force(state, args[0]);
-	return As<List>(state, from);
+void aslist(State& state, Value const* args, Value& result) {
+	result = As<List>(state, args[0]);
 }
 
 // Implement internally or as R library?
 /*
-Value isnull(State& state, List const& args, Character const& names) {
+void isnull(State& state, Value const* args, Value& result) {
 	Value from = force(state, args[0]);
 	state.registers[0] = Logical::c(from.isNull());
 	return 1;
 }
 
-Value islogical(State& state, List const& args, Character const& names) {
+void islogical(State& state, Value const* args, Value& result) {
 	Value from = force(state, args[0]);
 	state.registers[0] = Logical::c(from.isLogical());
 	return 1;
 }
 
-Value isinteger(State& state, List const& args, Character const& names) {
+void isinteger(State& state, Value const* args, Value& result) {
 	Value from = force(state, args[0]);
 	state.registers[0] = Logical::c(from.isInteger());
 	return 1;
 }
 
-Value isdouble(State& state, List const& args, Character const& names) {
+void isdouble(State& state, Value const* args, Value& result) {
 	Value from = force(state, args[0]);
 	state.registers[0] = Logical::c(from.isDouble());
 	return 1;
 }
 
-Value iscomplex(State& state, List const& args, Character const& names) {
+void iscomplex(State& state, Value const* args, Value& result) {
 	Value from = force(state, args[0]);
 	state.registers[0] = Logical::c(from.isComplex());
 	return 1;
 }
 
-Value ischaracter(State& state, List const& args, Character const& names) {
+void ischaracter(State& state, Value const* args, Value& result) {
 	Value from = force(state, args[0]);
 	state.registers[0] = Logical::c(from.isCharacter());
 	return 1;
 }
 
-Value islist(State& state, List const& args, Character const& names) {
+void islist(State& state, Value const* args, Value& result) {
 	Value from = force(state, args[0]);
 	state.registers[0] = Logical::c(from.isList());
 	return 1;
@@ -83,23 +76,23 @@ Value islist(State& state, List const& args, Character const& names) {
 
 void importCoerceFunctions(State& state, Environment* env)
 {
-	env->assign(state.StrToSym("as.null"), BuiltIn(asnull));
-	env->assign(state.StrToSym("as.logical"), BuiltIn(aslogical));
-	env->assign(state.StrToSym("as.integer"), BuiltIn(asinteger));
-	env->assign(state.StrToSym("as.double"), BuiltIn(asdouble));
-	env->assign(state.StrToSym("as.numeric"), BuiltIn(asdouble));
-	env->assign(state.StrToSym("as.complex"), BuiltIn(ascomplex));
-	env->assign(state.StrToSym("as.character"), BuiltIn(ascharacter));
-	env->assign(state.StrToSym("as.list"), BuiltIn(aslist));
+	state.registerInternalFunction(state.internStr("as.null"), (asnull), 1);
+	state.registerInternalFunction(state.internStr("as.logical"), (aslogical), 1);
+	state.registerInternalFunction(state.internStr("as.integer"), (asinteger), 1);
+	state.registerInternalFunction(state.internStr("as.double"), (asdouble), 1);
+	state.registerInternalFunction(state.internStr("as.numeric"), (asdouble), 1);
+	state.registerInternalFunction(state.internStr("as.complex"), (ascomplex), 1);
+	state.registerInternalFunction(state.internStr("as.character"), (ascharacter), 1);
+	state.registerInternalFunction(state.internStr("as.list"), (aslist), 1);
 
 /*
-	env->assign(state.StrToSym("is.null"), BuiltIn(isnull));
-	env->assign(state.StrToSym("is.logical"), BuiltIn(islogical));
-	env->assign(state.StrToSym("is.integer"), BuiltIn(isinteger));
-	env->assign(state.StrToSym("is.double"), BuiltIn(isdouble));
-	env->assign(state.StrToSym("is.real"), BuiltIn(isdouble));
-	env->assign(state.StrToSym("is.complex"), BuiltIn(iscomplex));
-	env->assign(state.StrToSym("is.character"), BuiltIn(ischaracter));
-	env->assign(state.StrToSym("is.list"), BuiltIn(islist));
+	state.registerInternalFunction(state.internStr("is.null"), (isnull));
+	state.registerInternalFunction(state.internStr("is.logical"), (islogical));
+	state.registerInternalFunction(state.internStr("is.integer"), (isinteger));
+	state.registerInternalFunction(state.internStr("is.double"), (isdouble));
+	state.registerInternalFunction(state.internStr("is.real"), (isdouble));
+	state.registerInternalFunction(state.internStr("is.complex"), (iscomplex));
+	state.registerInternalFunction(state.internStr("is.character"), (ischaracter));
+	state.registerInternalFunction(state.internStr("is.list"), (islist));
 */
 }

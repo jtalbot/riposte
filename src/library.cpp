@@ -54,5 +54,5 @@ void loadLibrary(State& state, std::string library_name) {
 	}
 
 	state.path.push_back(env);
-	state.global->init(state.path.back());
+	state.global->init(state.path.back(), 0, Null::Singleton());
 }

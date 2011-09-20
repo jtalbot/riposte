@@ -9,7 +9,9 @@
 	_(jt, "jt") \
 	_(jf, "jf") \
 	_(jmp, "jmp") \
+	_(branch, "branch") \
 	_(call, "call") \
+	_(icall, "icall") \
 	_(UseMethod, "UseMethod") \
 	_(ret, "ret") \
 	_(forbegin, "forbegin") \
@@ -18,7 +20,6 @@
 #define MEMORY_ACCESS_BYTECODES(_) \
 	_(get, "get") \
 	_(kget, "kget") \
-	_(iget, "iget") \
 	_(assign, "assign") \
 	_(assign2, "assign2") \
 	_(iassign, "iassign") \
@@ -107,6 +108,9 @@
 	_(raw1, "raw") \
 	_(seq, "seq") \
 	_(type, "type") \
+	_(list, "list") \
+	_(length, "length") \
+	_(missing, "missing") 
 
 #define SPECIAL_BYTECODES(_) 	\
 	_(done, "done") 
