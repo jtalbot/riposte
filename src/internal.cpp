@@ -26,6 +26,15 @@ void cat(State& state, Value const* args, Value& result) {
 	result = Null::Singleton();
 }
 
+void remove(State& state, Value const* args, Value& result) {
+	Character const& a = Cast<Character>(args[0]);
+	REnvironment e(args[1]);
+	for(int64_t i = 0; i < a.length; i++) {
+		e.ptr()->assign(a[i], Value::Nil());
+	}
+	result = Null::Singleton();
+}
+
 void library(State& state, Value const* args, Value& result) {
 	Character from = As<Character>(state, args[0]);
 	if(from.length > 0) {
@@ -425,13 +434,26 @@ void environment(State& state, Value const* args, Value& result) {
 	result = Null::Singleton();
 }
 
+// TODO: parent.frame and sys.call need to ignore frames for promises, etc. We may need
+// the dynamic pointer in the environment after all...
 void parentframe(State& state, Value const* args, Value& result) {
 	int64_t i = (int64_t)asReal1(args[0]);
 	Environment* env = state.frame.environment;
-	if(i > 0) {
-		env = state.stack[std::max(0ULL, (unsigned long long) state.stack.size()-i)].environment;
+	while(i > 0 && env->DynamicScope() != 0) {
+		env = env->DynamicScope();
+		i--;
 	}
 	result = REnvironment(env);
+}
+
+void syscall(State& state, Value const* args, Value& result) {
+	int64_t i = (int64_t)asReal1(args[0]);
+	Environment* env = state.frame.environment;
+	while(i > 0 && env->DynamicScope() != 0) {
+		env = env->DynamicScope();
+		i--;
+	}
+	result = env->call;
 }
 
 void stop_fn(State& state, Value const* args, Value& result) {
@@ -567,6 +589,8 @@ void importCoreFunctions(State& state, Environment* env)
 
 	state.registerInternalFunction(state.internStr("environment"), (environment), 1);
 	state.registerInternalFunction(state.internStr("parent.frame"), (parentframe), 1);
+	state.registerInternalFunction(state.internStr("sys.call"), (syscall), 1);
+	state.registerInternalFunction(state.internStr("remove"), (remove), 2);
 	
 	state.registerInternalFunction(state.internStr("stop"), (stop_fn), 1);
 	state.registerInternalFunction(state.internStr("warning"), (warning_fn), 1);

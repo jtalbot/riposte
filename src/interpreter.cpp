@@ -161,15 +161,15 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 	}
 }
 
-static Environment* CreateEnvironment(State& state, Environment* s) {
+static Environment* CreateEnvironment(State& state, Environment* l, Environment* d, Value const& call) {
 	Environment* env;
 	if(state.environments.size() == 0) {
-		env = new Environment(s);
+		env = new Environment();
 	} else {
 		env = state.environments.back();
 		state.environments.pop_back();
-		env->init(s);
 	}
+	env->init(l, d, call);
 	return env;
 }
 //track the heat of back edge operations and invoke the recorder on hot traces
@@ -182,17 +182,20 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 	Value f = REG(state, inst.a);
 	if(!f.isFunction())
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
+	Function func(f);
 	
 	// TODO: using inst.b < 0 to indicate a normal call means that do.call can never use a ..# variable. Not common, but would surely be unexpected for users. Probably best to just have a separate op for do.call?
 	
 	List arguments;
 	Character names;
+	Environment* fenv;
 	if(inst.b < 0) {
 		CompiledCall const& call = state.frame.prototype->calls[-(inst.b+1)];
 		arguments = call.arguments;
 		names = call.names;
 		if(call.dots < arguments.length)
 			ExpandDots(state, arguments, names, call.dots);
+		fenv = CreateEnvironment(state, func.environment(), state.frame.environment, call.call);
 	} else {
 		Value const& reg = REG(state, inst.b);
 		if(reg.isObject()) {
@@ -202,10 +205,9 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 		else {
 			arguments = List(reg);
 		}
+		fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton());
 	}
 
-	Function func(f);
-	Environment* fenv = CreateEnvironment(state, func.environment());
 	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
 	return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
 }
@@ -220,8 +222,8 @@ Instruction const* icall_op(State& state, Instruction const& inst) {
 static Value UseMethodSearch(State& state, String s) {
 	Environment* environment = state.frame.environment;
 	Value value = environment->get(s);
-	while(value.isNil() && environment->StaticParent() != 0) {
-		environment = environment->StaticParent();
+	while(value.isNil() && environment->LexicalScope() != 0) {
+		environment = environment->LexicalScope();
 		value = environment->get(s);
 	}
 	if(value.isPromise()) {
@@ -259,7 +261,7 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 	}
 
 	Function func(f);
-	Environment* fenv = CreateEnvironment(state, func.environment());
+	Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, call.call);
 	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);	
 	fenv->assign(Strings::dotGeneric, Symbol(generic));
 	fenv->assign(Strings::dotMethod, Symbol(method));
@@ -293,8 +295,8 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 		Value& dest = REG(state, inst.c);
 		dest = src;
 		Environment* environment = state.frame.environment;
-		while(dest.isNil() && environment->StaticParent() != 0) {
-			environment = environment->StaticParent();
+		while(dest.isNil() && environment->LexicalScope() != 0) {
+			environment = environment->LexicalScope();
 			dest = environment->get(s);
 		}
 		if(dest.isPromise()) {
@@ -338,8 +340,8 @@ Instruction const* assign2_op(State& state, Instruction const& inst) {
 	// search through environments for destination...
 	Environment* environment = state.frame.environment;
 	Value value = environment->get(s);
-	while(value.isNil() && environment->StaticParent() != 0) {
-		environment = environment->StaticParent();
+	while(value.isNil() && environment->LexicalScope() != 0) {
+		environment = environment->LexicalScope();
 		value = environment->get(s);
 	}
 	if(!value.isNil()) {

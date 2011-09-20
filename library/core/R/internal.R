@@ -20,7 +20,10 @@ source <- function(x) .Internal(source(x))
 lapply <- function(x, func) .Internal(lapply(x, func))
 
 environment <- function(x) .Internal(environment(x))
-parent.frame <- function(x) .Internal(parent.frame(x))
+parent.frame <- function(n=1) .Internal(parent.frame(n+1))
+sys.call <- function(which=0) .Internal(sys.call(which+1))
+alist <- function(...) as.list(sys.call())[-1L]
+rm <- function(...) .Internal(remove(as.character(sys.call())[-1L], parent.frame()))
 
 stop <- function(x) .Internal(stop(x))
 warning <- function(x) .Internal(warning(x))

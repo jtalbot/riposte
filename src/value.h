@@ -606,21 +606,25 @@ struct Prototype : public gc {
 
 class Environment : public Dictionary {
 private:
-	Environment* staticParent;
+	Environment* lexical, *dynamic;
 	
 public:
+	Value call;
 	std::vector<String> dots;
 
-	explicit Environment(Environment* staticParent=0) : 
-			staticParent(staticParent) {}
+	explicit Environment(Environment* lexical=0, Environment* dynamic=0) : 
+			lexical(lexical), dynamic(dynamic), call(Null::Singleton()) {}
 
-	void init(Environment* s) {
-		staticParent = s;
+	void init(Environment* l, Environment* d, Value const& call) {
+		lexical = l;
+		dynamic = d;
+		this->call = call;
 		clear();
 		dots.clear();
 	}
 	
-	Environment* StaticParent() const { return staticParent; }
+	Environment* LexicalScope() const { return lexical; }
+	Environment* DynamicScope() const { return dynamic; }
 
 };
 

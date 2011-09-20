@@ -7,7 +7,12 @@
 
 #include <limits>
 
-// Casting functions between types
+
+// Casting between scalar types
+template<typename I, typename O>
+static void Cast1(State& state, I const& i, O& o) { o = (O)i; }
+
+// Casting functions between vector types
 template<typename I, typename O>
 static typename O::Element Cast(State& state, typename I::Element const& i) { return (typename O::Element)i; }
 
@@ -21,12 +26,15 @@ void As(State& state, Value const& src, O& out) {
 	if(src.type == O::VectorType)
 		out = (O const&)src;
 	switch(src.type) {
-		case Type::Null: O(0); break;
-		#define CASE(Name,...) case Type::Name: Zip1< CastOp<Name, O> >::eval(state, (Name const&)src, out); break;
+		case Type::Null: O(0); return; break;
+		#define CASE(Name,...) case Type::Name: Zip1< CastOp<Name, O> >::eval(state, (Name const&)src, out); return; break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
-		default: _error(std::string("Invalid cast from ") + Type::toString(src.type) + " to " + Type::toString(O::VectorType)); break;
+		case Type::Symbol: 
+			Cast1<Symbol, O>(state, (Symbol const&)src, out); return; break;
+		default: break;
 	};
+	_error(std::string("Invalid cast from ") + Type::toString(src.type) + " to " + Type::toString(O::VectorType));
 }
 
 template<>
@@ -54,6 +62,7 @@ inline Value As(State& state, Type::Enum type, Value const& src) {
 }
 
 
+
 //gcc >= 4.3 requires template specialization to have the same storage class (e.g. 'static') as the orignal template
 //specifying static is an error
 //gcc < 4.3 treats the declarations as distinct. Not specifying a storage class makes the specialization external >_<
@@ -62,6 +71,7 @@ inline Value As(State& state, Type::Enum type, Value const& src) {
 #else
 #define SPECIALIZED_STATIC static
 #endif
+
 
 
 template<>
@@ -196,6 +206,29 @@ SPECIALIZED_STATIC Complex::Element Cast<List, Complex>(State& state, List::Elem
 template<>
 SPECIALIZED_STATIC Character::Element Cast<List, Character>(State& state, List::Element const& i) { Character a = As<Character>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to character"); }
 
+
+
+// Symbol casting...move somewhere else?
+template<>
+SPECIALIZED_STATIC void Cast1<Symbol, Raw>(State& state, Symbol const& i, Raw& o) { _error("Invalid cast from symbol to raw"); }
+
+template<>
+SPECIALIZED_STATIC void Cast1<Symbol, Logical>(State& state, Symbol const& i, Logical& o) { _error("Invalid cast from symbol to logical"); }
+
+template<>
+SPECIALIZED_STATIC void Cast1<Symbol, Integer>(State& state, Symbol const& i, Integer& o) { _error("Invalid cast from symbol to integer"); }
+
+template<>
+SPECIALIZED_STATIC void Cast1<Symbol, Double>(State& state, Symbol const& i, Double& o) { _error("Invalid cast from symbol to double"); }
+
+template<>
+SPECIALIZED_STATIC void Cast1<Symbol, Complex>(State& state, Symbol const& i, Complex& o) { _error("Invalid cast from symbol to complex"); }
+
+template<>
+SPECIALIZED_STATIC void Cast1<Symbol, Character>(State& state, Symbol const& i, Character& o) { Character::InitScalar(o, i); }
+
+template<>
+SPECIALIZED_STATIC void Cast1<Symbol, List>(State& state, Symbol const& i, List& o) { List::InitScalar(o, i); }
 
 #endif
 
