@@ -10,6 +10,8 @@ static ByteCode::Enum op(Symbol const& s) {
 		case EStrings::idiv: return ByteCode::idiv; break;
 		case EStrings::mod: return ByteCode::mod; break;
 		case EStrings::pow: return ByteCode::pow; break;
+		case EStrings::atan2: return ByteCode::atan2; break;
+		case EStrings::hypot: return ByteCode::hypot; break;
 		case EStrings::lt: return ByteCode::lt; break;
 		case EStrings::gt: return ByteCode::gt; break;
 		case EStrings::eq: return ByteCode::eq; break;
@@ -534,6 +536,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	case EStrings::idiv: 
 	case EStrings::pow: 
 	case EStrings::mod:
+	case EStrings::atan2:
+	case EStrings::hypot:
 	case EStrings::land:
 	case EStrings::lor:
 	case EStrings::slor:

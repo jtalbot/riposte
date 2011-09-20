@@ -54,6 +54,8 @@
 	_(idiv, 	"%/%") \
 	_(pow, 		"^") \
 	_(mod, 		"%%") \
+	_(atan2, 	"atan2") \
+	_(hypot, 	"hypot") \
 	_(lnot, 	"!") \
 	_(land, 	"&") \
 	_(sland, 	"&&") \

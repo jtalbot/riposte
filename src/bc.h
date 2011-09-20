@@ -58,6 +58,8 @@
 	_(idiv, "idiv",	IDivOp) \
 	_(mod, "mod",	ModOp) \
 	_(pow, "pow",	PowOp) \
+	_(atan2, "atan2",	ATan2Op) \
+	_(hypot, "hypot",	HypotOp) \
 
 #define BINARY_LOGICAL_MAP_BYTECODES(_) \
 	_(land, "land",	AndOp) \

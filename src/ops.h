@@ -155,6 +155,8 @@ BINARY_OP(PowOp, Self, Self, Up, pow(a,b))
 inline double Mod(double a, double b) { return a - IDiv(a,b) * b; /* TODO: Replace with ugly R version */ }
 inline int64_t Mod(int64_t a, int64_t b) { return a % b; }
 BINARY_OP(ModOp, Self, Self, Self, Mod(a,b))			NYI_COMPLEX_OP(ModOp)
+BINARY_OP(ATan2Op, Self, Self, Self, atan2(a,b))			NYI_COMPLEX_OP(ATan2Op)
+BINARY_OP(HypotOp, Self, Self, Self, hypot(a,b))			NYI_COMPLEX_OP(HypotOp)
 BINARY_OP(PMinOp, Self, Self, Self, riposte_min(state, a,b))		NYI_COMPLEX_OP(PMinOp)
 BINARY_OP(PMaxOp, Self, Self, Self, riposte_max(state, a,b))		NYI_COMPLEX_OP(PMaxOp)
 
