@@ -35,7 +35,7 @@
 	'NA_integer_'	{token( TOKEN_NUM_CONST, Integer::NA() );};
 	'NA_real_'	{token( TOKEN_NUM_CONST, Double::NA() );};
 	'NA_character_'	{token( TOKEN_STR_CONST, Character::NA() );};
-	'NA_complex_'	{token( TOKEN_NUM_CONST, Complex::NA() );};
+	# 'NA_complex_'	{token( TOKEN_NUM_CONST, Complex::NA() );};
 	'function'	{token( TOKEN_FUNCTION, Symbol(Strings::function) );};
 	'while'	{token( TOKEN_WHILE, Symbol(Strings::whileSym) );};
 	'repeat'	{token( TOKEN_REPEAT, Symbol(Strings::repeatSym) );};
@@ -64,8 +64,8 @@
 	( float exponent? ) 
 		{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );};
 	
-	( float exponent? 'i' ) 
-		{token( TOKEN_NUM_CONST, Complex::c(std::complex<double>(0, atof(std::string(ts, te-ts-1).c_str()))) );};
+	#( float exponent? 'i' ) 
+	#	{token( TOKEN_NUM_CONST, Complex::c(std::complex<double>(0, atof(std::string(ts, te-ts-1).c_str()))) );};
 	
 	( float exponent? 'L' ) 
 		{token( TOKEN_NUM_CONST, Integer::c(atof(std::string(ts, te-ts-1).c_str())) );};

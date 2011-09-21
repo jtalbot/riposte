@@ -3,7 +3,6 @@ as.null <- function(x,...) .Internal(as.null(x))
 as.logical <- function(x,...) .Internal(as.logical(x))
 as.integer <- function(x,...) .Internal(as.integer(x))
 as.double <- function(x,...) .Internal(as.double(x))
-as.complex <- function(x,...) .Internal(as.complex(x))
 as.character <- function(x,...) .Internal(as.character(x))
 as.list <- function(x,...) .Internal(as.list(x))
 
@@ -12,7 +11,6 @@ is.logical <- function(x) .Internal(typeof(x)) == "logical"
 is.integer <- function(x) .Internal(typeof(x)) == "integer"
 is.real <- function(x) .Internal(typeof(x)) == "double"
 is.double <- function(x) .Internal(typeof(x)) == "double"
-is.complex <- function(x) .Internal(typeof(x)) == "complex"
 is.character <- function(x) .Internal(typeof(x)) == "character"
 is.symbol <- function(x) .Internal(typeof(x)) == "symbol"
 is.environment <- function(x) .Internal(typeof(x)) == "environment"

@@ -34,10 +34,6 @@ template<> std::string stringify<Double>(State const& state, Double::Element a) 
 	return Double::isNA(a) ? "NA" : doubleToStr(a);
 }  
 
-template<> std::string stringify<Complex>(State const& state, Complex::Element a) {
-	return Complex::isNA(a) ? "NA" : complexToStr(a);
-}  
-
 template<> std::string stringify<Character>(State const& state, Character::Element a) {
 	return Character::isNA(a) ? "NA" : std::string("\"") + state.externStr(a) + "\"";
 }  
@@ -114,8 +110,6 @@ std::string stringify(State const& state, Value const& value, Value const& names
 			return stringifyVector(state, Integer(value), names);
 		case Type::Double:
 			return stringifyVector(state, Double(value), names);
-		case Type::Complex:		
-			return stringifyVector(state, Complex(value), names);
 		case Type::Character:
 			return stringifyVector(state, Character(value), names);
 		
@@ -200,10 +194,6 @@ template<> std::string deparse<Integer>(State const& state, Integer::Element a) 
 
 template<> std::string deparse<Double>(State const& state, Double::Element a) {
 	return Double::isNA(a) ? "NA_real_" : doubleToStr(a);
-}  
-
-template<> std::string deparse<Complex>(State const& state, Complex::Element a) {
-	return Complex::isNA(a) ? "NA_complex_" : complexToStr(a);
 }  
 
 template<> std::string deparse<Character>(State const& state, Character::Element a) {
