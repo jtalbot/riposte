@@ -55,7 +55,7 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 		//otherwise the inline cache is updated, which involves creating a pointer
 
 		//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
-		TRACE.EmitVarOutput(state,state.frame.environment->makePointer(Symbol(inst.a)));
+		TRACE.EmitVarOutput(state,state.frame.environment->makePointer(String::Init(inst.a)));
 	}
 	TRACE.SetMaxLiveRegister(state.base,inst.c);
 	return RecordingStatus::NO_ERROR;
@@ -84,12 +84,14 @@ CHECKED_INTERPRET(eassign, A B C)
 CHECKED_INTERPRET(iassign, A B C)
 CHECKED_INTERPRET(jt, B)
 CHECKED_INTERPRET(jf, B)
+CHECKED_INTERPRET(branch, A)
 CHECKED_INTERPRET(subset, A B C)
 CHECKED_INTERPRET(subset2, A B C)
 CHECKED_INTERPRET(colon, A B C)
 CHECKED_INTERPRET(forbegin, B_1)
 CHECKED_INTERPRET(forend, B_1)
 CHECKED_INTERPRET(UseMethod, A C)
+CHECKED_INTERPRET(call, A)
 #undef A
 #undef B
 #undef B_1
@@ -97,13 +99,7 @@ CHECKED_INTERPRET(UseMethod, A C)
 #undef C_1
 #undef CHECKED_INTERPRET
 
-RecordingStatus::Enum call_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	Value & a = REG(state,inst.a);
-	if(a.isFuture() || a.isBuiltIn()) //built-ins may recursive call eval and do other nasty things so we do not want them called from the recorder with an active trace
-		return RecordingStatus::UNSUPPORTED_OP;
-	*pc = call_op(state,inst);
-	return RecordingStatus::NO_ERROR;
-}
+OP_NOT_IMPLEMENTED(icall)
 
 bool get_input(State & state, Value & v, IRef * ref, bool * can_fallback, bool * should_record) {
 
@@ -273,6 +269,7 @@ OP_NOT_IMPLEMENTED(lor)
 OP_NOT_IMPLEMENTED(sland)
 OP_NOT_IMPLEMENTED(slor)
 
+OP_NOT_IMPLEMENTED(list)
 OP_NOT_IMPLEMENTED(logical1)
 OP_NOT_IMPLEMENTED(integer1)
 OP_NOT_IMPLEMENTED(double1)
@@ -312,9 +309,17 @@ RecordingStatus::Enum type_record(State & state, Instruction const & inst, Instr
 	// Should have a direct mapping from type to symbol.
 	Value & a = REG(state, inst.a);
 	Type::Enum atyp = (a.isFuture()) ? a.future.typ : a.type;
-	c[0] = state.StrToSym(Type::toString(atyp));
+	c[0] = state.internStr(Type::toString(atyp));
 	REG(state, inst.c) = c;
 	(*pc)++;
+	return RecordingStatus::NO_ERROR;
+}
+RecordingStatus::Enum length_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	*pc = length_op(state, inst);
+	return RecordingStatus::NO_ERROR;
+}
+RecordingStatus::Enum missing_record(State & state, Instruction const & inst, Instruction const ** pc) {
+	*pc = length_op(state, inst);
 	return RecordingStatus::NO_ERROR;
 }
 RecordingStatus::Enum ret_record(State & state, Instruction const & inst, Instruction const ** pc) {

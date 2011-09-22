@@ -1,7 +1,5 @@
 
-c <- function(...) unlist(list(...))
-
-environment <- function(fun=NULL) .Internal(environment)(fun)
+c <- function(...) .Internal(unlist(list(...)))
 
 ifelse <- function(test, yes, no) {
 	if(!any(test)) no

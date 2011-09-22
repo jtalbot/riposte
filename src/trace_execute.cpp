@@ -28,6 +28,8 @@
 	_(idiv, "idiv",	IDivOp, p) \
 	_(mod, "mod",	ModOp, p) \
 	_(pow, "pow",	PowOp, p) \
+	_(atan2, "atan2",	ATan2Op,p) \
+	_(hypot, "hypot",	HypotOp,p) \
 
 #define UNARY_ARITH_MAP_TRACE_BC(_,p) \
 	_(pos, "pos", 	PosOp, p) \

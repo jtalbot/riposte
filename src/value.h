@@ -18,7 +18,7 @@
 #include "bc.h"
 #include "common.h"
 #include "enum.h"
-#include "symbols.h"
+#include "string.h"
 #include "exceptions.h"
 
 
@@ -39,6 +39,7 @@ struct Value {
 		int64_t i;
 		double d;
 		unsigned char c;
+		String s;
 		struct {
 			Type::Enum typ;
 			uint32_t ref;
@@ -53,6 +54,7 @@ struct Value {
 	bool isNull() const { return type == Type::Null; }
 	bool isLogical() const { return type == Type::Logical; }
 	bool isInteger() const { return type == Type::Integer; }
+	bool isLogical1() const { return header == (1<<4) + Type::Logical; }
 	bool isInteger1() const { return header == (1<<4) + Type::Integer; }
 	bool isDouble() const { return type == Type::Double; }
 	bool isDouble1() const { return header == (1<<4) + Type::Double; }
@@ -63,7 +65,6 @@ struct Value {
 	bool isSymbol() const { return type == Type::Symbol; }
 	bool isPromise() const { return type == Type::Promise && !isNil(); }
 	bool isFunction() const { return type == Type::Function; }
-	bool isBuiltIn() const { return type == Type::BuiltIn; }
 	bool isObject() const { return type == Type::Object; }
 	bool isFuture() const { return type == Type::Future; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
@@ -78,50 +79,56 @@ struct Value {
 	static Value const& Nil() { static const Value v = { {{Type::Promise, 0}}, {0} }; return v; }
 };
 
-class Prototype;
-class Environment;
-class State;
-
-// Value type implementations
-
-struct Symbol {
-	int64_t i;
-
-	Symbol() : i(String::NA) {}
-	explicit Symbol(int64_t index) : i(index) {}
-
-	explicit Symbol(Value const& v) : i(v.i) {
-		assert(v.type == Type::Symbol); 
-	}
-
-	operator Value() const {
-		Value v;
-		Value::Init(v, Type::Symbol, 0);
-		v.i = i;
-		return v;
-	}
-
-	bool operator==(Symbol const& other) const { return i == other.i; }
-	bool operator!=(Symbol const& other) const { return i != other.i; }
-	bool operator==(int64_t other) const { return i == other; }
-};
-
-// make constant members matching built in strings
-namespace Symbols {
-	#define CONST_DECLARE(name, string, ...) static const ::Symbol name(String::name);
-	STRINGS(CONST_DECLARE)
-	#undef CONST_DECLARE
-}
-
 template<> inline int64_t& Value::scalar<int64_t>() { return i; }
 template<> inline double& Value::scalar<double>() { return d; }
 template<> inline unsigned char& Value::scalar<unsigned char>() { return c; }
-template<> inline Symbol& Value::scalar<Symbol>() { return (Symbol&)i; }
+template<> inline String& Value::scalar<String>() { return s; }
 
 template<> inline int64_t const& Value::scalar<int64_t>() const { return i; }
 template<> inline double const& Value::scalar<double>() const { return d; }
 template<> inline unsigned char const& Value::scalar<unsigned char>() const { return c; }
-template<> inline Symbol const& Value::scalar<Symbol>() const { return (Symbol const&) i; }
+template<> inline String const& Value::scalar<String>() const { return s; }
+
+
+//
+// Value type implementations
+//
+
+class Prototype;
+class Environment;
+class State;
+
+// A symbol has the same format as a 1-element character vector.
+struct Symbol : public Value {
+	Symbol() {
+		Value::Init(*this, Type::Symbol, 1);
+		s = Strings::NA;
+	} 
+	
+	explicit Symbol(String str) {
+		Value::Init(*this, Type::Symbol, 1);
+		s = str; 
+	} 
+
+	explicit Symbol(Value const& v) {
+		assert(v.isSymbol() || v.isCharacter1()); 
+		header = v.header;
+		s = v.s;
+	}
+
+	operator String() const {
+		return s;
+	}
+
+	operator Value() const {
+		return *(Value*)this;
+	}
+
+	bool operator==(Symbol const& other) const { return s == other.s; }
+	bool operator!=(Symbol const& other) const { return s != other.s; }
+	bool operator==(String other) const { return s == other; }
+	bool operator!=(String other) const { return s != other; }
+};
 
 
 template<Type::Enum VType, typename ElementType, bool Recursive,
@@ -183,10 +190,7 @@ struct Vector : public Value {
 	}
 
 	operator Value() const {
-		Value v;
-		Value::Init(v,type, length);
-		v.p = p;
-		return v;
+		return (Value&)*this;
 	}
 };
 
@@ -265,12 +269,12 @@ VECTOR_IMPL(Complex, std::complex<double>, false)
 	static bool isInfinite(std::complex<double> c) { return Double::isInfinite(c.real()) || Double::isInfinite(c.imag()); }
 };
 
-VECTOR_IMPL(Character, Symbol, false)
-	static bool isNA(Symbol c) { return c == Symbols::NA; }
-	static bool isCheckedNA(Symbol c) { return isNA(c); }
-	static bool isNaN(Symbol c) { return false; }
-	static bool isFinite(Symbol c) { return false; }
-	static bool isInfinite(Symbol c) { return false; }
+VECTOR_IMPL(Character, String, false)
+	static bool isNA(String c) { return c == Strings::NA; }
+	static bool isCheckedNA(String c) { return isNA(c); }
+	static bool isNaN(String c) { return false; }
+	static bool isFinite(String c) { return false; }
+	static bool isInfinite(String c) { return false; }
 };
 
 VECTOR_IMPL(Raw, unsigned char, false) 
@@ -322,23 +326,6 @@ public:
 	Environment* environment() const { return env; }
 };
 
-class BuiltIn {
-public:
-	typedef Value (*BuiltInFunctionPtr)(State& s, List const& args, Character const& names);
-	BuiltInFunctionPtr func;
-	explicit BuiltIn(BuiltInFunctionPtr func) : func(func) {}
-	explicit BuiltIn(Value const& v) {
-		assert(v.isBuiltIn());
-		func = (BuiltInFunctionPtr)v.p; 
-	}
-	operator Value() const {
-		Value v;
-		Value::Init(v, Type::BuiltIn, 0);
-		v.p = (void*)func;
-		return v;
-	}
-};
-
 class REnvironment {
 private:
 	Environment* env;
@@ -361,23 +348,144 @@ public:
 	}
 };
 
+class Dictionary : public gc {
+	static uint64_t globalRevision;
+	uint64_t revision;
+
+	static const uint64_t inlineSize = 16;
+	struct Pair { String n; Value v; };
+	Pair* d;
+	Pair inlineDict[inlineSize];
+	uint64_t size, load;
+
+public:
+	Dictionary() : revision(++globalRevision), d(inlineDict), size(inlineSize) {
+		clear();
+	}
+	
+	// for now, do linear probing
+	// this returns the location of the String s (or where it was stored before being deleted).
+	// or, if s doesn't exist, the location at which s should be inserted.
+	uint64_t find(String s) const {
+		uint64_t i = (uint64_t)s.i & (size-1);	// hash this?
+		while(d[i].n != s && d[i].n != Strings::NA) {
+			i = (i+1) & (size-1);
+		}
+		assert(i >= 0 && i < size);
+		return i; 
+	}
+	
+	uint64_t assign(String name, Value const& value) {
+		uint64_t i = find(name);
+		if(value.isNil()) {
+			// deleting a value changes the revision number! 
+			if(d[i].n != Strings::NA) { 
+				load--; 
+				d[i] = (Pair) { Strings::NA, Value::Nil() }; 
+				revision = ++globalRevision; 
+			}
+		} else {
+			if(d[i].n == Strings::NA) { 
+				load++;
+				if((load * 2) > size) {
+					rehash(size * 2);
+					i = find(name);
+				}
+				d[i] = (Pair) { name, value };
+			} else {
+				d[i].v = value;
+			}
+		}
+		return i;
+	}
+
+	Value const& get(String name) const {
+		uint64_t i = find(name);
+		if(d[i].n != Strings::NA) return d[i].v;
+		else return Value::Nil();
+	}
+
+	void rehash(uint64_t s) {
+		uint64_t old_size = size;
+		Pair* old_d = d;
+		s = nextPow2(s);
+		if(s <= size) return; // should rehash on shrinking sometimes, when?
+
+		size = s;
+		d = new (GC) Pair[size];
+		clear();	// this increments the revision
+		
+		// copy over previous populated values...
+		for(uint64_t i = 0; i < old_size; i++) {
+			if(old_d[i].n != Strings::NA) {
+				d[find(old_d[i].n)] = old_d[i];
+			}
+		}
+	}
+
+	void clear() {
+		load = 0; 
+		for(uint64_t i = 0; i < size; i++) {
+			// wiping v too makes sure we're not holding unnecessary pointers
+			d[i] = (Pair) { Strings::NA, Value::Nil() };
+		}
+		revision = ++globalRevision;
+	}
+
+	struct Pointer {
+		Dictionary* env;
+		String name;
+		uint64_t revision;
+		uint64_t index;
+	};
+
+	bool validRevision(uint64_t i) { return i >= revision; }
+	
+	Value const& get(uint64_t index) const {
+		assert(index >= 0 && index < size);
+		return d[index].v;
+	}
+
+	void assign(uint64_t index, Value const& value) {
+		assert(index >= 0 && index < size);
+		d[index].v = value;
+	}
+	
+	// making a pointer only works if the entry already exists 
+	Pointer makePointer(String name) {
+		uint64_t i = find(name);
+		if(d[i].n == Strings::NA) _error("Making pointer to non-existant variable"); 
+		return (Pointer) { this, name, revision, i };
+	}
+
+	Value const& get(Pointer const& p) {
+		if(p.revision == revision) return get(p.index);
+		else return get(p.name);
+	}
+
+	void assign(Pointer const& p, Value const& value) {
+		if(p.revision == revision) assign(p.index, value);
+		else assign(p.name, value);
+	}
+};
+
 struct Object : public Value {
-	typedef std::map<int64_t, Value, std::less<int64_t>, traceable_allocator<std::pair<int64_t, Value> > > Container;
 
 	struct Inner : public gc {
 		Value base;
-		Container attributes;
+		Dictionary attributes;
 	};
 
 	Value& base() { return ((Inner*)p)->base; }
 	Value const& base() const { return ((Inner*)p)->base; }
-	Container& attributes() { return ((Inner*)p)->attributes; }
-	Container const& attributes() const { return ((Inner*)p)->attributes; }
+	Dictionary& attributes() { return ((Inner*)p)->attributes; }
+	Dictionary const& attributes() const { return ((Inner*)p)->attributes; }
 
 	static void Init(Value& v, Value const& _base) {
-		Value::Init(v, Type::Object, 0);
-		Inner* inner = new Inner();
+		Inner* inner = new (GC) Inner();
 		inner->base = _base;
+		// doing this after ensures that it will work even if base and v overlap.
+		Value::Init(v, Type::Object, 0);
 		v.p = (void*)inner;
 	}
 
@@ -392,35 +500,33 @@ struct Object : public Value {
 		((Object&)v).setClass(className);
 	}
 
-	bool hasAttribute(Symbol s) const {
-		return attributes().find(s.i) != attributes().end();
+	bool hasAttribute(String s) const {
+		return !attributes().get(s).isNil();
 	}
 
-	bool hasNames() const { return hasAttribute(Symbols::names); }
-	bool hasClass() const { return hasAttribute(Symbols::classSym); }
-	bool hasDim() const   { return hasAttribute(Symbols::dim); }
+	bool hasNames() const { return hasAttribute(Strings::names); }
+	bool hasClass() const { return hasAttribute(Strings::classSym); }
+	bool hasDim() const   { return hasAttribute(Strings::dim); }
 
-	Value getAttribute(Symbol s) const {
-		Container::const_iterator i = attributes().find(s.i);
-		if(i != attributes().end()) return i->second;
-		else return Value::Nil();
+	Value getAttribute(String s) const {
+		return attributes().get(s);
 	}
 
-	Value getNames() const { return getAttribute(Symbols::names); }
-	Value getClass() const { return getAttribute(Symbols::classSym); }
-	Value getDim() const { return getAttribute(Symbols::dim); }
+	Value getNames() const { return getAttribute(Strings::names); }
+	Value getClass() const { return getAttribute(Strings::classSym); }
+	Value getDim() const { return getAttribute(Strings::dim); }
 
-	void setAttribute(Symbol s, Value const& v) {
-		attributes()[s.i] = v;
+	void setAttribute(String s, Value const& v) {
+		attributes().assign(s, v);
 	}
 	
-	void setNames(Value const& v) { setAttribute(Symbols::names, v); }
-	void setClass(Value const& v) { setAttribute(Symbols::classSym, v); }
-	void setDim(Value const& v)  { setAttribute(Symbols::dim, v); }
+	void setNames(Value const& v) { setAttribute(Strings::names, v); }
+	void setClass(Value const& v) { setAttribute(Strings::classSym, v); }
+	void setDim(Value const& v)  { setAttribute(Strings::dim, v); }
 
-	Symbol className() const {
+	String className() const {
 		if(!hasClass()) {
-			return Symbol(base().type);
+			return String::Init(base().type);	// TODO: make sure types line up correctly with strings
 		}
 		else {
 			return Character(getClass())[0];
@@ -430,13 +536,13 @@ struct Object : public Value {
 
 inline Value CreateExpression(List const& list) {
 	Value v;
-	Object::Init(v, list, Value::Nil(), Character::c(Symbols::Expression));
+	Object::Init(v, list, Value::Nil(), Character::c(Strings::Expression));
 	return v;
 }
 
 inline Value CreateCall(List const& list, Value const& names = Value::Nil()) {
 	Value v;
-	Object::Init(v, list, names, Character::c(Symbols::Call));
+	Object::Init(v, list, names, Character::c(Strings::Call));
 	return v;
 }
 
@@ -461,7 +567,7 @@ struct CompiledCall : public gc {
 
 struct Prototype : public gc {
 	Value expression;
-	Symbol string;
+	String string;
 
 	Character parameters;
 	List defaults;
@@ -497,142 +603,29 @@ struct Prototype : public gc {
  *     -result register pointer
  */
 
-class Environment : public gc {
+
+class Environment : public Dictionary {
 private:
-	static const uint64_t inlineSize = 16;
-
-	Environment* staticParent;
-	struct NamedValue { Symbol n; Value v; };
-	NamedValue* values;
-	NamedValue inlineValues[inlineSize];
-	uint64_t size, load, live;
-
-	uint64_t revision;
-	static uint64_t globalRevision;
+	Environment* lexical, *dynamic;
 	
-	// empty slots have a Name = Symbols::NA
-	// deleted slots have a non-NA name and a Nil value
-	bool initHash(uint64_t s) {
-		s = nextPow2(s);
-		if(s > size) {		// should rehash on shrinking sometimes, when?
-			size = s;
-			values = new (GC) NamedValue[size];
-			clear();
-			return true;
-		}
-		return false;
-	}
-
-	// for now, do linear probing
-	// this returns the location of the Symbol s (or where it was stored before being deleted).
-	// or, if s doesn't exist, the location at which s should be inserted.
-	uint64_t find(Symbol s) const {
-		int64_t i = s.i & (size-1);	// hash this?
-		while(values[i].n != s && values[i].n != Symbols::NA) {
-			i = (i+1) & (size-1);
-		}
-		return i; 
-	}
-	
-	void rehash(uint64_t s) {
-		uint64_t old_size = size;
-		NamedValue* old_values = values;
-		if(!initHash(s)) return;		// if it didn't have to reallocate, just return
-		// otherwise, copy over previous non-deleted values...
-		for(uint64_t i = 0; i < old_size; i++) {
-			if(old_values[i].n != Symbols::NA && !old_values[i].v.isNil()) {
-				values[find(old_values[i].n)] = old_values[i];
-				load++; live++; 
-			}
-		}
-	}
-
-	void clear() {
-		for(uint64_t i = 0; i < size; i++) values[i].n = Symbols::NA;
-		load = 0;
-		live = 0;
-		revision = ++globalRevision;
-	}
-
 public:
-	std::vector<Symbol> dots;
+	Value call;
+	std::vector<String> dots;
 
-	Environment(Environment* staticParent=0) : 
-			staticParent(staticParent),
-			values(inlineValues), size(inlineSize), 
-			load(0), live(0), revision(++globalRevision) {
-		for(uint64_t i = 0; i < size; i++) 
-			values[i].n = Symbols::NA;
-	}
+	explicit Environment(Environment* lexical=0, Environment* dynamic=0) : 
+			lexical(lexical), dynamic(dynamic), call(Null::Singleton()) {}
 
-	void init(Environment* s) {
-		staticParent = s;
+	void init(Environment* l, Environment* d, Value const& call) {
+		lexical = l;
+		dynamic = d;
+		this->call = call;
 		clear();
 		dots.clear();
 	}
 	
-	Environment* StaticParent() const { return staticParent; }
+	Environment* LexicalScope() const { return lexical; }
+	Environment* DynamicScope() const { return dynamic; }
 
-	Value const& get(Symbol const& name) const {
-		uint64_t i = find(name);
-		if(values[i].n != Symbols::NA) return values[i].v;
-		else return Value::Nil();
-	}
-
-	uint64_t assign(Symbol const& name, Value const& value) {
-		if(value.isNil()) { return -1; }
-		uint64_t i = find(name);
-		if(values[i].n == Symbols::NA) { load++; live++; }
-		if((load * 2) > size) {
-			rehash(size * 2);
-			i = find(name);
-		}
-		values[i] = (NamedValue) { name, value };
-		return i;
-	}
-
-	void rm(Symbol const& name) {
-		uint64_t i = find(name);
-		if(values[i].n != Symbols::NA) {
-			live--;
-			values[i].v = Value::Nil();
-			revision = ++globalRevision;
-		}
-	}
-
-	struct Pointer {
-		Environment* env;
-		Symbol name;
-		uint64_t revision;
-		uint64_t index;
-	};
-
-	// making a pointer only works if the entry already exists 
-	Pointer makePointer(Symbol name) {
-		uint64_t i = find(name);
-		if(values[i].n == Symbols::NA) _error("Making pointer to non-existant variable"); 
-		return (Pointer) { this, name, revision, i };
-	}
-
-	Value const& get(Pointer const& p) {
-		if(p.revision == revision) return values[p.index].v;
-		else return get(p.name);
-	}
-
-	void assign(Pointer const& p, Value const& value) {
-		if(p.revision == revision) values[p.index].v = value;
-		else assign(p.name, value);
-	}
-
-	bool validRevision(uint64_t i) { return i >= revision; }
-	
-	Value const& get(uint64_t index) const {
-		return values[index].v;
-	}
-
-	void assign(uint64_t index, Value const& value) {
-		values[index].v = value;
-	}
 };
 
 struct StackFrame {
@@ -808,6 +801,14 @@ struct TraceState {
 	}
 };
 
+// TODO: Careful, args and result might overlap!
+typedef void (*InternalFunctionPtr)(State& s, Value const* args, Value& result);
+
+struct InternalFunction {
+	InternalFunctionPtr ptr;
+	int64_t params;
+};
+
 #define DEFAULT_NUM_REGISTERS 10000
 
 struct State {
@@ -824,6 +825,9 @@ struct State {
 	StringTable strings;
 	
 	std::vector<std::string> warnings;
+
+	std::vector<InternalFunction> internalFunctions;
+	std::map<String, int64_t> internalFunctionIndex;
 	
 	TraceState tracing; //all state related to tracing compiler
 
@@ -848,13 +852,18 @@ struct State {
 	std::string stringify(Trace const & t) const;
 	std::string deparse(Value const& v) const;
 
-	Symbol StrToSym(std::string s) {
-		return Symbol(strings.in(s));
+	String internStr(std::string s) {
+		return strings.in(s);
 	}
 
-	std::string SymToStr(Symbol s) const {
-		if(s.i < 0) return std::string("..") + intToStr(-s.i);
-		else return strings.out(s.i);
+	std::string externStr(String s) const {
+		return strings.out(s);
+	}
+
+	void registerInternalFunction(String s, InternalFunctionPtr internalFunction, int64_t params) {
+		InternalFunction i = { internalFunction, params };
+		internalFunctions.push_back(i);
+		internalFunctionIndex[s] = internalFunctions.size()-1;
 	}
 };
 

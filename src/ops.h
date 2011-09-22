@@ -96,12 +96,12 @@ struct LNotOp : UnaryOp<Logical, Logical> {
 
 template<typename T>
 struct NcharOp : UnaryOp<Character, Integer> {
-	static typename NcharOp::R eval(State& state, typename NcharOp::A const a) { return (a == Symbols::NA) ? 2 : state.SymToStr(a).length(); }
+	static typename NcharOp::R eval(State& state, typename NcharOp::A const a) { return (a == Strings::NA) ? 2 : state.externStr(a).length(); }
 };
 
 template<typename T>
 struct NzcharOp : UnaryOp<Character, Logical> {
-	static typename NzcharOp::R eval(State& state, typename NzcharOp::A const a) { return a != Symbols::empty; }
+	static typename NzcharOp::R eval(State& state, typename NzcharOp::A const a) { return a != Strings::empty; }
 };
 
 #undef UNARY_OP 
@@ -129,8 +129,9 @@ inline double riposte_max(State& state, double a, double b) {
 inline int64_t riposte_max(State& state, int64_t a, int64_t b) { 
 	return a > b ? a : b;
 }
-inline Symbol riposte_max(State& state, Symbol a, Symbol b) {
-	return state.SymToStr(a) > state.SymToStr(b) ? a : b;
+// TODO: Fix string min and max
+inline String riposte_max(State& state, String a, String b) {
+	return state.externStr(a) > state.externStr(b) ? a : b;
 } 
 
 inline double riposte_min(State& state, double a, double b) { 
@@ -139,9 +140,9 @@ inline double riposte_min(State& state, double a, double b) {
 inline int64_t riposte_min(State& state, int64_t a, int64_t b) { 
 	return a < b ? a : b;
 }
-inline Symbol riposte_min(State& state, Symbol a, Symbol b) {
-	return state.SymToStr(a) < state.SymToStr(b) ? a : b;
-} 
+inline String riposte_min(State& state, String a, String b) {
+	return state.externStr(a) < state.externStr(b) ? a : b;
+}
 
 BINARY_OP(AddOp, Self, Self, Self, a+b)
 BINARY_OP(SubOp, Self, Self, Self, a-b)
@@ -154,6 +155,8 @@ BINARY_OP(PowOp, Self, Self, Up, pow(a,b))
 inline double Mod(double a, double b) { return a - IDiv(a,b) * b; /* TODO: Replace with ugly R version */ }
 inline int64_t Mod(int64_t a, int64_t b) { return a % b; }
 BINARY_OP(ModOp, Self, Self, Self, Mod(a,b))			NYI_COMPLEX_OP(ModOp)
+BINARY_OP(ATan2Op, Self, Self, Self, atan2(a,b))			NYI_COMPLEX_OP(ATan2Op)
+BINARY_OP(HypotOp, Self, Self, Self, hypot(a,b))			NYI_COMPLEX_OP(HypotOp)
 BINARY_OP(PMinOp, Self, Self, Self, riposte_min(state, a,b))		NYI_COMPLEX_OP(PMinOp)
 BINARY_OP(PMaxOp, Self, Self, Self, riposte_max(state, a,b))		NYI_COMPLEX_OP(PMaxOp)
 
@@ -185,12 +188,12 @@ struct Name<TComplex> : public BinaryOp<Complex, Complex, Logical> { \
 	static Name::R eval(State& state, Name::A const a, Name::B const b) { _error("invalid complex function"); } \
 };
 
-ORDINAL_OP(LTOp, a<b)	CHARACTER_ORDINAL_OP(LTOp, state.SymToStr(a).compare(state.SymToStr(b)) < 0)		INVALID_COMPLEX_OP(LTOp)
-ORDINAL_OP(GTOp, a>b)	CHARACTER_ORDINAL_OP(GTOp, state.SymToStr(a).compare(state.SymToStr(b)) > 0)		INVALID_COMPLEX_OP(GTOp)
-ORDINAL_OP(LEOp, a<=b)	CHARACTER_ORDINAL_OP(LEOp, state.SymToStr(a).compare(state.SymToStr(b)) <= 0)	INVALID_COMPLEX_OP(LEOp)
-ORDINAL_OP(GEOp, a>=b)	CHARACTER_ORDINAL_OP(GEOp, state.SymToStr(a).compare(state.SymToStr(b)) >= 0)	INVALID_COMPLEX_OP(GEOp)
-ORDINAL_OP(EqOp, a==b)	/* Character equality can just compare Symbols */
-ORDINAL_OP(NeqOp, a!=b) /* Character inequality can just compare Symbols */
+ORDINAL_OP(LTOp, a<b)	CHARACTER_ORDINAL_OP(LTOp, state.externStr(a).compare(state.externStr(b)) < 0)		INVALID_COMPLEX_OP(LTOp)
+ORDINAL_OP(GTOp, a>b)	CHARACTER_ORDINAL_OP(GTOp, state.externStr(a).compare(state.externStr(b)) > 0)		INVALID_COMPLEX_OP(GTOp)
+ORDINAL_OP(LEOp, a<=b)	CHARACTER_ORDINAL_OP(LEOp, state.externStr(a).compare(state.externStr(b)) <= 0)	INVALID_COMPLEX_OP(LEOp)
+ORDINAL_OP(GEOp, a>=b)	CHARACTER_ORDINAL_OP(GEOp, state.externStr(a).compare(state.externStr(b)) >= 0)	INVALID_COMPLEX_OP(GEOp)
+ORDINAL_OP(EqOp, a==b)	/* Character equality can just compare Strings */
+ORDINAL_OP(NeqOp, a!=b) /* Character inequality can just compare Strings */
 
 #undef ORDINAL_OP
 #undef CHARACTER_ORDINAL_OP
@@ -244,10 +247,10 @@ struct T<TComplex> : public BinaryOp<Complex, Complex, Complex> { \
 }; 
 
 FOLD_OP(MaxOp, PMaxOp<T>::eval(state, a, b), -std::numeric_limits<typename MaxOp<T>::A>::infinity())
-CHARACTER_FOLD_OP(MaxOp, PMaxOp<TCharacter>::eval(state, a, b), Symbols::empty) 
+CHARACTER_FOLD_OP(MaxOp, PMaxOp<TCharacter>::eval(state, a, b), Strings::empty) 
 INVALID_COMPLEX_FUNCTION(MaxOp);
 FOLD_OP(MinOp, PMinOp<T>::eval(state, a, b), std::numeric_limits<typename MaxOp<T>::A>::infinity()) 
-CHARACTER_FOLD_OP(MinOp, PMinOp<TCharacter>::eval(state, a, b), Symbols::empty) 
+CHARACTER_FOLD_OP(MinOp, PMinOp<TCharacter>::eval(state, a, b), Strings::empty) 
 INVALID_COMPLEX_FUNCTION(MinOp);
 FOLD_OP(SumOp, AddOp<T>::eval(state, a, b), 0) 
 FOLD_OP(ProdOp, MulOp<T>::eval(state, a, b), 1) 
