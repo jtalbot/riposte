@@ -1,5 +1,6 @@
-x <- 1:10000000
 add <- function() {
-for(i in x) 1
+x <- 1:100000000
+a <- 0
+system.time(for(i in x) a <- a+x[i])
 }
-system.time(add())
+add()

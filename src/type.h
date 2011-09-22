@@ -15,7 +15,6 @@
 	_(Logical, 	"logical")	\
 	_(Integer, 	"integer")	\
 	_(Double, 	"double")	\
-	_(Complex, 	"complex")	\
 	_(Character, 	"character")	\
 	_(List,		"list")		\
 	_(Function,	"function")	\
@@ -32,7 +31,6 @@ DECLARE_ENUM(Type, TYPES)
 	_(Logical) 	\
 	_(Integer) 	\
 	_(Double) 	\
-	_(Complex) 	\
 	_(Character) 	\
 	_(List) 	\
 
@@ -41,7 +39,6 @@ DECLARE_ENUM(Type, TYPES)
 	_(Logical) 	\
 	_(Integer) 	\
 	_(Double) 	\
-	_(Complex) 	\
 	_(Character) 	\
 	_(List) 	\
 
@@ -51,7 +48,6 @@ DECLARE_ENUM(Type, TYPES)
 	_(Logical)	\
 	_(Integer)	\
 	_(Double)	\
-	_(Complex)	\
 	_(Character)	\
 
 #define LISTLIKE_VECTOR_TYPES(_) \

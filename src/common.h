@@ -62,14 +62,6 @@ static inline double strToDouble( std::string const& s) {
 	return r;
 }
 
-static inline std::complex<double> strToComplex( std::string const& s) {
-	double r, i;
-	std::istringstream t(s);
-	t >> r;
-	t >> i;
-	return std::complex<double>(r,i);
-}
-
 static inline double time_diff (
     timespec const& end, timespec const& begin)
 {

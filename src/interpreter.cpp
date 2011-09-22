@@ -21,8 +21,10 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 extern Instruction const* kget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* get_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* assign_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* assign2_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* forend_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* add_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* subset_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 #endif
 
 #define REG(state, i) (*(state.base+i))
@@ -219,7 +221,7 @@ Instruction const* icall_op(State& state, Instruction const& inst) {
 
 // Get a Value by Symbol from the current environment,
 //  TODO: UseMethod also should search in some cached library locations.
-static Value UseMethodSearch(State& state, String s) {
+static Value GenericGet(State& state, String s) {
 	Environment* environment = state.frame.environment;
 	Value value = environment->get(s);
 	while(value.isNil() && environment->LexicalScope() != 0) {
@@ -234,6 +236,26 @@ static Value UseMethodSearch(State& state, String s) {
 	return value;
 }
 
+static Value GenericSearch(State& state, Character klass, String generic, String& method) {
+	
+	// first search for type specific method
+	Value func = Value::Nil();
+	for(int64_t i = 0; i < klass.length && func.isNil(); i++) {
+		method = state.internStr(state.externStr(generic) + "." + state.externStr(klass[i]));
+		func = GenericGet(state, method);	
+	}
+
+	// TODO: look for group generics
+
+	// look for default if necessary
+	if(func.isNil()) {
+		method = state.internStr(state.externStr(generic) + ".default");
+		func = GenericGet(state, method);
+	}
+
+	return func;
+}
+
 Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 	String generic = String::Init(inst.a);
 
@@ -246,15 +268,8 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 	Value object = REG(state, inst.c);
 	Character type = klass(state, object);
 
-	//Search for type-specific method
-	String method = state.internStr(state.externStr(generic) + "." + state.externStr(type[0]));
-	Value f = UseMethodSearch(state, method);
-
-	//Search for default
-	if(f.isNil()) {
-		method = state.internStr(state.externStr(generic) + ".default");
-		f = UseMethodSearch(state, method);
-	}
+	String method;
+	Value f = GenericSearch(state, type, generic, method);
 
 	if(!f.isFunction()) { 
 		_error(std::string("no applicable method for '") + state.externStr(generic) + "' applied to an object of class \"" + state.externStr(type[0]) + "\"");
@@ -275,41 +290,56 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 	//	2) an assign with dest symbol in a and source register in c.
 	//		(for use by the promise evaluation. If no promise, step over this instruction.)
 	//	3) an invalid instruction containing inline caching info.	
-	
+
 	// check if we can get the value through inline caching...
-	bool ic = state.frame.environment->validRevision((&inst+2)->b);
-	if(__builtin_expect(ic, true)) {
+	uint64_t icRevision = (&inst+2)->b;
+
+	if(__builtin_expect(state.frame.environment->equalRevision(icRevision), true)) {
 		REG(state, inst.c) = state.frame.environment->get((&inst+2)->a);
 		return &inst+3;
-	} 
-	
-	String s = String::Init(inst.a);
-	Value const& src = state.frame.environment->get(s);
-	if(src.isConcrete()) {
-		Environment::Pointer p = state.frame.environment->makePointer(s);
-		((Instruction*)(&inst+2))->a = p.index;
-		((Instruction*)(&inst+2))->b = p.revision;
-		REG(state, inst.c) = src;
-		return &inst+3;
-	} else {
-		Value& dest = REG(state, inst.c);
-		dest = src;
-		Environment* environment = state.frame.environment;
-		while(dest.isNil() && environment->LexicalScope() != 0) {
-			environment = environment->LexicalScope();
-			dest = environment->get(s);
-		}
-		if(dest.isPromise()) {
-			Environment* env = Function(dest).environment();
-			if(env == 0) env = state.frame.environment;
-			Prototype* prototype = Function(dest).prototype();
-			return buildStackFrame(state, env, false, prototype, &dest, &inst+1);
-		}
-		else if(dest.isNil()) 
-			throw RiposteError(std::string("object '") + state.externStr(s) + "' not found");
-		else
-			return &inst+3;
 	}
+
+	Environment* env = state.frame.environment;
+	uint64_t n = (&inst+2)->c;		// how many environments up is it?
+	icRevision += n;	// hacky, hacky, hacky! subtracting n avoids an extra check in the fastest case above. Otherwise we'd have to check equalRevision *and* n == 0.
+	uint64_t up = 0;
+	for(; up < n && env->validRevision(icRevision); up++) {
+		env = env->LexicalScope();
+	}
+
+	if(__builtin_expect(env->validRevision(icRevision), true)) {
+		REG(state, inst.c) = env->get((&inst+2)->a);
+		return &inst+3;
+	}
+
+	// otherwise, need to do a real look up starting from env (the first invalid env)
+	Value& dest = REG(state, inst.c);
+
+	String s = String::Init(inst.a);
+	dest = env->get(s);
+	icRevision = std::max(icRevision, env->getRevision());
+	while(dest.isNil() && env->LexicalScope() != 0) {
+		env = env->LexicalScope();
+		dest = env->get(s);
+		up++;
+		icRevision = std::max(icRevision, env->getRevision());
+	}
+
+	if(dest.isConcrete()) {
+		Environment::Pointer p = env->makePointer(s);
+		((Instruction*)(&inst+2))->a = p.index;
+		((Instruction*)(&inst+2))->b = icRevision - up;
+		((Instruction*)(&inst+2))->c = up;
+		return &inst+3;
+	} else if(dest.isPromise()) {
+		Environment* env = Function(dest).environment();
+		Prototype* prototype = Function(dest).prototype();
+		assert(env != 0);
+		// the inline cache info will be populated by the assignment instruction
+		return buildStackFrame(state, env, false, prototype, &dest, &inst+1);
+	}
+	else
+		throw RiposteError(std::string("object '") + state.externStr(s) + "' not found");
 }
 
 Instruction const* kget_op(State& state, Instruction const& inst) {
@@ -323,7 +353,7 @@ Instruction const* iget_op(State& state, Instruction const& inst) {
 }
 Instruction const* assign_op(State& state, Instruction const& inst) {
 	// check if we can assign through inline caching
-	if(state.frame.environment->validRevision((&inst+1)->b))
+	if(state.frame.environment->equalRevision((&inst+1)->b))
 		state.frame.environment->assign((&inst+1)->a, REG(state, inst.c));
 	else {
 		state.frame.environment->assign(String::Init(inst.a), REG(state, inst.c));
@@ -331,26 +361,63 @@ Instruction const* assign_op(State& state, Instruction const& inst) {
 		Environment::Pointer p = state.frame.environment->makePointer(String::Init(inst.a));
 		((Instruction*)(&inst+1))->a = p.index;
 		((Instruction*)(&inst+1))->b = p.revision;
+		((Instruction*)(&inst+1))->c = 0;
 	}
 	return &inst+2;
 }
 Instruction const* assign2_op(State& state, Instruction const& inst) {
-	// TODO: Make inline caching work for assign2
-	String s = String::Init(inst.a);
-	// search through environments for destination...
-	Environment* environment = state.frame.environment;
-	Value value = environment->get(s);
-	while(value.isNil() && environment->LexicalScope() != 0) {
-		environment = environment->LexicalScope();
-		value = environment->get(s);
+	// check if we can assign the value through inline caching...
+	// assign2 is always used to assign up at least one scope level...
+	// so start off looking up one level...
+
+	Environment* env = state.frame.environment->LexicalScope();
+	assert(env != 0);
+
+	uint64_t icRevision = (&inst+1)->b;
+	if(__builtin_expect(env->equalRevision(icRevision), true)) {
+		env->assign((&inst+1)->a, REG(state, inst.c));
+		return &inst+2;
 	}
-	if(!value.isNil()) {
-		environment->assign(s, REG(state, inst.c));
-	} else {
+
+	uint64_t n = (&inst+1)->c;		// how many environments up is it from one up?
+	icRevision += n;	// hacky, hacky, hacky! subtracting n avoids an extra check in the fastest case above. Otherwise we'd have to check equalRevision *and* n == 0.
+	uint64_t up = 0;
+	for(; up < n && env->validRevision(icRevision); up++) {
+		env = env->LexicalScope();
+	}
+
+	if(__builtin_expect(env->validRevision(icRevision), true)) {
+		env->assign((&inst+1)->a, REG(state, inst.c));
+		return &inst+2;
+	}
+	
+	// otherwise, need to do a real look up starting from env (the first invalid env)
+	String s = String::Init(inst.a);
+	Value dest = env->get(s);
+	icRevision = std::max(icRevision, env->getRevision());
+	while(dest.isNil() && env->LexicalScope() != 0) {
+		env = env->LexicalScope();
+		dest = env->get(s);
+		up++;
+		icRevision = std::max(icRevision, env->getRevision());
+	}
+
+	if(!dest.isNil()) {
+		env->assign(s, REG(state, inst.c));
+		Environment::Pointer p = env->makePointer(String::Init(inst.a));
+		((Instruction*)(&inst+1))->a = p.index;
+		((Instruction*)(&inst+1))->b = icRevision - up;
+		((Instruction*)(&inst+1))->c = up;
+	}
+	else {
 		state.global->assign(s, REG(state, inst.c));
+		// Global may not be in the static scope of function so we can't populate IC here.
+		// However, if global is in the static scope, the second iteration of assign2 will find it on the path and set the IC in the immediately previous if block.
 	}
 	return &inst+2;
 }
+
+
 // everything else should be in registers
 
 Instruction const* iassign_op(State& state, Instruction const& inst) {
@@ -515,13 +582,23 @@ Instruction const* seq_op(State& state, Instruction const& inst) {
 	}
 }
 
-#define OP(name, string, Op) \
+#define OP(name, string, Op, Func) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
 	Value & a =  REG(state, inst.a);	\
 	Value & c = REG(state, inst.c);	\
 	if(a.isDouble1()) { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d)); return &inst+1; } \
 	else if(a.isInteger1()) { Op<TDouble>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i)); return &inst+1; } \
-	if(state.tracing.enabled && isRecordable(a)) \
+	if(a.isObject() ) { \
+		String method; \
+		Value f = GenericSearch(state, klass(state, a), state.internStr(Func), method); \
+		if(f.isFunction()) { \
+			Function func(f); \
+			Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton()); \
+			MatchArgs(state, state.frame.environment, fenv, func, List::c(a), Character(0)); \
+			return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1); \
+		}	\
+	} \
+	else if(state.tracing.enabled && isRecordable(a)) \
 		return state.tracing.begin_tracing(state, &inst, a.length); \
 	\
 	unaryArith<Zip1, Op>(state, a, c); \
@@ -531,7 +608,7 @@ UNARY_ARITH_MAP_BYTECODES(OP)
 #undef OP
 
 
-#define OP(name, string, Op) \
+#define OP(name, string, Op, Func) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
 	unaryLogical<Zip1, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
 	return &inst+1; \
@@ -539,7 +616,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 UNARY_LOGICAL_MAP_BYTECODES(OP)
 #undef OP
 
-#define OP(name, string, Op) \
+#define OP(name, string, Op, Func) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
 	Value & a =  REG(state, inst.a);	\
 	Value & b =  REG(state, inst.b);	\
@@ -556,17 +633,34 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
                 else if(b.isInteger1())	\
                         { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return &inst+1;} \
         } \
-	\
-	if(state.tracing.enabled && isRecordable(a,b)) \
+	if(a.isObject() || b.isObject()) { \
+		Value f; \
+		String method; \
+		if(a.isObject() && b.isObject()) { \
+			Value af = GenericSearch(state, klass(state, a), state.internStr(Func), method); \
+			Value bf = GenericSearch(state, klass(state, b), state.internStr(Func), method); \
+			if(af != bf) _error("Generic functions do not match on binary operator"); \
+			f = af; \
+		} \
+		else if(a.isObject()) f = GenericSearch(state, klass(state, a), state.internStr(Func), method); \
+		else f = GenericSearch(state, klass(state, b), state.internStr(Func), method); \
+		if(f.isFunction()) { \
+			Function func(f); \
+			Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton()); \
+			MatchArgs(state, state.frame.environment, fenv, func, List::c(a, b), Character(0)); \
+			return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1); \
+		}	\
+	} \
+	else if(state.tracing.enabled && isRecordable(a,b)) \
 		return state.tracing.begin_tracing(state, &inst, std::max(a.length,b.length));	\
-    \
+\
 	binaryArithSlow<Zip2, Op>(state, a, b, c);	\
 	return &inst+1;	\
 }
 BINARY_ARITH_MAP_BYTECODES(OP)
 #undef OP
 
-#define OP(name, string, Op) \
+#define OP(name, string, Op, Func) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
 	binaryLogical<Zip2, Op>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c)); \
 	return &inst+1; \
@@ -574,15 +668,30 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 BINARY_LOGICAL_MAP_BYTECODES(OP)
 #undef OP
 
-#define OP(name, string, Op) \
+#define OP(name, string, Op, Func) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
+	Value & a =  REG(state, inst.a);	\
+	Value & b =  REG(state, inst.b);	\
+	Value & c = REG(state, inst.c);	\
+        if(a.isDouble1()) {			\
+                if(b.isDouble1())		\
+                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d, b.d)); return &inst+1; }	\
+                else if(b.isInteger1())	\
+                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d, (double)b.i));return &inst+1; }	\
+        }	\
+        else if(a.isInteger1()) {	\
+                if(b.isDouble1())	\
+                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, (double)a.i, b.d)); return &inst+1; }	\
+                else if(b.isInteger1())	\
+                        { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return &inst+1;} \
+        } \
 	binaryOrdinal<Zip2, Op>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c)); \
 	return &inst+1; \
 }
 BINARY_ORDINAL_MAP_BYTECODES(OP)
 #undef OP
 
-#define OP(name, string, Op) \
+#define OP(name, string, Op, Func) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
 	unaryArith<FoldLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
 	return &inst+1; \
@@ -590,7 +699,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 ARITH_FOLD_BYTECODES(OP)
 #undef OP
 
-#define OP(name, string, Op) \
+#define OP(name, string, Op, Func) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
 	unaryLogical<FoldLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
 	return &inst+1; \
@@ -598,7 +707,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 LOGICAL_FOLD_BYTECODES(OP)
 #undef OP
 
-#define OP(name, string, Op) \
+#define OP(name, string, Op, Func) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
 	unaryOrdinal<FoldLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
 	return &inst+1; \
@@ -606,7 +715,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 ORDINAL_FOLD_BYTECODES(OP)
 #undef OP
 
-#define OP(name, string, Op) \
+#define OP(name, string, Op, Func) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
 	unaryArith<ScanLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
 	return &inst+1; \
@@ -614,7 +723,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 ARITH_SCAN_BYTECODES(OP)
 #undef OP
 
-#define OP(name, string, Op) \
+#define OP(name, string, Op, Func) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
 	unaryLogical<ScanLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
 	return &inst+1; \
@@ -622,7 +731,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 LOGICAL_SCAN_BYTECODES(OP)
 #undef OP
 
-#define OP(name, string, Op) \
+#define OP(name, string, Op, Func) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
 	unaryOrdinal<ScanLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
 	return &inst+1; \
@@ -678,13 +787,10 @@ Instruction const* integer1_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* double1_op(State& state, Instruction const& inst) {
-	Integer i = As<Integer>(state, REG(state, inst.a));
-	REG(state, inst.c) = Double(i[0]);
-	return &inst+1;
-}
-Instruction const* complex1_op(State& state, Instruction const& inst) {
-	Integer i = As<Integer>(state, REG(state, inst.a));
-	REG(state, inst.c) = Complex(i[0]);
+	int64_t length = asReal1(REG(state, inst.a));
+	Double d(length);
+	for(int64_t i = 0; i < length; i++) d[i] = 0;
+	REG(state, inst.c) = d;
 	return &inst+1;
 }
 Instruction const* character1_op(State& state, Instruction const& inst) {
@@ -746,7 +852,7 @@ static void printCode(State const& state, Prototype const* prototype) {
 
 	r = r + "code: " + intToStr(prototype->bc.size()) + "\n";
 	for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++)
-		r = r + intToStr(i) + ":\t" + prototype->bc[i].toString() + "\n";
+		r = r + intToHexStr((uint64_t)&(prototype->bc[i])) + "--: " + intToStr(i) + ":\t" + prototype->bc[i].toString() + "\n";
 
 	std::cout << r << std::endl;
 }

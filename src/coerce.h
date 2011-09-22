@@ -84,9 +84,6 @@ template<>
 SPECIALIZED_STATIC Double::Element Cast<Logical, Double>(State& state, Logical::Element const& i) { return Logical::isNA(i) ? Double::NAelement : i ? 1.0 : 0.0; }
 
 template<>
-SPECIALIZED_STATIC Complex::Element Cast<Logical, Complex>(State& state, Logical::Element const& i) { if(Logical::isNA(i)) return Complex::NAelement; else if(i) return std::complex<double>(1.0,0.0); else return std::complex<double>(0.0,0.0); }
-
-template<>
 SPECIALIZED_STATIC Character::Element Cast<Logical, Character>(State& state, Logical::Element const& i) { return Logical::isNA(i) ? Character::NAelement : i ? Strings::TRUE : Strings::FALSE; }
 
 template<>
@@ -101,9 +98,6 @@ SPECIALIZED_STATIC Logical::Element Cast<Integer, Logical>(State& state, Integer
 
 template<>
 SPECIALIZED_STATIC Double::Element Cast<Integer, Double>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Double::NAelement : (Double::Element)i; }
-
-template<>
-SPECIALIZED_STATIC Complex::Element Cast<Integer, Complex>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Complex::NAelement : std::complex<double>(i, 0); }
 
 template<>
 SPECIALIZED_STATIC Character::Element Cast<Integer, Character>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Character::NAelement : state.internStr(intToStr(i)); }
@@ -122,32 +116,10 @@ template<>
 SPECIALIZED_STATIC Integer::Element Cast<Double, Integer>(State& state, Double::Element const& i) { return Double::isNA(i) || i > std::numeric_limits<Integer::Element>::max() || i < std::numeric_limits<Integer::Element>::min() ? Integer::NAelement : i;  }
 
 template<>
-SPECIALIZED_STATIC Complex::Element Cast<Double, Complex>(State& state, Double::Element const& i) { return Double::isNA(i) ? Complex::NAelement : std::complex<double>(i, 0);  }
-
-template<>
 SPECIALIZED_STATIC Character::Element Cast<Double, Character>(State& state, Double::Element const& i) { return Integer::isNA(i) ? Character::NAelement : state.internStr(doubleToStr(i)); }
 
 template<>
 SPECIALIZED_STATIC List::Element Cast<Double, List>(State& state, Double::Element const& i) { return Double::c(i); }
-
-
-template<>
-SPECIALIZED_STATIC Raw::Element Cast<Complex, Raw>(State& state, Complex::Element const& i) { return (Raw::Element)i.real(); }
-
-template<>
-SPECIALIZED_STATIC Logical::Element Cast<Complex, Logical>(State& state, Complex::Element const& i) { if(Complex::isNA(i)) return Logical::NAelement; else return i.real() != 0 || i.imag() != 0; }
-
-template<>
-SPECIALIZED_STATIC Integer::Element Cast<Complex, Integer>(State& state, Complex::Element const& i) { return (Complex::isNA(i) || i.real() > std::numeric_limits<Integer::Element>::max() || i.real() < std::numeric_limits<Integer::Element>::min() || i.imag() != 0) ? Integer::NAelement : i.real();  }
-
-template<>
-SPECIALIZED_STATIC Double::Element Cast<Complex, Double>(State& state, Complex::Element const& i) { if(Complex::isNA(i) || i.imag() != 0) return Double::NAelement; else return i.real(); }
-
-template<>
-SPECIALIZED_STATIC Character::Element Cast<Complex, Character>(State& state, Complex::Element const& i) { if(Complex::isNA(i)) return Character::NAelement; else return state.internStr(complexToStr(i));}
-
-template<>
-SPECIALIZED_STATIC List::Element Cast<Complex, List>(State& state, Complex::Element const& i) { return Complex::c(i); }
 
 
 template<>
@@ -161,9 +133,6 @@ SPECIALIZED_STATIC Integer::Element Cast<Character, Integer>(State& state, Chara
 
 template<>
 SPECIALIZED_STATIC Double::Element Cast<Character, Double>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Double::NAelement; else {try{return strToDouble(state.externStr(i));} catch(...) {return Double::NAelement;}} }
-
-template<>
-SPECIALIZED_STATIC Complex::Element Cast<Character, Complex>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Complex::NAelement; else {try{return strToComplex(state.externStr(i));} catch(...) {return Complex::NAelement;}} }
 
 template<>
 SPECIALIZED_STATIC List::Element Cast<Character, List>(State& state, Character::Element const& i) { return Character::c(i); }
@@ -182,9 +151,6 @@ template<>
 SPECIALIZED_STATIC Double::Element Cast<Raw, Double>(State& state, Raw::Element const& i) { return i; }
 
 template<>
-SPECIALIZED_STATIC Complex::Element Cast<Raw, Complex>(State& state, Raw::Element const& i) { return std::complex<double>(i, 0); }
-
-template<>
 SPECIALIZED_STATIC List::Element Cast<Raw, List>(State& state, Raw::Element const& i) { return Raw::c(i); }
 
 
@@ -199,9 +165,6 @@ SPECIALIZED_STATIC Integer::Element Cast<List, Integer>(State& state, List::Elem
 
 template<>
 SPECIALIZED_STATIC Double::Element Cast<List, Double>(State& state, List::Element const& i) { Double a = As<Double>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to double"); }
-
-template<>
-SPECIALIZED_STATIC Complex::Element Cast<List, Complex>(State& state, List::Element const& i) { Complex a = As<Complex>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to complex"); }
 
 template<>
 SPECIALIZED_STATIC Character::Element Cast<List, Character>(State& state, List::Element const& i) { Character a = As<Character>(state, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to character"); }
@@ -220,9 +183,6 @@ SPECIALIZED_STATIC void Cast1<Symbol, Integer>(State& state, Symbol const& i, In
 
 template<>
 SPECIALIZED_STATIC void Cast1<Symbol, Double>(State& state, Symbol const& i, Double& o) { _error("Invalid cast from symbol to double"); }
-
-template<>
-SPECIALIZED_STATIC void Cast1<Symbol, Complex>(State& state, Symbol const& i, Complex& o) { _error("Invalid cast from symbol to complex"); }
 
 template<>
 SPECIALIZED_STATIC void Cast1<Symbol, Character>(State& state, Symbol const& i, Character& o) { Character::InitScalar(o, i); }

@@ -55,7 +55,6 @@ static ByteCode::Enum op(Symbol const& s) {
 		case EStrings::Logical: return ByteCode::logical1; break;	 	
 		case EStrings::Integer: return ByteCode::integer1; break;
 		case EStrings::Double: return ByteCode::double1; break;
-		case EStrings::Complex: return ByteCode::complex1; break;
 		case EStrings::Character: return ByteCode::character1; break;
 		case EStrings::Raw: return ByteCode::raw1; break;
 		case EStrings::length: return ByteCode::length; break;
@@ -593,7 +592,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	case EStrings::Logical:
 	case EStrings::Integer:
 	case EStrings::Double:
-	case EStrings::Complex:
 	case EStrings::Character:
 	case EStrings::Raw:
 	{

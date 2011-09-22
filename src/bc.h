@@ -28,74 +28,74 @@
 	_(subset2, "subset2") \
 
 #define UNARY_ARITH_MAP_BYTECODES(_) \
-	_(pos, "pos", 	PosOp) \
-	_(neg, "neg", 	NegOp) \
-	_(abs, "abs", 	AbsOp) \
-	_(sign, "sign",	SignOp) \
-	_(sqrt, "sqrt",	SqrtOp) \
-	_(floor, "floor",	FloorOp) \
-	_(ceiling, "ceiling",	CeilingOp) \
-	_(trunc, "trunc",	TruncOp) \
-	_(round, "round",	RoundOp) \
-	_(signif, "signif",	SignifOp) \
-	_(exp, "exp",	ExpOp) \
-	_(log, "log",	LogOp) \
-	_(cos, "cos",	CosOp) \
-	_(sin, "sin",	SinOp) \
-	_(tan, "tan",	TanOp) \
-	_(acos, "acos",	ACosOp) \
-	_(asin, "asin",	ASinOp) \
-	_(atan, "atan",	ATanOp) \
+	_(pos, "pos", 	PosOp, 	"+") \
+	_(neg, "neg", 	NegOp, 	"-") \
+	_(abs, "abs", 	AbsOp,	"abs") \
+	_(sign, "sign",	SignOp,	"sign") \
+	_(sqrt, "sqrt",	SqrtOp,	"sqrt") \
+	_(floor, "floor",	FloorOp,	"floor") \
+	_(ceiling, "ceiling",	CeilingOp,	"ceiling") \
+	_(trunc, "trunc",	TruncOp,	"trunc") \
+	_(round, "round",	RoundOp,	"round") \
+	_(signif, "signif",	SignifOp,	"signif") \
+	_(exp, "exp",	ExpOp,	"exp") \
+	_(log, "log",	LogOp,	"log") \
+	_(cos, "cos",	CosOp,	"cos") \
+	_(sin, "sin",	SinOp,	"sin") \
+	_(tan, "tan",	TanOp,	"tan") \
+	_(acos, "acos",	ACosOp,	"acos") \
+	_(asin, "asin",	ASinOp,	"asin") \
+	_(atan, "atan",	ATanOp,	"atan") \
 
 #define UNARY_LOGICAL_MAP_BYTECODES(_) \
-	_(lnot, "lnot",	LNotOp) \
+	_(lnot, "lnot",	LNotOp, "!") \
 
 #define BINARY_ARITH_MAP_BYTECODES(_) \
-	_(add, "add",	AddOp) \
-	_(sub, "sub",	SubOp) \
-	_(mul, "mul",	MulOp) \
-	_(div, "div",	DivOp) \
-	_(idiv, "idiv",	IDivOp) \
-	_(mod, "mod",	ModOp) \
-	_(pow, "pow",	PowOp) \
-	_(atan2, "atan2",	ATan2Op) \
-	_(hypot, "hypot",	HypotOp) \
+	_(add, "add",	AddOp,	"+") \
+	_(sub, "sub",	SubOp,	"-") \
+	_(mul, "mul",	MulOp,	"*") \
+	_(div, "div",	DivOp,	"/") \
+	_(idiv, "idiv",	IDivOp,	"%/%") \
+	_(mod, "mod",	ModOp,	"%%") \
+	_(pow, "pow",	PowOp,	"pow") \
+	_(atan2, "atan2",	ATan2Op,	"atan2") \
+	_(hypot, "hypot",	HypotOp,	"hypot") \
 
 #define BINARY_LOGICAL_MAP_BYTECODES(_) \
-	_(land, "land",	AndOp) \
-	_(lor, "lor",	OrOp) \
+	_(land, "land",	AndOp,	"|") \
+	_(lor, "lor",	OrOp,	"&") \
 
 #define BINARY_ORDINAL_MAP_BYTECODES(_) \
-	_(eq, "eq",	EqOp) \
-	_(neq, "neq",	NeqOp) \
-	_(gt, "gt",	GTOp) \
-	_(ge, "ge",	GEOp) \
-	_(lt, "lt",	LTOp) \
-	_(le, "le",	LEOp) \
+	_(eq, "eq",	EqOp,	"==") \
+	_(neq, "neq",	NeqOp,	"!=") \
+	_(gt, "gt",	GTOp,	">") \
+	_(ge, "ge",	GEOp,	">=") \
+	_(lt, "lt",	LTOp,	"<") \
+	_(le, "le",	LEOp,	"<=") \
 
 #define ARITH_FOLD_BYTECODES(_) \
-	_(sum, "sum",	SumOp) \
-	_(prod, "prod",	ProdOp) \
+	_(sum, "sum",	SumOp,	"sum") \
+	_(prod, "prod",	ProdOp,	"prod") \
 
 #define ORDINAL_FOLD_BYTECODES(_) \
-	_(min, "min",	MinOp) \
-	_(max, "max",	MaxOp) \
+	_(min, "min",	MinOp,	"min") \
+	_(max, "max",	MaxOp,	"max") \
 
 #define LOGICAL_FOLD_BYTECODES(_) \
-	_(any, "any",	AnyOp) \
-	_(all, "all",	AllOp) \
+	_(any, "any",	AnyOp,	"any") \
+	_(all, "all",	AllOp,	"all") \
 
 #define ARITH_SCAN_BYTECODES(_) \
-	_(cumsum, "cumsum",	SumOp) \
-	_(cumprod, "cumprod",	ProdOp) \
+	_(cumsum, "cumsum",	SumOp,	"cumsum") \
+	_(cumprod, "cumprod",	ProdOp,	"cumprod") \
 
 #define ORDINAL_SCAN_BYTECODES(_) \
-	_(cummin, "cummin",	MinOp) \
-	_(cummax, "cummax",	MaxOp) \
+	_(cummin, "cummin",	MinOp,	"cummin") \
+	_(cummax, "cummax",	MaxOp,	"cummax") \
 
 #define LOGICAL_SCAN_BYTECODES(_) \
-	_(cumany, "cumany",	AnyOp) \
-	_(cumall, "cumall",	AllOp) \
+	_(cumany, "cumany",	AnyOp,	"cumany") \
+	_(cumall, "cumall",	AllOp,	"cumall") \
 
 #define UTILITY_BYTECODES(_)\
 	_(sland, "sland") \
@@ -105,7 +105,6 @@
 	_(logical1, "logical") \
 	_(integer1, "integer") \
 	_(double1, "double") \
-	_(complex1, "complex") \
 	_(character1, "character") \
 	_(raw1, "raw") \
 	_(seq, "seq") \

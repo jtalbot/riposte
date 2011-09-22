@@ -50,6 +50,15 @@ struct Value {
 		v.header =  type + (length<<4);
 	}
 
+	// Warning: shallow equality!
+	bool operator==(Value const& other) const {
+		return header == other.header && p == other.p;
+	}
+	
+	bool operator!=(Value const& other) const {
+		return header != other.header || p != other.p;
+	}
+	
 	bool isNil() const { return header == 0; }
 	bool isNull() const { return type == Type::Null; }
 	bool isLogical() const { return type == Type::Logical; }
@@ -58,7 +67,6 @@ struct Value {
 	bool isInteger1() const { return header == (1<<4) + Type::Integer; }
 	bool isDouble() const { return type == Type::Double; }
 	bool isDouble1() const { return header == (1<<4) + Type::Double; }
-	bool isComplex() const { return type == Type::Complex; }
 	bool isCharacter() const { return type == Type::Character; }
 	bool isCharacter1() const { return header == (1<<4) + Type::Character; }
 	bool isList() const { return type == Type::List; }
@@ -67,10 +75,10 @@ struct Value {
 	bool isFunction() const { return type == Type::Function; }
 	bool isObject() const { return type == Type::Object; }
 	bool isFuture() const { return type == Type::Future; }
-	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
-	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical() || isComplex(); }
-	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isComplex() || isCharacter() || isList(); }
-	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isComplex() || isCharacter() || isSymbol() || (isList() && length==0); }
+	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical(); }
+	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }
+	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isCharacter() || isList(); }
+	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isCharacter() || isSymbol() || (isList() && length==0); }
 	bool isConcrete() const { return type != Type::Promise; }
 
 	template<class T> T& scalar() { throw "not allowed"; }
@@ -261,14 +269,6 @@ VECTOR_IMPL(Double, double, false)
 	static bool isInfinite(double c) { return c == std::numeric_limits<double>::infinity() || c == -std::numeric_limits<double>::infinity(); }
 };
 
-VECTOR_IMPL(Complex, std::complex<double>, false)
-	static bool isNA(std::complex<double> c) { _doublena a, b, t ; a.d = c.real(); b.d = c.imag(); t.d = Double::NAelement; return a.i==t.i || b.i==t.i; }
-	static bool isCheckedNA(std::complex<double> c) { return false; }
-	static bool isNaN(std::complex<double> c) { return Double::isNaN(c.real()) || Double::isNaN(c.imag()); }
-	static bool isFinite(std::complex<double> c) { return Double::isFinite(c.real()) && Double::isFinite(c.imag()); }
-	static bool isInfinite(std::complex<double> c) { return Double::isInfinite(c.real()) || Double::isInfinite(c.imag()); }
-};
-
 VECTOR_IMPL(Character, String, false)
 	static bool isNA(String c) { return c == Strings::NA; }
 	static bool isCheckedNA(String c) { return isNA(c); }
@@ -349,6 +349,7 @@ public:
 };
 
 class Dictionary : public gc {
+protected:
 	static uint64_t globalRevision;
 	uint64_t revision;
 
@@ -439,7 +440,9 @@ public:
 		uint64_t index;
 	};
 
-	bool validRevision(uint64_t i) { return i >= revision; }
+	uint64_t getRevision() const { return revision; }
+	bool equalRevision(uint64_t i) const { return i == revision; }
+	bool validRevision(uint64_t i) const { return i >= revision; }
 	
 	Value const& get(uint64_t index) const {
 		assert(index >= 0 && index < size);

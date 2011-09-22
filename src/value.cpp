@@ -16,8 +16,6 @@ const int64_t Integer::NAelement = std::numeric_limits<int64_t>::min();
 
 const double Double::NAelement = doublena.d;
 
-const std::complex<double> Complex::NAelement = std::complex<double>(doublena.d, doublena.d);
-
 const String Character::NAelement = Strings::NA;
 
 const Value List::NAelement = Value::Nil();

@@ -25,8 +25,8 @@ fail <- 0
 	PassIfFalse('a' == 'b')
 	PassIfTrue(TRUE == TRUE)
 	PassIfFalse(TRUE == FALSE)
-	PassIfTrue(1+2i == 1+2i)
-	PassIfFalse(1+2i == 1+3i)
+	#PassIfTrue(1+2i == 1+2i)
+	#PassIfFalse(1+2i == 1+3i)
 	"done"
 }
 
