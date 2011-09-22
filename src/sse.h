@@ -16,7 +16,7 @@ struct Map1< NegOp<TDouble>, N > {
 	}
 };
 
-union ieee754_QNAN
+static union ieee754_QNAN
 {
         uint64_t i;
         double f;
