@@ -136,6 +136,8 @@ struct Symbol : public Value {
 	bool operator!=(Symbol const& other) const { return s != other.s; }
 	bool operator==(String other) const { return s == other; }
 	bool operator!=(String other) const { return s != other; }
+
+	Symbol Clone() const { return *this; }
 };
 
 
@@ -207,13 +209,6 @@ union _doublena {
 	double d;
 };
 
-struct Future : public Value {
-	static void Init(Value & f, Type::Enum typ,int64_t length, IRef ref) {
-		Value::Init(f,Type::Future,length);
-		f.future.ref = ref;
-		f.future.typ = typ;
-	}
-};
 
 #define VECTOR_IMPL(Name, Element, Recursive) 				\
 struct Name : public Vector<Type::Name, Element, Recursive> { 			\
@@ -227,7 +222,8 @@ struct Name : public Vector<Type::Name, Element, Recursive> { 			\
 	const static Element NAelement; \
 	static Name NA() { static Name na = Name::c(NAelement); return na; }  \
 	static Name& Init(Value& v, int64_t length) { return (Name&)Vector<Type::Name, Element, Recursive>::Init(v, length); } \
-	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); }
+	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); }\
+	Name Clone() const { Name c(length); memcpy(c.v(), v(), length*width); return c; }
 /* note missing }; */
 
 VECTOR_IMPL(Null, unsigned char, false)  
@@ -294,6 +290,17 @@ VECTOR_IMPL(List, Value, true)
 };
 
 
+struct Future : public Value {
+	static void Init(Value & f, Type::Enum typ,int64_t length, IRef ref) {
+		Value::Init(f,Type::Future,length);
+		f.future.ref = ref;
+		f.future.typ = typ;
+	}
+	
+	Future Clone() const { throw("shouldn't be cloning futures"); }
+};
+
+
 class Function {
 private:
 	Prototype* proto;
@@ -324,6 +331,8 @@ public:
 
 	Prototype* prototype() const { return proto; }
 	Environment* environment() const { return env; }
+
+	Function Clone() const { return *this; }
 };
 
 class REnvironment {
@@ -346,6 +355,8 @@ public:
 	Environment* ptr() const {
 		return env;
 	}
+
+	REnvironment Clone() const { return *this; }
 };
 
 class Dictionary : public gc {
@@ -534,6 +545,17 @@ struct Object : public Value {
 		else {
 			return Character(getClass())[0];
 		}
+	}
+
+	Object Clone() const { 
+		Value v; 
+		Inner* inner = new (GC) Inner();
+		inner->base = ((Inner*)p)->base;
+		inner->attributes = ((Inner*)p)->attributes;
+		// doing this after ensures that it will work even if base and v overlap.
+		Value::Init(v, Type::Object, 0);
+		v.p = (void*)inner;
+		return (Object const&)v;
 	}
 };
 

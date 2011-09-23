@@ -422,12 +422,12 @@ Instruction const* assign2_op(State& state, Instruction const& inst) {
 
 Instruction const* iassign_op(State& state, Instruction const& inst) {
 	// a = value, b = index, c = dest 
-	SubsetAssign(state, REG(state,inst.c), REG(state,inst.b), REG(state,inst.a), REG(state,inst.c));
+	SubsetAssign(state, REG(state,inst.c), true, REG(state,inst.b), REG(state,inst.a), REG(state,inst.c));
 	return &inst+1;
 }
 Instruction const* eassign_op(State& state, Instruction const& inst) {
 	// a = value, b = index, c = dest
-	Subset2Assign(state, REG(state,inst.c), REG(state,inst.b), REG(state,inst.a), REG(state,inst.c));
+	Subset2Assign(state, REG(state,inst.c), true, REG(state,inst.b), REG(state,inst.a), REG(state,inst.c));
 	return &inst+1; 
 }
 Instruction const* subset_op(State& state, Instruction const& inst) {

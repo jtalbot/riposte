@@ -279,7 +279,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 
 template< class A  >
 struct SubsetAssignInclude {
-	static void eval(State& state, A const& a, Integer const& d, A const& b, Value& out)
+	static void eval(State& state, A const& a, bool clone, Integer const& d, A const& b, Value& out)
 	{
 		typename A::Element const* be = b.v();
 		typename Integer::Element const* de = d.v();
@@ -292,8 +292,7 @@ struct SubsetAssignInclude {
 		}
 
 		// should use max index here to extend vector if necessary	
-		//A r = Clone(a);	
-		A r = a;
+		A r = clone ? a.Clone() : a;
 		typename A::Element* re = r.v();
 		for(int64_t i = 0; i < length; i++) {	
 			int64_t idx = de[i];
@@ -306,15 +305,14 @@ struct SubsetAssignInclude {
 
 template< class A >
 struct SubsetAssignLogical {
-	static void eval(State& state, A const& a, Logical const& d, A const& b, Value& out)
+	static void eval(State& state, A const& a, bool clone, Logical const& d, A const& b, Value& out)
 	{
 		typename A::Element const* be = b.v();
 		typename Logical::Element const* de = d.v();
 		
 		// determine length
 		int64_t length = std::max(a.length, d.length);
-		//A r = Clone(a);
-		A r = a;
+		A r = clone ? a.Clone() : a;
 		typename A::Element* re = r.v();
 		int64_t j = 0, k = 0;
 		for(int64_t i = 0; i < length; i++) {
@@ -327,11 +325,11 @@ struct SubsetAssignLogical {
 	}
 };
 
-void SubsetAssignSlow(State& state, Value const& a, Value const& i, Value const& b, Value& c) {
+void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(i.isDouble() || i.isInteger()) {
 		Integer idx = As<Integer>(state, i);
 		switch(a.type) {
-#define CASE(Name) case Type::Name: SubsetAssignInclude<Name>::eval(state, (Name const&)a, idx, As<Name>(state, b), c); break;
+#define CASE(Name) case Type::Name: SubsetAssignInclude<Name>::eval(state, (Name const&)a, clone, idx, As<Name>(state, b), c); break;
 			VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 			default: _error("NYI: subset assign type"); break;
@@ -340,7 +338,7 @@ void SubsetAssignSlow(State& state, Value const& a, Value const& i, Value const&
 	else if(i.isLogical()) {
 		Logical index = Logical(i);
 		switch(a.type) {
-#define CASE(Name) case Type::Name: SubsetAssignLogical<Name>::eval(state, (Name const&)a, index, As<Name>(state, b), c); break;
+#define CASE(Name) case Type::Name: SubsetAssignLogical<Name>::eval(state, (Name const&)a, clone, index, As<Name>(state, b), c); break;
 					 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
@@ -351,10 +349,10 @@ void SubsetAssignSlow(State& state, Value const& a, Value const& i, Value const&
 	}
 }
 
-void Subset2AssignSlow(State& state, Value const& a, Value const& i, Value const& b, Value& c) {
+void Subset2AssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	Integer idx = As<Integer>(state, i);
 	switch(a.type) {
-		#define CASE(Name) case Type::Name: SubsetAssignInclude<Name>::eval(state, (Name const&)a, idx, As<Name>(state, b), c); break;
+		#define CASE(Name) case Type::Name: SubsetAssignInclude<Name>::eval(state, (Name const&)a, clone, idx, As<Name>(state, b), c); break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: subset assign type"); break;

@@ -122,11 +122,11 @@ inline void Element2Assign(Value const& v, int64_t index, Value& out) {
 	};
 }
 
-void SubsetAssignSlow(State& state, Value const& a, Value const& i, Value const& b, Value& c);
-void Subset2AssignSlow(State& state, Value const& a, Value const& i, Value const& b, Value& c);
+void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c);
+void Subset2AssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c);
  
-inline void SubsetAssign(State& state, Value const& a, Value const& i, Value const& b, Value& c) {
-	if(a.type == b.type) {
+inline void SubsetAssign(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
+	if(!clone && a.type == b.type) {
 		if(i.isDouble1()) {
 			int64_t index = (int64_t)i.d-1;
 			if(index >= 0 && index < a.length) {
@@ -144,11 +144,11 @@ inline void SubsetAssign(State& state, Value const& a, Value const& i, Value con
 			}
 		}
 	}
-	SubsetAssignSlow(state, a, i, b, c);
+	SubsetAssignSlow(state, a, clone, i, b, c);
 }
 
-inline void Subset2Assign(State& state, Value const& a, Value const& i, Value const& b, Value& c) {
-	if(a.type == b.type) {
+inline void Subset2Assign(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
+	if(!clone && a.type == b.type) {
 		if(i.isDouble1()) {
 			int64_t index = (int64_t)i.d-1;
 			if(index >= 0 && index < a.length) {
@@ -166,7 +166,7 @@ inline void Subset2Assign(State& state, Value const& a, Value const& i, Value co
 			}
 		}
 	}
-	Subset2AssignSlow(state, a, i, b, c);
+	Subset2AssignSlow(state, a, clone, i, b, c);
 }
 
 template<class D>
