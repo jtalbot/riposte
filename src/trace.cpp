@@ -108,12 +108,12 @@ void Trace::InitializeOutputs(State & state) {
 		} else {
 			IRef ref = loc.future.ref;
 			Type::Enum typ = loc.future.typ;
+			assert(ref < n_nodes);
 			if(values[ref] == NULL) { //if this is the first time we see this node as an output we crate a value for it
 				Value & v = output_values[n_output_values++];
 				Value::Init(v,typ,loc.length); //initialize the type of the output value, the actual value (i.e. v.p) will be set after it is calculed in the trace
 				if(loc.length == length) {
 					v.p = new (PointerFreeGC) double[length];
-					memset(v.p,0xFF,sizeof(double) * length);
 					EmitStoreV(typ,&v,ref);
 				} else {
 					EmitStoreC(typ,&v,ref);

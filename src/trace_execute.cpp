@@ -1,7 +1,7 @@
 #include "interpreter.h"
 #include "vector.h"
 #include "ops.h"
-#include "sse.h"
+//#include "sse.h"
 
 
 #define BINARY_VERSIONS(name,str,op,_,...) \
@@ -115,7 +115,7 @@ struct TraceCode {
 	size_t n_insts;
 	double ** incrementing_pointers[TRACE_MAX_NODES];
 	size_t n_incrementing_pointers;
-	void ** reference_to_result[TRACE_MAX_NODES]; //mapping from IRef from IRNode to the result pointer in an instruction where the result of that node will be written
+	TraceInst * reference_to_instruction[TRACE_MAX_NODES]; //mapping from IRef from IRNode to the result pointer in an instruction where the result of that node will be written
 	double registers [TRACE_MAX_VECTOR_REGISTERS][TRACE_VECTOR_WIDTH] __attribute__ ((aligned (16))); //for sse alignment
 
 	void compile() {
@@ -142,12 +142,14 @@ struct TraceCode {
 				//instructions referencing this load will look up its pointer field to read the value
 				incrementing_pointers[n_incrementing_pointers++] = (double**)&node.loadv.p;
 				break;
-			case IROpCode::storev:
-				*reference_to_result[node.store.a] = node.store.dst->p;
-				incrementing_pointers[n_incrementing_pointers++] = (double**)reference_to_result[node.store.a];
-				break;
+			case IROpCode::storev: {
+				TraceInst & rinst = *reference_to_instruction[node.store.a];
+				rinst.r.p = node.store.dst->p;
+				rinst.flags &= ~TraceInst::REG_R;
+				incrementing_pointers[n_incrementing_pointers++] = (double**)&rinst.r.p;
+			} break;
 			case IROpCode::storec:
-				*reference_to_result[node.store.a] = &node.store.dst->p;
+				reference_to_instruction[node.store.a]->r.p = &node.store.dst->p;
 				break;
 			default:
 				_error("unsupported op");
@@ -167,12 +169,14 @@ struct TraceCode {
 			}
 			if(inst.flags & TraceInst::REG_A) {
 				if(*inst.a.pp == NULL) {
-					*inst.a.pp = registers[free_reg.allocate()];
+					int reg = free_reg.allocate();
+					*inst.a.pp = registers[reg];
 				}
 			}
 			if(inst.flags & TraceInst::REG_B) {
 				if(*inst.b.pp == NULL) {
-					*inst.b.pp = registers[free_reg.allocate()];
+					int reg = free_reg.allocate();
+					*inst.b.pp = registers[reg];
 				}
 			}
 		}
@@ -215,8 +219,8 @@ private:
 		} else {
 			*isRegister = true;
 			*isConstant = false;
-			a.pp = reference_to_result[r];
-			assert(reference_to_result[r] != NULL);
+			a.pp = &reference_to_instruction[r]->r.p;
+			assert(reference_to_instruction[r] != NULL);
 		}
 		return a;
 	}
@@ -236,7 +240,7 @@ private:
 		if(b_is_reg)
 			inst.flags |= TraceInst::REG_B;
 		inst.r.p = NULL;
-		reference_to_result[node_ref] = &inst.r.p;
+		reference_to_instruction[node_ref] = &inst;
 		switch(node.type) {
 		case Type::Integer:
 			if(a_is_const) {
@@ -271,7 +275,7 @@ private:
 		inst.flags = TraceInst::REG_R;
 		if(a_is_reg)
 			inst.flags |= TraceInst::REG_A;
-		reference_to_result[node_ref] = &inst.r.p;
+		reference_to_instruction[node_ref] = &inst;
 		inst.r.p = NULL;
 		switch(node.type) {
 		case Type::Integer:
