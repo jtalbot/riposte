@@ -1,5 +1,5 @@
 
-c <- function(...) .Internal(unlist(list(...)))
+c <- function(...) .Internal(unlist(list(...), TRUE, TRUE))
 
 ifelse <- function(test, yes, no) {
 	if(!any(test)) no

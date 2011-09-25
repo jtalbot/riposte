@@ -250,7 +250,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		scopes.back().deadAfter(dest);	
 		return dest;
 	} break;
-	case EStrings::bbAssign: {
+	case EStrings::bbAssign: 
+	case EStrings::dollarAssign: {
 		if(call.length != 4) return compileFunctionCall(call, names, code);
 		int64_t dest = compile(call[1], code);
 		int64_t index = compile(call[2], code);

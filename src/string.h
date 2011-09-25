@@ -108,6 +108,7 @@
 	_(classSym, 	"class") \
 	_(bracketAssign, "[<-") \
 	_(bbAssign, 	"[[<-") \
+	_(dollarAssign, "$<-") \
 	_(UseMethod, 	"UseMethod") \
 	_(seq_len, 	"seq_len") \
 	_(TRUE, 	"TRUE") \

@@ -104,53 +104,139 @@ void assignAttr(State& state, Value const* args, Value& result)
 	result = object;
 }
 
-Type::Enum cTypeCast(Value const& v, Type::Enum t)
+Type::Enum cTypeCast(Type::Enum s, Type::Enum t)
 {
-	Type::Enum r;
-	r = std::max(v.type, t);
-	return r;
+	if(s == Type::Object || t == Type::Object) return Type::List;
+	else return std::max(s, t);
 }
-void unlist(State& state, Value const* args, Value& result) {
-	Value v = args[0];
-	if(!v.isList()) {
-		result = v;
+
+// These are all tree-based reductions. Should we have a tree reduction byte code?
+int64_t unlistLength(State& state, int64_t recurse, Value a) {
+	if(a.isObject()) a = ((Object&)a).base();
+	if(recurse > 0 && a.isList()) {
+		List l(a);
+		int64_t t = 0;
+		for(int64_t i = 0; i < l.length; i++) 
+			t += unlistLength(state, recurse-1, l[i]);
+		return t;
+	}
+	else if(a.isVector()) return a.length;
+	else return 1;
+}
+
+Type::Enum unlistType(State& state, int64_t recurse, Value a) {
+	if(a.isObject()) a = ((Object&)a).base();
+	if(a.isList()) {
+		List l(a);
+		Type::Enum t = Type::Null;
+		for(int64_t i = 0; i < l.length; i++) 
+			t = cTypeCast(recurse > 0 ? unlistType(state, recurse-1, l[i]) : l[i].type, t);
+		return t;
+	}
+	else if(a.isVector()) return a.type;
+	else return Type::List;
+}
+
+template< class T >
+void unlist(State& state, int64_t recurse, Value a, T& out, int64_t& start) {
+	if(a.isObject()) a = ((Object&)a).base();
+	if(recurse > 0 && a.isList()) {
+		List l(a);
+		for(int64_t i = 0; i < l.length; i++) 
+			unlist(state, recurse-1, l[i], out, start);
 		return;
 	}
-	List from = Cast<List>(v);
-	int64_t total = 0;
-	Type::Enum type = Type::Null;
-	for(int64_t i = 0; i < from.length; i++) {
-		total += from[i].length;
-		type = cTypeCast(from[i], type);
+	else if(a.isVector()) { Insert(state, a, 0, out, start, a.length); start += a.length; }
+	else _error("Unexpected non-basic type in unlist");
+}
+
+template<>
+void unlist<List>(State& state, int64_t recurse, Value a, List& out, int64_t& start) {
+	if(a.isObject()) a = ((Object&)a).base();
+	if(recurse > 0 && a.isList()) {
+		List l(a);
+		for(int64_t i = 0; i < l.length; i++) 
+			unlist(state, recurse-1, l[i], out, start);
+		return;
 	}
-	Character outnames;
-	/*if(hasNames(from))
-	{
-		Character names = Character(getNames(from));
-		outnames = Character(total);
-		int64_t j = 0;
-		for(int64_t i = 0; i < (int64_t)from.length; i++) {
-			for(int64_t m = 0; m < from[i].length; m++, j++) {
-				// NYI: R makes these names distinct
-				outnames[j] = names[i];
-			}
+	else if(a.isVector()) { Insert(state, a, 0, out, start, a.length); start += a.length; }
+	else out[start++] = a;
+}
+
+bool unlistHasNames(State& state, int64_t recurse, Value a) {
+	if(a.isObject() && ((Object const&)a).hasNames()) return true;
+	if(a.isObject()) a = ((Object&)a).base();
+	if(recurse > 0 && a.isList()) {
+		List l(a);
+		bool hasNames = false;
+		for(int64_t i = 0; i < l.length; i++) 
+			hasNames = hasNames || unlistHasNames(state, recurse-1, l[i]);
+		return hasNames;
+	}
+	else return false;
+}
+
+std::string makeName(State& state, std::string prefix, String name, int64_t i) {
+	if(prefix.length() > 0) {
+		if(name != Strings::empty)
+			return prefix + "." + state.externStr(name);
+		else
+			return prefix + intToStr(i+1);
+	}
+	else {
+		return state.externStr(name);
+	}
+}
+
+void unlistNames(State& state, int64_t recurse, Value a, Character& out, int64_t& start, std::string prefix) {
+	Character names(0);
+	if(a.isObject() && ((Object&)a).hasNames()) {
+		names = (Character)((Object&)a).getNames();
+	}
+	if(a.isObject()) a = ((Object&)a).base();
+
+	if(recurse > 0 && a.isList()) {
+		List l(a);
+		for(int64_t i = 0; i < l.length; i++)
+			unlistNames(state, recurse-1, l[i], out, start, makeName(state, prefix, i < names.length ? names[i] : Strings::empty, i));
+		return;
+	}
+	else if(a.isVector() && a.length != 1) { 
+		for(int64_t i = 0; i < a.length; i++) {
+			out[start++] = state.internStr(makeName(state, prefix, (i < names.length) ? names[i] : Strings::empty, i));
 		}
-	}*/
-	int64_t j = 0;
+	}
+	else out[start++] = state.internStr(prefix);
+}
+
+// TODO: useNames parameter could be handled at the R level
+void unlist(State& state, Value const* args, Value& result) {
+	Value v = args[0];
+	int64_t recurse = Cast<Logical>(args[1])[0] ? std::numeric_limits<int64_t>::max() : 1;
+	bool useNames = Cast<Logical>(args[2])[0];
+	
+	int64_t length = unlistLength(state, recurse, v);
+	Type::Enum type = unlistType(state, recurse, v);
+
 	switch(type) {
 		#define CASE(Name) \
 			case Type::Name: { \
-				Name out(total); \
-				for(int64_t i = 0; i < from.length; i++) { \
-					Insert(state, from[i], 0, out, j, from[i].length); \
-					j += from[i].length; \
-				} \
-				/*if(hasNames(from)) setNames(out, outnames);*/ \
-				result = out; } break;
+				Name out(length); \
+				int64_t i = 0; \
+				unlist(state, recurse, v, out, i); \
+				result = out; \
+			} break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: Insert into this type"); break;
 	};
+
+	if(useNames && unlistHasNames(state, recurse, v)) {
+		Character outnames(length);
+		int64_t i = 0;
+		unlistNames(state, recurse, v, outnames, i, "");
+		Object::InitWithNames(result, result, outnames);
+	}
 }
 
 
@@ -224,8 +310,46 @@ struct SubsetLogical {
 	}
 };
 
+template< class A >
+inline int64_t find(State& state, A const& a, typename A::Element const& b) {
+	typename A::Element const* ae = a.v();
+	// eventually use an index here...
+	for(int64_t i = 0; i < a.length; i++) {
+		if(ae[i] == b) return i;
+	}
+	return -1;
+}
+
+template< class A, class B >
+struct SubsetIndexed {
+	static void eval(State& state, A const& a, B const& b, B const& d, Value& out)
+	{
+		typename A::Element const* ae = a.v();
+		typename B::Element const* de = d.v();
+		
+		int64_t length = d.length;
+		A r(length);
+		for(int64_t i = 0; i < length; i++) {
+			int64_t index = find(state, b, de[i]);
+			r[i] = index >= 0 ? ae[index] : A::NAelement;
+		}
+		out = r;
+	}
+};
+
 void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble() || i.isInteger()) {
+		if(a.isObject()) {
+			// TODO: this computes positive twice
+			Value r, names;
+			SubsetSlow(state, ((Object const&)a).base(), i, r);
+			if(((Object const&)a).hasNames()) {
+				SubsetSlow(state, ((Object const&)a).getNames(), i, names);
+				Object::InitWithNames(r, r, names);
+			}
+			out = r;
+			return;
+		}
 		Integer index = As<Integer>(state, i);
 		int64_t positive = 0, negative = 0;
 		for(int64_t i = 0; i < index.length; i++) {
@@ -263,6 +387,16 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 		}
 	}
 	else if(i.isLogical()) {
+		if(a.isObject()) {
+			Value r, names;
+			SubsetSlow(state, ((Object const&)a).base(), i, r);
+			if(((Object const&)a).hasNames()) {
+				SubsetSlow(state, ((Object const&)a).getNames(), i, names);
+				Object::InitWithNames(r, r, names);
+			}
+			out = r;
+			return;
+		}
 		Logical index = Logical(i);
 		switch(a.type) {
 			case Type::Null: out = Null::Singleton(); break;
@@ -271,6 +405,21 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 #undef CASE
 			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
 		};	
+	}
+	else if(i.isCharacter()) {
+		if(a.isObject() && ((Object const&)a).hasNames()) {
+			Value const& b = ((Object const&)a).base();
+			Value const& n = ((Object const&)a).getNames();
+			switch(b.type) {
+				case Type::Null: out = Null::Singleton(); break;
+#define CASE(Name) case Type::Name: SubsetIndexed<Name, Character>::eval(state, (Name const&)b, (Character const&)n, (Character const&)i, out); break;
+				VECTOR_TYPES_NOT_NULL(CASE)
+#undef CASE
+				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
+			};
+			Object::InitWithNames(out, out, (Character const&)i);	
+		}
+		else _error("Object does not have names for subsetting");
 	}
 	else {
 		_error("NYI indexing type");
@@ -285,19 +434,21 @@ struct SubsetAssignInclude {
 		typename Integer::Element const* de = d.v();
 
 		// compute max index 
-		int64_t outlength = 0;
+		int64_t outlength = a.length;
 		int64_t length = d.length;
 		for(int64_t i = 0; i < length; i++) {
-			outlength = std::max((int64_t)outlength, de[i]);
+			outlength = std::max(outlength, de[i]);
 		}
 
 		// should use max index here to extend vector if necessary	
-		A r = clone ? a.Clone() : a;
+		A r = a;
+		Resize(state, clone, r, outlength);
 		typename A::Element* re = r.v();
-		for(int64_t i = 0; i < length; i++) {	
+		for(int64_t i = 0, j = 0; i < length; i++, j++) {	
+			if(j >= b.length) j = 0;
 			int64_t idx = de[i];
 			if(idx != 0)
-				re[idx-1] = be[i];
+				re[idx-1] = be[j];
 		}
 		out = r;
 	}
@@ -312,7 +463,8 @@ struct SubsetAssignLogical {
 		
 		// determine length
 		int64_t length = std::max(a.length, d.length);
-		A r = clone ? a.Clone() : a;
+		A r = a;
+		Resize(state, clone, r, length);
 		typename A::Element* re = r.v();
 		int64_t j = 0, k = 0;
 		for(int64_t i = 0; i < length; i++) {
@@ -325,6 +477,33 @@ struct SubsetAssignLogical {
 	}
 };
 
+template< class A, class B >
+struct SubsetAssignIndexed {
+	static void eval(State& state, A const& a, bool clone, B const& b, B const& d, A const& v, Value& out)
+	{
+		typename B::Element const* de = d.v();
+		
+		std::map<typename B::Element, int64_t> overflow;
+		int64_t extra = a.length;
+
+		int64_t length = d.length;
+		Integer include(length);
+		for(int64_t i = 0; i < length; i++) {
+			int64_t index = find(state, b, de[i]);
+			if(index < 0) {
+				if(overflow.find(de[i]) != overflow.end())
+					index = overflow[de[i]];
+				else {
+					index = extra++;
+					overflow[de[i]] = index;
+				}
+			}
+			include[i] = index+1;
+		}
+		SubsetAssignInclude<A>::eval(state, a, clone, include, v, out);
+	}
+};
+
 void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(i.isDouble() || i.isInteger()) {
 		Integer idx = As<Integer>(state, i);
@@ -332,6 +511,16 @@ void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, 
 #define CASE(Name) case Type::Name: SubsetAssignInclude<Name>::eval(state, (Name const&)a, clone, idx, As<Name>(state, b), c); break;
 			VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
+			case Type::Object: {
+				Value r;
+				SubsetAssignSlow(state, ((Object const&)a).base(), clone, i, b, r);
+				if(((Object const&)a).hasNames()) {
+					Character names = (Character)((Object const&)a).getNames();
+					Resize(state, clone, names, r.length, Strings::empty);
+					Object::InitWithNames(r, r, names);
+				}
+				c = r;
+			} break;
 			default: _error("NYI: subset assign type"); break;
 		};
 	}
@@ -341,8 +530,35 @@ void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, 
 #define CASE(Name) case Type::Name: SubsetAssignLogical<Name>::eval(state, (Name const&)a, clone, index, As<Name>(state, b), c); break;
 					 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
+			case Type::Object: {
+				Value r;
+				SubsetAssignSlow(state, ((Object const&)a).base(), clone, i, b, r);
+				if(((Object const&)a).hasNames()) {
+					Character names = (Character)((Object const&)a).getNames();
+					Resize(state, clone, names, r.length, Strings::empty);
+					Object::InitWithNames(r, r, names);
+				}
+				c = r;
+			} break;
 			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
 		};	
+	}
+	else if(i.isCharacter()) {
+		if(a.isObject() && ((Object const&)a).hasNames()) {
+			Value const& base = ((Object const&)a).base();
+			Value const& names = ((Object const&)a).getNames();
+			switch(base.type) {
+				case Type::Null: c = Null::Singleton(); break;
+#define CASE(Name) case Type::Name: SubsetAssignIndexed<Name, Character>::eval(state, (Name const&)base, clone, (Character const&)names, (Character const&)i, As<Name>(state, b), c); break;
+				VECTOR_TYPES_NOT_NULL(CASE)
+#undef CASE
+				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
+			};
+			Value newNames;
+			SubsetAssignIndexed<Character, Character>::eval(state, (Character const&)names, clone, (Character const&)names, (Character const&)i, (Character const&)i, newNames);
+			Object::InitWithNames(c, c, (Character const&)newNames);
+		}
+		else _error("Object does not have names for subsetting");
 	}
 	else {
 		_error("NYI indexing type");
@@ -350,13 +566,13 @@ void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, 
 }
 
 void Subset2AssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
-	Integer idx = As<Integer>(state, i);
-	switch(a.type) {
-		#define CASE(Name) case Type::Name: SubsetAssignInclude<Name>::eval(state, (Name const&)a, clone, idx, As<Name>(state, b), c); break;
-		VECTOR_TYPES(CASE)
-		#undef CASE
-		default: _error("NYI: subset assign type"); break;
-	};
+	if(i.isDouble() || i.isInteger() || i.isCharacter())
+		SubsetAssignSlow(state, a, clone, i, b, c);
+	// Frankly it seems pointless to support this case. We should make this an error.
+	//else if(i.isLogical() && i.length == 1 && ((Logical const&)i)[0])
+	//	SubsetAssignSlow(state, a, clone, As<Integer>(state, i), b, c);
+	else
+		_error("NYI indexing type");
 }
 
 void length(State& state, Value const* args, Value& result) {
@@ -576,7 +792,7 @@ void importCoreFunctions(State& state, Environment* env)
 	state.registerInternalFunction(state.internStr("attr"), (attr), 3);
 	state.registerInternalFunction(state.internStr("attr<-"), (assignAttr), 3);
 	
-	state.registerInternalFunction(state.internStr("unlist"), (unlist), 1);
+	state.registerInternalFunction(state.internStr("unlist"), (unlist), 3);
 	state.registerInternalFunction(state.internStr("length"), (length), 1);
 	
 	state.registerInternalFunction(state.internStr("eval"), (eval_fn), 3);

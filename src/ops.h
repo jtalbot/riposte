@@ -226,7 +226,7 @@ FOLD_OP(AllOp, AndOp<TLogical>::eval(state, a, b), 1)
 #undef FOLD_OP
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void unaryArith(State& state, Value const& a, Value& c) {
+void unaryArith(State& state, Value a, Value& c) {
 	if(a.isDouble())
 		Lift< Op<TDouble> >::eval(state, (Double const&)a, c);
 	else if(a.isInteger())
@@ -235,22 +235,34 @@ void unaryArith(State& state, Value const& a, Value& c) {
 		Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), c);
 	else if(a.isNull())
 		c = Null::Singleton();
+	else if(a.isObject()) {
+		unaryArith<Lift, Op>(state, ((Object const&)a).base(), c);
+		if(((Object const&)a).hasNames()) {
+			Object::InitWithNames(c, c, ((Object const&)a).getNames());
+		}
+	}
 	else 
 		_error("non-numeric argument to unary numeric operator");
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void unaryLogical(State& state, Value const& a, Value& c) {
+void unaryLogical(State& state, Value a, Value& c) {
 	if(a.isLogicalCoerce())
 		Lift< Op<TLogical> >::eval(state, As<Logical>(state, a), c);
 	else if(a.isNull())
 		c = Logical(0);
+	else if(a.isObject()) {
+		unaryLogical<Lift, Op>(state, ((Object const&)a).base(), c);
+		if(((Object const&)a).hasNames()) {
+			Object::InitWithNames(c, c, ((Object const&)a).getNames());
+		}
+	}
 	else
 		_error("non-logical argument to unary logical operator");
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void unaryOrdinal(State& state, Value const& a, Value& c) {
+void unaryOrdinal(State& state, Value a, Value& c) {
 	if(a.isDouble())
 		Lift< Op<TDouble> >::eval(state, (Double const&)a, c);
 	else if(a.isInteger())
@@ -263,6 +275,12 @@ void unaryOrdinal(State& state, Value const& a, Value& c) {
 		Double::InitScalar(c, Op<TDouble>::base());
 		_warning(state, "no non-missing arguments to min; returning Inf");
 	}
+	else if(a.isObject()) {
+		unaryOrdinal<Lift, Op>(state, ((Object const&)a).base(), c);
+		if(((Object const&)a).hasNames()) {
+			Object::InitWithNames(c, c, ((Object const&)a).getNames());
+		}
+	}
 	else {
 		printf("1: %s\n", Type::toString(a.type));
 		_error("non-ordinal argument to ordinal operator");
@@ -270,12 +288,19 @@ void unaryOrdinal(State& state, Value const& a, Value& c) {
 }
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void unaryCharacter(State& state, Value const& a, Value& c) {
-	Lift< Op<TCharacter> >::eval(state, As<Character>(state, a), c);
+void unaryCharacter(State& state, Value a, Value& c) {
+	if(a.isVector())
+		Lift< Op<TCharacter> >::eval(state, As<Character>(state, a), c);
+	else if(a.isObject()) {
+		unaryCharacter<Lift, Op>(state, ((Object const&)a).base(), c);
+		if(((Object const&)a).hasNames()) {
+			Object::InitWithNames(c, c, ((Object const&)a).getNames());
+		}
+	}
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void unaryFilter(State& state, Value const& a, Value& c) {
+void unaryFilter(State& state, Value a, Value& c) {
 	if(a.isDouble())
 		Lift< Op<TDouble> >::eval(state, (Double const&)a, c);
 	else if(a.isInteger())
@@ -288,17 +313,30 @@ void unaryFilter(State& state, Value const& a, Value& c) {
 		Logical(0);
 	else if(a.isList())
 		Lift< Op<TList> >::eval(state, (List const&)a, c);
+	else if(a.isObject()) {
+		unaryFilter<Lift, Op>(state, ((Object const&)a).base(), c);
+		if(((Object const&)a).hasNames()) {
+			Object::InitWithNames(c, c, ((Object const&)a).getNames());
+		}
+	}
+	else {
+		_error("unexpected type in unaryFilter");
+	}
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void binaryArithSlow(State& state, Value const& a, Value const& b, Value& c) {
+void binaryArithSlow(State& state, Value a, Value b, Value& c) {
 	if(a.isDouble() && b.isDouble())
 		Lift< Op<TDouble> >::eval(state, (Double const&)a, (Double const&)b, c);
 	else if((a.isDouble() && b.isMathCoerce()) || (b.isDouble() && a.isMathCoerce()))
 		Lift< Op<TDouble> >::eval(state, As<Double>(state, a), As<Double>(state, b), c);
 	else if(a.isMathCoerce() && b.isMathCoerce()) 
 		Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), As<Integer>(state, b), c);
-	else 
+	else if(a.isObject())
+		binaryArithSlow<Lift, Op>(state, ((Object const&)a).base(), b, c);
+	else if(b.isObject())
+		binaryArithSlow<Lift, Op>(state, a, ((Object const&)b).base(), c);
+	else
 		_error("non-numeric argument to binary numeric operator");
 }
 
@@ -327,6 +365,10 @@ void binaryLogical(State& state, Value const& a, Value const& b, Value& c) {
 		Lift< Op<TLogical> >::eval(state, (Logical const&)a, (Logical const&)b, c);
 	else if(a.isLogicalCoerce() && b.isLogicalCoerce()) 
 		Lift< Op<TLogical> >::eval(state, As<Logical>(state, a), As<Logical>(state, b), c);
+	else if(a.isObject())
+		binaryLogical<Lift, Op>(state, ((Object const&)a).base(), b, c);
+	else if(b.isObject())
+		binaryLogical<Lift, Op>(state, a, ((Object const&)b).base(), c);
 	else 
 		_error("non-logical argument to binary logical operator");
 }
@@ -341,6 +383,10 @@ void binaryOrdinal(State& state, Value const& a, Value const& b, Value& c) {
 		Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), As<Integer>(state, b),c );
 	else if(a.isCharacter() && b.isCharacter())
 		Lift< Op<TCharacter> >::eval(state, Character(a), Character(b), c);
+	else if(a.isObject())
+		binaryOrdinal<Lift, Op>(state, ((Object const&)a).base(), b, c);
+	else if(b.isObject())
+		binaryOrdinal<Lift, Op>(state, a, ((Object const&)b).base(), c);
 	else {
 		printf("2: %s\n", Type::toString(a.type));
 		_error("non-ordinal argument to ordinal operator");

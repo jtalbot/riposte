@@ -490,6 +490,7 @@ struct Object : public Value {
 		Dictionary attributes;
 	};
 
+	// Contract: base is a non-object type.
 	Value& base() { return ((Inner*)p)->base; }
 	Value const& base() const { return ((Inner*)p)->base; }
 	Dictionary& attributes() { return ((Inner*)p)->attributes; }
