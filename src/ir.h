@@ -8,13 +8,13 @@
 
 #define IR_ENUM(_) \
 		BINARY_ARITH_MAP_BYTECODES(_) \
-		_(seq,"seq", ___) \
 		UNARY_ARITH_MAP_BYTECODES(_) \
 		_(cast, "cast", ___) \
 		_(loadc,"loadc", ___) \
 		_(loadv,"loadv", ___) \
 		_(storev,"storev", ___) \
 		_(storec,"storec", ___) \
+		_(seq, "seq", ___) \
 		ARITH_FOLD_BYTECODES(_) \
 		ARITH_SCAN_BYTECODES(_) \
 

@@ -574,7 +574,7 @@ bool isRecordable(Value const& a, Value const& b) {
 Instruction const* seq_op(State& state, Instruction const& inst) {
 	int64_t len = As<Integer>(state, REG(state, inst.a))[0];
 	int64_t step = As<Integer>(state, REG(state, inst.b))[0];
-	if(state.tracing.enabled && isRecordable(Type::Integer, len) && false)
+	if(state.tracing.enabled && isRecordable(Type::Integer, len))
 		return state.tracing.begin_tracing(state, &inst, len);
 	else {
 		REG(state, inst.c) = Sequence(len, 1, step);

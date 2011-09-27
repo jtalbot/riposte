@@ -349,10 +349,6 @@ RecordingStatus::Enum done_record(State & state, Instruction const & inst, Instr
 	return RecordingStatus::UNSUPPORTED_OP;
 }
 
-
-OP_NOT_IMPLEMENTED(seq)
-
-#if 0
 RecordingStatus::Enum seq_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	Value & a = REG(state,inst.a);
 	Value & b = REG(state,inst.b);
@@ -363,7 +359,7 @@ RecordingStatus::Enum seq_record(State & state, Instruction const & inst, Instru
 	}
 	int64_t len = As<Integer>(state, REG(state, inst.a))[0];
 	int64_t step = As<Integer>(state, REG(state, inst.b))[0];
-	if(len != TRACE.length || true) {
+	if(len != TRACE.length) {
 		*pc = seq_op(state,inst); //this isn't ideal, as this will redo the As operators above
 	} else {
 		if(!TRACE.Reserve(1,1))
@@ -379,7 +375,6 @@ RecordingStatus::Enum seq_record(State & state, Instruction const & inst, Instru
 	}
 	return RecordingStatus::NO_ERROR;
 }
-#endif
 
 //check trace exit condition
 // -- do we need to abort due to conditions applying to all opcodes? if so, abort the trace, then exit the recorder

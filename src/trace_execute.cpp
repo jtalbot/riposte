@@ -15,6 +15,7 @@ namespace TraceBC {
 	  UNARY_ARITH_MAP_BYTECODES(UNARY_VERSIONS)
 	  ARITH_FOLD_BYTECODES(UNARY_VERSIONS)
 	  ARITH_SCAN_BYTECODES(UNARY_VERSIONS)
+	  seq,
 	  casti2d
   };
 }
@@ -38,8 +39,6 @@ struct TraceInst {
 	};
 	Operand a,b;
 };
-
-
 
 //bit-string based allocator for registers
 
@@ -93,6 +92,7 @@ struct TraceCode {
 #undef FOLD_OP
 #undef SCAN_OP
 			case IROpCode::cast: EmitUnary(TraceBC::casti2d,TraceBC::casti2d,i); break;
+			case IROpCode::seq: EmitSpecial(TraceBC::seq,i); break;
 			case IROpCode::loadc:
 				//nop, these will be inlined into arithmetic ops
 				break;
@@ -177,6 +177,7 @@ struct TraceCode {
 #undef SCAN_OP
 
 				case TraceBC :: casti2d:  Map1< CastOp<Integer, Double> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.ipp , (double *)inst.r.p); break;
+				case TraceBC :: seq:  Sequence<TRACE_VECTOR_WIDTH>(i*inst.b.i+1, inst.b.i, (int64_t*)inst.r.p);
 				}
 			}
 			for(size_t j = 0; j < n_incrementing_pointers; j++)
@@ -297,7 +298,16 @@ private:
 				break;
 			}
 		}
-
+	void EmitSpecial(TraceBC::Enum op, IRef node_ref) {
+		IRNode & node = trace->nodes[node_ref];
+		TraceInst & inst = insts[n_insts++];
+		inst.bc = op;
+		inst.a.i = node.special.a;
+		inst.b.i = node.special.b;
+		inst.flags = TraceInst::REG_R;
+		reference_to_instruction[node_ref] = &inst;
+		inst.r.p = NULL;
+	}
 };
 
 
