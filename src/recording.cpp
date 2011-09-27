@@ -30,6 +30,8 @@ RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instru
 	*pc = get_op(state,inst);
 	Value & r = REG(state,inst.c);
 
+	TRACE.UnionWithMaxLiveRegister(state.base,inst.c);
+
 	if(r.isFuture()) {
 		TRACE.EmitRegOutput(state.base,inst.c);
 	}
@@ -255,7 +257,7 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, State &
 
 BINARY_ARITH_MAP_BYTECODES(BINARY_OP)
 UNARY_ARITH_MAP_BYTECODES(UNARY_OP)
-ARITH_FOLD_BYTECODES(OP_NOT_IMPLEMENTED)
+ARITH_FOLD_BYTECODES(FOLD_OP)
 
 OP_NOT_IMPLEMENTED(lt)
 OP_NOT_IMPLEMENTED(gt)
@@ -283,8 +285,9 @@ OP_NOT_IMPLEMENTED(max)
 OP_NOT_IMPLEMENTED(any)
 OP_NOT_IMPLEMENTED(all)
 
-OP_NOT_IMPLEMENTED(cumsum)
-OP_NOT_IMPLEMENTED(cumprod)
+FOLD_OP(cumsum)
+FOLD_OP(cumprod)
+
 OP_NOT_IMPLEMENTED(cummin)
 OP_NOT_IMPLEMENTED(cummax)
 OP_NOT_IMPLEMENTED(cumany)
@@ -347,9 +350,9 @@ RecordingStatus::Enum done_record(State & state, Instruction const & inst, Instr
 }
 
 
-#if 1
 OP_NOT_IMPLEMENTED(seq)
-#else
+
+#if 0
 RecordingStatus::Enum seq_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	Value & a = REG(state,inst.a);
 	Value & b = REG(state,inst.b);
@@ -363,15 +366,13 @@ RecordingStatus::Enum seq_record(State & state, Instruction const & inst, Instru
 	if(len != TRACE.length || true) {
 		*pc = seq_op(state,inst); //this isn't ideal, as this will redo the As operators above
 	} else {
-		if(!TRACE.Reserve(3,1))
+		if(!TRACE.Reserve(1,1))
 			return RecordingStatus::RESOURCE;
-		IRef lenr = TRACE.EmitLoadC(Type::Integer,len);
-		IRef stepr = TRACE.EmitLoadC(Type::Integer,step);
 
 		Future::Init(REG(state,inst.c),
 				     Type::Integer,
 				     len,
-				     TRACE.EmitBinary(IROpCode::seq,Type::Integer,lenr,stepr));
+				     TRACE.EmitSpecial(IROpCode::seq,Type::Integer,len,step));
 		TRACE.SetMaxLiveRegister(state.base,inst.c);
 		TRACE.Commit();
 		(*pc)++;

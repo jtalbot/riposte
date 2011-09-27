@@ -15,8 +15,8 @@
 		_(loadv,"loadv", ___) \
 		_(storev,"storev", ___) \
 		_(storec,"storec", ___) \
-		/*ARITH_FOLD_BYTECODES(_) \
-		ARITH_SCAN_BYTECODES(_) */\
+		ARITH_FOLD_BYTECODES(_) \
+		ARITH_SCAN_BYTECODES(_) \
 
 DECLARE_ENUM(IROpCode,IR_ENUM)
 
@@ -31,9 +31,20 @@ struct IRNode {
 		struct {
 			int64_t a,b;
 		} binary;
+
+		struct {
+			int64_t a,b;
+		} special;
 		struct {
 			int64_t a;
 		} unary;
+		struct {
+			int64_t a;
+			union {
+				int64_t i;
+				double d;
+			};
+		} fold;
 		struct {
 			union {
 				int64_t i;

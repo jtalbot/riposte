@@ -707,11 +707,27 @@ struct Trace {
 		n.binary.b = b;
 		return n_pending++;
 	}
+	IRef EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t b) {
+		IRNode & n = nodes[n_pending];
+		n.op = op;
+		n.type = type;
+		n.special.a = a;
+		n.special.b = b;
+		return n_pending++;
+	}
 	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, int64_t a) {
 		IRNode & n = nodes[n_pending];
 		n.op = op;
 		n.type = type;
 		n.unary.a = a;
+		return n_pending++;
+	}
+	IRef EmitFold(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t base) {
+		IRNode & n = nodes[n_pending];
+		n.op = op;
+		n.type = type;
+		n.fold.a = a;
+		n.fold.i = base;
 		return n_pending++;
 	}
 	IRef EmitLoadC(Type::Enum type, int64_t c) {
@@ -758,6 +774,12 @@ struct Trace {
 	void SetMaxLiveRegister(Value * base, int64_t r) {
 		max_live_register_base = base;
 		max_live_register = r;
+	}
+	void UnionWithMaxLiveRegister(Value * base, int64_t r) {
+		if(base < max_live_register_base
+		   || (base == max_live_register_base && r > max_live_register)) {
+			SetMaxLiveRegister(base,r);
+		}
 	}
 	void Reset();
 	void InitializeOutputs(State & state);

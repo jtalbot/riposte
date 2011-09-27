@@ -12,7 +12,7 @@ testno <- 0
 {
 	PassIfTrue <- function(x) { fail<-fail+1; testno <<- testno + 1; cat(testno-1); if(x) { cat(" PASS\n"); fail<-fail-1 } else cat(" FAIL\n") }
 	PassIfFalse <- function(x) { fail<-fail+1;testno <<- testno + 1; cat(testno-1); if(x) cat(" FAIL\n") else { cat(" PASS\n"); fail<-fail-1 } }
-	PassIfEq <- function(x,y) { fail<-fail+1;testno <<- testno + 1; cat(testno-1); if(x == y) cat(" PASS\n") else { cat(" FAIL:\nx: ");  cat(x); cat("\ny: "); cat(y); cat("\n"); fail<-fail-1 } }
+	PassIfEq <- function(x,y) { testno <<- testno + 1; cat(testno-1); if(x == y) cat(" PASS\n") else { cat(" FAIL:\nx: ");  cat(x); cat("\ny: "); cat(y); cat("\n"); fail<<-fail+1; } }
 	foo <- function(x,y) { x + y; }	
 }
 

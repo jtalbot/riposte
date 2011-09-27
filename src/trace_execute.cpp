@@ -4,63 +4,20 @@
 //#include "sse.h"
 
 
-#define BINARY_VERSIONS(name,str,op,_,...) \
-	_(name##dvv,#name  "dvv", Map2VV, op, TDouble, *inst.a.dpp, *inst.b.dpp ) \
-	_(name##dvs,#name  "dvs", Map2VS, op, TDouble, *inst.a.dpp, inst.b.d ) \
-	_(name##dsv,#name  "dsv", Map2SV, op, TDouble, inst.a.d, *inst.b.dpp ) \
-	_(name##ivv,#name  "ivv", Map2VV, op, TInteger,*inst.a.ipp, *inst.b.ipp ) \
-	_(name##ivs,#name  "ivs", Map2VS, op, TInteger,*inst.a.ipp,   inst.b.i ) \
-	_(name##isv,#name  "isv", Map2SV, op, TInteger,  inst.a.i,   *inst.b.ipp ) \
+#define BINARY_VERSIONS(name,...) \
+	name##dvv, name##dvs, name##dsv, name##ivv, name##ivs, name##isv,
+#define UNARY_VERSIONS(name,...) \
+	name ## d, name ## i,
 
-#define UNARY_VERSIONS(name,str,op,_,...) \
-	_(name##d, #name "d", op, TDouble, *inst.a.dpp) \
-	_(name##i, #name "i", op, TInteger,*inst.a.ipp) \
-
-#define FOLD_VERSIONS
-#define SCAN_VERSIONS
-
-
-#define BINARY_ARITH_MAP_TRACE_BC(_,p) \
-	_(add, "add",	AddOp, p) \
-	_(sub, "sub",	SubOp, p) \
-	_(mul, "mul",	MulOp, p) \
-	_(div, "div",	DivOp, p) \
-	_(idiv, "idiv",	IDivOp, p) \
-	_(mod, "mod",	ModOp, p) \
-	_(pow, "pow",	PowOp, p) \
-	_(atan2, "atan2",	ATan2Op,p) \
-	_(hypot, "hypot",	HypotOp,p) \
-
-#define UNARY_ARITH_MAP_TRACE_BC(_,p) \
-	_(pos, "pos", 	PosOp, p) \
-	_(neg, "neg", 	NegOp, p) \
-	_(abs, "abs", 	AbsOp, p) \
-	_(sign, "sign",	SignOp, p) \
-	_(sqrt, "sqrt",	SqrtOp, p) \
-	_(floor, "floor",	FloorOp, p) \
-	_(ceiling, "ceiling",	CeilingOp, p) \
-	_(trunc, "trunc",	TruncOp, p) \
-	_(round, "round",	RoundOp, p) \
-	_(signif, "signif",	SignifOp, p) \
-	_(exp, "exp",	ExpOp, p) \
-	_(log, "log",	LogOp, p) \
-	_(cos, "cos",	CosOp, p) \
-	_(sin, "sin",	SinOp, p) \
-	_(tan, "tan",	TanOp, p) \
-	_(acos, "acos",	ACosOp, p) \
-	_(asin, "asin",	ASinOp, p) \
-	_(atan, "atan",	ATanOp, p) \
-
-#define TRACE_BC(_) \
-	BINARY_ARITH_MAP_TRACE_BC(BINARY_VERSIONS,_) \
-	UNARY_ARITH_MAP_TRACE_BC(UNARY_VERSIONS,_) \
-	_(casti2d,"casti2d")
-		/*ARITH_FOLD_BYTECODES(FOLD_VERSIONS) \
-		ARITH_SCAN_BYTECODES(SCAN_VERSIONS) \*/
-
-DECLARE_ENUM(TraceBC,TRACE_BC)
-DEFINE_ENUM_TO_STRING(TraceBC,TRACE_BC)
-
+namespace TraceBC {
+  enum Enum {
+	  BINARY_ARITH_MAP_BYTECODES(BINARY_VERSIONS)
+	  UNARY_ARITH_MAP_BYTECODES(UNARY_VERSIONS)
+	  ARITH_FOLD_BYTECODES(UNARY_VERSIONS)
+	  ARITH_SCAN_BYTECODES(UNARY_VERSIONS)
+	  casti2d
+  };
+}
 
 
 struct TraceInst {
@@ -69,8 +26,8 @@ struct TraceInst {
 	char flags; //which elements are registers? this simplifies the register allocation pass
 	union {
 		void * p;
-		int64_t i;
-		double d;
+		double * dp;
+		int64_t * ip;
 	} r;
 	union Operand {
 		void ** pp;
@@ -124,16 +81,17 @@ struct TraceCode {
 		for(IRef i = 0; i < trace->n_nodes; i++) {
 			IRNode & node = trace->nodes[i];
 			switch(node.op) {
-#define BINARY_OP(op,...) case IROpCode :: op : EmitBinary(TraceBC::op##isv,TraceBC::op##ivs,TraceBC::op##ivv,TraceBC::op##dsv,TraceBC::op##dvs,TraceBC::op##dvv,\
-			                                               i); \
-			                                          break;
+#define BINARY_OP(op,...) case IROpCode :: op : EmitBinary(TraceBC::op##isv,TraceBC::op##ivs,TraceBC::op##ivv,TraceBC::op##dsv,TraceBC::op##dvs,TraceBC::op##dvv, i); break;
 #define UNARY_OP(op,...) case IROpCode :: op : EmitUnary(TraceBC::op##i,TraceBC::op##d,i); break;
-
+#define FOLD_OP(op,name,OP,...) case IROpCode :: op : EmitFold(TraceBC::op##i,TraceBC::op##d, OP<TInteger>::base(),OP<TDouble>::base(), i); break;
 			BINARY_ARITH_MAP_BYTECODES(BINARY_OP)
 			UNARY_ARITH_MAP_BYTECODES(UNARY_OP)
+			ARITH_FOLD_BYTECODES(FOLD_OP)
+			ARITH_SCAN_BYTECODES(FOLD_OP)
 #undef UNARY_OP
 #undef BINARY_OP
-
+#undef FOLD_OP
+#undef SCAN_OP
 			case IROpCode::cast: EmitUnary(TraceBC::casti2d,TraceBC::casti2d,i); break;
 			case IROpCode::loadc:
 				//nop, these will be inlined into arithmetic ops
@@ -188,15 +146,37 @@ struct TraceCode {
 			for(size_t j = 0; j < n_insts; j++) {
 				TraceInst & inst = insts[j];
 				switch(inst.bc) {
-	#define BINARY_OP(name,str, map, op, typ, get_a, get_b) \
-				case TraceBC :: name :  map< op < typ >, TRACE_VECTOR_WIDTH >::eval(state, get_a,get_b,(op < typ >::R*) inst.r.p); break;
-	#define UNARY_OP(name,str, op, typ, get_a) \
-				case TraceBC :: name :  Map1< op < typ >, TRACE_VECTOR_WIDTH >::eval(state, get_a,(op < typ >::R*) inst.r.p); break;
-				BINARY_ARITH_MAP_TRACE_BC(BINARY_VERSIONS,BINARY_OP)
-				UNARY_ARITH_MAP_TRACE_BC(UNARY_VERSIONS,UNARY_OP)
-	#undef BINARY_OP
-	#undef UNARY_OP
-				case TraceBC :: casti2d: Map1< CastOp<Integer, Double> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.ipp , (double *)inst.r.p); break;
+#define BINARY_OP(name,str, op, ...) \
+				case TraceBC :: name ##dvv :  Map2VV< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.dpp,*inst.b.dpp,(op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name ##dvs :  Map2VS< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.dpp,inst.b.d,(op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name ##dsv :  Map2SV< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(state, inst.a.d,*inst.b.dpp,(op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name ##ivv :  Map2VV< op < TInteger >,TRACE_VECTOR_WIDTH >::eval(state, *inst.a.ipp,*inst.b.ipp,(op < TInteger >::R*) inst.r.p); break; \
+				case TraceBC :: name ##ivs :  Map2VS< op < TInteger >,TRACE_VECTOR_WIDTH >::eval(state, *inst.a.ipp,inst.b.i,(op < TInteger >::R*) inst.r.p); break; \
+				case TraceBC :: name ##isv :  Map2SV< op < TInteger >,TRACE_VECTOR_WIDTH >::eval(state, inst.a.i,*inst.b.ipp, (op < TInteger >::R*) inst.r.p); break;
+
+#define UNARY_OP(name,str, op, ...) \
+				case TraceBC :: name##d :  Map1< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.dpp,(op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name##i :  Map1< op < TInteger >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.ipp,(op < TInteger >::R*) inst.r.p); break;
+
+#define FOLD_OP(name, str, op, ...) \
+				case TraceBC :: name##d :  *inst.r.dp = inst.b.d = FoldLeftT< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.dpp, inst.b.d); break; \
+				case TraceBC :: name##i :  *inst.r.ip = inst.b.i = FoldLeftT< op < TInteger >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.ipp, inst.b.i); break;
+
+#define SCAN_OP(name, str, op, ...) \
+				case TraceBC :: name##d :  inst.b.d = ScanLeftT< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.dpp, inst.b.d, (op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name##i :  inst.b.i = ScanLeftT< op < TInteger >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.ipp, inst.b.i, (op < TInteger >::R*) inst.r.p); break;
+
+				BINARY_ARITH_MAP_BYTECODES(BINARY_OP)
+				UNARY_ARITH_MAP_BYTECODES(UNARY_OP)
+				ARITH_FOLD_BYTECODES(FOLD_OP)
+				ARITH_SCAN_BYTECODES(SCAN_OP)
+
+#undef BINARY_OP
+#undef UNARY_OP
+#undef FOLD_OP
+#undef SCAN_OP
+
+				case TraceBC :: casti2d:  Map1< CastOp<Integer, Double> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.ipp , (double *)inst.r.p); break;
 				}
 			}
 			for(size_t j = 0; j < n_incrementing_pointers; j++)
@@ -289,6 +269,34 @@ private:
 			break;
 		}
 	}
+	void EmitFold(TraceBC::Enum oi, TraceBC::Enum od,
+			      int64_t basei,    double based, IRef node_ref) {
+			IRNode & node = trace->nodes[node_ref];
+			bool a_is_reg;
+			bool a_is_const;
+			TraceInst & inst = insts[n_insts++];
+			inst.a = GetOperand(node.unary.a,&a_is_const,&a_is_reg);
+			assert(!a_is_const);
+			inst.flags = TraceInst::REG_R;
+			if(a_is_reg)
+				inst.flags |= TraceInst::REG_A;
+			reference_to_instruction[node_ref] = &inst;
+			inst.r.p = NULL;
+
+			switch(node.type) {
+			case Type::Integer:
+				inst.bc = oi;
+				inst.b.i = basei;
+				break;
+			case Type::Double:
+				inst.bc = od;
+				inst.b.d = based;
+				break;
+			default:
+				_error("unsupported type");
+				break;
+			}
+		}
 
 };
 
