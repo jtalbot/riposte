@@ -1,7 +1,7 @@
 #include "interpreter.h"
 #include "vector.h"
 #include "ops.h"
-//#include "sse.h"
+#include "sse.h"
 
 
 #define BINARY_VERSIONS(name,...) \
