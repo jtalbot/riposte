@@ -24,8 +24,22 @@ struct Value;
 
 typedef size_t IRef;
 struct IRNode {
+
+
+	enum Encoding {
+		BINARY,
+		SPECIAL,
+		UNARY,
+		FOLD,
+		LOADC,
+		LOADV,
+		STORE,
+	};
+
+	Encoding enc;
 	IROpCode::Enum op;
 	Type::Enum type;
+
 
 	union {
 		struct {
