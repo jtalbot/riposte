@@ -794,6 +794,9 @@ struct Trace {
 	void WriteOutputs(State & state);
 	void Execute(State & state);
 	std::string toString(State & state);
+private:
+	void Interpret(State & state);
+	void JIT(State & state);
 };
 
 //member of State, manages information for all traces
@@ -802,17 +805,24 @@ struct Trace {
 struct TraceState {
 	TraceState() {
 		active = false;
-		enabled = true;
+		config = DISABLED;
 		verbose = false;
 	}
 
-	bool enabled;
+
+	enum Mode {
+		DISABLED,
+		INTERPRET,
+		COMPILE
+	};
+	Mode config;
 	bool verbose;
 	bool active;
 
 	Trace current_trace;
 
 
+	bool enabled() { return DISABLED != config; }
 	bool is_tracing() const { return active; }
 
 	Instruction const * begin_tracing(State & state, Instruction const * inst, size_t length) {

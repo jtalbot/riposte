@@ -8,8 +8,6 @@ LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
 ENABLE_ARBB=0
 ARBB_HOME=/opt/intel/arbb/1.0.0.018
 ARBB_EXISTS=$(shell test -d $(ARBB_HOME); echo $$?)
-COMPILE_TRACE=1
-
 
 ifeq ($(ENABLE_ARBB),0)
 	CXXFLAGS += -I/opt/local/include
@@ -18,14 +16,7 @@ else
 	CXXFLAGS += -I$(ARBB_HOME)/include
 endif
 
-SRC := main.cpp type.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp ir.cpp recording.cpp trace.cpp
-
-ifeq ($(COMPILE_TRACE),0)
-	SRC += trace_interpret.cpp
-else
-	SRC += trace_compile.cpp
-	SRC += assembler-x64.cpp
-endif
+SRC := main.cpp type.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp ir.cpp recording.cpp trace.cpp trace_interpret.cpp trace_compile.cpp assembler-x64.cpp
 
 EXECUTABLE := bin/riposte
 

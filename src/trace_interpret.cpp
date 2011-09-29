@@ -64,8 +64,8 @@ struct Allocator {
 };
 
 
-struct TraceCode {
-	TraceCode(Trace * t) { trace = t; n_insts = n_incrementing_pointers = 0; }
+struct TraceInterpret {
+	TraceInterpret(Trace * t) { trace = t; n_insts = n_incrementing_pointers = 0; }
 	Trace * trace;
 	TraceInst insts[TRACE_MAX_NODES];
 	size_t n_insts;
@@ -311,12 +311,12 @@ private:
 };
 
 
-void Trace::Execute(State & state) {
+void Trace::Interpret(State & state) {
 	InitializeOutputs(state);
 	if(state.tracing.verbose)
 		printf("executing trace:\n%s\n",toString(state).c_str());
 
-	TraceCode trace_code(this);
+	TraceInterpret trace_code(this);
 
 	trace_code.compile();
 	trace_code.execute(state);

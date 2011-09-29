@@ -7,6 +7,8 @@
 
 using namespace v8::internal;
 
+#define SIMD_WIDTH (2 * sizeof(double))
+
 //bit-string based allocator for registers
 
 typedef uint32_t RegisterSet;
@@ -28,23 +30,23 @@ struct Allocator {
 		assert(preferred < NUM_REGISTERS);
 		if(a & (1 << preferred)) {
 			a &= ~(1 << preferred);
-			++n_allocated;
 			return preferred;
 		} else return allocate();
 	}
-	int allocate() {
-		int reg = ffs(a) - 1;
+	int allocateWithMask(RegisterSet valid_registers) {
+		int reg = ffs(a & valid_registers) - 1;
 		a &= ~(1 << reg);
 
-		if(++n_allocated > NUM_REGISTERS)
-			_error("ran out of registers...");
+		if(reg >= (int) NUM_REGISTERS)
+			_error("ran out of registers");
+
 		return reg;
 	}
+	int allocate() { return allocateWithMask(~0); }
 	RegisterSet live_registers() {
 		return a;
 	}
 	void free(int reg) {
-		n_allocated--;
 		a |= (1 << reg);
 	}
 };
@@ -75,8 +77,11 @@ enum ConstantTableEntry {
 	C_ACOS = 0x48,
 	C_ASIN = 0x50,
 	C_ATAN = 0x58,
-	C_FIRST_TRACE_CONST = 0x60
+	C_DEBUG_PRINT = 0x60,
+	C_REGISTER_SPILL_SPACE = 0x70,
+	C_FIRST_TRACE_CONST = C_REGISTER_SPILL_SPACE + 0x100
 };
+
 static void set_constant(int offset, double v) {
 	double * d = (double*) &constant_table[offset];
 	d[0] = d[1] = v;
@@ -90,8 +95,22 @@ static void set_constant(int offset, double (*fn)(double)) {
 	*i = (void*)fn;
 }
 
-struct TraceCode {
-	TraceCode(Trace * t)
+#include <xmmintrin.h>
+
+double debug_print(int64_t offset, __m128 a) {
+	union {
+		__m128 c;
+		double d[2];
+	};
+	c = a;
+	printf("%d %f %f\n", (int) offset, d[0],d[1]);
+
+	return d[0];
+}
+
+
+struct TraceJIT {
+	TraceJIT(Trace * t)
 	:  trace(t), asm_(code_buffer,CODE_BUFFER_SIZE), next_constant_slot(C_FIRST_TRACE_CONST) {}
 
 	Trace * trace;
@@ -170,14 +189,14 @@ struct TraceCode {
 			//emit encoding specific code
 			switch(node.enc) {
 			case IRNode::BINARY: {
+				//register allocation should ensure r = a op r does not occur, only r = a + b, r = r + b, and r = r + r
+				assert(!reg(ref).is(reg(node.binary.b)) || reg(ref).is(reg(node.binary.a)));
 				EmitMove(reg(ref),reg(node.binary.a));
 			} break;
 			case IRNode::UNARY: break;
 			case IRNode::LOADC: {
 				XMMRegister r = reg(ref);
-				set_constant(next_constant_slot,node.loadc.d);
-				asm_.movdqa(r,Operand(constant_base,next_constant_slot));
-				next_constant_slot += sizeof(double)*2;
+				asm_.movdqa(r,Operand(constant_base,PushConstant(node.loadc.d)));
 			} break;
 			case IRNode::LOADV: {
 				asm_.movq(load_addr,node.loadv.p);
@@ -236,6 +255,19 @@ struct TraceCode {
 				break;
 			}
 
+			/*
+			switch(node.enc) {
+			case IRNode::LOADV:
+			case IRNode::LOADC:
+			case IRNode::BINARY:
+			case IRNode::UNARY:
+				EmitDebugPrintResult(ref);
+				break;
+			case IRNode::STORE:
+			case IRNode::SPECIAL:
+			case IRNode::FOLD:
+				break;
+			}*/
 
 			if(store_inst[ref] != NULL) {
 				IRNode & str = *store_inst[ref];
@@ -249,7 +281,7 @@ struct TraceCode {
 			}
 		}
 
-		asm_.addq(vector_offset, Immediate(2 * sizeof(double)));
+		asm_.addq(vector_offset, Immediate(SIMD_WIDTH));
 		asm_.cmpq(vector_offset,end_offset);
 		asm_.j(less,&begin);
 
@@ -269,7 +301,7 @@ struct TraceCode {
 			asm_.movapd(dst,src);
 		}
 	}
-	IRef AllocateNullary(IRef ref) {
+	IRef AllocateNullary(IRef ref, bool p = true) {
 		if(allocated_register[ref] < 0) { //this instruction is dead, for now we just emit it anyway
 			allocated_register[ref] = alloc.allocate();
 		}
@@ -277,45 +309,103 @@ struct TraceCode {
 		alloc.free(r);
 		//we want to know the registers live out of this op, not including value that this op defines
 		live_registers[ref] = alloc.live_registers();
+		if(p) {
+			//printf("%d = _, %d = _ \n",(int)allocated_register[ref],(int)ref);
+		}
 		return r;
 	}
-	IRef AllocateUnary(IRef ref, IRef a) {
-		IRef r = AllocateNullary(ref);
+	IRef AllocateUnary(IRef ref, IRef a, bool p = true) {
+		IRef r = AllocateNullary(ref,false);
 		if(allocated_register[a] < 0)
 			allocated_register[a] = alloc.allocate(r);
+		if(p) {
+			//printf("%d = %d op, %d = %d op\n",(int)allocated_register[ref],(int)allocated_register[a],(int)ref,(int)a);
+		}
 		return r;
 	}
 	IRef AllocateBinary(IRef ref, IRef a, IRef b) {
-		IRef r = AllocateUnary(ref,a);
-		if(allocated_register[b] < 0)
-			allocated_register[b] = alloc.allocate();
+		IRef r = AllocateUnary(ref,a,false);
+		if(allocated_register[b] < 0) {
+			RegisterSet mask = ~(1 << allocated_register[ref]);
+			//we avoid allocating registers such that r = a op r
+			//occurs
+			allocated_register[b] = alloc.allocateWithMask(mask);
+			assert(allocated_register[ref] != allocated_register[b]);
+		}
+
+
+		//printf("%d = %d op %d, %d = %d op %d\n",(int)allocated_register[ref],(int)allocated_register[a],(int)allocated_register[b],(int)ref,(int)a,(int)b);
+
+		assert(!reg(ref).is(reg(b)) || reg(ref).is(reg(a)));
+		//proof:
+		// case: b is not live out of this stmt and b != a -> we allocated b s.t. r != b
+		// case: b is not live out this stmt and b == a -> either this stmt is r = a + a or r = r + r, either of which is allowed in codegen
+		// case: b is live out of this stmt -> b and r are live at the same time so b != r
+
 		return r;
 	}
-	void EmitUnaryFunction(IRef ref, uint32_t fn_offset) {
-		uint32_t spill_loc = next_constant_slot;
-		for(RegisterIterator it(live_registers[ref]); !it.done(); it.next()) {
-			asm_.movdqa(Operand(constant_base,spill_loc),XMMRegister::FromAllocationIndex(it.value()));
-			spill_loc += 2 * sizeof(double);
+
+	uint32_t PushConstant(double d) {
+		uint32_t offset = next_constant_slot;
+		set_constant(offset,d);
+		next_constant_slot += SIMD_WIDTH;
+		return offset;
+	}
+
+	void EmitCall(uint32_t fn_offset) {
+		int64_t addr = *(int64_t*)&constant_table[fn_offset];
+		int64_t diff = (int64_t)(code_buffer + asm_.pc_offset() + 5 - addr);
+		if(is_int32(diff)) {
+			asm_.call((byte*)addr);
+		} else {
+			asm_.call(Operand(constant_base,fn_offset));
 		}
+	}
+	void EmitUnaryFunction(IRef ref, uint32_t fn_offset) {
+
+		SaveRegisters(live_registers[ref]);
 
 		EmitMove(xmm0,reg(trace->nodes[ref].unary.a));
 		asm_.movapd(xmm1,xmm0);
 		asm_.unpckhpd(xmm1,xmm1);
 		asm_.movq(load_addr,xmm1);//we need the high value for the second call
-		asm_.call(Operand(constant_base,fn_offset));
+		EmitCall(fn_offset);
 		asm_.movq(rbx,xmm0);
 		asm_.movq(xmm0,load_addr);
-		asm_.call(Operand(constant_base,fn_offset));
+		EmitCall(fn_offset);
 		asm_.movq(xmm1,rbx);
 		asm_.unpcklpd(xmm1,xmm0);
 		EmitMove(reg(ref),xmm1);
 
-		spill_loc = next_constant_slot;
-		for(RegisterIterator it(live_registers[ref]); !it.done(); it.next()) {
-			asm_.movdqa(XMMRegister::FromAllocationIndex(it.value()),Operand(constant_base,spill_loc));
-			spill_loc += 2 * sizeof(double);
+		RestoreRegsiters(live_registers[ref]);
+	}
+	void EmitDebugPrintResult(IRef i) {
+		RegisterSet regs = live_registers[i];
+		regs &= ~(1 << allocated_register[i]);
+
+		SaveRegisters(regs);
+		EmitMove(xmm0,reg(i));
+		asm_.movq(rdi,vector_offset);
+		asm_.call(Operand(constant_base,C_DEBUG_PRINT));
+		RestoreRegsiters(regs);
+	}
+
+	void SaveRegisters(RegisterSet regs) {
+		uint32_t offset = C_REGISTER_SPILL_SPACE;
+		for(RegisterIterator it(regs); !it.done(); it.next()) {
+			asm_.movdqa(Operand(constant_base,offset),XMMRegister::FromAllocationIndex(it.value()));
+			offset += SIMD_WIDTH;
 		}
 	}
+
+	void RestoreRegsiters(RegisterSet regs) {
+		uint32_t offset = C_REGISTER_SPILL_SPACE;
+		for(RegisterIterator it(regs); !it.done(); it.next()) {
+			asm_.movdqa(XMMRegister::FromAllocationIndex(it.value()),Operand(constant_base,offset));
+			offset += SIMD_WIDTH;
+		}
+	}
+
 	void execute(State & state) {
 		typedef void (*fn) (void);
 		fn trace_code = (fn) code_buffer;
@@ -323,15 +413,20 @@ struct TraceCode {
 	}
 };
 
-
-void Trace::Execute(State & state) {
+void Trace::JIT(State & state) {
 	InitializeOutputs(state);
 	if(state.tracing.verbose)
 		printf("executing trace:\n%s\n",toString(state).c_str());
 
 	if(code_buffer == NULL) {
 		//allocate the code buffer
-		code_buffer = (char*) mmap(NULL,CODE_BUFFER_SIZE,PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANON, -1, 0);
+		code_buffer = (char*) malloc(CODE_BUFFER_SIZE);//(char*) mmap(NULL,CODE_BUFFER_SIZE,PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANON, -1, 0);
+		int64_t page = (int64_t)code_buffer & ~0x7FFF;
+		int64_t size = (int64_t)code_buffer + CODE_BUFFER_SIZE - page;
+		int err = mprotect((void*)page,size, PROT_READ | PROT_WRITE | PROT_EXEC);
+		if(err) {
+			_error("mprotect failed.");
+		}
 		//also fill in the constant table
 		set_constant(C_ABS_MASK,0x7FFFFFFFFFFFFFFFUL);
 		set_constant(C_NEG_MASK,0x8000000000000000UL);
@@ -343,9 +438,10 @@ void Trace::Execute(State & state) {
 		set_constant(C_ACOS,acos);
 		set_constant(C_ASIN,asin);
 		set_constant(C_ATAN,atan);
+		set_constant(C_DEBUG_PRINT,(uint64_t)debug_print);
 	}
 
-	TraceCode trace_code(this);
+	TraceJIT trace_code(this);
 
 	trace_code.compile();
 	trace_code.execute(state);

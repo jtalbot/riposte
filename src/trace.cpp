@@ -141,3 +141,13 @@ void Trace::WriteOutputs(State & state) {
 		set_location_value(state,outputs[i].location,*outputs[i].value);
 	}
 }
+
+void Trace::Execute(State & state) {
+	if(state.tracing.config == TraceState::COMPILE) {
+		JIT(state);
+	} else if(state.tracing.config == TraceState::INTERPRET) {
+		Interpret(state);
+	} else {
+		_error("executing a trace when tracing disabled");
+	}
+}
