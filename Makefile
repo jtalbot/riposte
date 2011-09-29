@@ -3,7 +3,7 @@ UNAME := $(shell uname -s)
  
 CXX := g++
 CXXFLAGS := -Wall -DRIPOSTE_DISABLE_TRACING
-LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
+LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -lrt -g
 
 ENABLE_ARBB=0
 ARBB_HOME=/opt/intel/arbb/1.0.0.018

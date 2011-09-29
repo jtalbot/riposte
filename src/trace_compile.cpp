@@ -165,7 +165,6 @@ struct TraceJIT {
 		load_addr = r14;
 		end_offset = r15;
 
-
 		asm_.push(constant_base);
 		asm_.push(vector_offset);
 		asm_.push(load_addr);
@@ -199,8 +198,7 @@ struct TraceJIT {
 				asm_.movdqa(r,Operand(constant_base,PushConstant(node.loadc.d)));
 			} break;
 			case IRNode::LOADV: {
-				asm_.movq(load_addr,node.loadv.p);
-				asm_.movdqa(reg(ref), Operand(load_addr,vector_offset,times_1,0));
+				EmitVectorLoad(reg(ref),node.loadv.p);
 			} break;
 			case IRNode::STORE: {
 				//stores are generated right after the value that is stored
@@ -272,9 +270,7 @@ struct TraceJIT {
 			if(store_inst[ref] != NULL) {
 				IRNode & str = *store_inst[ref];
 				if(str.op == IROpCode::storev) {
-					void * addr = str.store.dst->p;
-					asm_.movq(load_addr,addr);
-					asm_.movdqa(Operand(load_addr,vector_offset,times_1,0),reg(str.store.a));
+					EmitVectorStore(str.store.dst->p,reg(str.store.a));
 				} else {
 					_error("unsupported scalar store");
 				}
@@ -299,6 +295,24 @@ struct TraceJIT {
 	void EmitMove(XMMRegister dst, XMMRegister src) {
 		if(!dst.is(src)) {
 			asm_.movapd(dst,src);
+		}
+	}
+	void EmitVectorLoad(XMMRegister dst, void * src) {
+		int64_t diff = (int64_t)src - (int64_t)constant_table;
+		if(is_int32(diff)) {
+			asm_.movdqa(dst,Operand(constant_base,vector_offset,times_1,diff));
+		} else {
+			asm_.movq(load_addr,src);
+			asm_.movdqa(dst, Operand(load_addr,vector_offset,times_1,0));
+		}
+	}
+	void EmitVectorStore(void * dst,  XMMRegister src) {
+		int64_t diff = (int64_t)dst - (int64_t)constant_table;
+		if(is_int32(diff)) {
+			asm_.movdqa(Operand(constant_base,vector_offset,times_1,diff),src);
+		} else {
+			asm_.movq(load_addr,dst);
+			asm_.movdqa(Operand(load_addr,vector_offset,times_1,0),src);
 		}
 	}
 	IRef AllocateNullary(IRef ref, bool p = true) {
@@ -409,7 +423,15 @@ struct TraceJIT {
 	void execute(State & state) {
 		typedef void (*fn) (void);
 		fn trace_code = (fn) code_buffer;
-		trace_code();
+		if(state.tracing.verbose) {
+			timespec begin;
+			get_time(begin);
+			trace_code();
+			double s = time_elapsed(begin) / trace->length * 1024.0 * 1024.0 * 1024.0;
+			printf("trace elapsed %fns\n",s);
+		} else {
+			trace_code();
+		}
 	}
 };
 
