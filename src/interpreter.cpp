@@ -299,37 +299,21 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 		return &inst+3;
 	}
 
+	// otherwise, need to do a real look up starting from env
 	Environment* env = state.frame.environment;
-	uint64_t n = (&inst+2)->c;		// how many environments up is it?
-	icRevision += n;	// hacky, hacky, hacky! subtracting n avoids an extra check in the fastest case above. Otherwise we'd have to check equalRevision *and* n == 0.
-	uint64_t up = 0;
-	for(; up < n && env->validRevision(icRevision); up++) {
-		env = env->LexicalScope();
-	}
-
-	if(__builtin_expect(env->validRevision(icRevision), true)) {
-		REG(state, inst.c) = env->get((&inst+2)->a);
-		return &inst+3;
-	}
-
-	// otherwise, need to do a real look up starting from env (the first invalid env)
-	Value& dest = REG(state, inst.c);
-
 	String s = String::Init(inst.a);
+	
+	Value& dest = REG(state, inst.c);
 	dest = env->get(s);
-	icRevision = std::max(icRevision, env->getRevision());
 	while(dest.isNil() && env->LexicalScope() != 0) {
 		env = env->LexicalScope();
 		dest = env->get(s);
-		up++;
-		icRevision = std::max(icRevision, env->getRevision());
 	}
 
 	if(dest.isConcrete()) {
 		Environment::Pointer p = env->makePointer(s);
 		((Instruction*)(&inst+2))->a = p.index;
-		((Instruction*)(&inst+2))->b = icRevision - up;
-		((Instruction*)(&inst+2))->c = up;
+		((Instruction*)(&inst+2))->b = p.revision;
 		return &inst+3;
 	} else if(dest.isPromise()) {
 		Environment* env = Function(dest).environment();
@@ -379,35 +363,20 @@ Instruction const* assign2_op(State& state, Instruction const& inst) {
 		return &inst+2;
 	}
 
-	uint64_t n = (&inst+1)->c;		// how many environments up is it from one up?
-	icRevision += n;	// hacky, hacky, hacky! subtracting n avoids an extra check in the fastest case above. Otherwise we'd have to check equalRevision *and* n == 0.
-	uint64_t up = 0;
-	for(; up < n && env->validRevision(icRevision); up++) {
-		env = env->LexicalScope();
-	}
-
-	if(__builtin_expect(env->validRevision(icRevision), true)) {
-		env->assign((&inst+1)->a, REG(state, inst.c));
-		return &inst+2;
-	}
-	
-	// otherwise, need to do a real look up starting from env (the first invalid env)
+	// otherwise, need to do a real look up starting from env
 	String s = String::Init(inst.a);
 	Value dest = env->get(s);
 	icRevision = std::max(icRevision, env->getRevision());
 	while(dest.isNil() && env->LexicalScope() != 0) {
 		env = env->LexicalScope();
 		dest = env->get(s);
-		up++;
-		icRevision = std::max(icRevision, env->getRevision());
 	}
 
 	if(!dest.isNil()) {
 		env->assign(s, REG(state, inst.c));
 		Environment::Pointer p = env->makePointer(String::Init(inst.a));
 		((Instruction*)(&inst+1))->a = p.index;
-		((Instruction*)(&inst+1))->b = icRevision - up;
-		((Instruction*)(&inst+1))->c = up;
+		((Instruction*)(&inst+1))->b = p.revision;
 	}
 	else {
 		state.global->assign(s, REG(state, inst.c));

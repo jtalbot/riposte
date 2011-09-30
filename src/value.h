@@ -453,7 +453,6 @@ public:
 
 	uint64_t getRevision() const { return revision; }
 	bool equalRevision(uint64_t i) const { return i == revision; }
-	bool validRevision(uint64_t i) const { return i >= revision; }
 	
 	Value const& get(uint64_t index) const {
 		assert(index >= 0 && index < size);
