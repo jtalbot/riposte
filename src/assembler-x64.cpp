@@ -2380,6 +2380,14 @@ void Assembler::psubq(XMMRegister dst, XMMRegister src) {
 	emit(0xFB);
 	emit_sse_operand(dst, src);
 }
+void Assembler::psubq(XMMRegister dst, const Operand& src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0xFB);
+	emit_sse_operand(dst, src);
+}
 
 void Assembler::unpcklpd(XMMRegister dst, XMMRegister src) {
 	EnsureSpace ensure_space(this);

@@ -1292,6 +1292,7 @@ class Assembler {
 
   void paddq(XMMRegister dst, XMMRegister src);
   void psubq(XMMRegister dst, XMMRegister src);
+  void psubq(XMMRegister dst, const Operand& src);
 
 
   void unpcklpd(XMMRegister dst, XMMRegister src);

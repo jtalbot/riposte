@@ -69,9 +69,10 @@ static char constant_table[sizeof(double) * 2 * TRACE_MAX_NODES] __attribute__((
 enum ConstantTableEntry {
 	C_ABS_MASK = 0,
 	C_NEG_MASK = 0x10,
-	C_REGISTER_SPILL_SPACE = 0x20,
-	C_FUNCTION_SPILL_SPACE = 0x120,
-	C_FIRST_TRACE_CONST = 0x140
+	C_NOT_MASK = 0x20,
+	C_REGISTER_SPILL_SPACE = 0x30,
+	C_FUNCTION_SPILL_SPACE = 0x130,
+	C_FIRST_TRACE_CONST = 0x150
 };
 
 static void set_constant_d(int offset, double v) {
@@ -93,16 +94,78 @@ double debug_print(int64_t offset, __m128 a) {
 	union {
 		__m128 c;
 		double d[2];
+		int64_t i[2];
 	};
 	c = a;
-	printf("%d %f %f\n", (int) offset, d[0],d[1]);
+	printf("%d %f %f %ld %ld\n", (int) offset, d[0],d[1],i[0],i[1]);
 
 	return d[0];
 }
 
+//some helper functions
 static double sign_fn(double a) {
 	return a > 0 ? 1 : (a < 0 ? -1 : 0);
 }
+static double imod(double aa, double bb) { //these are actually integers passed in xmm0 and xmm1
+	union {
+		int64_t ia;
+		double da;
+	};
+	union {
+		int64_t ib;
+		double db;
+	};
+	da = aa;
+	db = bb;
+	ia = ia % ib;
+	return da; //also return the value in xmm0
+}
+static double imul(double aa, double bb) { //these are actually integers passed in xmm0 and xmm1
+	union {
+		int64_t ia;
+		double da;
+	};
+	union {
+		int64_t ib;
+		double db;
+	};
+	da = aa;
+	db = bb;
+	ia = ia * ib;
+	return da; //also return the value in xmm0
+}
+static double idiv(double aa, double bb) { //these are actually integers passed in xmm0 and xmm1
+	union {
+		int64_t ia;
+		double da;
+	};
+	union {
+		int64_t ib;
+		double db;
+	};
+	da = aa;
+	db = bb;
+	ia = ia / ib;
+	return da; //also return the value in xmm0
+}
+static double casti2d(double aa) { //these are actually integers passed in xmm0 and xmm1
+	union {
+		int64_t ia;
+		double da;
+	};
+	da = aa;
+	return (double) ia; //also return the value in xmm0
+}
+static double iabs(double aa) { //these are actually integers passed in xmm0 and xmm1
+	union {
+		int64_t ia;
+		double da;
+	};
+	da = aa;
+	ia = (ia < 0) ?  -ia : ia;
+	return da; //also return the value in xmm0
+}
+
 
 struct TraceJIT {
 	TraceJIT(Trace * t)
@@ -176,8 +239,6 @@ struct TraceJIT {
 		for(IRef i = 0; i < trace->n_nodes; i++) {
 			IRef ref = i;
 			IRNode & node = trace->nodes[i];
-			if(node.type != Type::Double)
-				_error("only support doubles for now");
 
 			//emit encoding specific code
 			switch(node.enc) {
@@ -205,46 +266,70 @@ struct TraceJIT {
 			}
 
 			//right now reg(ref) holds a if binary
-			switch(node.op) {
-			case IROpCode::add: asm_.addpd(reg(ref),reg(node.binary.b)); break;
-			case IROpCode::sub: asm_.subpd(reg(ref),reg(node.binary.b)); break;
-			case IROpCode::mul: asm_.mulpd(reg(ref),reg(node.binary.b)); break;
-			case IROpCode::div: asm_.divpd(reg(ref),reg(node.binary.b)); break;
-			case IROpCode::sqrt: asm_.sqrtpd(reg(ref),reg(node.unary.a)); break;
-			case IROpCode::round: asm_.roundpd(reg(ref),reg(node.unary.a),Assembler::kRoundToNearest); break;
-			case IROpCode::floor: asm_.roundpd(reg(ref),reg(node.unary.a),Assembler::kRoundDown); break;
-			case IROpCode::ceiling: asm_.roundpd(reg(ref),reg(node.unary.a),Assembler::kRoundUp); break;
-			case IROpCode::trunc: asm_.roundpd(reg(ref),reg(node.unary.a),Assembler::kRoundToZero); break;
+			if(node.type == Type::Double) {
+				switch(node.op) {
+				case IROpCode::add: asm_.addpd(reg(ref),reg(node.binary.b)); break;
+				case IROpCode::sub: asm_.subpd(reg(ref),reg(node.binary.b)); break;
+				case IROpCode::mul: asm_.mulpd(reg(ref),reg(node.binary.b)); break;
+				case IROpCode::div: asm_.divpd(reg(ref),reg(node.binary.b)); break;
+				case IROpCode::sqrt: asm_.sqrtpd(reg(ref),reg(node.unary.a)); break;
+				case IROpCode::round: asm_.roundpd(reg(ref),reg(node.unary.a),Assembler::kRoundToNearest); break;
+				case IROpCode::floor: asm_.roundpd(reg(ref),reg(node.unary.a),Assembler::kRoundDown); break;
+				case IROpCode::ceiling: asm_.roundpd(reg(ref),reg(node.unary.a),Assembler::kRoundUp); break;
+				case IROpCode::trunc: asm_.roundpd(reg(ref),reg(node.unary.a),Assembler::kRoundToZero); break;
 
-			case IROpCode::abs: {
-				EmitMove(reg(ref),reg(node.unary.a));
-				asm_.andpd(reg(ref),Operand(constant_base,C_ABS_MASK));
-			} break;
-			case IROpCode::neg: {
-				EmitMove(reg(ref),reg(node.unary.a));
-				asm_.xorpd(reg(ref),Operand(constant_base,C_NEG_MASK));
-			} break;
-			case IROpCode::pos: EmitMove(reg(ref),reg(node.unary.a)); break;
+				case IROpCode::abs: {
+					EmitMove(reg(ref),reg(node.unary.a));
+					asm_.andpd(reg(ref),Operand(constant_base,C_ABS_MASK));
+				} break;
+				case IROpCode::neg: {
+					EmitMove(reg(ref),reg(node.unary.a));
+					asm_.xorpd(reg(ref),Operand(constant_base,C_NEG_MASK));
+				} break;
+				case IROpCode::pos: EmitMove(reg(ref),reg(node.unary.a)); break;
 
-			case IROpCode::exp: EmitUnaryFunction(ref,exp); break;
-			case IROpCode::log: EmitUnaryFunction(ref,log); break;
-			case IROpCode::cos: EmitUnaryFunction(ref,cos); break;
-			case IROpCode::sin: EmitUnaryFunction(ref,sin); break;
-			case IROpCode::tan: EmitUnaryFunction(ref,tan); break;
-			case IROpCode::acos: EmitUnaryFunction(ref,acos); break;
-			case IROpCode::asin: EmitUnaryFunction(ref,asin); break;
-			case IROpCode::atan: EmitUnaryFunction(ref,atan); break;
-			case IROpCode::pow: EmitBinaryFunction(ref,pow); break;
-			case IROpCode::atan2: EmitBinaryFunction(ref,atan2); break;
-			case IROpCode::hypot: EmitBinaryFunction(ref,hypot); break;
-			case IROpCode::sign: EmitUnaryFunction(ref,sign_fn); break;
-			case IROpCode::mod: EmitBinaryFunction(ref,Mod); break;
-
-			case IROpCode::signif:
-			default:
-				if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
-					_error("unimplemented op");
-				break;
+				case IROpCode::exp: EmitUnaryFunction(ref,exp); break;
+				case IROpCode::log: EmitUnaryFunction(ref,log); break;
+				case IROpCode::cos: EmitUnaryFunction(ref,cos); break;
+				case IROpCode::sin: EmitUnaryFunction(ref,sin); break;
+				case IROpCode::tan: EmitUnaryFunction(ref,tan); break;
+				case IROpCode::acos: EmitUnaryFunction(ref,acos); break;
+				case IROpCode::asin: EmitUnaryFunction(ref,asin); break;
+				case IROpCode::atan: EmitUnaryFunction(ref,atan); break;
+				case IROpCode::pow: EmitBinaryFunction(ref,pow); break;
+				case IROpCode::atan2: EmitBinaryFunction(ref,atan2); break;
+				case IROpCode::hypot: EmitBinaryFunction(ref,hypot); break;
+				case IROpCode::sign: EmitUnaryFunction(ref,sign_fn); break;
+				case IROpCode::mod: EmitBinaryFunction(ref,Mod); break;
+				case IROpCode::cast: EmitUnaryFunction(ref,casti2d); break; //it should be possible to inline this, but I can't find the convert packed quadword to packed double instruction
+				case IROpCode::signif:
+				default:
+					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
+						_error("unimplemented op");
+					break;
+				}
+			} else if(node.type == Type::Integer) {
+				switch(node.op) {
+				case IROpCode::add: asm_.paddq(reg(ref),reg(node.binary.b)); break;
+				case IROpCode::sub: asm_.psubq(reg(ref),reg(node.binary.b)); break;
+				case IROpCode::mul: EmitBinaryFunction(ref,imul); break;
+				case IROpCode::div: EmitBinaryFunction(ref,idiv); break;
+				case IROpCode::abs: EmitUnaryFunction(ref,iabs);break; //this can be inlined using bit-whacking, but we would need an additional register
+				                                                        // if(r < 0) f = ~0 else 0; r = r xor f; r -= f;
+				case IROpCode::neg: {
+					EmitMove(reg(ref),reg(node.unary.a));
+					asm_.xorpd(reg(ref),Operand(constant_base,C_NOT_MASK)); //r = ~r
+					asm_.psubq(reg(ref),Operand(constant_base,C_NOT_MASK)); //r -= -1
+				} break;
+				case IROpCode::pos: EmitMove(reg(ref),reg(node.unary.a)); break;
+				case IROpCode::mod: EmitBinaryFunction(ref,imod); break;
+				default:
+					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
+						_error("unimplemented op");
+					break;
+				}
+			} else {
+				_error("type not supported");
 			}
 
 			/*
@@ -259,7 +344,8 @@ struct TraceJIT {
 			case IRNode::SPECIAL:
 			case IRNode::FOLD:
 				break;
-			}*/
+			}
+			*/
 
 			if(store_inst[ref] != NULL) {
 				IRNode & str = *store_inst[ref];
@@ -377,6 +463,9 @@ struct TraceJIT {
 		}
 	}
 	void EmitUnaryFunction(IRef ref, double (*fn)(double)) {
+		EmitUnaryFunction(ref,(void*)fn);
+	}
+	void EmitUnaryFunction(IRef ref, void * fn) {
 
 		SaveRegisters(live_registers[ref]);
 
@@ -384,10 +473,10 @@ struct TraceJIT {
 		asm_.movapd(xmm1,xmm0);
 		asm_.unpckhpd(xmm1,xmm1);
 		asm_.movq(load_addr,xmm1);//we need the high value for the second call
-		EmitCall((void*)fn);
+		EmitCall(fn);
 		asm_.movq(rbx,xmm0);
 		asm_.movq(xmm0,load_addr);
-		EmitCall((void*)fn);
+		EmitCall(fn);
 		asm_.movq(xmm1,rbx);
 		asm_.unpcklpd(xmm1,xmm0);
 		EmitMove(reg(ref),xmm1);
@@ -395,6 +484,9 @@ struct TraceJIT {
 		RestoreRegisters(live_registers[ref]);
 	}
 	void EmitBinaryFunction(IRef ref, double (*fn)(double,double)) {
+		EmitBinaryFunction(ref,(void*)fn);
+	}
+	void EmitBinaryFunction(IRef ref, void * fn) {
 		//this isn't the most optimized way to do this but it works for now
 		SaveRegisters(live_registers[ref]);
 		IRNode & node = trace->nodes[ref];
@@ -402,15 +494,16 @@ struct TraceJIT {
 		asm_.movdqa(Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x10),reg(node.binary.b));
 		asm_.movsd(xmm0,Operand(constant_base,C_FUNCTION_SPILL_SPACE));
 		asm_.movsd(xmm1,Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x10));
-		EmitCall((void*)fn);
+		EmitCall(fn);
 		asm_.movsd(Operand(constant_base,C_FUNCTION_SPILL_SPACE),xmm0);
 		asm_.movsd(xmm0,Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x8));
 		asm_.movsd(xmm1,Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x18));
-		EmitCall((void*)fn);
+		EmitCall(fn);
 		asm_.movsd(Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x8),xmm0);
 		asm_.movdqa(reg(ref),Operand(constant_base,C_FUNCTION_SPILL_SPACE));
 		RestoreRegisters(live_registers[ref]);
 	}
+
 	void EmitDebugPrintResult(IRef i) {
 		RegisterSet regs = live_registers[i];
 		regs &= ~(1 << allocated_register[i]);
@@ -470,6 +563,7 @@ void Trace::JIT(State & state) {
 		//also fill in the constant table
 		set_constant_i(C_ABS_MASK,0x7FFFFFFFFFFFFFFFUL);
 		set_constant_i(C_NEG_MASK,0x8000000000000000UL);
+		set_constant_i(C_NOT_MASK,0xFFFFFFFFFFFFFFFFUL);
 	}
 
 	TraceJIT trace_code(this);
