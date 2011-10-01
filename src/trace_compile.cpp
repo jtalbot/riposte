@@ -69,30 +69,22 @@ static char constant_table[sizeof(double) * 2 * TRACE_MAX_NODES] __attribute__((
 enum ConstantTableEntry {
 	C_ABS_MASK = 0,
 	C_NEG_MASK = 0x10,
-	C_EXP = 0x20,
-	C_LOG = 0x28,
-	C_COS = 0x30,
-	C_SIN = 0x38,
-	C_TAN = 0x40,
-	C_ACOS = 0x48,
-	C_ASIN = 0x50,
-	C_ATAN = 0x58,
-	C_DEBUG_PRINT = 0x60,
-	C_REGISTER_SPILL_SPACE = 0x70,
-	C_FIRST_TRACE_CONST = C_REGISTER_SPILL_SPACE + 0x100
+	C_REGISTER_SPILL_SPACE = 0x20,
+	C_FUNCTION_SPILL_SPACE = 0x120,
+	C_FIRST_TRACE_CONST = 0x140
 };
 
-static void set_constant(int offset, double v) {
+static void set_constant_d(int offset, double v) {
 	double * d = (double*) &constant_table[offset];
 	d[0] = d[1] = v;
 }
-static void set_constant(int offset, uint64_t v) {
+static void set_constant_i(int offset, uint64_t v) {
 	uint64_t * i = (uint64_t*) &constant_table[offset];
 	i[0] = i[1] = v;
 }
-static void set_constant(int offset, double (*fn)(double)) {
+static void set_constant_fn(int offset, void * fn) {
 	void** i = (void**) &constant_table[offset];
-	*i = (void*)fn;
+	*i = fn;
 }
 
 #include <xmmintrin.h>
@@ -108,6 +100,9 @@ double debug_print(int64_t offset, __m128 a) {
 	return d[0];
 }
 
+static double sign_fn(double a) {
+	return a > 0 ? 1 : (a < 0 ? -1 : 0);
+}
 
 struct TraceJIT {
 	TraceJIT(Trace * t)
@@ -130,7 +125,6 @@ struct TraceJIT {
 	void compile() {
 		bzero(store_inst,sizeof(IRNode *) * trace->n_nodes);
 		memset(allocated_register,-1,sizeof(char) * trace->n_nodes);
-
 		//pass 1 register allocation
 		for(IRef i = trace->n_nodes; i > 0; i--) {
 			IRef ref = i - 1;
@@ -190,12 +184,13 @@ struct TraceJIT {
 			case IRNode::BINARY: {
 				//register allocation should ensure r = a op r does not occur, only r = a + b, r = r + b, and r = r + r
 				assert(!reg(ref).is(reg(node.binary.b)) || reg(ref).is(reg(node.binary.a)));
+				//we perform r = a; r = r op b, the mov is not emitted if r == a
 				EmitMove(reg(ref),reg(node.binary.a));
 			} break;
 			case IRNode::UNARY: break;
 			case IRNode::LOADC: {
 				XMMRegister r = reg(ref);
-				asm_.movdqa(r,Operand(constant_base,PushConstant(node.loadc.d)));
+				asm_.movdqa(r,Operand(constant_base,PushConstantD(node.loadc.d)));
 			} break;
 			case IRNode::LOADV: {
 				EmitVectorLoad(reg(ref),node.loadv.p);
@@ -231,20 +226,19 @@ struct TraceJIT {
 			} break;
 			case IROpCode::pos: EmitMove(reg(ref),reg(node.unary.a)); break;
 
-			case IROpCode::exp: EmitUnaryFunction(ref,C_EXP); break;
-			case IROpCode::log: EmitUnaryFunction(ref,C_LOG); break;
-			case IROpCode::cos: EmitUnaryFunction(ref,C_COS); break;
-			case IROpCode::sin: EmitUnaryFunction(ref,C_SIN); break;
-			case IROpCode::tan: EmitUnaryFunction(ref,C_TAN); break;
-			case IROpCode::acos: EmitUnaryFunction(ref,C_ACOS); break;
-			case IROpCode::asin: EmitUnaryFunction(ref,C_ASIN); break;
-			case IROpCode::atan: EmitUnaryFunction(ref,C_ATAN); break;
-
-			case IROpCode::mod:
-			case IROpCode::pow:
-			case IROpCode::atan2:
-			case IROpCode::hypot:
-			case IROpCode::sign:
+			case IROpCode::exp: EmitUnaryFunction(ref,exp); break;
+			case IROpCode::log: EmitUnaryFunction(ref,log); break;
+			case IROpCode::cos: EmitUnaryFunction(ref,cos); break;
+			case IROpCode::sin: EmitUnaryFunction(ref,sin); break;
+			case IROpCode::tan: EmitUnaryFunction(ref,tan); break;
+			case IROpCode::acos: EmitUnaryFunction(ref,acos); break;
+			case IROpCode::asin: EmitUnaryFunction(ref,asin); break;
+			case IROpCode::atan: EmitUnaryFunction(ref,atan); break;
+			case IROpCode::pow: EmitBinaryFunction(ref,pow); break;
+			case IROpCode::atan2: EmitBinaryFunction(ref,atan2); break;
+			case IROpCode::hypot: EmitBinaryFunction(ref,hypot); break;
+			case IROpCode::sign: EmitUnaryFunction(ref,sign_fn); break;
+			case IROpCode::mod: EmitBinaryFunction(ref,Mod); break;
 
 			case IROpCode::signif:
 			default:
@@ -331,6 +325,7 @@ struct TraceJIT {
 	IRef AllocateUnary(IRef ref, IRef a, bool p = true) {
 		IRef r = AllocateNullary(ref,false);
 		if(allocated_register[a] < 0)
+			//try to allocated register a and r to the same location,  this avoids moves in binary instructions
 			allocated_register[a] = alloc.allocate(r);
 		if(p) {
 			//printf("%d = %d op, %d = %d op\n",(int)allocated_register[ref],(int)allocated_register[a],(int)ref,(int)a);
@@ -350,6 +345,7 @@ struct TraceJIT {
 
 		//printf("%d = %d op %d, %d = %d op %d\n",(int)allocated_register[ref],(int)allocated_register[a],(int)allocated_register[b],(int)ref,(int)a,(int)b);
 
+		//we need to avoid binary statements of the form r = a op r, a != r because these are hard to code gen with 2-op codes
 		assert(!reg(ref).is(reg(b)) || reg(ref).is(reg(a)));
 		//proof:
 		// case: b is not live out of this stmt and b != a -> we allocated b s.t. r != b
@@ -359,23 +355,28 @@ struct TraceJIT {
 		return r;
 	}
 
-	uint32_t PushConstant(double d) {
+	uint32_t PushConstantD(double d) {
 		uint32_t offset = next_constant_slot;
-		set_constant(offset,d);
+		set_constant_d(offset,d);
+		next_constant_slot += SIMD_WIDTH;
+		return offset;
+	}
+	uint32_t PushConstantFn(void * fn) {
+		uint32_t offset = next_constant_slot;
+		set_constant_fn(offset,fn);
 		next_constant_slot += SIMD_WIDTH;
 		return offset;
 	}
 
-	void EmitCall(uint32_t fn_offset) {
-		int64_t addr = *(int64_t*)&constant_table[fn_offset];
-		int64_t diff = (int64_t)(code_buffer + asm_.pc_offset() + 5 - addr);
+	void EmitCall(void * fn) {
+		int64_t diff = (int64_t)(code_buffer + asm_.pc_offset() + 5 - (int64_t) fn);
 		if(is_int32(diff)) {
-			asm_.call((byte*)addr);
+			asm_.call((byte*)fn);
 		} else {
-			asm_.call(Operand(constant_base,fn_offset));
+			asm_.call(Operand(constant_base,PushConstantFn(fn)));
 		}
 	}
-	void EmitUnaryFunction(IRef ref, uint32_t fn_offset) {
+	void EmitUnaryFunction(IRef ref, double (*fn)(double)) {
 
 		SaveRegisters(live_registers[ref]);
 
@@ -383,15 +384,32 @@ struct TraceJIT {
 		asm_.movapd(xmm1,xmm0);
 		asm_.unpckhpd(xmm1,xmm1);
 		asm_.movq(load_addr,xmm1);//we need the high value for the second call
-		EmitCall(fn_offset);
+		EmitCall((void*)fn);
 		asm_.movq(rbx,xmm0);
 		asm_.movq(xmm0,load_addr);
-		EmitCall(fn_offset);
+		EmitCall((void*)fn);
 		asm_.movq(xmm1,rbx);
 		asm_.unpcklpd(xmm1,xmm0);
 		EmitMove(reg(ref),xmm1);
 
-		RestoreRegsiters(live_registers[ref]);
+		RestoreRegisters(live_registers[ref]);
+	}
+	void EmitBinaryFunction(IRef ref, double (*fn)(double,double)) {
+		//this isn't the most optimized way to do this but it works for now
+		SaveRegisters(live_registers[ref]);
+		IRNode & node = trace->nodes[ref];
+		asm_.movdqa(Operand(constant_base,C_FUNCTION_SPILL_SPACE),reg(node.binary.a));
+		asm_.movdqa(Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x10),reg(node.binary.b));
+		asm_.movsd(xmm0,Operand(constant_base,C_FUNCTION_SPILL_SPACE));
+		asm_.movsd(xmm1,Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x10));
+		EmitCall((void*)fn);
+		asm_.movsd(Operand(constant_base,C_FUNCTION_SPILL_SPACE),xmm0);
+		asm_.movsd(xmm0,Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x8));
+		asm_.movsd(xmm1,Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x18));
+		EmitCall((void*)fn);
+		asm_.movsd(Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x8),xmm0);
+		asm_.movdqa(reg(ref),Operand(constant_base,C_FUNCTION_SPILL_SPACE));
+		RestoreRegisters(live_registers[ref]);
 	}
 	void EmitDebugPrintResult(IRef i) {
 		RegisterSet regs = live_registers[i];
@@ -400,8 +418,8 @@ struct TraceJIT {
 		SaveRegisters(regs);
 		EmitMove(xmm0,reg(i));
 		asm_.movq(rdi,vector_offset);
-		asm_.call(Operand(constant_base,C_DEBUG_PRINT));
-		RestoreRegsiters(regs);
+		EmitCall((void*) debug_print);
+		RestoreRegisters(regs);
 	}
 
 	void SaveRegisters(RegisterSet regs) {
@@ -412,7 +430,7 @@ struct TraceJIT {
 		}
 	}
 
-	void RestoreRegsiters(RegisterSet regs) {
+	void RestoreRegisters(RegisterSet regs) {
 		uint32_t offset = C_REGISTER_SPILL_SPACE;
 		for(RegisterIterator it(regs); !it.done(); it.next()) {
 			asm_.movdqa(XMMRegister::FromAllocationIndex(it.value()),Operand(constant_base,offset));
@@ -450,17 +468,8 @@ void Trace::JIT(State & state) {
 			_error("mprotect failed.");
 		}
 		//also fill in the constant table
-		set_constant(C_ABS_MASK,0x7FFFFFFFFFFFFFFFUL);
-		set_constant(C_NEG_MASK,0x8000000000000000UL);
-		set_constant(C_EXP,exp);
-		set_constant(C_LOG,log);
-		set_constant(C_COS,cos);
-		set_constant(C_SIN,sin);
-		set_constant(C_TAN,tan);
-		set_constant(C_ACOS,acos);
-		set_constant(C_ASIN,asin);
-		set_constant(C_ATAN,atan);
-		set_constant(C_DEBUG_PRINT,(uint64_t)debug_print);
+		set_constant_i(C_ABS_MASK,0x7FFFFFFFFFFFFFFFUL);
+		set_constant_i(C_NEG_MASK,0x8000000000000000UL);
 	}
 
 	TraceJIT trace_code(this);

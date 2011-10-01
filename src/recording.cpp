@@ -209,7 +209,7 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, State &
 		Future::Init(REG(state,inst.c),
 				     type,
 				     length,
-				     TRACE.EmitUnary(op,type,aref));
+				     TRACE.EmitUnary(op,type,coerce(state,type,aref)));
 		TRACE.EmitRegOutput(state.base,inst.c);
 		TRACE.SetMaxLiveRegister(state.base,inst.c);
 		TRACE.Commit();
