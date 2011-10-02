@@ -503,7 +503,7 @@ Instruction const* list_op(State& state, Instruction const& inst) {
 			Character names(dots.size());
 			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
 				names[i] = dots[i];
-			Object::InitWithNames(REG(state, inst.c), REG(state, inst.c), names);
+			Object::Init(REG(state, inst.c), REG(state, inst.c), names);
 		}
 		return &inst+1;
 	}

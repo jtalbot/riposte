@@ -359,6 +359,221 @@ public:
 	REnvironment Clone() const { return *this; }
 };
 
+
+// Object implements an immutable dictionary interface.
+// Objects also have a base value which right now must be a non-object type...
+//  However S4 objects can contain S3 objects so we may have to change this.
+//  If we make this change, then all code that unwraps objects must do so recursively.
+struct Object : public Value {
+
+	struct Pair { String n; Value v; };
+
+	struct Inner : public gc {
+		Value base;
+		Pair const* attributes;
+		uint64_t capacity;
+	};
+
+	// Contract: base is a non-object type.
+	Value const& base() const { return ((Inner const*)p)->base; }
+	Pair const* attributes() const { return ((Inner const*)p)->attributes; }
+	uint64_t capacity() const { return ((Inner const*)p)->capacity; }
+
+	Object() {}
+
+	Object(Value base, uint64_t length, uint64_t capacity, Pair const* attributes) {
+		Value::Init(*this, Type::Object, length);
+		
+		assert(!base.isObject());	
+		Inner* inner = new (GC) Inner();
+		inner->base = base;
+		inner->capacity = capacity;
+		inner->attributes = attributes;
+		p = (void*)inner;
+	}
+
+	uint64_t find(String s) const {
+		uint64_t i = (uint64_t)s.i & (capacity()-1);	// hash this?
+		while(attributes()[i].n != s && attributes()[i].n != Strings::NA) i = (i+1) & (capacity()-1);
+		assert(i >= 0 && i < capacity());
+		return i; 
+	}
+	
+	static void Init(Value& v, Value _base) {
+		Pair* attributes = new Pair[4];
+		for(uint64_t j = 0; j < 4; j++)
+			attributes[j] = (Pair) { Strings::NA, Value::Nil() };
+		
+		v = Object(_base, 0, 4, attributes);
+	}
+
+	static void Init(Value& v, Value const& _base, Value const& _names) {
+		Init(v, _base);
+		v = ((Object&)v).setNames(_names);
+	}
+	
+	static void Init(Value& v, Value const& _base, Value const& _names, Value const& className) {
+		Init(v, _base);
+		v = ((Object&)v).setNames(_names);
+		v = ((Object&)v).setClass(className);
+	}
+
+	bool hasAttribute(String s) const {
+		return attributes()[find(s)].n != Strings::NA;
+	}
+
+	bool hasNames() const { return hasAttribute(Strings::names); }
+	bool hasClass() const { return hasAttribute(Strings::classSym); }
+	bool hasDim() const   { return hasAttribute(Strings::dim); }
+
+	Value const& getAttribute(String s) const {
+		uint64_t i = find(s);
+		if(attributes()[i].n != Strings::NA) return attributes()[i].v;
+		else _error("Subscript out of range"); 
+	}
+
+	Value const& getNames() const { return getAttribute(Strings::names); }
+	Value const& getClass() const { return getAttribute(Strings::classSym); }
+	Value const& getDim() const { return getAttribute(Strings::dim); }
+
+	String className() const {
+		if(!hasClass()) {
+			return String::Init(base().type);	// TODO: make sure types line up correctly with strings
+		}
+		else {
+			return Character(getClass())[0];
+		}
+	}
+
+	// Generate derived versions...
+
+	Object Clone() const { 
+		Value v; 
+		Inner* inner = new (GC) Inner();
+		inner->base = ((Inner*)p)->base;
+		inner->attributes = ((Inner*)p)->attributes;
+		// doing this after ensures that it will work even if base and v overlap.
+		Value::Init(v, Type::Object, 0);
+		v.p = (void*)inner;
+		return (Object const&)v;
+	}
+
+	Object setAttribute(String s, Value const& v) const {
+		uint64_t l=0;
+		
+		uint64_t i = find(s);
+		if(!v.isNil() && attributes()[i].n == Strings::NA) l = length+1;
+		else if(v.isNil() && attributes()[i].n != Strings::NA) l = length-1;
+		else l = length;
+
+		Object out;
+		Pair* a;
+		if((l*2) > capacity()) {
+			// going to have to rehash the result
+			uint64_t c = std::max(capacity()*2, 1ULL);
+			a = new Pair[c];
+			out = Object(base(), l, c, a);
+
+			// clear
+			for(uint64_t j = 0; j < c; j++)
+				a[j] = (Pair) { Strings::NA, Value::Nil() };
+
+			// rehash
+			for(uint64_t j = 0; j < capacity(); j++)
+				if(attributes()[j].n != Strings::NA)
+					a[out.find(attributes()[j].n)] = attributes()[j];
+		}
+		else {
+			// otherwise, just copy straight over
+			a = new Object::Pair[capacity()];
+			out = Object(base(), l, capacity(), a);
+
+			for(uint64_t j = 0; j < capacity(); j++)
+				a[j] = attributes()[j];
+		}
+		if(v.isNil())
+			a[out.find(s)] = (Pair) { Strings::NA, Value::Nil() };
+		else 
+			a[out.find(s)] = (Pair) { s, v };
+
+		return out;
+	}
+	
+	Object setNames(Value const& v) const { return setAttribute(Strings::names, v); }
+	Object setClass(Value const& v) const { return setAttribute(Strings::classSym, v); }
+	Object setDim(Value const& v) const { return setAttribute(Strings::dim, v); }
+
+};
+
+inline Value CreateExpression(List const& list) {
+	Value v;
+	Object::Init(v, list, Value::Nil(), Character::c(Strings::Expression));
+	return v;
+}
+
+inline Value CreateCall(List const& list, Value const& names = Value::Nil()) {
+	Value v;
+	Object::Init(v, list, names, Character::c(Strings::Call));
+	return v;
+}
+
+
+
+
+////////////////////////////////////////////////////////////////////
+// VM data structures
+///////////////////////////////////////////////////////////////////
+
+
+struct CompiledCall : public gc {
+	List call;
+
+	List arguments;
+	Character names;
+	int64_t dots;
+	
+	explicit CompiledCall(List const& call, List const& arguments, Character const& names, int64_t dots) 
+		: call(call), arguments(arguments), names(names), dots(dots) {}
+};
+
+struct Prototype : public gc {
+	Value expression;
+	String string;
+
+	Character parameters;
+	List defaults;
+
+	int dots;
+
+	int registers;
+	std::vector<Value, traceable_allocator<Value> > constants;
+	std::vector<Prototype*, traceable_allocator<Prototype*> > prototypes; 	
+	std::vector<CompiledCall, traceable_allocator<CompiledCall> > calls; 
+
+	std::vector<Instruction> bc;			// bytecode
+	mutable std::vector<Instruction> tbc;		// threaded bytecode
+};
+
+/*
+ * Riposte execution environments are split into two parts:
+ * 1) Environment -- the static part, exposed to the R level as an R environment, these may not obey stack discipline, thus allocated on heap, try to reuse to decrease allocation overhead.
+ *     -static link to enclosing environment
+ *     -dynamic link to calling environment (necessary for promises which need to see original call stack)
+ *     -slots storing variables that may be accessible by inner functions that may be returned 
+ *		(for now, conservatively assume all variables are accessible)
+ *     -names of slots
+ *     -map storing overflow variables or variables that are created dynamically 
+ * 		(e.g. assign() in a nested function call)
+ *
+ * 2) Stack Frame -- the dynamic part, not exposed at the R level, these obey stack discipline
+ *     -pointer to associated Environment
+ *     -pointer to Stack Frame of calling function (the dynamic link)
+ *     -pointer to constant file
+ *     -pointer to registers
+ *     -return PC
+ *     -result register pointer
+ */
+
 class Dictionary : public gc {
 protected:
 	static uint64_t globalRevision;
@@ -380,9 +595,7 @@ public:
 	// or, if s doesn't exist, the location at which s should be inserted.
 	uint64_t find(String s) const {
 		uint64_t i = (uint64_t)s.i & (size-1);	// hash this?
-		while(d[i].n != s && d[i].n != Strings::NA) {
-			i = (i+1) & (size-1);
-		}
+		while(d[i].n != s && d[i].n != Strings::NA) i = (i+1) & (size-1);
 		assert(i >= 0 && i < size);
 		return i; 
 	}
@@ -481,153 +694,6 @@ public:
 		else assign(p.name, value);
 	}
 };
-
-struct Object : public Value {
-
-	struct Inner : public gc {
-		Value base;
-		Dictionary attributes;
-	};
-
-	// Contract: base is a non-object type.
-	Value& base() { return ((Inner*)p)->base; }
-	Value const& base() const { return ((Inner*)p)->base; }
-	Dictionary& attributes() { return ((Inner*)p)->attributes; }
-	Dictionary const& attributes() const { return ((Inner*)p)->attributes; }
-
-	static void Init(Value& v, Value const& _base) {
-		Inner* inner = new (GC) Inner();
-		inner->base = _base;
-		// doing this after ensures that it will work even if base and v overlap.
-		Value::Init(v, Type::Object, 0);
-		v.p = (void*)inner;
-	}
-
-	static void InitWithNames(Value& v, Value const& _base, Value const& _names) {
-		Init(v, _base);
-		if(!_names.isNil())
-			((Object&)v).setNames(_names);
-	}
-	
-	static void Init(Value& v, Value const& _base, Value const& _names, Value const& className) {
-		InitWithNames(v, _base, _names);
-		((Object&)v).setClass(className);
-	}
-
-	bool hasAttribute(String s) const {
-		return !attributes().get(s).isNil();
-	}
-
-	bool hasNames() const { return hasAttribute(Strings::names); }
-	bool hasClass() const { return hasAttribute(Strings::classSym); }
-	bool hasDim() const   { return hasAttribute(Strings::dim); }
-
-	Value getAttribute(String s) const {
-		return attributes().get(s);
-	}
-
-	Value getNames() const { return getAttribute(Strings::names); }
-	Value getClass() const { return getAttribute(Strings::classSym); }
-	Value getDim() const { return getAttribute(Strings::dim); }
-
-	void setAttribute(String s, Value const& v) {
-		attributes().assign(s, v);
-	}
-	
-	void setNames(Value const& v) { setAttribute(Strings::names, v); }
-	void setClass(Value const& v) { setAttribute(Strings::classSym, v); }
-	void setDim(Value const& v)  { setAttribute(Strings::dim, v); }
-
-	String className() const {
-		if(!hasClass()) {
-			return String::Init(base().type);	// TODO: make sure types line up correctly with strings
-		}
-		else {
-			return Character(getClass())[0];
-		}
-	}
-
-	Object Clone() const { 
-		Value v; 
-		Inner* inner = new (GC) Inner();
-		inner->base = ((Inner*)p)->base;
-		inner->attributes = ((Inner*)p)->attributes;
-		// doing this after ensures that it will work even if base and v overlap.
-		Value::Init(v, Type::Object, 0);
-		v.p = (void*)inner;
-		return (Object const&)v;
-	}
-};
-
-inline Value CreateExpression(List const& list) {
-	Value v;
-	Object::Init(v, list, Value::Nil(), Character::c(Strings::Expression));
-	return v;
-}
-
-inline Value CreateCall(List const& list, Value const& names = Value::Nil()) {
-	Value v;
-	Object::Init(v, list, names, Character::c(Strings::Call));
-	return v;
-}
-
-
-
-
-////////////////////////////////////////////////////////////////////
-// VM data structures
-///////////////////////////////////////////////////////////////////
-
-
-struct CompiledCall : public gc {
-	List call;
-
-	List arguments;
-	Character names;
-	int64_t dots;
-	
-	explicit CompiledCall(List const& call, List const& arguments, Character const& names, int64_t dots) 
-		: call(call), arguments(arguments), names(names), dots(dots) {}
-};
-
-struct Prototype : public gc {
-	Value expression;
-	String string;
-
-	Character parameters;
-	List defaults;
-
-	int dots;
-
-	int registers;
-	std::vector<Value, traceable_allocator<Value> > constants;
-	std::vector<Prototype*, traceable_allocator<Prototype*> > prototypes; 	
-	std::vector<CompiledCall, traceable_allocator<CompiledCall> > calls; 
-
-	std::vector<Instruction> bc;			// bytecode
-	mutable std::vector<Instruction> tbc;		// threaded bytecode
-};
-
-/*
- * Riposte execution environments are split into two parts:
- * 1) Environment -- the static part, exposed to the R level as an R environment, these may not obey stack discipline, thus allocated on heap, try to reuse to decrease allocation overhead.
- *     -static link to enclosing environment
- *     -dynamic link to calling environment (necessary for promises which need to see original call stack)
- *     -slots storing variables that may be accessible by inner functions that may be returned 
- *		(for now, conservatively assume all variables are accessible)
- *     -names of slots
- *     -map storing overflow variables or variables that are created dynamically 
- * 		(e.g. assign() in a nested function call)
- *
- * 2) Stack Frame -- the dynamic part, not exposed at the R level, these obey stack discipline
- *     -pointer to associated Environment
- *     -pointer to Stack Frame of calling function (the dynamic link)
- *     -pointer to constant file
- *     -pointer to registers
- *     -return PC
- *     -result register pointer
- */
-
 
 class Environment : public Dictionary {
 private:

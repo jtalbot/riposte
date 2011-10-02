@@ -29,7 +29,7 @@ inline void ElementSlow(Object v, int64_t index, Value& out) {
 	if(v.hasNames()) {
 		Value names;
 		Element(v.getNames(), index, names);
-		Object::InitWithNames(out, out, names);
+		Object::Init(out, out, names);
 	}
 }
 
@@ -217,15 +217,15 @@ inline void Insert(State& state, Value const& src, int64_t srcIndex, Value& dst,
 
 template<class D>
 inline void Resize(State& state, bool clone, D& src, int64_t newLength, typename D::Element fill = D::NAelement) {
-	if(newLength == src.length) 
-		return;
-	else if(clone || newLength > src.length) {
+	if(clone || newLength > src.length) {
 		D r(newLength);
 		Insert(state, src, 0, r, 0, std::min(src.length, newLength));
 		for(int64_t i = src.length; i < newLength; i++) r[i] = fill;	
 		src = r; 
-	} else {
+	} else if(newLength < src.length) {
 		src.length = newLength;
+	} else {
+		// No resizing to do, so do nothing...
 	}
 }
 

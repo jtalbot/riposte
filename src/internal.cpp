@@ -100,8 +100,7 @@ void assignAttr(State& state, Value const* args, Value& result)
 		Object::Init(v, object);
 		object = v;
 	}
-	((Object&)object).setAttribute(which[0], args[2]);
-	result = object;
+	result = ((Object&)object).setAttribute(which[0], args[2]);
 }
 
 Type::Enum cTypeCast(Type::Enum s, Type::Enum t)
@@ -235,7 +234,7 @@ void unlist(State& state, Value const* args, Value& result) {
 		Character outnames(length);
 		int64_t i = 0;
 		unlistNames(state, recurse, v, outnames, i, "");
-		Object::InitWithNames(result, result, outnames);
+		Object::Init(result, result, outnames);
 	}
 }
 
@@ -345,7 +344,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 			SubsetSlow(state, ((Object const&)a).base(), i, r);
 			if(((Object const&)a).hasNames()) {
 				SubsetSlow(state, ((Object const&)a).getNames(), i, names);
-				Object::InitWithNames(r, r, names);
+				Object::Init(r, r, names);
 			}
 			out = r;
 			return;
@@ -392,7 +391,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 			SubsetSlow(state, ((Object const&)a).base(), i, r);
 			if(((Object const&)a).hasNames()) {
 				SubsetSlow(state, ((Object const&)a).getNames(), i, names);
-				Object::InitWithNames(r, r, names);
+				Object::Init(r, r, names);
 			}
 			out = r;
 			return;
@@ -417,7 +416,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 #undef CASE
 				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
 			};
-			Object::InitWithNames(out, out, (Character const&)i);	
+			Object::Init(out, out, (Character const&)i);	
 		}
 		else _error("Object does not have names for subsetting");
 	}
@@ -517,7 +516,7 @@ void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, 
 				if(((Object const&)a).hasNames()) {
 					Character names = (Character)((Object const&)a).getNames();
 					Resize(state, clone, names, r.length, Strings::empty);
-					Object::InitWithNames(r, r, names);
+					Object::Init(r, r, names);
 				}
 				c = r;
 			} break;
@@ -536,7 +535,7 @@ void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, 
 				if(((Object const&)a).hasNames()) {
 					Character names = (Character)((Object const&)a).getNames();
 					Resize(state, clone, names, r.length, Strings::empty);
-					Object::InitWithNames(r, r, names);
+					Object::Init(r, r, names);
 				}
 				c = r;
 			} break;
@@ -556,7 +555,7 @@ void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, 
 			};
 			Value newNames;
 			SubsetAssignIndexed<Character, Character>::eval(state, (Character const&)names, clone, (Character const&)names, (Character const&)i, (Character const&)i, newNames);
-			Object::InitWithNames(c, c, (Character const&)newNames);
+			Object::Init(c, c, (Character const&)newNames);
 		}
 		else _error("Object does not have names for subsetting");
 	}

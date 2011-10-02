@@ -238,7 +238,7 @@ void unaryArith(State& state, Value a, Value& c) {
 	else if(a.isObject()) {
 		unaryArith<Lift, Op>(state, ((Object const&)a).base(), c);
 		if(((Object const&)a).hasNames()) {
-			Object::InitWithNames(c, c, ((Object const&)a).getNames());
+			Object::Init(c, c, ((Object const&)a).getNames());
 		}
 	}
 	else 
@@ -254,7 +254,7 @@ void unaryLogical(State& state, Value a, Value& c) {
 	else if(a.isObject()) {
 		unaryLogical<Lift, Op>(state, ((Object const&)a).base(), c);
 		if(((Object const&)a).hasNames()) {
-			Object::InitWithNames(c, c, ((Object const&)a).getNames());
+			Object::Init(c, c, ((Object const&)a).getNames());
 		}
 	}
 	else
@@ -278,7 +278,7 @@ void unaryOrdinal(State& state, Value a, Value& c) {
 	else if(a.isObject()) {
 		unaryOrdinal<Lift, Op>(state, ((Object const&)a).base(), c);
 		if(((Object const&)a).hasNames()) {
-			Object::InitWithNames(c, c, ((Object const&)a).getNames());
+			Object::Init(c, c, ((Object const&)a).getNames());
 		}
 	}
 	else {
@@ -294,7 +294,7 @@ void unaryCharacter(State& state, Value a, Value& c) {
 	else if(a.isObject()) {
 		unaryCharacter<Lift, Op>(state, ((Object const&)a).base(), c);
 		if(((Object const&)a).hasNames()) {
-			Object::InitWithNames(c, c, ((Object const&)a).getNames());
+			Object::Init(c, c, ((Object const&)a).getNames());
 		}
 	}
 };
@@ -316,7 +316,7 @@ void unaryFilter(State& state, Value a, Value& c) {
 	else if(a.isObject()) {
 		unaryFilter<Lift, Op>(state, ((Object const&)a).base(), c);
 		if(((Object const&)a).hasNames()) {
-			Object::InitWithNames(c, c, ((Object const&)a).getNames());
+			Object::Init(c, c, ((Object const&)a).getNames());
 		}
 	}
 	else {
