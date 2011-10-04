@@ -11,6 +11,7 @@
 #include "interpreter.h"
 #include "recording.h"
 #include "compiler.h"
+#include "sse.h"
 
 #define USE_THREADED_INTERPRETER
 #define ALWAYS_INLINE __attribute__((always_inline))

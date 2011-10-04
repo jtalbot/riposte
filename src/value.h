@@ -162,23 +162,18 @@ struct Vector : public Value {
 	ElementType const& operator[](int64_t index) const { return v()[index]; }
 
 	explicit Vector(int64_t length=0) {
-		Value::Init(*this, VectorType, length);
-		if(canPack && length > 1)
-			p = Recursive ? new (GC) Element[length] : 
-				new (PointerFreeGC) Element[length];
-		else if(!canPack && length > 0)
-			p = Recursive ? new (GC) Element[length] : 
-				new (PointerFreeGC) Element[length];
+		Init(*this, length);
 	}
 
 	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
 		Value::Init(v, VectorType, length);
+		int64_t l = (length+1)&(~1); 	// round up to a multiple of 2 for SSE
 		if(canPack && length > 1)
-			v.p = Recursive ? new (GC) Element[length] : 
-				new (PointerFreeGC) Element[length];
+			v.p = Recursive ? new (GC) Element[l] : 
+				new (PointerFreeGC) Element[l];
 		else if(!canPack && length > 0)
-			v.p = Recursive ? new (GC) Element[length] : 
-				new (PointerFreeGC) Element[length];
+			v.p = Recursive ? new (GC) Element[l] : 
+				new (PointerFreeGC) Element[l];
 		return (Vector<VType, ElementType, Recursive>&)v;
 	}
 
@@ -187,7 +182,7 @@ struct Vector : public Value {
 		if(canPack)
 			v.scalar<ElementType>() = d;
 		else {
-			v.p = Recursive ? new (GC) Element[1] : new (PointerFreeGC) Element[1];
+			v.p = Recursive ? new (GC) Element[2] : new (PointerFreeGC) Element[2];
 			*(Element*)v.p = d;
 		}
 	}

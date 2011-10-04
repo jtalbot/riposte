@@ -92,9 +92,9 @@ struct Zip1 {
 			typename Op::RV r(a.length);
 			typename Op::R* re = r.v();
 			typename Op::A const* ae = a.v();
-			int64_t length = a.length;
-			for(int64_t i = 0; i < length; ++i) {
-				re[i] = Op::eval(state, ae[i]);
+			int64_t length = (a.length+1) & ~1;
+			for(int64_t i = 0; i < length; i+=2) {
+				Map1<Op, 2>::eval(state, ae+i, re+i);
 			}
 			out = (Value&)r;
 		}
@@ -113,9 +113,9 @@ struct Zip2 {
 			typename Op::R* re = r.v();
 			typename Op::A const* ae = a.v();
 			typename Op::B be = b.s();
-			int64_t length = a.length;
-			for(int64_t i = 0; i < length; ++i) {
-				re[i] = Op::eval(state, ae[i], be);
+			int64_t length = (a.length+1) & ~1;
+			for(int64_t i = 0; i < length; i+=2) {
+				Map2VS<Op,2>::eval(state, ae+i, be, re+i);
 			}
 			out = (Value&)r;
 		}
@@ -124,9 +124,9 @@ struct Zip2 {
 			typename Op::R* re = r.v();
 			typename Op::A ae = a.s();
 			typename Op::B const* be = b.v();
-			int64_t length = b.length;
-			for(int64_t i = 0; i < length; ++i) {
-				re[i] = Op::eval(state, ae, be[i]);
+			int64_t length = (b.length+1) & ~1;
+			for(int64_t i = 0; i < length; i+=2) {
+				Map2SV<Op,2>::eval(state, ae, be+i, re+i);
 			}
 			out = (Value&)r;
 		}
@@ -135,9 +135,9 @@ struct Zip2 {
 			typename Op::R* re = r.v();
 			typename Op::A const* ae = a.v();
 			typename Op::B const* be = b.v();
-			int64_t length = a.length;
-			for(int64_t i = 0; i < length; ++i) {
-				re[i] = Op::eval(state, ae[i], be[i]);
+			int64_t length = (a.length+1) & ~1;
+			for(int64_t i = 0; i < length; i+=2) {
+				Map2VV<Op,2>::eval(state, ae+i, be+i, re+i);
 			}
 			out = (Value&)r;
 		}
