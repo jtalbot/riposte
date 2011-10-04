@@ -537,7 +537,7 @@ bool isRecordable(Value const& a, Value const& b) {
 				      && (b.isDouble() || b.isInteger());
 	size_t length = std::max(a.length,b.length);
 	bool compatible_lengths = a.length == 1 || b.length == 1 || a.length == b.length;
-	bool should_record_length = length > TRACE_VECTOR_WIDTH && length % TRACE_VECTOR_WIDTH == 0;
+	bool should_record_length = length >= TRACE_VECTOR_WIDTH && length % TRACE_VECTOR_WIDTH == 0;
 	return valid_types && compatible_lengths && should_record_length;
 }
 
