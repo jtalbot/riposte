@@ -63,41 +63,46 @@ private:
 	uint32_t live;
 };
 
-#define CODE_BUFFER_SIZE (4096)
+#define CODE_BUFFER_SIZE (16 * 1024)
 static char * code_buffer = NULL;
-static char constant_table[sizeof(double) * 2 * TRACE_MAX_NODES] __attribute__((aligned(16)));
-enum ConstantTableEntry {
-	C_ABS_MASK = 0,
-	C_NEG_MASK = 0x10,
-	C_NOT_MASK = 0x20,
-	C_SEQ_VEC  = 0x30,
-	C_REGISTER_SPILL_SPACE = 0x40,
-	C_FUNCTION_SPILL_SPACE = 0x140,
-	C_FIRST_TRACE_CONST = 0x160
+struct Constant {
+	Constant() {}
+	Constant(int64_t i)
+	: i0(i), i1(i) {}
+	Constant(uint64_t i)
+	: u0(i), u1(i) {}
+	Constant(double d)
+	: d0(d), d1(d) {}
+	Constant(void * f)
+	: f0(f),f1(f)  {}
+
+	Constant(int64_t ii0, int64_t ii1)
+	: i0(ii0), i1(ii1) {}
+	union {
+		uint64_t u0;
+		int64_t i0;
+		double d0;
+		void * f0;
+	};
+	union {
+		 uint64_t u1;
+		int64_t i1;
+		double d1;
+		void * f1;
+	};
 };
 
-static void set_constant_d(int offset, double v) {
-	double * d = (double*) &constant_table[offset];
-	d[0] = d[1] = v;
-}
-static void set_constant_i(int offset, uint64_t v) {
-	uint64_t * i = (uint64_t*) &constant_table[offset];
-	i[0] = i[1] = v;
-}
-static void set_constant_ii(int offset, uint64_t v0, uint64_t v1) {
-	uint64_t * i = (uint64_t*) &constant_table[offset];
-	i[0] = v0;
-	i[1] = v1;
-}
-static void set_constant_dd(int offset, double v0, double v1) {
-	double * i = (double*) &constant_table[offset];
-	i[0] = v0;
-	i[1] = v1;
-}
-static void set_constant_fn(int offset, void * fn) {
-	void** i = (void**) &constant_table[offset];
-	*i = fn;
-}
+enum ConstantTableEntry {
+	C_ABS_MASK = 0x0,
+	C_NEG_MASK = 0x1,
+	C_NOT_MASK = 0x2,
+	C_SEQ_VEC  = 0x3,
+	C_FUNCTION_SPILL_SPACE = 0x4,
+	C_REGISTER_SPILL_SPACE = 0x5,
+	C_FIRST_TRACE_CONST = 0x15
+};
+
+static Constant constant_table[TRACE_MAX_NODES] __attribute__((aligned(16)));
 
 #include <xmmintrin.h>
 
@@ -177,25 +182,33 @@ static double iabs(double aa) { //these are actually integers passed in xmm0 and
 	return da; //also return the value in xmm0
 }
 
-static __m128d prodi(__m128d input, int64_t * output, int64_t offset) {
-	union {
-		__m128d in;
-		int64_t i[2];
-	};
-	in = input;
-	*output *= i[0] * i[1];
-	return input;
-}
-static __m128d sumi(__m128d input, int64_t * output, int64_t offset) {
-	union {
-		__m128d in;
-		int64_t i[2];
-	};
-	in = input;
-	*output += i[0] + i[1];
-	return input;
+
+
+#define FOLD_SCAN_FN(name, type, op) \
+static __m128d name (__m128d input, type * last) { \
+	union { \
+		__m128d in; \
+		type i[2]; \
+	}; \
+	in = input; \
+	*last = i[0] = *last op i[0] op i[1]; \
+	return in; \
+} \
+static __m128d cum##name(__m128d input, type * last) { \
+	union { \
+		__m128d in; \
+		type i[2]; \
+	}; \
+	in = input; \
+	i[0] = *last op i[0]; \
+	*last = i[1] = i[0] op i[1]; \
+	return in; \
 }
 
+FOLD_SCAN_FN(prodi, int64_t, *)
+FOLD_SCAN_FN(sumi , int64_t, +)
+FOLD_SCAN_FN(prodd, double , *)
+FOLD_SCAN_FN(sumd , double , +)
 
 struct TraceJIT {
 	TraceJIT(Trace * t)
@@ -281,7 +294,7 @@ struct TraceJIT {
 			case IRNode::UNARY: break;
 			case IRNode::LOADC: {
 				XMMRegister r = reg(ref);
-				asm_.movdqa(r,Operand(constant_base,PushConstantD(node.loadc.d)));
+				asm_.movdqa(r,PushConstant(Constant(node.loadc.d)));
 			} break;
 			case IRNode::LOADV: {
 				EmitVectorLoad(reg(ref),node.loadv.p);
@@ -310,11 +323,11 @@ struct TraceJIT {
 
 				case IROpCode::abs: {
 					EmitMove(reg(ref),reg(node.unary.a));
-					asm_.andpd(reg(ref),Operand(constant_base,C_ABS_MASK));
+					asm_.andpd(reg(ref), ConstantTable(C_ABS_MASK));
 				} break;
 				case IROpCode::neg: {
 					EmitMove(reg(ref),reg(node.unary.a));
-					asm_.xorpd(reg(ref),Operand(constant_base,C_NEG_MASK));
+					asm_.xorpd(reg(ref), ConstantTable(C_NEG_MASK));
 				} break;
 				case IROpCode::pos: EmitMove(reg(ref),reg(node.unary.a)); break;
 				case IROpCode::sum:  {
@@ -354,6 +367,9 @@ struct TraceJIT {
 				case IROpCode::sign: EmitUnaryFunction(ref,sign_fn); break;
 				case IROpCode::mod: EmitBinaryFunction(ref,Mod); break;
 				case IROpCode::cast: EmitUnaryFunction(ref,casti2d); break; //it should be possible to inline this, but I can't find the convert packed quadword to packed double instruction
+				//placeholder for now
+				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumd,Constant(0.0)); break;
+				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodd,Constant(1.0)); break;
 				case IROpCode::signif:
 				default:
 					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
@@ -370,8 +386,8 @@ struct TraceJIT {
 				                                                        // if(r < 0) f = ~0 else 0; r = r xor f; r -= f;
 				case IROpCode::neg: {
 					EmitMove(reg(ref),reg(node.unary.a));
-					asm_.xorpd(reg(ref),Operand(constant_base,C_NOT_MASK)); //r = ~r
-					asm_.psubq(reg(ref),Operand(constant_base,C_NOT_MASK)); //r -= -1
+					asm_.xorpd(reg(ref),ConstantTable(C_NOT_MASK)); //r = ~r
+					asm_.psubq(reg(ref),ConstantTable(C_NOT_MASK)); //r -= -1
 				} break;
 				case IROpCode::pos: EmitMove(reg(ref),reg(node.unary.a)); break;
 				case IROpCode::mod: EmitBinaryFunction(ref,imod); break;
@@ -380,11 +396,13 @@ struct TraceJIT {
 					asm_.shr(load_addr,Immediate(4));
 					asm_.movq(reg(ref),load_addr);
 					asm_.unpcklpd(reg(ref),reg(ref));
-					asm_.paddq(reg(ref),Operand(constant_base,C_SEQ_VEC));
+					asm_.paddq(reg(ref),ConstantTable(C_SEQ_VEC));
 				} break;
 				//placeholder for now
-				case IROpCode::sum:  EmitFoldFunction(ref,0,(void*)sumi); break;
-				case IROpCode::prod: EmitFoldFunction(ref,1,(void*)prodi); break;
+				case IROpCode::sum:  EmitFoldFunction(ref,(void*)sumi,Constant(0L)); break;
+				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumi,Constant(0L)); break;
+				case IROpCode::prod:  EmitFoldFunction(ref,(void*)prodi,Constant(1L)); break;
+				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodi,Constant(1L)); break;
 				default:
 					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
 						_error("unimplemented op");
@@ -414,8 +432,8 @@ struct TraceJIT {
 				if(str.op == IROpCode::storev) {
 					EmitVectorStore(str.store.dst->p,reg(str.store.a));
 				} else {
-					//scalar stores only occur for reductions right now and are handled during the opcode
-					_error("unsupported scalar store");
+					Operand op = EncodeOperand(&str.store.dst->p);
+					asm_.movsd(op,reg(str.store.a));
 				}
 			}
 		}
@@ -440,22 +458,29 @@ struct TraceJIT {
 			asm_.movapd(dst,src);
 		}
 	}
-	void EmitFoldFunction(IRef ref, int64_t data, void * fn) {
+	Operand ConstantTable(int entry) {
+		return Operand(constant_base,entry * sizeof(Constant));
+	}
+
+	Operand PushConstant(const Constant& data) {
+		return ConstantTable(PushConstantOffset(data));
+	}
+	uint64_t PushConstantOffset(const Constant& data) {
+		uint32_t offset = next_constant_slot;
+		constant_table[offset] = data;
+		next_constant_slot++;
+		return offset;
+	}
+	//slow path for Folds that don't have inline assembly
+	void EmitFoldFunction(IRef ref, void * fn, const Constant& identity) {
 		IRNode & node = trace->nodes[ref];
-		assert(store_inst[ref] != NULL);
-		IRNode & str = *store_inst[ref];
-		str.store.dst->i = data;
-		if(str.op == IROpCode::storec)
-			asm_.movq(rdi,&str.store.dst->p);
-		else
-			asm_.movq(rdi,str.store.dst->p);
-		asm_.movq(rsi,vector_offset);
+		uint64_t offset = PushConstantOffset(identity);
 		SaveRegisters(live_registers[ref]);
 		EmitMove(xmm0,reg(node.unary.a));
+		asm_.movq(rdi,(void*)&constant_table[offset]);
 		EmitCall(fn);
 		EmitMove(reg(ref),xmm0);
 		RestoreRegisters(live_registers[ref]);
-		store_inst[ref] = NULL;
 	}
 	void EmitVectorLoad(XMMRegister dst, void * src) {
 		int64_t diff = (int64_t)src - (int64_t)constant_table;
@@ -483,7 +508,6 @@ struct TraceJIT {
 			asm_.movq(load_addr,src);
 			return Operand(load_addr,0);
 		}
-
 	}
 	IRef AllocateNullary(IRef ref, bool p = true) {
 		if(allocated_register[ref] < 0) { //this instruction is dead, for now we just emit it anyway
@@ -531,25 +555,12 @@ struct TraceJIT {
 		return r;
 	}
 
-	uint32_t PushConstantD(double d) {
-		uint32_t offset = next_constant_slot;
-		set_constant_d(offset,d);
-		next_constant_slot += SIMD_WIDTH;
-		return offset;
-	}
-	uint32_t PushConstantFn(void * fn) {
-		uint32_t offset = next_constant_slot;
-		set_constant_fn(offset,fn);
-		next_constant_slot += SIMD_WIDTH;
-		return offset;
-	}
-
 	void EmitCall(void * fn) {
 		int64_t diff = (int64_t)(code_buffer + asm_.pc_offset() + 5 - (int64_t) fn);
 		if(is_int32(diff)) {
 			asm_.call((byte*)fn);
 		} else {
-			asm_.call(Operand(constant_base,PushConstantFn(fn)));
+			asm_.call(PushConstant(Constant(fn)));
 		}
 	}
 	void EmitUnaryFunction(IRef ref, double (*fn)(double)) {
@@ -580,17 +591,18 @@ struct TraceJIT {
 		//this isn't the most optimized way to do this but it works for now
 		SaveRegisters(live_registers[ref]);
 		IRNode & node = trace->nodes[ref];
-		asm_.movdqa(Operand(constant_base,C_FUNCTION_SPILL_SPACE),reg(node.binary.a));
-		asm_.movdqa(Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x10),reg(node.binary.b));
-		asm_.movsd(xmm0,Operand(constant_base,C_FUNCTION_SPILL_SPACE));
-		asm_.movsd(xmm1,Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x10));
+		uint64_t spill_start = C_FUNCTION_SPILL_SPACE * sizeof(Constant);
+		asm_.movdqa(Operand(constant_base,spill_start),reg(node.binary.a));
+		asm_.movdqa(Operand(constant_base,spill_start + 0x10),reg(node.binary.b));
+		asm_.movsd(xmm0,Operand(constant_base,spill_start));
+		asm_.movsd(xmm1,Operand(constant_base,spill_start + 0x10));
 		EmitCall(fn);
-		asm_.movsd(Operand(constant_base,C_FUNCTION_SPILL_SPACE),xmm0);
-		asm_.movsd(xmm0,Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x8));
-		asm_.movsd(xmm1,Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x18));
+		asm_.movsd(Operand(constant_base,spill_start),xmm0);
+		asm_.movsd(xmm0,Operand(constant_base,spill_start + 0x8));
+		asm_.movsd(xmm1,Operand(constant_base,spill_start + 0x18));
 		EmitCall(fn);
-		asm_.movsd(Operand(constant_base,C_FUNCTION_SPILL_SPACE + 0x8),xmm0);
-		asm_.movdqa(reg(ref),Operand(constant_base,C_FUNCTION_SPILL_SPACE));
+		asm_.movsd(Operand(constant_base,spill_start + 0x8),xmm0);
+		asm_.movdqa(reg(ref),Operand(constant_base,spill_start));
 		RestoreRegisters(live_registers[ref]);
 	}
 
@@ -606,7 +618,7 @@ struct TraceJIT {
 	}
 
 	void SaveRegisters(RegisterSet regs) {
-		uint32_t offset = C_REGISTER_SPILL_SPACE;
+		uint32_t offset = C_REGISTER_SPILL_SPACE * sizeof(Constant);
 		for(RegisterIterator it(regs); !it.done(); it.next()) {
 			asm_.movdqa(Operand(constant_base,offset),XMMRegister::FromAllocationIndex(it.value()));
 			offset += SIMD_WIDTH;
@@ -614,7 +626,7 @@ struct TraceJIT {
 	}
 
 	void RestoreRegisters(RegisterSet regs) {
-		uint32_t offset = C_REGISTER_SPILL_SPACE;
+		uint32_t offset = C_REGISTER_SPILL_SPACE * sizeof(Constant);
 		for(RegisterIterator it(regs); !it.done(); it.next()) {
 			asm_.movdqa(XMMRegister::FromAllocationIndex(it.value()),Operand(constant_base,offset));
 			offset += SIMD_WIDTH;
@@ -651,10 +663,10 @@ void Trace::JIT(State & state) {
 			_error("mprotect failed.");
 		}
 		//also fill in the constant table
-		set_constant_i(C_ABS_MASK,0x7FFFFFFFFFFFFFFFUL);
-		set_constant_i(C_NEG_MASK,0x8000000000000000UL);
-		set_constant_i(C_NOT_MASK,0xFFFFFFFFFFFFFFFFUL);
-		set_constant_ii(C_SEQ_VEC,1UL,2UL);
+		constant_table[C_ABS_MASK] = Constant(0x7FFFFFFFFFFFFFFFUL);
+		constant_table[C_NEG_MASK] = Constant(0x8000000000000000UL);
+		constant_table[C_NOT_MASK] = Constant(0xFFFFFFFFFFFFFFFFUL);
+		constant_table[C_SEQ_VEC] = Constant(1L,2L);
 	}
 
 	TraceJIT trace_code(this);

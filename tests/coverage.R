@@ -17,7 +17,7 @@ testno <- 0
 }
 
 {
-	trace.config(FALSE,FALSE)
+	trace.config(0)
 	d <- 1:128
 	s <- 1:65
 	i <- as.integer(d)
@@ -105,7 +105,7 @@ testno <- 0
 	
 }
 {
-	trace.config(TRUE,TRUE)
+	trace.config(2)
 	
 	v0 <- d + d
 	v1 <- d + ds
