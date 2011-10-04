@@ -70,9 +70,10 @@ enum ConstantTableEntry {
 	C_ABS_MASK = 0,
 	C_NEG_MASK = 0x10,
 	C_NOT_MASK = 0x20,
-	C_REGISTER_SPILL_SPACE = 0x30,
-	C_FUNCTION_SPILL_SPACE = 0x130,
-	C_FIRST_TRACE_CONST = 0x150
+	C_SEQ_VEC  = 0x30,
+	C_REGISTER_SPILL_SPACE = 0x40,
+	C_FUNCTION_SPILL_SPACE = 0x140,
+	C_FIRST_TRACE_CONST = 0x160
 };
 
 static void set_constant_d(int offset, double v) {
@@ -82,6 +83,16 @@ static void set_constant_d(int offset, double v) {
 static void set_constant_i(int offset, uint64_t v) {
 	uint64_t * i = (uint64_t*) &constant_table[offset];
 	i[0] = i[1] = v;
+}
+static void set_constant_ii(int offset, uint64_t v0, uint64_t v1) {
+	uint64_t * i = (uint64_t*) &constant_table[offset];
+	i[0] = v0;
+	i[1] = v1;
+}
+static void set_constant_dd(int offset, double v0, double v1) {
+	double * i = (double*) &constant_table[offset];
+	i[0] = v0;
+	i[1] = v1;
 }
 static void set_constant_fn(int offset, void * fn) {
 	void** i = (void**) &constant_table[offset];
@@ -196,20 +207,20 @@ struct TraceJIT {
 			case IRNode::BINARY: {
 				AllocateBinary(ref,node.binary.a,node.binary.b);
 			} break;
+			case IRNode::FOLD: /*fallthrough*/
 			case IRNode::UNARY: {
 				AllocateUnary(ref,node.unary.a);
 			} break;
 			case IRNode::LOADC: /*fallthrough*/
-			case IRNode::LOADV: {
+			case IRNode::LOADV: /*fallthrough*/
+			case IRNode::SPECIAL: {
 				AllocateNullary(ref);
 			} break;
 			case IRNode::STORE: {
 				store_inst[node.store.a] = &node;
 			} break;
-			case IRNode::SPECIAL:
-			case IRNode::FOLD:
 			default:
-				_error("unsupported op");
+				_error("unsupported op in reg allocation");
 			}
 		}
 
@@ -259,8 +270,8 @@ struct TraceJIT {
 			case IRNode::STORE: {
 				//stores are generated right after the value that is stored
 			} break;
-			case IRNode::SPECIAL:
-			case IRNode::FOLD:
+			case IRNode::SPECIAL: break;
+			case IRNode::FOLD: break;
 			default:
 				_error("unsupported op");
 			}
@@ -287,7 +298,29 @@ struct TraceJIT {
 					asm_.xorpd(reg(ref),Operand(constant_base,C_NEG_MASK));
 				} break;
 				case IROpCode::pos: EmitMove(reg(ref),reg(node.unary.a)); break;
-
+				case IROpCode::sum:  {
+					assert(store_inst[ref] != NULL);
+					IRNode & str = *store_inst[ref];
+					str.store.dst->d = 0.0;
+					Operand op = EncodeOperand(&str.store.dst->p);
+					asm_.haddpd(reg(ref),reg(node.unary.a));
+					asm_.addsd(reg(ref),op);
+					asm_.movsd(op,reg(ref));
+					store_inst[ref] = NULL;
+				} break;
+				case IROpCode::prod: { //this could be more efficient if we had an additional register ...
+					assert(store_inst[ref] != NULL);
+					IRNode & str = *store_inst[ref];
+					str.store.dst->d = 1.0;
+					Operand op = EncodeOperand(&str.store.dst->p);
+					EmitMove(reg(ref),reg(node.unary.a));
+					asm_.mulsd(reg(ref),op); //r[0] *= sum;
+					asm_.movsd(op,reg(ref)); //sum = r[0];
+					asm_.unpckhpd(reg(ref),reg(ref)); //r[0] = r[1]
+					asm_.mulsd(reg(ref),op); //r[0] *= sum;
+					asm_.movsd(op,reg(ref)); //sum = r[0];
+					store_inst[ref] = NULL;
+				} break;
 				case IROpCode::exp: EmitUnaryFunction(ref,exp); break;
 				case IROpCode::log: EmitUnaryFunction(ref,log); break;
 				case IROpCode::cos: EmitUnaryFunction(ref,cos); break;
@@ -323,6 +356,13 @@ struct TraceJIT {
 				} break;
 				case IROpCode::pos: EmitMove(reg(ref),reg(node.unary.a)); break;
 				case IROpCode::mod: EmitBinaryFunction(ref,imod); break;
+				case IROpCode::seq: {
+					asm_.movq(load_addr,vector_offset);
+					asm_.shr(load_addr,Immediate(4));
+					asm_.movq(reg(ref),load_addr);
+					asm_.unpcklpd(reg(ref),reg(ref));
+					asm_.paddq(reg(ref),Operand(constant_base,C_SEQ_VEC));
+				} break;
 				default:
 					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
 						_error("unimplemented op");
@@ -352,6 +392,7 @@ struct TraceJIT {
 				if(str.op == IROpCode::storev) {
 					EmitVectorStore(str.store.dst->p,reg(str.store.a));
 				} else {
+					//scalar stores only occur for reductions right now and are handled during the opcode
 					_error("unsupported scalar store");
 				}
 			}
@@ -394,6 +435,16 @@ struct TraceJIT {
 			asm_.movq(load_addr,dst);
 			asm_.movdqa(Operand(load_addr,vector_offset,times_1,0),src);
 		}
+	}
+	Operand EncodeOperand(void * src) {
+		int64_t diff = (int64_t)src - (int64_t)constant_table;
+		if(is_int32(diff)) {
+			return Operand(constant_base,diff);
+		} else {
+			asm_.movq(load_addr,src);
+			return Operand(load_addr,0);
+		}
+
 	}
 	IRef AllocateNullary(IRef ref, bool p = true) {
 		if(allocated_register[ref] < 0) { //this instruction is dead, for now we just emit it anyway
@@ -564,6 +615,7 @@ void Trace::JIT(State & state) {
 		set_constant_i(C_ABS_MASK,0x7FFFFFFFFFFFFFFFUL);
 		set_constant_i(C_NEG_MASK,0x8000000000000000UL);
 		set_constant_i(C_NOT_MASK,0xFFFFFFFFFFFFFFFFUL);
+		set_constant_ii(C_SEQ_VEC,1UL,2UL);
 	}
 
 	TraceJIT trace_code(this);

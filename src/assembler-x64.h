@@ -1281,18 +1281,25 @@ class Assembler {
   void cvtsd2siq(Register dst, XMMRegister src);
 
   void addsd(XMMRegister dst, XMMRegister src);
+  void addsd(XMMRegister dst, const Operand& src);
   void subsd(XMMRegister dst, XMMRegister src);
   void mulsd(XMMRegister dst, XMMRegister src);
+  void mulsd(XMMRegister dst, const Operand& src);
   void divsd(XMMRegister dst, XMMRegister src);
 
   void addpd(XMMRegister dst, XMMRegister src);
+  void addpd(XMMRegister dst, const Operand& src);
   void subpd(XMMRegister dst, XMMRegister src);
   void mulpd(XMMRegister dst, XMMRegister src);
   void divpd(XMMRegister dst, XMMRegister src);
 
   void paddq(XMMRegister dst, XMMRegister src);
+  void paddq(XMMRegister dst, const Operand& src);
+
   void psubq(XMMRegister dst, XMMRegister src);
   void psubq(XMMRegister dst, const Operand& src);
+  void haddpd(XMMRegister dst, XMMRegister src);
+  void hsubpd(XMMRegister dst, XMMRegister src);
 
 
   void unpcklpd(XMMRegister dst, XMMRegister src);

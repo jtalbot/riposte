@@ -2354,6 +2354,14 @@ void Assembler::addsd(XMMRegister dst, XMMRegister src) {
 	emit(0x58);
 	emit_sse_operand(dst, src);
 }
+void Assembler::addsd(XMMRegister dst, const Operand& src) {
+	EnsureSpace ensure_space(this);
+	emit(0xF2);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x58);
+	emit_sse_operand(dst, src);
+}
 
 void Assembler::addpd(XMMRegister dst, XMMRegister src) {
 	EnsureSpace ensure_space(this);
@@ -2363,8 +2371,24 @@ void Assembler::addpd(XMMRegister dst, XMMRegister src) {
 	emit(0x58);
 	emit_sse_operand(dst, src);
 }
+void Assembler::addpd(XMMRegister dst, const Operand& src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x58);
+	emit_sse_operand(dst, src);
+}
 
 void Assembler::paddq(XMMRegister dst, XMMRegister src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0xD4);
+	emit_sse_operand(dst, src);
+}
+void Assembler::paddq(XMMRegister dst, const Operand& src) {
 	EnsureSpace ensure_space(this);
 	emit(0x66);
 	emit_optional_rex_32(dst, src);
@@ -2388,6 +2412,22 @@ void Assembler::psubq(XMMRegister dst, const Operand& src) {
 	emit(0xFB);
 	emit_sse_operand(dst, src);
 }
+void Assembler::haddpd(XMMRegister dst, XMMRegister src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x7C);
+	emit_sse_operand(dst, src);
+}
+void Assembler::hsubpd(XMMRegister dst, XMMRegister src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x7D);
+	emit_sse_operand(dst, src);
+}
 
 void Assembler::unpcklpd(XMMRegister dst, XMMRegister src) {
 	EnsureSpace ensure_space(this);
@@ -2406,6 +2446,14 @@ void Assembler::unpckhpd(XMMRegister dst, XMMRegister src) {
 	emit_sse_operand(dst, src);
 }
 void Assembler::mulsd(XMMRegister dst, XMMRegister src) {
+	EnsureSpace ensure_space(this);
+	emit(0xF2);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x59);
+	emit_sse_operand(dst, src);
+}
+void Assembler::mulsd(XMMRegister dst, const Operand& src) {
 	EnsureSpace ensure_space(this);
 	emit(0xF2);
 	emit_optional_rex_32(dst, src);
