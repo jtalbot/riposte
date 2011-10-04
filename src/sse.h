@@ -16,16 +16,14 @@ struct Map1< NegOp<TDouble>, N > {
 	}
 };
 
-static union ieee754_QNAN
-{
-        uint64_t i;
-        double f;
-        ieee754_QNAN() : i(0x7FFFFFFFFFFFFFFF) {}
-};
-
 template<int64_t N>
 struct Map1< AbsOp<TDouble>, N > {
-	
+	union ieee754_QNAN
+	{
+	        uint64_t i;
+	        double f;
+	        ieee754_QNAN() : i(0x7FFFFFFFFFFFFFFF) {}
+	};
 	static void eval(State& state, double const* a, double* r) {
                 const ieee754_QNAN AbsMask;
 		const __m128d absMask = _mm_load1_pd( &AbsMask.f);
@@ -55,9 +53,8 @@ struct Map1< ExpOp<TDouble>, N > {
 	static void eval(State& state, double const* a, double* r) {
         __m128d const* xa = (__m128d const*)a;
 		__m128d* xr = (__m128d*)r;
-		for(int j = 0; j < N/2; j+=2) {
+		for(int j = 0; j < N/2; j++) {
 			xr[j] = amd_vrd2_exp(xa[j]);
-			xr[j+1] = amd_vrd2_exp(xa[j+1]);
 		}
 	}
 };
@@ -66,9 +63,8 @@ struct Map1< LogOp<TDouble>, N > {
 	static void eval(State& state, double const* a, double* r) {
         __m128d const* xa = (__m128d const*)a;
 		__m128d* xr = (__m128d*)r;
-		for(int j = 0; j < N/2; j+=2) {
+		for(int j = 0; j < N/2; j++) {
 			xr[j] = amd_vrd2_log(xa[j]);
-			xr[j+1] = amd_vrd2_log(xa[j+1]);
 		}
 	}
 };

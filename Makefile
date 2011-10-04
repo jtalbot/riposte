@@ -10,7 +10,7 @@ ARBB_HOME=/opt/intel/arbb/1.0.0.018
 ARBB_EXISTS=$(shell test -d $(ARBB_HOME); echo $$?)
 
 
-ENABLE_LIBM=0
+ENABLE_LIBM=1
 AMD_LIBM_HOME=/opt/amdlibm-3-0-1-lin64
 
 ifeq ($(ENABLE_ARBB),0)
