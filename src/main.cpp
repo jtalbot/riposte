@@ -247,6 +247,7 @@ main(int argc, char** argv)
 	Environment* global = new Environment(base);
 
 	State state(global, base);
+	state.tracing.verbose = verbose;
 
 	interpreter_init(state);
 

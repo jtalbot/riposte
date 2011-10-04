@@ -16,131 +16,25 @@ DEFINE_ENUM_TO_STRING(RecordingStatus,ENUM_RECORDING_STATUS)
 
 //for brevity
 #define TRACE (state.tracing.current_trace)
-
-
-static RecordingStatus::Enum reserve(State & state, size_t num_nodes, size_t num_outputs) {
-	if(TRACE.n_nodes + num_nodes >= TRACE_MAX_NODES)
-		return RecordingStatus::RESOURCE;
-	else if(TRACE.n_outputs + num_outputs >= TRACE_MAX_OUTPUTS)
-		return RecordingStatus::RESOURCE;
-	else
-		return RecordingStatus::NO_ERROR;
-}
-
-static void add_reg_output(State & state, int64_t id) {
-	Trace::Output & out = TRACE.outputs[TRACE.n_outputs++];
-	out.location.type = Trace::Location::REG;
-	out.location.pointer.env = (Environment*) state.base;
-	out.location.pointer.index = id;
-}
-static void add_var_output(State & state, const Environment::Pointer & p) {
-	Trace::Output & out = TRACE.outputs[TRACE.n_outputs++];
-	out.location.type = Trace::Location::VAR;
-	out.location.pointer = p;
-}
-
-static void set_max_live_register(State & state, int64_t r) {
-	TRACE.max_live_register_base = state.base;
-	TRACE.max_live_register = r;
-}
-
-struct InputValue {
-	IROp::Encoding encoding;
-	Type::Enum typ;
-	bool is_external;
-	IRNode::InputReg data;
-};
-
-static const InputValue InputValue_unused = {IROp::E_VECTOR, Type::Integer, false, { NULL } };
-
-void coerce(State & state, Type::Enum result_type, InputValue & a) {
-	IRNode & n = TRACE.nodes[TRACE.n_nodes];
-
-	if(a.encoding == IROp::E_VECTOR) {
-		n.op.a_enc = a.encoding;
-		n.op.a_typ = IROp::T_INT;
-		n.a_external = a.is_external;
-		n.a.p = a.data.p;
-
-		n.op.b_enc = InputValue_unused.encoding;
-		n.op.b_typ = IROp::T_DOUBLE; //coerse op holds the result type in n.op.b_typ
-		n.b_external = InputValue_unused.is_external;
-		n.b.p = InputValue_unused.data.p;
-
-		n.r_external = false;
-		n.r.p =  NULL;
-		n.op.code = IROpCode::coerce;
-		IRef result = TRACE.n_nodes++;
-
-		a.data.i = result;
-
-	} else {
-		//no need to issues a scalar conversion, just promote the integer data to a double
-		a.data.d = a.data.i;
-	}
-	a.typ = result_type;
-	a.is_external = false;
-}
-
 #define REG(state, i) (*(state.base+i))
-//this emits an opcode assuming that a and b are the same type
-void emitir(State & state, IROpCode::Enum opcode,
-						   Type::Enum ret_type,
-						   int64_t ret_length,
-		                   const InputValue & a,
-		                   const InputValue & b,
-		                   int64_t r) {
-	IRNode & n = TRACE.nodes[TRACE.n_nodes];
-	n.op.a_enc = a.encoding;
-	n.op.a_typ = (a.typ == Type::Integer) ? IROp::T_INT : IROp::T_DOUBLE;
-	n.a_external = a.is_external;
-	n.a.p = a.data.p;
 
-	n.op.b_enc = b.encoding;
-	n.op.b_typ = (b.typ == Type::Integer) ? IROp::T_INT : IROp::T_DOUBLE;
-	n.b_external = b.is_external;
-	n.b.p = b.data.p;
-
-	n.r_external = false;
-	n.r.p = NULL;
-
-	n.op.code = opcode;
-
-	//TODO: replace binary OR with a function that calculates output types from input types
-	Value & v = REG(state,r);
-	Future::Init(v, ret_type,ret_length,TRACE.n_nodes++);
-	add_reg_output(state,r);
-	set_max_live_register(state,r);
-}
-
-//attempt to execute fn, otherwise return error code
-#define RECORDING_DO(fn) \
-	do { \
-		RecordingStatus::Enum s = fn; \
-		if(RecordingStatus::NO_ERROR != s) { \
-			return s; \
-		} \
-	} while(0)
-
-#define RESERVE(nodes,outputs) RECORDING_DO(reserve(state,nodes,outputs))
-
-
-#define OP_NOT_IMPLEMENTED(op) \
+#define OP_NOT_IMPLEMENTED(op,...) \
 RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
 	return RecordingStatus::UNSUPPORTED_OP; \
 } \
 
 
 RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	RESERVE(0,1);
-
+	if(!TRACE.Reserve(0,1))
+		return RecordingStatus::RESOURCE;
 	*pc = get_op(state,inst);
 	Value & r = REG(state,inst.c);
 
+	TRACE.UnionWithMaxLiveRegister(state.base,inst.c);
+
 	if(r.isFuture()) {
-		add_reg_output(state,inst.c);
+		TRACE.EmitRegOutput(state.base,inst.c);
 	}
-	set_max_live_register(state,inst.c);
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -153,7 +47,8 @@ RecordingStatus::Enum kget_record(State & state, Instruction const & inst, Instr
 OP_NOT_IMPLEMENTED(iget)
 
 RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	RESERVE(0,1);
+	if(!TRACE.Reserve(0,1))
+		return RecordingStatus::RESOURCE;
 	*pc = assign_op(state,inst);
 	Value& r = REG(state, inst.c);
 	if(r.isFuture()) {
@@ -162,9 +57,9 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 		//otherwise the inline cache is updated, which involves creating a pointer
 
 		//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
-		add_var_output(state,state.frame.environment->makePointer(String::Init(inst.a)));
+		TRACE.EmitVarOutput(state,state.frame.environment->makePointer(String::Init(inst.a)));
 	}
-	set_max_live_register(state,inst.c);
+	TRACE.SetMaxLiveRegister(state.base,inst.c);
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -199,7 +94,6 @@ CHECKED_INTERPRET(forbegin, B_1)
 CHECKED_INTERPRET(forend, B_1)
 CHECKED_INTERPRET(UseMethod, A C)
 CHECKED_INTERPRET(call, A)
-OP_NOT_IMPLEMENTED(icall)
 #undef A
 #undef B
 #undef B_1
@@ -207,108 +101,129 @@ OP_NOT_IMPLEMENTED(icall)
 #undef C_1
 #undef CHECKED_INTERPRET
 
-RecordingStatus::Enum get_input(State & state, Value & v, InputValue * ret, bool * can_fallback, bool * should_record) {
+OP_NOT_IMPLEMENTED(icall)
+
+bool get_input(State & state, Value & v, IRef * ref, bool * can_fallback, bool * should_record) {
+
+	static IRef load_cache[256];
 
 	//encode the type;
 	switch(v.type) {
 	case Type::Integer: /* fallthrough */
 	case Type::Double:
-		ret->typ = v.type;
-		//encode the data (for vectors this copies the pointer, for scalars this copies the value from the Value object)
-		ret->data.p = (double *) v.p;
-		//scalar or vector?
+		//constant or external reference?
 		if(v.length == 1) {
-			ret->is_external = false;
-			ret->encoding = IROp::E_SCALAR;
+			*ref = TRACE.EmitLoadC(v.type,v.i);
 		} else if(v.length == TRACE.length) {
-			ret->encoding = IROp::E_VECTOR;
-			ret->is_external = true;
+			//first check to see if we already loaded this value
+			uint64_t idx = (int64_t) v.p;
+			idx += idx >> 32;
+			idx += idx >> 16;
+			idx += idx >> 8;
+			idx &= 0xFF;
+			IRef cached = load_cache[idx];
+			if(cached < TRACE.n_pending &&
+			   TRACE.nodes[cached].op == IROpCode::loadv &&
+			   TRACE.nodes[cached].loadv.p == v.p) {
+				*ref = cached;
+			} else {
+				*ref = TRACE.EmitLoadV(v.type,v.p);
+				load_cache[idx] = *ref;
+			}
 			*should_record = true;
 		} else {
-			return RecordingStatus::UNSUPPORTED_TYPE;
+			return false;
 		}
-		return RecordingStatus::NO_ERROR;
+		return true;
 		break;
 	case Type::Future:
 		*can_fallback = false;
 		*should_record = true;
 		if(v.length != TRACE.length) {
-			return RecordingStatus::UNSUPPORTED_TYPE;
+			return false;
 		} else {
-			ret->encoding = IROp::E_VECTOR;
-			ret->typ = v.future.typ;
-			ret->data.i = v.future.ref;
-			ret->is_external = false;
-			return RecordingStatus::NO_ERROR;
+			*ref = v.future.ref;
+			return true;
 		}
 		break;
 	default:
-		return RecordingStatus::UNSUPPORTED_TYPE;
+		return false;
 		break;
 	}
 }
+IRef coerce(State & state, Type::Enum dst_type, IRef v) {
+	IRNode & n = TRACE.nodes[v];
+	if(dst_type == n.type)
+		return v;
+	else if(n.op == IROpCode::loadc) {
+		//perform the load directly on the constant
+		//TODO! when there are more possible casts, we need to implement them here
+		n.type = Type::Double;
+		n.loadc.d = n.loadc.i;
+		return v;
+	} else {
+		return TRACE.EmitUnary(IROpCode::cast,dst_type,v);
+	}
+}
 
-RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum opcode, State & state, Instruction const & inst) {
+RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, State & state, Instruction const & inst) {
 	Value & a = REG(state,inst.a);
 	Value & b = REG(state,inst.b);
-
+	if(!TRACE.Reserve(4,1)) //2 loads, 1 coerce, 1 op, 1 output
+		return RecordingStatus::RESOURCE;
 	bool can_fallback = true;
 	bool should_record = false;
-	InputValue aenc;
-	InputValue benc;
-	RecordingStatus::Enum ar = get_input(state,a,&aenc,&can_fallback,&should_record);
-	RecordingStatus::Enum br = get_input(state,b,&benc,&can_fallback,&should_record);
-	if(should_record && RecordingStatus::NO_ERROR == ar && RecordingStatus::NO_ERROR == br) {
-		RESERVE(2,1);
-		Type::Enum arg_type = std::max(aenc.typ,benc.typ);
-		if(aenc.typ != arg_type)
-			coerce(state,arg_type,aenc);
-		if(benc.typ != arg_type)
-			coerce(state,arg_type,benc);
-		emitir(state,opcode,resultType(bc,aenc.typ,benc.typ),TRACE.length,aenc,benc,inst.c);
+	IRef aref;
+	IRef bref;
+	bool ar = get_input(state,a,&aref,&can_fallback,&should_record);
+	bool br = get_input(state,b,&bref,&can_fallback,&should_record);
+	if(should_record && ar && br) {
+		Type::Enum type = resultType(bc,TRACE.nodes[aref].type,TRACE.nodes[bref].type);
+		TRACE.EmitRegOutput(state.base,inst.c);
+		TRACE.SetMaxLiveRegister(state.base,inst.c);
+		Future::Init(REG(state,inst.c),
+				     type,
+				     TRACE.length,
+				     TRACE.EmitBinary(op,type,coerce(state,type,aref),coerce(state,type,bref)));
+		TRACE.Commit();
 		return RecordingStatus::NO_ERROR;
 	} else {
+		TRACE.Rollback();
 		return (can_fallback) ? RecordingStatus::FALLBACK : RecordingStatus::UNSUPPORTED_TYPE;
 	}
 
 }
 
-RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum opcode, State & state, Instruction const & inst) {
+RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, State & state, int64_t length, Instruction const & inst) {
 	Value & a = REG(state,inst.a);
+	if(!TRACE.Reserve(2,1))
+		return RecordingStatus::RESOURCE;
+
 	bool can_fallback = true;
 	bool should_record = false;
-	InputValue aenc;
-	RecordingStatus::Enum ar = get_input(state,a,&aenc,&can_fallback,&should_record);
+    IRef aref;
+	bool ar = get_input(state,a,&aref,&can_fallback,&should_record);
 
-	if(should_record && RecordingStatus::NO_ERROR == ar) {
-		RESERVE(1,1);
-		emitir(state,opcode,resultType(bc,aenc.typ),TRACE.length,aenc,InputValue_unused,inst.c);
+	if(should_record && ar) {
+		Type::Enum type = resultType(bc,TRACE.nodes[aref].type);
+		Future::Init(REG(state,inst.c),
+				     type,
+				     length,
+				     TRACE.EmitUnary(op,type,coerce(state,type,aref)));
+		TRACE.EmitRegOutput(state.base,inst.c);
+		TRACE.SetMaxLiveRegister(state.base,inst.c);
+		TRACE.Commit();
 		return RecordingStatus::NO_ERROR;
 	} else {
+		TRACE.Rollback();
 		return (can_fallback) ? RecordingStatus::FALLBACK : RecordingStatus::UNSUPPORTED_TYPE;
 	}
 
-}
-
-RecordingStatus::Enum fold_record(ByteCode::Enum bc, IROpCode::Enum opcode, State & state, Instruction const & inst) {
-	Value & a = REG(state,inst.a);
-	bool can_fallback = true;
-	bool should_record = false;
-	InputValue aenc;
-	RecordingStatus::Enum ar = get_input(state,a,&aenc,&can_fallback,&should_record);
-
-	if(should_record && RecordingStatus::NO_ERROR == ar) {
-		RESERVE(1,1);
-		emitir(state,opcode,resultType(bc,aenc.typ),1,aenc,InputValue_unused,inst.c);
-		return RecordingStatus::NO_ERROR;
-	} else {
-		return (can_fallback) ? RecordingStatus::FALLBACK : RecordingStatus::UNSUPPORTED_TYPE;
-	}
 }
 
 //all arithmetic binary ops share the same recording implementation
 #define BINARY_OP(op,...) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
-	RecordingStatus::Enum status = binary_record(ByteCode :: op, IROpCode :: op, state, inst);\
+	RecordingStatus::Enum status = binary_record(ByteCode :: op,IROpCode :: op, state, inst);\
 	if(RecordingStatus::FALLBACK == status) { \
 		*pc = op##_op(state,inst); \
 		return RecordingStatus::NO_ERROR; \
@@ -319,7 +234,7 @@ RecordingStatus::Enum fold_record(ByteCode::Enum bc, IROpCode::Enum opcode, Stat
 }
 //all unary arithmetic ops share the same implementation as well
 #define UNARY_OP(op,...) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
-	RecordingStatus::Enum status = unary_record(ByteCode :: op , IROpCode :: op, state, inst);\
+	RecordingStatus::Enum status = unary_record(ByteCode :: op , IROpCode :: op, state, TRACE.length, inst);\
 	if(RecordingStatus::FALLBACK == status) { \
 		*pc = op##_op(state,inst); \
 		return RecordingStatus::NO_ERROR; \
@@ -328,8 +243,8 @@ RecordingStatus::Enum fold_record(ByteCode::Enum bc, IROpCode::Enum opcode, Stat
 		(*pc)++; \
 	return status; \
 }
-#define FOLD_OP(op) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
-	RecordingStatus::Enum status = fold_record(ByteCode :: op , IROpCode :: op, state, inst);\
+#define FOLD_OP(op,...) RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
+	RecordingStatus::Enum status = unary_record(ByteCode :: op, IROpCode :: op, state, 1, inst);\
 	if(RecordingStatus::FALLBACK == status) { \
 		*pc = op##_op(state,inst); \
 		return RecordingStatus::NO_ERROR; \
@@ -339,8 +254,10 @@ RecordingStatus::Enum fold_record(ByteCode::Enum bc, IROpCode::Enum opcode, Stat
 	return status; \
 }
 
-IR_BINARY(BINARY_OP)
-IR_UNARY(UNARY_OP)
+
+BINARY_ARITH_MAP_BYTECODES(BINARY_OP)
+UNARY_ARITH_MAP_BYTECODES(UNARY_OP)
+ARITH_FOLD_BYTECODES(FOLD_OP)
 
 OP_NOT_IMPLEMENTED(lt)
 OP_NOT_IMPLEMENTED(gt)
@@ -362,8 +279,7 @@ OP_NOT_IMPLEMENTED(complex1)
 OP_NOT_IMPLEMENTED(character1)
 OP_NOT_IMPLEMENTED(raw1)
 
-FOLD_OP(sum)
-FOLD_OP(prod)
+
 OP_NOT_IMPLEMENTED(min)
 OP_NOT_IMPLEMENTED(max)
 OP_NOT_IMPLEMENTED(any)
@@ -371,6 +287,7 @@ OP_NOT_IMPLEMENTED(all)
 
 UNARY_OP(cumsum)
 UNARY_OP(cumprod)
+
 OP_NOT_IMPLEMENTED(cummin)
 OP_NOT_IMPLEMENTED(cummax)
 OP_NOT_IMPLEMENTED(cumany)
@@ -411,14 +328,18 @@ RecordingStatus::Enum missing_record(State & state, Instruction const & inst, In
 RecordingStatus::Enum ret_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	//ret writes a value into a register of the caller's frame. If this value is a future we need to
 	//record it as a potential output location
+	if(!TRACE.Reserve(0,1))
+		return RecordingStatus::RESOURCE;
 	Value * result = state.frame.result;
 	int64_t offset = result - state.frame.returnbase;
 	int64_t max_live = state.frame.returnbase - state.base;
 	*pc = ret_op(state,inst); //warning: ret_op will change 'frame'
 
-	if(result->isFuture())
-		add_reg_output(state,offset);
-	set_max_live_register(state,max_live);
+	if(result->isFuture()) {
+		TRACE.EmitRegOutput(state.base,offset);
+	}
+
+	TRACE.SetMaxLiveRegister(state.base,max_live);
 
 	return RecordingStatus::NO_ERROR;
 }
@@ -436,20 +357,22 @@ RecordingStatus::Enum seq_record(State & state, Instruction const & inst, Instru
 		// don't increment the pc
 		return RecordingStatus::UNSUPPORTED_OP;
 	}
-        int64_t len = As<Integer>(state, REG(state, inst.a))[0];
-        int64_t step = As<Integer>(state, REG(state, inst.b))[0];
-	
-	IRNode::InputReg ai, bi;
-	ai.i = len;
-	bi.i = step;
+	int64_t len = As<Integer>(state, REG(state, inst.a))[0];
+	int64_t step = As<Integer>(state, REG(state, inst.b))[0];
+	if(len != TRACE.length) {
+		*pc = seq_op(state,inst); //this isn't ideal, as this will redo the As operators above
+	} else {
+		if(!TRACE.Reserve(1,1))
+			return RecordingStatus::RESOURCE;
 
-	InputValue av = {IROp::E_SCALAR,Type::Integer,false,ai};
-	InputValue bv = {IROp::E_SCALAR,Type::Integer,false,bi};
-
-	RESERVE(1,1);
-	emitir(state, IROpCode::seq, Type::Integer,TRACE.length, av, bv, inst.c);
-	
-	(*pc)++;
+		Future::Init(REG(state,inst.c),
+				     Type::Integer,
+				     len,
+				     TRACE.EmitSpecial(IROpCode::seq,Type::Integer,len,step));
+		TRACE.SetMaxLiveRegister(state.base,inst.c);
+		TRACE.Commit();
+		(*pc)++;
+	}
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -469,7 +392,7 @@ static RecordingStatus::Enum recording_check_conditions(State& state, Instructio
 Instruction const * recording_interpret(State& state, Instruction const* pc) {
 	RecordingStatus::Enum status = RecordingStatus::NO_ERROR;
 	while( true ) {
-#define RUN_RECORD(name,str,...) case ByteCode::name: {  /* printf("rec " #name);*/ status = name##_record(state, *pc,&pc); } break;
+#define RUN_RECORD(name,str,...) case ByteCode::name: {  /*printf("rec " #name "\n");*/ status = name##_record(state, *pc,&pc); } break;
 		switch(pc->bc) {
 			BYTECODES(RUN_RECORD)
 		}

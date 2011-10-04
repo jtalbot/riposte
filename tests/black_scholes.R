@@ -1,5 +1,6 @@
 #adapted from https://github.com/ispc/ispc/tree/master/examples/options
-N_OPTIONS <- 1024*1024
+trace.config(2)
+N_OPTIONS <- 1024 * 1024
 N_BLACK_SCHOLES_ROUNDS <- 20
 S <- rep(100,1,N_OPTIONS)
 X <- rep(98,1,N_OPTIONS)

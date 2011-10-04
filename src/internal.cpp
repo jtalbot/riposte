@@ -763,12 +763,9 @@ void proctime(State& state, Value const* args, Value& result) {
 }
 
 void traceconfig(State & state, Value const* args, Value& result) {
-	Logical e = As<Logical>(state, args[0]);
-	if(e.length == 0) _error("condition is of zero length");
-	Logical v = As<Logical>(state, args[1]);
-	if(v.length == 0) _error("condition is of zero length");
-	state.tracing.enabled = e[0];
-	state.tracing.verbose = v[0];
+	Integer c = As<Integer>(state, args[0]);
+	if(c.length == 0) _error("condition is of zero length");
+	state.tracing.config = (TraceState::Mode) c[0];
 	result = Null::Singleton();
 }
 

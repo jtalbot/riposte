@@ -465,7 +465,7 @@ struct Object : public Value {
 		Pair* a;
 		if((l*2) > capacity()) {
 			// going to have to rehash the result
-			uint64_t c = std::max(capacity()*2, 1ULL);
+			uint64_t c = std::max(capacity()*2ULL, 1ULL);
 			a = new Pair[c];
 			out = Object(base(), l, c, a);
 
@@ -733,10 +733,10 @@ struct StackFrame {
 #define TRACE_MAX_RECORDED (1024)
 
 struct Trace {
-	double registers [TRACE_MAX_VECTOR_REGISTERS][TRACE_VECTOR_WIDTH] __attribute__ ((aligned (16))); //for sse alignment
+	IRNode nodes[TRACE_MAX_NODES];
 
-	IRNode nodes[TRACE_MAX_NODES] ;
 	size_t n_nodes;
+	size_t n_pending;
 	size_t n_recorded;
 
 	int64_t length;
@@ -744,25 +744,142 @@ struct Trace {
 	struct Location {
 		enum Type {REG, VAR};
 		Type type;
-		Environment::Pointer pointer; //fat pointer to environment location
-		//if type == REG, pointer.env points to the base pointer
-		//and pointer.index is its offset
-		//this should go into a union but Environment::Pointer can't go in a union since Symbol has a constructor...
+		/*union { */ //union disabled because Pointer has a Symbol with constructor
+			Environment::Pointer pointer; //fat pointer to environment location
+			struct {
+				Value * base;
+				int64_t offset;
+			} reg;
+		/*};*/
 	};
+
 	struct Output {
 		Location location; //location where an output might exist
 		                   //if that location is live and contains a future then that is a live output
-		IRef ref; //(used only to enable pretty printing) value of the output in the trace code,
+		Value * value; //pointer into output_values array
 	};
 
 	Output outputs[TRACE_MAX_OUTPUTS];
 	size_t n_outputs;
+
+	Value output_values[TRACE_MAX_OUTPUTS];
+	size_t n_output_values;
+
 	Value * max_live_register_base;
 	int64_t max_live_register;
 
-	void reset();
-	void execute(State & state);
+	bool Reserve(size_t num_nodes, size_t num_outputs) {
+		if(n_pending + num_nodes >= TRACE_MAX_NODES)
+			return false;
+		else if(n_outputs + num_outputs >= TRACE_MAX_OUTPUTS)
+			return false;
+		else
+			return true;
+	}
+	void Rollback() {
+		n_pending = n_nodes;
+	}
+	void Commit() {
+		n_nodes = n_pending;
+	}
+	IRef EmitBinary(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t b) {
+		IRNode & n = nodes[n_pending];
+		n.enc = IRNode::BINARY;
+		n.op = op;
+		n.type = type;
+		n.binary.a = a;
+		n.binary.b = b;
+		return n_pending++;
+	}
+	IRef EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t b) {
+		IRNode & n = nodes[n_pending];
+		n.enc = IRNode::SPECIAL;
+		n.op = op;
+		n.type = type;
+		n.special.a = a;
+		n.special.b = b;
+		return n_pending++;
+	}
+	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, int64_t a) {
+		IRNode & n = nodes[n_pending];
+		n.enc = IRNode::UNARY;
+		n.op = op;
+		n.type = type;
+		n.unary.a = a;
+		return n_pending++;
+	}
+	IRef EmitFold(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t base) {
+		IRNode & n = nodes[n_pending];
+		n.enc = IRNode::FOLD;
+		n.op = op;
+		n.type = type;
+		n.fold.a = a;
+		n.fold.i = base;
+		return n_pending++;
+	}
+	IRef EmitLoadC(Type::Enum type, int64_t c) {
+		IRNode & n = nodes[n_pending];
+		n.enc = IRNode::LOADC;
+		n.op = IROpCode::loadc;
+		n.type = type;
+		n.loadc.i = c;
+		return n_pending++;
+	}
+	IRef EmitLoadV(Type::Enum type,void * v) {
+		IRNode & n = nodes[n_pending];
+		n.enc = IRNode::LOADV;
+		n.op = IROpCode::loadv;
+		n.type = type;
+		n.loadv.p = v;
+		return n_pending++;
+	}
+	IRef EmitStoreV(Type::Enum type, Value * dst, int64_t a) {
+		IRNode & n = nodes[n_pending];
+		n.enc = IRNode::STORE;
+		n.op = IROpCode::storev;
+		n.type = type;
+		n.store.a = a;
+		n.store.dst = dst;
+		return n_pending++;
+	}
+	IRef EmitStoreC(Type::Enum type, Value * dst, int64_t a) {
+		IRNode & n = nodes[n_pending];
+		n.enc = IRNode::STORE;
+		n.op = IROpCode::storec;
+		n.type = type;
+		n.store.a = a;
+		n.store.dst = dst;
+		return n_pending++;
+	}
+	void EmitRegOutput(Value * base, int64_t id) {
+		Trace::Output & out = outputs[n_outputs++];
+		out.location.type = Location::REG;
+		out.location.reg.base = base;
+		out.location.reg.offset = id;
+	}
+	void EmitVarOutput(State & state, const Environment::Pointer & p) {
+		Trace::Output & out = outputs[n_outputs++];
+		out.location.type = Trace::Location::VAR;
+		out.location.pointer = p;
+	}
+	void SetMaxLiveRegister(Value * base, int64_t r) {
+		max_live_register_base = base;
+		max_live_register = r;
+	}
+	void UnionWithMaxLiveRegister(Value * base, int64_t r) {
+		if(base < max_live_register_base
+		   || (base == max_live_register_base && r > max_live_register)) {
+			SetMaxLiveRegister(base,r);
+		}
+	}
+	void Reset();
+	void InitializeOutputs(State & state);
+	void WriteOutputs(State & state);
+	void Execute(State & state);
 	std::string toString(State & state);
+private:
+	void Interpret(State & state);
+	void JIT(State & state);
 };
 
 //member of State, manages information for all traces
@@ -771,24 +888,31 @@ struct Trace {
 struct TraceState {
 	TraceState() {
 		active = false;
-		enabled = true;
+		config = DISABLED;
 		verbose = false;
 	}
 
-	bool enabled;
+
+	enum Mode {
+		DISABLED,
+		INTERPRET,
+		COMPILE
+	};
+	Mode config;
 	bool verbose;
 	bool active;
 
 	Trace current_trace;
 
 
+	bool enabled() { return DISABLED != config; }
 	bool is_tracing() const { return active; }
 
 	Instruction const * begin_tracing(State & state, Instruction const * inst, size_t length) {
 		if(active) {
 			_error("recursive record\n");
 		}
-		current_trace.reset();
+		current_trace.Reset();
 		current_trace.length = length;
 		active = true;
 		return recording_interpret(state,inst);
@@ -798,7 +922,7 @@ struct TraceState {
 	void end_tracing(State & state) {
 		if(active) {
 			active = false;
-			current_trace.execute(state);
+			current_trace.Execute(state);
 		}
 	}
 };

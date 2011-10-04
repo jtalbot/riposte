@@ -544,7 +544,7 @@ bool isRecordable(Value const& a, Value const& b) {
 Instruction const* seq_op(State& state, Instruction const& inst) {
 	int64_t len = As<Integer>(state, REG(state, inst.a))[0];
 	int64_t step = As<Integer>(state, REG(state, inst.b))[0];
-	if(state.tracing.enabled && isRecordable(Type::Integer, len))
+	if(state.tracing.enabled() && isRecordable(Type::Integer, len))
 		return state.tracing.begin_tracing(state, &inst, len);
 	else {
 		REG(state, inst.c) = Sequence(len, 1, step);
@@ -568,7 +568,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 			return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1); \
 		}	\
 	} \
-	else if(state.tracing.enabled && isRecordable(a)) \
+	else if(state.tracing.enabled() && isRecordable(a)) \
 		return state.tracing.begin_tracing(state, &inst, a.length); \
 	\
 	unaryArith<Zip1, Op>(state, a, c); \
@@ -621,7 +621,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 			return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1); \
 		}	\
 	} \
-	else if(state.tracing.enabled && isRecordable(a,b)) \
+	else if(state.tracing.enabled() && isRecordable(a,b)) \
 		return state.tracing.begin_tracing(state, &inst, std::max(a.length,b.length));	\
 \
 	binaryArithSlow<Zip2, Op>(state, a, b, c);	\

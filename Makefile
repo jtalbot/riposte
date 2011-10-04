@@ -3,11 +3,15 @@ UNAME := $(shell uname -s)
  
 CXX := g++
 CXXFLAGS := -Wall -DRIPOSTE_DISABLE_TRACING
-LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
+LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -lrt -g
 
 ENABLE_ARBB=0
 ARBB_HOME=/opt/intel/arbb/1.0.0.018
 ARBB_EXISTS=$(shell test -d $(ARBB_HOME); echo $$?)
+
+
+ENABLE_LIBM=0
+AMD_LIBM_HOME=/opt/amdlibm-3-0-1-lin64
 
 ifeq ($(ENABLE_ARBB),0)
 	CXXFLAGS += -I/opt/local/include
@@ -16,7 +20,12 @@ else
 	CXXFLAGS += -I$(ARBB_HOME)/include
 endif
 
-SRC := main.cpp type.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp ir.cpp recording.cpp trace.cpp
+ifneq ($(ENABLE_LIBM),0)
+	CXXFLAGS += -I$(AMD_LIBM_HOME)/include -DUSE_AMD_LIBM
+	LFLAGS += -L$(AMD_LIBM_HOME)/lib/dynamic -lamdlibm
+endif
+
+SRC := main.cpp type.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp ir.cpp recording.cpp trace.cpp trace_interpret.cpp trace_compile.cpp assembler-x64.cpp
 
 EXECUTABLE := bin/riposte
 
