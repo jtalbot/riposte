@@ -177,6 +177,25 @@ static double iabs(double aa) { //these are actually integers passed in xmm0 and
 	return da; //also return the value in xmm0
 }
 
+static __m128d prodi(__m128d input, int64_t * output, int64_t offset) {
+	union {
+		__m128d in;
+		int64_t i[2];
+	};
+	in = input;
+	*output *= i[0] * i[1];
+	return input;
+}
+static __m128d sumi(__m128d input, int64_t * output, int64_t offset) {
+	union {
+		__m128d in;
+		int64_t i[2];
+	};
+	in = input;
+	*output += i[0] + i[1];
+	return input;
+}
+
 
 struct TraceJIT {
 	TraceJIT(Trace * t)
@@ -363,6 +382,9 @@ struct TraceJIT {
 					asm_.unpcklpd(reg(ref),reg(ref));
 					asm_.paddq(reg(ref),Operand(constant_base,C_SEQ_VEC));
 				} break;
+				//placeholder for now
+				case IROpCode::sum:  EmitFoldFunction(ref,0,(void*)sumi); break;
+				case IROpCode::prod: EmitFoldFunction(ref,1,(void*)prodi); break;
 				default:
 					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
 						_error("unimplemented op");
@@ -417,6 +439,23 @@ struct TraceJIT {
 		if(!dst.is(src)) {
 			asm_.movapd(dst,src);
 		}
+	}
+	void EmitFoldFunction(IRef ref, int64_t data, void * fn) {
+		IRNode & node = trace->nodes[ref];
+		assert(store_inst[ref] != NULL);
+		IRNode & str = *store_inst[ref];
+		str.store.dst->i = data;
+		if(str.op == IROpCode::storec)
+			asm_.movq(rdi,&str.store.dst->p);
+		else
+			asm_.movq(rdi,str.store.dst->p);
+		asm_.movq(rsi,vector_offset);
+		SaveRegisters(live_registers[ref]);
+		EmitMove(xmm0,reg(node.unary.a));
+		EmitCall(fn);
+		EmitMove(reg(ref),xmm0);
+		RestoreRegisters(live_registers[ref]);
+		store_inst[ref] = NULL;
 	}
 	void EmitVectorLoad(XMMRegister dst, void * src) {
 		int64_t diff = (int64_t)src - (int64_t)constant_table;
