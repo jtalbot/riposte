@@ -49,6 +49,31 @@ struct Map1< SqrtOp<TDouble>, N > {
 	}
 };
 
+#ifdef USE_AMD_LIBM
+#include <amdlibm.h>
+template<int64_t N>
+struct Map1< ExpOp<TDouble>, N > {
+	static void eval(State& state, double const* a, double* r) {
+        __m128d const* xa = (__m128d const*)a;
+		__m128d* xr = (__m128d*)r;
+		for(int j = 0; j < N/2; j+=2) {
+			xr[j] = amd_vrd2_exp(xa[j]);
+			xr[j+1] = amd_vrd2_exp(xa[j+1]);
+		}
+	}
+};
+template<int64_t N>
+struct Map1< LogOp<TDouble>, N > {
+	static void eval(State& state, double const* a, double* r) {
+        __m128d const* xa = (__m128d const*)a;
+		__m128d* xr = (__m128d*)r;
+		for(int j = 0; j < N/2; j+=2) {
+			xr[j] = amd_vrd2_log(xa[j]);
+			xr[j+1] = amd_vrd2_log(xa[j+1]);
+		}
+	}
+};
+#endif
 
 
 // Binary ops...

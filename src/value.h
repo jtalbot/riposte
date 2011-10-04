@@ -470,7 +470,7 @@ struct Object : public Value {
 		Pair* a;
 		if((l*2) > capacity()) {
 			// going to have to rehash the result
-			uint64_t c = std::max(capacity()*2, 1ULL);
+			uint64_t c = std::max(capacity()*2ULL, 1ULL);
 			a = new Pair[c];
 			out = Object(base(), l, c, a);
 

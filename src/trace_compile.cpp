@@ -5,6 +5,11 @@
 #include "assembler-x64.h"
 #include <math.h>
 
+#ifdef USE_AMD_LIBM
+#include <amdlibm.h>
+#endif
+
+
 using namespace v8::internal;
 
 #define SIMD_WIDTH (2 * sizeof(double))
@@ -353,6 +358,21 @@ struct TraceJIT {
 					asm_.movsd(op,reg(ref)); //sum = r[0];
 					store_inst[ref] = NULL;
 				} break;
+
+#ifdef USE_AMD_LIBM
+				case IROpCode::exp: EmitVectorizedUnaryFunction(ref,amd_vrd2_exp); break;
+				case IROpCode::log: EmitVectorizedUnaryFunction(ref,amd_vrd2_log); break;
+				case IROpCode::cos: EmitVectorizedUnaryFunction(ref,amd_vrd2_cos); break;
+				case IROpCode::sin: EmitVectorizedUnaryFunction(ref,amd_vrd2_sin); break;
+				case IROpCode::tan: EmitVectorizedUnaryFunction(ref,amd_vrd2_tan); break;
+				case IROpCode::pow: EmitVectorizedBinaryFunction(ref,amd_vrd2_pow); break;
+
+				case IROpCode::acos: EmitUnaryFunction(ref,amd_acos); break;
+				case IROpCode::asin: EmitUnaryFunction(ref,amd_asin); break;
+				case IROpCode::atan: EmitUnaryFunction(ref,amd_atan); break;
+				case IROpCode::atan2: EmitBinaryFunction(ref,amd_atan2); break;
+				case IROpCode::hypot: EmitBinaryFunction(ref,amd_hypot); break;
+#else
 				case IROpCode::exp: EmitUnaryFunction(ref,exp); break;
 				case IROpCode::log: EmitUnaryFunction(ref,log); break;
 				case IROpCode::cos: EmitUnaryFunction(ref,cos); break;
@@ -364,6 +384,7 @@ struct TraceJIT {
 				case IROpCode::pow: EmitBinaryFunction(ref,pow); break;
 				case IROpCode::atan2: EmitBinaryFunction(ref,atan2); break;
 				case IROpCode::hypot: EmitBinaryFunction(ref,hypot); break;
+#endif
 				case IROpCode::sign: EmitUnaryFunction(ref,sign_fn); break;
 				case IROpCode::mod: EmitBinaryFunction(ref,Mod); break;
 				case IROpCode::cast: EmitUnaryFunction(ref,casti2d); break; //it should be possible to inline this, but I can't find the convert packed quadword to packed double instruction
@@ -562,6 +583,55 @@ struct TraceJIT {
 		} else {
 			asm_.call(PushConstant(Constant(fn)));
 		}
+	}
+	void EmitVectorizedUnaryFunction(IRef ref, __m128d (*fn)(__m128d)) {
+		EmitVectorizedUnaryFunction(ref,(void*)fn);
+	}
+	void EmitVectorizedUnaryFunction(IRef ref, void * fn) {
+
+		SaveRegisters(live_registers[ref]);
+
+		EmitMove(xmm0,reg(trace->nodes[ref].unary.a));
+		EmitCall(fn);
+		EmitMove(reg(ref),xmm0);
+
+		RestoreRegisters(live_registers[ref]);
+
+	}
+
+	void EmitVectorizedBinaryFunction(IRef ref, __m128d (*fn)(__m128d,__m128d)) {
+		EmitBinaryFunction(ref,(void*)fn);
+	}
+	void EmitVectorizedBinaryFunction(IRef ref, void * fn) {
+
+		SaveRegisters(live_registers[ref]);
+
+		XMMRegister ar = reg(trace->nodes[ref].binary.a);
+		XMMRegister br = reg(trace->nodes[ref].binary.b);
+
+		if(ar.is(xmm1)) {
+			if(br.is(xmm0)) { //swap
+				EmitMove(xmm2,ar);
+				EmitMove(xmm1,br);
+				EmitMove(xmm0,xmm2);
+			} else {
+				EmitMove(xmm0,ar);
+				EmitMove(xmm1,br);
+			}
+		} else {
+			if(br.is(xmm0)) {
+				EmitMove(xmm1,br);
+				EmitMove(xmm0,ar);
+			} else {
+				EmitMove(xmm0,ar);
+				EmitMove(xmm1,br);
+			}
+		}
+		EmitCall(fn);
+		EmitMove(reg(ref),xmm0);
+
+		RestoreRegisters(live_registers[ref]);
+
 	}
 	void EmitUnaryFunction(IRef ref, double (*fn)(double)) {
 		EmitUnaryFunction(ref,(void*)fn);
