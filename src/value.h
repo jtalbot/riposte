@@ -167,7 +167,7 @@ struct Vector : public Value {
 
 	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
 		Value::Init(v, VectorType, length);
-		int64_t l = (length+1)&(~1); 	// round up to a multiple of 2 for SSE
+		int64_t l = (length+1)&(~1); 	// round up to a multiple of 4 for SSE
 		if(canPack && length > 1)
 			v.p = Recursive ? new (GC) Element[l] : 
 				new (PointerFreeGC) Element[l];
