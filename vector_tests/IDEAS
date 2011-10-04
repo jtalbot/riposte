@@ -1,0 +1,11 @@
+
+2D filtering
+FFT
+Matrix-matrix multiplication
+Optical flow
+
+Statistical algorithms
+linear regression
+	would need QR decomposition
+	would need to construct Householder transformation
+	

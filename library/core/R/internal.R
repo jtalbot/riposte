@@ -12,7 +12,10 @@ inherits <- function(x, what, which=FALSE) .Internal(inherits(x, what, which))
 seq <- function(from=1, by=1, length.out=1) .Internal(seq(from, by, length.out))
 rep <- function(v, each=1, length.out=1) .Internal(rep(v, each, length.out))
 
-unlist <- function(x) .Internal(unlist(x))
+unlist <- function(x, recursive = TRUE, use.names = TRUE) UseMethod("unlist")
+unlist.default <- function(x, recursive = TRUE, use.names = TRUE) {
+	x <- .Internal(unlist(x, as.logical(recursive), as.logical(use.names)))
+}
 
 eval <- function(expr, envir=parent.frame()) .Internal(eval(x, envir, NULL))
 source <- function(x) .Internal(source(x))

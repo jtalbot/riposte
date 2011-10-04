@@ -194,14 +194,15 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		Value value = call[2];
 		while(isCall(dest)) {
 			List c = List(((Object const&)dest).base());
-			Value names = ((Object const&)dest).getNames();
 			List n(c.length+1);
 
 			for(int64_t i = 0; i < c.length; i++) { n[i] = c[i]; }
 			Character nnames(c.length+1);
-			for(int64_t i = 0; i < c.length; i++) { nnames[i] = Strings::empty; }
-			if(names.isCharacter()) {
-				for(int i = 0; i < c.length; i++) { nnames[i] = Character(names)[i]; }
+			if(((Object const&)dest).hasNames()) {
+				Value names = ((Object const&)dest).getNames();
+				for(int64_t i = 0; i < c.length; i++) { nnames[i] = Character(names)[i]; }
+			} else {
+				for(int64_t i = 0; i < c.length; i++) { nnames[i] = Strings::empty; }
 			}
 
 			n[0] = Symbol(state.internStr(state.externStr(Symbol(c[0])) + "<-"));
@@ -250,7 +251,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		scopes.back().deadAfter(dest);	
 		return dest;
 	} break;
-	case EStrings::bbAssign: {
+	case EStrings::bbAssign: 
+	case EStrings::dollarAssign: {
 		if(call.length != 4) return compileFunctionCall(call, names, code);
 		int64_t dest = compile(call[1], code);
 		int64_t index = compile(call[2], code);

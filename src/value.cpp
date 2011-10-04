@@ -1,6 +1,5 @@
 
 #include "value.h"
-#include "internal.h"
 
 DEFINE_ENUM_TO_STRING(EStrings, STRINGS)
 

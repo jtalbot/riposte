@@ -23,11 +23,24 @@ inline double asReal1(Value const& v) {
 }
 
 void Element(Value const& v, int64_t index, Value& out) __attribute__((always_inline));
+
+inline void ElementSlow(Object v, int64_t index, Value& out) {
+	Element(v.base(), index, out);
+	if(v.hasNames()) {
+		Value names;
+		Element(v.getNames(), index, names);
+		Object::Init(out, out, names);
+	}
+}
+
 inline void Element(Value const& v, int64_t index, Value& out) {
 	switch(v.type) {
 		#define CASE(Name) case Type::Name: Name::InitScalar(out, ((Name const&)v)[index]); break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
+		case Type::Object: 
+			ElementSlow((Object const&)v, index, out); 
+			break;
 		default: _error("NYI: Element of this type"); break;
 	};
 }
@@ -122,11 +135,11 @@ inline void Element2Assign(Value const& v, int64_t index, Value& out) {
 	};
 }
 
-void SubsetAssignSlow(State& state, Value const& a, Value const& i, Value const& b, Value& c);
-void Subset2AssignSlow(State& state, Value const& a, Value const& i, Value const& b, Value& c);
+void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c);
+void Subset2AssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c);
  
-inline void SubsetAssign(State& state, Value const& a, Value const& i, Value const& b, Value& c) {
-	if(a.type == b.type) {
+inline void SubsetAssign(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
+	if(!clone && a.type == b.type) {
 		if(i.isDouble1()) {
 			int64_t index = (int64_t)i.d-1;
 			if(index >= 0 && index < a.length) {
@@ -144,11 +157,11 @@ inline void SubsetAssign(State& state, Value const& a, Value const& i, Value con
 			}
 		}
 	}
-	SubsetAssignSlow(state, a, i, b, c);
+	SubsetAssignSlow(state, a, clone, i, b, c);
 }
 
-inline void Subset2Assign(State& state, Value const& a, Value const& i, Value const& b, Value& c) {
-	if(a.type == b.type) {
+inline void Subset2Assign(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
+	if(!clone && a.type == b.type) {
 		if(i.isDouble1()) {
 			int64_t index = (int64_t)i.d-1;
 			if(index >= 0 && index < a.length) {
@@ -166,8 +179,9 @@ inline void Subset2Assign(State& state, Value const& a, Value const& i, Value co
 			}
 		}
 	}
-	Subset2AssignSlow(state, a, i, b, c);
+	Subset2AssignSlow(state, a, clone, i, b, c);
 }
+
 
 template<class D>
 inline void Insert(State& state, D const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
@@ -198,6 +212,29 @@ inline void Insert(State& state, Value const& src, int64_t srcIndex, Value& dst,
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: Insert into this type"); break;
+	};
+}
+
+template<class D>
+inline void Resize(State& state, bool clone, D& src, int64_t newLength, typename D::Element fill = D::NAelement) {
+	if(clone || newLength > src.length) {
+		D r(newLength);
+		Insert(state, src, 0, r, 0, std::min(src.length, newLength));
+		for(int64_t i = src.length; i < newLength; i++) r[i] = fill;	
+		src = r; 
+	} else if(newLength < src.length) {
+		src.length = newLength;
+	} else {
+		// No resizing to do, so do nothing...
+	}
+}
+
+inline void Resize(State& state, bool clone, Value& src, int64_t newLength) {
+	switch(src.type) {
+		#define CASE(Name) case Type::Name: { Resize(state, clone, src, newLength); } break;
+		VECTOR_TYPES(CASE)
+		#undef CASE
+		default: _error("NYI: Resize this type"); break;
 	};
 }
 

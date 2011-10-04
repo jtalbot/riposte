@@ -32,6 +32,8 @@ void As(State& state, Value const& src, O& out) {
 		#undef CASE
 		case Type::Symbol: 
 			Cast1<Symbol, O>(state, (Symbol const&)src, out); return; break;
+		case Type::Function:
+			Cast1<Function, O>(state, (Function const&)src, out); return; break;
 		default: break;
 	};
 	_error(std::string("Invalid cast from ") + Type::toString(src.type) + " to " + Type::toString(O::VectorType));
@@ -189,6 +191,11 @@ SPECIALIZED_STATIC void Cast1<Symbol, Character>(State& state, Symbol const& i, 
 
 template<>
 SPECIALIZED_STATIC void Cast1<Symbol, List>(State& state, Symbol const& i, List& o) { List::InitScalar(o, i); }
+
+
+template<>
+SPECIALIZED_STATIC void Cast1<Function, List>(State& state, Function const& i, List& o) { List::InitScalar(o, (Value const&)i); }
+
 
 #endif
 

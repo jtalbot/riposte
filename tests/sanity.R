@@ -158,6 +158,39 @@ fail <- 0
 	#PassIfTrue(a[1,2] == 3)
 	#PassIfTrue(a[1,] == c(1,3))
 	#PassIfTrue(a[,1] == c(1,2))
+	
+	a <- c(a=10,b=20,c=30)
+	PassIfTrue(a[1] == 10)
+	PassIfTrue(a[1L] == 10)
+	PassIfTrue(a['a'] == 10)
+	PassIfTrue(a[['a']] == 10)
+	PassIfTrue(a$a == 10)
+	PassIfTrue(a[c(1,3)] == c(10,30))
+	"done"
+}
+
+{
+	cat("Testing vector assignment operations\n------------------------\n")
+	a <- c(10,20,30)
+	a[1] <- 40
+	PassIfTrue(a == c(40,20,30))
+	a[[2]] <- 50
+	PassIfTrue(a == c(40,50,30))
+	a[4] <- 60
+	PassIfTrue(a == c(40,50,30,60))
+	a[c(TRUE,FALSE)] <- c(70, 80)
+	PassIfTrue(a == c(70, 50, 80, 60))
+	a[0] <- 0
+	PassIfTrue(a == c(70, 50, 80, 60))
+	
+	a <- c(a=10,b=20,c=30)
+	a[['a']] <- 40
+	PassIfTrue(a == c(40,20,30))
+	a$b <- 50
+	PassIfTrue(a == c(40,50,30))
+	a[['d']] <- 60
+	PassIfTrue(a == c(40,50,30,60))
+	PassIfTrue(names(a) == c('a', 'b', 'c', 'd'))
 	"done"
 }
 

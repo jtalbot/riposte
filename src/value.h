@@ -136,6 +136,8 @@ struct Symbol : public Value {
 	bool operator!=(Symbol const& other) const { return s != other.s; }
 	bool operator==(String other) const { return s == other; }
 	bool operator!=(String other) const { return s != other; }
+
+	Symbol Clone() const { return *this; }
 };
 
 
@@ -207,13 +209,6 @@ union _doublena {
 	double d;
 };
 
-struct Future : public Value {
-	static void Init(Value & f, Type::Enum typ,int64_t length, IRef ref) {
-		Value::Init(f,Type::Future,length);
-		f.future.ref = ref;
-		f.future.typ = typ;
-	}
-};
 
 #define VECTOR_IMPL(Name, Element, Recursive) 				\
 struct Name : public Vector<Type::Name, Element, Recursive> { 			\
@@ -227,7 +222,8 @@ struct Name : public Vector<Type::Name, Element, Recursive> { 			\
 	const static Element NAelement; \
 	static Name NA() { static Name na = Name::c(NAelement); return na; }  \
 	static Name& Init(Value& v, int64_t length) { return (Name&)Vector<Type::Name, Element, Recursive>::Init(v, length); } \
-	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); }
+	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); }\
+	Name Clone() const { Name c(length); memcpy(c.v(), v(), length*width); return c; }
 /* note missing }; */
 
 VECTOR_IMPL(Null, unsigned char, false)  
@@ -294,6 +290,17 @@ VECTOR_IMPL(List, Value, true)
 };
 
 
+struct Future : public Value {
+	static void Init(Value & f, Type::Enum typ,int64_t length, IRef ref) {
+		Value::Init(f,Type::Future,length);
+		f.future.ref = ref;
+		f.future.typ = typ;
+	}
+	
+	Future Clone() const { throw("shouldn't be cloning futures"); }
+};
+
+
 class Function {
 private:
 	Prototype* proto;
@@ -324,6 +331,8 @@ public:
 
 	Prototype* prototype() const { return proto; }
 	Environment* environment() const { return env; }
+
+	Function Clone() const { return *this; }
 };
 
 class REnvironment {
@@ -346,186 +355,86 @@ public:
 	Environment* ptr() const {
 		return env;
 	}
+
+	REnvironment Clone() const { return *this; }
 };
 
-class Dictionary : public gc {
-protected:
-	static uint64_t globalRevision;
-	uint64_t revision;
 
-	static const uint64_t inlineSize = 16;
-	struct Pair { String n; Value v; };
-	Pair* d;
-	Pair inlineDict[inlineSize];
-	uint64_t size, load;
-
-public:
-	Dictionary() : revision(++globalRevision), d(inlineDict), size(inlineSize) {
-		clear();
-	}
-	
-	// for now, do linear probing
-	// this returns the location of the String s (or where it was stored before being deleted).
-	// or, if s doesn't exist, the location at which s should be inserted.
-	uint64_t find(String s) const {
-		uint64_t i = (uint64_t)s.i & (size-1);	// hash this?
-		while(d[i].n != s && d[i].n != Strings::NA) {
-			i = (i+1) & (size-1);
-		}
-		assert(i >= 0 && i < size);
-		return i; 
-	}
-	
-	uint64_t assign(String name, Value const& value) {
-		uint64_t i = find(name);
-		if(value.isNil()) {
-			// deleting a value changes the revision number! 
-			if(d[i].n != Strings::NA) { 
-				load--; 
-				d[i] = (Pair) { Strings::NA, Value::Nil() }; 
-				revision = ++globalRevision; 
-			}
-		} else {
-			if(d[i].n == Strings::NA) { 
-				load++;
-				if((load * 2) > size) {
-					rehash(size * 2);
-					i = find(name);
-				}
-				d[i] = (Pair) { name, value };
-			} else {
-				d[i].v = value;
-			}
-		}
-		return i;
-	}
-
-	Value const& get(String name) const {
-		uint64_t i = find(name);
-		if(d[i].n != Strings::NA) return d[i].v;
-		else return Value::Nil();
-	}
-
-	void rehash(uint64_t s) {
-		uint64_t old_size = size;
-		Pair* old_d = d;
-		s = nextPow2(s);
-		if(s <= size) return; // should rehash on shrinking sometimes, when?
-
-		size = s;
-		d = new (GC) Pair[size];
-		clear();	// this increments the revision
-		
-		// copy over previous populated values...
-		for(uint64_t i = 0; i < old_size; i++) {
-			if(old_d[i].n != Strings::NA) {
-				d[find(old_d[i].n)] = old_d[i];
-			}
-		}
-	}
-
-	void clear() {
-		load = 0; 
-		for(uint64_t i = 0; i < size; i++) {
-			// wiping v too makes sure we're not holding unnecessary pointers
-			d[i] = (Pair) { Strings::NA, Value::Nil() };
-		}
-		revision = ++globalRevision;
-	}
-
-	struct Pointer {
-		Dictionary* env;
-		String name;
-		uint64_t revision;
-		uint64_t index;
-	};
-
-	uint64_t getRevision() const { return revision; }
-	bool equalRevision(uint64_t i) const { return i == revision; }
-	bool validRevision(uint64_t i) const { return i >= revision; }
-	
-	Value const& get(uint64_t index) const {
-		assert(index >= 0 && index < size);
-		return d[index].v;
-	}
-
-	void assign(uint64_t index, Value const& value) {
-		assert(index >= 0 && index < size);
-		d[index].v = value;
-	}
-	
-	// making a pointer only works if the entry already exists 
-	Pointer makePointer(String name) {
-		uint64_t i = find(name);
-		if(d[i].n == Strings::NA) _error("Making pointer to non-existant variable"); 
-		return (Pointer) { this, name, revision, i };
-	}
-
-	Value const& get(Pointer const& p) {
-		if(p.revision == revision) return get(p.index);
-		else return get(p.name);
-	}
-
-	void assign(Pointer const& p, Value const& value) {
-		if(p.revision == revision) assign(p.index, value);
-		else assign(p.name, value);
-	}
-};
-
+// Object implements an immutable dictionary interface.
+// Objects also have a base value which right now must be a non-object type...
+//  However S4 objects can contain S3 objects so we may have to change this.
+//  If we make this change, then all code that unwraps objects must do so recursively.
 struct Object : public Value {
+
+	struct Pair { String n; Value v; };
 
 	struct Inner : public gc {
 		Value base;
-		Dictionary attributes;
+		Pair const* attributes;
+		uint64_t capacity;
 	};
 
-	Value& base() { return ((Inner*)p)->base; }
-	Value const& base() const { return ((Inner*)p)->base; }
-	Dictionary& attributes() { return ((Inner*)p)->attributes; }
-	Dictionary const& attributes() const { return ((Inner*)p)->attributes; }
+	// Contract: base is a non-object type.
+	Value const& base() const { return ((Inner const*)p)->base; }
+	Pair const* attributes() const { return ((Inner const*)p)->attributes; }
+	uint64_t capacity() const { return ((Inner const*)p)->capacity; }
 
-	static void Init(Value& v, Value const& _base) {
+	Object() {}
+
+	Object(Value base, uint64_t length, uint64_t capacity, Pair const* attributes) {
+		Value::Init(*this, Type::Object, length);
+		
+		assert(!base.isObject());	
 		Inner* inner = new (GC) Inner();
-		inner->base = _base;
-		// doing this after ensures that it will work even if base and v overlap.
-		Value::Init(v, Type::Object, 0);
-		v.p = (void*)inner;
+		inner->base = base;
+		inner->capacity = capacity;
+		inner->attributes = attributes;
+		p = (void*)inner;
 	}
 
-	static void InitWithNames(Value& v, Value const& _base, Value const& _names) {
+	uint64_t find(String s) const {
+		uint64_t i = (uint64_t)s.i & (capacity()-1);	// hash this?
+		while(attributes()[i].n != s && attributes()[i].n != Strings::NA) i = (i+1) & (capacity()-1);
+		assert(i >= 0 && i < capacity());
+		return i; 
+	}
+	
+	static void Init(Value& v, Value _base) {
+		Pair* attributes = new Pair[4];
+		for(uint64_t j = 0; j < 4; j++)
+			attributes[j] = (Pair) { Strings::NA, Value::Nil() };
+		
+		v = Object(_base, 0, 4, attributes);
+	}
+
+	static void Init(Value& v, Value const& _base, Value const& _names) {
 		Init(v, _base);
-		if(!_names.isNil())
-			((Object&)v).setNames(_names);
+		v = ((Object&)v).setNames(_names);
 	}
 	
 	static void Init(Value& v, Value const& _base, Value const& _names, Value const& className) {
-		InitWithNames(v, _base, _names);
-		((Object&)v).setClass(className);
+		Init(v, _base);
+		v = ((Object&)v).setNames(_names);
+		v = ((Object&)v).setClass(className);
 	}
 
 	bool hasAttribute(String s) const {
-		return !attributes().get(s).isNil();
+		return attributes()[find(s)].n != Strings::NA;
 	}
 
 	bool hasNames() const { return hasAttribute(Strings::names); }
 	bool hasClass() const { return hasAttribute(Strings::classSym); }
 	bool hasDim() const   { return hasAttribute(Strings::dim); }
 
-	Value getAttribute(String s) const {
-		return attributes().get(s);
+	Value const& getAttribute(String s) const {
+		uint64_t i = find(s);
+		if(attributes()[i].n != Strings::NA) return attributes()[i].v;
+		else _error("Subscript out of range"); 
 	}
 
-	Value getNames() const { return getAttribute(Strings::names); }
-	Value getClass() const { return getAttribute(Strings::classSym); }
-	Value getDim() const { return getAttribute(Strings::dim); }
-
-	void setAttribute(String s, Value const& v) {
-		attributes().assign(s, v);
-	}
-	
-	void setNames(Value const& v) { setAttribute(Strings::names, v); }
-	void setClass(Value const& v) { setAttribute(Strings::classSym, v); }
-	void setDim(Value const& v)  { setAttribute(Strings::dim, v); }
+	Value const& getNames() const { return getAttribute(Strings::names); }
+	Value const& getClass() const { return getAttribute(Strings::classSym); }
+	Value const& getDim() const { return getAttribute(Strings::dim); }
 
 	String className() const {
 		if(!hasClass()) {
@@ -535,6 +444,65 @@ struct Object : public Value {
 			return Character(getClass())[0];
 		}
 	}
+
+	// Generate derived versions...
+
+	Object Clone() const { 
+		Value v; 
+		Inner* inner = new (GC) Inner();
+		inner->base = ((Inner*)p)->base;
+		inner->attributes = ((Inner*)p)->attributes;
+		// doing this after ensures that it will work even if base and v overlap.
+		Value::Init(v, Type::Object, 0);
+		v.p = (void*)inner;
+		return (Object const&)v;
+	}
+
+	Object setAttribute(String s, Value const& v) const {
+		uint64_t l=0;
+		
+		uint64_t i = find(s);
+		if(!v.isNil() && attributes()[i].n == Strings::NA) l = length+1;
+		else if(v.isNil() && attributes()[i].n != Strings::NA) l = length-1;
+		else l = length;
+
+		Object out;
+		Pair* a;
+		if((l*2) > capacity()) {
+			// going to have to rehash the result
+			uint64_t c = std::max(capacity()*2, 1ULL);
+			a = new Pair[c];
+			out = Object(base(), l, c, a);
+
+			// clear
+			for(uint64_t j = 0; j < c; j++)
+				a[j] = (Pair) { Strings::NA, Value::Nil() };
+
+			// rehash
+			for(uint64_t j = 0; j < capacity(); j++)
+				if(attributes()[j].n != Strings::NA)
+					a[out.find(attributes()[j].n)] = attributes()[j];
+		}
+		else {
+			// otherwise, just copy straight over
+			a = new Object::Pair[capacity()];
+			out = Object(base(), l, capacity(), a);
+
+			for(uint64_t j = 0; j < capacity(); j++)
+				a[j] = attributes()[j];
+		}
+		if(v.isNil())
+			a[out.find(s)] = (Pair) { Strings::NA, Value::Nil() };
+		else 
+			a[out.find(s)] = (Pair) { s, v };
+
+		return out;
+	}
+	
+	Object setNames(Value const& v) const { return setAttribute(Strings::names, v); }
+	Object setClass(Value const& v) const { return setAttribute(Strings::classSym, v); }
+	Object setDim(Value const& v) const { return setAttribute(Strings::dim, v); }
+
 };
 
 inline Value CreateExpression(List const& list) {
@@ -606,6 +574,126 @@ struct Prototype : public gc {
  *     -result register pointer
  */
 
+class Dictionary : public gc {
+protected:
+	static uint64_t globalRevision;
+	uint64_t revision;
+
+	static const uint64_t inlineSize = 16;
+	struct Pair { String n; Value v; };
+	Pair* d;
+	Pair inlineDict[inlineSize];
+	uint64_t size, load;
+
+public:
+	Dictionary() : revision(++globalRevision), d(inlineDict), size(inlineSize) {
+		clear();
+	}
+	
+	// for now, do linear probing
+	// this returns the location of the String s (or where it was stored before being deleted).
+	// or, if s doesn't exist, the location at which s should be inserted.
+	uint64_t find(String s) const {
+		uint64_t i = (uint64_t)s.i & (size-1);	// hash this?
+		while(d[i].n != s && d[i].n != Strings::NA) i = (i+1) & (size-1);
+		assert(i >= 0 && i < size);
+		return i; 
+	}
+	
+	uint64_t assign(String name, Value const& value) {
+		uint64_t i = find(name);
+		if(value.isNil()) {
+			// deleting a value changes the revision number! 
+			if(d[i].n != Strings::NA) { 
+				load--; 
+				d[i] = (Pair) { Strings::NA, Value::Nil() }; 
+				revision = ++globalRevision; 
+			}
+		} else {
+			if(d[i].n == Strings::NA) { 
+				load++;
+				if((load * 2) > size) {
+					rehash(size * 2);
+					i = find(name);
+				}
+				d[i] = (Pair) { name, value };
+			} else {
+				d[i].v = value;
+			}
+		}
+		return i;
+	}
+
+	Value const& get(String name) const {
+		uint64_t i = find(name);
+		if(d[i].n != Strings::NA) return d[i].v;
+		else return Value::Nil();
+	}
+
+	void rehash(uint64_t s) {
+		uint64_t old_size = size;
+		Pair* old_d = d;
+		s = nextPow2(s);
+		if(s <= size) return; // should rehash on shrinking sometimes, when?
+
+		size = s;
+		d = new (GC) Pair[size];
+		clear();	// this increments the revision
+		
+		// copy over previous populated values...
+		for(uint64_t i = 0; i < old_size; i++) {
+			if(old_d[i].n != Strings::NA) {
+				d[find(old_d[i].n)] = old_d[i];
+			}
+		}
+	}
+
+	void clear() {
+		load = 0; 
+		for(uint64_t i = 0; i < size; i++) {
+			// wiping v too makes sure we're not holding unnecessary pointers
+			d[i] = (Pair) { Strings::NA, Value::Nil() };
+		}
+		revision = ++globalRevision;
+	}
+
+	struct Pointer {
+		Dictionary* env;
+		String name;
+		uint64_t revision;
+		uint64_t index;
+	};
+
+	uint64_t getRevision() const { return revision; }
+	bool equalRevision(uint64_t i) const { return i == revision; }
+	
+	Value const& get(uint64_t index) const {
+		assert(index >= 0 && index < size);
+		return d[index].v;
+	}
+
+	void assign(uint64_t index, Value const& value) {
+		assert(index >= 0 && index < size);
+		d[index].v = value;
+	}
+	
+	// making a pointer only works if the entry already exists 
+	Pointer makePointer(String name) {
+		uint64_t i = find(name);
+		if(d[i].n == Strings::NA) _error("Making pointer to non-existant variable"); 
+		return (Pointer) { this, name, revision, i };
+	}
+
+	Value const& get(Pointer const& p) {
+		if(p.revision == revision) return get(p.index);
+		else return get(p.name);
+	}
+
+	void assign(Pointer const& p, Value const& value) {
+		if(p.revision == revision) assign(p.index, value);
+		else assign(p.name, value);
+	}
+};
 
 class Environment : public Dictionary {
 private:
