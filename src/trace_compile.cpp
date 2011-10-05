@@ -736,7 +736,7 @@ void Trace::JIT(State & state) {
 		constant_table[C_ABS_MASK] = Constant(0x7FFFFFFFFFFFFFFFULL);
 		constant_table[C_NEG_MASK] = Constant(0x8000000000000000ULL);
 		constant_table[C_NOT_MASK] = Constant(0xFFFFFFFFFFFFFFFFULL);
-		constant_table[C_SEQ_VEC] = Constant(1L,2L);
+		constant_table[C_SEQ_VEC] = Constant(1LL,2LL);
 	}
 
 	TraceJIT trace_code(this);
