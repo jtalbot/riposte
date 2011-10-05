@@ -39,4 +39,4 @@ typeof <- function(x) .Internal(typeof(x))
 exists <- function(x) .Internal(exists(x, NULL, NULL, NULL))
 
 proc.time <- function(x) .Internal(proc.time())
-trace.config <- function(trace=TRUE, verbose=FALSE) .Internal(trace.config(trace, verbose))
+trace.config <- function(trace=0) .Internal(trace.config(trace))

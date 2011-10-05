@@ -168,12 +168,14 @@ struct Vector : public Value {
 	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
 		Value::Init(v, VectorType, length);
 		int64_t l = (length+1)&(~1); 	// round up to a multiple of 4 for SSE
-		if(canPack && length > 1)
-			v.p = Recursive ? new (GC) Element[l] : 
-				new (PointerFreeGC) Element[l];
-		else if(!canPack && length > 0)
-			v.p = Recursive ? new (GC) Element[l] : 
-				new (PointerFreeGC) Element[l];
+		if((canPack && length > 1) || (!canPack && length > 0)) {
+			int64_t length_aligned = (l < 128) ? (l + 1) : l;
+			v.p = Recursive ? new (GC) Element[length_aligned] :
+				new (PointerFreeGC) Element[length_aligned];
+			assert(l < 128 || (0xF & (int64_t)v.p) == 0);
+			if( (0xF & (int64_t)v.p) != 0)
+				v.p =  (char*)v.p + 0x8;
+		}
 		return (Vector<VType, ElementType, Recursive>&)v;
 	}
 

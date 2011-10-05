@@ -1,4 +1,3 @@
-#adapted from https://github.com/ispc/ispc/tree/master/examples/mandelbrot
 trace.config(0)
 time_many_sizes <- function(name, times, init_fn, run_fn, baseline_fn) {
 	report <- function(name, width, exec_type, time, baseline_time) {
@@ -36,51 +35,28 @@ time_many_sizes <- function(name, times, init_fn, run_fn, baseline_fn) {
 }
 
 
-init <- function(V_WIDTH) {
-	width <- 32
-	height <- V_WIDTH / width
-	x0 <- -2
-	x1 <- 1
-	y0 <- -1
-	y1 <- 1
-	
-	
-	dx <- (x1 - x0) / width
-	dy <- (y1 - y0) / height
-    
-	c <- (1:(width*height)) - 1
-	i <- c %% width
-	j <- floor(c / width)
-	
-	maxIterations <<- 1
-	c_re <<- x0 + i * dx
-	c_im <<- y0 + j * dy
+init_simple <- function(width) {
+	v <<- 1 : width
 }
 
-mandel <- function(times,width) {
+simple <- function(times, width) {
+	a <- 0
 	for(i in 1:times) {
-		z_re <- c_re
-		z_im <- c_im
-		cnt <- 0
-		for(i in 1:maxIterations) {
-			ndone <- z_re * z_re + z_im * z_im <= 4.
-			z_re <- c_re + ndone * (z_re*z_re - z_im*z_im)
-			z_im <- c_im + ndone * (2. * z_re * z_im)
-			cnt <- cnt + ndone
-		}
-		#end the trace
-		result <- max(cnt) 
+		a <- a + max(v + v)
 	}
 }
 
-baseline <- function(times) {
+baseline <- function(times,width) {
+	a <- 0
 	for(i in 1:times) {
-		#end the trace
-		result <- max(c_re) 
+		a <- a + max(v)
 	}
 }
 
-time_many_sizes("mandelbrot",1,init,mandel,baseline)
+time_many_sizes("v+v",8,init_simple, simple,baseline)
 
-	
-	
+
+
+
+
+

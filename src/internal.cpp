@@ -640,9 +640,11 @@ void environment(State& state, Value const* args, Value& result) {
 	Value e = args[0];
 	if(e.isNull()) {
 		result = REnvironment(state.frame.environment);
+		return;
 	}
 	else if(e.isFunction()) {
 		result = REnvironment(Function(e).environment());
+		return;
 	}
 	result = Null::Singleton();
 }
@@ -814,6 +816,6 @@ void importCoreFunctions(State& state, Environment* env)
 	state.registerInternalFunction(state.internStr("exists"), (exists), 4);
 
 	state.registerInternalFunction(state.internStr("proc.time"), (proctime), 0);
-	state.registerInternalFunction(state.internStr("trace.config"), (traceconfig), 2);
+	state.registerInternalFunction(state.internStr("trace.config"), (traceconfig), 1);
 }
 

@@ -113,7 +113,16 @@ void Trace::InitializeOutputs(State & state) {
 				Value & v = output_values[n_output_values++];
 				Value::Init(v,typ,loc.length); //initialize the type of the output value, the actual value (i.e. v.p) will be set after it is calculated in the trace
 				if(loc.length == length) {
-					v.p = new (PointerFreeGC) double[length];
+					if(length < 128) {
+						double * dp = new (PointerFreeGC) double[length + 1];
+						if( ( (int64_t)dp & 0xF) != 0)
+							v.p = dp + 1;
+						else
+							v.p = dp;
+					} else {
+						v.p = new (PointerFreeGC) double[length];
+					}
+					assert( ((int64_t)v.p & 0xF) == 0);
 					EmitStoreV(typ,&v,ref);
 				} else {
 					EmitStoreC(typ,&v,ref);
