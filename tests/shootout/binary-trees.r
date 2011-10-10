@@ -17,27 +17,32 @@ itemCheck <- function(tree)
 }
 
 #N <- as.numeric(commandArgs(TRUE)[1])
-N <- 14 
+N <- 12 
 
 mindepth <- 4
-maxdepth <- max(mindepth+2, N)
+maxdepth <- 12 #max(mindepth+2, N)
 
-cat(paste("stretch tree of depth ", maxdepth+1, 
-  "\t check: ", itemCheck(bottomUpTree(0, maxdepth+1)), "\n", sep=""))
+#cat(paste("stretch tree of depth ", maxdepth+1, 
+#  "\t check: ", itemCheck(bottomUpTree(0, maxdepth+1)), "\n", sep=""))
 
 longLivedTree <- bottomUpTree(0, maxdepth)
 
+library(compiler)
+bottomUpTree <- cmpfun(bottomUpTree)
+itemCheck <- cmpfun(itemCheck)
+
+for(depth in (1:((maxdepth-mindepth)/2+1)-1)*2+mindepth)
 #for(depth in seq.int(mindepth, maxdepth, 2))
-for(depth in seq(mindepth, 2, (maxdepth-mindepth)/2+1))
+#for(depth in seq(mindepth, 2, (maxdepth-mindepth)/2+1))
 {
   iterations <- 2^(maxdepth-depth+mindepth)
   check <- 0
   for(i in 1:iterations)
     check <- check + itemCheck(bottomUpTree(1, depth)) + itemCheck(bottomUpTree(-1, depth))
-  cat(paste(iterations*2, "\t trees of depth ", depth, 
-    "\t check: ", check, "\n", sep=""))
+#  cat(paste(iterations*2, "\t trees of depth ", depth, 
+#    "\t check: ", check, "\n", sep=""))
 }
 
-cat(paste("long lived tree of depth ", maxdepth, 
-  "\t check: ", itemCheck(longLivedTree), "\n", sep=""))
+#cat(paste("long lived tree of depth ", maxdepth, 
+#  "\t check: ", itemCheck(longLivedTree), "\n", sep=""))
 

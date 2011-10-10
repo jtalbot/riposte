@@ -4,7 +4,7 @@
 
 #include "value.h"
 
-void loadLibrary(State& state, std::string name);
+void loadLibrary(State& state, std::string path, std::string name);
 
 
 void importCoreFunctions(State& state, Environment* env);

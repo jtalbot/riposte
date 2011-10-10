@@ -8,6 +8,7 @@
 #include <dirent.h>
 #include <fstream>
 #include <sys/stat.h>
+#include <dlfcn.h>
 
 void sourceFile(State& state, std::string name, Environment* env) {
 	//std::cout << "Sourcing " << name << std::endl;
@@ -32,27 +33,57 @@ void sourceFile(State& state, std::string name, Environment* env) {
 	}
 }
 
+void openDynamic(State& state, std::string path, Environment* env) {
+	std::string p = std::string("/Users/jtalbot/riposte/")+path;
+	void* lib = dlopen(p.c_str(), RTLD_LAZY);
+	if(lib == NULL) {
+		_error(std::string("failed to open: ") + p + " (" + dlerror() + ")");
+	}
+	// set lib in env...
+}
 
-void loadLibrary(State& state, std::string library_name) {
+void loadLibrary(State& state, std::string path, std::string name) {
 	Environment* env = new Environment(state.path.back());
 	
-	std::string path = std::string("library/")+library_name+("/R/");
+	std::string p = path + "/" + name + ("/R/");
 
-	DIR* dir = opendir(path.c_str());
 	dirent* file;
 	struct stat info;
 
-	while((file=readdir(dir))) {
-		if(file->d_name[0] != '.') {
-			stat(file->d_name, &info);
-			std::string name = file->d_name;
-			if(!S_ISDIR(info.st_mode) && 
-				(name.length()>2 && name.substr(name.length()-2,2)==".R")) {
-				sourceFile(state, path+name, env);
+	// Load R files
+	DIR* dir = opendir(p.c_str());
+	if(dir != NULL) {
+		while((file=readdir(dir))) {
+			if(file->d_name[0] != '.') {
+				stat(file->d_name, &info);
+				std::string name = file->d_name;
+				if(!S_ISDIR(info.st_mode) && 
+						(name.length()>2 && name.substr(name.length()-2,2)==".R")) {
+					sourceFile(state, p+name, env);
+				}
 			}
 		}
+		closedir(dir);
+	}
+
+	// Load dynamic libraries
+	p = path + "/" + name + "/libs/";
+	dir = opendir(p.c_str());
+	if(dir != NULL) {
+		while((file=readdir(dir))) {
+			if(file->d_name[0] != '.') {
+				stat(file->d_name, &info);
+				std::string name = file->d_name;
+				if(!S_ISDIR(info.st_mode) && 
+						(name.length()>2 && name.substr(name.length()-3,3)==".so")) {
+					openDynamic(state, p+name, env);
+				}
+			}
+		}
+		closedir(dir);
 	}
 
 	state.path.push_back(env);
 	state.global->init(state.path.back(), 0, Null::Singleton());
 }
+

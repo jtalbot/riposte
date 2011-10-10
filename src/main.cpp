@@ -254,8 +254,9 @@ main(int argc, char** argv)
 	try {
 		importCoreFunctions(state, base);	
 		importCoerceFunctions(state, base);	
-		loadLibrary(state, "core");
-		//loadLibrary(state, "base");
+		loadLibrary(state, "library", "core");
+		//loadLibrary(state, "library", "base");
+		loadLibrary(state, "library", "stats");
 
 	} catch(RiposteError& error) { 
 		e_message("Error", "riposte", error.what().c_str());

@@ -38,7 +38,7 @@ void remove(State& state, Value const* args, Value& result) {
 void library(State& state, Value const* args, Value& result) {
 	Character from = As<Character>(state, args[0]);
 	if(from.length > 0) {
-		loadLibrary(state, state.externStr(from[0]));
+		loadLibrary(state, "library", state.externStr(from[0]));
 	}
 	result = Null::Singleton();
 }

@@ -6,4 +6,4 @@ fib <- function(n) {
 		fn <- fib(n - 1) + fib(n - 2)
 	fn
 }
-fib(30)
+system.time(fib(30))
