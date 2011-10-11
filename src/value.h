@@ -14,6 +14,7 @@
 #include <gc/gc_cpp.h>
 #include <gc/gc_allocator.h>
 
+#include "gc.h"
 #include "type.h"
 #include "bc.h"
 #include "common.h"
@@ -75,6 +76,7 @@ struct Value {
 	bool isFunction() const { return type == Type::Function; }
 	bool isObject() const { return type == Type::Object; }
 	bool isFuture() const { return type == Type::Future; }
+	bool isEnvironment() const { return type == Type::Environment; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isCharacter() || isList(); }
@@ -571,18 +573,19 @@ struct Prototype : public gc {
  *     -result register pointer
  */
 
-class Dictionary : public gc {
+class Dictionary {
 protected:
 	static uint64_t globalRevision;
 	uint64_t revision;
 
 	static const uint64_t inlineSize = 16;
 	struct Pair { String n; Value v; };
+
+public:
 	Pair* d;
 	Pair inlineDict[inlineSize];
 	uint64_t size, load;
-
-public:
+	
 	Dictionary() : revision(++globalRevision), d(inlineDict), size(inlineSize) {
 		clear();
 	}
@@ -692,7 +695,7 @@ public:
 	}
 };
 
-class Environment : public Dictionary {
+class Environment : public HeapObject, public Dictionary {
 private:
 	Environment* lexical, *dynamic;
 	
@@ -700,20 +703,33 @@ public:
 	Value call;
 	std::vector<String> dots;
 
-	explicit Environment(Environment* lexical=0, Environment* dynamic=0) : 
+	explicit Environment(Environment* lexical=0, Environment* dynamic=0) :
+			HeapObject(Type::Environment, sizeof(Environment)), 
 			lexical(lexical), dynamic(dynamic), call(Null::Singleton()) {}
 
-	void init(Environment* l, Environment* d, Value const& call) {
-		lexical = l;
-		dynamic = d;
-		this->call = call;
-		clear();
-		dots.clear();
-	}
-	
+	explicit Environment(Environment* lexical, Environment* dynamic, Value const& call) :
+		HeapObject(Type::Environment, sizeof(Environment)), 
+		lexical(lexical), dynamic(dynamic), call(call) {}
+
 	Environment* LexicalScope() const { return lexical; }
 	Environment* DynamicScope() const { return dynamic; }
 
+	// used when loading libraries...should probably reengineer so this isn't needed.
+	void SetLexicalScope(Environment* env) { lexical = env; }
+
+	void walk(Heap* heap) {
+                lexical = (Environment*)heap->mark(lexical);
+                dynamic = (Environment*)heap->mark(dynamic);
+
+                for(uint64_t i = 0; i < size; i++) {
+                        if(d[i].n != Strings::NA) {
+                                Value& r = d[i].v;
+                                if(r.isEnvironment() || r.isFunction() || r.isPromise()) {
+                                        r.p = (void*)heap->mark((HeapObject*)(r.p));
+                                }
+                        }
+                }
+	}
 };
 
 struct StackFrame {
@@ -945,7 +961,6 @@ struct State {
 
 	std::vector<StackFrame, traceable_allocator<StackFrame> > stack;
 	StackFrame frame;
-	std::vector<Environment*, traceable_allocator<Environment*> > environments;
 
 	std::vector<Environment*, traceable_allocator<Environment*> > path;
 	Environment* global;
@@ -959,8 +974,12 @@ struct State {
 	
 	TraceState tracing; //all state related to tracing compiler
 
-	State(Environment* global, Environment* base) {
-		this->global = global;
+	Semispace* semispace;
+
+	State() {
+		semispace = new Semispace(this);
+		Environment* base = new (semispace) Environment();
+		global = new (semispace) Environment(base);
 		path.push_back(base);
 		registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
 		this->base = registers + DEFAULT_NUM_REGISTERS;

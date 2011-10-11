@@ -43,7 +43,7 @@ void openDynamic(State& state, std::string path, Environment* env) {
 }
 
 void loadLibrary(State& state, std::string path, std::string name) {
-	Environment* env = new Environment(state.path.back());
+	Environment* env = new (state.semispace) Environment(state.path.back());
 	
 	std::string p = path + "/" + name + ("/R/");
 
@@ -84,6 +84,6 @@ void loadLibrary(State& state, std::string path, std::string name) {
 	}
 
 	state.path.push_back(env);
-	state.global->init(state.path.back(), 0, Null::Singleton());
+	state.global->SetLexicalScope(state.path.back());
 }
 

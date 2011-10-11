@@ -165,15 +165,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 }
 
 static Environment* CreateEnvironment(State& state, Environment* l, Environment* d, Value const& call) {
-	Environment* env;
-	if(state.environments.size() == 0) {
-		env = new Environment();
-	} else {
-		env = state.environments.back();
-		state.environments.pop_back();
-	}
-	env->init(l, d, call);
-	return env;
+	return new (state.semispace) Environment(l, d, call);
 }
 //track the heat of back edge operations and invoke the recorder on hot traces
 //unused until we begin tracing loops again
@@ -799,11 +791,6 @@ Instruction const* missing_op(State& state, Instruction const& inst) {
 }
 Instruction const* ret_op(State& state, Instruction const& inst) {
 	*(state.frame.result) = REG(state, inst.c);
-	// if this stack frame owns the environment, we can free it for reuse
-	// as long as we don't return a closure...
-	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
-	if(state.frame.ownEnvironment && REG(state, inst.c).isClosureSafe())
-		state.environments.push_back(state.frame.environment);
 	state.base = state.frame.returnbase;
 	Instruction const* returnpc = state.frame.returnpc;
 	state.pop();

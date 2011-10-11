@@ -242,21 +242,18 @@ main(int argc, char** argv)
 #ifdef USE_CALLGRIND
 	CALLGRIND_START_INSTRUMENTATION
 #endif
-		/* Create riposte environment */
-	Environment* base = new Environment(0);
-	Environment* global = new Environment(base);
 
-	State state(global, base);
+	State state;
 	state.tracing.verbose = verbose;
 
 	interpreter_init(state);
 
 	try {
-		importCoreFunctions(state, base);	
-		importCoerceFunctions(state, base);	
+		importCoreFunctions(state, state.path.back());	
+		importCoerceFunctions(state, state.path.back());	
 		loadLibrary(state, "library", "core");
 		//loadLibrary(state, "library", "base");
-		loadLibrary(state, "library", "stats");
+		//loadLibrary(state, "library", "stats");
 
 	} catch(RiposteError& error) { 
 		e_message("Error", "riposte", error.what().c_str());

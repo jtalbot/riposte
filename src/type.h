@@ -21,6 +21,7 @@
 	_(Symbol,	"symbol")	\
 	_(Environment,	"environment")	\
 	_(Future, "future")				\
+	_(Forward, "forward")				\
 
 DECLARE_ENUM(Type, TYPES)
 
