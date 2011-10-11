@@ -159,7 +159,8 @@ std::string stringify(State const& state, Value const& value, Value const& names
 		}
 		case Type::Object:
 		{
-			result = stringify(state, ((Object const&)value).base(), ((Object const&)value).getNames());
+			Value names = ((Object const&)value).hasNames() ? ((Object const&)value).getNames() : Value::Nil();
+			result = stringify(state, ((Object const&)value).base(), names);
 			if(((Object const&)value).hasClass()) result += "\nclass: " + state.stringify(((Object const&)value).getClass());
 			return result;
 		}

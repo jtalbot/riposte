@@ -167,7 +167,7 @@ struct Vector : public Value {
 
 	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
 		Value::Init(v, VectorType, length);
-		int64_t l = (length+1)&(~1); 	// round up to a multiple of 4 for SSE
+		int64_t l = length;
 		if((canPack && length > 1) || (!canPack && length > 0)) {
 			int64_t length_aligned = (l < 128) ? (l + 1) : l;
 			v.p = Recursive ? new (GC) Element[length_aligned] :
@@ -184,7 +184,7 @@ struct Vector : public Value {
 		if(canPack)
 			v.scalar<ElementType>() = d;
 		else {
-			v.p = Recursive ? new (GC) Element[2] : new (PointerFreeGC) Element[2];
+			v.p = Recursive ? new (GC) Element[4] : new (PointerFreeGC) Element[4];
 			*(Element*)v.p = d;
 		}
 	}

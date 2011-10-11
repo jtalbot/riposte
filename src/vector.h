@@ -37,28 +37,28 @@ struct NAFold : public Op {
 	}
 };
 
-template< class Op, int64_t N >
+template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
 struct Map1 {
 	static void eval(State& state, typename Op::A const* a, typename Op::R* r) {
 		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, a[i]);
 	}
 };
 
-template< class Op, int64_t N >
+template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
 struct Map2VV {
 	static void eval(State& state, typename Op::A const* a, typename Op::B const* b, typename Op::R* r) {
 		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, a[i], b[i]);
 	}
 };
 
-template< class Op, int64_t N >
+template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
 struct Map2SV {
 	static void eval(State& state, typename Op::A const a, typename Op::B const* b, typename Op::R* r) {
 		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, a, b[i]);
 	}
 };
 
-template< class Op, int64_t N >
+template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
 struct Map2VS {
 	static void eval(State& state, typename Op::A const* a, typename Op::B const b, typename Op::R* r) {
 		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, a[i], b);
@@ -92,10 +92,10 @@ struct Zip1 {
 			typename Op::RV r(a.length);
 			typename Op::R* re = r.v();
 			typename Op::A const* ae = a.v();
-			int64_t length = (a.length+1) & ~1;
-			for(int64_t i = 0; i < length; i+=2) {
-				Map1<Op, 2>::eval(state, ae+i, re+i);
-			}
+			int64_t length = a.length;
+			int64_t i = 0;
+			for(; i < length-3; i+=4) Map1<Op,4>::eval(state, ae+i, re+i);
+			for(; i < length; i++) Map1<Op,1>::eval(state, ae+i, re+i);
 			out = (Value&)r;
 		}
 	}
@@ -113,10 +113,10 @@ struct Zip2 {
 			typename Op::R* re = r.v();
 			typename Op::A const* ae = a.v();
 			typename Op::B be = b.s();
-			int64_t length = (a.length+1) & ~1;
-			for(int64_t i = 0; i < length; i+=2) {
-				Map2VS<Op,2>::eval(state, ae+i, be, re+i);
-			}
+			int64_t length = a.length;
+			int64_t i = 0;
+			for(; i < length-3; i+=4) Map2VS<Op,4>::eval(state, ae+i, be, re+i);
+			for(; i < length; i++) Map2VS<Op,1>::eval(state, ae+i, be, re+i);
 			out = (Value&)r;
 		}
 		else if(a.isScalar()) {
@@ -124,10 +124,10 @@ struct Zip2 {
 			typename Op::R* re = r.v();
 			typename Op::A ae = a.s();
 			typename Op::B const* be = b.v();
-			int64_t length = (b.length+1) & ~1;
-			for(int64_t i = 0; i < length; i+=2) {
-				Map2SV<Op,2>::eval(state, ae, be+i, re+i);
-			}
+			int64_t length = b.length;
+			int64_t i = 0;
+			for(; i < length-3; i+=4) Map2SV<Op,4>::eval(state, ae, be+i, re+i);
+			for(; i < length; i++) Map2SV<Op,1>::eval(state, ae, be+i, re+i);
 			out = (Value&)r;
 		}
 		else if(a.length == b.length) {
@@ -135,10 +135,10 @@ struct Zip2 {
 			typename Op::R* re = r.v();
 			typename Op::A const* ae = a.v();
 			typename Op::B const* be = b.v();
-			int64_t length = (a.length+1) & ~1;
-			for(int64_t i = 0; i < length; i+=2) {
-				Map2VV<Op,2>::eval(state, ae+i, be+i, re+i);
-			}
+			int64_t length = a.length;
+			int64_t i = 0;
+			for(; i < length-3; i+=4) Map2VV<Op,4>::eval(state, ae+i, be+i, re+i);
+			for(; i < length; i++) Map2VV<Op,1>::eval(state, ae+i, be+i, re+i);
 			out = (Value&)r;
 		}
 		else if(a.length == 0 || b.length == 0) {
