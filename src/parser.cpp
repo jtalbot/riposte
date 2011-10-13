@@ -444,6 +444,7 @@ Parser::Parser(State& state) : line(0), col(0), state(state), errors(0), complet
 
 int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* trace )
 {
+	GC_disable();
 	out = Value::Nil();
 	errors = 0;
 	lastTokenWasNL = false;
@@ -458,7 +459,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	const char* eof = isEof ? pe : 0;
 	int cs, act;
 	
-#line 462 "../parser.cpp"
+#line 463 "../parser.cpp"
 	{
 	cs = Scanner_start;
 	ts = 0;
@@ -466,9 +467,9 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	act = 0;
 	}
 
-#line 201 "lexer.rl"
+#line 202 "lexer.rl"
 	
-#line 472 "../parser.cpp"
+#line 473 "../parser.cpp"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -489,7 +490,7 @@ _resume:
 #line 1 "NONE"
 	{ts = p;}
 	break;
-#line 493 "../parser.cpp"
+#line 494 "../parser.cpp"
 		}
 	}
 
@@ -927,7 +928,7 @@ _eof_trans:
 	}
 	}
 	break;
-#line 931 "../parser.cpp"
+#line 932 "../parser.cpp"
 		}
 	}
 
@@ -944,7 +945,7 @@ _again:
 #line 1 "NONE"
 	{act = 0;}
 	break;
-#line 948 "../parser.cpp"
+#line 949 "../parser.cpp"
 		}
 	}
 
@@ -964,7 +965,7 @@ _again:
 	_out: {}
 	}
 
-#line 202 "lexer.rl"
+#line 203 "lexer.rl"
 	int syntaxErrors = errors;
 	Parse(pParser, 0, Value::Nil(), this);
 	ParseFree(pParser, GC_free);
@@ -974,6 +975,8 @@ _again:
 		syntaxErrors++;
 		std::cout << "Lexing error (" << intToStr(line+1) << "," << intToStr(col+1) << ") : unexpected '" << std::string(ts, te-ts) + "'" << std::endl; 
 	}
+	
+	GC_enable();
 	
 	if( syntaxErrors > 0 )
 		return -1;

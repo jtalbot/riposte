@@ -184,6 +184,7 @@ Parser::Parser(State& state) : line(0), col(0), state(state), errors(0), complet
 
 int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* trace )
 {
+	GC_disable();
 	out = Value::Nil();
 	errors = 0;
 	lastTokenWasNL = false;
@@ -208,6 +209,8 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 		syntaxErrors++;
 		std::cout << "Lexing error (" << intToStr(line+1) << "," << intToStr(col+1) << ") : unexpected '" << std::string(ts, te-ts) + "'" << std::endl; 
 	}
+	
+	GC_enable();
 	
 	if( syntaxErrors > 0 )
 		return -1;
