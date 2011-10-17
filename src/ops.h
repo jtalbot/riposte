@@ -402,17 +402,21 @@ inline void selectType(ByteCode::Enum bc, Type::Enum input, Type::Enum * atyp, T
 		else if(input == Type::Double || input == Type::Logical) { *atyp = Op<TDouble>::AV::VectorType; *rtyp = Op<TDouble>::RV::VectorType; } \
 		else _error("Unknown type"); \
 		break;
-#define LOGICAL_RESULT_CASE(name,str,Op,...) \
+#define LOGICAL_CASE(name,str,Op,...) \
 	case ByteCode::name: \
-		*atyp = input; *rtyp = Type::Logical; \
+		*atyp = Type::Logical; *rtyp = Type::Logical; \
+		break;
+#define BINARY_ORDINAL_CASE(name,str,Op,...) \
+	case ByteCode::name: /*logical inputs get promoted to integer so that we can use integer ops to implement the ordinals*/\
+		*atyp = (input == Type::Logical) ? Type::Integer : input; *rtyp = Type::Logical; \
 		break;
 #define ORDINAL_CASE(name,str,Op,...) \
 	case ByteCode::name: \
 		*atyp = input; *rtyp = input; \
 		break;
 ARITH_BYTECODES(ARITH_CASE)
-LOGICAL_BYTECODES(LOGICAL_RESULT_CASE)
-BINARY_ORDINAL_MAP_BYTECODES(LOGICAL_RESULT_CASE)
+LOGICAL_BYTECODES(LOGICAL_CASE)
+BINARY_ORDINAL_MAP_BYTECODES(BINARY_ORDINAL_CASE)
 ORDINAL_FOLD_BYTECODES(ORDINAL_CASE)
 ORDINAL_SCAN_BYTECODES(ORDINAL_CASE)
 #undef ARITH_CASE

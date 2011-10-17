@@ -19,10 +19,14 @@ namespace TraceBC {
 	  ARITH_SCAN_BYTECODES(UNARY_VERSIONS)
 	  BINARY_ORDINAL_MAP_BYTECODES(BINARY_VERSIONS)
 	  BINARY_LOGICAL_MAP_BYTECODES(BINARY_VERSIONS_MONOMORPHIC)
+	  lnot,
 	  seq,
 	  casti2d,
+	  castd2i,
 	  castl2i,
 	  castl2d,
+	  casti2l,
+	  castd2l
   };
 }
 
@@ -96,6 +100,13 @@ struct TraceInterpret {
 	TraceInst * reference_to_instruction[TRACE_MAX_NODES]; //mapping from IRef from IRNode to the result pointer in an instruction where the result of that node will be written
 	double registers [TRACE_MAX_VECTOR_REGISTERS][TRACE_VECTOR_WIDTH] __attribute__ ((aligned (16))); //for sse alignment
 
+	void AddIncrementingPointer(Type::Enum t, void ** ptr) {
+		if(size_for_type(t) == 1) {
+			incrementing_pointers_1[n_incrementing_pointers_1++] = (uint8_t**)ptr;
+		} else {
+			incrementing_pointers_8[n_incrementing_pointers_8++] = (double**) ptr;
+		}
+	}
 	void compile() {
 
 		//pass 1 instruction selection
@@ -103,7 +114,7 @@ struct TraceInterpret {
 			IRNode & node = trace->nodes[i];
 			switch(node.op) {
 #define BINARY_OP(op,...) case IROpCode :: op : EmitBinary(TraceBC::op##isv,TraceBC::op##ivs,TraceBC::op##ivv,TraceBC::op##dsv,TraceBC::op##dvs,TraceBC::op##dvv, i); break;
-#define BINARYM_OP(op,...) case IROpCode :: op : EmitBinary(TraceBC::op##sv,TraceBC::op##vs,TraceBC::op##vv,TraceBC::op##sv,TraceBC::op##vs,TraceBC::op##vv, i); break;
+#define BINARYM_OP(op,...) case IROpCode :: op : EmitBinary(TraceBC::op##sv,TraceBC::op##vs,TraceBC::op##vv, i); break;
 #define UNARY_OP(op,...) case IROpCode :: op : EmitUnary(TraceBC::op##i,TraceBC::op##d,i); break;
 #define FOLD_OP(op,name,OP,...) case IROpCode :: op : EmitFold(TraceBC::op##i,TraceBC::op##d, OP<TInteger>::base(),OP<TDouble>::base(), i); break;
 			BINARY_ARITH_MAP_BYTECODES(BINARY_OP)
@@ -117,18 +128,28 @@ struct TraceInterpret {
 #undef BINARYM_OP
 #undef FOLD_OP
 #undef SCAN_OP
+			case IROpCode::lnot: EmitUnary(TraceBC::lnot,i); break;
 			case IROpCode::cast: {
 				TraceBC::Enum bc;
-				if(node.type == Type::Double) {
-					if(trace->nodes[node.unary.a].type == Type::Integer) {
-						bc = TraceBC::casti2d;
-					} else {
-						bc = TraceBC::castl2d;
-					}
-				} else {
-					bc = TraceBC::castl2i;
+				switch(trace->nodes[node.unary.a].type) {
+				case Type::Logical: switch(node.type) {
+					case Type::Integer: bc = TraceBC::castl2i; break;
+					case Type::Double: bc = TraceBC::castl2d; break;
+					default: _error("unexpected type");
+				} break;
+				case Type::Integer: switch(node.type) {
+					case Type::Logical: bc = TraceBC::casti2l; break;
+					case Type::Double: bc = TraceBC::casti2d; break;
+					default: _error("unexpected type");
+				} break;
+				case Type::Double: switch(node.type) {
+					case Type::Logical: bc = TraceBC::castd2l; break;
+					case Type::Integer: bc = TraceBC::castd2i; break;
+					default: _error("unexpected type");
+				} break;
+				default: _error("unexpected type");
 				}
-				EmitUnary(bc,bc,i); break;
+				EmitUnary(bc,i); break;
 			}
 			case IROpCode::seq: EmitSpecial(TraceBC::seq,i); break;
 			case IROpCode::loadc:
@@ -136,19 +157,13 @@ struct TraceInterpret {
 				break;
 			case IROpCode::loadv:
 				//instructions referencing this load will look up its pointer field to read the value
-				if(size_for_type(node.type) == 1)
-					incrementing_pointers_1[n_incrementing_pointers_1++] = (uint8_t**)&node.loadv.p;
-				else
-					incrementing_pointers_8[n_incrementing_pointers_8++] = (double**)&node.loadv.p;
+				AddIncrementingPointer(node.type,&node.loadv.p);
 				break;
 			case IROpCode::storev: {
 				TraceInst & rinst = *reference_to_instruction[node.store.a];
 				rinst.r.p = node.store.dst->p;
 				rinst.flags &= ~TraceInst::REG_R;
-				if(size_for_type(node.type) == 1)
-					incrementing_pointers_1[n_incrementing_pointers_1++] = (uint8_t**)&rinst.r.p;
-				else
-					incrementing_pointers_8[n_incrementing_pointers_8++] = (double**)&rinst.r.p;
+				AddIncrementingPointer(node.type,&rinst.r.p);
 			} break;
 			case IROpCode::storec:
 				reference_to_instruction[node.store.a]->r.p = &node.store.dst->p;
@@ -237,8 +252,12 @@ struct TraceInterpret {
 #undef SCAN_OP
 
 				case TraceBC :: casti2d:  Map1< CastOp<Integer, Double> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.ipp , (double *)inst.r.p); break;
+				case TraceBC :: castd2i:  Map1< CastOp<Double, Integer> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.dpp , (int64_t *)inst.r.p); break;
 				case TraceBC :: castl2d: Map1< CastOp<Logical, Double> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.lpp , (double *)inst.r.p); break;
 				case TraceBC :: castl2i:  Map1< CastOp<Logical, Integer> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.lpp , (int64_t *)inst.r.p); break;
+				case TraceBC :: castd2l: Map1< CastOp<Double, Logical> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.dpp , (uint8_t *)inst.r.p); break;
+				case TraceBC :: casti2l:  Map1< CastOp<Integer, Logical> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.ipp , (uint8_t *)inst.r.p); break;
+				case TraceBC :: lnot: Map1< LNotOp<TLogical> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.lpp , (uint8_t *)inst.r.p); break;
 				case TraceBC :: seq:  Sequence<TRACE_VECTOR_WIDTH>(i*inst.b.i+1, inst.b.i, (int64_t*)inst.r.p);
 				}
 			}
@@ -273,6 +292,17 @@ private:
 	void EmitBinary(TraceBC::Enum oisv,TraceBC::Enum oivs, TraceBC::Enum oivv,
                     TraceBC::Enum odsv,TraceBC::Enum odvs, TraceBC::Enum odvv,
                     IRef node_ref) {
+		Type::Enum operand_type = trace->nodes[trace->nodes[node_ref].binary.a].type;
+		switch(operand_type) {
+		case Type::Integer:
+			EmitBinary(oisv,oivs,oivv,node_ref); break;
+		case Type::Double:
+			EmitBinary(odsv,odvs,odvv,node_ref); break;
+		default: _error("unsupported type");
+		}
+	}
+	void EmitBinary(TraceBC::Enum osv,TraceBC::Enum ovs, TraceBC::Enum ovv,
+                    IRef node_ref) {
 		IRNode & node = trace->nodes[node_ref];
 		bool a_is_reg; bool b_is_reg;
 		bool a_is_const; bool b_is_const;
@@ -286,29 +316,28 @@ private:
 			inst.flags |= TraceInst::REG_B;
 		inst.r.p = NULL;
 		reference_to_instruction[node_ref] = &inst;
-		Type::Enum operand_type = trace->nodes[node.binary.a].type;
-		switch(operand_type) {
-		default: /*fallthrough*/
-		case Type::Integer:
-			if(a_is_const) {
-				inst.bc = oisv;
-			} else if(b_is_const) {
-				inst.bc = oivs;
-			} else {
-				inst.bc = oivv;
-			}
-			break;
-		case Type::Double:
-			if(a_is_const) {
-				inst.bc = odsv;
-			} else if(b_is_const) {
-				inst.bc = odvs;
-			} else {
-				inst.bc = odvv;
-			} break;
+		if(a_is_const) {
+			inst.bc = osv;
+		} else if(b_is_const) {
+			inst.bc = ovs;
+		} else {
+			inst.bc = ovv;
 		}
 	}
 	void EmitUnary(TraceBC::Enum oi, TraceBC::Enum od,
+                    IRef node_ref) {
+		switch(trace->nodes[node_ref].type) {
+		case Type::Integer:
+			EmitUnary(oi,node_ref);
+			break;
+		case Type::Double:
+			EmitUnary(od,node_ref);
+			break;
+		default:
+			_error("unsupported type");
+		}
+	}
+	void EmitUnary(TraceBC::Enum bc,
                     IRef node_ref) {
 		IRNode & node = trace->nodes[node_ref];
 		bool a_is_reg;
@@ -321,17 +350,7 @@ private:
 			inst.flags |= TraceInst::REG_A;
 		reference_to_instruction[node_ref] = &inst;
 		inst.r.p = NULL;
-		switch(node.type) {
-		case Type::Integer:
-			inst.bc = oi;
-			break;
-		case Type::Double:
-			inst.bc = od;
-			break;
-		default:
-			_error("unsupported type");
-			break;
-		}
+		inst.bc = bc;
 	}
 	void EmitFold(TraceBC::Enum oi, TraceBC::Enum od,
 			      int64_t basei,    double based, IRef node_ref) {
