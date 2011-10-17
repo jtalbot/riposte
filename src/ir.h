@@ -7,8 +7,7 @@
 #include "type.h"
 
 #define IR_ENUM(_) \
-		BINARY_ARITH_MAP_BYTECODES(_) \
-		UNARY_ARITH_MAP_BYTECODES(_) \
+		MAP_BYTECODES(_) \
 		_(cast, "cast", ___) \
 		_(loadc,"loadc", ___) \
 		_(loadv,"loadv", ___) \
@@ -63,6 +62,7 @@ struct IRNode {
 			union {
 				int64_t i;
 				double d;
+				uint8_t l;
 			};
 		} loadc;
 		struct {

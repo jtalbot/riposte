@@ -524,8 +524,12 @@ Instruction const* list_op(State& state, Instruction const& inst) {
 	}
 }
 
+
+bool isRecordableType(Type::Enum type) {
+	return type == Type::Double || type == Type::Integer || type == Type::Logical;
+}
 bool isRecordable(Type::Enum type, int64_t length) {
-	return (type == Type::Double || type == Type::Integer)
+	return isRecordableType(type)
 		&& length > TRACE_VECTOR_WIDTH
 		&& length % TRACE_VECTOR_WIDTH == 0;
 }
@@ -533,8 +537,8 @@ bool isRecordable(Value const& a) {
 	return isRecordable(a.type, a.length);
 }
 bool isRecordable(Value const& a, Value const& b) {
-	bool valid_types =   (a.isDouble() || a.isInteger())
-				      && (b.isDouble() || b.isInteger());
+	bool valid_types =   isRecordableType(a.type)
+				      && isRecordableType(b.type);
 	size_t length = std::max(a.length,b.length);
 	bool compatible_lengths = a.length == 1 || b.length == 1 || a.length == b.length;
 	bool should_record_length = length >= TRACE_VECTOR_WIDTH && length % TRACE_VECTOR_WIDTH == 0;
@@ -580,7 +584,11 @@ UNARY_ARITH_MAP_BYTECODES(OP)
 
 #define OP(name, string, Op, Func) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
-	unaryLogical<Zip1, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+	Value & a = REG(state,inst.a); \
+	if(state.tracing.enabled() && isRecordable(a)) \
+		return state.tracing.begin_tracing(state,&inst,a.length); \
+	else \
+		unaryLogical<Zip1, Op>(state, a, REG(state, inst.c)); \
 	return &inst+1; \
 }
 UNARY_LOGICAL_MAP_BYTECODES(OP)
@@ -632,7 +640,12 @@ BINARY_ARITH_MAP_BYTECODES(OP)
 
 #define OP(name, string, Op, Func) \
 Instruction const* name##_op(State& state, Instruction const& inst) { \
-	binaryLogical<Zip2, Op>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c)); \
+	Value & a = REG(state,inst.a); \
+	Value & b = REG(state,inst.b); \
+	if(state.tracing.enabled() && isRecordable(a,b)) \
+		return state.tracing.begin_tracing(state,&inst,std::max(a.length,b.length)); \
+	else \
+		binaryLogical<Zip2, Op>(state, a, b, REG(state, inst.c)); \
 	return &inst+1; \
 }
 BINARY_LOGICAL_MAP_BYTECODES(OP)
@@ -655,6 +668,9 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
                 else if(b.isInteger1())	\
                         { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return &inst+1;} \
         } \
+    	else if(state.tracing.enabled() && isRecordable(a,b)) \
+    		return state.tracing.begin_tracing(state,&inst,std::max(a.length,b.length)); \
+    	else \
 	binaryOrdinal<Zip2, Op>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c)); \
 	return &inst+1; \
 }

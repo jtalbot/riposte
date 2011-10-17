@@ -420,10 +420,10 @@ struct TraceJIT {
 					asm_.paddq(reg(ref),ConstantTable(C_SEQ_VEC));
 				} break;
 				//placeholder for now
-				case IROpCode::sum:  EmitFoldFunction(ref,(void*)sumi,Constant(0LL)); break;
-				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumi,Constant(0LL)); break;
-				case IROpCode::prod:  EmitFoldFunction(ref,(void*)prodi,Constant(1LL)); break;
-				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodi,Constant(1LL)); break;
+				case IROpCode::sum:  EmitFoldFunction(ref,(void*)sumi,Constant((int64_t)0LL)); break;
+				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumi,Constant((int64_t)0LL)); break;
+				case IROpCode::prod:  EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)1LL)); break;
+				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodi,Constant((int64_t)1LL)); break;
 				default:
 					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
 						_error("unimplemented op");
@@ -733,9 +733,9 @@ void Trace::JIT(State & state) {
 			_error("mprotect failed.");
 		}
 		//also fill in the constant table
-		constant_table[C_ABS_MASK] = Constant(0x7FFFFFFFFFFFFFFFULL);
-		constant_table[C_NEG_MASK] = Constant(0x8000000000000000ULL);
-		constant_table[C_NOT_MASK] = Constant(0xFFFFFFFFFFFFFFFFULL);
+		constant_table[C_ABS_MASK] = Constant((uint64_t)0x7FFFFFFFFFFFFFFFULL);
+		constant_table[C_NEG_MASK] = Constant((uint64_t)0x8000000000000000ULL);
+		constant_table[C_NOT_MASK] = Constant((uint64_t)0xFFFFFFFFFFFFFFFFULL);
 		constant_table[C_SEQ_VEC] = Constant(1LL,2LL);
 	}
 

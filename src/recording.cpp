@@ -151,15 +151,35 @@ bool get_input(State & state, Value & v, IRef * ref, bool * can_fallback, bool *
 		break;
 	}
 }
+
+void coerce_scalar(Type::Enum to, IRNode & n) {
+	switch(n.type) {
+	case Type::Integer: switch(to) {
+		case Type::Double: n.loadc.d = n.loadc.i; break;
+		case Type::Logical: n.loadc.l = n.loadc.i; break;
+		default: _error("unknown cast"); break;
+	} break;
+	case Type::Double: switch(to) {
+		case Type::Integer: n.loadc.i = (int64_t) n.loadc.d; break;
+		case Type::Logical: n.loadc.l = (char) n.loadc.d; break;
+		default: _error("unknown cast"); break;
+	} break;
+	case Type::Logical: switch(to) {
+		case Type::Double: n.loadc.d = n.loadc.l; break;
+		case Type::Integer: n.loadc.i = n.loadc.l; break;
+		default: _error("unknown cast"); break;
+	} break;
+	default: _error("unknown cast"); break;
+	}
+	n.type = to;
+}
+
 IRef coerce(State & state, Type::Enum dst_type, IRef v) {
 	IRNode & n = TRACE.nodes[v];
 	if(dst_type == n.type)
 		return v;
 	else if(n.op == IROpCode::loadc) {
-		//perform the load directly on the constant
-		//TODO! when there are more possible casts, we need to implement them here
-		n.type = Type::Double;
-		n.loadc.d = n.loadc.i;
+		coerce_scalar(dst_type,n);
 		return v;
 	} else {
 		return TRACE.EmitUnary(IROpCode::cast,dst_type,v);
@@ -178,13 +198,14 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, State 
 	bool ar = get_input(state,a,&aref,&can_fallback,&should_record);
 	bool br = get_input(state,b,&bref,&can_fallback,&should_record);
 	if(should_record && ar && br) {
-		Type::Enum type = resultType(bc,TRACE.nodes[aref].type,TRACE.nodes[bref].type);
+		Type::Enum rtyp,atyp,btyp;
+		selectType(bc,TRACE.nodes[aref].type,TRACE.nodes[bref].type,&atyp,&btyp,&rtyp);
 		TRACE.EmitRegOutput(state.base,inst.c);
 		TRACE.SetMaxLiveRegister(state.base,inst.c);
 		Future::Init(REG(state,inst.c),
-				     type,
+				     rtyp,
 				     TRACE.length,
-				     TRACE.EmitBinary(op,type,coerce(state,type,aref),coerce(state,type,bref)));
+				     TRACE.EmitBinary(op,rtyp,coerce(state,atyp,aref),coerce(state,btyp,bref)));
 		TRACE.Commit();
 		return RecordingStatus::NO_ERROR;
 	} else {
@@ -205,11 +226,12 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, State &
 	bool ar = get_input(state,a,&aref,&can_fallback,&should_record);
 
 	if(should_record && ar) {
-		Type::Enum type = resultType(bc,TRACE.nodes[aref].type);
+		Type::Enum rtyp,atyp;
+		selectType(bc,TRACE.nodes[aref].type,&atyp,&rtyp);
 		Future::Init(REG(state,inst.c),
-				     type,
+				     rtyp,
 				     length,
-				     TRACE.EmitUnary(op,type,coerce(state,type,aref)));
+				     TRACE.EmitUnary(op,rtyp,coerce(state,atyp,aref)));
 		TRACE.EmitRegOutput(state.base,inst.c);
 		TRACE.SetMaxLiveRegister(state.base,inst.c);
 		TRACE.Commit();
@@ -259,15 +281,10 @@ BINARY_ARITH_MAP_BYTECODES(BINARY_OP)
 UNARY_ARITH_MAP_BYTECODES(UNARY_OP)
 ARITH_FOLD_BYTECODES(FOLD_OP)
 
-OP_NOT_IMPLEMENTED(lt)
-OP_NOT_IMPLEMENTED(gt)
-OP_NOT_IMPLEMENTED(eq)
-OP_NOT_IMPLEMENTED(neq)
-OP_NOT_IMPLEMENTED(le)
-OP_NOT_IMPLEMENTED(ge)
-OP_NOT_IMPLEMENTED(lnot)
-OP_NOT_IMPLEMENTED(land)
-OP_NOT_IMPLEMENTED(lor)
+BINARY_ORDINAL_MAP_BYTECODES(BINARY_OP)
+UNARY_LOGICAL_MAP_BYTECODES(UNARY_OP)
+BINARY_LOGICAL_MAP_BYTECODES(BINARY_OP)
+
 OP_NOT_IMPLEMENTED(sland)
 OP_NOT_IMPLEMENTED(slor)
 
@@ -278,7 +295,6 @@ OP_NOT_IMPLEMENTED(double1)
 OP_NOT_IMPLEMENTED(complex1)
 OP_NOT_IMPLEMENTED(character1)
 OP_NOT_IMPLEMENTED(raw1)
-
 
 OP_NOT_IMPLEMENTED(min)
 OP_NOT_IMPLEMENTED(max)

@@ -20,7 +20,10 @@ std::string Trace::toString(State & state) {
 #define BINARY(op,...) case IROpCode::op: out << "n" << node.binary.a << "\tn" << node.binary.b; break;
 #define UNARY(op,...) case IROpCode::op: out << "n" << node.unary.a; break;
 		BINARY_ARITH_MAP_BYTECODES(BINARY)
+		BINARY_LOGICAL_MAP_BYTECODES(BINARY)
+		BINARY_ORDINAL_MAP_BYTECODES(BINARY)
 		UNARY_ARITH_MAP_BYTECODES(UNARY)
+		UNARY_LOGICAL_MAP_BYTECODES(UNARY)
 		ARITH_FOLD_BYTECODES(UNARY)
 		ARITH_SCAN_BYTECODES(UNARY)
 		UNARY(cast)
@@ -113,16 +116,21 @@ void Trace::InitializeOutputs(State & state) {
 				Value & v = output_values[n_output_values++];
 				Value::Init(v,typ,loc.length); //initialize the type of the output value, the actual value (i.e. v.p) will be set after it is calculated in the trace
 				if(loc.length == length) {
-					if(length < 128) {
+
+					if(typ == Type::Logical) {
+						v.p = new (PointerFreeGC) char[length];
+					} else if(length < 128) {
 						double * dp = new (PointerFreeGC) double[length + 1];
 						if( ( (int64_t)dp & 0xF) != 0)
 							v.p = dp + 1;
 						else
 							v.p = dp;
+						assert( ((int64_t)v.p & 0xF) == 0);
 					} else {
 						v.p = new (PointerFreeGC) double[length];
+						assert( ((int64_t)v.p & 0xF) == 0);
 					}
-					assert( ((int64_t)v.p & 0xF) == 0);
+
 					EmitStoreV(typ,&v,ref);
 				} else {
 					EmitStoreC(typ,&v,ref);

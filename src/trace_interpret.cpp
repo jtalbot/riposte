@@ -8,6 +8,8 @@
 	name##dvv, name##dvs, name##dsv, name##ivv, name##ivs, name##isv,
 #define UNARY_VERSIONS(name,...) \
 	name ## d, name ## i,
+#define BINARY_VERSIONS_MONOMORPHIC(name,...) \
+	name##vv, name##vs, name##sv,
 
 namespace TraceBC {
   enum Enum {
@@ -15,9 +17,17 @@ namespace TraceBC {
 	  UNARY_ARITH_MAP_BYTECODES(UNARY_VERSIONS)
 	  ARITH_FOLD_BYTECODES(UNARY_VERSIONS)
 	  ARITH_SCAN_BYTECODES(UNARY_VERSIONS)
+	  BINARY_ORDINAL_MAP_BYTECODES(BINARY_VERSIONS)
+	  BINARY_LOGICAL_MAP_BYTECODES(BINARY_VERSIONS_MONOMORPHIC)
 	  seq,
-	  casti2d
+	  casti2d,
+	  castl2i,
+	  castl2d,
   };
+}
+
+static inline bool is_widening_cast(TraceBC::Enum e) {
+	return e == TraceBC::castl2i || e == TraceBC::castl2d;
 }
 
 
@@ -28,14 +38,17 @@ struct TraceInst {
 	union {
 		void * p;
 		double * dp;
-		int64_t * ip;
+		uint8_t * ip;
+		unsigned char * lp;
 	} r;
 	union Operand {
 		void ** pp;
 		double ** dpp;
 		int64_t ** ipp;
+		uint8_t ** lpp;
 		int64_t i;
 		double d;
+		uint8_t l;
 	};
 	Operand a,b;
 };
@@ -63,14 +76,23 @@ struct Allocator {
 	}
 };
 
+//which pointer incrementing list do we use?
+static size_t size_for_type(Type::Enum t) {
+	if(Type::Logical == t)
+		return 1;
+	else
+		return 8;
+}
 
 struct TraceInterpret {
-	TraceInterpret(Trace * t) { trace = t; n_insts = n_incrementing_pointers = 0; }
+	TraceInterpret(Trace * t) { trace = t; n_insts = n_incrementing_pointers_1 = n_incrementing_pointers_8 = 0; }
 	Trace * trace;
 	TraceInst insts[TRACE_MAX_NODES];
 	size_t n_insts;
-	double ** incrementing_pointers[TRACE_MAX_NODES];
-	size_t n_incrementing_pointers;
+	double ** incrementing_pointers_8[TRACE_MAX_NODES];
+	size_t n_incrementing_pointers_8;
+	uint8_t ** incrementing_pointers_1[TRACE_MAX_NODES];
+	size_t n_incrementing_pointers_1;
 	TraceInst * reference_to_instruction[TRACE_MAX_NODES]; //mapping from IRef from IRNode to the result pointer in an instruction where the result of that node will be written
 	double registers [TRACE_MAX_VECTOR_REGISTERS][TRACE_VECTOR_WIDTH] __attribute__ ((aligned (16))); //for sse alignment
 
@@ -81,30 +103,52 @@ struct TraceInterpret {
 			IRNode & node = trace->nodes[i];
 			switch(node.op) {
 #define BINARY_OP(op,...) case IROpCode :: op : EmitBinary(TraceBC::op##isv,TraceBC::op##ivs,TraceBC::op##ivv,TraceBC::op##dsv,TraceBC::op##dvs,TraceBC::op##dvv, i); break;
+#define BINARYM_OP(op,...) case IROpCode :: op : EmitBinary(TraceBC::op##sv,TraceBC::op##vs,TraceBC::op##vv,TraceBC::op##sv,TraceBC::op##vs,TraceBC::op##vv, i); break;
 #define UNARY_OP(op,...) case IROpCode :: op : EmitUnary(TraceBC::op##i,TraceBC::op##d,i); break;
 #define FOLD_OP(op,name,OP,...) case IROpCode :: op : EmitFold(TraceBC::op##i,TraceBC::op##d, OP<TInteger>::base(),OP<TDouble>::base(), i); break;
 			BINARY_ARITH_MAP_BYTECODES(BINARY_OP)
+			BINARY_ORDINAL_MAP_BYTECODES(BINARY_OP)
+			BINARY_LOGICAL_MAP_BYTECODES(BINARYM_OP)
 			UNARY_ARITH_MAP_BYTECODES(UNARY_OP)
 			ARITH_FOLD_BYTECODES(FOLD_OP)
 			ARITH_SCAN_BYTECODES(FOLD_OP)
 #undef UNARY_OP
 #undef BINARY_OP
+#undef BINARYM_OP
 #undef FOLD_OP
 #undef SCAN_OP
-			case IROpCode::cast: EmitUnary(TraceBC::casti2d,TraceBC::casti2d,i); break;
+			case IROpCode::cast: {
+				TraceBC::Enum bc;
+				if(node.type == Type::Double) {
+					if(trace->nodes[node.unary.a].type == Type::Integer) {
+						bc = TraceBC::casti2d;
+					} else {
+						bc = TraceBC::castl2d;
+					}
+				} else {
+					bc = TraceBC::castl2i;
+				}
+				EmitUnary(bc,bc,i); break;
+			}
 			case IROpCode::seq: EmitSpecial(TraceBC::seq,i); break;
 			case IROpCode::loadc:
 				//nop, these will be inlined into arithmetic ops
 				break;
 			case IROpCode::loadv:
 				//instructions referencing this load will look up its pointer field to read the value
-				incrementing_pointers[n_incrementing_pointers++] = (double**)&node.loadv.p;
+				if(size_for_type(node.type) == 1)
+					incrementing_pointers_1[n_incrementing_pointers_1++] = (uint8_t**)&node.loadv.p;
+				else
+					incrementing_pointers_8[n_incrementing_pointers_8++] = (double**)&node.loadv.p;
 				break;
 			case IROpCode::storev: {
 				TraceInst & rinst = *reference_to_instruction[node.store.a];
 				rinst.r.p = node.store.dst->p;
 				rinst.flags &= ~TraceInst::REG_R;
-				incrementing_pointers[n_incrementing_pointers++] = (double**)&rinst.r.p;
+				if(size_for_type(node.type) == 1)
+					incrementing_pointers_1[n_incrementing_pointers_1++] = (uint8_t**)&rinst.r.p;
+				else
+					incrementing_pointers_8[n_incrementing_pointers_8++] = (double**)&rinst.r.p;
 			} break;
 			case IROpCode::storec:
 				reference_to_instruction[node.store.a]->r.p = &node.store.dst->p;
@@ -129,6 +173,14 @@ struct TraceInterpret {
 				if(*inst.a.pp == NULL) {
 					int reg = free_reg.allocate();
 					*inst.a.pp = registers[reg];
+					//a cast from a smaller type to a wider one cannot alias to the same register,
+					//otherwise the wider elements of the result will overwrite the operands before they are converted
+					//if this is the case, we make sure the registers do not alias
+					if(is_widening_cast(inst.bc) && inst.r.p == *inst.a.pp) {
+						int reg2 = free_reg.allocate();
+						*inst.a.pp = registers[reg2];
+						free_reg.free(reg);
+					}
 				}
 			}
 			if(inst.flags & TraceInst::REG_B) {
@@ -154,6 +206,11 @@ struct TraceInterpret {
 				case TraceBC :: name ##ivs :  Map2VS< op < TInteger >,TRACE_VECTOR_WIDTH >::eval(state, *inst.a.ipp,inst.b.i,(op < TInteger >::R*) inst.r.p); break; \
 				case TraceBC :: name ##isv :  Map2SV< op < TInteger >,TRACE_VECTOR_WIDTH >::eval(state, inst.a.i,*inst.b.ipp, (op < TInteger >::R*) inst.r.p); break;
 
+#define LOGICAL_OP(name,str, op, ...) \
+				case TraceBC :: name ##vv :  Map2VV< op < TLogical >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.lpp,*inst.b.lpp,(op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name ##vs :  Map2VS< op < TLogical >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.lpp,inst.b.l,(op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name ##sv :  Map2SV< op < TLogical >, TRACE_VECTOR_WIDTH >::eval(state, inst.a.l,*inst.b.lpp,(op < TDouble >::R*) inst.r.p); break; \
+
 #define UNARY_OP(name,str, op, ...) \
 				case TraceBC :: name##d :  Map1< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.dpp,(op < TDouble >::R*) inst.r.p); break; \
 				case TraceBC :: name##i :  Map1< op < TInteger >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.ipp,(op < TInteger >::R*) inst.r.p); break;
@@ -167,21 +224,28 @@ struct TraceInterpret {
 				case TraceBC :: name##i :  inst.b.i = ScanLeftT< op < TInteger >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.ipp, inst.b.i, (op < TInteger >::R*) inst.r.p); break;
 
 				BINARY_ARITH_MAP_BYTECODES(BINARY_OP)
+				BINARY_LOGICAL_MAP_BYTECODES(LOGICAL_OP)
+				BINARY_ORDINAL_MAP_BYTECODES(BINARY_OP)
 				UNARY_ARITH_MAP_BYTECODES(UNARY_OP)
 				ARITH_FOLD_BYTECODES(FOLD_OP)
 				ARITH_SCAN_BYTECODES(SCAN_OP)
 
 #undef BINARY_OP
+#undef LOGICAL_OP
 #undef UNARY_OP
 #undef FOLD_OP
 #undef SCAN_OP
 
 				case TraceBC :: casti2d:  Map1< CastOp<Integer, Double> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.ipp , (double *)inst.r.p); break;
+				case TraceBC :: castl2d: Map1< CastOp<Logical, Double> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.lpp , (double *)inst.r.p); break;
+				case TraceBC :: castl2i:  Map1< CastOp<Logical, Integer> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.lpp , (int64_t *)inst.r.p); break;
 				case TraceBC :: seq:  Sequence<TRACE_VECTOR_WIDTH>(i*inst.b.i+1, inst.b.i, (int64_t*)inst.r.p);
 				}
 			}
-			for(size_t j = 0; j < n_incrementing_pointers; j++)
-				(*incrementing_pointers[j]) += TRACE_VECTOR_WIDTH;
+			for(size_t j = 0; j < n_incrementing_pointers_1; j++)
+				(*incrementing_pointers_1[j]) += TRACE_VECTOR_WIDTH;
+			for(size_t j = 0; j < n_incrementing_pointers_8; j++)
+				(*incrementing_pointers_8[j]) += TRACE_VECTOR_WIDTH;
 		}
 	}
 private:
@@ -222,7 +286,9 @@ private:
 			inst.flags |= TraceInst::REG_B;
 		inst.r.p = NULL;
 		reference_to_instruction[node_ref] = &inst;
-		switch(node.type) {
+		Type::Enum operand_type = trace->nodes[node.binary.a].type;
+		switch(operand_type) {
+		default: /*fallthrough*/
 		case Type::Integer:
 			if(a_is_const) {
 				inst.bc = oisv;
@@ -240,9 +306,6 @@ private:
 			} else {
 				inst.bc = odvv;
 			} break;
-		default:
-			_error("unsupported type");
-			break;
 		}
 	}
 	void EmitUnary(TraceBC::Enum oi, TraceBC::Enum od,
