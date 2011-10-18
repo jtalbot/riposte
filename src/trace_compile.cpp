@@ -80,6 +80,8 @@ struct Constant {
 	: d0(d), d1(d) {}
 	Constant(void * f)
 	: f0(f),f1(f)  {}
+	Constant(uint8_t l)
+	: u0((l << 8) + l), u1(0) {}
 
 	Constant(int64_t ii0, int64_t ii1)
 	: i0(ii0), i1(ii1) {}
@@ -102,9 +104,13 @@ enum ConstantTableEntry {
 	C_NEG_MASK = 0x1,
 	C_NOT_MASK = 0x2,
 	C_SEQ_VEC  = 0x3,
-	C_FUNCTION_SPILL_SPACE = 0x4,
-	C_REGISTER_SPILL_SPACE = 0x5,
-	C_FIRST_TRACE_CONST = 0x15
+	C_PACK_LOGICAL = 0x4,
+	C_LOGICAL_MASK = 0x5,
+	C_LNOT_MASK = 0x6,
+	C_DOUBLE_ZERO = 0x7,
+	C_FUNCTION_SPILL_SPACE = 0x8,
+	C_REGISTER_SPILL_SPACE = 0x9,
+	C_FIRST_TRACE_CONST = 0x19
 };
 
 static Constant constant_table[TRACE_MAX_NODES] __attribute__((aligned(16)));
@@ -228,10 +234,19 @@ struct TraceJIT {
 
 
 	Register constant_base; //holds pointer to Trace object
-	Register vector_offset; //holds byte offset into vector for current loop iteration
+	Register vector_index; //index into long vector where the short vector begins
 	Register load_addr; //holds address of input vectors
-	Register end_offset; //holds address of input vectors
+	Register vector_length; //holds length of long vector
 	uint32_t next_constant_slot;
+
+	//some hardware ops like > do not exist, requiring the use of < instead.  For simplicity, this needs to be done before register allocation
+	void SimplifyNode(IRNode & node) {
+		switch(node.op) {
+		case IROpCode::gt: node.op = IROpCode::lt; std::swap(node.binary.a,node.binary.b); break;
+		case IROpCode::ge: node.op = IROpCode::le; std::swap(node.binary.a,node.binary.b); break;
+		default: /*pass*/ break;
+		}
+	}
 
 	void compile() {
 		bzero(store_inst,sizeof(IRNode *) * trace->n_nodes);
@@ -240,6 +255,7 @@ struct TraceJIT {
 		for(IRef i = trace->n_nodes; i > 0; i--) {
 			IRef ref = i - 1;
 			IRNode & node = trace->nodes[ref];
+			SimplifyNode(node); //emulate ops like > and >= which have no hardware equivalent by modifying the operand order
 			switch(node.enc) {
 			case IRNode::BINARY: {
 				AllocateBinary(ref,node.binary.a,node.binary.b);
@@ -266,19 +282,19 @@ struct TraceJIT {
 		//registers are callee saved so that we can make external function calls without saving the registers the tight loop
 		//we need to explicitly save and restore these on entrace and exit to the function
 		constant_base = r12;
-		vector_offset = r13;
+		vector_index = r13;
 		load_addr = r14;
-		end_offset = r15;
+		vector_length = r15;
 
 		asm_.push(constant_base);
-		asm_.push(vector_offset);
+		asm_.push(vector_index);
 		asm_.push(load_addr);
-		asm_.push(end_offset);
+		asm_.push(vector_length);
 		asm_.push(rbx);
 
 		asm_.movq(constant_base, &constant_table[0]);
-		asm_.xor_(vector_offset,vector_offset);
-		asm_.movq(end_offset, trace->length * sizeof(double));
+		asm_.xor_(vector_index,vector_index);
+		asm_.movq(vector_length, trace->length);
 
 		Label begin;
 
@@ -298,11 +314,20 @@ struct TraceJIT {
 			} break;
 			case IRNode::UNARY: break;
 			case IRNode::LOADC: {
-				XMMRegister r = reg(ref);
-				asm_.movdqa(r,PushConstant(Constant(node.loadc.d)));
+				Constant c;
+				switch(node.type) {
+				case Type::Integer: c = Constant(node.loadc.i); break;
+				case Type::Logical: c = Constant(node.loadc.l); break;
+				case Type::Double:  c = Constant(node.loadc.d); break;
+				default: _error("unexpected type");
+				}
+				asm_.movdqa(reg(ref),PushConstant(c));
 			} break;
 			case IRNode::LOADV: {
-				EmitVectorLoad(reg(ref),node.loadv.p);
+				if(Type::Logical == node.type)
+					EmitLogicalLoad(reg(ref),node.loadv.p);
+				else
+					EmitVectorLoad(reg(ref),node.loadv.p);
 			} break;
 			case IRNode::STORE: {
 				//stores are generated right after the value that is stored
@@ -387,7 +412,12 @@ struct TraceJIT {
 #endif
 				case IROpCode::sign: EmitUnaryFunction(ref,sign_fn); break;
 				case IROpCode::mod: EmitBinaryFunction(ref,Mod); break;
-				case IROpCode::cast: EmitUnaryFunction(ref,casti2d); break; //it should be possible to inline this, but I can't find the convert packed quadword to packed double instruction
+				case IROpCode::cast: {
+					if(trace->nodes[node.unary.a].type == Type::Integer)
+						EmitUnaryFunction(ref,casti2d); //it should be possible to inline this, but I can't find the convert packed quadword to packed double instruction
+					else
+						_error("NYI - castl2d");
+				} break;
 				//placeholder for now
 				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumd,Constant(0.0)); break;
 				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodd,Constant(1.0)); break;
@@ -413,9 +443,7 @@ struct TraceJIT {
 				case IROpCode::pos: EmitMove(reg(ref),reg(node.unary.a)); break;
 				case IROpCode::mod: EmitBinaryFunction(ref,imod); break;
 				case IROpCode::seq: {
-					asm_.movq(load_addr,vector_offset);
-					asm_.shr(load_addr,Immediate(4));
-					asm_.movq(reg(ref),load_addr);
+					asm_.movq(reg(ref),vector_index);
 					asm_.unpcklpd(reg(ref),reg(ref));
 					asm_.paddq(reg(ref),ConstantTable(C_SEQ_VEC));
 				} break;
@@ -424,6 +452,33 @@ struct TraceJIT {
 				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumi,Constant((int64_t)0LL)); break;
 				case IROpCode::prod:  EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)1LL)); break;
 				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodi,Constant((int64_t)1LL)); break;
+				case IROpCode::cast: _error("NYI - cast to int"); break;
+				default:
+					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
+						_error("unimplemented op");
+					break;
+				}
+			} else if(node.type == Type::Logical) {
+				switch(node.op) {
+				case IROpCode::eq: EmitCompare(ref,Assembler::kEQ); break;
+				case IROpCode::lt: EmitCompare(ref,Assembler::kLT); break;
+				case IROpCode::le: EmitCompare(ref,Assembler::kLE); break;
+				case IROpCode::neq: EmitCompare(ref,Assembler::kNEQ); break;
+				case IROpCode::land: asm_.andpd(reg(ref),reg(node.binary.b)); break;
+				case IROpCode::lor: asm_.orpd(reg(ref),reg(node.binary.b)); break;
+				case IROpCode::lnot: {
+					EmitMove(reg(ref),reg(node.unary.a));
+					asm_.xorpd(reg(ref),ConstantTable(C_LNOT_MASK));
+				} break;
+				case IROpCode::cast: {
+					Type::Enum operand_type = trace->nodes[node.unary.a].type;
+					if(operand_type == Type::Double) {
+						asm_.cmppd(reg(ref),ConstantTable(C_DOUBLE_ZERO),Assembler::kNEQ);
+						EmitComparisonToLogical(reg(ref));
+					} else {
+						_error("NYI - casti2l");
+					}
+				} break;
 				default:
 					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
 						_error("unimplemented op");
@@ -451,7 +506,10 @@ struct TraceJIT {
 			if(store_inst[ref] != NULL) {
 				IRNode & str = *store_inst[ref];
 				if(str.op == IROpCode::storev) {
-					EmitVectorStore(str.store.dst->p,reg(str.store.a));
+					if(Type::Logical == str.type)
+						EmitLogicalStore(str.store.dst->p,reg(str.store.a));
+					else
+						EmitVectorStore(str.store.dst->p,reg(str.store.a));
 				} else {
 					Operand op = EncodeOperand(&str.store.dst->p);
 					asm_.movsd(op,reg(str.store.a));
@@ -459,14 +517,14 @@ struct TraceJIT {
 			}
 		}
 
-		asm_.addq(vector_offset, Immediate(SIMD_WIDTH));
-		asm_.cmpq(vector_offset,end_offset);
+		asm_.addq(vector_index, Immediate(2));
+		asm_.cmpq(vector_index,vector_length);
 		asm_.j(less,&begin);
 
 		asm_.pop(rbx);
-		asm_.pop(end_offset);
+		asm_.pop(vector_length);
 		asm_.pop(load_addr);
-		asm_.pop(vector_offset);
+		asm_.pop(vector_index);
 		asm_.pop(constant_base);
 		asm_.ret(0);
 	}
@@ -504,21 +562,26 @@ struct TraceJIT {
 		RestoreRegisters(live_registers[ref]);
 	}
 	void EmitVectorLoad(XMMRegister dst, void * src) {
-		int64_t diff = (int64_t)src - (int64_t)constant_table;
-		if(is_int32(diff)) {
-			asm_.movdqa(dst,Operand(constant_base,vector_offset,times_1,diff));
-		} else {
-			asm_.movq(load_addr,src);
-			asm_.movdqa(dst, Operand(load_addr,vector_offset,times_1,0));
-		}
+		asm_.movdqa(dst,EncodeOperand(src,vector_index,times_8));
 	}
 	void EmitVectorStore(void * dst,  XMMRegister src) {
+		asm_.movdqa(EncodeOperand(dst,vector_index,times_8),src);
+	}
+	void EmitLogicalLoad(XMMRegister dst, void * src) {
+		asm_.movss(dst,EncodeOperand(src,vector_index,times_1));
+	}
+	void EmitLogicalStore(void * dst,  XMMRegister src) {
+		asm_.movq(rbx,src);
+		asm_.movw(EncodeOperand(dst,vector_index,times_1),rbx);
+	}
+
+	Operand EncodeOperand(void * dst, Register idx, ScaleFactor scale) {
 		int64_t diff = (int64_t)dst - (int64_t)constant_table;
 		if(is_int32(diff)) {
-			asm_.movdqa(Operand(constant_base,vector_offset,times_1,diff),src);
+			return Operand(constant_base,idx,scale,diff);
 		} else {
 			asm_.movq(load_addr,dst);
-			asm_.movdqa(Operand(load_addr,vector_offset,times_1,0),src);
+			return Operand(load_addr,idx,scale,0);
 		}
 	}
 	Operand EncodeOperand(void * src) {
@@ -682,11 +745,10 @@ struct TraceJIT {
 
 		SaveRegisters(regs);
 		EmitMove(xmm0,reg(i));
-		asm_.movq(rdi,vector_offset);
+		asm_.movq(rdi,vector_index);
 		EmitCall((void*) debug_print);
 		RestoreRegisters(regs);
 	}
-
 	void SaveRegisters(RegisterSet regs) {
 		uint32_t offset = C_REGISTER_SPILL_SPACE * sizeof(Constant);
 		for(RegisterIterator it(regs); !it.done(); it.next()) {
@@ -703,6 +765,19 @@ struct TraceJIT {
 		}
 	}
 
+	void EmitComparisonToLogical(XMMRegister r) {
+		asm_.andpd(r,ConstantTable(C_LOGICAL_MASK));
+		asm_.pshufb(r,ConstantTable(C_PACK_LOGICAL));
+	}
+	void EmitCompare(IRef ref, Assembler::ComparisonType typ) {
+		IRNode & node = trace->nodes[ref];
+		if(Type::Double == trace->nodes[node.binary.a].type) {
+			asm_.cmppd(reg(ref),reg(node.binary.b),typ);
+			EmitComparisonToLogical(reg(ref));
+		} else {
+			_error("NYI - integer compare");
+		}
+	}
 	void execute(State & state) {
 		typedef void (*fn) (void);
 		fn trace_code = (fn) code_buffer;
@@ -737,6 +812,10 @@ void Trace::JIT(State & state) {
 		constant_table[C_NEG_MASK] = Constant((uint64_t)0x8000000000000000ULL);
 		constant_table[C_NOT_MASK] = Constant((uint64_t)0xFFFFFFFFFFFFFFFFULL);
 		constant_table[C_SEQ_VEC] = Constant(1LL,2LL);
+		constant_table[C_LOGICAL_MASK] = Constant((uint64_t)0x1);
+		constant_table[C_PACK_LOGICAL] = Constant(0x1010101010100800,0x1010101010101010);
+		constant_table[C_LNOT_MASK] = Constant((uint8_t)0x1);
+		constant_table[C_DOUBLE_ZERO] = Constant(0.0);
 	}
 
 	TraceJIT trace_code(this);

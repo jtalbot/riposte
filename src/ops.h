@@ -407,8 +407,8 @@ inline void selectType(ByteCode::Enum bc, Type::Enum input, Type::Enum * atyp, T
 		*atyp = Type::Logical; *rtyp = Type::Logical; \
 		break;
 #define BINARY_ORDINAL_CASE(name,str,Op,...) \
-	case ByteCode::name: /*logical inputs get promoted to integer so that we can use integer ops to implement the ordinals*/\
-		*atyp = (input == Type::Logical) ? Type::Integer : input; *rtyp = Type::Logical; \
+	case ByteCode::name: /*logical inputs get promoted to double so that we can use sse ops to implement the ordinals*/\
+		*atyp = (input == Type::Logical) ? Type::Double : input; *rtyp = Type::Logical; \
 		break;
 #define ORDINAL_CASE(name,str,Op,...) \
 	case ByteCode::name: \

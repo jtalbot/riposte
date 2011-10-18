@@ -2379,6 +2379,15 @@ void Assembler::addpd(XMMRegister dst, const Operand& src) {
 	emit(0x58);
 	emit_sse_operand(dst, src);
 }
+void Assembler::pshufb(XMMRegister dst, const Operand& src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x38);
+	emit(0x00);
+	emit_sse_operand(dst, src);
+}
 
 void Assembler::paddq(XMMRegister dst, XMMRegister src) {
 	EnsureSpace ensure_space(this);
@@ -2622,6 +2631,30 @@ void Assembler::roundpd(XMMRegister dst, XMMRegister src,
 	// Mask precision exeption.
 	emit(static_cast<byte> (mode) | 0x8);
 }
+
+void Assembler::cmppd(XMMRegister dst, XMMRegister src,
+		Assembler::ComparisonType mode) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0f);
+	emit(0xc2);
+	emit_sse_operand(dst, src);
+	// Mask precision exeption.
+	emit(static_cast<byte> (mode));
+}
+void Assembler::cmppd(XMMRegister dst, const Operand& src,
+		Assembler::ComparisonType mode) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0f);
+	emit(0xc2);
+	emit_sse_operand(dst, src);
+	// Mask precision exeption.
+	emit(static_cast<byte> (mode));
+}
+
 void Assembler::shufpd(XMMRegister dst, XMMRegister src,
 		Assembler::ShuffleModeD mode) {
 	EnsureSpace ensure_space(this);

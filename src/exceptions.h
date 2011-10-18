@@ -32,7 +32,28 @@ public:
 	std::string what() const { return message; }
 };
 
+#define THROW_TO_GDB
+#ifdef THROW_TO_GDB
+#include<stdio.h>
+#include<sys/types.h>
+#include<sys/wait.h>
+#include <unistd.h>
+static inline void attachGDB() {
+	pid_t pid = getpid();
+	pid_t t = fork();
+	if(t) {
+		int status;
+		waitpid(t,&status,0);
+	} else {
+		char buf[32];
+		sprintf(buf,"%d",pid);
+		execl("/usr/bin/gdb","/usr/bin/gdb","bin/riposte",buf,NULL);
+	}
+}
+#define _error(T) do { attachGDB(); throw RiposteError(T); } while(0)
+#else
 #define _error(T) (throw RiposteError(T))
+#endif
 #define _warning(S, T) (S.warnings.push_back(T))
 
 #endif
