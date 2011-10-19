@@ -5,6 +5,8 @@
 #include "assembler-x64.h"
 #include <math.h>
 
+#include "register_set.h"
+
 #ifdef USE_AMD_LIBM
 #include <amdlibm.h>
 #endif
@@ -14,59 +16,6 @@ using namespace v8::internal;
 
 #define SIMD_WIDTH (2 * sizeof(double))
 #define CODE_BUFFER_SIZE (16 * 1024)
-
-//bit-string based allocator for registers
-
-typedef uint32_t RegisterSet;
-struct Allocator {
-	uint32_t a;
-	uint32_t n_allocated;
-	static const uint32_t NUM_REGISTERS = 16;
-	Allocator() : a(~0), n_allocated(0) {}
-	void print() {
-		for(int i = 0; i < 32; i++)
-			if( a & (1 << i))
-				printf("-");
-			else
-				printf("a");
-		printf("\n");
-	}
-	//try to allocated preferred register
-	int allocate(size_t preferred) {
-		assert(preferred < NUM_REGISTERS);
-		if(a & (1 << preferred)) {
-			a &= ~(1 << preferred);
-			return preferred;
-		} else return allocate();
-	}
-	int allocateWithMask(RegisterSet valid_registers) {
-		int reg = ffs(a & valid_registers) - 1;
-		a &= ~(1 << reg);
-
-		if(reg >= (int) NUM_REGISTERS)
-			_error("ran out of registers");
-
-		return reg;
-	}
-	int allocate() { return allocateWithMask(~0); }
-	RegisterSet live_registers() {
-		return a;
-	}
-	void free(int reg) {
-		a |= (1 << reg);
-	}
-};
-
-struct RegisterIterator {
-	RegisterIterator(RegisterSet l) {
-		live = ~l;
-	}
-	bool done() { return live == 0; }
-	void next() {  live &= ~(1 << value()); }
-	uint32_t value() { return ffs(live) - 1; }
-private:
-	uint32_t live;
-};
 
 struct Constant {
 	Constant() {}
@@ -246,14 +195,14 @@ FOLD_SCAN_FN(sumd , double , +)
 
 struct TraceJIT {
 	TraceJIT(Trace * t)
-	:  trace(t), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), next_constant_slot(C_FIRST_TRACE_CONST) {}
+	:  trace(t), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), alloc(XMMRegister::kNumAllocatableRegisters), next_constant_slot(C_FIRST_TRACE_CONST) {}
 
 	Trace * trace;
 	IRNode * store_inst[TRACE_MAX_NODES];
 	RegisterSet live_registers[TRACE_MAX_NODES];
-	char allocated_register[TRACE_MAX_NODES];
+	int8_t allocated_register[TRACE_MAX_NODES];
 	Assembler asm_;
-	Allocator alloc;
+	RegisterAllocator alloc;
 
 
 	Register constant_base; //holds pointer to Trace object
@@ -618,7 +567,8 @@ struct TraceJIT {
 	}
 	IRef AllocateNullary(IRef ref, bool p = true) {
 		if(allocated_register[ref] < 0) { //this instruction is dead, for now we just emit it anyway
-			allocated_register[ref] = alloc.allocate();
+			if(!alloc.allocate(&allocated_register[ref]))
+				_error("exceeded available registers");
 		}
 		int r = allocated_register[ref];
 		alloc.free(r);
@@ -631,9 +581,11 @@ struct TraceJIT {
 	}
 	IRef AllocateUnary(IRef ref, IRef a, bool p = true) {
 		IRef r = AllocateNullary(ref,false);
-		if(allocated_register[a] < 0)
+		if(allocated_register[a] < 0) {
 			//try to allocated register a and r to the same location,  this avoids moves in binary instructions
-			allocated_register[a] = alloc.allocate(r);
+			if(!alloc.allocate(r,&allocated_register[a]))
+				_error("exceeded available registers");
+		}
 		if(p) {
 			//printf("%d = %d op, %d = %d op\n",(int)allocated_register[ref],(int)allocated_register[a],(int)ref,(int)a);
 		}
@@ -645,7 +597,9 @@ struct TraceJIT {
 			RegisterSet mask = ~(1 << allocated_register[ref]);
 			//we avoid allocating registers such that r = a op r
 			//occurs
-			allocated_register[b] = alloc.allocateWithMask(mask);
+			if(!alloc.allocateWithMask(mask,&allocated_register[b])) {
+				_error("exceeded available registers");
+			}
 			assert(allocated_register[ref] != allocated_register[b]);
 		}
 

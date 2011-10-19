@@ -733,6 +733,7 @@ struct StackFrame {
 //maximum number of instructions to record before dropping out of the
 //recording interpreter
 #define TRACE_MAX_RECORDED (1024)
+#define TRACE_MAX_TRACES (4)
 
 struct TraceCodeBuffer;
 struct Trace {
