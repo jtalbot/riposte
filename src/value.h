@@ -734,6 +734,7 @@ struct StackFrame {
 //recording interpreter
 #define TRACE_MAX_RECORDED (1024)
 
+struct TraceCodeBuffer;
 struct Trace {
 	IRNode nodes[TRACE_MAX_NODES];
 
@@ -766,7 +767,9 @@ struct Trace {
 
 	Value output_values[TRACE_MAX_OUTPUTS];
 	size_t n_output_values;
+	TraceCodeBuffer * code_buffer;
 
+	Trace() { Reset(); code_buffer = NULL; }
 	bool Reserve(size_t num_nodes, size_t num_outputs) {
 		if(n_pending + num_nodes >= TRACE_MAX_NODES)
 			return false;
@@ -873,7 +876,6 @@ private:
 
 //member of State, manages information for all traces
 //and the currently recording trace (if any)
-
 struct TraceState {
 	TraceState() {
 		active = false;

@@ -138,9 +138,7 @@ void Trace::WriteOutputs(State & state) {
 			printf("o%d = %s\n", (int) i, v.c_str());
 		}
 	}
-
 	for(size_t i = 0; i < n_outputs; i++) {
-
 		set_location_value(state,outputs[i].location,*outputs[i].value);
 	}
 }

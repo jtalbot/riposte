@@ -13,6 +13,7 @@
 using namespace v8::internal;
 
 #define SIMD_WIDTH (2 * sizeof(double))
+#define CODE_BUFFER_SIZE (16 * 1024)
 
 //bit-string based allocator for registers
 
@@ -64,12 +65,9 @@ struct RegisterIterator {
 	void next() {  live &= ~(1 << value()); }
 	uint32_t value() { return ffs(live) - 1; }
 private:
-	bool forward;
 	uint32_t live;
 };
 
-#define CODE_BUFFER_SIZE (16 * 1024)
-static char * code_buffer = NULL;
 struct Constant {
 	Constant() {}
 	Constant(int64_t i)
@@ -113,7 +111,32 @@ enum ConstantTableEntry {
 	C_FIRST_TRACE_CONST = 0x19
 };
 
-static Constant constant_table[TRACE_MAX_NODES] __attribute__((aligned(16)));
+static int make_executable(char * data, size_t size) {
+	int64_t page = (int64_t)data & ~0x7FFF;
+	int64_t psize = (int64_t)data + size - page;
+	return mprotect((void*)page,psize, PROT_READ | PROT_WRITE | PROT_EXEC);
+}
+
+//scratch space that is reused across traces
+struct TraceCodeBuffer {
+	Constant constant_table[TRACE_MAX_NODES] __attribute__((aligned(16)));
+	char code[CODE_BUFFER_SIZE] __attribute__((aligned(16)));
+	TraceCodeBuffer() {
+		//make the code executable
+		if(0 != make_executable(code,CODE_BUFFER_SIZE)) {
+			_error("mprotect failed.");
+		}
+		//fill in the constant table
+		constant_table[C_ABS_MASK] = Constant((uint64_t)0x7FFFFFFFFFFFFFFFULL);
+		constant_table[C_NEG_MASK] = Constant((uint64_t)0x8000000000000000ULL);
+		constant_table[C_NOT_MASK] = Constant((uint64_t)0xFFFFFFFFFFFFFFFFULL);
+		constant_table[C_SEQ_VEC] = Constant(1LL,2LL);
+		constant_table[C_LOGICAL_MASK] = Constant((uint64_t)0x1);
+		constant_table[C_PACK_LOGICAL] = Constant(0x1010101010100800,0x1010101010101010);
+		constant_table[C_LNOT_MASK] = Constant((uint8_t)0x1);
+		constant_table[C_DOUBLE_ZERO] = Constant(0.0);
+	}
+};
 
 #include <xmmintrin.h>
 
@@ -223,7 +246,7 @@ FOLD_SCAN_FN(sumd , double , +)
 
 struct TraceJIT {
 	TraceJIT(Trace * t)
-	:  trace(t), asm_(code_buffer,CODE_BUFFER_SIZE), next_constant_slot(C_FIRST_TRACE_CONST) {}
+	:  trace(t), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), next_constant_slot(C_FIRST_TRACE_CONST) {}
 
 	Trace * trace;
 	IRNode * store_inst[TRACE_MAX_NODES];
@@ -248,7 +271,7 @@ struct TraceJIT {
 		}
 	}
 
-	void compile() {
+	void Compile() {
 		bzero(store_inst,sizeof(IRNode *) * trace->n_nodes);
 		memset(allocated_register,-1,sizeof(char) * trace->n_nodes);
 		//pass 1 register allocation
@@ -292,7 +315,7 @@ struct TraceJIT {
 		asm_.push(vector_length);
 		asm_.push(rbx);
 
-		asm_.movq(constant_base, &constant_table[0]);
+		asm_.movq(constant_base, &trace->code_buffer->constant_table[0]);
 		asm_.xor_(vector_index,vector_index);
 		asm_.movq(vector_length, trace->length);
 
@@ -546,7 +569,7 @@ struct TraceJIT {
 	}
 	uint64_t PushConstantOffset(const Constant& data) {
 		uint32_t offset = next_constant_slot;
-		constant_table[offset] = data;
+		trace->code_buffer->constant_table[offset] = data;
 		next_constant_slot++;
 		return offset;
 	}
@@ -556,7 +579,7 @@ struct TraceJIT {
 		uint64_t offset = PushConstantOffset(identity);
 		SaveRegisters(live_registers[ref]);
 		EmitMove(xmm0,reg(node.unary.a));
-		asm_.movq(rdi,(void*)&constant_table[offset]);
+		asm_.movq(rdi,(void*)&trace->code_buffer->constant_table[offset]);
 		EmitCall(fn);
 		EmitMove(reg(ref),xmm0);
 		RestoreRegisters(live_registers[ref]);
@@ -576,7 +599,7 @@ struct TraceJIT {
 	}
 
 	Operand EncodeOperand(void * dst, Register idx, ScaleFactor scale) {
-		int64_t diff = (int64_t)dst - (int64_t)constant_table;
+		int64_t diff = (int64_t)dst - (int64_t)trace->code_buffer->constant_table;
 		if(is_int32(diff)) {
 			return Operand(constant_base,idx,scale,diff);
 		} else {
@@ -585,7 +608,7 @@ struct TraceJIT {
 		}
 	}
 	Operand EncodeOperand(void * src) {
-		int64_t diff = (int64_t)src - (int64_t)constant_table;
+		int64_t diff = (int64_t)src - (int64_t)trace->code_buffer->constant_table;
 		if(is_int32(diff)) {
 			return Operand(constant_base,diff);
 		} else {
@@ -640,7 +663,7 @@ struct TraceJIT {
 	}
 
 	void EmitCall(void * fn) {
-		int64_t diff = (int64_t)(code_buffer + asm_.pc_offset() + 5 - (int64_t) fn);
+		int64_t diff = (int64_t)(trace->code_buffer + asm_.pc_offset() + 5 - (int64_t) fn);
 		if(is_int32(diff)) {
 			asm_.call((byte*)fn);
 		} else {
@@ -778,9 +801,9 @@ struct TraceJIT {
 			_error("NYI - integer compare");
 		}
 	}
-	void execute(State & state) {
+	void Execute(State & state) {
 		typedef void (*fn) (void);
-		fn trace_code = (fn) code_buffer;
+		fn trace_code = (fn) trace->code_buffer->code;
 		if(state.tracing.verbose) {
 			timespec begin;
 			get_time(begin);
@@ -798,30 +821,14 @@ void Trace::JIT(State & state) {
 	if(state.tracing.verbose)
 		printf("executing trace:\n%s\n",toString(state).c_str());
 
-	if(code_buffer == NULL) {
-		//allocate the code buffer
-		code_buffer = (char*) malloc(CODE_BUFFER_SIZE);//(char*) mmap(NULL,CODE_BUFFER_SIZE,PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANON, -1, 0);
-		int64_t page = (int64_t)code_buffer & ~0x7FFF;
-		int64_t size = (int64_t)code_buffer + CODE_BUFFER_SIZE - page;
-		int err = mprotect((void*)page,size, PROT_READ | PROT_WRITE | PROT_EXEC);
-		if(err) {
-			_error("mprotect failed.");
-		}
-		//also fill in the constant table
-		constant_table[C_ABS_MASK] = Constant((uint64_t)0x7FFFFFFFFFFFFFFFULL);
-		constant_table[C_NEG_MASK] = Constant((uint64_t)0x8000000000000000ULL);
-		constant_table[C_NOT_MASK] = Constant((uint64_t)0xFFFFFFFFFFFFFFFFULL);
-		constant_table[C_SEQ_VEC] = Constant(1LL,2LL);
-		constant_table[C_LOGICAL_MASK] = Constant((uint64_t)0x1);
-		constant_table[C_PACK_LOGICAL] = Constant(0x1010101010100800,0x1010101010101010);
-		constant_table[C_LNOT_MASK] = Constant((uint8_t)0x1);
-		constant_table[C_DOUBLE_ZERO] = Constant(0.0);
+	if(code_buffer == NULL) { //since it is expensive to reallocate this, we reuse it across traces
+		code_buffer = new TraceCodeBuffer();
 	}
 
 	TraceJIT trace_code(this);
 
-	trace_code.compile();
-	trace_code.execute(state);
+	trace_code.Compile();
+	trace_code.Execute(state);
 
 	WriteOutputs(state);
 }
