@@ -130,7 +130,8 @@ bool get_input(State & state, Value & v, IRef * ref, bool * can_fallback, bool *
 	//encode the type;
 	switch(v.type) {
 	case Type::Integer: /* fallthrough */
-	case Type::Double:
+	case Type::Double: /* fallthrough */
+	case Type::Logical:
 		//constant or external reference?
 		if(v.length == 1) {
 			*ref = TRACE.EmitLoadC(v.type,v.i);
