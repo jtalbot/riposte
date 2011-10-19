@@ -907,10 +907,10 @@ struct TraceState {
 	Trace current_trace;
 
 
-	bool enabled() { return DISABLED != config; }
-	bool is_tracing() const { return active; }
+	bool Enabled() { return DISABLED != config; }
+	bool IsTracing() const { return active; }
 
-	Instruction const * begin_tracing(State & state, Instruction const * inst, size_t length) {
+	Instruction const * BeginTracing(State & state, Instruction const * inst, size_t length) {
 		if(active) {
 			_error("recursive record\n");
 		}
@@ -921,7 +921,7 @@ struct TraceState {
 
 	}
 
-	void end_tracing(State & state) {
+	void EndTracing(State & state) {
 		if(active) {
 			active = false;
 			current_trace.Execute(state);

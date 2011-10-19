@@ -424,7 +424,7 @@ Instruction const * recording_interpret(State& state, Instruction const* pc) {
 		   || RecordingStatus::NO_ERROR != (status = recording_check_conditions(state,pc))) {
 			if(state.tracing.verbose)
 				printf("%s op ended trace: %s\n",ByteCode::toString(pc->bc),RecordingStatus::toString(status));
-			state.tracing.end_tracing(state);
+			state.tracing.EndTracing(state);
 			return pc;
 		}
 		//printf(" .\n");
