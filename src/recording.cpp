@@ -103,9 +103,29 @@ CHECKED_INTERPRET(call, A)
 
 OP_NOT_IMPLEMENTED(icall)
 
+
+struct LoadCache {
+	IRef get(State & state, const Value& v) {
+		uint64_t idx = (int64_t) v.p;
+		idx += idx >> 32;
+		idx += idx >> 16;
+		idx += idx >> 8;
+		idx &= 0xFF;
+		IRef cached = cache[idx];
+		if(cached < TRACE.n_pending &&
+		   TRACE.nodes[cached].op == IROpCode::loadv &&
+		   TRACE.nodes[cached].loadv.p == v.p) {
+			return cached;
+		} else {
+			return (cache[idx] = TRACE.EmitLoadV(v.type,v.p));
+		}
+	}
+	IRef cache[256];
+};
+
 bool get_input(State & state, Value & v, IRef * ref, bool * can_fallback, bool * should_record) {
 
-	static IRef load_cache[256];
+	static LoadCache load_cache;
 
 	//encode the type;
 	switch(v.type) {
@@ -115,21 +135,7 @@ bool get_input(State & state, Value & v, IRef * ref, bool * can_fallback, bool *
 		if(v.length == 1) {
 			*ref = TRACE.EmitLoadC(v.type,v.i);
 		} else if(v.length == TRACE.length) {
-			//first check to see if we already loaded this value
-			uint64_t idx = (int64_t) v.p;
-			idx += idx >> 32;
-			idx += idx >> 16;
-			idx += idx >> 8;
-			idx &= 0xFF;
-			IRef cached = load_cache[idx];
-			if(cached < TRACE.n_pending &&
-			   TRACE.nodes[cached].op == IROpCode::loadv &&
-			   TRACE.nodes[cached].loadv.p == v.p) {
-				*ref = cached;
-			} else {
-				*ref = TRACE.EmitLoadV(v.type,v.p);
-				load_cache[idx] = *ref;
-			}
+			*ref = load_cache.get(state,v);
 			*should_record = true;
 		} else {
 			return false;
