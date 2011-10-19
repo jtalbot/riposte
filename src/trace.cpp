@@ -7,7 +7,6 @@
 
 void Trace::Reset() {
 	n_nodes = n_recorded = length = n_outputs = n_output_values = n_pending = 0;
-	max_live_register = NULL;
 }
 
 std::string Trace::toString(State & state) {
@@ -76,22 +75,9 @@ static void set_location_value(State & state, const Trace::Location & l, const V
 	}
 }
 
-static bool is_location_dead(Trace & trace, const Trace::Location & l) {
-	bool dead = l.type == Trace::Location::REG &&
-	( l.reg.base < trace.max_live_register_base ||
-	  ( l.reg.base == trace.max_live_register_base &&
-	    l.reg.offset > trace.max_live_register
-	  )
-	);
-	//if(dead)
-	//	printf("r%d is dead! long live r%d\n",(int)l.reg.offset,(int)trace.max_live_register);
-
-	return dead;
-}
-
 //attempts to find a future at location l, returns true if the location is live and contains a future
-static bool get_location_value_if_live(State & state, Trace & trace, const Trace::Location & l, Value & v) {
-	if(is_location_dead(trace,l))
+static bool get_location_value_if_live(State & state, const Trace::Location & l, Value & v) {
+	if(state.tracing.LocationIsDead(l))
 		return false;
 	v = get_location_value(state,l);
 	return v.isFuture();
@@ -106,7 +92,7 @@ void Trace::InitializeOutputs(State & state) {
 	for(size_t i = 0; i < n_outputs; ) {
 		Output & o = outputs[i];
 		Value loc;
-		if(!get_location_value_if_live(state,*this,o.location,loc)) {
+		if(!get_location_value_if_live(state,o.location,loc)) {
 			o = outputs[--n_outputs];
 		} else {
 			IRef ref = loc.future.ref;

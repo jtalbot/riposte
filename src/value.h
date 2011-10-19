@@ -767,9 +767,6 @@ struct Trace {
 	Value output_values[TRACE_MAX_OUTPUTS];
 	size_t n_output_values;
 
-	Value * max_live_register_base;
-	int64_t max_live_register;
-
 	bool Reserve(size_t num_nodes, size_t num_outputs) {
 		if(n_pending + num_nodes >= TRACE_MAX_NODES)
 			return false;
@@ -864,16 +861,6 @@ struct Trace {
 		out.location.type = Trace::Location::VAR;
 		out.location.pointer = p;
 	}
-	void SetMaxLiveRegister(Value * base, int64_t r) {
-		max_live_register_base = base;
-		max_live_register = r;
-	}
-	void UnionWithMaxLiveRegister(Value * base, int64_t r) {
-		if(base < max_live_register_base
-		   || (base == max_live_register_base && r > max_live_register)) {
-			SetMaxLiveRegister(base,r);
-		}
-	}
 	void Reset();
 	void InitializeOutputs(State & state);
 	void WriteOutputs(State & state);
@@ -906,19 +893,43 @@ struct TraceState {
 
 	Trace current_trace;
 
+	Value * max_live_register_base;
+	int64_t max_live_register;
 
 	bool Enabled() { return DISABLED != config; }
 	bool IsTracing() const { return active; }
+
+	void SetMaxLiveRegister(Value * base, int64_t r) {
+		max_live_register_base = base;
+		max_live_register = r;
+	}
+	void UnionWithMaxLiveRegister(Value * base, int64_t r) {
+		if(base < max_live_register_base
+		   || (base == max_live_register_base && r > max_live_register)) {
+			SetMaxLiveRegister(base,r);
+		}
+	}
+	bool LocationIsDead(const Trace::Location & l) {
+		bool dead = l.type == Trace::Location::REG &&
+		( l.reg.base < max_live_register_base ||
+		  ( l.reg.base == max_live_register_base &&
+		    l.reg.offset > max_live_register
+		  )
+		);
+		//if(dead)
+		//	printf("r%d is dead! long live r%d\n",(int)l.reg.offset,(int)trace.max_live_register);
+		return dead;
+	}
 
 	Instruction const * BeginTracing(State & state, Instruction const * inst, size_t length) {
 		if(active) {
 			_error("recursive record\n");
 		}
+		max_live_register = NULL;
 		current_trace.Reset();
 		current_trace.length = length;
 		active = true;
 		return recording_interpret(state,inst);
-
 	}
 
 	void EndTracing(State & state) {

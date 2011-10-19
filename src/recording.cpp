@@ -30,7 +30,7 @@ RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instru
 	*pc = get_op(state,inst);
 	Value & r = REG(state,inst.c);
 
-	TRACE.UnionWithMaxLiveRegister(state.base,inst.c);
+	state.tracing.UnionWithMaxLiveRegister(state.base,inst.c);
 
 	if(r.isFuture()) {
 		TRACE.EmitRegOutput(state.base,inst.c);
@@ -59,7 +59,7 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 		//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
 		TRACE.EmitVarOutput(state,state.frame.environment->makePointer(String::Init(inst.a)));
 	}
-	TRACE.SetMaxLiveRegister(state.base,inst.c);
+	state.tracing.SetMaxLiveRegister(state.base,inst.c);
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -208,7 +208,7 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, State 
 		Type::Enum rtyp,atyp,btyp;
 		selectType(bc,TRACE.nodes[aref].type,TRACE.nodes[bref].type,&atyp,&btyp,&rtyp);
 		TRACE.EmitRegOutput(state.base,inst.c);
-		TRACE.SetMaxLiveRegister(state.base,inst.c);
+		state.tracing.SetMaxLiveRegister(state.base,inst.c);
 		Future::Init(REG(state,inst.c),
 				     rtyp,
 				     TRACE.length,
@@ -240,7 +240,7 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, State &
 				     length,
 				     TRACE.EmitUnary(op,rtyp,coerce(state,atyp,aref)));
 		TRACE.EmitRegOutput(state.base,inst.c);
-		TRACE.SetMaxLiveRegister(state.base,inst.c);
+		state.tracing.SetMaxLiveRegister(state.base,inst.c);
 		TRACE.Commit();
 		return RecordingStatus::NO_ERROR;
 	} else {
@@ -362,7 +362,7 @@ RecordingStatus::Enum ret_record(State & state, Instruction const & inst, Instru
 		TRACE.EmitRegOutput(state.base,offset);
 	}
 
-	TRACE.SetMaxLiveRegister(state.base,max_live);
+	state.tracing.SetMaxLiveRegister(state.base,max_live);
 
 	return RecordingStatus::NO_ERROR;
 }
@@ -392,7 +392,7 @@ RecordingStatus::Enum seq_record(State & state, Instruction const & inst, Instru
 				     Type::Integer,
 				     len,
 				     TRACE.EmitSpecial(IROpCode::seq,Type::Integer,len,step));
-		TRACE.SetMaxLiveRegister(state.base,inst.c);
+		state.tracing.SetMaxLiveRegister(state.base,inst.c);
 		TRACE.Commit();
 		(*pc)++;
 	}
