@@ -549,7 +549,7 @@ Instruction const* seq_op(State& state, Instruction const& inst) {
 	int64_t len = As<Integer>(state, REG(state, inst.a))[0];
 	int64_t step = As<Integer>(state, REG(state, inst.b))[0];
 	if(state.tracing.Enabled() && isRecordable(Type::Integer, len))
-		return state.tracing.BeginTracing(state, &inst, len);
+		return state.tracing.BeginTracing(state, &inst);
 	else {
 		REG(state, inst.c) = Sequence(len, 1, step);
 		return &inst+1;
@@ -573,7 +573,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 		}	\
 	} \
 	else if(state.tracing.Enabled() && isRecordable(a)) \
-		return state.tracing.BeginTracing(state, &inst, a.length); \
+		return state.tracing.BeginTracing(state, &inst); \
 	\
 	unaryArith<Zip1, Op>(state, a, c); \
 	return &inst+1; \
@@ -586,7 +586,7 @@ UNARY_ARITH_MAP_BYTECODES(OP)
 Instruction const* name##_op(State& state, Instruction const& inst) { \
 	Value & a = REG(state,inst.a); \
 	if(state.tracing.Enabled() && isRecordable(a)) \
-		return state.tracing.BeginTracing(state,&inst,a.length); \
+		return state.tracing.BeginTracing(state,&inst); \
 	else \
 		unaryLogical<Zip1, Op>(state, a, REG(state, inst.c)); \
 	return &inst+1; \
@@ -630,7 +630,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 		}	\
 	} \
 	else if(state.tracing.Enabled() && isRecordable(a,b)) \
-		return state.tracing.BeginTracing(state, &inst, std::max(a.length,b.length));	\
+		return state.tracing.BeginTracing(state, &inst);	\
 \
 	binaryArithSlow<Zip2, Op>(state, a, b, c);	\
 	return &inst+1;	\
@@ -643,7 +643,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 	Value & a = REG(state,inst.a); \
 	Value & b = REG(state,inst.b); \
 	if(state.tracing.Enabled() && isRecordable(a,b)) \
-		return state.tracing.BeginTracing(state,&inst,std::max(a.length,b.length)); \
+		return state.tracing.BeginTracing(state,&inst); \
 	else \
 		binaryLogical<Zip2, Op>(state, a, b, REG(state, inst.c)); \
 	return &inst+1; \
@@ -669,7 +669,7 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
                         { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return &inst+1;} \
         } \
     	else if(state.tracing.Enabled() && isRecordable(a,b)) \
-    		return state.tracing.BeginTracing(state,&inst,std::max(a.length,b.length)); \
+    		return state.tracing.BeginTracing(state,&inst); \
     	else \
 	binaryOrdinal<Zip2, Op>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c)); \
 	return &inst+1; \

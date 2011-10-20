@@ -289,9 +289,10 @@ VECTOR_IMPL(List, Value, true)
 
 
 struct Future : public Value {
-	static void Init(Value & f, Type::Enum typ,int64_t length, IRef ref) {
+	static void Init(Value & f, Type::Enum typ,int64_t length, int64_t id,IRef ref) {
 		Value::Init(f,Type::Future,length);
 		f.future.ref = ref;
+		f.future.trace_id = id;
 		f.future.typ = typ;
 	}
 	
@@ -744,7 +745,6 @@ struct Trace {
 
 	size_t n_nodes;
 	size_t n_pending_nodes;
-	size_t n_recorded;
 
 	int64_t length;
 
@@ -776,23 +776,6 @@ struct Trace {
 
 	Trace() { Reset(); code_buffer = NULL; }
 
-	void Rollback() {
-		n_pending_nodes = n_nodes;
-	}
-	//commits the recorded instructions and outputs from the current op
-	//returns true when there is enough room left to record another op
-	//returns false otherwise, indicating the trace must be flushed
-	//??? - Should commit just go and flush the trace itself when it runs out of room?
-	bool Commit() {
-		n_nodes = n_pending_nodes;
-		n_outputs = n_pending_outputs;
-		if(n_nodes + TRACE_MAX_NODES_PER_COMMIT >= TRACE_MAX_NODES)
-			return false;
-		else if(n_outputs + TRACE_MAX_OUTPUTS_PER_COMMIT >= TRACE_MAX_OUTPUTS)
-			return false;
-		else
-			return true;
-	}
 	IRef EmitBinary(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t b) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::BINARY;
@@ -891,6 +874,7 @@ struct TraceState {
 		active = false;
 		config = DISABLED;
 		verbose = false;
+		n_recorded_since_last_exec = 0;
 	}
 
 	enum Mode {
@@ -908,6 +892,8 @@ struct TraceState {
 
 	Value * max_live_register_base;
 	int64_t max_live_register;
+
+	size_t n_recorded_since_last_exec;
 
 	bool Enabled() { return DISABLED != config; }
 	bool IsTracing() const { return active; }
@@ -934,32 +920,76 @@ struct TraceState {
 		return dead;
 	}
 
-	Instruction const * BeginTracing(State & state, Instruction const * inst,size_t length) {
+	Instruction const * BeginTracing(State & state, Instruction const * inst) {
 		if(active) {
 			_error("recursive record\n");
 		}
 		max_live_register = NULL;
 		active = true;
-		int8_t reg;
-		live_traces.allocate(&reg);
-		traces[reg].Reset();
-		traces[reg].length = length;
-		return recording_interpret(state,inst);
-	}
 
-	void ExecuteAllTraces(State & state) {
-		for(size_t i = 0; i < TRACE_MAX_TRACES; i++) {
-			if(live_traces.is_live(i)) {
-				traces[i].Execute(state);
-			}
-		}
-		live_traces.clear();
+		return recording_interpret(state,inst);
 	}
 
 	void EndTracing(State & state) {
 		if(active) {
 			active = false;
-			ExecuteAllTraces(state);
+			FlushAllTraces(state);
+		}
+	}
+
+	Trace & AllocateTrace(State & state, int64_t shape) {
+		int8_t reg;
+		if(live_traces.allocate(&reg)) {
+			traces[reg].Reset();
+			traces[reg].length = shape;
+			return traces[reg];
+		} else {
+			FlushAllTraces(state);
+			return AllocateTrace(state,shape);
+		}
+	}
+	int64_t TraceID(Trace & trace) {
+		return &trace - &traces[0];
+	}
+	Trace & GetOrAllocateTrace(State & state, int64_t shape) {
+		for(size_t i = 0; i < TRACE_MAX_TRACES; i++) {
+			if(live_traces.is_live(i) && traces[i].length == shape)
+				return traces[i];
+		}
+		return AllocateTrace(state,shape);
+	}
+
+	void Rollback(Trace & t) {
+		t.n_pending_nodes = t.n_nodes;
+		t.n_pending_outputs = t.n_output_values;
+		if(t.n_nodes == 0) {
+			size_t id = TraceID(t);
+			live_traces.free(id);
+		}
+	}
+	//commits the recorded instructions and outputs from the current op
+	//if the trace does not have enough room to record another op, it is flushed
+	//and the slot is freed for another trace
+	void Commit(State & state, Trace & t) {
+		t.n_nodes = t.n_pending_nodes;
+		t.n_outputs = t.n_pending_outputs;
+		if(t.n_nodes + TRACE_MAX_NODES_PER_COMMIT >= TRACE_MAX_NODES
+		  || t.n_outputs + TRACE_MAX_OUTPUTS_PER_COMMIT >= TRACE_MAX_OUTPUTS) {
+			Flush(state,t);
+		}
+	}
+	void Flush(State & state, Trace & trace) {
+		size_t id = TraceID(trace);
+		if(live_traces.is_live(id)) {
+			n_recorded_since_last_exec = 0;
+			trace.Execute(state);
+			assert(id < TRACE_MAX_TRACES);
+			live_traces.free(TraceID(trace));
+		}
+	}
+	void FlushAllTraces(State & state) {
+		for(size_t i = 0; i < TRACE_MAX_TRACES; i++) {
+			Flush(state,traces[i]);
 		}
 	}
 };

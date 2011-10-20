@@ -8,7 +8,7 @@ struct RegisterAllocator {
 	uint32_t a;
 	uint32_t n_registers;
 	RegisterAllocator(uint32_t n_reg)
-	: a(~0), n_registers(n_reg) {}
+	: a(~0U), n_registers(n_reg) {}
 	void print() {
 		for(int i = 0; i < 32; i++)
 			if( a & (1 << i))
@@ -28,8 +28,12 @@ struct RegisterAllocator {
 	}
 	bool allocateWithMask(RegisterSet valid_registers, int8_t * reg) {
 		*reg = ffs(a & valid_registers) - 1;
-		a &= ~(1 << *reg);
-		return (*reg < (int) n_registers);
+		if(*reg < (int) n_registers)  {
+			a &= ~(1 << *reg);
+			return true;
+		} else {
+			return false;
+		}
 	}
 	bool allocate(int8_t * reg) { return allocateWithMask(~0,reg); }
 	RegisterSet live_registers() {
@@ -38,8 +42,11 @@ struct RegisterAllocator {
 	bool is_live(uint8_t reg) {
 		return !(a & (1 << reg));
 	}
+	bool empty() {
+		return a == ~0U;
+	}
 	void clear() {
-		a = ~0;
+		a = ~0U;
 	}
 	void free(uint8_t reg) {
 		a |= (1 << reg);

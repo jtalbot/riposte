@@ -6,7 +6,7 @@
 #include <stdlib.h>
 
 void Trace::Reset() {
-	n_nodes = n_recorded = length = n_outputs = n_output_values = n_pending_nodes = n_pending_outputs = 0;
+	n_nodes = length = n_outputs = n_output_values = n_pending_nodes = n_pending_outputs = 0;
 }
 
 std::string Trace::toString(State & state) {
@@ -76,11 +76,11 @@ static void set_location_value(State & state, const Trace::Location & l, const V
 }
 
 //attempts to find a future at location l, returns true if the location is live and contains a future
-static bool get_location_value_if_live(State & state, const Trace::Location & l, Value & v) {
+static bool get_location_value_if_live(State & state, Trace & trace, const Trace::Location & l, Value & v) {
 	if(state.tracing.LocationIsDead(l))
 		return false;
 	v = get_location_value(state,l);
-	return v.isFuture();
+	return v.isFuture() && v.future.trace_id == state.tracing.TraceID(trace);
 }
 
 void Trace::InitializeOutputs(State & state) {
@@ -92,7 +92,7 @@ void Trace::InitializeOutputs(State & state) {
 	for(size_t i = 0; i < n_outputs; ) {
 		Output & o = outputs[i];
 		Value loc;
-		if(!get_location_value_if_live(state,o.location,loc)) {
+		if(!get_location_value_if_live(state,*this,o.location,loc)) {
 			o = outputs[--n_outputs];
 		} else {
 			IRef ref = loc.future.ref;
@@ -121,7 +121,7 @@ void Trace::InitializeOutputs(State & state) {
 				} else {
 					EmitStoreC(typ,&v,ref);
 				}
-				Commit();
+				n_nodes = n_pending_nodes;
 				values[ref] = &v;
 			}
 			set_location_value(state,o.location,Value::Nil()); //mark this location in the interpreter as already seen
