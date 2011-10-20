@@ -64,7 +64,7 @@ void islist(State& state, Value const* args, Value& result) {
 }
 */
 
-void importCoerceFunctions(State& state, Environment* env)
+void importCoerceFunctions(State& state, REnvironment env)
 {
 	state.registerInternalFunction(state.internStr("as.null"), (asnull), 1);
 	state.registerInternalFunction(state.internStr("as.logical"), (aslogical), 1);

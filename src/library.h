@@ -7,8 +7,8 @@
 void loadLibrary(State& state, std::string path, std::string name);
 
 
-void importCoreFunctions(State& state, Environment* env);
-void importCoerceFunctions(State& state, Environment* env);
+void importCoreFunctions(State& state, REnvironment env);
+void importCoerceFunctions(State& state, REnvironment env);
 
 
 #endif

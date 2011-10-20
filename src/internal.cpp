@@ -28,9 +28,8 @@ void cat(State& state, Value const* args, Value& result) {
 
 void remove(State& state, Value const* args, Value& result) {
 	Character const& a = Cast<Character>(args[0]);
-	REnvironment e(args[1]);
 	for(int64_t i = 0; i < a.length; i++) {
-		e.ptr()->assign(a[i], Value::Nil());
+		REnvironment::assign((REnvironment&)args[1], a[i], Value::Nil());
 	}
 	result = Null::Singleton();
 }
@@ -579,7 +578,7 @@ void length(State& state, Value const* args, Value& result) {
 }
 
 void eval_fn(State& state, Value const* args, Value& result) {
-	result = eval(state, Compiler::compile(state, args[0]), REnvironment(args[1]).ptr());
+	result = eval(state, Compiler::compile(state, args[0]), ((REnvironment&)args[1]));
 }
 
 void lapply(State& state, Value const* args, Value& result) {
@@ -653,22 +652,22 @@ void environment(State& state, Value const* args, Value& result) {
 // the dynamic pointer in the environment after all...
 void parentframe(State& state, Value const* args, Value& result) {
 	int64_t i = (int64_t)asReal1(args[0]);
-	Environment* env = state.frame.environment;
-	while(i > 0 && env->DynamicScope() != 0) {
-		env = env->DynamicScope();
+	REnvironment env = state.frame.environment;
+	while(i > 0 && !env.DynamicScope().isNull()) {
+		env = env.DynamicScope();
 		i--;
 	}
-	result = REnvironment(env);
+	result = env;
 }
 
 void syscall(State& state, Value const* args, Value& result) {
 	int64_t i = (int64_t)asReal1(args[0]);
-	Environment* env = state.frame.environment;
-	while(i > 0 && env->DynamicScope() != 0) {
-		env = env->DynamicScope();
+	REnvironment env = state.frame.environment;
+	while(i > 0 && !env.DynamicScope().isNull()) {
+		env = env.DynamicScope();
 		i--;
 	}
-	result = env->call;
+	result = env.call();
 }
 
 void stop_fn(State& state, Value const* args, Value& result) {
@@ -728,7 +727,7 @@ void substitute(State& state, Value const* args, Value& result) {
 	while(v.isPromise()) v = Function(v).prototype()->expression;
 	
 	if(v.isSymbol()) {
-		Value r = state.frame.environment->get(Symbol(v));
+		Value r = state.frame.environment.get(Symbol(v));
 		if(!r.isNil()) v = r;
 		while(v.isPromise()) v = Function(v).prototype()->expression;
 	}
@@ -742,8 +741,7 @@ void type_of(State& state, Value const* args, Value& result) {
 
 void exists(State& state, Value const* args, Value& result) {
 	Character c = As<Character>(state, args[0]);
-	REnvironment e(args[1]);
-	Value v = e.ptr()->get(c[0]);
+	Value v = ((REnvironment&)args[1]).get(c[0]);
 	if(v.isNil())
 		result = Logical::False();
 	else
@@ -771,7 +769,7 @@ void traceconfig(State & state, Value const* args, Value& result) {
 	result = Null::Singleton();
 }
 
-void importCoreFunctions(State& state, Environment* env)
+void importCoreFunctions(State& state, REnvironment env)
 {
 	state.registerInternalFunction(state.internStr("nchar"), (nchar_fn), 1);
 	state.registerInternalFunction(state.internStr("nzchar"), (nzchar_fn), 1);

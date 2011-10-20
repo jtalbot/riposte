@@ -59,7 +59,7 @@ static const Value & get_location_value(State & state, const Trace::Location & l
 		return l.reg.base[l.reg.offset];
 	default:
 	case Trace::Location::VAR:
-		return l.pointer.env->get(l.pointer);
+		return ((REnvironment&)l.pointer.env).get(l.pointer);
 	}
 }
 static void set_location_value(State & state, const Trace::Location & l, const Value & v) {
@@ -68,7 +68,7 @@ static void set_location_value(State & state, const Trace::Location & l, const V
 		l.reg.base[l.reg.offset] = v;
 		return;
 	case Trace::Location::VAR:
-		l.pointer.env->assign(l.pointer,v);
+		REnvironment::assign(l.pointer, v);
 		return;
 	}
 }

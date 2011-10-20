@@ -16,7 +16,7 @@
 #define USE_THREADED_INTERPRETER
 #define ALWAYS_INLINE __attribute__((always_inline))
 
-static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc);
+static Instruction const* buildStackFrame(State& state, REnvironment environment, Prototype const* prototype, Value* result, Instruction const* returnpc);
 
 #ifndef __ICC
 extern Instruction const* kget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
@@ -28,22 +28,22 @@ extern Instruction const* add_op(State& state, Instruction const& inst) ALWAYS_I
 extern Instruction const* subset_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 #endif
 
-#define REG(state, i) (*(state.base+i))
+#define REG(state, i) (*(state.sp+i))
 
 static void ExpandDots(State& state, List& arguments, Character& names, int64_t dots) {
-	Environment* environment = state.frame.environment;
-	uint64_t dotslength = environment->dots.size();
+	REnvironment environment = state.frame.environment;
+	uint64_t dotslength = environment.dots().size();
 	// Expand dots into the parameter list...
 	if(dots < arguments.length) {
 		List a(arguments.length + dotslength - 1);
 		for(int64_t i = 0; i < dots; i++) a[i] = arguments[i];
-		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(state, Symbol(String::Init(-(i-dots+1)))), NULL).AsPromise(); } // TODO: should cache these.
+		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(state, Symbol(String::Init(-(i-dots+1)))), REnvironment::Null()).AsPromise(); } // TODO: should cache these.
 		for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) a[i] = arguments[i-dotslength];
 
 		arguments = a;
 		
 		uint64_t named = 0;
-		for(uint64_t i = 0; i < dotslength; i++) if(environment->dots[i] != Strings::empty) named++;
+		for(uint64_t i = 0; i < dotslength; i++) if(environment.dots()[i] != Strings::empty) named++;
 
 		if(names.length > 0 || named > 0) {
 			Character n(arguments.length + dotslength - 1);
@@ -53,24 +53,24 @@ static void ExpandDots(State& state, List& arguments, Character& names, int64_t 
 				for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) n[i] = names[i-dotslength];
 			}
 			if(named > 0) {
-				for(uint64_t i = dots; i < dots+dotslength; i++) n[i] = environment->dots[i]; 
+				for(uint64_t i = dots; i < dots+dotslength; i++) n[i] = environment.dots()[i]; 
 			}
 			names = n;
 		}
 	}
 }
 
-inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* execution, Character const& parameters) {
+inline void argAssign(REnvironment env, int64_t i, Value const& v, REnvironment execution, Character const& parameters) {
 	Value w = v;
-	if(w.isPromise() && w.p == 0) w.p = execution;
+	if(w.isPromise() && w.p == 0) w.p = execution.p;
 	if(i >= 0)
-		env->assign(parameters[i], w);
+		REnvironment::assign(env, parameters[i], w);
 	else {
-		env->assign(String::Init(i), w);
+		REnvironment::assign(env, String::Init(i), w);
 	}
 }
 
-static void MatchArgs(State& state, Environment* env, Environment* fenv, Function const& func, List const& arguments, Character const& anames) {
+static void MatchArgs(State& state, REnvironment env, REnvironment fenv, Function const& func, List const& arguments, Character const& anames) {
 	List const& defaults = func.prototype()->defaults;
 	Character const& parameters = func.prototype()->parameters;
 	int64_t fdots = func.prototype()->dots;
@@ -92,7 +92,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			int64_t idx = 1;
 			for(int64_t i = fdots; i < arguments.length; i++) {
 				argAssign(fenv, -idx, arguments[i], env, parameters);
-				fenv->dots.push_back(Strings::empty);
+				fenv.dots().push_back(Strings::empty);
 				idx++;
 			}
 			end++;
@@ -156,7 +156,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 			for(int64_t i = 0; i < arguments.length; i++) {
 				if(assignment[i] < 0) {
 					argAssign(fenv, -idx, arguments[i], env, parameters);
-					fenv->dots.push_back(anames[i]);
+					fenv.dots().push_back(anames[i]);
 					idx++;
 				}
 			}
@@ -164,8 +164,8 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 	}
 }
 
-static Environment* CreateEnvironment(State& state, Environment* l, Environment* d, Value const& call) {
-	return new (state.semispace) Environment(l, d, call);
+static REnvironment CreateEnvironment(State& state, REnvironment l, REnvironment d, Value const& call) {
+	return REnvironment(state, l, d, call);
 }
 //track the heat of back edge operations and invoke the recorder on hot traces
 //unused until we begin tracing loops again
@@ -183,7 +183,7 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 	
 	List arguments;
 	Character names;
-	Environment* fenv;
+	REnvironment fenv;
 	if(inst.b < 0) {
 		CompiledCall const& call = state.frame.prototype->calls[-(inst.b+1)];
 		arguments = call.arguments;
@@ -204,7 +204,7 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 	}
 
 	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
-	return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
+	return buildStackFrame(state, fenv, func.prototype(), &REG(state, inst.c), &inst+1);
 }
 
 Instruction const* icall_op(State& state, Instruction const& inst) {
@@ -215,11 +215,11 @@ Instruction const* icall_op(State& state, Instruction const& inst) {
 // Get a Value by Symbol from the current environment,
 //  TODO: UseMethod also should search in some cached library locations.
 static Value GenericGet(State& state, String s) {
-	Environment* environment = state.frame.environment;
-	Value value = environment->get(s);
-	while(value.isNil() && environment->LexicalScope() != 0) {
-		environment = environment->LexicalScope();
-		value = environment->get(s);
+	REnvironment environment = state.frame.environment;
+	Value value = environment.get(s);
+	while(value.isNil() && !environment.LexicalScope().isNull()) {
+		environment = environment.LexicalScope();
+		value = environment.get(s);
 	}
 	if(value.isPromise()) {
 		//value = force(state, value);
@@ -269,12 +269,12 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 	}
 
 	Function func(f);
-	Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, call.call);
+	REnvironment fenv = CreateEnvironment(state, func.environment(), state.frame.environment, call.call);
 	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);	
-	fenv->assign(Strings::dotGeneric, Symbol(generic));
-	fenv->assign(Strings::dotMethod, Symbol(method));
-	fenv->assign(Strings::dotClass, type); 
-	return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
+	REnvironment::assign(fenv, Strings::dotGeneric, Symbol(generic));
+	REnvironment::assign(fenv, Strings::dotMethod, Symbol(method));
+	REnvironment::assign(fenv, Strings::dotClass, type); 
+	return buildStackFrame(state, fenv, func.prototype(), &REG(state, inst.c), &inst+1);
 }
 
 Instruction const* get_op(State& state, Instruction const& inst) {
@@ -287,33 +287,33 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 	// check if we can get the value through inline caching...
 	uint64_t icRevision = (&inst+2)->b;
 
-	if(__builtin_expect(state.frame.environment->equalRevision(icRevision), true)) {
-		REG(state, inst.c) = state.frame.environment->get((&inst+2)->a);
+	if(__builtin_expect(state.frame.environment.equalRevision(icRevision), true)) {
+		REG(state, inst.c) = state.frame.environment.get((&inst+2)->a);
 		return &inst+3;
 	}
 
 	// otherwise, need to do a real look up starting from env
-	Environment* env = state.frame.environment;
+	REnvironment env = state.frame.environment;
 	String s = String::Init(inst.a);
 	
 	Value& dest = REG(state, inst.c);
-	dest = env->get(s);
-	while(dest.isNil() && env->LexicalScope() != 0) {
-		env = env->LexicalScope();
-		dest = env->get(s);
+	dest = env.get(s);
+	while(dest.isNil() && !env.LexicalScope().isNull()) {
+		env = env.LexicalScope();
+		dest = env.get(s);
 	}
 
 	if(dest.isConcrete()) {
-		Environment::Pointer p = env->makePointer(s);
+		REnvironment::Pointer p = env.makePointer(s);
 		((Instruction*)(&inst+2))->a = p.index;
 		((Instruction*)(&inst+2))->b = p.revision;
 		return &inst+3;
 	} else if(dest.isPromise()) {
-		Environment* env = Function(dest).environment();
+		REnvironment env = Function(dest).environment();
 		Prototype* prototype = Function(dest).prototype();
-		assert(env != 0);
+		assert(!env.isNull());
 		// the inline cache info will be populated by the assignment instruction
-		return buildStackFrame(state, env, false, prototype, &dest, &inst+1);
+		return buildStackFrame(state, env, prototype, &dest, &inst+1);
 	}
 	else
 		throw RiposteError(std::string("object '") + state.externStr(s) + "' not found");
@@ -324,18 +324,18 @@ Instruction const* kget_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* iget_op(State& state, Instruction const& inst) {
-	REG(state, inst.c) = state.path[0]->get(inst.a);
+	REG(state, inst.c) = state.path[0].get(inst.a);
 	if(REG(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.externStr(String::Init(inst.a)) + "' not found");
 	return &inst+1;
 }
 Instruction const* assign_op(State& state, Instruction const& inst) {
 	// check if we can assign through inline caching
-	if(state.frame.environment->equalRevision((&inst+1)->b))
-		state.frame.environment->assign((&inst+1)->a, REG(state, inst.c));
+	if(state.frame.environment.equalRevision((&inst+1)->b))
+		REnvironment::assign(state.frame.environment, (&inst+1)->a, REG(state, inst.c));
 	else {
-		state.frame.environment->assign(String::Init(inst.a), REG(state, inst.c));
+		REnvironment::assign(state.frame.environment, String::Init(inst.a), REG(state, inst.c));
 		
-		Environment::Pointer p = state.frame.environment->makePointer(String::Init(inst.a));
+		REnvironment::Pointer p = state.frame.environment.makePointer(String::Init(inst.a));
 		((Instruction*)(&inst+1))->a = p.index;
 		((Instruction*)(&inst+1))->b = p.revision;
 		((Instruction*)(&inst+1))->c = 0;
@@ -347,32 +347,32 @@ Instruction const* assign2_op(State& state, Instruction const& inst) {
 	// assign2 is always used to assign up at least one scope level...
 	// so start off looking up one level...
 
-	Environment* env = state.frame.environment->LexicalScope();
-	assert(env != 0);
+	REnvironment env = state.frame.environment.LexicalScope();
+	assert(!env.isNull());
 
 	uint64_t icRevision = (&inst+1)->b;
-	if(__builtin_expect(env->equalRevision(icRevision), true)) {
-		env->assign((&inst+1)->a, REG(state, inst.c));
+	if(__builtin_expect(env.equalRevision(icRevision), true)) {
+		REnvironment::assign(env, (&inst+1)->a, REG(state, inst.c));
 		return &inst+2;
 	}
 
 	// otherwise, need to do a real look up starting from env
 	String s = String::Init(inst.a);
-	Value dest = env->get(s);
-	icRevision = std::max(icRevision, env->getRevision());
-	while(dest.isNil() && env->LexicalScope() != 0) {
-		env = env->LexicalScope();
-		dest = env->get(s);
+	Value dest = env.get(s);
+	icRevision = std::max(icRevision, env.getRevision());
+	while(dest.isNil() && !env.LexicalScope().isNull()) {
+		env = env.LexicalScope();
+		dest = env.get(s);
 	}
 
 	if(!dest.isNil()) {
-		env->assign(s, REG(state, inst.c));
-		Environment::Pointer p = env->makePointer(String::Init(inst.a));
+		REnvironment::assign(env, s, REG(state, inst.c));
+		REnvironment::Pointer p = env.makePointer(String::Init(inst.a));
 		((Instruction*)(&inst+1))->a = p.index;
 		((Instruction*)(&inst+1))->b = p.revision;
 	}
 	else {
-		state.global->assign(s, REG(state, inst.c));
+		REnvironment::assign(state.global, s, REG(state, inst.c));
 		// Global may not be in the static scope of function so we can't populate IC here.
 		// However, if global is in the static scope, the second iteration of assign2 will find it on the path and set the IC in the immediately previous if block.
 	}
@@ -475,14 +475,14 @@ Instruction const* colon_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* list_op(State& state, Instruction const& inst) {
-	std::vector<String> const& dots = state.frame.environment->dots;
+	std::vector<String> const& dots = state.frame.environment.dots();
 	// First time through, make a result vector...
 	if(REG(state, inst.a).i == 0) {
 		REG(state, inst.c) = List(dots.size());
 	}
 	// Otherwise populate result vector with next element
 	else {
-		state.frame.environment->assign(String::Init(-REG(state, inst.a).i), REG(state, inst.b));
+		REnvironment::assign(state.frame.environment, String::Init(-REG(state, inst.a).i), REG(state, inst.b));
 		((List&)REG(state, inst.c))[REG(state, inst.a).i-1] = REG(state, inst.b);
 	}
 
@@ -503,16 +503,16 @@ Instruction const* list_op(State& state, Instruction const& inst) {
 
 	// Not done yet, increment counter, evaluate next ..#
 	REG(state, inst.a).i++;
-	Value const& src = state.frame.environment->get(String::Init(-REG(state, inst.a).i));
+	Value const& src = state.frame.environment.get(String::Init(-REG(state, inst.a).i));
 	if(!src.isPromise()) {
 		REG(state, inst.b) = src;
 		return &inst;
 	}
 	else {
-		Environment* env = Function(src).environment();
-		if(env == 0) env = state.frame.environment;
+		REnvironment env = Function(src).environment();
+		if(env.isNull()) env = state.frame.environment;
 		Prototype* prototype = Function(src).prototype();
-		return buildStackFrame(state, env, false, prototype, &REG(state, inst.b), &inst);
+		return buildStackFrame(state, env, prototype, &REG(state, inst.b), &inst);
 	}
 }
 
@@ -555,9 +555,9 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 		Value f = GenericSearch(state, klass(state, a), state.internStr(Func), method); \
 		if(f.isFunction()) { \
 			Function func(f); \
-			Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton()); \
+			REnvironment fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton()); \
 			MatchArgs(state, state.frame.environment, fenv, func, List::c(a), Character(0)); \
-			return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1); \
+			return buildStackFrame(state, fenv, func.prototype(), &REG(state, inst.c), &inst+1); \
 		}	\
 	} \
 	else if(state.tracing.enabled() && isRecordable(a)) \
@@ -608,9 +608,9 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 		else f = GenericSearch(state, klass(state, b), state.internStr(Func), method); \
 		if(f.isFunction()) { \
 			Function func(f); \
-			Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton()); \
+			REnvironment fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton()); \
 			MatchArgs(state, state.frame.environment, fenv, func, List::c(a, b), Character(0)); \
-			return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1); \
+			return buildStackFrame(state, fenv, func.prototype(), &REG(state, inst.c), &inst+1); \
 		}	\
 	} \
 	else if(state.tracing.enabled() && isRecordable(a,b)) \
@@ -784,14 +784,14 @@ Instruction const* length_op(State& state, Instruction const& inst) {
 Instruction const* missing_op(State& state, Instruction const& inst) {
 	// This could be inline cached...or implemented in terms of something else?
 	String s = String::Init(inst.a);
-	Value const& v = state.frame.environment->get(s);
+	Value const& v = state.frame.environment.get(s);
 	bool missing = v.isNil() || (v.isPromise() && Function(v).environment() == state.frame.environment);
 	Logical::InitScalar(REG(state, inst.c), missing);
 	return &inst+1;
 }
 Instruction const* ret_op(State& state, Instruction const& inst) {
 	*(state.frame.result) = REG(state, inst.c);
-	state.base = state.frame.returnbase;
+	state.sp = state.frame.returnsp;
 	Instruction const* returnpc = state.frame.returnpc;
 	state.pop();
 	return returnpc;
@@ -818,17 +818,16 @@ static void printCode(State const& state, Prototype const* prototype) {
 static const void** glabels = 0;
 #endif
 
-static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc) {
+static Instruction const* buildStackFrame(State& state, REnvironment environment, Prototype const* prototype, Value* result, Instruction const* returnpc) {
 	//printCode(state, prototype);
 	StackFrame& s = state.push();
 	s.environment = environment;
-	s.ownEnvironment = ownEnvironment;
 	s.returnpc = returnpc;
-	s.returnbase = state.base;
+	s.returnsp = state.sp;
 	s.result = result;
 	s.prototype = prototype;
-	state.base -= prototype->registers;
-	if(state.base < state.registers)
+	state.sp -= prototype->registers;
+	if(state.sp < state.registers)
 		throw RiposteError("Register overflow");
 
 #ifdef USE_THREADED_INTERPRETER
@@ -890,29 +889,29 @@ Value eval(State& state, Prototype const* prototype) {
 	return eval(state, prototype, state.frame.environment);
 }
 
-Value eval(State& state, Prototype const* prototype, Environment* environment) {
+Value eval(State& state, Prototype const* prototype, REnvironment environment) {
 	static const Instruction* done = new Instruction(ByteCode::done);
 #ifdef USE_THREADED_INTERPRETER
 	done->ibc = glabels[ByteCode::done];
 #endif
-	Value* old_base = state.base;
+	Value* old_sp = state.sp;
 	int64_t stackSize = state.stack.size();
 	
 	// Build a half-hearted stack frame for the result. Necessary for the trace recorder.
 	StackFrame& s = state.push();
-	s.environment = 0;
+	s.environment = REnvironment::Null();
 	s.prototype = 0;
-	s.returnbase = state.base;
-	state.base -= 1;
-	Value* result = state.base;
+	s.returnsp = state.sp;
+	state.sp -= 1;
+	Value* result = state.sp;
 	
-	Instruction const* run = buildStackFrame(state, environment, false, prototype, result, done);
+	Instruction const* run = buildStackFrame(state, environment, prototype, result, done);
 	try {
 		interpret(state, run);
-		state.base = old_base;
+		state.sp = old_sp;
 		state.pop();
 	} catch(...) {
-		state.base = old_base;
+		state.sp = old_sp;
 		state.stack.resize(stackSize);
 		throw;
 	}

@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 #include <dlfcn.h>
 
-void sourceFile(State& state, std::string name, Environment* env) {
+void sourceFile(State& state, std::string name, REnvironment env) {
 	//std::cout << "Sourcing " << name << std::endl;
 	try {
 		std::ifstream t(name.c_str());
@@ -33,7 +33,7 @@ void sourceFile(State& state, std::string name, Environment* env) {
 	}
 }
 
-void openDynamic(State& state, std::string path, Environment* env) {
+void openDynamic(State& state, std::string path, REnvironment env) {
 	std::string p = std::string("/Users/jtalbot/riposte/")+path;
 	void* lib = dlopen(p.c_str(), RTLD_LAZY);
 	if(lib == NULL) {
@@ -43,7 +43,7 @@ void openDynamic(State& state, std::string path, Environment* env) {
 }
 
 void loadLibrary(State& state, std::string path, std::string name) {
-	Environment* env = new (state.semispace) Environment(state.path.back());
+	REnvironment env(state, state.path.back(), REnvironment::Null());
 	
 	std::string p = path + "/" + name + ("/R/");
 
@@ -84,6 +84,6 @@ void loadLibrary(State& state, std::string path, std::string name) {
 	}
 
 	state.path.push_back(env);
-	state.global->SetLexicalScope(state.path.back());
+	state.global.SetLexicalScope(state.path.back());
 }
 

@@ -110,7 +110,7 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 			dots = i-1;
 		} else if(isCall(call[i]) || call[i].isSymbol()) {
 			// promises should have access to the slots of the enclosing scope, but have their own register assignments
-			arguments[i-1] = Function(Compiler::compile(call[i]),NULL).AsPromise();
+			arguments[i-1] = Function(Compiler::compile(call[i]),REnvironment::Null()).AsPromise();
 		} else {
 			arguments[i-1] = call[i];
 		}
@@ -276,7 +276,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		scope.parameters = parameters;
 		for(int64_t i = 0; i < defaults.length; i++) {
 			if(!c[i].isNil()) {
-				defaults[i] = Function(compile(c[i]),NULL).AsPromise();
+				defaults[i] = Function(compile(c[i]),REnvironment::Null()).AsPromise();
 			}
 			else {
 				defaults[i] = c[i];

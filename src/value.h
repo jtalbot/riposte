@@ -300,64 +300,6 @@ struct Future : public Value {
 };
 
 
-class Function {
-private:
-	Prototype* proto;
-	Environment* env;
-public:
-	explicit Function(Prototype* proto, Environment* env)
-		: proto(proto), env(env) {}
-	
-	explicit Function(Value const& v) {
-		assert(v.isFunction() || v.isPromise());
-		proto = (Prototype*)(v.length << 4);
-		env = (Environment*)v.p;
-	}
-
-	operator Value() const {
-		Value v;
-		v.header = (int64_t)proto + Type::Function;
-		v.p = env;
-		return v;
-	}
-
-	Value AsPromise() const {
-		Value v;
-		v.header = (int64_t)proto + Type::Promise;
-		v.p = env;
-		return v;
-	}
-
-	Prototype* prototype() const { return proto; }
-	Environment* environment() const { return env; }
-
-	Function Clone() const { return *this; }
-};
-
-class REnvironment {
-private:
-	Environment* env;
-public:
-	explicit REnvironment(Environment* env) : env(env) {
-	}
-	explicit REnvironment(Value const& v) {
-		assert(v.type == Type::Environment);
-		env = (Environment*)v.p;
-	}
-	
-	operator Value() const {
-		Value v;
-		Value::Init(v, Type::Environment, 0);
-		v.p = (void*)env;
-		return v;
-	}
-	Environment* ptr() const {
-		return env;
-	}
-
-	REnvironment Clone() const { return *this; }
-};
-
 
 // Object implements an immutable dictionary interface.
 // Objects also have a base value which right now must be a non-object type...
@@ -574,19 +516,17 @@ struct Prototype : public gc {
  */
 
 class Dictionary {
-protected:
+public:
 	static uint64_t globalRevision;
 	uint64_t revision;
 
-	static const uint64_t inlineSize = 16;
 	struct Pair { String n; Value v; };
-
-public:
 	Pair* d;
-	Pair inlineDict[inlineSize];
 	uint64_t size, load;
 	
-	Dictionary() : revision(++globalRevision), d(inlineDict), size(inlineSize) {
+	Dictionary() : revision(++globalRevision) {
+		d = new Pair[16];
+		size = 16;
 		clear();
 	}
 	
@@ -697,18 +637,16 @@ public:
 
 class Environment : public HeapObject, public Dictionary {
 private:
-	Environment* lexical, *dynamic;
 	
 public:
+	Environment* lexical, *dynamic;
 	Value call;
 	std::vector<String> dots;
 
-	explicit Environment(Environment* lexical=0, Environment* dynamic=0) :
-			HeapObject(Type::Environment, sizeof(Environment)), 
+	explicit Environment(Environment* lexical, Environment* dynamic=0) :
 			lexical(lexical), dynamic(dynamic), call(Null::Singleton()) {}
 
 	explicit Environment(Environment* lexical, Environment* dynamic, Value const& call) :
-		HeapObject(Type::Environment, sizeof(Environment)), 
 		lexical(lexical), dynamic(dynamic), call(call) {}
 
 	Environment* LexicalScope() const { return lexical; }
@@ -732,13 +670,135 @@ public:
 	}
 };
 
+class REnvironment : public Value {
+public:
+
+	REnvironment() {
+		Value::Init(*this, Type::Environment, 0);
+		this->p = 0;
+	}
+
+	REnvironment(State& state, REnvironment s, REnvironment d, Value call = Null::Singleton()) {
+		Value::Init(*this, Type::Environment, 0);
+		this->p = new (state, 0) Environment((Environment*)s.p, (Environment*)d.p, call);
+	}
+
+	static REnvironment Null() {
+		return REnvironment();
+	}
+
+	bool isNull() { return this->p == 0; }
+
+	explicit REnvironment(Environment* env) {
+		Value::Init(*this, Type::Environment, 0);
+		this->p = env;
+	}
+
+	explicit REnvironment(Value const& v) {
+		assert(v.type == Type::Environment);
+		Value::Init(*this, Type::Environment, 0);
+		this->p = v.p;
+	}
+	
+	operator Value() const {
+		return (Value&) *this;
+	}
+
+	Value const& get(uint64_t index) {
+		Environment const* e = (Environment const*)p;
+		assert(index >= 0 && index < e->size);
+		return e->d[index].v;
+	}
+
+	Value const& get(String name) {
+		Environment const* e = (Environment const*)p;
+		uint64_t i = e->find(name);
+		if(e->d[i].n != Strings::NA) return e->d[i].v;
+		else return Value::Nil();
+	}
+
+	static void assign(REnvironment& env, String name, Value v) {
+		Environment* e = (Environment*)env.p;
+		e->assign(name, v);
+	}
+
+	static void assign(REnvironment& env, uint64_t index, Value v) {
+		Environment* e = (Environment*)env.p;
+		assert(index >= 0 && index < e->size);
+		e->d[index].v = v;
+	}
+
+	REnvironment LexicalScope() const { return REnvironment(((Environment const*)p)->lexical); }
+	REnvironment DynamicScope() const { return REnvironment(((Environment const*)p)->dynamic); }
+	void SetLexicalScope(REnvironment env) { ((Environment*)p)->lexical = (Environment*)env.p; }
+	std::vector<String>& dots() { return ((Environment*)p)->dots; }
+	std::vector<String> const& dots() const { return ((Environment const*)p)->dots; }
+	
+	uint64_t getRevision() const { return ((Environment const*)p)->revision; }
+	bool equalRevision(uint64_t i) const { return i == ((Environment const*)p)->revision; }
+
+	struct Pointer {
+		Value env;
+		String name;
+		uint64_t revision;
+		uint64_t index;
+	};
+
+	Pointer makePointer(String name) {
+		Environment* e = (Environment*)p;
+		uint64_t i = e->find(name);
+		if(e->d[i].n == Strings::NA) _error("Making pointer to non-existant variable"); 
+		return (Pointer) { *this, name, e->revision, i };
+	}
+	
+	static Value const& get(Pointer const& p) {
+		Environment const* e = (Environment const*)(p.env.p);
+		if(p.revision == e->revision) return e->get(p.index);
+		else return e->get(p.name);
+	}
+
+	static void assign(Pointer const& p, Value const& value) {
+		Environment* e = (Environment*)(p.env.p);
+		if(p.revision == e->revision) e->assign(p.index, value);
+		else e->assign(p.name, value);
+	}
+
+	Value const& call() const { return ((Environment const*)p)->call; }
+};
+
+class Function : public Value {
+public:
+	explicit Function(Prototype* proto, REnvironment env) {
+		header = (int64_t)proto + Type::Function;
+		p = env.p;
+	}
+	
+	explicit Function(Value const& v) {
+		header = v.header;
+		p = v.p;
+	}
+
+	operator Value() const {
+		return (Value&)*this;
+	}
+
+	Value AsPromise() const {
+		Value v;
+		v.header = (length<<4) + Type::Promise;
+		v.p = p;
+		return v;
+	}
+
+	Prototype* prototype() const { return (Prototype*)(length<<4); }
+	REnvironment environment() const { return REnvironment((Environment*)p); }
+};
+
 struct StackFrame {
-	Environment* environment;
-	bool ownEnvironment;
+	REnvironment environment;
 	Prototype const* prototype;
 
 	Instruction const* returnpc;
-	Value* returnbase;
+	Value* returnsp;
 	Value* result;
 };
 
@@ -763,7 +823,7 @@ struct Trace {
 		enum Type {REG, VAR};
 		Type type;
 		/*union { */ //union disabled because Pointer has a Symbol with constructor
-			Environment::Pointer pointer; //fat pointer to environment location
+			REnvironment::Pointer pointer; //fat pointer to environment location
 			struct {
 				Value * base;
 				int64_t offset;
@@ -875,7 +935,7 @@ struct Trace {
 		out.location.reg.base = base;
 		out.location.reg.offset = id;
 	}
-	void EmitVarOutput(State & state, const Environment::Pointer & p) {
+	void EmitVarOutput(State & state, const REnvironment::Pointer & p) {
 		Trace::Output & out = outputs[n_outputs++];
 		out.location.type = Trace::Location::VAR;
 		out.location.pointer = p;
@@ -956,14 +1016,15 @@ struct InternalFunction {
 #define DEFAULT_NUM_REGISTERS 10000
 
 struct State {
-	Value* base;
+	Semispace* semispace;
+	Value* sp;
 	Value* registers;
 
 	std::vector<StackFrame, traceable_allocator<StackFrame> > stack;
 	StackFrame frame;
 
-	std::vector<Environment*, traceable_allocator<Environment*> > path;
-	Environment* global;
+	std::vector<REnvironment, traceable_allocator<REnvironment> > path;
+	REnvironment base, global;
 
 	StringTable strings;
 	
@@ -974,15 +1035,11 @@ struct State {
 	
 	TraceState tracing; //all state related to tracing compiler
 
-	Semispace* semispace;
 
-	State() {
-		semispace = new Semispace(this);
-		Environment* base = new (semispace) Environment();
-		global = new (semispace) Environment(base);
+	State() : semispace(new Semispace(this)), base(*this, REnvironment::Null(), REnvironment::Null()), global(*this, base, REnvironment::Null()) {
 		path.push_back(base);
 		registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
-		this->base = registers + DEFAULT_NUM_REGISTERS;
+		this->sp = registers + DEFAULT_NUM_REGISTERS;
 	}
 
 	StackFrame& push() {
@@ -1014,10 +1071,12 @@ struct State {
 	}
 };
 
-
+inline void* HeapObject::operator new(unsigned long bytes, State& state, unsigned long extra) {
+	return state.semispace->alloc(bytes+extra);
+}
 
 Value eval(State& state, Function const& function);
-Value eval(State& state, Prototype const* prototype, Environment* environment); 
+Value eval(State& state, Prototype const* prototype, REnvironment environment); 
 Value eval(State& state, Prototype const* prototype);
 void interpreter_init(State& state);
 

@@ -16,7 +16,7 @@ DEFINE_ENUM_TO_STRING(RecordingStatus,ENUM_RECORDING_STATUS)
 
 //for brevity
 #define TRACE (state.tracing.current_trace)
-#define REG(state, i) (*(state.base+i))
+#define REG(state, i) (*(state.sp+i))
 
 #define OP_NOT_IMPLEMENTED(op,...) \
 RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instruction const ** pc) { \
@@ -30,10 +30,10 @@ RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instru
 	*pc = get_op(state,inst);
 	Value & r = REG(state,inst.c);
 
-	TRACE.UnionWithMaxLiveRegister(state.base,inst.c);
+	TRACE.UnionWithMaxLiveRegister(state.sp,inst.c);
 
 	if(r.isFuture()) {
-		TRACE.EmitRegOutput(state.base,inst.c);
+		TRACE.EmitRegOutput(state.sp,inst.c);
 	}
 	return RecordingStatus::NO_ERROR;
 }
@@ -57,9 +57,9 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 		//otherwise the inline cache is updated, which involves creating a pointer
 
 		//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
-		TRACE.EmitVarOutput(state,state.frame.environment->makePointer(String::Init(inst.a)));
+		TRACE.EmitVarOutput(state,state.frame.environment.makePointer(String::Init(inst.a)));
 	}
-	TRACE.SetMaxLiveRegister(state.base,inst.c);
+	TRACE.SetMaxLiveRegister(state.sp,inst.c);
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -179,8 +179,8 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, State 
 	bool br = get_input(state,b,&bref,&can_fallback,&should_record);
 	if(should_record && ar && br) {
 		Type::Enum type = resultType(bc,TRACE.nodes[aref].type,TRACE.nodes[bref].type);
-		TRACE.EmitRegOutput(state.base,inst.c);
-		TRACE.SetMaxLiveRegister(state.base,inst.c);
+		TRACE.EmitRegOutput(state.sp,inst.c);
+		TRACE.SetMaxLiveRegister(state.sp,inst.c);
 		Future::Init(REG(state,inst.c),
 				     type,
 				     TRACE.length,
@@ -210,8 +210,8 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, State &
 				     type,
 				     length,
 				     TRACE.EmitUnary(op,type,coerce(state,type,aref)));
-		TRACE.EmitRegOutput(state.base,inst.c);
-		TRACE.SetMaxLiveRegister(state.base,inst.c);
+		TRACE.EmitRegOutput(state.sp,inst.c);
+		TRACE.SetMaxLiveRegister(state.sp,inst.c);
 		TRACE.Commit();
 		return RecordingStatus::NO_ERROR;
 	} else {
@@ -331,15 +331,15 @@ RecordingStatus::Enum ret_record(State & state, Instruction const & inst, Instru
 	if(!TRACE.Reserve(0,1))
 		return RecordingStatus::RESOURCE;
 	Value * result = state.frame.result;
-	int64_t offset = result - state.frame.returnbase;
-	int64_t max_live = state.frame.returnbase - state.base;
+	int64_t offset = result - state.frame.returnsp;
+	int64_t max_live = state.frame.returnsp - state.sp;
 	*pc = ret_op(state,inst); //warning: ret_op will change 'frame'
 
 	if(result->isFuture()) {
-		TRACE.EmitRegOutput(state.base,offset);
+		TRACE.EmitRegOutput(state.sp,offset);
 	}
 
-	TRACE.SetMaxLiveRegister(state.base,max_live);
+	TRACE.SetMaxLiveRegister(state.sp,max_live);
 
 	return RecordingStatus::NO_ERROR;
 }
@@ -369,7 +369,7 @@ RecordingStatus::Enum seq_record(State & state, Instruction const & inst, Instru
 				     Type::Integer,
 				     len,
 				     TRACE.EmitSpecial(IROpCode::seq,Type::Integer,len,step));
-		TRACE.SetMaxLiveRegister(state.base,inst.c);
+		TRACE.SetMaxLiveRegister(state.sp,inst.c);
 		TRACE.Commit();
 		(*pc)++;
 	}
