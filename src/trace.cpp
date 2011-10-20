@@ -6,7 +6,7 @@
 #include <stdlib.h>
 
 void Trace::Reset() {
-	n_nodes = n_recorded = length = n_outputs = n_output_values = n_pending = 0;
+	n_nodes = n_recorded = length = n_outputs = n_output_values = n_pending_nodes = n_pending_outputs = 0;
 }
 
 std::string Trace::toString(State & state) {

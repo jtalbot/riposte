@@ -20,7 +20,7 @@
 #include "enum.h"
 #include "string.h"
 #include "exceptions.h"
-
+#include "register_set.h"
 
 #include "ir.h"
 #include "recording.h"
@@ -42,7 +42,8 @@ struct Value {
 		String s;
 		struct {
 			Type::Enum typ;
-			uint32_t ref;
+			uint16_t trace_id;
+			uint16_t ref;
 		} future;
 	};
 
@@ -734,13 +735,15 @@ struct StackFrame {
 //recording interpreter
 #define TRACE_MAX_RECORDED (1024)
 #define TRACE_MAX_TRACES (4)
+#define TRACE_MAX_NODES_PER_COMMIT (4)
+#define TRACE_MAX_OUTPUTS_PER_COMMIT (1)
 
 struct TraceCodeBuffer;
 struct Trace {
 	IRNode nodes[TRACE_MAX_NODES];
 
 	size_t n_nodes;
-	size_t n_pending;
+	size_t n_pending_nodes;
 	size_t n_recorded;
 
 	int64_t length;
@@ -765,103 +768,108 @@ struct Trace {
 
 	Output outputs[TRACE_MAX_OUTPUTS];
 	size_t n_outputs;
+	size_t n_pending_outputs;
 
 	Value output_values[TRACE_MAX_OUTPUTS];
 	size_t n_output_values;
 	TraceCodeBuffer * code_buffer;
 
 	Trace() { Reset(); code_buffer = NULL; }
-	bool Reserve(size_t num_nodes, size_t num_outputs) {
-		if(n_pending + num_nodes >= TRACE_MAX_NODES)
+
+	void Rollback() {
+		n_pending_nodes = n_nodes;
+	}
+	//commits the recorded instructions and outputs from the current op
+	//returns true when there is enough room left to record another op
+	//returns false otherwise, indicating the trace must be flushed
+	//??? - Should commit just go and flush the trace itself when it runs out of room?
+	bool Commit() {
+		n_nodes = n_pending_nodes;
+		n_outputs = n_pending_outputs;
+		if(n_nodes + TRACE_MAX_NODES_PER_COMMIT >= TRACE_MAX_NODES)
 			return false;
-		else if(n_outputs + num_outputs >= TRACE_MAX_OUTPUTS)
+		else if(n_outputs + TRACE_MAX_OUTPUTS_PER_COMMIT >= TRACE_MAX_OUTPUTS)
 			return false;
 		else
 			return true;
 	}
-	void Rollback() {
-		n_pending = n_nodes;
-	}
-	void Commit() {
-		n_nodes = n_pending;
-	}
 	IRef EmitBinary(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t b) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::BINARY;
 		n.op = op;
 		n.type = type;
 		n.binary.a = a;
 		n.binary.b = b;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	IRef EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t b) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::SPECIAL;
 		n.op = op;
 		n.type = type;
 		n.special.a = a;
 		n.special.b = b;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, int64_t a) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::UNARY;
 		n.op = op;
 		n.type = type;
 		n.unary.a = a;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	IRef EmitFold(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t base) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::FOLD;
 		n.op = op;
 		n.type = type;
 		n.fold.a = a;
 		n.fold.i = base;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	IRef EmitLoadC(Type::Enum type, int64_t c) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::LOADC;
 		n.op = IROpCode::loadc;
 		n.type = type;
 		n.loadc.i = c;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	IRef EmitLoadV(Type::Enum type,void * v) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::LOADV;
 		n.op = IROpCode::loadv;
 		n.type = type;
 		n.loadv.p = v;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	IRef EmitStoreV(Type::Enum type, Value * dst, int64_t a) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::STORE;
 		n.op = IROpCode::storev;
 		n.type = type;
 		n.store.a = a;
 		n.store.dst = dst;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	IRef EmitStoreC(Type::Enum type, Value * dst, int64_t a) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::STORE;
 		n.op = IROpCode::storec;
 		n.type = type;
 		n.store.a = a;
 		n.store.dst = dst;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	void EmitRegOutput(Value * base, int64_t id) {
-		Trace::Output & out = outputs[n_outputs++];
+		Trace::Output & out = outputs[n_pending_outputs++];
 		out.location.type = Location::REG;
 		out.location.reg.base = base;
 		out.location.reg.offset = id;
 	}
 	void EmitVarOutput(State & state, const Environment::Pointer & p) {
-		Trace::Output & out = outputs[n_outputs++];
+		Trace::Output & out = outputs[n_pending_outputs++];
 		out.location.type = Trace::Location::VAR;
 		out.location.pointer = p;
 	}
@@ -878,12 +886,12 @@ private:
 //member of State, manages information for all traces
 //and the currently recording trace (if any)
 struct TraceState {
-	TraceState() {
+	TraceState()
+	: live_traces(TRACE_MAX_TRACES) {
 		active = false;
 		config = DISABLED;
 		verbose = false;
 	}
-
 
 	enum Mode {
 		DISABLED,
@@ -894,7 +902,9 @@ struct TraceState {
 	bool verbose;
 	bool active;
 
-	Trace current_trace;
+	Trace traces[TRACE_MAX_TRACES];
+	RegisterAllocator live_traces;
+
 
 	Value * max_live_register_base;
 	int64_t max_live_register;
@@ -924,21 +934,32 @@ struct TraceState {
 		return dead;
 	}
 
-	Instruction const * BeginTracing(State & state, Instruction const * inst, size_t length) {
+	Instruction const * BeginTracing(State & state, Instruction const * inst,size_t length) {
 		if(active) {
 			_error("recursive record\n");
 		}
 		max_live_register = NULL;
-		current_trace.Reset();
-		current_trace.length = length;
 		active = true;
+		int8_t reg;
+		live_traces.allocate(&reg);
+		traces[reg].Reset();
+		traces[reg].length = length;
 		return recording_interpret(state,inst);
+	}
+
+	void ExecuteAllTraces(State & state) {
+		for(size_t i = 0; i < TRACE_MAX_TRACES; i++) {
+			if(live_traces.is_live(i)) {
+				traces[i].Execute(state);
+			}
+		}
+		live_traces.clear();
 	}
 
 	void EndTracing(State & state) {
 		if(active) {
 			active = false;
-			current_trace.Execute(state);
+			ExecuteAllTraces(state);
 		}
 	}
 };

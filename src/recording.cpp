@@ -15,7 +15,7 @@ DECLARE_ENUM(RecordingStatus,ENUM_RECORDING_STATUS)
 DEFINE_ENUM_TO_STRING(RecordingStatus,ENUM_RECORDING_STATUS)
 
 //for brevity
-#define TRACE (state.tracing.current_trace)
+#define TRACE (state.tracing.traces[0])
 #define REG(state, i) (*(state.base+i))
 
 #define OP_NOT_IMPLEMENTED(op,...) \
@@ -25,8 +25,6 @@ RecordingStatus::Enum op##_record(State & state, Instruction const & inst, Instr
 
 
 RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	if(!TRACE.Reserve(0,1))
-		return RecordingStatus::RESOURCE;
 	*pc = get_op(state,inst);
 	Value & r = REG(state,inst.c);
 
@@ -34,6 +32,8 @@ RecordingStatus::Enum get_record(State & state, Instruction const & inst, Instru
 
 	if(r.isFuture()) {
 		TRACE.EmitRegOutput(state.base,inst.c);
+		if(!TRACE.Commit())
+			return RecordingStatus::RESOURCE;
 	}
 	return RecordingStatus::NO_ERROR;
 }
@@ -47,8 +47,6 @@ RecordingStatus::Enum kget_record(State & state, Instruction const & inst, Instr
 OP_NOT_IMPLEMENTED(iget)
 
 RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	if(!TRACE.Reserve(0,1))
-		return RecordingStatus::RESOURCE;
 	*pc = assign_op(state,inst);
 	Value& r = REG(state, inst.c);
 	if(r.isFuture()) {
@@ -58,6 +56,8 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 
 		//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
 		TRACE.EmitVarOutput(state,state.frame.environment->makePointer(String::Init(inst.a)));
+		if(!TRACE.Commit())
+			return RecordingStatus::RESOURCE;
 	}
 	state.tracing.SetMaxLiveRegister(state.base,inst.c);
 	return RecordingStatus::NO_ERROR;
@@ -112,7 +112,7 @@ struct LoadCache {
 		idx += idx >> 8;
 		idx &= 0xFF;
 		IRef cached = cache[idx];
-		if(cached < TRACE.n_pending &&
+		if(cached < TRACE.n_pending_nodes &&
 		   TRACE.nodes[cached].op == IROpCode::loadv &&
 		   TRACE.nodes[cached].loadv.p == v.p) {
 			return cached;
@@ -196,8 +196,6 @@ IRef coerce(State & state, Type::Enum dst_type, IRef v) {
 RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, State & state, Instruction const & inst) {
 	Value & a = REG(state,inst.a);
 	Value & b = REG(state,inst.b);
-	if(!TRACE.Reserve(4,1)) //2 loads, 1 coerce, 1 op, 1 output
-		return RecordingStatus::RESOURCE;
 	bool can_fallback = true;
 	bool should_record = false;
 	IRef aref;
@@ -213,8 +211,7 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, State 
 				     rtyp,
 				     TRACE.length,
 				     TRACE.EmitBinary(op,rtyp,coerce(state,atyp,aref),coerce(state,btyp,bref)));
-		TRACE.Commit();
-		return RecordingStatus::NO_ERROR;
+		return TRACE.Commit() ? RecordingStatus::NO_ERROR : RecordingStatus::RESOURCE;
 	} else {
 		TRACE.Rollback();
 		return (can_fallback) ? RecordingStatus::FALLBACK : RecordingStatus::UNSUPPORTED_TYPE;
@@ -224,8 +221,6 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, State 
 
 RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, State & state, int64_t length, Instruction const & inst) {
 	Value & a = REG(state,inst.a);
-	if(!TRACE.Reserve(2,1))
-		return RecordingStatus::RESOURCE;
 
 	bool can_fallback = true;
 	bool should_record = false;
@@ -241,8 +236,7 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, State &
 				     TRACE.EmitUnary(op,rtyp,coerce(state,atyp,aref)));
 		TRACE.EmitRegOutput(state.base,inst.c);
 		state.tracing.SetMaxLiveRegister(state.base,inst.c);
-		TRACE.Commit();
-		return RecordingStatus::NO_ERROR;
+		return TRACE.Commit() ? RecordingStatus::NO_ERROR : RecordingStatus::RESOURCE;
 	} else {
 		TRACE.Rollback();
 		return (can_fallback) ? RecordingStatus::FALLBACK : RecordingStatus::UNSUPPORTED_TYPE;
@@ -351,18 +345,16 @@ RecordingStatus::Enum missing_record(State & state, Instruction const & inst, In
 RecordingStatus::Enum ret_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	//ret writes a value into a register of the caller's frame. If this value is a future we need to
 	//record it as a potential output location
-	if(!TRACE.Reserve(0,1))
-		return RecordingStatus::RESOURCE;
 	Value * result = state.frame.result;
 	int64_t offset = result - state.frame.returnbase;
 	int64_t max_live = state.frame.returnbase - state.base;
 	*pc = ret_op(state,inst); //warning: ret_op will change 'frame'
-
+	state.tracing.SetMaxLiveRegister(state.base,max_live);
 	if(result->isFuture()) {
 		TRACE.EmitRegOutput(state.base,offset);
+		if(!TRACE.Commit())
+			return RecordingStatus::RESOURCE;
 	}
-
-	state.tracing.SetMaxLiveRegister(state.base,max_live);
 
 	return RecordingStatus::NO_ERROR;
 }
@@ -385,16 +377,14 @@ RecordingStatus::Enum seq_record(State & state, Instruction const & inst, Instru
 	if(len != TRACE.length) {
 		*pc = seq_op(state,inst); //this isn't ideal, as this will redo the As operators above
 	} else {
-		if(!TRACE.Reserve(1,1))
-			return RecordingStatus::RESOURCE;
-
 		Future::Init(REG(state,inst.c),
 				     Type::Integer,
 				     len,
 				     TRACE.EmitSpecial(IROpCode::seq,Type::Integer,len,step));
 		state.tracing.SetMaxLiveRegister(state.base,inst.c);
-		TRACE.Commit();
 		(*pc)++;
+		if(!TRACE.Commit())
+			return RecordingStatus::RESOURCE;
 	}
 	return RecordingStatus::NO_ERROR;
 }

@@ -35,6 +35,12 @@ struct RegisterAllocator {
 	RegisterSet live_registers() {
 		return a;
 	}
+	bool is_live(uint8_t reg) {
+		return !(a & (1 << reg));
+	}
+	void clear() {
+		a = ~0;
+	}
 	void free(uint8_t reg) {
 		a |= (1 << reg);
 	}
