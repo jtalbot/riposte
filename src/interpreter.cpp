@@ -60,38 +60,38 @@ static void ExpandDots(State& state, List& arguments, Character& names, int64_t 
 	}
 }
 
-inline void argAssign(REnvironment env, int64_t i, Value const& v, REnvironment execution, Character const& parameters) {
+inline void argAssign(State& state, REnvironment& env, int64_t i, Value const& v, REnvironment execution, Character const& parameters) {
 	Value w = v;
 	if(w.isPromise() && w.p == 0) w.p = execution.p;
 	if(i >= 0)
-		REnvironment::assign(env, parameters[i], w);
+		REnvironment::assign(state, env, parameters[i], w);
 	else {
-		REnvironment::assign(env, String::Init(i), w);
+		REnvironment::assign(state, env, String::Init(i), w);
 	}
 }
 
-static void MatchArgs(State& state, REnvironment env, REnvironment fenv, Function const& func, List const& arguments, Character const& anames) {
+static void MatchArgs(State& state, REnvironment& env, REnvironment& fenv, Function const& func, List const& arguments, Character const& anames) {
 	List const& defaults = func.prototype()->defaults;
 	Character const& parameters = func.prototype()->parameters;
 	int64_t fdots = func.prototype()->dots;
 
 	// set defaults
 	for(int64_t i = 0; i < defaults.length; ++i) {
-		argAssign(fenv, i, defaults[i], fenv, parameters);
+		argAssign(state, fenv, i, defaults[i], fenv, parameters);
 	}
 
 	// call arguments are not named, do posititional matching
 	if(anames.length == 0) {
 		int64_t end = std::min(arguments.length, fdots);
 		for(int64_t i = 0; i < end; ++i) {
-			if(!arguments[i].isNil()) argAssign(fenv, i, arguments[i], env, parameters);
+			if(!arguments[i].isNil()) argAssign(state, fenv, i, arguments[i], env, parameters);
 		}
 
 		// set dots if necessary
 		if(fdots < parameters.length) {
 			int64_t idx = 1;
 			for(int64_t i = fdots; i < arguments.length; i++) {
-				argAssign(fenv, -idx, arguments[i], env, parameters);
+				argAssign(state, fenv, -idx, arguments[i], env, parameters);
 				fenv.dots().push_back(Strings::empty);
 				idx++;
 			}
@@ -148,14 +148,14 @@ static void MatchArgs(State& state, REnvironment env, REnvironment fenv, Functio
 		// stuff that can't be cached...
 
 		// assign all the arguments
-		for(int64_t j = 0; j < parameters.length; ++j) if(j != fdots && set[j] >= 0 && !arguments[set[j]].isNil()) argAssign(fenv, j, arguments[set[j]], env, parameters);
+		for(int64_t j = 0; j < parameters.length; ++j) if(j != fdots && set[j] >= 0 && !arguments[set[j]].isNil()) argAssign(state, fenv, j, arguments[set[j]], env, parameters);
 
 		// put unused args into the dots
 		if(fdots < parameters.length) {
 			int64_t idx = 1;
 			for(int64_t i = 0; i < arguments.length; i++) {
 				if(assignment[i] < 0) {
-					argAssign(fenv, -idx, arguments[i], env, parameters);
+					argAssign(state, fenv, -idx, arguments[i], env, parameters);
 					fenv.dots().push_back(anames[i]);
 					idx++;
 				}
@@ -164,7 +164,7 @@ static void MatchArgs(State& state, REnvironment env, REnvironment fenv, Functio
 	}
 }
 
-static REnvironment CreateEnvironment(State& state, REnvironment l, REnvironment d, Value const& call) {
+inline static REnvironment CreateEnvironment(State& state, REnvironment l, REnvironment d, Value const& call) {
 	return REnvironment(state, l, d, call);
 }
 //track the heat of back edge operations and invoke the recorder on hot traces
@@ -183,14 +183,14 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 	
 	List arguments;
 	Character names;
-	REnvironment fenv;
+	Value call = Null::Singleton();
 	if(inst.b < 0) {
-		CompiledCall const& call = state.frame.prototype->calls[-(inst.b+1)];
-		arguments = call.arguments;
-		names = call.names;
-		if(call.dots < arguments.length)
-			ExpandDots(state, arguments, names, call.dots);
-		fenv = CreateEnvironment(state, func.environment(), state.frame.environment, call.call);
+		CompiledCall const& ccall = state.frame.prototype->calls[-(inst.b+1)];
+		arguments = ccall.arguments;
+		names = ccall.names;
+		if(ccall.dots < arguments.length)
+			ExpandDots(state, arguments, names, ccall.dots);
+		call = ccall.call;
 	} else {
 		Value const& reg = REG(state, inst.b);
 		if(reg.isObject()) {
@@ -200,10 +200,13 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 		else {
 			arguments = List(reg);
 		}
-		fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton());
 	}
-
-	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
+	REnvironment fenv = CreateEnvironment(state, func.environment(), state.frame.environment, call);
+	{
+		Handle<REnvironment> h(state, fenv);	
+		MatchArgs(state, state.frame.environment, h, func, arguments, names);
+		fenv = h;
+	}
 	return buildStackFrame(state, fenv, func.prototype(), &REG(state, inst.c), &inst+1);
 }
 
@@ -270,10 +273,14 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 
 	Function func(f);
 	REnvironment fenv = CreateEnvironment(state, func.environment(), state.frame.environment, call.call);
-	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);	
-	REnvironment::assign(fenv, Strings::dotGeneric, Symbol(generic));
-	REnvironment::assign(fenv, Strings::dotMethod, Symbol(method));
-	REnvironment::assign(fenv, Strings::dotClass, type); 
+	{
+		Handle<REnvironment> h(state, fenv);
+		MatchArgs(state, state.frame.environment, fenv, func, arguments, names);	
+		REnvironment::assign(state, fenv, Strings::dotGeneric, Symbol(generic));
+		REnvironment::assign(state, fenv, Strings::dotMethod, Symbol(method));
+		REnvironment::assign(state, fenv, Strings::dotClass, type);
+		fenv = h; 
+	}
 	return buildStackFrame(state, fenv, func.prototype(), &REG(state, inst.c), &inst+1);
 }
 
@@ -285,8 +292,8 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 	//	3) an invalid instruction containing inline caching info.	
 
 	// check if we can get the value through inline caching...
-	uint64_t icRevision = (&inst+2)->b;
 
+	uint64_t icRevision = (&inst+2)->b;
 	if(__builtin_expect(state.frame.environment.equalRevision(icRevision), true)) {
 		REG(state, inst.c) = state.frame.environment.get((&inst+2)->a);
 		return &inst+3;
@@ -333,7 +340,7 @@ Instruction const* assign_op(State& state, Instruction const& inst) {
 	if(state.frame.environment.equalRevision((&inst+1)->b))
 		REnvironment::assign(state.frame.environment, (&inst+1)->a, REG(state, inst.c));
 	else {
-		REnvironment::assign(state.frame.environment, String::Init(inst.a), REG(state, inst.c));
+		REnvironment::assign(state, state.frame.environment, String::Init(inst.a), REG(state, inst.c));
 		
 		REnvironment::Pointer p = state.frame.environment.makePointer(String::Init(inst.a));
 		((Instruction*)(&inst+1))->a = p.index;
@@ -366,13 +373,13 @@ Instruction const* assign2_op(State& state, Instruction const& inst) {
 	}
 
 	if(!dest.isNil()) {
-		REnvironment::assign(env, s, REG(state, inst.c));
+		REnvironment::assign(state, env, s, REG(state, inst.c));
 		REnvironment::Pointer p = env.makePointer(String::Init(inst.a));
 		((Instruction*)(&inst+1))->a = p.index;
 		((Instruction*)(&inst+1))->b = p.revision;
 	}
 	else {
-		REnvironment::assign(state.global, s, REG(state, inst.c));
+		REnvironment::assign(state, state.global, s, REG(state, inst.c));
 		// Global may not be in the static scope of function so we can't populate IC here.
 		// However, if global is in the static scope, the second iteration of assign2 will find it on the path and set the IC in the immediately previous if block.
 	}
@@ -403,14 +410,14 @@ Instruction const* subset2_op(State& state, Instruction const& inst) {
 Instruction const* forbegin_op(State& state, Instruction const& inst) {
 	// inst.b-1 holds the loopVector
 	if((int64_t)REG(state, inst.b-1).length <= 0) { return &inst+inst.a; }
-	Element2(REG(state, inst.b-1), 0, REG(state, inst.c));
+	Element2(state, REG(state, inst.b-1), 0, REG(state, inst.c));
 	REG(state, inst.b).header = REG(state, inst.b-1).length;	// warning: not a valid object, but saves a shift
 	REG(state, inst.b).i = 1;
 	return &inst+1;
 }
 Instruction const* forend_op(State& state, Instruction const& inst) {
 	if(__builtin_expect((REG(state,inst.b).i) < REG(state,inst.b).header, true)) {
-		Element2(REG(state, inst.b-1), REG(state, inst.b).i, REG(state, inst.c));
+		Element2(state, REG(state, inst.b-1), REG(state, inst.b).i, REG(state, inst.c));
 		REG(state, inst.b).i++;
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;
@@ -482,7 +489,7 @@ Instruction const* list_op(State& state, Instruction const& inst) {
 	}
 	// Otherwise populate result vector with next element
 	else {
-		REnvironment::assign(state.frame.environment, String::Init(-REG(state, inst.a).i), REG(state, inst.b));
+		REnvironment::assign(state, state.frame.environment, String::Init(-REG(state, inst.a).i), REG(state, inst.b));
 		((List&)REG(state, inst.c))[REG(state, inst.a).i-1] = REG(state, inst.b);
 	}
 
@@ -496,7 +503,7 @@ Instruction const* list_op(State& state, Instruction const& inst) {
 			Character names(dots.size());
 			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
 				names[i] = dots[i];
-			Object::Init(REG(state, inst.c), REG(state, inst.c), names);
+			Object::Init(state, REG(state, inst.c), REG(state, inst.c), names);
 		}
 		return &inst+1;
 	}
@@ -556,7 +563,11 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 		if(f.isFunction()) { \
 			Function func(f); \
 			REnvironment fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton()); \
-			MatchArgs(state, state.frame.environment, fenv, func, List::c(a), Character(0)); \
+			{ \
+				Handle<REnvironment> h(state, fenv); \
+				MatchArgs(state, state.frame.environment, fenv, func, List::c(a), Character(0)); \
+				fenv = h; \
+			} \
 			return buildStackFrame(state, fenv, func.prototype(), &REG(state, inst.c), &inst+1); \
 		}	\
 	} \
@@ -609,7 +620,11 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 		if(f.isFunction()) { \
 			Function func(f); \
 			REnvironment fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton()); \
-			MatchArgs(state, state.frame.environment, fenv, func, List::c(a, b), Character(0)); \
+			{ \
+				Handle<REnvironment> h(state, fenv); \
+				MatchArgs(state, state.frame.environment, fenv, func, List::c(a, b), Character(0)); \
+				fenv = h; \
+			} \
 			return buildStackFrame(state, fenv, func.prototype(), &REG(state, inst.c), &inst+1); \
 		}	\
 	} \

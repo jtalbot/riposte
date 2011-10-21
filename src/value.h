@@ -300,6 +300,18 @@ struct Future : public Value {
 };
 
 
+inline void walkValue(Heap* heap, Value& r) {
+	switch(r.type) {
+		case Type::Environment:
+		case Type::Function:
+		case Type::Promise:
+		case Type::Object:
+			r.p = (void*)heap->mark((HeapObject*)(r.p));
+			break;
+		default: break;
+	};
+}
+
 
 // Object implements an immutable dictionary interface.
 // Objects also have a base value which right now must be a non-object type...
@@ -309,29 +321,29 @@ struct Object : public Value {
 
 	struct Pair { String n; Value v; };
 
-	struct Inner : public gc {
+	struct Inner : public HeapObject {
 		Value base;
-		Pair const* attributes;
 		uint64_t capacity;
+		Pair attributes[];
+
+		virtual void walk(Heap* heap) {
+			for(uint64_t i = 0; i < capacity; ++i) {
+				if(attributes[i].n != Strings::NA) {
+					walkValue(heap, attributes[i].v);
+				}
+			}
+		}
 	};
 
 	// Contract: base is a non-object type.
 	Value const& base() const { return ((Inner const*)p)->base; }
+	Pair* attributes() { return ((Inner*)p)->attributes; }
 	Pair const* attributes() const { return ((Inner const*)p)->attributes; }
 	uint64_t capacity() const { return ((Inner const*)p)->capacity; }
 
-	Object() {}
+	Object() {p = 0;}
 
-	Object(Value base, uint64_t length, uint64_t capacity, Pair const* attributes) {
-		Value::Init(*this, Type::Object, length);
-		
-		assert(!base.isObject());	
-		Inner* inner = new (GC) Inner();
-		inner->base = base;
-		inner->capacity = capacity;
-		inner->attributes = attributes;
-		p = (void*)inner;
-	}
+	Object(State& state, Value base, uint64_t length, uint64_t capacity);
 
 	uint64_t find(String s) const {
 		uint64_t i = (uint64_t)s.i & (capacity()-1);	// hash this?
@@ -340,23 +352,19 @@ struct Object : public Value {
 		return i; 
 	}
 	
-	static void Init(Value& v, Value _base) {
-		Pair* attributes = new Pair[4];
-		for(uint64_t j = 0; j < 4; j++)
-			attributes[j] = (Pair) { Strings::NA, Value::Nil() };
-		
-		v = Object(_base, 0, 4, attributes);
+	static void Init(State& state, Value& v, Value _base, uint64_t capacity=4) {
+		v = Object(state, _base, 0, capacity);
 	}
 
-	static void Init(Value& v, Value const& _base, Value const& _names) {
-		Init(v, _base);
-		v = ((Object&)v).setNames(_names);
+	static void Init(State& state, Value& v, Value const& _base, Value const& _names) {
+		Init(state, v, _base, 4);
+		v = ((Object&)v).setNames(state, _names);
 	}
 	
-	static void Init(Value& v, Value const& _base, Value const& _names, Value const& className) {
-		Init(v, _base);
-		v = ((Object&)v).setNames(_names);
-		v = ((Object&)v).setClass(className);
+	static void Init(State& state, Value& v, Value const& _base, Value const& _names, Value const& className) {
+		Init(state, v, _base, 4);
+		v = ((Object&)v).setNames(state, _names);
+		v = ((Object&)v).setClass(state, className);
 	}
 
 	bool hasAttribute(String s) const {
@@ -388,18 +396,7 @@ struct Object : public Value {
 
 	// Generate derived versions...
 
-	Object Clone() const { 
-		Value v; 
-		Inner* inner = new (GC) Inner();
-		inner->base = ((Inner*)p)->base;
-		inner->attributes = ((Inner*)p)->attributes;
-		// doing this after ensures that it will work even if base and v overlap.
-		Value::Init(v, Type::Object, 0);
-		v.p = (void*)inner;
-		return (Object const&)v;
-	}
-
-	Object setAttribute(String s, Value const& v) const {
+	Object setAttribute(State& state, String s, Value const& v) const {
 		uint64_t l=0;
 		
 		uint64_t i = find(s);
@@ -408,53 +405,50 @@ struct Object : public Value {
 		else l = length;
 
 		Object out;
-		Pair* a;
 		if((l*2) > capacity()) {
 			// going to have to rehash the result
 			uint64_t c = std::max(capacity()*2ULL, 1ULL);
-			a = new Pair[c];
-			out = Object(base(), l, c, a);
+			out = Object(state, base(), l, c);
 
 			// clear
 			for(uint64_t j = 0; j < c; j++)
-				a[j] = (Pair) { Strings::NA, Value::Nil() };
+				out.attributes()[j] = (Pair) { Strings::NA, Value::Nil() };
 
 			// rehash
 			for(uint64_t j = 0; j < capacity(); j++)
 				if(attributes()[j].n != Strings::NA)
-					a[out.find(attributes()[j].n)] = attributes()[j];
+					out.attributes()[out.find(attributes()[j].n)] = attributes()[j];
 		}
 		else {
 			// otherwise, just copy straight over
-			a = new Object::Pair[capacity()];
-			out = Object(base(), l, capacity(), a);
+			out = Object(state, base(), l, capacity());
 
 			for(uint64_t j = 0; j < capacity(); j++)
-				a[j] = attributes()[j];
+				out.attributes()[j] = attributes()[j];
 		}
 		if(v.isNil())
-			a[out.find(s)] = (Pair) { Strings::NA, Value::Nil() };
+			out.attributes()[out.find(s)] = (Pair) { Strings::NA, Value::Nil() };
 		else 
-			a[out.find(s)] = (Pair) { s, v };
+			out.attributes()[out.find(s)] = (Pair) { s, v };
 
 		return out;
 	}
 	
-	Object setNames(Value const& v) const { return setAttribute(Strings::names, v); }
-	Object setClass(Value const& v) const { return setAttribute(Strings::classSym, v); }
-	Object setDim(Value const& v) const { return setAttribute(Strings::dim, v); }
+	Object setNames(State& state, Value const& v) const { return setAttribute(state, Strings::names, v); }
+	Object setClass(State& state, Value const& v) const { return setAttribute(state, Strings::classSym, v); }
+	Object setDim(State& state, Value const& v) const { return setAttribute(state, Strings::dim, v); }
 
 };
 
-inline Value CreateExpression(List const& list) {
+inline Value CreateExpression(State& state, List const& list) {
 	Value v;
-	Object::Init(v, list, Value::Nil(), Character::c(Strings::Expression));
+	Object::Init(state, v, list, Value::Nil(), Character::c(Strings::Expression));
 	return v;
 }
 
-inline Value CreateCall(List const& list, Value const& names = Value::Nil()) {
+inline Value CreateCall(State& state, List const& list, Value const& names = Value::Nil()) {
 	Value v;
-	Object::Init(v, list, names, Character::c(Strings::Call));
+	Object::Init(state, v, list, names, Character::c(Strings::Call));
 	return v;
 }
 
@@ -515,156 +509,44 @@ struct Prototype : public gc {
  *     -result register pointer
  */
 
-class Dictionary {
-public:
+template<class T>
+struct Ref : public HeapObject {
+	T* t;
+
+	Ref() : t(0) {}
+	Ref(T* t) : t(t) {}
+
+	virtual void walk(Heap* heap) {
+		HeapObject* p = t;
+		t = (T*)heap->mark(p);
+	}
+
+	T* operator->() { return t; }
+	T const* operator->() const { return t; }
+};
+
+struct Environment : public HeapObject {
 	static uint64_t globalRevision;
 	uint64_t revision;
 
-	struct Pair { String n; Value v; };
-	Pair* d;
-	uint64_t size, load;
-	
-	Dictionary() : revision(++globalRevision) {
-		d = new Pair[16];
-		size = 16;
-		clear();
-	}
-	
-	// for now, do linear probing
-	// this returns the location of the String s (or where it was stored before being deleted).
-	// or, if s doesn't exist, the location at which s should be inserted.
-	uint64_t find(String s) const {
-		uint64_t i = (uint64_t)s.i & (size-1);	// hash this?
-		while(d[i].n != s && d[i].n != Strings::NA) i = (i+1) & (size-1);
-		assert(i >= 0 && i < size);
-		return i; 
-	}
-	
-	uint64_t assign(String name, Value const& value) {
-		uint64_t i = find(name);
-		if(value.isNil()) {
-			// deleting a value changes the revision number! 
-			if(d[i].n != Strings::NA) { 
-				load--; 
-				d[i] = (Pair) { Strings::NA, Value::Nil() }; 
-				revision = ++globalRevision; 
-			}
-		} else {
-			if(d[i].n == Strings::NA) { 
-				load++;
-				if((load * 2) > size) {
-					rehash(size * 2);
-					i = find(name);
-				}
-				d[i] = (Pair) { name, value };
-			} else {
-				d[i].v = value;
-			}
-		}
-		return i;
-	}
-
-	Value const& get(String name) const {
-		uint64_t i = find(name);
-		if(d[i].n != Strings::NA) return d[i].v;
-		else return Value::Nil();
-	}
-
-	void rehash(uint64_t s) {
-		uint64_t old_size = size;
-		Pair* old_d = d;
-		s = nextPow2(s);
-		if(s <= size) return; // should rehash on shrinking sometimes, when?
-
-		size = s;
-		d = new (GC) Pair[size];
-		clear();	// this increments the revision
-		
-		// copy over previous populated values...
-		for(uint64_t i = 0; i < old_size; i++) {
-			if(old_d[i].n != Strings::NA) {
-				d[find(old_d[i].n)] = old_d[i];
-			}
-		}
-	}
-
-	void clear() {
-		load = 0; 
-		for(uint64_t i = 0; i < size; i++) {
-			// wiping v too makes sure we're not holding unnecessary pointers
-			d[i] = (Pair) { Strings::NA, Value::Nil() };
-		}
-		revision = ++globalRevision;
-	}
-
-	struct Pointer {
-		Dictionary* env;
-		String name;
-		uint64_t revision;
-		uint64_t index;
-	};
-
-	uint64_t getRevision() const { return revision; }
-	bool equalRevision(uint64_t i) const { return i == revision; }
-	
-	Value const& get(uint64_t index) const {
-		assert(index >= 0 && index < size);
-		return d[index].v;
-	}
-
-	void assign(uint64_t index, Value const& value) {
-		assert(index >= 0 && index < size);
-		d[index].v = value;
-	}
-	
-	// making a pointer only works if the entry already exists 
-	Pointer makePointer(String name) {
-		uint64_t i = find(name);
-		if(d[i].n == Strings::NA) _error("Making pointer to non-existant variable"); 
-		return (Pointer) { this, name, revision, i };
-	}
-
-	Value const& get(Pointer const& p) {
-		if(p.revision == revision) return get(p.index);
-		else return get(p.name);
-	}
-
-	void assign(Pointer const& p, Value const& value) {
-		if(p.revision == revision) assign(p.index, value);
-		else assign(p.name, value);
-	}
-};
-
-class Environment : public HeapObject, public Dictionary {
-private:
-	
-public:
-	Environment* lexical, *dynamic;
+	Value lexical, dynamic;
 	Value call;
 	std::vector<String> dots;
+	
+	uint64_t size, load;
+	struct Pair { String n; Value v; };
+	Pair d[];
 
-	explicit Environment(Environment* lexical, Environment* dynamic=0) :
-			lexical(lexical), dynamic(dynamic), call(Null::Singleton()) {}
-
-	explicit Environment(Environment* lexical, Environment* dynamic, Value const& call) :
-		lexical(lexical), dynamic(dynamic), call(call) {}
-
-	Environment* LexicalScope() const { return lexical; }
-	Environment* DynamicScope() const { return dynamic; }
-
-	// used when loading libraries...should probably reengineer so this isn't needed.
-	void SetLexicalScope(Environment* env) { lexical = env; }
+	explicit Environment(uint64_t size, Value lexical, Value dynamic, Value call) :
+			revision(++globalRevision), lexical(lexical), dynamic(dynamic), call(call), size(size) {}
 
 	void walk(Heap* heap) {
-                lexical = (Environment*)heap->mark(lexical);
-                dynamic = (Environment*)heap->mark(dynamic);
+                lexical.p = (void*)heap->mark((HeapObject*)lexical.p);
+                dynamic.p = (void*)heap->mark((HeapObject*)dynamic.p);
 
                 for(uint64_t i = 0; i < size; i++) {
                         if(d[i].n != Strings::NA) {
-                                Value& r = d[i].v;
-                                if(r.isEnvironment() || r.isFunction() || r.isPromise()) {
-                                        r.p = (void*)heap->mark((HeapObject*)(r.p));
-                                }
+				walkValue(heap, d[i].v);
                         }
                 }
 	}
@@ -673,15 +555,22 @@ public:
 class REnvironment : public Value {
 public:
 
+	static const uint64_t defaultSize = 8;
+
 	REnvironment() {
 		Value::Init(*this, Type::Environment, 0);
 		this->p = 0;
 	}
 
-	REnvironment(State& state, REnvironment s, REnvironment d, Value call = Null::Singleton()) {
+	REnvironment(State& state, REnvironment l, REnvironment d, Value call = Null::Singleton());
+/* {
 		Value::Init(*this, Type::Environment, 0);
-		this->p = new (state, 0) Environment((Environment*)s.p, (Environment*)d.p, call);
-	}
+		uint64_t bytes = defaultSize * sizeof(Environment::Pair);
+		Environment* env = new (state, bytes) Environment(defaultSize, l, d, call);
+		// need to protect env here
+		this->p = new (state, 0) Ref<Environment>(env);
+		clear();
+	}*/
 
 	static REnvironment Null() {
 		return REnvironment();
@@ -689,7 +578,7 @@ public:
 
 	bool isNull() { return this->p == 0; }
 
-	explicit REnvironment(Environment* env) {
+	explicit REnvironment(Ref<Environment>* env) {
 		Value::Init(*this, Type::Environment, 0);
 		this->p = env;
 	}
@@ -704,38 +593,113 @@ public:
 		return (Value&) *this;
 	}
 
+	// for now, do linear probing
+	// this returns the location of the String s (or where it was stored before being deleted).
+	// or, if s doesn't exist, the location at which s should be inserted.
+	uint64_t find(String s) const {
+		Ref<Environment> const& e = *(Ref<Environment> const*)p;
+		uint64_t i = (uint64_t)s.i & (e->size-1);	// hash this?
+		while(e->d[i].n != s && e->d[i].n != Strings::NA) i = (i+1) & (e->size-1);
+		assert(i >= 0 && i < e->size);
+		return i; 
+	}
+
 	Value const& get(uint64_t index) {
-		Environment const* e = (Environment const*)p;
+		Ref<Environment> const& e = *(Ref<Environment> const*)p;
 		assert(index >= 0 && index < e->size);
 		return e->d[index].v;
 	}
 
+	String const& getName(uint64_t index) {
+		Ref<Environment> const& e = *(Ref<Environment> const*)p;
+		assert(index >= 0 && index < e->size);
+		return e->d[index].n;
+	}
+
 	Value const& get(String name) {
-		Environment const* e = (Environment const*)p;
-		uint64_t i = e->find(name);
+		Ref<Environment> const& e = *(Ref<Environment> const*)p;
+		uint64_t i = find(name);
 		if(e->d[i].n != Strings::NA) return e->d[i].v;
 		else return Value::Nil();
 	}
 
-	static void assign(REnvironment& env, String name, Value v) {
-		Environment* e = (Environment*)env.p;
-		e->assign(name, v);
+	static void rehash(State& state, REnvironment& env, uint64_t s) {
+		Ref<Environment> e = *(Ref<Environment>*)env.p;
+
+		s = nextPow2(s);
+		if(s <= e->size) return; // should rehash on shrinking sometimes, when?
+
+		uint64_t bytes = s * sizeof(Environment::Pair);
+		Environment* n = new (state, bytes) Environment(s, e->lexical, e->dynamic, e->call);
+		e = *(Ref<Environment>*)env.p;
+
+		// now swap in...	
+		((Ref<Environment>*)env.p)->t = n;
+
+		env.clear();
+
+		n->load = e->load;
+		n->dots.swap(e->dots);
+
+		// copy over previous populated values...
+		for(uint64_t i = 0; i < e->size; i++) {
+			if(e->d[i].n != Strings::NA) {
+				n->d[env.find(e->d[i].n)] = e->d[i];
+			}
+		}
+	}
+
+
+	static uint64_t assign(State& state, REnvironment& env, String name, Value value) {
+		Ref<Environment>& e = *(Ref<Environment>*)env.p;
+		uint64_t i = env.find(name);
+		if(value.isNil()) {
+			// deleting a value changes the revision number! 
+			if(e->d[i].n != Strings::NA) {
+				e->load--; 
+				e->d[i] = (Environment::Pair) { Strings::NA, Value::Nil() }; 
+				e->revision = ++e->globalRevision; 
+			}
+		} else {
+			if(e->d[i].n == Strings::NA) { 
+				e->load++;
+				if((e->load * 2) > e->size) {
+					rehash(state, env, e->size * 2);
+					e = *(Ref<Environment>*)env.p;
+					i = env.find(name);
+				}
+				e->d[i] = (Environment::Pair) { name, value };
+			} else {
+				e->d[i].v = value;
+			}
+		}
+		return i;
 	}
 
 	static void assign(REnvironment& env, uint64_t index, Value v) {
-		Environment* e = (Environment*)env.p;
+		Ref<Environment>& e = *(Ref<Environment>*)env.p;
 		assert(index >= 0 && index < e->size);
 		e->d[index].v = v;
 	}
 
-	REnvironment LexicalScope() const { return REnvironment(((Environment const*)p)->lexical); }
-	REnvironment DynamicScope() const { return REnvironment(((Environment const*)p)->dynamic); }
-	void SetLexicalScope(REnvironment env) { ((Environment*)p)->lexical = (Environment*)env.p; }
-	std::vector<String>& dots() { return ((Environment*)p)->dots; }
-	std::vector<String> const& dots() const { return ((Environment const*)p)->dots; }
+	void clear() {
+		Ref<Environment>& e = *(Ref<Environment>*)p;
+		e->load = 0; 
+		for(uint64_t i = 0; i < e->size; i++) {
+			// wiping v too makes sure we're not holding unnecessary pointers
+			e->d[i] = (Environment::Pair) { Strings::NA, Value::Nil() };
+		}
+		e->revision = ++e->globalRevision;
+	}
+
+	REnvironment LexicalScope() const { return (REnvironment&)((*(Ref<Environment> const*)p)->lexical); }
+	REnvironment DynamicScope() const { return (REnvironment&)((*(Ref<Environment> const*)p)->dynamic); }
+	void SetLexicalScope(REnvironment env) { (*(Ref<Environment>*)p)->lexical = env; }
+	std::vector<String>& dots() { return (*(Ref<Environment>*)p)->dots; }
+	std::vector<String> const& dots() const { return (*(Ref<Environment> const*)p)->dots; }
 	
-	uint64_t getRevision() const { return ((Environment const*)p)->revision; }
-	bool equalRevision(uint64_t i) const { return i == ((Environment const*)p)->revision; }
+	uint64_t getRevision() const { return (*(Ref<Environment> const*)p)->revision; }
+	bool equalRevision(uint64_t i) const { return i == (*(Ref<Environment> const*)p)->revision; }
 
 	struct Pointer {
 		Value env;
@@ -745,25 +709,25 @@ public:
 	};
 
 	Pointer makePointer(String name) {
-		Environment* e = (Environment*)p;
-		uint64_t i = e->find(name);
+		Ref<Environment>& e = *(Ref<Environment>*)p;
+		uint64_t i = find(name);
 		if(e->d[i].n == Strings::NA) _error("Making pointer to non-existant variable"); 
 		return (Pointer) { *this, name, e->revision, i };
 	}
 	
 	static Value const& get(Pointer const& p) {
-		Environment const* e = (Environment const*)(p.env.p);
-		if(p.revision == e->revision) return e->get(p.index);
-		else return e->get(p.name);
+		REnvironment& env = ((REnvironment&)p.env);
+		if(env.equalRevision(p.revision)) return env.get(p.index);
+		else return env.get(p.name);
 	}
 
-	static void assign(Pointer const& p, Value const& value) {
-		Environment* e = (Environment*)(p.env.p);
-		if(p.revision == e->revision) e->assign(p.index, value);
-		else e->assign(p.name, value);
+	static void assign(State& state, Pointer const& p, Value const& value) {
+		REnvironment& env = ((REnvironment&)p.env);
+		if(env.equalRevision(p.revision)) REnvironment::assign(env, p.index, value);
+		else REnvironment::assign(state, env, p.name, value);
 	}
 
-	Value const& call() const { return ((Environment const*)p)->call; }
+	Value const& call() const { return (*(Ref<Environment> const*)p)->call; }
 };
 
 class Function : public Value {
@@ -790,7 +754,7 @@ public:
 	}
 
 	Prototype* prototype() const { return (Prototype*)(length<<4); }
-	REnvironment environment() const { return REnvironment((Environment*)p); }
+	REnvironment environment() const { return REnvironment((Ref<Environment>*)p); }
 };
 
 struct StackFrame {
@@ -1017,8 +981,8 @@ struct InternalFunction {
 
 struct State {
 	Semispace* semispace;
-	Value* sp;
 	Value* registers;
+	Value* sp;
 
 	std::vector<StackFrame, traceable_allocator<StackFrame> > stack;
 	StackFrame frame;
@@ -1036,10 +1000,12 @@ struct State {
 	TraceState tracing; //all state related to tracing compiler
 
 
-	State() : semispace(new Semispace(this)), base(*this, REnvironment::Null(), REnvironment::Null()), global(*this, base, REnvironment::Null()) {
+	State() : 	semispace(new Semispace(this)), 
+			registers(new (GC) Value[DEFAULT_NUM_REGISTERS]),
+			sp(registers+DEFAULT_NUM_REGISTERS),
+			base(*this, REnvironment::Null(), REnvironment::Null()), 
+			global(*this, base, REnvironment::Null()) {
 		path.push_back(base);
-		registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
-		this->sp = registers + DEFAULT_NUM_REGISTERS;
 	}
 
 	StackFrame& push() {
@@ -1069,10 +1035,54 @@ struct State {
 		internalFunctions.push_back(i);
 		internalFunctionIndex[s] = internalFunctions.size()-1;
 	}
+
+	Value& root(Value v) {
+		sp--;
+		*sp = v;
+		return *sp;
+	}
+
+	void unroot() {
+		sp++;
+	}
 };
 
 inline void* HeapObject::operator new(unsigned long bytes, State& state, unsigned long extra) {
 	return state.semispace->alloc(bytes+extra);
+}
+
+template<class T>
+struct Handle {
+	State& state;
+	T& t;
+	Handle(State& state, T t) : state(state), t((T&)state.root(t)) {}
+	~Handle() { state.unroot(); }
+	operator T&() { return t; }
+	operator T const&() const { return t; }
+};
+
+inline Object::Object(State& state, Value base, uint64_t length, uint64_t capacity) {
+	Value::Init(*this, Type::Object, length);
+	assert(!base.isObject());
+	Inner* inner = new (state, sizeof(Pair) * capacity) Inner();
+	inner->base = base;
+	inner->capacity = capacity;
+	for(uint64_t j = 0; j < capacity; j++)
+		inner->attributes[j] = (Pair) { Strings::NA, Value::Nil() };
+	p = (void*)inner;
+}
+
+inline REnvironment::REnvironment(State& state, REnvironment l, REnvironment d, Value call) {
+	Value::Init(*this, Type::Environment, 0);
+	uint64_t bytes = defaultSize * sizeof(Environment::Pair);
+	Environment* env = new (state, bytes) Environment(defaultSize, l, d, call);
+	Value v;
+	v.type = Type::HeapObject;
+	v.p = env;
+	Handle<Value> h(state, v);
+	this->p = new (state, 0) Ref<Environment>();
+	((Ref<Environment>*)(this->p))->t = (Environment*)(((Value)h).p);
+	clear();
 }
 
 Value eval(State& state, Function const& function);

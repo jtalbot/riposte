@@ -22,6 +22,7 @@
 	_(Environment,	"environment")	\
 	_(Future, "future")				\
 	_(Forward, "forward")				\
+	_(HeapObject, "heapobject")				\
 
 DECLARE_ENUM(Type, TYPES)
 

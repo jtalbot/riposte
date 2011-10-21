@@ -22,36 +22,36 @@ inline double asReal1(Value const& v) {
 	else _error("Can't cast argument to number"); 
 }
 
-void Element(Value const& v, int64_t index, Value& out) __attribute__((always_inline));
+void Element(State& state, Value const& v, int64_t index, Value& out) __attribute__((always_inline));
 
-inline void ElementSlow(Object v, int64_t index, Value& out) {
-	Element(v.base(), index, out);
+inline void ElementSlow(State& state, Object v, int64_t index, Value& out) {
+	Element(state, v.base(), index, out);
 	if(v.hasNames()) {
 		Value names;
-		Element(v.getNames(), index, names);
-		Object::Init(out, out, names);
+		Element(state, v.getNames(), index, names);
+		Object::Init(state, out, out, names);
 	}
 }
 
-inline void Element(Value const& v, int64_t index, Value& out) {
+inline void Element(State& state, Value const& v, int64_t index, Value& out) {
 	switch(v.type) {
 		#define CASE(Name) case Type::Name: Name::InitScalar(out, ((Name const&)v)[index]); break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		case Type::Object: 
-			ElementSlow((Object const&)v, index, out); 
+			ElementSlow(state, (Object const&)v, index, out); 
 			break;
 		default: _error("NYI: Element of this type"); break;
 	};
 }
 
-void Element2(Value const& v, int64_t index, Value& out) __attribute__((always_inline));
+void Element2(State& state, Value const& v, int64_t index, Value& out) __attribute__((always_inline));
 
-inline void Element2Slow(Object const& v, int64_t index, Value& out) {
-	Element2(v.base(), index, out); 
+inline void Element2Slow(State& state, Object const& v, int64_t index, Value& out) {
+	Element2(state, v.base(), index, out); 
 }
 
-inline void Element2(Value const& v, int64_t index, Value& out) {
+inline void Element2(State& state, Value const& v, int64_t index, Value& out) {
 	switch(v.type) {
 		#define CASE(Name) case Type::Name: \
 			if(index < 0 || index >= v.length) \
@@ -68,7 +68,7 @@ inline void Element2(Value const& v, int64_t index, Value& out) {
 			out = ((List const&)v)[index]; 
 			break;
 		case Type::Object: 
-			Element2Slow(((Object const&)v), index, out); 
+			Element2Slow(state, ((Object const&)v), index, out); 
 			break;
 		default: _error("NYI: Element of this type"); break;
 	};
@@ -78,10 +78,10 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out);
 
 inline void Subset(State& state, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble1() && i.d >= 1) {
-		Element(a, (int64_t)i.d-1, out);
+		Element(state, a, (int64_t)i.d-1, out);
 	}
 	else if(i.isInteger1() && i.i >= 1) {
-		Element(a, i.i-1, out);
+		Element(state, a, i.i-1, out);
 	}
 	else {
 		SubsetSlow(state, a, i, out);
@@ -90,11 +90,11 @@ inline void Subset(State& state, Value const& a, Value const& i, Value& out) {
 
 inline void Subset2(State& state, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble1() && i.d >= 1) {
-		Element2(a, (int64_t)i.d-1, out);
+		Element2(state, a, (int64_t)i.d-1, out);
 		return;
 	}
 	else if(i.isInteger1() && i.i >= 1) {
-		Element2(a, i.i-1, out);
+		Element2(state, a, i.i-1, out);
 		return;
 	}
 	else if(i.isCharacter1() && a.isObject() && ((Object const&)a).hasNames()) {
@@ -103,7 +103,7 @@ inline void Subset2(State& state, Value const& a, Value const& i, Value& out) {
 		int64_t length = c.length;
 		for(int64_t j = 0; j < length; j++) {
 			if(data[j].i == i.i) {
-				Element2(a, j, out);
+				Element2(state, a, j, out);
 				return;
 			}
 		}

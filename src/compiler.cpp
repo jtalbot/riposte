@@ -208,7 +208,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			n[0] = Symbol(state.internStr(state.externStr(Symbol(c[0])) + "<-"));
 			n[c.length] = value;
 			nnames[c.length] = Strings::value;
-			value = CreateCall(n, nnames);
+			value = CreateCall(state, n, nnames);
 			dest = c[1];
 		}
 		
