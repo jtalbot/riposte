@@ -138,14 +138,13 @@ int dostdin(State& state) {
 	return rc;
 }
 
-static int dofile(const char * file, State& state, bool echo) {
+static int dofile(const char * file, std::istream & in, State& state, bool echo) {
 	int rc = 0;
 	std::string s;
 
 	// Read in the file
 	std::string code;
 	std::string line;
-	std::ifstream in(file);
        	d_message(1,"Parsing file (%s)\n",file);
 	while(std::getline(in,line))
         {
@@ -275,9 +274,12 @@ main(int argc, char** argv)
 	if(-1 != fd) {
 		close(fd);    /* will reopen in R for parsing */
 		d_message(1,"source(%s)\n",filename);
-		rc = dofile(filename,state,echo); 
-	} else {
+		std::ifstream in(filename);
+		rc = dofile(filename,in,state,echo);
+	} else if(isatty(STDIN_FILENO)){
 		rc = dostdin(state);
+	} else {
+		rc = dofile("<stdin>",std::cin,state,echo);
 	}
 
 	/* Session over */
