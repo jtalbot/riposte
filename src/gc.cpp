@@ -108,4 +108,155 @@ HeapObject* Semispace::mark(HeapObject* o) {
 	return o;
 }
 
+MarkRegion::MarkRegion(State* state) : state(state) {
+	existingRegions = 0;
+	makeRegions(128);
+}
+
+void MarkRegion::makeRegions(uint64_t regions) {
+
+	// allocate one extra so we can align the memory
+	char* head = new (GC) char[(regions+1)*rSize];
+	head = (char*)(((uint64_t)head+rSize-1) & (~(rSize-1)));
+	for(uint64_t i = 0; i < regions; i++) {
+		ar.push(Region(head));
+		head += rSize;
+	}
+	existingRegions += regions;
+}
+
+HeapObject* alloc(uint64_t bytes) {
+	if(bump+bytes < limit) {
+		HeapObject* r = (HeapObject*)bump;
+		r->forward = 0;
+		r->bytes = bytes;
+		bump += bytes;
+		return bump;
+	} else {
+		return slowAlloc(uint64_t bytes);
+	}
+}
+
+uint64_t MarkRegion::bitInRegion(Region& r, char* p) {
+	return (p-r.ptr)>>5;
+}
+
+Region MarkRegion::getFreeRegion() {
+	if(ar.size() == 0) makeRegions(existingRegions*0.5);
+	Region result = ar.back();
+	ar.pop_back();
+	return result;
+}
+
+void MarkRegion::advanceBump() {
+	// figure out which bit we're in...
+	uint64_t bir = bitInRegion(*currentRegion, bump);
+	uint64_t block = bir >> 6;
+	uint64_t bit = bir & 15;
+	// then find the next free line
+	while(true) {
+		for(uint64_t cblock = block; cblock < 16; cblock++) {
+			// this check is redundant if full blocks are always pulled out of the list by the marking scheme
+			if(currentRegion->mark[cblock] != 0xFFFFFFFFFFFFFFFFF) {
+				for(uint64_t cbit = bit; cbit < 64; cbit++) {
+					if(~currentRegion->mark[cblock] & (1 << cbit)) {
+						bump = currentRegion->ptr + ((cblock << 6 + cbit)<<5);
+						return;
+					}
+				}
+			}
+		}
+		currentRegion++;
+		if(currentRegion == br.end()) {
+			br.push_back(getFreeRegion());
+			currentRegion = br.back();
+		}
+		block = 0;
+		bit = 0;
+	}
+}
+
+void MarkRegion::advanceLimit() {
+	// figure out which bit we're in...
+	uint64_t bir = bitInRegion(*currentRegion, bump);
+	uint64_t block = bir >> 6;
+	uint64_t bit = bir & 15;
+	// then find the next non-free line or the end of the current block
+	for(uint64_t cblock = block; cblock < 16; cblock++) {
+		// this check is redundant if full blocks are always pulled out of the list by the marking scheme
+		if(currentRegion->mark[cblock] != 0x0) {
+			for(uint64_t cbit = bit; cbit < 64; cbit++) {
+				if(currentRegion->mark[cblock] & (1 << cbit)) {
+					limit = currentRegion->ptr + ((cblock << 6 + cbit)<<5);
+					return;
+				}
+			}
+		}
+	}
+	limit = currentRegion->ptr + rSize;
+}
+
+HeapObject* MarkRegion::slowAlloc(uint64_t bytes) {
+
+	HeapObject* r;
+
+	// something here needs to trigger a collection
+
+	// look for the next free line
+	if(bytes <= lSize) {
+		advanceBump();
+		advanceLimit();
+		r = (HeapObject*)bump;
+		bump += bytes;
+	}
+	// we've already failed to place it in the next available space, so
+	// if it's bigger than a line, place in free region.
+	else {
+		if(cbump+bytes >= climit) {
+			cr.push_back(getFreeRegion());
+			cbump = cr.back().ptr;
+			climit = cr.back().ptr+rSize;
+		}
+		r = (HeapObject*)cbump;
+		cbump += bytes;
+	}
+	r->forward = 0;
+	r->bytes = bytes;
+	return bump;
+}
+
+void MarkRegion::collect() {
+	// clear all mark bits
+	// call mark recursively
+}
+
+HeapObject* MarkRegion::mark(HeapObject* o) {
+	// figure out which region we're in...
+	o >> 15 << 15;
+	// if not marked yet...
+	// 	mark relevant bits given the size of our object
+	//	recursively mark children
+	// if marked already (implies that its already been visited AND it (and its children) are unchanged)...
+	//	just return
+	if(inSpace((HeapObject*)o)) {
+		if(o->forward) {
+			return (HeapObject*)o->bytes;
+		}
+
+		// should check if room in new space I guess?
+		assert(bump + o->bytes < newbase + size);
+	
+		memcpy(bump, o, o->bytes);
+		HeapObject* result = (HeapObject*)bump;
+		bump += o->bytes;
+		
+		o->forward = 1;
+		o->bytes = (uint64_t)result;
+
+		printf("copying from %llx to %llx\n", o, result);
+
+		return result;
+	}
+	return o;
+}
 

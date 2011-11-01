@@ -6,6 +6,8 @@
 #include "common.h"
 #include <assert.h>
 
+#include <list>
+
 #include <gc/gc_cpp.h>
 #include <gc/gc_allocator.h>
 
@@ -91,6 +93,48 @@ public:
 	void collect();
 	virtual HeapObject* mark(HeapObject* o);
 
+};
+
+class MarkRegion : public Heap {
+
+	State* state;
+
+	// 16*64 32B lines in a region
+	static const uint64_t rSize = 2 << 15;
+	static const uint64_t lSize = 2 << 5;
+
+	struct Region {
+		// marks
+		uint64_t mark[16];
+		// start
+		char* ptr;
+
+		Region(char* ptr) : ptr(ptr) {
+			for(uint64_t i = 0; i < 16; i++) mark = 0;
+		}
+	};
+	
+	// lists of regions
+	std::list<Region> ar, br, cr, dr;
+
+	MarkRegion(State* state);
+
+	uint64_t existingRegions;
+	void makeRegions(uint64_t regions);
+
+	std::list<Region>::iterator currentRegion;
+	char *bump, *limit;
+	char *cbump, *climit;
+
+	HeapObject* alloc(uint64_t bytes);
+	HeapObject* slowAlloc(uint64_t bytes);
+	virtual HeapObject* mark(HeapObject* o);
+
+	Region getFreeRegion();
+	uint64_t bitInRegion(Region& r, char* p);
+
+	void advanceBump();
+	void advanceLimit();
 };
 
 #endif
