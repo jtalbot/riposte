@@ -293,6 +293,8 @@ OP_NOT_IMPLEMENTED(cummax)
 OP_NOT_IMPLEMENTED(cumany)
 OP_NOT_IMPLEMENTED(cumall)
 
+OP_NOT_IMPLEMENTED(mmul)
+
 
 RecordingStatus::Enum jmp_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	//this is just a constant jump, nothing to record

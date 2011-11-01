@@ -58,6 +58,7 @@ static ByteCode::Enum op(Symbol const& s) {
 		case EStrings::Character: return ByteCode::character1; break;
 		case EStrings::Raw: return ByteCode::raw1; break;
 		case EStrings::length: return ByteCode::length; break;
+		case EStrings::mmul: return ByteCode::mmul; break;
 		default: throw RuntimeError("unexpected symbol used as an operator"); break;
 	}
 }
@@ -549,6 +550,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	case EStrings::gt:
 	case EStrings::ge:
 	case EStrings::le:
+	case EStrings::mmul:
 	{
 		// if there aren't exactly two parameters, we should call the library version...
 		if(call.length != 3) return compileFunctionCall(call, names, code);

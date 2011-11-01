@@ -10,6 +10,10 @@
 #include <set>
 #include <algorithm>
 
+#include "Eigen/Dense"
+using Eigen::MatrixXd;
+using Eigen::Map;
+
 inline Value expression(Value const& v) { 
 	if(v.isPromise())
 		return Function(v).prototype()->expression;
@@ -288,6 +292,31 @@ inline Character klass(State& state, Value const& v)
 	return c;
 }
 
+inline Value MatrixMultiply(State& state, Value const& a, Value const& b) {
+	MatrixXd aa, bb;
+	if(a.isObject() && ((Object const&)a).hasDim()) {
+		Integer ai = As<Integer>(state, ((Object const&)a).getDim());
+		Double ad = As<Double>(state, ((Object const&)a).base());
+		aa = Map<MatrixXd>(ad.v(), ai[0], ai[1]);
+	} else {
+		Double ad = As<Double>(state, a);
+		aa = Map<MatrixXd>(ad.v(), 1, a.length);
+	}
+	if(b.isObject() && ((Object const&)b).hasDim()) {
+		Integer bi = As<Integer>(state, ((Object const&)b).getDim());
+		Double bd = As<Double>(state, ((Object const&)b).base());
+		bb = Map<MatrixXd>(bd.v(), bi[0], bi[1]);
+	} else {
+		Double bd = As<Double>(state, b);
+		bb = Map<MatrixXd>(bd.v(), b.length, 1);
+	}
+	Double c(aa.rows()*bb.cols());
+	Map<MatrixXd>(c.v(), aa.rows(), bb.cols()) = aa*bb;
+	Value result;
+	Object::Init(result, c);
+	Integer dim = Integer::c(aa.rows(), bb.cols());
+	return ((Object const&)result).setDim(dim);
+}
 
 #endif
 

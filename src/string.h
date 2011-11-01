@@ -123,6 +123,7 @@
 	_(list,		"list") \
 	_(missing,	"missing") \
 	_(quote,	"quote") \
+	_(mmul,		"%*%") \
 
 DECLARE_ENUM(EStrings, STRINGS)
 

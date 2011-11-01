@@ -111,7 +111,8 @@
 	_(type, "type") \
 	_(list, "list") \
 	_(length, "length") \
-	_(missing, "missing") 
+	_(missing, "missing") \
+	_(mmul, "mmul")
 
 #define SPECIAL_BYTECODES(_) 	\
 	_(done, "done") 

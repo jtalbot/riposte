@@ -797,6 +797,10 @@ Instruction const* missing_op(State& state, Instruction const& inst) {
 	Logical::InitScalar(REG(state, inst.c), missing);
 	return &inst+1;
 }
+Instruction const* mmul_op(State& state, Instruction const& inst) {
+	REG(state, inst.c) = MatrixMultiply(state, REG(state, inst.a), REG(state, inst.b));
+	return &inst+1;
+}
 Instruction const* ret_op(State& state, Instruction const& inst) {
 	*(state.frame.result) = REG(state, inst.c);
 	// if this stack frame owns the environment, we can free it for reuse
