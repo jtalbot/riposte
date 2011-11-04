@@ -21,8 +21,8 @@
 	_(Symbol,	"symbol")	\
 	_(Environment,	"environment")	\
 	_(Future, "future")				\
-	_(Forward, "forward")				\
 	_(HeapObject, "heapobject")				\
+	_(Code, "code")
 
 DECLARE_ENUM(Type, TYPES)
 

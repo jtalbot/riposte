@@ -11,9 +11,6 @@
 #include <limits>
 #include <complex>
 
-#include <gc/gc_cpp.h>
-#include <gc/gc_allocator.h>
-
 #include "gc.h"
 #include "type.h"
 #include "bc.h"
@@ -154,40 +151,43 @@ struct Vector : public Value {
 		return length == 1;
 	}
 
-	ElementType& s() { return canPack ? Value::scalar<ElementType>() : *(ElementType*)p; }
-	ElementType const& s() const { return canPack ? Value::scalar<ElementType>() : *(ElementType const*)p; }
+	struct Inner : public HeapObject {
+		uint64_t padding;	// HeapObjects are now 24 bytes, this makes data 16B aligned
+		ElementType data[];
 
-	ElementType const* v() const { return (canPack && isScalar()) ? &Value::scalar<ElementType>() : (ElementType const*)p; }
-	ElementType* v() { return (canPack && isScalar()) ? &Value::scalar<ElementType>() : (ElementType*)p; }
+		virtual void walk(Heap* heap) {
+			//if(Recursive) {
+			//	for(uint64_t i = 0; i < length; i++) walkValue(heap, data[i]);
+			//}
+		}
+	};
+
+	ElementType& s() { return canPack ? Value::scalar<ElementType>() : ((Inner*)p)->data[0]; }
+	ElementType const& s() const { return canPack ? Value::scalar<ElementType>() : ((Inner const*)p)->data[0]; }
+
+	ElementType const* v() const { return (canPack && isScalar()) ? &Value::scalar<ElementType>() : ((Inner const*)p)->data; }
+	ElementType* v() { return (canPack && isScalar()) ? &Value::scalar<ElementType>() : ((Inner*)p)->data; }
 	
 	ElementType& operator[](int64_t index) { return v()[index]; }
 	ElementType const& operator[](int64_t index) const { return v()[index]; }
 
-	explicit Vector(int64_t length=0) {
-		Init(*this, length);
-	}
+	explicit Vector();
 
-	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
-		Value::Init(v, VectorType, length);
-		int64_t l = length;
-		if((canPack && length > 1) || (!canPack && length > 0)) {
-			int64_t length_aligned = (l < 128) ? (l + 1) : l;
-			v.p = Recursive ? new (GC) Element[length_aligned] :
-				new (PointerFreeGC) Element[length_aligned];
-			assert(l < 128 || (0xF & (int64_t)v.p) == 0);
-			if( (0xF & (int64_t)v.p) != 0)
-				v.p =  (char*)v.p + 0x8;
-		}
+	explicit Vector(State& state, int64_t length=0);
+
+	static Vector<VType, ElementType, Recursive>& Init(State& state, Value& v, int64_t length) {
+		v = Vector(state, length);
 		return (Vector<VType, ElementType, Recursive>&)v;
 	}
 
-	static void InitScalar(Value& v, ElementType const& d) {
-		Value::Init(v, VectorType, 1);
-		if(canPack)
+	static void InitScalar(State& state, Value& v, ElementType const& d) {
+		if(canPack) {
+			Value::Init(v, VectorType, 1);
 			v.scalar<ElementType>() = d;
+		}
 		else {
-			v.p = Recursive ? new (GC) Element[4] : new (PointerFreeGC) Element[4];
-			*(Element*)v.p = d;
+			v = Vector(state, 4);
+			((Inner*)v.p)->data[0] = d;
 		}
 	}
 
@@ -211,18 +211,19 @@ union _doublena {
 
 #define VECTOR_IMPL(Name, Element, Recursive) 				\
 struct Name : public Vector<Type::Name, Element, Recursive> { 			\
-	explicit Name(int64_t length=0) : Vector<Type::Name, Element, Recursive>(length) {} 	\
+	explicit Name() : Vector<Type::Name, Element, Recursive>() {} 	\
+	explicit Name(State& state, int64_t length) : Vector<Type::Name, Element, Recursive>(state, length) {} 	\
 	explicit Name(Value const& v) : Vector<Type::Name, Element, Recursive>(v) {} 	\
-	static Name c() { Name c(0); return c; } \
-	static Name c(Element v0) { Name c(1); c[0] = v0; return c; } \
-	static Name c(Element v0, Element v1) { Name c(2); c[0] = v0; c[1] = v1; return c; } \
-	static Name c(Element v0, Element v1, Element v2) { Name c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } \
-	static Name c(Element v0, Element v1, Element v2, Element v3) { Name c(4); c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; return c; } \
+	static Name c() { Name c; return c; } \
+	static Name c(State& state, Element v0) { Name c(state, 1); c[0] = v0; return c; } \
+	static Name c(State& state, Element v0, Element v1) { Name c(state, 2); c[0] = v0; c[1] = v1; return c; } \
+	static Name c(State& state, Element v0, Element v1, Element v2) { Name c(state, 3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } \
+	static Name c(State& state, Element v0, Element v1, Element v2, Element v3) { Name c(state, 4); c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; return c; } \
 	const static Element NAelement; \
-	static Name NA() { static Name na = Name::c(NAelement); return na; }  \
-	static Name& Init(Value& v, int64_t length) { return (Name&)Vector<Type::Name, Element, Recursive>::Init(v, length); } \
-	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); }\
-	Name Clone() const { Name c(length); memcpy(c.v(), v(), length*width); return c; }
+	static Name NA(State& state) { static Name na = Name::c(state, NAelement); return na; }  \
+	static Name& Init(State& state, Value& v, int64_t length) { return (Name&)Vector<Type::Name, Element, Recursive>::Init(state, v, length); } \
+	static void InitScalar(State& state, Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(state, v, d); }\
+	Name Clone(State& state) const { Name c(state, length); memcpy(c.v(), v(), length*width); return c; }
 /* note missing }; */
 
 VECTOR_IMPL(Null, unsigned char, false)  
@@ -232,8 +233,8 @@ VECTOR_IMPL(Null, unsigned char, false)
 };
 
 VECTOR_IMPL(Logical, unsigned char, false)
-	static Logical True() { static Logical t = Logical::c(1); return t; }
-	static Logical False() { static Logical f = Logical::c(0); return f; } 
+	static Logical True(State& state) { static Logical t = Logical::c(state, 1); return t; }
+	static Logical False(State& state) { static Logical f = Logical::c(state, 0); return f; } 
 	
 	static bool isTrue(unsigned char c) { return c == 1; }
 	static bool isFalse(unsigned char c) { return c == 0; }
@@ -253,9 +254,9 @@ VECTOR_IMPL(Integer, int64_t, false)
 }; 
 
 VECTOR_IMPL(Double, double, false)
-	static Double Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
-	static Double NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
-	static Double NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } 
+	static Double Inf(State& state) { static Double i = Double::c(state, std::numeric_limits<double>::infinity()); return i; }
+	static Double NInf(State& state) { static Double i = Double::c(state, -std::numeric_limits<double>::infinity()); return i; }
+	static Double NaN(State& state) { static Double n = Double::c(state, std::numeric_limits<double>::quiet_NaN()); return n; } 
 	
 	static bool isNA(double c) { _doublena a, b; a.d = c; b.d = NAelement; return a.i==b.i; }
 	static bool isCheckedNA(int64_t c) { return false; }
@@ -288,6 +289,8 @@ VECTOR_IMPL(List, Value, true)
 	static bool isInfinite(Value const& c) { return false; }
 };
 
+VECTOR_IMPL(Code, Instruction, false)
+};
 
 struct Future : public Value {
 	static void Init(Value & f, Type::Enum typ,int64_t length, IRef ref) {
@@ -303,10 +306,34 @@ struct Future : public Value {
 inline void walkValue(Heap* heap, Value& r) {
 	switch(r.type) {
 		case Type::Environment:
-		case Type::Function:
-		case Type::Promise:
 		case Type::Object:
+		case Type::HeapObject:
 			r.p = (void*)heap->mark((HeapObject*)(r.p));
+			break;
+		case Type::Promise:
+		case Type::Function:
+			r.length = ((uint64_t)heap->mark((HeapObject*)(r.length<<4)))>>4;
+			r.p = (void*)heap->mark((HeapObject*)(r.p));
+			break;
+		case Type::Logical:
+		case Type::Integer:
+		case Type::Double:
+		case Type::Raw:
+		case Type::Character:
+			if(r.length > 1)
+				r.p = (void*)heap->mark((HeapObject*)(r.p));
+			break;
+		case Type::List:
+			if(r.length > 0) {
+				r.p = (void*)heap->mark((HeapObject*)(r.p));
+				List l(r);
+				for(int64_t i = 0; i < r.length; i++) walkValue(heap, l[i]);
+			}
+			break;
+		case Type::Code:
+			if(r.length > 0) {
+				r.p = (void*)heap->mark((HeapObject*)(r.p));
+			}
 			break;
 		default: break;
 	};
@@ -442,13 +469,13 @@ struct Object : public Value {
 
 inline Value CreateExpression(State& state, List const& list) {
 	Value v;
-	Object::Init(state, v, list, Value::Nil(), Character::c(Strings::Expression));
+	Object::Init(state, v, list, Value::Nil(), Character::c(state, Strings::Expression));
 	return v;
 }
 
 inline Value CreateCall(State& state, List const& list, Value const& names = Value::Nil()) {
 	Value v;
-	Object::Init(state, v, list, names, Character::c(Strings::Call));
+	Object::Init(state, v, list, names, Character::c(state, Strings::Call));
 	return v;
 }
 
@@ -460,33 +487,77 @@ inline Value CreateCall(State& state, List const& list, Value const& names = Val
 ///////////////////////////////////////////////////////////////////
 
 
-struct CompiledCall : public gc {
-	List call;
-
-	List arguments;
-	Character names;
-	int64_t dots;
+struct CompiledCall : public Value {
 	
-	explicit CompiledCall(List const& call, List const& arguments, Character const& names, int64_t dots) 
-		: call(call), arguments(arguments), names(names), dots(dots) {}
+	struct Inner : public HeapObject {
+		List call;
+		List arguments;
+		Character names;
+		int64_t dots;
+
+		Inner(List const& call, List const& arguments, Character const& names, int64_t dots)
+			: call(call), arguments(arguments), names(names), dots(dots) {}
+	
+		virtual void walk(Heap* heap) {
+			walkValue(heap, call);
+			walkValue(heap, arguments);
+			walkValue(heap, names);
+		}
+	};
+	
+	explicit CompiledCall(State& state, List const& call, List const& arguments, Character const& names, int64_t dots); 
+
+	List const& call() const { return ((Inner const*)p)->call; }
+	List const& arguments() const { return ((Inner const*)p)->arguments; }
+	Character const& names() const { return ((Inner const*)p)->names; }
+	int64_t dots() const { return ((Inner const*)p)->dots; }
 };
 
-struct Prototype : public gc {
-	Value expression;
-	String string;
+struct Prototype : public Value {
 
-	Character parameters;
-	List defaults;
+	struct Inner : public HeapObject {
+		Value expression;
+		String string;
+		Character parameters;
+		List defaults;
+		int64_t dots;
 
-	int dots;
+		int64_t registers;
+		List constants;
 
-	int registers;
-	std::vector<Value, traceable_allocator<Value> > constants;
-	std::vector<Prototype*, traceable_allocator<Prototype*> > prototypes; 	
-	std::vector<CompiledCall, traceable_allocator<CompiledCall> > calls; 
+		Code bc;			// bytecode
+	
+		Inner(Value expression, String string, Character parameters, List defaults, int64_t dots) : expression(expression), string(string), parameters(parameters), defaults(defaults), dots(dots) {}
+	
+		virtual void walk(Heap* heap) {
+			walkValue(heap, expression);
+			walkValue(heap, parameters);
+			walkValue(heap, defaults);
+			walkValue(heap, constants);
+			walkValue(heap, bc);
+		}
+	};
 
-	std::vector<Instruction> bc;			// bytecode
-	mutable std::vector<Instruction> tbc;		// threaded bytecode
+	explicit Prototype(State& state, Value const& expression, String const& string, Character const& parameters, List const& defaults, int64_t dots);
+	explicit Prototype(State& state, Value const& expression);
+
+	explicit Prototype(Inner* inner=0) {
+		Value::Init(*this, Type::HeapObject, 0);
+		p = (void*)inner;
+	}
+
+	Value const& expression() const { return ((Inner const*)p)->expression; }
+	String const& string() const { return ((Inner const*)p)->string; }
+	Character const& parameters() const { return ((Inner const*)p)->parameters; }
+	List const& defaults() const { return ((Inner const*)p)->defaults; }
+	int64_t dots() const { return ((Inner const*)p)->dots; }
+
+	int64_t& registers() { return ((Inner*)p)->registers; }
+	int64_t const& registers() const { return ((Inner const*)p)->registers; }
+	List& constants() { return ((Inner*)p)->constants; }
+	List const& constants() const { return ((Inner const*)p)->constants; }
+	Code& bc() { return ((Inner*)p)->bc; }
+	Code const& bc() const { return ((Inner const*)p)->bc; }
 };
 
 /*
@@ -562,15 +633,7 @@ public:
 		this->p = 0;
 	}
 
-	REnvironment(State& state, REnvironment l, REnvironment d, Value call = Null::Singleton());
-/* {
-		Value::Init(*this, Type::Environment, 0);
-		uint64_t bytes = defaultSize * sizeof(Environment::Pair);
-		Environment* env = new (state, bytes) Environment(defaultSize, l, d, call);
-		// need to protect env here
-		this->p = new (state, 0) Ref<Environment>(env);
-		clear();
-	}*/
+	REnvironment(State& state, REnvironment l, REnvironment d, Value call);
 
 	static REnvironment Null() {
 		return REnvironment();
@@ -732,8 +795,8 @@ public:
 
 class Function : public Value {
 public:
-	explicit Function(Prototype* proto, REnvironment env) {
-		header = (int64_t)proto + Type::Function;
+	explicit Function(Prototype proto, REnvironment env) {
+		header = (int64_t)proto.p + Type::Function;
 		p = env.p;
 	}
 	
@@ -753,13 +816,13 @@ public:
 		return v;
 	}
 
-	Prototype* prototype() const { return (Prototype*)(length<<4); }
+	Prototype prototype() const { return Prototype((Prototype::Inner*)(length<<4)); }
 	REnvironment environment() const { return REnvironment((Ref<Environment>*)p); }
 };
 
 struct StackFrame {
 	REnvironment environment;
-	Prototype const* prototype;
+	Prototype prototype;
 
 	Instruction const* returnpc;
 	Value* returnsp;
@@ -983,11 +1046,13 @@ struct State {
 	Semispace* semispace;
 	Value* registers;
 	Value* sp;
+	Value* handleStack;
+	Value* hsp;
 
-	std::vector<StackFrame, traceable_allocator<StackFrame> > stack;
+	std::vector<StackFrame> stack;
 	StackFrame frame;
 
-	std::vector<REnvironment, traceable_allocator<REnvironment> > path;
+	std::vector<REnvironment> path;
 	REnvironment base, global;
 
 	StringTable strings;
@@ -1001,11 +1066,19 @@ struct State {
 
 
 	State() : 	semispace(new Semispace(this)), 
-			registers(new (GC) Value[DEFAULT_NUM_REGISTERS]),
+			registers(new Value[DEFAULT_NUM_REGISTERS]),
 			sp(registers+DEFAULT_NUM_REGISTERS),
-			base(*this, REnvironment::Null(), REnvironment::Null()), 
-			global(*this, base, REnvironment::Null()) {
+			handleStack(new Value[DEFAULT_NUM_REGISTERS]),
+			hsp(handleStack),
+			base(*this, REnvironment::Null(), REnvironment::Null(), Null::Singleton()), 
+			global(*this, base, REnvironment::Null(), Null::Singleton()) {
 		path.push_back(base);
+	}
+
+	~State() {
+		delete semispace;
+		delete [] registers;
+		delete [] handleStack;
 	}
 
 	StackFrame& push() {
@@ -1036,26 +1109,35 @@ struct State {
 		internalFunctionIndex[s] = internalFunctions.size()-1;
 	}
 
-	Value& root(Value v) {
-		sp--;
-		*sp = v;
-		return *sp;
+	Value* root(Value v) {
+		*hsp = v;
+		return hsp++;
 	}
 
 	void unroot() {
-		sp++;
+		hsp--;
 	}
 };
 
+inline void* HeapObject::operator new(unsigned long bytes, State& state) {
+	return state.semispace->alloc(bytes);
+}
+
 inline void* HeapObject::operator new(unsigned long bytes, State& state, unsigned long extra) {
-	return state.semispace->alloc(bytes+extra);
+	return state.semispace->varalloc(bytes+extra);
 }
 
 template<class T>
-struct Handle {
+class Handle {
+private:
 	State& state;
 	T& t;
-	Handle(State& state, T t) : state(state), t((T&)state.root(t)) {}
+	Handle(const Handle<T>&) {}
+	void operator=(const Handle<T>&) {}
+	void* operator new(size_t size) { return 0; }
+	void operator delete(void* size_t) {}
+public:
+	Handle(State& state, T t) : state(state), t(*(T*)state.root(t)) {}
 	~Handle() { state.unroot(); }
 	operator T&() { return t; }
 	operator T const&() const { return t; }
@@ -1080,14 +1162,54 @@ inline REnvironment::REnvironment(State& state, REnvironment l, REnvironment d, 
 	v.type = Type::HeapObject;
 	v.p = env;
 	Handle<Value> h(state, v);
-	this->p = new (state, 0) Ref<Environment>();
+	this->p = new (state) Ref<Environment>();
 	((Ref<Environment>*)(this->p))->t = (Environment*)(((Value)h).p);
 	clear();
 }
 
+inline CompiledCall::CompiledCall(State& state, List const& call, List const& arguments, Character const& names, int64_t dots) {
+	Value::Init(*this, Type::HeapObject, 0);
+	Inner* inner = new (state) Inner(call, arguments, names, dots);
+	p = (void*)inner;
+}
+
+inline Prototype::Prototype(State& state, Value const& expression, String const& string, Character const& parameters, List const& defaults, int64_t dots) {
+	Value::Init(*this, Type::HeapObject, 0);
+	Inner* inner = new (state) Inner(expression, string, parameters, defaults, dots);
+	assert((uint64_t)inner % 16 == 0);
+	p = (void*)inner;
+}
+inline Prototype:: Prototype(State& state, Value const& expression) {
+	Value::Init(*this, Type::HeapObject, 0);
+	Inner* inner = new (state) Inner(expression, Strings::empty, Character(state, 0), List(state, 0), 0);
+	assert((uint64_t)inner % 16 == 0);
+	p = (void*)inner;
+}
+
+template<Type::Enum VType, typename ElementType, bool Recursive, bool canPack>
+inline Vector<VType, ElementType, Recursive, canPack>::Vector() {
+	Value::Init(*this, VectorType, 0);
+}
+
+template<Type::Enum VType, typename ElementType, bool Recursive, bool canPack>
+inline Vector<VType, ElementType, Recursive, canPack>::Vector(State& state, int64_t length) {
+	Value::Init(*this, VectorType, length);
+	int64_t l = length;
+	if((canPack && length > 1) || (!canPack && length > 0)) {
+		int64_t length_aligned = l;//(l < 128) ? (l + 1) : l;
+		uint64_t bytes = sizeof(Element) * length_aligned;
+		p = new (state, bytes) Inner(); 
+		//assert(l < 128 || (0xF & (int64_t)(((Inner*)p)->data)) == 0);
+		//if( (0xF & (int64_t)((Inner*)p)->data) != 0)
+		//	p =  (char*)p + 0x8;
+		assert((0xF & (int64_t)(((Inner*)p)->data)) == 0);
+	}
+}
+
+
 Value eval(State& state, Function const& function);
-Value eval(State& state, Prototype const* prototype, REnvironment environment); 
-Value eval(State& state, Prototype const* prototype);
+Value eval(State& state, Prototype const prototype, REnvironment environment); 
+Value eval(State& state, Prototype const prototype);
 void interpreter_init(State& state);
 
 #endif

@@ -27,9 +27,9 @@ maxdepth <- 12 #max(mindepth+2, N)
 
 longLivedTree <- bottomUpTree(0, maxdepth)
 
-library(compiler)
-bottomUpTree <- cmpfun(bottomUpTree)
-itemCheck <- cmpfun(itemCheck)
+#library(compiler)
+#bottomUpTree <- cmpfun(bottomUpTree)
+#itemCheck <- cmpfun(itemCheck)
 
 for(depth in (1:((maxdepth-mindepth)/2+1)-1)*2+mindepth)
 #for(depth in seq.int(mindepth, maxdepth, 2))

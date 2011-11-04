@@ -4,12 +4,11 @@
 
 #include "type.h"
 #include "common.h"
+#include "exceptions.h"
 #include <assert.h>
+#include <sys/mman.h>
 
 #include <list>
-
-#include <gc/gc_cpp.h>
-#include <gc/gc_allocator.h>
 
 /*
 
@@ -54,10 +53,11 @@ struct HeapObject {
 	uint64_t bytes;
 
 	virtual void walk(Heap*) = 0;
-	void* operator new(size_t size, State& state, size_t extra=0);
+	void* operator new(size_t size, State& state);
+	void* operator new(size_t size, State& state, size_t extra);
 };
 
-class Heap : public gc {
+class Heap {
 public:
         virtual HeapObject* mark(HeapObject*) = 0;
 };
@@ -69,32 +69,62 @@ class Semispace : public Heap {
 	char *base, *newbase;		// must be aligned by size
 	char *bump;
 
+	std::list<HeapObject*> lo;	// large object space
+
 	State* state;
 
 public:
 
 	Semispace(State* state);
+	~Semispace();
 
 	bool inSpace(HeapObject* p) const {
 		return ((uint64_t)p & (~(size-1))) == (uint64_t)base;
 	}
 
-	HeapObject* alloc(uint64_t bytes) { 
+	// should only be used with small allocations
+	HeapObject* alloc(uint64_t bytes) {
+		bytes = (bytes + 15) & (~15);
 		if(!inSpace((HeapObject*)(bump + bytes)))
 			collect();
 		HeapObject* result = (HeapObject*)bump;
 		result->forward = 0;
 		result->bytes = bytes;
 		bump += bytes;
-		printf("allocated %d at %llx\n", bytes, result);
+		//printf("allocated %d at %llx\n", bytes, result);
 		return result;
 	}
+	
+	// used with things that can potentially be large allocations
+	HeapObject* varalloc(uint64_t bytes) {
+		bytes = (bytes + 15) & (~15);
+		if(bytes < (1<<11)) {
+			if(!inSpace((HeapObject*)(bump + bytes)))
+				collect();
+			if(!inSpace((HeapObject*)(bump + bytes)))
+				_error("Out of memory in the nursery");
+			HeapObject* result = (HeapObject*)bump;
+			result->forward = 0;
+			result->bytes = bytes;
+			bump += bytes;
+			//printf("varallocated %d at %llx\n", bytes, result);
+			return result;
+		} else {
+			HeapObject* result = (HeapObject*)mmap(0, bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);	
+			result->forward = 0;
+			result->bytes = bytes;
+			lo.push_back(result);
+			//printf("lo allocated %d at %llx\n", bytes, result);
+			return result;
+		}
+	}
+
 
 	void collect();
 	virtual HeapObject* mark(HeapObject* o);
 
 };
-
+/*
 class MarkRegion : public Heap {
 
 	State* state;
@@ -136,6 +166,6 @@ class MarkRegion : public Heap {
 	void advanceBump();
 	void advanceLimit();
 };
-
+*/
 #endif
 

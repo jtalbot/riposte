@@ -31,6 +31,9 @@ private:
 		int64_t maxRegister;
 		Character parameters;
 
+		std::vector<Instruction> bc;
+		std::vector<Value> constants;
+
 		Scope() : env(0), topLevel(false), maxRegister(-1) {}
 
 		int64_t live() const { return registers.size()-1; }
@@ -40,32 +43,38 @@ private:
 
 	std::vector<Scope> scopes;
 
+	std::vector<Instruction>& bc() { return scopes.back().bc; }
+	std::vector<Value>& constants() { return scopes.back().constants; }
+
 	int64_t loopDepth;	
 
 	Compiler(State& state) : state(state) {
 		loopDepth = 0;
 	}
 	
-	Prototype* compile(Value const& expr);			// compile function block, code ends with return
-	int64_t compile(Value const& expr, Prototype* code);		// compile into existing code block
+	Prototype compile(Prototype& code);			// compile expression in prototype, code ends with return
+	int64_t compile(Value const& expr, Prototype& code);		// compile into existing code block
 
-	int64_t compileConstant(Value const& expr, Prototype* code);
-	int64_t compileSymbol(Symbol const& symbol, Prototype* code); 
-	int64_t compileCall(List const& call, Character const& names, Prototype* code); 
-	int64_t compileFunctionCall(List const& call, Character const& names, Prototype* code); 
-	int64_t compileInternalFunctionCall(Object const& o, Prototype* code); 
-	int64_t compileExpression(List const& values, Prototype* code);
+	int64_t compileConstant(Value const& expr, Prototype& code);
+	int64_t compileSymbol(Symbol const& symbol, Prototype& code); 
+	int64_t compileCall(List const& call, Character const& names, Prototype& code); 
+	int64_t compileFunctionCall(List const& call, Character const& names, Prototype& code); 
+	int64_t compileInternalFunctionCall(Object const& o, Prototype& code); 
+	int64_t compileExpression(List const& values, Prototype& code);
 	
 	CompiledCall makeCall(List const& call, Character const& names);
 
-	int64_t emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c);
+	int64_t emit(Prototype& code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c);
+	void resolveLoopReferences(Prototype& code, int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget);
 public:
-	static Prototype* compile(State& state, Value const& expr) {
+	static Prototype compile(State& state, Value const& expr) {
 		Compiler compiler(state);
 		Scope scope;
 		scope.topLevel = true;
 		compiler.scopes.push_back(scope);
-		return compiler.compile(expr);
+		Handle<Prototype> code(state, Prototype(state, expr));
+		compiler.compile(code);
+		return code;
 	}
 };
 

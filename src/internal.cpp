@@ -47,7 +47,7 @@ void sequence(State& state, Value const* args, Value& result) {
 	double by = asReal1(args[1]);
 	double len = asReal1(args[2]);
 
-	result = Sequence(from, by, len);	
+	result = Sequence(state, from, by, len);	
 }
 
 void repeat(State& state, Value const* args, Value& result) {
@@ -55,7 +55,7 @@ void repeat(State& state, Value const* args, Value& result) {
 	//double e = asReal1(args[1]);
 	double l = asReal1(args[2]);
 	
-	Double r(l);
+	Double r(state, l);
 	for(int64_t i = 0; i < l; i++) {
 		r[i] = v;
 	}
@@ -74,7 +74,7 @@ void inherits(State& state, Value const* args, Value& result) {
 			if(what[i] == c[j]) inherits = true;
 		}
 	}
-	result = Logical::c(inherits);
+	result = Logical::c(state, inherits);
 }
 
 void attr(State& state, Value const* args, Value& result)
@@ -187,7 +187,7 @@ std::string makeName(State& state, std::string prefix, String name, int64_t i) {
 }
 
 void unlistNames(State& state, int64_t recurse, Value a, Character& out, int64_t& start, std::string prefix) {
-	Character names(0);
+	Character names;
 	if(a.isObject() && ((Object&)a).hasNames()) {
 		names = (Character)((Object&)a).getNames();
 	}
@@ -219,7 +219,7 @@ void unlist(State& state, Value const* args, Value& result) {
 	switch(type) {
 		#define CASE(Name) \
 			case Type::Name: { \
-				Name out(length); \
+				Name out(state, length); \
 				int64_t i = 0; \
 				unlist(state, recurse, v, out, i); \
 				result = out; \
@@ -230,7 +230,7 @@ void unlist(State& state, Value const* args, Value& result) {
 	};
 
 	if(useNames && unlistHasNames(state, recurse, v)) {
-		Character outnames(length);
+		Character outnames(state, length);
 		int64_t i = 0;
 		unlistNames(state, recurse, v, outnames, i, "");
 		Object::Init(state, result, result, outnames);
@@ -242,7 +242,7 @@ template< class A >
 struct SubsetInclude {
 	static void eval(State& state, A const& a, Integer const& d, int64_t nonzero, Value& out)
 	{
-		A r(nonzero);
+		A r(state, nonzero);
 		int64_t j = 0;
 		typename A::Element const* ae = a.v();
 		typename Integer::Element const* de = d.v();
@@ -266,7 +266,7 @@ struct SubsetExclude {
 		int64_t length = d.length;
 		for(int64_t i = 0; i < length; i++) if(-de[i] > 0 && -de[i] <= (int64_t)a.length) index.insert(-de[i]);
 		// iterate through excluded elements copying intervening ranges.
-		A r(a.length-index.size());
+		A r(state, a.length-index.size());
 		typename A::Element* re = r.v();
 		int64_t start = 1;
 		int64_t k = 0;
@@ -296,7 +296,7 @@ struct SubsetLogical {
 				if(++j >= d.length) j = 0;
 			}
 		}
-		A r(length);
+		A r(state, length);
 		typename A::Element* re = r.v();
 		int64_t j = 0, k = 0;
 		for(int64_t i = 0; i < std::max(a.length, d.length) && k < length; i++) {
@@ -326,7 +326,7 @@ struct SubsetIndexed {
 		typename B::Element const* de = d.v();
 		
 		int64_t length = d.length;
-		A r(length);
+		A r(state, length);
 		for(int64_t i = 0; i < length; i++) {
 			int64_t index = find(state, b, de[i]);
 			r[i] = index >= 0 ? ae[index] : A::NAelement;
@@ -377,7 +377,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 		else {
 			switch(a.type) {
 				case Type::Null: out = Null::Singleton(); break;
-#define CASE(Name) case Type::Name: out = Name(0); break;
+#define CASE(Name) case Type::Name: out = Name(); break;
 						 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
@@ -485,7 +485,7 @@ struct SubsetAssignIndexed {
 		int64_t extra = a.length;
 
 		int64_t length = d.length;
-		Integer include(length);
+		Integer include(state, length);
 		for(int64_t i = 0; i < length; i++) {
 			int64_t index = find(state, b, de[i]);
 			if(index < 0) {
@@ -574,7 +574,7 @@ void Subset2AssignSlow(State& state, Value const& a, bool clone, Value const& i,
 }
 
 void length(State& state, Value const* args, Value& result) {
-	result = Integer::c(args[0].length);
+	result = Integer::c(state, args[0].length);
 }
 
 void eval_fn(State& state, Value const* args, Value& result) {
@@ -585,10 +585,10 @@ void lapply(State& state, Value const* args, Value& result) {
 	List x = As<List>(state, args[0]);
 	Value func = args[1];
 
-	List apply(2);
+	List apply(state, 2);
 	apply[0] = func;
 
-	List r(x.length);
+	List r(state, x.length);
 	// TODO: should have a way to make a simple function call without compiling,
 	// or should have a fast case for compilation
 	for(int64_t i = 0; i < x.length; i++) {
@@ -680,7 +680,7 @@ void stop_fn(State& state, Value const* args, Value& result) {
 void warning_fn(State& state, Value const* args, Value& result) {
 	std::string message = state.externStr(Cast<Character>(args[0])[0]);
 	_warning(state, message);
-	result = Character::c(state.internStr(message));
+	result = Character::c(state, state.internStr(message));
 } 
 void isna_fn(State& state, Value const* args, Value& result) {
 	unaryFilter<Zip1, IsNAOp>(state, args[0], result);
@@ -715,37 +715,37 @@ void paste(State& state, Value const* args, Value& result) {
 		r = r + state.externStr(a[i]) + state.externStr(sep[0]);
 	}
 	if(a.length > 0) r = r + state.externStr(a[a.length-1]);
-	result = Character::c(state.internStr(r));
+	result = Character::c(state, state.internStr(r));
 }
 
 void deparse(State& state, Value const* args, Value& result) {
-	result = Character::c(state.internStr(state.deparse(args[0])));
+	result = Character::c(state, state.internStr(state.deparse(args[0])));
 }
 
 void substitute(State& state, Value const* args, Value& result) {
 	Value v = args[0];
-	while(v.isPromise()) v = Function(v).prototype()->expression;
+	while(v.isPromise()) v = Function(v).prototype().expression();
 	
 	if(v.isSymbol()) {
 		Value r = state.frame.environment.get(Symbol(v));
 		if(!r.isNil()) v = r;
-		while(v.isPromise()) v = Function(v).prototype()->expression;
+		while(v.isPromise()) v = Function(v).prototype().expression();
 	}
  	result = v;
 }
 
 void type_of(State& state, Value const* args, Value& result) {
 	// Should have a direct mapping from type to symbol.
-	result = Character::c(state.internStr(Type::toString(args[0].type)));
+	result = Character::c(state, state.internStr(Type::toString(args[0].type)));
 }
 
 void exists(State& state, Value const* args, Value& result) {
 	Character c = As<Character>(state, args[0]);
 	Value v = ((REnvironment&)args[1]).get(c[0]);
 	if(v.isNil())
-		result = Logical::False();
+		result = Logical::False(state);
 	else
-		result = Logical::True();
+		result = Logical::True(state);
 }
 
 #include <sys/time.h>
@@ -759,7 +759,7 @@ uint64_t readTime()
 
 void proctime(State& state, Value const* args, Value& result) {
 	uint64_t s = readTime();
-	result = Double::c(s/(1000000.0));
+	result = Double::c(state, s/(1000000.0));
 }
 
 void traceconfig(State & state, Value const* args, Value& result) {

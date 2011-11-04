@@ -16,7 +16,7 @@
 #define USE_THREADED_INTERPRETER
 #define ALWAYS_INLINE __attribute__((always_inline))
 
-static Instruction const* buildStackFrame(State& state, REnvironment environment, Prototype const* prototype, Value* result, Instruction const* returnpc);
+static Instruction const* buildStackFrame(State& state, REnvironment environment, Prototype prototype, Value* result, Instruction const* returnpc);
 
 #ifndef __ICC
 extern Instruction const* kget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
@@ -35,7 +35,7 @@ static void ExpandDots(State& state, List& arguments, Character& names, int64_t 
 	uint64_t dotslength = environment.dots().size();
 	// Expand dots into the parameter list...
 	if(dots < arguments.length) {
-		List a(arguments.length + dotslength - 1);
+		List a(state, arguments.length + dotslength - 1);
 		for(int64_t i = 0; i < dots; i++) a[i] = arguments[i];
 		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(state, Symbol(String::Init(-(i-dots+1)))), REnvironment::Null()).AsPromise(); } // TODO: should cache these.
 		for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) a[i] = arguments[i-dotslength];
@@ -46,7 +46,7 @@ static void ExpandDots(State& state, List& arguments, Character& names, int64_t 
 		for(uint64_t i = 0; i < dotslength; i++) if(environment.dots()[i] != Strings::empty) named++;
 
 		if(names.length > 0 || named > 0) {
-			Character n(arguments.length + dotslength - 1);
+			Character n(state, arguments.length + dotslength - 1);
 			for(int64_t i = 0; i < n.length; i++) n[i] = Strings::empty;
 			if(names.length > 0) {
 				for(int64_t i = 0; i < dots; i++) n[i] = names[i];
@@ -71,9 +71,9 @@ inline void argAssign(State& state, REnvironment& env, int64_t i, Value const& v
 }
 
 static void MatchArgs(State& state, REnvironment& env, REnvironment& fenv, Function const& func, List const& arguments, Character const& anames) {
-	List const& defaults = func.prototype()->defaults;
-	Character const& parameters = func.prototype()->parameters;
-	int64_t fdots = func.prototype()->dots;
+	List const& defaults = func.prototype().defaults();
+	Character const& parameters = func.prototype().parameters();
+	int64_t fdots = func.prototype().dots();
 
 	// set defaults
 	for(int64_t i = 0; i < defaults.length; ++i) {
@@ -174,10 +174,10 @@ static Instruction const * profile_back_edge(State & state, Instruction const * 
 }
 
 Instruction const* call_op(State& state, Instruction const& inst) {
-	Value f = REG(state, inst.a);
+	Value& f = REG(state, inst.a);
 	if(!f.isFunction())
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
-	Function func(f);
+	Function const& func = (Function const&)f;
 	
 	// TODO: using inst.b < 0 to indicate a normal call means that do.call can never use a ..# variable. Not common, but would surely be unexpected for users. Probably best to just have a separate op for do.call?
 	
@@ -185,12 +185,12 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 	Character names;
 	Value call = Null::Singleton();
 	if(inst.b < 0) {
-		CompiledCall const& ccall = state.frame.prototype->calls[-(inst.b+1)];
-		arguments = ccall.arguments;
-		names = ccall.names;
-		if(ccall.dots < arguments.length)
-			ExpandDots(state, arguments, names, ccall.dots);
-		call = ccall.call;
+		CompiledCall const& ccall = (CompiledCall const&)state.frame.prototype.constants()[-(inst.b+1)];
+		arguments = ccall.arguments();
+		names = ccall.names();
+		if(ccall.dots() < arguments.length)
+			ExpandDots(state, arguments, names, ccall.dots());
+		call = ccall.call();
 	} else {
 		Value const& reg = REG(state, inst.b);
 		if(reg.isObject()) {
@@ -201,12 +201,8 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 			arguments = List(reg);
 		}
 	}
-	REnvironment fenv = CreateEnvironment(state, func.environment(), state.frame.environment, call);
-	{
-		Handle<REnvironment> h(state, fenv);	
-		MatchArgs(state, state.frame.environment, h, func, arguments, names);
-		fenv = h;
-	}
+	Handle<REnvironment> fenv(state, CreateEnvironment(state, func.environment(), state.frame.environment, call));
+	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
 	return buildStackFrame(state, fenv, func.prototype(), &REG(state, inst.c), &inst+1);
 }
 
@@ -255,11 +251,11 @@ static Value GenericSearch(State& state, Character klass, String generic, String
 Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 	String generic = String::Init(inst.a);
 
-	CompiledCall const& call = state.frame.prototype->calls[inst.b];
-	List arguments = call.arguments;
-	Character names = call.names;
-	if(call.dots < arguments.length)
-		ExpandDots(state, arguments, names, call.dots);
+	CompiledCall const& call = (CompiledCall const&)state.frame.prototype.constants()[inst.b];
+	List arguments = call.arguments();
+	Character names = call.names();
+	if(call.dots() < arguments.length)
+		ExpandDots(state, arguments, names, call.dots());
 
 	Value object = REG(state, inst.c);
 	Character type = klass(state, object);
@@ -272,15 +268,11 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 	}
 
 	Function func(f);
-	REnvironment fenv = CreateEnvironment(state, func.environment(), state.frame.environment, call.call);
-	{
-		Handle<REnvironment> h(state, fenv);
-		MatchArgs(state, state.frame.environment, fenv, func, arguments, names);	
-		REnvironment::assign(state, fenv, Strings::dotGeneric, Symbol(generic));
-		REnvironment::assign(state, fenv, Strings::dotMethod, Symbol(method));
-		REnvironment::assign(state, fenv, Strings::dotClass, type);
-		fenv = h; 
-	}
+	Handle<REnvironment> fenv (state, CreateEnvironment(state, func.environment(), state.frame.environment, call.call()));
+	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);	
+	REnvironment::assign(state, fenv, Strings::dotGeneric, Symbol(generic));
+	REnvironment::assign(state, fenv, Strings::dotMethod, Symbol(method));
+	REnvironment::assign(state, fenv, Strings::dotClass, type);
 	return buildStackFrame(state, fenv, func.prototype(), &REG(state, inst.c), &inst+1);
 }
 
@@ -317,7 +309,7 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 		return &inst+3;
 	} else if(dest.isPromise()) {
 		REnvironment env = Function(dest).environment();
-		Prototype* prototype = Function(dest).prototype();
+		Prototype prototype = Function(dest).prototype();
 		assert(!env.isNull());
 		// the inline cache info will be populated by the assignment instruction
 		return buildStackFrame(state, env, prototype, &dest, &inst+1);
@@ -327,7 +319,7 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 }
 
 Instruction const* kget_op(State& state, Instruction const& inst) {
-	REG(state, inst.c) = state.frame.prototype->constants[inst.a];
+	REG(state, inst.c) = state.frame.prototype.constants()[inst.a];
 	return &inst+1;
 }
 Instruction const* iget_op(State& state, Instruction const& inst) {
@@ -408,16 +400,18 @@ Instruction const* subset2_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* forbegin_op(State& state, Instruction const& inst) {
-	// inst.b-1 holds the loopVector
-	if((int64_t)REG(state, inst.b-1).length <= 0) { return &inst+inst.a; }
-	Element2(state, REG(state, inst.b-1), 0, REG(state, inst.c));
-	REG(state, inst.b).header = REG(state, inst.b-1).length;	// warning: not a valid object, but saves a shift
+	// inst.b-2 holds the loopVector
+	if((int64_t)REG(state, inst.b-2).length <= 0) { return &inst+inst.a; }
+	Element2(state, REG(state, inst.b-2), 0, REG(state, inst.c));
+	REG(state, inst.b-1) = Integer();
+	REG(state, inst.b) = Integer();
+	REG(state, inst.b-1).i = REG(state, inst.b-2).length;	// warning: not a valid object, but saves a shift
 	REG(state, inst.b).i = 1;
 	return &inst+1;
 }
 Instruction const* forend_op(State& state, Instruction const& inst) {
-	if(__builtin_expect((REG(state,inst.b).i) < REG(state,inst.b).header, true)) {
-		Element2(state, REG(state, inst.b-1), REG(state, inst.b).i, REG(state, inst.c));
+	if(__builtin_expect((REG(state,inst.b).i) < REG(state,inst.b-1).i, true)) {
+		Element2(state, REG(state, inst.b-2), REG(state, inst.b).i, REG(state, inst.c));
 		REG(state, inst.b).i++;
 		return profile_back_edge(state,&inst+inst.a);
 	} else return &inst+1;
@@ -478,14 +472,14 @@ Instruction const* branch_op(State& state, Instruction const& inst) {
 Instruction const* colon_op(State& state, Instruction const& inst) {
 	double from = asReal1(REG(state,inst.a));
 	double to = asReal1(REG(state,inst.b));
-	REG(state,inst.c) = Sequence(from, to>from?1:-1, fabs(to-from)+1);
+	REG(state,inst.c) = Sequence(state, from, to>from?1:-1, fabs(to-from)+1);
 	return &inst+1;
 }
 Instruction const* list_op(State& state, Instruction const& inst) {
 	std::vector<String> const& dots = state.frame.environment.dots();
 	// First time through, make a result vector...
 	if(REG(state, inst.a).i == 0) {
-		REG(state, inst.c) = List(dots.size());
+		REG(state, inst.c) = List(state, dots.size());
 	}
 	// Otherwise populate result vector with next element
 	else {
@@ -500,7 +494,7 @@ Instruction const* list_op(State& state, Instruction const& inst) {
 			if(dots[i] != Strings::empty) nonEmptyName = true;
 		if(nonEmptyName) {
 			// TODO: should really just use the names in the dots directly
-			Character names(dots.size());
+			Character names(state, dots.size());
 			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
 				names[i] = dots[i];
 			Object::Init(state, REG(state, inst.c), REG(state, inst.c), names);
@@ -518,7 +512,7 @@ Instruction const* list_op(State& state, Instruction const& inst) {
 	else {
 		REnvironment env = Function(src).environment();
 		if(env.isNull()) env = state.frame.environment;
-		Prototype* prototype = Function(src).prototype();
+		Prototype prototype = Function(src).prototype();
 		return buildStackFrame(state, env, prototype, &REG(state, inst.b), &inst);
 	}
 }
@@ -546,7 +540,7 @@ Instruction const* seq_op(State& state, Instruction const& inst) {
 	if(state.tracing.enabled() && isRecordable(Type::Integer, len))
 		return state.tracing.begin_tracing(state, &inst, len);
 	else {
-		REG(state, inst.c) = Sequence(len, 1, step);
+		REG(state, inst.c) = Sequence(state, len, 1, step);
 		return &inst+1;
 	}
 }
@@ -555,19 +549,15 @@ Instruction const* seq_op(State& state, Instruction const& inst) {
 Instruction const* name##_op(State& state, Instruction const& inst) { \
 	Value & a =  REG(state, inst.a);	\
 	Value & c = REG(state, inst.c);	\
-	if(a.isDouble1()) { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d)); return &inst+1; } \
-	else if(a.isInteger1()) { Op<TDouble>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i)); return &inst+1; } \
+	if(a.isDouble1()) { Op<TDouble>::RV::InitScalar(state, c, Op<TDouble>::eval(state, a.d)); return &inst+1; } \
+	else if(a.isInteger1()) { Op<TDouble>::RV::InitScalar(state, c, Op<TInteger>::eval(state, a.i)); return &inst+1; } \
 	if(a.isObject() ) { \
 		String method; \
 		Value f = GenericSearch(state, klass(state, a), state.internStr(Func), method); \
 		if(f.isFunction()) { \
 			Function func(f); \
-			REnvironment fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton()); \
-			{ \
-				Handle<REnvironment> h(state, fenv); \
-				MatchArgs(state, state.frame.environment, fenv, func, List::c(a), Character(0)); \
-				fenv = h; \
-			} \
+			Handle<REnvironment> fenv(state, CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton())); \
+			MatchArgs(state, state.frame.environment, fenv, func, List::c(state, a), Character()); \
 			return buildStackFrame(state, fenv, func.prototype(), &REG(state, inst.c), &inst+1); \
 		}	\
 	} \
@@ -596,15 +586,15 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 	Value & c = REG(state, inst.c);	\
         if(a.isDouble1()) {			\
                 if(b.isDouble1())		\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d, b.d)); return &inst+1; }	\
+                        { Op<TDouble>::RV::InitScalar(state, c, Op<TDouble>::eval(state, a.d, b.d)); return &inst+1; }	\
                 else if(b.isInteger1())	\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d, (double)b.i));return &inst+1; }	\
+                        { Op<TDouble>::RV::InitScalar(state, c, Op<TDouble>::eval(state, a.d, (double)b.i));return &inst+1; }	\
         }	\
         else if(a.isInteger1()) {	\
                 if(b.isDouble1())	\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, (double)a.i, b.d)); return &inst+1; }	\
+                        { Op<TDouble>::RV::InitScalar(state, c, Op<TDouble>::eval(state, (double)a.i, b.d)); return &inst+1; }	\
                 else if(b.isInteger1())	\
-                        { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return &inst+1;} \
+                        { Op<TInteger>::RV::InitScalar(state, c, Op<TInteger>::eval(state, a.i, b.i)); return &inst+1;} \
         } \
 	if(a.isObject() || b.isObject()) { \
 		Value f; \
@@ -619,12 +609,8 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 		else f = GenericSearch(state, klass(state, b), state.internStr(Func), method); \
 		if(f.isFunction()) { \
 			Function func(f); \
-			REnvironment fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton()); \
-			{ \
-				Handle<REnvironment> h(state, fenv); \
-				MatchArgs(state, state.frame.environment, fenv, func, List::c(a, b), Character(0)); \
-				fenv = h; \
-			} \
+			Handle<REnvironment> fenv(state, CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton())); \
+			MatchArgs(state, state.frame.environment, fenv, func, List::c(state, a, b), Character()); \
 			return buildStackFrame(state, fenv, func.prototype(), &REG(state, inst.c), &inst+1); \
 		}	\
 	} \
@@ -652,15 +638,15 @@ Instruction const* name##_op(State& state, Instruction const& inst) { \
 	Value & c = REG(state, inst.c);	\
         if(a.isDouble1()) {			\
                 if(b.isDouble1())		\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d, b.d)); return &inst+1; }	\
+                        { Op<TDouble>::RV::InitScalar(state, c, Op<TDouble>::eval(state, a.d, b.d)); return &inst+1; }	\
                 else if(b.isInteger1())	\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d, (double)b.i));return &inst+1; }	\
+                        { Op<TDouble>::RV::InitScalar(state, c, Op<TDouble>::eval(state, a.d, (double)b.i));return &inst+1; }	\
         }	\
         else if(a.isInteger1()) {	\
                 if(b.isDouble1())	\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, (double)a.i, b.d)); return &inst+1; }	\
+                        { Op<TDouble>::RV::InitScalar(state, c, Op<TDouble>::eval(state, (double)a.i, b.d)); return &inst+1; }	\
                 else if(b.isInteger1())	\
-                        { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return &inst+1;} \
+                        { Op<TInteger>::RV::InitScalar(state, c, Op<TInteger>::eval(state, a.i, b.i)); return &inst+1;} \
         } \
 	binaryOrdinal<Zip2, Op>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c)); \
 	return &inst+1; \
@@ -723,14 +709,14 @@ Instruction const* sland_op(State& state, Instruction const& inst) {
 	Logical l = As<Logical>(state, REG(state, inst.a));
 	if(l.length == 0) _error("argument to && is zero length");
 	if(Logical::isFalse(l[0])) {
-		REG(state, inst.c) = Logical::False();
+		REG(state, inst.c) = Logical::False(state);
 		return &inst+1;
 	} else {
 		Logical r = As<Logical>(state, REG(state, inst.b));
 		if(r.length == 0) _error("argument to && is zero length");
-		if(Logical::isFalse(r[0])) REG(state, inst.c) = Logical::False();
-		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) REG(state, inst.c) = Logical::NA();
-		else REG(state, inst.c) = Logical::True();
+		if(Logical::isFalse(r[0])) REG(state, inst.c) = Logical::False(state);
+		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) REG(state, inst.c) = Logical::NA(state);
+		else REG(state, inst.c) = Logical::True(state);
 		return &inst+1;
 	}
 }
@@ -738,52 +724,52 @@ Instruction const* slor_op(State& state, Instruction const& inst) {
 	Logical l = As<Logical>(state, REG(state, inst.a));
 	if(l.length == 0) _error("argument to || is zero length");
 	if(Logical::isTrue(l[0])) {
-		REG(state, inst.c) = Logical::True();
+		REG(state, inst.c) = Logical::True(state);
 		return &inst+1;
 	} else {
 		Logical r = As<Logical>(state, REG(state, inst.b));
 		if(r.length == 0) _error("argument to || is zero length");
-		if(Logical::isTrue(r[0])) REG(state, inst.c) = Logical::True();
-		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) REG(state, inst.c) = Logical::NA();
-		else REG(state, inst.c) = Logical::False();
+		if(Logical::isTrue(r[0])) REG(state, inst.c) = Logical::True(state);
+		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) REG(state, inst.c) = Logical::NA(state);
+		else REG(state, inst.c) = Logical::False(state);
 		return &inst+1;
 	}
 }
 Instruction const* function_op(State& state, Instruction const& inst) {
-	REG(state, inst.c) = Function(state.frame.prototype->prototypes[inst.a], state.frame.environment);
+	REG(state, inst.c) = Function((Prototype const&)state.frame.prototype.constants()[inst.a], state.frame.environment);
 	return &inst+1;
 }
 Instruction const* logical1_op(State& state, Instruction const& inst) {
 	Integer i = As<Integer>(state, REG(state, inst.a));
-	REG(state, inst.c) = Logical(i[0]);
+	REG(state, inst.c) = Logical(state, i[0]);
 	return &inst+1;
 }
 Instruction const* integer1_op(State& state, Instruction const& inst) {
 	Integer i = As<Integer>(state, REG(state, inst.a));
-	REG(state, inst.c) = Integer(i[0]);
+	REG(state, inst.c) = Integer(state, i[0]);
 	return &inst+1;
 }
 Instruction const* double1_op(State& state, Instruction const& inst) {
 	int64_t length = asReal1(REG(state, inst.a));
-	Double d(length);
+	Double d(state, length);
 	for(int64_t i = 0; i < length; i++) d[i] = 0;
 	REG(state, inst.c) = d;
 	return &inst+1;
 }
 Instruction const* character1_op(State& state, Instruction const& inst) {
 	Integer i = As<Integer>(state, REG(state, inst.a));
-	Character r = Character(i[0]);
+	Character r = Character(state, i[0]);
 	for(int64_t j = 0; j < r.length; j++) r[j] = Strings::empty;
 	REG(state, inst.c) = r;
 	return &inst+1;
 }
 Instruction const* raw1_op(State& state, Instruction const& inst) {
 	Integer i = As<Integer>(state, REG(state, inst.a));
-	REG(state, inst.c) = Raw(i[0]);
+	REG(state, inst.c) = Raw(state, i[0]);
 	return &inst+1;
 }
 Instruction const* type_op(State& state, Instruction const& inst) {
-	Character c(1);
+	Character c(state, 1);
 	// Should have a direct mapping from type to symbol.
 	c[0] = state.internStr(Type::toString(REG(state, inst.a).type));
 	REG(state, inst.c) = c;
@@ -791,9 +777,9 @@ Instruction const* type_op(State& state, Instruction const& inst) {
 }
 Instruction const* length_op(State& state, Instruction const& inst) {
 	if(REG(state,inst.a).isVector())
-		Integer::InitScalar(REG(state, inst.c), REG(state,inst.a).length);
+		Integer::InitScalar(state, REG(state, inst.c), REG(state,inst.a).length);
 	else
-		Integer::InitScalar(REG(state, inst.c), 1);
+		Integer::InitScalar(state, REG(state, inst.c), 1);
 	return &inst+1;
 }
 Instruction const* missing_op(State& state, Instruction const& inst) {
@@ -801,7 +787,7 @@ Instruction const* missing_op(State& state, Instruction const& inst) {
 	String s = String::Init(inst.a);
 	Value const& v = state.frame.environment.get(s);
 	bool missing = v.isNil() || (v.isPromise() && Function(v).environment() == state.frame.environment);
-	Logical::InitScalar(REG(state, inst.c), missing);
+	Logical::InitScalar(state, REG(state, inst.c), missing);
 	return &inst+1;
 }
 Instruction const* ret_op(State& state, Instruction const& inst) {
@@ -817,14 +803,14 @@ Instruction const* done_op(State& state, Instruction const& inst) {
 }
 
 
-static void printCode(State const& state, Prototype const* prototype) {
-	std::string r = "block:\nconstants: " + intToStr(prototype->constants.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)prototype->constants.size(); i++)
-		r = r + intToStr(i) + "=\t" + state.stringify(prototype->constants[i]) + "\n";
+static void printCode(State const& state, Prototype const prototype) {
+	std::string r = "block:\nconstants: " + intToStr(prototype.constants().length) + "\n";
+	for(int64_t i = 0; i < (int64_t)prototype.constants().length; i++)
+		r = r + intToStr(i) + "=\t" + state.stringify(prototype.constants()[i]) + "\n";
 
-	r = r + "code: " + intToStr(prototype->bc.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++)
-		r = r + intToHexStr((uint64_t)&(prototype->bc[i])) + "--: " + intToStr(i) + ":\t" + prototype->bc[i].toString() + "\n";
+	r = r + "code: " + intToStr(prototype.bc().length) + "\n";
+	for(int64_t i = 0; i < (int64_t)prototype.bc().length; i++)
+		r = r + intToHexStr((uint64_t)&(prototype.bc()[i])) + "--: " + intToStr(i) + ":\t" + prototype.bc()[i].toString() + "\n";
 
 	std::cout << r << std::endl;
 }
@@ -833,7 +819,7 @@ static void printCode(State const& state, Prototype const* prototype) {
 static const void** glabels = 0;
 #endif
 
-static Instruction const* buildStackFrame(State& state, REnvironment environment, Prototype const* prototype, Value* result, Instruction const* returnpc) {
+static Instruction const* buildStackFrame(State& state, REnvironment environment, Prototype prototype, Value* result, Instruction const* returnpc) {
 	//printCode(state, prototype);
 	StackFrame& s = state.push();
 	s.environment = environment;
@@ -841,21 +827,21 @@ static Instruction const* buildStackFrame(State& state, REnvironment environment
 	s.returnsp = state.sp;
 	s.result = result;
 	s.prototype = prototype;
-	state.sp -= prototype->registers;
-	if(state.sp < state.registers)
+	state.sp -= prototype.registers();
+	if(state.sp < state.registers || state.sp > state.registers+DEFAULT_NUM_REGISTERS)
 		throw RiposteError("Register overflow");
 
 #ifdef USE_THREADED_INTERPRETER
 	// Initialize threaded bytecode if not yet done 
-	if(prototype->bc[0].ibc == 0)
+	if(prototype.bc()[0].ibc == 0)
 	{
-		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); ++i) {
-			Instruction const& inst = prototype->bc[i];
+		for(int64_t i = 0; i < (int64_t)prototype.bc().length; ++i) {
+			Instruction const& inst = prototype.bc()[i];
 			inst.ibc = glabels[inst.bc];
 		}
 	}
 #endif
-	return &(prototype->bc[0]);
+	return &(prototype.bc()[0]);
 }
 
 //
@@ -863,7 +849,6 @@ static Instruction const* buildStackFrame(State& state, REnvironment environment
 //
 //__attribute__((__noinline__,__noclone__)) 
 void interpret(State& state, Instruction const* pc) {
-
 #ifdef USE_THREADED_INTERPRETER
     #define LABELS_THREADED(name,type,...) (void*)&&name##_label,
 	static const void* labels[] = {BYTECODES(LABELS_THREADED)};
@@ -900,11 +885,11 @@ Value eval(State& state, Function const& function) {
 	return eval(state, function.prototype(), function.environment());
 }
 
-Value eval(State& state, Prototype const* prototype) {
+Value eval(State& state, Prototype prototype) {
 	return eval(state, prototype, state.frame.environment);
 }
 
-Value eval(State& state, Prototype const* prototype, REnvironment environment) {
+Value eval(State& state, Prototype prototype, REnvironment environment) {
 	static const Instruction* done = new Instruction(ByteCode::done);
 #ifdef USE_THREADED_INTERPRETER
 	done->ibc = glabels[ByteCode::done];
@@ -915,7 +900,6 @@ Value eval(State& state, Prototype const* prototype, REnvironment environment) {
 	// Build a half-hearted stack frame for the result. Necessary for the trace recorder.
 	StackFrame& s = state.push();
 	s.environment = REnvironment::Null();
-	s.prototype = 0;
 	s.returnsp = state.sp;
 	state.sp -= 1;
 	Value* result = state.sp;

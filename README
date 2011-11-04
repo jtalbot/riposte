@@ -5,12 +5,9 @@ Zach Devito
 
 Compiling riposte
 -----------------
-1. Install the Boehm GC. Available in macports, `port install boehmgc`.
-   (Optional) Install rlwrap. Available in macports, `port install rlwrap`.
+1. Run make in the riposte directory, or `make release` for the optimized version
 
-2. Run make in the riposte directory, or `make release` for the optimized version
-
-3. Execute ./riposte to start
+2. Execute ./riposte to start
 
 
 Limitations

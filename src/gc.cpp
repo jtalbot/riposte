@@ -3,7 +3,7 @@
 #include "value.h"
 
 Semispace::Semispace(State* state) : state(state) {
-	head = new (GC) char[size*3];
+	head = new char[size*3];
 	
 	base = (char*)(((uint64_t)head+size) & (~(size-1)));
 	newbase = base+size;
@@ -12,6 +12,14 @@ Semispace::Semispace(State* state) : state(state) {
 
 	printf("Allocated semispace at %llx and %llx\n", base, newbase);
 	assert(newbase + size <= head + size*3);
+}
+
+Semispace::~Semispace() {
+	delete [] head;
+	
+	for(std::list<HeapObject*>::iterator i = lo.begin(); i != lo.end(); ++i) {
+		munmap(*i, (*i)->bytes);
+	}
 }
 
 /*
@@ -27,11 +35,26 @@ HeapObject* Semispace::alloc(Type::Enum type, uint64_t bytes) {
 */
 
 void Semispace::collect() {
+	
+	// TODO: track allocations into LOS. Trigger GC when that reaches some large value.
+	// --Generational
+	// --Non-moving
+	// --Get std::vectors in Prototype into heap format
+	// --Root stuff during parsing
+	// --Compress representations
+	// --Can we reduce the number of allocations necessary to parse simple input?
+	// --
+
 	printf("Running the collector\n");
 	// allocate new space, bigger if need be
 	// iterate over roots copying stuff over
 	// leave behind forwarding pointer
 	// bump needs to point to end of copied data
+
+	// clear marks in the lo space
+	for(std::list<HeapObject*>::iterator i = lo.begin(); i != lo.end(); ++i) {
+		(*i)->forward = 0;
+	}
 
 	bump = newbase;
 
@@ -46,9 +69,11 @@ void Semispace::collect() {
 	//printf("--stack--\n");
 	for(uint64_t i = 0; i < state->stack.size(); i++) {
 		state->stack[i].environment.p = (Environment*)mark((HeapObject*)(state->stack[i].environment.p));
+		state->stack[i].prototype.p = (void*)mark((HeapObject*)(state->stack[i].prototype.p));
 	}
 	//printf("--frame--\n");
 	state->frame.environment.p = (Environment*)mark((HeapObject*)(state->frame.environment.p));
+	state->frame.prototype.p = (void*)mark((HeapObject*)(state->frame.prototype.p));
 
 	//printf("--trace--\n");
 	Trace::Output* op = state->tracing.current_trace.outputs;
@@ -61,9 +86,12 @@ void Semispace::collect() {
 
 	//printf("--registers--\n");
 	for(Value* r = state->sp; r < state->registers+DEFAULT_NUM_REGISTERS; r++) {
-		if(r->isEnvironment() || r->isFunction() || r->isPromise() || r->type == Type::HeapObject) {
-			r->p = (void*)mark((HeapObject*)(r->p));
-		}
+		walkValue(this, *r);
+	}
+
+	//printf("--handles--\n");
+	for(Value* r = state->handleStack; r < state->hsp; r++) {
+		walkValue(this, *r);
 	}
 	
 	//printf("--finger--\n");
@@ -75,8 +103,14 @@ void Semispace::collect() {
 		finger += hp->bytes;
 	}
 
+	// sweep the lo space
+	for(std::list<HeapObject*>::iterator i = lo.begin(); i != lo.end();) {
+		if(!(*i)->forward) { munmap(*i, (*i)->bytes); lo.erase(i++); }
+		else i++;
+	}
+
 	// clear old subspace so Boehm doesn't keep stuff around
-	//memset(base, 0xF, size);
+	memset(base, 0xff, size);
 	
 	char* t = base;
 	base = newbase;
@@ -102,12 +136,15 @@ HeapObject* Semispace::mark(HeapObject* o) {
 		o->bytes = (uint64_t)result;
 
 		printf("copying from %llx to %llx\n", o, result);
-
 		return result;
+	} else if(o != 0) {
+		//printf("non-nursery item: %llx\n", o);
+		// mark in lo space
+		o->forward = 1;
 	}
 	return o;
 }
-
+/*
 MarkRegion::MarkRegion(State* state) : state(state) {
 	existingRegions = 0;
 	makeRegions(128);
@@ -259,4 +296,4 @@ HeapObject* MarkRegion::mark(HeapObject* o) {
 	}
 	return o;
 }
-
+*/

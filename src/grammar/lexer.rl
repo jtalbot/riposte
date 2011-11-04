@@ -27,15 +27,15 @@
 
 	# Keywords.
 	'NULL' 	{token( TOKEN_NULL_CONST, Null::Singleton() );};
-	'NA' 	{token( TOKEN_NUM_CONST, Logical::NA() );};
-	'TRUE' 	{token( TOKEN_NUM_CONST, Logical::True() );};
-	'FALSE'	{token( TOKEN_NUM_CONST, Logical::False() );};
-	'Inf'	{token( TOKEN_NUM_CONST, Double::Inf() );};
-	'NaN'	{token( TOKEN_NUM_CONST, Double::NaN() );};
-	'NA_integer_'	{token( TOKEN_NUM_CONST, Integer::NA() );};
-	'NA_real_'	{token( TOKEN_NUM_CONST, Double::NA() );};
-	'NA_character_'	{token( TOKEN_STR_CONST, Character::NA() );};
-	# 'NA_complex_'	{token( TOKEN_NUM_CONST, Complex::NA() );};
+	'NA' 	{token( TOKEN_NUM_CONST, Logical::NA(state) );};
+	'TRUE' 	{token( TOKEN_NUM_CONST, Logical::True(state) );};
+	'FALSE'	{token( TOKEN_NUM_CONST, Logical::False(state) );};
+	'Inf'	{token( TOKEN_NUM_CONST, Double::Inf(state) );};
+	'NaN'	{token( TOKEN_NUM_CONST, Double::NaN(state) );};
+	'NA_integer_'	{token( TOKEN_NUM_CONST, Integer::NA(state) );};
+	'NA_real_'	{token( TOKEN_NUM_CONST, Double::NA(state) );};
+	'NA_character_'	{token( TOKEN_STR_CONST, Character::NA(state) );};
+	# 'NA_complex_'	{token( TOKEN_NUM_CONST, Complex::NA(state) );};
 	'function'	{token( TOKEN_FUNCTION, Symbol(Strings::function) );};
 	'while'	{token( TOKEN_WHILE, Symbol(Strings::whileSym) );};
 	'repeat'	{token( TOKEN_REPEAT, Symbol(Strings::repeatSym) );};
@@ -48,9 +48,9 @@
 	
 	# Single and double-quoted string literals.
 	( "'" ( [^'\\\n] | /\\./ )* "'" ) 
-		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.internStr(unescape(s))) );};
+		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state, state.internStr(unescape(s))) );};
 	( '"' ( [^"\\\n] | /\\./ )* '"' ) 
-		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.internStr(unescape(s))) );};
+		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state, state.internStr(unescape(s))) );};
 
 	# Symbols.
 	( '..' digit+ )
@@ -62,13 +62,13 @@
 		{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, Symbol(state.internStr(unescape(s))) );};
 	# Numeric literals.
 	( float exponent? ) 
-		{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );};
+		{token( TOKEN_NUM_CONST, Double::c(state, atof(std::string(ts, te-ts).c_str())) );};
 	
 	#( float exponent? 'i' ) 
-	#	{token( TOKEN_NUM_CONST, Complex::c(std::complex<double>(0, atof(std::string(ts, te-ts-1).c_str()))) );};
+	#	{token( TOKEN_NUM_CONST, Complex::c(state, std::complex<double>(0, atof(std::string(ts, te-ts-1).c_str()))) );};
 	
 	( float exponent? 'L' ) 
-		{token( TOKEN_NUM_CONST, Integer::c(atof(std::string(ts, te-ts-1).c_str())) );};
+		{token( TOKEN_NUM_CONST, Integer::c(state, atof(std::string(ts, te-ts-1).c_str())) );};
 	
 	# Integer octal. Leading part buffered by float.
 	#( '0' [0-9]+ [ulUL]{0,2} ) 
@@ -184,13 +184,12 @@ Parser::Parser(State& state) : line(0), col(0), state(state), errors(0), complet
 
 int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* trace )
 {
-	GC_disable();
 	out = Value::Nil();
 	errors = 0;
 	lastTokenWasNL = false;
 	complete = false;
 
-	pParser = ParseAlloc(GC_malloc);
+	pParser = ParseAlloc(malloc);
 
 	/*ParseTrace(trace, 0);*/
 
@@ -202,15 +201,13 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	%% write exec;
 	int syntaxErrors = errors;
 	Parse(pParser, 0, Value::Nil(), this);
-	ParseFree(pParser, GC_free);
+	ParseFree(pParser, free);
 	errors = syntaxErrors;
 
 	if( cs == Scanner_error && syntaxErrors == 0) {
 		syntaxErrors++;
 		std::cout << "Lexing error (" << intToStr(line+1) << "," << intToStr(col+1) << ") : unexpected '" << std::string(ts, te-ts) + "'" << std::endl; 
 	}
-	
-	GC_enable();
 	
 	if( syntaxErrors > 0 )
 		return -1;

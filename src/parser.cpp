@@ -444,13 +444,12 @@ Parser::Parser(State& state) : line(0), col(0), state(state), errors(0), complet
 
 int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* trace )
 {
-	GC_disable();
 	out = Value::Nil();
 	errors = 0;
 	lastTokenWasNL = false;
 	complete = false;
 
-	pParser = ParseAlloc(GC_malloc);
+	pParser = ParseAlloc(malloc);
 
 	/*ParseTrace(trace, 0);*/
 
@@ -459,7 +458,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	const char* eof = isEof ? pe : 0;
 	int cs, act;
 	
-#line 463 "../parser.cpp"
+#line 462 "../parser.cpp"
 	{
 	cs = Scanner_start;
 	ts = 0;
@@ -467,9 +466,9 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	act = 0;
 	}
 
-#line 202 "lexer.rl"
+#line 201 "lexer.rl"
 	
-#line 473 "../parser.cpp"
+#line 472 "../parser.cpp"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -490,7 +489,7 @@ _resume:
 #line 1 "NONE"
 	{ts = p;}
 	break;
-#line 494 "../parser.cpp"
+#line 493 "../parser.cpp"
 		}
 	}
 
@@ -646,11 +645,11 @@ _eof_trans:
 	break;
 	case 25:
 #line 51 "lexer.rl"
-	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.internStr(unescape(s))) );}}
+	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state, state.internStr(unescape(s))) );}}
 	break;
 	case 26:
 #line 53 "lexer.rl"
-	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.internStr(unescape(s))) );}}
+	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state, state.internStr(unescape(s))) );}}
 	break;
 	case 27:
 #line 62 "lexer.rl"
@@ -658,7 +657,7 @@ _eof_trans:
 	break;
 	case 28:
 #line 71 "lexer.rl"
-	{te = p+1;{token( TOKEN_NUM_CONST, Integer::c(atof(std::string(ts, te-ts-1).c_str())) );}}
+	{te = p+1;{token( TOKEN_NUM_CONST, Integer::c(state, atof(std::string(ts, te-ts-1).c_str())) );}}
 	break;
 	case 29:
 #line 83 "lexer.rl"
@@ -770,7 +769,7 @@ _eof_trans:
 	break;
 	case 56:
 #line 30 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NUM_CONST, Logical::NA() );}}
+	{te = p;p--;{token( TOKEN_NUM_CONST, Logical::NA(state) );}}
 	break;
 	case 57:
 #line 60 "lexer.rl"
@@ -778,7 +777,7 @@ _eof_trans:
 	break;
 	case 58:
 #line 65 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );}}
+	{te = p;p--;{token( TOKEN_NUM_CONST, Double::c(state, atof(std::string(ts, te-ts).c_str())) );}}
 	break;
 	case 59:
 #line 79 "lexer.rl"
@@ -842,7 +841,7 @@ _eof_trans:
 	break;
 	case 74:
 #line 65 "lexer.rl"
-	{{p = ((te))-1;}{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );}}
+	{{p = ((te))-1;}{token( TOKEN_NUM_CONST, Double::c(state, atof(std::string(ts, te-ts).c_str())) );}}
 	break;
 	case 75:
 #line 79 "lexer.rl"
@@ -866,25 +865,25 @@ _eof_trans:
 	{{p = ((te))-1;}token( TOKEN_NULL_CONST, Null::Singleton() );}
 	break;
 	case 3:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Logical::True() );}
+	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Logical::True(state) );}
 	break;
 	case 4:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Logical::False() );}
+	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Logical::False(state) );}
 	break;
 	case 5:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::Inf() );}
+	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::Inf(state) );}
 	break;
 	case 6:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::NaN() );}
+	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::NaN(state) );}
 	break;
 	case 7:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Integer::NA() );}
+	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Integer::NA(state) );}
 	break;
 	case 8:
-	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::NA() );}
+	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Double::NA(state) );}
 	break;
 	case 9:
-	{{p = ((te))-1;}token( TOKEN_STR_CONST, Character::NA() );}
+	{{p = ((te))-1;}token( TOKEN_STR_CONST, Character::NA(state) );}
 	break;
 	case 10:
 	{{p = ((te))-1;}token( TOKEN_FUNCTION, Symbol(Strings::function) );}
@@ -928,7 +927,7 @@ _eof_trans:
 	}
 	}
 	break;
-#line 932 "../parser.cpp"
+#line 931 "../parser.cpp"
 		}
 	}
 
@@ -945,7 +944,7 @@ _again:
 #line 1 "NONE"
 	{act = 0;}
 	break;
-#line 949 "../parser.cpp"
+#line 948 "../parser.cpp"
 		}
 	}
 
@@ -965,18 +964,16 @@ _again:
 	_out: {}
 	}
 
-#line 203 "lexer.rl"
+#line 202 "lexer.rl"
 	int syntaxErrors = errors;
 	Parse(pParser, 0, Value::Nil(), this);
-	ParseFree(pParser, GC_free);
+	ParseFree(pParser, free);
 	errors = syntaxErrors;
 
 	if( cs == Scanner_error && syntaxErrors == 0) {
 		syntaxErrors++;
 		std::cout << "Lexing error (" << intToStr(line+1) << "," << intToStr(col+1) << ") : unexpected '" << std::string(ts, te-ts) + "'" << std::endl; 
 	}
-	
-	GC_enable();
 	
 	if( syntaxErrors > 0 )
 		return -1;

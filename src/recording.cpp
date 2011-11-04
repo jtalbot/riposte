@@ -308,7 +308,7 @@ RecordingStatus::Enum function_record(State & state, Instruction const & inst, I
 
 //we can extract the type from the future so we can continue a trace beyond a type-check
 RecordingStatus::Enum type_record(State & state, Instruction const & inst, Instruction const ** pc) {
-	Character c(1);
+	Character c(state, 1);
 	// Should have a direct mapping from type to symbol.
 	Value & a = REG(state, inst.a);
 	Type::Enum atyp = (a.isFuture()) ? a.future.typ : a.type;

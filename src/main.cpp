@@ -89,14 +89,14 @@ Value parsetty(State& state) {
 	return ppr;
 }
 
-static void printCode(State const& state, Prototype const* code) {
-	std::string r = "block:\nconstants: " + intToStr(code->constants.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)code->constants.size(); i++)
-		r = r + intToStr(i) + "=\t" + state.stringify(code->constants[i]) + "\n";
+static void printCode(State const& state, Prototype const& code) {
+	std::string r = "block:\nconstants: " + intToStr(code.constants().length) + "\n";
+	for(int64_t i = 0; i < (int64_t)code.constants().length; i++)
+		r = r + intToStr(i) + "=\t" + state.stringify(code.constants()[i]) + "\n";
 
-	r = r + "code: " + intToStr(code->bc.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)code->bc.size(); i++)
-		r = r + intToStr(i) + ":\t" + code->bc[i].toString() + "\n";
+	r = r + "code: " + intToStr(code.bc().length) + "\n";
+	for(int64_t i = 0; i < (int64_t)code.bc().length; i++)
+		r = r + intToStr(i) + ":\t" + code.bc()[i].toString() + "\n";
 
 	std::cout << r << std::endl;
 }
@@ -116,7 +116,7 @@ int dostdin(State& state) {
 			value = parsetty(state);
 			if(value.isNil()) continue;
 			//std::cout << "Parsed: " << value.toString() << std::endl;
-			Prototype* proto = Compiler::compile(state, value);
+			Handle<Prototype> proto(state, Compiler::compile(state, value));
 			//std::cout << "Compiled code: " << state.stringify(Closure(code,NULL)) << std::endl;
 			result = eval(state, proto, state.global);
 			std::cout << state.stringify(result) << std::endl;
@@ -159,7 +159,7 @@ static int dofile(const char * file, std::istream & in, State& state, bool echo)
 	if(value.isNil()) return -1;
 
 	try {
-		Prototype* proto = Compiler::compile(state, value);
+		Handle<Prototype> proto(state, Compiler::compile(state, value));
 		Value result = eval(state, proto, state.global);
 		if(echo)
 			std::cout << state.stringify(result) << std::endl;
@@ -234,9 +234,6 @@ main(int argc, char** argv)
 
 
 	d_message(1,NULL,"Command option processing complete");
-
-	/* start garbage collector */
-	GC_INIT();
 
 #ifdef USE_CALLGRIND
 	CALLGRIND_START_INSTRUMENTATION

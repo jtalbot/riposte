@@ -26,7 +26,7 @@ void As(State& state, Value const& src, O& out) {
 	if(src.type == O::VectorType)
 		out = (O const&)src;
 	switch(src.type) {
-		case Type::Null: O(0); return; break;
+		case Type::Null: O(); return; break;
 		#define CASE(Name,...) case Type::Name: Zip1< CastOp<Name, O> >::eval(state, (Name const&)src, out); return; break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
@@ -89,7 +89,7 @@ template<>
 SPECIALIZED_STATIC Character::Element Cast<Logical, Character>(State& state, Logical::Element const& i) { return Logical::isNA(i) ? Character::NAelement : i ? Strings::TRUE : Strings::FALSE; }
 
 template<>
-SPECIALIZED_STATIC List::Element Cast<Logical, List>(State& state, Logical::Element const& i) { return Logical::c(i); }
+SPECIALIZED_STATIC List::Element Cast<Logical, List>(State& state, Logical::Element const& i) { return Logical::c(state, i); }
 
 
 template<>
@@ -105,7 +105,7 @@ template<>
 SPECIALIZED_STATIC Character::Element Cast<Integer, Character>(State& state, Integer::Element const& i) { return Integer::isNA(i) ? Character::NAelement : state.internStr(intToStr(i)); }
 
 template<>
-SPECIALIZED_STATIC List::Element Cast<Integer, List>(State& state, Integer::Element const& i) { return Integer::c(i); }
+SPECIALIZED_STATIC List::Element Cast<Integer, List>(State& state, Integer::Element const& i) { return Integer::c(state, i); }
 
 
 template<>
@@ -121,7 +121,7 @@ template<>
 SPECIALIZED_STATIC Character::Element Cast<Double, Character>(State& state, Double::Element const& i) { return Integer::isNA(i) ? Character::NAelement : state.internStr(doubleToStr(i)); }
 
 template<>
-SPECIALIZED_STATIC List::Element Cast<Double, List>(State& state, Double::Element const& i) { return Double::c(i); }
+SPECIALIZED_STATIC List::Element Cast<Double, List>(State& state, Double::Element const& i) { return Double::c(state, i); }
 
 
 template<>
@@ -137,7 +137,7 @@ template<>
 SPECIALIZED_STATIC Double::Element Cast<Character, Double>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Double::NAelement; else {try{return strToDouble(state.externStr(i));} catch(...) {return Double::NAelement;}} }
 
 template<>
-SPECIALIZED_STATIC List::Element Cast<Character, List>(State& state, Character::Element const& i) { return Character::c(i); }
+SPECIALIZED_STATIC List::Element Cast<Character, List>(State& state, Character::Element const& i) { return Character::c(state, i); }
 
 
 template<>
@@ -153,7 +153,7 @@ template<>
 SPECIALIZED_STATIC Double::Element Cast<Raw, Double>(State& state, Raw::Element const& i) { return i; }
 
 template<>
-SPECIALIZED_STATIC List::Element Cast<Raw, List>(State& state, Raw::Element const& i) { return Raw::c(i); }
+SPECIALIZED_STATIC List::Element Cast<Raw, List>(State& state, Raw::Element const& i) { return Raw::c(state, i); }
 
 
 template<>
@@ -187,14 +187,14 @@ template<>
 SPECIALIZED_STATIC void Cast1<Symbol, Double>(State& state, Symbol const& i, Double& o) { _error("Invalid cast from symbol to double"); }
 
 template<>
-SPECIALIZED_STATIC void Cast1<Symbol, Character>(State& state, Symbol const& i, Character& o) { Character::InitScalar(o, i); }
+SPECIALIZED_STATIC void Cast1<Symbol, Character>(State& state, Symbol const& i, Character& o) { Character::InitScalar(state, o, i); }
 
 template<>
-SPECIALIZED_STATIC void Cast1<Symbol, List>(State& state, Symbol const& i, List& o) { List::InitScalar(o, i); }
+SPECIALIZED_STATIC void Cast1<Symbol, List>(State& state, Symbol const& i, List& o) { List::InitScalar(state, o, i); }
 
 
 template<>
-SPECIALIZED_STATIC void Cast1<Function, List>(State& state, Function const& i, List& o) { List::InitScalar(o, (Value const&)i); }
+SPECIALIZED_STATIC void Cast1<Function, List>(State& state, Function const& i, List& o) { List::InitScalar(state, o, (Value const&)i); }
 
 
 #endif

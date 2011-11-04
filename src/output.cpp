@@ -150,7 +150,7 @@ std::string stringify(State const& state, Value const& value, Value const& names
 		}
 		case Type::Function:
 		{
-			result = state.externStr(Function(value).prototype()->string);
+			result = state.externStr(Function(value).prototype().string());
 			return result;
 		}
 		case Type::Environment:
@@ -255,7 +255,7 @@ std::string deparse(State const& state, Value const& value, Value const& names) 
 		case Type::Symbol:
 			return state.externStr(Symbol(value)); // NYI: need to check if this should be backticked.
 		case Type::Function:
-			return state.externStr(Function(value).prototype()->string);
+			return state.externStr(Function(value).prototype().string());
 		case Type::Environment:
 			return "environment";
 		case Type::Object:

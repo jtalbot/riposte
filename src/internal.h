@@ -12,7 +12,7 @@
 
 inline Value expression(Value const& v) { 
 	if(v.isPromise())
-		return Function(v).prototype()->expression;
+		return Function(v).prototype().expression();
 	else return v; 
 }
 
@@ -35,7 +35,7 @@ inline void ElementSlow(State& state, Object v, int64_t index, Value& out) {
 
 inline void Element(State& state, Value const& v, int64_t index, Value& out) {
 	switch(v.type) {
-		#define CASE(Name) case Type::Name: Name::InitScalar(out, ((Name const&)v)[index]); break;
+		#define CASE(Name) case Type::Name: Name::InitScalar(state, out, ((Name const&)v)[index]); break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		case Type::Object: 
@@ -56,7 +56,7 @@ inline void Element2(State& state, Value const& v, int64_t index, Value& out) {
 		#define CASE(Name) case Type::Name: \
 			if(index < 0 || index >= v.length) \
 				_error("Out-of-range index"); \
-			Name::InitScalar(out, ((Name const&)v)[index]); \
+			Name::InitScalar(state, out, ((Name const&)v)[index]); \
 			break;
 		ATOMIC_VECTOR_TYPES(CASE)
 		#undef CASE
@@ -218,7 +218,7 @@ inline void Insert(State& state, Value const& src, int64_t srcIndex, Value& dst,
 template<class D>
 inline void Resize(State& state, bool clone, D& src, int64_t newLength, typename D::Element fill = D::NAelement) {
 	if(clone || newLength > src.length) {
-		D r(newLength);
+		D r(state, newLength);
 		Insert(state, src, 0, r, 0, std::min(src.length, newLength));
 		for(int64_t i = src.length; i < newLength; i++) r[i] = fill;	
 		src = r; 
@@ -239,25 +239,25 @@ inline void Resize(State& state, bool clone, Value& src, int64_t newLength) {
 }
 
 template<class T>
-inline T Subset(T const& src, int64_t start, int64_t length) {
+inline T Subset(State& state, T const& src, int64_t start, int64_t length) {
 	if(length > 0 && start+length > src.length)
 		_error("subset index out of bounds");
-	T v(length);
+	T v(state, length);
 	memcpy(v.v(), src.v()+start, length*src.width);
 	return v;
 }
 
 
-inline Integer Sequence(int64_t length, int64_t start, int64_t step) {
-	Integer r(length);
+inline Integer Sequence(State& state, int64_t length, int64_t start, int64_t step) {
+	Integer r(state, length);
 	for(int64_t i = 0, j = start; i < length; i++, j+=step) {
 		r[i] = j;
 	}
 	return r;
 }
 
-inline Double Sequence(double from, double by, double len) {
-	Double r(len);
+inline Double Sequence(State& state, double from, double by, double len) {
+	Double r(state, len);
 	double j = 0;
 	for(int64_t i = 0; i < len; i++) {
 		r[i] = from+j;
@@ -279,7 +279,7 @@ inline Character klass(State& state, Value const& v)
 		type = v.type;
 	}
 			
-	Character c(1);
+	Character c(state, 1);
 	if(type == Type::Integer || type == Type::Double)
 		c[0] = Strings::Numeric;
 	else if(type == Type::Symbol)

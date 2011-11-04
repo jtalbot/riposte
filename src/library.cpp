@@ -43,7 +43,7 @@ void openDynamic(State& state, std::string path, REnvironment env) {
 }
 
 void loadLibrary(State& state, std::string path, std::string name) {
-	REnvironment env(state, state.path.back(), REnvironment::Null());
+	REnvironment env(state, state.path.back(), REnvironment::Null(), Null::Singleton());
 	
 	std::string p = path + "/" + name + ("/R/");
 

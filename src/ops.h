@@ -250,7 +250,7 @@ void unaryLogical(State& state, Value a, Value& c) {
 	if(a.isLogicalCoerce())
 		Lift< Op<TLogical> >::eval(state, As<Logical>(state, a), c);
 	else if(a.isNull())
-		c = Logical(0);
+		c = Logical();
 	else if(a.isObject()) {
 		unaryLogical<Lift, Op>(state, ((Object const&)a).base(), c);
 		if(((Object const&)a).hasNames()) {
@@ -272,7 +272,7 @@ void unaryOrdinal(State& state, Value a, Value& c) {
 	else if(a.isCharacter())
 		Lift< Op<TCharacter> >::eval(state, (Character const&)a, c);
 	else if(a.isNull()) {
-		Double::InitScalar(c, Op<TDouble>::base());
+		Double::InitScalar(state, c, Op<TDouble>::base());
 		_warning(state, "no non-missing arguments to min; returning Inf");
 	}
 	else if(a.isObject()) {
@@ -310,7 +310,7 @@ void unaryFilter(State& state, Value a, Value& c) {
 	else if(a.isCharacter())
 		Lift< Op<TCharacter> >::eval(state, (Character const&)a, c);
 	else if(a.isNull())
-		Logical(0);
+		Logical();
 	else if(a.isList())
 		Lift< Op<TList> >::eval(state, (List const&)a, c);
 	else if(a.isObject()) {
@@ -347,15 +347,15 @@ template< template<class Op> class Lift, template<typename T> class Op >
 void binaryArith(State& state, Value const& a, Value const& b, Value& c) {
 	if(a.isDouble1()) {
 		if(b.isDouble1()) 
-			{ Double::InitScalar(c, Op<TDouble>::eval(state, a.d, b.d)); return; }
+			{ Double::InitScalar(state, c, Op<TDouble>::eval(state, a.d, b.d)); return; }
 		else if(b.isInteger1())	
-			{ Double::InitScalar(c, Op<TDouble>::eval(state, a.d, (double)b.i));return; }
+			{ Double::InitScalar(state, c, Op<TDouble>::eval(state, a.d, (double)b.i));return; }
 	}
 	else if(a.isInteger1()) {
 		if(b.isDouble1()) 
-			{ Double::InitScalar(c, Op<TDouble>::eval(state, (double)a.i, b.d)); return; }
+			{ Double::InitScalar(state, c, Op<TDouble>::eval(state, (double)a.i, b.d)); return; }
 		else if(b.isInteger1())	
-			{ Integer::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return;}
+			{ Integer::InitScalar(state, c, Op<TInteger>::eval(state, a.i, b.i)); return;}
 	}
 	binaryArithSlow<Lift, Op>(state, a, b, c);
 }

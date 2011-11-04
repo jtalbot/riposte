@@ -109,14 +109,14 @@ struct Pairs {
 	const Value& value(int64_t i) const { return p[i].v; }
 	const String& name(int64_t i) const { return p[i].n; }
 
-	List values() const {
-		List l(length());
+	List values(State& state) const {
+		List l(state, length());
 		for(int64_t i = 0; i < length(); i++)
 			l[i] = value(i);
 		return l;
 	}
 
-	Value names(bool forceNames) const {
+	Value names(State& state, bool forceNames) const {
 		bool named = false;
 		for(int64_t i = 0; i < length(); i++) {                        
 			if(name(i) != Strings::empty) {
@@ -125,7 +125,7 @@ struct Pairs {
 			}                
 		}                
 		if(named || forceNames) {
-			Character n(length());                        
+			Character n(state, length());                        
 			for(int64_t i = 0; i < length(); i++)
 				n[i] = name(i);
 			return n;

@@ -86,10 +86,10 @@ struct Zip1 {
 	static void eval(State& state, typename Op::AV const& a, Value& out)
 	{
 		if(a.isScalar()) {
-			Op::RV::InitScalar(out, Op::eval(state, a.s()));
+			Op::RV::InitScalar(state, out, Op::eval(state, a.s()));
 		}
 		else {
-			typename Op::RV r(a.length);
+			typename Op::RV r(state, a.length);
 			typename Op::R* re = r.v();
 			typename Op::A const* ae = a.v();
 			int64_t length = a.length;
@@ -106,10 +106,10 @@ struct Zip2 {
 	static void eval(State& state, typename Op::AV const& a, typename Op::BV const& b, Value& out)
 	{
 		if(a.isScalar() && b.isScalar()) {
-			Op::RV::InitScalar(out, Op::eval(state, a.s(), b.s()));
+			Op::RV::InitScalar(state, out, Op::eval(state, a.s(), b.s()));
 		}
 		else if(b.isScalar()) {
-			typename Op::RV r(a.length);
+			typename Op::RV r(state, a.length);
 			typename Op::R* re = r.v();
 			typename Op::A const* ae = a.v();
 			typename Op::B be = b.s();
@@ -120,7 +120,7 @@ struct Zip2 {
 			out = (Value&)r;
 		}
 		else if(a.isScalar()) {
-			typename Op::RV r(b.length);
+			typename Op::RV r(state, b.length);
 			typename Op::R* re = r.v();
 			typename Op::A ae = a.s();
 			typename Op::B const* be = b.v();
@@ -131,7 +131,7 @@ struct Zip2 {
 			out = (Value&)r;
 		}
 		else if(a.length == b.length) {
-			typename Op::RV r(a.length);
+			typename Op::RV r(state, a.length);
 			typename Op::R* re = r.v();
 			typename Op::A const* ae = a.v();
 			typename Op::B const* be = b.v();
@@ -142,10 +142,10 @@ struct Zip2 {
 			out = (Value&)r;
 		}
 		else if(a.length == 0 || b.length == 0) {
-			Op::RV::Init(out, 0);
+			Op::RV::Init(state, out, 0);
 		}
 		else if(a.length > b.length) {
-			typename Op::RV r(a.length);
+			typename Op::RV r(state, a.length);
 			typename Op::R* re = r.v();
 			typename Op::A const* ae = a.v();
 			typename Op::B const* be = b.v();
@@ -160,7 +160,7 @@ struct Zip2 {
 			out = (Value&)r;
 		}
 		else {
-			typename Op::RV r(b.length);
+			typename Op::RV r(state, b.length);
 			typename Op::R* re = r.v();
 			typename Op::A const* ae = a.v();
 			typename Op::B const* be = b.v();
@@ -183,7 +183,7 @@ struct Zip2N {
 	{
 		typename Op::A const* ae = a.v();
 		typename Op::B const* be = b.v();
-		typename Op::RV r(N);
+		typename Op::RV r(state, N);
 		typename Op::R* re = r.v();
 		int64_t j = 0, k = 0;
 		for(int64_t i = 0; i < N; i++) {
@@ -205,7 +205,7 @@ struct FoldLeft {
 		for(int64_t i = 0; i < length; ++i) {
 			b = Op::eval(state, b, ae[i]);
 		}
-		Op::RV::InitScalar(out, b);
+		Op::RV::InitScalar(state, out, b);
 	}
 };
 
@@ -215,7 +215,7 @@ struct ScanLeft {
 	{
 		typename Op::A const* ae = a.v();
 		typename Op::R b = Op::base();
-		typename Op::RV r(a.length);
+		typename Op::RV r(state, a.length);
 		typename Op::R* re = r.v();
 		int64_t length = a.length;
 		for(int64_t i = 0; i < length; ++i) {
