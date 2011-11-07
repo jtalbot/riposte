@@ -810,7 +810,7 @@ static void printCode(State const& state, Prototype const prototype) {
 
 	r = r + "code: " + intToStr(prototype.bc().length) + "\n";
 	for(int64_t i = 0; i < (int64_t)prototype.bc().length; i++)
-		r = r + intToHexStr((uint64_t)&(prototype.bc()[i])) + "--: " + intToStr(i) + ":\t" + prototype.bc()[i].toString() + "\n";
+		r = r + intToHexStr((uint64_t)(prototype.bc()[i].ibc)) + "--: " + intToStr(i) + ":\t" + prototype.bc()[i].toString() + "\n";
 
 	std::cout << r << std::endl;
 }
@@ -820,7 +820,6 @@ static const void** glabels = 0;
 #endif
 
 static Instruction const* buildStackFrame(State& state, REnvironment environment, Prototype prototype, Value* result, Instruction const* returnpc) {
-	//printCode(state, prototype);
 	StackFrame& s = state.push();
 	s.environment = environment;
 	s.returnpc = returnpc;
@@ -841,6 +840,7 @@ static Instruction const* buildStackFrame(State& state, REnvironment environment
 		}
 	}
 #endif
+	//printCode(state, prototype);
 	return &(prototype.bc()[0]);
 }
 
@@ -856,7 +856,6 @@ void interpret(State& state, Instruction const* pc) {
 		glabels = labels;
 		return;
 	}
-
 	goto *(pc->ibc);
 	#define LABELED_OP(name,type,...) \
 		name##_label: \

@@ -10,7 +10,7 @@ Semispace::Semispace(State* state) : state(state) {
 
 	bump = base;
 
-	printf("Allocated semispace at %llx and %llx\n", base, newbase);
+	printf("Allocated semispace at %llx and %llx\n", (uint64_t)base, (uint64_t)newbase);
 	assert(newbase + size <= head + size*3);
 }
 
@@ -34,7 +34,7 @@ HeapObject* Semispace::alloc(Type::Enum type, uint64_t bytes) {
 }
 */
 
-void Semispace::collect() {
+void Semispace::collect(Heap* heap) {
 	
 	// TODO: track allocations into LOS. Trigger GC when that reaches some large value.
 	// --Generational
@@ -45,7 +45,7 @@ void Semispace::collect() {
 	// --Can we reduce the number of allocations necessary to parse simple input?
 	// --
 
-	printf("Running the collector\n");
+	//printf("Running the collector\n");
 	// allocate new space, bigger if need be
 	// iterate over roots copying stuff over
 	// leave behind forwarding pointer
@@ -61,37 +61,37 @@ void Semispace::collect() {
 	// iterate over path, then stack, then trace locations, then registers
 	//printf("--path--\n");
 	for(uint64_t i = 0; i < state->path.size(); i++) {
-		state->path[i].p = (Environment*)mark((HeapObject*)(state->path[i].p));
+		state->path[i].p = (Environment*)mark(heap, (HeapObject*)(state->path[i].p));
 	}
 	//printf("--global--\n");
-	state->global.p = (Environment*)mark((HeapObject*)(state->global.p));
+	state->global.p = (Environment*)mark(heap, (HeapObject*)(state->global.p));
 
 	//printf("--stack--\n");
 	for(uint64_t i = 0; i < state->stack.size(); i++) {
-		state->stack[i].environment.p = (Environment*)mark((HeapObject*)(state->stack[i].environment.p));
-		state->stack[i].prototype.p = (void*)mark((HeapObject*)(state->stack[i].prototype.p));
+		state->stack[i].environment.p = (Environment*)mark(heap, (HeapObject*)(state->stack[i].environment.p));
+		state->stack[i].prototype.p = (void*)mark(heap, (HeapObject*)(state->stack[i].prototype.p));
 	}
 	//printf("--frame--\n");
-	state->frame.environment.p = (Environment*)mark((HeapObject*)(state->frame.environment.p));
-	state->frame.prototype.p = (void*)mark((HeapObject*)(state->frame.prototype.p));
+	state->frame.environment.p = (Environment*)mark(heap, (HeapObject*)(state->frame.environment.p));
+	state->frame.prototype.p = (void*)mark(heap, (HeapObject*)(state->frame.prototype.p));
 
 	//printf("--trace--\n");
 	Trace::Output* op = state->tracing.current_trace.outputs;
 	for(uint64_t i = 0; i < state->tracing.current_trace.n_outputs; i++) {
 		if(op->location.type == Trace::Location::VAR) {
-			op->location.pointer.env.p = (Environment*)mark((HeapObject*)(op->location.pointer.env.p));
+			op->location.pointer.env.p = (Environment*)mark(heap, (HeapObject*)(op->location.pointer.env.p));
 		}
 		op++;
 	}
 
 	//printf("--registers--\n");
 	for(Value* r = state->sp; r < state->registers+DEFAULT_NUM_REGISTERS; r++) {
-		walkValue(this, *r);
+		walkValue(heap, *r);
 	}
 
 	//printf("--handles--\n");
 	for(Value* r = state->handleStack; r < state->hsp; r++) {
-		walkValue(this, *r);
+		walkValue(heap, *r);
 	}
 	
 	//printf("--finger--\n");
@@ -99,7 +99,7 @@ void Semispace::collect() {
 	char* finger = newbase;
 	while(finger < bump) {
 		HeapObject* hp = (HeapObject*)finger;
-		hp->walk(this);
+		hp->walk(heap);
 		finger += hp->bytes;
 	}
 
@@ -109,16 +109,16 @@ void Semispace::collect() {
 		else i++;
 	}
 
-	// clear old subspace so Boehm doesn't keep stuff around
-	memset(base, 0xff, size);
+	// clear old subspace in debug mode to help detect bugs 
+	assert(memset(base, 0xff, size) == base);
 	
 	char* t = base;
 	base = newbase;
 	newbase = t;
-	printf("Finished running the collector\n");
+	//printf("Finished running the collector\n");
 }
 
-HeapObject* Semispace::mark(HeapObject* o) {
+HeapObject* Semispace::mark(Heap* heap, HeapObject* o) {
 	// only copy to new space if in old space to start
 	if(inSpace((HeapObject*)o)) {
 		if(o->forward) {
@@ -135,7 +135,7 @@ HeapObject* Semispace::mark(HeapObject* o) {
 		o->forward = 1;
 		o->bytes = (uint64_t)result;
 
-		printf("copying from %llx to %llx\n", o, result);
+		//printf("copying from %llx to %llx\n", (uint64_t)o, (uint64_t)result);
 		return result;
 	} else if(o != 0) {
 		//printf("non-nursery item: %llx\n", o);
@@ -144,6 +144,47 @@ HeapObject* Semispace::mark(HeapObject* o) {
 	}
 	return o;
 }
+
+
+void MarkRegion::makeRegions(uint64_t regions) {
+	char* head = (char*)malloc((regions+1)*regionSize);
+	head = (char*)(((uint64_t)head+regionSize-1) & (~(regionSize-1)));
+	for(uint64_t i = 0; i < regions; i++) {
+		Region* r = (Region*)head;
+		assert(((uint64_t)r & (regionSize-1)) == 0);
+		empty.push_back(r);
+		head += regionSize;
+	}
+}
+
+void MarkRegion::clear() {
+	for(std::list<Region*>::iterator i = used.begin(); i != used.end(); ++i) {
+		(*i)->mark = 0;
+		char* b = (*i)->data;
+		for(uint64_t j = 0; j < (*i)->count; j++) {
+			HeapObject* o = (HeapObject*)b;
+			o->forward = 0;
+			b += o->bytes;
+		}
+	}
+}
+
+void MarkRegion::sweep() {
+	uint64_t old = used.size();
+	for(std::list<Region*>::iterator i = used.begin(); i != used.end();) {
+		if(!(*i)->mark) {
+			Region* r = *i;
+			used.erase(i++);
+			empty.push_back(r); 
+		}
+		else {
+			i++;
+		}
+	}
+	//printf("MarkRegion: %d regions left out of %d (now %d empty)\n", used.size(), old, empty.size());
+}
+
+
 /*
 MarkRegion::MarkRegion(State* state) : state(state) {
 	existingRegions = 0;
@@ -297,3 +338,92 @@ HeapObject* MarkRegion::mark(HeapObject* o) {
 	return o;
 }
 */
+
+void MarkSweep::clear() {
+	// clear marks
+	for(std::list<HeapObject*>::iterator i = data.begin(); i != data.end(); ++i) {
+		(*i)->forward = 0;
+	}
+}
+
+void MarkSweep::sweep() {
+	// sweep the space
+	total = 0;
+	for(std::list<HeapObject*>::iterator i = data.begin(); i != data.end();) {
+		if(!(*i)->forward) { 
+			assert(memset(*i, 0xFF, ( *i)->bytes) == *i); 
+			free(*i); 
+			data.erase(i++);
+		}
+		else {
+			total += (*i)->bytes;
+			i++;
+		}
+	}
+	//printf("MarkSweep: %d bytes left\n", total);
+}
+
+void Heap::collect() {
+	
+	// TODO: track allocations into LOS. Trigger GC when that reaches some large value.
+	// --Generational
+	// --Non-moving
+	// --Get std::vectors in Prototype into heap format
+	// --Root stuff during parsing
+	// --Compress representations
+	// --Can we reduce the number of allocations necessary to parse simple input?
+	// --
+
+	//printf("Running the collector\n");
+	
+	space.clear();
+	region.clear();
+
+	// iterate over path, then stack, then trace locations, then registers
+	//printf("--path--\n");
+	for(uint64_t i = 0; i < state->path.size(); i++) {
+		state->path[i].p = (Environment*)mark((HeapObject*)(state->path[i].p));
+	}
+	//printf("--global--\n");
+	state->global.p = (Environment*)mark((HeapObject*)(state->global.p));
+
+	//printf("--stack--\n");
+	for(uint64_t i = 0; i < state->stack.size(); i++) {
+		state->stack[i].environment.p = (Environment*)mark((HeapObject*)(state->stack[i].environment.p));
+		state->stack[i].prototype.p = (void*)mark((HeapObject*)(state->stack[i].prototype.p));
+	}
+	//printf("--frame--\n");
+	state->frame.environment.p = (Environment*)mark((HeapObject*)(state->frame.environment.p));
+	state->frame.prototype.p = (void*)mark((HeapObject*)(state->frame.prototype.p));
+
+	//printf("--trace--\n");
+	Trace::Output* op = state->tracing.current_trace.outputs;
+	for(uint64_t i = 0; i < state->tracing.current_trace.n_outputs; i++) {
+		if(op->location.type == Trace::Location::VAR) {
+			op->location.pointer.env.p = (Environment*)mark((HeapObject*)(op->location.pointer.env.p));
+		}
+		op++;
+	}
+
+	//printf("--registers--\n");
+	for(Value* r = state->sp; r < state->registers+DEFAULT_NUM_REGISTERS; r++) {
+		walkValue(this, *r);
+	}
+
+	//printf("--handles--\n");
+	for(Value* r = state->handleStack; r < state->hsp; r++) {
+		walkValue(this, *r);
+	}
+
+	while(stack.size() > 0) {
+		HeapObject* hp = stack.back();
+		stack.pop_back();
+		hp->walk(this);
+	}
+
+	space.sweep();
+	region.sweep();
+
+	//printf("Finished running the collector\n");
+}
+

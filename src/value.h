@@ -143,6 +143,9 @@ struct Symbol : public Value {
 template<Type::Enum VType, typename ElementType, bool Recursive,
 	bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive>
 struct Vector : public Value {
+private:	
+	void reserve(State& state, int64_t size);
+public:
 	typedef ElementType Element;
 	static const int64_t width = sizeof(ElementType); 
 	static const Type::Enum VectorType = VType;
@@ -152,8 +155,10 @@ struct Vector : public Value {
 	}
 
 	struct Inner : public HeapObject {
-		uint64_t padding;	// HeapObjects are now 24 bytes, this makes data 16B aligned
+		uint64_t capacity;	// HeapObjects are now 24 bytes, this makes data 16B aligned
 		ElementType data[];
+
+		Inner(uint64_t capacity) : capacity(capacity) {}
 
 		virtual void walk(Heap* heap) {
 			//if(Recursive) {
@@ -171,9 +176,14 @@ struct Vector : public Value {
 	ElementType& operator[](int64_t index) { return v()[index]; }
 	ElementType const& operator[](int64_t index) const { return v()[index]; }
 
-	explicit Vector();
+	explicit Vector() {
+		Value::Init(*this, VectorType, 0);
+	}
 
-	explicit Vector(State& state, int64_t length=0);
+	explicit Vector(State& state, int64_t length) {
+		Value::Init(*this, VectorType, length);
+		reserve(state, length);
+	}
 
 	static Vector<VType, ElementType, Recursive>& Init(State& state, Value& v, int64_t length) {
 		v = Vector(state, length);
@@ -200,6 +210,27 @@ struct Vector : public Value {
 
 	operator Value() const {
 		return (Value&)*this;
+	}
+
+	// these functions are only really safe if you know you have the only pointer to this vector
+
+	void append(State& state, ElementType e) {
+		if(length == 0 && canPack) {
+			length = 1;
+			scalar<ElementType>() = e;
+		}
+		else {
+			if(length == 0) {
+				Vector<VType, ElementType, Recursive> n(state, 1LL);
+				p = n.p;
+			}
+			if(length >= ((Inner*)p)->capacity) {
+				Vector<VType, ElementType, Recursive> n(state, (int64_t)length*2);
+				memcpy(n.v(), v(), length*sizeof(ElementType));
+				p = n.p;
+			}
+			((Inner*)p)->data[length++] = e;
+		}
 	}
 };
 
@@ -1043,7 +1074,7 @@ struct InternalFunction {
 #define DEFAULT_NUM_REGISTERS 10000
 
 struct State {
-	Semispace* semispace;
+	Heap heap;
 	Value* registers;
 	Value* sp;
 	Value* handleStack;
@@ -1065,7 +1096,7 @@ struct State {
 	TraceState tracing; //all state related to tracing compiler
 
 
-	State() : 	semispace(new Semispace(this)), 
+	State() : 	heap(this),
 			registers(new Value[DEFAULT_NUM_REGISTERS]),
 			sp(registers+DEFAULT_NUM_REGISTERS),
 			handleStack(new Value[DEFAULT_NUM_REGISTERS]),
@@ -1076,7 +1107,6 @@ struct State {
 	}
 
 	~State() {
-		delete semispace;
 		delete [] registers;
 		delete [] handleStack;
 	}
@@ -1120,11 +1150,11 @@ struct State {
 };
 
 inline void* HeapObject::operator new(unsigned long bytes, State& state) {
-	return state.semispace->alloc(bytes);
+	return state.heap.alloc(bytes);
 }
 
 inline void* HeapObject::operator new(unsigned long bytes, State& state, unsigned long extra) {
-	return state.semispace->varalloc(bytes+extra);
+	return state.heap.varalloc(bytes+extra);
 }
 
 template<class T>
@@ -1187,25 +1217,13 @@ inline Prototype:: Prototype(State& state, Value const& expression) {
 }
 
 template<Type::Enum VType, typename ElementType, bool Recursive, bool canPack>
-inline Vector<VType, ElementType, Recursive, canPack>::Vector() {
-	Value::Init(*this, VectorType, 0);
-}
-
-template<Type::Enum VType, typename ElementType, bool Recursive, bool canPack>
-inline Vector<VType, ElementType, Recursive, canPack>::Vector(State& state, int64_t length) {
-	Value::Init(*this, VectorType, length);
-	int64_t l = length;
+inline void Vector<VType, ElementType, Recursive, canPack>::reserve(State& state, int64_t length) {
 	if((canPack && length > 1) || (!canPack && length > 0)) {
-		int64_t length_aligned = l;//(l < 128) ? (l + 1) : l;
-		uint64_t bytes = sizeof(Element) * length_aligned;
-		p = new (state, bytes) Inner(); 
-		//assert(l < 128 || (0xF & (int64_t)(((Inner*)p)->data)) == 0);
-		//if( (0xF & (int64_t)((Inner*)p)->data) != 0)
-		//	p =  (char*)p + 0x8;
+		uint64_t bytes = sizeof(Element) * length;
+		p = new (state, bytes) Inner(length); 
 		assert((0xF & (int64_t)(((Inner*)p)->data)) == 0);
 	}
 }
-
 
 Value eval(State& state, Function const& function);
 Value eval(State& state, Prototype const prototype, REnvironment environment); 

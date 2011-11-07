@@ -63,24 +63,24 @@ static ByteCode::Enum op(Symbol const& s) {
 }
 
 int64_t Compiler::emit(Prototype& code, ByteCode::Enum bytecode, int64_t a, int64_t b, int64_t c) {
-	bc().push_back(Instruction(bytecode, a, b, c));
-	return bc().size()-1;
+	code.bc().append(state, Instruction(bytecode, a, b, c));
+	return code.bc().length-1;
 }
 
 void Compiler::resolveLoopReferences(Prototype& code, int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget) {
 	for(int64_t i = start; i < end; i++) {
-		if(bc()[i].bc == ByteCode::jmp && bc()[i].a == 0 && bc()[i].b == 1) {
-			bc()[i].a = nextTarget-i;
-		} else if(bc()[i].bc == ByteCode::jmp && bc()[i].a == 0 && bc()[i].b == 2) {
-			bc()[i].a = breakTarget-i;
+		if(code.bc()[i].bc == ByteCode::jmp && code.bc()[i].a == 0 && code.bc()[i].b == 1) {
+			code.bc()[i].a = nextTarget-i;
+		} else if(code.bc()[i].bc == ByteCode::jmp && code.bc()[i].a == 0 && code.bc()[i].b == 2) {
+			code.bc()[i].a = breakTarget-i;
 		}
 	}
 }
 
 int64_t Compiler::compileConstant(Value const& expr, Prototype& code) {
-	constants().push_back(expr);
+	code.constants().append(state, expr);
 	int64_t reg = scopes.back().allocRegister(Register::CONSTANT);
-	emit(code, ByteCode::kget, constants().size()-1, 0, reg);
+	emit(code, ByteCode::kget, code.constants().length-1, 0, reg);
 	return reg;
 }
 
@@ -127,11 +127,11 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 // a standard call, not an op
 int64_t Compiler::compileFunctionCall(List const& call, Character const& names, Prototype& code) {
 	int64_t liveIn = scopes.back().live();
-	constants().push_back(makeCall(call, names));
+	code.constants().append(state, makeCall(call, names));
 	int64_t function = compile(call[0], code);
 	scopes.back().deadAfter(liveIn);
 	int64_t result = scopes.back().allocRegister(Register::TEMP);
-	emit(code, ByteCode::call, function, -constants().size(), result);
+	emit(code, ByteCode::call, function, -code.constants().length, result);
 	return result;
 }
 
@@ -294,11 +294,11 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		compile(functionCode);
 		scopes.pop_back();
 
-		constants().push_back(functionCode);
+		code.constants().append(state, functionCode);
 		
 		scopes.back().deadAfter(liveIn);	
 		int64_t reg = scopes.back().allocRegister(Register::CONSTANT);	
-		emit(code, ByteCode::function, constants().size()-1, 0, reg);
+		emit(code, ByteCode::function, code.constants().length-1, 0, reg);
 		return reg;
 	} break;
 	case EStrings::returnSym: 
@@ -325,13 +325,13 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			//if(slot < 0) throw CompileError("for loop variable not allocated to slot");
 			emit(code, ByteCode::iforbegin, 0, Symbol(call[1]).i, lim2);
 			loopDepth++;
-			int64_t beginbody = bc().size();
+			int64_t beginbody = code.bc().length;
 			compile(call[3], code);
-			int64_t endbody = bc().size();
+			int64_t endbody = code.bc().length;
 			resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
 			loopDepth--;
 			emit(code, ByteCode::iforend, beginbody-endbody, Symbol(call[1]).i, lim2);
-			bc()[beginbody-1].a = endbody-beginbody+1;
+			code.bc()[beginbody-1].a = endbody-beginbody+1;
 		}
 		else {*/
 			int64_t loop_vector = compile(call[2], code);
@@ -341,17 +341,17 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			
 			emit(code, ByteCode::forbegin, 0, loop_counter, loop_variable);
 			loopDepth++;
-			int64_t beginbody = bc().size();
+			int64_t beginbody = code.bc().length;
 
 			emit(code, ByteCode::assign, Symbol(call[1]).i, 0, loop_variable);
 			emit(code, ByteCode::assign, 0, 0, loop_variable);
 			compile(call[3], code);
 
-			int64_t endbody = bc().size();
+			int64_t endbody = code.bc().length;
 			resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
 			loopDepth--;
 			emit(code, ByteCode::forend, beginbody-endbody, loop_counter , loop_variable);
-			bc()[beginbody-1].a = endbody-beginbody+1;
+			code.bc()[beginbody-1].a = endbody-beginbody+1;
 		//}
 		scopes.back().deadAfter(liveIn);
 		int64_t result = compile(Null::Singleton(), code);
@@ -363,15 +363,15 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		emit(code, ByteCode::jf, 0, head_condition, liveIn);
 		loopDepth++;
 		
-		int64_t beginbody = bc().size();
+		int64_t beginbody = code.bc().length;
 		compile(call[2], code);
-		int64_t tail = bc().size();
+		int64_t tail = code.bc().length;
 		int64_t tail_condition = compile(call[1], code);
-		int64_t endbody = bc().size();
+		int64_t endbody = code.bc().length;
 		
 		emit(code, ByteCode::jt, beginbody-endbody, tail_condition, liveIn);
 		resolveLoopReferences(code, beginbody, endbody, tail, endbody+1);
-		bc()[beginbody-1].a = endbody-beginbody+2;
+		code.bc()[beginbody-1].a = endbody-beginbody+2;
 		
 		loopDepth--;
 		scopes.back().deadAfter(liveIn);
@@ -382,9 +382,9 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	{
 		loopDepth++;
 
-		int64_t beginbody = bc().size();
+		int64_t beginbody = code.bc().length;
 		compile(call[1], code);
-		int64_t endbody = bc().size();
+		int64_t endbody = code.bc().length;
 		resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
 		
 		loopDepth--;
@@ -416,22 +416,22 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			resultF = compile(Null::Singleton(), code);
 		int64_t cond = compile(call[1], code);
 		emit(code, ByteCode::jf, 0, cond, liveIn);
-		int64_t begin1 = bc().size(), begin2 = 0;
+		int64_t begin1 = code.bc().length, begin2 = 0;
 		scopes.back().deadAfter(liveIn);
 		resultT = compile(call[2], code);
 		
 		if(call.length == 4) {
 			emit(code, ByteCode::jmp, 0, 0, 0);
 			scopes.back().deadAfter(liveIn);
-			begin2 = bc().size();
+			begin2 = code.bc().length;
 			resultF = compile(call[3], code);
 		}
 		else
-			begin2 = bc().size();
-		int64_t end = bc().size();
-		bc()[begin1-1].a = begin2-begin1+1;
+			begin2 = code.bc().length;
+		int64_t end = code.bc().length;
+		code.bc()[begin1-1].a = begin2-begin1+1;
 		if(call.length == 4)
-			bc()[begin2-1].a = end-begin2+1;
+			code.bc()[begin2-1].a = end-begin2+1;
 	
 		// TODO: if this can ever happen, should probably just insert a move into the lower numbered register	
 		if(resultT != resultF) throw CompileError(std::string("then and else blocks don't put the result in the same register ") + intToStr(resultT) + " " + intToStr(resultF));
@@ -454,7 +454,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		jmps.push_back(emit(code, ByteCode::jmp, 0, 0, 0));	
 		
 		for(int64_t i = 1; i <= n; i++) {
-			bc()[branch+i].c = bc().size()-branch;
+			code.bc()[branch+i].c = code.bc().length-branch;
 			scopes.back().deadAfter(liveIn);
 			if(!call[i+1].isNil()) {
 				int64_t r = compile(call[i+1], code);
@@ -466,7 +466,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			}
 		}
 		for(int64_t i = 0; i < (int64_t)jmps.size(); i++) {
-			bc()[jmps[i]].a = bc().size()-jmps[i];
+			code.bc()[jmps[i]].a = code.bc().length-jmps[i];
 		}
 		scopes.back().deadAfter(result);
 		return result;
@@ -618,9 +618,9 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		Character p(scopes.back().parameters);
 		List gcall(state, p.length+1);
 		for(int64_t i = 0; i < p.length; i++) gcall[i+1] = Symbol(p[i]);
-		constants().push_back(makeCall(gcall, Character()));
+		code.constants().append(state, makeCall(gcall, Character()));
 	
-		emit(code, ByteCode::UseMethod, generic.i, constants().size()-1, object);
+		emit(code, ByteCode::UseMethod, generic.i, code.constants().length-1, object);
 		scopes.back().deadAfter(object);
 		return object;
 	} break;
@@ -732,15 +732,6 @@ Prototype Compiler::compile(Prototype& code) {
 
 	// insert return statement at end of code
 	emit(code, ByteCode::ret, 0, 0, result);
-	
-	code.constants() = List(state, constants().size());
-	for(uint64_t i = 0; i < constants().size(); i++) {
-		code.constants()[i] = constants()[i];
-	}
-	code.bc() = Code(state, bc().size());
-	for(uint64_t i = 0; i < bc().size(); i++) {
-		code.bc()[i] = bc()[i];
-	}
 	code.registers() = scopes.back().maxRegister+1;
 	
 	oldRegisters.swap(scopes.back().registers);

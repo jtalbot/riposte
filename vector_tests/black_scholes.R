@@ -1,5 +1,5 @@
 #adapted from https://github.com/ispc/ispc/tree/master/examples/options
-N_OPTIONS <- 1024*1024
+N_OPTIONS <- 64
 N_BLACK_SCHOLES_ROUNDS <- 20
 S <- rep(100,1,N_OPTIONS)
 X <- rep(98,1,N_OPTIONS)
@@ -30,4 +30,5 @@ blackScholes <- function() {
 	acc <- acc / (N_BLACK_SCHOLES_ROUNDS * N_OPTIONS)
 }
 
-blackScholes()
+for(i in 1:(16*1024))
+	blackScholes()

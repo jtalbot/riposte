@@ -31,9 +31,6 @@ private:
 		int64_t maxRegister;
 		Character parameters;
 
-		std::vector<Instruction> bc;
-		std::vector<Value> constants;
-
 		Scope() : env(0), topLevel(false), maxRegister(-1) {}
 
 		int64_t live() const { return registers.size()-1; }
@@ -42,9 +39,6 @@ private:
 	}; 
 
 	std::vector<Scope> scopes;
-
-	std::vector<Instruction>& bc() { return scopes.back().bc; }
-	std::vector<Value>& constants() { return scopes.back().constants; }
 
 	int64_t loopDepth;	
 
