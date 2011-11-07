@@ -23,8 +23,10 @@ struct CastOp : public UnaryOp<I, O> {
 
 template<class O>
 void As(State& state, Value const& src, O& out) {
-	if(src.type == O::VectorType)
+	if(src.type == O::VectorType) {
 		out = (O const&)src;
+		return;
+	}
 	switch(src.type) {
 		case Type::Null: O(); return; break;
 		#define CASE(Name,...) case Type::Name: Zip1< CastOp<Name, O> >::eval(state, (Name const&)src, out); return; break;

@@ -50,7 +50,7 @@ class Heap;
 class Semispace;
 
 struct HeapObject {
-        uint64_t forward:1;
+        uint64_t forward;
 	uint64_t bytes;
 
 	virtual void walk(Heap*) = 0;
@@ -173,16 +173,17 @@ private:
 	MarkSweep space;
 	MarkRegion region;
 	std::vector<HeapObject*> stack;
+	static const uint64_t loLimit = 8192;
 public:
 	Heap(State* state) : state(state), space(*this), region(*this) {}
 
 	// should only be used with small allocations
-	HeapObject* alloc(uint64_t bytes) { assert(bytes < 4096); return region.alloc(bytes); }
+	HeapObject* alloc(uint64_t bytes) { assert(bytes < loLimit); return region.alloc(bytes); }
 	
 	// used with things that can potentially be large allocations
-	HeapObject* varalloc(uint64_t bytes) { if(bytes < 4096) return region.alloc(bytes); else return space.alloc(bytes); }
+	HeapObject* varalloc(uint64_t bytes) { if(bytes < loLimit) return region.alloc(bytes); else return space.alloc(bytes); }
 
-	HeapObject* mark(HeapObject* o) { if(o == 0) return 0; if(o->bytes < 4096) return region.mark(o); else return space.mark(o); }
+	HeapObject* mark(HeapObject* o) { if(o == 0) return 0; if(o->bytes < loLimit) return region.mark(o); else return space.mark(o); }
 	void push(HeapObject* o) { stack.push_back(o); }
 	void collect();
 };
