@@ -11,6 +11,7 @@
 	_(jmp, "jmp") \
 	_(branch, "branch") \
 	_(call, "call") \
+	_(docall, "docall") \
 	_(icall, "icall") \
 	_(UseMethod, "UseMethod") \
 	_(ret, "ret") \

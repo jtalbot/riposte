@@ -131,7 +131,7 @@ int64_t Compiler::compileFunctionCall(List const& call, Character const& names, 
 	int64_t function = compile(call[0], code);
 	scopes.back().deadAfter(liveIn);
 	int64_t result = scopes.back().allocRegister(Register::TEMP);
-	emit(code, ByteCode::call, function, -code.constants().length, result);
+	emit(code, ByteCode::call, function, code.constants().length-1, result);
 	return result;
 }
 
@@ -639,7 +639,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t args = compile(call[2], code);
 		scopes.back().deadAfter(liveIn);
 		int64_t result = scopes.back().allocRegister(Register::TEMP);
-		emit(code, ByteCode::call, what, args, result);
+		emit(code, ByteCode::docall, what, args, result);
 		return result;
 	} break;
 	case EStrings::list:

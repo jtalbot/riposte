@@ -1,4 +1,4 @@
-is_real_r <- 1
+is_real_r <- 0
 time_many_sizes <- function(name, times, init_fn, run_fn, baseline_fn) {
 	report <- function(name, width, exec_type, time, baseline_time) {
 		cat(name)

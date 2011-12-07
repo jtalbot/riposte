@@ -32,7 +32,7 @@ extern Instruction const* subset_op(State& state, Instruction const& inst) ALWAY
 
 static void ExpandDots(State& state, List& arguments, Character& names, int64_t dots) {
 	REnvironment environment = state.frame.environment;
-	uint64_t dotslength = environment.dots().size();
+	uint64_t dotslength = environment.dots().length;
 	// Expand dots into the parameter list...
 	if(dots < arguments.length) {
 		List a(state, arguments.length + dotslength - 1);
@@ -92,7 +92,7 @@ static void MatchArgs(State& state, REnvironment& env, REnvironment& fenv, Funct
 			int64_t idx = 1;
 			for(int64_t i = fdots; i < arguments.length; i++) {
 				argAssign(state, fenv, -idx, arguments[i], env, parameters);
-				fenv.dots().push_back(Strings::empty);
+				fenv.dots().append(state, Strings::empty);
 				idx++;
 			}
 			end++;
@@ -156,7 +156,7 @@ static void MatchArgs(State& state, REnvironment& env, REnvironment& fenv, Funct
 			for(int64_t i = 0; i < arguments.length; i++) {
 				if(assignment[i] < 0) {
 					argAssign(state, fenv, -idx, arguments[i], env, parameters);
-					fenv.dots().push_back(anames[i]);
+					fenv.dots().append(state, anames[i]);
 					idx++;
 				}
 			}
@@ -167,9 +167,10 @@ static void MatchArgs(State& state, REnvironment& env, REnvironment& fenv, Funct
 inline static REnvironment CreateEnvironment(State& state, REnvironment l, REnvironment d, Value const& call) {
 	return REnvironment(state, l, d, call);
 }
+
 //track the heat of back edge operations and invoke the recorder on hot traces
 //unused until we begin tracing loops again
-static Instruction const * profile_back_edge(State & state, Instruction const * inst) {
+inline static Instruction const * profile_back_edge(State & state, Instruction const * inst) {
 	return inst;
 }
 
@@ -179,27 +180,34 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
 	Function const& func = (Function const&)f;
 	
-	// TODO: using inst.b < 0 to indicate a normal call means that do.call can never use a ..# variable. Not common, but would surely be unexpected for users. Probably best to just have a separate op for do.call?
+	CompiledCall const& ccall = (CompiledCall const&)state.frame.prototype.constants()[inst.b];
+	Handle<List> arguments(state, ccall.arguments());
+	Handle<Character> names(state, ccall.names());
+	if(ccall.dots() < arguments->length)
+		ExpandDots(state, arguments, names, ccall.dots());
+	Handle<Value> call(state, ccall.call());
+	Handle<REnvironment> fenv(state, REnvironment(state, func.environment(), state.frame.environment, call));
+	
+	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
+	return buildStackFrame(state, fenv, func.prototype(), &REG(state, inst.c), &inst+1);
+}
+
+Instruction const* docall_op(State& state, Instruction const& inst) {
+	Value& f = REG(state, inst.a);
+	if(!f.isFunction())
+		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
+	Function const& func = (Function const&)f;
 	
 	List arguments;
 	Character names;
 	Value call = Null::Singleton();
-	if(inst.b < 0) {
-		CompiledCall const& ccall = (CompiledCall const&)state.frame.prototype.constants()[-(inst.b+1)];
-		arguments = ccall.arguments();
-		names = ccall.names();
-		if(ccall.dots() < arguments.length)
-			ExpandDots(state, arguments, names, ccall.dots());
-		call = ccall.call();
-	} else {
-		Value const& reg = REG(state, inst.b);
-		if(reg.isObject()) {
-			arguments = List(((Object const&)reg).base());
-			names = Character(((Object const&)reg).getNames());
-		}
-		else {
-			arguments = List(reg);
-		}
+	Value const& reg = REG(state, inst.b);
+	if(reg.isObject()) {
+		arguments = List(((Object const&)reg).base());
+		names = Character(((Object const&)reg).getNames());
+	}
+	else {
+		arguments = List(reg);
 	}
 	Handle<REnvironment> fenv(state, CreateEnvironment(state, func.environment(), state.frame.environment, call));
 	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
@@ -285,8 +293,7 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 
 	// check if we can get the value through inline caching...
 
-	uint64_t icRevision = (&inst+2)->b;
-	if(__builtin_expect(state.frame.environment.equalRevision(icRevision), true)) {
+	if(__builtin_expect(state.frame.environment.equalRevision((&inst+2)->b), true)) {
 		REG(state, inst.c) = state.frame.environment.get((&inst+2)->a);
 		return &inst+3;
 	}
@@ -476,10 +483,10 @@ Instruction const* colon_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* list_op(State& state, Instruction const& inst) {
-	std::vector<String> const& dots = state.frame.environment.dots();
+	Character const& dots = state.frame.environment.dots();
 	// First time through, make a result vector...
 	if(REG(state, inst.a).i == 0) {
-		REG(state, inst.c) = List(state, dots.size());
+		REG(state, inst.c) = List(state, dots.length);
 	}
 	// Otherwise populate result vector with next element
 	else {
@@ -488,16 +495,13 @@ Instruction const* list_op(State& state, Instruction const& inst) {
 	}
 
 	// If we're all done, check to see if we need to add names and then exit
-	if(REG(state, inst.a).i == (int64_t)dots.size()) {
+	if(REG(state, inst.a).i == (int64_t)dots.length) {
 		bool nonEmptyName = false;
-		for(int i = 0; i < (int64_t)dots.size(); i++) 
+		for(int i = 0; i < (int64_t)dots.length; i++) 
 			if(dots[i] != Strings::empty) nonEmptyName = true;
 		if(nonEmptyName) {
 			// TODO: should really just use the names in the dots directly
-			Character names(state, dots.size());
-			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
-				names[i] = dots[i];
-			Object::Init(state, REG(state, inst.c), REG(state, inst.c), names);
+			Object::Init(state, REG(state, inst.c), REG(state, inst.c), dots);
 		}
 		return &inst+1;
 	}

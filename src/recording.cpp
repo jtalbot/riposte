@@ -102,6 +102,7 @@ CHECKED_INTERPRET(call, A)
 #undef CHECKED_INTERPRET
 
 OP_NOT_IMPLEMENTED(icall)
+OP_NOT_IMPLEMENTED(docall)
 
 bool get_input(State & state, Value & v, IRef * ref, bool * can_fallback, bool * should_record) {
 

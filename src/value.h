@@ -127,16 +127,10 @@ struct Symbol : public Value {
 		return s;
 	}
 
-	operator Value() const {
-		return *(Value*)this;
-	}
-
 	bool operator==(Symbol const& other) const { return s == other.s; }
 	bool operator!=(Symbol const& other) const { return s != other.s; }
 	bool operator==(String other) const { return s == other; }
 	bool operator!=(String other) const { return s != other; }
-
-	Symbol Clone() const { return *this; }
 };
 
 
@@ -215,16 +209,30 @@ public:
 	// these functions are only really safe if you know you have the only pointer to this vector
 
 	void append(State& state, ElementType e) {
-		if(length == 0 && canPack) {
-			length = 1;
-			scalar<ElementType>() = e;
+		if(canPack) {
+			if(length == 0) {
+				length = 1;
+				scalar<ElementType>() = e;
+			}
+			else {
+				if(length == 1) {
+					Vector<VType, ElementType, Recursive> n(state, 2LL);
+					n.v()[0] = s();
+					p = n.p;
+				} else if(length >= ((Inner*)p)->capacity) {
+					Vector<VType, ElementType, Recursive> n(state, (int64_t)length*2);
+					memcpy(n.v(), v(), length*sizeof(ElementType));
+					p = n.p;
+				}
+				((Inner*)p)->data[length++] = e;
+			}
 		}
 		else {
 			if(length == 0) {
 				Vector<VType, ElementType, Recursive> n(state, 1LL);
 				p = n.p;
 			}
-			if(length >= ((Inner*)p)->capacity) {
+			else if(length >= ((Inner*)p)->capacity) {
 				Vector<VType, ElementType, Recursive> n(state, (int64_t)length*2);
 				memcpy(n.v(), v(), length*sizeof(ElementType));
 				p = n.p;
@@ -633,7 +641,7 @@ struct Environment : public HeapObject {
 
 	Value lexical, dynamic;
 	Value call;
-	std::vector<String> dots;
+	Character dots;
 	
 	uint64_t size, load;
 	struct Pair { String n; Value v; };
@@ -643,9 +651,10 @@ struct Environment : public HeapObject {
 			revision(++globalRevision), lexical(lexical), dynamic(dynamic), call(call), size(size) {}
 
 	void walk(Heap* heap) {
-                lexical.p = (void*)heap->mark((HeapObject*)lexical.p);
-                dynamic.p = (void*)heap->mark((HeapObject*)dynamic.p);
-
+		walkValue(heap, lexical);
+		walkValue(heap, dynamic);
+		walkValue(heap, call);
+		walkValue(heap, dots);
                 for(uint64_t i = 0; i < size; i++) {
                         if(d[i].n != Strings::NA) {
 				walkValue(heap, d[i].v);
@@ -733,7 +742,7 @@ public:
 		env.clear();
 
 		n->load = e->load;
-		n->dots.swap(e->dots);
+		n->dots = e->dots;
 
 		// copy over previous populated values...
 		for(uint64_t i = 0; i < e->size; i++) {
@@ -789,8 +798,8 @@ public:
 	REnvironment LexicalScope() const { return (REnvironment&)((*(Ref<Environment> const*)p)->lexical); }
 	REnvironment DynamicScope() const { return (REnvironment&)((*(Ref<Environment> const*)p)->dynamic); }
 	void SetLexicalScope(REnvironment env) { (*(Ref<Environment>*)p)->lexical = env; }
-	std::vector<String>& dots() { return (*(Ref<Environment>*)p)->dots; }
-	std::vector<String> const& dots() const { return (*(Ref<Environment> const*)p)->dots; }
+	Character& dots() { return (*(Ref<Environment>*)p)->dots; }
+	Character const& dots() const { return (*(Ref<Environment> const*)p)->dots; }
 	
 	uint64_t getRevision() const { return (*(Ref<Environment> const*)p)->revision; }
 	bool equalRevision(uint64_t i) const { return i == (*(Ref<Environment> const*)p)->revision; }
@@ -1171,6 +1180,7 @@ public:
 	~Handle() { state.unroot(); }
 	operator T&() { return t; }
 	operator T const&() const { return t; }
+	T* operator->() { return &t; }
 };
 
 inline Object::Object(State& state, Value base, uint64_t length, uint64_t capacity) {
