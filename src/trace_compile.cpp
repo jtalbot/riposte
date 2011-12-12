@@ -420,10 +420,10 @@ struct TraceJIT {
 					asm_.paddq(reg(ref),ConstantTable(C_SEQ_VEC));
 				} break;
 				//placeholder for now
-				case IROpCode::sum:  EmitFoldFunction(ref,(void*)sumi,Constant(0LL)); break;
-				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumi,Constant(0LL)); break;
-				case IROpCode::prod:  EmitFoldFunction(ref,(void*)prodi,Constant(1LL)); break;
-				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodi,Constant(1LL)); break;
+				case IROpCode::sum:  EmitFoldFunction(ref,(void*)sumi,Constant((int64_t)0)); break;
+				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumi,Constant((int64_t)0)); break;
+				case IROpCode::prod:  EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)1)); break;
+				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodi,Constant((int64_t)1)); break;
 				default:
 					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
 						_error("unimplemented op");
