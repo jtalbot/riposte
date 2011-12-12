@@ -733,10 +733,10 @@ void Trace::JIT(State & state) {
 			_error("mprotect failed.");
 		}
 		//also fill in the constant table
-		constant_table[C_ABS_MASK] = Constant(0x7FFFFFFFFFFFFFFFULL);
-		constant_table[C_NEG_MASK] = Constant(0x8000000000000000ULL);
-		constant_table[C_NOT_MASK] = Constant(0xFFFFFFFFFFFFFFFFULL);
-		constant_table[C_SEQ_VEC] = Constant(1LL,2LL);
+		constant_table[C_ABS_MASK] = Constant((uint64_t)0x7FFFFFFFFFFFFFFFULL);
+		constant_table[C_NEG_MASK] = Constant((uint64_t)0x8000000000000000ULL);
+		constant_table[C_NOT_MASK] = Constant((uint64_t)0xFFFFFFFFFFFFFFFFULL);
+		constant_table[C_SEQ_VEC] = Constant((int64_t)1LL,(int64_t)2LL);
 	}
 
 	TraceJIT trace_code(this);
