@@ -667,6 +667,10 @@ class Assembler {
   void movzxwq(Register dst, const Operand& src);
   void movzxwl(Register dst, const Operand& src);
 
+  void movlpd(XMMRegister dst, const Operand& src);
+  void movhpd(XMMRegister dst, const Operand& src);
+  void movhlps(XMMRegister dst, XMMRegister src);
+
   // Repeated moves.
 
   void repmovsb();

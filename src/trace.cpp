@@ -27,6 +27,7 @@ std::string Trace::toString(State & state) {
 		ARITH_SCAN_BYTECODES(UNARY)
 		UNARY(cast)
 		BINARY(seq)
+		case IROpCode::gather: out << "n" << node.unary.a << "\t" << "$" << (void*)node.unary.data; break;
 		case IROpCode::loadc: out << ( (node.type == Type::Integer) ? node.loadc.i : node.loadc.d); break;
 		case IROpCode::loadv: out << "$" << node.loadv.p; break;
 		case IROpCode::storec: /*fallthrough*/
@@ -100,7 +101,7 @@ void Trace::InitializeOutputs(State & state) {
 			assert(ref < n_nodes);
 			if(values[ref] == NULL) { //if this is the first time we see this node as an output we create a value for it
 				Value & v = output_values[n_output_values++];
-				Value::Init(v,typ,loc.length); //initialize the type of the output value, the actual value (i.e. v.p) will be set after it is calculated in the trace
+				Value::Init(v,typ,loc.length>=0?loc.length:0); //initialize the type of the output value, the actual value (i.e. v.p) will be set after it is calculated in the trace
 				if(loc.length == length) {
 
 					if(typ == Type::Logical) {
@@ -118,8 +119,10 @@ void Trace::InitializeOutputs(State & state) {
 					}
 
 					EmitStoreV(typ,&v,ref);
-				} else {
+				} else if(loc.length >= 0) {
 					EmitStoreC(typ,&v,ref);
+				} else {
+					EmitStoreV(typ,&v,ref);
 				}
 				n_nodes = n_pending_nodes;
 				values[ref] = &v;

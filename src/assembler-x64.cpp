@@ -2168,6 +2168,32 @@ void Assembler::movsd(XMMRegister dst, const Operand& src) {
 	emit_sse_operand(dst, src);
 }
 
+void Assembler::movlpd(XMMRegister dst, const Operand& src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66); // double
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x12); // load
+	emit_sse_operand(dst, src);
+}
+
+void Assembler::movhpd(XMMRegister dst, const Operand& src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66); // double
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x16); // load
+	emit_sse_operand(dst, src);
+}
+
+void Assembler::movhlps(XMMRegister dst, XMMRegister src) {
+	EnsureSpace ensure_space(this);
+	emit_optional_rex_32(src, dst);
+	emit(0x0F);
+	emit(0x12);
+	emit_sse_operand(src, dst);
+}
+
 void Assembler::movaps(XMMRegister dst, XMMRegister src) {
 	EnsureSpace ensure_space(this);
 	if (src.low_bits() == 4) {

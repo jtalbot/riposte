@@ -14,6 +14,8 @@
 		_(storev,"storev", ___) \
 		_(storec,"storec", ___) \
 		_(seq, "seq", ___) \
+		_(gather, "gather", ___) \
+		_(filter, "filter", ___) \
 		ARITH_FOLD_BYTECODES(_) \
 		ARITH_SCAN_BYTECODES(_) \
 
@@ -44,12 +46,11 @@ struct IRNode {
 		struct {
 			int64_t a,b;
 		} binary;
-
 		struct {
 			int64_t a,b;
 		} special;
 		struct {
-			int64_t a;
+			int64_t a,data;
 		} unary;
 		struct {
 			int64_t a;
@@ -72,6 +73,7 @@ struct IRNode {
 			Value * dst;
 			int64_t a;
 		} store;
+		
 	};
 };
 

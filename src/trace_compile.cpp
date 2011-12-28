@@ -155,6 +155,14 @@ static double casti2d(double aa) { //these are actually integers passed in xmm0 
 	da = aa;
 	return (double) ia; //also return the value in xmm0
 }
+static double castd2i(double aa) { //these are actually doubles passed in xmm0 and xmm1
+	union {
+		int64_t ia;
+		double da;
+	};
+	ia = (int64_t) aa;
+	return da; //also return the value in xmm0
+}
 static double iabs(double aa) { //these are actually integers passed in xmm0 and xmm1
 	union {
 		int64_t ia;
@@ -257,7 +265,7 @@ struct TraceJIT {
 		vector_index = r13;
 		load_addr = r14;
 		vector_length = r15;
-
+		
 		asm_.push(constant_base);
 		asm_.push(vector_index);
 		asm_.push(load_addr);
@@ -390,6 +398,16 @@ struct TraceJIT {
 					else
 						_error("NYI - castl2d");
 				} break;
+				case IROpCode::gather: {
+					Constant c(node.unary.data);
+					Operand base = PushConstant(c);
+					asm_.movq(r8, base);
+					asm_.movq(r9, reg(node.unary.a));
+					asm_.movhlps(reg(ref), reg(node.unary.a));
+					asm_.movq(r10, reg(ref));
+					asm_.movlpd(reg(ref),Operand(r8,r9,times_8,0));
+					asm_.movhpd(reg(ref),Operand(r8,r10,times_8,0));
+				} break;
 				//placeholder for now
 				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumd,Constant(0.0)); break;
 				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodd,Constant(1.0)); break;
@@ -419,12 +437,27 @@ struct TraceJIT {
 					asm_.unpcklpd(reg(ref),reg(ref));
 					asm_.paddq(reg(ref),ConstantTable(C_SEQ_VEC));
 				} break;
+				case IROpCode::gather: {
+					Constant c(node.unary.data);
+					Operand base = PushConstant(c);
+					asm_.movq(r8, base);
+					asm_.movq(r9, reg(node.unary.a));
+					asm_.movhlps(reg(ref), reg(node.unary.a));
+					asm_.movq(r10, reg(ref));
+					asm_.movlpd(reg(ref),Operand(r8,r9,times_8,0));
+					asm_.movhpd(reg(ref),Operand(r8,r10,times_8,0));
+				} break;
 				//placeholder for now
 				case IROpCode::sum:  EmitFoldFunction(ref,(void*)sumi,Constant((int64_t)0LL)); break;
 				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumi,Constant((int64_t)0LL)); break;
 				case IROpCode::prod:  EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)1LL)); break;
 				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodi,Constant((int64_t)1LL)); break;
-				case IROpCode::cast: _error("NYI - cast to int"); break;
+				case IROpCode::cast: {
+					if(trace->nodes[node.unary.a].type == Type::Double)
+						EmitUnaryFunction(ref,(void*)castd2i); 
+					else
+						_error("NYI - castl2i");
+				} break;
 				default:
 					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
 						_error("unimplemented op");

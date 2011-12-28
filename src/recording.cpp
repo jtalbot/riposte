@@ -96,7 +96,7 @@ CHECKED_INTERPRET(iassign, A B C)
 CHECKED_INTERPRET(jt, B)
 CHECKED_INTERPRET(jf, B)
 CHECKED_INTERPRET(branch, A)
-CHECKED_INTERPRET(subset, A B C)
+//CHECKED_INTERPRET(subset, A B C)
 CHECKED_INTERPRET(subset2, A B C)
 CHECKED_INTERPRET(colon, A B C)
 CHECKED_INTERPRET(forbegin, B_1)
@@ -111,7 +111,6 @@ CHECKED_INTERPRET(call, A)
 #undef CHECKED_INTERPRET
 
 OP_NOT_IMPLEMENTED(icall)
-
 
 struct LoadCache {
 	IRef get(Trace & trace, const Value& v) {
@@ -203,6 +202,58 @@ RecordingStatus::Enum fallback(State & state, Value & a, Value & b) {
 		state.tracing.Flush(state,traceForFuture(state,b));
 	}
 	return RecordingStatus::FALLBACK;
+}
+
+RecordingStatus::Enum subset_record(State & state, Instruction const & inst, Instruction const** pc) {
+	CHECK_REG(inst.a);
+	Value & b = REG(state,inst.b);
+	if(b.isInteger() || (b.isFuture() && b.future.typ == Type::Integer) ||
+	   b.isDouble() || (b.isFuture() && b.future.typ == Type::Double)) {
+		Value & a = REG(state,inst.a);
+
+		//get current trace
+		uint64_t trace_shape = b.length;
+		Trace & trace = state.tracing.GetOrAllocateTrace(state,trace_shape);
+
+		IRef bref = getRef(trace,b);
+		Type::Enum rtyp,atyp,btyp;
+		rtyp = atyp = a.type;
+		btyp = Type::Integer;
+		trace.EmitRegOutput(state.base,inst.c);
+		state.tracing.SetMaxLiveRegister(state.base,inst.c);
+		Future::Init(REG(state,inst.c),
+				 rtyp,
+				 trace.length,
+				 state.tracing.TraceID(trace),
+				 trace.EmitUnary(IROpCode::gather,rtyp,coerce(trace,btyp,bref),((int64_t)a.p)-8));
+		state.tracing.Commit(state,trace);
+		(*pc)++; 
+		return RecordingStatus::NO_ERROR;
+	}
+	else if(b.isLogical() || (b.isFuture() && b.future.type == Type::Logical)) {
+		Value& a = REG(state, inst.a);
+		static uniqueShapes = -1;
+		uint64_t trace_shape = b.length;
+		Trace & trace = state.tracing.GetOrAllocateTrace(state,trace_shape);
+
+		IRef bref = getRef(trace,b);
+		Type::Enum rtyp,atyp,btyp;
+		rtyp = atyp = a.type;
+		btyp = Type::Logical;
+		trace.EmitRegOutput(state.base,inst.c);
+		state.tracing.SetMaxLiveRegister(state.base,inst.c);
+		Future::Init(REG(state,inst.c),
+				 rtyp,
+				 uniqueShapes--,
+				 state.tracing.TraceID(trace),
+				 trace.EmitUnary(IROpCode::filter,rtyp,coerce(trace,btyp,bref),((int64_t)a.p)));
+	} 
+	else {
+		CHECK_REG(inst.b);
+		CHECK_REG(inst.c);
+		*pc = subset_op(state,inst);
+		return RecordingStatus::NO_ERROR;
+	}
 }
 
 RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, State & state, Instruction const & inst) {

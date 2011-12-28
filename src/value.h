@@ -794,12 +794,13 @@ struct Trace {
 		n.special.b = b;
 		return n_pending_nodes++;
 	}
-	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, int64_t a) {
+	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t data=0) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::UNARY;
 		n.op = op;
 		n.type = type;
 		n.unary.a = a;
+		n.unary.data = data;
 		return n_pending_nodes++;
 	}
 	IRef EmitFold(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t base) {
