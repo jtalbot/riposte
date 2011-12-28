@@ -959,6 +959,8 @@ struct State {
 	
 	TraceState tracing; //all state related to tracing compiler
 
+	int64_t assignment[64], set[64]; // temporary space for matching arguments
+	
 	State(Environment* global, Environment* base) {
 		this->global = global;
 		path.push_back(base);

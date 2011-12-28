@@ -101,7 +101,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 	// call arguments are named, do matching by name
 	else {
 		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
-		static char assignment[64], set[64];
+		int64_t *assignment = state.assignment, *set = state.set;
 		for(int64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
 		for(int64_t i = 0; i < parameters.length; i++) set[i] = -(i+1);
 
