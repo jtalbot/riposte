@@ -30,7 +30,7 @@ void remove(State& state, Value const* args, Value& result) {
 	Character const& a = Cast<Character>(args[0]);
 	REnvironment e(args[1]);
 	for(int64_t i = 0; i < a.length; i++) {
-		e.ptr()->assign(a[i], Value::Nil());
+		e.ptr()->remove(a[i]);
 	}
 	result = Null::Singleton();
 }

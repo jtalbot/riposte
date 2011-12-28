@@ -89,7 +89,6 @@ int64_t Compiler::compileSymbol(Symbol const& symbol, Prototype* code) {
 	int64_t reg = scopes.back().allocRegister(Register::VARIABLE);
 	emit(code, ByteCode::get, symbol.i, 0, reg);
 	emit(code, ByteCode::assign, symbol.i, 0, reg);
-	emit(code, ByteCode::get, 0, 0, 0);
 	return reg;
 }
 
@@ -217,7 +216,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t source = compile(value, code);
 
 		emit(code, func.i == EStrings::assign2 ? ByteCode::assign2 : ByteCode::assign, Symbol(dest).i, 0, source);
-		emit(code, ByteCode::assign, 0, 0, 0);
 	
 		scopes.back().deadAfter(source);
 		return source;
@@ -347,7 +345,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			int64_t beginbody = code->bc.size();
 
 			emit(code, ByteCode::assign, Symbol(call[1]).i, 0, loop_variable);
-			emit(code, ByteCode::assign, 0, 0, loop_variable);
 			compile(call[3], code);
 
 			int64_t endbody = code->bc.size();

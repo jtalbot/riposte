@@ -286,19 +286,10 @@ Instruction const* UseMethod_op(State& state, Instruction const& inst) {
 }
 
 Instruction const* get_op(State& state, Instruction const& inst) {
-	// gets are always generated as a sequence of 3 instructions...
+	// gets are always generated as a sequence of 2 instructions...
 	//	1) the get with source symbol in a and dest register in c.
 	//	2) an assign with dest symbol in a and source register in c.
 	//		(for use by the promise evaluation. If no promise, step over this instruction.)
-	//	3) an invalid instruction containing inline caching info.	
-
-	// check if we can get the value through inline caching...
-	uint64_t icRevision = (&inst+2)->b;
-
-	if(__builtin_expect(state.frame.environment->equalRevision(icRevision), true)) {
-		REG(state, inst.c) = state.frame.environment->get((&inst+2)->a);
-		return &inst+3;
-	}
 
 	// otherwise, need to do a real look up starting from env
 	Environment* env = state.frame.environment;
@@ -306,21 +297,19 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 	
 	Value& dest = REG(state, inst.c);
 	dest = env->get(s);
+	if(dest.isConcrete()) return &inst+2;
+
 	while(dest.isNil() && env->LexicalScope() != 0) {
 		env = env->LexicalScope();
 		dest = env->get(s);
 	}
 
 	if(dest.isConcrete()) {
-		Environment::Pointer p = env->makePointer(s);
-		((Instruction*)(&inst+2))->a = p.index;
-		((Instruction*)(&inst+2))->b = p.revision;
-		return &inst+3;
+		return &inst+2;
 	} else if(dest.isPromise()) {
 		Environment* env = Function(dest).environment();
 		Prototype* prototype = Function(dest).prototype();
 		assert(env != 0);
-		// the inline cache info will be populated by the assignment instruction
 		return buildStackFrame(state, env, false, prototype, &dest, &inst+1);
 	}
 	else
@@ -337,37 +326,18 @@ Instruction const* iget_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* assign_op(State& state, Instruction const& inst) {
-	// check if we can assign through inline caching
-	if(state.frame.environment->equalRevision((&inst+1)->b))
-		state.frame.environment->assign((&inst+1)->a, REG(state, inst.c));
-	else {
-		state.frame.environment->assign(String::Init(inst.a), REG(state, inst.c));
-		
-		Environment::Pointer p = state.frame.environment->makePointer(String::Init(inst.a));
-		((Instruction*)(&inst+1))->a = p.index;
-		((Instruction*)(&inst+1))->b = p.revision;
-		((Instruction*)(&inst+1))->c = 0;
-	}
-	return &inst+2;
+	state.frame.environment->assign(String::Init(inst.a), REG(state, inst.c));
+	return &inst+1;
 }
 Instruction const* assign2_op(State& state, Instruction const& inst) {
-	// check if we can assign the value through inline caching...
 	// assign2 is always used to assign up at least one scope level...
 	// so start off looking up one level...
 
 	Environment* env = state.frame.environment->LexicalScope();
 	assert(env != 0);
 
-	uint64_t icRevision = (&inst+1)->b;
-	if(__builtin_expect(env->equalRevision(icRevision), true)) {
-		env->assign((&inst+1)->a, REG(state, inst.c));
-		return &inst+2;
-	}
-
-	// otherwise, need to do a real look up starting from env
 	String s = String::Init(inst.a);
 	Value dest = env->get(s);
-	icRevision = std::max(icRevision, env->getRevision());
 	while(dest.isNil() && env->LexicalScope() != 0) {
 		env = env->LexicalScope();
 		dest = env->get(s);
@@ -375,16 +345,11 @@ Instruction const* assign2_op(State& state, Instruction const& inst) {
 
 	if(!dest.isNil()) {
 		env->assign(s, REG(state, inst.c));
-		Environment::Pointer p = env->makePointer(String::Init(inst.a));
-		((Instruction*)(&inst+1))->a = p.index;
-		((Instruction*)(&inst+1))->b = p.revision;
 	}
 	else {
 		state.global->assign(s, REG(state, inst.c));
-		// Global may not be in the static scope of function so we can't populate IC here.
-		// However, if global is in the static scope, the second iteration of assign2 will find it on the path and set the IC in the immediately previous if block.
 	}
-	return &inst+2;
+	return &inst+1;
 }
 
 

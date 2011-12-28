@@ -573,9 +573,6 @@ struct Prototype : public gc {
 
 class Dictionary : public gc {
 protected:
-	static uint64_t globalRevision;
-	uint64_t revision;
-
 	static const uint64_t inlineSize = 16;
 	struct Pair { String n; Value v; };
 	Pair* d;
@@ -583,48 +580,51 @@ protected:
 	uint64_t size, load;
 
 public:
-	Dictionary() : revision(++globalRevision), d(inlineDict), size(inlineSize) {
+	Dictionary() : d(inlineDict), size(inlineSize) {
 		clear();
 	}
 	
 	// for now, do linear probing
-	// this returns the location of the String s (or where it was stored before being deleted).
+	// this returns the location of the String s.
 	// or, if s doesn't exist, the location at which s should be inserted.
 	uint64_t find(String s) const {
 		uint64_t i = (uint64_t)s.i & (size-1);	// hash this?
-		while(d[i].n != s && d[i].n != Strings::NA) i = (i+1) & (size-1);
+		while(d[i].n != s & d[i].n != Strings::NA) i = (i+1) & (size-1);
 		assert(i >= 0 && i < size);
 		return i; 
 	}
-	
-	uint64_t assign(String name, Value const& value) {
-		uint64_t i = find(name);
-		if(value.isNil()) {
-			// deleting a value changes the revision number! 
-			if(d[i].n != Strings::NA) { 
-				load--; 
-				d[i] = (Pair) { Strings::NA, Value::Nil() }; 
-				revision = ++globalRevision; 
-			}
-		} else {
-			if(d[i].n == Strings::NA) { 
-				load++;
-				if((load * 2) > size) {
-					rehash(size * 2);
-					i = find(name);
-				}
-				d[i] = (Pair) { name, value };
-			} else {
-				d[i].v = value;
-			}
+
+	uint64_t insert(uint64_t i, String name, Value const& value) {
+		load++;
+		if((load * 2) > size) {
+			rehash(size * 2);
+			i = find(name);
 		}
+		d[i] = (Pair) { name, value };
 		return i;
 	}
+	
+	uint64_t assign(String name, Value const& value) __attribute__((always_inline)) {
+		uint64_t i = (uint64_t)name.i & (size-1);	// hash this?
+		if(d[i].n == name) { d[i].v = value; return i; }
+		i = (i+1) & (size-1);
+		if(d[i].n == name) { d[i].v = value; return i; }
+		i = find(name);
+		if(d[i].n == name) { d[i].v = value; return i; }
+		else { return insert(i, name, value); }
+	}
 
-	Value const& get(String name) const {
+	Value const& get(String name) const __attribute__((always_inline)) {
+		uint64_t i = (uint64_t)name.i & (size-1);	// hash this?
+		if(d[i].n == name) return d[i].v;
+		i = (i+1) & (size-1);
+		if(d[i].n == name) return d[i].v;
+		else return d[find(name)].v;
+	}
+
+	void remove(String name) {
 		uint64_t i = find(name);
-		if(d[i].n != Strings::NA) return d[i].v;
-		else return Value::Nil();
+		d[i] = (Pair) { Strings::NA, Value::Nil() };
 	}
 
 	void rehash(uint64_t s) {
@@ -651,45 +651,38 @@ public:
 			// wiping v too makes sure we're not holding unnecessary pointers
 			d[i] = (Pair) { Strings::NA, Value::Nil() };
 		}
-		revision = ++globalRevision;
 	}
 
 	struct Pointer {
 		Dictionary* env;
 		String name;
-		uint64_t revision;
-		uint64_t index;
 	};
 
-	uint64_t getRevision() const { return revision; }
-	bool equalRevision(uint64_t i) const { return i == revision; }
-	
 	Value const& get(uint64_t index) const {
 		assert(index >= 0 && index < size);
 		return d[index].v;
 	}
 
-	void assign(uint64_t index, Value const& value) {
+	/*void assign(uint64_t index, Value const& value) {
 		assert(index >= 0 && index < size);
 		d[index].v = value;
-	}
+	}*/
 	
 	// making a pointer only works if the entry already exists 
 	Pointer makePointer(String name) {
 		uint64_t i = find(name);
 		if(d[i].n == Strings::NA) _error("Making pointer to non-existant variable"); 
-		return (Pointer) { this, name, revision, i };
+		return (Pointer) { this, name };
 	}
 
-	Value const& get(Pointer const& p) {
-		if(p.revision == revision) return get(p.index);
-		else return get(p.name);
+	static Value const& get(Pointer const& p) {
+		return p.env->get(p.name);
 	}
 
-	void assign(Pointer const& p, Value const& value) {
-		if(p.revision == revision) assign(p.index, value);
-		else assign(p.name, value);
+	static void assign(Pointer const& p, Value const& value) {
+		p.env->assign(p.name, value);
 	}
+
 };
 
 class Environment : public Dictionary {
