@@ -2,6 +2,9 @@
 #ifndef _RIPOSTE_SYMBOLS_H
 #define _RIPOSTE_SYMBOLS_H
 
+#include <tbb/tbb.h>
+#include "enum.h"
+
 // predefined strings
 
 #define STRINGS(_) 			\
@@ -111,8 +114,8 @@
 	_(dollarAssign, "$<-") \
 	_(UseMethod, 	"UseMethod") \
 	_(seq_len, 	"seq_len") \
-	_(TRUE, 	"TRUE") \
-	_(FALSE, 	"FALSE") \
+	_(True, 	"TRUE") \
+	_(False, 	"FALSE") \
 	_(type, 	"typeof") \
 	_(length, 	"length") \
 	_(value, 	"value") \
@@ -142,10 +145,17 @@ namespace Strings {
        #undef CONST_DECLARE
 }
 
+struct StringHash {
+	size_t operator()( const String& x ) const {
+		return x.i;
+	} 
+};
 
 class StringTable {
-	std::map<std::string, String> stringTable;
-	std::map<String, std::string> reverseStringTable;
+	//std::map<std::string, String> stringTable;
+	//std::map<String, std::string> reverseStringTable;
+	tbb::concurrent_unordered_map<std::string, String> stringTable;
+	tbb::concurrent_unordered_map<String, std::string, StringHash> reverseStringTable;
 	int64_t next;
 public:
 	StringTable() : next(0) {
@@ -160,14 +170,14 @@ public:
 	}
 
 	String in(std::string const& s) {
-		std::map<std::string, String>::const_iterator i = stringTable.find(s);
+		//std::map<std::string, String>::const_iterator i = stringTable.find(s);
+		tbb::concurrent_unordered_map<std::string, String, StringHash>::const_iterator i = stringTable.find(s);
 		if(i == stringTable.end()) {
 			int64_t index = next++;
 			stringTable[s] = String::Init(index);
 			reverseStringTable[String::Init(index)] = s;
 			return String::Init(index);
 		} else return i->second;
-	
 	}
 
 	std::string out(String i) const {

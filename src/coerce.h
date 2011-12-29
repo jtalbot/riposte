@@ -86,7 +86,7 @@ template<>
 SPECIALIZED_STATIC Double::Element Cast<Logical, Double>(State& state, Logical::Element const& i) { return Logical::isNA(i) ? Double::NAelement : i ? 1.0 : 0.0; }
 
 template<>
-SPECIALIZED_STATIC Character::Element Cast<Logical, Character>(State& state, Logical::Element const& i) { return Logical::isNA(i) ? Character::NAelement : i ? Strings::TRUE : Strings::FALSE; }
+SPECIALIZED_STATIC Character::Element Cast<Logical, Character>(State& state, Logical::Element const& i) { return Logical::isNA(i) ? Character::NAelement : i ? Strings::True : Strings::False; }
 
 template<>
 SPECIALIZED_STATIC List::Element Cast<Logical, List>(State& state, Logical::Element const& i) { return Logical::c(i); }
@@ -128,7 +128,7 @@ template<>
 SPECIALIZED_STATIC Raw::Element Cast<Character, Raw>(State& state, Character::Element const& i) { return 0; }
 
 template<>
-SPECIALIZED_STATIC Logical::Element Cast<Character, Logical>(State& state, Character::Element const& i) { if(i == Strings::TRUE) return 1; else if(i == Strings::FALSE) return 0; else return Logical::NAelement; }
+SPECIALIZED_STATIC Logical::Element Cast<Character, Logical>(State& state, Character::Element const& i) { if(i == Strings::True) return 1; else if(i == Strings::False) return 0; else return Logical::NAelement; }
 
 template<>
 SPECIALIZED_STATIC Integer::Element Cast<Character, Integer>(State& state, Character::Element const& i) { if(Character::isNA(i)) return Integer::NAelement; else {try{return strToInt(state.externStr(i));} catch(...) {return Integer::NAelement;}} }

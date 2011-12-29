@@ -2,8 +2,8 @@
 UNAME := $(shell uname -s)
  
 CXX := g++
-CXXFLAGS := -Wall -DRIPOSTE_DISABLE_TRACING -msse4.1
-LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
+CXXFLAGS := -Wall -DRIPOSTE_DISABLE_TRACING -msse4.1 -I/opt/local/include
+LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g -ltbb
 
 ifeq ($(UNAME),Linux)
 #for clock_gettime
