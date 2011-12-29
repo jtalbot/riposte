@@ -668,10 +668,7 @@ public:
 		d[index].v = value;
 	}*/
 	
-	// making a pointer only works if the entry already exists 
 	Pointer makePointer(String name) {
-		uint64_t i = find(name);
-		if(d[i].n == Strings::NA) _error("Making pointer to non-existant variable"); 
 		return (Pointer) { this, name };
 	}
 
