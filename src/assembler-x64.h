@@ -667,6 +667,10 @@ class Assembler {
   void movzxwq(Register dst, const Operand& src);
   void movzxwl(Register dst, const Operand& src);
 
+  void movlpd(XMMRegister dst, const Operand& src);
+  void movhpd(XMMRegister dst, const Operand& src);
+  void movhlps(XMMRegister dst, XMMRegister src);
+
   // Repeated moves.
 
   void repmovsb();
@@ -1328,6 +1332,21 @@ class Assembler {
 
   void roundsd(XMMRegister dst, XMMRegister src, RoundingMode mode);
   void roundpd(XMMRegister dst, XMMRegister src, RoundingMode mode);
+
+
+  enum ComparisonType {
+	  kEQ = 0x0,
+	  kLT = 0x1,
+	  kLE = 0x2,
+	  kUNRD = 0x3,
+	  kNEQ = 0x4,
+	  kNLT = 0x5,
+	  kNLE = 0x6,
+	  kORD = 0x7
+  };
+  void cmppd(XMMRegister dst, XMMRegister src, ComparisonType mode);
+  void cmppd(XMMRegister dst, const Operand& src, ComparisonType mode);
+
   enum ShuffleModeD {
 	  kS0D0 = 0x0,
 	  kS0D1 = 0x1,
@@ -1335,6 +1354,7 @@ class Assembler {
 	  kS1D1 = 0x3
   };
   void shufpd(XMMRegister dst, XMMRegister src, ShuffleModeD mode);
+  void pshufb(XMMRegister dst, const Operand& src);
 
   void movmskpd(Register dst, XMMRegister src);
 

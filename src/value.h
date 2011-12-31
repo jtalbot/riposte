@@ -21,7 +21,7 @@
 #include "enum.h"
 #include "string.h"
 #include "exceptions.h"
-
+#include "register_set.h"
 
 #include "ir.h"
 #include "recording.h"
@@ -43,7 +43,8 @@ struct Value {
 		String s;
 		struct {
 			Type::Enum typ;
-			uint32_t ref;
+			uint16_t trace_id;
+			uint16_t ref;
 		} future;
 	};
 
@@ -289,9 +290,10 @@ VECTOR_IMPL(List, Value, true)
 
 
 struct Future : public Value {
-	static void Init(Value & f, Type::Enum typ,int64_t length, IRef ref) {
+	static void Init(Value & f, Type::Enum typ,int64_t length, int64_t id,IRef ref) {
 		Value::Init(f,Type::Future,length);
 		f.future.ref = ref;
+		f.future.trace_id = id;
 		f.future.typ = typ;
 	}
 	
@@ -726,13 +728,16 @@ struct StackFrame {
 //maximum number of instructions to record before dropping out of the
 //recording interpreter
 #define TRACE_MAX_RECORDED (1024)
+#define TRACE_MAX_TRACES (4)
+#define TRACE_MAX_NODES_PER_COMMIT (4)
+#define TRACE_MAX_OUTPUTS_PER_COMMIT (1)
 
+struct TraceCodeBuffer;
 struct Trace {
 	IRNode nodes[TRACE_MAX_NODES];
 
 	size_t n_nodes;
-	size_t n_pending;
-	size_t n_recorded;
+	size_t n_pending_nodes;
 
 	int64_t length;
 
@@ -756,116 +761,94 @@ struct Trace {
 
 	Output outputs[TRACE_MAX_OUTPUTS];
 	size_t n_outputs;
+	size_t n_pending_outputs;
 
 	Value output_values[TRACE_MAX_OUTPUTS];
 	size_t n_output_values;
+	TraceCodeBuffer * code_buffer;
 
-	Value * max_live_register_base;
-	int64_t max_live_register;
+	Trace() { Reset(); code_buffer = NULL; }
 
-	bool Reserve(size_t num_nodes, size_t num_outputs) {
-		if(n_pending + num_nodes >= TRACE_MAX_NODES)
-			return false;
-		else if(n_outputs + num_outputs >= TRACE_MAX_OUTPUTS)
-			return false;
-		else
-			return true;
-	}
-	void Rollback() {
-		n_pending = n_nodes;
-	}
-	void Commit() {
-		n_nodes = n_pending;
-	}
 	IRef EmitBinary(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t b) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::BINARY;
 		n.op = op;
 		n.type = type;
 		n.binary.a = a;
 		n.binary.b = b;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	IRef EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t b) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::SPECIAL;
 		n.op = op;
 		n.type = type;
 		n.special.a = a;
 		n.special.b = b;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
-	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, int64_t a) {
-		IRNode & n = nodes[n_pending];
+	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t data=0) {
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::UNARY;
 		n.op = op;
 		n.type = type;
 		n.unary.a = a;
-		return n_pending++;
+		n.unary.data = data;
+		return n_pending_nodes++;
 	}
 	IRef EmitFold(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t base) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::FOLD;
 		n.op = op;
 		n.type = type;
 		n.fold.a = a;
 		n.fold.i = base;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	IRef EmitLoadC(Type::Enum type, int64_t c) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::LOADC;
 		n.op = IROpCode::loadc;
 		n.type = type;
 		n.loadc.i = c;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	IRef EmitLoadV(Type::Enum type,void * v) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::LOADV;
 		n.op = IROpCode::loadv;
 		n.type = type;
 		n.loadv.p = v;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	IRef EmitStoreV(Type::Enum type, Value * dst, int64_t a) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::STORE;
 		n.op = IROpCode::storev;
 		n.type = type;
 		n.store.a = a;
 		n.store.dst = dst;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	IRef EmitStoreC(Type::Enum type, Value * dst, int64_t a) {
-		IRNode & n = nodes[n_pending];
+		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::STORE;
 		n.op = IROpCode::storec;
 		n.type = type;
 		n.store.a = a;
 		n.store.dst = dst;
-		return n_pending++;
+		return n_pending_nodes++;
 	}
 	void EmitRegOutput(Value * base, int64_t id) {
-		Trace::Output & out = outputs[n_outputs++];
+		Trace::Output & out = outputs[n_pending_outputs++];
 		out.location.type = Location::REG;
 		out.location.reg.base = base;
 		out.location.reg.offset = id;
 	}
 	void EmitVarOutput(State & state, const Environment::Pointer & p) {
-		Trace::Output & out = outputs[n_outputs++];
+		Trace::Output & out = outputs[n_pending_outputs++];
 		out.location.type = Trace::Location::VAR;
 		out.location.pointer = p;
-	}
-	void SetMaxLiveRegister(Value * base, int64_t r) {
-		max_live_register_base = base;
-		max_live_register = r;
-	}
-	void UnionWithMaxLiveRegister(Value * base, int64_t r) {
-		if(base < max_live_register_base
-		   || (base == max_live_register_base && r > max_live_register)) {
-			SetMaxLiveRegister(base,r);
-		}
 	}
 	void Reset();
 	void InitializeOutputs(State & state);
@@ -879,14 +862,14 @@ private:
 
 //member of State, manages information for all traces
 //and the currently recording trace (if any)
-
 struct TraceState {
-	TraceState() {
+	TraceState()
+	: live_traces(TRACE_MAX_TRACES) {
 		active = false;
 		config = DISABLED;
 		verbose = false;
+		n_recorded_since_last_exec = 0;
 	}
-
 
 	enum Mode {
 		DISABLED,
@@ -897,27 +880,110 @@ struct TraceState {
 	bool verbose;
 	bool active;
 
-	Trace current_trace;
+	Trace traces[TRACE_MAX_TRACES];
+	RegisterAllocator live_traces;
 
 
-	bool enabled() { return DISABLED != config; }
-	bool is_tracing() const { return active; }
+	Value * max_live_register_base;
+	int64_t max_live_register;
 
-	Instruction const * begin_tracing(State & state, Instruction const * inst, size_t length) {
+	size_t n_recorded_since_last_exec;
+
+	bool Enabled() { return DISABLED != config; }
+	bool IsTracing() const { return active; }
+
+	void SetMaxLiveRegister(Value * base, int64_t r) {
+		max_live_register_base = base;
+		max_live_register = r;
+	}
+	void UnionWithMaxLiveRegister(Value * base, int64_t r) {
+		if(base < max_live_register_base
+		   || (base == max_live_register_base && r > max_live_register)) {
+			SetMaxLiveRegister(base,r);
+		}
+	}
+	bool LocationIsDead(const Trace::Location & l) {
+		bool dead = l.type == Trace::Location::REG &&
+		( l.reg.base < max_live_register_base ||
+		  ( l.reg.base == max_live_register_base &&
+		    l.reg.offset > max_live_register
+		  )
+		);
+		//if(dead)
+		//	printf("r%d is dead! long live r%d\n",(int)l.reg.offset,(int)trace.max_live_register);
+		return dead;
+	}
+
+	Instruction const * BeginTracing(State & state, Instruction const * inst) {
 		if(active) {
 			_error("recursive record\n");
 		}
-		current_trace.Reset();
-		current_trace.length = length;
+		max_live_register = NULL;
 		active = true;
-		return recording_interpret(state,inst);
 
+		return recording_interpret(state,inst);
 	}
 
-	void end_tracing(State & state) {
+	void EndTracing(State & state) {
 		if(active) {
 			active = false;
-			current_trace.Execute(state);
+			FlushAllTraces(state);
+		}
+	}
+
+	Trace & AllocateTrace(State & state, int64_t shape) {
+		int8_t reg;
+		if(live_traces.allocate(&reg)) {
+			traces[reg].Reset();
+			traces[reg].length = shape;
+			return traces[reg];
+		} else {
+			FlushAllTraces(state);
+			return AllocateTrace(state,shape);
+		}
+	}
+	int64_t TraceID(Trace & trace) {
+		return &trace - &traces[0];
+	}
+	Trace & GetOrAllocateTrace(State & state, int64_t shape) {
+		for(size_t i = 0; i < TRACE_MAX_TRACES; i++) {
+			if(live_traces.is_live(i) && traces[i].length == shape)
+				return traces[i];
+		}
+		return AllocateTrace(state,shape);
+	}
+
+	void Rollback(Trace & t) {
+		t.n_pending_nodes = t.n_nodes;
+		t.n_pending_outputs = t.n_output_values;
+		if(t.n_nodes == 0) {
+			size_t id = TraceID(t);
+			live_traces.free(id);
+		}
+	}
+	//commits the recorded instructions and outputs from the current op
+	//if the trace does not have enough room to record another op, it is flushed
+	//and the slot is freed for another trace
+	void Commit(State & state, Trace & t) {
+		t.n_nodes = t.n_pending_nodes;
+		t.n_outputs = t.n_pending_outputs;
+		if(t.n_nodes + TRACE_MAX_NODES_PER_COMMIT >= TRACE_MAX_NODES
+		  || t.n_outputs + TRACE_MAX_OUTPUTS_PER_COMMIT >= TRACE_MAX_OUTPUTS) {
+			Flush(state,t);
+		}
+	}
+	void Flush(State & state, Trace & trace) {
+		size_t id = TraceID(trace);
+		if(live_traces.is_live(id)) {
+			n_recorded_since_last_exec = 0;
+			trace.Execute(state);
+			assert(id < TRACE_MAX_TRACES);
+			live_traces.free(TraceID(trace));
+		}
+	}
+	void FlushAllTraces(State & state) {
+		for(size_t i = 0; i < TRACE_MAX_TRACES; i++) {
+			Flush(state,traces[i]);
 		}
 	}
 };

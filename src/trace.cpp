@@ -6,8 +6,7 @@
 #include <stdlib.h>
 
 void Trace::Reset() {
-	n_nodes = n_recorded = length = n_outputs = n_output_values = n_pending = 0;
-	max_live_register = NULL;
+	n_nodes = length = n_outputs = n_output_values = n_pending_nodes = n_pending_outputs = 0;
 }
 
 std::string Trace::toString(State & state) {
@@ -20,11 +19,15 @@ std::string Trace::toString(State & state) {
 #define BINARY(op,...) case IROpCode::op: out << "n" << node.binary.a << "\tn" << node.binary.b; break;
 #define UNARY(op,...) case IROpCode::op: out << "n" << node.unary.a; break;
 		BINARY_ARITH_MAP_BYTECODES(BINARY)
+		BINARY_LOGICAL_MAP_BYTECODES(BINARY)
+		BINARY_ORDINAL_MAP_BYTECODES(BINARY)
 		UNARY_ARITH_MAP_BYTECODES(UNARY)
+		UNARY_LOGICAL_MAP_BYTECODES(UNARY)
 		ARITH_FOLD_BYTECODES(UNARY)
 		ARITH_SCAN_BYTECODES(UNARY)
 		UNARY(cast)
 		BINARY(seq)
+		case IROpCode::gather: out << "n" << node.unary.a << "\t" << "$" << (void*)node.unary.data; break;
 		case IROpCode::loadc: out << ( (node.type == Type::Integer) ? node.loadc.i : node.loadc.d); break;
 		case IROpCode::loadv: out << "$" << node.loadv.p; break;
 		case IROpCode::storec: /*fallthrough*/
@@ -73,25 +76,12 @@ static void set_location_value(State & state, const Trace::Location & l, const V
 	}
 }
 
-static bool is_location_dead(Trace & trace, const Trace::Location & l) {
-	bool dead = l.type == Trace::Location::REG &&
-	( l.reg.base < trace.max_live_register_base ||
-	  ( l.reg.base == trace.max_live_register_base &&
-	    l.reg.offset > trace.max_live_register
-	  )
-	);
-	//if(dead)
-	//	printf("r%d is dead! long live r%d\n",(int)l.reg.offset,(int)trace.max_live_register);
-
-	return dead;
-}
-
 //attempts to find a future at location l, returns true if the location is live and contains a future
 static bool get_location_value_if_live(State & state, Trace & trace, const Trace::Location & l, Value & v) {
-	if(is_location_dead(trace,l))
+	if(state.tracing.LocationIsDead(l))
 		return false;
 	v = get_location_value(state,l);
-	return v.isFuture();
+	return v.isFuture() && v.future.trace_id == state.tracing.TraceID(trace);
 }
 
 void Trace::InitializeOutputs(State & state) {
@@ -111,23 +101,30 @@ void Trace::InitializeOutputs(State & state) {
 			assert(ref < n_nodes);
 			if(values[ref] == NULL) { //if this is the first time we see this node as an output we create a value for it
 				Value & v = output_values[n_output_values++];
-				Value::Init(v,typ,loc.length); //initialize the type of the output value, the actual value (i.e. v.p) will be set after it is calculated in the trace
+				Value::Init(v,typ,loc.length>=0?loc.length:0); //initialize the type of the output value, the actual value (i.e. v.p) will be set after it is calculated in the trace
 				if(loc.length == length) {
-					if(length < 128) {
+
+					if(typ == Type::Logical) {
+						v.p = new (PointerFreeGC) char[length];
+					} else if(length < 128) {
 						double * dp = new (PointerFreeGC) double[length + 1];
 						if( ( (int64_t)dp & 0xF) != 0)
 							v.p = dp + 1;
 						else
 							v.p = dp;
+						assert( ((int64_t)v.p & 0xF) == 0);
 					} else {
 						v.p = new (PointerFreeGC) double[length];
+						assert( ((int64_t)v.p & 0xF) == 0);
 					}
-					assert( ((int64_t)v.p & 0xF) == 0);
+
 					EmitStoreV(typ,&v,ref);
-				} else {
+				} else if(loc.length >= 0) {
 					EmitStoreC(typ,&v,ref);
+				} else {
+					EmitStoreV(typ,&v,ref);
 				}
-				Commit();
+				n_nodes = n_pending_nodes;
 				values[ref] = &v;
 			}
 			set_location_value(state,o.location,Value::Nil()); //mark this location in the interpreter as already seen
@@ -144,9 +141,7 @@ void Trace::WriteOutputs(State & state) {
 			printf("o%d = %s\n", (int) i, v.c_str());
 		}
 	}
-
 	for(size_t i = 0; i < n_outputs; i++) {
-
 		set_location_value(state,outputs[i].location,*outputs[i].value);
 	}
 }

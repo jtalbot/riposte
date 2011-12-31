@@ -7,14 +7,15 @@
 #include "type.h"
 
 #define IR_ENUM(_) \
-		BINARY_ARITH_MAP_BYTECODES(_) \
-		UNARY_ARITH_MAP_BYTECODES(_) \
+		MAP_BYTECODES(_) \
 		_(cast, "cast", ___) \
 		_(loadc,"loadc", ___) \
 		_(loadv,"loadv", ___) \
 		_(storev,"storev", ___) \
 		_(storec,"storec", ___) \
 		_(seq, "seq", ___) \
+		_(gather, "gather", ___) \
+		_(filter, "filter", ___) \
 		ARITH_FOLD_BYTECODES(_) \
 		ARITH_SCAN_BYTECODES(_) \
 
@@ -45,12 +46,11 @@ struct IRNode {
 		struct {
 			int64_t a,b;
 		} binary;
-
 		struct {
 			int64_t a,b;
 		} special;
 		struct {
-			int64_t a;
+			int64_t a,data;
 		} unary;
 		struct {
 			int64_t a;
@@ -63,6 +63,7 @@ struct IRNode {
 			union {
 				int64_t i;
 				double d;
+				uint8_t l;
 			};
 		} loadc;
 		struct {
@@ -72,6 +73,7 @@ struct IRNode {
 			Value * dst;
 			int64_t a;
 		} store;
+		
 	};
 };
 

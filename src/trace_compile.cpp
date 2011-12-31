@@ -5,6 +5,8 @@
 #include "assembler-x64.h"
 #include <math.h>
 
+#include "register_set.h"
+
 #ifdef USE_AMD_LIBM
 #include <amdlibm.h>
 #endif
@@ -13,63 +15,8 @@
 using namespace v8::internal;
 
 #define SIMD_WIDTH (2 * sizeof(double))
-
-//bit-string based allocator for registers
-
-typedef uint32_t RegisterSet;
-struct Allocator {
-	uint32_t a;
-	uint32_t n_allocated;
-	static const uint32_t NUM_REGISTERS = 16;
-	Allocator() : a(~0), n_allocated(0) {}
-	void print() {
-		for(int i = 0; i < 32; i++)
-			if( a & (1 << i))
-				printf("-");
-			else
-				printf("a");
-		printf("\n");
-	}
-	//try to allocated preferred register
-	int allocate(size_t preferred) {
-		assert(preferred < NUM_REGISTERS);
-		if(a & (1 << preferred)) {
-			a &= ~(1 << preferred);
-			return preferred;
-		} else return allocate();
-	}
-	int allocateWithMask(RegisterSet valid_registers) {
-		int reg = ffs(a & valid_registers) - 1;
-		a &= ~(1 << reg);
-
-		if(reg >= (int) NUM_REGISTERS)
-			_error("ran out of registers");
-
-		return reg;
-	}
-	int allocate() { return allocateWithMask(~0); }
-	RegisterSet live_registers() {
-		return a;
-	}
-	void free(int reg) {
-		a |= (1 << reg);
-	}
-};
-
-struct RegisterIterator {
-	RegisterIterator(RegisterSet l) {
-		live = ~l;
-	}
-	bool done() { return live == 0; }
-	void next() {  live &= ~(1 << value()); }
-	uint32_t value() { return ffs(live) - 1; }
-private:
-	bool forward;
-	uint32_t live;
-};
-
 #define CODE_BUFFER_SIZE (16 * 1024)
-static char * code_buffer = NULL;
+
 struct Constant {
 	Constant() {}
 	Constant(int64_t i)
@@ -80,6 +27,8 @@ struct Constant {
 	: d0(d), d1(d) {}
 	Constant(void * f)
 	: f0(f),f1(f)  {}
+	Constant(uint8_t l)
+	: u0((l << 8) + l), u1(0) {}
 
 	Constant(int64_t ii0, int64_t ii1)
 	: i0(ii0), i1(ii1) {}
@@ -102,12 +51,41 @@ enum ConstantTableEntry {
 	C_NEG_MASK = 0x1,
 	C_NOT_MASK = 0x2,
 	C_SEQ_VEC  = 0x3,
-	C_FUNCTION_SPILL_SPACE = 0x4,
-	C_REGISTER_SPILL_SPACE = 0x5,
-	C_FIRST_TRACE_CONST = 0x15
+	C_PACK_LOGICAL = 0x4,
+	C_LOGICAL_MASK = 0x5,
+	C_LNOT_MASK = 0x6,
+	C_DOUBLE_ZERO = 0x7,
+	C_FUNCTION_SPILL_SPACE = 0x8,
+	C_REGISTER_SPILL_SPACE = 0x9,
+	C_FIRST_TRACE_CONST = 0x19
 };
 
-static Constant constant_table[TRACE_MAX_NODES] __attribute__((aligned(16)));
+static int make_executable(char * data, size_t size) {
+	int64_t page = (int64_t)data & ~0x7FFF;
+	int64_t psize = (int64_t)data + size - page;
+	return mprotect((void*)page,psize, PROT_READ | PROT_WRITE | PROT_EXEC);
+}
+
+//scratch space that is reused across traces
+struct TraceCodeBuffer {
+	Constant constant_table[TRACE_MAX_NODES] __attribute__((aligned(16)));
+	char code[CODE_BUFFER_SIZE] __attribute__((aligned(16)));
+	TraceCodeBuffer() {
+		//make the code executable
+		if(0 != make_executable(code,CODE_BUFFER_SIZE)) {
+			_error("mprotect failed.");
+		}
+		//fill in the constant table
+		constant_table[C_ABS_MASK] = Constant((uint64_t)0x7FFFFFFFFFFFFFFFULL);
+		constant_table[C_NEG_MASK] = Constant((uint64_t)0x8000000000000000ULL);
+		constant_table[C_NOT_MASK] = Constant((uint64_t)0xFFFFFFFFFFFFFFFFULL);
+		constant_table[C_SEQ_VEC] = Constant(1LL,2LL);
+		constant_table[C_LOGICAL_MASK] = Constant((uint64_t)0x1);
+		constant_table[C_PACK_LOGICAL] = Constant(0x1010101010100800,0x1010101010101010);
+		constant_table[C_LNOT_MASK] = Constant((uint8_t)0x1);
+		constant_table[C_DOUBLE_ZERO] = Constant(0.0);
+	}
+};
 
 #include <xmmintrin.h>
 
@@ -177,6 +155,14 @@ static double casti2d(double aa) { //these are actually integers passed in xmm0 
 	da = aa;
 	return (double) ia; //also return the value in xmm0
 }
+static double castd2i(double aa) { //these are actually doubles passed in xmm0 and xmm1
+	union {
+		int64_t ia;
+		double da;
+	};
+	ia = (int64_t) aa;
+	return da; //also return the value in xmm0
+}
 static double iabs(double aa) { //these are actually integers passed in xmm0 and xmm1
 	union {
 		int64_t ia;
@@ -217,29 +203,39 @@ FOLD_SCAN_FN(sumd , double , +)
 
 struct TraceJIT {
 	TraceJIT(Trace * t)
-	:  trace(t), asm_(code_buffer,CODE_BUFFER_SIZE), next_constant_slot(C_FIRST_TRACE_CONST) {}
+	:  trace(t), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), alloc(XMMRegister::kNumAllocatableRegisters), next_constant_slot(C_FIRST_TRACE_CONST) {}
 
 	Trace * trace;
 	IRNode * store_inst[TRACE_MAX_NODES];
 	RegisterSet live_registers[TRACE_MAX_NODES];
-	char allocated_register[TRACE_MAX_NODES];
+	int8_t allocated_register[TRACE_MAX_NODES];
 	Assembler asm_;
-	Allocator alloc;
+	RegisterAllocator alloc;
 
 
 	Register constant_base; //holds pointer to Trace object
-	Register vector_offset; //holds byte offset into vector for current loop iteration
+	Register vector_index; //index into long vector where the short vector begins
 	Register load_addr; //holds address of input vectors
-	Register end_offset; //holds address of input vectors
+	Register vector_length; //holds length of long vector
 	uint32_t next_constant_slot;
 
-	void compile() {
+	//some hardware ops like > do not exist, requiring the use of < instead.  For simplicity, this needs to be done before register allocation
+	void SimplifyNode(IRNode & node) {
+		switch(node.op) {
+		case IROpCode::gt: node.op = IROpCode::lt; std::swap(node.binary.a,node.binary.b); break;
+		case IROpCode::ge: node.op = IROpCode::le; std::swap(node.binary.a,node.binary.b); break;
+		default: /*pass*/ break;
+		}
+	}
+
+	void Compile() {
 		bzero(store_inst,sizeof(IRNode *) * trace->n_nodes);
 		memset(allocated_register,-1,sizeof(char) * trace->n_nodes);
 		//pass 1 register allocation
 		for(IRef i = trace->n_nodes; i > 0; i--) {
 			IRef ref = i - 1;
 			IRNode & node = trace->nodes[ref];
+			SimplifyNode(node); //emulate ops like > and >= which have no hardware equivalent by modifying the operand order
 			switch(node.enc) {
 			case IRNode::BINARY: {
 				AllocateBinary(ref,node.binary.a,node.binary.b);
@@ -266,19 +262,19 @@ struct TraceJIT {
 		//registers are callee saved so that we can make external function calls without saving the registers the tight loop
 		//we need to explicitly save and restore these on entrace and exit to the function
 		constant_base = r12;
-		vector_offset = r13;
+		vector_index = r13;
 		load_addr = r14;
-		end_offset = r15;
-
+		vector_length = r15;
+		
 		asm_.push(constant_base);
-		asm_.push(vector_offset);
+		asm_.push(vector_index);
 		asm_.push(load_addr);
-		asm_.push(end_offset);
+		asm_.push(vector_length);
 		asm_.push(rbx);
 
-		asm_.movq(constant_base, &constant_table[0]);
-		asm_.xor_(vector_offset,vector_offset);
-		asm_.movq(end_offset, trace->length * sizeof(double));
+		asm_.movq(constant_base, &trace->code_buffer->constant_table[0]);
+		asm_.xor_(vector_index,vector_index);
+		asm_.movq(vector_length, trace->length);
 
 		Label begin;
 
@@ -298,11 +294,20 @@ struct TraceJIT {
 			} break;
 			case IRNode::UNARY: break;
 			case IRNode::LOADC: {
-				XMMRegister r = reg(ref);
-				asm_.movdqa(r,PushConstant(Constant(node.loadc.d)));
+				Constant c;
+				switch(node.type) {
+				case Type::Integer: c = Constant(node.loadc.i); break;
+				case Type::Logical: c = Constant(node.loadc.l); break;
+				case Type::Double:  c = Constant(node.loadc.d); break;
+				default: _error("unexpected type");
+				}
+				asm_.movdqa(reg(ref),PushConstant(c));
 			} break;
 			case IRNode::LOADV: {
-				EmitVectorLoad(reg(ref),node.loadv.p);
+				if(Type::Logical == node.type)
+					EmitLogicalLoad(reg(ref),node.loadv.p);
+				else
+					EmitVectorLoad(reg(ref),node.loadv.p);
 			} break;
 			case IRNode::STORE: {
 				//stores are generated right after the value that is stored
@@ -387,7 +392,22 @@ struct TraceJIT {
 #endif
 				case IROpCode::sign: EmitUnaryFunction(ref,sign_fn); break;
 				case IROpCode::mod: EmitBinaryFunction(ref,Mod); break;
-				case IROpCode::cast: EmitUnaryFunction(ref,casti2d); break; //it should be possible to inline this, but I can't find the convert packed quadword to packed double instruction
+				case IROpCode::cast: {
+					if(trace->nodes[node.unary.a].type == Type::Integer)
+						EmitUnaryFunction(ref,casti2d); //it should be possible to inline this, but I can't find the convert packed quadword to packed double instruction
+					else
+						_error("NYI - castl2d");
+				} break;
+				case IROpCode::gather: {
+					Constant c(node.unary.data);
+					Operand base = PushConstant(c);
+					asm_.movq(r8, base);
+					asm_.movq(r9, reg(node.unary.a));
+					asm_.movhlps(reg(ref), reg(node.unary.a));
+					asm_.movq(r10, reg(ref));
+					asm_.movlpd(reg(ref),Operand(r8,r9,times_8,0));
+					asm_.movhpd(reg(ref),Operand(r8,r10,times_8,0));
+				} break;
 				//placeholder for now
 				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumd,Constant(0.0)); break;
 				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodd,Constant(1.0)); break;
@@ -413,17 +433,57 @@ struct TraceJIT {
 				case IROpCode::pos: EmitMove(reg(ref),reg(node.unary.a)); break;
 				case IROpCode::mod: EmitBinaryFunction(ref,imod); break;
 				case IROpCode::seq: {
-					asm_.movq(load_addr,vector_offset);
-					asm_.shr(load_addr,Immediate(4));
-					asm_.movq(reg(ref),load_addr);
+					asm_.movq(reg(ref),vector_index);
 					asm_.unpcklpd(reg(ref),reg(ref));
 					asm_.paddq(reg(ref),ConstantTable(C_SEQ_VEC));
 				} break;
+				case IROpCode::gather: {
+					Constant c(node.unary.data);
+					Operand base = PushConstant(c);
+					asm_.movq(r8, base);
+					asm_.movq(r9, reg(node.unary.a));
+					asm_.movhlps(reg(ref), reg(node.unary.a));
+					asm_.movq(r10, reg(ref));
+					asm_.movlpd(reg(ref),Operand(r8,r9,times_8,0));
+					asm_.movhpd(reg(ref),Operand(r8,r10,times_8,0));
+				} break;
 				//placeholder for now
-				case IROpCode::sum:  EmitFoldFunction(ref,(void*)sumi,Constant((int64_t)0)); break;
-				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumi,Constant((int64_t)0)); break;
-				case IROpCode::prod:  EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)1)); break;
-				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodi,Constant((int64_t)1)); break;
+				case IROpCode::sum:  EmitFoldFunction(ref,(void*)sumi,Constant((int64_t)0LL)); break;
+				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumi,Constant((int64_t)0LL)); break;
+				case IROpCode::prod:  EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)1LL)); break;
+				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodi,Constant((int64_t)1LL)); break;
+				case IROpCode::cast: {
+					if(trace->nodes[node.unary.a].type == Type::Double)
+						EmitUnaryFunction(ref,(void*)castd2i); 
+					else
+						_error("NYI - castl2i");
+				} break;
+				default:
+					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
+						_error("unimplemented op");
+					break;
+				}
+			} else if(node.type == Type::Logical) {
+				switch(node.op) {
+				case IROpCode::eq: EmitCompare(ref,Assembler::kEQ); break;
+				case IROpCode::lt: EmitCompare(ref,Assembler::kLT); break;
+				case IROpCode::le: EmitCompare(ref,Assembler::kLE); break;
+				case IROpCode::neq: EmitCompare(ref,Assembler::kNEQ); break;
+				case IROpCode::land: asm_.andpd(reg(ref),reg(node.binary.b)); break;
+				case IROpCode::lor: asm_.orpd(reg(ref),reg(node.binary.b)); break;
+				case IROpCode::lnot: {
+					EmitMove(reg(ref),reg(node.unary.a));
+					asm_.xorpd(reg(ref),ConstantTable(C_LNOT_MASK));
+				} break;
+				case IROpCode::cast: {
+					Type::Enum operand_type = trace->nodes[node.unary.a].type;
+					if(operand_type == Type::Double) {
+						asm_.cmppd(reg(ref),ConstantTable(C_DOUBLE_ZERO),Assembler::kNEQ);
+						EmitComparisonToLogical(reg(ref));
+					} else {
+						_error("NYI - casti2l");
+					}
+				} break;
 				default:
 					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
 						_error("unimplemented op");
@@ -451,7 +511,10 @@ struct TraceJIT {
 			if(store_inst[ref] != NULL) {
 				IRNode & str = *store_inst[ref];
 				if(str.op == IROpCode::storev) {
-					EmitVectorStore(str.store.dst->p,reg(str.store.a));
+					if(Type::Logical == str.type)
+						EmitLogicalStore(str.store.dst->p,reg(str.store.a));
+					else
+						EmitVectorStore(str.store.dst->p,reg(str.store.a));
 				} else {
 					Operand op = EncodeOperand(&str.store.dst->p);
 					asm_.movsd(op,reg(str.store.a));
@@ -459,14 +522,14 @@ struct TraceJIT {
 			}
 		}
 
-		asm_.addq(vector_offset, Immediate(SIMD_WIDTH));
-		asm_.cmpq(vector_offset,end_offset);
+		asm_.addq(vector_index, Immediate(2));
+		asm_.cmpq(vector_index,vector_length);
 		asm_.j(less,&begin);
 
 		asm_.pop(rbx);
-		asm_.pop(end_offset);
+		asm_.pop(vector_length);
 		asm_.pop(load_addr);
-		asm_.pop(vector_offset);
+		asm_.pop(vector_index);
 		asm_.pop(constant_base);
 		asm_.ret(0);
 	}
@@ -488,7 +551,7 @@ struct TraceJIT {
 	}
 	uint64_t PushConstantOffset(const Constant& data) {
 		uint32_t offset = next_constant_slot;
-		constant_table[offset] = data;
+		trace->code_buffer->constant_table[offset] = data;
 		next_constant_slot++;
 		return offset;
 	}
@@ -498,31 +561,36 @@ struct TraceJIT {
 		uint64_t offset = PushConstantOffset(identity);
 		SaveRegisters(live_registers[ref]);
 		EmitMove(xmm0,reg(node.unary.a));
-		asm_.movq(rdi,(void*)&constant_table[offset]);
+		asm_.movq(rdi,(void*)&trace->code_buffer->constant_table[offset]);
 		EmitCall(fn);
 		EmitMove(reg(ref),xmm0);
 		RestoreRegisters(live_registers[ref]);
 	}
 	void EmitVectorLoad(XMMRegister dst, void * src) {
-		int64_t diff = (int64_t)src - (int64_t)constant_table;
-		if(is_int32(diff)) {
-			asm_.movdqa(dst,Operand(constant_base,vector_offset,times_1,diff));
-		} else {
-			asm_.movq(load_addr,src);
-			asm_.movdqa(dst, Operand(load_addr,vector_offset,times_1,0));
-		}
+		asm_.movdqa(dst,EncodeOperand(src,vector_index,times_8));
 	}
 	void EmitVectorStore(void * dst,  XMMRegister src) {
-		int64_t diff = (int64_t)dst - (int64_t)constant_table;
+		asm_.movdqa(EncodeOperand(dst,vector_index,times_8),src);
+	}
+	void EmitLogicalLoad(XMMRegister dst, void * src) {
+		asm_.movss(dst,EncodeOperand(src,vector_index,times_1));
+	}
+	void EmitLogicalStore(void * dst,  XMMRegister src) {
+		asm_.movq(rbx,src);
+		asm_.movw(EncodeOperand(dst,vector_index,times_1),rbx);
+	}
+
+	Operand EncodeOperand(void * dst, Register idx, ScaleFactor scale) {
+		int64_t diff = (int64_t)dst - (int64_t)trace->code_buffer->constant_table;
 		if(is_int32(diff)) {
-			asm_.movdqa(Operand(constant_base,vector_offset,times_1,diff),src);
+			return Operand(constant_base,idx,scale,diff);
 		} else {
 			asm_.movq(load_addr,dst);
-			asm_.movdqa(Operand(load_addr,vector_offset,times_1,0),src);
+			return Operand(load_addr,idx,scale,0);
 		}
 	}
 	Operand EncodeOperand(void * src) {
-		int64_t diff = (int64_t)src - (int64_t)constant_table;
+		int64_t diff = (int64_t)src - (int64_t)trace->code_buffer->constant_table;
 		if(is_int32(diff)) {
 			return Operand(constant_base,diff);
 		} else {
@@ -532,7 +600,8 @@ struct TraceJIT {
 	}
 	IRef AllocateNullary(IRef ref, bool p = true) {
 		if(allocated_register[ref] < 0) { //this instruction is dead, for now we just emit it anyway
-			allocated_register[ref] = alloc.allocate();
+			if(!alloc.allocate(&allocated_register[ref]))
+				_error("exceeded available registers");
 		}
 		int r = allocated_register[ref];
 		alloc.free(r);
@@ -545,9 +614,11 @@ struct TraceJIT {
 	}
 	IRef AllocateUnary(IRef ref, IRef a, bool p = true) {
 		IRef r = AllocateNullary(ref,false);
-		if(allocated_register[a] < 0)
+		if(allocated_register[a] < 0) {
 			//try to allocated register a and r to the same location,  this avoids moves in binary instructions
-			allocated_register[a] = alloc.allocate(r);
+			if(!alloc.allocate(r,&allocated_register[a]))
+				_error("exceeded available registers");
+		}
 		if(p) {
 			//printf("%d = %d op, %d = %d op\n",(int)allocated_register[ref],(int)allocated_register[a],(int)ref,(int)a);
 		}
@@ -559,7 +630,9 @@ struct TraceJIT {
 			RegisterSet mask = ~(1 << allocated_register[ref]);
 			//we avoid allocating registers such that r = a op r
 			//occurs
-			allocated_register[b] = alloc.allocateWithMask(mask);
+			if(!alloc.allocateWithMask(mask,&allocated_register[b])) {
+				_error("exceeded available registers");
+			}
 			assert(allocated_register[ref] != allocated_register[b]);
 		}
 
@@ -577,7 +650,7 @@ struct TraceJIT {
 	}
 
 	void EmitCall(void * fn) {
-		int64_t diff = (int64_t)(code_buffer + asm_.pc_offset() + 5 - (int64_t) fn);
+		int64_t diff = (int64_t)(trace->code_buffer + asm_.pc_offset() + 5 - (int64_t) fn);
 		if(is_int32(diff)) {
 			asm_.call((byte*)fn);
 		} else {
@@ -682,11 +755,10 @@ struct TraceJIT {
 
 		SaveRegisters(regs);
 		EmitMove(xmm0,reg(i));
-		asm_.movq(rdi,vector_offset);
+		asm_.movq(rdi,vector_index);
 		EmitCall((void*) debug_print);
 		RestoreRegisters(regs);
 	}
-
 	void SaveRegisters(RegisterSet regs) {
 		uint32_t offset = C_REGISTER_SPILL_SPACE * sizeof(Constant);
 		for(RegisterIterator it(regs); !it.done(); it.next()) {
@@ -703,9 +775,22 @@ struct TraceJIT {
 		}
 	}
 
-	void execute(State & state) {
+	void EmitComparisonToLogical(XMMRegister r) {
+		asm_.andpd(r,ConstantTable(C_LOGICAL_MASK));
+		asm_.pshufb(r,ConstantTable(C_PACK_LOGICAL));
+	}
+	void EmitCompare(IRef ref, Assembler::ComparisonType typ) {
+		IRNode & node = trace->nodes[ref];
+		if(Type::Double == trace->nodes[node.binary.a].type) {
+			asm_.cmppd(reg(ref),reg(node.binary.b),typ);
+			EmitComparisonToLogical(reg(ref));
+		} else {
+			_error("NYI - integer compare");
+		}
+	}
+	void Execute(State & state) {
 		typedef void (*fn) (void);
-		fn trace_code = (fn) code_buffer;
+		fn trace_code = (fn) trace->code_buffer->code;
 		if(state.tracing.verbose) {
 			timespec begin;
 			get_time(begin);
@@ -723,26 +808,14 @@ void Trace::JIT(State & state) {
 	if(state.tracing.verbose)
 		printf("executing trace:\n%s\n",toString(state).c_str());
 
-	if(code_buffer == NULL) {
-		//allocate the code buffer
-		code_buffer = (char*) malloc(CODE_BUFFER_SIZE);//(char*) mmap(NULL,CODE_BUFFER_SIZE,PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANON, -1, 0);
-		int64_t page = (int64_t)code_buffer & ~0x7FFF;
-		int64_t size = (int64_t)code_buffer + CODE_BUFFER_SIZE - page;
-		int err = mprotect((void*)page,size, PROT_READ | PROT_WRITE | PROT_EXEC);
-		if(err) {
-			_error("mprotect failed.");
-		}
-		//also fill in the constant table
-		constant_table[C_ABS_MASK] = Constant((uint64_t)0x7FFFFFFFFFFFFFFFULL);
-		constant_table[C_NEG_MASK] = Constant((uint64_t)0x8000000000000000ULL);
-		constant_table[C_NOT_MASK] = Constant((uint64_t)0xFFFFFFFFFFFFFFFFULL);
-		constant_table[C_SEQ_VEC] = Constant((int64_t)1LL,(int64_t)2LL);
+	if(code_buffer == NULL) { //since it is expensive to reallocate this, we reuse it across traces
+		code_buffer = new TraceCodeBuffer();
 	}
 
 	TraceJIT trace_code(this);
 
-	trace_code.compile();
-	trace_code.execute(state);
+	trace_code.Compile();
+	trace_code.Execute(state);
 
 	WriteOutputs(state);
 }

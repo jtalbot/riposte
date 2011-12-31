@@ -393,26 +393,51 @@ void binaryOrdinal(State& state, Value const& a, Value const& b, Value& c) {
 	}
 }
 
-// Figure out the output...
-inline Type::Enum resultType(ByteCode::Enum bc, Type::Enum input) {
+// Figure out the type of the operation given an input type
+inline void selectType(ByteCode::Enum bc, Type::Enum input, Type::Enum * atyp, Type::Enum * rtyp) {
 	switch(bc) {
-#define CASE(name, str, Op, ...) \
+#define ARITH_CASE(name,str,Op,...) \
 	case ByteCode::name: \
-		if(input == Type::Integer) return Op<TInteger>::RV::VectorType; \
-		else if(input == Type::Double) return Op<TDouble>::RV::VectorType; \
+		if(input == Type::Integer) { *atyp = Op<TInteger>::AV::VectorType; *rtyp = Op<TInteger>::RV::VectorType; } \
+		else if(input == Type::Double || input == Type::Logical) { *atyp = Op<TDouble>::AV::VectorType; *rtyp = Op<TDouble>::RV::VectorType; } \
 		else _error("Unknown type"); \
 		break;
-MAP_BYTECODES(CASE)
-FOLD_BYTECODES(CASE)
-SCAN_BYTECODES(CASE)
-#undef CASE
+#define LOGICAL_CASE(name,str,Op,...) \
+	case ByteCode::name: \
+		*atyp = Type::Logical; *rtyp = Type::Logical; \
+		break;
+#define BINARY_ORDINAL_CASE(name,str,Op,...) \
+	case ByteCode::name: /*logical inputs get promoted to double so that we can use sse ops to implement the ordinals*/\
+		*atyp = (input == Type::Logical) ? Type::Double : input; *rtyp = Type::Logical; \
+		break;
+#define ORDINAL_CASE(name,str,Op,...) \
+	case ByteCode::name: \
+		*atyp = input; *rtyp = input; \
+		break;
+ARITH_BYTECODES(ARITH_CASE)
+LOGICAL_BYTECODES(LOGICAL_CASE)
+BINARY_ORDINAL_MAP_BYTECODES(BINARY_ORDINAL_CASE)
+ORDINAL_FOLD_BYTECODES(ORDINAL_CASE)
+ORDINAL_SCAN_BYTECODES(ORDINAL_CASE)
+#undef ARITH_CASE
+#undef LOGICAL_RESULT_CASE
+#undef ORDINAL_CASE
 	default:
-		_error("Not a known op in resultType");
-	};
-} 
-inline Type::Enum resultType(ByteCode::Enum bc, Type::Enum a, Type::Enum b) {
-	return resultType(bc,std::max(a,b));
+		_error("Not a known op in selectType");
+	}
+
 }
+
+inline Type::Enum meetType(Type::Enum a, Type::Enum b) {
+	return std::max(a,b);
+}
+
+inline void selectType(ByteCode::Enum bc, Type::Enum a, Type::Enum b, Type::Enum * atyp, Type::Enum * btyp, Type::Enum * rtyp) {
+	selectType(bc,meetType(a,b),atyp,rtyp);
+	*btyp = *atyp;
+}
+
+
 
 template<int Len>
 inline void Sequence(int64_t start, int64_t step, int64_t* dest) {
