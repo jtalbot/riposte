@@ -741,6 +741,8 @@ struct Trace {
 
 	int64_t length;
 
+	int64_t uniqueShapes;
+	
 	struct Location {
 		enum Type {REG, VAR};
 		Type type;

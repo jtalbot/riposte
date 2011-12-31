@@ -228,9 +228,8 @@ RecordingStatus::Enum subset_record(State & state, Instruction const & inst, Ins
 		(*pc)++; 
 		return RecordingStatus::NO_ERROR;
 	}
-	else if(b.isLogical() || (b.isFuture() && b.future.type == Type::Logical)) {
+	else if(b.isLogical() || (b.isFuture() && b.future.typ == Type::Logical)) {
 		Value& a = REG(state, inst.a);
-		static uniqueShapes = -1;
 		uint64_t trace_shape = b.length;
 		Trace & trace = state.tracing.GetOrAllocateTrace(state,trace_shape);
 
@@ -242,9 +241,12 @@ RecordingStatus::Enum subset_record(State & state, Instruction const & inst, Ins
 		state.tracing.SetMaxLiveRegister(state.base,inst.c);
 		Future::Init(REG(state,inst.c),
 				 rtyp,
-				 uniqueShapes--,
+				 trace.uniqueShapes--,
 				 state.tracing.TraceID(trace),
 				 trace.EmitUnary(IROpCode::filter,rtyp,coerce(trace,btyp,bref),((int64_t)a.p)));
+		state.tracing.Commit(state,trace);
+		(*pc)++; 
+		return RecordingStatus::NO_ERROR;
 	} 
 	else {
 		CHECK_REG(inst.b);

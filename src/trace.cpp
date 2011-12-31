@@ -7,6 +7,7 @@
 
 void Trace::Reset() {
 	n_nodes = length = n_outputs = n_output_values = n_pending_nodes = n_pending_outputs = 0;
+	uniqueShapes = -1;
 }
 
 std::string Trace::toString(State & state) {
