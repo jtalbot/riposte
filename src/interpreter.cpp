@@ -294,9 +294,9 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 	String s = String::Init((char const*)inst.a);
 	
 	Value& dest = REG(state, inst.c);
-	dest = env->get(s);
-	if(dest.isConcrete()) return &inst+2;
+	if(env->fastGet(s, dest)) return &inst+2;
 
+	dest = env->get(s);
 	while(dest.isNil() && env->LexicalScope() != 0) {
 		env = env->LexicalScope();
 		dest = env->get(s);
@@ -324,6 +324,8 @@ Instruction const* iget_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* assign_op(State& state, Instruction const& inst) {
+	if(state.frame.environment->fastAssign(String::Init((char const*)inst.a), REG(state, inst.c))) return &inst+1;
+
 	state.frame.environment->assign(String::Init((char const*)inst.a), REG(state, inst.c));
 	return &inst+1;
 }

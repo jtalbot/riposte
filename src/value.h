@@ -575,7 +575,7 @@ struct Prototype : public gc {
 class Dictionary : public gc {
 protected:
 	static const uint64_t inlineSize = 16;
-	struct Pair { String n; Value v; };
+	struct Pair { String n; String cn; Value v; };
 	Pair* d;
 	Pair inlineDict[inlineSize];
 	uint64_t size, load;
@@ -601,31 +601,39 @@ public:
 			rehash(size * 2);
 			i = find(name);
 		}
-		d[i] = (Pair) { name, value };
+		d[i] = (Pair) { name, (value.isConcrete()) ? name : Strings::NA, value };
 		return i;
 	}
-	
-	uint64_t assign(String name, Value const& value) __attribute__((always_inline)) {
+
+	bool fastAssign(String name, Value const& value) __attribute__((always_inline)) {
 		uint64_t i = ((uint64_t)name.i>>3) & (size-1);	// hash this?
-		if(d[i].n == name) { d[i].v = value; return i; }
+		if(__builtin_expect(d[i].cn == name, true)) { d[i].v = value; return true; }
 		i = (i+1) & (size-1);
-		if(d[i].n == name) { d[i].v = value; return i; }
-		i = find(name);
-		if(d[i].n == name) { d[i].v = value; return i; }
+		if(__builtin_expect(d[i].cn == name, true)) { d[i].v = value; return true; }
+		return false;
+	}
+	
+	uint64_t assign(String name, Value const& value) {
+		uint64_t i = find(name);
+		if(d[i].n == name) { d[i].v = value; d[i].cn = value.isConcrete() ?  name : Strings::NA; return i; }
 		else { return insert(i, name, value); }
 	}
 
-	Value const& get(String name) const __attribute__((always_inline)) {
+	bool fastGet(String name, Value& out) __attribute__((always_inline)) {
 		uint64_t i = ((uint64_t)name.i>>3) & (size-1);	// hash this?
-		if(d[i].n == name) return d[i].v;
+		if(__builtin_expect(d[i].cn == name, true)) { out = d[i].v; return true; }
 		i = (i+1) & (size-1);
-		if(d[i].n == name) return d[i].v;
-		else return d[find(name)].v;
+		if(__builtin_expect(d[i].cn == name, true)) { out = d[i].v; return true; }
+		return false;
+	}
+
+	Value const& get(String name) const {
+		return d[find(name)].v;
 	}
 
 	void remove(String name) {
 		uint64_t i = find(name);
-		d[i] = (Pair) { Strings::NA, Value::Nil() };
+		d[i] = (Pair) { Strings::NA, Strings::NA, Value::Nil() };
 	}
 
 	void rehash(uint64_t s) {
@@ -650,7 +658,7 @@ public:
 		load = 0; 
 		for(uint64_t i = 0; i < size; i++) {
 			// wiping v too makes sure we're not holding unnecessary pointers
-			d[i] = (Pair) { Strings::NA, Value::Nil() };
+			d[i] = (Pair) { Strings::NA, Strings::NA, Value::Nil() };
 		}
 	}
 
