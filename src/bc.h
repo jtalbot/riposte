@@ -11,6 +11,7 @@
 	_(jmp, "jmp") \
 	_(branch, "branch") \
 	_(call, "call") \
+	_(apply, "apply") \
 	_(icall, "icall") \
 	_(UseMethod, "UseMethod") \
 	_(ret, "ret") \

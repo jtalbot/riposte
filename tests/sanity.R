@@ -1,5 +1,5 @@
 fail <- 0
-
+cat("Running sanity tests\n")
 {
 	cat("Testing if statement\n-------------\n")
 	if(TRUE) cat("PASS\n") else cat ("--FAIL\n")
@@ -116,11 +116,15 @@ fail <- 0
 	g <- function(...) f(...)
 	h <- function(...) f(100,...)
 	i <- function(k,...) f(...,k)
+	j <- function(...) ..1 
+	k <- function(...) ..2 
 
 	PassIfTrue(f(1,2,3) == 1)
 	PassIfTrue(g(1,2,3) == 1)
 	PassIfTrue(h(1,2,3) == 100)
 	PassIfTrue(i(1,2,3) == 2)
+	PassIfTrue(j(1,2,3) == 1)
+	PassIfTrue(k(1,2,3) == 2)
 
 	cat("Missing parameters...\n")
 	f <- function(x=4,y=2) x/y

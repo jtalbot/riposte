@@ -11,6 +11,7 @@
 #include <limits>
 #include <complex>
 
+#define GC_THREADS
 #include <gc/gc_cpp.h>
 #include <gc/gc_allocator.h>
 
@@ -688,6 +689,9 @@ private:
 	
 public:
 	Value call;
+	//List dot_values;
+	//Character dot_names;
+	
 	std::vector<String> dots;
 
 	explicit Environment(Environment* lexical=0, Environment* dynamic=0) : 
@@ -929,7 +933,29 @@ struct InternalFunction {
 
 #define DEFAULT_NUM_REGISTERS 10000
 
+struct SharedState {
+	StringTable strings;
+	
+	std::vector<InternalFunction> internalFunctions;
+	std::map<String, int64_t> internalFunctionIndex;
+	
+	std::vector<Environment*, traceable_allocator<Environment*> > path;
+	Environment* global;
+
+	SharedState(Environment* global, Environment* base) {
+		this->global = global;
+		path.push_back(base);
+	}
+
+	void registerInternalFunction(String s, InternalFunctionPtr internalFunction, int64_t params) {
+		InternalFunction i = { internalFunction, params };
+		internalFunctions.push_back(i);
+		internalFunctionIndex[s] = internalFunctions.size()-1;
+	}
+};
+
 struct State {
+	SharedState& sharedState;
 	Value* base;
 	Value* registers;
 
@@ -937,23 +963,13 @@ struct State {
 	StackFrame frame;
 	std::vector<Environment*, traceable_allocator<Environment*> > environments;
 
-	std::vector<Environment*, traceable_allocator<Environment*> > path;
-	Environment* global;
-
-	StringTable strings;
-	
 	std::vector<std::string> warnings;
 
-	std::vector<InternalFunction> internalFunctions;
-	std::map<String, int64_t> internalFunctionIndex;
-	
 	TraceState tracing; //all state related to tracing compiler
 
 	int64_t assignment[64], set[64]; // temporary space for matching arguments
 	
-	State(Environment* global, Environment* base) {
-		this->global = global;
-		path.push_back(base);
+	State(SharedState& sharedState) : sharedState(sharedState) {
 		registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
 		this->base = registers + DEFAULT_NUM_REGISTERS;
 	}
@@ -973,17 +989,11 @@ struct State {
 	std::string deparse(Value const& v) const;
 
 	String internStr(std::string s) {
-		return strings.in(s);
+		return sharedState.strings.in(s);
 	}
 
 	std::string externStr(String s) const {
-		return strings.out(s);
-	}
-
-	void registerInternalFunction(String s, InternalFunctionPtr internalFunction, int64_t params) {
-		InternalFunction i = { internalFunction, params };
-		internalFunctions.push_back(i);
-		internalFunctionIndex[s] = internalFunctions.size()-1;
+		return sharedState.strings.out(s);
 	}
 };
 

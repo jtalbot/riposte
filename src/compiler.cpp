@@ -139,14 +139,14 @@ int64_t Compiler::compileInternalFunctionCall(Object const& o, Prototype* code) 
 	List const& call = (List const&)(o.base());
 	int64_t liveIn = scopes.back().live();
 	Symbol func(call[0]);
-	std::map<String, int64_t>::const_iterator itr = state.internalFunctionIndex.find(func);
-	if(itr == state.internalFunctionIndex.end()) {
+	std::map<String, int64_t>::const_iterator itr = state.sharedState.internalFunctionIndex.find(func);
+	if(itr == state.sharedState.internalFunctionIndex.end()) {
 		_error(std::string("Unimplemented internal function ") + state.externStr(func));
 		//return compile(o, code);
 	}
 	int64_t function = itr->second;
 	// check parameter count
-	if(state.internalFunctions[function].params != call.length-1)
+	if(state.sharedState.internalFunctions[function].params != call.length-1)
 		_error(std::string("Incorrect number of arguments to internal function ") + state.externStr(func));
 	// compile parameters directly...reserve registers for them.
 	int64_t reg = liveIn;
@@ -671,6 +671,17 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		if(call.length != 2) _error("quote requires one argument");
 		return compileConstant(call[1], code);
 	} break;
+	case EStrings::apply:
+	{
+		List c(Subset(call, 1, call.length-1));
+		Character n(Subset(names, 1, call.length-1));
+		code->calls.push_back(makeCall(c, n));
+		int64_t function = compile(c[0], code);
+		scopes.back().deadAfter(liveIn);
+		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		emit(code, ByteCode::apply, function, -code->calls.size(), result);
+		return result;
+	}
 	default:
 	{
 		return compileFunctionCall(call, names, code);

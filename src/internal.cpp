@@ -6,6 +6,8 @@
 #include <math.h>
 #include <fstream>
 
+#include <pthread.h>
+
 template<typename T>
 T const& Cast(Value const& v) {
 	if(v.type != T::VectorType) _error("incorrect type passed to internal function");
@@ -582,23 +584,68 @@ void eval_fn(State& state, Value const* args, Value& result) {
 	result = eval(state, Compiler::compile(state, args[0]), REnvironment(args[1]).ptr());
 }
 
+struct lapplyargs {
+	uint64_t start;
+	uint64_t end;
+	State& state;
+	List& in;
+	List& out;
+	Value func;
+};
+
+void* lapplybody(void* args) {
+	lapplyargs& l = *(lapplyargs*)args;
+	List apply(2);
+	apply[0] = l.func;
+	apply[1] = Value::Nil();
+	Prototype* p = Compiler::compile(l.state, CreateCall(apply));
+	State istate(l.state.sharedState);
+	for( size_t i=l.start; i!=l.end; ++i ) {
+		p->calls[0].arguments[0] = l.in[i];
+		l.out[i] = eval(istate, p);
+	}
+	return 0;
+}
+
 void lapply(State& state, Value const* args, Value& result) {
 	List x = As<List>(state, args[0]);
 	Value func = args[1];
+	List r(x.length);
 
-	List apply(2);
+	/*List apply(2);
 	apply[0] = func;
 
-	List r(x.length);
 	// TODO: should have a way to make a simple function call without compiling,
 	// or should have a fast case for compilation
+	State istate(state.sharedState);
 	for(int64_t i = 0; i < x.length; i++) {
 		apply[1] = x[i];
-		r[i] = eval(state, Compiler::compile(state, CreateCall(apply)));
-	}
+		r[i] = eval(istate, Compiler::compile(state, CreateCall(apply)));
+	}*/
+
+	/*List apply(2);
+	apply[0] = func;
+	apply[1] = Value::Nil();
+	Prototype* p = Compiler::compile(state, CreateCall(apply));
+	State istate(state.sharedState);
+	for(int64_t i = 0; i < x.length; i++) {
+		p->calls[0].arguments[0] = x[i];
+		r[i] = eval(istate, p);
+	}*/
+
+	pthread_t h1, h2;
+
+	lapplyargs a1 = (lapplyargs) {0, x.length/2, state, x, r, func};
+	lapplyargs a2 = (lapplyargs) {x.length/2, x.length, state, x, r, func};
+
+        pthread_create (&h1, NULL, lapplybody, &a1);
+        pthread_create (&h2, NULL, lapplybody, &a2);
+	pthread_join(h1, NULL);
+	pthread_join(h2, NULL);
 
 	result = r;
 }
+
 /*
 void tlist(State& state, Value const* args, Value& result) {
 	int64_t length = args.length > 0 ? 1 : 0;
@@ -773,49 +820,49 @@ void traceconfig(State & state, Value const* args, Value& result) {
 
 void importCoreFunctions(State& state, Environment* env)
 {
-	state.registerInternalFunction(state.internStr("nchar"), (nchar_fn), 1);
-	state.registerInternalFunction(state.internStr("nzchar"), (nzchar_fn), 1);
-	state.registerInternalFunction(state.internStr("is.na"), (isna_fn), 1);
-	state.registerInternalFunction(state.internStr("is.nan"), (isnan_fn), 1);
-	state.registerInternalFunction(state.internStr("is.finite"), (isfinite_fn), 1);
-	state.registerInternalFunction(state.internStr("is.infinite"), (isinfinite_fn), 1);
+	state.sharedState.registerInternalFunction(state.internStr("nchar"), (nchar_fn), 1);
+	state.sharedState.registerInternalFunction(state.internStr("nzchar"), (nzchar_fn), 1);
+	state.sharedState.registerInternalFunction(state.internStr("is.na"), (isna_fn), 1);
+	state.sharedState.registerInternalFunction(state.internStr("is.nan"), (isnan_fn), 1);
+	state.sharedState.registerInternalFunction(state.internStr("is.finite"), (isfinite_fn), 1);
+	state.sharedState.registerInternalFunction(state.internStr("is.infinite"), (isinfinite_fn), 1);
 	
-	state.registerInternalFunction(state.internStr("cat"), (cat), 1);
-	state.registerInternalFunction(state.internStr("library"), (library), 1);
-	state.registerInternalFunction(state.internStr("inherits"), (inherits), 3);
+	state.sharedState.registerInternalFunction(state.internStr("cat"), (cat), 1);
+	state.sharedState.registerInternalFunction(state.internStr("library"), (library), 1);
+	state.sharedState.registerInternalFunction(state.internStr("inherits"), (inherits), 3);
 	
-	state.registerInternalFunction(state.internStr("seq"), (sequence), 3);
-	state.registerInternalFunction(state.internStr("rep"), (repeat), 3);
+	state.sharedState.registerInternalFunction(state.internStr("seq"), (sequence), 3);
+	state.sharedState.registerInternalFunction(state.internStr("rep"), (repeat), 3);
 	
-	state.registerInternalFunction(state.internStr("attr"), (attr), 3);
-	state.registerInternalFunction(state.internStr("attr<-"), (assignAttr), 3);
+	state.sharedState.registerInternalFunction(state.internStr("attr"), (attr), 3);
+	state.sharedState.registerInternalFunction(state.internStr("attr<-"), (assignAttr), 3);
 	
-	state.registerInternalFunction(state.internStr("unlist"), (unlist), 3);
-	state.registerInternalFunction(state.internStr("length"), (length), 1);
+	state.sharedState.registerInternalFunction(state.internStr("unlist"), (unlist), 3);
+	state.sharedState.registerInternalFunction(state.internStr("length"), (length), 1);
 	
-	state.registerInternalFunction(state.internStr("eval"), (eval_fn), 3);
-	state.registerInternalFunction(state.internStr("source"), (source), 1);
+	state.sharedState.registerInternalFunction(state.internStr("eval"), (eval_fn), 3);
+	state.sharedState.registerInternalFunction(state.internStr("source"), (source), 1);
 
-	state.registerInternalFunction(state.internStr("lapply"), (lapply), 2);
-	//state.registerInternalFunction(state.internStr("t.list"), (tlist));
+	state.sharedState.registerInternalFunction(state.internStr("lapply"), (lapply), 2);
+	//state.sharedState.registerInternalFunction(state.internStr("t.list"), (tlist));
 
-	state.registerInternalFunction(state.internStr("environment"), (environment), 1);
-	state.registerInternalFunction(state.internStr("parent.frame"), (parentframe), 1);
-	state.registerInternalFunction(state.internStr("sys.call"), (syscall), 1);
-	state.registerInternalFunction(state.internStr("remove"), (remove), 2);
+	state.sharedState.registerInternalFunction(state.internStr("environment"), (environment), 1);
+	state.sharedState.registerInternalFunction(state.internStr("parent.frame"), (parentframe), 1);
+	state.sharedState.registerInternalFunction(state.internStr("sys.call"), (syscall), 1);
+	state.sharedState.registerInternalFunction(state.internStr("remove"), (remove), 2);
 	
-	state.registerInternalFunction(state.internStr("stop"), (stop_fn), 1);
-	state.registerInternalFunction(state.internStr("warning"), (warning_fn), 1);
+	state.sharedState.registerInternalFunction(state.internStr("stop"), (stop_fn), 1);
+	state.sharedState.registerInternalFunction(state.internStr("warning"), (warning_fn), 1);
 	
-	state.registerInternalFunction(state.internStr("paste"), (paste), 2);
-	state.registerInternalFunction(state.internStr("deparse"), (deparse), 1);
-	state.registerInternalFunction(state.internStr("substitute"), (substitute), 1);
+	state.sharedState.registerInternalFunction(state.internStr("paste"), (paste), 2);
+	state.sharedState.registerInternalFunction(state.internStr("deparse"), (deparse), 1);
+	state.sharedState.registerInternalFunction(state.internStr("substitute"), (substitute), 1);
 	
-	state.registerInternalFunction(state.internStr("typeof"), (type_of), 1);
+	state.sharedState.registerInternalFunction(state.internStr("typeof"), (type_of), 1);
 	
-	state.registerInternalFunction(state.internStr("exists"), (exists), 4);
+	state.sharedState.registerInternalFunction(state.internStr("exists"), (exists), 4);
 
-	state.registerInternalFunction(state.internStr("proc.time"), (proctime), 0);
-	state.registerInternalFunction(state.internStr("trace.config"), (traceconfig), 1);
+	state.sharedState.registerInternalFunction(state.internStr("proc.time"), (proctime), 0);
+	state.sharedState.registerInternalFunction(state.internStr("trace.config"), (traceconfig), 1);
 }
 

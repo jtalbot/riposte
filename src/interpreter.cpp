@@ -214,9 +214,11 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
 	return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
 }
-
+Instruction const* apply_op(State& state, Instruction const& inst) {
+	return &inst+1;
+}
 Instruction const* icall_op(State& state, Instruction const& inst) {
-	state.internalFunctions[inst.a].ptr(state, &REG(state, inst.b), REG(state, inst.c));
+	state.sharedState.internalFunctions[inst.a].ptr(state, &REG(state, inst.b), REG(state, inst.c));
 	return &inst+1;
 }
 
@@ -321,7 +323,7 @@ Instruction const* kget_op(State& state, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* iget_op(State& state, Instruction const& inst) {
-	REG(state, inst.c) = state.path[0]->get(inst.a);
+	REG(state, inst.c) = state.sharedState.path[0]->get(inst.a);
 	if(REG(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.externStr(String::Init(inst.a)) + "' not found");
 	return &inst+1;
 }
@@ -347,7 +349,7 @@ Instruction const* assign2_op(State& state, Instruction const& inst) {
 		env->assign(s, REG(state, inst.c));
 	}
 	else {
-		state.global->assign(s, REG(state, inst.c));
+		state.sharedState.global->assign(s, REG(state, inst.c));
 	}
 	return &inst+1;
 }

@@ -118,7 +118,7 @@ int dostdin(State& state) {
 			//std::cout << "Parsed: " << value.toString() << std::endl;
 			Prototype* proto = Compiler::compile(state, value);
 			//std::cout << "Compiled code: " << state.stringify(Closure(code,NULL)) << std::endl;
-			result = eval(state, proto, state.global);
+			result = eval(state, proto, state.sharedState.global);
 			std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) { 
 			e_message("Error", "riposte", error.what().c_str());
@@ -160,7 +160,7 @@ static int dofile(const char * file, std::istream & in, State& state, bool echo)
 
 	try {
 		Prototype* proto = Compiler::compile(state, value);
-		Value result = eval(state, proto, state.global);
+		Value result = eval(state, proto, state.sharedState.global);
 		if(echo)
 			std::cout << state.stringify(result) << std::endl;
 	} catch(RiposteError& error) {
@@ -245,7 +245,8 @@ main(int argc, char** argv)
 	Environment* base = new Environment(0);
 	Environment* global = new Environment(base);
 
-	State state(global, base);
+	SharedState sharedState(global, base);
+	State state(sharedState);
 	state.tracing.verbose = verbose;
 
 	interpreter_init(state);

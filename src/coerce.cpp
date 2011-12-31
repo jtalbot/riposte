@@ -66,22 +66,22 @@ void islist(State& state, Value const* args, Value& result) {
 
 void importCoerceFunctions(State& state, Environment* env)
 {
-	state.registerInternalFunction(state.internStr("as.null"), (asnull), 1);
-	state.registerInternalFunction(state.internStr("as.logical"), (aslogical), 1);
-	state.registerInternalFunction(state.internStr("as.integer"), (asinteger), 1);
-	state.registerInternalFunction(state.internStr("as.double"), (asdouble), 1);
-	state.registerInternalFunction(state.internStr("as.numeric"), (asdouble), 1);
-	state.registerInternalFunction(state.internStr("as.character"), (ascharacter), 1);
-	state.registerInternalFunction(state.internStr("as.list"), (aslist), 1);
+	state.sharedState.registerInternalFunction(state.internStr("as.null"), (asnull), 1);
+	state.sharedState.registerInternalFunction(state.internStr("as.logical"), (aslogical), 1);
+	state.sharedState.registerInternalFunction(state.internStr("as.integer"), (asinteger), 1);
+	state.sharedState.registerInternalFunction(state.internStr("as.double"), (asdouble), 1);
+	state.sharedState.registerInternalFunction(state.internStr("as.numeric"), (asdouble), 1);
+	state.sharedState.registerInternalFunction(state.internStr("as.character"), (ascharacter), 1);
+	state.sharedState.registerInternalFunction(state.internStr("as.list"), (aslist), 1);
 
 /*
-	state.registerInternalFunction(state.internStr("is.null"), (isnull));
-	state.registerInternalFunction(state.internStr("is.logical"), (islogical));
-	state.registerInternalFunction(state.internStr("is.integer"), (isinteger));
-	state.registerInternalFunction(state.internStr("is.double"), (isdouble));
-	state.registerInternalFunction(state.internStr("is.real"), (isdouble));
-	state.registerInternalFunction(state.internStr("is.complex"), (iscomplex));
-	state.registerInternalFunction(state.internStr("is.character"), (ischaracter));
-	state.registerInternalFunction(state.internStr("is.list"), (islist));
+	state.sharedState.registerInternalFunction(state.internStr("is.null"), (isnull));
+	state.sharedState.registerInternalFunction(state.internStr("is.logical"), (islogical));
+	state.sharedState.registerInternalFunction(state.internStr("is.integer"), (isinteger));
+	state.sharedState.registerInternalFunction(state.internStr("is.double"), (isdouble));
+	state.sharedState.registerInternalFunction(state.internStr("is.real"), (isdouble));
+	state.sharedState.registerInternalFunction(state.internStr("is.complex"), (iscomplex));
+	state.sharedState.registerInternalFunction(state.internStr("is.character"), (ischaracter));
+	state.sharedState.registerInternalFunction(state.internStr("is.list"), (islist));
 */
 }

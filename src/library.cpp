@@ -43,7 +43,7 @@ void openDynamic(State& state, std::string path, Environment* env) {
 }
 
 void loadLibrary(State& state, std::string path, std::string name) {
-	Environment* env = new Environment(state.path.back());
+	Environment* env = new Environment(state.sharedState.path.back());
 	
 	std::string p = path + "/" + name + ("/R/");
 
@@ -83,7 +83,7 @@ void loadLibrary(State& state, std::string path, std::string name) {
 		closedir(dir);
 	}
 
-	state.path.push_back(env);
-	state.global->init(state.path.back(), 0, Null::Singleton());
+	state.sharedState.path.push_back(env);
+	state.sharedState.global->init(state.sharedState.path.back(), 0, Null::Singleton());
 }
 
