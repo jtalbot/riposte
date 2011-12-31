@@ -436,7 +436,8 @@ struct Object : public Value {
 
 	String className() const {
 		if(!hasClass()) {
-			return String::Init(base().type);	// TODO: make sure types line up correctly with strings
+			return Strings::NA;
+			//return String::Init(base().type);	// TODO: make sure types line up correctly with strings
 		}
 		else {
 			return Character(getClass())[0];
@@ -574,58 +575,66 @@ struct Prototype : public gc {
 
 class Dictionary : public gc {
 protected:
-	static const uint64_t inlineSize = 16;
-	struct Pair { String n; Value v; };
+	static const uint64_t inlineSize = 8;
+	struct Pair { String n; String cn; Value v; };
+	uint64_t size, load;
 	Pair* d;
 	Pair inlineDict[inlineSize];
-	uint64_t size, load;
 
 public:
-	Dictionary() : d(inlineDict), size(inlineSize) {
+	Dictionary() : size(inlineSize), d(inlineDict) {
 		clear();
 	}
+
+	uint64_t hash(String s) const { return (uint64_t)s.i>>3; }
 	
 	// for now, do linear probing
 	// this returns the location of the String s.
 	// or, if s doesn't exist, the location at which s should be inserted.
 	uint64_t find(String s) const {
-		uint64_t i = (uint64_t)s.i & (size-1);	// hash this?
+		uint64_t i = hash(s) & (size-1);	// hash this?
 		while(d[i].n != s & d[i].n != Strings::NA) i = (i+1) & (size-1);
 		assert(i >= 0 && i < size);
 		return i; 
 	}
 
-	uint64_t insert(uint64_t i, String name, Value const& value) {
-		load++;
-		if((load * 2) > size) {
-			rehash(size * 2);
-			i = find(name);
-		}
-		d[i] = (Pair) { name, value };
-		return i;
+	bool fastAssign(String name, Value const& value) __attribute__((always_inline)) {
+		uint64_t i = hash(name) & (size-1);	// hash this?
+		if(__builtin_expect(d[i].cn == name, true)) { d[i].v = value; return true; }
+		i = (i+1) & (size-1);
+		if(__builtin_expect(d[i].cn == name, true)) { d[i].v = value; return true; }
+		return false;
 	}
 	
-	uint64_t assign(String name, Value const& value) __attribute__((always_inline)) {
-		uint64_t i = (uint64_t)name.i & (size-1);	// hash this?
-		if(d[i].n == name) { d[i].v = value; return i; }
-		i = (i+1) & (size-1);
-		if(d[i].n == name) { d[i].v = value; return i; }
-		i = find(name);
-		if(d[i].n == name) { d[i].v = value; return i; }
-		else { return insert(i, name, value); }
+	uint64_t assign(String name, Value const& value) {
+		uint64_t i = find(name);
+		if(d[i].n == name) { d[i].v = value; d[i].cn = value.isConcrete() ?  name : Strings::NA; return i; }
+		else {
+			load++;
+			if((load * 2) > size) {
+				rehash((size) * 2);
+				i = find(name);
+			}
+			d[i] = (Pair) { name, (value.isConcrete()) ? name : Strings::NA, value };
+			return i;
+		}
 	}
 
-	Value const& get(String name) const __attribute__((always_inline)) {
-		uint64_t i = (uint64_t)name.i & (size-1);	// hash this?
-		if(d[i].n == name) return d[i].v;
+	bool fastGet(String name, Value& out) __attribute__((always_inline)) {
+		uint64_t i = hash(name) & (size-1);	// hash this?
+		if(__builtin_expect(d[i].cn == name, true)) { out = d[i].v; return true; }
 		i = (i+1) & (size-1);
-		if(d[i].n == name) return d[i].v;
-		else return d[find(name)].v;
+		if(__builtin_expect(d[i].cn == name, true)) { out = d[i].v; return true; }
+		return false;
+	}
+
+	Value const& get(String name) const {
+		return d[find(name)].v;
 	}
 
 	void remove(String name) {
 		uint64_t i = find(name);
-		d[i] = (Pair) { Strings::NA, Value::Nil() };
+		d[i] = (Pair) { Strings::NA, Strings::NA, Value::Nil() };
 	}
 
 	void rehash(uint64_t s) {
@@ -635,7 +644,7 @@ public:
 		if(s <= size) return; // should rehash on shrinking sometimes, when?
 
 		size = s;
-		d = new (GC) Pair[size];
+		d = new (GC) Pair[s];
 		clear();	// this increments the revision
 		
 		// copy over previous populated values...
@@ -650,7 +659,7 @@ public:
 		load = 0; 
 		for(uint64_t i = 0; i < size; i++) {
 			// wiping v too makes sure we're not holding unnecessary pointers
-			d[i] = (Pair) { Strings::NA, Value::Nil() };
+			d[i] = (Pair) { Strings::NA, Strings::NA, Value::Nil() };
 		}
 	}
 
@@ -659,16 +668,6 @@ public:
 		String name;
 	};
 
-	Value const& get(uint64_t index) const {
-		assert(index >= 0 && index < size);
-		return d[index].v;
-	}
-
-	/*void assign(uint64_t index, Value const& value) {
-		assert(index >= 0 && index < size);
-		d[index].v = value;
-	}*/
-	
 	Pointer makePointer(String name) {
 		return (Pointer) { this, name };
 	}

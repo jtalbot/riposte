@@ -1,8 +1,6 @@
 
 #include "value.h"
 
-DEFINE_ENUM_TO_STRING(EStrings, STRINGS)
-
 _doublena doublena = {0x7fff000000001953};
 
 const unsigned char Null::NAelement = 255;

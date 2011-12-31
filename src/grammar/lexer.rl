@@ -54,7 +54,7 @@
 
 	# Symbols.
 	( '..' digit+ )
-		{std::string s(ts+2, te-ts-2); token( TOKEN_SYMBOL, Symbol(String::Init(-strToInt(s))));};
+		{std::string s(ts+2, te-ts-2); token( TOKEN_SYMBOL, Symbol(String::Init((char const*)-strToInt(s)))); };
 
 	( ('.' ([a-zA-Z_.] [a-zA-Z0-9_.]*)?) | [a-zA-Z] [a-zA-Z0-9_.]* ) 
 		{token( TOKEN_SYMBOL, Symbol(state.internStr(std::string(ts, te-ts))) );};

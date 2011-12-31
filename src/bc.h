@@ -12,7 +12,7 @@
 	_(branch, "branch") \
 	_(call, "call") \
 	_(apply, "apply") \
-	_(icall, "icall") \
+	_(internal, "internal") \
 	_(UseMethod, "UseMethod") \
 	_(ret, "ret") \
 	_(forbegin, "forbegin") \

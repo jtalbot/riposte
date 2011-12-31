@@ -106,7 +106,7 @@ inline void Subset2(State& state, Value const& a, Value const& i, Value& out) {
 		String const* data = c.v();
 		int64_t length = c.length;
 		for(int64_t j = 0; j < length; j++) {
-			if(data[j].i == i.i) {
+			if(data[j] == i.s) {
 				Element2(a, j, out);
 				return;
 			}

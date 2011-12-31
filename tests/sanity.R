@@ -124,7 +124,7 @@ cat("Running sanity tests\n")
 	PassIfTrue(h(1,2,3) == 100)
 	PassIfTrue(i(1,2,3) == 2)
 	PassIfTrue(j(1,2,3) == 1)
-	PassIfTrue(k(1,2,3) == 2)
+	PassIfTrue(k(4,5,6) == 5)
 
 	cat("Missing parameters...\n")
 	f <- function(x=4,y=2) x/y

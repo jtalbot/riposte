@@ -44,8 +44,6 @@ RecordingStatus::Enum kget_record(State & state, Instruction const & inst, Instr
 }
 
 
-OP_NOT_IMPLEMENTED(iget)
-
 RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	if(!TRACE.Reserve(0,1))
 		return RecordingStatus::RESOURCE;
@@ -57,7 +55,7 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 		//otherwise the inline cache is updated, which involves creating a pointer
 
 		//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
-		TRACE.EmitVarOutput(state,state.frame.environment->makePointer(String::Init(inst.a)));
+		TRACE.EmitVarOutput(state,state.frame.environment->makePointer(String::Init((char const*)inst.a)));
 	}
 	TRACE.SetMaxLiveRegister(state.base,inst.c);
 	return RecordingStatus::NO_ERROR;
@@ -101,7 +99,7 @@ CHECKED_INTERPRET(call, A)
 #undef C_1
 #undef CHECKED_INTERPRET
 
-OP_NOT_IMPLEMENTED(icall)
+OP_NOT_IMPLEMENTED(internal)
 
 bool get_input(State & state, Value & v, IRef * ref, bool * can_fallback, bool * should_record) {
 

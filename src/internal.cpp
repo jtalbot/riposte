@@ -600,6 +600,8 @@ void* lapplybody(void* args) {
 	apply[1] = Value::Nil();
 	Prototype* p = Compiler::compile(l.state, CreateCall(apply));
 	State istate(l.state.sharedState);
+	istate.tracing.config = l.state.tracing.config;
+	istate.tracing.verbose = l.state.tracing.verbose;
 	for( size_t i=l.start; i!=l.end; ++i ) {
 		p->calls[0].arguments[0] = l.in[i];
 		l.out[i] = eval(istate, p);
