@@ -435,7 +435,8 @@ struct Object : public Value {
 
 	String className() const {
 		if(!hasClass()) {
-			return String::Init(base().type);	// TODO: make sure types line up correctly with strings
+			return Strings::NA;
+			//return String::Init(base().type);	// TODO: make sure types line up correctly with strings
 		}
 		else {
 			return Character(getClass())[0];

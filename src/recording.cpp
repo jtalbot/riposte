@@ -57,7 +57,7 @@ RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Ins
 		//otherwise the inline cache is updated, which involves creating a pointer
 
 		//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
-		TRACE.EmitVarOutput(state,state.frame.environment->makePointer(String::Init(inst.a)));
+		TRACE.EmitVarOutput(state,state.frame.environment->makePointer(String::Init((char const*)inst.a)));
 	}
 	TRACE.SetMaxLiveRegister(state.base,inst.c);
 	return RecordingStatus::NO_ERROR;

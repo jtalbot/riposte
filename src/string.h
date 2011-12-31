@@ -128,16 +128,16 @@
 DECLARE_ENUM(EStrings, STRINGS)
 
 struct String {
-	int64_t i;
+	char const* i;
 	bool operator==(String o) const { return i == o.i; }
 	bool operator!=(String o) const { return i != o.i; }
 	bool operator<(String o) const { return i < o.i; }
 	bool operator>(String o) const { return i > o.i; }
-	static String Init(int64_t i) { return (String){i}; }
+	static String Init(char const* i) { return (String){i}; }
 };
 
 namespace Strings {
-       #define CONST_DECLARE(name, string, ...) static const ::String name = String::Init(EStrings::name);
+       #define CONST_DECLARE(name, string, ...) static const ::String name = String::Init(string);
        STRINGS(CONST_DECLARE)
        #undef CONST_DECLARE
 }
@@ -145,16 +145,11 @@ namespace Strings {
 
 class StringTable {
 	std::map<std::string, String> stringTable;
-	std::map<String, std::string> reverseStringTable;
 	int64_t next;
 public:
 	StringTable() : next(0) {
-		// insert predefined strings into table at known positions (corresponding to their enum value)
 	#define ENUM_STRING_TABLE(name, string) \
 		stringTable[string] = Strings::name; \
-		reverseStringTable[Strings::name] = string;\
-		assert(next==Strings::name.i);\
-		next++;\
 
 		STRINGS(ENUM_STRING_TABLE);
 	}
@@ -162,17 +157,18 @@ public:
 	String in(std::string const& s) {
 		std::map<std::string, String>::const_iterator i = stringTable.find(s);
 		if(i == stringTable.end()) {
-			int64_t index = next++;
-			stringTable[s] = String::Init(index);
-			reverseStringTable[String::Init(index)] = s;
-			return String::Init(index);
+			char* str = new char[s.size()+1];
+			memcpy(str, s.c_str(), s.size()+1);
+			String string = String::Init(str);
+			stringTable[s] = string;
+			return string;
 		} else return i->second;
-	
 	}
 
 	std::string out(String i) const {
-		if(i.i < 0) return std::string("..") + intToStr(-i.i);
-		else return reverseStringTable.find(i)->second;
+		if((int64_t)i.i < 0) return std::string("..") + intToStr(-(int64_t)i.i);
+		//else return reverseStringTable.find(i)->second;
+		else return std::string(i.i);
 	}
 };
 

@@ -2,65 +2,63 @@
 #include "compiler.h"
 #include "internal.h"
 
-static ByteCode::Enum op(Symbol const& s) {
-	switch(s.i) {
-		case EStrings::colon: return ByteCode::colon; break;
-		case EStrings::mul: return ByteCode::mul; break;
-		case EStrings::div: return ByteCode::div; break;
-		case EStrings::idiv: return ByteCode::idiv; break;
-		case EStrings::mod: return ByteCode::mod; break;
-		case EStrings::pow: return ByteCode::pow; break;
-		case EStrings::atan2: return ByteCode::atan2; break;
-		case EStrings::hypot: return ByteCode::hypot; break;
-		case EStrings::lt: return ByteCode::lt; break;
-		case EStrings::gt: return ByteCode::gt; break;
-		case EStrings::eq: return ByteCode::eq; break;
-		case EStrings::neq: return ByteCode::neq; break;
-		case EStrings::ge: return ByteCode::ge; break;
-		case EStrings::le: return ByteCode::le; break;
-		case EStrings::lnot: return ByteCode::lnot; break;
-		case EStrings::land: return ByteCode::land; break;
-		case EStrings::lor: return ByteCode::lor; break;
-		case EStrings::sland: return ByteCode::sland; break;
-		case EStrings::slor: return ByteCode::slor; break;
-		case EStrings::abs: return ByteCode::abs; break;
-		case EStrings::sign: return ByteCode::sign; break;
-		case EStrings::sqrt: return ByteCode::sqrt; break;
-		case EStrings::floor: return ByteCode::floor; break;
-		case EStrings::ceiling: return ByteCode::ceiling; break;
-		case EStrings::trunc: return ByteCode::trunc; break;
-		case EStrings::round: return ByteCode::round; break;
-		case EStrings::signif: return ByteCode::signif; break;
-		case EStrings::exp: return ByteCode::exp; break;
-		case EStrings::log: return ByteCode::log; break;
-		case EStrings::cos: return ByteCode::cos; break;
-		case EStrings::sin: return ByteCode::sin; break;
-		case EStrings::tan: return ByteCode::tan; break;
-		case EStrings::acos: return ByteCode::acos; break;
-		case EStrings::asin: return ByteCode::asin; break;
-		case EStrings::atan: return ByteCode::atan; break;
-		case EStrings::sum: return ByteCode::sum; break;
-		case EStrings::prod: return ByteCode::prod; break;
-		case EStrings::min: return ByteCode::min; break;
-		case EStrings::max: return ByteCode::max; break;
-		case EStrings::any: return ByteCode::any; break;
-		case EStrings::all: return ByteCode::all; break;
-		case EStrings::cumsum: return ByteCode::cumsum; break;
-		case EStrings::cumprod: return ByteCode::cumprod; break;
-		case EStrings::cummin: return ByteCode::cummin; break;
-		case EStrings::cummax: return ByteCode::cummax; break;
-		case EStrings::cumany: return ByteCode::cumany; break;
-		case EStrings::cumall: return ByteCode::cumall; break;
-		case EStrings::type: return ByteCode::type; break;
-		case EStrings::Logical: return ByteCode::logical1; break;	 	
-		case EStrings::Integer: return ByteCode::integer1; break;
-		case EStrings::Double: return ByteCode::double1; break;
-		case EStrings::Character: return ByteCode::character1; break;
-		case EStrings::Raw: return ByteCode::raw1; break;
-		case EStrings::length: return ByteCode::length; break;
-		case EStrings::mmul: return ByteCode::mmul; break;
-		default: throw RuntimeError("unexpected symbol used as an operator"); break;
-	}
+static ByteCode::Enum op(Symbol const& func) {
+	if(func.s == Strings::colon) return ByteCode::colon;
+	if(func.s == Strings::mul) return ByteCode::mul;
+	if(func.s == Strings::div) return ByteCode::div; 
+	if(func.s == Strings::idiv) return ByteCode::idiv; 
+	if(func.s == Strings::mod) return ByteCode::mod; 
+	if(func.s == Strings::pow) return ByteCode::pow; 
+	if(func.s == Strings::atan2) return ByteCode::atan2; 
+	if(func.s == Strings::hypot) return ByteCode::hypot; 
+	if(func.s == Strings::lt) return ByteCode::lt; 
+	if(func.s == Strings::gt) return ByteCode::gt; 
+	if(func.s == Strings::eq) return ByteCode::eq; 
+	if(func.s == Strings::neq) return ByteCode::neq; 
+	if(func.s == Strings::ge) return ByteCode::ge; 
+	if(func.s == Strings::le) return ByteCode::le; 
+	if(func.s == Strings::lnot) return ByteCode::lnot; 
+	if(func.s == Strings::land) return ByteCode::land; 
+	if(func.s == Strings::lor) return ByteCode::lor; 
+	if(func.s == Strings::sland) return ByteCode::sland; 
+	if(func.s == Strings::slor) return ByteCode::slor; 
+	if(func.s == Strings::abs) return ByteCode::abs; 
+	if(func.s == Strings::sign) return ByteCode::sign; 
+	if(func.s == Strings::sqrt) return ByteCode::sqrt; 
+	if(func.s == Strings::floor) return ByteCode::floor; 
+	if(func.s == Strings::ceiling) return ByteCode::ceiling; 
+	if(func.s == Strings::trunc) return ByteCode::trunc; 
+	if(func.s == Strings::round) return ByteCode::round; 
+	if(func.s == Strings::signif) return ByteCode::signif; 
+	if(func.s == Strings::exp) return ByteCode::exp; 
+	if(func.s == Strings::log) return ByteCode::log; 
+	if(func.s == Strings::cos) return ByteCode::cos; 
+	if(func.s == Strings::sin) return ByteCode::sin; 
+	if(func.s == Strings::tan) return ByteCode::tan; 
+	if(func.s == Strings::acos) return ByteCode::acos; 
+	if(func.s == Strings::asin) return ByteCode::asin; 
+	if(func.s == Strings::atan) return ByteCode::atan; 
+	if(func.s == Strings::sum) return ByteCode::sum; 
+	if(func.s == Strings::prod) return ByteCode::prod; 
+	if(func.s == Strings::min) return ByteCode::min; 
+	if(func.s == Strings::max) return ByteCode::max; 
+	if(func.s == Strings::any) return ByteCode::any; 
+	if(func.s == Strings::all) return ByteCode::all; 
+	if(func.s == Strings::cumsum) return ByteCode::cumsum; 
+	if(func.s == Strings::cumprod) return ByteCode::cumprod; 
+	if(func.s == Strings::cummin) return ByteCode::cummin; 
+	if(func.s == Strings::cummax) return ByteCode::cummax; 
+	if(func.s == Strings::cumany) return ByteCode::cumany; 
+	if(func.s == Strings::cumall) return ByteCode::cumall; 
+	if(func.s == Strings::type) return ByteCode::type; 
+	if(func.s == Strings::Logical) return ByteCode::logical1; 	 	
+	if(func.s == Strings::Integer) return ByteCode::integer1; 
+	if(func.s == Strings::Double) return ByteCode::double1; 
+	if(func.s == Strings::Character) return ByteCode::character1; 
+	if(func.s == Strings::Raw) return ByteCode::raw1; 
+	if(func.s == Strings::length) return ByteCode::length; 
+	if(func.s == Strings::mmul) return ByteCode::mmul; 
+	else throw RuntimeError("unexpected symbol used as an operator"); 
 }
 
 int64_t Compiler::emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c) {
@@ -174,19 +172,17 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 
 	Symbol func(call[0]);
 	
-	switch(func.i) {
-
-	case EStrings::internal: 
+	if(func.s == Strings::internal) 
 	{
 		if(!call[1].isObject())
 			throw CompileError(std::string(".Internal has invalid arguments (") + Type::toString(call[1].type) + ")");
 		Object const& o = (Object const&)call[1];
 		assert(o.className() == Strings::Call && o.base().isList());
 		return compileInternalFunctionCall(o, code);
-	} break;
-	case EStrings::assign:
-	case EStrings::eqassign: 
-	case EStrings::assign2: 
+	} 
+	else if(func.s == Strings::assign ||
+		func.s == Strings::eqassign || 
+		func.s == Strings::assign2)
 	{
 		Value dest = call[1];
 		
@@ -219,8 +215,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	
 		scopes.back().deadAfter(source);
 		return source;
-	} break;
-	case EStrings::bracket: {
+	} 
+	else if(func.s == Strings::bracket) {
 		if(call.length != 3) return compileFunctionCall(call, names, code);
 		int64_t value = compile(call[1], code);
 		int64_t index = compile(call[2], code);
@@ -229,9 +225,9 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		emit(code, ByteCode::subset, value, index, reg);
 		scopes.back().deadAfter(reg);	
 		return reg;
-	} break;
-	case EStrings::bb: 
-	case EStrings::dollar: {
+	} 
+	else if(func.s == Strings::bb ||
+		func.s == Strings::dollar) {
 		if(call.length != 3) return compileFunctionCall(call, names, code);
 		int64_t value = compile(call[1], code);
 		int64_t index = compile(call[2], code);
@@ -240,8 +236,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		emit(code, ByteCode::subset2, value, index, reg);
 		scopes.back().deadAfter(reg);	
 		return reg;
-	} break;
-	case EStrings::bracketAssign: { 
+	} 
+	else if(func.s == Strings::bracketAssign) { 
 		if(call.length != 4) return compileFunctionCall(call, names, code);
 		int64_t dest = compile(call[1], code);
 		int64_t index = compile(call[2], code);
@@ -249,9 +245,9 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		emit(code, ByteCode::iassign, value, index, dest);
 		scopes.back().deadAfter(dest);	
 		return dest;
-	} break;
-	case EStrings::bbAssign: 
-	case EStrings::dollarAssign: {
+	} 
+	else if(func.s == Strings::bbAssign ||
+		func.s == Strings::dollarAssign) {
 		if(call.length != 4) return compileFunctionCall(call, names, code);
 		int64_t dest = compile(call[1], code);
 		int64_t index = compile(call[2], code);
@@ -259,8 +255,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		emit(code, ByteCode::eassign, value, index, dest);
 		scopes.back().deadAfter(dest);	
 		return dest;
-	} break;
-	case EStrings::function: 
+	} 
+	else if(func.s == Strings::function) 
 	{
 		Scope scope;
 		scope.topLevel = false;
@@ -301,8 +297,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t reg = scopes.back().allocRegister(Register::CONSTANT);	
 		emit(code, ByteCode::function, code->prototypes.size()-1, 0, reg);
 		return reg;
-	} break;
-	case EStrings::returnSym: 
+	} 
+	else if(func.s == Strings::returnSym)
 	{
 		int64_t result;
 		if(call.length == 1) {
@@ -314,8 +310,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		emit(code, ByteCode::ret, 0, 0, result);
 		scopes.back().deadAfter(result);
 		return result;
-	} break;
-	case EStrings::forSym: 
+	} 
+	else if(func.s == Strings::forSym) 
 	{
 		// special case common i in m:n case
 		/*if(call[2].isCall() && Symbol(Call(call[2])[0]) == EStrings::colon) {
@@ -356,8 +352,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		scopes.back().deadAfter(liveIn);
 		int64_t result = compile(Null::Singleton(), code);
 		return result;
-	} break;
-	case EStrings::whileSym: 
+	} 
+	else if(func.s == Strings::whileSym)
 	{
 		int64_t head_condition = compile(call[1], code);
 		emit(code, ByteCode::jf, 0, head_condition, liveIn);
@@ -377,8 +373,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		scopes.back().deadAfter(liveIn);
 		int64_t result = compile(Null::Singleton(), code);
 		return result;
-	} break;
-	case EStrings::repeatSym: 
+	} 
+	else if(func.s == Strings::repeatSym)
 	{
 		loopDepth++;
 
@@ -392,22 +388,22 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		scopes.back().deadAfter(liveIn);
 		int64_t result = compile(Null::Singleton(), code);
 		return result;
-	} break;
-	case EStrings::nextSym:
+	}
+	else if(func.s == Strings::nextSym)
 	{
 		if(loopDepth == 0) throw CompileError("next used outside of loop");
 		int64_t result = scopes.back().allocRegister(Register::TEMP);	
 		emit(code, ByteCode::jmp, 0, 1, result);
 		return result;
-	} break;
-	case EStrings::breakSym:
+	} 
+	else if(func.s == Strings::breakSym)
 	{
 		if(loopDepth == 0) throw CompileError("break used outside of loop");
 		int64_t result = scopes.back().allocRegister(Register::TEMP);	
 		emit(code, ByteCode::jmp, 0, 2, result);
 		return result;
-	} break;
-	case EStrings::ifSym: 
+	} 
+	else if(func.s == Strings::ifSym) 
 	{
 		int64_t resultT=0, resultF=0;
 		if(call.length != 3 && call.length != 4)	
@@ -437,15 +433,15 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		if(resultT != resultF) throw CompileError(std::string("then and else blocks don't put the result in the same register ") + intToStr(resultT) + " " + intToStr(resultF));
 		scopes.back().deadAfter(resultT);
 		return resultT;
-	} break;
-	case EStrings::switchSym:
+	} 
+	else if(func.s == Strings::switchSym)
 	{
 		if(call.length == 0) _error("'EXPR' is missing");
 		int64_t c = compile(call[1], code);
 		int64_t n = call.length-2;
 		int64_t branch = emit(code, ByteCode::branch, c, n, 0);
 		for(int64_t i = 2; i < call.length; i++) {
-			emit(code, ByteCode::branch, names.length > i ? names[i].i : Strings::empty.i, 0, 0);
+			emit(code, ByteCode::branch, (int64_t)(names.length > i ? names[i].i : Strings::empty.i), 0, 0);
 		}
 		scopes.back().deadAfter(liveIn);
 		
@@ -470,8 +466,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		}
 		scopes.back().deadAfter(result);
 		return result;
-	} break;
-	case EStrings::brace: 
+	} 
+	else if(func.s == Strings::brace) 
 	{
 		int64_t length = call.length;
 		if(length <= 1) {
@@ -485,12 +481,12 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			scopes.back().deadAfter(result);
 			return result;
 		}
-	} break;
-	case EStrings::paren: 
+	} 
+	else if(func.s == Strings::paren) 
 	{
 		return compile(call[1], code);
-	} break;
-	case EStrings::add: 
+	} 
+	else if(func.s == Strings::add)
 	{
 		int64_t result = 0;
 		if(call.length != 2 && call.length != 3)
@@ -508,8 +504,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			emit(code, ByteCode::add, a, b, result);
 		}
 		return result;
-	} break;
-	case EStrings::sub: 
+	} 
+	else if(func.s == Strings::sub) 
 	{
 		int64_t result = 0;
 		if(call.length != 2 && call.length != 3)
@@ -527,27 +523,27 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			emit(code, ByteCode::sub, a, b, result);
 		}
 		return result;
-	} break;
+	} 
 	// Binary operators
-	case EStrings::colon:
-	case EStrings::mul: 
-	case EStrings::div: 
-	case EStrings::idiv: 
-	case EStrings::pow: 
-	case EStrings::mod:
-	case EStrings::atan2:
-	case EStrings::hypot:
-	case EStrings::land:
-	case EStrings::lor:
-	case EStrings::slor:
-	case EStrings::sland:
-	case EStrings::eq:
-	case EStrings::neq:
-	case EStrings::lt:
-	case EStrings::gt:
-	case EStrings::ge:
-	case EStrings::le:
-	case EStrings::mmul:
+	else if(func.s == Strings::colon ||
+		func.s == Strings::mul ||
+		func.s == Strings::div || 
+		func.s == Strings::idiv || 
+		func.s == Strings::pow || 
+		func.s == Strings::mod ||
+		func.s == Strings::atan2 ||
+		func.s == Strings::hypot ||
+		func.s == Strings::land || 
+		func.s == Strings::lor ||
+		func.s == Strings::slor ||
+		func.s == Strings::sland ||
+		func.s == Strings::eq ||
+		func.s == Strings::neq ||
+		func.s == Strings::lt ||
+		func.s == Strings::gt ||
+		func.s == Strings::ge ||
+		func.s == Strings::le ||
+		func.s == Strings::mmul)
 	{
 		// if there aren't exactly two parameters, we should call the library version...
 		if(call.length != 3) return compileFunctionCall(call, names, code);
@@ -557,44 +553,44 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t result = scopes.back().allocRegister(Register::TEMP);
 		emit(code, op(func), a, b, result);
 		return result;
-	} break;
+	} 
 	// Unary operators
-	case EStrings::lnot: 
-	case EStrings::abs: 
-	case EStrings::sign: 
-	case EStrings::sqrt: 
-	case EStrings::floor: 
-	case EStrings::ceiling: 
-	case EStrings::trunc: 
-	case EStrings::round: 
-	case EStrings::signif: 
-	case EStrings::exp: 
-	case EStrings::log: 
-	case EStrings::cos: 
-	case EStrings::sin: 
-	case EStrings::tan: 
-	case EStrings::acos: 
-	case EStrings::asin: 
-	case EStrings::atan:
-	case EStrings::sum:
-	case EStrings::prod:
-	case EStrings::min:
-	case EStrings::max:
-	case EStrings::any:
-	case EStrings::all:
-	case EStrings::cumsum:
-	case EStrings::cumprod:
-	case EStrings::cummin:
-	case EStrings::cummax:
-	case EStrings::cumany:
-	case EStrings::cumall:
-	case EStrings::type:
-	case EStrings::length:
-	case EStrings::Logical:
-	case EStrings::Integer:
-	case EStrings::Double:
-	case EStrings::Character:
-	case EStrings::Raw:
+	else if(func.s == Strings::lnot || 
+		func.s == Strings::abs || 
+		func.s == Strings::sign ||
+		func.s == Strings::sqrt ||
+		func.s == Strings::floor ||
+		func.s == Strings::ceiling || 
+		func.s == Strings::trunc ||
+		func.s == Strings::round ||
+		func.s == Strings::signif ||
+		func.s == Strings::exp ||
+		func.s == Strings::log ||
+		func.s == Strings::cos ||
+		func.s == Strings::sin ||
+		func.s == Strings::tan ||
+		func.s == Strings::acos ||
+		func.s == Strings::asin ||
+		func.s == Strings::atan ||
+		func.s == Strings::sum ||
+		func.s == Strings::prod ||
+		func.s == Strings::min ||
+		func.s == Strings::max ||
+		func.s == Strings::any ||
+		func.s == Strings::all ||
+		func.s == Strings::cumsum ||
+		func.s == Strings::cumprod ||
+		func.s == Strings::cummin ||
+		func.s == Strings::cummax ||
+		func.s == Strings::cumany ||
+		func.s == Strings::cumall ||
+		func.s == Strings::type ||
+		func.s == Strings::length ||
+		func.s == Strings::Logical ||
+		func.s == Strings::Integer ||
+		func.s == Strings::Double ||
+		func.s == Strings::Character ||
+		func.s == Strings::Raw)
 	{
 		// if there isn't exactly one parameter, we should call the library version...
 		if(call.length != 2) return compileFunctionCall(call, names, code);
@@ -603,8 +599,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t result = scopes.back().allocRegister(Register::TEMP);
 		emit(code, op(func), a, 0, result);
 		return result; 
-	} break;
-	case EStrings::UseMethod:
+	} 
+	else if(func.s == Strings::UseMethod)
 	{
 		if(scopes.back().topLevel)
 			throw CompileError("Attempt to use UseMethod outside of function");
@@ -624,8 +620,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		emit(code, ByteCode::UseMethod, generic.i, code->calls.size()-1, object);
 		scopes.back().deadAfter(object);
 		return object;
-	} break;
-	case EStrings::seq_len:
+	} 
+	else if(func.s == Strings::seq_len)
 	{
 		int64_t len = compile(call[1], code);
 		int64_t step = compile(Integer::c(1), code);
@@ -633,8 +629,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t result = scopes.back().allocRegister(Register::TEMP);
 		emit(code, ByteCode::seq, len, step, result);
 		return result;
-	} break;
-	case EStrings::docall:
+	} 
+	else if(func.s == Strings::docall)
 	{
 		int64_t what = compile(call[1], code);
 		int64_t args = compile(call[2], code);
@@ -642,8 +638,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t result = scopes.back().allocRegister(Register::TEMP);
 		emit(code, ByteCode::call, what, args, result);
 		return result;
-	} break;
-	case EStrings::list:
+	} 
+	else if(func.s == Strings::list)
 	{
 		// we only handle the list(...) case through an op for now
 		if(call.length != 2 || !call[1].isSymbol() || Symbol(call[1]) != Strings::dots)
@@ -655,8 +651,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		emit(code, ByteCode::list, counter, storage, result); 
 		scopes.back().deadAfter(result);
 		return result;
-	} break;
-	case EStrings::missing:
+	} 
+	else if(func.s == Strings::missing)
 	{
 		if(call.length != 2) _error("missing requires one argument");
 		if(!call[1].isSymbol() && !call[1].isCharacter1()) _error("wrong parameter to missing");
@@ -665,17 +661,16 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		emit(code, ByteCode::missing, s.i, 0, result); 
 		scopes.back().deadAfter(result);
 		return result;
-	} break;
-	case EStrings::quote:
+	} 
+	else if(func.s == Strings::quote)
 	{
 		if(call.length != 2) _error("quote requires one argument");
 		return compileConstant(call[1], code);
-	} break;
-	default:
+	} 
+	else 
 	{
 		return compileFunctionCall(call, names, code);
 	}
-	};
 }
 
 int64_t Compiler::compileExpression(List const& values, Prototype* code) {
@@ -696,7 +691,7 @@ int64_t Compiler::compile(Value const& expr, Prototype* code) {
 	{
 		case Type::Symbol:
 			return compileSymbol(Symbol(expr), code);
-			break;
+			break;			
 		case Type::Object:
 			{
 				Object const& o = (Object const&) expr;
@@ -717,7 +712,8 @@ int64_t Compiler::compile(Value const& expr, Prototype* code) {
 		default: {
 			int64_t i = compileConstant(expr, code);
 			return i;
-		}	break;
+			}	
+			break;
 	};
 }
 

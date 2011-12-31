@@ -37,7 +37,7 @@ static void ExpandDots(State& state, List& arguments, Character& names, int64_t 
 	if(dots < arguments.length) {
 		List a(arguments.length + dotslength - 1);
 		for(int64_t i = 0; i < dots; i++) a[i] = arguments[i];
-		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(state, Symbol(String::Init(-(i-dots+1)))), NULL).AsPromise(); } // TODO: should cache these.
+		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(state, Symbol(String::Init((char const*)-(i-dots+1)))), NULL).AsPromise(); } // TODO: should cache these.
 		for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) a[i] = arguments[i-dotslength];
 
 		arguments = a;
@@ -66,7 +66,7 @@ inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* 
 	if(i >= 0)
 		env->assign(parameters[i], w);
 	else {
-		env->assign(String::Init(i), w);
+		env->assign(String::Init((char const*)i), w);
 	}
 }
 
@@ -258,7 +258,7 @@ static Value GenericSearch(State& state, Character klass, String generic, String
 }
 
 Instruction const* UseMethod_op(State& state, Instruction const& inst) {
-	String generic = String::Init(inst.a);
+	String generic = String::Init((char const*)inst.a);
 
 	CompiledCall const& call = state.frame.prototype->calls[inst.b];
 	List arguments = call.arguments;
@@ -293,7 +293,7 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 
 	// otherwise, need to do a real look up starting from env
 	Environment* env = state.frame.environment;
-	String s = String::Init(inst.a);
+	String s = String::Init((char const*)inst.a);
 	
 	Value& dest = REG(state, inst.c);
 	dest = env->get(s);
@@ -322,11 +322,11 @@ Instruction const* kget_op(State& state, Instruction const& inst) {
 }
 Instruction const* iget_op(State& state, Instruction const& inst) {
 	REG(state, inst.c) = state.path[0]->get(inst.a);
-	if(REG(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.externStr(String::Init(inst.a)) + "' not found");
+	if(REG(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.externStr(String::Init((char const*)inst.a)) + "' not found");
 	return &inst+1;
 }
 Instruction const* assign_op(State& state, Instruction const& inst) {
-	state.frame.environment->assign(String::Init(inst.a), REG(state, inst.c));
+	state.frame.environment->assign(String::Init((char const*)inst.a), REG(state, inst.c));
 	return &inst+1;
 }
 Instruction const* assign2_op(State& state, Instruction const& inst) {
@@ -336,7 +336,7 @@ Instruction const* assign2_op(State& state, Instruction const& inst) {
 	Environment* env = state.frame.environment->LexicalScope();
 	assert(env != 0);
 
-	String s = String::Init(inst.a);
+	String s = String::Init((char const*)inst.a);
 	Value dest = env->get(s);
 	while(dest.isNil() && env->LexicalScope() != 0) {
 		env = env->LexicalScope();
@@ -426,11 +426,11 @@ Instruction const* branch_op(State& state, Instruction const& inst) {
 	else if(c.isLogical1()) index = c.i;
 	else if(c.isCharacter1()) {
 		for(int64_t i = 1; i <= inst.b; i++) {
-			if((&inst+i)->a == c.s.i) {
+			if((char const*)(&inst+i)->a == c.s.i) {
 				index = i;
 				break;
 			}
-			if(index < 0 && (&inst+i)->a == Strings::empty.i) {
+			if(index < 0 && (char const*)(&inst+i)->a == Strings::empty.i) {
 				index = i;
 			}
 		}
@@ -455,7 +455,7 @@ Instruction const* list_op(State& state, Instruction const& inst) {
 	}
 	// Otherwise populate result vector with next element
 	else {
-		state.frame.environment->assign(String::Init(-REG(state, inst.a).i), REG(state, inst.b));
+		state.frame.environment->assign(String::Init((char const*)-REG(state, inst.a).i), REG(state, inst.b));
 		((List&)REG(state, inst.c))[REG(state, inst.a).i-1] = REG(state, inst.b);
 	}
 
@@ -476,7 +476,7 @@ Instruction const* list_op(State& state, Instruction const& inst) {
 
 	// Not done yet, increment counter, evaluate next ..#
 	REG(state, inst.a).i++;
-	Value const& src = state.frame.environment->get(String::Init(-REG(state, inst.a).i));
+	Value const& src = state.frame.environment->get(String::Init((char const*)-REG(state, inst.a).i));
 	if(!src.isPromise()) {
 		REG(state, inst.b) = src;
 		return &inst;
@@ -756,7 +756,7 @@ Instruction const* length_op(State& state, Instruction const& inst) {
 }
 Instruction const* missing_op(State& state, Instruction const& inst) {
 	// This could be inline cached...or implemented in terms of something else?
-	String s = String::Init(inst.a);
+	String s = String::Init((char const*)inst.a);
 	Value const& v = state.frame.environment->get(s);
 	bool missing = v.isNil() || (v.isPromise() && Function(v).environment() == state.frame.environment);
 	Logical::InitScalar(REG(state, inst.c), missing);
