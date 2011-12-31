@@ -589,7 +589,7 @@ public:
 	// this returns the location of the String s.
 	// or, if s doesn't exist, the location at which s should be inserted.
 	uint64_t find(String s) const {
-		uint64_t i = (uint64_t)s.i & (size-1);	// hash this?
+		uint64_t i = ((uint64_t)s.i>>3) & (size-1);	// hash this?
 		while(d[i].n != s & d[i].n != Strings::NA) i = (i+1) & (size-1);
 		assert(i >= 0 && i < size);
 		return i; 
@@ -606,7 +606,7 @@ public:
 	}
 	
 	uint64_t assign(String name, Value const& value) __attribute__((always_inline)) {
-		uint64_t i = (uint64_t)name.i & (size-1);	// hash this?
+		uint64_t i = ((uint64_t)name.i>>3) & (size-1);	// hash this?
 		if(d[i].n == name) { d[i].v = value; return i; }
 		i = (i+1) & (size-1);
 		if(d[i].n == name) { d[i].v = value; return i; }
@@ -616,7 +616,7 @@ public:
 	}
 
 	Value const& get(String name) const __attribute__((always_inline)) {
-		uint64_t i = (uint64_t)name.i & (size-1);	// hash this?
+		uint64_t i = ((uint64_t)name.i>>3) & (size-1);	// hash this?
 		if(d[i].n == name) return d[i].v;
 		i = (i+1) & (size-1);
 		if(d[i].n == name) return d[i].v;
