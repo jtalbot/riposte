@@ -60,14 +60,10 @@ static void ExpandDots(State& state, List& arguments, Character& names, int64_t 
 	}
 }
 
-inline void argAssign(Environment* env, int64_t i, Value const& v, Environment* execution, Character const& parameters) {
+inline void argAssign(Environment* env, String n, Value const& v, Environment* execution) {
 	Value w = v;
 	if(w.isPromise() && w.p == 0) w.p = execution;
-	if(i >= 0)
-		env->assign(parameters[i], w);
-	else {
-		env->assign(String::Init((char const*)i), w);
-	}
+	env->assign(n, w);
 }
 
 static void MatchArgs(State& state, Environment* env, Environment* fenv, Function const& func, List const& arguments, Character const& anames) {
@@ -77,21 +73,21 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 
 	// set defaults
 	for(int64_t i = 0; i < defaults.length; ++i) {
-		argAssign(fenv, i, defaults[i], fenv, parameters);
+		argAssign(fenv, parameters[i], defaults[i], fenv);
 	}
 
 	// call arguments are not named, do posititional matching
 	if(anames.length == 0) {
 		int64_t end = std::min(arguments.length, fdots);
 		for(int64_t i = 0; i < end; ++i) {
-			if(!arguments[i].isNil()) argAssign(fenv, i, arguments[i], env, parameters);
+			if(!arguments[i].isNil()) argAssign(fenv, parameters[i], arguments[i], env);
 		}
 
 		// set dots if necessary
 		if(fdots < parameters.length) {
 			int64_t idx = 1;
 			for(int64_t i = fdots; i < arguments.length; i++) {
-				argAssign(fenv, -idx, arguments[i], env, parameters);
+				argAssign(fenv, String::Init((char const*)-idx), arguments[i], env);
 				fenv->dots.push_back(Strings::empty);
 				idx++;
 			}
@@ -148,14 +144,16 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 		// stuff that can't be cached...
 
 		// assign all the arguments
-		for(int64_t j = 0; j < parameters.length; ++j) if(j != fdots && set[j] >= 0 && !arguments[set[j]].isNil()) argAssign(fenv, j, arguments[set[j]], env, parameters);
+		for(int64_t j = 0; j < parameters.length; ++j) 
+			if(j != fdots && set[j] >= 0 && !arguments[set[j]].isNil()) 
+				argAssign(fenv, parameters[j], arguments[set[j]], env);
 
 		// put unused args into the dots
 		if(fdots < parameters.length) {
 			int64_t idx = 1;
 			for(int64_t i = 0; i < arguments.length; i++) {
 				if(assignment[i] < 0) {
-					argAssign(fenv, -idx, arguments[i], env, parameters);
+					argAssign(fenv, String::Init((char const*)-idx), arguments[i], env);
 					fenv->dots.push_back(anames[i]);
 					idx++;
 				}
