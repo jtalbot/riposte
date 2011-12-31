@@ -128,12 +128,12 @@
 DECLARE_ENUM(EStrings, STRINGS)
 
 struct String {
-	char const* i;
+	int64_t i;
 	bool operator==(String o) const { return i == o.i; }
 	bool operator!=(String o) const { return i != o.i; }
 	bool operator<(String o) const { return i < o.i; }
 	bool operator>(String o) const { return i > o.i; }
-	static String Init(char const* i) { return (String){i}; }
+	static String Init(char const* i) { return (String){(int64_t)i}; }
 };
 
 namespace Strings {
@@ -166,9 +166,8 @@ public:
 	}
 
 	std::string out(String i) const {
-		if((int64_t)i.i < 0) return std::string("..") + intToStr(-(int64_t)i.i);
-		//else return reverseStringTable.find(i)->second;
-		else return std::string(i.i);
+		if(i.i < 0) return std::string("..") + intToStr(-i.i);
+		else return std::string((char const*)i.i);
 	}
 };
 

@@ -44,8 +44,6 @@ RecordingStatus::Enum kget_record(State & state, Instruction const & inst, Instr
 }
 
 
-OP_NOT_IMPLEMENTED(iget)
-
 RecordingStatus::Enum assign_record(State & state, Instruction const & inst, Instruction const ** pc) {
 	if(!TRACE.Reserve(0,1))
 		return RecordingStatus::RESOURCE;
@@ -101,7 +99,7 @@ CHECKED_INTERPRET(call, A)
 #undef C_1
 #undef CHECKED_INTERPRET
 
-OP_NOT_IMPLEMENTED(icall)
+OP_NOT_IMPLEMENTED(internal)
 
 bool get_input(State & state, Value & v, IRef * ref, bool * can_fallback, bool * should_record) {
 

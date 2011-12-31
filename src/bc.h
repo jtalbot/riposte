@@ -11,7 +11,7 @@
 	_(jmp, "jmp") \
 	_(branch, "branch") \
 	_(call, "call") \
-	_(icall, "icall") \
+	_(internal, "internal") \
 	_(UseMethod, "UseMethod") \
 	_(ret, "ret") \
 	_(forbegin, "forbegin") \

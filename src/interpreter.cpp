@@ -213,9 +213,9 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 	return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
 }
 
-Instruction const* icall_op(State& state, Instruction const& inst) {
-	state.internalFunctions[inst.a].ptr(state, &REG(state, inst.b), REG(state, inst.c));
-	return &inst+1;
+Instruction const* internal_op(State& state, Instruction const& inst) {
+       state.internalFunctions[inst.a].ptr(state, &REG(state, inst.b), REG(state, inst.c));
+       return &inst+1;
 }
 
 // Get a Value by Symbol from the current environment,
@@ -318,11 +318,7 @@ Instruction const* kget_op(State& state, Instruction const& inst) {
 	REG(state, inst.c) = state.frame.prototype->constants[inst.a];
 	return &inst+1;
 }
-Instruction const* iget_op(State& state, Instruction const& inst) {
-	REG(state, inst.c) = state.path[0]->get(inst.a);
-	if(REG(state, inst.c).isNil()) throw RiposteError(std::string("object '") + state.externStr(String::Init((char const*)inst.a)) + "' not found");
-	return &inst+1;
-}
+
 Instruction const* assign_op(State& state, Instruction const& inst) {
 	if(state.frame.environment->fastAssign(String::Init((char const*)inst.a), REG(state, inst.c))) return &inst+1;
 
@@ -426,11 +422,11 @@ Instruction const* branch_op(State& state, Instruction const& inst) {
 	else if(c.isLogical1()) index = c.i;
 	else if(c.isCharacter1()) {
 		for(int64_t i = 1; i <= inst.b; i++) {
-			if((char const*)(&inst+i)->a == c.s.i) {
+			if((&inst+i)->a == c.s.i) {
 				index = i;
 				break;
 			}
-			if(index < 0 && (char const*)(&inst+i)->a == Strings::empty.i) {
+			if(index < 0 && (&inst+i)->a == Strings::empty.i) {
 				index = i;
 			}
 		}

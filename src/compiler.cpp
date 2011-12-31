@@ -155,7 +155,7 @@ int64_t Compiler::compileInternalFunctionCall(Object const& o, Prototype* code) 
 	}
 	scopes.back().deadAfter(liveIn);
 	int64_t result = scopes.back().allocRegister(Register::TEMP);
-	emit(code, ByteCode::icall, function, reg-(call.length-2), result);
+	emit(code, ByteCode::internal, function, reg-(call.length-2), result);
 	return result;
 }
 
