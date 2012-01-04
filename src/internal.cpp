@@ -214,6 +214,7 @@ void unlistNames(State& state, int64_t recurse, Value a, Character& out, int64_t
 void unlist(State& state, Value const* args, Value& result) {
 	Value v = args[0];
 	int64_t recurse = Cast<Logical>(args[1])[0] ? std::numeric_limits<int64_t>::max() : 1;
+	printf("recurse: %d\n", recurse);
 	bool useNames = Cast<Logical>(args[2])[0];
 	
 	int64_t length = unlistLength(state, recurse, v);
@@ -585,28 +586,25 @@ void eval_fn(State& state, Value const* args, Value& result) {
 }
 
 struct lapplyargs {
-	uint64_t start;
-	uint64_t end;
-	State& state;
 	List& in;
 	List& out;
 	Value func;
 };
 
-void* lapplybody(void* args) {
+void lapplybody(void* args, uint64_t start, uint64_t end, State& state) {
 	lapplyargs& l = *(lapplyargs*)args;
+	//printf("lapplybody called with %d to %d\n", start, end);
 	List apply(2);
 	apply[0] = l.func;
 	apply[1] = Value::Nil();
-	Prototype* p = Compiler::compile(l.state, CreateCall(apply));
-	State istate(l.state.sharedState);
-	istate.tracing.config = l.state.tracing.config;
-	istate.tracing.verbose = l.state.tracing.verbose;
-	for( size_t i=l.start; i!=l.end; ++i ) {
+	Prototype* p = Compiler::compile(state, CreateCall(apply));
+	//istate.tracing.config = l.state.tracing.config;
+	//istate.tracing.verbose = l.state.tracing.verbose;
+	for( size_t i=start; i!=end; ++i ) {
 		p->calls[0].arguments[0] = l.in[i];
-		l.out[i] = eval(istate, p);
+		l.out[i] = eval(state, p);
 	}
-	return 0;
+	//return 0;
 }
 
 void lapply(State& state, Value const* args, Value& result) {
@@ -635,7 +633,7 @@ void lapply(State& state, Value const* args, Value& result) {
 		r[i] = eval(istate, p);
 	}*/
 
-	pthread_t h1, h2;
+	/*pthread_t h1, h2;
 
 	lapplyargs a1 = (lapplyargs) {0, x.length/2, state, x, r, func};
 	lapplyargs a2 = (lapplyargs) {x.length/2, x.length, state, x, r, func};
@@ -644,6 +642,10 @@ void lapply(State& state, Value const* args, Value& result) {
         pthread_create (&h2, NULL, lapplybody, &a2);
 	pthread_join(h1, NULL);
 	pthread_join(h2, NULL);
+	*/
+
+	lapplyargs a1 = (lapplyargs) {x, r, func};
+	state.doall(lapplybody, &a1, 0, x.length, 1, 1); 
 
 	result = r;
 }
@@ -816,7 +818,13 @@ void proctime(State& state, Value const* args, Value& result) {
 void traceconfig(State & state, Value const* args, Value& result) {
 	Integer c = As<Integer>(state, args[0]);
 	if(c.length == 0) _error("condition is of zero length");
-	state.tracing.config = (TraceState::Mode) c[0];
+	//state.tracing.config = (TraceState::Mode) c[0];
+		
+	std::vector<State*>& threads = state.sharedState.threads;
+	for(uint64_t i = 0; i < threads.size(); i++) {
+		threads[i]->tracing.config = (TraceState::Mode) c[0];
+	}
+
 	result = Null::Singleton();
 }
 

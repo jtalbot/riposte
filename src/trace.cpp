@@ -136,7 +136,7 @@ void Trace::InitializeOutputs(State & state) {
 }
 
 void Trace::WriteOutputs(State & state) {
-	if(state.tracing.verbose) {
+	if(state.sharedState.verbose) {
 		for(size_t i = 0; i < n_output_values; i++) {
 			std::string v = state.stringify(output_values[i]);
 			printf("o%d = %s\n", (int) i, v.c_str());

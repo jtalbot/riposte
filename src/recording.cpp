@@ -503,7 +503,7 @@ Instruction const * recording_interpret(State& state, Instruction const* pc) {
 #undef RUN_RECORD
 		if(   RecordingStatus::NO_ERROR != status
 		   || RecordingStatus::NO_ERROR != (status = recording_check_conditions(state,pc))) {
-			if(state.tracing.verbose)
+			if(state.sharedState.verbose)
 				printf("%s op caused trace vm to exit: %s\n",ByteCode::toString(pc->bc),RecordingStatus::toString(status));
 			state.tracing.EndTracing(state);
 			return pc;

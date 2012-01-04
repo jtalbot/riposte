@@ -245,10 +245,9 @@ main(int argc, char** argv)
 	Environment* base = new Environment(0);
 	Environment* global = new Environment(base);
 
-	SharedState sharedState(global, base);
-	State state(sharedState);
-	state.tracing.verbose = verbose;
-
+	SharedState sharedState(2, global, base);
+	sharedState.verbose = verbose;
+	State& state = sharedState.getMainThread();
 	interpreter_init(state);
 
 	try {

@@ -395,7 +395,7 @@ private:
 
 void Trace::Interpret(State & state) {
 	InitializeOutputs(state);
-	if(state.tracing.verbose)
+	if(state.sharedState.verbose)
 		printf("executing trace:\n%s\n",toString(state).c_str());
 
 	TraceInterpret trace_code(this);

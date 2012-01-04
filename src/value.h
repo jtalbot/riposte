@@ -22,6 +22,7 @@
 #include "string.h"
 #include "exceptions.h"
 #include "register_set.h"
+#include "thread.h"
 
 #include "ir.h"
 #include "recording.h"
@@ -869,7 +870,6 @@ struct TraceState {
 	: live_traces(TRACE_MAX_TRACES) {
 		active = false;
 		config = DISABLED;
-		verbose = false;
 		n_recorded_since_last_exec = 0;
 	}
 
@@ -879,7 +879,6 @@ struct TraceState {
 		COMPILE
 	};
 	Mode config;
-	bool verbose;
 	bool active;
 
 	Trace traces[TRACE_MAX_TRACES];
@@ -1009,9 +1008,14 @@ struct SharedState {
 	std::vector<Environment*, traceable_allocator<Environment*> > path;
 	Environment* global;
 
-	SharedState(Environment* global, Environment* base) {
-		this->global = global;
-		path.push_back(base);
+	std::vector<State*> threads;
+
+	bool verbose;
+
+	SharedState(uint64_t threads, Environment* global, Environment* base);
+
+	State& getMainThread() const {
+		return *threads[0];
 	}
 
 	void registerInternalFunction(String s, InternalFunctionPtr internalFunction, int64_t params) {
@@ -1021,8 +1025,28 @@ struct SharedState {
 	}
 };
 
+typedef void (*TaskFunctionPtr)(void* args, uint64_t a, uint64_t b, State& thread);
+
 struct State {
+	struct Task {
+		TaskFunctionPtr func;
+		void* args;
+		uint64_t a;	// start of range [a <= x < b]
+		uint64_t b;	// end
+		uint64_t alignment;
+		uint64_t ppt;
+		int* done;
+		Task() : func(0), args(0), done(0) {}
+		Task(TaskFunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment, uint64_t ppt) 
+			: func(func), args(args), a(a), b(b), alignment(alignment), ppt(ppt) {
+			done = new int(1);
+		}
+	};
+
 	SharedState& sharedState;
+	uint64_t index;
+	pthread_t thread;
+	
 	Value* base;
 	Value* registers;
 
@@ -1034,9 +1058,12 @@ struct State {
 
 	TraceState tracing; //all state related to tracing compiler
 
+	std::deque<Task> tasks;
+	Lock tasksLock;
+
 	int64_t assignment[64], set[64]; // temporary space for matching arguments
 	
-	State(SharedState& sharedState) : sharedState(sharedState) {
+	State(SharedState& sharedState, uint64_t index) : sharedState(sharedState), index(index) {
 		registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
 		this->base = registers + DEFAULT_NUM_REGISTERS;
 	}
@@ -1062,9 +1089,166 @@ struct State {
 	std::string externStr(String s) const {
 		return sharedState.strings.out(s);
 	}
+
+	static void* start(void* ptr) {
+		State* p = (State*)ptr;
+		p->loop();
+		return 0;
+	}
+
+	void doall(TaskFunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment=1, uint64_t ppt = 1) {
+		//printf("%d: in doall\n", index);
+		if(a < b && func != 0) {
+			uint64_t tmp = ppt+alignment-1;
+			ppt = std::max(1ULL, tmp - (tmp % alignment));
+
+			// avoid an extra enqueue (expensive on leaf nodes) and the possibility of
+			// of an unnecessary steal by directly executing task rather than queueing
+			// and then unqueueing.
+
+			Task t(func, args, a, b, alignment, ppt);
+				
+			tasksLock.acquire();
+			tasks.push_front(t);
+			tasksLock.release();
+			//printf("%d: queued up\n", index);	
+			while(fetch_and_add(t.done, 0) != 0) {
+				Task s;
+				if(dequeue(s) || steal(s)) run(s);
+				else sleep(); 
+			}
+			delete t.done;
+		}
+	}
+
+	void loop() {
+		while(true) {
+			// pull stuff off my queue and run
+			// or steal and run
+			Task s;
+			if(dequeue(s) || steal(s)) run(s);
+			else sleep(); 
+		}
+	}
+
+	void sleep() const {
+		struct timespec sleepTime;
+		struct timespec returnTime;
+		sleepTime.tv_sec = 0;
+		sleepTime.tv_nsec = 1000000;
+		nanosleep(&sleepTime, &returnTime);
+	}
+
+	void run(Task& t) {
+		while(t.a < t.b) {
+			// check if we need to relinquish some of our chunk...
+			if((t.b-t.a) > t.ppt) {
+				tasksLock.acquire();
+				if(tasks.size() == 0) {
+					Task n = t;
+					uint64_t half = split(t);
+					t.b = half;
+					n.a = half;
+					if(n.a < n.b) {
+						fetch_and_add(n.done, 1); 
+						//printf("Thread %d relinquishing %d (%d %d) (%d)\n", index, n.b-n.a, t.a, t.b, a);
+						tasks.push_front(n);
+					}
+				}
+				tasksLock.release();
+			}
+			t.func(t.args, t.a, std::min(t.a+t.ppt,t.b), *this);
+			t.a += t.ppt;
+		}
+		//printf("Thread %d finished %d %d (%d)\n", index, t.a, t.b, t.done);
+		fetch_and_add(t.done, -1);
+	}
+
+private:
+
+	uint64_t split(Task const& t) {
+		uint64_t half = (t.a+t.b)/2;
+		uint64_t r = half + (t.alignment/2);
+		half = r - (r % t.alignment);
+		if(half < t.a) half = t.a;
+		if(half > t.b) half = t.b;
+		return half;
+	}
+
+	bool dequeue(Task& out) {
+		// if only one task and size is larger than ppt in queue pull half
+		// otherwise pull the whole thing
+		tasksLock.acquire();
+		if(tasks.size() >= 1) {
+			out = tasks.front();
+			if(tasks.size() == 1 && (out.b-out.a) > out.ppt) {
+				uint64_t half = split(out);
+				//printf("Thread %d dequeuing and splitting (%d %d %d) (%d)\n", index, out.a, half, out.b, out.done);
+				out.b = half;
+				tasks.front().a = half;
+				fetch_and_add(tasks.front().done, 1); 
+				// wake a sleeping thread
+			}
+			else {
+				//printf("Thread %d dequeuing the whole thing (%d %d) (%d)\n", index, out.a, out.b, out.done);
+				tasks.pop_front();
+			}
+			tasksLock.release();
+			return true;
+		}
+		tasksLock.release();
+		return false;
+	}
+
+	bool steal(Task& out) {
+		// check other threads for available tasks, don't check myself.
+		bool found = false;
+		for(uint64_t i = 0; i < sharedState.threads.size() && !found; i++) {
+			if(i != index) {
+				State& t = *(sharedState.threads[i]);
+				t.tasksLock.acquire();
+				if(t.tasks.size() > 0) {
+				//printf("Thread %d stealing from %d\n", index, t.index);
+					out = t.tasks.back();
+					t.tasks.pop_back();
+					t.tasksLock.release();
+					if(out.b-out.a > out.ppt) {
+						uint64_t half = split(out);
+						tasksLock.acquire();
+						tasks.push_front(out);
+						out.b = half;
+						tasks.front().a = half;
+						fetch_and_add(tasks.front().done, 1);
+						tasksLock.release();
+					}
+					found = true;
+				} else {
+					t.tasksLock.release();
+				}
+			}
+		}
+		return found;
+	}
 };
 
+inline SharedState::SharedState(uint64_t threads, Environment* global, Environment* base) : verbose(false) {
+	this->global = global;
+	path.push_back(base);
+	
+	pthread_attr_t  attr;
+	pthread_attr_init (&attr);
+	pthread_attr_setscope (&attr, PTHREAD_SCOPE_SYSTEM);
+	pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
 
+	State* t = new State(*this, 0);
+	this->threads.push_back(t);
+
+	for(uint64_t i = 1; i < threads; i++) {
+		State* t = new State(*this, i);
+		pthread_create (&t->thread, &attr, State::start, t);
+		this->threads.push_back(t);
+	}
+}
 
 Value eval(State& state, Function const& function);
 Value eval(State& state, Prototype const* prototype, Environment* environment); 

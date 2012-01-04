@@ -5,6 +5,8 @@
 #include "assembler-x64.h"
 #include <math.h>
 
+#include <pthread.h>
+
 #include "register_set.h"
 
 #ifdef USE_AMD_LIBM
@@ -273,8 +275,8 @@ struct TraceJIT {
 		asm_.push(rbx);
 
 		asm_.movq(constant_base, &trace->code_buffer->constant_table[0]);
-		asm_.xor_(vector_index,vector_index);
-		asm_.movq(vector_length, trace->length);
+		asm_.movq(vector_index, rdi);
+		asm_.movq(vector_length, rsi);
 
 		Label begin;
 
@@ -788,24 +790,34 @@ struct TraceJIT {
 			_error("NYI - integer compare");
 		}
 	}
+
+	typedef void (*fn) (uint64_t start, uint64_t end);
+	
+	static void executebody(void* args, uint64_t start, uint64_t end, State& state) {
+		//printf("%d: called with %d to %d\n", state.index, start, end);
+		fn code = (fn)args;
+		code(start, end);	
+	}
+
 	void Execute(State & state) {
-		typedef void (*fn) (void);
 		fn trace_code = (fn) trace->code_buffer->code;
-		if(state.tracing.verbose) {
+		if(state.sharedState.verbose) {
 			timespec begin;
 			get_time(begin);
-			trace_code();
+			state.doall(executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
+			//trace_code(0, trace->length);
 			double s = time_elapsed(begin) / trace->length * 1024.0 * 1024.0 * 1024.0;
 			printf("trace elapsed %fns\n",s);
 		} else {
-			trace_code();
+			state.doall(executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
+			//trace_code(0, trace->length);
 		}
 	}
 };
 
 void Trace::JIT(State & state) {
 	InitializeOutputs(state);
-	if(state.tracing.verbose)
+	if(state.sharedState.verbose)
 		printf("executing trace:\n%s\n",toString(state).c_str());
 
 	if(code_buffer == NULL) { //since it is expensive to reallocate this, we reuse it across traces
