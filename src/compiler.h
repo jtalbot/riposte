@@ -51,7 +51,7 @@ private:
 	int64_t compile(Value const& expr, Prototype* code);		// compile into existing code block
 
 	int64_t compileConstant(Value const& expr, Prototype* code);
-	int64_t compileSymbol(Symbol const& symbol, Prototype* code); 
+	int64_t compileSymbol(Value const& symbol, Prototype* code); 
 	int64_t compileCall(List const& call, Character const& names, Prototype* code); 
 	int64_t compileFunctionCall(List const& call, Character const& names, Prototype* code); 
 	int64_t compileInternalFunctionCall(Object const& o, Prototype* code); 

@@ -288,8 +288,6 @@ inline Character klass(Thread& thread, Value const& v)
 	Character c(1);
 	if(type == Type::Integer || type == Type::Double)
 		c[0] = Strings::Numeric;
-	else if(type == Type::Symbol)
-		c[0] = Strings::Name;
 	else c[0] = thread.internStr(Type::toString(type));
 	return c;
 }

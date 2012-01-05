@@ -123,7 +123,7 @@ expr(A) ::= SYMBOL(B) NS_GET(C) symbolstr(D). { A = CreateCall(List::c(C, B, D))
 expr(A) ::= STR_CONST(B) NS_GET(C) symbolstr(D). { A = CreateCall(List::c(C, B, D)); }
 expr(A) ::= SYMBOL(B) NS_GET_INT(C) symbolstr(D). { A = CreateCall(List::c(C, B, D)); }
 expr(A) ::= STR_CONST(B) NS_GET_INT(C) symbolstr(D). { A = CreateCall(List::c(C, B, D)); }
-expr(A) ::= expr(B) DOLLAR(C) optnl symbolstr(D). { if(D.isSymbol()) D = Character::c(Symbol(D)); A = CreateCall(List::c(C, B, D)); }
+expr(A) ::= expr(B) DOLLAR(C) optnl symbolstr(D). { if(isSymbol(D)) D = Character::c(SymbolStr(D)); A = CreateCall(List::c(C, B, D)); }
 expr(A) ::= expr(B) AT(C) optnl symbolstr(D). { A = CreateCall(List::c(C, B, D)); }
 expr(A) ::= NEXT(B). { A = CreateCall(List::c(B)); }
 expr(A) ::= BREAK(B). { A = CreateCall(List::c(B)); }
@@ -144,17 +144,17 @@ sublist(A) ::= sub(B). { A = B; }
 sublist(A) ::= sublist(B) optnl COMMA optnl sub(C). { A = B; if(A->length() == 0) A->push_back(Strings::empty, Value::Nil()); if(C->length() == 1) A->push_back(C->name(0), C->value(0)); else if(C->length() == 0) A->push_back(Strings::empty, Value::Nil()); }
 
 sub(A) ::= . { A = new Pairs(); }
-sub(A) ::= SYMBOL(B) optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(Symbol(B), Value::Nil()); }
-sub(A) ::= STR_CONST(B) optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(Symbol(B), Value::Nil()); }
-sub(A) ::= SYMBOL(B) optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(Symbol(B), C); }
-sub(A) ::= STR_CONST(B) optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(Symbol(B), C); }
+sub(A) ::= SYMBOL(B) optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(SymbolStr(B), Value::Nil()); }
+sub(A) ::= STR_CONST(B) optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(SymbolStr(B), Value::Nil()); }
+sub(A) ::= SYMBOL(B) optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(SymbolStr(B), C); }
+sub(A) ::= STR_CONST(B) optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(SymbolStr(B), C); }
 sub(A) ::= NULL_CONST optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(Strings::empty, Value::Nil()); }
 sub(A) ::= NULL_CONST optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(Strings::empty, C); }
 sub(A) ::= expr(B). { A = new Pairs(); A->push_back(Strings::empty, B); }
 
 formallist(A) ::= . { A = new Pairs(); }
-formallist(A) ::= SYMBOL(B). { A = new Pairs(); A->push_back(Symbol(B), Value::Nil()); }
-formallist(A) ::= SYMBOL(B) optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(Symbol(B), C); }
-formallist(A) ::= formallist(B) optnl COMMA optnl SYMBOL(C). { A = B; A->push_back(Symbol(C), Value::Nil()); }
-formallist(A) ::= formallist(B) optnl COMMA optnl SYMBOL(C) optnl EQ_ASSIGN optnl expr(D). { A = B; A->push_back(Symbol(C), D); }
+formallist(A) ::= SYMBOL(B). { A = new Pairs(); A->push_back(SymbolStr(B), Value::Nil()); }
+formallist(A) ::= SYMBOL(B) optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(SymbolStr(B), C); }
+formallist(A) ::= formallist(B) optnl COMMA optnl SYMBOL(C). { A = B; A->push_back(SymbolStr(C), Value::Nil()); }
+formallist(A) ::= formallist(B) optnl COMMA optnl SYMBOL(C) optnl EQ_ASSIGN optnl expr(D). { A = B; A->push_back(SymbolStr(C), D); }
 

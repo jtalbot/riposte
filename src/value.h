@@ -63,7 +63,6 @@ struct Value {
 	bool isCharacter() const { return type == Type::Character; }
 	bool isCharacter1() const { return header == (1<<4) + Type::Character; }
 	bool isList() const { return type == Type::List; }
-	bool isSymbol() const { return type == Type::Symbol; }
 	bool isPromise() const { return type == Type::Promise && !isNil(); }
 	bool isFunction() const { return type == Type::Function; }
 	bool isObject() const { return type == Type::Object; }
@@ -71,7 +70,7 @@ struct Value {
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isCharacter() || isList(); }
-	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isCharacter() || isSymbol() || (isList() && length==0); }
+	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isCharacter() || (isList() && length==0); }
 	bool isConcrete() const { return type != Type::Promise; }
 
 	template<class T> T& scalar() { throw "not allowed"; }
@@ -99,41 +98,6 @@ class State;
 class Thread;
 class Prototype;
 class Environment;
-
-// A symbol has the same format as a 1-element character vector.
-struct Symbol : public Value {
-	Symbol() {
-		Value::Init(*this, Type::Symbol, 1);
-		s = Strings::NA;
-	} 
-	
-	explicit Symbol(String str) {
-		Value::Init(*this, Type::Symbol, 1);
-		s = str; 
-	} 
-
-	explicit Symbol(Value const& v) {
-		assert(v.isSymbol() || v.isCharacter1()); 
-		header = v.header;
-		s = v.s;
-	}
-
-	operator String() const {
-		return s;
-	}
-
-	operator Value() const {
-		return *(Value*)this;
-	}
-
-	bool operator==(Symbol const& other) const { return s == other.s; }
-	bool operator!=(Symbol const& other) const { return s != other.s; }
-	bool operator==(String other) const { return s == other; }
-	bool operator!=(String other) const { return s != other; }
-
-	Symbol Clone() const { return *this; }
-};
-
 
 template<Type::Enum VType, typename ElementType, bool Recursive,
 	bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive>
@@ -473,6 +437,12 @@ struct Object : public Value {
 
 };
 
+inline Value CreateSymbol(String s) {
+	Value v;
+	Object::Init(v, Character::c(s), Value::Nil(), Character::c(Strings::Symbol));
+	return v;
+}
+
 inline Value CreateExpression(List const& list) {
 	Value v;
 	Object::Init(v, list, Value::Nil(), Character::c(Strings::Expression));
@@ -483,6 +453,23 @@ inline Value CreateCall(List const& list, Value const& names = Value::Nil()) {
 	Value v;
 	Object::Init(v, list, names, Character::c(Strings::Call));
 	return v;
+}
+
+inline bool isSymbol(Value const& v) {
+	return v.isObject() && ((Object const&)v).hasClass() && ((Object const&)v).className() == Strings::Symbol;
+}
+
+inline bool isCall(Value const& v) {
+	return v.isObject() && ((Object const&)v).hasClass() && ((Object const&)v).className() == Strings::Call;
+}
+
+inline bool isExpression(Value const& v) {
+	return v.isObject() && ((Object const&)v).hasClass() && ((Object const&)v).className() == Strings::Expression;
+}
+
+inline String SymbolStr(Value const& v) {
+	if(v.isObject()) return Character(((Object const&)v).base())[0];
+	else return Character(v)[0];
 }
 
 class Dictionary : public gc {

@@ -144,11 +144,6 @@ std::string stringify(State const& state, Value const& value, Value const& names
 			if(dots) result = result + " ...\n\n";
 			return result;
 		}
-		case Type::Symbol:
-		{
-			result = "`" + state.externStr(Symbol(value)) + "`";
-			return result;
-		}
 		case Type::Function:
 		{
 			result = state.externStr(Function(value).prototype()->string);
@@ -252,8 +247,6 @@ std::string deparse(State const& state, Value const& value, Value const& names) 
 		#define CASE(Name) case Type::Name: return deparseVector(state, Name(value), names); break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
-		case Type::Symbol:
-			return state.externStr(Symbol(value)); // NYI: need to check if this should be backticked.
 		case Type::Function:
 			return state.externStr(Function(value).prototype()->string);
 		case Type::Environment:

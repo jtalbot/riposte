@@ -654,7 +654,7 @@ _eof_trans:
 	break;
 	case 27:
 #line 62 "lexer.rl"
-	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, Symbol(state.internStr(unescape(s))) );}}
+	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol(state.internStr(unescape(s))) );}}
 	break;
 	case 28:
 #line 71 "lexer.rl"
@@ -662,39 +662,39 @@ _eof_trans:
 	break;
 	case 29:
 #line 83 "lexer.rl"
-	{te = p+1;{token( TOKEN_PLUS, Symbol(Strings::add) );}}
+	{te = p+1;{token( TOKEN_PLUS, CreateSymbol(Strings::add) );}}
 	break;
 	case 30:
 #line 85 "lexer.rl"
-	{te = p+1;{token( TOKEN_POW, Symbol(Strings::pow) );}}
+	{te = p+1;{token( TOKEN_POW, CreateSymbol(Strings::pow) );}}
 	break;
 	case 31:
 #line 86 "lexer.rl"
-	{te = p+1;{token( TOKEN_DIVIDE, Symbol(Strings::div) );}}
+	{te = p+1;{token( TOKEN_DIVIDE, CreateSymbol(Strings::div) );}}
 	break;
 	case 32:
 #line 88 "lexer.rl"
-	{te = p+1;{token( TOKEN_POW, Symbol(Strings::pow) );}}
+	{te = p+1;{token( TOKEN_POW, CreateSymbol(Strings::pow) );}}
 	break;
 	case 33:
 #line 89 "lexer.rl"
-	{te = p+1;{token( TOKEN_TILDE, Symbol(Strings::tilde) );}}
+	{te = p+1;{token( TOKEN_TILDE, CreateSymbol(Strings::tilde) );}}
 	break;
 	case 34:
 #line 90 "lexer.rl"
-	{te = p+1;{token( TOKEN_DOLLAR, Symbol(Strings::dollar) );}}
+	{te = p+1;{token( TOKEN_DOLLAR, CreateSymbol(Strings::dollar) );}}
 	break;
 	case 35:
 #line 91 "lexer.rl"
-	{te = p+1;{token( TOKEN_AT, Symbol(Strings::at) );}}
+	{te = p+1;{token( TOKEN_AT, CreateSymbol(Strings::at) );}}
 	break;
 	case 36:
 #line 95 "lexer.rl"
-	{te = p+1;{token( TOKEN_NS_GET_INT, Symbol(Strings::nsgetint) );}}
+	{te = p+1;{token( TOKEN_NS_GET_INT, CreateSymbol(Strings::nsgetint) );}}
 	break;
 	case 37:
 #line 98 "lexer.rl"
-	{te = p+1;{token( TOKEN_LBRACE, Symbol(Strings::brace) );}}
+	{te = p+1;{token( TOKEN_LBRACE, CreateSymbol(Strings::brace) );}}
 	break;
 	case 38:
 #line 99 "lexer.rl"
@@ -702,7 +702,7 @@ _eof_trans:
 	break;
 	case 39:
 #line 100 "lexer.rl"
-	{te = p+1;{token( TOKEN_LPAREN, Symbol(Strings::paren) );}}
+	{te = p+1;{token( TOKEN_LPAREN, CreateSymbol(Strings::paren) );}}
 	break;
 	case 40:
 #line 101 "lexer.rl"
@@ -710,7 +710,7 @@ _eof_trans:
 	break;
 	case 41:
 #line 103 "lexer.rl"
-	{te = p+1;{token( TOKEN_LBB, Symbol(Strings::bb) );}}
+	{te = p+1;{token( TOKEN_LBB, CreateSymbol(Strings::bb) );}}
 	break;
 	case 42:
 #line 104 "lexer.rl"
@@ -718,47 +718,47 @@ _eof_trans:
 	break;
 	case 43:
 #line 107 "lexer.rl"
-	{te = p+1;{token( TOKEN_LE, Symbol(Strings::le) );}}
+	{te = p+1;{token( TOKEN_LE, CreateSymbol(Strings::le) );}}
 	break;
 	case 44:
 #line 108 "lexer.rl"
-	{te = p+1;{token( TOKEN_GE, Symbol(Strings::ge) );}}
+	{te = p+1;{token( TOKEN_GE, CreateSymbol(Strings::ge) );}}
 	break;
 	case 45:
 #line 109 "lexer.rl"
-	{te = p+1;{token( TOKEN_EQ, Symbol(Strings::eq) );}}
+	{te = p+1;{token( TOKEN_EQ, CreateSymbol(Strings::eq) );}}
 	break;
 	case 46:
 #line 110 "lexer.rl"
-	{te = p+1;{token( TOKEN_NE, Symbol(Strings::neq) );}}
+	{te = p+1;{token( TOKEN_NE, CreateSymbol(Strings::neq) );}}
 	break;
 	case 47:
 #line 111 "lexer.rl"
-	{te = p+1;{token( TOKEN_AND2, Symbol(Strings::sland) );}}
+	{te = p+1;{token( TOKEN_AND2, CreateSymbol(Strings::sland) );}}
 	break;
 	case 48:
 #line 112 "lexer.rl"
-	{te = p+1;{token( TOKEN_OR2, Symbol(Strings::slor) );}}
+	{te = p+1;{token( TOKEN_OR2, CreateSymbol(Strings::slor) );}}
 	break;
 	case 49:
 #line 113 "lexer.rl"
-	{te = p+1;{token( TOKEN_LEFT_ASSIGN, Symbol(Strings::assign) );}}
+	{te = p+1;{token( TOKEN_LEFT_ASSIGN, CreateSymbol(Strings::assign) );}}
 	break;
 	case 50:
 #line 115 "lexer.rl"
-	{te = p+1;{token( TOKEN_RIGHT_ASSIGN, Symbol(Strings::assign2) );}}
+	{te = p+1;{token( TOKEN_RIGHT_ASSIGN, CreateSymbol(Strings::assign2) );}}
 	break;
 	case 51:
 #line 116 "lexer.rl"
-	{te = p+1;{token( TOKEN_LEFT_ASSIGN, Symbol(Strings::assign2) );}}
+	{te = p+1;{token( TOKEN_LEFT_ASSIGN, CreateSymbol(Strings::assign2) );}}
 	break;
 	case 52:
 #line 117 "lexer.rl"
-	{te = p+1;{token( TOKEN_QUESTION, Symbol(Strings::question) );}}
+	{te = p+1;{token( TOKEN_QUESTION, CreateSymbol(Strings::question) );}}
 	break;
 	case 53:
 #line 120 "lexer.rl"
-	{te = p+1;{token(TOKEN_SPECIALOP, Symbol(state.internStr(std::string(ts, te-ts))) ); }}
+	{te = p+1;{token(TOKEN_SPECIALOP, CreateSymbol(state.internStr(std::string(ts, te-ts))) ); }}
 	break;
 	case 54:
 #line 123 "lexer.rl"
@@ -774,7 +774,7 @@ _eof_trans:
 	break;
 	case 57:
 #line 60 "lexer.rl"
-	{te = p;p--;{token( TOKEN_SYMBOL, Symbol(state.internStr(std::string(ts, te-ts))) );}}
+	{te = p;p--;{token( TOKEN_SYMBOL, CreateSymbol(state.internStr(std::string(ts, te-ts))) );}}
 	break;
 	case 58:
 #line 65 "lexer.rl"
@@ -786,51 +786,51 @@ _eof_trans:
 	break;
 	case 60:
 #line 82 "lexer.rl"
-	{te = p;p--;{token( TOKEN_EQ_ASSIGN, Symbol(Strings::eqassign) );}}
+	{te = p;p--;{token( TOKEN_EQ_ASSIGN, CreateSymbol(Strings::eqassign) );}}
 	break;
 	case 61:
 #line 84 "lexer.rl"
-	{te = p;p--;{token( TOKEN_MINUS, Symbol(Strings::sub) );}}
+	{te = p;p--;{token( TOKEN_MINUS, CreateSymbol(Strings::sub) );}}
 	break;
 	case 62:
 #line 87 "lexer.rl"
-	{te = p;p--;{token( TOKEN_TIMES, Symbol(Strings::mul) );}}
+	{te = p;p--;{token( TOKEN_TIMES, CreateSymbol(Strings::mul) );}}
 	break;
 	case 63:
 #line 92 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NOT, Symbol(Strings::lnot) );}}
+	{te = p;p--;{token( TOKEN_NOT, CreateSymbol(Strings::lnot) );}}
 	break;
 	case 64:
 #line 93 "lexer.rl"
-	{te = p;p--;{token( TOKEN_COLON, Symbol(Strings::colon) );}}
+	{te = p;p--;{token( TOKEN_COLON, CreateSymbol(Strings::colon) );}}
 	break;
 	case 65:
 #line 94 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NS_GET, Symbol(Strings::nsget) );}}
+	{te = p;p--;{token( TOKEN_NS_GET, CreateSymbol(Strings::nsget) );}}
 	break;
 	case 66:
 #line 96 "lexer.rl"
-	{te = p;p--;{token( TOKEN_AND, Symbol(Strings::land) );}}
+	{te = p;p--;{token( TOKEN_AND, CreateSymbol(Strings::land) );}}
 	break;
 	case 67:
 #line 97 "lexer.rl"
-	{te = p;p--;{token( TOKEN_OR, Symbol(Strings::lor) );}}
+	{te = p;p--;{token( TOKEN_OR, CreateSymbol(Strings::lor) );}}
 	break;
 	case 68:
 #line 102 "lexer.rl"
-	{te = p;p--;{token( TOKEN_LBRACKET, Symbol(Strings::bracket) );}}
+	{te = p;p--;{token( TOKEN_LBRACKET, CreateSymbol(Strings::bracket) );}}
 	break;
 	case 69:
 #line 105 "lexer.rl"
-	{te = p;p--;{token( TOKEN_LT, Symbol(Strings::lt) );}}
+	{te = p;p--;{token( TOKEN_LT, CreateSymbol(Strings::lt) );}}
 	break;
 	case 70:
 #line 106 "lexer.rl"
-	{te = p;p--;{token( TOKEN_GT, Symbol(Strings::gt) );}}
+	{te = p;p--;{token( TOKEN_GT, CreateSymbol(Strings::gt) );}}
 	break;
 	case 71:
 #line 114 "lexer.rl"
-	{te = p;p--;{token( TOKEN_RIGHT_ASSIGN, Symbol(Strings::assign) );}}
+	{te = p;p--;{token( TOKEN_RIGHT_ASSIGN, CreateSymbol(Strings::assign) );}}
 	break;
 	case 72:
 #line 126 "lexer.rl"
@@ -850,7 +850,7 @@ _eof_trans:
 	break;
 	case 76:
 #line 105 "lexer.rl"
-	{{p = ((te))-1;}{token( TOKEN_LT, Symbol(Strings::lt) );}}
+	{{p = ((te))-1;}{token( TOKEN_LT, CreateSymbol(Strings::lt) );}}
 	break;
 	case 77:
 #line 126 "lexer.rl"
@@ -887,19 +887,19 @@ _eof_trans:
 	{{p = ((te))-1;}token( TOKEN_STR_CONST, Character::NA() );}
 	break;
 	case 10:
-	{{p = ((te))-1;}token( TOKEN_FUNCTION, Symbol(Strings::function) );}
+	{{p = ((te))-1;}token( TOKEN_FUNCTION, CreateSymbol(Strings::function) );}
 	break;
 	case 11:
-	{{p = ((te))-1;}token( TOKEN_WHILE, Symbol(Strings::whileSym) );}
+	{{p = ((te))-1;}token( TOKEN_WHILE, CreateSymbol(Strings::whileSym) );}
 	break;
 	case 12:
-	{{p = ((te))-1;}token( TOKEN_REPEAT, Symbol(Strings::repeatSym) );}
+	{{p = ((te))-1;}token( TOKEN_REPEAT, CreateSymbol(Strings::repeatSym) );}
 	break;
 	case 13:
-	{{p = ((te))-1;}token( TOKEN_FOR, Symbol(Strings::forSym) );}
+	{{p = ((te))-1;}token( TOKEN_FOR, CreateSymbol(Strings::forSym) );}
 	break;
 	case 14:
-	{{p = ((te))-1;}token( TOKEN_IF, Symbol(Strings::ifSym) );}
+	{{p = ((te))-1;}token( TOKEN_IF, CreateSymbol(Strings::ifSym) );}
 	break;
 	case 15:
 	{{p = ((te))-1;}token( TOKEN_IN );}
@@ -908,16 +908,16 @@ _eof_trans:
 	{{p = ((te))-1;}token( TOKEN_ELSE );}
 	break;
 	case 17:
-	{{p = ((te))-1;}token( TOKEN_NEXT, Symbol(Strings::nextSym) );}
+	{{p = ((te))-1;}token( TOKEN_NEXT, CreateSymbol(Strings::nextSym) );}
 	break;
 	case 18:
-	{{p = ((te))-1;}token( TOKEN_BREAK, Symbol(Strings::breakSym) );}
+	{{p = ((te))-1;}token( TOKEN_BREAK, CreateSymbol(Strings::breakSym) );}
 	break;
 	case 21:
-	{{p = ((te))-1;}std::string s(ts+2, te-ts-2); token( TOKEN_SYMBOL, Symbol(String::Init((char const*)-strToInt(s)))); }
+	{{p = ((te))-1;}std::string s(ts+2, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol(String::Init((char const*)-strToInt(s)))); }
 	break;
 	case 22:
-	{{p = ((te))-1;}token( TOKEN_SYMBOL, Symbol(state.internStr(std::string(ts, te-ts))) );}
+	{{p = ((te))-1;}token( TOKEN_SYMBOL, CreateSymbol(state.internStr(std::string(ts, te-ts))) );}
 	break;
 	case 66:
 	{{p = ((te))-1;}token( TOKEN_NEWLINE );}

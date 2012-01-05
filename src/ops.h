@@ -282,7 +282,6 @@ void unaryOrdinal(Thread& thread, Value a, Value& c) {
 		}
 	}
 	else {
-		printf("1: %s\n", Type::toString(a.type));
 		_error("non-ordinal argument to ordinal operator");
 	}
 }
@@ -363,7 +362,7 @@ template< template<class Op> class Lift, template<typename T> class Op >
 void binaryLogical(Thread& thread, Value const& a, Value const& b, Value& c) {
 	if(a.isLogical() && b.isLogical())
 		Lift< Op<TLogical> >::eval(thread, (Logical const&)a, (Logical const&)b, c);
-	else if(a.isLogicalCoerce() && b.isLogicalCoerce()) 
+	else if(a.isLogicalCoerce() && b.isLogicalCoerce())
 		Lift< Op<TLogical> >::eval(thread, As<Logical>(thread, a), As<Logical>(thread, b), c);
 	else if(a.isObject())
 		binaryLogical<Lift, Op>(thread, ((Object const&)a).base(), b, c);
@@ -388,7 +387,6 @@ void binaryOrdinal(Thread& thread, Value const& a, Value const& b, Value& c) {
 	else if(b.isObject())
 		binaryOrdinal<Lift, Op>(thread, a, ((Object const&)b).base(), c);
 	else {
-		printf("2: %s\n", Type::toString(a.type));
 		_error("non-ordinal argument to ordinal operator");
 	}
 }

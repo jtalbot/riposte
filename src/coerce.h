@@ -26,16 +26,17 @@ struct CastOp : public UnaryOp<I, O> {
 };
 
 template<class O>
-void As(Thread& thread, Value const& src, O& out) {
+void As(Thread& thread, Value src, O& out) {
 	if(src.type == O::VectorType)
 		out = (O const&)src;
+	if(src.isObject()) {
+		src = ((Object const&)src).base();
+	}
 	switch(src.type) {
 		case Type::Null: O(0); return; break;
 		#define CASE(Name,...) case Type::Name: Zip1< CastOp<Name, O> >::eval(thread, (Name const&)src, out); return; break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
-		case Type::Symbol: 
-			Cast1<Symbol, O>(thread, (Symbol const&)src, out); return; break;
 		case Type::Function:
 			Cast1<Function, O>(thread, (Function const&)src, out); return; break;
 		default: break;
@@ -44,7 +45,7 @@ void As(Thread& thread, Value const& src, O& out) {
 }
 
 template<>
-inline void As<Null>(Thread& thread, Value const& src, Null& out) {
+inline void As<Null>(Thread& thread, Value src, Null& out) {
        out = Null::Singleton();
 }
 
@@ -175,26 +176,6 @@ SPECIALIZED_STATIC Double::Element Cast<List, Double>(Thread& thread, List::Elem
 template<>
 SPECIALIZED_STATIC Character::Element Cast<List, Character>(Thread& thread, List::Element const& i) { Character a = As<Character>(thread, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to character"); }
 
-
-
-// Symbol casting...move somewhere else?
-template<>
-SPECIALIZED_STATIC void Cast1<Symbol, Raw>(Thread& thread, Symbol const& i, Raw& o) { _error("Invalid cast from symbol to raw"); }
-
-template<>
-SPECIALIZED_STATIC void Cast1<Symbol, Logical>(Thread& thread, Symbol const& i, Logical& o) { _error("Invalid cast from symbol to logical"); }
-
-template<>
-SPECIALIZED_STATIC void Cast1<Symbol, Integer>(Thread& thread, Symbol const& i, Integer& o) { _error("Invalid cast from symbol to integer"); }
-
-template<>
-SPECIALIZED_STATIC void Cast1<Symbol, Double>(Thread& thread, Symbol const& i, Double& o) { _error("Invalid cast from symbol to double"); }
-
-template<>
-SPECIALIZED_STATIC void Cast1<Symbol, Character>(Thread& thread, Symbol const& i, Character& o) { Character::InitScalar(o, i); }
-
-template<>
-SPECIALIZED_STATIC void Cast1<Symbol, List>(Thread& thread, Symbol const& i, List& o) { List::InitScalar(o, i); }
 
 
 template<>

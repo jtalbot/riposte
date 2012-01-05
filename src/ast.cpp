@@ -1148,7 +1148,7 @@ static void yy_reduce(
         break;
       case 49: /* expr ::= expr DOLLAR optnl symbolstr */
 #line 126 "parser.y"
-{ if(yymsp[0].minor.yy0.isSymbol()) yymsp[0].minor.yy0 = Character::c(Symbol(yymsp[0].minor.yy0)); yygotominor.yy0 = CreateCall(List::c(yymsp[-2].minor.yy0, yymsp[-3].minor.yy0, yymsp[0].minor.yy0)); }
+{ if(isSymbol(yymsp[0].minor.yy0)) yymsp[0].minor.yy0 = Character::c(SymbolStr(yymsp[0].minor.yy0)); yygotominor.yy0 = CreateCall(List::c(yymsp[-2].minor.yy0, yymsp[-3].minor.yy0, yymsp[0].minor.yy0)); }
 #line 1153 "parser.c"
         break;
       case 51: /* expr ::= NEXT */
@@ -1209,7 +1209,7 @@ static void yy_reduce(
       case 65: /* sub ::= SYMBOL optnl EQ_ASSIGN */
       case 66: /* sub ::= STR_CONST optnl EQ_ASSIGN */ yytestcase(yyruleno==66);
 #line 147 "parser.y"
-{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(Symbol(yymsp[-2].minor.yy0), Value::Nil());   yy_destructor(yypParser,9,&yymsp[0].minor);
+{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(SymbolStr(yymsp[-2].minor.yy0), Value::Nil());   yy_destructor(yypParser,9,&yymsp[0].minor);
 }
 #line 1215 "parser.c"
         break;
@@ -1217,7 +1217,7 @@ static void yy_reduce(
       case 68: /* sub ::= STR_CONST optnl EQ_ASSIGN optnl expr */ yytestcase(yyruleno==68);
       case 74: /* formallist ::= SYMBOL optnl EQ_ASSIGN optnl expr */ yytestcase(yyruleno==74);
 #line 149 "parser.y"
-{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(Symbol(yymsp[-4].minor.yy0), yymsp[0].minor.yy0);   yy_destructor(yypParser,9,&yymsp[-2].minor);
+{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(SymbolStr(yymsp[-4].minor.yy0), yymsp[0].minor.yy0);   yy_destructor(yypParser,9,&yymsp[-2].minor);
 }
 #line 1223 "parser.c"
         break;
@@ -1237,18 +1237,18 @@ static void yy_reduce(
         break;
       case 73: /* formallist ::= SYMBOL */
 #line 156 "parser.y"
-{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(Symbol(yymsp[0].minor.yy0), Value::Nil()); }
+{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(SymbolStr(yymsp[0].minor.yy0), Value::Nil()); }
 #line 1242 "parser.c"
         break;
       case 75: /* formallist ::= formallist optnl COMMA optnl SYMBOL */
 #line 158 "parser.y"
-{ yygotominor.yy122 = yymsp[-4].minor.yy122; yygotominor.yy122->push_back(Symbol(yymsp[0].minor.yy0), Value::Nil());   yy_destructor(yypParser,52,&yymsp[-2].minor);
+{ yygotominor.yy122 = yymsp[-4].minor.yy122; yygotominor.yy122->push_back(SymbolStr(yymsp[0].minor.yy0), Value::Nil());   yy_destructor(yypParser,52,&yymsp[-2].minor);
 }
 #line 1248 "parser.c"
         break;
       case 76: /* formallist ::= formallist optnl COMMA optnl SYMBOL optnl EQ_ASSIGN optnl expr */
 #line 159 "parser.y"
-{ yygotominor.yy122 = yymsp[-8].minor.yy122; yygotominor.yy122->push_back(Symbol(yymsp[-4].minor.yy0), yymsp[0].minor.yy0);   yy_destructor(yypParser,52,&yymsp[-6].minor);
+{ yygotominor.yy122 = yymsp[-8].minor.yy122; yygotominor.yy122->push_back(SymbolStr(yymsp[-4].minor.yy0), yymsp[0].minor.yy0);   yy_destructor(yypParser,52,&yymsp[-6].minor);
   yy_destructor(yypParser,9,&yymsp[-2].minor);
 }
 #line 1255 "parser.c"

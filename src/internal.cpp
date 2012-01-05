@@ -775,8 +775,8 @@ void substitute(Thread& thread, Value const* args, Value& result) {
 	Value v = args[0];
 	while(v.isPromise()) v = Function(v).prototype()->expression;
 	
-	if(v.isSymbol()) {
-		Value r = thread.frame.environment->get(Symbol(v));
+	if(isSymbol(v)) {
+		Value r = thread.frame.environment->get(SymbolStr(v));
 		if(!r.isNil()) v = r;
 		while(v.isPromise()) v = Function(v).prototype()->expression;
 	}

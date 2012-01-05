@@ -18,7 +18,6 @@
 	_(Character, 	"character")	\
 	_(List,		"list")		\
 	_(Function,	"function")	\
-	_(Symbol,	"symbol")	\
 	_(Environment,	"environment")	\
 	_(Future, "future")				\
 

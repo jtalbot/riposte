@@ -19,7 +19,6 @@
 	_(List,		"list")		\
 	_(Function,	"function")	\
 	_(BuiltIn,	"builtin")	\
-	_(Symbol,	"symbol")	\
 	_(Environment,	"environment")	\
 	_(Object,	"object")	\
 	_(Promise, 	"promise") 	\
@@ -32,6 +31,7 @@
 	_(Name, 	"name") \
 	_(Numeric, 	"numeric") \
 	_(PairList,	"pairlist")	\
+	_(Symbol,	"symbol")	\
 	_(Call,		"call")		\
 	_(Expression,	"expression")	\
 	_(internal, 	".Internal") \

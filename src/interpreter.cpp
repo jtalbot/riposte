@@ -32,7 +32,7 @@ static void ExpandDots(Thread& thread, List& arguments, Character& names, int64_
 	if(dots < arguments.length) {
 		List a(arguments.length + dotslength - 1);
 		for(int64_t i = 0; i < dots; i++) a[i] = arguments[i];
-		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(thread.state, Symbol(String::Init((char const*)-(i-dots+1)))), NULL).AsPromise(); } // TODO: should cache these.
+		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(thread.state, CreateSymbol(String::Init((char const*)-(i-dots+1)))), NULL).AsPromise(); } // TODO: should cache these.
 		for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) a[i] = arguments[i-dotslength];
 
 		arguments = a;
@@ -276,8 +276,8 @@ Instruction const* UseMethod_op(Thread& thread, Instruction const& inst) {
 	Function func(f);
 	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
 	MatchArgs(thread, thread.frame.environment, fenv, func, arguments, names);	
-	fenv->assign(Strings::dotGeneric, Symbol(generic));
-	fenv->assign(Strings::dotMethod, Symbol(method));
+	fenv->assign(Strings::dotGeneric, CreateSymbol(generic));
+	fenv->assign(Strings::dotMethod, CreateSymbol(method));
 	fenv->assign(Strings::dotClass, type); 
 	return buildStackFrame(thread, fenv, true, func.prototype(), &REG(thread, inst.c), &inst+1);
 }
@@ -630,7 +630,7 @@ Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
         } \
     	else if(thread.tracing.Enabled() && isRecordable(a,b)) \
     		return thread.tracing.BeginTracing(thread,&inst); \
-    	else \
+	\
 	binaryOrdinal<Zip2, Op>(thread, REG(thread, inst.a), REG(thread, inst.b), REG(thread, inst.c)); \
 	return &inst+1; \
 }
