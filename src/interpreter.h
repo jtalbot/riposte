@@ -361,7 +361,14 @@ struct State {
 
 	bool verbose;
 
+	int done;
+
 	State(uint64_t threads, Environment* global, Environment* base);
+
+	~State() {
+		fetch_and_add(&done, 1);
+		while(fetch_and_add(&done, 0) != threads.size()) { sleep(); }
+	}
 
 	Thread& getMainThread() const {
 		return *threads[0];
@@ -487,21 +494,14 @@ struct Thread {
 	}
 
 	void loop() {
-		while(true) {
+		while(fetch_and_add(&(state.done), 0) == 0) {
 			// pull stuff off my queue and run
 			// or steal and run
 			Task s;
 			if(dequeue(s) || steal(s)) run(s);
 			else sleep(); 
 		}
-	}
-
-	void sleep() const {
-		struct timespec sleepTime;
-		struct timespec returnTime;
-		sleepTime.tv_sec = 0;
-		sleepTime.tv_nsec = 1000000;
-		nanosleep(&sleepTime, &returnTime);
+		fetch_and_add(&(state.done), 1);
 	}
 
 	void run(Task& t) {
@@ -596,7 +596,7 @@ private:
 	}
 };
 
-inline State::State(uint64_t threads, Environment* global, Environment* base) : verbose(false) {
+inline State::State(uint64_t threads, Environment* global, Environment* base) : verbose(false), done(0) {
 	this->global = global;
 	path.push_back(base);
 	
