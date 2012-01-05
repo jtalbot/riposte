@@ -33,7 +33,7 @@ struct TList {
 #define UNARY_OP(Name, T1, T2, Func) \
 template<typename T> \
 struct Name : public UnaryOp<typename T::T1, typename T::T2> {\
-	static typename Name::R eval(State& state, typename Name::A const a) {\
+	static typename Name::R eval(Thread& thread, typename Name::A const a) {\
 		if(!Name::AV::isCheckedNA(a)) return (Func);\
 		else return Name::RV::NAelement;\
 	}\
@@ -42,7 +42,7 @@ struct Name : public UnaryOp<typename T::T1, typename T::T2> {\
 #define NYI_UNARY_OP(Name, T1, T2) \
 template<typename T> \
 struct Name : public UnaryOp<typename T::T1, typename T::T2> {\
-	static typename Name::R eval(State& state, typename Name::A const a) { _error("NYI: "#Name); } \
+	static typename Name::R eval(Thread& thread, typename Name::A const a) { _error("NYI: "#Name); } \
 };
 
 UNARY_OP(PosOp, Self, Self, a)
@@ -69,7 +69,7 @@ UNARY_OP(ATanOp, Self, Up, atan(a))
 #define UNARY_FILTER_OP(Name, Func) \
 template<typename T> \
 struct Name : public UnaryOp<typename T::Self, Logical> {\
-	static typename Name::R eval(State& state, typename Name::A const a) {\
+	static typename Name::R eval(Thread& thread, typename Name::A const a) {\
 		return (Func);\
 	}\
 };
@@ -81,17 +81,17 @@ UNARY_FILTER_OP(IsInfiniteOp, IsInfiniteOp::AV::isInfinite(a))
 
 template<typename T> 
 struct LNotOp : UnaryOp<Logical, Logical> {
-	static typename LNotOp::R eval(State& state, typename LNotOp::A const a) { return !a; }
+	static typename LNotOp::R eval(Thread& thread, typename LNotOp::A const a) { return !a; }
 };
 
 template<typename T>
 struct NcharOp : UnaryOp<Character, Integer> {
-	static typename NcharOp::R eval(State& state, typename NcharOp::A const a) { return (a == Strings::NA) ? 2 : state.externStr(a).length(); }
+	static typename NcharOp::R eval(Thread& thread, typename NcharOp::A const a) { return (a == Strings::NA) ? 2 : thread.externStr(a).length(); }
 };
 
 template<typename T>
 struct NzcharOp : UnaryOp<Character, Logical> {
-	static typename NzcharOp::R eval(State& state, typename NzcharOp::A const a) { return a != Strings::empty; }
+	static typename NzcharOp::R eval(Thread& thread, typename NzcharOp::A const a) { return a != Strings::empty; }
 };
 
 #undef UNARY_OP 
@@ -101,31 +101,31 @@ struct NzcharOp : UnaryOp<Character, Logical> {
 #define BINARY_OP(Name, T1, T2, T3, Func) \
 template<typename T> \
 struct Name : public BinaryOp<typename T::T1, typename T::T2, typename T::T3> {\
-	static typename Name::R eval(State& state, typename Name::A const a, typename Name::B const b) { \
+	static typename Name::R eval(Thread& thread, typename Name::A const a, typename Name::B const b) { \
 		if(!Name::AV::isCheckedNA(a) && !Name::BV::isCheckedNA(b)) return (Func); \
 		else return Name::RV::NAelement; \
 	} \
 };
 
-inline double riposte_max(State& state, double a, double b) { 
+inline double riposte_max(Thread& thread, double a, double b) { 
 	if(a!=a) return a; if(b!=b) return b; return a > b ? a : b; 
 }
-inline int64_t riposte_max(State& state, int64_t a, int64_t b) { 
+inline int64_t riposte_max(Thread& thread, int64_t a, int64_t b) { 
 	return a > b ? a : b;
 }
 // TODO: Fix string min and max
-inline String riposte_max(State& state, String a, String b) {
-	return state.externStr(a) > state.externStr(b) ? a : b;
+inline String riposte_max(Thread& thread, String a, String b) {
+	return thread.externStr(a) > thread.externStr(b) ? a : b;
 } 
 
-inline double riposte_min(State& state, double a, double b) { 
+inline double riposte_min(Thread& thread, double a, double b) { 
 	if(a!=a) return a; if(b!=b) return b; return a < b ? a : b; 
 }
-inline int64_t riposte_min(State& state, int64_t a, int64_t b) { 
+inline int64_t riposte_min(Thread& thread, int64_t a, int64_t b) { 
 	return a < b ? a : b;
 }
-inline String riposte_min(State& state, String a, String b) {
-	return state.externStr(a) < state.externStr(b) ? a : b;
+inline String riposte_min(Thread& thread, String a, String b) {
+	return thread.externStr(a) < thread.externStr(b) ? a : b;
 }
 
 BINARY_OP(AddOp, Self, Self, Self, a+b)
@@ -141,8 +141,8 @@ inline int64_t Mod(int64_t a, int64_t b) { return a % b; }
 BINARY_OP(ModOp, Self, Self, Self, Mod(a,b))
 BINARY_OP(ATan2Op, Self, Self, Self, atan2(a,b))
 BINARY_OP(HypotOp, Self, Self, Self, hypot(a,b))
-BINARY_OP(PMinOp, Self, Self, Self, riposte_min(state, a,b))
-BINARY_OP(PMaxOp, Self, Self, Self, riposte_max(state, a,b))
+BINARY_OP(PMinOp, Self, Self, Self, riposte_min(thread, a,b))
+BINARY_OP(PMaxOp, Self, Self, Self, riposte_max(thread, a,b))
 
 #undef BINARY_OP
 
@@ -150,7 +150,7 @@ BINARY_OP(PMaxOp, Self, Self, Self, riposte_max(state, a,b))
 #define ORDINAL_OP(Name, Func) \
 template<typename T> \
 struct Name : public BinaryOp<typename T::Self, typename T::Self, Logical> {\
-	static typename Name::R eval(State& state, typename Name::A const a, typename Name::B const b) { \
+	static typename Name::R eval(Thread& thread, typename Name::A const a, typename Name::B const b) { \
 		if(!Name::AV::isNA(a) && !Name::BV::isNA(b)) return (Func); \
 		else return Name::RV::NAelement; \
 	} \
@@ -159,16 +159,16 @@ struct Name : public BinaryOp<typename T::Self, typename T::Self, Logical> {\
 #define CHARACTER_ORDINAL_OP(Name, Func) \
 template<> \
 struct Name<TCharacter> : public BinaryOp<Character, Character, Logical> {\
-	static Name::R eval(State& state, Name::A const a, Name::B const b) { \
+	static Name::R eval(Thread& thread, Name::A const a, Name::B const b) { \
 		if(!Name::AV::isNA(a) && !Name::BV::isNA(b)) return (Func); \
 		else return Name::RV::NAelement; \
 	} \
 };\
 
-ORDINAL_OP(LTOp, a<b)	CHARACTER_ORDINAL_OP(LTOp, state.externStr(a).compare(state.externStr(b)) < 0)
-ORDINAL_OP(GTOp, a>b)	CHARACTER_ORDINAL_OP(GTOp, state.externStr(a).compare(state.externStr(b)) > 0)
-ORDINAL_OP(LEOp, a<=b)	CHARACTER_ORDINAL_OP(LEOp, state.externStr(a).compare(state.externStr(b)) <= 0)
-ORDINAL_OP(GEOp, a>=b)	CHARACTER_ORDINAL_OP(GEOp, state.externStr(a).compare(state.externStr(b)) >= 0)
+ORDINAL_OP(LTOp, a<b)	CHARACTER_ORDINAL_OP(LTOp, thread.externStr(a).compare(thread.externStr(b)) < 0)
+ORDINAL_OP(GTOp, a>b)	CHARACTER_ORDINAL_OP(GTOp, thread.externStr(a).compare(thread.externStr(b)) > 0)
+ORDINAL_OP(LEOp, a<=b)	CHARACTER_ORDINAL_OP(LEOp, thread.externStr(a).compare(thread.externStr(b)) <= 0)
+ORDINAL_OP(GEOp, a>=b)	CHARACTER_ORDINAL_OP(GEOp, thread.externStr(a).compare(thread.externStr(b)) >= 0)
 ORDINAL_OP(EqOp, a==b)	/* Character equality can just compare Strings */
 ORDINAL_OP(NeqOp, a!=b) /* Character inequality can just compare Strings */
 
@@ -178,7 +178,7 @@ ORDINAL_OP(NeqOp, a!=b) /* Character inequality can just compare Strings */
 // Logical binary ops
 template<typename T>
 struct AndOp : BinaryOp<Logical, Logical, Logical> {
-	static typename AndOp::R eval(State& state, typename AndOp::A const a, typename AndOp::B const b) {
+	static typename AndOp::R eval(Thread& thread, typename AndOp::A const a, typename AndOp::B const b) {
 		if(AV::isNA(a)) return b ? RV::NAelement : 0;
 		else if(BV::isNA(b)) return a ? RV::NAelement : 0;
 		else return a && b ? 1 : 0;
@@ -187,7 +187,7 @@ struct AndOp : BinaryOp<Logical, Logical, Logical> {
 
 template<typename T>
 struct OrOp : BinaryOp<Logical, Logical, Logical> {
-	static typename OrOp::R eval(State& state, typename OrOp::A const a, typename OrOp::B const b) {
+	static typename OrOp::R eval(Thread& thread, typename OrOp::A const a, typename OrOp::B const b) {
 		if(AV::isNA(a)) return b ? 1 : RV::NAelement;
 		else if(BV::isNA(b)) return a ? 1 : RV::NAelement;
 		return (a || b) ? 1 : 0;
@@ -200,7 +200,7 @@ struct OrOp : BinaryOp<Logical, Logical, Logical> {
 template<typename T> \
 struct Name : FoldOp<typename T::Self> { \
 	static typename Name::A base() { return Initial; } \
-	static typename Name::R eval(State& state, typename Name::R const a, typename Name::A const b) { \
+	static typename Name::R eval(Thread& thread, typename Name::R const a, typename Name::A const b) { \
 		return (Func); \
 	} \
 }; \
@@ -209,34 +209,34 @@ struct Name : FoldOp<typename T::Self> { \
 template<> \
 struct Name<TCharacter> : FoldOp<Character> { \
 	static Name::A base() { return Initial; } \
-	static Name::R eval(State& state, Name::R const a, Name::A const b) { \
+	static Name::R eval(Thread& thread, Name::R const a, Name::A const b) { \
 		return (Func); \
 	} \
 }; \
 
-FOLD_OP(MaxOp, PMaxOp<T>::eval(state, a, b), -std::numeric_limits<typename MaxOp<T>::A>::infinity())
-CHARACTER_FOLD_OP(MaxOp, PMaxOp<TCharacter>::eval(state, a, b), Strings::empty) 
-FOLD_OP(MinOp, PMinOp<T>::eval(state, a, b), std::numeric_limits<typename MaxOp<T>::A>::infinity()) 
-CHARACTER_FOLD_OP(MinOp, PMinOp<TCharacter>::eval(state, a, b), Strings::empty) 
-FOLD_OP(SumOp, AddOp<T>::eval(state, a, b), 0) 
-FOLD_OP(ProdOp, MulOp<T>::eval(state, a, b), 1) 
-FOLD_OP(AnyOp, OrOp<TLogical>::eval(state, a, b), 0)
-FOLD_OP(AllOp, AndOp<TLogical>::eval(state, a, b), 1)
+FOLD_OP(MaxOp, PMaxOp<T>::eval(thread, a, b), -std::numeric_limits<typename MaxOp<T>::A>::infinity())
+CHARACTER_FOLD_OP(MaxOp, PMaxOp<TCharacter>::eval(thread, a, b), Strings::empty) 
+FOLD_OP(MinOp, PMinOp<T>::eval(thread, a, b), std::numeric_limits<typename MaxOp<T>::A>::infinity()) 
+CHARACTER_FOLD_OP(MinOp, PMinOp<TCharacter>::eval(thread, a, b), Strings::empty) 
+FOLD_OP(SumOp, AddOp<T>::eval(thread, a, b), 0) 
+FOLD_OP(ProdOp, MulOp<T>::eval(thread, a, b), 1) 
+FOLD_OP(AnyOp, OrOp<TLogical>::eval(thread, a, b), 0)
+FOLD_OP(AllOp, AndOp<TLogical>::eval(thread, a, b), 1)
 
 #undef FOLD_OP
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void unaryArith(State& state, Value a, Value& c) {
+void unaryArith(Thread& thread, Value a, Value& c) {
 	if(a.isDouble())
-		Lift< Op<TDouble> >::eval(state, (Double const&)a, c);
+		Lift< Op<TDouble> >::eval(thread, (Double const&)a, c);
 	else if(a.isInteger())
-		Lift< Op<TInteger> >::eval(state, (Integer const&)a, c);
+		Lift< Op<TInteger> >::eval(thread, (Integer const&)a, c);
 	else if(a.isLogical())
-		Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), c);
+		Lift< Op<TInteger> >::eval(thread, As<Integer>(thread, a), c);
 	else if(a.isNull())
 		c = Null::Singleton();
 	else if(a.isObject()) {
-		unaryArith<Lift, Op>(state, ((Object const&)a).base(), c);
+		unaryArith<Lift, Op>(thread, ((Object const&)a).base(), c);
 		if(((Object const&)a).hasNames()) {
 			Object::Init(c, c, ((Object const&)a).getNames());
 		}
@@ -246,13 +246,13 @@ void unaryArith(State& state, Value a, Value& c) {
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void unaryLogical(State& state, Value a, Value& c) {
+void unaryLogical(Thread& thread, Value a, Value& c) {
 	if(a.isLogicalCoerce())
-		Lift< Op<TLogical> >::eval(state, As<Logical>(state, a), c);
+		Lift< Op<TLogical> >::eval(thread, As<Logical>(thread, a), c);
 	else if(a.isNull())
 		c = Logical(0);
 	else if(a.isObject()) {
-		unaryLogical<Lift, Op>(state, ((Object const&)a).base(), c);
+		unaryLogical<Lift, Op>(thread, ((Object const&)a).base(), c);
 		if(((Object const&)a).hasNames()) {
 			Object::Init(c, c, ((Object const&)a).getNames());
 		}
@@ -262,21 +262,21 @@ void unaryLogical(State& state, Value a, Value& c) {
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void unaryOrdinal(State& state, Value a, Value& c) {
+void unaryOrdinal(Thread& thread, Value a, Value& c) {
 	if(a.isDouble())
-		Lift< Op<TDouble> >::eval(state, (Double const&)a, c);
+		Lift< Op<TDouble> >::eval(thread, (Double const&)a, c);
 	else if(a.isInteger())
-		Lift< Op<TInteger> >::eval(state, (Integer const&)a, c);
+		Lift< Op<TInteger> >::eval(thread, (Integer const&)a, c);
 	else if(a.isLogical())
-		Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), c);
+		Lift< Op<TInteger> >::eval(thread, As<Integer>(thread, a), c);
 	else if(a.isCharacter())
-		Lift< Op<TCharacter> >::eval(state, (Character const&)a, c);
+		Lift< Op<TCharacter> >::eval(thread, (Character const&)a, c);
 	else if(a.isNull()) {
 		Double::InitScalar(c, Op<TDouble>::base());
-		_warning(state, "no non-missing arguments to min; returning Inf");
+		_warning(thread, "no non-missing arguments to min; returning Inf");
 	}
 	else if(a.isObject()) {
-		unaryOrdinal<Lift, Op>(state, ((Object const&)a).base(), c);
+		unaryOrdinal<Lift, Op>(thread, ((Object const&)a).base(), c);
 		if(((Object const&)a).hasNames()) {
 			Object::Init(c, c, ((Object const&)a).getNames());
 		}
@@ -288,11 +288,11 @@ void unaryOrdinal(State& state, Value a, Value& c) {
 }
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void unaryCharacter(State& state, Value a, Value& c) {
+void unaryCharacter(Thread& thread, Value a, Value& c) {
 	if(a.isVector())
-		Lift< Op<TCharacter> >::eval(state, As<Character>(state, a), c);
+		Lift< Op<TCharacter> >::eval(thread, As<Character>(thread, a), c);
 	else if(a.isObject()) {
-		unaryCharacter<Lift, Op>(state, ((Object const&)a).base(), c);
+		unaryCharacter<Lift, Op>(thread, ((Object const&)a).base(), c);
 		if(((Object const&)a).hasNames()) {
 			Object::Init(c, c, ((Object const&)a).getNames());
 		}
@@ -300,21 +300,21 @@ void unaryCharacter(State& state, Value a, Value& c) {
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void unaryFilter(State& state, Value a, Value& c) {
+void unaryFilter(Thread& thread, Value a, Value& c) {
 	if(a.isDouble())
-		Lift< Op<TDouble> >::eval(state, (Double const&)a, c);
+		Lift< Op<TDouble> >::eval(thread, (Double const&)a, c);
 	else if(a.isInteger())
-		Lift< Op<TInteger> >::eval(state, (Integer const&)a, c);
+		Lift< Op<TInteger> >::eval(thread, (Integer const&)a, c);
 	else if(a.isLogical())
-		Lift< Op<TLogical> >::eval(state, (Logical const&)a, c);
+		Lift< Op<TLogical> >::eval(thread, (Logical const&)a, c);
 	else if(a.isCharacter())
-		Lift< Op<TCharacter> >::eval(state, (Character const&)a, c);
+		Lift< Op<TCharacter> >::eval(thread, (Character const&)a, c);
 	else if(a.isNull())
 		Logical(0);
 	else if(a.isList())
-		Lift< Op<TList> >::eval(state, (List const&)a, c);
+		Lift< Op<TList> >::eval(thread, (List const&)a, c);
 	else if(a.isObject()) {
-		unaryFilter<Lift, Op>(state, ((Object const&)a).base(), c);
+		unaryFilter<Lift, Op>(thread, ((Object const&)a).base(), c);
 		if(((Object const&)a).hasNames()) {
 			Object::Init(c, c, ((Object const&)a).getNames());
 		}
@@ -325,68 +325,68 @@ void unaryFilter(State& state, Value a, Value& c) {
 };
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void binaryArithSlow(State& state, Value a, Value b, Value& c) {
+void binaryArithSlow(Thread& thread, Value a, Value b, Value& c) {
 	if(a.isDouble() && b.isDouble())
-		Lift< Op<TDouble> >::eval(state, (Double const&)a, (Double const&)b, c);
+		Lift< Op<TDouble> >::eval(thread, (Double const&)a, (Double const&)b, c);
 	else if((a.isDouble() && b.isMathCoerce()) || (b.isDouble() && a.isMathCoerce()))
-		Lift< Op<TDouble> >::eval(state, As<Double>(state, a), As<Double>(state, b), c);
+		Lift< Op<TDouble> >::eval(thread, As<Double>(thread, a), As<Double>(thread, b), c);
 	else if(a.isMathCoerce() && b.isMathCoerce()) 
-		Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), As<Integer>(state, b), c);
+		Lift< Op<TInteger> >::eval(thread, As<Integer>(thread, a), As<Integer>(thread, b), c);
 	else if(a.isObject())
-		binaryArithSlow<Lift, Op>(state, ((Object const&)a).base(), b, c);
+		binaryArithSlow<Lift, Op>(thread, ((Object const&)a).base(), b, c);
 	else if(b.isObject())
-		binaryArithSlow<Lift, Op>(state, a, ((Object const&)b).base(), c);
+		binaryArithSlow<Lift, Op>(thread, a, ((Object const&)b).base(), c);
 	else
 		_error("non-numeric argument to binary numeric operator");
 }
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void binaryArith(State& state, Value const& a, Value const& b, Value& c) __attribute__((always_inline));
+void binaryArith(Thread& thread, Value const& a, Value const& b, Value& c) ALWAYS_INLINE; 
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void binaryArith(State& state, Value const& a, Value const& b, Value& c) {
+void binaryArith(Thread& thread, Value const& a, Value const& b, Value& c) {
 	if(a.isDouble1()) {
 		if(b.isDouble1()) 
-			{ Double::InitScalar(c, Op<TDouble>::eval(state, a.d, b.d)); return; }
+			{ Double::InitScalar(c, Op<TDouble>::eval(thread, a.d, b.d)); return; }
 		else if(b.isInteger1())	
-			{ Double::InitScalar(c, Op<TDouble>::eval(state, a.d, (double)b.i));return; }
+			{ Double::InitScalar(c, Op<TDouble>::eval(thread, a.d, (double)b.i));return; }
 	}
 	else if(a.isInteger1()) {
 		if(b.isDouble1()) 
-			{ Double::InitScalar(c, Op<TDouble>::eval(state, (double)a.i, b.d)); return; }
+			{ Double::InitScalar(c, Op<TDouble>::eval(thread, (double)a.i, b.d)); return; }
 		else if(b.isInteger1())	
-			{ Integer::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return;}
+			{ Integer::InitScalar(c, Op<TInteger>::eval(thread, a.i, b.i)); return;}
 	}
-	binaryArithSlow<Lift, Op>(state, a, b, c);
+	binaryArithSlow<Lift, Op>(thread, a, b, c);
 }
 template< template<class Op> class Lift, template<typename T> class Op > 
-void binaryLogical(State& state, Value const& a, Value const& b, Value& c) {
+void binaryLogical(Thread& thread, Value const& a, Value const& b, Value& c) {
 	if(a.isLogical() && b.isLogical())
-		Lift< Op<TLogical> >::eval(state, (Logical const&)a, (Logical const&)b, c);
+		Lift< Op<TLogical> >::eval(thread, (Logical const&)a, (Logical const&)b, c);
 	else if(a.isLogicalCoerce() && b.isLogicalCoerce()) 
-		Lift< Op<TLogical> >::eval(state, As<Logical>(state, a), As<Logical>(state, b), c);
+		Lift< Op<TLogical> >::eval(thread, As<Logical>(thread, a), As<Logical>(thread, b), c);
 	else if(a.isObject())
-		binaryLogical<Lift, Op>(state, ((Object const&)a).base(), b, c);
+		binaryLogical<Lift, Op>(thread, ((Object const&)a).base(), b, c);
 	else if(b.isObject())
-		binaryLogical<Lift, Op>(state, a, ((Object const&)b).base(), c);
+		binaryLogical<Lift, Op>(thread, a, ((Object const&)b).base(), c);
 	else 
 		_error("non-logical argument to binary logical operator");
 }
 
 template< template<class Op> class Lift, template<typename T> class Op > 
-void binaryOrdinal(State& state, Value const& a, Value const& b, Value& c) {
+void binaryOrdinal(Thread& thread, Value const& a, Value const& b, Value& c) {
 	if(a.isDouble() && b.isDouble())
-		Lift< Op<TDouble> >::eval(state, (Double const&)a, (Double const&)b, c);
+		Lift< Op<TDouble> >::eval(thread, (Double const&)a, (Double const&)b, c);
 	else if((a.isDouble() && b.isMathCoerce()) || (b.isDouble() && a.isMathCoerce()))
-		Lift< Op<TDouble> >::eval(state, As<Double>(state, a), As<Double>(state, b), c);
+		Lift< Op<TDouble> >::eval(thread, As<Double>(thread, a), As<Double>(thread, b), c);
 	else if(a.isMathCoerce() && b.isMathCoerce()) 
-		Lift< Op<TInteger> >::eval(state, As<Integer>(state, a), As<Integer>(state, b),c );
+		Lift< Op<TInteger> >::eval(thread, As<Integer>(thread, a), As<Integer>(thread, b),c );
 	else if(a.isCharacter() && b.isCharacter())
-		Lift< Op<TCharacter> >::eval(state, Character(a), Character(b), c);
+		Lift< Op<TCharacter> >::eval(thread, Character(a), Character(b), c);
 	else if(a.isObject())
-		binaryOrdinal<Lift, Op>(state, ((Object const&)a).base(), b, c);
+		binaryOrdinal<Lift, Op>(thread, ((Object const&)a).base(), b, c);
 	else if(b.isObject())
-		binaryOrdinal<Lift, Op>(state, a, ((Object const&)b).base(), c);
+		binaryOrdinal<Lift, Op>(thread, a, ((Object const&)b).base(), c);
 	else {
 		printf("2: %s\n", Type::toString(a.type));
 		_error("non-ordinal argument to ordinal operator");

@@ -14,13 +14,13 @@ T const& Cast(Value const& v) {
 	return (T const&)v;
 }
 
-void cat(State& state, Value const* args, Value& result) {
+void cat(Thread& thread, Value const* args, Value& result) {
 	List const& a = Cast<List>(args[0]);
 	for(int64_t i = 0; i < a.length; i++) {
 		if(!List::isNA(a[i])) {
-			Character c = As<Character>(state, a[i]);
+			Character c = As<Character>(thread, a[i]);
 			for(int64_t j = 0; j < c.length; j++) {
-				printf("%s", state.externStr(c[j]).c_str());
+				printf("%s", thread.externStr(c[j]).c_str());
 				if(j < c.length-1) printf(" ");
 			}
 		}
@@ -28,7 +28,7 @@ void cat(State& state, Value const* args, Value& result) {
 	result = Null::Singleton();
 }
 
-void remove(State& state, Value const* args, Value& result) {
+void remove(Thread& thread, Value const* args, Value& result) {
 	Character const& a = Cast<Character>(args[0]);
 	REnvironment e(args[1]);
 	for(int64_t i = 0; i < a.length; i++) {
@@ -37,15 +37,15 @@ void remove(State& state, Value const* args, Value& result) {
 	result = Null::Singleton();
 }
 
-void library(State& state, Value const* args, Value& result) {
-	Character from = As<Character>(state, args[0]);
+void library(Thread& thread, Value const* args, Value& result) {
+	Character from = As<Character>(thread, args[0]);
 	if(from.length > 0) {
-		loadLibrary(state, "library", state.externStr(from[0]));
+		loadLibrary(thread, "library", thread.externStr(from[0]));
 	}
 	result = Null::Singleton();
 }
 
-void sequence(State& state, Value const* args, Value& result) {
+void sequence(Thread& thread, Value const* args, Value& result) {
 	double from = asReal1(args[0]);
 	double by = asReal1(args[1]);
 	double len = asReal1(args[2]);
@@ -53,7 +53,7 @@ void sequence(State& state, Value const* args, Value& result) {
 	result = Sequence(from, by, len);	
 }
 
-void repeat(State& state, Value const* args, Value& result) {
+void repeat(Thread& thread, Value const* args, Value& result) {
 	double v = asReal1(args[0]);
 	//double e = asReal1(args[1]);
 	double l = asReal1(args[2]);
@@ -65,12 +65,12 @@ void repeat(State& state, Value const* args, Value& result) {
 	result = r;
 }
 
-void inherits(State& state, Value const* args, Value& result) {
+void inherits(Thread& thread, Value const* args, Value& result) {
 	Value x = args[0];
 	Character what = Cast<Character>(args[1]);
 	Logical which = Cast<Logical>(args[2]);
 	// NYI: which
-	Character c = klass(state, x);
+	Character c = klass(thread, x);
 	bool inherits = false;
 	for(int64_t i = 0; i < what.length && !inherits; i++) {
 		for(int64_t j = 0; j < c.length && !inherits; j++) {
@@ -80,7 +80,7 @@ void inherits(State& state, Value const* args, Value& result) {
 	result = Logical::c(inherits);
 }
 
-void attr(State& state, Value const* args, Value& result)
+void attr(Thread& thread, Value const* args, Value& result)
 {
 	// NYI: exact
 	Value object = args[0];
@@ -93,7 +93,7 @@ void attr(State& state, Value const* args, Value& result)
 	}
 }
 
-void assignAttr(State& state, Value const* args, Value& result)
+void assignAttr(Thread& thread, Value const* args, Value& result)
 {
 	Value object = args[0];
 	Character which = Cast<Character>(args[1]);
@@ -112,26 +112,26 @@ Type::Enum cTypeCast(Type::Enum s, Type::Enum t)
 }
 
 // These are all tree-based reductions. Should we have a tree reduction byte code?
-int64_t unlistLength(State& state, int64_t recurse, Value a) {
+int64_t unlistLength(Thread& thread, int64_t recurse, Value a) {
 	if(a.isObject()) a = ((Object&)a).base();
 	if(recurse > 0 && a.isList()) {
 		List l(a);
 		int64_t t = 0;
 		for(int64_t i = 0; i < l.length; i++) 
-			t += unlistLength(state, recurse-1, l[i]);
+			t += unlistLength(thread, recurse-1, l[i]);
 		return t;
 	}
 	else if(a.isVector()) return a.length;
 	else return 1;
 }
 
-Type::Enum unlistType(State& state, int64_t recurse, Value a) {
+Type::Enum unlistType(Thread& thread, int64_t recurse, Value a) {
 	if(a.isObject()) a = ((Object&)a).base();
 	if(a.isList()) {
 		List l(a);
 		Type::Enum t = Type::Null;
 		for(int64_t i = 0; i < l.length; i++) 
-			t = cTypeCast(recurse > 0 ? unlistType(state, recurse-1, l[i]) : l[i].type, t);
+			t = cTypeCast(recurse > 0 ? unlistType(thread, recurse-1, l[i]) : l[i].type, t);
 		return t;
 	}
 	else if(a.isVector()) return a.type;
@@ -139,57 +139,57 @@ Type::Enum unlistType(State& state, int64_t recurse, Value a) {
 }
 
 template< class T >
-void unlist(State& state, int64_t recurse, Value a, T& out, int64_t& start) {
+void unlist(Thread& thread, int64_t recurse, Value a, T& out, int64_t& start) {
 	if(a.isObject()) a = ((Object&)a).base();
 	if(recurse > 0 && a.isList()) {
 		List l(a);
 		for(int64_t i = 0; i < l.length; i++) 
-			unlist(state, recurse-1, l[i], out, start);
+			unlist(thread, recurse-1, l[i], out, start);
 		return;
 	}
-	else if(a.isVector()) { Insert(state, a, 0, out, start, a.length); start += a.length; }
+	else if(a.isVector()) { Insert(thread, a, 0, out, start, a.length); start += a.length; }
 	else _error("Unexpected non-basic type in unlist");
 }
 
 template<>
-void unlist<List>(State& state, int64_t recurse, Value a, List& out, int64_t& start) {
+void unlist<List>(Thread& thread, int64_t recurse, Value a, List& out, int64_t& start) {
 	if(a.isObject()) a = ((Object&)a).base();
 	if(recurse > 0 && a.isList()) {
 		List l(a);
 		for(int64_t i = 0; i < l.length; i++) 
-			unlist(state, recurse-1, l[i], out, start);
+			unlist(thread, recurse-1, l[i], out, start);
 		return;
 	}
-	else if(a.isVector()) { Insert(state, a, 0, out, start, a.length); start += a.length; }
+	else if(a.isVector()) { Insert(thread, a, 0, out, start, a.length); start += a.length; }
 	else out[start++] = a;
 }
 
-bool unlistHasNames(State& state, int64_t recurse, Value a) {
+bool unlistHasNames(Thread& thread, int64_t recurse, Value a) {
 	if(a.isObject() && ((Object const&)a).hasNames()) return true;
 	if(a.isObject()) a = ((Object&)a).base();
 	if(recurse > 0 && a.isList()) {
 		List l(a);
 		bool hasNames = false;
 		for(int64_t i = 0; i < l.length; i++) 
-			hasNames = hasNames || unlistHasNames(state, recurse-1, l[i]);
+			hasNames = hasNames || unlistHasNames(thread, recurse-1, l[i]);
 		return hasNames;
 	}
 	else return false;
 }
 
-std::string makeName(State& state, std::string prefix, String name, int64_t i) {
+std::string makeName(Thread& thread, std::string prefix, String name, int64_t i) {
 	if(prefix.length() > 0) {
 		if(name != Strings::empty)
-			return prefix + "." + state.externStr(name);
+			return prefix + "." + thread.externStr(name);
 		else
 			return prefix + intToStr(i+1);
 	}
 	else {
-		return state.externStr(name);
+		return thread.externStr(name);
 	}
 }
 
-void unlistNames(State& state, int64_t recurse, Value a, Character& out, int64_t& start, std::string prefix) {
+void unlistNames(Thread& thread, int64_t recurse, Value a, Character& out, int64_t& start, std::string prefix) {
 	Character names(0);
 	if(a.isObject() && ((Object&)a).hasNames()) {
 		names = (Character)((Object&)a).getNames();
@@ -199,33 +199,32 @@ void unlistNames(State& state, int64_t recurse, Value a, Character& out, int64_t
 	if(recurse > 0 && a.isList()) {
 		List l(a);
 		for(int64_t i = 0; i < l.length; i++)
-			unlistNames(state, recurse-1, l[i], out, start, makeName(state, prefix, i < names.length ? names[i] : Strings::empty, i));
+			unlistNames(thread, recurse-1, l[i], out, start, makeName(thread, prefix, i < names.length ? names[i] : Strings::empty, i));
 		return;
 	}
 	else if(a.isVector() && a.length != 1) { 
 		for(int64_t i = 0; i < a.length; i++) {
-			out[start++] = state.internStr(makeName(state, prefix, (i < names.length) ? names[i] : Strings::empty, i));
+			out[start++] = thread.internStr(makeName(thread, prefix, (i < names.length) ? names[i] : Strings::empty, i));
 		}
 	}
-	else out[start++] = state.internStr(prefix);
+	else out[start++] = thread.internStr(prefix);
 }
 
 // TODO: useNames parameter could be handled at the R level
-void unlist(State& state, Value const* args, Value& result) {
+void unlist(Thread& thread, Value const* args, Value& result) {
 	Value v = args[0];
 	int64_t recurse = Cast<Logical>(args[1])[0] ? std::numeric_limits<int64_t>::max() : 1;
-	printf("recurse: %d\n", recurse);
 	bool useNames = Cast<Logical>(args[2])[0];
 	
-	int64_t length = unlistLength(state, recurse, v);
-	Type::Enum type = unlistType(state, recurse, v);
+	int64_t length = unlistLength(thread, recurse, v);
+	Type::Enum type = unlistType(thread, recurse, v);
 
 	switch(type) {
 		#define CASE(Name) \
 			case Type::Name: { \
 				Name out(length); \
 				int64_t i = 0; \
-				unlist(state, recurse, v, out, i); \
+				unlist(thread, recurse, v, out, i); \
 				result = out; \
 			} break;
 		VECTOR_TYPES(CASE)
@@ -233,10 +232,10 @@ void unlist(State& state, Value const* args, Value& result) {
 		default: _error("NYI: Insert into this type"); break;
 	};
 
-	if(useNames && unlistHasNames(state, recurse, v)) {
+	if(useNames && unlistHasNames(thread, recurse, v)) {
 		Character outnames(length);
 		int64_t i = 0;
-		unlistNames(state, recurse, v, outnames, i, "");
+		unlistNames(thread, recurse, v, outnames, i, "");
 		Object::Init(result, result, outnames);
 	}
 }
@@ -244,7 +243,7 @@ void unlist(State& state, Value const* args, Value& result) {
 
 template< class A >
 struct SubsetInclude {
-	static void eval(State& state, A const& a, Integer const& d, int64_t nonzero, Value& out)
+	static void eval(Thread& thread, A const& a, Integer const& d, int64_t nonzero, Value& out)
 	{
 		A r(nonzero);
 		int64_t j = 0;
@@ -262,7 +261,7 @@ struct SubsetInclude {
 
 template< class A >
 struct SubsetExclude {
-	static void eval(State& state, A const& a, Integer const& d, int64_t nonzero, Value& out)
+	static void eval(Thread& thread, A const& a, Integer const& d, int64_t nonzero, Value& out)
 	{
 		std::set<Integer::Element> index; 
 		typename A::Element const* ae = a.v();
@@ -286,7 +285,7 @@ struct SubsetExclude {
 
 template< class A >
 struct SubsetLogical {
-	static void eval(State& state, A const& a, Logical const& d, Value& out)
+	static void eval(Thread& thread, A const& a, Logical const& d, Value& out)
 	{
 		typename A::Element const* ae = a.v();
 		typename Logical::Element const* de = d.v();
@@ -313,7 +312,7 @@ struct SubsetLogical {
 };
 
 template< class A >
-inline int64_t find(State& state, A const& a, typename A::Element const& b) {
+inline int64_t find(Thread& thread, A const& a, typename A::Element const& b) {
 	typename A::Element const* ae = a.v();
 	// eventually use an index here...
 	for(int64_t i = 0; i < a.length; i++) {
@@ -324,7 +323,7 @@ inline int64_t find(State& state, A const& a, typename A::Element const& b) {
 
 template< class A, class B >
 struct SubsetIndexed {
-	static void eval(State& state, A const& a, B const& b, B const& d, Value& out)
+	static void eval(Thread& thread, A const& a, B const& b, B const& d, Value& out)
 	{
 		typename A::Element const* ae = a.v();
 		typename B::Element const* de = d.v();
@@ -332,27 +331,27 @@ struct SubsetIndexed {
 		int64_t length = d.length;
 		A r(length);
 		for(int64_t i = 0; i < length; i++) {
-			int64_t index = find(state, b, de[i]);
+			int64_t index = find(thread, b, de[i]);
 			r[i] = index >= 0 ? ae[index] : A::NAelement;
 		}
 		out = r;
 	}
 };
 
-void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
+void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble() || i.isInteger()) {
 		if(a.isObject()) {
 			// TODO: this computes positive twice
 			Value r, names;
-			SubsetSlow(state, ((Object const&)a).base(), i, r);
+			SubsetSlow(thread, ((Object const&)a).base(), i, r);
 			if(((Object const&)a).hasNames()) {
-				SubsetSlow(state, ((Object const&)a).getNames(), i, names);
+				SubsetSlow(thread, ((Object const&)a).getNames(), i, names);
 				Object::Init(r, r, names);
 			}
 			out = r;
 			return;
 		}
-		Integer index = As<Integer>(state, i);
+		Integer index = As<Integer>(thread, i);
 		int64_t positive = 0, negative = 0;
 		for(int64_t i = 0; i < index.length; i++) {
 			if(index[i] > 0 || Integer::isNA(index[i])) positive++;
@@ -363,7 +362,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 		else if(positive > 0) {
 			switch(a.type) {
 				case Type::Null: out = Null::Singleton(); break;
-#define CASE(Name,...) case Type::Name: SubsetInclude<Name>::eval(state, (Name const&)a, index, positive, out); break;
+#define CASE(Name,...) case Type::Name: SubsetInclude<Name>::eval(thread, (Name const&)a, index, positive, out); break;
 						 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
@@ -372,7 +371,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 		else if(negative > 0) {
 			switch(a.type) {
 				case Type::Null: out = Null::Singleton(); break;
-#define CASE(Name) case Type::Name: SubsetExclude<Name>::eval(state, (Name const&)a, index, negative, out); break;
+#define CASE(Name) case Type::Name: SubsetExclude<Name>::eval(thread, (Name const&)a, index, negative, out); break;
 						 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
@@ -391,9 +390,9 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 	else if(i.isLogical()) {
 		if(a.isObject()) {
 			Value r, names;
-			SubsetSlow(state, ((Object const&)a).base(), i, r);
+			SubsetSlow(thread, ((Object const&)a).base(), i, r);
 			if(((Object const&)a).hasNames()) {
-				SubsetSlow(state, ((Object const&)a).getNames(), i, names);
+				SubsetSlow(thread, ((Object const&)a).getNames(), i, names);
 				Object::Init(r, r, names);
 			}
 			out = r;
@@ -402,7 +401,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 		Logical index = Logical(i);
 		switch(a.type) {
 			case Type::Null: out = Null::Singleton(); break;
-#define CASE(Name) case Type::Name: SubsetLogical<Name>::eval(state, (Name const&)a, index, out); break;
+#define CASE(Name) case Type::Name: SubsetLogical<Name>::eval(thread, (Name const&)a, index, out); break;
 					 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
@@ -414,7 +413,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 			Value const& n = ((Object const&)a).getNames();
 			switch(b.type) {
 				case Type::Null: out = Null::Singleton(); break;
-#define CASE(Name) case Type::Name: SubsetIndexed<Name, Character>::eval(state, (Name const&)b, (Character const&)n, (Character const&)i, out); break;
+#define CASE(Name) case Type::Name: SubsetIndexed<Name, Character>::eval(thread, (Name const&)b, (Character const&)n, (Character const&)i, out); break;
 				VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
@@ -430,7 +429,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 
 template< class A  >
 struct SubsetAssignInclude {
-	static void eval(State& state, A const& a, bool clone, Integer const& d, A const& b, Value& out)
+	static void eval(Thread& thread, A const& a, bool clone, Integer const& d, A const& b, Value& out)
 	{
 		typename A::Element const* be = b.v();
 		typename Integer::Element const* de = d.v();
@@ -444,7 +443,7 @@ struct SubsetAssignInclude {
 
 		// should use max index here to extend vector if necessary	
 		A r = a;
-		Resize(state, clone, r, outlength);
+		Resize(thread, clone, r, outlength);
 		typename A::Element* re = r.v();
 		for(int64_t i = 0, j = 0; i < length; i++, j++) {	
 			if(j >= b.length) j = 0;
@@ -458,7 +457,7 @@ struct SubsetAssignInclude {
 
 template< class A >
 struct SubsetAssignLogical {
-	static void eval(State& state, A const& a, bool clone, Logical const& d, A const& b, Value& out)
+	static void eval(Thread& thread, A const& a, bool clone, Logical const& d, A const& b, Value& out)
 	{
 		typename A::Element const* be = b.v();
 		typename Logical::Element const* de = d.v();
@@ -466,7 +465,7 @@ struct SubsetAssignLogical {
 		// determine length
 		int64_t length = std::max(a.length, d.length);
 		A r = a;
-		Resize(state, clone, r, length);
+		Resize(thread, clone, r, length);
 		typename A::Element* re = r.v();
 		int64_t j = 0, k = 0;
 		for(int64_t i = 0; i < length; i++) {
@@ -481,7 +480,7 @@ struct SubsetAssignLogical {
 
 template< class A, class B >
 struct SubsetAssignIndexed {
-	static void eval(State& state, A const& a, bool clone, B const& b, B const& d, A const& v, Value& out)
+	static void eval(Thread& thread, A const& a, bool clone, B const& b, B const& d, A const& v, Value& out)
 	{
 		typename B::Element const* de = d.v();
 		
@@ -491,7 +490,7 @@ struct SubsetAssignIndexed {
 		int64_t length = d.length;
 		Integer include(length);
 		for(int64_t i = 0; i < length; i++) {
-			int64_t index = find(state, b, de[i]);
+			int64_t index = find(thread, b, de[i]);
 			if(index < 0) {
 				if(overflow.find(de[i]) != overflow.end())
 					index = overflow[de[i]];
@@ -502,23 +501,23 @@ struct SubsetAssignIndexed {
 			}
 			include[i] = index+1;
 		}
-		SubsetAssignInclude<A>::eval(state, a, clone, include, v, out);
+		SubsetAssignInclude<A>::eval(thread, a, clone, include, v, out);
 	}
 };
 
-void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
+void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(i.isDouble() || i.isInteger()) {
-		Integer idx = As<Integer>(state, i);
+		Integer idx = As<Integer>(thread, i);
 		switch(a.type) {
-#define CASE(Name) case Type::Name: SubsetAssignInclude<Name>::eval(state, (Name const&)a, clone, idx, As<Name>(state, b), c); break;
+#define CASE(Name) case Type::Name: SubsetAssignInclude<Name>::eval(thread, (Name const&)a, clone, idx, As<Name>(thread, b), c); break;
 			VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 			case Type::Object: {
 				Value r;
-				SubsetAssignSlow(state, ((Object const&)a).base(), clone, i, b, r);
+				SubsetAssignSlow(thread, ((Object const&)a).base(), clone, i, b, r);
 				if(((Object const&)a).hasNames()) {
 					Character names = (Character)((Object const&)a).getNames();
-					Resize(state, clone, names, r.length, Strings::empty);
+					Resize(thread, clone, names, r.length, Strings::empty);
 					Object::Init(r, r, names);
 				}
 				c = r;
@@ -529,15 +528,15 @@ void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, 
 	else if(i.isLogical()) {
 		Logical index = Logical(i);
 		switch(a.type) {
-#define CASE(Name) case Type::Name: SubsetAssignLogical<Name>::eval(state, (Name const&)a, clone, index, As<Name>(state, b), c); break;
+#define CASE(Name) case Type::Name: SubsetAssignLogical<Name>::eval(thread, (Name const&)a, clone, index, As<Name>(thread, b), c); break;
 					 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 			case Type::Object: {
 				Value r;
-				SubsetAssignSlow(state, ((Object const&)a).base(), clone, i, b, r);
+				SubsetAssignSlow(thread, ((Object const&)a).base(), clone, i, b, r);
 				if(((Object const&)a).hasNames()) {
 					Character names = (Character)((Object const&)a).getNames();
-					Resize(state, clone, names, r.length, Strings::empty);
+					Resize(thread, clone, names, r.length, Strings::empty);
 					Object::Init(r, r, names);
 				}
 				c = r;
@@ -551,13 +550,13 @@ void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, 
 			Value const& names = ((Object const&)a).getNames();
 			switch(base.type) {
 				case Type::Null: c = Null::Singleton(); break;
-#define CASE(Name) case Type::Name: SubsetAssignIndexed<Name, Character>::eval(state, (Name const&)base, clone, (Character const&)names, (Character const&)i, As<Name>(state, b), c); break;
+#define CASE(Name) case Type::Name: SubsetAssignIndexed<Name, Character>::eval(thread, (Name const&)base, clone, (Character const&)names, (Character const&)i, As<Name>(thread, b), c); break;
 				VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
 			};
 			Value newNames;
-			SubsetAssignIndexed<Character, Character>::eval(state, (Character const&)names, clone, (Character const&)names, (Character const&)i, (Character const&)i, newNames);
+			SubsetAssignIndexed<Character, Character>::eval(thread, (Character const&)names, clone, (Character const&)names, (Character const&)i, (Character const&)i, newNames);
 			Object::Init(c, c, (Character const&)newNames);
 		}
 		else _error("Object does not have names for subsetting");
@@ -567,22 +566,22 @@ void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, 
 	}
 }
 
-void Subset2AssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
+void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(i.isDouble() || i.isInteger() || i.isCharacter())
-		SubsetAssignSlow(state, a, clone, i, b, c);
+		SubsetAssignSlow(thread, a, clone, i, b, c);
 	// Frankly it seems pointless to support this case. We should make this an error.
 	//else if(i.isLogical() && i.length == 1 && ((Logical const&)i)[0])
-	//	SubsetAssignSlow(state, a, clone, As<Integer>(state, i), b, c);
+	//	SubsetAssignSlow(thread, a, clone, As<Integer>(thread, i), b, c);
 	else
 		_error("NYI indexing type");
 }
 
-void length(State& state, Value const* args, Value& result) {
+void length(Thread& thread, Value const* args, Value& result) {
 	result = Integer::c(args[0].length);
 }
 
-void eval_fn(State& state, Value const* args, Value& result) {
-	result = eval(state, Compiler::compile(state, args[0]), REnvironment(args[1]).ptr());
+void eval_fn(Thread& thread, Value const* args, Value& result) {
+	result = thread.eval(Compiler::compile(thread.state, args[0]), REnvironment(args[1]).ptr());
 }
 
 struct lapplyargs {
@@ -591,24 +590,22 @@ struct lapplyargs {
 	Value func;
 };
 
-void lapplybody(void* args, uint64_t start, uint64_t end, State& state) {
+void lapplybody(void* args, uint64_t start, uint64_t end, Thread& thread) {
 	lapplyargs& l = *(lapplyargs*)args;
 	//printf("lapplybody called with %d to %d\n", start, end);
 	List apply(2);
 	apply[0] = l.func;
 	apply[1] = Value::Nil();
-	Prototype* p = Compiler::compile(state, CreateCall(apply));
-	//istate.tracing.config = l.state.tracing.config;
-	//istate.tracing.verbose = l.state.tracing.verbose;
+	Prototype* p = Compiler::compile(thread.state, CreateCall(apply));
 	for( size_t i=start; i!=end; ++i ) {
 		p->calls[0].arguments[0] = l.in[i];
-		l.out[i] = eval(state, p);
+		l.out[i] = thread.eval(p);
 	}
 	//return 0;
 }
 
-void lapply(State& state, Value const* args, Value& result) {
-	List x = As<List>(state, args[0]);
+void lapply(Thread& thread, Value const* args, Value& result) {
+	List x = As<List>(thread, args[0]);
 	Value func = args[1];
 	List r(x.length);
 
@@ -617,26 +614,26 @@ void lapply(State& state, Value const* args, Value& result) {
 
 	// TODO: should have a way to make a simple function call without compiling,
 	// or should have a fast case for compilation
-	State istate(state.sharedState);
+	Thread ithread(state);
 	for(int64_t i = 0; i < x.length; i++) {
 		apply[1] = x[i];
-		r[i] = eval(istate, Compiler::compile(state, CreateCall(apply)));
+		r[i] = eval(ithread, Compiler::compile(thread, CreateCall(apply)));
 	}*/
 
 	/*List apply(2);
 	apply[0] = func;
 	apply[1] = Value::Nil();
-	Prototype* p = Compiler::compile(state, CreateCall(apply));
-	State istate(state.sharedState);
+	Prototype* p = Compiler::compile(thread, CreateCall(apply));
+	Thread ithread(state);
 	for(int64_t i = 0; i < x.length; i++) {
 		p->calls[0].arguments[0] = x[i];
-		r[i] = eval(istate, p);
+		r[i] = eval(ithread, p);
 	}*/
 
 	/*pthread_t h1, h2;
 
-	lapplyargs a1 = (lapplyargs) {0, x.length/2, state, x, r, func};
-	lapplyargs a2 = (lapplyargs) {x.length/2, x.length, state, x, r, func};
+	lapplyargs a1 = (lapplyargs) {0, x.length/2, thread, x, r, func};
+	lapplyargs a2 = (lapplyargs) {x.length/2, x.length, thread, x, r, func};
 
         pthread_create (&h1, NULL, lapplybody, &a1);
         pthread_create (&h2, NULL, lapplybody, &a2);
@@ -645,17 +642,17 @@ void lapply(State& state, Value const* args, Value& result) {
 	*/
 
 	lapplyargs a1 = (lapplyargs) {x, r, func};
-	state.doall(lapplybody, &a1, 0, x.length, 1, 1); 
+	thread.doall(lapplybody, &a1, 0, x.length, 1, 1); 
 
 	result = r;
 }
 
 /*
-void tlist(State& state, Value const* args, Value& result) {
+void tlist(Thread& thread, Value const* args, Value& result) {
 	int64_t length = args.length > 0 ? 1 : 0;
 	List a = Clone(args);
 	for(int64_t i = 0; i < a.length; i++) {
-		a[i] = force(state, a[i]);
+		a[i] = force(thread, a[i]);
 		if(a[i].isVector() && a[i].length != 0 && length != 0)
 			length = std::max(length, (int64_t)a[i].length);
 	}
@@ -673,24 +670,24 @@ void tlist(State& state, Value const* args, Value& result) {
 	result = r;
 }
 */
-void source(State& state, Value const* args, Value& result) {
+void source(Thread& thread, Value const* args, Value& result) {
 	Character file = Cast<Character>(args[0]);
-	std::ifstream t(state.externStr(file[0]).c_str());
+	std::ifstream t(thread.externStr(file[0]).c_str());
 	std::stringstream buffer;
 	buffer << t.rdbuf();
 	std::string code = buffer.str();
 
-	Parser parser(state);
+	Parser parser(thread.state);
 	Value value;
 	parser.execute(code.c_str(), code.length(), true, value);	
 	
-	result = eval(state, Compiler::compile(state, value));
+	result = thread.eval(Compiler::compile(thread.state, value));
 }
 
-void environment(State& state, Value const* args, Value& result) {
+void environment(Thread& thread, Value const* args, Value& result) {
 	Value e = args[0];
 	if(e.isNull()) {
-		result = REnvironment(state.frame.environment);
+		result = REnvironment(thread.frame.environment);
 		return;
 	}
 	else if(e.isFunction()) {
@@ -702,9 +699,9 @@ void environment(State& state, Value const* args, Value& result) {
 
 // TODO: parent.frame and sys.call need to ignore frames for promises, etc. We may need
 // the dynamic pointer in the environment after all...
-void parentframe(State& state, Value const* args, Value& result) {
+void parentframe(Thread& thread, Value const* args, Value& result) {
 	int64_t i = (int64_t)asReal1(args[0]);
-	Environment* env = state.frame.environment;
+	Environment* env = thread.frame.environment;
 	while(i > 0 && env->DynamicScope() != 0) {
 		env = env->DynamicScope();
 		i--;
@@ -712,9 +709,9 @@ void parentframe(State& state, Value const* args, Value& result) {
 	result = REnvironment(env);
 }
 
-void syscall(State& state, Value const* args, Value& result) {
+void syscall(Thread& thread, Value const* args, Value& result) {
 	int64_t i = (int64_t)asReal1(args[0]);
-	Environment* env = state.frame.environment;
+	Environment* env = thread.frame.environment;
 	while(i > 0 && env->DynamicScope() != 0) {
 		env = env->DynamicScope();
 		i--;
@@ -722,77 +719,77 @@ void syscall(State& state, Value const* args, Value& result) {
 	result = env->call;
 }
 
-void stop_fn(State& state, Value const* args, Value& result) {
+void stop_fn(Thread& thread, Value const* args, Value& result) {
 	// this should stop whether or not the arguments are correct...
-	std::string message = state.externStr(Cast<Character>(args[0])[0]);
+	std::string message = thread.externStr(Cast<Character>(args[0])[0]);
 	_error(message);
 	result = Null::Singleton();
 }
 
-void warning_fn(State& state, Value const* args, Value& result) {
-	std::string message = state.externStr(Cast<Character>(args[0])[0]);
-	_warning(state, message);
-	result = Character::c(state.internStr(message));
+void warning_fn(Thread& thread, Value const* args, Value& result) {
+	std::string message = thread.externStr(Cast<Character>(args[0])[0]);
+	_warning(thread, message);
+	result = Character::c(thread.internStr(message));
 } 
-void isna_fn(State& state, Value const* args, Value& result) {
-	unaryFilter<Zip1, IsNAOp>(state, args[0], result);
+void isna_fn(Thread& thread, Value const* args, Value& result) {
+	unaryFilter<Zip1, IsNAOp>(thread, args[0], result);
 }
 
-void isnan_fn(State& state, Value const* args, Value& result) {
-	unaryFilter<Zip1, IsNaNOp>(state, args[0], result);
+void isnan_fn(Thread& thread, Value const* args, Value& result) {
+	unaryFilter<Zip1, IsNaNOp>(thread, args[0], result);
 }
 
-void nchar_fn(State& state, Value const* args, Value& result) {
+void nchar_fn(Thread& thread, Value const* args, Value& result) {
 	// NYI: type or allowNA
-	unaryCharacter<Zip1, NcharOp>(state, args[0], result);
+	unaryCharacter<Zip1, NcharOp>(thread, args[0], result);
 }
 
-void nzchar_fn(State& state, Value const* args, Value& result) {
-	unaryCharacter<Zip1, NzcharOp>(state, args[0], result);
+void nzchar_fn(Thread& thread, Value const* args, Value& result) {
+	unaryCharacter<Zip1, NzcharOp>(thread, args[0], result);
 }
 
-void isfinite_fn(State& state, Value const* args, Value& result) {
-	unaryFilter<Zip1, IsFiniteOp>(state, args[0], result);
+void isfinite_fn(Thread& thread, Value const* args, Value& result) {
+	unaryFilter<Zip1, IsFiniteOp>(thread, args[0], result);
 }
 
-void isinfinite_fn(State& state, Value const* args, Value& result) {
-	unaryFilter<Zip1, IsInfiniteOp>(state, args[0], result);
+void isinfinite_fn(Thread& thread, Value const* args, Value& result) {
+	unaryFilter<Zip1, IsInfiniteOp>(thread, args[0], result);
 }
 
-void paste(State& state, Value const* args, Value& result) {
-	Character a = As<Character>(state, args[0]);
-	Character sep = As<Character>(state, args[1]);
+void paste(Thread& thread, Value const* args, Value& result) {
+	Character a = As<Character>(thread, args[0]);
+	Character sep = As<Character>(thread, args[1]);
 	std::string r = "";
 	for(int64_t i = 0; i+1 < a.length; i++) {
-		r = r + state.externStr(a[i]) + state.externStr(sep[0]);
+		r = r + thread.externStr(a[i]) + thread.externStr(sep[0]);
 	}
-	if(a.length > 0) r = r + state.externStr(a[a.length-1]);
-	result = Character::c(state.internStr(r));
+	if(a.length > 0) r = r + thread.externStr(a[a.length-1]);
+	result = Character::c(thread.internStr(r));
 }
 
-void deparse(State& state, Value const* args, Value& result) {
-	result = Character::c(state.internStr(state.deparse(args[0])));
+void deparse(Thread& thread, Value const* args, Value& result) {
+	result = Character::c(thread.internStr(thread.deparse(args[0])));
 }
 
-void substitute(State& state, Value const* args, Value& result) {
+void substitute(Thread& thread, Value const* args, Value& result) {
 	Value v = args[0];
 	while(v.isPromise()) v = Function(v).prototype()->expression;
 	
 	if(v.isSymbol()) {
-		Value r = state.frame.environment->get(Symbol(v));
+		Value r = thread.frame.environment->get(Symbol(v));
 		if(!r.isNil()) v = r;
 		while(v.isPromise()) v = Function(v).prototype()->expression;
 	}
  	result = v;
 }
 
-void type_of(State& state, Value const* args, Value& result) {
+void type_of(Thread& thread, Value const* args, Value& result) {
 	// Should have a direct mapping from type to symbol.
-	result = Character::c(state.internStr(Type::toString(args[0].type)));
+	result = Character::c(thread.internStr(Type::toString(args[0].type)));
 }
 
-void exists(State& state, Value const* args, Value& result) {
-	Character c = As<Character>(state, args[0]);
+void exists(Thread& thread, Value const* args, Value& result) {
+	Character c = As<Character>(thread, args[0]);
 	REnvironment e(args[1]);
 	Value v = e.ptr()->get(c[0]);
 	if(v.isNil())
@@ -810,69 +807,69 @@ uint64_t readTime()
   return (uint64_t)time_tt.tv_sec * 1000 * 1000 + (uint64_t)time_tt.tv_usec;
 }
 
-void proctime(State& state, Value const* args, Value& result) {
+void proctime(Thread& thread, Value const* args, Value& result) {
 	uint64_t s = readTime();
 	result = Double::c(s/(1000000.0));
 }
 
-void traceconfig(State & state, Value const* args, Value& result) {
-	Integer c = As<Integer>(state, args[0]);
+void traceconfig(Thread & thread, Value const* args, Value& result) {
+	Integer c = As<Integer>(thread, args[0]);
 	if(c.length == 0) _error("condition is of zero length");
-	//state.tracing.config = (TraceState::Mode) c[0];
+	//thread.tracing.config = (TraceThread::Mode) c[0];
 		
-	std::vector<State*>& threads = state.sharedState.threads;
+	std::vector<Thread*>& threads = thread.state.threads;
 	for(uint64_t i = 0; i < threads.size(); i++) {
-		threads[i]->tracing.config = (TraceState::Mode) c[0];
+		threads[i]->tracing.config = (TraceThread::Mode) c[0];
 	}
 
 	result = Null::Singleton();
 }
 
-void importCoreFunctions(State& state, Environment* env)
+void registerCoreFunctions(State& state)
 {
-	state.sharedState.registerInternalFunction(state.internStr("nchar"), (nchar_fn), 1);
-	state.sharedState.registerInternalFunction(state.internStr("nzchar"), (nzchar_fn), 1);
-	state.sharedState.registerInternalFunction(state.internStr("is.na"), (isna_fn), 1);
-	state.sharedState.registerInternalFunction(state.internStr("is.nan"), (isnan_fn), 1);
-	state.sharedState.registerInternalFunction(state.internStr("is.finite"), (isfinite_fn), 1);
-	state.sharedState.registerInternalFunction(state.internStr("is.infinite"), (isinfinite_fn), 1);
+	state.registerInternalFunction(state.internStr("nchar"), (nchar_fn), 1);
+	state.registerInternalFunction(state.internStr("nzchar"), (nzchar_fn), 1);
+	state.registerInternalFunction(state.internStr("is.na"), (isna_fn), 1);
+	state.registerInternalFunction(state.internStr("is.nan"), (isnan_fn), 1);
+	state.registerInternalFunction(state.internStr("is.finite"), (isfinite_fn), 1);
+	state.registerInternalFunction(state.internStr("is.infinite"), (isinfinite_fn), 1);
 	
-	state.sharedState.registerInternalFunction(state.internStr("cat"), (cat), 1);
-	state.sharedState.registerInternalFunction(state.internStr("library"), (library), 1);
-	state.sharedState.registerInternalFunction(state.internStr("inherits"), (inherits), 3);
+	state.registerInternalFunction(state.internStr("cat"), (cat), 1);
+	state.registerInternalFunction(state.internStr("library"), (library), 1);
+	state.registerInternalFunction(state.internStr("inherits"), (inherits), 3);
 	
-	state.sharedState.registerInternalFunction(state.internStr("seq"), (sequence), 3);
-	state.sharedState.registerInternalFunction(state.internStr("rep"), (repeat), 3);
+	state.registerInternalFunction(state.internStr("seq"), (sequence), 3);
+	state.registerInternalFunction(state.internStr("rep"), (repeat), 3);
 	
-	state.sharedState.registerInternalFunction(state.internStr("attr"), (attr), 3);
-	state.sharedState.registerInternalFunction(state.internStr("attr<-"), (assignAttr), 3);
+	state.registerInternalFunction(state.internStr("attr"), (attr), 3);
+	state.registerInternalFunction(state.internStr("attr<-"), (assignAttr), 3);
 	
-	state.sharedState.registerInternalFunction(state.internStr("unlist"), (unlist), 3);
-	state.sharedState.registerInternalFunction(state.internStr("length"), (length), 1);
+	state.registerInternalFunction(state.internStr("unlist"), (unlist), 3);
+	state.registerInternalFunction(state.internStr("length"), (length), 1);
 	
-	state.sharedState.registerInternalFunction(state.internStr("eval"), (eval_fn), 3);
-	state.sharedState.registerInternalFunction(state.internStr("source"), (source), 1);
+	state.registerInternalFunction(state.internStr("eval"), (eval_fn), 3);
+	state.registerInternalFunction(state.internStr("source"), (source), 1);
 
-	state.sharedState.registerInternalFunction(state.internStr("lapply"), (lapply), 2);
-	//state.sharedState.registerInternalFunction(state.internStr("t.list"), (tlist));
+	state.registerInternalFunction(state.internStr("lapply"), (lapply), 2);
+	//state.registerInternalFunction(state.internStr("t.list"), (tlist));
 
-	state.sharedState.registerInternalFunction(state.internStr("environment"), (environment), 1);
-	state.sharedState.registerInternalFunction(state.internStr("parent.frame"), (parentframe), 1);
-	state.sharedState.registerInternalFunction(state.internStr("sys.call"), (syscall), 1);
-	state.sharedState.registerInternalFunction(state.internStr("remove"), (remove), 2);
+	state.registerInternalFunction(state.internStr("environment"), (environment), 1);
+	state.registerInternalFunction(state.internStr("parent.frame"), (parentframe), 1);
+	state.registerInternalFunction(state.internStr("sys.call"), (syscall), 1);
+	state.registerInternalFunction(state.internStr("remove"), (remove), 2);
 	
-	state.sharedState.registerInternalFunction(state.internStr("stop"), (stop_fn), 1);
-	state.sharedState.registerInternalFunction(state.internStr("warning"), (warning_fn), 1);
+	state.registerInternalFunction(state.internStr("stop"), (stop_fn), 1);
+	state.registerInternalFunction(state.internStr("warning"), (warning_fn), 1);
 	
-	state.sharedState.registerInternalFunction(state.internStr("paste"), (paste), 2);
-	state.sharedState.registerInternalFunction(state.internStr("deparse"), (deparse), 1);
-	state.sharedState.registerInternalFunction(state.internStr("substitute"), (substitute), 1);
+	state.registerInternalFunction(state.internStr("paste"), (paste), 2);
+	state.registerInternalFunction(state.internStr("deparse"), (deparse), 1);
+	state.registerInternalFunction(state.internStr("substitute"), (substitute), 1);
 	
-	state.sharedState.registerInternalFunction(state.internStr("typeof"), (type_of), 1);
+	state.registerInternalFunction(state.internStr("typeof"), (type_of), 1);
 	
-	state.sharedState.registerInternalFunction(state.internStr("exists"), (exists), 4);
+	state.registerInternalFunction(state.internStr("exists"), (exists), 4);
 
-	state.sharedState.registerInternalFunction(state.internStr("proc.time"), (proctime), 0);
-	state.sharedState.registerInternalFunction(state.internStr("trace.config"), (traceconfig), 1);
+	state.registerInternalFunction(state.internStr("proc.time"), (proctime), 0);
+	state.registerInternalFunction(state.internStr("trace.config"), (traceconfig), 1);
 }
 

@@ -14,6 +14,7 @@
 #include <gc/gc_allocator.h>
 
 #include "value.h"
+#include "interpreter.h"
 
 // trim from end
 static inline std::string& rtrim(std::string &s) {

@@ -13,31 +13,26 @@
 #include "compiler.h"
 #include "sse.h"
 
-#define USE_THREADED_INTERPRETER
-#define ALWAYS_INLINE __attribute__((always_inline))
+static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc);
 
-static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc);
+extern Instruction const* kget_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* get_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* assign2_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* subset_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 
-#ifndef __ICC
-extern Instruction const* kget_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* get_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* assign_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* assign2_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* forend_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* add_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* subset_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-#endif
+#define REG(thread, i) (*(thread.base+i))
 
-#define REG(state, i) (*(state.base+i))
-
-static void ExpandDots(State& state, List& arguments, Character& names, int64_t dots) {
-	Environment* environment = state.frame.environment;
+static void ExpandDots(Thread& thread, List& arguments, Character& names, int64_t dots) {
+	Environment* environment = thread.frame.environment;
 	uint64_t dotslength = environment->dots.size();
 	// Expand dots into the parameter list...
 	if(dots < arguments.length) {
 		List a(arguments.length + dotslength - 1);
 		for(int64_t i = 0; i < dots; i++) a[i] = arguments[i];
-		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(state, Symbol(String::Init((char const*)-(i-dots+1)))), NULL).AsPromise(); } // TODO: should cache these.
+		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(thread.state, Symbol(String::Init((char const*)-(i-dots+1)))), NULL).AsPromise(); } // TODO: should cache these.
 		for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) a[i] = arguments[i-dotslength];
 
 		arguments = a;
@@ -66,7 +61,7 @@ inline void argAssign(Environment* env, String n, Value const& v, Environment* e
 	env->assign(n, w);
 }
 
-static void MatchArgs(State& state, Environment* env, Environment* fenv, Function const& func, List const& arguments, Character const& anames) {
+static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, List const& arguments, Character const& anames) {
 	List const& defaults = func.prototype()->defaults;
 	Character const& parameters = func.prototype()->parameters;
 	int64_t fdots = func.prototype()->dots;
@@ -97,7 +92,7 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 	// call arguments are named, do matching by name
 	else {
 		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
-		int64_t *assignment = state.assignment, *set = state.set;
+		int64_t *assignment = thread.assignment, *set = thread.set;
 		for(int64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
 		for(int64_t i = 0; i < parameters.length; i++) set[i] = -(i+1);
 
@@ -116,10 +111,10 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 		// named args, search for incomplete matches
 		for(int64_t i = 0; i < arguments.length; ++i) {
 			if(anames[i] != Strings::empty && assignment[i] < 0) {
-				std::string a = state.externStr(anames[i]);
+				std::string a = thread.externStr(anames[i]);
 				for(int64_t j = 0; j < parameters.length; ++j) {
 					if(set[j] < 0 && j != fdots &&
-							state.externStr(parameters[j]).compare( 0, a.size(), a ) == 0 ) {	
+							thread.externStr(parameters[j]).compare( 0, a.size(), a ) == 0 ) {	
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -162,25 +157,25 @@ static void MatchArgs(State& state, Environment* env, Environment* fenv, Functio
 	}
 }
 
-static Environment* CreateEnvironment(State& state, Environment* l, Environment* d, Value const& call) {
+static Environment* CreateEnvironment(Thread& thread, Environment* l, Environment* d, Value const& call) {
 	Environment* env;
-	if(state.environments.size() == 0) {
+	if(thread.environments.size() == 0) {
 		env = new Environment();
 	} else {
-		env = state.environments.back();
-		state.environments.pop_back();
+		env = thread.environments.back();
+		thread.environments.pop_back();
 	}
 	env->init(l, d, call);
 	return env;
 }
 //track the heat of back edge operations and invoke the recorder on hot traces
 //unused until we begin tracing loops again
-static Instruction const * profile_back_edge(State & state, Instruction const * inst) {
+static Instruction const * profile_back_edge(Thread & thread, Instruction const * inst) {
 	return inst;
 }
 
-Instruction const* call_op(State& state, Instruction const& inst) {
-	Value f = REG(state, inst.a);
+Instruction const* call_op(Thread& thread, Instruction const& inst) {
+	Value f = REG(thread, inst.a);
 	if(!f.isFunction())
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
 	Function func(f);
@@ -191,14 +186,14 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 	Character names;
 	Environment* fenv;
 	if(inst.b < 0) {
-		CompiledCall const& call = state.frame.prototype->calls[-(inst.b+1)];
+		CompiledCall const& call = thread.frame.prototype->calls[-(inst.b+1)];
 		arguments = call.arguments;
 		names = call.names;
 		if(call.dots < arguments.length)
-			ExpandDots(state, arguments, names, call.dots);
-		fenv = CreateEnvironment(state, func.environment(), state.frame.environment, call.call);
+			ExpandDots(thread, arguments, names, call.dots);
+		fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
 	} else {
-		Value const& reg = REG(state, inst.b);
+		Value const& reg = REG(thread, inst.b);
 		if(reg.isObject()) {
 			arguments = List(((Object const&)reg).base());
 			names = Character(((Object const&)reg).getNames());
@@ -206,98 +201,98 @@ Instruction const* call_op(State& state, Instruction const& inst) {
 		else {
 			arguments = List(reg);
 		}
-		fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton());
+		fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
 	}
 
-	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);
-	return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
+	MatchArgs(thread, thread.frame.environment, fenv, func, arguments, names);
+	return buildStackFrame(thread, fenv, true, func.prototype(), &REG(thread, inst.c), &inst+1);
 }
 
-Instruction const* apply_op(State& state, Instruction const& inst) {
+Instruction const* apply_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* internal_op(State& state, Instruction const& inst) {
-       state.sharedState.internalFunctions[inst.a].ptr(state, &REG(state, inst.b), REG(state, inst.c));
+Instruction const* internal_op(Thread& thread, Instruction const& inst) {
+       thread.state.internalFunctions[inst.a].ptr(thread, &REG(thread, inst.b), REG(thread, inst.c));
        return &inst+1;
 }
 
 // Get a Value by Symbol from the current environment,
 //  TODO: UseMethod also should search in some cached library locations.
-static Value GenericGet(State& state, String s) {
-	Environment* environment = state.frame.environment;
+static Value GenericGet(Thread& thread, String s) {
+	Environment* environment = thread.frame.environment;
 	Value value = environment->get(s);
 	while(value.isNil() && environment->LexicalScope() != 0) {
 		environment = environment->LexicalScope();
 		value = environment->get(s);
 	}
 	if(value.isPromise()) {
-		//value = force(state, value);
+		//value = force(thread, value);
 		//environment->assign(s, value);
 		_error("UseMethod does not yet support evaluating promises");
 	}
 	return value;
 }
 
-static Value GenericSearch(State& state, Character klass, String generic, String& method) {
+static Value GenericSearch(Thread& thread, Character klass, String generic, String& method) {
 	
 	// first search for type specific method
 	Value func = Value::Nil();
 	for(int64_t i = 0; i < klass.length && func.isNil(); i++) {
-		method = state.internStr(state.externStr(generic) + "." + state.externStr(klass[i]));
-		func = GenericGet(state, method);	
+		method = thread.internStr(thread.externStr(generic) + "." + thread.externStr(klass[i]));
+		func = GenericGet(thread, method);	
 	}
 
 	// TODO: look for group generics
 
 	// look for default if necessary
 	if(func.isNil()) {
-		method = state.internStr(state.externStr(generic) + ".default");
-		func = GenericGet(state, method);
+		method = thread.internStr(thread.externStr(generic) + ".default");
+		func = GenericGet(thread, method);
 	}
 
 	return func;
 }
 
-Instruction const* UseMethod_op(State& state, Instruction const& inst) {
+Instruction const* UseMethod_op(Thread& thread, Instruction const& inst) {
 	String generic = String::Init((char const*)inst.a);
 
-	CompiledCall const& call = state.frame.prototype->calls[inst.b];
+	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
 	List arguments = call.arguments;
 	Character names = call.names;
 	if(call.dots < arguments.length)
-		ExpandDots(state, arguments, names, call.dots);
+		ExpandDots(thread, arguments, names, call.dots);
 
-	Value object = REG(state, inst.c);
-	Character type = klass(state, object);
+	Value object = REG(thread, inst.c);
+	Character type = klass(thread, object);
 
 	String method;
-	Value f = GenericSearch(state, type, generic, method);
+	Value f = GenericSearch(thread, type, generic, method);
 
 	if(!f.isFunction()) { 
-		_error(std::string("no applicable method for '") + state.externStr(generic) + "' applied to an object of class \"" + state.externStr(type[0]) + "\"");
+		_error(std::string("no applicable method for '") + thread.externStr(generic) + "' applied to an object of class \"" + thread.externStr(type[0]) + "\"");
 	}
 
 	Function func(f);
-	Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, call.call);
-	MatchArgs(state, state.frame.environment, fenv, func, arguments, names);	
+	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
+	MatchArgs(thread, thread.frame.environment, fenv, func, arguments, names);	
 	fenv->assign(Strings::dotGeneric, Symbol(generic));
 	fenv->assign(Strings::dotMethod, Symbol(method));
 	fenv->assign(Strings::dotClass, type); 
-	return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1);
+	return buildStackFrame(thread, fenv, true, func.prototype(), &REG(thread, inst.c), &inst+1);
 }
 
-Instruction const* get_op(State& state, Instruction const& inst) {
+Instruction const* get_op(Thread& thread, Instruction const& inst) {
 	// gets are always generated as a sequence of 2 instructions...
 	//	1) the get with source symbol in a and dest register in c.
 	//	2) an assign with dest symbol in a and source register in c.
 	//		(for use by the promise evaluation. If no promise, step over this instruction.)
 
 	// otherwise, need to do a real look up starting from env
-	Environment* env = state.frame.environment;
+	Environment* env = thread.frame.environment;
 	String s = String::Init((char const*)inst.a);
 	
-	Value& dest = REG(state, inst.c);
+	Value& dest = REG(thread, inst.c);
 	if(env->fastGet(s, dest)) return &inst+2;
 
 	dest = env->get(s);
@@ -312,28 +307,28 @@ Instruction const* get_op(State& state, Instruction const& inst) {
 		Environment* env = Function(dest).environment();
 		Prototype* prototype = Function(dest).prototype();
 		assert(env != 0);
-		return buildStackFrame(state, env, false, prototype, &dest, &inst+1);
+		return buildStackFrame(thread, env, false, prototype, &dest, &inst+1);
 	}
 	else
-		throw RiposteError(std::string("object '") + state.externStr(s) + "' not found");
+		throw RiposteError(std::string("object '") + thread.externStr(s) + "' not found");
 }
 
-Instruction const* kget_op(State& state, Instruction const& inst) {
-	REG(state, inst.c) = state.frame.prototype->constants[inst.a];
+Instruction const* kget_op(Thread& thread, Instruction const& inst) {
+	REG(thread, inst.c) = thread.frame.prototype->constants[inst.a];
 	return &inst+1;
 }
 
-Instruction const* assign_op(State& state, Instruction const& inst) {
-	if(state.frame.environment->fastAssign(String::Init((char const*)inst.a), REG(state, inst.c))) return &inst+1;
+Instruction const* assign_op(Thread& thread, Instruction const& inst) {
+	if(thread.frame.environment->fastAssign(String::Init((char const*)inst.a), REG(thread, inst.c))) return &inst+1;
 
-	state.frame.environment->assign(String::Init((char const*)inst.a), REG(state, inst.c));
+	thread.frame.environment->assign(String::Init((char const*)inst.a), REG(thread, inst.c));
 	return &inst+1;
 }
-Instruction const* assign2_op(State& state, Instruction const& inst) {
+Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 	// assign2 is always used to assign up at least one scope level...
 	// so start off looking up one level...
 
-	Environment* env = state.frame.environment->LexicalScope();
+	Environment* env = thread.frame.environment->LexicalScope();
 	assert(env != 0);
 
 	String s = String::Init((char const*)inst.a);
@@ -344,10 +339,10 @@ Instruction const* assign2_op(State& state, Instruction const& inst) {
 	}
 
 	if(!dest.isNil()) {
-		env->assign(s, REG(state, inst.c));
+		env->assign(s, REG(thread, inst.c));
 	}
 	else {
-		state.sharedState.global->assign(s, REG(state, inst.c));
+		thread.state.global->assign(s, REG(thread, inst.c));
 	}
 	return &inst+1;
 }
@@ -355,71 +350,71 @@ Instruction const* assign2_op(State& state, Instruction const& inst) {
 
 // everything else should be in registers
 
-Instruction const* iassign_op(State& state, Instruction const& inst) {
+Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest 
-	SubsetAssign(state, REG(state,inst.c), true, REG(state,inst.b), REG(state,inst.a), REG(state,inst.c));
+	SubsetAssign(thread, REG(thread,inst.c), true, REG(thread,inst.b), REG(thread,inst.a), REG(thread,inst.c));
 	return &inst+1;
 }
-Instruction const* eassign_op(State& state, Instruction const& inst) {
+Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest
-	Subset2Assign(state, REG(state,inst.c), true, REG(state,inst.b), REG(state,inst.a), REG(state,inst.c));
+	Subset2Assign(thread, REG(thread,inst.c), true, REG(thread,inst.b), REG(thread,inst.a), REG(thread,inst.c));
 	return &inst+1; 
 }
-Instruction const* subset_op(State& state, Instruction const& inst) {
-	Subset(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
+Instruction const* subset_op(Thread& thread, Instruction const& inst) {
+	Subset(thread, REG(thread, inst.a), REG(thread, inst.b), REG(thread, inst.c));
 	return &inst+1;
 }
-Instruction const* subset2_op(State& state, Instruction const& inst) {
-	Subset2(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c));
+Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
+	Subset2(thread, REG(thread, inst.a), REG(thread, inst.b), REG(thread, inst.c));
 	return &inst+1;
 }
-Instruction const* forbegin_op(State& state, Instruction const& inst) {
+Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
 	// inst.b-1 holds the loopVector
-	if((int64_t)REG(state, inst.b-1).length <= 0) { return &inst+inst.a; }
-	Element2(REG(state, inst.b-1), 0, REG(state, inst.c));
-	REG(state, inst.b).header = REG(state, inst.b-1).length;	// warning: not a valid object, but saves a shift
-	REG(state, inst.b).i = 1;
+	if((int64_t)REG(thread, inst.b-1).length <= 0) { return &inst+inst.a; }
+	Element2(REG(thread, inst.b-1), 0, REG(thread, inst.c));
+	REG(thread, inst.b).header = REG(thread, inst.b-1).length;	// warning: not a valid object, but saves a shift
+	REG(thread, inst.b).i = 1;
 	return &inst+1;
 }
-Instruction const* forend_op(State& state, Instruction const& inst) {
-	if(__builtin_expect((REG(state,inst.b).i) < REG(state,inst.b).header, true)) {
-		Element2(REG(state, inst.b-1), REG(state, inst.b).i, REG(state, inst.c));
-		REG(state, inst.b).i++;
-		return profile_back_edge(state,&inst+inst.a);
+Instruction const* forend_op(Thread& thread, Instruction const& inst) {
+	if(__builtin_expect((REG(thread,inst.b).i) < REG(thread,inst.b).header, true)) {
+		Element2(REG(thread, inst.b-1), REG(thread, inst.b).i, REG(thread, inst.c));
+		REG(thread, inst.b).i++;
+		return profile_back_edge(thread,&inst+inst.a);
 	} else return &inst+1;
 }
-/*Instruction const* iforbegin_op(State& state, Instruction const& inst) {
-	double m = asReal1(REG(state, inst.c-1));
-	double n = asReal1(REG(state, inst.c));
-	REG(state, inst.c-1) = Integer::c(n > m ? 1 : -1);
-	REG(state, inst.c-1).length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
-	REG(state, inst.c) = Integer::c((int64_t)m);
-	if(REG(state, inst.c).i >= (int64_t)REG(state, inst.c-1).length) { return &inst+inst.a; }
-	state.frame.environment->hassign(Symbol(inst.b), Integer::c(m));
-	REG(state, inst.c).i += REG(state, inst.c-1).i;
+/*Instruction const* iforbegin_op(Thread& thread, Instruction const& inst) {
+	double m = asReal1(REG(thread, inst.c-1));
+	double n = asReal1(REG(thread, inst.c));
+	REG(thread, inst.c-1) = Integer::c(n > m ? 1 : -1);
+	REG(thread, inst.c-1).length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
+	REG(thread, inst.c) = Integer::c((int64_t)m);
+	if(REG(thread, inst.c).i >= (int64_t)REG(thread, inst.c-1).length) { return &inst+inst.a; }
+	thread.frame.environment->hassign(Symbol(inst.b), Integer::c(m));
+	REG(thread, inst.c).i += REG(thread, inst.c-1).i;
 	return &inst+1;
 }
-Instruction const* iforend_op(State& state, Instruction const& inst) {
-	if(REG(state, inst.c).i < REG(state, inst.c-1).length) { 
-		state.frame.environment->hassign(Symbol(inst.b), REG(state, inst.c));
-		REG(state, inst.c).i += REG(state, inst.c-1).i;
-		return profile_back_edge(state,&inst+inst.a);
+Instruction const* iforend_op(Thread& thread, Instruction const& inst) {
+	if(REG(thread, inst.c).i < REG(thread, inst.c-1).length) { 
+		thread.frame.environment->hassign(Symbol(inst.b), REG(thread, inst.c));
+		REG(thread, inst.c).i += REG(thread, inst.c-1).i;
+		return profile_back_edge(thread,&inst+inst.a);
 	} else return &inst+1;
 }*/
-Instruction const* jt_op(State& state, Instruction const& inst) {
-	Logical l = As<Logical>(state, REG(state,inst.b));
+Instruction const* jt_op(Thread& thread, Instruction const& inst) {
+	Logical l = As<Logical>(thread, REG(thread,inst.b));
 	if(l.length == 0) _error("condition is of zero length");
 	if(l[0]) return &inst+inst.a;
 	else return &inst+1;
 }
-Instruction const* jf_op(State& state, Instruction const& inst) {
-	Logical l = As<Logical>(state, REG(state, inst.b));
+Instruction const* jf_op(Thread& thread, Instruction const& inst) {
+	Logical l = As<Logical>(thread, REG(thread, inst.b));
 	if(l.length == 0) _error("condition is of zero length");
 	if(l[0]) return &inst+1;
 	else return &inst+inst.a;
 }
-Instruction const* branch_op(State& state, Instruction const& inst) {
-	Value const& c = REG(state, inst.a);
+Instruction const* branch_op(Thread& thread, Instruction const& inst) {
+	Value const& c = REG(thread, inst.a);
 	int64_t index = -1;
 	if(c.isDouble1()) index = (int64_t)c.d;
 	else if(c.isInteger1()) index = c.i;
@@ -441,26 +436,26 @@ Instruction const* branch_op(State& state, Instruction const& inst) {
 		return &inst+1+inst.b;
 	}
 }
-Instruction const* colon_op(State& state, Instruction const& inst) {
-	double from = asReal1(REG(state,inst.a));
-	double to = asReal1(REG(state,inst.b));
-	REG(state,inst.c) = Sequence(from, to>from?1:-1, fabs(to-from)+1);
+Instruction const* colon_op(Thread& thread, Instruction const& inst) {
+	double from = asReal1(REG(thread,inst.a));
+	double to = asReal1(REG(thread,inst.b));
+	REG(thread,inst.c) = Sequence(from, to>from?1:-1, fabs(to-from)+1);
 	return &inst+1;
 }
-Instruction const* list_op(State& state, Instruction const& inst) {
-	std::vector<String> const& dots = state.frame.environment->dots;
+Instruction const* list_op(Thread& thread, Instruction const& inst) {
+	std::vector<String> const& dots = thread.frame.environment->dots;
 	// First time through, make a result vector...
-	if(REG(state, inst.a).i == 0) {
-		REG(state, inst.c) = List(dots.size());
+	if(REG(thread, inst.a).i == 0) {
+		REG(thread, inst.c) = List(dots.size());
 	}
 	// Otherwise populate result vector with next element
 	else {
-		state.frame.environment->assign(String::Init((char const*)-REG(state, inst.a).i), REG(state, inst.b));
-		((List&)REG(state, inst.c))[REG(state, inst.a).i-1] = REG(state, inst.b);
+		thread.frame.environment->assign(String::Init((char const*)-REG(thread, inst.a).i), REG(thread, inst.b));
+		((List&)REG(thread, inst.c))[REG(thread, inst.a).i-1] = REG(thread, inst.b);
 	}
 
 	// If we're all done, check to see if we need to add names and then exit
-	if(REG(state, inst.a).i == (int64_t)dots.size()) {
+	if(REG(thread, inst.a).i == (int64_t)dots.size()) {
 		bool nonEmptyName = false;
 		for(int i = 0; i < (int64_t)dots.size(); i++) 
 			if(dots[i] != Strings::empty) nonEmptyName = true;
@@ -469,23 +464,23 @@ Instruction const* list_op(State& state, Instruction const& inst) {
 			Character names(dots.size());
 			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
 				names[i] = dots[i];
-			Object::Init(REG(state, inst.c), REG(state, inst.c), names);
+			Object::Init(REG(thread, inst.c), REG(thread, inst.c), names);
 		}
 		return &inst+1;
 	}
 
 	// Not done yet, increment counter, evaluate next ..#
-	REG(state, inst.a).i++;
-	Value const& src = state.frame.environment->get(String::Init((char const*)-REG(state, inst.a).i));
+	REG(thread, inst.a).i++;
+	Value const& src = thread.frame.environment->get(String::Init((char const*)-REG(thread, inst.a).i));
 	if(!src.isPromise()) {
-		REG(state, inst.b) = src;
+		REG(thread, inst.b) = src;
 		return &inst;
 	}
 	else {
 		Environment* env = Function(src).environment();
-		if(env == 0) env = state.frame.environment;
+		if(env == 0) env = thread.frame.environment;
 		Prototype* prototype = Function(src).prototype();
-		return buildStackFrame(state, env, false, prototype, &REG(state, inst.b), &inst);
+		return buildStackFrame(thread, env, false, prototype, &REG(thread, inst.b), &inst);
 	}
 }
 
@@ -510,37 +505,37 @@ bool isRecordable(Value const& a, Value const& b) {
 	return valid_types && compatible_lengths && should_record_length;
 }
 
-Instruction const* seq_op(State& state, Instruction const& inst) {
-	int64_t len = As<Integer>(state, REG(state, inst.a))[0];
-	int64_t step = As<Integer>(state, REG(state, inst.b))[0];
-	if(state.tracing.Enabled() && isRecordable(Type::Integer, len))
-		return state.tracing.BeginTracing(state, &inst);
+Instruction const* seq_op(Thread& thread, Instruction const& inst) {
+	int64_t len = As<Integer>(thread, REG(thread, inst.a))[0];
+	int64_t step = As<Integer>(thread, REG(thread, inst.b))[0];
+	if(thread.tracing.Enabled() && isRecordable(Type::Integer, len))
+		return thread.tracing.BeginTracing(thread, &inst);
 	else {
-		REG(state, inst.c) = Sequence(len, 1, step);
+		REG(thread, inst.c) = Sequence(len, 1, step);
 		return &inst+1;
 	}
 }
 
 #define OP(name, string, Op, Func) \
-Instruction const* name##_op(State& state, Instruction const& inst) { \
-	Value & a =  REG(state, inst.a);	\
-	Value & c = REG(state, inst.c);	\
-	if(a.isDouble1()) { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d)); return &inst+1; } \
-	else if(a.isInteger1()) { Op<TDouble>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i)); return &inst+1; } \
+Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
+	Value & a =  REG(thread, inst.a);	\
+	Value & c = REG(thread, inst.c);	\
+	if(a.isDouble1()) { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, a.d)); return &inst+1; } \
+	else if(a.isInteger1()) { Op<TDouble>::RV::InitScalar(c, Op<TInteger>::eval(thread, a.i)); return &inst+1; } \
 	if(a.isObject() ) { \
 		String method; \
-		Value f = GenericSearch(state, klass(state, a), state.internStr(Func), method); \
+		Value f = GenericSearch(thread, klass(thread, a), thread.internStr(Func), method); \
 		if(f.isFunction()) { \
 			Function func(f); \
-			Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton()); \
-			MatchArgs(state, state.frame.environment, fenv, func, List::c(a), Character(0)); \
-			return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1); \
+			Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton()); \
+			MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a), Character(0)); \
+			return buildStackFrame(thread, fenv, true, func.prototype(), &REG(thread, inst.c), &inst+1); \
 		}	\
 	} \
-	else if(state.tracing.Enabled() && isRecordable(a)) \
-		return state.tracing.BeginTracing(state, &inst); \
+	else if(thread.tracing.Enabled() && isRecordable(a)) \
+		return thread.tracing.BeginTracing(thread, &inst); \
 	\
-	unaryArith<Zip1, Op>(state, a, c); \
+	unaryArith<Zip1, Op>(thread, a, c); \
 	return &inst+1; \
 }
 UNARY_ARITH_MAP_BYTECODES(OP)
@@ -548,262 +543,262 @@ UNARY_ARITH_MAP_BYTECODES(OP)
 
 
 #define OP(name, string, Op, Func) \
-Instruction const* name##_op(State& state, Instruction const& inst) { \
-	Value & a = REG(state,inst.a); \
-	if(state.tracing.Enabled() && isRecordable(a)) \
-		return state.tracing.BeginTracing(state,&inst); \
+Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
+	Value & a = REG(thread,inst.a); \
+	if(thread.tracing.Enabled() && isRecordable(a)) \
+		return thread.tracing.BeginTracing(thread,&inst); \
 	else \
-		unaryLogical<Zip1, Op>(state, a, REG(state, inst.c)); \
+		unaryLogical<Zip1, Op>(thread, a, REG(thread, inst.c)); \
 	return &inst+1; \
 }
 UNARY_LOGICAL_MAP_BYTECODES(OP)
 #undef OP
 
 #define OP(name, string, Op, Func) \
-Instruction const* name##_op(State& state, Instruction const& inst) { \
-	Value & a =  REG(state, inst.a);	\
-	Value & b =  REG(state, inst.b);	\
-	Value & c = REG(state, inst.c);	\
+Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
+	Value & a =  REG(thread, inst.a);	\
+	Value & b =  REG(thread, inst.b);	\
+	Value & c = REG(thread, inst.c);	\
         if(a.isDouble1()) {			\
                 if(b.isDouble1())		\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d, b.d)); return &inst+1; }	\
+                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, a.d, b.d)); return &inst+1; }	\
                 else if(b.isInteger1())	\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d, (double)b.i));return &inst+1; }	\
+                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, a.d, (double)b.i));return &inst+1; }	\
         }	\
         else if(a.isInteger1()) {	\
                 if(b.isDouble1())	\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, (double)a.i, b.d)); return &inst+1; }	\
+                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, (double)a.i, b.d)); return &inst+1; }	\
                 else if(b.isInteger1())	\
-                        { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return &inst+1;} \
+                        { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(thread, a.i, b.i)); return &inst+1;} \
         } \
 	if(a.isObject() || b.isObject()) { \
 		Value f; \
 		String method; \
 		if(a.isObject() && b.isObject()) { \
-			Value af = GenericSearch(state, klass(state, a), state.internStr(Func), method); \
-			Value bf = GenericSearch(state, klass(state, b), state.internStr(Func), method); \
+			Value af = GenericSearch(thread, klass(thread, a), thread.internStr(Func), method); \
+			Value bf = GenericSearch(thread, klass(thread, b), thread.internStr(Func), method); \
 			if(af != bf) _error("Generic functions do not match on binary operator"); \
 			f = af; \
 		} \
-		else if(a.isObject()) f = GenericSearch(state, klass(state, a), state.internStr(Func), method); \
-		else f = GenericSearch(state, klass(state, b), state.internStr(Func), method); \
+		else if(a.isObject()) f = GenericSearch(thread, klass(thread, a), thread.internStr(Func), method); \
+		else f = GenericSearch(thread, klass(thread, b), thread.internStr(Func), method); \
 		if(f.isFunction()) { \
 			Function func(f); \
-			Environment* fenv = CreateEnvironment(state, func.environment(), state.frame.environment, Null::Singleton()); \
-			MatchArgs(state, state.frame.environment, fenv, func, List::c(a, b), Character(0)); \
-			return buildStackFrame(state, fenv, true, func.prototype(), &REG(state, inst.c), &inst+1); \
+			Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton()); \
+			MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a, b), Character(0)); \
+			return buildStackFrame(thread, fenv, true, func.prototype(), &REG(thread, inst.c), &inst+1); \
 		}	\
 	} \
-	else if(state.tracing.Enabled() && isRecordable(a,b)) \
-		return state.tracing.BeginTracing(state, &inst);	\
+	else if(thread.tracing.Enabled() && isRecordable(a,b)) \
+		return thread.tracing.BeginTracing(thread, &inst);	\
 \
-	binaryArithSlow<Zip2, Op>(state, a, b, c);	\
+	binaryArithSlow<Zip2, Op>(thread, a, b, c);	\
 	return &inst+1;	\
 }
 BINARY_ARITH_MAP_BYTECODES(OP)
 #undef OP
 
 #define OP(name, string, Op, Func) \
-Instruction const* name##_op(State& state, Instruction const& inst) { \
-	Value & a = REG(state,inst.a); \
-	Value & b = REG(state,inst.b); \
-	if(state.tracing.Enabled() && isRecordable(a,b)) \
-		return state.tracing.BeginTracing(state,&inst); \
+Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
+	Value & a = REG(thread,inst.a); \
+	Value & b = REG(thread,inst.b); \
+	if(thread.tracing.Enabled() && isRecordable(a,b)) \
+		return thread.tracing.BeginTracing(thread,&inst); \
 	else \
-		binaryLogical<Zip2, Op>(state, a, b, REG(state, inst.c)); \
+		binaryLogical<Zip2, Op>(thread, a, b, REG(thread, inst.c)); \
 	return &inst+1; \
 }
 BINARY_LOGICAL_MAP_BYTECODES(OP)
 #undef OP
 
 #define OP(name, string, Op, Func) \
-Instruction const* name##_op(State& state, Instruction const& inst) { \
-	Value & a =  REG(state, inst.a);	\
-	Value & b =  REG(state, inst.b);	\
-	Value & c = REG(state, inst.c);	\
+Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
+	Value & a =  REG(thread, inst.a);	\
+	Value & b =  REG(thread, inst.b);	\
+	Value & c = REG(thread, inst.c);	\
         if(a.isDouble1()) {			\
                 if(b.isDouble1())		\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d, b.d)); return &inst+1; }	\
+                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, a.d, b.d)); return &inst+1; }	\
                 else if(b.isInteger1())	\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, a.d, (double)b.i));return &inst+1; }	\
+                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, a.d, (double)b.i));return &inst+1; }	\
         }	\
         else if(a.isInteger1()) {	\
                 if(b.isDouble1())	\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(state, (double)a.i, b.d)); return &inst+1; }	\
+                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, (double)a.i, b.d)); return &inst+1; }	\
                 else if(b.isInteger1())	\
-                        { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(state, a.i, b.i)); return &inst+1;} \
+                        { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(thread, a.i, b.i)); return &inst+1;} \
         } \
-    	else if(state.tracing.Enabled() && isRecordable(a,b)) \
-    		return state.tracing.BeginTracing(state,&inst); \
+    	else if(thread.tracing.Enabled() && isRecordable(a,b)) \
+    		return thread.tracing.BeginTracing(thread,&inst); \
     	else \
-	binaryOrdinal<Zip2, Op>(state, REG(state, inst.a), REG(state, inst.b), REG(state, inst.c)); \
+	binaryOrdinal<Zip2, Op>(thread, REG(thread, inst.a), REG(thread, inst.b), REG(thread, inst.c)); \
 	return &inst+1; \
 }
 BINARY_ORDINAL_MAP_BYTECODES(OP)
 #undef OP
 
 #define OP(name, string, Op, Func) \
-Instruction const* name##_op(State& state, Instruction const& inst) { \
-	unaryArith<FoldLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
+	unaryArith<FoldLeft, Op>(thread, REG(thread, inst.a), REG(thread, inst.c)); \
 	return &inst+1; \
 }
 ARITH_FOLD_BYTECODES(OP)
 #undef OP
 
 #define OP(name, string, Op, Func) \
-Instruction const* name##_op(State& state, Instruction const& inst) { \
-	unaryLogical<FoldLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
+	unaryLogical<FoldLeft, Op>(thread, REG(thread, inst.a), REG(thread, inst.c)); \
 	return &inst+1; \
 }
 LOGICAL_FOLD_BYTECODES(OP)
 #undef OP
 
 #define OP(name, string, Op, Func) \
-Instruction const* name##_op(State& state, Instruction const& inst) { \
-	unaryOrdinal<FoldLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
+	unaryOrdinal<FoldLeft, Op>(thread, REG(thread, inst.a), REG(thread, inst.c)); \
 	return &inst+1; \
 }
 ORDINAL_FOLD_BYTECODES(OP)
 #undef OP
 
 #define OP(name, string, Op, Func) \
-Instruction const* name##_op(State& state, Instruction const& inst) { \
-	unaryArith<ScanLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
+	unaryArith<ScanLeft, Op>(thread, REG(thread, inst.a), REG(thread, inst.c)); \
 	return &inst+1; \
 }
 ARITH_SCAN_BYTECODES(OP)
 #undef OP
 
 #define OP(name, string, Op, Func) \
-Instruction const* name##_op(State& state, Instruction const& inst) { \
-	unaryLogical<ScanLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
+	unaryLogical<ScanLeft, Op>(thread, REG(thread, inst.a), REG(thread, inst.c)); \
 	return &inst+1; \
 }
 LOGICAL_SCAN_BYTECODES(OP)
 #undef OP
 
 #define OP(name, string, Op, Func) \
-Instruction const* name##_op(State& state, Instruction const& inst) { \
-	unaryOrdinal<ScanLeft, Op>(state, REG(state, inst.a), REG(state, inst.c)); \
+Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
+	unaryOrdinal<ScanLeft, Op>(thread, REG(thread, inst.a), REG(thread, inst.c)); \
 	return &inst+1; \
 }
 ORDINAL_SCAN_BYTECODES(OP)
 #undef OP
 
-Instruction const* jmp_op(State& state, Instruction const& inst) {
+Instruction const* jmp_op(Thread& thread, Instruction const& inst) {
 	return &inst+inst.a;
 }
-Instruction const* sland_op(State& state, Instruction const& inst) {
-	Logical l = As<Logical>(state, REG(state, inst.a));
+Instruction const* sland_op(Thread& thread, Instruction const& inst) {
+	Logical l = As<Logical>(thread, REG(thread, inst.a));
 	if(l.length == 0) _error("argument to && is zero length");
 	if(Logical::isFalse(l[0])) {
-		REG(state, inst.c) = Logical::False();
+		REG(thread, inst.c) = Logical::False();
 		return &inst+1;
 	} else {
-		Logical r = As<Logical>(state, REG(state, inst.b));
+		Logical r = As<Logical>(thread, REG(thread, inst.b));
 		if(r.length == 0) _error("argument to && is zero length");
-		if(Logical::isFalse(r[0])) REG(state, inst.c) = Logical::False();
-		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) REG(state, inst.c) = Logical::NA();
-		else REG(state, inst.c) = Logical::True();
+		if(Logical::isFalse(r[0])) REG(thread, inst.c) = Logical::False();
+		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) REG(thread, inst.c) = Logical::NA();
+		else REG(thread, inst.c) = Logical::True();
 		return &inst+1;
 	}
 }
-Instruction const* slor_op(State& state, Instruction const& inst) {
-	Logical l = As<Logical>(state, REG(state, inst.a));
+Instruction const* slor_op(Thread& thread, Instruction const& inst) {
+	Logical l = As<Logical>(thread, REG(thread, inst.a));
 	if(l.length == 0) _error("argument to || is zero length");
 	if(Logical::isTrue(l[0])) {
-		REG(state, inst.c) = Logical::True();
+		REG(thread, inst.c) = Logical::True();
 		return &inst+1;
 	} else {
-		Logical r = As<Logical>(state, REG(state, inst.b));
+		Logical r = As<Logical>(thread, REG(thread, inst.b));
 		if(r.length == 0) _error("argument to || is zero length");
-		if(Logical::isTrue(r[0])) REG(state, inst.c) = Logical::True();
-		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) REG(state, inst.c) = Logical::NA();
-		else REG(state, inst.c) = Logical::False();
+		if(Logical::isTrue(r[0])) REG(thread, inst.c) = Logical::True();
+		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) REG(thread, inst.c) = Logical::NA();
+		else REG(thread, inst.c) = Logical::False();
 		return &inst+1;
 	}
 }
-Instruction const* function_op(State& state, Instruction const& inst) {
-	REG(state, inst.c) = Function(state.frame.prototype->prototypes[inst.a], state.frame.environment);
+Instruction const* function_op(Thread& thread, Instruction const& inst) {
+	REG(thread, inst.c) = Function(thread.frame.prototype->prototypes[inst.a], thread.frame.environment);
 	return &inst+1;
 }
-Instruction const* logical1_op(State& state, Instruction const& inst) {
-	Integer i = As<Integer>(state, REG(state, inst.a));
-	REG(state, inst.c) = Logical(i[0]);
+Instruction const* logical1_op(Thread& thread, Instruction const& inst) {
+	Integer i = As<Integer>(thread, REG(thread, inst.a));
+	REG(thread, inst.c) = Logical(i[0]);
 	return &inst+1;
 }
-Instruction const* integer1_op(State& state, Instruction const& inst) {
-	Integer i = As<Integer>(state, REG(state, inst.a));
-	REG(state, inst.c) = Integer(i[0]);
+Instruction const* integer1_op(Thread& thread, Instruction const& inst) {
+	Integer i = As<Integer>(thread, REG(thread, inst.a));
+	REG(thread, inst.c) = Integer(i[0]);
 	return &inst+1;
 }
-Instruction const* double1_op(State& state, Instruction const& inst) {
-	int64_t length = asReal1(REG(state, inst.a));
+Instruction const* double1_op(Thread& thread, Instruction const& inst) {
+	int64_t length = asReal1(REG(thread, inst.a));
 	Double d(length);
 	for(int64_t i = 0; i < length; i++) d[i] = 0;
-	REG(state, inst.c) = d;
+	REG(thread, inst.c) = d;
 	return &inst+1;
 }
-Instruction const* character1_op(State& state, Instruction const& inst) {
-	Integer i = As<Integer>(state, REG(state, inst.a));
+Instruction const* character1_op(Thread& thread, Instruction const& inst) {
+	Integer i = As<Integer>(thread, REG(thread, inst.a));
 	Character r = Character(i[0]);
 	for(int64_t j = 0; j < r.length; j++) r[j] = Strings::empty;
-	REG(state, inst.c) = r;
+	REG(thread, inst.c) = r;
 	return &inst+1;
 }
-Instruction const* raw1_op(State& state, Instruction const& inst) {
-	Integer i = As<Integer>(state, REG(state, inst.a));
-	REG(state, inst.c) = Raw(i[0]);
+Instruction const* raw1_op(Thread& thread, Instruction const& inst) {
+	Integer i = As<Integer>(thread, REG(thread, inst.a));
+	REG(thread, inst.c) = Raw(i[0]);
 	return &inst+1;
 }
-Instruction const* type_op(State& state, Instruction const& inst) {
+Instruction const* type_op(Thread& thread, Instruction const& inst) {
 	Character c(1);
 	// Should have a direct mapping from type to symbol.
-	c[0] = state.internStr(Type::toString(REG(state, inst.a).type));
-	REG(state, inst.c) = c;
+	c[0] = thread.internStr(Type::toString(REG(thread, inst.a).type));
+	REG(thread, inst.c) = c;
 	return &inst+1;
 }
-Instruction const* length_op(State& state, Instruction const& inst) {
-	if(REG(state,inst.a).isVector())
-		Integer::InitScalar(REG(state, inst.c), REG(state,inst.a).length);
+Instruction const* length_op(Thread& thread, Instruction const& inst) {
+	if(REG(thread,inst.a).isVector())
+		Integer::InitScalar(REG(thread, inst.c), REG(thread,inst.a).length);
 	else
-		Integer::InitScalar(REG(state, inst.c), 1);
+		Integer::InitScalar(REG(thread, inst.c), 1);
 	return &inst+1;
 }
-Instruction const* missing_op(State& state, Instruction const& inst) {
+Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 	// This could be inline cached...or implemented in terms of something else?
 	String s = String::Init((char const*)inst.a);
-	Value const& v = state.frame.environment->get(s);
-	bool missing = v.isNil() || (v.isPromise() && Function(v).environment() == state.frame.environment);
-	Logical::InitScalar(REG(state, inst.c), missing);
+	Value const& v = thread.frame.environment->get(s);
+	bool missing = v.isNil() || (v.isPromise() && Function(v).environment() == thread.frame.environment);
+	Logical::InitScalar(REG(thread, inst.c), missing);
 	return &inst+1;
 }
-Instruction const* mmul_op(State& state, Instruction const& inst) {
-	REG(state, inst.c) = MatrixMultiply(state, REG(state, inst.a), REG(state, inst.b));
+Instruction const* mmul_op(Thread& thread, Instruction const& inst) {
+	REG(thread, inst.c) = MatrixMultiply(thread, REG(thread, inst.a), REG(thread, inst.b));
 	return &inst+1;
 }
-Instruction const* ret_op(State& state, Instruction const& inst) {
-	*(state.frame.result) = REG(state, inst.c);
+Instruction const* ret_op(Thread& thread, Instruction const& inst) {
+	*(thread.frame.result) = REG(thread, inst.c);
 	// if this stack frame owns the environment, we can free it for reuse
 	// as long as we don't return a closure...
 	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
-	if(state.frame.ownEnvironment && REG(state, inst.c).isClosureSafe())
-		state.environments.push_back(state.frame.environment);
-	state.base = state.frame.returnbase;
-	Instruction const* returnpc = state.frame.returnpc;
-	state.pop();
+	if(thread.frame.ownEnvironment && REG(thread, inst.c).isClosureSafe())
+		thread.environments.push_back(thread.frame.environment);
+	thread.base = thread.frame.returnbase;
+	Instruction const* returnpc = thread.frame.returnpc;
+	thread.pop();
 	return returnpc;
 }
-Instruction const* done_op(State& state, Instruction const& inst) {
+Instruction const* done_op(Thread& thread, Instruction const& inst) {
 	// not used. When this instruction is hit, interpreter exits.
 	return 0;
 }
 
 
-static void printCode(State const& state, Prototype const* prototype) {
+static void printCode(Thread const& thread, Prototype const* prototype) {
 	std::string r = "block:\nconstants: " + intToStr(prototype->constants.size()) + "\n";
 	for(int64_t i = 0; i < (int64_t)prototype->constants.size(); i++)
-		r = r + intToStr(i) + "=\t" + state.stringify(prototype->constants[i]) + "\n";
+		r = r + intToStr(i) + "=\t" + thread.stringify(prototype->constants[i]) + "\n";
 
 	r = r + "code: " + intToStr(prototype->bc.size()) + "\n";
 	for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++)
@@ -816,17 +811,17 @@ static void printCode(State const& state, Prototype const* prototype) {
 static const void** glabels = 0;
 #endif
 
-static Instruction const* buildStackFrame(State& state, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc) {
-	//printCode(state, prototype);
-	StackFrame& s = state.push();
+static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc) {
+	//printCode(thread, prototype);
+	StackFrame& s = thread.push();
 	s.environment = environment;
 	s.ownEnvironment = ownEnvironment;
 	s.returnpc = returnpc;
-	s.returnbase = state.base;
+	s.returnbase = thread.base;
 	s.result = result;
 	s.prototype = prototype;
-	state.base -= prototype->registers;
-	if(state.base < state.registers)
+	thread.base -= prototype->registers;
+	if(thread.base < thread.registers)
 		throw RiposteError("Register overflow");
 
 #ifdef USE_THREADED_INTERPRETER
@@ -846,7 +841,7 @@ static Instruction const* buildStackFrame(State& state, Environment* environment
 //    Main interpreter loop 
 //
 //__attribute__((__noinline__,__noclone__)) 
-void interpret(State& state, Instruction const* pc) {
+void interpret(Thread& thread, Instruction const* pc) {
 
 #ifdef USE_THREADED_INTERPRETER
     #define LABELS_THREADED(name,type,...) (void*)&&name##_label,
@@ -859,14 +854,14 @@ void interpret(State& state, Instruction const* pc) {
 	goto *(pc->ibc);
 	#define LABELED_OP(name,type,...) \
 		name##_label: \
-			{ pc = name##_op(state, *pc); goto *(pc->ibc); } 
+			{ pc = name##_op(thread, *pc); goto *(pc->ibc); } 
 	STANDARD_BYTECODES(LABELED_OP)
 	done_label: {}
 #else
 	while(pc->bc != ByteCode::done) {
 		switch(pc->bc) {
 			#define SWITCH_OP(name,type,...) \
-				case ByteCode::name: { pc = name##_op(state, *pc); } break;
+				case ByteCode::name: { pc = name##_op(thread, *pc); } break;
 			BYTECODES(SWITCH_OP)
 		};
 	}
@@ -874,44 +869,44 @@ void interpret(State& state, Instruction const* pc) {
 }
 
 // ensure glabels is inited before we need it.
-void interpreter_init(State& state) {
+void State::interpreter_init(Thread& thread) {
 #ifdef USE_THREADED_INTERPRETER
-	interpret(state, 0);
+	interpret(thread, 0);
 #endif
 }
 
-Value eval(State& state, Function const& function) {
-	return eval(state, function.prototype(), function.environment());
+Value Thread::eval(Function const& function) {
+	return eval(function.prototype(), function.environment());
 }
 
-Value eval(State& state, Prototype const* prototype) {
-	return eval(state, prototype, state.frame.environment);
+Value Thread::eval(Prototype const* prototype) {
+	return eval(prototype, frame.environment);
 }
 
-Value eval(State& state, Prototype const* prototype, Environment* environment) {
+Value Thread::eval(Prototype const* prototype, Environment* environment) {
 	static const Instruction* done = new Instruction(ByteCode::done);
 #ifdef USE_THREADED_INTERPRETER
 	done->ibc = glabels[ByteCode::done];
 #endif
-	Value* old_base = state.base;
-	int64_t stackSize = state.stack.size();
+	Value* old_base = base;
+	int64_t stackSize = stack.size();
 	
 	// Build a half-hearted stack frame for the result. Necessary for the trace recorder.
-	StackFrame& s = state.push();
+	StackFrame& s = push();
 	s.environment = 0;
 	s.prototype = 0;
-	s.returnbase = state.base;
-	state.base -= 1;
-	Value* result = state.base;
+	s.returnbase = base;
+	base -= 1;
+	Value* result = base;
 	
-	Instruction const* run = buildStackFrame(state, environment, false, prototype, result, done);
+	Instruction const* run = buildStackFrame(*this, environment, false, prototype, result, done);
 	try {
-		interpret(state, run);
-		state.base = old_base;
-		state.pop();
+		interpret(*this, run);
+		base = old_base;
+		pop();
 	} catch(...) {
-		state.base = old_base;
-		state.stack.resize(stackSize);
+		base = old_base;
+		stack.resize(stackSize);
 		throw;
 	}
 	return *result;

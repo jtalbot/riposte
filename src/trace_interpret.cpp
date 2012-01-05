@@ -207,36 +207,36 @@ struct TraceInterpret {
 		}
 	}
 
-	void execute(State & state) {
+	void execute(Thread & thread) {
 		//interpret
 		for(int64_t i = 0; i < trace->length; i += TRACE_VECTOR_WIDTH) {
 			for(size_t j = 0; j < n_insts; j++) {
 				TraceInst & inst = insts[j];
 				switch(inst.bc) {
 #define BINARY_OP(name,str, op, ...) \
-				case TraceBC :: name ##dvv :  Map2VV< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.dpp,*inst.b.dpp,(op < TDouble >::R*) inst.r.p); break; \
-				case TraceBC :: name ##dvs :  Map2VS< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.dpp,inst.b.d,(op < TDouble >::R*) inst.r.p); break; \
-				case TraceBC :: name ##dsv :  Map2SV< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(state, inst.a.d,*inst.b.dpp,(op < TDouble >::R*) inst.r.p); break; \
-				case TraceBC :: name ##ivv :  Map2VV< op < TInteger >,TRACE_VECTOR_WIDTH >::eval(state, *inst.a.ipp,*inst.b.ipp,(op < TInteger >::R*) inst.r.p); break; \
-				case TraceBC :: name ##ivs :  Map2VS< op < TInteger >,TRACE_VECTOR_WIDTH >::eval(state, *inst.a.ipp,inst.b.i,(op < TInteger >::R*) inst.r.p); break; \
-				case TraceBC :: name ##isv :  Map2SV< op < TInteger >,TRACE_VECTOR_WIDTH >::eval(state, inst.a.i,*inst.b.ipp, (op < TInteger >::R*) inst.r.p); break;
+				case TraceBC :: name ##dvv :  Map2VV< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(thread, *inst.a.dpp,*inst.b.dpp,(op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name ##dvs :  Map2VS< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(thread, *inst.a.dpp,inst.b.d,(op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name ##dsv :  Map2SV< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(thread, inst.a.d,*inst.b.dpp,(op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name ##ivv :  Map2VV< op < TInteger >,TRACE_VECTOR_WIDTH >::eval(thread, *inst.a.ipp,*inst.b.ipp,(op < TInteger >::R*) inst.r.p); break; \
+				case TraceBC :: name ##ivs :  Map2VS< op < TInteger >,TRACE_VECTOR_WIDTH >::eval(thread, *inst.a.ipp,inst.b.i,(op < TInteger >::R*) inst.r.p); break; \
+				case TraceBC :: name ##isv :  Map2SV< op < TInteger >,TRACE_VECTOR_WIDTH >::eval(thread, inst.a.i,*inst.b.ipp, (op < TInteger >::R*) inst.r.p); break;
 
 #define LOGICAL_OP(name,str, op, ...) \
-				case TraceBC :: name ##vv :  Map2VV< op < TLogical >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.lpp,*inst.b.lpp,(op < TDouble >::R*) inst.r.p); break; \
-				case TraceBC :: name ##vs :  Map2VS< op < TLogical >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.lpp,inst.b.l,(op < TDouble >::R*) inst.r.p); break; \
-				case TraceBC :: name ##sv :  Map2SV< op < TLogical >, TRACE_VECTOR_WIDTH >::eval(state, inst.a.l,*inst.b.lpp,(op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name ##vv :  Map2VV< op < TLogical >, TRACE_VECTOR_WIDTH >::eval(thread, *inst.a.lpp,*inst.b.lpp,(op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name ##vs :  Map2VS< op < TLogical >, TRACE_VECTOR_WIDTH >::eval(thread, *inst.a.lpp,inst.b.l,(op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name ##sv :  Map2SV< op < TLogical >, TRACE_VECTOR_WIDTH >::eval(thread, inst.a.l,*inst.b.lpp,(op < TDouble >::R*) inst.r.p); break; \
 
 #define UNARY_OP(name,str, op, ...) \
-				case TraceBC :: name##d :  Map1< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.dpp,(op < TDouble >::R*) inst.r.p); break; \
-				case TraceBC :: name##i :  Map1< op < TInteger >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.ipp,(op < TInteger >::R*) inst.r.p); break;
+				case TraceBC :: name##d :  Map1< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(thread, *inst.a.dpp,(op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name##i :  Map1< op < TInteger >, TRACE_VECTOR_WIDTH >::eval(thread, *inst.a.ipp,(op < TInteger >::R*) inst.r.p); break;
 
 #define FOLD_OP(name, str, op, ...) \
-				case TraceBC :: name##d :  *inst.r.dp = inst.b.d = FoldLeftT< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.dpp, inst.b.d); break; \
-				case TraceBC :: name##i :  *inst.r.ip = inst.b.i = FoldLeftT< op < TInteger >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.ipp, inst.b.i); break;
+				case TraceBC :: name##d :  *inst.r.dp = inst.b.d = FoldLeftT< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(thread, *inst.a.dpp, inst.b.d); break; \
+				case TraceBC :: name##i :  *inst.r.ip = inst.b.i = FoldLeftT< op < TInteger >, TRACE_VECTOR_WIDTH >::eval(thread, *inst.a.ipp, inst.b.i); break;
 
 #define SCAN_OP(name, str, op, ...) \
-				case TraceBC :: name##d :  inst.b.d = ScanLeftT< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.dpp, inst.b.d, (op < TDouble >::R*) inst.r.p); break; \
-				case TraceBC :: name##i :  inst.b.i = ScanLeftT< op < TInteger >, TRACE_VECTOR_WIDTH >::eval(state, *inst.a.ipp, inst.b.i, (op < TInteger >::R*) inst.r.p); break;
+				case TraceBC :: name##d :  inst.b.d = ScanLeftT< op < TDouble >, TRACE_VECTOR_WIDTH >::eval(thread, *inst.a.dpp, inst.b.d, (op < TDouble >::R*) inst.r.p); break; \
+				case TraceBC :: name##i :  inst.b.i = ScanLeftT< op < TInteger >, TRACE_VECTOR_WIDTH >::eval(thread, *inst.a.ipp, inst.b.i, (op < TInteger >::R*) inst.r.p); break;
 
 				BINARY_ARITH_MAP_BYTECODES(BINARY_OP)
 				BINARY_LOGICAL_MAP_BYTECODES(LOGICAL_OP)
@@ -251,13 +251,13 @@ struct TraceInterpret {
 #undef FOLD_OP
 #undef SCAN_OP
 
-				case TraceBC :: casti2d:  Map1< CastOp<Integer, Double> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.ipp , (double *)inst.r.p); break;
-				case TraceBC :: castd2i:  Map1< CastOp<Double, Integer> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.dpp , (int64_t *)inst.r.p); break;
-				case TraceBC :: castl2d: Map1< CastOp<Logical, Double> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.lpp , (double *)inst.r.p); break;
-				case TraceBC :: castl2i:  Map1< CastOp<Logical, Integer> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.lpp , (int64_t *)inst.r.p); break;
-				case TraceBC :: castd2l: Map1< CastOp<Double, Logical> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.dpp , (uint8_t *)inst.r.p); break;
-				case TraceBC :: casti2l:  Map1< CastOp<Integer, Logical> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.ipp , (uint8_t *)inst.r.p); break;
-				case TraceBC :: lnot: Map1< LNotOp<TLogical> , TRACE_VECTOR_WIDTH>::eval(state, *inst.a.lpp , (uint8_t *)inst.r.p); break;
+				case TraceBC :: casti2d:  Map1< CastOp<Integer, Double> , TRACE_VECTOR_WIDTH>::eval(thread, *inst.a.ipp , (double *)inst.r.p); break;
+				case TraceBC :: castd2i:  Map1< CastOp<Double, Integer> , TRACE_VECTOR_WIDTH>::eval(thread, *inst.a.dpp , (int64_t *)inst.r.p); break;
+				case TraceBC :: castl2d: Map1< CastOp<Logical, Double> , TRACE_VECTOR_WIDTH>::eval(thread, *inst.a.lpp , (double *)inst.r.p); break;
+				case TraceBC :: castl2i:  Map1< CastOp<Logical, Integer> , TRACE_VECTOR_WIDTH>::eval(thread, *inst.a.lpp , (int64_t *)inst.r.p); break;
+				case TraceBC :: castd2l: Map1< CastOp<Double, Logical> , TRACE_VECTOR_WIDTH>::eval(thread, *inst.a.dpp , (uint8_t *)inst.r.p); break;
+				case TraceBC :: casti2l:  Map1< CastOp<Integer, Logical> , TRACE_VECTOR_WIDTH>::eval(thread, *inst.a.ipp , (uint8_t *)inst.r.p); break;
+				case TraceBC :: lnot: Map1< LNotOp<TLogical> , TRACE_VECTOR_WIDTH>::eval(thread, *inst.a.lpp , (uint8_t *)inst.r.p); break;
 				case TraceBC :: seq:  Sequence<TRACE_VECTOR_WIDTH>(i*inst.b.i+1, inst.b.i, (int64_t*)inst.r.p);
 				}
 			}
@@ -393,15 +393,15 @@ private:
 };
 
 
-void Trace::Interpret(State & state) {
-	InitializeOutputs(state);
-	if(state.sharedState.verbose)
-		printf("executing trace:\n%s\n",toString(state).c_str());
+void Trace::Interpret(Thread & thread) {
+	InitializeOutputs(thread);
+	if(thread.state.verbose)
+		printf("executing trace:\n%s\n",toString(thread).c_str());
 
 	TraceInterpret trace_code(this);
 
 	trace_code.compile();
-	trace_code.execute(state);
+	trace_code.execute(thread);
 
-	WriteOutputs(state);
+	WriteOutputs(thread);
 }

@@ -641,7 +641,7 @@ struct TraceJIT {
 
 		//printf("%d = %d op %d, %d = %d op %d\n",(int)allocated_register[ref],(int)allocated_register[a],(int)allocated_register[b],(int)ref,(int)a,(int)b);
 
-		//we need to avoid binary statements of the form r = a op r, a != r because these are hard to code gen with 2-op codes
+		//we need to avoid binary threadments of the form r = a op r, a != r because these are hard to code gen with 2-op codes
 		assert(!reg(ref).is(reg(b)) || reg(ref).is(reg(a)));
 		//proof:
 		// case: b is not live out of this stmt and b != a -> we allocated b s.t. r != b
@@ -793,32 +793,32 @@ struct TraceJIT {
 
 	typedef void (*fn) (uint64_t start, uint64_t end);
 	
-	static void executebody(void* args, uint64_t start, uint64_t end, State& state) {
-		//printf("%d: called with %d to %d\n", state.index, start, end);
+	static void executebody(void* args, uint64_t start, uint64_t end, Thread& thread) {
+		//printf("%d: called with %d to %d\n", thread.index, start, end);
 		fn code = (fn)args;
 		code(start, end);	
 	}
 
-	void Execute(State & state) {
+	void Execute(Thread & thread) {
 		fn trace_code = (fn) trace->code_buffer->code;
-		if(state.sharedState.verbose) {
+		if(thread.state.verbose) {
 			timespec begin;
 			get_time(begin);
-			state.doall(executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
+			thread.doall(executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
 			//trace_code(0, trace->length);
 			double s = time_elapsed(begin) / trace->length * 1024.0 * 1024.0 * 1024.0;
 			printf("trace elapsed %fns\n",s);
 		} else {
-			state.doall(executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
+			thread.doall(executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
 			//trace_code(0, trace->length);
 		}
 	}
 };
 
-void Trace::JIT(State & state) {
-	InitializeOutputs(state);
-	if(state.sharedState.verbose)
-		printf("executing trace:\n%s\n",toString(state).c_str());
+void Trace::JIT(Thread & thread) {
+	InitializeOutputs(thread);
+	if(thread.state.verbose)
+		printf("executing trace:\n%s\n",toString(thread).c_str());
 
 	if(code_buffer == NULL) { //since it is expensive to reallocate this, we reuse it across traces
 		code_buffer = new TraceCodeBuffer();
@@ -827,7 +827,7 @@ void Trace::JIT(State & state) {
 	TraceJIT trace_code(this);
 
 	trace_code.Compile();
-	trace_code.Execute(state);
+	trace_code.Execute(thread);
 
-	WriteOutputs(state);
+	WriteOutputs(thread);
 }

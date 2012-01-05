@@ -6,7 +6,7 @@
 
 template<int64_t N>
 struct Map1< NegOp<TDouble>, N, true > {
-	static void eval(State& state, double const* a, double* r) {
+	static void eval(Thread& thread, double const* a, double* r) {
                 __m128d const* xa = (__m128d const*)a;
                 __m128d xb = _mm_setzero_pd();
 		__m128d* xr = (__m128d*)r;
@@ -26,7 +26,7 @@ struct Map1< AbsOp<TDouble>, N, true > {
 	        double f;
 	        ieee754_QNAN() : i(0x7FFFFFFFFFFFFFFF) {}
 	};
-	static void eval(State& state, double const* a, double* r) {
+	static void eval(Thread& thread, double const* a, double* r) {
                 const ieee754_QNAN AbsMask;
 		const __m128d absMask = _mm_load1_pd( &AbsMask.f);
 		__m128d const* xa = (__m128d const*)a;
@@ -40,7 +40,7 @@ struct Map1< AbsOp<TDouble>, N, true > {
 
 template<int64_t N>
 struct Map1< SqrtOp<TDouble>, N, true > {
-	static void eval(State& state, double const* a, double* r) {
+	static void eval(Thread& thread, double const* a, double* r) {
                 __m128d const* xa = (__m128d const*)a;
 		__m128d* xr = (__m128d*)r;
                 for(int j = 0; j < N/2; j+=2) {
@@ -54,7 +54,7 @@ struct Map1< SqrtOp<TDouble>, N, true > {
 #include <amdlibm.h>
 template<int64_t N>
 struct Map1< ExpOp<TDouble>, N, true > {
-	static void eval(State& state, double const* a, double* r) {
+	static void eval(Thread& thread, double const* a, double* r) {
         __m128d const* xa = (__m128d const*)a;
 		__m128d* xr = (__m128d*)r;
 		for(int j = 0; j < N/2; j+=2) {
@@ -65,7 +65,7 @@ struct Map1< ExpOp<TDouble>, N, true > {
 };
 template<int64_t N>
 struct Map1< LogOp<TDouble>, N, true > {
-	static void eval(State& state, double const* a, double* r) {
+	static void eval(Thread& thread, double const* a, double* r) {
         __m128d const* xa = (__m128d const*)a;
 		__m128d* xr = (__m128d*)r;
 		for(int j = 0; j < N/2; j+=2) {
@@ -81,7 +81,7 @@ struct Map1< LogOp<TDouble>, N, true > {
 
 template<int64_t N>
 struct Map2VV< AddOp<TDouble>, N, true > {
-        static void eval(State& state, double const* a, double const* b, double* r) {
+        static void eval(Thread& thread, double const* a, double const* b, double* r) {
 		__m128d const* xa = (__m128d const*)a;
                 __m128d const* xb = (__m128d const*)b;
                 __m128d* xr = (__m128d*)r;
@@ -94,7 +94,7 @@ struct Map2VV< AddOp<TDouble>, N, true > {
 
 template<int64_t N>
 struct Map2SV< AddOp<TDouble>, N, true > {
-        static void eval(State& state, double const a, double const* b, double* r) {
+        static void eval(Thread& thread, double const a, double const* b, double* r) {
                 const __m128d xa = _mm_set1_pd(a);
                 __m128d const* xb = (__m128d const*)b;
                 __m128d* xr = (__m128d*)r;
@@ -107,7 +107,7 @@ struct Map2SV< AddOp<TDouble>, N, true > {
 
 template<int64_t N>
 struct Map2VS< AddOp<TDouble>, N, true > {
-        static void eval(State& state, double const* a, double const b, double* r) {
+        static void eval(Thread& thread, double const* a, double const b, double* r) {
                 __m128d const* xa = (__m128d const*)a;
                 const __m128d xb = _mm_set1_pd(b);
                 __m128d* xr = (__m128d*)r;
@@ -122,7 +122,7 @@ struct Map2VS< AddOp<TDouble>, N, true > {
 
 template<int64_t N>
 struct Map2VV< SubOp<TDouble>, N, true > {
-        static void eval(State& state, double const* a, double const* b, double* r) {
+        static void eval(Thread& thread, double const* a, double const* b, double* r) {
                 __m128d const* xa = (__m128d const*)a;
                 __m128d const* xb = (__m128d const*)b;
                 __m128d* xr = (__m128d*)r;
@@ -135,7 +135,7 @@ struct Map2VV< SubOp<TDouble>, N, true > {
 
 template<int64_t N>
 struct Map2SV< SubOp<TDouble>, N, true > {
-        static void eval(State& state, double const a, double const* b, double* r) {
+        static void eval(Thread& thread, double const a, double const* b, double* r) {
                 const __m128d xa = _mm_set1_pd(a);
                 __m128d const* xb = (__m128d const*)b;
                 __m128d* xr = (__m128d*)r;
@@ -148,7 +148,7 @@ struct Map2SV< SubOp<TDouble>, N, true > {
 
 template<int64_t N>
 struct Map2VS< SubOp<TDouble>, N, true > {
-        static void eval(State& state, double const* a, double const b, double* r) {
+        static void eval(Thread& thread, double const* a, double const b, double* r) {
                 __m128d const* xa = (__m128d const*)a;
                 const __m128d xb = _mm_set1_pd(b);
                 __m128d* xr = (__m128d*)r;
@@ -163,7 +163,7 @@ struct Map2VS< SubOp<TDouble>, N, true > {
 
 template<int64_t N>
 struct Map2VV< MulOp<TDouble>, N, true > {
-        static void eval(State& state, double const* a, double const* b, double* r) {
+        static void eval(Thread& thread, double const* a, double const* b, double* r) {
                 __m128d const* xa = (__m128d const*)a;
                 __m128d const* xb = (__m128d const*)b;
                 __m128d* xr = (__m128d*)r;
@@ -176,7 +176,7 @@ struct Map2VV< MulOp<TDouble>, N, true > {
 
 template<int64_t N>
 struct Map2SV< MulOp<TDouble>, N, true > {
-        static void eval(State& state, double const a, double const* b, double* r) {
+        static void eval(Thread& thread, double const a, double const* b, double* r) {
                 const __m128d xa = _mm_set1_pd(a);
                 __m128d const* xb = (__m128d const*)b;
                 __m128d* xr = (__m128d*)r;
@@ -189,7 +189,7 @@ struct Map2SV< MulOp<TDouble>, N, true > {
 
 template<int64_t N>
 struct Map2VS< MulOp<TDouble>, N, true > {
-        static void eval(State& state, double const* a, double const b, double* r) {
+        static void eval(Thread& thread, double const* a, double const b, double* r) {
                 __m128d const* xa = (__m128d const*)a;
                 const __m128d xb = _mm_set1_pd(b);
                 __m128d* xr = (__m128d*)r;
@@ -204,7 +204,7 @@ struct Map2VS< MulOp<TDouble>, N, true > {
 
 template<int64_t N>
 struct Map2VV< DivOp<TDouble>, N, true > {
-        static void eval(State& state, double const* a, double const* b, double* r) {
+        static void eval(Thread& thread, double const* a, double const* b, double* r) {
                 __m128d const* xa = (__m128d const*)a;
                 __m128d const* xb = (__m128d const*)b;
                 __m128d* xr = (__m128d*)r;
@@ -217,7 +217,7 @@ struct Map2VV< DivOp<TDouble>, N, true > {
 
 template<int64_t N>
 struct Map2SV< DivOp<TDouble>, N, true > {
-        static void eval(State& state, double const a, double const* b, double* r) {
+        static void eval(Thread& thread, double const a, double const* b, double* r) {
                 const __m128d xa = _mm_set1_pd(a);
                 __m128d const* xb = (__m128d const*)b;
                 __m128d* xr = (__m128d*)r;
@@ -230,7 +230,7 @@ struct Map2SV< DivOp<TDouble>, N, true > {
 
 template<int64_t N>
 struct Map2VS< DivOp<TDouble>, N, true > {
-        static void eval(State& state, double const* a, double const b, double* r) {
+        static void eval(Thread& thread, double const* a, double const b, double* r) {
                 __m128d const* xa = (__m128d const*)a;
                 const __m128d xb = _mm_set1_pd(b);
                 __m128d* xr = (__m128d*)r;

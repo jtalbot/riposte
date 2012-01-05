@@ -12,6 +12,7 @@
 #include "value.h"
 #include "type.h"
 #include "bc.h"
+#include "interpreter.h"
 
 class Compiler {
 private:

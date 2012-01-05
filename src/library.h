@@ -4,11 +4,7 @@
 
 #include "value.h"
 
-void loadLibrary(State& state, std::string path, std::string name);
-
-
-void importCoreFunctions(State& state, Environment* env);
-void importCoerceFunctions(State& state, Environment* env);
+void loadLibrary(Thread& thread, std::string path, std::string name);
 
 
 #endif

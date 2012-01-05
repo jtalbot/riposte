@@ -2,6 +2,7 @@
 #include "value.h"
 #include "type.h"
 #include "bc.h"
+#include "interpreter.h"
 
 #include <sstream>
 #include <iomanip>

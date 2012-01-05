@@ -10,7 +10,7 @@ void Trace::Reset() {
 	uniqueShapes = -1;
 }
 
-std::string Trace::toString(State & state) {
+std::string Trace::toString(Thread & thread) {
 	std::ostringstream out;
 	out << "recorded: \n";
 	for(size_t j = 0; j < n_nodes; j++) {
@@ -44,7 +44,7 @@ std::string Trace::toString(State & state) {
 		case Trace::Location::REG:
 			out << "r[" << o.location.reg.offset << "]"; break;
 		case Trace::Location::VAR:
-			out << state.externStr(o.location.pointer.name); break;
+			out << thread.externStr(o.location.pointer.name); break;
 		}
 		out << " = o" << o.value - output_values << "\n";
 	}
@@ -55,9 +55,9 @@ std::string Trace::toString(State & state) {
 	return out.str();
 }
 
-#define REG(state, i) (*(state.base+i))
+#define REG(thread, i) (*(thread.base+i))
 
-static const Value & get_location_value(State & state, const Trace::Location & l) {
+static const Value & get_location_value(Thread & thread, const Trace::Location & l) {
 	switch(l.type) {
 	case Trace::Location::REG:
 		return l.reg.base[l.reg.offset];
@@ -66,7 +66,7 @@ static const Value & get_location_value(State & state, const Trace::Location & l
 		return Dictionary::get(l.pointer);
 	}
 }
-static void set_location_value(State & state, const Trace::Location & l, const Value & v) {
+static void set_location_value(Thread & thread, const Trace::Location & l, const Value & v) {
 	switch(l.type) {
 	case Trace::Location::REG:
 		l.reg.base[l.reg.offset] = v;
@@ -78,14 +78,14 @@ static void set_location_value(State & state, const Trace::Location & l, const V
 }
 
 //attempts to find a future at location l, returns true if the location is live and contains a future
-static bool get_location_value_if_live(State & state, Trace & trace, const Trace::Location & l, Value & v) {
-	if(state.tracing.LocationIsDead(l))
+static bool get_location_value_if_live(Thread & thread, Trace & trace, const Trace::Location & l, Value & v) {
+	if(thread.tracing.LocationIsDead(l))
 		return false;
-	v = get_location_value(state,l);
-	return v.isFuture() && v.future.trace_id == state.tracing.TraceID(trace);
+	v = get_location_value(thread,l);
+	return v.isFuture() && v.future.trace_id == thread.tracing.TraceID(trace);
 }
 
-void Trace::InitializeOutputs(State & state) {
+void Trace::InitializeOutputs(Thread & thread) {
 	//check list of recorded output locations for live futures
 	//for each live future found, replace the future with a concrete object
 	//the data for the object will be filled in by the trace interpreter
@@ -94,7 +94,7 @@ void Trace::InitializeOutputs(State & state) {
 	for(size_t i = 0; i < n_outputs; ) {
 		Output & o = outputs[i];
 		Value loc;
-		if(!get_location_value_if_live(state,*this,o.location,loc)) {
+		if(!get_location_value_if_live(thread,*this,o.location,loc)) {
 			o = outputs[--n_outputs];
 		} else {
 			IRef ref = loc.future.ref;
@@ -128,30 +128,30 @@ void Trace::InitializeOutputs(State & state) {
 				n_nodes = n_pending_nodes;
 				values[ref] = &v;
 			}
-			set_location_value(state,o.location,Value::Nil()); //mark this location in the interpreter as already seen
+			set_location_value(thread,o.location,Value::Nil()); //mark this location in the interpreter as already seen
 			o.value = values[ref];
 			i++;
 		}
 	}
 }
 
-void Trace::WriteOutputs(State & state) {
-	if(state.sharedState.verbose) {
+void Trace::WriteOutputs(Thread & thread) {
+	if(thread.state.verbose) {
 		for(size_t i = 0; i < n_output_values; i++) {
-			std::string v = state.stringify(output_values[i]);
+			std::string v = thread.stringify(output_values[i]);
 			printf("o%d = %s\n", (int) i, v.c_str());
 		}
 	}
 	for(size_t i = 0; i < n_outputs; i++) {
-		set_location_value(state,outputs[i].location,*outputs[i].value);
+		set_location_value(thread,outputs[i].location,*outputs[i].value);
 	}
 }
 
-void Trace::Execute(State & state) {
-	if(state.tracing.config == TraceState::COMPILE) {
-		JIT(state);
-	} else if(state.tracing.config == TraceState::INTERPRET) {
-		Interpret(state);
+void Trace::Execute(Thread & thread) {
+	if(thread.tracing.config == TraceThread::COMPILE) {
+		JIT(thread);
+	} else if(thread.tracing.config == TraceThread::INTERPRET) {
+		Interpret(thread);
 	} else {
 		_error("executing a trace when tracing disabled");
 	}

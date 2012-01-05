@@ -16,6 +16,8 @@
 #include "parser.h"
 #include "compiler.h"
 #include "library.h"
+#include "coerce.h"
+#include "internal.h"
 
 /*  Globals  */
 static int debug = 0;
@@ -89,10 +91,10 @@ Value parsetty(State& state) {
 	return ppr;
 }
 
-static void printCode(State const& state, Prototype const* code) {
+static void printCode(Thread const& thread, Prototype const* code) {
 	std::string r = "block:\nconstants: " + intToStr(code->constants.size()) + "\n";
 	for(int64_t i = 0; i < (int64_t)code->constants.size(); i++)
-		r = r + intToStr(i) + "=\t" + state.stringify(code->constants[i]) + "\n";
+		r = r + intToStr(i) + "=\t" + thread.stringify(code->constants[i]) + "\n";
 
 	r = r + "code: " + intToStr(code->bc.size()) + "\n";
 	for(int64_t i = 0; i < (int64_t)code->bc.size(); i++)
@@ -110,6 +112,8 @@ int dostdin(State& state) {
 	printf("rockit@graphics.stanford.edu\n");
 	printf("\n");
 
+	Thread& thread = state.getMainThread();
+
 	while(!die) {
 		try { 
 			Value value, result;
@@ -117,8 +121,8 @@ int dostdin(State& state) {
 			if(value.isNil()) continue;
 			//std::cout << "Parsed: " << value.toString() << std::endl;
 			Prototype* proto = Compiler::compile(state, value);
-			//std::cout << "Compiled code: " << state.stringify(Closure(code,NULL)) << std::endl;
-			result = eval(state, proto, state.sharedState.global);
+			//std::cout << "Compiled code: " << thread.stringify(Closure(code,NULL)) << std::endl;
+			result = thread.eval(proto, state.global);
 			std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) { 
 			e_message("Error", "riposte", error.what().c_str());
@@ -127,13 +131,13 @@ int dostdin(State& state) {
 		} catch(CompileError& error) {
 			e_message("Error", "compiler", error.what().c_str());
 		}
-		if(state.warnings.size() > 0) {
-			std::cout << "There were " << intToStr(state.warnings.size()) << " warnings." << std::endl;
-			for(int64_t i = 0; i < (int64_t)state.warnings.size(); i++) {
-				std::cout << "(" << intToStr(i+1) << ") " << state.warnings[i] << std::endl;
+		if(thread.warnings.size() > 0) {
+			std::cout << "There were " << intToStr(thread.warnings.size()) << " warnings." << std::endl;
+			for(int64_t i = 0; i < (int64_t)thread.warnings.size(); i++) {
+				std::cout << "(" << intToStr(i+1) << ") " << thread.warnings[i] << std::endl;
 			}
 		}
-		state.warnings.clear();
+		thread.warnings.clear();
 	}
 	return rc;
 }
@@ -160,7 +164,7 @@ static int dofile(const char * file, std::istream & in, State& state, bool echo)
 
 	try {
 		Prototype* proto = Compiler::compile(state, value);
-		Value result = eval(state, proto, state.sharedState.global);
+		Value result = state.getMainThread().eval(proto, state.global);
 		if(echo)
 			std::cout << state.stringify(result) << std::endl;
 	} catch(RiposteError& error) {
@@ -245,17 +249,16 @@ main(int argc, char** argv)
 	Environment* base = new Environment(0);
 	Environment* global = new Environment(base);
 
-	SharedState sharedState(2, global, base);
-	sharedState.verbose = verbose;
-	State& state = sharedState.getMainThread();
-	interpreter_init(state);
+	State state(2, global, base);
+	state.verbose = verbose;
+	Thread& thread = state.getMainThread();
 
 	try {
-		importCoreFunctions(state, base);	
-		importCoerceFunctions(state, base);	
-		loadLibrary(state, "library", "core");
-		//loadLibrary(state, "library", "base");
-		//loadLibrary(state, "library", "stats");
+		registerCoreFunctions(state);	
+		registerCoerceFunctions(state);	
+		loadLibrary(thread, "library", "core");
+		//loadLibrary(thread, "library", "base");
+		//loadLibrary(thread, "library", "stats");
 
 	} catch(RiposteError& error) { 
 		e_message("Error", "riposte", error.what().c_str());
@@ -264,13 +267,13 @@ main(int argc, char** argv)
 	} catch(CompileError& error) {
 		e_message("Error", "compiler", error.what().c_str());
 	}
-	if(state.warnings.size() > 0) {
-		std::cout << "There were " << intToStr(state.warnings.size()) << " warnings." << std::endl;
-		for(int64_t i = 0; i < (int64_t)state.warnings.size(); i++) {
-			std::cout << "(" << intToStr(i+1) << ") " << state.warnings[i] << std::endl;
+	if(thread.warnings.size() > 0) {
+		std::cout << "There were " << intToStr(thread.warnings.size()) << " warnings." << std::endl;
+		for(int64_t i = 0; i < (int64_t)thread.warnings.size(); i++) {
+			std::cout << "(" << intToStr(i+1) << ") " << thread.warnings[i] << std::endl;
 		}
 	}
-	state.warnings.clear();
+	thread.warnings.clear();
 	/* Either execute the specified file or read interactively from stdin  */
 
 	/* Load the file containing the script we are going to run */

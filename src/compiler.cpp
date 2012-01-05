@@ -137,14 +137,14 @@ int64_t Compiler::compileInternalFunctionCall(Object const& o, Prototype* code) 
 	List const& call = (List const&)(o.base());
 	int64_t liveIn = scopes.back().live();
 	Symbol func(call[0]);
-	std::map<String, int64_t>::const_iterator itr = state.sharedState.internalFunctionIndex.find(func);
-	if(itr == state.sharedState.internalFunctionIndex.end()) {
+	std::map<String, int64_t>::const_iterator itr = state.internalFunctionIndex.find(func);
+	if(itr == state.internalFunctionIndex.end()) {
 		_error(std::string("Unimplemented internal function ") + state.externStr(func));
 		//return compile(o, code);
 	}
 	int64_t function = itr->second;
 	// check parameter count
-	if(state.sharedState.internalFunctions[function].params != call.length-1)
+	if(state.internalFunctions[function].params != call.length-1)
 		_error(std::string("Incorrect number of arguments to internal function ") + state.externStr(func));
 	// compile parameters directly...reserve registers for them.
 	int64_t reg = liveIn;

@@ -11,6 +11,13 @@
 #include <sys/time.h>
 #include <stdio.h>
 
+#ifdef __GNUC__
+	#define ALWAYS_INLINE __attribute__((always_inline))
+#else
+	#define ALWAYS_INLINE
+#endif
+
+#define USE_THREADED_INTERPRETER
 #define TIMING
 
 static inline std::string rawToStr( unsigned char n )

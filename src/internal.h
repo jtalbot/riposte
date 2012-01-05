@@ -14,6 +14,8 @@
 using Eigen::MatrixXd;
 using Eigen::Map;
 
+void registerCoreFunctions(State& state);
+
 inline Value expression(Value const& v) { 
 	if(v.isPromise())
 		return Function(v).prototype()->expression;
@@ -26,7 +28,7 @@ inline double asReal1(Value const& v) {
 	else _error("Can't cast argument to number"); 
 }
 
-void Element(Value const& v, int64_t index, Value& out) __attribute__((always_inline));
+void Element(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 
 inline void ElementSlow(Object v, int64_t index, Value& out) {
 	Element(v.base(), index, out);
@@ -49,7 +51,7 @@ inline void Element(Value const& v, int64_t index, Value& out) {
 	};
 }
 
-void Element2(Value const& v, int64_t index, Value& out) __attribute__((always_inline));
+void Element2(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 
 inline void Element2Slow(Object const& v, int64_t index, Value& out) {
 	Element2(v.base(), index, out); 
@@ -78,9 +80,9 @@ inline void Element2(Value const& v, int64_t index, Value& out) {
 	};
 }
 
-void SubsetSlow(State& state, Value const& a, Value const& i, Value& out); 
+void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out); 
 
-inline void Subset(State& state, Value const& a, Value const& i, Value& out) {
+inline void Subset(Thread& thread, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble1() && i.d >= 1) {
 		Element(a, (int64_t)i.d-1, out);
 	}
@@ -88,11 +90,11 @@ inline void Subset(State& state, Value const& a, Value const& i, Value& out) {
 		Element(a, i.i-1, out);
 	}
 	else {
-		SubsetSlow(state, a, i, out);
+		SubsetSlow(thread, a, i, out);
 	}
 }
 
-inline void Subset2(State& state, Value const& a, Value const& i, Value& out) {
+inline void Subset2(Thread& thread, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble1() && i.d >= 1) {
 		Element2(a, (int64_t)i.d-1, out);
 		return;
@@ -115,7 +117,7 @@ inline void Subset2(State& state, Value const& a, Value const& i, Value& out) {
 	_error("Invalid subset index");
 }
 
-void ElementAssign(Value const& v, int64_t index, Value& out) __attribute__((always_inline));
+void ElementAssign(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 inline void ElementAssign(Value const& v, int64_t index, Value& out) {
 	switch(v.type) {
 		#define CASE(Name) case Type::Name: ((Name&)out)[index] = ((Name const&)v)[0]; break;
@@ -125,7 +127,7 @@ inline void ElementAssign(Value const& v, int64_t index, Value& out) {
 	};
 }
 
-void Element2Assign(Value const& v, int64_t index, Value& out) __attribute__((always_inline));
+void Element2Assign(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 inline void Element2Assign(Value const& v, int64_t index, Value& out) {
 	if(index < 0 || index > v.length) _error("Out-of-range index");
 	switch(v.type) {
@@ -139,10 +141,10 @@ inline void Element2Assign(Value const& v, int64_t index, Value& out) {
 	};
 }
 
-void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c);
-void Subset2AssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c);
+void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c);
+void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c);
  
-inline void SubsetAssign(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
+inline void SubsetAssign(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(!clone && a.type == b.type) {
 		if(i.isDouble1()) {
 			int64_t index = (int64_t)i.d-1;
@@ -161,10 +163,10 @@ inline void SubsetAssign(State& state, Value const& a, bool clone, Value const& 
 			}
 		}
 	}
-	SubsetAssignSlow(state, a, clone, i, b, c);
+	SubsetAssignSlow(thread, a, clone, i, b, c);
 }
 
-inline void Subset2Assign(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
+inline void Subset2Assign(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(!clone && a.type == b.type) {
 		if(i.isDouble1()) {
 			int64_t index = (int64_t)i.d-1;
@@ -183,36 +185,36 @@ inline void Subset2Assign(State& state, Value const& a, bool clone, Value const&
 			}
 		}
 	}
-	Subset2AssignSlow(state, a, clone, i, b, c);
+	Subset2AssignSlow(thread, a, clone, i, b, c);
 }
 
 
 template<class D>
-inline void Insert(State& state, D const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
+inline void Insert(Thread& thread, D const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
 	if((length > 0 && srcIndex+length > src.length) || dstIndex+length > dst.length)
 		_error("insert index out of bounds");
 	memcpy(dst.v()+dstIndex, src.v()+srcIndex, length*src.width);
 }
 
 template<class S, class D>
-inline void Insert(State& state, S const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
-	D as = As<D>(state, src);
-	Insert(state, as, srcIndex, dst, dstIndex, length);
+inline void Insert(Thread& thread, S const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
+	D as = As<D>(thread, src);
+	Insert(thread, as, srcIndex, dst, dstIndex, length);
 }
 
 template<class D>
-inline void Insert(State& state, Value const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
+inline void Insert(Thread& thread, Value const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
 	switch(src.type) {
-		#define CASE(Name) case Type::Name: Insert(state, (Name const&)src, srcIndex, dst, dstIndex, length); break;
+		#define CASE(Name) case Type::Name: Insert(thread, (Name const&)src, srcIndex, dst, dstIndex, length); break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: Insert into this type"); break;
 	};
 }
 
-inline void Insert(State& state, Value const& src, int64_t srcIndex, Value& dst, int64_t dstIndex, int64_t length) {
+inline void Insert(Thread& thread, Value const& src, int64_t srcIndex, Value& dst, int64_t dstIndex, int64_t length) {
 	switch(dst.type) {
-		#define CASE(Name) case Type::Name: { Insert(state, src, srcIndex, (Name&) dst, dstIndex, length); } break;
+		#define CASE(Name) case Type::Name: { Insert(thread, src, srcIndex, (Name&) dst, dstIndex, length); } break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: Insert into this type"); break;
@@ -220,10 +222,10 @@ inline void Insert(State& state, Value const& src, int64_t srcIndex, Value& dst,
 }
 
 template<class D>
-inline void Resize(State& state, bool clone, D& src, int64_t newLength, typename D::Element fill = D::NAelement) {
+inline void Resize(Thread& thread, bool clone, D& src, int64_t newLength, typename D::Element fill = D::NAelement) {
 	if(clone || newLength > src.length) {
 		D r(newLength);
-		Insert(state, src, 0, r, 0, std::min(src.length, newLength));
+		Insert(thread, src, 0, r, 0, std::min(src.length, newLength));
 		for(int64_t i = src.length; i < newLength; i++) r[i] = fill;	
 		src = r; 
 	} else if(newLength < src.length) {
@@ -233,9 +235,9 @@ inline void Resize(State& state, bool clone, D& src, int64_t newLength, typename
 	}
 }
 
-inline void Resize(State& state, bool clone, Value& src, int64_t newLength) {
+inline void Resize(Thread& thread, bool clone, Value& src, int64_t newLength) {
 	switch(src.type) {
-		#define CASE(Name) case Type::Name: { Resize(state, clone, src, newLength); } break;
+		#define CASE(Name) case Type::Name: { Resize(thread, clone, src, newLength); } break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: Resize this type"); break;
@@ -270,7 +272,7 @@ inline Double Sequence(double from, double by, double len) {
 	return r;
 }
 
-inline Character klass(State& state, Value const& v)
+inline Character klass(Thread& thread, Value const& v)
 {
 	Type::Enum type;
 	if(v.isObject()) {
@@ -288,26 +290,26 @@ inline Character klass(State& state, Value const& v)
 		c[0] = Strings::Numeric;
 	else if(type == Type::Symbol)
 		c[0] = Strings::Name;
-	else c[0] = state.internStr(Type::toString(type));
+	else c[0] = thread.internStr(Type::toString(type));
 	return c;
 }
 
-inline Value MatrixMultiply(State& state, Value const& a, Value const& b) {
+inline Value MatrixMultiply(Thread& thread, Value const& a, Value const& b) {
 	MatrixXd aa, bb;
 	if(a.isObject() && ((Object const&)a).hasDim()) {
-		Integer ai = As<Integer>(state, ((Object const&)a).getDim());
-		Double ad = As<Double>(state, ((Object const&)a).base());
+		Integer ai = As<Integer>(thread, ((Object const&)a).getDim());
+		Double ad = As<Double>(thread, ((Object const&)a).base());
 		aa = Map<MatrixXd>(ad.v(), ai[0], ai[1]);
 	} else {
-		Double ad = As<Double>(state, a);
+		Double ad = As<Double>(thread, a);
 		aa = Map<MatrixXd>(ad.v(), 1, a.length);
 	}
 	if(b.isObject() && ((Object const&)b).hasDim()) {
-		Integer bi = As<Integer>(state, ((Object const&)b).getDim());
-		Double bd = As<Double>(state, ((Object const&)b).base());
+		Integer bi = As<Integer>(thread, ((Object const&)b).getDim());
+		Double bd = As<Double>(thread, ((Object const&)b).base());
 		bb = Map<MatrixXd>(bd.v(), bi[0], bi[1]);
 	} else {
-		Double bd = As<Double>(state, b);
+		Double bd = As<Double>(thread, b);
 		bb = Map<MatrixXd>(bd.v(), b.length, 1);
 	}
 	Double c(aa.rows()*bb.cols());
