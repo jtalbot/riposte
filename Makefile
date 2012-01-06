@@ -2,8 +2,8 @@
 UNAME := $(shell uname -s)
  
 CXX := g++
-CXXFLAGS := -Wall -DRIPOSTE_DISABLE_TRACING -msse4.1 -I/opt/local/include
-LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g -ltbb
+CXXFLAGS := -Wall -DRIPOSTE_DISABLE_TRACING -msse4.1
+LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
 
 ifeq ($(UNAME),Linux)
 #for clock_gettime
@@ -21,7 +21,7 @@ AMD_LIBM_HOME=/opt/amdlibm-3-0-1-lin64
 ifeq ($(ENABLE_ARBB),0)
 	CXXFLAGS += -I/opt/local/include
 else
-	LFLAGS += -L$(ARBB_HOME)/lib/intel64 -larbb -ltbb
+	LFLAGS += -L$(ARBB_HOME)/lib/intel64 -larbb
 	CXXFLAGS += -I$(ARBB_HOME)/include
 endif
 
