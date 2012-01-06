@@ -793,7 +793,7 @@ struct TraceJIT {
 
 	typedef void (*fn) (uint64_t start, uint64_t end);
 	
-	static void executebody(void* args, uint64_t start, uint64_t end, Thread& thread) {
+	static void executebody(void* args, void* h, uint64_t start, uint64_t end, Thread& thread) {
 		//printf("%d: called with %d to %d\n", thread.index, start, end);
 		fn code = (fn)args;
 		code(start, end);	
@@ -804,12 +804,12 @@ struct TraceJIT {
 		if(thread.state.verbose) {
 			timespec begin;
 			get_time(begin);
-			thread.doall(executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
+			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
 			//trace_code(0, trace->length);
 			double s = time_elapsed(begin) / trace->length * 1024.0 * 1024.0 * 1024.0;
 			printf("trace elapsed %fns\n",s);
 		} else {
-			thread.doall(executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
+			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
 			//trace_code(0, trace->length);
 		}
 	}

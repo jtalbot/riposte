@@ -399,10 +399,12 @@ struct State {
 // Per-thread state 
 ///////////////////////////////////////////////////////////////////
 
-typedef void (*TaskFunctionPtr)(void* args, uint64_t a, uint64_t b, Thread& thread);
+typedef void* (*TaskHeaderPtr)(void* args, uint64_t a, uint64_t b, Thread& thread);
+typedef void (*TaskFunctionPtr)(void* args, void* header, uint64_t a, uint64_t b, Thread& thread);
 
 struct Thread {
 	struct Task {
+		TaskHeaderPtr header;
 		TaskFunctionPtr func;
 		void* args;
 		uint64_t a;	// start of range [a <= x < b]
@@ -411,8 +413,8 @@ struct Thread {
 		uint64_t ppt;
 		int* done;
 		Task() : func(0), args(0), done(0) {}
-		Task(TaskFunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment, uint64_t ppt) 
-			: func(func), args(args), a(a), b(b), alignment(alignment), ppt(ppt) {
+		Task(TaskHeaderPtr header, TaskFunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment, uint64_t ppt) 
+			: header(header), func(func), args(args), a(a), b(b), alignment(alignment), ppt(ppt) {
 			done = new int(1);
 		}
 	};
@@ -434,10 +436,11 @@ struct Thread {
 
 	std::deque<Task> tasks;
 	Lock tasksLock;
+	int steals;
 
 	int64_t assignment[64], set[64]; // temporary space for matching arguments
 	
-	Thread(State& state, uint64_t index) : state(state), index(index) {
+	Thread(State& state, uint64_t index) : state(state), index(index), steals(1) {
 		registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
 		this->base = registers + DEFAULT_NUM_REGISTERS;
 	}
@@ -468,22 +471,14 @@ struct Thread {
 	Value eval(Prototype const* prototype, Environment* environment); 
 	Value eval(Prototype const* prototype);
 	
-	void doall(TaskFunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment=1, uint64_t ppt = 1) {
-		//printf("%d: in doall\n", index);
+	void doall(TaskHeaderPtr header, TaskFunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment=1, uint64_t ppt = 1) {
 		if(a < b && func != 0) {
 			uint64_t tmp = ppt+alignment-1;
 			ppt = std::max(1ULL, tmp - (tmp % alignment));
 
-			// avoid an extra enqueue (expensive on leaf nodes) and the possibility of
-			// of an unnecessary steal by directly executing task rather than queueing
-			// and then unqueueing.
-
-			Task t(func, args, a, b, alignment, ppt);
-				
-			tasksLock.acquire();
-			tasks.push_front(t);
-			tasksLock.release();
-			//printf("%d: queued up\n", index);	
+			Task t(header, func, args, a, b, alignment, ppt);
+			run(t);
+	
 			while(fetch_and_add(t.done, 0) != 0) {
 				Task s;
 				if(dequeue(s) || steal(s)) run(s);
@@ -493,6 +488,7 @@ struct Thread {
 		}
 	}
 
+private:
 	void loop() {
 		while(fetch_and_add(&(state.done), 0) == 0) {
 			// pull stuff off my queue and run
@@ -505,31 +501,30 @@ struct Thread {
 	}
 
 	void run(Task& t) {
+		void* h = t.header != NULL ? t.header(t.args, t.a, t.b, *this) : 0;
 		while(t.a < t.b) {
 			// check if we need to relinquish some of our chunk...
-			if((t.b-t.a) > t.ppt) {
-				tasksLock.acquire();
-				if(tasks.size() == 0) {
-					Task n = t;
-					uint64_t half = split(t);
-					t.b = half;
-					n.a = half;
-					if(n.a < n.b) {
-						fetch_and_add(n.done, 1); 
-						//printf("Thread %d relinquishing %d (%d %d) (%d)\n", index, n.b-n.a, t.a, t.b, a);
-						tasks.push_front(n);
-					}
+			int s = fetch_and_add(&steals, 0);
+			fetch_and_add(&steals, -s);	// we might miss an update here. that's ok, we'll get it next time.
+			if(s > 0 && (t.b-t.a) > t.ppt) {
+				Task n = t;
+				uint64_t half = split(t);
+				t.b = half;
+				n.a = half;
+				if(n.a < n.b) {
+					//printf("Thread %d relinquishing %d (%d %d)\n", index, n.b-n.a, t.a, t.b);
+					tasksLock.acquire();
+					fetch_and_add(t.done, 1); 
+					tasks.push_front(n);
+					tasksLock.release();
 				}
-				tasksLock.release();
 			}
-			t.func(t.args, t.a, std::min(t.a+t.ppt,t.b), *this);
+			t.func(t.args, h, t.a, std::min(t.a+t.ppt,t.b), *this);
 			t.a += t.ppt;
 		}
 		//printf("Thread %d finished %d %d (%d)\n", index, t.a, t.b, t.done);
 		fetch_and_add(t.done, -1);
 	}
-
-private:
 
 	uint64_t split(Task const& t) {
 		uint64_t half = (t.a+t.b)/2;
@@ -541,23 +536,10 @@ private:
 	}
 
 	bool dequeue(Task& out) {
-		// if only one task and size is larger than ppt in queue pull half
-		// otherwise pull the whole thing
 		tasksLock.acquire();
 		if(tasks.size() >= 1) {
 			out = tasks.front();
-			if(tasks.size() == 1 && (out.b-out.a) > out.ppt) {
-				uint64_t half = split(out);
-				//printf("Thread %d dequeuing and splitting (%d %d %d) (%d)\n", index, out.a, half, out.b, out.done);
-				out.b = half;
-				tasks.front().a = half;
-				fetch_and_add(tasks.front().done, 1); 
-				// wake a sleeping thread
-			}
-			else {
-				//printf("Thread %d dequeuing the whole thing (%d %d) (%d)\n", index, out.a, out.b, out.done);
-				tasks.pop_front();
-			}
+			tasks.pop_front();
 			tasksLock.release();
 			return true;
 		}
@@ -573,21 +555,12 @@ private:
 				Thread& t = *(state.threads[i]);
 				t.tasksLock.acquire();
 				if(t.tasks.size() > 0) {
-				//printf("Thread %d stealing from %d\n", index, t.index);
 					out = t.tasks.back();
 					t.tasks.pop_back();
 					t.tasksLock.release();
-					if(out.b-out.a > out.ppt) {
-						uint64_t half = split(out);
-						tasksLock.acquire();
-						tasks.push_front(out);
-						out.b = half;
-						tasks.front().a = half;
-						fetch_and_add(tasks.front().done, 1);
-						tasksLock.release();
-					}
 					found = true;
 				} else {
+					fetch_and_add(&t.steals,1);
 					t.tasksLock.release();
 				}
 			}

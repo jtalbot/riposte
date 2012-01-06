@@ -590,13 +590,18 @@ struct lapplyargs {
 	Value func;
 };
 
-void lapplybody(void* args, uint64_t start, uint64_t end, Thread& thread) {
+void* lapplyheader(void* args, uint64_t start, uint64_t end, Thread& thread) {
 	lapplyargs& l = *(lapplyargs*)args;
-	//printf("lapplybody called with %d to %d\n", start, end);
 	List apply(2);
 	apply[0] = l.func;
 	apply[1] = Value::Nil();
 	Prototype* p = Compiler::compile(thread.state, CreateCall(apply));
+	return p;
+}
+
+void lapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& thread) {
+	lapplyargs& l = *(lapplyargs*)args;
+	Prototype* p = (Prototype*) header;
 	for( size_t i=start; i!=end; ++i ) {
 		p->calls[0].arguments[0] = l.in[i];
 		l.out[i] = thread.eval(p);
@@ -642,7 +647,7 @@ void lapply(Thread& thread, Value const* args, Value& result) {
 	*/
 
 	lapplyargs a1 = (lapplyargs) {x, r, func};
-	thread.doall(lapplybody, &a1, 0, x.length, 1, 1); 
+	thread.doall(lapplyheader, lapplybody, &a1, 0, x.length, 1, 1); 
 
 	result = r;
 }

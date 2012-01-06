@@ -39,7 +39,7 @@ static inline void sleep() {
 	struct timespec sleepTime;
 	struct timespec returnTime;
 	sleepTime.tv_sec = 0;
-	sleepTime.tv_nsec = 1000000;
+	sleepTime.tv_nsec = 5000000;
 	nanosleep(&sleepTime, &returnTime);
 }
 
