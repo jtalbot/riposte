@@ -249,7 +249,7 @@ main(int argc, char** argv)
 	Environment* base = new Environment(0);
 	Environment* global = new Environment(base);
 
-	State state(4, global, base);
+	State state(1, global, base);
 	state.verbose = verbose;
 	Thread& thread = state.getMainThread();
 

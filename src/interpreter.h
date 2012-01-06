@@ -508,9 +508,14 @@ private:
 			int64_t s = atomic_xchg(&steals, 0);
 			if(s > 0 && (t.b-t.a) > t.ppt) {
 				Task n = t;
-				uint64_t half = split(t);
-				t.b = half;
-				n.a = half;
+				if((t.b-t.a) > t.ppt*4) {
+					uint64_t half = split(t);
+					t.b = half;
+					n.a = half;
+				} else {
+					t.b = t.a+t.ppt;
+					n.a = t.a+t.ppt;
+				}
 				if(n.a < n.b) {
 					//printf("Thread %d relinquishing %d (%d %d)\n", index, n.b-n.a, t.a, t.b);
 					tasksLock.acquire();
