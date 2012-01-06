@@ -822,7 +822,7 @@ void traceconfig(Thread & thread, Value const* args, Value& result) {
 	if(c.length == 0) _error("condition is of zero length");
 	//thread.tracing.config = (TraceThread::Mode) c[0];
 		
-	std::vector<Thread*>& threads = thread.state.threads;
+	std::vector<Thread*, traceable_allocator<Thread*> >& threads = thread.state.threads;
 	for(uint64_t i = 0; i < threads.size(); i++) {
 		threads[i]->tracing.config = (TraceThread::Mode) c[0];
 	}

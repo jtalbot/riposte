@@ -357,7 +357,7 @@ struct State {
 	std::vector<Environment*, traceable_allocator<Environment*> > path;
 	Environment* global;
 
-	std::vector<Thread*> threads;
+	std::vector<Thread*, traceable_allocator<Thread*> > threads;
 
 	bool verbose;
 
@@ -369,6 +369,7 @@ struct State {
 		fetch_and_add(&done, 1);
 		while(fetch_and_add(&done, 0) != (int64_t)threads.size()) { sleep(); }
 	}
+
 
 	Thread& getMainThread() const {
 		return *threads[0];
@@ -577,7 +578,7 @@ inline State::State(uint64_t threads, Environment* global, Environment* base) : 
 	pthread_attr_setscope (&attr, PTHREAD_SCOPE_SYSTEM);
 	pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
 
-	Thread* t = new Thread(*this, 0);
+	Thread* t = new (GC) Thread(*this, 0);
 	this->threads.push_back(t);
 
 	for(uint64_t i = 1; i < threads; i++) {

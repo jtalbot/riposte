@@ -6,10 +6,6 @@
 #include <assert.h>
 #include <limits>
 
-#define GC_THREADS
-#include <gc/gc_cpp.h>
-#include <gc/gc_allocator.h>
-
 #include "common.h"
 #include "type.h"
 #include "bc.h"
