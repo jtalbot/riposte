@@ -361,13 +361,13 @@ struct State {
 
 	bool verbose;
 
-	int done;
+	int64_t done;
 
 	State(uint64_t threads, Environment* global, Environment* base);
 
 	~State() {
 		fetch_and_add(&done, 1);
-		while(fetch_and_add(&done, 0) != threads.size()) { sleep(); }
+		while(fetch_and_add(&done, 0) != (int64_t)threads.size()) { sleep(); }
 	}
 
 	Thread& getMainThread() const {
@@ -411,11 +411,11 @@ struct Thread {
 		uint64_t b;	// end
 		uint64_t alignment;
 		uint64_t ppt;
-		int* done;
+		int64_t* done;
 		Task() : func(0), args(0), done(0) {}
 		Task(TaskHeaderPtr header, TaskFunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment, uint64_t ppt) 
 			: header(header), func(func), args(args), a(a), b(b), alignment(alignment), ppt(ppt) {
-			done = new int(1);
+			done = new int64_t(1);
 		}
 	};
 
@@ -436,7 +436,7 @@ struct Thread {
 
 	std::deque<Task> tasks;
 	Lock tasksLock;
-	int steals;
+	int64_t steals;
 
 	int64_t assignment[64], set[64]; // temporary space for matching arguments
 	
@@ -504,8 +504,7 @@ private:
 		void* h = t.header != NULL ? t.header(t.args, t.a, t.b, *this) : 0;
 		while(t.a < t.b) {
 			// check if we need to relinquish some of our chunk...
-			int s = fetch_and_add(&steals, 0);
-			fetch_and_add(&steals, -s);	// we might miss an update here. that's ok, we'll get it next time.
+			int64_t s = atomic_xchg(&steals, 0);
 			if(s > 0 && (t.b-t.a) > t.ppt) {
 				Task n = t;
 				uint64_t half = split(t);
