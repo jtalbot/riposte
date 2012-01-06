@@ -491,7 +491,7 @@ public:
 	uint64_t find(String s) const {
 		uint64_t i = hash(s) & (size-1);
 		uint64_t j = 1;
-		while(d[i].n != s & d[i].n != Strings::NA) i = (i+(j++)) & (size-1);
+		while((d[i].n != s) & (d[i].n != Strings::NA)) i = (i+(j++)) & (size-1);
 		assert(i >= 0 && i < size);
 		return i; 
 	}

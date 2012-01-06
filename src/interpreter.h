@@ -474,7 +474,7 @@ struct Thread {
 	void doall(TaskHeaderPtr header, TaskFunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment=1, uint64_t ppt = 1) {
 		if(a < b && func != 0) {
 			uint64_t tmp = ppt+alignment-1;
-			ppt = std::max(1ULL, tmp - (tmp % alignment));
+			ppt = std::max((uint64_t)1, tmp - (tmp % alignment));
 
 			Task t(header, func, args, a, b, alignment, ppt);
 			run(t);
