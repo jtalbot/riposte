@@ -2,8 +2,9 @@
 #ifndef _RIPOSTE_SYMBOLS_H
 #define _RIPOSTE_SYMBOLS_H
 
-#include <tbb/tbb.h>
+#include <map>
 #include "enum.h"
+#include "thread.h"
 
 // predefined strings
 
@@ -144,33 +145,31 @@ namespace Strings {
        #undef CONST_DECLARE
 }
 
-struct StringHash {
-	size_t operator()( const String& x ) const {
-		return x.i>>3;
-	} 
-};
-
+// TODO: Make this use a good concurrent map implementation 
 class StringTable {
-	//std::map<std::string, String> stringTable;
-	tbb::concurrent_unordered_map<std::string, String> stringTable;
+	std::map<std::string, String> stringTable;
+	Lock lock;
 public:
 	StringTable() {
 	#define ENUM_STRING_TABLE(name, string) \
-		stringTable[string] = Strings::name; \
-
+		stringTable[string] = Strings::name; 
 		STRINGS(ENUM_STRING_TABLE);
 	}
 
 	String in(std::string const& s) {
-		//std::map<std::string, String>::const_iterator i = stringTable.find(s);
-		tbb::concurrent_unordered_map<std::string, String, StringHash>::const_iterator i = stringTable.find(s);
+		lock.acquire();
+		std::map<std::string, String>::const_iterator i = stringTable.find(s);
 		if(i == stringTable.end()) {
 			char* str = new char[s.size()+1];
 			memcpy(str, s.c_str(), s.size()+1);
 			String string = String::Init(str);
 			stringTable[s] = string;
+			lock.release();
 			return string;
-		} else return i->second;
+		} else {
+			lock.release();
+			return i->second;
+		}
 	}
 
 	std::string out(String i) const {

@@ -474,7 +474,7 @@ inline String SymbolStr(Value const& v) {
 
 class Dictionary : public gc {
 protected:
-	static const uint64_t inlineSize = 8;
+	static const uint64_t inlineSize = 16;
 	struct Pair { String n; String cn; Value v; };
 	uint64_t size, load;
 	Pair* d;
@@ -487,20 +487,21 @@ public:
 
 	uint64_t hash(String s) const { return (uint64_t)s.i>>3; }
 	
-	// for now, do linear probing
-	// this returns the location of the String s.
-	// or, if s doesn't exist, the location at which s should be inserted.
+	// simple quadratic probing
 	uint64_t find(String s) const {
-		uint64_t i = hash(s) & (size-1);	// hash this?
-		while(d[i].n != s & d[i].n != Strings::NA) i = (i+1) & (size-1);
+		uint64_t i = hash(s) & (size-1);
+		uint64_t j = 1;
+		while(d[i].n != s & d[i].n != Strings::NA) i = (i+(j++)) & (size-1);
 		assert(i >= 0 && i < size);
 		return i; 
 	}
 
 	bool fastAssign(String name, Value const& value) ALWAYS_INLINE {
-		uint64_t i = hash(name) & (size-1);	// hash this?
+		uint64_t i = hash(name) & (size-1);
 		if(__builtin_expect(d[i].cn == name, true)) { d[i].v = value; return true; }
 		i = (i+1) & (size-1);
+		if(__builtin_expect(d[i].cn == name, true)) { d[i].v = value; return true; }
+		i = (i+2) & (size-1);
 		if(__builtin_expect(d[i].cn == name, true)) { d[i].v = value; return true; }
 		return false;
 	}
@@ -520,9 +521,11 @@ public:
 	}
 
 	bool fastGet(String name, Value& out) ALWAYS_INLINE {
-		uint64_t i = hash(name) & (size-1);	// hash this?
+		uint64_t i = hash(name) & (size-1);
 		if(__builtin_expect(d[i].cn == name, true)) { out = d[i].v; return true; }
 		i = (i+1) & (size-1);
+		if(__builtin_expect(d[i].cn == name, true)) { out = d[i].v; return true; }
+		i = (i+2) & (size-1);
 		if(__builtin_expect(d[i].cn == name, true)) { out = d[i].v; return true; }
 		return false;
 	}
