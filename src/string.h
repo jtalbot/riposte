@@ -25,7 +25,6 @@
 	_(Promise, 	"promise") 	\
 	_(Nil,		"nil")		\
 	/* Now all other strings */	\
-	_(NA, 		"<NA>") /* this should have the same string representation as something else so it will be masked in the string table. */ \
 	_(NArep, 	"<NA>") \
 	_(empty, 	"") \
 	_(dots, 	"...") \
@@ -140,9 +139,10 @@ struct String {
 };
 
 namespace Strings {
-       #define CONST_DECLARE(name, string, ...) static const ::String name = String::Init(string);
-       STRINGS(CONST_DECLARE)
-       #undef CONST_DECLARE
+	static const ::String NA = String::Init(0);
+#define CONST_DECLARE(name, string, ...) static const ::String name = String::Init(string);
+	STRINGS(CONST_DECLARE)
+#undef CONST_DECLARE
 }
 
 // TODO: Make this use a good concurrent map implementation 
