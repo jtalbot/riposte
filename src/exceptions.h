@@ -32,7 +32,7 @@ public:
 	std::string what() const { return message; }
 };
 
-#define THROW_TO_GDB
+//#define THROW_TO_GDB
 #ifdef THROW_TO_GDB
 #include<stdio.h>
 #include<sys/types.h>
