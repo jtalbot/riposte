@@ -807,10 +807,6 @@ static void printCode(Thread const& thread, Prototype const* prototype) {
 	std::cout << r << std::endl;
 }
 
-#ifdef USE_THREADED_INTERPRETER
-static const void** glabels = 0;
-#endif
-
 static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc) {
 	//printCode(thread, prototype);
 	StackFrame& s = thread.push();
@@ -830,7 +826,7 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 	{
 		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); ++i) {
 			Instruction const& inst = prototype->bc[i];
-			inst.ibc = glabels[inst.bc];
+			inst.ibc = thread.labels[inst.bc];
 		}
 	}
 #endif
@@ -847,7 +843,7 @@ void interpret(Thread& thread, Instruction const* pc) {
 	if(pc == 0) { 
     		#define LABELS_THREADED(name,type,...) (void*)&&name##_label,
 		static const void* labels[] = {BYTECODES(LABELS_THREADED)};
-		glabels = labels;
+		thread.labels = labels;
 		return;
 	}
 
@@ -868,10 +864,12 @@ void interpret(Thread& thread, Instruction const* pc) {
 #endif
 }
 
-// ensure glabels is inited before we need it.
-void State::interpreter_init(Thread& thread) {
+Thread::Thread(State& state, uint64_t index) : state(state), index(index), steals(1) {
+	registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
+	this->base = registers + DEFAULT_NUM_REGISTERS;
 #ifdef USE_THREADED_INTERPRETER
-	interpret(thread, 0);
+	// ensure labels is inited before we need it.
+	interpret(*this, 0);
 #endif
 }
 
@@ -886,7 +884,7 @@ Value Thread::eval(Prototype const* prototype) {
 Value Thread::eval(Prototype const* prototype, Environment* environment) {
 	Instruction done(ByteCode::done);
 #ifdef USE_THREADED_INTERPRETER
-	done.ibc = glabels[ByteCode::done];
+	done.ibc = labels[ByteCode::done];
 #endif
 	Value* old_base = base;
 	int64_t stackSize = stack.size();
