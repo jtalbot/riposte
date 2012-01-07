@@ -53,7 +53,7 @@ template<class O>
 O As(Thread& thread, Value const& src) {
 	O out;
 	As<O>(thread, src, out);
-	return O(out);
+	return out;
 }
 
 inline Value As(Thread& thread, Type::Enum type, Value const& src) {

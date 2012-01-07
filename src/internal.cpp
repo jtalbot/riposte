@@ -585,7 +585,7 @@ void eval_fn(Thread& thread, Value const* args, Value& result) {
 }
 
 struct lapplyargs {
-	List& in;
+	Value& in;
 	List& out;
 	Value func;
 };
@@ -603,14 +603,18 @@ void lapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& 
 	lapplyargs& l = *(lapplyargs*)args;
 	Prototype* p = (Prototype*) header;
 	for( size_t i=start; i!=end; ++i ) {
-		p->calls[0].arguments[0] = l.in[i];
+		Value e;
+		Element2(l.in, i, e);
+		p->calls[0].arguments[0] = e;
 		l.out[i] = thread.eval(p);
 	}
 	//return 0;
 }
 
 void lapply(Thread& thread, Value const* args, Value& result) {
-	List x = As<List>(thread, args[0]);
+	if(!args[0].isVector())
+		_error("Invalid type for argument to lapply");
+	Value x = args[0];
 	Value func = args[1];
 	List r(x.length);
 
