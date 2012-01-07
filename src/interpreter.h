@@ -348,7 +348,7 @@ struct TraceThread {
 // Global shared state 
 ///////////////////////////////////////////////////////////////////
 
-struct State {
+struct State : public gc {
 	StringTable strings;
 	
 	std::vector<InternalFunction> internalFunctions;
@@ -403,8 +403,8 @@ struct State {
 typedef void* (*TaskHeaderPtr)(void* args, uint64_t a, uint64_t b, Thread& thread);
 typedef void (*TaskFunctionPtr)(void* args, void* header, uint64_t a, uint64_t b, Thread& thread);
 
-struct Thread {
-	struct Task {
+struct Thread : public gc {
+	struct Task : public gc {
 		TaskHeaderPtr header;
 		TaskFunctionPtr func;
 		void* args;
@@ -416,7 +416,7 @@ struct Thread {
 		Task() : func(0), args(0), done(0) {}
 		Task(TaskHeaderPtr header, TaskFunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment, uint64_t ppt) 
 			: header(header), func(func), args(args), a(a), b(b), alignment(alignment), ppt(ppt) {
-			done = new int64_t(1);
+			done = new (GC) int64_t(1);
 		}
 	};
 
@@ -485,7 +485,6 @@ struct Thread {
 				if(dequeue(s) || steal(s)) run(s);
 				else sleep(); 
 			}
-			delete t.done;
 		}
 	}
 
