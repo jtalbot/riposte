@@ -844,9 +844,9 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 void interpret(Thread& thread, Instruction const* pc) {
 
 #ifdef USE_THREADED_INTERPRETER
-    #define LABELS_THREADED(name,type,...) (void*)&&name##_label,
-	static const void* labels[] = {BYTECODES(LABELS_THREADED)};
 	if(pc == 0) { 
+    		#define LABELS_THREADED(name,type,...) (void*)&&name##_label,
+		static const void* labels[] = {BYTECODES(LABELS_THREADED)};
 		glabels = labels;
 		return;
 	}
@@ -884,9 +884,9 @@ Value Thread::eval(Prototype const* prototype) {
 }
 
 Value Thread::eval(Prototype const* prototype, Environment* environment) {
-	static const Instruction* done = new Instruction(ByteCode::done);
+	Instruction done(ByteCode::done);
 #ifdef USE_THREADED_INTERPRETER
-	done->ibc = glabels[ByteCode::done];
+	done.ibc = glabels[ByteCode::done];
 #endif
 	Value* old_base = base;
 	int64_t stackSize = stack.size();
@@ -899,7 +899,7 @@ Value Thread::eval(Prototype const* prototype, Environment* environment) {
 	base -= 1;
 	Value* result = base;
 	
-	Instruction const* run = buildStackFrame(*this, environment, false, prototype, result, done);
+	Instruction const* run = buildStackFrame(*this, environment, false, prototype, result, &done);
 	try {
 		interpret(*this, run);
 		base = old_base;
