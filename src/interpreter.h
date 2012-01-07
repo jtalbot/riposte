@@ -381,6 +381,8 @@ struct State : public gc {
 		internalFunctionIndex[s] = internalFunctions.size()-1;
 	}
 
+	void interpreter_init(Thread& state);
+	
 	std::string stringify(Value const& v) const;
 	std::string stringify(Trace const & t) const;
 	std::string deparse(Value const& v) const;
@@ -438,10 +440,11 @@ struct Thread : public gc {
 	int64_t steals;
 
 	int64_t assignment[64], set[64]; // temporary space for matching arguments
-
-	const void** labels;
 	
-	Thread(State& state, uint64_t index);
+	Thread(State& state, uint64_t index) : state(state), index(index), steals(1) {
+		registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
+		this->base = registers + DEFAULT_NUM_REGISTERS;
+	}
 
 	StackFrame& push() {
 		stack.push_back(frame);
@@ -596,6 +599,8 @@ inline State::State(uint64_t threads, Environment* global, Environment* base) : 
 		pthread_create (&t->thread, &attr, Thread::start, t);
 		this->threads.push_back(t);
 	}
+
+	interpreter_init(getMainThread());
 }
 
 #endif
