@@ -30,7 +30,7 @@ ifneq ($(ENABLE_LIBM),0)
 	LFLAGS += -L$(AMD_LIBM_HOME)/lib/dynamic -lamdlibm
 endif
 
-SRC := main.cpp type.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp ir.cpp recording.cpp trace.cpp trace_interpret.cpp trace_compile.cpp assembler-x64.cpp 
+SRC := main.cpp type.cpp string.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp ir.cpp recording.cpp trace.cpp trace_interpret.cpp trace_compile.cpp assembler-x64.cpp 
 
 EXECUTABLE := bin/riposte
 

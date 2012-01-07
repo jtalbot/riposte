@@ -3,7 +3,7 @@
 #define _RIPOSTE_SYMBOLS_H
 
 #include <map>
-#include "enum.h"
+#include "common.h"
 #include "thread.h"
 
 // predefined strings
@@ -139,10 +139,10 @@ struct String {
 };
 
 namespace Strings {
-	static const ::String NA = String::Init(0);
-#define CONST_DECLARE(name, string, ...) static const ::String name = String::Init(string);
-	STRINGS(CONST_DECLARE)
-#undef CONST_DECLARE
+	static const String NA = String::Init(0);
+#define DECLARE(name, string, ...) extern String name;
+	STRINGS(DECLARE)
+#undef DECLARE
 }
 
 // TODO: Make this use a good concurrent map implementation 
@@ -151,6 +151,9 @@ class StringTable {
 	Lock lock;
 public:
 	StringTable() {
+	#define ENUM_STRINGS(name, string) \
+		Strings::name = String::Init(string); 
+		STRINGS(ENUM_STRINGS);
 	#define ENUM_STRING_TABLE(name, string) \
 		stringTable[string] = Strings::name; 
 		STRINGS(ENUM_STRING_TABLE);
