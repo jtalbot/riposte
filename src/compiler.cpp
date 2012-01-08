@@ -66,6 +66,11 @@ int64_t Compiler::emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b,
 	return code->bc.size()-1;
 }
 
+int64_t Compiler::emit(Prototype* code, ByteCode::Enum bc, String s, int64_t b, int64_t c) {
+	code->bc.push_back(Instruction(bc, s, b, c));
+	return code->bc.size()-1;
+}
+
 static void resolveLoopReferences(Prototype* code, int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget) {
 	for(int64_t i = start; i < end; i++) {
 		if(code->bc[i].bc == ByteCode::jmp && code->bc[i].a == 0 && code->bc[i].b == 1) {
@@ -86,8 +91,8 @@ int64_t Compiler::compileConstant(Value const& expr, Prototype* code) {
 int64_t Compiler::compileSymbol(Value const& symbol, Prototype* code) {
 	int64_t reg = scopes.back().allocRegister(Register::VARIABLE);
 	String s = SymbolStr(symbol);
-	emit(code, ByteCode::get, s.i, 0, reg);
-	emit(code, ByteCode::assign, s.i, 0, reg);
+	emit(code, ByteCode::get, s, 0, reg);
+	emit(code, ByteCode::assign, s, 0, reg);
 	return reg;
 }
 
@@ -204,7 +209,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		// the source for the assignment
 		int64_t source = compile(value, code);
 
-		emit(code, func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, SymbolStr(dest).i, 0, source);
+		emit(code, func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, SymbolStr(dest), 0, source);
 	
 		scopes.back().deadAfter(source);
 		return source;
@@ -300,7 +305,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			result = compile(call[1], code);
 		else
 			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
-		emit(code, ByteCode::ret, 0, 0, result);
+		emit(code, ByteCode::ret, (int64_t)0, (int64_t)0, result);
 		scopes.back().deadAfter(result);
 		return result;
 	} 
@@ -329,11 +334,11 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			int64_t loop_variable = scopes.back().allocRegister(Register::VARIABLE);
 			
 			if(loop_counter != loop_vector+1) throw CompileError("limits aren't in adjacent registers");
-			emit(code, ByteCode::forbegin, 0, loop_counter, loop_variable);
+			emit(code, ByteCode::forbegin, (int64_t)0, loop_counter, loop_variable);
 			loopDepth++;
 			int64_t beginbody = code->bc.size();
 
-			emit(code, ByteCode::assign, SymbolStr(call[1]).i, 0, loop_variable);
+			emit(code, ByteCode::assign, SymbolStr(call[1]), 0, loop_variable);
 			compile(call[3], code);
 
 			int64_t endbody = code->bc.size();
@@ -349,7 +354,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	else if(func == Strings::whileSym)
 	{
 		int64_t head_condition = compile(call[1], code);
-		emit(code, ByteCode::jf, 0, head_condition, liveIn);
+		emit(code, ByteCode::jf, (int64_t)0, head_condition, liveIn);
 		loopDepth++;
 		
 		int64_t beginbody = code->bc.size();
@@ -386,14 +391,14 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	{
 		if(loopDepth == 0) throw CompileError("next used outside of loop");
 		int64_t result = scopes.back().allocRegister(Register::TEMP);	
-		emit(code, ByteCode::jmp, 0, 1, result);
+		emit(code, ByteCode::jmp, (int64_t)0, (int64_t)1, result);
 		return result;
 	} 
 	else if(func == Strings::breakSym)
 	{
 		if(loopDepth == 0) throw CompileError("break used outside of loop");
 		int64_t result = scopes.back().allocRegister(Register::TEMP);	
-		emit(code, ByteCode::jmp, 0, 2, result);
+		emit(code, ByteCode::jmp, (int64_t)0, (int64_t)2, result);
 		return result;
 	} 
 	else if(func == Strings::ifSym) 
@@ -404,13 +409,13 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		if(call.length == 3)
 			resultF = compile(Null::Singleton(), code);
 		int64_t cond = compile(call[1], code);
-		emit(code, ByteCode::jf, 0, cond, liveIn);
+		emit(code, ByteCode::jf, (int64_t)0, cond, liveIn);
 		int64_t begin1 = code->bc.size(), begin2 = 0;
 		scopes.back().deadAfter(liveIn);
 		resultT = compile(call[2], code);
 		
 		if(call.length == 4) {
-			emit(code, ByteCode::jmp, 0, 0, 0);
+			emit(code, ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0);
 			scopes.back().deadAfter(liveIn);
 			begin2 = code->bc.size();
 			resultF = compile(call[3], code);
@@ -434,13 +439,13 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t n = call.length-2;
 		int64_t branch = emit(code, ByteCode::branch, c, n, 0);
 		for(int64_t i = 2; i < call.length; i++) {
-			emit(code, ByteCode::branch, (int64_t)(names.length > i ? names[i].i : Strings::empty.i), 0, 0);
+			emit(code, ByteCode::branch, (names.length > i ? names[i] : Strings::empty), 0, 0);
 		}
 		scopes.back().deadAfter(liveIn);
 		
 		std::vector<int64_t> jmps;
 		int64_t result = compile(Null::Singleton(), code);
-		jmps.push_back(emit(code, ByteCode::jmp, 0, 0, 0));	
+		jmps.push_back(emit(code, ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0));	
 		
 		for(int64_t i = 1; i <= n; i++) {
 			code->bc[branch+i].c = code->bc.size()-branch;
@@ -449,7 +454,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 				int64_t r = compile(call[i+1], code);
 				if(r != result) throw CompileError(std::string("switch statement doesn't put all its results in the same register"));
 				if(i < n)
-					jmps.push_back(emit(code, ByteCode::jmp, 0, 0, 0));
+					jmps.push_back(emit(code, ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0));
 			} else if(i == n) {
 				compile(Null::Singleton(), code);
 			}
@@ -610,7 +615,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		for(int64_t i = 0; i < p.length; i++) gcall[i+1] = CreateSymbol(p[i]);
 		code->calls.push_back(makeCall(gcall, Character(0)));
 	
-		emit(code, ByteCode::UseMethod, generic.i, code->calls.size()-1, object);
+		emit(code, ByteCode::UseMethod, generic, code->calls.size()-1, object);
 		scopes.back().deadAfter(object);
 		return object;
 	} 
@@ -651,7 +656,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		if(!isSymbol(call[1]) && !call[1].isCharacter1()) _error("wrong parameter to missing");
 		String s = SymbolStr(call[1]);
 		int64_t result = scopes.back().allocRegister(Register::TEMP);
-		emit(code, ByteCode::missing, s.i, 0, result); 
+		emit(code, ByteCode::missing, s, 0, result); 
 		scopes.back().deadAfter(result);
 		return result;
 	} 
@@ -740,7 +745,7 @@ Prototype* Compiler::compile(Value const& expr) {
 	code->registers = scopes.back().maxRegister+1;
 	code->expression = expr;
 	// insert return statement at end of code
-	emit(code, ByteCode::ret, 0, 0, result);
+	emit(code, ByteCode::ret, (int64_t)0, (int64_t)0, result);
 	
 	oldRegisters.swap(scopes.back().registers);
 	scopes.back().maxRegister = oldMaxRegister;	

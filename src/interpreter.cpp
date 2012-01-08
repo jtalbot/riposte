@@ -32,7 +32,7 @@ static void ExpandDots(Thread& thread, List& arguments, Character& names, int64_
 	if(dots < arguments.length) {
 		List a(arguments.length + dotslength - 1);
 		for(int64_t i = 0; i < dots; i++) a[i] = arguments[i];
-		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(thread.state, CreateSymbol(String::Init((char const*)-(i-dots+1)))), NULL).AsPromise(); } // TODO: should cache these.
+		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(thread.state, CreateSymbol((String)-(i-dots+1))), NULL).AsPromise(); } // TODO: should cache these.
 		for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) a[i] = arguments[i-dotslength];
 
 		arguments = a;
@@ -82,7 +82,7 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 		if(fdots < parameters.length) {
 			int64_t idx = 1;
 			for(int64_t i = fdots; i < arguments.length; i++) {
-				argAssign(fenv, String::Init((char const*)-idx), arguments[i], env);
+				argAssign(fenv, (String)-idx, arguments[i], env);
 				fenv->dots.push_back(Strings::empty);
 				idx++;
 			}
@@ -148,7 +148,7 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 			int64_t idx = 1;
 			for(int64_t i = 0; i < arguments.length; i++) {
 				if(assignment[i] < 0) {
-					argAssign(fenv, String::Init((char const*)-idx), arguments[i], env);
+					argAssign(fenv, (String)-idx, arguments[i], env);
 					fenv->dots.push_back(anames[i]);
 					idx++;
 				}
@@ -255,7 +255,7 @@ static Value GenericSearch(Thread& thread, Character klass, String generic, Stri
 }
 
 Instruction const* UseMethod_op(Thread& thread, Instruction const& inst) {
-	String generic = String::Init((char const*)inst.a);
+	String generic = inst.s;
 
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
 	List arguments = call.arguments;
@@ -290,7 +290,7 @@ Instruction const* get_op(Thread& thread, Instruction const& inst) {
 
 	// otherwise, need to do a real look up starting from env
 	Environment* env = thread.frame.environment;
-	String s = String::Init((char const*)inst.a);
+	String s = inst.s;
 	
 	Value& dest = REG(thread, inst.c);
 	if(env->fastGet(s, dest)) return &inst+2;
@@ -319,9 +319,9 @@ Instruction const* kget_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* assign_op(Thread& thread, Instruction const& inst) {
-	if(thread.frame.environment->fastAssign(String::Init((char const*)inst.a), REG(thread, inst.c))) return &inst+1;
+	if(thread.frame.environment->fastAssign(inst.s, REG(thread, inst.c))) return &inst+1;
 
-	thread.frame.environment->assign(String::Init((char const*)inst.a), REG(thread, inst.c));
+	thread.frame.environment->assign(inst.s, REG(thread, inst.c));
 	return &inst+1;
 }
 Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
@@ -331,7 +331,7 @@ Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 	Environment* env = thread.frame.environment->LexicalScope();
 	assert(env != 0);
 
-	String s = String::Init((char const*)inst.a);
+	String s = inst.s;
 	Value dest = env->get(s);
 	while(dest.isNil() && env->LexicalScope() != 0) {
 		env = env->LexicalScope();
@@ -421,11 +421,11 @@ Instruction const* branch_op(Thread& thread, Instruction const& inst) {
 	else if(c.isLogical1()) index = c.i;
 	else if(c.isCharacter1()) {
 		for(int64_t i = 1; i <= inst.b; i++) {
-			if((&inst+i)->a == c.s.i) {
+			if((&inst+i)->s == c.s) {
 				index = i;
 				break;
 			}
-			if(index < 0 && (&inst+i)->a == Strings::empty.i) {
+			if(index < 0 && (&inst+i)->s == Strings::empty) {
 				index = i;
 			}
 		}
@@ -450,7 +450,7 @@ Instruction const* list_op(Thread& thread, Instruction const& inst) {
 	}
 	// Otherwise populate result vector with next element
 	else {
-		thread.frame.environment->assign(String::Init((char const*)-REG(thread, inst.a).i), REG(thread, inst.b));
+		thread.frame.environment->assign((String)-REG(thread, inst.a).i, REG(thread, inst.b));
 		((List&)REG(thread, inst.c))[REG(thread, inst.a).i-1] = REG(thread, inst.b);
 	}
 
@@ -471,7 +471,7 @@ Instruction const* list_op(Thread& thread, Instruction const& inst) {
 
 	// Not done yet, increment counter, evaluate next ..#
 	REG(thread, inst.a).i++;
-	Value const& src = thread.frame.environment->get(String::Init((char const*)-REG(thread, inst.a).i));
+	Value const& src = thread.frame.environment->get((String)-REG(thread, inst.a).i);
 	if(!src.isPromise()) {
 		REG(thread, inst.b) = src;
 		return &inst;
@@ -767,7 +767,7 @@ Instruction const* length_op(Thread& thread, Instruction const& inst) {
 }
 Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 	// This could be inline cached...or implemented in terms of something else?
-	String s = String::Init((char const*)inst.a);
+	String s = inst.s;
 	Value const& v = thread.frame.environment->get(s);
 	bool missing = v.isNil() || (v.isPromise() && Function(v).environment() == thread.frame.environment);
 	Logical::InitScalar(REG(thread, inst.c), missing);

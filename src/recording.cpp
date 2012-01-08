@@ -59,7 +59,7 @@ RecordingStatus::Enum assign_record(Thread & thread, Instruction const & inst, I
 		//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
 		if(r.isFuture()) {
 			Trace & trace = traceForFuture(thread,r);
-			trace.EmitVarOutput(thread,thread.frame.environment->makePointer(String::Init((char const*)inst.a)));
+			trace.EmitVarOutput(thread,thread.frame.environment->makePointer((String)inst.a));
 			thread.tracing.Commit(thread,trace);
 		}
 	}

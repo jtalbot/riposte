@@ -60,6 +60,7 @@ private:
 	CompiledCall makeCall(List const& call, Character const& names);
 
 	int64_t emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c);
+	int64_t emit(Prototype* code, ByteCode::Enum bc, String s, int64_t b, int64_t c);
 public:
 	static Prototype* compile(State& state, Value const& expr) {
 		Compiler compiler(state);

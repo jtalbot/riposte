@@ -129,17 +129,10 @@
 	_(mmul,		"%*%") \
 	_(apply,	"apply") \
 
-struct String {
-	int64_t i;
-	bool operator==(String o) const { return i == o.i; }
-	bool operator!=(String o) const { return i != o.i; }
-	bool operator<(String o) const { return i < o.i; }
-	bool operator>(String o) const { return i > o.i; }
-	static String Init(char const* i) { return (String){(int64_t)i}; }
-};
+typedef const char* String;
 
 namespace Strings {
-	static const String NA = String::Init(0);
+	static const String NA = 0;
 #define DECLARE(name, string, ...) extern String name;
 	STRINGS(DECLARE)
 #undef DECLARE
@@ -151,9 +144,6 @@ class StringTable {
 	Lock lock;
 public:
 	StringTable() {
-	#define ENUM_STRINGS(name, string) \
-		Strings::name = String::Init(string); 
-		STRINGS(ENUM_STRINGS);
 	#define ENUM_STRING_TABLE(name, string) \
 		stringTable[string] = Strings::name; 
 		STRINGS(ENUM_STRING_TABLE);
@@ -165,7 +155,7 @@ public:
 		if(i == stringTable.end()) {
 			char* str = new char[s.size()+1];
 			memcpy(str, s.c_str(), s.size()+1);
-			String string = String::Init(str);
+			String string = (String)str;
 			stringTable[s] = string;
 			lock.release();
 			return string;
@@ -175,9 +165,9 @@ public:
 		}
 	}
 
-	std::string out(String i) const {
-		if(i.i < 0) return std::string("..") + intToStr(-i.i);
-		else return std::string((char const*)i.i);
+	std::string out(String s) const {
+		if((int64_t)s < 0) return std::string("..") + intToStr(-(int64_t)s);
+		else return std::string(s);
 	}
 };
 

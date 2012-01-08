@@ -245,11 +245,8 @@ main(int argc, char** argv)
 #ifdef USE_CALLGRIND
 	CALLGRIND_START_INSTRUMENTATION
 #endif
-		/* Create riposte environment */
-	Environment* base = new Environment(0);
-	Environment* global = new Environment(base);
 
-	State state(1, global, base);
+	State state(1);
 	state.verbose = verbose;
 	Thread& thread = state.getMainThread();
 

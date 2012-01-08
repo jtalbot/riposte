@@ -320,17 +320,18 @@ struct Object : public Value {
 	}
 
 	uint64_t find(String s) const {
-		uint64_t i = (uint64_t)s.i & (capacity()-1);	// hash this?
+		uint64_t i = (uint64_t)s & (capacity()-1);	// hash this?
 		while(attributes()[i].n != s && attributes()[i].n != Strings::NA) i = (i+1) & (capacity()-1);
 		assert(i >= 0 && i < capacity());
 		return i; 
 	}
 	
 	static void Init(Value& v, Value _base) {
-		Pair* attributes = new Pair[4];
-		for(uint64_t j = 0; j < 4; j++)
-			attributes[j] = (Pair) { Strings::NA, Value::Nil() };
-		
+		Pair* attributes = new (GC) Pair[4];
+		for(uint64_t j = 0; j < 4; j++) {
+			attributes[j].n = Strings::NA;
+			attributes[j].v = Value::Nil();
+		}
 		v = Object(_base, 0, 4, attributes);
 	}
 
@@ -402,9 +403,7 @@ struct Object : public Value {
 			a = new Pair[c];
 			out = Object(base(), l, c, a);
 
-			// clear
-			for(uint64_t j = 0; j < c; j++)
-				a[j] = (Pair) { Strings::NA, Value::Nil() };
+			memset(a, 0, sizeof(Pair)*c);
 
 			// rehash
 			for(uint64_t j = 0; j < capacity(); j++)
@@ -415,9 +414,7 @@ struct Object : public Value {
 			// otherwise, just copy straight over
 			a = new Object::Pair[capacity()];
 			out = Object(base(), l, capacity(), a);
-
-			for(uint64_t j = 0; j < capacity(); j++)
-				a[j] = attributes()[j];
+			memcpy(a, attributes(), sizeof(Pair)*capacity());
 		}
 		if(v.isNil())
 			a[out.find(s)] = (Pair) { Strings::NA, Value::Nil() };
@@ -481,7 +478,7 @@ public:
 		clear();
 	}
 
-	uint64_t hash(String s) const { return (uint64_t)s.i>>3; }
+	uint64_t hash(String s) const { return (uint64_t)s>>3; }
 	
 	// simple quadratic probing
 	uint64_t find(String s) const {
@@ -504,16 +501,17 @@ public:
 	
 	uint64_t assign(String name, Value const& value) {
 		uint64_t i = find(name);
-		if(d[i].n == name) { d[i].v = value; d[i].cn = value.isConcrete() ?  name : Strings::NA; return i; }
-		else {
+		if(d[i].n != name) {
 			load++;
 			if((load * 2) > size) {
 				rehash((size) * 2);
 				i = find(name);
 			}
-			d[i] = (Pair) { name, (value.isConcrete()) ? name : Strings::NA, value };
-			return i;
+			d[i].n = name;
 		}
+		d[i].cn = value.isConcrete() ?  name : Strings::NA; 
+		d[i].v = value; 
+		return i;
 	}
 
 	bool fastGet(String name, Value& out) ALWAYS_INLINE {
@@ -532,7 +530,9 @@ public:
 
 	void remove(String name) {
 		uint64_t i = find(name);
-		d[i] = (Pair) { Strings::NA, Strings::NA, Value::Nil() };
+		d[i].n = Strings::NA;
+		d[i].cn = Strings::NA;
+		d[i].v = Value::Nil();
 	}
 
 	void rehash(uint64_t s) {
@@ -554,11 +554,8 @@ public:
 	}
 
 	void clear() {
-		load = 0; 
-		for(uint64_t i = 0; i < size; i++) {
-			// wiping v too makes sure we're not holding unnecessary pointers
-			d[i] = (Pair) { Strings::NA, Strings::NA, Value::Nil() };
-		}
+		load = 0;
+		memset(d, 0, sizeof(Pair)*size); 
 	}
 
 	struct Pointer {

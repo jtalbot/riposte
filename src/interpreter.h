@@ -363,7 +363,7 @@ struct State : public gc {
 
 	int64_t done;
 
-	State(uint64_t threads, Environment* global, Environment* base);
+	State(uint64_t threads);
 
 	~State() {
 		fetch_and_add(&done, 1);
@@ -582,8 +582,9 @@ private:
 	}
 };
 
-inline State::State(uint64_t threads, Environment* global, Environment* base) : verbose(false), done(0) {
-	this->global = global;
+inline State::State(uint64_t threads) : verbose(false), done(0) {
+	Environment* base = new (GC) Environment(0);
+	this->global = new (GC) Environment(base);
 	path.push_back(base);
 	
 	pthread_attr_t  attr;

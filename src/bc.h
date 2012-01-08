@@ -4,6 +4,7 @@
 
 #include "enum.h"
 #include "common.h"
+#include "string.h"
 
 #define CONTROL_FLOW_BYTECODES(_) 	\
 	_(jt, "jt") \
@@ -168,12 +169,19 @@
 DECLARE_ENUM(ByteCode, BYTECODES)
 
 struct Instruction {
-	int64_t a, b, c;
+	union {
+		int64_t a;
+		String s;
+	};
+	int64_t b, c;
 	ByteCode::Enum bc;
 	mutable void const* ibc;
 
 	Instruction(ByteCode::Enum bc, int64_t a=0, int64_t b=0, int64_t c=0) :
 		a(a), b(b), c(c), bc(bc), ibc(0) {}
+	
+	Instruction(ByteCode::Enum bc, String s, int64_t b=0, int64_t c=0) :
+		s(s), b(b), c(c), bc(bc), ibc(0) {}
 	
 	std::string toString() const {
 		return std::string("") + ByteCode::toString(bc) + "\t" + intToStr(a) + "\t" + intToStr(b) + "\t" + intToStr(c);
