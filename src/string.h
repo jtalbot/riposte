@@ -2,9 +2,7 @@
 #ifndef _RIPOSTE_SYMBOLS_H
 #define _RIPOSTE_SYMBOLS_H
 
-#include <map>
 #include "common.h"
-#include "thread.h"
 
 // predefined strings
 
@@ -137,38 +135,5 @@ namespace Strings {
 	STRINGS(DECLARE)
 #undef DECLARE
 }
-
-// TODO: Make this use a good concurrent map implementation 
-class StringTable {
-	std::map<std::string, String> stringTable;
-	Lock lock;
-public:
-	StringTable() {
-	#define ENUM_STRING_TABLE(name, string) \
-		stringTable[string] = Strings::name; 
-		STRINGS(ENUM_STRING_TABLE);
-	}
-
-	String in(std::string const& s) {
-		lock.acquire();
-		std::map<std::string, String>::const_iterator i = stringTable.find(s);
-		if(i == stringTable.end()) {
-			char* str = new char[s.size()+1];
-			memcpy(str, s.c_str(), s.size()+1);
-			String string = (String)str;
-			stringTable[s] = string;
-			lock.release();
-			return string;
-		} else {
-			lock.release();
-			return i->second;
-		}
-	}
-
-	std::string out(String s) const {
-		if((int64_t)s < 0) return std::string("..") + intToStr(-(int64_t)s);
-		else return std::string(s);
-	}
-};
 
 #endif
