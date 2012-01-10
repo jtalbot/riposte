@@ -107,7 +107,8 @@ int dostdin(State& state) {
 	int rc = 0;
 
 	printf("\n");
-	printf("Riposte   (A Fast Interpreter and (soon) JIT for R)\n\n");
+	printf("Riposte   (A Fast Interpreter and (soon) JIT for R)\n");
+	printf("(%d threads)\n\n", state.nThreads);
 	printf("Stanford University\n");
 	printf("rockit@graphics.stanford.edu\n");
 	printf("\n");
@@ -193,7 +194,8 @@ main(int argc, char** argv)
 	int ch;
 	int fd = -1;
 	char * filename = NULL;
-	bool echo = true; 
+	bool echo = true;
+	int threads = 1; 
 
 	static struct option longopts[] = {
 		{ "debug",     0,     NULL,           'd' },
@@ -212,9 +214,10 @@ main(int argc, char** argv)
 				debug++;
 				break;
 			case 'f':
-				if (0 != strcmp("-",filename = optarg))
+				filename = optarg;
+				if (0 != strcmp("-",filename))
 				{
-					if ((fd = open(optarg, O_RDONLY, 0)) == -1)
+					if ((fd = open(filename, O_RDONLY, 0)) == -1)
 						err(1, "unable to open %s", filename);
 				}
 				break;
@@ -227,6 +230,11 @@ main(int argc, char** argv)
 				break;
 			case 'q':
 				echo = false;
+				break;
+			case 'j':
+				if(0 != strcmp("-",optarg)) {
+					threads = atoi(optarg);
+				}
 				break;
 			default:
 				usage();
@@ -246,7 +254,7 @@ main(int argc, char** argv)
 	CALLGRIND_START_INSTRUMENTATION
 #endif
 
-	State state(2);
+	State state(threads);
 	state.verbose = verbose;
 	Thread& thread = state.getMainThread();
 
