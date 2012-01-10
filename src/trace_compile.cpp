@@ -841,7 +841,7 @@ struct TraceJIT {
 					IRNode & str = *store_inst[ref];
 					double* d = (double*)str.store.dst->p;
 					double sum = 0;
-					for(uint64_t j = 0; j < 2; j++) {
+					for(uint64_t j = 0; j < thread.state.nThreads; j++) {
 						sum += d[j*8];
 						sum += d[j*8+1];
 					}
@@ -851,7 +851,7 @@ struct TraceJIT {
 					IRNode & str = *store_inst[ref];
 					double* d = (double*)str.store.dst->p;
 					double sum = 1.0;
-					for(uint64_t j = 0; j < 2; j++) {
+					for(uint64_t j = 0; j < thread.state.nThreads; j++) {
 						sum *= d[j*8];
 						sum *= d[j*8+1];
 					}

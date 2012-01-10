@@ -392,6 +392,7 @@ struct State : public gc {
 	Environment* global;
 
 	std::vector<Thread*, traceable_allocator<Thread*> > threads;
+	int64_t nThreads;
 
 	bool verbose;
 
@@ -401,7 +402,7 @@ struct State : public gc {
 
 	~State() {
 		fetch_and_add(&done, 1);
-		while(fetch_and_add(&done, 0) != (int64_t)threads.size()) { sleep(); }
+		while(fetch_and_add(&done, 0) != nThreads) { sleep(); }
 	}
 
 
@@ -616,7 +617,7 @@ private:
 	}
 };
 
-inline State::State(uint64_t threads) : verbose(false), done(0) {
+inline State::State(uint64_t threads) : nThreads(threads), verbose(false), done(0) {
 	Environment* base = new (GC) Environment(0);
 	this->global = new (GC) Environment(base);
 	path.push_back(base);

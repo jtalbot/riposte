@@ -121,8 +121,14 @@ void Trace::InitializeOutputs(Thread & thread) {
 
 					EmitStoreV(typ,&v,ref);
 				} else if(loc.length >= 0) {
-					v.length = 128;
-					v.p = new (PointerFreeGC) double[128];
+					// conservative allocation for reductions
+					// assume all threads might write. Allocate
+					// 64-byte wide region for each to avoid false
+					// sharing. Allocate at least 128 so it's aligned.
+					// Clean this up...
+					uint64_t n = std::max((int64_t)128, thread.state.nThreads*8);
+					v.length = n;
+					v.p = new (PointerFreeGC) double[n];
 					assert( ((int64_t)v.p & 0xF) == 0);
 					EmitStoreC(typ,&v,ref);
 				} else {
