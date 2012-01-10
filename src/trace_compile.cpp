@@ -57,9 +57,7 @@ enum ConstantTableEntry {
 	C_LOGICAL_MASK = 0x5,
 	C_LNOT_MASK = 0x6,
 	C_DOUBLE_ZERO = 0x7,
-	C_FUNCTION_SPILL_SPACE = 0x8,
-	C_REGISTER_SPILL_SPACE = 0x9,
-	C_FIRST_TRACE_CONST = 0x19
+	C_FIRST_TRACE_CONST = 0x8
 };
 
 static int make_executable(char * data, size_t size) {
@@ -214,7 +212,7 @@ struct TraceJIT {
 	Assembler asm_;
 	RegisterAllocator alloc;
 
-
+	Register thread_index;
 	Register constant_base; //holds pointer to Trace object
 	Register vector_index; //index into long vector where the short vector begins
 	Register load_addr; //holds address of input vectors
@@ -263,20 +261,23 @@ struct TraceJIT {
 
 		//registers are callee saved so that we can make external function calls without saving the registers the tight loop
 		//we need to explicitly save and restore these on entrace and exit to the function
+		thread_index = rbp;
 		constant_base = r12;
 		vector_index = r13;
 		load_addr = r14;
 		vector_length = r15;
 		
+		asm_.push(thread_index);
 		asm_.push(constant_base);
 		asm_.push(vector_index);
 		asm_.push(load_addr);
 		asm_.push(vector_length);
 		asm_.push(rbx);
 
+		asm_.movq(thread_index, rdi);
 		asm_.movq(constant_base, &trace->code_buffer->constant_table[0]);
-		asm_.movq(vector_index, rdi);
-		asm_.movq(vector_length, rsi);
+		asm_.movq(vector_index, rsi);
+		asm_.movq(vector_length, rdx);
 
 		Label begin;
 
@@ -345,25 +346,28 @@ struct TraceJIT {
 				case IROpCode::sum:  {
 					assert(store_inst[ref] != NULL);
 					IRNode & str = *store_inst[ref];
-					str.store.dst->d = 0.0;
-					Operand op = EncodeOperand(&str.store.dst->p);
-					asm_.haddpd(reg(ref),reg(node.unary.a));
-					asm_.addsd(reg(ref),op);
-					asm_.movsd(op,reg(ref));
-					store_inst[ref] = NULL;
+					for(uint64_t i = 0; i < 128; i++)
+						((double*)str.store.dst->p)[i] = 0.0;
+					Operand op = EncodeOperand(str.store.dst->p, thread_index, times_8);
+					asm_.addpd(reg(ref), op);
+					asm_.movdqa(op,reg(ref));
+					//store_inst[ref] = NULL;
 				} break;
 				case IROpCode::prod: { //this could be more efficient if we had an additional register ...
 					assert(store_inst[ref] != NULL);
 					IRNode & str = *store_inst[ref];
-					str.store.dst->d = 1.0;
-					Operand op = EncodeOperand(&str.store.dst->p);
-					EmitMove(reg(ref),reg(node.unary.a));
+					for(uint64_t i = 0; i < 128; i++)
+						((double*)str.store.dst->p)[i] = 1.0;
+					Operand op = EncodeOperand(str.store.dst->p, thread_index, times_8);
+					/*EmitMove(reg(ref),reg(node.unary.a));
 					asm_.mulsd(reg(ref),op); //r[0] *= sum;
 					asm_.movsd(op,reg(ref)); //sum = r[0];
 					asm_.unpckhpd(reg(ref),reg(ref)); //r[0] = r[1]
 					asm_.mulsd(reg(ref),op); //r[0] *= sum;
 					asm_.movsd(op,reg(ref)); //sum = r[0];
-					store_inst[ref] = NULL;
+					store_inst[ref] = NULL;*/
+					asm_.mulpd(reg(ref),op);
+					asm_.movdqa(op,reg(ref));
 				} break;
 
 #ifdef USE_AMD_LIBM
@@ -495,7 +499,7 @@ struct TraceJIT {
 				_error("type not supported");
 			}
 
-			/*
+		/*	
 			switch(node.enc) {
 			case IRNode::LOADV:
 			case IRNode::LOADC:
@@ -508,9 +512,9 @@ struct TraceJIT {
 			case IRNode::FOLD:
 				break;
 			}
-			*/
+		*/	
 
-			if(store_inst[ref] != NULL) {
+			if(store_inst[ref] != NULL && node.op != IROpCode::sum && node.op != IROpCode::prod) {
 				IRNode & str = *store_inst[ref];
 				if(str.op == IROpCode::storev) {
 					if(Type::Logical == str.type)
@@ -533,6 +537,7 @@ struct TraceJIT {
 		asm_.pop(load_addr);
 		asm_.pop(vector_index);
 		asm_.pop(constant_base);
+		asm_.pop(thread_index);
 		asm_.ret(0);
 	}
 	XMMRegister reg(IRef r) {
@@ -736,18 +741,19 @@ struct TraceJIT {
 		//this isn't the most optimized way to do this but it works for now
 		SaveRegisters(live_registers[ref]);
 		IRNode & node = trace->nodes[ref];
-		uint64_t spill_start = C_FUNCTION_SPILL_SPACE * sizeof(Constant);
-		asm_.movdqa(Operand(constant_base,spill_start),reg(node.binary.a));
-		asm_.movdqa(Operand(constant_base,spill_start + 0x10),reg(node.binary.b));
-		asm_.movsd(xmm0,Operand(constant_base,spill_start));
-		asm_.movsd(xmm1,Operand(constant_base,spill_start + 0x10));
+		asm_.subq(rsp, Immediate(0x20));
+		asm_.movdqu(Operand(rsp,0),reg(node.binary.a));
+		asm_.movdqu(Operand(rsp,0x10),reg(node.binary.b));
+		asm_.movsd(xmm0,Operand(rsp,0));
+		asm_.movsd(xmm1,Operand(rsp,0x10));
 		EmitCall(fn);
-		asm_.movsd(Operand(constant_base,spill_start),xmm0);
-		asm_.movsd(xmm0,Operand(constant_base,spill_start + 0x8));
-		asm_.movsd(xmm1,Operand(constant_base,spill_start + 0x18));
+		asm_.movsd(Operand(rsp, 0),xmm0);
+		asm_.movsd(xmm0,Operand(rsp, 0x8));
+		asm_.movsd(xmm1,Operand(rsp, 0x18));
 		EmitCall(fn);
-		asm_.movsd(Operand(constant_base,spill_start + 0x8),xmm0);
-		asm_.movdqa(reg(ref),Operand(constant_base,spill_start));
+		asm_.movsd(Operand(rsp, 0x8),xmm0);
+		asm_.movdqu(reg(ref),Operand(rsp, 0));
+		asm_.addq(rsp, Immediate(0x20));
 		RestoreRegisters(live_registers[ref]);
 	}
 
@@ -762,19 +768,31 @@ struct TraceJIT {
 		RestoreRegisters(regs);
 	}
 	void SaveRegisters(RegisterSet regs) {
-		uint32_t offset = C_REGISTER_SPILL_SPACE * sizeof(Constant);
+		/*uint32_t offset = C_REGISTER_SPILL_SPACE * sizeof(Constant);
 		for(RegisterIterator it(regs); !it.done(); it.next()) {
 			asm_.movdqa(Operand(constant_base,offset),XMMRegister::FromAllocationIndex(it.value()));
 			offset += SIMD_WIDTH;
+		}*/
+		asm_.subq(rsp, Immediate(256));
+		uint64_t index = 0;
+		for(RegisterIterator it(regs); !it.done(); it.next()) {
+			asm_.movdqu(Operand(rsp, index), XMMRegister::FromAllocationIndex(it.value()));
+			index += 16;
 		}
 	}
 
 	void RestoreRegisters(RegisterSet regs) {
-		uint32_t offset = C_REGISTER_SPILL_SPACE * sizeof(Constant);
+		/*uint32_t offset = C_REGISTER_SPILL_SPACE * sizeof(Constant);
 		for(RegisterIterator it(regs); !it.done(); it.next()) {
 			asm_.movdqa(XMMRegister::FromAllocationIndex(it.value()),Operand(constant_base,offset));
 			offset += SIMD_WIDTH;
+		}*/
+		uint64_t index = 0;
+		for(RegisterIterator it(regs); !it.done(); it.next()) {
+			asm_.movdqu(XMMRegister::FromAllocationIndex(it.value()), Operand(rsp, index));
+			index += 16;
 		}
+		asm_.addq(rsp, Immediate(256));
 	}
 
 	void EmitComparisonToLogical(XMMRegister r) {
@@ -791,12 +809,12 @@ struct TraceJIT {
 		}
 	}
 
-	typedef void (*fn) (uint64_t start, uint64_t end);
+	typedef void (*fn) (uint64_t thread_index, uint64_t start, uint64_t end);
 	
 	static void executebody(void* args, void* h, uint64_t start, uint64_t end, Thread& thread) {
 		//printf("%d: called with %d to %d\n", thread.index, start, end);
 		fn code = (fn)args;
-		code(start, end);	
+		code(thread.index*8, start, end);	
 	}
 
 	void Execute(Thread & thread) {
@@ -804,13 +822,43 @@ struct TraceJIT {
 		if(thread.state.verbose) {
 			timespec begin;
 			get_time(begin);
-			//thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
-			trace_code(0, trace->length);
+			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
+			//trace_code(thread.index, 0, trace->length);
 			double s = time_elapsed(begin) / trace->length * 1024.0 * 1024.0 * 1024.0;
 			printf("trace elapsed %fns\n",s);
 		} else {
-			//thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
-			trace_code(0, trace->length);
+			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
+			//trace_code(thread.index, 0, trace->length);
+		}
+	}
+
+	void GlobalReduce(Thread& thread) {
+		for(IRef i = 0; i < trace->n_nodes; i++) {
+			IRef ref = i;
+			IRNode & node = trace->nodes[i];
+			switch(node.op) {
+				case IROpCode::sum:  {
+					IRNode & str = *store_inst[ref];
+					double* d = (double*)str.store.dst->p;
+					double sum = 0;
+					for(uint64_t j = 0; j < 2; j++) {
+						sum += d[j*8];
+						sum += d[j*8+1];
+					}
+					*str.store.dst = Double::c(sum);
+				} break;
+				case IROpCode::prod:  {
+					IRNode & str = *store_inst[ref];
+					double* d = (double*)str.store.dst->p;
+					double sum = 1.0;
+					for(uint64_t j = 0; j < 2; j++) {
+						sum *= d[j*8];
+						sum *= d[j*8+1];
+					}
+					*str.store.dst = Double::c(sum);
+				} break;
+				default: break;
+			}
 		}
 	}
 };
@@ -828,6 +876,6 @@ void Trace::JIT(Thread & thread) {
 
 	trace_code.Compile();
 	trace_code.Execute(thread);
-
+	trace_code.GlobalReduce(thread);
 	WriteOutputs(thread);
 }

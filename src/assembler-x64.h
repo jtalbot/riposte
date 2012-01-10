@@ -1258,6 +1258,9 @@ class Assembler {
   void movdqa(const Operand& dst, XMMRegister src);
   void movdqa(XMMRegister dst, const Operand& src);
 
+  void movdqu(const Operand& dst, XMMRegister src);
+  void movdqu(XMMRegister dst, const Operand& src);
+  
   void movapd(XMMRegister dst, XMMRegister src);
   void movaps(XMMRegister dst, XMMRegister src);
 
@@ -1295,6 +1298,7 @@ class Assembler {
   void addpd(XMMRegister dst, const Operand& src);
   void subpd(XMMRegister dst, XMMRegister src);
   void mulpd(XMMRegister dst, XMMRegister src);
+  void mulpd(XMMRegister dst, const Operand& src);
   void divpd(XMMRegister dst, XMMRegister src);
 
   void paddq(XMMRegister dst, XMMRegister src);

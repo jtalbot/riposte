@@ -133,13 +133,13 @@ struct Trace {
 	struct Location {
 		enum Type {REG, VAR};
 		Type type;
-		/*union { */ //union disabled because Pointer has a Symbol with constructor
+		union {
 			Environment::Pointer pointer; //fat pointer to environment location
 			struct {
 				Value * base;
 				int64_t offset;
 			} reg;
-		/*};*/
+		};
 	};
 
 	struct Output {

@@ -121,6 +121,9 @@ void Trace::InitializeOutputs(Thread & thread) {
 
 					EmitStoreV(typ,&v,ref);
 				} else if(loc.length >= 0) {
+					v.length = 128;
+					v.p = new (PointerFreeGC) double[128];
+					assert( ((int64_t)v.p & 0xF) == 0);
 					EmitStoreC(typ,&v,ref);
 				} else {
 					EmitStoreV(typ,&v,ref);

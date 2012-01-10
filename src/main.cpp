@@ -246,7 +246,7 @@ main(int argc, char** argv)
 	CALLGRIND_START_INSTRUMENTATION
 #endif
 
-	State state(1);
+	State state(2);
 	state.verbose = verbose;
 	Thread& thread = state.getMainThread();
 
