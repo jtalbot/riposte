@@ -158,72 +158,80 @@ struct Trace {
 
 	Trace() { Reset(); code_buffer = NULL; }
 
-	IRef EmitBinary(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t b) {
+	IRef EmitBinary(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::BINARY;
 		n.op = op;
 		n.type = type;
+		n.length = length;
 		n.binary.a = a;
 		n.binary.b = b;
 		return n_pending_nodes++;
 	}
-	IRef EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t b) {
+	IRef EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::SPECIAL;
 		n.op = op;
 		n.type = type;
+		n.length = length;
 		n.special.a = a;
 		n.special.b = b;
 		return n_pending_nodes++;
 	}
-	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t data=0) {
+	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t data=0) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::UNARY;
 		n.op = op;
 		n.type = type;
+		n.length = length;
 		n.unary.a = a;
 		n.unary.data = data;
 		return n_pending_nodes++;
 	}
-	IRef EmitFold(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t base) {
+	IRef EmitFold(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t base) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::FOLD;
 		n.op = op;
 		n.type = type;
+		n.length = length;
 		n.fold.a = a;
 		n.fold.i = base;
 		return n_pending_nodes++;
 	}
-	IRef EmitLoadC(Type::Enum type, int64_t c) {
+	IRef EmitLoadC(Type::Enum type, int64_t length, int64_t c) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::LOADC;
 		n.op = IROpCode::loadc;
 		n.type = type;
+		n.length = length;
 		n.loadc.i = c;
 		return n_pending_nodes++;
 	}
-	IRef EmitLoadV(Type::Enum type,void * v) {
+	IRef EmitLoadV(Type::Enum type, int64_t length, void * v) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::LOADV;
 		n.op = IROpCode::loadv;
 		n.type = type;
+		n.length = length;
 		n.loadv.p = v;
 		return n_pending_nodes++;
 	}
-	IRef EmitStoreV(Type::Enum type, Value * dst, int64_t a) {
+	IRef EmitStoreV(Type::Enum type, int64_t length, Value * dst, int64_t a) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::STORE;
 		n.op = IROpCode::storev;
 		n.type = type;
+		n.length = length;
 		n.store.a = a;
 		n.store.dst = dst;
 		return n_pending_nodes++;
 	}
-	IRef EmitStoreC(Type::Enum type, Value * dst, int64_t a) {
+	IRef EmitStoreC(Type::Enum type, int64_t length, Value * dst, int64_t a) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::STORE;
 		n.op = IROpCode::storec;
 		n.type = type;
+		n.length = length;
 		n.store.a = a;
 		n.store.dst = dst;
 		return n_pending_nodes++;

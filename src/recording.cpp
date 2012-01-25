@@ -123,7 +123,7 @@ struct LoadCache {
 		   trace.nodes[cached].loadv.p == v.p) {
 			return cached;
 		} else {
-			return (cache[idx] = trace.EmitLoadV(v.type,v.p));
+			return (cache[idx] = trace.EmitLoadV(v.type,v.length,v.p));
 		}
 	}
 	IRef cache[256];
@@ -150,7 +150,7 @@ IRef getRef(Trace & trace, Value & v) {
 		return v.future.ref;
 	} else {
 		if(v.length == 1) {
-			return trace.EmitLoadC(v.type,v.i);
+			return trace.EmitLoadC(v.type,v.length,v.i);
 		} else {
 			assert(v.length == trace.length);
 			return load_cache.get(trace,v);
@@ -188,7 +188,7 @@ IRef coerce(Trace & trace, Type::Enum dst_type, IRef v) {
 		coerce_scalar(dst_type,n);
 		return v;
 	} else {
-		return trace.EmitUnary(IROpCode::cast,dst_type,v);
+		return trace.EmitUnary(IROpCode::cast,dst_type,n.length,v);
 	}
 }
 
@@ -296,9 +296,9 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread
 	thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
 	Future::Init(REG(thread,inst.c),
 				 rtyp,
-				 trace.length,
+				 trace_shape,
 				 thread.tracing.TraceID(trace),
-				 trace.EmitBinary(op,rtyp,coerce(trace,atyp,aref),coerce(trace,btyp,bref)));
+				 trace.EmitBinary(op,rtyp,trace_shape,coerce(trace,atyp,aref),coerce(trace,btyp,bref)));
 	thread.tracing.Commit(thread,trace);
 	return RecordingStatus::NO_ERROR;
 }
@@ -313,15 +313,16 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread 
 	}
 
 	Trace & trace = thread.tracing.GetOrAllocateTrace(thread,a.length);
+	int64_t shape = isReduction ? 1 : trace.length;
 
     IRef aref = getRef(trace,a);
     Type::Enum rtyp,atyp;
     selectType(bc,trace.nodes[aref].type,&atyp,&rtyp);
 	Future::Init(REG(thread,inst.c),
 				 rtyp,
-				 isReduction ? 1 : trace.length,
+				 shape,
 				 thread.tracing.TraceID(trace),
-				 trace.EmitUnary(op,rtyp,coerce(trace,atyp,aref)));
+				 trace.EmitUnary(op,rtyp,shape,coerce(trace,atyp,aref)));
 	trace.EmitRegOutput(thread.base,inst.c);
 	thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
 	thread.tracing.Commit(thread,trace);
@@ -471,7 +472,7 @@ RecordingStatus::Enum seq_record(Thread & thread, Instruction const & inst, Inst
 				     Type::Integer,
 				     len,
 				     thread.tracing.TraceID(trace),
-				     trace.EmitSpecial(IROpCode::seq,Type::Integer,len,step));
+				     trace.EmitSpecial(IROpCode::seq,Type::Integer,len,len,step));
 		thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
 		(*pc)++;
 		thread.tracing.Commit(thread,trace);

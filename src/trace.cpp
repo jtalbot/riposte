@@ -15,7 +15,7 @@ std::string Trace::toString(Thread & thread) {
 	out << "recorded: \n";
 	for(size_t j = 0; j < n_nodes; j++) {
 		IRNode & node = nodes[j];
-		out << "n" << j << " : " << Type::toString(node.type) << " = " << IROpCode::toString(node.op) << "\t";
+		out << "n" << j << " : " << Type::toString(node.type) << "[" << node.length << "]" << " = " << IROpCode::toString(node.op) << "\t";
 		switch(node.op) {
 #define BINARY(op,...) case IROpCode::op: out << "n" << node.binary.a << "\tn" << node.binary.b; break;
 #define UNARY(op,...) case IROpCode::op: out << "n" << node.unary.a; break;
@@ -119,7 +119,7 @@ void Trace::InitializeOutputs(Thread & thread) {
 						assert( ((int64_t)v.p & 0xF) == 0);
 					}
 
-					EmitStoreV(typ,&v,ref);
+					EmitStoreV(typ,loc.length,&v,ref);
 				} else if(loc.length >= 0) {
 					// conservative allocation for reductions
 					// assume all threads might write. Allocate
@@ -130,9 +130,9 @@ void Trace::InitializeOutputs(Thread & thread) {
 					v.length = n;
 					v.p = new (PointerFreeGC) double[n];
 					assert( ((int64_t)v.p & 0xF) == 0);
-					EmitStoreC(typ,&v,ref);
+					EmitStoreC(typ,loc.length,&v,ref);
 				} else {
-					EmitStoreV(typ,&v,ref);
+					EmitStoreV(typ,loc.length,&v,ref);
 				}
 				n_nodes = n_pending_nodes;
 				values[ref] = &v;

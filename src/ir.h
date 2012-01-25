@@ -40,7 +40,7 @@ struct IRNode {
 	Encoding enc;
 	IROpCode::Enum op;
 	Type::Enum type;
-
+	int64_t length;
 
 	union {
 		struct {
