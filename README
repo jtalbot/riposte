@@ -8,9 +8,24 @@ Compiling riposte
 1. Install the Boehm GC. Available in macports, `port install boehmgc`.
    (Optional) Install rlwrap. Available in macports, `port install rlwrap`.
 
-2. Run make in the riposte directory, or `make release` for the optimized version
+2. Run `make release` in the riposte directory, or `make debug` for the debug version
 
 3. Execute ./riposte to start
+
+
+Flags
+-----
+
+-j # 		: start with # worker threads (defaults to 1, set to the number of cores on your machine)
+-f <filename>	: execute R script in <filename>
+-v 		: verbose debug output for the vector trace recorder and JIT
+
+
+Runtime control
+---------------
+
+Running trace.config(0) turns off the vector JIT, trace.config(1) turns on the recorder but does not JIT machine code, 
+trace.config(2) (the default) turns on the JIT. 
 
 
 Limitations

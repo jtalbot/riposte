@@ -107,10 +107,12 @@ int dostdin(State& state) {
 	int rc = 0;
 
 	printf("\n");
-	printf("Riposte   (A Fast Interpreter and (soon) JIT for R)\n");
-	printf("(%d threads)\n\n", state.nThreads);
+	printf("Riposte (%d threads) -- A Fast Interpreter and JIT for R\n", state.nThreads);
+	printf("Flags: \t-v\t verbose vector output\n");
+	printf("\t-j #\t start with # worker threads\n");
+	printf("\n");
 	printf("Stanford University\n");
-	printf("rockit@graphics.stanford.edu\n");
+	printf("jtalbot@stanford.edu\n");
 	printf("\n");
 
 	Thread& thread = state.getMainThread();

@@ -39,7 +39,7 @@ DEPENDENCIES := $(patsubst %.cpp,bin/%.d,$(SRC))
 
 ASM := $(patsubst %.cpp,bin/%.s,$(SRC))
 
-default: debug
+default: debug 
 
 debug: CXXFLAGS += -DDEBUG -O0 -g
 debug: $(EXECUTABLE)

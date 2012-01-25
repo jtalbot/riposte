@@ -263,7 +263,7 @@ struct TraceThread {
 	TraceThread()
 	: live_traces(TRACE_MAX_TRACES) {
 		active = false;
-		config = DISABLED;
+		config = COMPILE;
 		n_recorded_since_last_exec = 0;
 	}
 
