@@ -269,7 +269,6 @@ struct TraceThread {
 
 	enum Mode {
 		DISABLED,
-		INTERPRET,
 		COMPILE
 	};
 	Mode config;

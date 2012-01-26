@@ -135,7 +135,7 @@ bool isRecordableType(Value & v) {
 
 
 bool isRecordableShape(int64_t l) {
-	return l >= TRACE_VECTOR_WIDTH && l % TRACE_VECTOR_WIDTH == 0;
+	return l >= TRACE_VECTOR_WIDTH;
 }
 bool isRecordableShape(Value & v) {
 	return isRecordableShape(v.length);

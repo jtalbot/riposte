@@ -121,8 +121,10 @@ struct Vector : public Value {
 
 	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
 		Value::Init(v, VectorType, length);
-		int64_t l = length;
 		if((canPack && length > 1) || (!canPack && length > 0)) {
+			int64_t l = length;
+			// round l up to nearest even number so SSE can work on tail region
+			l += (int64_t)((uint64_t)l & 1);
 			int64_t length_aligned = (l < 128) ? (l + 1) : l;
 			v.p = Recursive ? new (GC) Element[length_aligned] :
 				new (PointerFreeGC) Element[length_aligned];

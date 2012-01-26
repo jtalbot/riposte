@@ -157,11 +157,5 @@ void Trace::WriteOutputs(Thread & thread) {
 }
 
 void Trace::Execute(Thread & thread) {
-	if(thread.tracing.config == TraceThread::COMPILE) {
-		JIT(thread);
-	} else if(thread.tracing.config == TraceThread::INTERPRET) {
-		Interpret(thread);
-	} else {
-		_error("executing a trace when tracing disabled");
-	}
+	JIT(thread);
 }
