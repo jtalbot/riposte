@@ -5,6 +5,7 @@
 #include "common.h"
 #include "bc.h"
 #include "type.h"
+#include "value.h"
 
 #define IR_ENUM(_) \
 		MAP_BYTECODES(_) \
@@ -18,16 +19,17 @@
 		_(filter, "filter", ___) \
 		ARITH_FOLD_BYTECODES(_) \
 		ARITH_SCAN_BYTECODES(_) \
+		_(nop, "nop", ___)
 
 DECLARE_ENUM(IROpCode,IR_ENUM)
 
 struct Value;
 
-typedef size_t IRef;
 struct IRNode {
 
 
 	enum Encoding {
+		NOP,
 		BINARY,
 		SPECIAL,
 		UNARY,
@@ -41,6 +43,11 @@ struct IRNode {
 	IROpCode::Enum op;
 	Type::Enum type;
 	int64_t length;
+	bool used;
+
+	bool isDouble() const { return type == Type::Double; }
+	bool isInteger() const { return type == Type::Integer; }
+	bool isLogical() const { return type == Type::Logical; }
 
 	union {
 		struct {

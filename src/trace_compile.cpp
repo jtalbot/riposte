@@ -220,22 +220,134 @@ struct TraceJIT {
 	uint32_t next_constant_slot;
 
 	//some hardware ops like > do not exist, requiring the use of < instead.  For simplicity, this needs to be done before register allocation
-	void SimplifyNode(IRNode & node) {
-		switch(node.op) {
-		case IROpCode::gt: node.op = IROpCode::lt; std::swap(node.binary.a,node.binary.b); break;
-		case IROpCode::ge: node.op = IROpCode::le; std::swap(node.binary.a,node.binary.b); break;
-		default: /*pass*/ break;
+	void SimplifyOps() {
+		for(IRef ref = 0; ref < trace->n_nodes; ref++) {
+			IRNode & node = trace->nodes[ref];
+			switch(node.op) {
+				case IROpCode::gt: node.op = IROpCode::lt; std::swap(node.binary.a,node.binary.b); break;
+				case IROpCode::ge: node.op = IROpCode::le; std::swap(node.binary.a,node.binary.b); break;
+				case IROpCode::add: /* fallthrough */ 
+				case IROpCode::mul: 
+					if(trace->nodes[node.binary.a].op == IROpCode::loadc) std::swap(node.binary.a,node.binary.b); break;
+				default: /*pass*/ break;
+			}
 		}
 	}
 
-	void Compile() {
-		bzero(store_inst,sizeof(IRNode *) * trace->n_nodes);
-		memset(allocated_register,-1,sizeof(char) * trace->n_nodes);
+	void AlgebraicSimplification() {
+		for(IRef ref = 0; ref < trace->n_nodes; ref++) {
+			IRNode & node = trace->nodes[ref];
+			
+			if(node.enc == IRNode::UNARY && trace->nodes[node.unary.a].op == IROpCode::pos)
+				node.unary.a = trace->nodes[node.unary.a].unary.a;
+			if(node.enc == IRNode::FOLD && trace->nodes[node.unary.a].op == IROpCode::pos)
+				node.unary.a = trace->nodes[node.unary.a].unary.a;
+			if(node.enc == IRNode::STORE && trace->nodes[node.store.a].op == IROpCode::pos)
+				node.store.a = trace->nodes[node.store.a].unary.a;
+			if(node.enc == IRNode::BINARY && trace->nodes[node.binary.a].op == IROpCode::pos)
+				node.binary.a = trace->nodes[node.binary.a].unary.a;
+			if(node.enc == IRNode::BINARY && trace->nodes[node.binary.b].op == IROpCode::pos)
+				node.binary.b = trace->nodes[node.binary.b].unary.a;
+			
+			if(	node.op == IROpCode::neg &&
+				trace->nodes[node.unary.a].op == IROpCode::neg) {
+				node.op = IROpCode::pos;
+				node.unary.a = trace->nodes[node.unary.a].unary.a;
+			}
+			if(	node.op == IROpCode::pos &&
+				trace->nodes[node.unary.a].op == IROpCode::pos) {
+				node.unary.a = trace->nodes[node.unary.a].unary.a;
+			}
+			if(node.op == IROpCode::add &&
+				trace->nodes[node.binary.b].op == IROpCode::loadc &&
+			   	trace->nodes[node.binary.a].op == IROpCode::add &&
+			   	trace->nodes[trace->nodes[node.binary.a].binary.b].op == IROpCode::loadc) {
+				if(node.isInteger())
+					trace->nodes[node.binary.b].loadc.i += trace->nodes[trace->nodes[node.binary.a].binary.b].loadc.i;
+				else
+					trace->nodes[node.binary.b].loadc.d += trace->nodes[trace->nodes[node.binary.a].binary.b].loadc.d;
+				node.binary.a = trace->nodes[node.binary.a].binary.a;
+			}
+			if(node.op == IROpCode::mul &&
+				trace->nodes[node.binary.b].op == IROpCode::loadc &&
+			   	trace->nodes[node.binary.a].op == IROpCode::mul &&
+			   	trace->nodes[trace->nodes[node.binary.a].binary.b].op == IROpCode::loadc) {
+				if(node.isInteger())
+					trace->nodes[node.binary.b].loadc.i *= trace->nodes[trace->nodes[node.binary.a].binary.b].loadc.i;
+				else
+					trace->nodes[node.binary.b].loadc.d *= trace->nodes[trace->nodes[node.binary.a].binary.b].loadc.d;
+				node.binary.a = trace->nodes[node.binary.a].binary.a;
+			}
+
+			if(node.op == IROpCode::add &&
+				trace->nodes[node.binary.b].op == IROpCode::loadc &&
+				trace->nodes[node.binary.b].loadc.i == 0) {
+				node.op = IROpCode::pos;
+				node.unary.a = node.binary.a;
+			}
+			
+			if(node.op == IROpCode::mul &&
+				trace->nodes[node.binary.b].op == IROpCode::loadc &&
+				((node.isDouble() && trace->nodes[node.binary.b].loadc.d == 1) || 
+				(node.isInteger() && trace->nodes[node.binary.b].loadc.i == 1))) {
+				node.op = IROpCode::pos;
+				node.unary.a = node.binary.a;
+			}
+		}
+	}
+
+	void DeadCodeElimination() {
+		// kill any defs whose use I haven't seen!
+		for(IRef ref = 0; ref < trace->n_nodes; ref++) {
+			IRNode & node = trace->nodes[ref];
+			node.used = false;
+		}
+		for(IRef ref = trace->n_nodes; ref > 0; ref--) {
+			IRNode & node = trace->nodes[ref-1];
+			if(node.enc == IRNode::STORE) {
+				// do load-store forwarding here...
+				if(trace->nodes[node.store.a].op == IROpCode::loadv) {
+					node.store.dst->p = trace->nodes[node.store.a].loadv.p;
+					node.op = IROpCode::nop;
+					node.enc = IRNode::NOP;
+				}
+				else trace->nodes[node.store.a].used = true;
+			} else if(node.used) {
+				switch(node.enc) {
+					case IRNode::BINARY: 
+						trace->nodes[node.binary.a].used = true;
+						trace->nodes[node.binary.b].used = true;
+						break;
+					case IRNode::FOLD: /*fallthrough*/
+					case IRNode::UNARY:
+						trace->nodes[node.unary.a].used = true;
+						break;
+					case IRNode::LOADC: /*fallthrough*/
+					case IRNode::LOADV: /*fallthrough*/
+					case IRNode::SPECIAL: /*fallthrough*/
+					case IRNode::STORE: /*fallthrough*/
+					case IRNode::NOP: 
+						/* nothing */
+						break;
+				}
+			} else {
+				node.op = IROpCode::nop;
+				node.enc = IRNode::NOP;
+			}
+		}
+	}
+
+	void Optimize() {
+		SimplifyOps();
+		AlgebraicSimplification();
+		DeadCodeElimination();
+	}
+
+	void RegisterAllocate() {
 		//pass 1 register allocation
 		for(IRef i = trace->n_nodes; i > 0; i--) {
 			IRef ref = i - 1;
 			IRNode & node = trace->nodes[ref];
-			SimplifyNode(node); //emulate ops like > and >= which have no hardware equivalent by modifying the operand order
 			switch(node.enc) {
 			case IRNode::BINARY: {
 				AllocateBinary(ref,node.binary.a,node.binary.b);
@@ -252,11 +364,67 @@ struct TraceJIT {
 			case IRNode::STORE: {
 				store_inst[node.store.a] = &node;
 			} break;
+			case IRNode::NOP: {
+				/* nothing */
+			} break;
 			default:
 				_error("unsupported op in reg allocation");
 			}
 		}
+	}
 
+	IRef AllocateNullary(IRef ref, bool p = true) {
+		if(allocated_register[ref] < 0) { //this instruction is dead, for now we just emit it anyway
+			if(!alloc.allocate(&allocated_register[ref]))
+				_error("exceeded available registers");
+		}
+		int r = allocated_register[ref];
+		alloc.free(r);
+		//we want to know the registers live out of this op, not including value that this op defines
+		live_registers[ref] = alloc.live_registers();
+		if(p) {
+			//printf("%d = _, %d = _ \n",(int)allocated_register[ref],(int)ref);
+		}
+		return r;
+	}
+	IRef AllocateUnary(IRef ref, IRef a, bool p = true) {
+		IRef r = AllocateNullary(ref,false);
+		if(allocated_register[a] < 0) {
+			//try to allocated register a and r to the same location,  this avoids moves in binary instructions
+			if(!alloc.allocate(r,&allocated_register[a]))
+				_error("exceeded available registers");
+		}
+		if(p) {
+			//printf("%d = %d op, %d = %d op\n",(int)allocated_register[ref],(int)allocated_register[a],(int)ref,(int)a);
+		}
+		return r;
+	}
+	IRef AllocateBinary(IRef ref, IRef a, IRef b) {
+		IRef r = AllocateUnary(ref,a,false);
+		if(allocated_register[b] < 0) {
+			RegisterSet mask = ~(1 << allocated_register[ref]);
+			//we avoid allocating registers such that r = a op r
+			//occurs
+			if(!alloc.allocateWithMask(mask,&allocated_register[b])) {
+				_error("exceeded available registers");
+			}
+			assert(allocated_register[ref] != allocated_register[b]);
+		}
+
+
+		//printf("%d = %d op %d, %d = %d op %d\n",(int)allocated_register[ref],(int)allocated_register[a],(int)allocated_register[b],(int)ref,(int)a,(int)b);
+
+		//we need to avoid binary threadments of the form r = a op r, a != r because these are hard to code gen with 2-op codes
+		assert(!reg(ref).is(reg(b)) || reg(ref).is(reg(a)));
+		//proof:
+		// case: b is not live out of this stmt and b != a -> we allocated b s.t. r != b
+		// case: b is not live out this stmt and b == a -> either this stmt is r = a + a or r = r + r, either of which is allowed in codegen
+		// case: b is live out of this stmt -> b and r are live at the same time so b != r
+
+		return r;
+	}
+
+	void InstructionSelection() {
 		//pass 2 instruction selection
 
 		//registers are callee saved so that we can make external function calls without saving the registers the tight loop
@@ -287,63 +455,80 @@ struct TraceJIT {
 			IRef ref = i;
 			IRNode & node = trace->nodes[i];
 
-			//emit encoding specific code
-			switch(node.enc) {
-			case IRNode::BINARY: {
-				//register allocation should ensure r = a op r does not occur, only r = a + b, r = r + b, and r = r + r
-				assert(!reg(ref).is(reg(node.binary.b)) || reg(ref).is(reg(node.binary.a)));
-				//we perform r = a; r = r op b, the mov is not emitted if r == a
-				EmitMove(reg(ref),reg(node.binary.a));
-			} break;
-			case IRNode::UNARY: break;
-			case IRNode::LOADC: {
+			//right now reg(ref) holds a if binary
+			switch(node.op) {
+
+			case IROpCode::loadc: {
 				Constant c;
 				switch(node.type) {
-				case Type::Integer: c = Constant(node.loadc.i); break;
-				case Type::Logical: c = Constant(node.loadc.l); break;
-				case Type::Double:  c = Constant(node.loadc.d); break;
-				default: _error("unexpected type");
+					case Type::Integer: c = Constant(node.loadc.i); break;
+					case Type::Logical: c = Constant(node.loadc.l); break;
+					case Type::Double:  c = Constant(node.loadc.d); break;
+					default: _error("unexpected type");
 				}
 				asm_.movdqa(reg(ref),PushConstant(c));
 			} break;
-			case IRNode::LOADV: {
-				if(Type::Logical == node.type)
-					EmitLogicalLoad(reg(ref),node.loadv.p);
+			case IROpCode::loadv: {
+				if(node.isLogical())
+					asm_.movss(reg(ref),EncodeOperand(node.loadv.p,vector_index,times_1));
 				else
-					EmitVectorLoad(reg(ref),node.loadv.p);
+					asm_.movdqa(reg(ref),EncodeOperand(node.loadv.p,vector_index,times_8));
 			} break;
-			case IRNode::STORE: {
-				//stores are generated right after the value that is stored
+			case IROpCode::storec:
+			case IROpCode::storev: {
+				// as an optimization, stores are generated right after the value that is stored
+				// this moves the store as far forward as possible, reducing register pressure.
 			} break;
-			case IRNode::SPECIAL: break;
-			case IRNode::FOLD: break;
-			default:
-				_error("unsupported op");
-			}
 
-			//right now reg(ref) holds a if binary
-			if(node.type == Type::Double) {
-				switch(node.op) {
-				case IROpCode::add: asm_.addpd(reg(ref),reg(node.binary.b)); break;
-				case IROpCode::sub: asm_.subpd(reg(ref),reg(node.binary.b)); break;
-				case IROpCode::mul: asm_.mulpd(reg(ref),reg(node.binary.b)); break;
-				case IROpCode::div: asm_.divpd(reg(ref),reg(node.binary.b)); break;
-				case IROpCode::sqrt: asm_.sqrtpd(reg(ref),reg(node.unary.a)); break;
-				case IROpCode::round: asm_.roundpd(reg(ref),reg(node.unary.a),Assembler::kRoundToNearest); break;
-				case IROpCode::floor: asm_.roundpd(reg(ref),reg(node.unary.a),Assembler::kRoundDown); break;
-				case IROpCode::ceiling: asm_.roundpd(reg(ref),reg(node.unary.a),Assembler::kRoundUp); break;
-				case IROpCode::trunc: asm_.roundpd(reg(ref),reg(node.unary.a),Assembler::kRoundToZero); break;
-
-				case IROpCode::abs: {
+			case IROpCode::add: {
+				if(node.isDouble()) 	asm_.addpd(Move(ref, node.binary.a),reg(node.binary.b)); 
+				else		 	asm_.paddq(Move(ref, node.binary.a),reg(node.binary.b));
+			} break;
+			case IROpCode::sub: {
+				if(node.isDouble()) 	asm_.subpd(Move(ref, node.binary.a),reg(node.binary.b)); 
+				else		 	asm_.psubq(Move(ref, node.binary.a),reg(node.binary.b));
+			} break;
+			case IROpCode::mul: {
+				if(node.isDouble()) 	asm_.mulpd(Move(ref, node.binary.a),reg(node.binary.b)); 
+				else			EmitBinaryFunction(ref,imul);
+			} break;
+			case IROpCode::div: 	asm_.divpd(Move(ref, node.binary.a),reg(node.binary.b)); break;
+			case IROpCode::idiv: {
+				if(node.isDouble()) {	
+					asm_.divpd(Move(ref, node.binary.a),reg(node.binary.b)); 
+					asm_.roundpd(Move(ref, node.binary.a), reg(ref), Assembler::kRoundDown);	
+				} else	{ 
+					EmitBinaryFunction(ref,idiv);
+				}
+			} break;
+			case IROpCode::sqrt: 	asm_.sqrtpd(reg(ref),reg(node.binary.b)); break;
+			case IROpCode::round:	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundToNearest); break;
+			case IROpCode::floor: 	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundDown); break;
+			case IROpCode::ceiling:	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundUp); break;
+			case IROpCode::trunc: 	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundToZero); break;
+			case IROpCode::abs: {
+				if(node.isDouble()) {
 					EmitMove(reg(ref),reg(node.unary.a));
 					asm_.andpd(reg(ref), ConstantTable(C_ABS_MASK));
-				} break;
-				case IROpCode::neg: {
+				} else {			
+					//this could be inlined using bit-whacking, but we would need an additional register
+					// if(r < 0) f = ~0 else 0; r = r xor f; r -= f;
+					EmitUnaryFunction(ref,iabs); 
+				}
+			} break;
+			case IROpCode::neg: {
+				if(node.isDouble()) {	
 					EmitMove(reg(ref),reg(node.unary.a));
-					asm_.xorpd(reg(ref), ConstantTable(C_NEG_MASK));
-				} break;
-				case IROpCode::pos: EmitMove(reg(ref),reg(node.unary.a)); break;
-				case IROpCode::sum:  {
+					asm_.xorpd(reg(ref), ConstantTable(C_NEG_MASK));	
+				} else {
+					EmitMove(reg(ref),reg(node.unary.a));
+					asm_.xorpd(reg(ref),ConstantTable(C_NOT_MASK)); //r = ~r
+					asm_.psubq(reg(ref),ConstantTable(C_NOT_MASK)); //r -= -1	
+				}
+			} break;
+			case IROpCode::pos: EmitMove(reg(ref), reg(node.unary.a)); break;
+			case IROpCode::sum:  {
+				if(node.isDouble()) {
 					assert(store_inst[ref] != NULL);
 					IRNode & str = *store_inst[ref];
 					for(uint64_t i = 0; i < 128; i++)
@@ -351,154 +536,139 @@ struct TraceJIT {
 					Operand op = EncodeOperand(str.store.dst->p, thread_index, times_8);
 					asm_.addpd(reg(ref), op);
 					asm_.movdqa(op,reg(ref));
-					//store_inst[ref] = NULL;
-				} break;
-				case IROpCode::prod: { //this could be more efficient if we had an additional register ...
+				} 
+				else {
+					EmitFoldFunction(ref,(void*)sumi,Constant((int64_t)0LL)); break;
+				}
+			} break;
+			case IROpCode::prod: { 
+				if(node.isDouble()) {
 					assert(store_inst[ref] != NULL);
 					IRNode & str = *store_inst[ref];
 					for(uint64_t i = 0; i < 128; i++)
 						((double*)str.store.dst->p)[i] = 1.0;
 					Operand op = EncodeOperand(str.store.dst->p, thread_index, times_8);
-					/*EmitMove(reg(ref),reg(node.unary.a));
-					asm_.mulsd(reg(ref),op); //r[0] *= sum;
-					asm_.movsd(op,reg(ref)); //sum = r[0];
-					asm_.unpckhpd(reg(ref),reg(ref)); //r[0] = r[1]
-					asm_.mulsd(reg(ref),op); //r[0] *= sum;
-					asm_.movsd(op,reg(ref)); //sum = r[0];
-					store_inst[ref] = NULL;*/
 					asm_.mulpd(reg(ref),op);
 					asm_.movdqa(op,reg(ref));
-				} break;
-
-#ifdef USE_AMD_LIBM
-				case IROpCode::exp: EmitVectorizedUnaryFunction(ref,amd_vrd2_exp); break;
-				case IROpCode::log: EmitVectorizedUnaryFunction(ref,amd_vrd2_log); break;
-				case IROpCode::cos: EmitVectorizedUnaryFunction(ref,amd_vrd2_cos); break;
-				case IROpCode::sin: EmitVectorizedUnaryFunction(ref,amd_vrd2_sin); break;
-				case IROpCode::tan: EmitVectorizedUnaryFunction(ref,amd_vrd2_tan); break;
-				case IROpCode::pow: EmitVectorizedBinaryFunction(ref,amd_vrd2_pow); break;
-
-				case IROpCode::acos: EmitUnaryFunction(ref,amd_acos); break;
-				case IROpCode::asin: EmitUnaryFunction(ref,amd_asin); break;
-				case IROpCode::atan: EmitUnaryFunction(ref,amd_atan); break;
-				case IROpCode::atan2: EmitBinaryFunction(ref,amd_atan2); break;
-				case IROpCode::hypot: EmitBinaryFunction(ref,amd_hypot); break;
-#else
-				case IROpCode::exp: EmitUnaryFunction(ref,exp); break;
-				case IROpCode::log: EmitUnaryFunction(ref,log); break;
-				case IROpCode::cos: EmitUnaryFunction(ref,cos); break;
-				case IROpCode::sin: EmitUnaryFunction(ref,sin); break;
-				case IROpCode::tan: EmitUnaryFunction(ref,tan); break;
-				case IROpCode::acos: EmitUnaryFunction(ref,acos); break;
-				case IROpCode::asin: EmitUnaryFunction(ref,asin); break;
-				case IROpCode::atan: EmitUnaryFunction(ref,atan); break;
-				case IROpCode::pow: EmitBinaryFunction(ref,pow); break;
-				case IROpCode::atan2: EmitBinaryFunction(ref,atan2); break;
-				case IROpCode::hypot: EmitBinaryFunction(ref,hypot); break;
-#endif
-				case IROpCode::sign: EmitUnaryFunction(ref,sign_fn); break;
-				case IROpCode::mod: EmitBinaryFunction(ref,Mod); break;
-				case IROpCode::cast: {
-					if(trace->nodes[node.unary.a].type == Type::Integer)
-						EmitUnaryFunction(ref,casti2d); //it should be possible to inline this, but I can't find the convert packed quadword to packed double instruction
-					else
-						_error("NYI - castl2d");
-				} break;
-				case IROpCode::gather: {
-					Constant c(node.unary.data);
-					Operand base = PushConstant(c);
-					asm_.movq(r8, base);
-					asm_.movq(r9, reg(node.unary.a));
-					asm_.movhlps(reg(ref), reg(node.unary.a));
-					asm_.movq(r10, reg(ref));
-					asm_.movlpd(reg(ref),Operand(r8,r9,times_8,0));
-					asm_.movhpd(reg(ref),Operand(r8,r10,times_8,0));
-				} break;
-				//placeholder for now
-				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumd,Constant(0.0)); break;
-				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodd,Constant(1.0)); break;
-				case IROpCode::signif:
-				default:
-					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
-						_error("unimplemented op");
-					break;
 				}
-			} else if(node.type == Type::Integer) {
-				switch(node.op) {
-				case IROpCode::add: asm_.paddq(reg(ref),reg(node.binary.b)); break;
-				case IROpCode::sub: asm_.psubq(reg(ref),reg(node.binary.b)); break;
-				case IROpCode::mul: EmitBinaryFunction(ref,imul); break;
-				case IROpCode::div: EmitBinaryFunction(ref,idiv); break;
-				case IROpCode::abs: EmitUnaryFunction(ref,iabs);break; //this can be inlined using bit-whacking, but we would need an additional register
-				                                                        // if(r < 0) f = ~0 else 0; r = r xor f; r -= f;
-				case IROpCode::neg: {
-					EmitMove(reg(ref),reg(node.unary.a));
-					asm_.xorpd(reg(ref),ConstantTable(C_NOT_MASK)); //r = ~r
-					asm_.psubq(reg(ref),ConstantTable(C_NOT_MASK)); //r -= -1
-				} break;
-				case IROpCode::pos: EmitMove(reg(ref),reg(node.unary.a)); break;
-				case IROpCode::mod: EmitBinaryFunction(ref,imod); break;
-				case IROpCode::seq: {
+				else {
+					EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)0LL)); break;
+				}
+			} break;
+#ifdef USE_AMD_LIBM
+			case IROpCode::exp: 	EmitVectorizedUnaryFunction(ref,amd_vrd2_exp); break;
+			case IROpCode::log: 	EmitVectorizedUnaryFunction(ref,amd_vrd2_log); break;
+			case IROpCode::cos: 	EmitVectorizedUnaryFunction(ref,amd_vrd2_cos); break;
+			case IROpCode::sin: 	EmitVectorizedUnaryFunction(ref,amd_vrd2_sin); break;
+			case IROpCode::tan: 	EmitVectorizedUnaryFunction(ref,amd_vrd2_tan); break;
+			case IROpCode::pow: 	EmitVectorizedBinaryFunction(ref,amd_vrd2_pow); break;
+
+			case IROpCode::acos: 	EmitUnaryFunction(ref,amd_acos); break;
+			case IROpCode::asin: 	EmitUnaryFunction(ref,amd_asin); break;
+			case IROpCode::atan: 	EmitUnaryFunction(ref,amd_atan); break;
+			case IROpCode::atan2: 	EmitBinaryFunction(ref,amd_atan2); break;
+			case IROpCode::hypot: 	EmitBinaryFunction(ref,amd_hypot); break;
+#else
+			case IROpCode::exp: 	EmitUnaryFunction(ref,exp); break;
+			case IROpCode::log: 	EmitUnaryFunction(ref,log); break;
+			case IROpCode::cos: 	EmitUnaryFunction(ref,cos); break;
+			case IROpCode::sin: 	EmitUnaryFunction(ref,sin); break;
+			case IROpCode::tan: 	EmitUnaryFunction(ref,tan); break;
+			case IROpCode::acos: 	EmitUnaryFunction(ref,acos); break;
+			case IROpCode::asin: 	EmitUnaryFunction(ref,asin); break;
+			case IROpCode::atan: 	EmitUnaryFunction(ref,atan); break;
+			case IROpCode::pow: 	EmitBinaryFunction(ref,pow); break;
+			case IROpCode::atan2: 	EmitBinaryFunction(ref,atan2); break;
+			case IROpCode::hypot: 	EmitBinaryFunction(ref,hypot); break;
+#endif
+			case IROpCode::sign: 	EmitUnaryFunction(ref,sign_fn); break;
+			case IROpCode::mod: {
+				if(node.isDouble()) {
+					EmitBinaryFunction(ref, Mod); 
+				} else {
+					EmitBinaryFunction(ref, imod);
+				}
+			} break;
+			
+			case IROpCode::eq: EmitCompare(ref,Assembler::kEQ); break;
+			case IROpCode::lt: EmitCompare(ref,Assembler::kLT); break;
+			case IROpCode::le: EmitCompare(ref,Assembler::kLE); break;
+			case IROpCode::neq: EmitCompare(ref,Assembler::kNEQ); break;
+			case IROpCode::land: asm_.andpd(reg(ref),reg(node.binary.b)); break;
+			case IROpCode::lor: asm_.orpd(reg(ref),reg(node.binary.b)); break;
+			case IROpCode::lnot: {
+				EmitMove(reg(ref),reg(node.unary.a));
+				asm_.xorpd(reg(ref),ConstantTable(C_LNOT_MASK));
+			} break;
+			
+			case IROpCode::cast: {
+				if(node.type == trace->nodes[node.unary.a].type)
+					EmitMove(reg(ref), reg(node.unary.a));
+				else if(node.isDouble() && trace->nodes[node.unary.a].isInteger())
+					EmitUnaryFunction(ref, casti2d);
+				else if(node.isInteger() && trace->nodes[node.unary.a].isDouble())
+					EmitUnaryFunction(ref, castd2i);
+				else if(node.isLogical() && trace->nodes[node.unary.a].isDouble()) {
+					asm_.cmppd(reg(ref),ConstantTable(C_DOUBLE_ZERO),Assembler::kNEQ);
+					EmitComparisonToLogical(reg(ref));
+				}
+				else _error("Unimplemented cast");
+			} break;
+			case IROpCode::gather: {
+				Constant c(node.unary.data);
+				Operand base = PushConstant(c);
+				asm_.movq(r8, base);
+				asm_.movq(r9, reg(node.unary.a));
+				asm_.movhlps(reg(ref), reg(node.unary.a));
+				asm_.movq(r10, reg(ref));
+				asm_.movlpd(reg(ref),Operand(r8,r9,times_8,0));
+				asm_.movhpd(reg(ref),Operand(r8,r10,times_8,0));
+			} break;
+			case IROpCode::seq: {
+				if(node.isDouble()) {
+					_error("No double seq yet in JIT");
+				} else {
 					asm_.movq(reg(ref),vector_index);
 					asm_.unpcklpd(reg(ref),reg(ref));
 					asm_.paddq(reg(ref),ConstantTable(C_SEQ_VEC));
-				} break;
-				case IROpCode::gather: {
-					Constant c(node.unary.data);
-					Operand base = PushConstant(c);
-					asm_.movq(r8, base);
-					asm_.movq(r9, reg(node.unary.a));
-					asm_.movhlps(reg(ref), reg(node.unary.a));
-					asm_.movq(r10, reg(ref));
-					asm_.movlpd(reg(ref),Operand(r8,r9,times_8,0));
-					asm_.movhpd(reg(ref),Operand(r8,r10,times_8,0));
-				} break;
-				//placeholder for now
-				case IROpCode::sum:  EmitFoldFunction(ref,(void*)sumi,Constant((int64_t)0LL)); break;
-				case IROpCode::cumsum:  EmitFoldFunction(ref,(void*)cumsumi,Constant((int64_t)0LL)); break;
-				case IROpCode::prod:  EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)1LL)); break;
-				case IROpCode::cumprod:  EmitFoldFunction(ref,(void*)cumprodi,Constant((int64_t)1LL)); break;
-				case IROpCode::cast: {
-					if(trace->nodes[node.unary.a].type == Type::Double)
-						EmitUnaryFunction(ref,(void*)castd2i); 
-					else
-						_error("NYI - castl2i");
-				} break;
-				default:
-					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
-						_error("unimplemented op");
-					break;
 				}
-			} else if(node.type == Type::Logical) {
-				switch(node.op) {
-				case IROpCode::eq: EmitCompare(ref,Assembler::kEQ); break;
-				case IROpCode::lt: EmitCompare(ref,Assembler::kLT); break;
-				case IROpCode::le: EmitCompare(ref,Assembler::kLE); break;
-				case IROpCode::neq: EmitCompare(ref,Assembler::kNEQ); break;
-				case IROpCode::land: asm_.andpd(reg(ref),reg(node.binary.b)); break;
-				case IROpCode::lor: asm_.orpd(reg(ref),reg(node.binary.b)); break;
-				case IROpCode::lnot: {
-					EmitMove(reg(ref),reg(node.unary.a));
-					asm_.xorpd(reg(ref),ConstantTable(C_LNOT_MASK));
-				} break;
-				case IROpCode::cast: {
-					Type::Enum operand_type = trace->nodes[node.unary.a].type;
-					if(operand_type == Type::Double) {
-						asm_.cmppd(reg(ref),ConstantTable(C_DOUBLE_ZERO),Assembler::kNEQ);
-						EmitComparisonToLogical(reg(ref));
-					} else {
-						_error("NYI - casti2l");
-					}
-				} break;
-				default:
-					if(node.enc == IRNode::BINARY || node.enc == IRNode::UNARY)
-						_error("unimplemented op");
-					break;
-				}
-			} else {
-				_error("type not supported");
+			} break;
+			//placeholder for now
+			case IROpCode::cumsum: {
+				if(node.isDouble()) 
+					EmitFoldFunction(ref,(void*)cumsumd,Constant(0.0)); 
+				else
+					EmitFoldFunction(ref,(void*)cumsumi,Constant((int64_t)0LL));
+			} break;
+			case IROpCode::cumprod: {
+				if(node.isDouble()) 
+					EmitFoldFunction(ref,(void*)cumprodd,Constant(1.0)); 
+				else
+					EmitFoldFunction(ref,(void*)cumprodi,Constant((int64_t)1LL));
+			} break;
+
+			case IROpCode::nop:
+			/* nothing */
+			break;
+
+			case IROpCode::signif:
+			default:	_error("unimplemented op"); break;
+		
 			}
 
+			if(node.op != IROpCode::nop && store_inst[ref] != NULL && node.op != IROpCode::sum && node.op != IROpCode::prod) {
+				IRNode & str = *store_inst[ref];
+				if(str.op == IROpCode::storev) {
+					if(Type::Logical == str.type)
+						EmitLogicalStore(str.store.dst->p,reg(str.store.a));
+					else
+						EmitVectorStore(str.store.dst->p,reg(str.store.a));
+				} else {
+					Operand op = EncodeOperand(&str.store.dst->p);
+					asm_.movsd(op,reg(str.store.a));
+				}
+			}
+		
 		/*	
 			switch(node.enc) {
 			case IRNode::LOADV:
@@ -514,18 +684,6 @@ struct TraceJIT {
 			}
 		*/	
 
-			if(store_inst[ref] != NULL && node.op != IROpCode::sum && node.op != IROpCode::prod) {
-				IRNode & str = *store_inst[ref];
-				if(str.op == IROpCode::storev) {
-					if(Type::Logical == str.type)
-						EmitLogicalStore(str.store.dst->p,reg(str.store.a));
-					else
-						EmitVectorStore(str.store.dst->p,reg(str.store.a));
-				} else {
-					Operand op = EncodeOperand(&str.store.dst->p);
-					asm_.movsd(op,reg(str.store.a));
-				}
-			}
 		}
 
 		asm_.addq(vector_index, Immediate(2));
@@ -544,10 +702,19 @@ struct TraceJIT {
 		assert(allocated_register[r] >= 0);
 		return XMMRegister::FromAllocationIndex(allocated_register[r]);
 	}
-	void EmitMove(XMMRegister dst, XMMRegister src) {
+	XMMRegister Move(IRef d, IRef s) {
+		XMMRegister dst = reg(d);
+		XMMRegister src = reg(s);
 		if(!dst.is(src)) {
 			asm_.movapd(dst,src);
 		}
+		return dst;
+	}
+	XMMRegister EmitMove(XMMRegister dst, XMMRegister src) {
+		if(!dst.is(src)) {
+			asm_.movapd(dst,src);
+		}
+		return dst;
 	}
 	Operand ConstantTable(int entry) {
 		return Operand(constant_base,entry * sizeof(Constant));
@@ -604,56 +771,6 @@ struct TraceJIT {
 			asm_.movq(load_addr,src);
 			return Operand(load_addr,0);
 		}
-	}
-	IRef AllocateNullary(IRef ref, bool p = true) {
-		if(allocated_register[ref] < 0) { //this instruction is dead, for now we just emit it anyway
-			if(!alloc.allocate(&allocated_register[ref]))
-				_error("exceeded available registers");
-		}
-		int r = allocated_register[ref];
-		alloc.free(r);
-		//we want to know the registers live out of this op, not including value that this op defines
-		live_registers[ref] = alloc.live_registers();
-		if(p) {
-			//printf("%d = _, %d = _ \n",(int)allocated_register[ref],(int)ref);
-		}
-		return r;
-	}
-	IRef AllocateUnary(IRef ref, IRef a, bool p = true) {
-		IRef r = AllocateNullary(ref,false);
-		if(allocated_register[a] < 0) {
-			//try to allocated register a and r to the same location,  this avoids moves in binary instructions
-			if(!alloc.allocate(r,&allocated_register[a]))
-				_error("exceeded available registers");
-		}
-		if(p) {
-			//printf("%d = %d op, %d = %d op\n",(int)allocated_register[ref],(int)allocated_register[a],(int)ref,(int)a);
-		}
-		return r;
-	}
-	IRef AllocateBinary(IRef ref, IRef a, IRef b) {
-		IRef r = AllocateUnary(ref,a,false);
-		if(allocated_register[b] < 0) {
-			RegisterSet mask = ~(1 << allocated_register[ref]);
-			//we avoid allocating registers such that r = a op r
-			//occurs
-			if(!alloc.allocateWithMask(mask,&allocated_register[b])) {
-				_error("exceeded available registers");
-			}
-			assert(allocated_register[ref] != allocated_register[b]);
-		}
-
-
-		//printf("%d = %d op %d, %d = %d op %d\n",(int)allocated_register[ref],(int)allocated_register[a],(int)allocated_register[b],(int)ref,(int)a,(int)b);
-
-		//we need to avoid binary threadments of the form r = a op r, a != r because these are hard to code gen with 2-op codes
-		assert(!reg(ref).is(reg(b)) || reg(ref).is(reg(a)));
-		//proof:
-		// case: b is not live out of this stmt and b != a -> we allocated b s.t. r != b
-		// case: b is not live out this stmt and b == a -> either this stmt is r = a + a or r = r + r, either of which is allowed in codegen
-		// case: b is live out of this stmt -> b and r are live at the same time so b != r
-
-		return r;
 	}
 
 	void EmitCall(void * fn) {
@@ -817,6 +934,16 @@ struct TraceJIT {
 		code(thread.index*8, start, end);	
 	}
 
+
+	void Compile() {
+		bzero(store_inst,sizeof(IRNode *) * trace->n_nodes);
+		memset(allocated_register,-1,sizeof(char) * trace->n_nodes);
+
+		Optimize();
+		RegisterAllocate();
+		InstructionSelection();
+	}
+
 	void Execute(Thread & thread) {
 		fn trace_code = (fn) trace->code_buffer->code;
 		if(thread.state.verbose) {
@@ -875,6 +1002,8 @@ void Trace::JIT(Thread & thread) {
 	TraceJIT trace_code(this);
 
 	trace_code.Compile();
+	if(thread.state.verbose)
+		printf("optimized:\n%s\n",toString(thread).c_str());
 	trace_code.Execute(thread);
 	trace_code.GlobalReduce(thread);
 	WriteOutputs(thread);

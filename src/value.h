@@ -10,8 +10,9 @@
 #include "type.h"
 #include "bc.h"
 #include "string.h"
-#include "ir.h"
 #include "exceptions.h"
+
+typedef size_t IRef;
 
 struct Value {
 	

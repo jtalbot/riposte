@@ -6,6 +6,7 @@
 
 #include "value.h"
 #include "thread.h"
+#include "ir.h"
 
 #include "recording.h"
 #include "register_set.h"

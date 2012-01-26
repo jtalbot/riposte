@@ -51,17 +51,11 @@ RecordingStatus::Enum kget_record(Thread & thread, Instruction const & inst, Ins
 RecordingStatus::Enum assign_record(Thread & thread, Instruction const & inst, Instruction const ** pc) {
 	*pc = assign_op(thread,inst);
 	Value& r = REG(thread, inst.c);
+	//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
 	if(r.isFuture()) {
-		//Note: this call to makePointer is redundant:
-		//if the variable is cached then we could construct the Pointer from the cache
-		//otherwise the inline cache is updated, which involves creating a pointer
-
-		//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
-		if(r.isFuture()) {
-			Trace & trace = traceForFuture(thread,r);
-			trace.EmitVarOutput(thread,thread.frame.environment->makePointer((String)inst.a));
-			thread.tracing.Commit(thread,trace);
-		}
+		Trace & trace = traceForFuture(thread,r);
+		trace.EmitVarOutput(thread,thread.frame.environment->makePointer((String)inst.a));
+		thread.tracing.Commit(thread,trace);
 	}
 	thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
 	return RecordingStatus::NO_ERROR;

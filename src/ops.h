@@ -396,8 +396,8 @@ inline void selectType(ByteCode::Enum bc, Type::Enum input, Type::Enum * atyp, T
 	switch(bc) {
 #define ARITH_CASE(name,str,Op,...) \
 	case ByteCode::name: \
-		if(input == Type::Integer) { *atyp = Op<TInteger>::AV::VectorType; *rtyp = Op<TInteger>::RV::VectorType; } \
-		else if(input == Type::Double || input == Type::Logical) { *atyp = Op<TDouble>::AV::VectorType; *rtyp = Op<TDouble>::RV::VectorType; } \
+		if(input == Type::Integer) { *atyp = Op<TInteger>::RV::VectorType; *rtyp = Op<TInteger>::RV::VectorType; } \
+		else if(input == Type::Double || input == Type::Logical) { *atyp = Op<TDouble>::RV::VectorType; *rtyp = Op<TDouble>::RV::VectorType; } \
 		else _error("Unknown type"); \
 		break;
 #define LOGICAL_CASE(name,str,Op,...) \

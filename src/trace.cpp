@@ -12,7 +12,6 @@ void Trace::Reset() {
 
 std::string Trace::toString(Thread & thread) {
 	std::ostringstream out;
-	out << "recorded: \n";
 	for(size_t j = 0; j < n_nodes; j++) {
 		IRNode & node = nodes[j];
 		out << "n" << j << " : " << Type::toString(node.type) << "[" << node.length << "]" << " = " << IROpCode::toString(node.op) << "\t";
@@ -33,6 +32,7 @@ std::string Trace::toString(Thread & thread) {
 		case IROpCode::loadv: out << "$" << node.loadv.p; break;
 		case IROpCode::storec: /*fallthrough*/
 		case IROpCode::storev: out << "o" << node.store.dst - output_values << "\tn" << node.store.a; break;
+		case IROpCode::nop: break;
 		}
 		out << "\n";
 	}
