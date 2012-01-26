@@ -331,7 +331,6 @@ struct TraceJIT {
 			IRef ref = i;
 			IRNode & node = trace->nodes[i];
 
-			//right now reg(ref) holds a if binary
 			switch(node.op) {
 
 			case IROpCode::loadc: {
@@ -403,34 +402,6 @@ struct TraceJIT {
 				}
 			} break;
 			case IROpCode::pos: EmitMove(reg(ref), reg(node.unary.a)); break;
-			case IROpCode::sum:  {
-				if(node.isDouble()) {
-					assert(store_inst[ref] != NULL);
-					IRNode & str = *store_inst[ref];
-					for(uint64_t i = 0; i < 128; i++)
-						((double*)str.store.dst.p)[i] = 0.0;
-					Operand op = EncodeOperand(str.store.dst.p, thread_index, times_8);
-					asm_.addpd(reg(ref), op);
-					asm_.movdqa(op,reg(ref));
-				} 
-				else {
-					EmitFoldFunction(ref,(void*)sumi,Constant((int64_t)0LL)); break;
-				}
-			} break;
-			case IROpCode::prod: { 
-				if(node.isDouble()) {
-					assert(store_inst[ref] != NULL);
-					IRNode & str = *store_inst[ref];
-					for(uint64_t i = 0; i < 128; i++)
-						((double*)str.store.dst.p)[i] = 1.0;
-					Operand op = EncodeOperand(str.store.dst.p, thread_index, times_8);
-					asm_.mulpd(reg(ref),op);
-					asm_.movdqa(op,reg(ref));
-				}
-				else {
-					EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)0LL)); break;
-				}
-			} break;
 #ifdef USE_AMD_LIBM
 			case IROpCode::exp: 	EmitVectorizedUnaryFunction(ref,amd_vrd2_exp); break;
 			case IROpCode::log: 	EmitVectorizedUnaryFunction(ref,amd_vrd2_log); break;
@@ -509,6 +480,37 @@ struct TraceJIT {
 					asm_.paddq(reg(ref),ConstantTable(C_SEQ_VEC));
 				}
 			} break;
+
+			case IROpCode::sum:  {
+				if(node.isDouble()) {
+					assert(store_inst[ref] != NULL);
+					IRNode & str = *store_inst[ref];
+					for(uint64_t i = 0; i < 128; i++)
+						((double*)str.store.dst.p)[i] = 0.0;
+					Operand op = EncodeOperand(str.store.dst.p, thread_index, times_8);
+					asm_.addpd(reg(ref), op);
+					asm_.movdqa(op,reg(ref));
+				} 
+				else {
+					EmitFoldFunction(ref,(void*)sumi,Constant((int64_t)0LL)); break;
+				}
+			} break;
+
+			case IROpCode::prod: { 
+				if(node.isDouble()) {
+					assert(store_inst[ref] != NULL);
+					IRNode & str = *store_inst[ref];
+					for(uint64_t i = 0; i < 128; i++)
+						((double*)str.store.dst.p)[i] = 1.0;
+					Operand op = EncodeOperand(str.store.dst.p, thread_index, times_8);
+					asm_.mulpd(reg(ref),op);
+					asm_.movdqa(op,reg(ref));
+				}
+				else {
+					EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)0LL)); break;
+				}
+			} break;
+	
 			//placeholder for now
 			case IROpCode::cumsum: {
 				if(node.isDouble()) 

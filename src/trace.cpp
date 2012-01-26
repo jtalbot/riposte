@@ -80,26 +80,26 @@ static void set_location_value(Thread & thread, const Trace::Location & l, const
 static bool isOutputAlive(Thread& thread, Trace& trace, Trace::Output const& o) {
 	if(thread.tracing.LocationIsDead(o.location)) return false;
 	Value const& v = get_location_value(thread, o.location);
-	return v.isFuture() && (v.future.trace_id == thread.tracing.TraceID(trace)) && (v.future.ref == o.ref);
+	return v.isFuture() && (v.future.trace_id == thread.tracing.TraceID(trace));
 }
 
 void Trace::InitializeOutputs(Thread& thread) {
-	bool stored[TRACE_MAX_NODES];
-	bzero(stored, sizeof(bool)*TRACE_MAX_NODES);
+	IRef store[TRACE_MAX_NODES];
+	bzero(store, sizeof(IRef)*TRACE_MAX_NODES);
 
 	for(size_t i = 0; i < n_outputs; ) {
 		Output & o = outputs[i];
 		if(isOutputAlive(thread,*this,o)) {
-			if(!stored[o.ref]) {
+			if(!store[o.ref]) {
 				IRNode& node = nodes[o.ref];
-				stored[o.ref] = true;
 				if(node.length == length || node.length < 0) {
-					o.ref = EmitStoreV(node.type, node.length, o.ref);
+					store[o.ref] = EmitStoreV(node.type, node.length, o.ref);
 				} else {
-					o.ref = EmitStoreC(node.type, node.length, o.ref);
+					store[o.ref] = EmitStoreC(node.type, node.length, o.ref);
 				}
 				n_nodes = n_pending_nodes;
 			}
+			o.ref = store[o.ref];
 			i++;
 		}
 		else  {
@@ -129,7 +129,9 @@ void Trace::SimplifyOps(Thread& thread) {
 			case IROpCode::gt: node.op = IROpCode::lt; std::swap(node.binary.a,node.binary.b); break;
 			case IROpCode::ge: node.op = IROpCode::le; std::swap(node.binary.a,node.binary.b); break;
 			case IROpCode::add: /* fallthrough */ 
-			case IROpCode::mul: 
+			case IROpCode::mul:
+			case IROpCode::land:
+			case IROpCode::lor: 
 					   if(nodes[node.binary.a].op == IROpCode::loadc) std::swap(node.binary.a,node.binary.b); break;
 			default: /*pass*/ break;
 		}
@@ -187,6 +189,11 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			node.op = IROpCode::pos;
 			node.unary.a = nodes[node.unary.a].unary.a;
 		}
+		if(	node.op == IROpCode::lnot &&
+				nodes[node.unary.a].op == IROpCode::lnot) {
+			node.op = IROpCode::pos;
+			node.unary.a = nodes[node.unary.a].unary.a;
+		}
 		if(	node.op == IROpCode::pos &&
 				nodes[node.unary.a].op == IROpCode::pos) {
 			node.unary.a = nodes[node.unary.a].unary.a;
@@ -225,6 +232,38 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 				 (node.isInteger() && nodes[node.binary.b].loadc.i == 1))) {
 			node.op = IROpCode::pos;
 			node.unary.a = node.binary.a;
+		}
+		
+		if(node.op == IROpCode::land &&
+				nodes[node.binary.b].op == IROpCode::loadc &&
+				Logical::isTrue(nodes[node.binary.b].loadc.l)) {
+			node.op = IROpCode::pos;
+			node.unary.a = node.binary.a;
+		}
+
+		if(node.op == IROpCode::land &&
+				nodes[node.binary.b].op == IROpCode::loadc &&
+				Logical::isFalse(nodes[node.binary.b].loadc.l)) {
+			node.op = IROpCode::loadc;
+			node.enc = IRNode::LOADC;
+			node.length = 1;
+			node.loadc.l = 0;
+		}
+
+		if(node.op == IROpCode::lor &&
+				nodes[node.binary.b].op == IROpCode::loadc &&
+				Logical::isFalse(nodes[node.binary.b].loadc.l)) {
+			node.op = IROpCode::pos;
+			node.unary.a = node.binary.a;
+		}
+
+		if(node.op == IROpCode::lor &&
+				nodes[node.binary.b].op == IROpCode::loadc &&
+				Logical::isTrue(nodes[node.binary.b].loadc.l)) {
+			node.op = IROpCode::loadc;
+			node.enc = IRNode::LOADC;
+			node.length = 1;
+			node.loadc.l = 1;
 		}
 	}
 }
