@@ -146,15 +146,13 @@ struct Trace {
 	struct Output {
 		Location location; //location where an output might exist
 		                   //if that location is live and contains a future then that is a live output
-		Value * value; //pointer into output_values array
+		IRef ref;	   //location of the associated store
 	};
 
 	Output outputs[TRACE_MAX_OUTPUTS];
 	size_t n_outputs;
 	size_t n_pending_outputs;
 
-	Value output_values[TRACE_MAX_OUTPUTS];
-	size_t n_output_values;
 	TraceCodeBuffer * code_buffer;
 
 	Trace() { Reset(); code_buffer = NULL; }
@@ -217,34 +215,34 @@ struct Trace {
 		n.loadv.p = v;
 		return n_pending_nodes++;
 	}
-	IRef EmitStoreV(Type::Enum type, int64_t length, Value * dst, int64_t a) {
+	IRef EmitStoreV(Type::Enum type, int64_t length, int64_t a) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::STORE;
 		n.op = IROpCode::storev;
 		n.type = type;
 		n.length = length;
 		n.store.a = a;
-		n.store.dst = dst;
 		return n_pending_nodes++;
 	}
-	IRef EmitStoreC(Type::Enum type, int64_t length, Value * dst, int64_t a) {
+	IRef EmitStoreC(Type::Enum type, int64_t length, int64_t a) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::STORE;
 		n.op = IROpCode::storec;
 		n.type = type;
 		n.length = length;
 		n.store.a = a;
-		n.store.dst = dst;
 		return n_pending_nodes++;
 	}
-	void EmitRegOutput(Value * base, int64_t id) {
+	void EmitRegOutput(IRef ref, Value * base, int64_t id) {
 		Trace::Output & out = outputs[n_pending_outputs++];
+		out.ref = ref;
 		out.location.type = Location::REG;
 		out.location.reg.base = base;
 		out.location.reg.offset = id;
 	}
-	void EmitVarOutput(Thread & state, const Environment::Pointer & p) {
+	void EmitVarOutput(IRef ref, Thread & state, const Environment::Pointer & p) {
 		Trace::Output & out = outputs[n_pending_outputs++];
+		out.ref = ref;
 		out.location.type = Trace::Location::VAR;
 		out.location.pointer = p;
 	}
@@ -256,6 +254,10 @@ struct Trace {
 private:
 	void Interpret(Thread & state);
 	void JIT(Thread & state);
+
+	void SimplifyOps(Thread& thread);
+	void AlgebraicSimplification(Thread& thread);
+	void DeadCodeElimination(Thread& thread);
 };
 
 //member of Thread, manages information for all traces
@@ -350,7 +352,6 @@ struct TraceThread {
 
 	void Rollback(Trace & t) {
 		t.n_pending_nodes = t.n_nodes;
-		t.n_pending_outputs = t.n_output_values;
 		if(t.n_nodes == 0) {
 			size_t id = TraceID(t);
 			live_traces.free(id);

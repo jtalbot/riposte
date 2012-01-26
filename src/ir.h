@@ -77,8 +77,8 @@ struct IRNode {
 			void * p;
 		} loadv;
 		struct {
-			Value * dst;
 			int64_t a;
+			Value dst;
 		} store;
 		
 	};

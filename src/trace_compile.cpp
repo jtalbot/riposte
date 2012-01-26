@@ -219,130 +219,6 @@ struct TraceJIT {
 	Register vector_length; //holds length of long vector
 	uint32_t next_constant_slot;
 
-	//some hardware ops like > do not exist, requiring the use of < instead.  For simplicity, this needs to be done before register allocation
-	void SimplifyOps() {
-		for(IRef ref = 0; ref < trace->n_nodes; ref++) {
-			IRNode & node = trace->nodes[ref];
-			switch(node.op) {
-				case IROpCode::gt: node.op = IROpCode::lt; std::swap(node.binary.a,node.binary.b); break;
-				case IROpCode::ge: node.op = IROpCode::le; std::swap(node.binary.a,node.binary.b); break;
-				case IROpCode::add: /* fallthrough */ 
-				case IROpCode::mul: 
-					if(trace->nodes[node.binary.a].op == IROpCode::loadc) std::swap(node.binary.a,node.binary.b); break;
-				default: /*pass*/ break;
-			}
-		}
-	}
-
-	void AlgebraicSimplification() {
-		for(IRef ref = 0; ref < trace->n_nodes; ref++) {
-			IRNode & node = trace->nodes[ref];
-			
-			if(node.enc == IRNode::UNARY && trace->nodes[node.unary.a].op == IROpCode::pos)
-				node.unary.a = trace->nodes[node.unary.a].unary.a;
-			if(node.enc == IRNode::FOLD && trace->nodes[node.unary.a].op == IROpCode::pos)
-				node.unary.a = trace->nodes[node.unary.a].unary.a;
-			if(node.enc == IRNode::STORE && trace->nodes[node.store.a].op == IROpCode::pos)
-				node.store.a = trace->nodes[node.store.a].unary.a;
-			if(node.enc == IRNode::BINARY && trace->nodes[node.binary.a].op == IROpCode::pos)
-				node.binary.a = trace->nodes[node.binary.a].unary.a;
-			if(node.enc == IRNode::BINARY && trace->nodes[node.binary.b].op == IROpCode::pos)
-				node.binary.b = trace->nodes[node.binary.b].unary.a;
-			
-			if(	node.op == IROpCode::neg &&
-				trace->nodes[node.unary.a].op == IROpCode::neg) {
-				node.op = IROpCode::pos;
-				node.unary.a = trace->nodes[node.unary.a].unary.a;
-			}
-			if(	node.op == IROpCode::pos &&
-				trace->nodes[node.unary.a].op == IROpCode::pos) {
-				node.unary.a = trace->nodes[node.unary.a].unary.a;
-			}
-			if(node.op == IROpCode::add &&
-				trace->nodes[node.binary.b].op == IROpCode::loadc &&
-			   	trace->nodes[node.binary.a].op == IROpCode::add &&
-			   	trace->nodes[trace->nodes[node.binary.a].binary.b].op == IROpCode::loadc) {
-				if(node.isInteger())
-					trace->nodes[node.binary.b].loadc.i += trace->nodes[trace->nodes[node.binary.a].binary.b].loadc.i;
-				else
-					trace->nodes[node.binary.b].loadc.d += trace->nodes[trace->nodes[node.binary.a].binary.b].loadc.d;
-				node.binary.a = trace->nodes[node.binary.a].binary.a;
-			}
-			if(node.op == IROpCode::mul &&
-				trace->nodes[node.binary.b].op == IROpCode::loadc &&
-			   	trace->nodes[node.binary.a].op == IROpCode::mul &&
-			   	trace->nodes[trace->nodes[node.binary.a].binary.b].op == IROpCode::loadc) {
-				if(node.isInteger())
-					trace->nodes[node.binary.b].loadc.i *= trace->nodes[trace->nodes[node.binary.a].binary.b].loadc.i;
-				else
-					trace->nodes[node.binary.b].loadc.d *= trace->nodes[trace->nodes[node.binary.a].binary.b].loadc.d;
-				node.binary.a = trace->nodes[node.binary.a].binary.a;
-			}
-
-			if(node.op == IROpCode::add &&
-				trace->nodes[node.binary.b].op == IROpCode::loadc &&
-				trace->nodes[node.binary.b].loadc.i == 0) {
-				node.op = IROpCode::pos;
-				node.unary.a = node.binary.a;
-			}
-			
-			if(node.op == IROpCode::mul &&
-				trace->nodes[node.binary.b].op == IROpCode::loadc &&
-				((node.isDouble() && trace->nodes[node.binary.b].loadc.d == 1) || 
-				(node.isInteger() && trace->nodes[node.binary.b].loadc.i == 1))) {
-				node.op = IROpCode::pos;
-				node.unary.a = node.binary.a;
-			}
-		}
-	}
-
-	void DeadCodeElimination() {
-		// kill any defs whose use I haven't seen!
-		for(IRef ref = 0; ref < trace->n_nodes; ref++) {
-			IRNode & node = trace->nodes[ref];
-			node.used = false;
-		}
-		for(IRef ref = trace->n_nodes; ref > 0; ref--) {
-			IRNode & node = trace->nodes[ref-1];
-			if(node.enc == IRNode::STORE) {
-				// do load-store forwarding here...
-				if(trace->nodes[node.store.a].op == IROpCode::loadv) {
-					node.store.dst->p = trace->nodes[node.store.a].loadv.p;
-					node.op = IROpCode::nop;
-					node.enc = IRNode::NOP;
-				}
-				else trace->nodes[node.store.a].used = true;
-			} else if(node.used) {
-				switch(node.enc) {
-					case IRNode::BINARY: 
-						trace->nodes[node.binary.a].used = true;
-						trace->nodes[node.binary.b].used = true;
-						break;
-					case IRNode::FOLD: /*fallthrough*/
-					case IRNode::UNARY:
-						trace->nodes[node.unary.a].used = true;
-						break;
-					case IRNode::LOADC: /*fallthrough*/
-					case IRNode::LOADV: /*fallthrough*/
-					case IRNode::SPECIAL: /*fallthrough*/
-					case IRNode::STORE: /*fallthrough*/
-					case IRNode::NOP: 
-						/* nothing */
-						break;
-				}
-			} else {
-				node.op = IROpCode::nop;
-				node.enc = IRNode::NOP;
-			}
-		}
-	}
-
-	void Optimize() {
-		SimplifyOps();
-		AlgebraicSimplification();
-		DeadCodeElimination();
-	}
-
 	void RegisterAllocate() {
 		//pass 1 register allocation
 		for(IRef i = trace->n_nodes; i > 0; i--) {
@@ -501,7 +377,7 @@ struct TraceJIT {
 					EmitBinaryFunction(ref,idiv);
 				}
 			} break;
-			case IROpCode::sqrt: 	asm_.sqrtpd(reg(ref),reg(node.binary.b)); break;
+			case IROpCode::sqrt: 	asm_.sqrtpd(reg(ref),reg(node.unary.a)); break;
 			case IROpCode::round:	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundToNearest); break;
 			case IROpCode::floor: 	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundDown); break;
 			case IROpCode::ceiling:	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundUp); break;
@@ -532,8 +408,8 @@ struct TraceJIT {
 					assert(store_inst[ref] != NULL);
 					IRNode & str = *store_inst[ref];
 					for(uint64_t i = 0; i < 128; i++)
-						((double*)str.store.dst->p)[i] = 0.0;
-					Operand op = EncodeOperand(str.store.dst->p, thread_index, times_8);
+						((double*)str.store.dst.p)[i] = 0.0;
+					Operand op = EncodeOperand(str.store.dst.p, thread_index, times_8);
 					asm_.addpd(reg(ref), op);
 					asm_.movdqa(op,reg(ref));
 				} 
@@ -546,8 +422,8 @@ struct TraceJIT {
 					assert(store_inst[ref] != NULL);
 					IRNode & str = *store_inst[ref];
 					for(uint64_t i = 0; i < 128; i++)
-						((double*)str.store.dst->p)[i] = 1.0;
-					Operand op = EncodeOperand(str.store.dst->p, thread_index, times_8);
+						((double*)str.store.dst.p)[i] = 1.0;
+					Operand op = EncodeOperand(str.store.dst.p, thread_index, times_8);
 					asm_.mulpd(reg(ref),op);
 					asm_.movdqa(op,reg(ref));
 				}
@@ -660,11 +536,11 @@ struct TraceJIT {
 				IRNode & str = *store_inst[ref];
 				if(str.op == IROpCode::storev) {
 					if(Type::Logical == str.type)
-						EmitLogicalStore(str.store.dst->p,reg(str.store.a));
+						EmitLogicalStore(str.store.dst.p,reg(str.store.a));
 					else
-						EmitVectorStore(str.store.dst->p,reg(str.store.a));
+						EmitVectorStore(str.store.dst.p,reg(str.store.a));
 				} else {
-					Operand op = EncodeOperand(&str.store.dst->p);
+					Operand op = EncodeOperand(&str.store.dst.p);
 					asm_.movsd(op,reg(str.store.a));
 				}
 			}
@@ -939,7 +815,6 @@ struct TraceJIT {
 		bzero(store_inst,sizeof(IRNode *) * trace->n_nodes);
 		memset(allocated_register,-1,sizeof(char) * trace->n_nodes);
 
-		Optimize();
 		RegisterAllocate();
 		InstructionSelection();
 	}
@@ -951,8 +826,8 @@ struct TraceJIT {
 			get_time(begin);
 			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
 			//trace_code(thread.index, 0, trace->length);
-			double s = time_elapsed(begin) / trace->length * 1024.0 * 1024.0 * 1024.0;
-			printf("trace elapsed %fns\n",s);
+			double s = trace->length / (time_elapsed(begin) * 10e9);
+			printf("elements computed / us: %f\n",s);
 		} else {
 			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
 			//trace_code(thread.index, 0, trace->length);
@@ -966,23 +841,23 @@ struct TraceJIT {
 			switch(node.op) {
 				case IROpCode::sum:  {
 					IRNode & str = *store_inst[ref];
-					double* d = (double*)str.store.dst->p;
+					double* d = (double*)str.store.dst.p;
 					double sum = 0;
 					for(uint64_t j = 0; j < thread.state.nThreads; j++) {
 						sum += d[j*8];
 						sum += d[j*8+1];
 					}
-					*str.store.dst = Double::c(sum);
+					str.store.dst = Double::c(sum);
 				} break;
 				case IROpCode::prod:  {
 					IRNode & str = *store_inst[ref];
-					double* d = (double*)str.store.dst->p;
+					double* d = (double*)str.store.dst.p;
 					double sum = 1.0;
 					for(uint64_t j = 0; j < thread.state.nThreads; j++) {
 						sum *= d[j*8];
 						sum *= d[j*8+1];
 					}
-					*str.store.dst = Double::c(sum);
+					str.store.dst = Double::c(sum);
 				} break;
 				default: break;
 			}
@@ -991,10 +866,6 @@ struct TraceJIT {
 };
 
 void Trace::JIT(Thread & thread) {
-	InitializeOutputs(thread);
-	if(thread.state.verbose)
-		printf("executing trace:\n%s\n",toString(thread).c_str());
-
 	if(code_buffer == NULL) { //since it is expensive to reallocate this, we reuse it across traces
 		code_buffer = new TraceCodeBuffer();
 	}
@@ -1002,9 +873,6 @@ void Trace::JIT(Thread & thread) {
 	TraceJIT trace_code(this);
 
 	trace_code.Compile();
-	if(thread.state.verbose)
-		printf("optimized:\n%s\n",toString(thread).c_str());
 	trace_code.Execute(thread);
 	trace_code.GlobalReduce(thread);
-	WriteOutputs(thread);
 }

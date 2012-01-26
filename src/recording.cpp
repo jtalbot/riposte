@@ -36,7 +36,7 @@ RecordingStatus::Enum get_record(Thread & thread, Instruction const & inst, Inst
 
 	if(r.isFuture()) {
 		Trace & trace = traceForFuture(thread,r);
-		trace.EmitRegOutput(thread.base,inst.c);
+		trace.EmitRegOutput(r.future.ref, thread.base,inst.c);
 		thread.tracing.Commit(thread,trace);
 	}
 	return RecordingStatus::NO_ERROR;
@@ -54,7 +54,7 @@ RecordingStatus::Enum assign_record(Thread & thread, Instruction const & inst, I
 	//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
 	if(r.isFuture()) {
 		Trace & trace = traceForFuture(thread,r);
-		trace.EmitVarOutput(thread,thread.frame.environment->makePointer((String)inst.a));
+		trace.EmitVarOutput(r.future.ref, thread,thread.frame.environment->makePointer((String)inst.a));
 		thread.tracing.Commit(thread,trace);
 	}
 	thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
@@ -211,13 +211,14 @@ RecordingStatus::Enum subset_record(Thread & thread, Instruction const & inst, I
 		Type::Enum rtyp,atyp,btyp;
 		rtyp = atyp = a.type;
 		btyp = Type::Integer;
-		trace.EmitRegOutput(thread.base,inst.c);
+		IRef r = trace.EmitUnary(IROpCode::gather,rtyp,coerce(trace,btyp,bref),((int64_t)a.p)-8);
+		trace.EmitRegOutput(r, thread.base,inst.c);
 		thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
 		Future::Init(REG(thread,inst.c),
 				 rtyp,
 				 trace.length,
 				 thread.tracing.TraceID(trace),
-				 trace.EmitUnary(IROpCode::gather,rtyp,coerce(trace,btyp,bref),((int64_t)a.p)-8));
+				 r);
 		thread.tracing.Commit(thread,trace);
 		(*pc)++; 
 		return RecordingStatus::NO_ERROR;
@@ -231,13 +232,14 @@ RecordingStatus::Enum subset_record(Thread & thread, Instruction const & inst, I
 		Type::Enum rtyp,atyp,btyp;
 		rtyp = atyp = a.type;
 		btyp = Type::Logical;
-		trace.EmitRegOutput(thread.base,inst.c);
+		IRef r = trace.EmitUnary(IROpCode::filter,rtyp,coerce(trace,btyp,bref),((int64_t)a.p));
+		trace.EmitRegOutput(r, thread.base,inst.c);
 		thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
 		Future::Init(REG(thread,inst.c),
 				 rtyp,
 				 trace.uniqueShapes--,
 				 thread.tracing.TraceID(trace),
-				 trace.EmitUnary(IROpCode::filter,rtyp,coerce(trace,btyp,bref),((int64_t)a.p)));
+				 r);
 		thread.tracing.Commit(thread,trace);
 		(*pc)++; 
 		return RecordingStatus::NO_ERROR;
@@ -286,13 +288,14 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread
 	IRef bref = getRef(trace,b);
 	Type::Enum rtyp,atyp,btyp;
 	selectType(bc,trace.nodes[aref].type,trace.nodes[bref].type,&atyp,&btyp,&rtyp);
-	trace.EmitRegOutput(thread.base,inst.c);
+	IRef r = trace.EmitBinary(op,rtyp,trace_shape,coerce(trace,atyp,aref),coerce(trace,btyp,bref));
+	trace.EmitRegOutput(r, thread.base,inst.c);
 	thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
 	Future::Init(REG(thread,inst.c),
 				 rtyp,
 				 trace_shape,
 				 thread.tracing.TraceID(trace),
-				 trace.EmitBinary(op,rtyp,trace_shape,coerce(trace,atyp,aref),coerce(trace,btyp,bref)));
+				 r);
 	thread.tracing.Commit(thread,trace);
 	return RecordingStatus::NO_ERROR;
 }
@@ -312,12 +315,13 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread 
     IRef aref = getRef(trace,a);
     Type::Enum rtyp,atyp;
     selectType(bc,trace.nodes[aref].type,&atyp,&rtyp);
+	IRef r = trace.EmitUnary(op,rtyp,shape,coerce(trace,atyp,aref));
 	Future::Init(REG(thread,inst.c),
 				 rtyp,
 				 shape,
 				 thread.tracing.TraceID(trace),
-				 trace.EmitUnary(op,rtyp,shape,coerce(trace,atyp,aref)));
-	trace.EmitRegOutput(thread.base,inst.c);
+				 r);
+	trace.EmitRegOutput(r, thread.base,inst.c);
 	thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
 	thread.tracing.Commit(thread,trace);
 	return RecordingStatus::NO_ERROR;
@@ -434,7 +438,7 @@ RecordingStatus::Enum ret_record(Thread & thread, Instruction const & inst, Inst
 	thread.tracing.SetMaxLiveRegister(thread.base,max_live);
 	if(result->isFuture()) {
 		Trace & trace = traceForFuture(thread,*result);
-		trace.EmitRegOutput(thread.base,offset);
+		trace.EmitRegOutput(result->future.ref, thread.base,offset);
 		thread.tracing.Commit(thread,trace);
 	}
 	return RecordingStatus::NO_ERROR;
