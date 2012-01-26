@@ -114,10 +114,10 @@ struct LoadCache {
 		IRef cached = cache[idx];
 		if(cached < trace.n_pending_nodes &&
 		   trace.nodes[cached].op == IROpCode::loadv &&
-		   trace.nodes[cached].loadv.p == v.p) {
+		   trace.nodes[cached].loadv.src.p == v.p) {
 			return cached;
 		} else {
-			return (cache[idx] = trace.EmitLoadV(v.type,v.length,v.p));
+			return (cache[idx] = trace.EmitLoadV(v.type,v.length,v));
 		}
 	}
 	IRef cache[256];
@@ -300,7 +300,7 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread
 	return RecordingStatus::NO_ERROR;
 }
 
-RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread & thread, bool isReduction, Instruction const & inst) {
+RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread & thread, Instruction const & inst) {
 	Value & a = REG(thread,inst.a);
 
 	if(!isRecordableType(a) || a.length == 1 || !isRecordableShape(a)) {
@@ -310,17 +310,44 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread 
 	}
 
 	Trace & trace = thread.tracing.GetOrAllocateTrace(thread,a.length);
-	int64_t shape = isReduction ? 1 : trace.length;
+	int64_t shape = trace.length;
 
-    IRef aref = getRef(trace,a);
-    Type::Enum rtyp,atyp;
-    selectType(bc,trace.nodes[aref].type,&atyp,&rtyp);
+	IRef aref = getRef(trace,a);
+	Type::Enum rtyp,atyp;
+	selectType(bc,trace.nodes[aref].type,&atyp,&rtyp);
 	IRef r = trace.EmitUnary(op,rtyp,shape,coerce(trace,atyp,aref));
 	Future::Init(REG(thread,inst.c),
-				 rtyp,
-				 shape,
-				 thread.tracing.TraceID(trace),
-				 r);
+			rtyp,
+			shape,
+			thread.tracing.TraceID(trace),
+			r);
+	trace.EmitRegOutput(r, thread.base,inst.c);
+	thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
+	thread.tracing.Commit(thread,trace);
+	return RecordingStatus::NO_ERROR;
+}
+
+RecordingStatus::Enum fold_record(ByteCode::Enum bc, IROpCode::Enum op, Thread & thread, Instruction const & inst) {
+	Value & a = REG(thread,inst.a);
+
+	if(!isRecordableType(a) || a.length == 1 || !isRecordableShape(a)) {
+		if(a.isFuture())
+			thread.tracing.Flush(thread,traceForFuture(thread,a));
+		return RecordingStatus::FALLBACK;
+	}
+
+	Trace & trace = thread.tracing.GetOrAllocateTrace(thread,a.length);
+	int64_t shape = 1;
+
+	IRef aref = getRef(trace,a);
+	Type::Enum rtyp,atyp;
+	selectType(bc,trace.nodes[aref].type,&atyp,&rtyp);
+	IRef r = trace.EmitUnary(op,rtyp,shape,coerce(trace,atyp,aref));
+	Future::Init(REG(thread,inst.c),
+			rtyp,
+			shape,
+			thread.tracing.TraceID(trace),
+			r);
 	trace.EmitRegOutput(r, thread.base,inst.c);
 	thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
 	thread.tracing.Commit(thread,trace);
@@ -340,7 +367,7 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread 
 }
 //all unary arithmetic ops share the same implementation as well
 #define UNARY_OP(op,...) RecordingStatus::Enum op##_record(Thread & thread, Instruction const & inst, Instruction const ** pc) { \
-	RecordingStatus::Enum status = unary_record(ByteCode :: op , IROpCode :: op, thread, false, inst);\
+	RecordingStatus::Enum status = unary_record(ByteCode :: op , IROpCode :: op, thread, inst);\
 	if(RecordingStatus::FALLBACK == status) { \
 		*pc = op##_op(thread,inst); \
 		return RecordingStatus::NO_ERROR; \
@@ -350,7 +377,7 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread 
 	return status; \
 }
 #define FOLD_OP(op,...) RecordingStatus::Enum op##_record(Thread & thread, Instruction const & inst, Instruction const ** pc) { \
-	RecordingStatus::Enum status = unary_record(ByteCode :: op, IROpCode :: op, thread, true, inst);\
+	RecordingStatus::Enum status = fold_record(ByteCode :: op, IROpCode :: op, thread, inst);\
 	if(RecordingStatus::FALLBACK == status) { \
 		*pc = op##_op(thread,inst); \
 		return RecordingStatus::NO_ERROR; \

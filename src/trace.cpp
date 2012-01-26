@@ -29,7 +29,7 @@ std::string Trace::toString(Thread & thread) {
 		BINARY(seq)
 		case IROpCode::gather: out << "n" << node.unary.a << "\t" << "$" << (void*)node.unary.data; break;
 		case IROpCode::loadc: out << ( (node.type == Type::Integer) ? node.loadc.i : node.loadc.d); break;
-		case IROpCode::loadv: out << "$" << node.loadv.p; break;
+		case IROpCode::loadv: out << "$" << node.loadv.src.p; break;
 		case IROpCode::storec: /*fallthrough*/
 		case IROpCode::storev: out << "n" << node.store.a; break;
 		case IROpCode::nop: break;
@@ -80,7 +80,7 @@ static void set_location_value(Thread & thread, const Trace::Location & l, const
 static bool isOutputAlive(Thread& thread, Trace& trace, Trace::Output const& o) {
 	if(thread.tracing.LocationIsDead(o.location)) return false;
 	Value const& v = get_location_value(thread, o.location);
-	return v.isFuture() && (v.future.trace_id == thread.tracing.TraceID(trace));
+	return v.isFuture() && (v.future.trace_id == thread.tracing.TraceID(trace)) && (v.future.ref == o.ref);
 }
 
 void Trace::InitializeOutputs(Thread& thread) {
@@ -91,12 +91,7 @@ void Trace::InitializeOutputs(Thread& thread) {
 		Output & o = outputs[i];
 		if(isOutputAlive(thread,*this,o)) {
 			if(!store[o.ref]) {
-				IRNode& node = nodes[o.ref];
-				if(node.length == length || node.length < 0) {
-					store[o.ref] = EmitStoreV(node.type, node.length, o.ref);
-				} else {
-					store[o.ref] = EmitStoreC(node.type, node.length, o.ref);
-				}
+				store[o.ref] = EmitStore(o.ref);
 				n_nodes = n_pending_nodes;
 			}
 			o.ref = store[o.ref];
@@ -113,7 +108,7 @@ void Trace::WriteOutputs(Thread & thread) {
 		for(size_t i = 0; i < n_outputs; i++) {
 			Output& o = outputs[i];
 			std::string v = thread.stringify(nodes[o.ref].store.dst);
-			printf("n%d = %s\n", o.ref, v.c_str());
+			printf("n%lld = %s\n", o.ref, v.c_str());
 		}
 	}
 	for(size_t i = 0; i < n_outputs; i++) {
@@ -143,8 +138,6 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 		IRNode & node = nodes[ref];
 
 		if(node.enc == IRNode::UNARY && nodes[node.unary.a].op == IROpCode::pos)
-			node.unary.a = nodes[node.unary.a].unary.a;
-		if(node.enc == IRNode::FOLD && nodes[node.unary.a].op == IROpCode::pos)
 			node.unary.a = nodes[node.unary.a].unary.a;
 		if(node.enc == IRNode::STORE && nodes[node.store.a].op == IROpCode::pos)
 			node.store.a = nodes[node.store.a].unary.a;
@@ -284,7 +277,6 @@ void Trace::DeadCodeElimination(Thread& thread) {
 					nodes[node.binary.a].used = true;
 					nodes[node.binary.b].used = true;
 					break;
-				case IRNode::FOLD: /*fallthrough*/
 				case IRNode::UNARY:
 					nodes[node.unary.a].used = true;
 					break;
@@ -319,8 +311,7 @@ void Trace::Execute(Thread & thread) {
 		IRNode& node = nodes[ref];
 		if(node.op == IROpCode::storev) {
 			if(nodes[node.store.a].op == IROpCode::loadv) {
-				Value::Init(node.store.dst, node.type, node.length);
-				node.store.dst.p = nodes[node.store.a].loadv.p;
+				node.store.dst = nodes[node.store.a].loadv.src;
 				node.op = IROpCode::nop;
 				node.enc = IRNode::NOP;
 			} else {

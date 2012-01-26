@@ -33,7 +33,6 @@ struct IRNode {
 		BINARY,
 		SPECIAL,
 		UNARY,
-		FOLD,
 		LOADC,
 		LOADV,
 		STORE,
@@ -74,7 +73,7 @@ struct IRNode {
 			};
 		} loadc;
 		struct {
-			void * p;
+			Value src;
 		} loadv;
 		struct {
 			int64_t a;

@@ -187,16 +187,6 @@ struct Trace {
 		n.unary.data = data;
 		return n_pending_nodes++;
 	}
-	IRef EmitFold(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t base) {
-		IRNode & n = nodes[n_pending_nodes];
-		n.enc = IRNode::FOLD;
-		n.op = op;
-		n.type = type;
-		n.length = length;
-		n.fold.a = a;
-		n.fold.i = base;
-		return n_pending_nodes++;
-	}
 	IRef EmitLoadC(Type::Enum type, int64_t length, int64_t c) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::LOADC;
@@ -206,30 +196,21 @@ struct Trace {
 		n.loadc.i = c;
 		return n_pending_nodes++;
 	}
-	IRef EmitLoadV(Type::Enum type, int64_t length, void * v) {
+	IRef EmitLoadV(Type::Enum type, int64_t length, Value const& v) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::LOADV;
 		n.op = IROpCode::loadv;
 		n.type = type;
 		n.length = length;
-		n.loadv.p = v;
+		n.loadv.src = v;
 		return n_pending_nodes++;
 	}
-	IRef EmitStoreV(Type::Enum type, int64_t length, int64_t a) {
+	IRef EmitStore(int64_t a) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::STORE;
-		n.op = IROpCode::storev;
-		n.type = type;
-		n.length = length;
-		n.store.a = a;
-		return n_pending_nodes++;
-	}
-	IRef EmitStoreC(Type::Enum type, int64_t length, int64_t a) {
-		IRNode & n = nodes[n_pending_nodes];
-		n.enc = IRNode::STORE;
-		n.op = IROpCode::storec;
-		n.type = type;
-		n.length = length;
+		n.op = nodes[a].length == length || nodes[a].length < 0 ?  IROpCode::storev : IROpCode::storec;
+		n.type = nodes[a].type;
+		n.length = nodes[a].length;
 		n.store.a = a;
 		return n_pending_nodes++;
 	}

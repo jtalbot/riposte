@@ -228,7 +228,6 @@ struct TraceJIT {
 			case IRNode::BINARY: {
 				AllocateBinary(ref,node.binary.a,node.binary.b);
 			} break;
-			case IRNode::FOLD: /*fallthrough*/
 			case IRNode::UNARY: {
 				AllocateUnary(ref,node.unary.a);
 			} break;
@@ -345,9 +344,9 @@ struct TraceJIT {
 			} break;
 			case IROpCode::loadv: {
 				if(node.isLogical())
-					asm_.movss(reg(ref),EncodeOperand(node.loadv.p,vector_index,times_1));
+					asm_.movss(reg(ref),EncodeOperand(node.loadv.src.p,vector_index,times_1));
 				else
-					asm_.movdqa(reg(ref),EncodeOperand(node.loadv.p,vector_index,times_8));
+					asm_.movdqa(reg(ref),EncodeOperand(node.loadv.src.p,vector_index,times_8));
 			} break;
 			case IROpCode::storec:
 			case IROpCode::storev: {
@@ -534,17 +533,16 @@ struct TraceJIT {
 		
 			}
 
-			if(node.op != IROpCode::nop && store_inst[ref] != NULL && node.op != IROpCode::sum && node.op != IROpCode::prod) {
+			if(node.op != IROpCode::nop && store_inst[ref] != NULL && store_inst[ref]->op == IROpCode::storev) {
 				IRNode & str = *store_inst[ref];
-				if(str.op == IROpCode::storev) {
-					if(Type::Logical == str.type)
-						EmitLogicalStore(str.store.dst.p,reg(str.store.a));
-					else
-						EmitVectorStore(str.store.dst.p,reg(str.store.a));
-				} else {
+				if(Type::Logical == str.type)
+					EmitLogicalStore(str.store.dst.p,reg(str.store.a));
+				else
+					EmitVectorStore(str.store.dst.p,reg(str.store.a));
+				/*} else {
 					Operand op = EncodeOperand(&str.store.dst.p);
 					asm_.movsd(op,reg(str.store.a));
-				}
+				}*/
 			}
 		
 		/*	
@@ -557,7 +555,6 @@ struct TraceJIT {
 				break;
 			case IRNode::STORE:
 			case IRNode::SPECIAL:
-			case IRNode::FOLD:
 				break;
 			}
 		*/	
@@ -845,7 +842,7 @@ struct TraceJIT {
 					IRNode & str = *store_inst[ref];
 					double* d = (double*)str.store.dst.p;
 					double sum = 0;
-					for(uint64_t j = 0; j < thread.state.nThreads; j++) {
+					for(int64_t j = 0; j < thread.state.nThreads; j++) {
 						sum += d[j*8];
 						sum += d[j*8+1];
 					}
@@ -855,7 +852,7 @@ struct TraceJIT {
 					IRNode & str = *store_inst[ref];
 					double* d = (double*)str.store.dst.p;
 					double sum = 1.0;
-					for(uint64_t j = 0; j < thread.state.nThreads; j++) {
+					for(int64_t j = 0; j < thread.state.nThreads; j++) {
 						sum *= d[j*8];
 						sum *= d[j*8+1];
 					}
