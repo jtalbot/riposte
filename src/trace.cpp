@@ -6,15 +6,19 @@
 #include <stdlib.h>
 
 void Trace::Reset() {
-	n_nodes = length = n_outputs = n_pending_nodes = n_pending_outputs = 0;
-	uniqueShapes = -1;
+	active = false;
+	n_recorded_since_last_exec = 0;
+	n_nodes = n_outputs = n_pending_nodes = n_pending_outputs = 0;
 }
 
 std::string Trace::toString(Thread & thread) {
 	std::ostringstream out;
 	for(size_t j = 0; j < n_nodes; j++) {
 		IRNode & node = nodes[j];
-		out << "n" << j << " : " << Type::toString(node.type) << "[" << node.length << "]" << " = " << IROpCode::toString(node.op) << "\t";
+		if(node.length >= 0)
+			out << "n" << j << " : " << Type::toString(node.type) << "[" << node.length << "]" << " = " << IROpCode::toString(node.op) << "\t";
+		else
+			out << "n" << j << " : " << Type::toString(node.type) << "[n" << -node.length << "]" << " = " << IROpCode::toString(node.op) << "\t";
 		switch(node.op) {
 #define BINARY(op,...) case IROpCode::op: out << "n" << node.binary.a << "\tn" << node.binary.b; break;
 #define UNARY(op,...) case IROpCode::op: out << "n" << node.unary.a; break;
@@ -27,6 +31,7 @@ std::string Trace::toString(Thread & thread) {
 		ARITH_SCAN_BYTECODES(UNARY)
 		UNARY(cast)
 		BINARY(seq)
+		BINARY(filter)
 		case IROpCode::gather: out << "n" << node.unary.a << "\t" << "$" << (void*)node.unary.data; break;
 		case IROpCode::loadc: out << ( (node.type == Type::Integer) ? node.loadc.i : node.loadc.d); break;
 		case IROpCode::loadv: out << "$" << node.loadv.src.p; break;
@@ -78,9 +83,9 @@ static void set_location_value(Thread & thread, const Trace::Location & l, const
 }
 
 static bool isOutputAlive(Thread& thread, Trace& trace, Trace::Output const& o) {
-	if(thread.tracing.LocationIsDead(o.location)) return false;
+	if(thread.trace.LocationIsDead(o.location)) return false;
 	Value const& v = get_location_value(thread, o.location);
-	return v.isFuture() && (v.future.trace_id == thread.tracing.TraceID(trace)) && (v.future.ref == o.ref);
+	return v.isFuture() && (v.future.ref == o.ref);
 }
 
 void Trace::InitializeOutputs(Thread& thread) {
@@ -295,6 +300,13 @@ void Trace::DeadCodeElimination(Thread& thread) {
 	}
 }
 
+
+// ref must be evaluated. Other stuff doesn't need to be executed unless it improves performance.
+void Trace::Execute(Thread & thread, IRef ref) {
+	Execute(thread);
+}
+
+// everything must be evaluated in the end...
 void Trace::Execute(Thread & thread) {
 	
 	if(thread.state.verbose)

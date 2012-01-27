@@ -17,27 +17,25 @@ DEFINE_ENUM_TO_STRING(RecordingStatus,ENUM_RECORDING_STATUS)
 //for brevity
 #define REG(thread, i) (*(thread.base+i))
 
-inline static Trace & traceForFuture(Thread & thread, const Value& v) {
-	return thread.tracing.traces[v.future.trace_id];
-}
-
-
 #define OP_NOT_IMPLEMENTED(op,...) \
 RecordingStatus::Enum op##_record(Thread & thread, Instruction const & inst, Instruction const ** pc) { \
 	return RecordingStatus::UNSUPPORTED_OP; \
 } \
 
+Type::Enum getType(Value& v) {
+	if(v.isFuture()) return v.future.typ;
+	else return v.type;
+}
 
 RecordingStatus::Enum get_record(Thread & thread, Instruction const & inst, Instruction const ** pc) {
 	*pc = get_op(thread,inst);
 	Value & r = REG(thread,inst.c);
 
-	thread.tracing.UnionWithMaxLiveRegister(thread.base,inst.c);
+	thread.trace.UnionWithMaxLiveRegister(thread.base,inst.c);
 
 	if(r.isFuture()) {
-		Trace & trace = traceForFuture(thread,r);
-		trace.EmitRegOutput(r.future.ref, thread.base,inst.c);
-		thread.tracing.Commit(thread,trace);
+		thread.trace.EmitRegOutput(r.future.ref, thread.base,inst.c);
+		thread.trace.Commit(thread);
 	}
 	return RecordingStatus::NO_ERROR;
 }
@@ -53,20 +51,17 @@ RecordingStatus::Enum assign_record(Thread & thread, Instruction const & inst, I
 	Value& r = REG(thread, inst.c);
 	//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
 	if(r.isFuture()) {
-		Trace & trace = traceForFuture(thread,r);
-		trace.EmitVarOutput(r.future.ref, thread,thread.frame.environment->makePointer((String)inst.a));
-		thread.tracing.Commit(thread,trace);
+		thread.trace.EmitVarOutput(r.future.ref, thread,thread.frame.environment->makePointer((String)inst.a));
+		thread.trace.Commit(thread);
 	}
-	thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
+	thread.trace.SetMaxLiveRegister(thread.base,inst.c);
 	return RecordingStatus::NO_ERROR;
 }
 
 OP_NOT_IMPLEMENTED(assign2)
 
 #define CHECK_REG(r) do { \
-	Value & v = REG(thread,r);\
-	if(v.isFuture()) \
-		thread.tracing.Flush(thread,traceForFuture(thread,v)); \
+	thread.trace.Force(thread, REG(thread, r)); \
 } while(0)
 //temporary defines to generate code for checked interpret
 #define A CHECK_REG(inst.a);
@@ -132,7 +127,7 @@ bool isRecordableShape(int64_t l) {
 	return l >= TRACE_VECTOR_WIDTH;
 }
 bool isRecordableShape(Value & v) {
-	return isRecordableShape(v.length);
+	return isRecordableShape(v.length) || (v.isFuture() && v.length < 0);
 }
 
 //invariants:
@@ -146,7 +141,6 @@ IRef getRef(Trace & trace, Value & v) {
 		if(v.length == 1) {
 			return trace.EmitLoadC(v.type,v.length,v.i);
 		} else {
-			assert(v.length == trace.length);
 			return load_cache.get(trace,v);
 		}
 	}
@@ -187,60 +181,50 @@ IRef coerce(Trace & trace, Type::Enum dst_type, IRef v) {
 }
 
 RecordingStatus::Enum fallback(Thread & thread, Value & a, Value & b) {
-	if(a.isFuture()) {
-		thread.tracing.Flush(thread,traceForFuture(thread,a));
-	}
-	if(b.isFuture()) {
-		thread.tracing.Flush(thread,traceForFuture(thread,b));
-	}
+	thread.trace.Force(thread, a);
+	thread.trace.Force(thread, b);
 	return RecordingStatus::FALLBACK;
 }
 
 RecordingStatus::Enum subset_record(Thread & thread, Instruction const & inst, Instruction const** pc) {
-	CHECK_REG(inst.a);
 	Value & b = REG(thread,inst.b);
 	if(b.isInteger() || (b.isFuture() && b.future.typ == Type::Integer) ||
 	   b.isDouble() || (b.isFuture() && b.future.typ == Type::Double)) {
+		CHECK_REG(inst.a);
 		Value & a = REG(thread,inst.a);
 
 		//get current trace
 		uint64_t trace_shape = b.length;
-		Trace & trace = thread.tracing.GetOrAllocateTrace(thread,trace_shape);
-
-		IRef bref = getRef(trace,b);
+		IRef bref = getRef(thread.trace,b);
 		Type::Enum rtyp,atyp,btyp;
 		rtyp = atyp = a.type;
 		btyp = Type::Integer;
-		IRef r = trace.EmitUnary(IROpCode::gather,rtyp,coerce(trace,btyp,bref),((int64_t)a.p)-8);
-		trace.EmitRegOutput(r, thread.base,inst.c);
-		thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
+		IRef r = thread.trace.EmitUnary(IROpCode::gather,rtyp,coerce(thread.trace,btyp,bref),((int64_t)a.p)-8);
+		thread.trace.EmitRegOutput(r, thread.base,inst.c);
+		thread.trace.SetMaxLiveRegister(thread.base,inst.c);
 		Future::Init(REG(thread,inst.c),
 				 rtyp,
-				 trace.length,
-				 thread.tracing.TraceID(trace),
+				 trace_shape,
 				 r);
-		thread.tracing.Commit(thread,trace);
+		thread.trace.Commit(thread);
 		(*pc)++; 
 		return RecordingStatus::NO_ERROR;
 	}
 	else if(b.isLogical() || (b.isFuture() && b.future.typ == Type::Logical)) {
 		Value& a = REG(thread, inst.a);
-		uint64_t trace_shape = b.length;
-		Trace & trace = thread.tracing.GetOrAllocateTrace(thread,trace_shape);
-
-		IRef bref = getRef(trace,b);
+		IRef aref = getRef(thread.trace,a);
+		IRef bref = getRef(thread.trace,b);
 		Type::Enum rtyp,atyp,btyp;
-		rtyp = atyp = a.type;
+		rtyp = atyp = getType(a);
 		btyp = Type::Logical;
-		IRef r = trace.EmitUnary(IROpCode::filter,rtyp,coerce(trace,btyp,bref),((int64_t)a.p));
-		trace.EmitRegOutput(r, thread.base,inst.c);
-		thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
+		IRef r = thread.trace.EmitFilter(IROpCode::filter,rtyp,aref,bref);
+		thread.trace.EmitRegOutput(r, thread.base,inst.c);
+		thread.trace.SetMaxLiveRegister(thread.base,inst.c);
 		Future::Init(REG(thread,inst.c),
 				 rtyp,
-				 trace.uniqueShapes--,
-				 thread.tracing.TraceID(trace),
+				 -r,
 				 r);
-		thread.tracing.Commit(thread,trace);
+		thread.trace.Commit(thread);
 		(*pc)++; 
 		return RecordingStatus::NO_ERROR;
 	} 
@@ -282,21 +266,18 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread
 		break;
 	}
 	//get current trace
-	Trace & trace = thread.tracing.GetOrAllocateTrace(thread,trace_shape);
-
-	IRef aref = getRef(trace,a);
-	IRef bref = getRef(trace,b);
+	IRef aref = getRef(thread.trace,a);
+	IRef bref = getRef(thread.trace,b);
 	Type::Enum rtyp,atyp,btyp;
-	selectType(bc,trace.nodes[aref].type,trace.nodes[bref].type,&atyp,&btyp,&rtyp);
-	IRef r = trace.EmitBinary(op,rtyp,trace_shape,coerce(trace,atyp,aref),coerce(trace,btyp,bref));
-	trace.EmitRegOutput(r, thread.base,inst.c);
-	thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
+	selectType(bc,thread.trace.nodes[aref].type,thread.trace.nodes[bref].type,&atyp,&btyp,&rtyp);
+	IRef r = thread.trace.EmitBinary(op,rtyp,trace_shape,coerce(thread.trace,atyp,aref),coerce(thread.trace,btyp,bref));
+	thread.trace.EmitRegOutput(r, thread.base,inst.c);
+	thread.trace.SetMaxLiveRegister(thread.base,inst.c);
 	Future::Init(REG(thread,inst.c),
 				 rtyp,
 				 trace_shape,
-				 thread.tracing.TraceID(trace),
 				 r);
-	thread.tracing.Commit(thread,trace);
+	thread.trace.Commit(thread);
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -304,26 +285,22 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread 
 	Value & a = REG(thread,inst.a);
 
 	if(!isRecordableType(a) || a.length == 1 || !isRecordableShape(a)) {
-		if(a.isFuture())
-			thread.tracing.Flush(thread,traceForFuture(thread,a));
+		thread.trace.Force(thread, a);
 		return RecordingStatus::FALLBACK;
 	}
 
-	Trace & trace = thread.tracing.GetOrAllocateTrace(thread,a.length);
-	int64_t shape = trace.length;
-
-	IRef aref = getRef(trace,a);
+	int64_t shape = a.length;
+	IRef aref = getRef(thread.trace,a);
 	Type::Enum rtyp,atyp;
-	selectType(bc,trace.nodes[aref].type,&atyp,&rtyp);
-	IRef r = trace.EmitUnary(op,rtyp,shape,coerce(trace,atyp,aref));
+	selectType(bc,thread.trace.nodes[aref].type,&atyp,&rtyp);
+	IRef r = thread.trace.EmitUnary(op,rtyp,shape,coerce(thread.trace,atyp,aref));
 	Future::Init(REG(thread,inst.c),
 			rtyp,
 			shape,
-			thread.tracing.TraceID(trace),
 			r);
-	trace.EmitRegOutput(r, thread.base,inst.c);
-	thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
-	thread.tracing.Commit(thread,trace);
+	thread.trace.EmitRegOutput(r, thread.base,inst.c);
+	thread.trace.SetMaxLiveRegister(thread.base,inst.c);
+	thread.trace.Commit(thread);
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -331,26 +308,23 @@ RecordingStatus::Enum fold_record(ByteCode::Enum bc, IROpCode::Enum op, Thread &
 	Value & a = REG(thread,inst.a);
 
 	if(!isRecordableType(a) || a.length == 1 || !isRecordableShape(a)) {
-		if(a.isFuture())
-			thread.tracing.Flush(thread,traceForFuture(thread,a));
+		thread.trace.Force(thread, a);
 		return RecordingStatus::FALLBACK;
 	}
 
-	Trace & trace = thread.tracing.GetOrAllocateTrace(thread,a.length);
 	int64_t shape = 1;
 
-	IRef aref = getRef(trace,a);
+	IRef aref = getRef(thread.trace,a);
 	Type::Enum rtyp,atyp;
-	selectType(bc,trace.nodes[aref].type,&atyp,&rtyp);
-	IRef r = trace.EmitUnary(op,rtyp,shape,coerce(trace,atyp,aref));
+	selectType(bc,thread.trace.nodes[aref].type,&atyp,&rtyp);
+	IRef r = thread.trace.EmitUnary(op,rtyp,shape,coerce(thread.trace,atyp,aref));
 	Future::Init(REG(thread,inst.c),
 			rtyp,
 			shape,
-			thread.tracing.TraceID(trace),
 			r);
-	trace.EmitRegOutput(r, thread.base,inst.c);
-	thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
-	thread.tracing.Commit(thread,trace);
+	thread.trace.EmitRegOutput(r, thread.base,inst.c);
+	thread.trace.SetMaxLiveRegister(thread.base,inst.c);
+	thread.trace.Commit(thread);
 	return RecordingStatus::NO_ERROR;
 }
 
@@ -462,11 +436,10 @@ RecordingStatus::Enum ret_record(Thread & thread, Instruction const & inst, Inst
 	int64_t offset = result - thread.frame.returnbase;
 	int64_t max_live = thread.frame.returnbase - thread.base;
 	*pc = ret_op(thread,inst); //warning: ret_op will change 'frame'
-	thread.tracing.SetMaxLiveRegister(thread.base,max_live);
+	thread.trace.SetMaxLiveRegister(thread.base,max_live);
 	if(result->isFuture()) {
-		Trace & trace = traceForFuture(thread,*result);
-		trace.EmitRegOutput(result->future.ref, thread.base,offset);
-		thread.tracing.Commit(thread,trace);
+		thread.trace.EmitRegOutput(result->future.ref, thread.base,offset);
+		thread.trace.Commit(thread);
 	}
 	return RecordingStatus::NO_ERROR;
 }
@@ -480,27 +453,21 @@ RecordingStatus::Enum seq_record(Thread & thread, Instruction const & inst, Inst
 	Value & a = REG(thread,inst.a);
 	Value & b = REG(thread,inst.b);
 
-	if(a.isFuture()) {
-		thread.tracing.Flush(thread,traceForFuture(thread,a));
-	}
-	if(b.isFuture()) {
-		thread.tracing.Flush(thread,traceForFuture(thread,b));
-	}
+	thread.trace.Force(thread, a);
+	thread.trace.Force(thread, a);
 	int64_t len = As<Integer>(thread, REG(thread, inst.a))[0];
 	int64_t step = As<Integer>(thread, REG(thread, inst.b))[0];
 
 	if(!isRecordableShape(len)) {
 		*pc = seq_op(thread,inst); //this isn't ideal, as this will redo the As operators above
 	} else {
-		Trace & trace = thread.tracing.GetOrAllocateTrace(thread,len);
 		Future::Init(REG(thread,inst.c),
 				     Type::Integer,
 				     len,
-				     thread.tracing.TraceID(trace),
-				     trace.EmitSpecial(IROpCode::seq,Type::Integer,len,len,step));
-		thread.tracing.SetMaxLiveRegister(thread.base,inst.c);
+				     thread.trace.EmitSpecial(IROpCode::seq,Type::Integer,len,len,step));
+		thread.trace.SetMaxLiveRegister(thread.base,inst.c);
 		(*pc)++;
-		thread.tracing.Commit(thread,trace);
+		thread.trace.Commit(thread);
 	}
 	return RecordingStatus::NO_ERROR;
 }
@@ -511,10 +478,8 @@ RecordingStatus::Enum seq_record(Thread & thread, Instruction const & inst, Inst
 // -- otherwise, the recorder continues normally
 //returns true if we should continue recording
 static RecordingStatus::Enum recording_check_conditions(Thread& thread, Instruction const * inst) {
-	if(++thread.tracing.n_recorded_since_last_exec > TRACE_MAX_RECORDED) {
+	if(++thread.trace.n_recorded_since_last_exec > TRACE_MAX_RECORDED) {
 		return RecordingStatus::RECORD_LIMIT;
-	} else if(thread.tracing.live_traces.empty()) {
-		return RecordingStatus::NO_LIVE_TRACES;
 	}
 	return RecordingStatus::NO_ERROR;
 }
@@ -531,7 +496,7 @@ Instruction const * recording_interpret(Thread& thread, Instruction const* pc) {
 		   || RecordingStatus::NO_ERROR != (status = recording_check_conditions(thread,pc))) {
 			if(thread.state.verbose)
 				printf("%s op caused trace vm to exit: %s\n",ByteCode::toString(pc->bc),RecordingStatus::toString(status));
-			thread.tracing.EndTracing(thread);
+			thread.trace.EndTracing(thread);
 			return pc;
 		}
 		//printf(" .\n");

@@ -31,7 +31,6 @@ struct Value {
 		String s;
 		struct {
 			Type::Enum typ;
-			uint16_t trace_id;
 			uint16_t ref;
 		} future;
 	};
@@ -245,10 +244,9 @@ VECTOR_IMPL(List, Value, true)
 
 
 struct Future : public Value {
-	static void Init(Value & f, Type::Enum typ,int64_t length, int64_t id,IRef ref) {
+	static void Init(Value & f, Type::Enum typ,int64_t length,IRef ref) {
 		Value::Init(f,Type::Future,length);
 		f.future.ref = ref;
-		f.future.trace_id = id;
 		f.future.typ = typ;
 	}
 	

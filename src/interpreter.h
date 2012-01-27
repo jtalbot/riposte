@@ -122,14 +122,6 @@ struct InternalFunction {
 
 struct TraceCodeBuffer;
 struct Trace {
-	IRNode nodes[TRACE_MAX_NODES];
-
-	size_t n_nodes;
-	size_t n_pending_nodes;
-
-	int64_t length;
-
-	int64_t uniqueShapes;
 	
 	struct Location {
 		enum Type {REG, VAR};
@@ -149,13 +141,62 @@ struct Trace {
 		IRef ref;	   //location of the associated store
 	};
 
+
+	IRNode nodes[TRACE_MAX_NODES];
+	size_t n_nodes;
+	size_t n_pending_nodes;
+	
 	Output outputs[TRACE_MAX_OUTPUTS];
 	size_t n_outputs;
 	size_t n_pending_outputs;
 
 	TraceCodeBuffer * code_buffer;
 
-	Trace() { Reset(); code_buffer = NULL; }
+	Value * max_live_register_base;
+	int64_t max_live_register;
+
+	size_t n_recorded_since_last_exec;
+	bool active;
+
+	Trace() { 
+		Reset(); 
+		code_buffer = NULL;
+ 	}
+
+	Instruction const * BeginTracing(Thread & state, Instruction const * inst) {
+		if(active) {
+			_error("recursive record\n");
+		}
+		max_live_register = NULL;
+		active = true;
+		try {
+			return recording_interpret(state,inst);
+		} catch(...) {
+			Reset();
+			active = false;
+			throw;
+		}
+	}
+
+	void EndTracing(Thread & thread) {
+		if(active) {
+			Flush(thread);
+			active = false;
+		}
+	}
+
+	void Force(Thread& thread, Value& v) {
+		if(!v.isFuture()) return;
+		Execute(thread, v.future.ref);
+	}
+
+	void Flush(Thread & thread) {
+		if(active) {
+			n_recorded_since_last_exec = 0;
+			Execute(thread);
+			Reset();
+		}
+	}
 
 	IRef EmitBinary(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b) {
 		IRNode & n = nodes[n_pending_nodes];
@@ -187,6 +228,16 @@ struct Trace {
 		n.unary.data = data;
 		return n_pending_nodes++;
 	}
+	IRef EmitFilter(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t b) {
+		IRNode & n = nodes[n_pending_nodes];
+		n.enc = IRNode::BINARY;
+		n.op = op;
+		n.type = type;
+		n.length = -n_pending_nodes;
+		n.binary.a = a;
+		n.binary.b = b;
+		return n_pending_nodes++;
+	}
 	IRef EmitLoadC(Type::Enum type, int64_t length, int64_t c) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::LOADC;
@@ -208,7 +259,7 @@ struct Trace {
 	IRef EmitStore(int64_t a) {
 		IRNode & n = nodes[n_pending_nodes];
 		n.enc = IRNode::STORE;
-		n.op = nodes[a].length == length || nodes[a].length < 0 ?  IROpCode::storev : IROpCode::storec;
+		n.op = IROpCode::storev;
 		n.type = nodes[a].type;
 		n.length = nodes[a].length;
 		n.store.a = a;
@@ -227,48 +278,6 @@ struct Trace {
 		out.location.type = Trace::Location::VAR;
 		out.location.pointer = p;
 	}
-	void Reset();
-	void InitializeOutputs(Thread & state);
-	void WriteOutputs(Thread & state);
-	void Execute(Thread & state);
-	std::string toString(Thread & state);
-private:
-	void Interpret(Thread & state);
-	void JIT(Thread & state);
-
-	void SimplifyOps(Thread& thread);
-	void AlgebraicSimplification(Thread& thread);
-	void DeadCodeElimination(Thread& thread);
-};
-
-//member of Thread, manages information for all traces
-//and the currently recording trace (if any)
-struct TraceThread {
-	TraceThread()
-	: live_traces(TRACE_MAX_TRACES) {
-		active = false;
-		config = COMPILE;
-		n_recorded_since_last_exec = 0;
-	}
-
-	enum Mode {
-		DISABLED,
-		COMPILE
-	};
-	Mode config;
-	bool active;
-
-	Trace traces[TRACE_MAX_TRACES];
-	RegisterAllocator live_traces;
-
-
-	Value * max_live_register_base;
-	int64_t max_live_register;
-
-	size_t n_recorded_since_last_exec;
-
-	bool Enabled() { return DISABLED != config; }
-	bool IsTracing() const { return active; }
 
 	void SetMaxLiveRegister(Value * base, int64_t r) {
 		max_live_register_base = base;
@@ -292,77 +301,35 @@ struct TraceThread {
 		return dead;
 	}
 
-	Instruction const * BeginTracing(Thread & state, Instruction const * inst) {
-		if(active) {
-			_error("recursive record\n");
-		}
-		max_live_register = NULL;
-		active = true;
-
-		return recording_interpret(state,inst);
-	}
-
-	void EndTracing(Thread & state) {
-		if(active) {
-			active = false;
-			FlushAllTraces(state);
-		}
-	}
-
-	Trace & AllocateTrace(Thread & state, int64_t shape) {
-		int8_t reg;
-		if(live_traces.allocate(&reg)) {
-			traces[reg].Reset();
-			traces[reg].length = shape;
-			return traces[reg];
-		} else {
-			FlushAllTraces(state);
-			return AllocateTrace(state,shape);
-		}
-	}
-	int64_t TraceID(Trace & trace) {
-		return &trace - &traces[0];
-	}
-	Trace & GetOrAllocateTrace(Thread & state, int64_t shape) {
-		for(size_t i = 0; i < TRACE_MAX_TRACES; i++) {
-			if(live_traces.is_live(i) && traces[i].length == shape)
-				return traces[i];
-		}
-		return AllocateTrace(state,shape);
-	}
-
-	void Rollback(Trace & t) {
-		t.n_pending_nodes = t.n_nodes;
-		if(t.n_nodes == 0) {
-			size_t id = TraceID(t);
-			live_traces.free(id);
-		}
+	void Rollback() {
+		n_pending_nodes = n_nodes;
 	}
 	//commits the recorded instructions and outputs from the current op
 	//if the trace does not have enough room to record another op, it is flushed
 	//and the slot is freed for another trace
-	void Commit(Thread & state, Trace & t) {
-		t.n_nodes = t.n_pending_nodes;
-		t.n_outputs = t.n_pending_outputs;
-		if(t.n_nodes + TRACE_MAX_NODES_PER_COMMIT >= TRACE_MAX_NODES
-		  || t.n_outputs + TRACE_MAX_OUTPUTS_PER_COMMIT >= TRACE_MAX_OUTPUTS) {
-			Flush(state,t);
+	void Commit(Thread& thread) {
+		n_nodes = n_pending_nodes;
+		n_outputs = n_pending_outputs;
+		if(n_nodes + TRACE_MAX_NODES_PER_COMMIT >= TRACE_MAX_NODES
+		  || n_outputs + TRACE_MAX_OUTPUTS_PER_COMMIT >= TRACE_MAX_OUTPUTS) {
+			Flush(thread);
 		}
 	}
-	void Flush(Thread & state, Trace & trace) {
-		size_t id = TraceID(trace);
-		if(live_traces.is_live(id)) {
-			n_recorded_since_last_exec = 0;
-			trace.Execute(state);
-			assert(id < TRACE_MAX_TRACES);
-			live_traces.free(TraceID(trace));
-		}
-	}
-	void FlushAllTraces(Thread & state) {
-		for(size_t i = 0; i < TRACE_MAX_TRACES; i++) {
-			Flush(state,traces[i]);
-		}
-	}
+
+private:
+	void Reset();
+	void InitializeOutputs(Thread & state);
+	void WriteOutputs(Thread & state);
+	void Execute(Thread & state);
+	void Execute(Thread & state, IRef ref);
+	std::string toString(Thread & state);
+
+	void Interpret(Thread & state);
+	void JIT(Thread & state);
+
+	void SimplifyOps(Thread& thread);
+	void AlgebraicSimplification(Thread& thread);
+	void DeadCodeElimination(Thread& thread);
 };
 
 #define DEFAULT_NUM_REGISTERS 10000
@@ -385,6 +352,7 @@ struct State : public gc {
 	int64_t nThreads;
 
 	bool verbose;
+	bool jitEnabled;
 
 	int64_t done;
 
@@ -458,7 +426,7 @@ struct Thread : public gc {
 
 	std::vector<std::string> warnings;
 
-	TraceThread tracing; //all state related to tracing compiler
+	Trace trace; //all state related to tracing compiler
 
 	std::deque<Task> tasks;
 	Lock tasksLock;
@@ -607,7 +575,7 @@ private:
 	}
 };
 
-inline State::State(uint64_t threads) : nThreads(threads), verbose(false), done(0) {
+inline State::State(uint64_t threads) : nThreads(threads), verbose(false), jitEnabled(true), done(0) {
 	Environment* base = new (GC) Environment(0);
 	this->global = new (GC) Environment(base);
 	path.push_back(base);

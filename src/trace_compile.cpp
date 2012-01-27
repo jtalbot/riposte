@@ -821,14 +821,14 @@ struct TraceJIT {
 	void Execute(Thread & thread) {
 		fn trace_code = (fn) trace->code_buffer->code;
 		if(thread.state.verbose) {
-			timespec begin;
-			get_time(begin);
-			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
+			//timespec begin;
+			//get_time(begin);
+			//thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
 			//trace_code(thread.index, 0, trace->length);
-			double s = trace->length / (time_elapsed(begin) * 10e9);
-			printf("elements computed / us: %f\n",s);
+			//double s = trace->length / (time_elapsed(begin) * 10e9);
+			//printf("elements computed / us: %f\n",s);
 		} else {
-			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
+			//thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
 			//trace_code(thread.index, 0, trace->length);
 		}
 	}

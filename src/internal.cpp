@@ -822,15 +822,9 @@ void proctime(Thread& thread, Value const* args, Value& result) {
 }
 
 void traceconfig(Thread & thread, Value const* args, Value& result) {
-	Integer c = As<Integer>(thread, args[0]);
+	Logical c = As<Logical>(thread, args[0]);
 	if(c.length == 0) _error("condition is of zero length");
-	//thread.tracing.config = (TraceThread::Mode) c[0];
-		
-	std::vector<Thread*, traceable_allocator<Thread*> >& threads = thread.state.threads;
-	for(uint64_t i = 0; i < threads.size(); i++) {
-		threads[i]->tracing.config = (TraceThread::Mode) c[0];
-	}
-
+	thread.state.jitEnabled = Logical::isTrue(c[0]);
 	result = Null::Singleton();
 }
 

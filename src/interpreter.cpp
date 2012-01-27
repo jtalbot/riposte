@@ -508,8 +508,8 @@ bool isRecordable(Value const& a, Value const& b) {
 Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	int64_t len = As<Integer>(thread, REG(thread, inst.a))[0];
 	int64_t step = As<Integer>(thread, REG(thread, inst.b))[0];
-	if(thread.tracing.Enabled() && isRecordable(Type::Integer, len))
-		return thread.tracing.BeginTracing(thread, &inst);
+	if(thread.state.jitEnabled && isRecordable(Type::Integer, len))
+		return thread.trace.BeginTracing(thread, &inst);
 	else {
 		REG(thread, inst.c) = Sequence(len, 1, step);
 		return &inst+1;
@@ -532,8 +532,8 @@ Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
 			return buildStackFrame(thread, fenv, true, func.prototype(), &REG(thread, inst.c), &inst+1); \
 		}	\
 	} \
-	else if(thread.tracing.Enabled() && isRecordable(a)) \
-		return thread.tracing.BeginTracing(thread, &inst); \
+	else if(thread.state.jitEnabled && isRecordable(a)) \
+		return thread.trace.BeginTracing(thread, &inst); \
 	\
 	unaryArith<Zip1, Op>(thread, a, c); \
 	return &inst+1; \
@@ -545,8 +545,8 @@ UNARY_ARITH_MAP_BYTECODES(OP)
 #define OP(name, string, Op, Func) \
 Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
 	Value & a = REG(thread,inst.a); \
-	if(thread.tracing.Enabled() && isRecordable(a)) \
-		return thread.tracing.BeginTracing(thread,&inst); \
+	if(thread.state.jitEnabled && isRecordable(a)) \
+		return thread.trace.BeginTracing(thread,&inst); \
 	else \
 		unaryLogical<Zip1, Op>(thread, a, REG(thread, inst.c)); \
 	return &inst+1; \
@@ -589,8 +589,8 @@ Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
 			return buildStackFrame(thread, fenv, true, func.prototype(), &REG(thread, inst.c), &inst+1); \
 		}	\
 	} \
-	else if(thread.tracing.Enabled() && isRecordable(a,b)) \
-		return thread.tracing.BeginTracing(thread, &inst);	\
+	else if(thread.state.jitEnabled && isRecordable(a,b)) \
+		return thread.trace.BeginTracing(thread, &inst);	\
 \
 	binaryArithSlow<Zip2, Op>(thread, a, b, c);	\
 	return &inst+1;	\
@@ -602,8 +602,8 @@ BINARY_ARITH_MAP_BYTECODES(OP)
 Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
 	Value & a = REG(thread,inst.a); \
 	Value & b = REG(thread,inst.b); \
-	if(thread.tracing.Enabled() && isRecordable(a,b)) \
-		return thread.tracing.BeginTracing(thread,&inst); \
+	if(thread.state.jitEnabled && isRecordable(a,b)) \
+		return thread.trace.BeginTracing(thread,&inst); \
 	else \
 		binaryLogical<Zip2, Op>(thread, a, b, REG(thread, inst.c)); \
 	return &inst+1; \
@@ -628,8 +628,8 @@ Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
                 else if(b.isInteger1())	\
                         { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(thread, a.i, b.i)); return &inst+1;} \
         } \
-    	else if(thread.tracing.Enabled() && isRecordable(a,b)) \
-    		return thread.tracing.BeginTracing(thread,&inst); \
+    	else if(thread.state.jitEnabled && isRecordable(a,b)) \
+    		return thread.trace.BeginTracing(thread,&inst); \
 	\
 	binaryOrdinal<Zip2, Op>(thread, REG(thread, inst.a), REG(thread, inst.b), REG(thread, inst.c)); \
 	return &inst+1; \
