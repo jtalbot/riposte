@@ -198,86 +198,17 @@ struct Trace {
 		}
 	}
 
-	IRef EmitBinary(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b) {
-		IRNode & n = nodes[n_pending_nodes];
-		n.enc = IRNode::BINARY;
-		n.op = op;
-		n.type = type;
-		n.length = length;
-		n.binary.a = a;
-		n.binary.b = b;
-		return n_pending_nodes++;
-	}
-	IRef EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b) {
-		IRNode & n = nodes[n_pending_nodes];
-		n.enc = IRNode::SPECIAL;
-		n.op = op;
-		n.type = type;
-		n.length = length;
-		n.special.a = a;
-		n.special.b = b;
-		return n_pending_nodes++;
-	}
-	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t data=0) {
-		IRNode & n = nodes[n_pending_nodes];
-		n.enc = IRNode::UNARY;
-		n.op = op;
-		n.type = type;
-		n.length = length;
-		n.unary.a = a;
-		n.unary.data = data;
-		return n_pending_nodes++;
-	}
-	IRef EmitFilter(IROpCode::Enum op, Type::Enum type, int64_t a, int64_t b) {
-		IRNode & n = nodes[n_pending_nodes];
-		n.enc = IRNode::BINARY;
-		n.op = op;
-		n.type = type;
-		n.length = -n_pending_nodes;
-		n.binary.a = a;
-		n.binary.b = b;
-		return n_pending_nodes++;
-	}
-	IRef EmitLoadC(Type::Enum type, int64_t length, int64_t c) {
-		IRNode & n = nodes[n_pending_nodes];
-		n.enc = IRNode::LOADC;
-		n.op = IROpCode::loadc;
-		n.type = type;
-		n.length = length;
-		n.loadc.i = c;
-		return n_pending_nodes++;
-	}
-	IRef EmitLoadV(Type::Enum type, int64_t length, Value const& v) {
-		IRNode & n = nodes[n_pending_nodes];
-		n.enc = IRNode::LOADV;
-		n.op = IROpCode::loadv;
-		n.type = type;
-		n.length = length;
-		n.loadv.src = v;
-		return n_pending_nodes++;
-	}
-	IRef EmitStore(int64_t a) {
-		IRNode & n = nodes[n_pending_nodes];
-		n.enc = IRNode::STORE;
-		n.op = IROpCode::storev;
-		n.type = nodes[a].type;
-		n.length = nodes[a].length;
-		n.store.a = a;
-		return n_pending_nodes++;
-	}
-	void EmitRegOutput(IRef ref, Value * base, int64_t id) {
-		Trace::Output & out = outputs[n_pending_outputs++];
-		out.ref = ref;
-		out.location.type = Location::REG;
-		out.location.reg.base = base;
-		out.location.reg.offset = id;
-	}
-	void EmitVarOutput(IRef ref, Thread & state, const Environment::Pointer & p) {
-		Trace::Output & out = outputs[n_pending_outputs++];
-		out.ref = ref;
-		out.location.type = Trace::Location::VAR;
-		out.location.pointer = p;
-	}
+	IRef EmitCoerce(IRef a, Type::Enum dst_type);
+	IRef EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b);
+	IRef EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b);
+	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data); 
+	IRef EmitFold(IROpCode::Enum op, Type::Enum type, IRef a); 
+	IRef EmitFilter(IROpCode::Enum op, IRef a, IRef b);
+	IRef EmitLoadC(Type::Enum type, int64_t length, int64_t c);
+	IRef EmitLoadV(Value const& v);
+	IRef EmitStore(IRef a);
+	void RegOutput(IRef ref, Value * base, int64_t id);
+	void VarOutput(IRef ref, const Environment::Pointer & p);
 
 	void SetMaxLiveRegister(Value * base, int64_t r) {
 		max_live_register_base = base;

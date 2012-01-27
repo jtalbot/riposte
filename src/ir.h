@@ -33,6 +33,7 @@ struct IRNode {
 		BINARY,
 		SPECIAL,
 		UNARY,
+		FOLD,
 		LOADC,
 		LOADV,
 		STORE,

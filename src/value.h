@@ -95,10 +95,10 @@ class Thread;
 class Prototype;
 class Environment;
 
-template<Type::Enum VType, typename ElementType, bool Recursive,
-	bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive>
+template<Type::Enum VType, typename ElementType, bool Recursive>
 struct Vector : public Value {
 	typedef ElementType Element;
+	static const bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive;
 	static const int64_t width = sizeof(ElementType); 
 	static const Type::Enum VectorType = VType;
 

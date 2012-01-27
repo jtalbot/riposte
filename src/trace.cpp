@@ -60,6 +60,130 @@ std::string Trace::toString(Thread & thread) {
 	return out.str();
 }
 
+void coerce_scalar(IRNode & n, Type::Enum to) {
+	switch(n.type) {
+	case Type::Integer: switch(to) {
+		case Type::Double: n.loadc.d = n.loadc.i; break;
+		case Type::Logical: n.loadc.l = n.loadc.i; break;
+		default: _error("unknown cast"); break;
+	} break;
+	case Type::Double: switch(to) {
+		case Type::Integer: n.loadc.i = (int64_t) n.loadc.d; break;
+		case Type::Logical: n.loadc.l = (char) n.loadc.d; break;
+		default: _error("unknown cast"); break;
+	} break;
+	case Type::Logical: switch(to) {
+		case Type::Double: n.loadc.d = n.loadc.l; break;
+		case Type::Integer: n.loadc.i = n.loadc.l; break;
+		default: _error("unknown cast"); break;
+	} break;
+	default: _error("unknown cast"); break;
+	}
+	n.type = to;
+}
+
+IRef Trace::EmitCoerce(IRef a, Type::Enum dst_type) {
+	IRNode& n = nodes[a];
+	if(dst_type == n.type) {
+		return a;
+	} else if(n.op == IROpCode::loadc) {
+		coerce_scalar(n, dst_type);
+		return a;
+	} else {
+		return EmitUnary(IROpCode::cast,dst_type,a,0);
+	} 
+}
+IRef Trace::EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b) {
+	IRNode & n = nodes[n_pending_nodes];
+	n.enc = IRNode::BINARY;
+	n.op = op;
+	n.type = type;
+	n.length = nodes[a].length == 0 || nodes[b].length == 0 ? 0 : std::max(nodes[a].length, nodes[b].length);
+	n.binary.a = a;
+	n.binary.b = b;
+	return n_pending_nodes++;
+}
+IRef Trace::EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b) {
+	IRNode & n = nodes[n_pending_nodes];
+	n.enc = IRNode::SPECIAL;
+	n.op = op;
+	n.type = type;
+	n.length = length;
+	n.special.a = a;
+	n.special.b = b;
+	return n_pending_nodes++;
+}
+IRef Trace::EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data) {
+	IRNode & n = nodes[n_pending_nodes];
+	n.enc = IRNode::UNARY;
+	n.op = op;
+	n.type = type;
+	n.length = nodes[a].length;
+	n.unary.a = a;
+	n.unary.data = data;
+	return n_pending_nodes++;
+}
+IRef Trace::EmitFold(IROpCode::Enum op, Type::Enum type, IRef a) {
+	IRNode & n = nodes[n_pending_nodes];
+	n.enc = IRNode::FOLD;
+	n.op = op;
+	n.type = type;
+	n.length = 1;
+	n.unary.a = a;
+	return n_pending_nodes++;
+}
+IRef Trace::EmitFilter(IROpCode::Enum op, IRef a, IRef b) {
+	IRNode & n = nodes[n_pending_nodes];
+	n.enc = IRNode::BINARY;
+	n.op = op;
+	n.type = nodes[a].type;
+	n.length = -n_pending_nodes;
+	n.binary.a = a;
+	n.binary.b = b;
+	return n_pending_nodes++;
+}
+IRef Trace::EmitLoadC(Type::Enum type, int64_t length, int64_t c) {
+	IRNode & n = nodes[n_pending_nodes];
+	n.enc = IRNode::LOADC;
+	n.op = IROpCode::loadc;
+	n.type = type;
+	n.length = length;
+	n.loadc.i = c;
+	return n_pending_nodes++;
+}
+IRef Trace::EmitLoadV(Value const& v) {
+	IRNode & n = nodes[n_pending_nodes];
+	n.enc = IRNode::LOADV;
+	n.op = IROpCode::loadv;
+	n.type = v.type;
+	n.length = v.length;
+	n.loadv.src = v;
+	return n_pending_nodes++;
+}
+IRef Trace::EmitStore(IRef a) {
+	IRNode & n = nodes[n_pending_nodes];
+	n.enc = IRNode::STORE;
+	n.op = IROpCode::storev;
+	n.type = nodes[a].type;
+	n.length = nodes[a].length;
+	n.store.a = a;
+	return n_pending_nodes++;
+}
+void Trace::RegOutput(IRef ref, Value * base, int64_t id) {
+	Trace::Output & out = outputs[n_pending_outputs++];
+	out.ref = ref;
+	out.location.type = Location::REG;
+	out.location.reg.base = base;
+	out.location.reg.offset = id;
+}
+void Trace::VarOutput(IRef ref, const Environment::Pointer & p) {
+	Trace::Output & out = outputs[n_pending_outputs++];
+	out.ref = ref;
+	out.location.type = Trace::Location::VAR;
+	out.location.pointer = p;
+}
+
+
 #define REG(thread, i) (*(thread.base+i))
 
 static const Value & get_location_value(Thread & thread, const Trace::Location & l) {
@@ -283,6 +407,7 @@ void Trace::DeadCodeElimination(Thread& thread) {
 					nodes[node.binary.b].used = true;
 					break;
 				case IRNode::UNARY:
+				case IRNode::FOLD:
 					nodes[node.unary.a].used = true;
 					break;
 				case IRNode::LOADC: /*fallthrough*/
@@ -327,15 +452,23 @@ void Trace::Execute(Thread & thread) {
 				node.op = IROpCode::nop;
 				node.enc = IRNode::NOP;
 			} else {
+				// compute length
+				IRNode* n = &node;
+				if(n->length < 0) {
+					n = &nodes[-n->length];
+				}
+				int64_t length = n->length;
 				if(node.type == Type::Double) {
-					node.store.dst = Double(node.length);
+					node.store.dst = Double(length);
 				} else if(node.type == Type::Integer) {
-					node.store.dst = Integer(node.length);
+					node.store.dst = Integer(length);
 				} else if(node.type == Type::Logical) {
-					node.store.dst = Logical(node.length);
+					node.store.dst = Logical(length);
 				} else {
 					_error("Unknown type in initialize outputs");
 				}
+				if(node.length < 0)
+					node.store.dst.length = 0;
 			}
 		} else if(node.op == IROpCode::storec) {
 			uint64_t n = std::max((int64_t)128, thread.state.nThreads*8);

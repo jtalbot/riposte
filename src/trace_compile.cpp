@@ -70,6 +70,7 @@ static int make_executable(char * data, size_t size) {
 struct TraceCodeBuffer {
 	Constant constant_table[TRACE_MAX_NODES] __attribute__((aligned(16)));
 	char code[CODE_BUFFER_SIZE] __attribute__((aligned(16)));
+	uint64_t outer_loop;
 	TraceCodeBuffer() {
 		//make the code executable
 		if(0 != make_executable(code,CODE_BUFFER_SIZE)) {
@@ -84,6 +85,7 @@ struct TraceCodeBuffer {
 		constant_table[C_PACK_LOGICAL] = Constant(0x1010101010100800,0x1010101010101010);
 		constant_table[C_LNOT_MASK] = Constant((uint8_t)0x1);
 		constant_table[C_DOUBLE_ZERO] = Constant(0.0);
+		outer_loop = 0;
 	}
 };
 
@@ -173,7 +175,22 @@ static double iabs(double aa) { //these are actually integers passed in xmm0 and
 	return da; //also return the value in xmm0
 }
 
-
+static void storec(__m128d input, __m128d mask, Value* out) {
+	union { 
+		__m128i ma; 
+		unsigned char m[2]; 
+	}; 
+	union { 
+		__m128d in; 
+		double i[2]; 
+	};
+	ma = (__m128i)mask; 
+	in = input;
+	if(m[0]) 
+		((double*)(out->p))[out->length++] = i[0];
+	if(m[1]) 
+		((double*)(out->p))[out->length++] = i[1];
+}
 
 #define FOLD_SCAN_FN(name, type, op) \
 static __m128d name (__m128d input, type * last) { \
@@ -329,6 +346,7 @@ struct TraceJIT {
 		for(IRef i = 0; i < trace->n_nodes; i++) {
 			IRef ref = i;
 			IRNode & node = trace->nodes[i];
+			if(node.length > 1) trace->code_buffer->outer_loop = node.length;
 
 			switch(node.op) {
 
@@ -528,17 +546,22 @@ struct TraceJIT {
 			/* nothing */
 			break;
 
+			case IROpCode::filter:
+				Move(ref, node.binary.a);
+			/* nothing */
+			break;
+
 			case IROpCode::signif:
 			default:	_error("unimplemented op"); break;
 		
 			}
 
-			if(node.op != IROpCode::nop && store_inst[ref] != NULL && store_inst[ref]->op == IROpCode::storev) {
+			if(store_inst[ref] != NULL && store_inst[ref]->op == IROpCode::storev) {
 				IRNode & str = *store_inst[ref];
 				if(Type::Logical == str.type)
-					EmitLogicalStore(str.store.dst.p,reg(str.store.a));
+					EmitLogicalStore(str.store.dst,reg(str.store.a),str.length);
 				else
-					EmitVectorStore(str.store.dst.p,reg(str.store.a));
+					EmitVectorStore(ref, str.store.dst,reg(str.store.a), str.length);
 				/*} else {
 					Operand op = EncodeOperand(&str.store.dst.p);
 					asm_.movsd(op,reg(str.store.a));
@@ -618,15 +641,38 @@ struct TraceJIT {
 	void EmitVectorLoad(XMMRegister dst, void * src) {
 		asm_.movdqa(dst,EncodeOperand(src,vector_index,times_8));
 	}
-	void EmitVectorStore(void * dst,  XMMRegister src) {
-		asm_.movdqa(EncodeOperand(dst,vector_index,times_8),src);
+	void EmitVectorStore(IRef ref, Value& dst, XMMRegister src, int64_t length) {
+		if(length > 0)
+			asm_.movdqa(EncodeOperand(dst.p,vector_index,times_8),src);
+		else {
+			printf("Out pointer is %x\n", &dst);
+			XMMRegister filter = reg(-length);
+			SaveRegisters(live_registers[ref]);
+				printf("In bottom case: %d %d (%d %d)\n", src, filter, xmm0, xmm1);
+			if(filter.is(xmm0)) {
+				if(src.is(xmm1)) {
+					EmitMove(xmm2, filter);
+					EmitMove(xmm0, src);
+					EmitMove(xmm1, xmm2);
+				} else {
+					EmitMove(xmm1, filter);
+					EmitMove(xmm0, src);
+				}
+			} else {
+				EmitMove(xmm0,src);
+				EmitMove(xmm1,filter);
+			}
+			asm_.movq(rdi,&dst);
+			EmitCall((void*)storec);
+			RestoreRegisters(live_registers[ref]);
+		}
 	}
 	void EmitLogicalLoad(XMMRegister dst, void * src) {
 		asm_.movss(dst,EncodeOperand(src,vector_index,times_1));
 	}
-	void EmitLogicalStore(void * dst,  XMMRegister src) {
+	void EmitLogicalStore(Value& dst,  XMMRegister src, int64_t length) {
 		asm_.movq(rbx,src);
-		asm_.movw(EncodeOperand(dst,vector_index,times_1),rbx);
+		asm_.movw(EncodeOperand(dst.p,vector_index,times_1),rbx);
 	}
 
 	Operand EncodeOperand(void * dst, Register idx, ScaleFactor scale) {
@@ -760,11 +806,6 @@ struct TraceJIT {
 		RestoreRegisters(regs);
 	}
 	void SaveRegisters(RegisterSet regs) {
-		/*uint32_t offset = C_REGISTER_SPILL_SPACE * sizeof(Constant);
-		for(RegisterIterator it(regs); !it.done(); it.next()) {
-			asm_.movdqa(Operand(constant_base,offset),XMMRegister::FromAllocationIndex(it.value()));
-			offset += SIMD_WIDTH;
-		}*/
 		asm_.subq(rsp, Immediate(256));
 		uint64_t index = 0;
 		for(RegisterIterator it(regs); !it.done(); it.next()) {
@@ -774,11 +815,6 @@ struct TraceJIT {
 	}
 
 	void RestoreRegisters(RegisterSet regs) {
-		/*uint32_t offset = C_REGISTER_SPILL_SPACE * sizeof(Constant);
-		for(RegisterIterator it(regs); !it.done(); it.next()) {
-			asm_.movdqa(XMMRegister::FromAllocationIndex(it.value()),Operand(constant_base,offset));
-			offset += SIMD_WIDTH;
-		}*/
 		uint64_t index = 0;
 		for(RegisterIterator it(regs); !it.done(); it.next()) {
 			asm_.movdqu(XMMRegister::FromAllocationIndex(it.value()), Operand(rsp, index));
@@ -823,12 +859,12 @@ struct TraceJIT {
 		if(thread.state.verbose) {
 			//timespec begin;
 			//get_time(begin);
-			//thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
+			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->code_buffer->outer_loop, 4, 16*1024); 
 			//trace_code(thread.index, 0, trace->length);
 			//double s = trace->length / (time_elapsed(begin) * 10e9);
 			//printf("elements computed / us: %f\n",s);
 		} else {
-			//thread.doall(NULL, executebody, (void*)trace_code, 0, trace->length, 4, 16*1024); 
+			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->code_buffer->outer_loop, 4, 16*1024); 
 			//trace_code(thread.index, 0, trace->length);
 		}
 	}
