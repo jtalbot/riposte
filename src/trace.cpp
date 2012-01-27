@@ -98,7 +98,10 @@ IRef Trace::EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b) {
 	n.enc = IRNode::BINARY;
 	n.op = op;
 	n.type = type;
-	n.length = nodes[a].length == 0 || nodes[b].length == 0 ? 0 : std::max(nodes[a].length, nodes[b].length);
+	n.length = nodes[a].length == 0 || nodes[b].length == 0 ? 0 
+		: nodes[a].length < 0 ? nodes[a].length
+		: nodes[b].length < 0 ? nodes[b].length
+		: std::max(nodes[a].length, nodes[b].length);
 	n.binary.a = a;
 	n.binary.b = b;
 	return n_pending_nodes++;
@@ -137,7 +140,7 @@ IRef Trace::EmitFilter(IROpCode::Enum op, IRef a, IRef b) {
 	n.enc = IRNode::BINARY;
 	n.op = op;
 	n.type = nodes[a].type;
-	n.length = -n_pending_nodes;
+	n.length = -b;
 	n.binary.a = a;
 	n.binary.b = b;
 	return n_pending_nodes++;
@@ -400,6 +403,7 @@ void Trace::DeadCodeElimination(Thread& thread) {
 		IRNode & node = nodes[ref-1];
 		if(node.enc == IRNode::STORE) {
 			nodes[node.store.a].used = true;
+			if(node.length < 0) nodes[-node.length].used = true;
 		} else if(node.used) {
 			switch(node.enc) {
 				case IRNode::BINARY: 
@@ -418,6 +422,7 @@ void Trace::DeadCodeElimination(Thread& thread) {
 					/* nothing */
 					break;
 			}
+			if(node.length < 0) nodes[-node.length].used = true;
 		} else {
 			node.op = IROpCode::nop;
 			node.enc = IRNode::NOP;
@@ -493,4 +498,6 @@ void Trace::Execute(Thread & thread) {
 	JIT(thread);
 	
 	WriteOutputs(thread);
+
+	Reset();
 }

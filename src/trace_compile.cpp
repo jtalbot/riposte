@@ -175,7 +175,7 @@ static double iabs(double aa) { //these are actually integers passed in xmm0 and
 	return da; //also return the value in xmm0
 }
 
-static void storec(__m128d input, __m128d mask, Value* out) {
+static void store_conditional(__m128d input, __m128d mask, Value* out) {
 	union { 
 		__m128i ma; 
 		unsigned char m[2]; 
@@ -191,6 +191,7 @@ static void storec(__m128d input, __m128d mask, Value* out) {
 	if(m[1]) 
 		((double*)(out->p))[out->length++] = i[1];
 }
+
 
 #define FOLD_SCAN_FN(name, type, op) \
 static __m128d name (__m128d input, type * last) { \
@@ -286,6 +287,13 @@ struct TraceJIT {
 			if(!alloc.allocate(r,&allocated_register[a]))
 				_error("exceeded available registers");
 		}
+		if(trace->nodes[ref].length < 0) {
+			IRef mask = -trace->nodes[ref].length;
+			if(allocated_register[mask] < 0) {
+				if(!alloc.allocate(&allocated_register[mask]))
+					_error("exceeded available registers");
+			}
+		}
 		if(p) {
 			//printf("%d = %d op, %d = %d op\n",(int)allocated_register[ref],(int)allocated_register[a],(int)ref,(int)a);
 		}
@@ -333,6 +341,7 @@ struct TraceJIT {
 		asm_.push(load_addr);
 		asm_.push(vector_length);
 		asm_.push(rbx);
+		asm_.subq(rsp, Immediate(0x8));
 
 		asm_.movq(thread_index, rdi);
 		asm_.movq(constant_base, &trace->code_buffer->constant_table[0]);
@@ -588,6 +597,7 @@ struct TraceJIT {
 		asm_.cmpq(vector_index,vector_length);
 		asm_.j(less,&begin);
 
+		asm_.addq(rsp, Immediate(0x8));
 		asm_.pop(rbx);
 		asm_.pop(vector_length);
 		asm_.pop(load_addr);
@@ -645,10 +655,9 @@ struct TraceJIT {
 		if(length > 0)
 			asm_.movdqa(EncodeOperand(dst.p,vector_index,times_8),src);
 		else {
-			printf("Out pointer is %x\n", &dst);
 			XMMRegister filter = reg(-length);
+			
 			SaveRegisters(live_registers[ref]);
-				printf("In bottom case: %d %d (%d %d)\n", src, filter, xmm0, xmm1);
 			if(filter.is(xmm0)) {
 				if(src.is(xmm1)) {
 					EmitMove(xmm2, filter);
@@ -663,7 +672,7 @@ struct TraceJIT {
 				EmitMove(xmm1,filter);
 			}
 			asm_.movq(rdi,&dst);
-			EmitCall((void*)storec);
+			EmitCall((void*)store_conditional);
 			RestoreRegisters(live_registers[ref]);
 		}
 	}

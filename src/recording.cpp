@@ -178,6 +178,9 @@ RecordingStatus::Enum subset_record(Thread & thread, Instruction const & inst, I
 		IRef aref = getRef(thread.trace,a);
 		IRef bref = getRef(thread.trace,b);
 
+		if(trace.nodes[aref].length != trace.nodes[bref].length)
+			return fallback(thread, a, b);
+
 		IRef r = trace.EmitFilter(IROpCode::filter, aref, bref);
 		Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].length, r);
 		

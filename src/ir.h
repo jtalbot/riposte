@@ -44,6 +44,7 @@ struct IRNode {
 	Type::Enum type;
 	int64_t length;
 	bool used;
+	IRef mask;
 
 	bool isDouble() const { return type == Type::Double; }
 	bool isInteger() const { return type == Type::Integer; }

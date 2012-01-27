@@ -194,7 +194,6 @@ struct Trace {
 		if(active) {
 			n_recorded_since_last_exec = 0;
 			Execute(thread);
-			Reset();
 		}
 	}
 
