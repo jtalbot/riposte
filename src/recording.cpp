@@ -107,7 +107,7 @@ struct LoadCache {
 		idx += idx >> 8;
 		idx &= 0xFF;
 		IRef cached = cache[idx];
-		if(cached < trace.n_pending_nodes &&
+		if(cached < trace.nodes.size() &&
 		   trace.nodes[cached].op == IROpCode::loadv &&
 		   trace.nodes[cached].loadv.src.p == v.p) {
 			return cached;

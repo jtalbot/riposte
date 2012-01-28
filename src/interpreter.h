@@ -109,16 +109,11 @@ struct InternalFunction {
 	int64_t params;
 };
 
-#define TRACE_MAX_NODES (128)
-#define TRACE_MAX_OUTPUTS (128)
 #define TRACE_MAX_VECTOR_REGISTERS (32)
 #define TRACE_VECTOR_WIDTH (64)
 //maximum number of instructions to record before dropping out of the
 //recording interpreter
 #define TRACE_MAX_RECORDED (1024)
-#define TRACE_MAX_TRACES (4)
-#define TRACE_MAX_NODES_PER_COMMIT (4)
-#define TRACE_MAX_OUTPUTS_PER_COMMIT (1)
 
 struct TraceCodeBuffer;
 struct Trace {
@@ -142,13 +137,9 @@ struct Trace {
 	};
 
 
-	IRNode nodes[TRACE_MAX_NODES];
-	size_t n_nodes;
-	size_t n_pending_nodes;
+	std::vector<IRNode> nodes;
 	
-	Output outputs[TRACE_MAX_OUTPUTS];
-	size_t n_outputs;
-	size_t n_pending_outputs;
+	std::vector<Output> outputs;
 
 	TraceCodeBuffer * code_buffer;
 
@@ -232,16 +223,16 @@ struct Trace {
 	}
 
 	void Rollback() {
-		n_pending_nodes = n_nodes;
 	}
 	//commits the recorded instructions and outputs from the current op
 	//if the trace does not have enough room to record another op, it is flushed
 	//and the slot is freed for another trace
 	void Commit(Thread& thread) {
-		n_nodes = n_pending_nodes;
-		n_outputs = n_pending_outputs;
-		if(n_nodes + TRACE_MAX_NODES_PER_COMMIT >= TRACE_MAX_NODES
-		  || n_outputs + TRACE_MAX_OUTPUTS_PER_COMMIT >= TRACE_MAX_OUTPUTS) {
+		/*n_nodes = n_pending_nodes;
+		if(n_nodes + TRACE_MAX_NODES_PER_COMMIT >= TRACE_MAX_NODES) {
+			Flush(thread);
+		}*/
+		if(nodes.size() > 128) {
 			Flush(thread);
 		}
 	}

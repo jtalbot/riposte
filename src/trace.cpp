@@ -8,12 +8,13 @@
 void Trace::Reset() {
 	active = false;
 	n_recorded_since_last_exec = 0;
-	n_nodes = n_outputs = n_pending_nodes = n_pending_outputs = 0;
+	nodes.clear();
+	outputs.clear();
 }
 
 std::string Trace::toString(Thread & thread) {
 	std::ostringstream out;
-	for(size_t j = 0; j < n_nodes; j++) {
+	for(size_t j = 0; j < nodes.size(); j++) {
 		IRNode & node = nodes[j];
 		if(node.length >= 0)
 			out << "n" << j << " : " << Type::toString(node.type) << "[" << node.length << "]" << " = " << IROpCode::toString(node.op) << "\t";
@@ -42,7 +43,7 @@ std::string Trace::toString(Thread & thread) {
 		out << "\n";
 	}
 	out << "outputs: \n";
-	for(size_t i = 0; i < n_outputs; i++) {
+	for(size_t i = 0; i < outputs.size(); i++) {
 
 		Output & o = outputs[i];
 		switch(o.location.type) {
@@ -94,7 +95,7 @@ IRef Trace::EmitCoerce(IRef a, Type::Enum dst_type) {
 	} 
 }
 IRef Trace::EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b) {
-	IRNode & n = nodes[n_pending_nodes];
+	IRNode n;
 	n.enc = IRNode::BINARY;
 	n.op = op;
 	n.type = type;
@@ -104,86 +105,96 @@ IRef Trace::EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b) {
 		: std::max(nodes[a].length, nodes[b].length);
 	n.binary.a = a;
 	n.binary.b = b;
-	return n_pending_nodes++;
+	nodes.push_back(n);
+	return nodes.size()-1;
 }
 IRef Trace::EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b) {
-	IRNode & n = nodes[n_pending_nodes];
+	IRNode n;
 	n.enc = IRNode::SPECIAL;
 	n.op = op;
 	n.type = type;
 	n.length = length;
 	n.special.a = a;
 	n.special.b = b;
-	return n_pending_nodes++;
+	nodes.push_back(n);
+	return nodes.size()-1;
 }
 IRef Trace::EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data) {
-	IRNode & n = nodes[n_pending_nodes];
+	IRNode n;
 	n.enc = IRNode::UNARY;
 	n.op = op;
 	n.type = type;
 	n.length = nodes[a].length;
 	n.unary.a = a;
 	n.unary.data = data;
-	return n_pending_nodes++;
+	nodes.push_back(n);
+	return nodes.size()-1;
 }
 IRef Trace::EmitFold(IROpCode::Enum op, Type::Enum type, IRef a) {
-	IRNode & n = nodes[n_pending_nodes];
+	IRNode n;
 	n.enc = IRNode::FOLD;
 	n.op = op;
 	n.type = type;
 	n.length = 1;
 	n.unary.a = a;
-	return n_pending_nodes++;
+	nodes.push_back(n);
+	return nodes.size()-1;
 }
 IRef Trace::EmitFilter(IROpCode::Enum op, IRef a, IRef b) {
-	IRNode & n = nodes[n_pending_nodes];
+	IRNode n;
 	n.enc = IRNode::BINARY;
 	n.op = op;
 	n.type = nodes[a].type;
 	n.length = -b;
 	n.binary.a = a;
 	n.binary.b = b;
-	return n_pending_nodes++;
+	nodes.push_back(n);
+	return nodes.size()-1;
 }
 IRef Trace::EmitLoadC(Type::Enum type, int64_t length, int64_t c) {
-	IRNode & n = nodes[n_pending_nodes];
+	IRNode n;
 	n.enc = IRNode::LOADC;
 	n.op = IROpCode::loadc;
 	n.type = type;
 	n.length = length;
 	n.loadc.i = c;
-	return n_pending_nodes++;
+	nodes.push_back(n);
+	return nodes.size()-1;
 }
 IRef Trace::EmitLoadV(Value const& v) {
-	IRNode & n = nodes[n_pending_nodes];
+	IRNode n;
 	n.enc = IRNode::LOADV;
 	n.op = IROpCode::loadv;
 	n.type = v.type;
 	n.length = v.length;
 	n.loadv.src = v;
-	return n_pending_nodes++;
+	nodes.push_back(n);
+	return nodes.size()-1;
 }
 IRef Trace::EmitStore(IRef a) {
-	IRNode & n = nodes[n_pending_nodes];
+	IRNode n;
 	n.enc = IRNode::STORE;
-	n.op = IROpCode::storev;
+	n.op = nodes[a].enc == IRNode::FOLD ? IROpCode::storec : IROpCode::storev;
 	n.type = nodes[a].type;
 	n.length = nodes[a].length;
 	n.store.a = a;
-	return n_pending_nodes++;
+	nodes.push_back(n);
+	return nodes.size()-1;
 }
 void Trace::RegOutput(IRef ref, Value * base, int64_t id) {
-	Trace::Output & out = outputs[n_pending_outputs++];
+	Output out;
 	out.ref = ref;
 	out.location.type = Location::REG;
 	out.location.reg.base = base;
 	out.location.reg.offset = id;
+	outputs.push_back(out);
 }
 void Trace::VarOutput(IRef ref, const Environment::Pointer & p) {
-	Trace::Output & out = outputs[n_pending_outputs++];
+	Output out;
 	out.ref = ref;
 	out.location.type = Trace::Location::VAR;
 	out.location.pointer = p;
+	outputs.push_back(out);
 }
 
 
@@ -216,41 +227,41 @@ static bool isOutputAlive(Thread& thread, Trace& trace, Trace::Output const& o) 
 }
 
 void Trace::InitializeOutputs(Thread& thread) {
-	IRef store[TRACE_MAX_NODES];
-	bzero(store, sizeof(IRef)*TRACE_MAX_NODES);
+	IRef* store = new (PointerFreeGC) IRef[nodes.size()];
+	bzero(store, sizeof(IRef)*nodes.size());
 
-	for(size_t i = 0; i < n_outputs; ) {
+	for(size_t i = 0; i < outputs.size(); ) {
 		Output & o = outputs[i];
 		if(isOutputAlive(thread,*this,o)) {
 			if(!store[o.ref]) {
 				store[o.ref] = EmitStore(o.ref);
-				n_nodes = n_pending_nodes;
 			}
 			o.ref = store[o.ref];
 			i++;
 		}
 		else  {
-			o = outputs[--n_outputs];
+			o = outputs.back();
+			outputs.pop_back();
 		}	
 	}	
 }
 
 void Trace::WriteOutputs(Thread & thread) {
 	if(thread.state.verbose) {
-		for(size_t i = 0; i < n_outputs; i++) {
+		for(size_t i = 0; i < outputs.size(); i++) {
 			Output& o = outputs[i];
 			std::string v = thread.stringify(nodes[o.ref].store.dst);
 			printf("n%lld = %s\n", o.ref, v.c_str());
 		}
 	}
-	for(size_t i = 0; i < n_outputs; i++) {
+	for(size_t i = 0; i < outputs.size(); i++) {
 		Output & o = outputs[i];
 		set_location_value(thread,o.location,nodes[o.ref].store.dst);
 	}
 }
 
 void Trace::SimplifyOps(Thread& thread) {
-	for(IRef ref = 0; ref < n_nodes; ref++) {
+	for(IRef ref = 0; ref < nodes.size(); ref++) {
 		IRNode & node = nodes[ref];
 		switch(node.op) {
 			case IROpCode::gt: node.op = IROpCode::lt; std::swap(node.binary.a,node.binary.b); break;
@@ -266,7 +277,7 @@ void Trace::SimplifyOps(Thread& thread) {
 }
 
 void Trace::AlgebraicSimplification(Thread& thread) {
-	for(IRef ref = 0; ref < n_nodes; ref++) {
+	for(IRef ref = 0; ref < nodes.size(); ref++) {
 		IRNode & node = nodes[ref];
 
 		if(node.enc == IRNode::UNARY && nodes[node.unary.a].op == IROpCode::pos)
@@ -395,11 +406,11 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 
 void Trace::DeadCodeElimination(Thread& thread) {
 	// kill any defs whose use I haven't seen!
-	for(IRef ref = 0; ref < n_nodes; ref++) {
+	for(IRef ref = 0; ref < nodes.size(); ref++) {
 		IRNode & node = nodes[ref];
 		node.used = false;
 	}
-	for(IRef ref = n_nodes; ref > 0; ref--) {
+	for(IRef ref = nodes.size(); ref > 0; ref--) {
 		IRNode & node = nodes[ref-1];
 		if(node.enc == IRNode::STORE) {
 			nodes[node.store.a].used = true;
@@ -449,7 +460,7 @@ void Trace::Execute(Thread & thread) {
 	AlgebraicSimplification(thread);
 	
 	// Initialize Output...
-	for(IRef ref = 0; ref < n_nodes; ref++) {
+	for(IRef ref = 0; ref < nodes.size(); ref++) {
 		IRNode& node = nodes[ref];
 		if(node.op == IROpCode::storev) {
 			if(nodes[node.store.a].op == IROpCode::loadv) {

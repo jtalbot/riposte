@@ -187,8 +187,9 @@ testno <- 0
  
 
 {
+	trace.config(0)
 	cat("Test trace ops\n")
-	PassIfTrue(v0 ,  r0 )
+	PassIfEq(v0 ,  r0 )
 	PassIfEq(v1  ,  r1 )
 	PassIfEq(v2  ,  r2 )
 	PassIfEq(v3  ,  r3 )

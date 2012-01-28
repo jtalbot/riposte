@@ -66,7 +66,7 @@ static int make_executable(char * data, size_t size) {
 
 //scratch space that is reused across traces
 struct TraceCodeBuffer {
-	Constant constant_table[TRACE_MAX_NODES] __attribute__((aligned(16)));
+	Constant constant_table[128] __attribute__((aligned(16)));
 	char code[CODE_BUFFER_SIZE] __attribute__((aligned(16)));
 	uint64_t outer_loop;
 	TraceCodeBuffer() {
@@ -161,6 +161,33 @@ static double castd2i(double aa) { //these are actually doubles passed in xmm0 a
 	ia = (int64_t) aa;
 	return da; //also return the value in xmm0
 }
+static double castl2d(double aa) { //these are actually logicals passed in xmm0 and xmm1
+	union {
+		double da;
+		int64_t a;
+	};
+	da = aa;
+	if(Logical::isTrue((char)a))
+		return 1.0;
+	else if(Logical::isFalse((char)a))
+		return 0.0;
+	else
+		return Double::NAelement;
+}
+static double castl2i(double aa) { //these are actually logicals passed in xmm0 and xmm1
+	union {
+		double da;
+		int64_t a;
+	};
+	da = aa;
+	if(Logical::isTrue((char)a))
+		a = 1;
+	else if(Logical::isFalse((char)a))
+		a = 0;
+	else
+		a = Integer::NAelement;
+	return da;
+}
 static double iabs(double aa) { //these are actually integers passed in xmm0 and xmm1
 	union {
 		int64_t ia;
@@ -217,12 +244,16 @@ FOLD_SCAN_FN(sumd , double , +)
 
 struct TraceJIT {
 	TraceJIT(Trace * t)
-	:  trace(t), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), alloc(XMMRegister::kNumAllocatableRegisters), next_constant_slot(C_FIRST_TRACE_CONST) {}
+	:  trace(t), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), alloc(XMMRegister::kNumAllocatableRegisters), next_constant_slot(C_FIRST_TRACE_CONST) {
+		store_inst = new (PointerFreeGC) IRNode*[trace->nodes.size()];
+		live_registers = new (PointerFreeGC) RegisterSet[trace->nodes.size()];
+		allocated_register = new (PointerFreeGC) int8_t[trace->nodes.size()];
+	}
 
 	Trace * trace;
-	IRNode * store_inst[TRACE_MAX_NODES];
-	RegisterSet live_registers[TRACE_MAX_NODES];
-	int8_t allocated_register[TRACE_MAX_NODES];
+	IRNode ** store_inst;
+	RegisterSet* live_registers;
+	int8_t* allocated_register;
 	Assembler asm_;
 	RegisterAllocator alloc;
 
@@ -235,14 +266,15 @@ struct TraceJIT {
 
 	void RegisterAllocate() {
 		//pass 1 register allocation
-		for(IRef i = trace->n_nodes; i > 0; i--) {
+		for(IRef i = trace->nodes.size(); i > 0; i--) {
 			IRef ref = i - 1;
 			IRNode & node = trace->nodes[ref];
 			switch(node.enc) {
 			case IRNode::BINARY: {
 				AllocateBinary(ref,node.binary.a,node.binary.b);
 			} break;
-			case IRNode::UNARY: {
+			case IRNode::UNARY:
+			case IRNode::FOLD: {
 				AllocateUnary(ref,node.unary.a);
 			} break;
 			case IRNode::LOADC: /*fallthrough*/
@@ -348,7 +380,7 @@ struct TraceJIT {
 
 		asm_.bind(&begin);
 
-		for(IRef i = 0; i < trace->n_nodes; i++) {
+		for(IRef i = 0; i < trace->nodes.size(); i++) {
 			IRef ref = i;
 			IRNode & node = trace->nodes[i];
 			if(node.length > 1) trace->code_buffer->outer_loop = node.length;
@@ -473,8 +505,12 @@ struct TraceJIT {
 					EmitMove(reg(ref), reg(node.unary.a));
 				else if(node.isDouble() && trace->nodes[node.unary.a].isInteger())
 					EmitUnaryFunction(ref, casti2d);
+				else if(node.isDouble() && trace->nodes[node.unary.a].isLogical())
+					EmitUnaryFunction(ref, castl2d);
 				else if(node.isInteger() && trace->nodes[node.unary.a].isDouble())
 					EmitUnaryFunction(ref, castd2i);
+				else if(node.isInteger() && trace->nodes[node.unary.a].isLogical())
+					EmitUnaryFunction(ref, castl2i);
 				else if(node.isLogical() && trace->nodes[node.unary.a].isDouble()) {
 					asm_.cmppd(reg(ref),ConstantTable(C_DOUBLE_ZERO),Assembler::kNEQ);
 					// need to propogate NAs here
@@ -843,8 +879,8 @@ struct TraceJIT {
 
 
 	void Compile() {
-		bzero(store_inst,sizeof(IRNode *) * trace->n_nodes);
-		memset(allocated_register,-1,sizeof(char) * trace->n_nodes);
+		bzero(store_inst,sizeof(IRNode *) * trace->nodes.size());
+		memset(allocated_register,-1,sizeof(char) * trace->nodes.size());
 
 		RegisterAllocate();
 		InstructionSelection();
@@ -866,7 +902,7 @@ struct TraceJIT {
 	}
 
 	void GlobalReduce(Thread& thread) {
-		for(IRef i = 0; i < trace->n_nodes; i++) {
+		for(IRef i = 0; i < trace->nodes.size(); i++) {
 			IRef ref = i;
 			IRNode & node = trace->nodes[i];
 			switch(node.op) {
