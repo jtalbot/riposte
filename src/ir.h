@@ -71,7 +71,7 @@ struct IRNode {
 			union {
 				int64_t i;
 				double d;
-				uint8_t l;
+				char l;
 			};
 		} loadc;
 		struct {

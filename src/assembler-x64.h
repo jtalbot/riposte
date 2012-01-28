@@ -658,6 +658,8 @@ class Assembler {
   void movq(Register dst, int64_t value);
   // Moves the address of the external reference into the register.
 
+  void pmovsxbq(XMMRegister dst, const Operand& src);
+  
   void movsxbq(Register dst, const Operand& src);
   void movsxwq(Register dst, const Operand& src);
   void movsxlq(Register dst, Register src);
@@ -1300,6 +1302,9 @@ class Assembler {
   void mulpd(XMMRegister dst, XMMRegister src);
   void mulpd(XMMRegister dst, const Operand& src);
   void divpd(XMMRegister dst, XMMRegister src);
+
+  void pand(XMMRegister dst, XMMRegister src);
+  void por(XMMRegister dst, XMMRegister src);
 
   void paddq(XMMRegister dst, XMMRegister src);
   void paddq(XMMRegister dst, const Operand& src);

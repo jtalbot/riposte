@@ -1273,6 +1273,16 @@ void Assembler::movl(const Operand& dst, Label* src) {
 	}
 }
 
+void Assembler::pmovsxbq(XMMRegister dst, const Operand& src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x38);
+	emit(0x22);
+	emit_sse_operand(dst, src);
+}
+
 void Assembler::movsxbq(Register dst, const Operand& src) {
 	EnsureSpace ensure_space(this);
 	emit_rex_64(dst, src);
@@ -2432,7 +2442,22 @@ void Assembler::pshufb(XMMRegister dst, const Operand& src) {
 	emit(0x00);
 	emit_sse_operand(dst, src);
 }
-
+void Assembler::pand(XMMRegister dst, XMMRegister src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0xDB);
+	emit_sse_operand(dst, src);
+}
+void Assembler::por(XMMRegister dst, XMMRegister src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0xEB);
+	emit_sse_operand(dst, src);
+}
 void Assembler::paddq(XMMRegister dst, XMMRegister src) {
 	EnsureSpace ensure_space(this);
 	emit(0x66);

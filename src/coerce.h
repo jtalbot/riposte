@@ -82,7 +82,7 @@ inline Value As(Thread& thread, Type::Enum type, Value const& src) {
 
 
 template<>
-SPECIALIZED_STATIC Raw::Element Cast<Logical, Raw>(Thread& thread, Logical::Element const& i) { return i; }
+SPECIALIZED_STATIC Raw::Element Cast<Logical, Raw>(Thread& thread, Logical::Element const& i) { return Logical::isTrue(i) ? 1 : 0; }
 
 template<>
 SPECIALIZED_STATIC Integer::Element Cast<Logical, Integer>(Thread& thread, Logical::Element const& i) { return Logical::isNA(i) ? Integer::NAelement : i ? 1 : 0; }
@@ -101,7 +101,7 @@ template<>
 SPECIALIZED_STATIC Raw::Element Cast<Integer, Raw>(Thread& thread, Integer::Element const& i) { return (Raw::Element)i; }
 
 template<>
-SPECIALIZED_STATIC Logical::Element Cast<Integer, Logical>(Thread& thread, Integer::Element const& i) { return Integer::isNA(i) ? Logical::NAelement : i != 0 ? 1 : 0; }
+SPECIALIZED_STATIC Logical::Element Cast<Integer, Logical>(Thread& thread, Integer::Element const& i) { return Integer::isNA(i) ? Logical::NAelement : i != 0 ? Logical::TrueElement : Logical::FalseElement; }
 
 template<>
 SPECIALIZED_STATIC Double::Element Cast<Integer, Double>(Thread& thread, Integer::Element const& i) { return Integer::isNA(i) ? Double::NAelement : (Double::Element)i; }
@@ -117,7 +117,7 @@ template<>
 SPECIALIZED_STATIC Raw::Element Cast<Double, Raw>(Thread& thread, Double::Element const& i) { return (Raw::Element)i; }
 
 template<>
-SPECIALIZED_STATIC Logical::Element Cast<Double, Logical>(Thread& thread, Double::Element const& i) { return Double::isNA(i) ? Logical::NAelement : i != 0.0 ? 1 : 0; }
+SPECIALIZED_STATIC Logical::Element Cast<Double, Logical>(Thread& thread, Double::Element const& i) { return Double::isNA(i) ? Logical::NAelement : i != 0.0 ? Logical::TrueElement : Logical::FalseElement; }
 
 template<>
 SPECIALIZED_STATIC Integer::Element Cast<Double, Integer>(Thread& thread, Double::Element const& i) { return Double::isNA(i) || i > std::numeric_limits<Integer::Element>::max() || i < std::numeric_limits<Integer::Element>::min() ? Integer::NAelement : i;  }
@@ -133,7 +133,7 @@ template<>
 SPECIALIZED_STATIC Raw::Element Cast<Character, Raw>(Thread& thread, Character::Element const& i) { return 0; }
 
 template<>
-SPECIALIZED_STATIC Logical::Element Cast<Character, Logical>(Thread& thread, Character::Element const& i) { if(i == Strings::True) return 1; else if(i == Strings::False) return 0; else return Logical::NAelement; }
+SPECIALIZED_STATIC Logical::Element Cast<Character, Logical>(Thread& thread, Character::Element const& i) { if(i == Strings::True) return Logical::TrueElement; else if(i == Strings::False) return Logical::FalseElement; else return Logical::NAelement; }
 
 template<>
 SPECIALIZED_STATIC Integer::Element Cast<Character, Integer>(Thread& thread, Character::Element const& i) { if(Character::isNA(i)) return Integer::NAelement; else {try{return strToInt(thread.externStr(i));} catch(...) {return Integer::NAelement;}} }
@@ -149,7 +149,7 @@ template<>
 SPECIALIZED_STATIC Character::Element Cast<Raw, Character>(Thread& thread, Raw::Element const& i) { return thread.internStr(rawToStr(i)); }
 
 template<>
-SPECIALIZED_STATIC Logical::Element Cast<Raw, Logical>(Thread& thread, Raw::Element const& i) { return (Logical::Element)i; }
+SPECIALIZED_STATIC Logical::Element Cast<Raw, Logical>(Thread& thread, Raw::Element const& i) { return i ? Logical::TrueElement : Logical::FalseElement; }
 
 template<>
 SPECIALIZED_STATIC Integer::Element Cast<Raw, Integer>(Thread& thread, Raw::Element const& i) { return i; }

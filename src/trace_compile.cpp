@@ -29,8 +29,8 @@ struct Constant {
 	: d0(d), d1(d) {}
 	Constant(void * f)
 	: f0(f),f1(f)  {}
-	Constant(uint8_t l)
-	: u0((l << 8) + l), u1(0) {}
+	Constant(char l)
+	: i0(l), i1(l) {}
 
 	Constant(int64_t ii0, int64_t ii1)
 	: i0(ii0), i1(ii1) {}
@@ -52,12 +52,10 @@ enum ConstantTableEntry {
 	C_ABS_MASK = 0x0,
 	C_NEG_MASK = 0x1,
 	C_NOT_MASK = 0x2,
-	C_SEQ_VEC  = 0x3,
-	C_PACK_LOGICAL = 0x4,
-	C_LOGICAL_MASK = 0x5,
-	C_LNOT_MASK = 0x6,
-	C_DOUBLE_ZERO = 0x7,
-	C_FIRST_TRACE_CONST = 0x8
+	C_PACK_LOGICAL = 0x3,
+	C_SEQ_VEC  = 0x5,
+	C_DOUBLE_ZERO = 0x6,
+	C_FIRST_TRACE_CONST = 0x7
 };
 
 static int make_executable(char * data, size_t size) {
@@ -80,10 +78,8 @@ struct TraceCodeBuffer {
 		constant_table[C_ABS_MASK] = Constant((uint64_t)0x7FFFFFFFFFFFFFFFULL);
 		constant_table[C_NEG_MASK] = Constant((uint64_t)0x8000000000000000ULL);
 		constant_table[C_NOT_MASK] = Constant((uint64_t)0xFFFFFFFFFFFFFFFFULL);
+		constant_table[C_PACK_LOGICAL] = Constant(0x0706050403020800,0x0F0E0D0C0B0A0902);
 		constant_table[C_SEQ_VEC] = Constant(1LL,2LL);
-		constant_table[C_LOGICAL_MASK] = Constant((uint64_t)0x1);
-		constant_table[C_PACK_LOGICAL] = Constant(0x1010101010100800,0x1010101010101010);
-		constant_table[C_LNOT_MASK] = Constant((uint8_t)0x1);
 		constant_table[C_DOUBLE_ZERO] = Constant(0.0);
 		outer_loop = 0;
 	}
@@ -175,20 +171,20 @@ static double iabs(double aa) { //these are actually integers passed in xmm0 and
 	return da; //also return the value in xmm0
 }
 
-static void store_conditional(__m128d input, __m128d mask, Value* out) {
+static void store_conditional(__m128d input, __m128i mask, Value* out) {
 	union { 
 		__m128i ma; 
-		unsigned char m[2]; 
+		int64_t m[2]; 
 	}; 
 	union { 
 		__m128d in; 
 		double i[2]; 
 	};
-	ma = (__m128i)mask; 
+	ma = mask; 
 	in = input;
-	if(m[0]) 
+	if(m[0] == -1) 
 		((double*)(out->p))[out->length++] = i[0];
-	if(m[1]) 
+	if(m[1] == -1) 
 		((double*)(out->p))[out->length++] = i[1];
 }
 
@@ -371,7 +367,7 @@ struct TraceJIT {
 			} break;
 			case IROpCode::loadv: {
 				if(node.isLogical())
-					asm_.movss(reg(ref),EncodeOperand(node.loadv.src.p,vector_index,times_1));
+					asm_.pmovsxbq(reg(ref), EncodeOperand(node.loadv.src.p, vector_index, times_1));
 				else
 					asm_.movdqa(reg(ref),EncodeOperand(node.loadv.src.p,vector_index,times_8));
 			} break;
@@ -467,12 +463,10 @@ struct TraceJIT {
 			case IROpCode::lt: EmitCompare(ref,Assembler::kLT); break;
 			case IROpCode::le: EmitCompare(ref,Assembler::kLE); break;
 			case IROpCode::neq: EmitCompare(ref,Assembler::kNEQ); break;
-			case IROpCode::land: asm_.andpd(reg(ref),reg(node.binary.b)); break;
-			case IROpCode::lor: asm_.orpd(reg(ref),reg(node.binary.b)); break;
-			case IROpCode::lnot: {
-				EmitMove(reg(ref),reg(node.unary.a));
-				asm_.xorpd(reg(ref),ConstantTable(C_LNOT_MASK));
-			} break;
+
+			case IROpCode::land: asm_.pand(reg(ref),reg(node.binary.b)); break;
+			case IROpCode::lor: asm_.por(reg(ref),reg(node.binary.b)); break;
+			case IROpCode::lnot: asm_.xorpd(Move(ref, node.unary.a), ConstantTable(C_NOT_MASK)); break;
 			
 			case IROpCode::cast: {
 				if(node.type == trace->nodes[node.unary.a].type)
@@ -483,7 +477,7 @@ struct TraceJIT {
 					EmitUnaryFunction(ref, castd2i);
 				else if(node.isLogical() && trace->nodes[node.unary.a].isDouble()) {
 					asm_.cmppd(reg(ref),ConstantTable(C_DOUBLE_ZERO),Assembler::kNEQ);
-					EmitComparisonToLogical(reg(ref));
+					// need to propogate NAs here
 				}
 				else _error("Unimplemented cast");
 			} break;
@@ -568,7 +562,7 @@ struct TraceJIT {
 			if(store_inst[ref] != NULL && store_inst[ref]->op == IROpCode::storev) {
 				IRNode & str = *store_inst[ref];
 				if(Type::Logical == str.type)
-					EmitLogicalStore(str.store.dst,reg(str.store.a),str.length);
+					EmitLogicalStore(ref, str.store.dst,reg(str.store.a),str.length);
 				else
 					EmitVectorStore(ref, str.store.dst,reg(str.store.a), str.length);
 				/*} else {
@@ -648,9 +642,7 @@ struct TraceJIT {
 		EmitMove(reg(ref),xmm0);
 		RestoreRegisters(live_registers[ref]);
 	}
-	void EmitVectorLoad(XMMRegister dst, void * src) {
-		asm_.movdqa(dst,EncodeOperand(src,vector_index,times_8));
-	}
+
 	void EmitVectorStore(IRef ref, Value& dst, XMMRegister src, int64_t length) {
 		if(length > 0)
 			asm_.movdqa(EncodeOperand(dst.p,vector_index,times_8),src);
@@ -676,12 +668,12 @@ struct TraceJIT {
 			RestoreRegisters(live_registers[ref]);
 		}
 	}
-	void EmitLogicalLoad(XMMRegister dst, void * src) {
-		asm_.movss(dst,EncodeOperand(src,vector_index,times_1));
-	}
-	void EmitLogicalStore(Value& dst,  XMMRegister src, int64_t length) {
-		asm_.movq(rbx,src);
+
+	void EmitLogicalStore(IRef ref, Value& dst,  XMMRegister src, int64_t length) {
+                asm_.pshufb(src,ConstantTable(C_PACK_LOGICAL));
+		asm_.movq(rbx, src);
 		asm_.movw(EncodeOperand(dst.p,vector_index,times_1),rbx);
+                asm_.pshufb(src,ConstantTable(C_PACK_LOGICAL));
 	}
 
 	Operand EncodeOperand(void * dst, Register idx, ScaleFactor scale) {
@@ -832,15 +824,10 @@ struct TraceJIT {
 		asm_.addq(rsp, Immediate(256));
 	}
 
-	void EmitComparisonToLogical(XMMRegister r) {
-		asm_.andpd(r,ConstantTable(C_LOGICAL_MASK));
-		asm_.pshufb(r,ConstantTable(C_PACK_LOGICAL));
-	}
 	void EmitCompare(IRef ref, Assembler::ComparisonType typ) {
 		IRNode & node = trace->nodes[ref];
 		if(Type::Double == trace->nodes[node.binary.a].type) {
 			asm_.cmppd(reg(ref),reg(node.binary.b),typ);
-			EmitComparisonToLogical(reg(ref));
 		} else {
 			_error("NYI - integer compare");
 		}

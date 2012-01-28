@@ -7,7 +7,9 @@ const unsigned char Null::NAelement = 255;
 
 const unsigned char Raw::NAelement = 255;
 
-const unsigned char Logical::NAelement = 255;
+const char Logical::TrueElement = -1;
+const char Logical::FalseElement = 0;
+const char Logical::NAelement = 1;
 
 const int64_t Integer::NAelement = std::numeric_limits<int64_t>::min();
 

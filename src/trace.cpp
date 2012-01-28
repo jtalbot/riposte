@@ -33,7 +33,7 @@ std::string Trace::toString(Thread & thread) {
 		BINARY(seq)
 		BINARY(filter)
 		case IROpCode::gather: out << "n" << node.unary.a << "\t" << "$" << (void*)node.unary.data; break;
-		case IROpCode::loadc: out << ( (node.type == Type::Integer) ? node.loadc.i : node.loadc.d); break;
+		case IROpCode::loadc: out << ( (node.type == Type::Integer) ? node.loadc.i : (node.type == Type::Logical) ? node.loadc.l : node.loadc.d); break;
 		case IROpCode::loadv: out << "$" << node.loadv.src.p; break;
 		case IROpCode::storec: /*fallthrough*/
 		case IROpCode::storev: out << "n" << node.store.a; break;
@@ -372,7 +372,7 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			node.op = IROpCode::loadc;
 			node.enc = IRNode::LOADC;
 			node.length = 1;
-			node.loadc.l = 0;
+			node.loadc.l = Logical::FalseElement;
 		}
 
 		if(node.op == IROpCode::lor &&
@@ -388,7 +388,7 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			node.op = IROpCode::loadc;
 			node.enc = IRNode::LOADC;
 			node.length = 1;
-			node.loadc.l = 1;
+			node.loadc.l = Logical::TrueElement;
 		}
 	}
 }

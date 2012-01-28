@@ -27,7 +27,7 @@ struct Value {
 		void* p;
 		int64_t i;
 		double d;
-		unsigned char c;
+		char c;
 		String s;
 		struct {
 			Type::Enum typ;
@@ -77,12 +77,12 @@ struct Value {
 
 template<> inline int64_t& Value::scalar<int64_t>() { return i; }
 template<> inline double& Value::scalar<double>() { return d; }
-template<> inline unsigned char& Value::scalar<unsigned char>() { return c; }
+template<> inline char& Value::scalar<char>() { return c; }
 template<> inline String& Value::scalar<String>() { return s; }
 
 template<> inline int64_t const& Value::scalar<int64_t>() const { return i; }
 template<> inline double const& Value::scalar<double>() const { return d; }
-template<> inline unsigned char const& Value::scalar<unsigned char>() const { return c; }
+template<> inline char const& Value::scalar<char>() const { return c; }
 template<> inline String const& Value::scalar<String>() const { return s; }
 
 
@@ -185,17 +185,20 @@ VECTOR_IMPL(Null, unsigned char, false)
 	static bool isCheckedNA() { return false; }
 };
 
-VECTOR_IMPL(Logical, unsigned char, false)
-	static Logical True() { static Logical t = Logical::c(1); return t; }
+VECTOR_IMPL(Logical, char, false)
+	const static char TrueElement;
+	const static char FalseElement;
+
+	static Logical True() { static Logical t = Logical::c(-1); return t; }
 	static Logical False() { static Logical f = Logical::c(0); return f; } 
 	
-	static bool isTrue(unsigned char c) { return c == 1; }
-	static bool isFalse(unsigned char c) { return c == 0; }
-	static bool isNA(unsigned char c) { return c == NAelement; }
-	static bool isCheckedNA(unsigned char c) { return isNA(c); }
-	static bool isNaN(unsigned char c) { return false; }
-	static bool isFinite(unsigned char c) { return false; }
-	static bool isInfinite(unsigned char c) { return false; }
+	static bool isTrue(char c) { return c == -1; }
+	static bool isFalse(char c) { return c == 0; }
+	static bool isNA(char c) { return c == 1; }
+	static bool isCheckedNA(char c) { return isNA(c); }
+	static bool isNaN(char c) { return false; }
+	static bool isFinite(char c) { return false; }
+	static bool isInfinite(char c) { return false; }
 };
 
 VECTOR_IMPL(Integer, int64_t, false)
