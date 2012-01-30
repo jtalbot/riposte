@@ -55,7 +55,8 @@ enum ConstantTableEntry {
 	C_PACK_LOGICAL = 0x3,
 	C_SEQ_VEC  = 0x5,
 	C_DOUBLE_ZERO = 0x6,
-	C_FIRST_TRACE_CONST = 0x7
+	C_DOUBLE_ONE = 0x7,
+	C_FIRST_TRACE_CONST = 0x8
 };
 
 static int make_executable(char * data, size_t size) {
@@ -80,7 +81,8 @@ struct TraceCodeBuffer {
 		constant_table[C_NOT_MASK] = Constant((uint64_t)0xFFFFFFFFFFFFFFFFULL);
 		constant_table[C_PACK_LOGICAL] = Constant(0x0706050403020800,0x0F0E0D0C0B0A0902);
 		constant_table[C_SEQ_VEC] = Constant(1LL,2LL);
-		constant_table[C_DOUBLE_ZERO] = Constant(0.0);
+		constant_table[C_DOUBLE_ZERO] = Constant(0.0, 0.0);
+		constant_table[C_DOUBLE_ONE] = Constant(1.0, 1.0);
 		outer_loop = 0;
 	}
 };
@@ -248,6 +250,9 @@ struct TraceJIT {
 		store_inst = new (PointerFreeGC) IRNode*[trace->nodes.size()];
 		live_registers = new (PointerFreeGC) RegisterSet[trace->nodes.size()];
 		allocated_register = new (PointerFreeGC) int8_t[trace->nodes.size()];
+		// allocate xmm0 as a temporary register (needed for blend)
+		int8_t temp;
+		alloc.allocate(0,&temp);
 	}
 
 	Trace * trace;
@@ -270,11 +275,19 @@ struct TraceJIT {
 			IRef ref = i - 1;
 			IRNode & node = trace->nodes[ref];
 			switch(node.enc) {
+			case IRNode::IFELSE: {
+				AllocateTrinary(ref, node.ifelse.no, node.ifelse.yes, node.ifelse.cond);
+			} break;
 			case IRNode::BINARY: {
 				AllocateBinary(ref,node.binary.a,node.binary.b);
 			} break;
-			case IRNode::UNARY:
 			case IRNode::FOLD: {
+				if(node.fold.mask < 0)
+					AllocateBinary(ref, node.fold.a, -node.fold.mask);
+				else
+					AllocateUnary(ref, node.fold.a);
+			} break;
+			case IRNode::UNARY: {
 				AllocateUnary(ref,node.unary.a);
 			} break;
 			case IRNode::LOADC: /*fallthrough*/
@@ -349,6 +362,14 @@ struct TraceJIT {
 		// case: b is not live out this stmt and b == a -> either this stmt is r = a + a or r = r + r, either of which is allowed in codegen
 		// case: b is live out of this stmt -> b and r are live at the same time so b != r
 
+		return r;
+	}
+	IRef AllocateTrinary(IRef ref, IRef a, IRef b, IRef c) {
+		IRef r = AllocateBinary(ref, a, b);
+		if(allocated_register[c] < 0) {
+			if(!alloc.allocate(&allocated_register[c]))
+				_error("exceeded available registers");
+		}
 		return r;
 	}
 
@@ -544,7 +565,15 @@ struct TraceJIT {
 					for(uint64_t i = 0; i < 128; i++)
 						((double*)str.store.dst.p)[i] = 0.0;
 					Operand op = EncodeOperand(str.store.dst.p, thread_index, times_8);
-					asm_.addpd(reg(ref), op);
+					if(node.fold.mask >= 0) {
+						asm_.addpd(Move(ref, node.unary.a), op);
+					} else {
+						IRef mask = -node.fold.mask;
+						EmitMove(xmm0, reg(mask));
+						asm_.xorpd(xmm0, ConstantTable(C_NOT_MASK));
+						asm_.blendvpd(Move(ref, node.unary.a), ConstantTable(C_DOUBLE_ZERO));
+						asm_.addpd(reg(ref), op);
+					}
 					asm_.movdqa(op,reg(ref));
 				} 
 				else {
@@ -588,6 +617,11 @@ struct TraceJIT {
 			case IROpCode::filter:
 				Move(ref, node.binary.a);
 			/* nothing */
+			break;
+
+			case IROpCode::ifelse:
+				EmitMove(xmm0, reg(node.ifelse.cond));
+				asm_.blendvpd(Move(ref, node.ifelse.no), reg(node.ifelse.yes));
 			break;
 
 			case IROpCode::signif:
@@ -686,19 +720,8 @@ struct TraceJIT {
 			XMMRegister filter = reg(-length);
 			
 			SaveRegisters(live_registers[ref]);
-			if(filter.is(xmm0)) {
-				if(src.is(xmm1)) {
-					EmitMove(xmm2, filter);
-					EmitMove(xmm0, src);
-					EmitMove(xmm1, xmm2);
-				} else {
-					EmitMove(xmm1, filter);
-					EmitMove(xmm0, src);
-				}
-			} else {
-				EmitMove(xmm0,src);
-				EmitMove(xmm1,filter);
-			}
+			EmitMove(xmm0,src);
+			EmitMove(xmm1,filter);
 			asm_.movq(rdi,&dst);
 			EmitCall((void*)store_conditional);
 			RestoreRegisters(live_registers[ref]);

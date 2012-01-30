@@ -1367,6 +1367,9 @@ class Assembler {
 
   void movmskpd(Register dst, XMMRegister src);
 
+  void blendvpd(XMMRegister dst, XMMRegister src);
+  void blendvpd(XMMRegister dst, const Operand& adr);
+
   // The first argument is the reg field, the second argument is the r/m field.
   void emit_sse_operand(XMMRegister dst, XMMRegister src);
   void emit_sse_operand(XMMRegister reg, const Operand& adr);

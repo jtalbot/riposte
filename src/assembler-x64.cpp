@@ -2458,6 +2458,24 @@ void Assembler::por(XMMRegister dst, XMMRegister src) {
 	emit(0xEB);
 	emit_sse_operand(dst, src);
 }
+void Assembler::blendvpd(XMMRegister dst, XMMRegister src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x38);
+	emit(0x15);
+	emit_sse_operand(dst, src);
+}
+void Assembler::blendvpd(XMMRegister dst, const Operand& src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x38);
+	emit(0x15);
+	emit_sse_operand(dst, src);
+}
 void Assembler::paddq(XMMRegister dst, XMMRegister src) {
 	EnsureSpace ensure_space(this);
 	emit(0x66);

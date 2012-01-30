@@ -194,6 +194,7 @@ struct Trace {
 	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data); 
 	IRef EmitFold(IROpCode::Enum op, Type::Enum type, IRef a); 
 	IRef EmitFilter(IROpCode::Enum op, IRef a, IRef b);
+	IRef EmitBlend(IRef cond, IRef yes, IRef no);
 	IRef EmitLoadC(Type::Enum type, int64_t length, int64_t c);
 	IRef EmitLoadV(Value const& v);
 	IRef EmitStore(IRef a);

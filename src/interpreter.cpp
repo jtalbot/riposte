@@ -490,7 +490,7 @@ bool isRecordableType(Type::Enum type) {
 }
 bool isRecordable(Type::Enum type, int64_t length) {
 	return isRecordableType(type)
-		&& length > TRACE_VECTOR_WIDTH;
+		&& length >= TRACE_VECTOR_WIDTH;
 		//&& length % TRACE_VECTOR_WIDTH == 0;
 }
 bool isRecordable(Value const& a) {
@@ -684,6 +684,14 @@ Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
 }
 ORDINAL_SCAN_BYTECODES(OP)
 #undef OP
+
+Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
+	if(thread.state.jitEnabled && isRecordable(REG(thread, inst.a)))
+		return thread.trace.BeginTracing(thread,&inst);
+	else 
+		_error("ifelse not defined in scalar yet");
+	return &inst+2; 
+}
 
 Instruction const* jmp_op(Thread& thread, Instruction const& inst) {
 	return &inst+inst.a;

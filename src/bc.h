@@ -75,6 +75,9 @@
 	_(lt, "lt",	LTOp,	"<") \
 	_(le, "le",	LEOp,	"<=") \
 
+#define SPECIAL_MAP_BYTECODES(_) \
+	_(ifelse, "ifelse", IfElseOp, "ifelse") \
+
 #define ARITH_FOLD_BYTECODES(_) \
 	_(sum, "sum",	SumOp,	"sum") \
 	_(prod, "prod",	ProdOp,	"prod") \
@@ -140,6 +143,7 @@
 	CONTROL_FLOW_BYTECODES(_) \
 	MEMORY_ACCESS_BYTECODES(_) \
 	MAP_BYTECODES(_) \
+	SPECIAL_MAP_BYTECODES(_) \
 	FOLD_BYTECODES(_) \
 	SCAN_BYTECODES(_) \
 	UTILITY_BYTECODES(_) \

@@ -627,6 +627,19 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t result = scopes.back().allocRegister(Register::TEMP);
 		emit(code, ByteCode::seq, len, step, result);
 		return result;
+	}
+	else if(func == Strings::ifelse)
+	{
+		if(call.length != 4)
+			return compileFunctionCall(call, names, code);
+		int64_t no = compile(call[3], code);
+		int64_t yes = compile(call[2], code);
+		int64_t cond = compile(call[1], code);
+		scopes.back().deadAfter(liveIn);
+		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		assert(no == result);
+		emit(code, ByteCode::ifelse, cond, yes, no);
+		return result;
 	} 
 	else if(func == Strings::docall)
 	{

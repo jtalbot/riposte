@@ -199,6 +199,32 @@ RecordingStatus::Enum subset_record(Thread & thread, Instruction const & inst, I
 	}
 }
 
+RecordingStatus::Enum ifelse_record(Thread & thread, Instruction const & inst, Instruction const** pc) {
+	Trace& trace = thread.trace;
+	
+	Value & cond = REG(thread,inst.a);
+	Value & yes = REG(thread,inst.b);
+	Value & no = REG(thread,inst.c);
+
+	Type::Enum ytype = getType(yes);	
+	Type::Enum ntype = getType(no);
+
+	Type::Enum rtype = std::max(ytype, ntype);
+
+	IRef cref = getRef(trace, cond);	
+	IRef yref = getRef(trace, yes);	
+	IRef nref = getRef(trace, no);	
+
+	IRef r = trace.EmitBlend(trace.EmitCoerce(cref, Type::Logical), trace.EmitCoerce(yref, rtype), trace.EmitCoerce(nref, rtype));
+	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].length, r);
+	
+	trace.RegOutput(r, thread.base, inst.c);
+	trace.SetMaxLiveRegister(thread.base, inst.c);
+	trace.Commit(thread);
+	(*pc)++;
+	return RecordingStatus::NO_ERROR;
+}
+
 RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread & thread, Instruction const & inst) {
 	Trace& trace = thread.trace;
 	

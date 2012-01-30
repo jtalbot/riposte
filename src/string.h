@@ -126,6 +126,7 @@
 	_(quote,	"quote") \
 	_(mmul,		"%*%") \
 	_(apply,	"apply") \
+	_(ifelse,	"ifelse")
 
 typedef const char* String;
 

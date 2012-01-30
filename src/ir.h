@@ -19,7 +19,8 @@
 		_(filter, "filter", ___) \
 		ARITH_FOLD_BYTECODES(_) \
 		ARITH_SCAN_BYTECODES(_) \
-		_(nop, "nop", ___)
+		_(nop, "nop", ___) \
+		_(ifelse, "ifelse", ___) \
 
 DECLARE_ENUM(IROpCode,IR_ENUM)
 
@@ -37,6 +38,7 @@ struct IRNode {
 		LOADC,
 		LOADV,
 		STORE,
+		IFELSE
 	};
 
 	Encoding enc;
@@ -62,10 +64,7 @@ struct IRNode {
 		} unary;
 		struct {
 			int64_t a;
-			union {
-				int64_t i;
-				double d;
-			};
+			int64_t mask;
 		} fold;
 		struct {
 			union {
@@ -81,6 +80,9 @@ struct IRNode {
 			int64_t a;
 			Value dst;
 		} store;
+		struct {
+			int64_t cond, yes, no;
+		} ifelse;
 		
 	};
 };

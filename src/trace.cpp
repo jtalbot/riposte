@@ -33,6 +33,7 @@ std::string Trace::toString(Thread & thread) {
 		UNARY(cast)
 		BINARY(seq)
 		BINARY(filter)
+		case IROpCode::ifelse: out << "n" << node.ifelse.cond << "\t" << "n" << node.ifelse.yes << "\t" << "n" << node.ifelse.no; break;
 		case IROpCode::gather: out << "n" << node.unary.a << "\t" << "$" << (void*)node.unary.data; break;
 		case IROpCode::loadc: out << ( (node.type == Type::Integer) ? node.loadc.i : (node.type == Type::Logical) ? node.loadc.l : node.loadc.d); break;
 		case IROpCode::loadv: out << "$" << node.loadv.src.p; break;
@@ -136,7 +137,8 @@ IRef Trace::EmitFold(IROpCode::Enum op, Type::Enum type, IRef a) {
 	n.op = op;
 	n.type = type;
 	n.length = 1;
-	n.unary.a = a;
+	n.fold.mask = nodes[a].length;
+	n.fold.a = a;
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
@@ -148,6 +150,19 @@ IRef Trace::EmitFilter(IROpCode::Enum op, IRef a, IRef b) {
 	n.length = -b;
 	n.binary.a = a;
 	n.binary.b = b;
+	nodes.push_back(n);
+	return nodes.size()-1;
+}
+IRef Trace::EmitBlend(IRef cond, IRef yes, IRef no) {
+	IRNode n;
+	n.enc = IRNode::IFELSE;
+	n.op = IROpCode::ifelse;
+	assert(nodes[yes].type == nodes[no].type);
+	n.type = nodes[yes].type;
+	n.length = nodes[cond].length;
+	n.ifelse.cond = cond;
+	n.ifelse.yes = yes;
+	n.ifelse.no = no;
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
@@ -424,6 +439,11 @@ void Trace::DeadCodeElimination(Thread& thread) {
 				case IRNode::UNARY:
 				case IRNode::FOLD:
 					nodes[node.unary.a].used = true;
+					break;
+				case IRNode::IFELSE: 
+					nodes[node.ifelse.cond].used = true;
+					nodes[node.ifelse.yes].used = true;
+					nodes[node.ifelse.no].used = true;
 					break;
 				case IRNode::LOADC: /*fallthrough*/
 				case IRNode::LOADV: /*fallthrough*/
