@@ -217,6 +217,20 @@ static void store_conditional(__m128d input, __m128i mask, Value* out) {
 		((double*)(out->p))[out->length++] = i[1];
 }
 
+static void sum_by(__m128d add, __m128i split, Value* out, int64_t thread_index, int64_t scale) {
+	union { 
+		__m128i ma; 
+		int64_t m[2]; 
+	}; 
+	union { 
+		__m128d in; 
+		double i[2]; 
+	};
+	ma = split;
+	in = add;
+	((double*)(out->p))[m[0]*scale+thread_index] += i[0];
+	((double*)(out->p))[m[1]*scale+thread_index] += i[1];
+}
 
 #define FOLD_SCAN_FN(name, type, op) \
 static __m128d name (__m128d input, type * last) { \
@@ -247,7 +261,6 @@ FOLD_SCAN_FN(sumd , double , +)
 struct TraceJIT {
 	TraceJIT(Trace * t)
 	:  trace(t), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), alloc(XMMRegister::kNumAllocatableRegisters), next_constant_slot(C_FIRST_TRACE_CONST) {
-		store_inst = new (PointerFreeGC) IRNode*[trace->nodes.size()];
 		live_registers = new (PointerFreeGC) RegisterSet[trace->nodes.size()];
 		allocated_register = new (PointerFreeGC) int8_t[trace->nodes.size()];
 		// allocate xmm0 as a temporary register (needed for blend)
@@ -256,7 +269,6 @@ struct TraceJIT {
 	}
 
 	Trace * trace;
-	IRNode ** store_inst;
 	RegisterSet* live_registers;
 	int8_t* allocated_register;
 	Assembler asm_;
@@ -275,28 +287,22 @@ struct TraceJIT {
 			IRef ref = i - 1;
 			IRNode & node = trace->nodes[ref];
 			switch(node.enc) {
-			case IRNode::IFELSE: {
-				AllocateTrinary(ref, node.ifelse.no, node.ifelse.yes, node.ifelse.cond);
+			case IRNode::TRINARY: {
+				AllocateTrinary(ref, node.trinary.a, node.trinary.b, node.trinary.c);
 			} break;
 			case IRNode::BINARY: {
 				AllocateBinary(ref,node.binary.a,node.binary.b);
 			} break;
 			case IRNode::FOLD: {
-				if(node.fold.mask < 0)
-					AllocateBinary(ref, node.fold.a, -node.fold.mask);
-				else
-					AllocateUnary(ref, node.fold.a);
+				AllocateUnary(ref, node.fold.a);
 			} break;
 			case IRNode::UNARY: {
 				AllocateUnary(ref,node.unary.a);
 			} break;
-			case IRNode::LOADC: /*fallthrough*/
-			case IRNode::LOADV: /*fallthrough*/
+			case IRNode::CONSTANT: /*fallthrough*/
+			case IRNode::LOAD: /*fallthrough*/
 			case IRNode::SPECIAL: {
 				AllocateNullary(ref);
-			} break;
-			case IRNode::STORE: {
-				store_inst[node.store.a] = &node;
 			} break;
 			case IRNode::NOP: {
 				/* nothing */
@@ -328,10 +334,14 @@ struct TraceJIT {
 			if(!alloc.allocate(r,&allocated_register[a]))
 				_error("exceeded available registers");
 		}
-		if(trace->nodes[ref].length < 0) {
-			IRef mask = -trace->nodes[ref].length;
-			if(allocated_register[mask] < 0) {
-				if(!alloc.allocate(&allocated_register[mask]))
+		if(trace->nodes[ref].liveOut) {
+			IRNode::Shape& s = trace->nodes[a].shape;
+			if(allocated_register[s.filter] < 0) {
+				if(!alloc.allocate(&allocated_register[s.filter]))
+					_error("exceeded available registers");
+			}
+			if(allocated_register[s.split] < 0) {
+				if(!alloc.allocate(&allocated_register[s.split]))
 					_error("exceeded available registers");
 			}
 		}
@@ -404,30 +414,25 @@ struct TraceJIT {
 		for(IRef i = 0; i < trace->nodes.size(); i++) {
 			IRef ref = i;
 			IRNode & node = trace->nodes[i];
-			if(node.length > 1) trace->code_buffer->outer_loop = node.length;
+			if(node.enc == IRNode::LOAD || node.enc == IRNode::SPECIAL) trace->code_buffer->outer_loop = node.shape.length;
 
 			switch(node.op) {
 
-			case IROpCode::loadc: {
+			case IROpCode::constant: {
 				Constant c;
 				switch(node.type) {
-					case Type::Integer: c = Constant(node.loadc.i); break;
-					case Type::Logical: c = Constant(node.loadc.l); break;
-					case Type::Double:  c = Constant(node.loadc.d); break;
+					case Type::Integer: c = Constant(node.constant.i); break;
+					case Type::Logical: c = Constant(node.constant.l); break;
+					case Type::Double:  c = Constant(node.constant.d); break;
 					default: _error("unexpected type");
 				}
 				asm_.movdqa(reg(ref),PushConstant(c));
 			} break;
-			case IROpCode::loadv: {
+			case IROpCode::load: {
 				if(node.isLogical())
-					asm_.pmovsxbq(reg(ref), EncodeOperand(node.loadv.src.p, vector_index, times_1));
+					asm_.pmovsxbq(reg(ref), EncodeOperand(node.out.p, vector_index, times_1));
 				else
-					asm_.movdqa(reg(ref),EncodeOperand(node.loadv.src.p,vector_index,times_8));
-			} break;
-			case IROpCode::storec:
-			case IROpCode::storev: {
-				// as an optimization, stores are generated right after the value that is stored
-				// this moves the store as far forward as possible, reducing register pressure.
+					asm_.movdqa(reg(ref),EncodeOperand(node.out.p,vector_index,times_8));
 			} break;
 
 			case IROpCode::add: {
@@ -560,21 +565,41 @@ struct TraceJIT {
 
 			case IROpCode::sum:  {
 				if(node.isDouble()) {
-					assert(store_inst[ref] != NULL);
-					IRNode & str = *store_inst[ref];
-					for(uint64_t i = 0; i < 128; i++)
-						((double*)str.store.dst.p)[i] = 0.0;
-					Operand op = EncodeOperand(str.store.dst.p, thread_index, times_8);
-					if(node.fold.mask >= 0) {
-						asm_.addpd(Move(ref, node.unary.a), op);
-					} else {
-						IRef mask = -node.fold.mask;
+					assert(node.liveOut);
+					for(int64_t i = 0; i < node.out.length; i++)
+						((double*)node.out.p)[i] = 0.0;
+					Move(ref, node.unary.a);
+					if(trace->nodes[node.fold.a].shape.filter > 0) {
+						IRef mask = trace->nodes[node.fold.a].shape.filter;
 						EmitMove(xmm0, reg(mask));
 						asm_.xorpd(xmm0, ConstantTable(C_NOT_MASK));
-						asm_.blendvpd(Move(ref, node.unary.a), ConstantTable(C_DOUBLE_ZERO));
-						asm_.addpd(reg(ref), op);
+						asm_.blendvpd(reg(ref), ConstantTable(C_DOUBLE_ZERO));
 					}
-					asm_.movdqa(op,reg(ref));
+					if(trace->nodes[node.fold.a].shape.split > 0) {
+						printf("in split sum\n");
+						EmitSplitFold(ref, (void*)sum_by);
+						/*// add to each independently?
+						Constant c(node.dst.p);
+						Operand base = PushConstant(c);
+						asm_.movq(r8, base);
+						asm_.movq(r9, reg(split));
+						asm_.imul(r9, r9, Immediate(scale));
+						asm_.addq(r9, r9, thread_index);
+						asm_.movq(r10, reg(ref));
+						asm_.addq(r10, Operand(r8, r9, times_8, 0));
+						asm_.movq(Operand(r8, r9, times_8, 0), r10); 
+						asm_.movhlps(xmm0, reg(split));
+						asm_.movq(r9, xmm0);
+						asm_.imul(r9, r9, Immediate(scale));
+						asm_.addq(r9, r9, thread_index);
+						asm_.movq(r10, reg(ref));
+						asm_.addq(r10, Operand(r8, r9, times_8, 0));
+						asm_.movq(Operand(r8, r9, times_8, 0), r10); */
+					} else {
+						Operand op = EncodeOperand(node.out.p, thread_index, times_8);
+						asm_.addpd(reg(ref), op);
+						asm_.movdqa(op,reg(ref));
+					}
 				} 
 				else {
 					EmitFoldFunction(ref,(void*)sumi,Constant((int64_t)0LL)); break;
@@ -583,13 +608,13 @@ struct TraceJIT {
 
 			case IROpCode::prod: { 
 				if(node.isDouble()) {
-					assert(store_inst[ref] != NULL);
+					/*assert(store_inst[ref] != NULL);
 					IRNode & str = *store_inst[ref];
 					for(uint64_t i = 0; i < 128; i++)
 						((double*)str.store.dst.p)[i] = 1.0;
 					Operand op = EncodeOperand(str.store.dst.p, thread_index, times_8);
 					asm_.mulpd(reg(ref),op);
-					asm_.movdqa(op,reg(ref));
+					asm_.movdqa(op,reg(ref));*/
 				}
 				else {
 					EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)0LL)); break;
@@ -614,14 +639,14 @@ struct TraceJIT {
 			/* nothing */
 			break;
 
+			case IROpCode::split:
 			case IROpCode::filter:
 				Move(ref, node.binary.a);
-			/* nothing */
 			break;
 
 			case IROpCode::ifelse:
-				EmitMove(xmm0, reg(node.ifelse.cond));
-				asm_.blendvpd(Move(ref, node.ifelse.no), reg(node.ifelse.yes));
+				EmitMove(xmm0, reg(node.trinary.c));
+				asm_.blendvpd(Move(ref, node.trinary.a), reg(node.trinary.b));
 			break;
 
 			case IROpCode::signif:
@@ -629,32 +654,26 @@ struct TraceJIT {
 		
 			}
 
-			if(store_inst[ref] != NULL && store_inst[ref]->op == IROpCode::storev) {
-				IRNode & str = *store_inst[ref];
-				if(Type::Logical == str.type)
-					EmitLogicalStore(ref, str.store.dst,reg(str.store.a),str.length);
-				else
-					EmitVectorStore(ref, str.store.dst,reg(str.store.a), str.length);
-				/*} else {
-					Operand op = EncodeOperand(&str.store.dst.p);
-					asm_.movsd(op,reg(str.store.a));
-				}*/
-			}
-		
-		/*	
-			switch(node.enc) {
-			case IRNode::LOADV:
-			case IRNode::LOADC:
-			case IRNode::BINARY:
-			case IRNode::UNARY:
-				EmitDebugPrintResult(ref);
-				break;
-			case IRNode::STORE:
-			case IRNode::SPECIAL:
-				break;
-			}
-		*/	
+			if(node.liveOut) {
+				switch(node.enc) {
+					case IRNode::UNARY:
+					case IRNode::BINARY:
+					case IRNode::TRINARY:
+					case IRNode::SPECIAL:
+					case IRNode::CONSTANT: {
+						if(Type::Logical == node.type)
+							EmitLogicalStore(ref, node.out, node.shape);
+						else
+							EmitVectorStore(ref, node.out, node.shape);
+					} break;
 
+					case IRNode::FOLD:
+					case IRNode::LOAD:
+					case IRNode::NOP:
+						// do nothing...
+					break;
+				}
+			}
 		}
 
 		asm_.addq(vector_index, Immediate(2));
@@ -713,11 +732,28 @@ struct TraceJIT {
 		RestoreRegisters(live_registers[ref]);
 	}
 
-	void EmitVectorStore(IRef ref, Value& dst, XMMRegister src, int64_t length) {
-		if(length > 0)
+	void EmitSplitFold(IRef ref, void* fn) {
+		IRNode const& node = trace->nodes[ref];
+		XMMRegister src = reg(ref);
+		XMMRegister split = reg(trace->nodes[node.fold.a].shape.split);
+		int64_t scale = node.out.length/node.shape.length;
+		SaveRegisters(live_registers[ref]);
+		EmitMove(xmm0,src);
+		EmitMove(xmm1,split);
+		asm_.movq(rdi,(int64_t)&node.out);
+		asm_.movq(rsi,thread_index);
+		asm_.movq(rdx,PushConstant(Constant(scale)));
+		EmitCall(fn);
+		RestoreRegisters(live_registers[ref]);
+	}
+
+	void EmitVectorStore(IRef ref, Value& dst, IRNode::Shape const& shape) {
+		XMMRegister src = reg(ref);
+		if(shape.filter == 0)
 			asm_.movdqa(EncodeOperand(dst.p,vector_index,times_8),src);
 		else {
-			XMMRegister filter = reg(-length);
+			dst.length = 0;
+			XMMRegister filter = reg(shape.filter);
 			
 			SaveRegisters(live_registers[ref]);
 			EmitMove(xmm0,src);
@@ -728,7 +764,8 @@ struct TraceJIT {
 		}
 	}
 
-	void EmitLogicalStore(IRef ref, Value& dst,  XMMRegister src, int64_t length) {
+	void EmitLogicalStore(IRef ref, Value& dst, IRNode::Shape const& shape) {
+		XMMRegister src = reg(ref);
                 asm_.pshufb(src,ConstantTable(C_PACK_LOGICAL));
 		asm_.movq(rbx, src);
 		asm_.movw(EncodeOperand(dst.p,vector_index,times_1),rbx);
@@ -902,7 +939,6 @@ struct TraceJIT {
 
 
 	void Compile() {
-		bzero(store_inst,sizeof(IRNode *) * trace->nodes.size());
 		memset(allocated_register,-1,sizeof(char) * trace->nodes.size());
 
 		RegisterAllocate();
@@ -925,31 +961,34 @@ struct TraceJIT {
 	}
 
 	void GlobalReduce(Thread& thread) {
-		for(IRef i = 0; i < trace->nodes.size(); i++) {
-			IRef ref = i;
-			IRNode & node = trace->nodes[i];
-			switch(node.op) {
+		for(IRef ref = 0; ref < trace->nodes.size(); ref++) {
+			IRNode & node = trace->nodes[ref];
+			if(node.liveOut) {
+				switch(node.op) {
 				case IROpCode::sum:  {
-					IRNode & str = *store_inst[ref];
-					double* d = (double*)str.store.dst.p;
-					double sum = 0;
-					for(int64_t j = 0; j < thread.state.nThreads; j++) {
-						sum += d[j*8];
-						sum += d[j*8+1];
+					Double r(node.shape.length);
+					for(int64_t i = 0; i < r.length; i++)
+						r[i] = 0.0;
+					double const* d = (double const*)node.out.p;
+					int64_t scale = node.out.length/node.shape.length;
+					for(int64_t i = 0; i < node.shape.length; i++) {
+						for(int64_t j = 0; j < scale; j++) {
+							r[i] += d[i*scale+j];
+						}
 					}
-					str.store.dst = Double::c(sum);
+					node.out = r;
 				} break;
 				case IROpCode::prod:  {
-					IRNode & str = *store_inst[ref];
-					double* d = (double*)str.store.dst.p;
+					/*double* d = (double*)node.out.p;
 					double sum = 1.0;
-					for(int64_t j = 0; j < thread.state.nThreads; j++) {
+					for(int64_t j = 0; j < node.out.length; j++) {
 						sum *= d[j*8];
 						sum *= d[j*8+1];
 					}
-					str.store.dst = Double::c(sum);
+					node.out = Double::c(sum);*/
 				} break;
 				default: break;
+				}
 			}
 		}
 	}

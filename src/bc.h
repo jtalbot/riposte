@@ -103,6 +103,7 @@
 	_(cumall, "cumall",	AllOp,	"cumall") \
 
 #define UTILITY_BYTECODES(_)\
+	_(split, "split") \
 	_(sland, "sland") \
 	_(slor, "slor") \
 	_(colon, "colon") \

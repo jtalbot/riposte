@@ -58,6 +58,7 @@ static ByteCode::Enum op(String const& func) {
 	if(func == Strings::Raw) return ByteCode::raw1; 
 	if(func == Strings::length) return ByteCode::length; 
 	if(func == Strings::mmul) return ByteCode::mmul; 
+	if(func == Strings::split) return ByteCode::split; 
 	else throw RuntimeError("unexpected symbol used as an operator"); 
 }
 
@@ -639,6 +640,19 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t result = scopes.back().allocRegister(Register::TEMP);
 		assert(no == result);
 		emit(code, ByteCode::ifelse, cond, yes, no);
+		return result;
+	} 
+	else if(func == Strings::split)
+	{
+		if(call.length != 4)
+			return compileFunctionCall(call, names, code);
+		int64_t levels = compile(call[3], code);
+		int64_t factor = compile(call[2], code);
+		int64_t x = compile(call[1], code);
+		scopes.back().deadAfter(liveIn);
+		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		assert(levels == result);
+		emit(code, ByteCode::split, x, factor, levels);
 		return result;
 	} 
 	else if(func == Strings::docall)

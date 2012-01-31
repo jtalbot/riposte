@@ -108,11 +108,11 @@ struct LoadCache {
 		idx &= 0xFF;
 		IRef cached = cache[idx];
 		if(cached < trace.nodes.size() &&
-		   trace.nodes[cached].op == IROpCode::loadv &&
-		   trace.nodes[cached].loadv.src.p == v.p) {
+		   trace.nodes[cached].op == IROpCode::load &&
+		   trace.nodes[cached].out.p == v.p) {
 			return cached;
 		} else {
-			return (cache[idx] = trace.EmitLoadV(v));
+			return (cache[idx] = trace.EmitLoad(v));
 		}
 	}
 	IRef cache[256];
@@ -139,7 +139,7 @@ IRef getRef(Trace & trace, Value & v) {
 		return v.future.ref;
 	} else {
 		if(v.length == 1) {
-			return trace.EmitLoadC(v.type,v.length,v.i);
+			return trace.EmitConstant(v.type,v.i);
 		} else {
 			return load_cache.get(trace,v);
 		}
@@ -164,7 +164,7 @@ RecordingStatus::Enum subset_record(Thread & thread, Instruction const & inst, I
 		Type::Enum rtype = a.type;
 
 		IRef r = trace.EmitUnary(IROpCode::gather, rtype, trace.EmitCoerce(bref, Type::Integer), ((int64_t)a.p)-8);
-		Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].length, r);
+		Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
 		
 		trace.RegOutput(r, thread.base,inst.c);
 		trace.SetMaxLiveRegister(thread.base,inst.c);
@@ -175,14 +175,14 @@ RecordingStatus::Enum subset_record(Thread & thread, Instruction const & inst, I
 	else if(getType(b) == Type::Logical) {
 		Value& a = REG(thread, inst.a);
 
-		IRef aref = getRef(thread.trace,a);
-		IRef bref = getRef(thread.trace,b);
+		IRef aref = getRef(trace,a);
+		IRef bref = getRef(trace,b);
 
-		if(trace.nodes[aref].length != trace.nodes[bref].length)
+		if(trace.nodes[aref].shape != trace.nodes[bref].shape)
 			return fallback(thread, a, b);
 
-		IRef r = trace.EmitFilter(IROpCode::filter, aref, bref);
-		Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].length, r);
+		IRef r = trace.EmitFilter(aref, bref);
+		Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
 		
 		trace.RegOutput(r, thread.base, inst.c);
 		trace.SetMaxLiveRegister(thread.base,inst.c);
@@ -215,8 +215,29 @@ RecordingStatus::Enum ifelse_record(Thread & thread, Instruction const & inst, I
 	IRef yref = getRef(trace, yes);	
 	IRef nref = getRef(trace, no);	
 
-	IRef r = trace.EmitBlend(trace.EmitCoerce(cref, Type::Logical), trace.EmitCoerce(yref, rtype), trace.EmitCoerce(nref, rtype));
-	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].length, r);
+	IRef r = trace.EmitTrinary(IROpCode::ifelse, rtype, trace.EmitCoerce(nref, rtype), trace.EmitCoerce(yref, rtype), trace.EmitCoerce(cref, Type::Logical));
+	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
+	
+	trace.RegOutput(r, thread.base, inst.c);
+	trace.SetMaxLiveRegister(thread.base, inst.c);
+	trace.Commit(thread);
+	(*pc)++;
+	return RecordingStatus::NO_ERROR;
+}
+
+RecordingStatus::Enum split_record(Thread & thread, Instruction const & inst, Instruction const** pc) {
+	Trace& trace = thread.trace;
+	
+	Value & x = REG(thread,inst.a);
+	Value & f = REG(thread,inst.b);
+	CHECK_REG(inst.c);
+	int64_t levels = As<Integer>(thread, REG(thread,inst.c))[0];
+
+	IRef xref = getRef(trace, x);
+	IRef fref = getRef(trace, f);	
+
+	IRef r = trace.EmitSplit(xref, trace.EmitCoerce(fref, Type::Integer), levels);
+	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
 	
 	trace.RegOutput(r, thread.base, inst.c);
 	trace.SetMaxLiveRegister(thread.base, inst.c);
@@ -264,8 +285,8 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread
 	Type::Enum rtype, atype, btype;
 	selectType(bc,trace.nodes[aref].type,trace.nodes[bref].type,&atype,&btype,&rtype);
 
-	IRef r = trace.EmitBinary(op, rtype, trace.EmitCoerce(aref,atype), trace.EmitCoerce(bref,btype));
-	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].length, r);
+	IRef r = trace.EmitBinary(op, rtype, trace.EmitCoerce(aref,atype), trace.EmitCoerce(bref,btype), 0);
+	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
 	
 	trace.RegOutput(r, thread.base, inst.c);
 	trace.SetMaxLiveRegister(thread.base, inst.c);
@@ -289,7 +310,7 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread 
 	selectType(bc,trace.nodes[aref].type,&atype,&rtype);
 
 	IRef r = trace.EmitUnary(op,rtype,trace.EmitCoerce(aref,atype), 0);
-	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].length, r);
+	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
 
 	trace.RegOutput(r, thread.base,inst.c);
 	trace.SetMaxLiveRegister(thread.base,inst.c);
@@ -312,8 +333,8 @@ RecordingStatus::Enum fold_record(ByteCode::Enum bc, IROpCode::Enum op, Thread &
 	Type::Enum rtype,atype;
 	selectType(bc,trace.nodes[aref].type,&atype,&rtype);
 
-	IRef r = trace.EmitFold(op,rtype,trace.EmitCoerce(aref,atype));
-	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].length, r);
+	IRef r = trace.EmitFold(op,trace.EmitCoerce(aref,rtype));
+	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
 
 	trace.RegOutput(r, thread.base,inst.c);
 	trace.SetMaxLiveRegister(thread.base,inst.c);

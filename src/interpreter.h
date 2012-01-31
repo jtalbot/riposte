@@ -189,15 +189,18 @@ struct Trace {
 	}
 
 	IRef EmitCoerce(IRef a, Type::Enum dst_type);
-	IRef EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b);
-	IRef EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b);
 	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data); 
-	IRef EmitFold(IROpCode::Enum op, Type::Enum type, IRef a); 
-	IRef EmitFilter(IROpCode::Enum op, IRef a, IRef b);
-	IRef EmitBlend(IRef cond, IRef yes, IRef no);
-	IRef EmitLoadC(Type::Enum type, int64_t length, int64_t c);
-	IRef EmitLoadV(Value const& v);
-	IRef EmitStore(IRef a);
+	IRef EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, int64_t data);
+	IRef EmitTrinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, IRef c);
+	IRef EmitFold(IROpCode::Enum op, IRef a); 
+	
+	IRef EmitFilter(IRef a, IRef b);
+	IRef EmitSplit(IRef x, IRef f, int64_t levels);
+	
+	IRef EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b);
+	IRef EmitConstant(Type::Enum type, int64_t c);
+	IRef EmitLoad(Value const& v);
+
 	void RegOutput(IRef ref, Value * base, int64_t id);
 	void VarOutput(IRef ref, const Environment::Pointer & p);
 
@@ -240,7 +243,7 @@ struct Trace {
 
 private:
 	void Reset();
-	void InitializeOutputs(Thread & state);
+	void DiscardDeadOutputs(Thread & state);
 	void WriteOutputs(Thread & state);
 	void Execute(Thread & state);
 	void Execute(Thread & state, IRef ref);
@@ -249,6 +252,7 @@ private:
 	void Interpret(Thread & state);
 	void JIT(Thread & state);
 
+	void MarkLiveOutputs(Thread& thread);
 	void SimplifyOps(Thread& thread);
 	void AlgebraicSimplification(Thread& thread);
 	void DeadCodeElimination(Thread& thread);

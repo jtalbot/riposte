@@ -10,13 +10,12 @@
 #define IR_ENUM(_) \
 		MAP_BYTECODES(_) \
 		_(cast, "cast", ___) \
-		_(loadc,"loadc", ___) \
-		_(loadv,"loadv", ___) \
-		_(storev,"storev", ___) \
-		_(storec,"storec", ___) \
+		_(constant,"constant", ___) \
+		_(load,"load", ___) \
 		_(seq, "seq", ___) \
 		_(gather, "gather", ___) \
 		_(filter, "filter", ___) \
+		_(split, "split", ___) \
 		ARITH_FOLD_BYTECODES(_) \
 		ARITH_SCAN_BYTECODES(_) \
 		_(nop, "nop", ___) \
@@ -28,25 +27,47 @@ struct Value;
 
 struct IRNode {
 
-
 	enum Encoding {
 		NOP,
-		BINARY,
-		SPECIAL,
+
 		UNARY,
+		BINARY,
+		TRINARY,
 		FOLD,
-		LOADC,
-		LOADV,
-		STORE,
-		IFELSE
+
+		SPECIAL,
+		CONSTANT,
+		LOAD
 	};
 
 	Encoding enc;
 	IROpCode::Enum op;
 	Type::Enum type;
-	int64_t length;
-	bool used;
-	IRef mask;
+
+	bool live;
+
+	bool liveOut;
+	Value out;
+	
+	struct Shape {
+		int64_t length;
+		IRef filter;
+		int64_t levels;
+		IRef split;
+
+		bool operator==(Shape const& o) const {
+			return length == o.length &&
+				filter == o.filter &&
+				levels == o.levels &&
+				split == o.split;
+		}
+
+		bool operator!=(Shape const& o) const {
+			return !(*this == o);
+		}
+	};
+
+	Shape shape;
 
 	bool isDouble() const { return type == Type::Double; }
 	bool isInteger() const { return type == Type::Integer; }
@@ -54,36 +75,31 @@ struct IRNode {
 
 	union {
 		struct {
-			int64_t a,b;
+			IRef a;
+			int64_t data;
+		} unary;
+		struct {
+			IRef a,b;
+			int64_t data;
 		} binary;
+		struct {
+			IRef a, b, c;
+		} trinary;
+
 		struct {
 			int64_t a,b;
 		} special;
-		struct {
-			int64_t a,data;
-		} unary;
-		struct {
-			int64_t a;
-			int64_t mask;
-		} fold;
 		struct {
 			union {
 				int64_t i;
 				double d;
 				char l;
 			};
-		} loadc;
+		} constant;
+
 		struct {
-			Value src;
-		} loadv;
-		struct {
-			int64_t a;
-			Value dst;
-		} store;
-		struct {
-			int64_t cond, yes, no;
-		} ifelse;
-		
+			IRef a;
+		} fold;
 	};
 };
 

@@ -16,11 +16,13 @@ std::string Trace::toString(Thread & thread) {
 	std::ostringstream out;
 	for(size_t j = 0; j < nodes.size(); j++) {
 		IRNode & node = nodes[j];
-		if(node.length >= 0)
-			out << "n" << j << " : " << Type::toString(node.type) << "[" << node.length << "]" << " = " << IROpCode::toString(node.op) << "\t";
-		else
-			out << "n" << j << " : " << Type::toString(node.type) << "[n" << -node.length << "]" << " = " << IROpCode::toString(node.op) << "\t";
+		out << "n" << j << " : " << Type::toString(node.type) << "[" << node.shape.length;
+		if(node.shape.filter > 0) out << "[n" << node.shape.filter << "]";
+		if(node.shape.split > 0) out << "/n" << node.shape.split << "(" << node.shape.levels << ")";
+		out << "]" << "\t";
+		out << " = " << IROpCode::toString(node.op) << "\t\t"; 
 		switch(node.op) {
+#define TRINARY(op,...) case IROpCode::op: out << "n" << node.trinary.a << "\tn" << node.trinary.b << "\tn" << node.trinary.c; break;
 #define BINARY(op,...) case IROpCode::op: out << "n" << node.binary.a << "\tn" << node.binary.b; break;
 #define UNARY(op,...) case IROpCode::op: out << "n" << node.unary.a; break;
 		BINARY_ARITH_MAP_BYTECODES(BINARY)
@@ -33,50 +35,47 @@ std::string Trace::toString(Thread & thread) {
 		UNARY(cast)
 		BINARY(seq)
 		BINARY(filter)
-		case IROpCode::ifelse: out << "n" << node.ifelse.cond << "\t" << "n" << node.ifelse.yes << "\t" << "n" << node.ifelse.no; break;
+		BINARY(split)
+		TRINARY(ifelse)
 		case IROpCode::gather: out << "n" << node.unary.a << "\t" << "$" << (void*)node.unary.data; break;
-		case IROpCode::loadc: out << ( (node.type == Type::Integer) ? node.loadc.i : (node.type == Type::Logical) ? node.loadc.l : node.loadc.d); break;
-		case IROpCode::loadv: out << "$" << node.loadv.src.p; break;
-		case IROpCode::storec: /*fallthrough*/
-		case IROpCode::storev: out << "n" << node.store.a; break;
+		case IROpCode::constant: out << ( (node.type == Type::Integer) ? node.constant.i : (node.type == Type::Logical) ? node.constant.l : node.constant.d); break;
+		case IROpCode::load: out << "$" << node.out.p; break;
 		case IROpCode::nop: break;
+		}
+		if(node.liveOut) {
+			out << "\t -> ";
+			for(size_t i = 0; i < outputs.size(); i++) {
+				Output & o = outputs[i];
+				if(o.ref == j) {
+					switch(o.location.type) {
+					case Trace::Location::REG:
+						out << "r[" << o.location.reg.offset << "] "; break;
+					case Trace::Location::VAR:
+						out << thread.externStr(o.location.pointer.name) << " "; break;
+					}
+				}
+			}
 		}
 		out << "\n";
 	}
-	out << "outputs: \n";
-	for(size_t i = 0; i < outputs.size(); i++) {
-
-		Output & o = outputs[i];
-		switch(o.location.type) {
-		case Trace::Location::REG:
-			out << "r[" << o.location.reg.offset << "]"; break;
-		case Trace::Location::VAR:
-			out << thread.externStr(o.location.pointer.name); break;
-		}
-		out << " = n" << o.ref << "\n";
-	}
-	/*out << "output_values: \n";
-	for(size_t i = 0; i < n_output_values; i++) {
-		out << "o" << i << " : " << Type::toString(output_values[i].type) << "[" << output_values[i].length << "]\n";
-	}*/
 	return out.str();
 }
 
 void coerce_scalar(IRNode & n, Type::Enum to) {
 	switch(n.type) {
 	case Type::Integer: switch(to) {
-		case Type::Double: n.loadc.d = n.loadc.i; break;
-		case Type::Logical: n.loadc.l = n.loadc.i; break;
+		case Type::Double: n.constant.d = n.constant.i; break;
+		case Type::Logical: n.constant.l = n.constant.i; break;
 		default: _error("unknown cast"); break;
 	} break;
 	case Type::Double: switch(to) {
-		case Type::Integer: n.loadc.i = (int64_t) n.loadc.d; break;
-		case Type::Logical: n.loadc.l = (char) n.loadc.d; break;
+		case Type::Integer: n.constant.i = (int64_t) n.constant.d; break;
+		case Type::Logical: n.constant.l = (char) n.constant.d; break;
 		default: _error("unknown cast"); break;
 	} break;
 	case Type::Logical: switch(to) {
-		case Type::Double: n.loadc.d = n.loadc.l; break;
-		case Type::Integer: n.loadc.i = n.loadc.l; break;
+		case Type::Double: n.constant.d = n.constant.l; break;
+		case Type::Integer: n.constant.i = n.constant.l; break;
 		default: _error("unknown cast"); break;
 	} break;
 	default: _error("unknown cast"); break;
@@ -88,114 +87,135 @@ IRef Trace::EmitCoerce(IRef a, Type::Enum dst_type) {
 	IRNode& n = nodes[a];
 	if(dst_type == n.type) {
 		return a;
-	} else if(n.op == IROpCode::loadc) {
+	} else if(n.op == IROpCode::constant) {
 		coerce_scalar(n, dst_type);
 		return a;
 	} else {
 		return EmitUnary(IROpCode::cast,dst_type,a,0);
 	} 
 }
-IRef Trace::EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b) {
-	IRNode n;
-	n.enc = IRNode::BINARY;
-	n.op = op;
-	n.type = type;
-	n.length = nodes[a].length == 0 || nodes[b].length == 0 ? 0 
-		: nodes[a].length < 0 ? nodes[a].length
-		: nodes[b].length < 0 ? nodes[b].length
-		: std::max(nodes[a].length, nodes[b].length);
-	n.binary.a = a;
-	n.binary.b = b;
-	nodes.push_back(n);
-	return nodes.size()-1;
-}
-IRef Trace::EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b) {
-	IRNode n;
-	n.enc = IRNode::SPECIAL;
-	n.op = op;
-	n.type = type;
-	n.length = length;
-	n.special.a = a;
-	n.special.b = b;
-	nodes.push_back(n);
-	return nodes.size()-1;
-}
 IRef Trace::EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data) {
 	IRNode n;
 	n.enc = IRNode::UNARY;
 	n.op = op;
 	n.type = type;
-	n.length = nodes[a].length;
+	n.shape = nodes[a].shape;
 	n.unary.a = a;
 	n.unary.data = data;
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
-IRef Trace::EmitFold(IROpCode::Enum op, Type::Enum type, IRef a) {
-	IRNode n;
-	n.enc = IRNode::FOLD;
-	n.op = op;
-	n.type = type;
-	n.length = 1;
-	n.fold.mask = nodes[a].length;
-	n.fold.a = a;
-	nodes.push_back(n);
-	return nodes.size()-1;
-}
-IRef Trace::EmitFilter(IROpCode::Enum op, IRef a, IRef b) {
+IRef Trace::EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, int64_t data) {
 	IRNode n;
 	n.enc = IRNode::BINARY;
 	n.op = op;
+	n.type = type;
+	if(nodes[a].enc == IRNode::CONSTANT)
+		n.shape = nodes[b].shape;
+	else if(nodes[b].enc == IRNode::CONSTANT)
+		n.shape = nodes[a].shape;
+	else {
+		assert(nodes[a].shape == nodes[b].shape);
+		n.shape = nodes[a].shape;
+	}
+	n.binary.a = a;
+	n.binary.b = b;
+	n.binary.data = data;
+	nodes.push_back(n);
+	return nodes.size()-1;
+}
+IRef Trace::EmitTrinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, IRef c) {
+	IRNode n;
+	n.enc = IRNode::TRINARY;
+	n.op = op;
+	n.type = type;
+	assert(nodes[a].shape == nodes[b].shape && nodes[b].shape == nodes[c].shape);
+	n.shape = nodes[a].shape;
+	n.trinary.a = a;
+	n.trinary.b = b;
+	n.trinary.c = c;
+	nodes.push_back(n);
+	return nodes.size()-1;
+}
+IRef Trace::EmitFold(IROpCode::Enum op, IRef a) {
+	IRNode n;
+	n.enc = IRNode::FOLD;
+	n.op = op;
 	n.type = nodes[a].type;
-	n.length = -b;
+	n.shape = (IRNode::Shape) { nodes[a].shape.levels, 0, 1, 0 };
+	n.unary.a = a;
+	nodes.push_back(n);
+	return nodes.size()-1;
+}
+
+IRef Trace::EmitFilter(IRef a, IRef b) {
+	// and the filters together if necessary
+	if(nodes[a].shape.filter > 0) {
+		b = EmitBinary(IROpCode::land, Type::Logical, nodes[a].shape.filter, b, 0);
+	}
+	IRNode n;
+	n.enc = IRNode::BINARY;
+	n.op = IROpCode::filter;
+	n.type = nodes[a].type;
+	n.shape = nodes[a].shape;
+	n.shape.filter = b;
 	n.binary.a = a;
 	n.binary.b = b;
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
-IRef Trace::EmitBlend(IRef cond, IRef yes, IRef no) {
+IRef Trace::EmitSplit(IRef x, IRef f, int64_t levels) {
+	// subsplit if necessary...
+	if(nodes[x].shape.split > 0) {
+		levels *= nodes[x].shape.levels;
+		IRef e = EmitBinary(IROpCode::mul, Type::Integer, f, EmitConstant(Type::Integer, levels), 0);
+		f = EmitBinary(IROpCode::add, Type::Integer, e, f, 0);
+	}
 	IRNode n;
-	n.enc = IRNode::IFELSE;
-	n.op = IROpCode::ifelse;
-	assert(nodes[yes].type == nodes[no].type);
-	n.type = nodes[yes].type;
-	n.length = nodes[cond].length;
-	n.ifelse.cond = cond;
-	n.ifelse.yes = yes;
-	n.ifelse.no = no;
+	n.enc = IRNode::BINARY;
+	n.op = IROpCode::split;
+	n.type = nodes[x].type;
+	n.shape = nodes[x].shape;
+	n.shape.split = f;
+	n.shape.levels = levels;
+	n.binary.a = x;
+	n.binary.b = f;
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
-IRef Trace::EmitLoadC(Type::Enum type, int64_t length, int64_t c) {
+
+IRef Trace::EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b) {
 	IRNode n;
-	n.enc = IRNode::LOADC;
-	n.op = IROpCode::loadc;
+	n.enc = IRNode::SPECIAL;
+	n.op = op;
 	n.type = type;
-	n.length = length;
-	n.loadc.i = c;
+	n.shape = (IRNode::Shape) { length, 0, 1, 0 };
+	n.special.a = a;
+	n.special.b = b;
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
-IRef Trace::EmitLoadV(Value const& v) {
+IRef Trace::EmitConstant(Type::Enum type, int64_t c) {
 	IRNode n;
-	n.enc = IRNode::LOADV;
-	n.op = IROpCode::loadv;
+	n.enc = IRNode::CONSTANT;
+	n.op = IROpCode::constant;
+	n.type = type;
+	n.shape = (IRNode::Shape) { 1, 0, 1, 0 };
+	n.constant.i = c;
+	nodes.push_back(n);
+	return nodes.size()-1;
+}
+IRef Trace::EmitLoad(Value const& v) {
+	IRNode n;
+	n.enc = IRNode::LOAD;
+	n.op = IROpCode::load;
 	n.type = v.type;
-	n.length = v.length;
-	n.loadv.src = v;
+	n.shape = (IRNode::Shape) { v.length, 0, 1, 0 };
+	n.out = v;
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
-IRef Trace::EmitStore(IRef a) {
-	IRNode n;
-	n.enc = IRNode::STORE;
-	n.op = nodes[a].enc == IRNode::FOLD ? IROpCode::storec : IROpCode::storev;
-	n.type = nodes[a].type;
-	n.length = nodes[a].length;
-	n.store.a = a;
-	nodes.push_back(n);
-	return nodes.size()-1;
-}
+
 void Trace::RegOutput(IRef ref, Value * base, int64_t id) {
 	Output out;
 	out.ref = ref;
@@ -241,37 +261,40 @@ static bool isOutputAlive(Thread& thread, Trace& trace, Trace::Output const& o) 
 	return v.isFuture() && (v.future.ref == o.ref);
 }
 
-void Trace::InitializeOutputs(Thread& thread) {
-	IRef* store = new (PointerFreeGC) IRef[nodes.size()];
-	bzero(store, sizeof(IRef)*nodes.size());
+void Trace::MarkLiveOutputs(Thread& thread) {
+	for(size_t i = 0; i < nodes.size(); i++) {
+		nodes[i].liveOut = false;
+	}
+	for(size_t i = 0; i < outputs.size(); i++) {
+		nodes[outputs[i].ref].liveOut = true;
+	}
+}
 
+void Trace::DiscardDeadOutputs(Thread& thread) {
 	for(size_t i = 0; i < outputs.size(); ) {
 		Output & o = outputs[i];
 		if(isOutputAlive(thread,*this,o)) {
-			if(!store[o.ref]) {
-				store[o.ref] = EmitStore(o.ref);
-			}
-			o.ref = store[o.ref];
 			i++;
 		}
 		else  {
 			o = outputs.back();
 			outputs.pop_back();
-		}	
-	}	
+		}
+	}
 }
 
 void Trace::WriteOutputs(Thread & thread) {
 	if(thread.state.verbose) {
-		for(size_t i = 0; i < outputs.size(); i++) {
-			Output& o = outputs[i];
-			std::string v = thread.stringify(nodes[o.ref].store.dst);
-			printf("n%lld = %s\n", o.ref, v.c_str());
+		for(size_t i = 0; i < nodes.size(); i++) {
+			if(nodes[i].liveOut) {
+				std::string v = thread.stringify(nodes[i].out);
+				printf("n%d = %s\n", i, v.c_str());
+			}
 		}
 	}
 	for(size_t i = 0; i < outputs.size(); i++) {
 		Output & o = outputs[i];
-		set_location_value(thread,o.location,nodes[o.ref].store.dst);
+		set_location_value(thread,o.location,nodes[o.ref].out);
 	}
 }
 
@@ -285,7 +308,7 @@ void Trace::SimplifyOps(Thread& thread) {
 			case IROpCode::mul:
 			case IROpCode::land:
 			case IROpCode::lor: 
-					   if(nodes[node.binary.a].op == IROpCode::loadc) std::swap(node.binary.a,node.binary.b); break;
+					   if(nodes[node.binary.a].op == IROpCode::constant) std::swap(node.binary.a,node.binary.b); break;
 			default: /*pass*/ break;
 		}
 	}
@@ -297,39 +320,39 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 
 		if(node.enc == IRNode::UNARY && nodes[node.unary.a].op == IROpCode::pos)
 			node.unary.a = nodes[node.unary.a].unary.a;
-		if(node.enc == IRNode::STORE && nodes[node.store.a].op == IROpCode::pos)
-			node.store.a = nodes[node.store.a].unary.a;
+		if(node.enc == IRNode::FOLD && nodes[node.fold.a].op == IROpCode::pos)
+			node.fold.a = nodes[node.fold.a].unary.a;
 		if(node.enc == IRNode::BINARY && nodes[node.binary.a].op == IROpCode::pos)
 			node.binary.a = nodes[node.binary.a].unary.a;
 		if(node.enc == IRNode::BINARY && nodes[node.binary.b].op == IROpCode::pos)
 			node.binary.b = nodes[node.binary.b].unary.a;
 
 		if(node.op == IROpCode::pow &&
-			nodes[node.binary.b].op == IROpCode::loadc) {
-			if(nodes[node.binary.b].loadc.d == 0) {
+			nodes[node.binary.b].op == IROpCode::constant) {
+			if(nodes[node.binary.b].constant.d == 0) {
 				// x^0 => 1
-				node.op = IROpCode::loadc;
-				node.enc = IRNode::LOADC;
-				node.length = 1;
-				node.loadc.d = 1;
-			} else if(nodes[node.binary.b].loadc.d == 1) {
+				node.op = IROpCode::constant;
+				node.enc = IRNode::CONSTANT;
+				node.shape = (IRNode::Shape) { 1, 0, 1, 0 };
+				node.constant.d = 1;
+			} else if(nodes[node.binary.b].constant.d == 1) {
 				// x^1 => x
 				node.op = IROpCode::pos;
 				node.enc = IRNode::UNARY;
 				node.unary.a = node.binary.a;
-			} else if(nodes[node.binary.b].loadc.d == 2) {
+			} else if(nodes[node.binary.b].constant.d == 2) {
 				// x^2 => x*x
 				node.op = IROpCode::mul;
 				node.binary.b = node.binary.a;
-			} else if(nodes[node.binary.b].loadc.d == 0.5) {
+			} else if(nodes[node.binary.b].constant.d == 0.5) {
 				// x^0.5 => sqrt(x)
 				node.op = IROpCode::sqrt;
 				node.enc = IRNode::UNARY;
 				node.unary.a = node.binary.a;
-			} else if(nodes[node.binary.b].loadc.d == -1) {
+			} else if(nodes[node.binary.b].constant.d == -1) {
 				// x^-1 => 1/x
 				node.op = IROpCode::div;
-				nodes[node.binary.b].loadc.d = 1;
+				nodes[node.binary.b].constant.d = 1;
 				std::swap(node.binary.a, node.binary.b);
 			}
 			// could also do x^-2 => 1/x * 1/x and x^-0.5 => sqrt(1/x) ?
@@ -350,113 +373,114 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			node.unary.a = nodes[node.unary.a].unary.a;
 		}
 		if(node.op == IROpCode::add &&
-				nodes[node.binary.b].op == IROpCode::loadc &&
+				nodes[node.binary.b].op == IROpCode::constant &&
 				nodes[node.binary.a].op == IROpCode::add &&
-				nodes[nodes[node.binary.a].binary.b].op == IROpCode::loadc) {
+				nodes[nodes[node.binary.a].binary.b].op == IROpCode::constant) {
 			if(node.isInteger())
-				nodes[node.binary.b].loadc.i += nodes[nodes[node.binary.a].binary.b].loadc.i;
+				nodes[node.binary.b].constant.i += nodes[nodes[node.binary.a].binary.b].constant.i;
 			else
-				nodes[node.binary.b].loadc.d += nodes[nodes[node.binary.a].binary.b].loadc.d;
+				nodes[node.binary.b].constant.d += nodes[nodes[node.binary.a].binary.b].constant.d;
 			node.binary.a = nodes[node.binary.a].binary.a;
 		}
 		if(node.op == IROpCode::mul &&
-				nodes[node.binary.b].op == IROpCode::loadc &&
+				nodes[node.binary.b].op == IROpCode::constant &&
 				nodes[node.binary.a].op == IROpCode::mul &&
-				nodes[nodes[node.binary.a].binary.b].op == IROpCode::loadc) {
+				nodes[nodes[node.binary.a].binary.b].op == IROpCode::constant) {
 			if(node.isInteger())
-				nodes[node.binary.b].loadc.i *= nodes[nodes[node.binary.a].binary.b].loadc.i;
+				nodes[node.binary.b].constant.i *= nodes[nodes[node.binary.a].binary.b].constant.i;
 			else
-				nodes[node.binary.b].loadc.d *= nodes[nodes[node.binary.a].binary.b].loadc.d;
+				nodes[node.binary.b].constant.d *= nodes[nodes[node.binary.a].binary.b].constant.d;
 			node.binary.a = nodes[node.binary.a].binary.a;
 		}
 
 		if(node.op == IROpCode::add &&
-				nodes[node.binary.b].op == IROpCode::loadc &&
-				nodes[node.binary.b].loadc.i == 0) {
+				nodes[node.binary.b].op == IROpCode::constant &&
+				nodes[node.binary.b].constant.i == 0) {
 			node.op = IROpCode::pos;
 			node.unary.a = node.binary.a;
 		}
 
 		if(node.op == IROpCode::mul &&
-				nodes[node.binary.b].op == IROpCode::loadc &&
-				((node.isDouble() && nodes[node.binary.b].loadc.d == 1) || 
-				 (node.isInteger() && nodes[node.binary.b].loadc.i == 1))) {
+				nodes[node.binary.b].op == IROpCode::constant &&
+				((node.isDouble() && nodes[node.binary.b].constant.d == 1) || 
+				 (node.isInteger() && nodes[node.binary.b].constant.i == 1))) {
 			node.op = IROpCode::pos;
 			node.unary.a = node.binary.a;
 		}
 		
 		if(node.op == IROpCode::land &&
-				nodes[node.binary.b].op == IROpCode::loadc &&
-				Logical::isTrue(nodes[node.binary.b].loadc.l)) {
+				nodes[node.binary.b].op == IROpCode::constant &&
+				Logical::isTrue(nodes[node.binary.b].constant.l)) {
 			node.op = IROpCode::pos;
 			node.unary.a = node.binary.a;
 		}
 
 		if(node.op == IROpCode::land &&
-				nodes[node.binary.b].op == IROpCode::loadc &&
-				Logical::isFalse(nodes[node.binary.b].loadc.l)) {
-			node.op = IROpCode::loadc;
-			node.enc = IRNode::LOADC;
-			node.length = 1;
-			node.loadc.l = Logical::FalseElement;
+				nodes[node.binary.b].op == IROpCode::constant &&
+				Logical::isFalse(nodes[node.binary.b].constant.l)) {
+			node.op = IROpCode::constant;
+			node.enc = IRNode::CONSTANT;
+			node.shape = (IRNode::Shape) { 1, 0, 1, 0 };
+			node.constant.l = Logical::FalseElement;
 		}
 
 		if(node.op == IROpCode::lor &&
-				nodes[node.binary.b].op == IROpCode::loadc &&
-				Logical::isFalse(nodes[node.binary.b].loadc.l)) {
+				nodes[node.binary.b].op == IROpCode::constant &&
+				Logical::isFalse(nodes[node.binary.b].constant.l)) {
 			node.op = IROpCode::pos;
 			node.unary.a = node.binary.a;
 		}
 
 		if(node.op == IROpCode::lor &&
-				nodes[node.binary.b].op == IROpCode::loadc &&
-				Logical::isTrue(nodes[node.binary.b].loadc.l)) {
-			node.op = IROpCode::loadc;
-			node.enc = IRNode::LOADC;
-			node.length = 1;
-			node.loadc.l = Logical::TrueElement;
+				nodes[node.binary.b].op == IROpCode::constant &&
+				Logical::isTrue(nodes[node.binary.b].constant.l)) {
+			node.op = IROpCode::constant;
+			node.enc = IRNode::CONSTANT;
+			node.shape = (IRNode::Shape) { 1, 0, 1, 0 };
+			node.constant.l = Logical::TrueElement;
 		}
 	}
 }
 
 void Trace::DeadCodeElimination(Thread& thread) {
-	// kill any defs whose use I haven't seen!
-	for(IRef ref = 0; ref < nodes.size(); ref++) {
-		IRNode & node = nodes[ref];
-		node.used = false;
+	for(size_t i = 0; i < nodes.size(); i++) {
+		nodes[i].live = false | nodes[i].liveOut;
 	}
 	for(IRef ref = nodes.size(); ref > 0; ref--) {
 		IRNode & node = nodes[ref-1];
-		if(node.enc == IRNode::STORE) {
-			nodes[node.store.a].used = true;
-			if(node.length < 0) nodes[-node.length].used = true;
-		} else if(node.used) {
+		if(node.live) {
 			switch(node.enc) {
+				case IRNode::TRINARY: 
+					nodes[node.trinary.a].live = true;
+					nodes[node.trinary.b].live = true;
+					nodes[node.trinary.c].live = true;
+					break;
 				case IRNode::BINARY: 
-					nodes[node.binary.a].used = true;
-					nodes[node.binary.b].used = true;
+					nodes[node.binary.a].live = true;
+					nodes[node.binary.b].live = true;
 					break;
 				case IRNode::UNARY:
-				case IRNode::FOLD:
-					nodes[node.unary.a].used = true;
+					nodes[node.unary.a].live = true;
 					break;
-				case IRNode::IFELSE: 
-					nodes[node.ifelse.cond].used = true;
-					nodes[node.ifelse.yes].used = true;
-					nodes[node.ifelse.no].used = true;
+				case IRNode::FOLD: 
+					nodes[node.fold.a].live = true;
 					break;
-				case IRNode::LOADC: /*fallthrough*/
-				case IRNode::LOADV: /*fallthrough*/
+				case IRNode::CONSTANT: /*fallthrough*/
+				case IRNode::LOAD: /*fallthrough*/
 				case IRNode::SPECIAL: /*fallthrough*/
-				case IRNode::STORE: /*fallthrough*/
 				case IRNode::NOP: 
 					/* nothing */
 					break;
 			}
-			if(node.length < 0) nodes[-node.length].used = true;
+			// mark used shape nodes
+			if(node.shape.filter > 0) 
+				nodes[node.shape.filter].live = true;
+			if(node.shape.split > 0) 
+				nodes[node.shape.split].live = true;
 		} else {
 			node.op = IROpCode::nop;
 			node.enc = IRNode::NOP;
+			node.shape = (IRNode::Shape) { 0, 0, 0, 0 };
 		}
 	}
 }
@@ -470,57 +494,51 @@ void Trace::Execute(Thread & thread, IRef ref) {
 // everything must be evaluated in the end...
 void Trace::Execute(Thread & thread) {
 	
+	DiscardDeadOutputs(thread);
+	MarkLiveOutputs(thread);
+
 	if(thread.state.verbose)
 		printf("executing trace:\n%s\n",toString(thread).c_str());
 
-	InitializeOutputs(thread);
 	DeadCodeElimination(thread);	// avoid optimizing code that's dead anyway
 	
 	SimplifyOps(thread);
 	AlgebraicSimplification(thread);
+
+	// move outputs up...
+	for(size_t i = 0; i < outputs.size(); i++) {
+		IRef& r = outputs[i].ref;
+		while(nodes[r].op == IROpCode::pos) {
+			nodes[r].liveOut = false;
+			r = nodes[r].unary.a;
+		}
+		nodes[r].liveOut = true;
+	}
 	
-	// Initialize Output...
+	DeadCodeElimination(thread);
+
+	// Initialize Outputs...
 	for(IRef ref = 0; ref < nodes.size(); ref++) {
 		IRNode& node = nodes[ref];
-		if(node.op == IROpCode::storev) {
-			if(nodes[node.store.a].op == IROpCode::loadv) {
-				node.store.dst = nodes[node.store.a].loadv.src;
-				node.op = IROpCode::nop;
-				node.enc = IRNode::NOP;
+		if(node.liveOut && node.enc != IRNode::LOAD) {
+			int64_t length = node.shape.length;
+			if(node.enc == IRNode::FOLD) {
+				length = nodes[node.fold.a].shape.levels * thread.state.nThreads * 8; // * 8 fills cache line (assuming aggregates are all stored in 8-byte fields)
 			} else {
-				// compute length
-				IRNode* n = &node;
-				if(n->length < 0) {
-					n = &nodes[-n->length];
-				}
-				int64_t length = n->length;
-				if(node.type == Type::Double) {
-					node.store.dst = Double(length);
-				} else if(node.type == Type::Integer) {
-					node.store.dst = Integer(length);
-				} else if(node.type == Type::Logical) {
-					node.store.dst = Logical(length);
-				} else {
-					_error("Unknown type in initialize outputs");
-				}
-				if(node.length < 0)
-					node.store.dst.length = 0;
+				if(node.shape.levels != 1)
+					_error("Group by without aggregate not yet supported");
 			}
-		} else if(node.op == IROpCode::storec) {
-			uint64_t n = std::max((int64_t)128, thread.state.nThreads*8);
 			if(node.type == Type::Double) {
-				node.store.dst = Double(n);
+				node.out = Double(length);
 			} else if(node.type == Type::Integer) {
-				node.store.dst = Integer(n);
+				node.out = Integer(length);
 			} else if(node.type == Type::Logical) {
-				node.store.dst = Logical(n);
+				node.out = Logical(length);
 			} else {
 				_error("Unknown type in initialize outputs");
 			}
 		}
 	}
-
-	DeadCodeElimination(thread);
 
 	if(thread.state.verbose)
 		printf("optimized:\n%s\n",toString(thread).c_str());

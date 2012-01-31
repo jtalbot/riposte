@@ -693,6 +693,14 @@ Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 	return &inst+2; 
 }
 
+Instruction const* split_op(Thread& thread, Instruction const& inst) {
+	if(thread.state.jitEnabled && isRecordable(REG(thread, inst.a)))
+		return thread.trace.BeginTracing(thread,&inst);
+	else 
+		_error("split not defined in scalar yet");
+	return &inst+2; 
+}
+
 Instruction const* jmp_op(Thread& thread, Instruction const& inst) {
 	return &inst+inst.a;
 }
