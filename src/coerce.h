@@ -27,10 +27,12 @@ struct CastOp : public UnaryOp<I, O> {
 
 template<class O>
 void As(Thread& thread, Value src, O& out) {
-	if(src.type == O::VectorType)
-		out = (O const&)src;
-	if(src.isObject()) {
+	if(src.isObject())
 		src = ((Object const&)src).base();
+
+	if(src.type == O::VectorType) {
+		out = (O const&)src;
+		return;
 	}
 	switch(src.type) {
 		case Type::Null: O(0); return; break;

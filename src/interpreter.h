@@ -116,7 +116,7 @@ struct InternalFunction {
 #define TRACE_MAX_RECORDED (1024)
 
 struct TraceCodeBuffer;
-struct Trace {
+struct Trace : public gc {
 	
 	struct Location {
 		enum Type {REG, VAR};
@@ -137,7 +137,7 @@ struct Trace {
 	};
 
 
-	std::vector<IRNode> nodes;
+	std::vector<IRNode, traceable_allocator<IRNode> > nodes;
 	
 	std::vector<Output> outputs;
 
@@ -149,7 +149,7 @@ struct Trace {
 	size_t n_recorded_since_last_exec;
 	bool active;
 
-	Trace() { 
+	Trace() : active(false) { 
 		Reset(); 
 		code_buffer = NULL;
  	}

@@ -128,6 +128,7 @@
 	_(apply,	"apply") \
 	_(ifelse,	"ifelse") \
 	_(split,	"split") \
+	_(strip,	"strip") \
 
 typedef const char* String;
 

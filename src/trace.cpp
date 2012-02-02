@@ -6,7 +6,6 @@
 #include <stdlib.h>
 
 void Trace::Reset() {
-	active = false;
 	n_recorded_since_last_exec = 0;
 	nodes.clear();
 	outputs.clear();
@@ -520,10 +519,12 @@ void Trace::Execute(Thread & thread) {
 	// Initialize Outputs...
 	for(IRef ref = 0; ref < nodes.size(); ref++) {
 		IRNode& node = nodes[ref];
-		if(node.liveOut && node.enc != IRNode::LOAD) {
+		if((node.liveOut && node.enc != IRNode::LOAD) || 
+		   (node.live && node.enc == IRNode::FOLD)) {
 			int64_t length = node.shape.length;
 			if(node.enc == IRNode::FOLD) {
-				length = nodes[node.fold.a].shape.levels * thread.state.nThreads * 8; // * 8 fills cache line (assuming aggregates are all stored in 8-byte fields)
+				length = std::max(nodes[node.fold.a].shape.levels*2, 8LL) * thread.state.nThreads; 
+				// * 8 fills cache line (assuming aggregates are all stored in 8-byte fields)
 			} else {
 				if(node.shape.levels != 1)
 					_error("Group by without aggregate not yet supported");

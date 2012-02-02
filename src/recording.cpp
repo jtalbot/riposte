@@ -439,6 +439,10 @@ RecordingStatus::Enum length_record(Thread & thread, Instruction const & inst, I
 	*pc = length_op(thread, inst);
 	return RecordingStatus::NO_ERROR;
 }
+RecordingStatus::Enum strip_record(Thread & thread, Instruction const & inst, Instruction const ** pc) {
+	*pc = strip_op(thread, inst);
+	return RecordingStatus::NO_ERROR;
+}
 RecordingStatus::Enum missing_record(Thread & thread, Instruction const & inst, Instruction const ** pc) {
 	*pc = length_op(thread, inst);
 	return RecordingStatus::NO_ERROR;

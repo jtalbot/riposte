@@ -59,6 +59,7 @@ static ByteCode::Enum op(String const& func) {
 	if(func == Strings::length) return ByteCode::length; 
 	if(func == Strings::mmul) return ByteCode::mmul; 
 	if(func == Strings::split) return ByteCode::split; 
+	if(func == Strings::strip) return ByteCode::strip; 
 	else throw RuntimeError("unexpected symbol used as an operator"); 
 }
 
@@ -589,7 +590,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		func == Strings::Integer ||
 		func == Strings::Double ||
 		func == Strings::Character ||
-		func == Strings::Raw)
+		func == Strings::Raw ||
+		func == Strings::strip)
 	{
 		// if there isn't exactly one parameter, we should call the library version...
 		if(call.length != 2) return compileFunctionCall(call, names, code);

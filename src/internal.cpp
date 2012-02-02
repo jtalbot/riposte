@@ -45,6 +45,29 @@ void library(Thread& thread, Value const* args, Value& result) {
 	result = Null::Singleton();
 }
 
+void readtable(Thread& thread, Value const* args, Value& result) {
+	Character from = As<Character>(thread, args[0]);
+	if(from.length > 0) {
+		std::string file = thread.externStr(from[0]);
+		std::ifstream in(file.c_str());
+		std::vector<double> v;
+		std::string line;
+		while(std::getline(in, line)) {
+			double d;
+			std::istringstream(line) >> d;
+			v.push_back(d);
+		}
+		in.close();
+		Double r(v.size());
+		for(int64_t i = 0; i < v.size(); i++) {
+			r[i] = v[i];
+		}
+		result = r;
+	} else {
+		result = Null::Singleton();
+	}
+}
+
 void sequence(Thread& thread, Value const* args, Value& result) {
 	double from = asReal1(args[0]);
 	double by = asReal1(args[1]);
@@ -89,7 +112,7 @@ void attr(Thread& thread, Value const* args, Value& result)
 		result = ((Object const&)object).getAttribute(which[0]);
 	}
 	else {
-		result = Value::Nil();
+		result = Null::Singleton();
 	}
 }
 
@@ -874,5 +897,7 @@ void registerCoreFunctions(State& state)
 
 	state.registerInternalFunction(state.internStr("proc.time"), (proctime), 0);
 	state.registerInternalFunction(state.internStr("trace.config"), (traceconfig), 1);
+	
+	state.registerInternalFunction(state.internStr("read.table"), (readtable), 1);
 }
 

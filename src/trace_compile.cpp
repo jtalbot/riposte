@@ -217,7 +217,7 @@ static void store_conditional(__m128d input, __m128i mask, Value* out) {
 		((double*)(out->p))[out->length++] = i[1];
 }
 
-static void sum_by(__m128d add, __m128i split, Value* out, int64_t thread_index, int64_t scale) {
+static void sum_by(__m128d add, __m128i split, Value* out, int64_t thread_index, int64_t step) {
 	union { 
 		__m128i ma; 
 		int64_t m[2]; 
@@ -228,8 +228,9 @@ static void sum_by(__m128d add, __m128i split, Value* out, int64_t thread_index,
 	};
 	ma = split;
 	in = add;
-	((double*)(out->p))[m[0]*scale+thread_index] += i[0];
-	((double*)(out->p))[m[1]*scale+thread_index] += i[1];
+	int off = (int)thread_index*(int)step;
+	((double*)(out->p))[off + m[0]] += i[0];
+	((double*)(out->p))[off + m[1]] += i[1];
 }
 
 #define FOLD_SCAN_FN(name, type, op) \
@@ -259,8 +260,8 @@ FOLD_SCAN_FN(prodd, double , *)
 FOLD_SCAN_FN(sumd , double , +)
 
 struct TraceJIT {
-	TraceJIT(Trace * t)
-	:  trace(t), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), alloc(XMMRegister::kNumAllocatableRegisters), next_constant_slot(C_FIRST_TRACE_CONST) {
+	TraceJIT(Trace * t, Thread& thread)
+	:  trace(t), thread(thread), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), alloc(XMMRegister::kNumAllocatableRegisters-1), next_constant_slot(C_FIRST_TRACE_CONST) {
 		live_registers = new (PointerFreeGC) RegisterSet[trace->nodes.size()];
 		allocated_register = new (PointerFreeGC) int8_t[trace->nodes.size()];
 		// allocate xmm0 as a temporary register (needed for blend)
@@ -269,6 +270,7 @@ struct TraceJIT {
 	}
 
 	Trace * trace;
+	Thread const& thread;
 	RegisterSet* live_registers;
 	int8_t* allocated_register;
 	Assembler asm_;
@@ -565,7 +567,7 @@ struct TraceJIT {
 
 			case IROpCode::sum:  {
 				if(node.isDouble()) {
-					assert(node.liveOut);
+					assert(node.live);
 					for(int64_t i = 0; i < node.out.length; i++)
 						((double*)node.out.p)[i] = 0.0;
 					Move(ref, node.unary.a);
@@ -576,7 +578,6 @@ struct TraceJIT {
 						asm_.blendvpd(reg(ref), ConstantTable(C_DOUBLE_ZERO));
 					}
 					if(trace->nodes[node.fold.a].shape.split > 0) {
-						printf("in split sum\n");
 						EmitSplitFold(ref, (void*)sum_by);
 						/*// add to each independently?
 						Constant c(node.dst.p);
@@ -691,7 +692,7 @@ struct TraceJIT {
 	}
 	XMMRegister reg(IRef r) {
 		assert(allocated_register[r] >= 0);
-		return XMMRegister::FromAllocationIndex(allocated_register[r]);
+		return XMMRegister::FromAllocationIndex(allocated_register[r]+1);	// xmm0 is a temporary register
 	}
 	XMMRegister Move(IRef d, IRef s) {
 		XMMRegister dst = reg(d);
@@ -736,13 +737,13 @@ struct TraceJIT {
 		IRNode const& node = trace->nodes[ref];
 		XMMRegister src = reg(ref);
 		XMMRegister split = reg(trace->nodes[node.fold.a].shape.split);
-		int64_t scale = node.out.length/node.shape.length;
+		int64_t step = node.out.length/thread.state.nThreads;
 		SaveRegisters(live_registers[ref]);
 		EmitMove(xmm0,src);
 		EmitMove(xmm1,split);
 		asm_.movq(rdi,(int64_t)&node.out);
 		asm_.movq(rsi,thread_index);
-		asm_.movq(rdx,PushConstant(Constant(scale)));
+		asm_.movq(rdx,PushConstant(Constant(step)));
 		EmitCall(fn);
 		RestoreRegisters(live_registers[ref]);
 	}
@@ -902,22 +903,27 @@ struct TraceJIT {
 		EmitCall((void*) debug_print);
 		RestoreRegisters(regs);
 	}
+
 	void SaveRegisters(RegisterSet regs) {
-		asm_.subq(rsp, Immediate(256));
-		uint64_t index = 0;
-		for(RegisterIterator it(regs); !it.done(); it.next()) {
-			asm_.movdqu(Operand(rsp, index), XMMRegister::FromAllocationIndex(it.value()));
-			index += 16;
+		if(regs > 0) {
+			asm_.subq(rsp, Immediate(256));
+			uint64_t index = 0;
+			for(RegisterIterator it(regs); !it.done(); it.next()) {
+				asm_.movdqu(Operand(rsp, index), XMMRegister::FromAllocationIndex(it.value()));
+				index += 16;
+			}
 		}
 	}
 
 	void RestoreRegisters(RegisterSet regs) {
-		uint64_t index = 0;
-		for(RegisterIterator it(regs); !it.done(); it.next()) {
-			asm_.movdqu(XMMRegister::FromAllocationIndex(it.value()), Operand(rsp, index));
-			index += 16;
+		if(regs > 0) {
+			uint64_t index = 0;
+			for(RegisterIterator it(regs); !it.done(); it.next()) {
+				asm_.movdqu(XMMRegister::FromAllocationIndex(it.value()), Operand(rsp, index));
+				index += 16;
+			}
+			asm_.addq(rsp, Immediate(256));
 		}
-		asm_.addq(rsp, Immediate(256));
 	}
 
 	void EmitCompare(IRef ref, Assembler::ComparisonType typ) {
@@ -970,10 +976,11 @@ struct TraceJIT {
 					for(int64_t i = 0; i < r.length; i++)
 						r[i] = 0.0;
 					double const* d = (double const*)node.out.p;
-					int64_t scale = node.out.length/node.shape.length;
+					int64_t step = node.out.length/thread.state.nThreads;
 					for(int64_t i = 0; i < node.shape.length; i++) {
-						for(int64_t j = 0; j < scale; j++) {
-							r[i] += d[i*scale+j];
+						for(int64_t j = 0; j < thread.state.nThreads; j++) {
+							r[i] += d[j*step+i];
+							r[i] += d[j*step+i+1];
 						}
 					}
 					node.out = r;
@@ -999,7 +1006,7 @@ void Trace::JIT(Thread & thread) {
 		code_buffer = new TraceCodeBuffer();
 	}
 
-	TraceJIT trace_code(this);
+	TraceJIT trace_code(this, thread);
 
 	trace_code.Compile();
 	trace_code.Execute(thread);

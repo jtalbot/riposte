@@ -235,7 +235,7 @@ static Value GenericGet(Thread& thread, String s) {
 }
 
 static Value GenericSearch(Thread& thread, Character klass, String generic, String& method) {
-	
+		
 	// first search for type specific method
 	Value func = Value::Nil();
 	for(int64_t i = 0; i < klass.length && func.isNil(); i++) {
@@ -791,6 +791,12 @@ Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 }
 Instruction const* mmul_op(Thread& thread, Instruction const& inst) {
 	REG(thread, inst.c) = MatrixMultiply(thread, REG(thread, inst.a), REG(thread, inst.b));
+	return &inst+1;
+}
+Instruction const* strip_op(Thread& thread, Instruction const& inst) {
+	REG(thread, inst.c) = REG(thread, inst.a);
+	if(REG(thread, inst.c).isObject())
+		REG(thread, inst.c) = ((Object const&)REG(thread, inst.c)).base();
 	return &inst+1;
 }
 Instruction const* ret_op(Thread& thread, Instruction const& inst) {

@@ -2216,10 +2216,10 @@ void Assembler::movhpd(XMMRegister dst, const Operand& src) {
 
 void Assembler::movhlps(XMMRegister dst, XMMRegister src) {
 	EnsureSpace ensure_space(this);
-	emit_optional_rex_32(src, dst);
+	emit_optional_rex_32(dst, src);
 	emit(0x0F);
 	emit(0x12);
-	emit_sse_operand(src, dst);
+	emit_sse_operand(dst, src);
 }
 
 void Assembler::movaps(XMMRegister dst, XMMRegister src) {
