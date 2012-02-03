@@ -11,6 +11,45 @@ void Trace::Reset() {
 	outputs.clear();
 }
 
+Trace::Trace() : active(false) { 
+	Reset(); 
+	code_buffer = NULL;
+}
+
+Instruction const * Trace::BeginTracing(Thread & state, Instruction const * inst) {
+	if(active) {
+		_error("recursive record\n");
+	}
+	max_live_register = NULL;
+	active = true;
+	try {
+		return recording_interpret(state,inst);
+	} catch(...) {
+		Reset();
+		active = false;
+		throw;
+	}
+}
+
+void Trace::EndTracing(Thread & thread) {
+	if(active) {
+		Flush(thread);
+		active = false;
+	}
+}
+
+void Trace::Force(Thread& thread, Value& v) {
+	if(!v.isFuture()) return;
+	Execute(thread, v.future.ref);
+}
+
+void Trace::Flush(Thread & thread) {
+	if(active) {
+		n_recorded_since_last_exec = 0;
+		Execute(thread);
+	}
+}
+
 std::string Trace::toString(Thread & thread) {
 	std::ostringstream out;
 	for(size_t j = 0; j < nodes.size(); j++) {

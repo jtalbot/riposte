@@ -109,6 +109,8 @@ struct InternalFunction {
 	int64_t params;
 };
 
+#ifdef ENABLE_JIT
+
 #define TRACE_MAX_VECTOR_REGISTERS (32)
 #define TRACE_VECTOR_WIDTH (64)
 //maximum number of instructions to record before dropping out of the
@@ -149,44 +151,12 @@ struct Trace : public gc {
 	size_t n_recorded_since_last_exec;
 	bool active;
 
-	Trace() : active(false) { 
-		Reset(); 
-		code_buffer = NULL;
- 	}
+	Trace();
 
-	Instruction const * BeginTracing(Thread & state, Instruction const * inst) {
-		if(active) {
-			_error("recursive record\n");
-		}
-		max_live_register = NULL;
-		active = true;
-		try {
-			return recording_interpret(state,inst);
-		} catch(...) {
-			Reset();
-			active = false;
-			throw;
-		}
-	}
-
-	void EndTracing(Thread & thread) {
-		if(active) {
-			Flush(thread);
-			active = false;
-		}
-	}
-
-	void Force(Thread& thread, Value& v) {
-		if(!v.isFuture()) return;
-		Execute(thread, v.future.ref);
-	}
-
-	void Flush(Thread & thread) {
-		if(active) {
-			n_recorded_since_last_exec = 0;
-			Execute(thread);
-		}
-	}
+	Instruction const * BeginTracing(Thread & state, Instruction const * inst);
+	void EndTracing(Thread & thread);
+	void Force(Thread& thread, Value& v);
+	void Flush(Thread & thread);
 
 	IRef EmitCoerce(IRef a, Type::Enum dst_type);
 	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data); 
@@ -258,6 +228,8 @@ private:
 	void DeadCodeElimination(Thread& thread);
 };
 
+#endif
+
 #define DEFAULT_NUM_REGISTERS 10000
 
 
@@ -303,7 +275,9 @@ struct State : public gc {
 	void interpreter_init(Thread& state);
 	
 	std::string stringify(Value const& v) const;
+#ifdef ENABLE_JIT
 	std::string stringify(Trace const & t) const;
+#endif
 	std::string deparse(Value const& v) const;
 
 	String internStr(std::string s) {
@@ -352,7 +326,9 @@ struct Thread : public gc {
 
 	std::vector<std::string> warnings;
 
+#ifdef ENABLE_JIT
 	Trace trace; //all state related to tracing compiler
+#endif
 
 	std::deque<Task> tasks;
 	Lock tasksLock;
@@ -376,7 +352,9 @@ struct Thread : public gc {
 	}
 
 	std::string stringify(Value const& v) const { return state.stringify(v); }
+#ifdef ENABLE_JIT
 	std::string stringify(Trace const & t) const { return state.stringify(t); }
+#endif
 	std::string deparse(Value const& v) const { return state.deparse(v); }
 	String internStr(std::string s) { return state.internStr(s); }
 	std::string externStr(String s) const { return state.externStr(s); }

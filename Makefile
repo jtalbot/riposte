@@ -10,12 +10,13 @@ ifeq ($(UNAME),Linux)
 LFLAGS += -lrt
 endif
 
+ENABLE_JIT=0
 ENABLE_ARBB=0
+ENABLE_LIBM=0
+
 ARBB_HOME=/opt/intel/arbb/1.0.0.018
 ARBB_EXISTS=$(shell test -d $(ARBB_HOME); echo $$?)
 
-
-ENABLE_LIBM=0
 AMD_LIBM_HOME=/opt/amdlibm-3-0-1-lin64
 
 ifeq ($(ENABLE_ARBB),0)
@@ -30,7 +31,12 @@ ifneq ($(ENABLE_LIBM),0)
 	LFLAGS += -L$(AMD_LIBM_HOME)/lib/dynamic -lamdlibm
 endif
 
-SRC := main.cpp type.cpp string.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp ir.cpp recording.cpp trace.cpp trace_compile.cpp assembler-x64.cpp 
+SRC := main.cpp type.cpp string.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp
+
+ifeq ($(ENABLE_JIT),1)
+	CXXFLAGS += -DENABLE_JIT
+	SRC += ir.cpp recording.cpp trace.cpp trace_compile.cpp assembler-x64.cpp
+endif
 
 EXECUTABLE := bin/riposte
 

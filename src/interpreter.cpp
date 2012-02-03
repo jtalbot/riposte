@@ -488,32 +488,39 @@ Instruction const* list_op(Thread& thread, Instruction const& inst) {
 bool isRecordableType(Type::Enum type) {
 	return type == Type::Double || type == Type::Integer || type == Type::Logical;
 }
-bool isRecordable(Type::Enum type, int64_t length) {
-	return isRecordableType(type)
-		&& length >= TRACE_VECTOR_WIDTH;
-		//&& length % TRACE_VECTOR_WIDTH == 0;
+
+static Instruction const* trace(Thread& thread, Instruction const& inst, Type::Enum type, int64_t length) {
+#ifdef ENABLE_JIT
+	if(thread.state.jitEnabled && isRecordableType(type) && length >= TRACE_VECTOR_WIDTH) {
+		return thread.trace.BeginTracing(thread, &inst);
+	}
+#endif
+	return 0;
 }
-bool isRecordable(Value const& a) {
-	return isRecordable(a.type, a.length);
+
+static Instruction const* trace(Thread& thread, Instruction const& inst, Value const& a) {
+	return trace(thread, inst, a.type, a.length);
 }
-bool isRecordable(Value const& a, Value const& b) {
-	bool valid_types =   isRecordableType(a.type)
-				      && isRecordableType(b.type);
-	size_t length = std::max(a.length,b.length);
-	bool compatible_lengths = a.length == 1 || b.length == 1 || a.length == b.length;
-	bool should_record_length = length >= TRACE_VECTOR_WIDTH;// && length % TRACE_VECTOR_WIDTH == 0;
-	return valid_types && compatible_lengths && should_record_length;
+
+static Instruction const* trace(Thread& thread, Instruction const& inst, Value const& a, Value const& b) {
+#ifdef ENABLE_JIT
+	if(thread.state.jitEnabled && isRecordableType(a.type) && isRecordableType(b.type) && 
+		(a.length >= TRACE_VECTOR_WIDTH || b.length >= TRACE_VECTOR_WIDTH)) {
+		return thread.trace.BeginTracing(thread, &inst);
+	}
+#endif
+	return 0;
 }
 
 Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	int64_t len = As<Integer>(thread, REG(thread, inst.a))[0];
 	int64_t step = As<Integer>(thread, REG(thread, inst.b))[0];
-	if(thread.state.jitEnabled && isRecordable(Type::Integer, len))
-		return thread.trace.BeginTracing(thread, &inst);
-	else {
-		REG(thread, inst.c) = Sequence(len, 1, step);
-		return &inst+1;
-	}
+	
+	Instruction const* jit = trace(thread, inst, Type::Integer, len);
+	if(jit) return jit;
+	
+	REG(thread, inst.c) = Sequence(len, 1, step);
+	return &inst+1;
 }
 
 #define OP(name, string, Op, Func) \
@@ -532,8 +539,8 @@ Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
 			return buildStackFrame(thread, fenv, true, func.prototype(), &REG(thread, inst.c), &inst+1); \
 		}	\
 	} \
-	else if(thread.state.jitEnabled && isRecordable(a)) \
-		return thread.trace.BeginTracing(thread, &inst); \
+	Instruction const* jit = trace(thread, inst, a); \
+	if(jit) return jit; \
 	\
 	unaryArith<Zip1, Op>(thread, a, c); \
 	return &inst+1; \
@@ -545,10 +552,11 @@ UNARY_ARITH_MAP_BYTECODES(OP)
 #define OP(name, string, Op, Func) \
 Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
 	Value & a = REG(thread,inst.a); \
-	if(thread.state.jitEnabled && isRecordable(a)) \
-		return thread.trace.BeginTracing(thread,&inst); \
-	else \
-		unaryLogical<Zip1, Op>(thread, a, REG(thread, inst.c)); \
+	\
+	Instruction const* jit = trace(thread, inst, a); \
+	if(jit) return jit; \
+	\
+	unaryLogical<Zip1, Op>(thread, a, REG(thread, inst.c)); \
 	return &inst+1; \
 }
 UNARY_LOGICAL_MAP_BYTECODES(OP)
@@ -589,8 +597,9 @@ Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
 			return buildStackFrame(thread, fenv, true, func.prototype(), &REG(thread, inst.c), &inst+1); \
 		}	\
 	} \
-	else if(thread.state.jitEnabled && isRecordable(a,b)) \
-		return thread.trace.BeginTracing(thread, &inst);	\
+	\
+	Instruction const* jit = trace(thread, inst, a, b); \
+	if(jit) return jit; \
 \
 	binaryArithSlow<Zip2, Op>(thread, a, b, c);	\
 	return &inst+1;	\
@@ -602,10 +611,11 @@ BINARY_ARITH_MAP_BYTECODES(OP)
 Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
 	Value & a = REG(thread,inst.a); \
 	Value & b = REG(thread,inst.b); \
-	if(thread.state.jitEnabled && isRecordable(a,b)) \
-		return thread.trace.BeginTracing(thread,&inst); \
-	else \
-		binaryLogical<Zip2, Op>(thread, a, b, REG(thread, inst.c)); \
+	\
+	Instruction const* jit = trace(thread, inst, a, b); \
+	if(jit) return jit; \
+	\
+	binaryLogical<Zip2, Op>(thread, a, b, REG(thread, inst.c)); \
 	return &inst+1; \
 }
 BINARY_LOGICAL_MAP_BYTECODES(OP)
@@ -628,8 +638,9 @@ Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
                 else if(b.isInteger1())	\
                         { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(thread, a.i, b.i)); return &inst+1;} \
         } \
-    	else if(thread.state.jitEnabled && isRecordable(a,b)) \
-    		return thread.trace.BeginTracing(thread,&inst); \
+	\
+	Instruction const* jit = trace(thread, inst, a, b); \
+	if(jit) return jit; \
 	\
 	binaryOrdinal<Zip2, Op>(thread, REG(thread, inst.a), REG(thread, inst.b), REG(thread, inst.c)); \
 	return &inst+1; \
@@ -686,18 +697,18 @@ ORDINAL_SCAN_BYTECODES(OP)
 #undef OP
 
 Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
-	if(thread.state.jitEnabled && isRecordable(REG(thread, inst.a)))
-		return thread.trace.BeginTracing(thread,&inst);
-	else 
-		_error("ifelse not defined in scalar yet");
+	Instruction const* jit = trace(thread, inst, REG(thread, inst.a));
+	if(jit) return jit;
+
+	_error("ifelse not defined in scalar yet");
 	return &inst+2; 
 }
 
 Instruction const* split_op(Thread& thread, Instruction const& inst) {
-	if(thread.state.jitEnabled && isRecordable(REG(thread, inst.a)))
-		return thread.trace.BeginTracing(thread,&inst);
-	else 
-		_error("split not defined in scalar yet");
+	Instruction const* jit = trace(thread, inst, REG(thread, inst.a));
+	if(jit) return jit;
+		
+	_error("split not defined in scalar yet");
 	return &inst+2; 
 }
 
