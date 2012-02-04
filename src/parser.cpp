@@ -734,11 +734,11 @@ _eof_trans:
 	break;
 	case 47:
 #line 111 "lexer.rl"
-	{te = p+1;{token( TOKEN_AND2, CreateSymbol(Strings::sland) );}}
+	{te = p+1;{token( TOKEN_AND2, CreateSymbol(Strings::land2) );}}
 	break;
 	case 48:
 #line 112 "lexer.rl"
-	{te = p+1;{token( TOKEN_OR2, CreateSymbol(Strings::slor) );}}
+	{te = p+1;{token( TOKEN_OR2, CreateSymbol(Strings::lor2) );}}
 	break;
 	case 49:
 #line 113 "lexer.rl"

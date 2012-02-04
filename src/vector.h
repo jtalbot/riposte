@@ -4,70 +4,37 @@
 
 #include "value.h"
 
-template<class X, class Y>
-struct UnaryOp {
-	typedef X AV;
-	typedef Y RV;
-	typedef typename X::Element A;
-	typedef typename Y::Element R;
-};
-
-template<typename X, typename Y, typename Z> struct BinaryOp {
-	typedef X AV;
-	typedef Y BV;
-	typedef Z RV;
-	typedef typename X::Element A;
-	typedef typename Y::Element B;
-	typedef typename Z::Element R;
-};
-
-template<class X>
-struct FoldOp {
-	typedef X AV;
-	typedef X RV;
-	typedef typename X::Element A;
-	typedef typename X::Element R;
-};
-
-template<class Op>
-struct NAFold : public Op {
-	static typename Op::R eval(Thread& thread, typename Op::R const& r, typename Op::A const& a) {
-		if(!Op::AV::isCheckedNA(a)) return Op::eval(thread, r, a);
-		else return Op::RV::NAelement;
-	}
-};
-
 template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
 struct Map1 {
-	static void eval(Thread& thread, typename Op::A const* a, typename Op::R* r) {
+	static void eval(Thread& thread, typename Op::A::Element const* a, typename Op::R::Element* r) {
 		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(thread, a[i]);
 	}
 };
 
 template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
 struct Map2VV {
-	static void eval(Thread& thread, typename Op::A const* a, typename Op::B const* b, typename Op::R* r) {
+	static void eval(Thread& thread, typename Op::A::Element const* a, typename Op::B::Element const* b, typename Op::R::Element* r) {
 		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(thread, a[i], b[i]);
 	}
 };
 
 template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
 struct Map2SV {
-	static void eval(Thread& thread, typename Op::A const a, typename Op::B const* b, typename Op::R* r) {
+	static void eval(Thread& thread, typename Op::A::Element const a, typename Op::B::Element const* b, typename Op::R::Element* r) {
 		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(thread, a, b[i]);
 	}
 };
 
 template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
 struct Map2VS {
-	static void eval(Thread& thread, typename Op::A const* a, typename Op::B const b, typename Op::R* r) {
+	static void eval(Thread& thread, typename Op::A::Element const* a, typename Op::B::Element const b, typename Op::R::Element* r) {
 		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(thread, a[i], b);
 	}
 };
 
 template< class Op, int64_t N >
 struct FoldLeftT {
-	static typename Op::R eval(Thread& thread, typename Op::A const* a, typename Op::R r) {
+	static typename Op::R eval(Thread& thread, typename Op::A::Element const* a, typename Op::R::Element r) {
 		for(int64_t i = 0; i < N; ++i) r = Op::eval(thread, r, a[i]);
 		return r;
 	}
@@ -75,7 +42,7 @@ struct FoldLeftT {
 
 template< class Op, int64_t N >
 struct ScanLeftT {
-	static typename Op::R eval(Thread& thread, typename Op::A const* a, typename Op::R b, typename Op::R* r) {
+	static typename Op::R eval(Thread& thread, typename Op::A::Element const* a, typename Op::R::Element b, typename Op::R::Element* r) {
 		for(int64_t i = 0; i < N; ++i) r[i] = b = Op::eval(thread, b, a[i]);
 		return b;
 	}
@@ -83,15 +50,15 @@ struct ScanLeftT {
 
 template< class Op >
 struct Zip1 {
-	static void eval(Thread& thread, typename Op::AV const& a, Value& out)
+	static void eval(Thread& thread, typename Op::A const& a, Value& out)
 	{
 		if(a.isScalar()) {
-			Op::RV::InitScalar(out, Op::eval(thread, a.s()));
+			Op::Scalar(thread, a.s(), out);
 		}
 		else {
-			typename Op::RV r(a.length);
-			typename Op::R* re = r.v();
-			typename Op::A const* ae = a.v();
+			typename Op::R r(a.length);
+			typename Op::R::Element* re = r.v();
+			typename Op::A::Element const* ae = a.v();
 			int64_t length = a.length;
 			int64_t i = 0;
 			for(; i < length-3; i+=4) Map1<Op,4>::eval(thread, ae+i, re+i);
@@ -103,16 +70,16 @@ struct Zip1 {
 
 template< class Op >
 struct Zip2 {
-	static void eval(Thread& thread, typename Op::AV const& a, typename Op::BV const& b, Value& out)
+	static void eval(Thread& thread, typename Op::A const& a, typename Op::B const& b, Value& out)
 	{
 		if(a.isScalar() && b.isScalar()) {
-			Op::RV::InitScalar(out, Op::eval(thread, a.s(), b.s()));
+			Op::Scalar(thread, a.s(), b.s(), out);
 		}
 		else if(b.isScalar()) {
-			typename Op::RV r(a.length);
-			typename Op::R* re = r.v();
-			typename Op::A const* ae = a.v();
-			typename Op::B be = b.s();
+			typename Op::R r(a.length);
+			typename Op::R::Element* re = r.v();
+			typename Op::A::Element const* ae = a.v();
+			typename Op::B::Element be = b.s();
 			int64_t length = a.length;
 			int64_t i = 0;
 			for(; i < length-3; i+=4) Map2VS<Op,4>::eval(thread, ae+i, be, re+i);
@@ -120,10 +87,10 @@ struct Zip2 {
 			out = (Value&)r;
 		}
 		else if(a.isScalar()) {
-			typename Op::RV r(b.length);
-			typename Op::R* re = r.v();
-			typename Op::A ae = a.s();
-			typename Op::B const* be = b.v();
+			typename Op::R r(b.length);
+			typename Op::R::Element* re = r.v();
+			typename Op::A::Element ae = a.s();
+			typename Op::B::Element const* be = b.v();
 			int64_t length = b.length;
 			int64_t i = 0;
 			for(; i < length-3; i+=4) Map2SV<Op,4>::eval(thread, ae, be+i, re+i);
@@ -131,10 +98,10 @@ struct Zip2 {
 			out = (Value&)r;
 		}
 		else if(a.length == b.length) {
-			typename Op::RV r(a.length);
-			typename Op::R* re = r.v();
-			typename Op::A const* ae = a.v();
-			typename Op::B const* be = b.v();
+			typename Op::R r(a.length);
+			typename Op::R::Element* re = r.v();
+			typename Op::A::Element const* ae = a.v();
+			typename Op::B::Element const* be = b.v();
 			int64_t length = a.length;
 			int64_t i = 0;
 			for(; i < length-3; i+=4) Map2VV<Op,4>::eval(thread, ae+i, be+i, re+i);
@@ -142,13 +109,13 @@ struct Zip2 {
 			out = (Value&)r;
 		}
 		else if(a.length == 0 || b.length == 0) {
-			Op::RV::Init(out, 0);
+			Op::R::Init(out, 0);
 		}
 		else if(a.length > b.length) {
-			typename Op::RV r(a.length);
-			typename Op::R* re = r.v();
-			typename Op::A const* ae = a.v();
-			typename Op::B const* be = b.v();
+			typename Op::R r(a.length);
+			typename Op::R::Element* re = r.v();
+			typename Op::A::Element const* ae = a.v();
+			typename Op::B::Element const* be = b.v();
 			int64_t alength = a.length;
 			int64_t blength = b.length;
 			int64_t j = 0;
@@ -160,10 +127,10 @@ struct Zip2 {
 			out = (Value&)r;
 		}
 		else {
-			typename Op::RV r(b.length);
-			typename Op::R* re = r.v();
-			typename Op::A const* ae = a.v();
-			typename Op::B const* be = b.v();
+			typename Op::R r(b.length);
+			typename Op::R::Element* re = r.v();
+			typename Op::A::Element const* ae = a.v();
+			typename Op::B::Element const* be = b.v();
 			int64_t alength = a.length;
 			int64_t blength = b.length;
 			int64_t j = 0;
@@ -181,10 +148,10 @@ template< class Op >
 struct Zip2N {
 	static void eval(Thread& thread, int64_t N, typename Op::AV const& a, typename Op::BV const& b, Value& out)
 	{
-		typename Op::A const* ae = a.v();
-		typename Op::B const* be = b.v();
-		typename Op::RV r(N);
-		typename Op::R* re = r.v();
+		typename Op::A::Element const* ae = a.v();
+		typename Op::B::Element const* be = b.v();
+		typename Op::R r(N);
+		typename Op::R::Element* re = r.v();
 		int64_t j = 0, k = 0;
 		for(int64_t i = 0; i < N; i++) {
 			re[i] = Op::eval(thread, ae[j++], be[k++]);
@@ -197,29 +164,29 @@ struct Zip2N {
 
 template< class Op >
 struct FoldLeft {
-	static void eval(Thread& thread, typename Op::AV const& a, Value& out)
+	static void eval(Thread& thread, typename Op::B const& b, Value& out)
 	{
-		typename Op::A const* ae = a.v();
-		typename Op::R b = Op::base();
-		int64_t length = a.length;
+		typename Op::B::Element const* be = b.v();
+		typename Op::R::Element a = Op::base();
+		int64_t length = b.length;
 		for(int64_t i = 0; i < length; ++i) {
-			b = Op::eval(thread, b, ae[i]);
+			a = Op::eval(thread, a, be[i]);
 		}
-		Op::RV::InitScalar(out, b);
+		Op::R::InitScalar(out, a);
 	}
 };
 
 template< class Op >
 struct ScanLeft {
-	static void eval(Thread& thread, typename Op::AV const& a, Value& out)
+	static void eval(Thread& thread, typename Op::B const& b, Value& out)
 	{
-		typename Op::A const* ae = a.v();
-		typename Op::R b = Op::base();
-		typename Op::RV r(a.length);
-		typename Op::R* re = r.v();
-		int64_t length = a.length;
+		typename Op::B::Element const* be = b.v();
+		typename Op::R::Element a = Op::base();
+		typename Op::R r(b.length);
+		typename Op::R::Element* re = r.v();
+		int64_t length = b.length;
 		for(int64_t i = 0; i < length; ++i) {
-			re[i] = b = Op::eval(thread, b, ae[i]);
+			re[i] = a = Op::eval(thread, a, be[i]);
 		}
 		out = (Value&)r;
 	}

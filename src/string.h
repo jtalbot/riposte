@@ -22,6 +22,7 @@
 	_(Object,	"object")	\
 	_(Promise, 	"promise") 	\
 	_(Nil,		"nil")		\
+	_(Future,	"future")		\
 	/* Now all other strings */	\
 	_(NArep, 	"<NA>") \
 	_(empty, 	"") \
@@ -59,9 +60,9 @@
 	_(hypot, 	"hypot") \
 	_(lnot, 	"!") \
 	_(land, 	"&") \
-	_(sland, 	"&&") \
 	_(lor, 		"|") \
-	_(slor, 	"||") \
+	_(land2, 	"&&") \
+	_(lor2, 	"||") \
 	_(eq, 		"==") \
 	_(neq, 		"!=") \
 	_(lt, 		"<") \
@@ -96,6 +97,8 @@
 	_(prod,		"prod") \
 	_(min,		"min") \
 	_(max,		"max") \
+	_(pmin,		"pmin") \
+	_(pmax,		"pmax") \
 	_(any,		"any") \
 	_(all,		"all") \
 	_(cumsum,	"cumsum") \
@@ -129,6 +132,11 @@
 	_(ifelse,	"ifelse") \
 	_(split,	"split") \
 	_(strip,	"strip") \
+	_(isna,		"is.na") \
+	_(isnan,	"is.nan") \
+	_(isfinite,	"is.finite") \
+	_(isinfinite,	"is.infinite") \
+	_(Maximal, "\255")
 
 typedef const char* String;
 

@@ -8,7 +8,6 @@
 #include "thread.h"
 #include "ir.h"
 
-#include "recording.h"
 #include "register_set.h"
 
 
@@ -118,8 +117,9 @@ struct InternalFunction {
 #define TRACE_MAX_RECORDED (1024)
 
 struct TraceCodeBuffer;
-struct Trace : public gc {
-	
+class Trace : public gc {
+
+public:	
 	struct Location {
 		enum Type {REG, VAR};
 		Type type;
@@ -237,7 +237,8 @@ private:
 // Global shared state 
 ///////////////////////////////////////////////////////////////////
 
-struct State : public gc {
+class State : public gc {
+public:
 	StringTable strings;
 	
 	std::vector<InternalFunction> internalFunctions;
@@ -296,7 +297,8 @@ struct State : public gc {
 typedef void* (*TaskHeaderPtr)(void* args, uint64_t a, uint64_t b, Thread& thread);
 typedef void (*TaskFunctionPtr)(void* args, void* header, uint64_t a, uint64_t b, Thread& thread);
 
-struct Thread : public gc {
+class Thread : public gc {
+public:
 	struct Task : public gc {
 		TaskHeaderPtr header;
 		TaskFunctionPtr func;

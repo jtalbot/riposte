@@ -52,4 +52,22 @@ DECLARE_ENUM(Type, TYPES)
 #define LISTLIKE_VECTOR_TYPES(_) \
 	_(List)		\
 
+#define DEFAULT_TYPE_MEET(_) \
+	_(Logical, Logical, Logical) \
+	_(Integer, Logical, Integer) \
+	_(Logical, Integer, Integer) \
+	_(Integer, Integer, Integer) \
+	_(Double,  Logical, Double) \
+	_(Logical, Double,  Double) \
+	_(Double,  Integer, Double) \
+	_(Integer, Double,  Double) \
+	_(Double,  Double,  Double) \
+	_(Character, Logical, Character) \
+	_(Logical, Character, Character) \
+	_(Character, Integer, Character) \
+	_(Integer, Character, Character) \
+	_(Character, Double, Character) \
+	_(Double, Character, Character) \
+	_(Character, Character, Character) \
+
 #endif

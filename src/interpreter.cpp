@@ -9,7 +9,6 @@
 #include "ops.h"
 #include "internal.h"
 #include "interpreter.h"
-#include "recording.h"
 #include "compiler.h"
 #include "sse.h"
 
@@ -22,6 +21,7 @@ extern Instruction const* assign2_op(Thread& thread, Instruction const& inst) AL
 extern Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* subset_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* subset2_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 
 #define REG(thread, i) (*(thread.base+i))
 
@@ -254,6 +254,33 @@ static Value GenericSearch(Thread& thread, Character klass, String generic, Stri
 	return func;
 }
 
+static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String func, Value& a, Value& out) {
+	String method;
+	Value f = GenericSearch(thread, klass(thread, a), func, method);
+	if(f.isFunction()) {
+		Function func(f);
+		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
+		MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a), Character(0));
+		return buildStackFrame(thread, fenv, true, func.prototype(), &out, &inst+1);
+	}
+	_error("Failed to find generic for builtin function");
+}
+
+static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String func, Value& a, Value& b, Value& out) {
+	String method;
+	Value f = a.isObject() ?  
+		GenericSearch(thread, klass(thread, a), func, method) :  
+		GenericSearch(thread, klass(thread, b), func, method);
+	// TODO: R checks if these match for some ops (not all)
+	if(f.isFunction()) { 
+		Function func(f);
+		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
+		MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a, b), Character(0));
+		return buildStackFrame(thread, fenv, true, func.prototype(), &out, &inst+1);
+	}
+	_error("Failed to find generic for builtin function");
+}
+
 Instruction const* UseMethod_op(Thread& thread, Instruction const& inst) {
 	String generic = inst.s;
 
@@ -263,7 +290,6 @@ Instruction const* UseMethod_op(Thread& thread, Instruction const& inst) {
 	if(call.dots < arguments.length)
 		ExpandDots(thread, arguments, names, call.dots);
 
-	Value object = REG(thread, inst.c);
 	Character type = klass(thread, object);
 
 	String method;
@@ -360,14 +386,38 @@ Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
 	Subset2Assign(thread, REG(thread,inst.c), true, REG(thread,inst.b), REG(thread,inst.a), REG(thread,inst.c));
 	return &inst+1; 
 }
+
 Instruction const* subset_op(Thread& thread, Instruction const& inst) {
-	Subset(thread, REG(thread, inst.a), REG(thread, inst.b), REG(thread, inst.c));
-	return &inst+1;
+	Value& a = REG(thread, inst.a);
+	Value& i = REG(thread, inst.b);
+	if(a.isVector()) {
+		if(i.isDouble1()) { Element(a, i.d-1, REG(thread, inst.c)); return &inst+1; }
+		else if(i.isInteger1()) { Element(a, i.i-1, REG(thread, inst.c)); return &inst+1; }
+		else if(i.isLogical1()) { Element(a, Logical::isTrue(i.c) ? 0 : -1, REG(thread, inst.c)); return &inst+1; }
+		else if(i.isCharacter1()) { _error("Subscript out of bounds"); }
+		else if(i.isVector()) { SubsetSlow(thread, a, i, REG(thread, inst.c)); return &inst+1; }
+	}
+	if(a.isObject() || i.isObject()) { return GenericDispatch(thread, inst, Strings::bracket, a, i, REG(thread, inst.c)); } 
+	_error("Invalid subset operation");
 }
+
 Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
-	Subset2(thread, REG(thread, inst.a), REG(thread, inst.b), REG(thread, inst.c));
-	return &inst+1;
+	Value& a = REG(thread, inst.a);
+	Value& i = REG(thread, inst.b);
+
+	if(a.isVector()) {
+		if(i.isDouble1()) { Element2(a, i.d-1, REG(thread, inst.c)); return &inst+1; }
+		else if(i.isInteger1()) { Element2(a, i.i-1, REG(thread, inst.c)); return &inst+1; }
+		else if(i.isLogical1()) { Element2(a, Logical::isTrue(i.c) ? 0 : -1, REG(thread, inst.c)); return &inst+1; }
+		else if(i.isCharacter1()) { _error("Subscript out of bounds"); }
+		else if(i.isVector() && (i.length == 0 || i.length > 1)) { 
+			_error("Attempt to select less or more than 1 element in subset2"); 
+		}
+	}
+	if(a.isObject() || i.isObject()) { return GenericDispatch(thread, inst, Strings::bb, a, i, REG(thread, inst.c)); } 
+	_error("Invalid subset2 operation");
 }
+
 Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
 	// inst.b-1 holds the loopVector
 	if((int64_t)REG(thread, inst.b-1).length <= 0) { return &inst+inst.a; }
@@ -401,17 +451,22 @@ Instruction const* iforend_op(Thread& thread, Instruction const& inst) {
 		return profile_back_edge(thread,&inst+inst.a);
 	} else return &inst+1;
 }*/
-Instruction const* jt_op(Thread& thread, Instruction const& inst) {
-	Logical l = As<Logical>(thread, REG(thread,inst.b));
-	if(l.length == 0) _error("condition is of zero length");
-	if(l[0]) return &inst+inst.a;
-	else return &inst+1;
-}
-Instruction const* jf_op(Thread& thread, Instruction const& inst) {
-	Logical l = As<Logical>(thread, REG(thread, inst.b));
-	if(l.length == 0) _error("condition is of zero length");
-	if(l[0]) return &inst+1;
-	else return &inst+inst.a;
+Instruction const* jc_op(Thread& thread, Instruction const& inst) {
+	Value& c = REG(thread, inst.c);
+	if(c.isLogical1()) {
+		if(Logical::isTrue(c.c)) return &inst+inst.a;
+		else if(Logical::isFalse(c.c)) return &inst+inst.b;
+		else _error("NA where TRUE/FALSE needed"); 
+	} else if(c.isInteger1()) {
+		if(Integer::isNA(c.i)) _error("NA where TRUE/FALSE needed");
+		else if(c.i != 0) return &inst + inst.a;
+		else return & inst+inst.b;
+	} else if(c.isDouble1()) {
+		if(Double::isNA(c.d)) _error("NA where TRUE/FALSE needed");
+		else if(c.d != 0) return &inst + inst.a;
+		else return & inst+inst.b;
+	}
+	_error("Need single element logical in conditional jump");
 }
 Instruction const* branch_op(Thread& thread, Instruction const& inst) {
 	Value const& c = REG(thread, inst.a);
@@ -523,177 +578,55 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-#define OP(name, string, Op, Func) \
-Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
+
+#define OP(Name, string, Op, Group, Func) \
+Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	Value & a =  REG(thread, inst.a);	\
 	Value & c = REG(thread, inst.c);	\
-	if(a.isDouble1()) { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, a.d)); return &inst+1; } \
-	else if(a.isInteger1()) { Op<TDouble>::RV::InitScalar(c, Op<TInteger>::eval(thread, a.i)); return &inst+1; } \
-	if(a.isObject() ) { \
-		String method; \
-		Value f = GenericSearch(thread, klass(thread, a), thread.internStr(Func), method); \
-		if(f.isFunction()) { \
-			Function func(f); \
-			Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton()); \
-			MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a), Character(0)); \
-			return buildStackFrame(thread, fenv, true, func.prototype(), &REG(thread, inst.c), &inst+1); \
-		}	\
-	} \
-	Instruction const* jit = trace(thread, inst, a); \
-	if(jit) return jit; \
-	\
-	unaryArith<Zip1, Op>(thread, a, c); \
-	return &inst+1; \
-}
-UNARY_ARITH_MAP_BYTECODES(OP)
-#undef OP
-
-
-#define OP(name, string, Op, Func) \
-Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
-	Value & a = REG(thread,inst.a); \
+	if(a.isDouble1())  { Name##VOp<Double>::Scalar(thread, a.d, c); return &inst+1; } \
+	if(a.isInteger1()) { Name##VOp<Integer>::Scalar(thread, a.i, c); return &inst+1; } \
+	if(a.isLogical1()) { Name##VOp<Logical>::Scalar(thread, a.c, c); return &inst+1; } \
+	if(a.isObject()) { return GenericDispatch(thread, inst, Strings::Op, a, c); } \
 	\
 	Instruction const* jit = trace(thread, inst, a); \
 	if(jit) return jit; \
 	\
-	unaryLogical<Zip1, Op>(thread, a, REG(thread, inst.c)); \
+	Group##Dispatch<Name##VOp>(thread, a, c); \
 	return &inst+1; \
 }
-UNARY_LOGICAL_MAP_BYTECODES(OP)
+UNARY_FOLD_SCAN_BYTECODES(OP)
 #undef OP
 
-#define OP(name, string, Op, Func) \
-Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
+
+#define OP(Name, string, Op, Group, Func) \
+Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	Value & a =  REG(thread, inst.a);	\
 	Value & b =  REG(thread, inst.b);	\
 	Value & c = REG(thread, inst.c);	\
         if(a.isDouble1()) {			\
-                if(b.isDouble1())		\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, a.d, b.d)); return &inst+1; }	\
-                else if(b.isInteger1())	\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, a.d, (double)b.i));return &inst+1; }	\
+		if(b.isDouble1()) { Name##VOp<Double,Double>::Scalar(thread, a.d, b.d, c); return &inst+1; } \
+		if(b.isInteger1()) { Name##VOp<Double,Integer>::Scalar(thread, a.d, b.i, c); return &inst+1; } \
+		if(b.isLogical1()) { Name##VOp<Double,Logical>::Scalar(thread, a.d, b.c, c); return &inst+1; } \
         }	\
         else if(a.isInteger1()) {	\
-                if(b.isDouble1())	\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, (double)a.i, b.d)); return &inst+1; }	\
-                else if(b.isInteger1())	\
-                        { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(thread, a.i, b.i)); return &inst+1;} \
+		if(b.isDouble1()) { Name##VOp<Integer,Double>::Scalar(thread, a.i, b.d, c); return &inst+1; } \
+		if(b.isInteger1()) { Name##VOp<Integer,Integer>::Scalar(thread, a.i, b.i, c); return &inst+1; } \
+		if(b.isLogical1()) { Name##VOp<Integer,Logical>::Scalar(thread, a.i, b.c, c); return &inst+1; } \
         } \
-	if(a.isObject() || b.isObject()) { \
-		Value f; \
-		String method; \
-		if(a.isObject() && b.isObject()) { \
-			Value af = GenericSearch(thread, klass(thread, a), thread.internStr(Func), method); \
-			Value bf = GenericSearch(thread, klass(thread, b), thread.internStr(Func), method); \
-			if(af != bf) _error("Generic functions do not match on binary operator"); \
-			f = af; \
-		} \
-		else if(a.isObject()) f = GenericSearch(thread, klass(thread, a), thread.internStr(Func), method); \
-		else f = GenericSearch(thread, klass(thread, b), thread.internStr(Func), method); \
-		if(f.isFunction()) { \
-			Function func(f); \
-			Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton()); \
-			MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a, b), Character(0)); \
-			return buildStackFrame(thread, fenv, true, func.prototype(), &REG(thread, inst.c), &inst+1); \
-		}	\
-	} \
+        else if(a.isLogical1()) {	\
+		if(b.isDouble1()) { Name##VOp<Logical,Double>::Scalar(thread, a.c, b.d, c); return &inst+1; } \
+		if(b.isInteger1()) { Name##VOp<Logical,Integer>::Scalar(thread, a.c, b.i, c); return &inst+1; } \
+		if(b.isLogical1()) { Name##VOp<Logical,Logical>::Scalar(thread, a.c, b.c, c); return &inst+1; } \
+        } \
+	if(a.isObject() || b.isObject()) { return GenericDispatch(thread, inst, Strings::Op, a, b, c); } \
 	\
 	Instruction const* jit = trace(thread, inst, a, b); \
 	if(jit) return jit; \
 \
-	binaryArithSlow<Zip2, Op>(thread, a, b, c);	\
+	Group##Dispatch<Name##VOp>(thread, a, b, c);	\
 	return &inst+1;	\
 }
-BINARY_ARITH_MAP_BYTECODES(OP)
-#undef OP
-
-#define OP(name, string, Op, Func) \
-Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
-	Value & a = REG(thread,inst.a); \
-	Value & b = REG(thread,inst.b); \
-	\
-	Instruction const* jit = trace(thread, inst, a, b); \
-	if(jit) return jit; \
-	\
-	binaryLogical<Zip2, Op>(thread, a, b, REG(thread, inst.c)); \
-	return &inst+1; \
-}
-BINARY_LOGICAL_MAP_BYTECODES(OP)
-#undef OP
-
-#define OP(name, string, Op, Func) \
-Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
-	Value & a =  REG(thread, inst.a);	\
-	Value & b =  REG(thread, inst.b);	\
-	Value & c = REG(thread, inst.c);	\
-        if(a.isDouble1()) {			\
-                if(b.isDouble1())		\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, a.d, b.d)); return &inst+1; }	\
-                else if(b.isInteger1())	\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, a.d, (double)b.i));return &inst+1; }	\
-        }	\
-        else if(a.isInteger1()) {	\
-                if(b.isDouble1())	\
-                        { Op<TDouble>::RV::InitScalar(c, Op<TDouble>::eval(thread, (double)a.i, b.d)); return &inst+1; }	\
-                else if(b.isInteger1())	\
-                        { Op<TInteger>::RV::InitScalar(c, Op<TInteger>::eval(thread, a.i, b.i)); return &inst+1;} \
-        } \
-	\
-	Instruction const* jit = trace(thread, inst, a, b); \
-	if(jit) return jit; \
-	\
-	binaryOrdinal<Zip2, Op>(thread, REG(thread, inst.a), REG(thread, inst.b), REG(thread, inst.c)); \
-	return &inst+1; \
-}
-BINARY_ORDINAL_MAP_BYTECODES(OP)
-#undef OP
-
-#define OP(name, string, Op, Func) \
-Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
-	unaryArith<FoldLeft, Op>(thread, REG(thread, inst.a), REG(thread, inst.c)); \
-	return &inst+1; \
-}
-ARITH_FOLD_BYTECODES(OP)
-#undef OP
-
-#define OP(name, string, Op, Func) \
-Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
-	unaryLogical<FoldLeft, Op>(thread, REG(thread, inst.a), REG(thread, inst.c)); \
-	return &inst+1; \
-}
-LOGICAL_FOLD_BYTECODES(OP)
-#undef OP
-
-#define OP(name, string, Op, Func) \
-Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
-	unaryOrdinal<FoldLeft, Op>(thread, REG(thread, inst.a), REG(thread, inst.c)); \
-	return &inst+1; \
-}
-ORDINAL_FOLD_BYTECODES(OP)
-#undef OP
-
-#define OP(name, string, Op, Func) \
-Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
-	unaryArith<ScanLeft, Op>(thread, REG(thread, inst.a), REG(thread, inst.c)); \
-	return &inst+1; \
-}
-ARITH_SCAN_BYTECODES(OP)
-#undef OP
-
-#define OP(name, string, Op, Func) \
-Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
-	unaryLogical<ScanLeft, Op>(thread, REG(thread, inst.a), REG(thread, inst.c)); \
-	return &inst+1; \
-}
-LOGICAL_SCAN_BYTECODES(OP)
-#undef OP
-
-#define OP(name, string, Op, Func) \
-Instruction const* name##_op(Thread& thread, Instruction const& inst) { \
-	unaryOrdinal<ScanLeft, Op>(thread, REG(thread, inst.a), REG(thread, inst.c)); \
-	return &inst+1; \
-}
-ORDINAL_SCAN_BYTECODES(OP)
+BINARY_BYTECODES(OP)
 #undef OP
 
 Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
@@ -714,36 +647,6 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 
 Instruction const* jmp_op(Thread& thread, Instruction const& inst) {
 	return &inst+inst.a;
-}
-Instruction const* sland_op(Thread& thread, Instruction const& inst) {
-	Logical l = As<Logical>(thread, REG(thread, inst.a));
-	if(l.length == 0) _error("argument to && is zero length");
-	if(Logical::isFalse(l[0])) {
-		REG(thread, inst.c) = Logical::False();
-		return &inst+1;
-	} else {
-		Logical r = As<Logical>(thread, REG(thread, inst.b));
-		if(r.length == 0) _error("argument to && is zero length");
-		if(Logical::isFalse(r[0])) REG(thread, inst.c) = Logical::False();
-		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) REG(thread, inst.c) = Logical::NA();
-		else REG(thread, inst.c) = Logical::True();
-		return &inst+1;
-	}
-}
-Instruction const* slor_op(Thread& thread, Instruction const& inst) {
-	Logical l = As<Logical>(thread, REG(thread, inst.a));
-	if(l.length == 0) _error("argument to || is zero length");
-	if(Logical::isTrue(l[0])) {
-		REG(thread, inst.c) = Logical::True();
-		return &inst+1;
-	} else {
-		Logical r = As<Logical>(thread, REG(thread, inst.b));
-		if(r.length == 0) _error("argument to || is zero length");
-		if(Logical::isTrue(r[0])) REG(thread, inst.c) = Logical::True();
-		else if(Logical::isNA(l[0]) || Logical::isNA(r[0])) REG(thread, inst.c) = Logical::NA();
-		else REG(thread, inst.c) = Logical::False();
-		return &inst+1;
-	}
 }
 Instruction const* function_op(Thread& thread, Instruction const& inst) {
 	REG(thread, inst.c) = Function(thread.frame.prototype->prototypes[inst.a], thread.frame.environment);

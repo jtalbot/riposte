@@ -108,8 +108,8 @@
 	'>=' {token( TOKEN_GE, CreateSymbol(Strings::ge) );};
 	'==' {token( TOKEN_EQ, CreateSymbol(Strings::eq) );};
 	'!=' {token( TOKEN_NE, CreateSymbol(Strings::neq) );};
-	'&&' {token( TOKEN_AND2, CreateSymbol(Strings::sland) );};
-	'||' {token( TOKEN_OR2, CreateSymbol(Strings::slor) );};
+	'&&' {token( TOKEN_AND2, CreateSymbol(Strings::land2) );};
+	'||' {token( TOKEN_OR2, CreateSymbol(Strings::lor2) );};
 	'<-' {token( TOKEN_LEFT_ASSIGN, CreateSymbol(Strings::assign) );};
 	'->' {token( TOKEN_RIGHT_ASSIGN, CreateSymbol(Strings::assign) );};
 	'->>' {token( TOKEN_RIGHT_ASSIGN, CreateSymbol(Strings::assign2) );};

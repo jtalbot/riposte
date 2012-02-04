@@ -3,7 +3,7 @@
 #include <xmmintrin.h>
 
 // Unary ops...
-
+#ifdef SSE_OPS
 template<int64_t N>
 struct Map1< NegOp<TDouble>, N, true > {
 	static void eval(Thread& thread, double const* a, double* r) {
@@ -241,3 +241,4 @@ struct Map2VS< DivOp<TDouble>, N, true > {
         }
 };
 
+#endif

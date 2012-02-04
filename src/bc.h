@@ -7,8 +7,7 @@
 #include "string.h"
 
 #define CONTROL_FLOW_BYTECODES(_) 	\
-	_(jt, "jt") \
-	_(jf, "jf") \
+	_(jc, "jc") \
 	_(jmp, "jmp") \
 	_(branch, "branch") \
 	_(call, "call") \
@@ -29,83 +28,96 @@
 	_(subset, "subset") \
 	_(subset2, "subset2") \
 
-#define UNARY_ARITH_MAP_BYTECODES(_) \
-	_(pos, "pos", 	PosOp, 	"+") \
-	_(neg, "neg", 	NegOp, 	"-") \
-	_(abs, "abs", 	AbsOp,	"abs") \
-	_(sign, "sign",	SignOp,	"sign") \
-	_(sqrt, "sqrt",	SqrtOp,	"sqrt") \
-	_(floor, "floor",	FloorOp,	"floor") \
-	_(ceiling, "ceiling",	CeilingOp,	"ceiling") \
-	_(trunc, "trunc",	TruncOp,	"trunc") \
-	_(round, "round",	RoundOp,	"round") \
-	_(signif, "signif",	SignifOp,	"signif") \
-	_(exp, "exp",	ExpOp,	"exp") \
-	_(log, "log",	LogOp,	"log") \
-	_(cos, "cos",	CosOp,	"cos") \
-	_(sin, "sin",	SinOp,	"sin") \
-	_(tan, "tan",	TanOp,	"tan") \
-	_(acos, "acos",	ACosOp,	"acos") \
-	_(asin, "asin",	ASinOp,	"asin") \
-	_(atan, "atan",	ATanOp,	"atan") \
+// ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double
+#define ARITH_UNARY_BYTECODES(_) \
+	_(pos, "pos", 	add,	ArithUnary1, 	PassNA(a, a)) \
+	_(neg, "neg", 	sub,	ArithUnary1, 	PassNA(a, -a)) \
+	_(abs, "abs", 	abs,	ArithUnary1, 	PassNA(a, Abs(a))) \
+	_(sign, "sign",	sign,	ArithUnary2, 	((a>0)-(a<0))) \
+	_(sqrt, "sqrt",	sqrt,	ArithUnary2,	sqrt(a)) \
+	_(floor, "floor",	floor,	ArithUnary2,	floor(a)) \
+	_(ceiling, "ceiling",	ceiling,	ArithUnary2,	ceil(a)) \
+	_(trunc, "trunc",	trunc,	ArithUnary2,	trunc(a)) \
+	_(exp, "exp",	exp,	ArithUnary2,	exp(a)) \
+	_(log, "log",	log,	ArithUnary2,	log(a)) \
+	_(cos, "cos",	cos,	ArithUnary2,	cos(a)) \
+	_(sin, "sin",	sin,	ArithUnary2,	sin(a)) \
+	_(tan, "tan",	tan,	ArithUnary2,	tan(a)) \
+	_(acos, "acos",	acos,	ArithUnary2,	acos(a)) \
+	_(asin, "asin",	asin,	ArithUnary2,	asin(a)) \
+	_(atan, "atan",	atan,	ArithUnary2,	atan(a)) \
 
-#define UNARY_LOGICAL_MAP_BYTECODES(_) \
-	_(lnot, "lnot",	LNotOp, "!") \
+#define LOGICAL_UNARY_BYTECODES(_) \
+	_(lnot, "lnot",	lnot,	LogicalUnary, PassNA(a, ~a)) \
 
-#define BINARY_ARITH_MAP_BYTECODES(_) \
-	_(add, "add",	AddOp,	"+") \
-	_(sub, "sub",	SubOp,	"-") \
-	_(mul, "mul",	MulOp,	"*") \
-	_(div, "div",	DivOp,	"/") \
-	_(idiv, "idiv",	IDivOp,	"%/%") \
-	_(mod, "mod",	ModOp,	"%%") \
-	_(pow, "pow",	PowOp,	"pow") \
-	_(atan2, "atan2",	ATan2Op,	"atan2") \
-	_(hypot, "hypot",	HypotOp,	"hypot") \
+#define ORDINAL_UNARY_BYTECODES(_) \
+	_(isna,	"isna",	isna,	OrdinalUnary,	M::isNA(a)?-1:0) \
+	_(isnan,	"isnan",	isnan,	OrdinalUnary,	M::isNaN(a)?-1:0) \
+	_(isfinite,	"isfinite",	isfinite,	OrdinalUnary,	M::isFinite(a)?-1:0) \
+	_(isinfinite,	"isinfinite",	isinfinite,	OrdinalUnary,	M::isInfinite(a)?-1:0) \
+/*
+#define STRING_UNARY_BYTECODES(_) \
+	_(nchar, "nchar", nchar, StringUnary, PassNA(a, strlen(a))) \
+	_(nzchar, "nzchar", nzchar, StringUnary, PassNA(a, (*a>0))) \
+*/
+// ArithBinary1 ops perform Integer*Integer->Integer, ArithBinary2 ops perform Integer*Integer->Double
+#define ARITH_BINARY_BYTECODES(_) \
+	_(add, "add",	add,	ArithBinary1,	PassNA(a,b,a+b)) \
+	_(sub, "sub",	sub,	ArithBinary1,	PassNA(a,b,a-b)) \
+	_(mul, "mul",	mul,	ArithBinary1,	PassNA(a,b,a*b)) \
+	_(div, "div",	div,	ArithBinary2,	a/b) \
+	_(idiv, "idiv",	idiv,	ArithBinary1,	PassNA(a,b,IDiv(a,b))) \
+	_(mod, "mod",	mod,	ArithBinary1,	PassNA(a,b,Mod(a,b))) \
+	_(pow, "pow",	pow,	ArithBinary2,	pow(a,b)) \
+	_(atan2, "atan2",	atan2,	ArithBinary2,	atan2(a,b)) \
+	_(hypot, "hypot",	hypot,	ArithBinary2,	hypot(a,b)) \
 
-#define BINARY_LOGICAL_MAP_BYTECODES(_) \
-	_(land, "land",	AndOp,	"|") \
-	_(lor, "lor",	OrOp,	"&") \
+#define LOGICAL_BINARY_BYTECODES(_) \
+	_(lor, "lor",	lor,	LogicalBinary,	a|b) \
+	_(land, "land",	land,	LogicalBinary,	a&b) \
 
-#define BINARY_ORDINAL_MAP_BYTECODES(_) \
-	_(eq, "eq",	EqOp,	"==") \
-	_(neq, "neq",	NeqOp,	"!=") \
-	_(gt, "gt",	GTOp,	">") \
-	_(ge, "ge",	GEOp,	">=") \
-	_(lt, "lt",	LTOp,	"<") \
-	_(le, "le",	LEOp,	"<=") \
+#define UNIFY_BINARY_BYTECODES(_) \
+	_(pmin, "pmin",	pmin,	UnifyBinary,	PassNA(a,b,riposte_min(thread,a,b))) \
+	_(pmax, "pmax",	pmax,	UnifyBinary,	PassNA(a,b,riposte_max(thread,a,b))) \
+
+/*
+	_(round, "round",	round,	ArithBinary2,	round(a)) \
+	_(signif, "signif",	signif,	ArithBinary2,	signif(a)) \
+*/
+
+#define ORDINAL_BINARY_BYTECODES(_) \
+	_(eq, "eq",	eq,	OrdinalBinary,	PassNA(a,b,a==b?-1:0)) \
+	_(neq, "neq",	neq,	OrdinalBinary,	PassNA(a,b,a!=b?-1:0)) \
+	_(gt, "gt",	gt,	OrdinalBinary,	PassNA(a,b,gt(thread,a,b)?-1:0)) \
+	_(ge, "ge",	ge,	OrdinalBinary,	PassNA(a,b,ge(thread,a,b)?-1:0)) \
+	_(lt, "lt",	lt,	OrdinalBinary,	PassNA(a,b,lt(thread,a,b)?-1:0)) \
+	_(le, "le",	le,	OrdinalBinary,	PassNA(a,b,le(thread,a,b)?-1:0)) \
 
 #define SPECIAL_MAP_BYTECODES(_) \
 	_(ifelse, "ifelse", IfElseOp, "ifelse") \
 
 #define ARITH_FOLD_BYTECODES(_) \
-	_(sum, "sum",	SumOp,	"sum") \
-	_(prod, "prod",	ProdOp,	"prod") \
-
-#define ORDINAL_FOLD_BYTECODES(_) \
-	_(min, "min",	MinOp,	"min") \
-	_(max, "max",	MaxOp,	"max") \
+	_(sum, "sum",	sum,	ArithFold, 	add) \
+	_(prod, "prod",	prod,	ArithFold, 	mul) \
 
 #define LOGICAL_FOLD_BYTECODES(_) \
-	_(any, "any",	AnyOp,	"any") \
-	_(all, "all",	AllOp,	"all") \
+	_(any, "any",	any,	LogicalFold, 	lor) \
+	_(all, "all",	all,	LogicalFold, 	land) \
+
+#define UNIFY_FOLD_BYTECODES(_) \
+	_(min, "min",	min,	UnifyFold, 	pmin) \
+	_(max, "max",	max,	UnifyFold, 	pmax) \
 
 #define ARITH_SCAN_BYTECODES(_) \
-	_(cumsum, "cumsum",	SumOp,	"cumsum") \
-	_(cumprod, "cumprod",	ProdOp,	"cumprod") \
+	_(cumsum, "cumsum",	cumsum,	ArithScan,	add) \
+	_(cumprod, "cumprod",	cumprod,	ArithScan,	mul) \
 
-#define ORDINAL_SCAN_BYTECODES(_) \
-	_(cummin, "cummin",	MinOp,	"cummin") \
-	_(cummax, "cummax",	MaxOp,	"cummax") \
-
-#define LOGICAL_SCAN_BYTECODES(_) \
-	_(cumany, "cumany",	AnyOp,	"cumany") \
-	_(cumall, "cumall",	AllOp,	"cumall") \
+#define UNIFY_SCAN_BYTECODES(_) \
+	_(cummin, "cummin",	cummin,	UnifyScan,	pmin) \
+	_(cummax, "cummax",	cummax,	UnifyScan,	pmax) \
 
 #define UTILITY_BYTECODES(_)\
 	_(split, "split") \
-	_(sland, "sland") \
-	_(slor, "slor") \
 	_(colon, "colon") \
 	_(function, "function") \
 	_(logical1, "logical") \
@@ -125,21 +137,22 @@
 	_(done, "done") 
 
 #define MAP_BYTECODES(_) \
-	UNARY_ARITH_MAP_BYTECODES(_) \
-	UNARY_LOGICAL_MAP_BYTECODES(_) \
-	BINARY_ARITH_MAP_BYTECODES(_) \
-	BINARY_LOGICAL_MAP_BYTECODES(_) \
-	BINARY_ORDINAL_MAP_BYTECODES(_) \
+	ARITH_UNARY_BYTECODES(_) \
+	LOGICAL_UNARY_BYTECODES(_) \
+	ORDINAL_UNARY_BYTECODES(_) \
+	ARITH_BINARY_BYTECODES(_) \
+	LOGICAL_BINARY_BYTECODES(_) \
+	UNIFY_BINARY_BYTECODES(_) \
+	ORDINAL_BINARY_BYTECODES(_) \
 
 #define FOLD_BYTECODES(_) \
 	ARITH_FOLD_BYTECODES(_) \
-	ORDINAL_FOLD_BYTECODES(_) \
 	LOGICAL_FOLD_BYTECODES(_) \
+	UNIFY_FOLD_BYTECODES(_) \
 
 #define SCAN_BYTECODES(_) \
 	ARITH_SCAN_BYTECODES(_) \
-	ORDINAL_SCAN_BYTECODES(_) \
-	LOGICAL_SCAN_BYTECODES(_) \
+	UNIFY_SCAN_BYTECODES(_) \
 
 #define STANDARD_BYTECODES(_) \
 	CONTROL_FLOW_BYTECODES(_) \
@@ -157,20 +170,30 @@
 #define ARITH_BYTECODES(_) \
 	ARITH_FOLD_BYTECODES(_) \
 	ARITH_SCAN_BYTECODES(_) \
-	UNARY_ARITH_MAP_BYTECODES(_) \
-	BINARY_ARITH_MAP_BYTECODES(_) \
+	ARITH_UNARY_BYTECODES(_) \
+	ARITH_BINARY_BYTECODES(_) \
 
 #define ORDINAL_BYTECODES(_) \
-	ORDINAL_FOLD_BYTECODES(_) \
-	ORDINAL_SCAN_BYTECODES(_) \
-	BINARY_ORDINAL_MAP_BYTECODES(_)
+	ORDINAL_BINARY_BYTECODES(_)
 
 #define LOGICAL_BYTECODES(_) \
-	LOGICAL_FOLD_BYTECODES(_) \
-	LOGICAL_SCAN_BYTECODES(_) \
-	UNARY_LOGICAL_MAP_BYTECODES(_) \
-	BINARY_LOGICAL_MAP_BYTECODES(_)
+	LOGICAL_UNARY_BYTECODES(_) \
 
+#define UNARY_FOLD_SCAN_BYTECODES(_) \
+	ARITH_UNARY_BYTECODES(_) \
+	LOGICAL_UNARY_BYTECODES(_) \
+	ORDINAL_UNARY_BYTECODES(_) \
+	ARITH_FOLD_BYTECODES(_) \
+	LOGICAL_FOLD_BYTECODES(_) \
+	UNIFY_FOLD_BYTECODES(_) \
+	ARITH_SCAN_BYTECODES(_) \
+	UNIFY_SCAN_BYTECODES(_) \
+
+#define BINARY_BYTECODES(_) \
+	ARITH_BINARY_BYTECODES(_) \
+	LOGICAL_BINARY_BYTECODES(_) \
+	UNIFY_BINARY_BYTECODES(_) \
+	ORDINAL_BINARY_BYTECODES(_) \
 
 DECLARE_ENUM(ByteCode, BYTECODES)
 

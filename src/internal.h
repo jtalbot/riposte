@@ -2,10 +2,9 @@
 #ifndef _RIPOSTE_INTERNAL_H
 #define _RIPOSTE_INTERNAL_H
 
+#include "value.h"
 #include "exceptions.h"
-#include "vector.h"
-#include "coerce.h"
-#include "ops.h"
+
 #include <cmath>
 #include <set>
 #include <algorithm>
@@ -14,29 +13,10 @@
 using Eigen::MatrixXd;
 using Eigen::Map;
 
-void registerCoreFunctions(State& state);
-
-inline Value expression(Value const& v) { 
-	if(v.isPromise())
-		return Function(v).prototype()->expression;
-	else return v; 
-}
-
 inline double asReal1(Value const& v) { 
 	if(v.isInteger()) return ((Integer const&)v)[0]; 
 	else if(v.isDouble()) return ((Double const&)v)[0]; 
 	else _error("Can't cast argument to number"); 
-}
-
-void Element(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
-
-inline void ElementSlow(Object v, int64_t index, Value& out) {
-	Element(v.base(), index, out);
-	if(v.hasNames()) {
-		Value names;
-		Element(v.getNames(), index, names);
-		Object::Init(out, out, names);
-	}
 }
 
 inline void Element(Value const& v, int64_t index, Value& out) {
@@ -44,17 +24,8 @@ inline void Element(Value const& v, int64_t index, Value& out) {
 		#define CASE(Name) case Type::Name: Name::InitScalar(out, ((Name const&)v)[index]); break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
-		case Type::Object: 
-			ElementSlow((Object const&)v, index, out); 
-			break;
 		default: _error("NYI: Element of this type"); break;
 	};
-}
-
-void Element2(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
-
-inline void Element2Slow(Object const& v, int64_t index, Value& out) {
-	Element2(v.base(), index, out); 
 }
 
 inline void Element2(Value const& v, int64_t index, Value& out) {
@@ -72,9 +43,6 @@ inline void Element2(Value const& v, int64_t index, Value& out) {
 			else if(List::isNA(((List const&)v)[index]))
 				_error("Extracting missing element");
 			out = ((List const&)v)[index]; 
-			break;
-		case Type::Object: 
-			Element2Slow(((Object const&)v), index, out); 
 			break;
 		default: _error("NYI: Element of this type"); break;
 	};
@@ -189,60 +157,9 @@ inline void Subset2Assign(Thread& thread, Value const& a, bool clone, Value cons
 }
 
 
-template<class D>
-inline void Insert(Thread& thread, D const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
-	if((length > 0 && srcIndex+length > src.length) || dstIndex+length > dst.length)
-		_error("insert index out of bounds");
-	memcpy(dst.v()+dstIndex, src.v()+srcIndex, length*src.width);
-}
+void Insert(Thread& thread, Value const& src, int64_t srcIndex, Value& dst, int64_t dstIndex, int64_t length);
 
-template<class S, class D>
-inline void Insert(Thread& thread, S const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
-	D as = As<D>(thread, src);
-	Insert(thread, as, srcIndex, dst, dstIndex, length);
-}
-
-template<class D>
-inline void Insert(Thread& thread, Value const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
-	switch(src.type) {
-		#define CASE(Name) case Type::Name: Insert(thread, (Name const&)src, srcIndex, dst, dstIndex, length); break;
-		VECTOR_TYPES(CASE)
-		#undef CASE
-		default: _error("NYI: Insert into this type"); break;
-	};
-}
-
-inline void Insert(Thread& thread, Value const& src, int64_t srcIndex, Value& dst, int64_t dstIndex, int64_t length) {
-	switch(dst.type) {
-		#define CASE(Name) case Type::Name: { Insert(thread, src, srcIndex, (Name&) dst, dstIndex, length); } break;
-		VECTOR_TYPES(CASE)
-		#undef CASE
-		default: _error("NYI: Insert into this type"); break;
-	};
-}
-
-template<class D>
-inline void Resize(Thread& thread, bool clone, D& src, int64_t newLength, typename D::Element fill = D::NAelement) {
-	if(clone || newLength > src.length) {
-		D r(newLength);
-		Insert(thread, src, 0, r, 0, std::min(src.length, newLength));
-		for(int64_t i = src.length; i < newLength; i++) r[i] = fill;	
-		src = r; 
-	} else if(newLength < src.length) {
-		src.length = newLength;
-	} else {
-		// No resizing to do, so do nothing...
-	}
-}
-
-inline void Resize(Thread& thread, bool clone, Value& src, int64_t newLength) {
-	switch(src.type) {
-		#define CASE(Name) case Type::Name: { Resize(thread, clone, src, newLength); } break;
-		VECTOR_TYPES(CASE)
-		#undef CASE
-		default: _error("NYI: Resize this type"); break;
-	};
-}
+void Resize(Thread& thread, bool clone, Value& src, int64_t newLength);
 
 template<class T>
 inline T Subset(T const& src, int64_t start, int64_t length) {
@@ -285,38 +202,24 @@ inline Character klass(Thread& thread, Value const& v)
 		type = v.type;
 	}
 			
-	Character c(1);
-	if(type == Type::Integer || type == Type::Double)
-		c[0] = Strings::Numeric;
-	else c[0] = thread.internStr(Type::toString(type));
-	return c;
+	switch(type) {
+		case Type::Promise: return Character::c(Strings::Promise); break;
+		case Type::Object: return Character::c(Strings::Object); break;
+		case Type::Null: return Character::c(Strings::Null); break;
+		case Type::Raw: return Character::c(Strings::Raw); break;
+		case Type::Logical: return Character::c(Strings::Logical); break;
+		case Type::Integer: return Character::c(Strings::Integer); break;
+		case Type::Double: return Character::c(Strings::Double); break;
+		case Type::Character: return Character::c(Strings::Character); break;
+		case Type::List: return Character::c(Strings::List); break;
+		case Type::Function: return Character::c(Strings::Function); break;
+		case Type::Environment: return Character::c(Strings::Environment); break;
+		case Type::Future: return Character::c(Strings::Future); break;
+		default: return Character::c(Strings::Nil); break;
+	}
 }
 
-inline Value MatrixMultiply(Thread& thread, Value const& a, Value const& b) {
-	MatrixXd aa, bb;
-	if(a.isObject() && ((Object const&)a).hasDim()) {
-		Integer ai = As<Integer>(thread, ((Object const&)a).getDim());
-		Double ad = As<Double>(thread, ((Object const&)a).base());
-		aa = Map<MatrixXd>(ad.v(), ai[0], ai[1]);
-	} else {
-		Double ad = As<Double>(thread, a);
-		aa = Map<MatrixXd>(ad.v(), 1, a.length);
-	}
-	if(b.isObject() && ((Object const&)b).hasDim()) {
-		Integer bi = As<Integer>(thread, ((Object const&)b).getDim());
-		Double bd = As<Double>(thread, ((Object const&)b).base());
-		bb = Map<MatrixXd>(bd.v(), bi[0], bi[1]);
-	} else {
-		Double bd = As<Double>(thread, b);
-		bb = Map<MatrixXd>(bd.v(), b.length, 1);
-	}
-	Double c(aa.rows()*bb.cols());
-	Map<MatrixXd>(c.v(), aa.rows(), bb.cols()) = aa*bb;
-	Value result;
-	Object::Init(result, c);
-	Integer dim = Integer::c(aa.rows(), bb.cols());
-	return ((Object const&)result).setDim(dim);
-}
+Value MatrixMultiply(Thread& thread, Value const& a, Value const& b);
 
 #endif
 

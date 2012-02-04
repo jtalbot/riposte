@@ -1,15 +1,6 @@
 
 c <- function(...) .Internal(unlist(list(...), TRUE, TRUE))
 
-ifelse <- function(test, yes, no) {
-	if(!any(test)) no
-	else {
-		tmp <- yes
-		if(!all(test)) yes[!test] <- no
-		tmp
-	}
-}
-
 #`[` <- function(x, ..., drop = TRUE) {
 #	i <- list(...)
 #	d <- dim(x)
@@ -21,12 +12,21 @@ ifelse <- function(test, yes, no) {
 #	a <- cumprod(nd)
 #}
 
-`[[` <- function(x, ..., exact = TRUE) {
+`[[` <- function(x, ..., exact = TRUE) UseMethod('[[')
+
+`[[.default` <- function(x, ..., exact = TRUE) {
 	i <- as.integer(list(...))
+	
 	d <- dim(x)
+	if(is.null(d)) d <- length(x)
+	
 	if(length(i) != length(d)) stop("incorrect number of subscripts")
 	if(any(i < 1) || any(i > d)) stop("subscript out of bounds")
-	d <- c(1,d[-length(d)])
-	x[[sum((i-1)*cumprod(d))+1]]
+
+	if(length(d) > 1) {
+		d <- c(1,d[-length(d)])
+		d <- sum((i-1)*cumprod(d))+1
+	}
+	strip(x)[[d]]
 }
 

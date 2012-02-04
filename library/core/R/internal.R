@@ -1,9 +1,5 @@
-nchar <- function(x) .Internal(nchar(x))
-nzchar <- function(x) .Internal(nzchar(x))
-is.na <- function(x) .Internal(is.na(x))
-is.nan <- function(x) .Internal(is.nan(x))
-is.finite <- function(x) .Internal(is.finite(x))
-is.infinite <- function(x) .Internal(is.infinite(x))
+#nchar <- function(x) .Internal(nchar(x))
+#nzchar <- function(x) .Internal(nzchar(x))
 
 cat <- function(...) .Internal(cat(list(...)))
 library <- function(.) .Internal(library(.))

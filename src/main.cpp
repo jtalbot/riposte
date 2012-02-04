@@ -16,8 +16,9 @@
 #include "parser.h"
 #include "compiler.h"
 #include "library.h"
-#include "coerce.h"
-#include "internal.h"
+
+void registerCoreFunctions(State& state);
+void registerCoerceFunctions(State& state);
 
 /*  Globals  */
 static int debug = 0;

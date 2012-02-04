@@ -3,6 +3,8 @@
 #include "compiler.h"
 #include "parser.h"
 #include "library.h"
+#include "coerce.h"
+
 #include <math.h>
 #include <fstream>
 
@@ -126,6 +128,61 @@ void assignAttr(Thread& thread, Value const* args, Value& result)
 		object = v;
 	}
 	result = ((Object&)object).setAttribute(which[0], args[2]);
+}
+
+template<class D>
+void Insert(Thread& thread, D const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
+	if((length > 0 && srcIndex+length > src.length) || dstIndex+length > dst.length)
+		_error("insert index out of bounds");
+	memcpy(dst.v()+dstIndex, src.v()+srcIndex, length*src.width);
+}
+
+template<class S, class D>
+void Insert(Thread& thread, S const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
+	D as = As<D>(thread, src);
+	Insert(thread, as, srcIndex, dst, dstIndex, length);
+}
+
+template<class D>
+void Insert(Thread& thread, Value const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
+	switch(src.type) {
+		#define CASE(Name) case Type::Name: Insert(thread, (Name const&)src, srcIndex, dst, dstIndex, length); break;
+		VECTOR_TYPES(CASE)
+		#undef CASE
+		default: _error("NYI: Insert into this type"); break;
+	};
+}
+
+void Insert(Thread& thread, Value const& src, int64_t srcIndex, Value& dst, int64_t dstIndex, int64_t length) {
+	switch(dst.type) {
+		#define CASE(Name) case Type::Name: { Insert(thread, src, srcIndex, (Name&) dst, dstIndex, length); } break;
+		VECTOR_TYPES(CASE)
+		#undef CASE
+		default: _error("NYI: Insert into this type"); break;
+	};
+}
+
+template<class D>
+void Resize(Thread& thread, bool clone, D& src, int64_t newLength, typename D::Element fill = D::NAelement) {
+	if(clone || newLength > src.length) {
+		D r(newLength);
+		Insert(thread, src, 0, r, 0, std::min(src.length, newLength));
+		for(int64_t i = src.length; i < newLength; i++) r[i] = fill;	
+		src = r; 
+	} else if(newLength < src.length) {
+		src.length = newLength;
+	} else {
+		// No resizing to do, so do nothing...
+	}
+}
+
+void Resize(Thread& thread, bool clone, Value& src, int64_t newLength) {
+	switch(src.type) {
+		#define CASE(Name) case Type::Name: { Resize(thread, clone, src, newLength); } break;
+		VECTOR_TYPES(CASE)
+		#undef CASE
+		default: _error("NYI: Resize this type"); break;
+	};
 }
 
 Type::Enum cTypeCast(Type::Enum s, Type::Enum t)
@@ -599,6 +656,7 @@ void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& 
 		_error("NYI indexing type");
 }
 
+
 void length(Thread& thread, Value const* args, Value& result) {
 	result = Integer::c(args[0].length);
 }
@@ -763,30 +821,15 @@ void warning_fn(Thread& thread, Value const* args, Value& result) {
 	_warning(thread, message);
 	result = Character::c(thread.internStr(message));
 } 
-void isna_fn(Thread& thread, Value const* args, Value& result) {
-	unaryFilter<Zip1, IsNAOp>(thread, args[0], result);
-}
 
-void isnan_fn(Thread& thread, Value const* args, Value& result) {
-	unaryFilter<Zip1, IsNaNOp>(thread, args[0], result);
-}
-
-void nchar_fn(Thread& thread, Value const* args, Value& result) {
+/*void nchar_fn(Thread& thread, Value const* args, Value& result) {
 	// NYI: type or allowNA
 	unaryCharacter<Zip1, NcharOp>(thread, args[0], result);
 }
 
 void nzchar_fn(Thread& thread, Value const* args, Value& result) {
 	unaryCharacter<Zip1, NzcharOp>(thread, args[0], result);
-}
-
-void isfinite_fn(Thread& thread, Value const* args, Value& result) {
-	unaryFilter<Zip1, IsFiniteOp>(thread, args[0], result);
-}
-
-void isinfinite_fn(Thread& thread, Value const* args, Value& result) {
-	unaryFilter<Zip1, IsInfiniteOp>(thread, args[0], result);
-}
+}*/
 
 void paste(Thread& thread, Value const* args, Value& result) {
 	Character a = As<Character>(thread, args[0]);
@@ -851,14 +894,36 @@ void traceconfig(Thread & thread, Value const* args, Value& result) {
 	result = Null::Singleton();
 }
 
+Value MatrixMultiply(Thread& thread, Value const& a, Value const& b) {
+	MatrixXd aa, bb;
+	if(a.isObject() && ((Object const&)a).hasDim()) {
+		Integer ai = As<Integer>(thread, ((Object const&)a).getDim());
+		Double ad = As<Double>(thread, ((Object const&)a).base());
+		aa = Map<MatrixXd>(ad.v(), ai[0], ai[1]);
+	} else {
+		Double ad = As<Double>(thread, a);
+		aa = Map<MatrixXd>(ad.v(), 1, a.length);
+	}
+	if(b.isObject() && ((Object const&)b).hasDim()) {
+		Integer bi = As<Integer>(thread, ((Object const&)b).getDim());
+		Double bd = As<Double>(thread, ((Object const&)b).base());
+		bb = Map<MatrixXd>(bd.v(), bi[0], bi[1]);
+	} else {
+		Double bd = As<Double>(thread, b);
+		bb = Map<MatrixXd>(bd.v(), b.length, 1);
+	}
+	Double c(aa.rows()*bb.cols());
+	Map<MatrixXd>(c.v(), aa.rows(), bb.cols()) = aa*bb;
+	Value result;
+	Object::Init(result, c);
+	Integer dim = Integer::c(aa.rows(), bb.cols());
+	return ((Object const&)result).setDim(dim);
+}
+
 void registerCoreFunctions(State& state)
 {
-	state.registerInternalFunction(state.internStr("nchar"), (nchar_fn), 1);
-	state.registerInternalFunction(state.internStr("nzchar"), (nzchar_fn), 1);
-	state.registerInternalFunction(state.internStr("is.na"), (isna_fn), 1);
-	state.registerInternalFunction(state.internStr("is.nan"), (isnan_fn), 1);
-	state.registerInternalFunction(state.internStr("is.finite"), (isfinite_fn), 1);
-	state.registerInternalFunction(state.internStr("is.infinite"), (isinfinite_fn), 1);
+	//state.registerInternalFunction(state.internStr("nchar"), (nchar_fn), 1);
+	//state.registerInternalFunction(state.internStr("nzchar"), (nzchar_fn), 1);
 	
 	state.registerInternalFunction(state.internStr("cat"), (cat), 1);
 	state.registerInternalFunction(state.internStr("library"), (library), 1);

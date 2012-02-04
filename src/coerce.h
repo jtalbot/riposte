@@ -9,9 +9,6 @@
 #include <limits>
 
 
-void registerCoerceFunctions(State& state);
-
-
 // Casting between scalar types
 template<typename I, typename O>
 static void Cast1(Thread& thread, I const& i, O& o) { o = (O)i; }
@@ -21,8 +18,11 @@ template<typename I, typename O>
 static typename O::Element Cast(Thread& thread, typename I::Element const& i) { return (typename O::Element)i; }
 
 template<class I, class O> 
-struct CastOp : public UnaryOp<I, O> {
-	static typename CastOp::R eval(Thread& thread, typename CastOp::A const& i) { return Cast<typename CastOp::AV, typename CastOp::RV>(thread, i); }
+struct CastOp {
+	typedef I A;
+	typedef O R;
+	static typename O::Element eval(Thread& thread, typename I::Element i) { return Cast<I, O>(thread, i); }
+	static void Scalar(Thread& thread, typename I::Element i, Value& c) { R::InitScalar(c, eval(thread, i)); }
 };
 
 template<class O>

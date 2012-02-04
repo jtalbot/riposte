@@ -1,5 +1,6 @@
 
 #include "internal.h"
+#include "coerce.h"
 
 void asnull(Thread& thread, Value const* args, Value& result) {
 	result = As<Null>(thread, args[0]);

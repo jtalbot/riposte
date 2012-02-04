@@ -17,19 +17,17 @@ static ByteCode::Enum op(String const& func) {
 	if(func == Strings::neq) return ByteCode::neq; 
 	if(func == Strings::ge) return ByteCode::ge; 
 	if(func == Strings::le) return ByteCode::le; 
-	if(func == Strings::lnot) return ByteCode::lnot; 
-	if(func == Strings::land) return ByteCode::land; 
 	if(func == Strings::lor) return ByteCode::lor; 
-	if(func == Strings::sland) return ByteCode::sland; 
-	if(func == Strings::slor) return ByteCode::slor; 
+	if(func == Strings::land) return ByteCode::land; 
+	if(func == Strings::lnot) return ByteCode::lnot; 
 	if(func == Strings::abs) return ByteCode::abs; 
 	if(func == Strings::sign) return ByteCode::sign; 
 	if(func == Strings::sqrt) return ByteCode::sqrt; 
 	if(func == Strings::floor) return ByteCode::floor; 
 	if(func == Strings::ceiling) return ByteCode::ceiling; 
 	if(func == Strings::trunc) return ByteCode::trunc; 
-	if(func == Strings::round) return ByteCode::round; 
-	if(func == Strings::signif) return ByteCode::signif; 
+	//if(func == Strings::round) return ByteCode::round; 
+	//if(func == Strings::signif) return ByteCode::signif; 
 	if(func == Strings::exp) return ByteCode::exp; 
 	if(func == Strings::log) return ByteCode::log; 
 	if(func == Strings::cos) return ByteCode::cos; 
@@ -38,6 +36,13 @@ static ByteCode::Enum op(String const& func) {
 	if(func == Strings::acos) return ByteCode::acos; 
 	if(func == Strings::asin) return ByteCode::asin; 
 	if(func == Strings::atan) return ByteCode::atan; 
+	if(func == Strings::isna) return ByteCode::isna; 
+	if(func == Strings::isnan) return ByteCode::isnan; 
+	if(func == Strings::isfinite) return ByteCode::isfinite; 
+	if(func == Strings::isinfinite) return ByteCode::isinfinite; 
+	
+	if(func == Strings::pmin) return ByteCode::pmin; 
+	if(func == Strings::pmax) return ByteCode::pmax; 
 	if(func == Strings::sum) return ByteCode::sum; 
 	if(func == Strings::prod) return ByteCode::prod; 
 	if(func == Strings::min) return ByteCode::min; 
@@ -48,8 +53,6 @@ static ByteCode::Enum op(String const& func) {
 	if(func == Strings::cumprod) return ByteCode::cumprod; 
 	if(func == Strings::cummin) return ByteCode::cummin; 
 	if(func == Strings::cummax) return ByteCode::cummax; 
-	if(func == Strings::cumany) return ByteCode::cumany; 
-	if(func == Strings::cumall) return ByteCode::cumall; 
 	if(func == Strings::type) return ByteCode::type; 
 	if(func == Strings::Logical) return ByteCode::logical1; 	 	
 	if(func == Strings::Integer) return ByteCode::integer1; 
@@ -356,7 +359,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	else if(func == Strings::whileSym)
 	{
 		int64_t head_condition = compile(call[1], code);
-		emit(code, ByteCode::jf, (int64_t)0, head_condition, liveIn);
+		emit(code, ByteCode::jc, (int64_t)1, (int64_t)0, head_condition);
 		loopDepth++;
 		
 		int64_t beginbody = code->bc.size();
@@ -365,9 +368,9 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t tail_condition = compile(call[1], code);
 		int64_t endbody = code->bc.size();
 		
-		emit(code, ByteCode::jt, beginbody-endbody, tail_condition, liveIn);
+		emit(code, ByteCode::jc, beginbody-endbody, (int64_t)1, tail_condition);
 		resolveLoopReferences(code, beginbody, endbody, tail, endbody+1);
-		code->bc[beginbody-1].a = endbody-beginbody+2;
+		code->bc[beginbody-1].b = endbody-beginbody+2;
 		
 		loopDepth--;
 		scopes.back().deadAfter(liveIn);
@@ -411,7 +414,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		if(call.length == 3)
 			resultF = compile(Null::Singleton(), code);
 		int64_t cond = compile(call[1], code);
-		emit(code, ByteCode::jf, (int64_t)0, cond, liveIn);
+		emit(code, ByteCode::jc, (int64_t)1, (int64_t)0, cond);
 		int64_t begin1 = code->bc.size(), begin2 = 0;
 		scopes.back().deadAfter(liveIn);
 		resultT = compile(call[2], code);
@@ -425,7 +428,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		else
 			begin2 = code->bc.size();
 		int64_t end = code->bc.size();
-		code->bc[begin1-1].a = begin2-begin1+1;
+		code->bc[begin1-1].b = begin2-begin1+1;
 		if(call.length == 4)
 			code->bc[begin2-1].a = end-begin2+1;
 	
@@ -433,7 +436,35 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		if(resultT != resultF) throw CompileError(std::string("then and else blocks don't put the result in the same register ") + intToStr(resultT) + " " + intToStr(resultF));
 		scopes.back().deadAfter(resultT);
 		return resultT;
-	} 
+	}
+	else if(func == Strings::lor2 && call.length == 3)
+	{
+		int64_t start = compileConstant(Logical::True(), code);
+		int64_t left = compile(call[1], code);
+		emit(code, ByteCode::jc, (int64_t)0, (int64_t)1, left);
+		int64_t j1 = code->bc.size()-1;
+		scopes.back().deadAfter(start);
+		int64_t right = compile(call[2], code);
+		emit(code, ByteCode::jc, (int64_t)2, (int64_t)1, right);
+		scopes.back().deadAfter(liveIn);
+		compileConstant(Logical::False(), code);
+		code->bc[j1].a = code->bc.size()-j1;
+		return start;
+	}
+	else if(func == Strings::land2 && call.length == 3)
+	{
+		int64_t start = compileConstant(Logical::False(), code);
+		int64_t left = compile(call[1], code);
+		emit(code, ByteCode::jc, (int64_t)1, (int64_t)0, left);
+		int64_t j1 = code->bc.size()-1;
+		scopes.back().deadAfter(start);
+		int64_t right = compile(call[2], code);
+		emit(code, ByteCode::jc, (int64_t)1, (int64_t)2, right);
+		scopes.back().deadAfter(liveIn);
+		compileConstant(Logical::True(), code);
+		code->bc[j1].b = code->bc.size()-j1;
+		return start;
+	}
 	else if(func == Strings::switchSym)
 	{
 		if(call.length == 0) _error("'EXPR' is missing");
@@ -533,16 +564,16 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		func == Strings::mod ||
 		func == Strings::atan2 ||
 		func == Strings::hypot ||
-		func == Strings::land || 
-		func == Strings::lor ||
-		func == Strings::slor ||
-		func == Strings::sland ||
 		func == Strings::eq ||
 		func == Strings::neq ||
 		func == Strings::lt ||
 		func == Strings::gt ||
 		func == Strings::ge ||
 		func == Strings::le ||
+		func == Strings::pmin ||
+		func == Strings::pmax ||
+		func == Strings::lor ||
+		func == Strings::land ||
 		func == Strings::mmul)
 	{
 		// if there aren't exactly two parameters, we should call the library version...
@@ -572,6 +603,10 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		func == Strings::acos ||
 		func == Strings::asin ||
 		func == Strings::atan ||
+		func == Strings::isna ||
+		func == Strings::isnan ||
+		func == Strings::isfinite ||
+		func == Strings::isinfinite ||
 		func == Strings::sum ||
 		func == Strings::prod ||
 		func == Strings::min ||
@@ -582,8 +617,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		func == Strings::cumprod ||
 		func == Strings::cummin ||
 		func == Strings::cummax ||
-		func == Strings::cumany ||
-		func == Strings::cumall ||
 		func == Strings::type ||
 		func == Strings::length ||
 		func == Strings::Logical ||

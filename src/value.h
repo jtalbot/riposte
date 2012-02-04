@@ -92,7 +92,7 @@ template<> inline String const& Value::scalar<String>() const { return s; }
 
 class State;
 class Thread;
-class Prototype;
+struct Prototype;
 class Environment;
 
 template<Type::Enum VType, typename ElementType, bool Recursive>

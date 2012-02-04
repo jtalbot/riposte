@@ -35,11 +35,6 @@ is.function <- function(x) .Internal(typeof(x)) == "function"
 
 is.single <- function(x) "NYI"
 
-is.na <- function(x) .Internal(is.na(x))
-is.nan <- function(x) .Internal(is.nan(x))
-is.finite <- function(x) .Internal(is.finite(x))
-is.infinite <- function(x) .Internal(is.infinite(x))
-
 is.vector <- function(x, mode="any") switch(mode,
 	NULL=is.null(x),
 	logical=is.logical(x),
