@@ -11,12 +11,11 @@
 	_(jmp, "jmp") \
 	_(branch, "branch") \
 	_(call, "call") \
-	_(apply, "apply") \
-	_(internal, "internal") \
 	_(UseMethod, "UseMethod") \
 	_(ret, "ret") \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
+	_(list, "list") \
 
 #define MEMORY_ACCESS_BYTECODES(_) \
 	_(get, "get") \
@@ -27,6 +26,23 @@
 	_(eassign, "eassign") \
 	_(subset, "subset") \
 	_(subset2, "subset2") \
+
+#define UTILITY_BYTECODES(_)\
+	_(internal, "internal") \
+	_(split, "split") \
+	_(colon, "colon") \
+	_(function, "function") \
+	_(logical1, "logical") \
+	_(integer1, "integer") \
+	_(double1, "double") \
+	_(character1, "character") \
+	_(raw1, "raw") \
+	_(seq, "seq") \
+	_(type, "type") \
+	_(length, "length") \
+	_(missing, "missing") \
+	_(mmul, "mmul") \
+	_(strip, "strip") \
 
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double
 #define ARITH_UNARY_BYTECODES(_) \
@@ -115,23 +131,6 @@
 #define UNIFY_SCAN_BYTECODES(_) \
 	_(cummin, "cummin",	cummin,	UnifyScan,	pmin) \
 	_(cummax, "cummax",	cummax,	UnifyScan,	pmax) \
-
-#define UTILITY_BYTECODES(_)\
-	_(split, "split") \
-	_(colon, "colon") \
-	_(function, "function") \
-	_(logical1, "logical") \
-	_(integer1, "integer") \
-	_(double1, "double") \
-	_(character1, "character") \
-	_(raw1, "raw") \
-	_(seq, "seq") \
-	_(type, "type") \
-	_(list, "list") \
-	_(length, "length") \
-	_(missing, "missing") \
-	_(mmul, "mmul") \
-	_(strip, "strip") \
 
 #define SPECIAL_BYTECODES(_) 	\
 	_(done, "done") 

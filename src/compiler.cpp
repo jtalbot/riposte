@@ -727,17 +727,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		if(call.length != 2) _error("quote requires one argument");
 		return compileConstant(call[1], code);
 	}
-	else if(func == Strings::apply)
-	{
-		List c(Subset(call, 1, call.length-1));
-		Character n(Subset(names, 1, call.length-1));
-		code->calls.push_back(makeCall(c, n));
-		int64_t function = compile(c[0], code);
-		scopes.back().deadAfter(liveIn);
-		int64_t result = scopes.back().allocRegister(Register::TEMP);
-		emit(code, ByteCode::apply, function, -code->calls.size(), result);
-		return result;
-	}
 	else
 	{
 		return compileFunctionCall(call, names, code);

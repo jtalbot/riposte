@@ -19,6 +19,7 @@ inline double asReal1(Value const& v) {
 	else _error("Can't cast argument to number"); 
 }
 
+void Element(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 inline void Element(Value const& v, int64_t index, Value& out) {
 	switch(v.type) {
 		#define CASE(Name) case Type::Name: Name::InitScalar(out, ((Name const&)v)[index]); break;
@@ -28,19 +29,17 @@ inline void Element(Value const& v, int64_t index, Value& out) {
 	};
 }
 
+void Element2(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 inline void Element2(Value const& v, int64_t index, Value& out) {
+	if(index < 0 || index >= v.length) _error("Out-of-range index");
 	switch(v.type) {
 		#define CASE(Name) case Type::Name: \
-			if(index < 0 || index >= v.length) \
-				_error("Out-of-range index"); \
 			Name::InitScalar(out, ((Name const&)v)[index]); \
 			break;
 		ATOMIC_VECTOR_TYPES(CASE)
 		#undef CASE
 		case Type::List: 
-			if(index < 0 || index >= v.length) 
-				_error("Out-of-range index");
-			else if(List::isNA(((List const&)v)[index]))
+			if(List::isNA(((List const&)v)[index]))
 				_error("Extracting missing element");
 			out = ((List const&)v)[index]; 
 			break;

@@ -11,8 +11,7 @@
 #include "interpreter.h"
 #include "compiler.h"
 #include "sse.h"
-
-static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc);
+#include "call.h"
 
 extern Instruction const* kget_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* get_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -25,154 +24,44 @@ extern Instruction const* subset2_op(Thread& thread, Instruction const& inst) AL
 
 #define REG(thread, i) (*(thread.base+i))
 
-static void ExpandDots(Thread& thread, List& arguments, Character& names, int64_t dots) {
-	Environment* environment = thread.frame.environment;
-	uint64_t dotslength = environment->dots.size();
-	// Expand dots into the parameter list...
-	if(dots < arguments.length) {
-		List a(arguments.length + dotslength - 1);
-		for(int64_t i = 0; i < dots; i++) a[i] = arguments[i];
-		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(thread.state, CreateSymbol((String)-(i-dots+1))), NULL).AsPromise(); } // TODO: should cache these.
-		for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) a[i] = arguments[i-dotslength];
+// Tracing stuff
 
-		arguments = a;
-		
-		uint64_t named = 0;
-		for(uint64_t i = 0; i < dotslength; i++) if(environment->dots[i] != Strings::empty) named++;
-
-		if(names.length > 0 || named > 0) {
-			Character n(arguments.length + dotslength - 1);
-			for(int64_t i = 0; i < n.length; i++) n[i] = Strings::empty;
-			if(names.length > 0) {
-				for(int64_t i = 0; i < dots; i++) n[i] = names[i];
-				for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) n[i] = names[i-dotslength];
-			}
-			if(named > 0) {
-				for(uint64_t i = dots; i < dots+dotslength; i++) n[i] = environment->dots[i]; 
-			}
-			names = n;
-		}
-	}
-}
-
-inline void argAssign(Environment* env, String n, Value const& v, Environment* execution) {
-	Value w = v;
-	if(w.isPromise() && w.p == 0) w.p = execution;
-	env->assign(n, w);
-}
-
-static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, List const& arguments, Character const& anames) {
-	List const& defaults = func.prototype()->defaults;
-	Character const& parameters = func.prototype()->parameters;
-	int64_t fdots = func.prototype()->dots;
-
-	// set defaults
-	for(int64_t i = 0; i < defaults.length; ++i) {
-		argAssign(fenv, parameters[i], defaults[i], fenv);
-	}
-
-	// call arguments are not named, do posititional matching
-	if(anames.length == 0) {
-		int64_t end = std::min(arguments.length, fdots);
-		for(int64_t i = 0; i < end; ++i) {
-			if(!arguments[i].isNil()) argAssign(fenv, parameters[i], arguments[i], env);
-		}
-
-		// set dots if necessary
-		if(fdots < parameters.length) {
-			int64_t idx = 1;
-			for(int64_t i = fdots; i < arguments.length; i++) {
-				argAssign(fenv, (String)-idx, arguments[i], env);
-				fenv->dots.push_back(Strings::empty);
-				idx++;
-			}
-			end++;
-		}
-	}
-	// call arguments are named, do matching by name
-	else {
-		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
-		int64_t *assignment = thread.assignment, *set = thread.set;
-		for(int64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
-		for(int64_t i = 0; i < parameters.length; i++) set[i] = -(i+1);
-
-		// named args, search for complete matches
-		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] != Strings::empty) {
-				for(int64_t j = 0; j < parameters.length; ++j) {
-					if(j != fdots && anames[i] == parameters[j]) {
-						assignment[i] = j;
-						set[j] = i;
-						break;
-					}
-				}
-			}
-		}
-		// named args, search for incomplete matches
-		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] != Strings::empty && assignment[i] < 0) {
-				std::string a = thread.externStr(anames[i]);
-				for(int64_t j = 0; j < parameters.length; ++j) {
-					if(set[j] < 0 && j != fdots &&
-							thread.externStr(parameters[j]).compare( 0, a.size(), a ) == 0 ) {	
-						assignment[i] = j;
-						set[j] = i;
-						break;
-					}
-				}
-			}
-		}
-		// unnamed args, fill into first missing spot.
-		int64_t firstEmpty = 0;
-		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] == Strings::empty) {
-				for(; firstEmpty < fdots; ++firstEmpty) {
-					if(set[firstEmpty] < 0) {
-						assignment[i] = firstEmpty;
-						set[firstEmpty] = i;
-						break;
-					}
-				}
-			}
-		}
-
-		// stuff that can't be cached...
-
-		// assign all the arguments
-		for(int64_t j = 0; j < parameters.length; ++j) 
-			if(j != fdots && set[j] >= 0 && !arguments[set[j]].isNil()) 
-				argAssign(fenv, parameters[j], arguments[set[j]], env);
-
-		// put unused args into the dots
-		if(fdots < parameters.length) {
-			int64_t idx = 1;
-			for(int64_t i = 0; i < arguments.length; i++) {
-				if(assignment[i] < 0) {
-					argAssign(fenv, (String)-idx, arguments[i], env);
-					fenv->dots.push_back(anames[i]);
-					idx++;
-				}
-			}
-		}
-	}
-}
-
-static Environment* CreateEnvironment(Thread& thread, Environment* l, Environment* d, Value const& call) {
-	Environment* env;
-	if(thread.environments.size() == 0) {
-		env = new Environment();
-	} else {
-		env = thread.environments.back();
-		thread.environments.pop_back();
-	}
-	env->init(l, d, call);
-	return env;
-}
 //track the heat of back edge operations and invoke the recorder on hot traces
 //unused until we begin tracing loops again
 static Instruction const * profile_back_edge(Thread & thread, Instruction const * inst) {
 	return inst;
 }
+
+bool isRecordableType(Type::Enum type) {
+	return type == Type::Double || type == Type::Integer || type == Type::Logical;
+}
+
+static Instruction const* trace(Thread& thread, Instruction const& inst, Type::Enum type, int64_t length) {
+#ifdef ENABLE_JIT
+	if(thread.state.jitEnabled && isRecordableType(type) && length >= TRACE_VECTOR_WIDTH) {
+		return thread.trace.BeginTracing(thread, &inst);
+	}
+#endif
+	return 0;
+}
+
+static Instruction const* trace(Thread& thread, Instruction const& inst, Value const& a) {
+	return trace(thread, inst, a.type, a.length);
+}
+
+static Instruction const* trace(Thread& thread, Instruction const& inst, Value const& a, Value const& b) {
+#ifdef ENABLE_JIT
+	if(thread.state.jitEnabled && isRecordableType(a.type) && isRecordableType(b.type) && 
+		(a.length >= TRACE_VECTOR_WIDTH || b.length >= TRACE_VECTOR_WIDTH)) {
+		return thread.trace.BeginTracing(thread, &inst);
+	}
+#endif
+	return 0;
+}
+
+
+
+// Control flow instructions
 
 Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	Value f = REG(thread, inst.a);
@@ -208,77 +97,17 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	return buildStackFrame(thread, fenv, true, func.prototype(), &REG(thread, inst.c), &inst+1);
 }
 
-Instruction const* apply_op(Thread& thread, Instruction const& inst) {
-	return &inst+1;
-}
-
-Instruction const* internal_op(Thread& thread, Instruction const& inst) {
-       thread.state.internalFunctions[inst.a].ptr(thread, &REG(thread, inst.b), REG(thread, inst.c));
-       return &inst+1;
-}
-
-// Get a Value by Symbol from the current environment,
-//  TODO: UseMethod also should search in some cached library locations.
-static Value GenericGet(Thread& thread, String s) {
-	Environment* environment = thread.frame.environment;
-	Value value = environment->get(s);
-	while(value.isNil() && environment->LexicalScope() != 0) {
-		environment = environment->LexicalScope();
-		value = environment->get(s);
-	}
-	if(value.isPromise()) {
-		//value = force(thread, value);
-		//environment->assign(s, value);
-		_error("UseMethod does not yet support evaluating promises");
-	}
-	return value;
-}
-
-static Value GenericSearch(Thread& thread, Character klass, String generic, String& method) {
-		
-	// first search for type specific method
-	Value func = Value::Nil();
-	for(int64_t i = 0; i < klass.length && func.isNil(); i++) {
-		method = thread.internStr(thread.externStr(generic) + "." + thread.externStr(klass[i]));
-		func = GenericGet(thread, method);	
-	}
-
-	// TODO: look for group generics
-
-	// look for default if necessary
-	if(func.isNil()) {
-		method = thread.internStr(thread.externStr(generic) + ".default");
-		func = GenericGet(thread, method);
-	}
-
-	return func;
-}
-
-static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String func, Value& a, Value& out) {
-	String method;
-	Value f = GenericSearch(thread, klass(thread, a), func, method);
-	if(f.isFunction()) {
-		Function func(f);
-		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
-		MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a), Character(0));
-		return buildStackFrame(thread, fenv, true, func.prototype(), &out, &inst+1);
-	}
-	_error("Failed to find generic for builtin function");
-}
-
-static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String func, Value& a, Value& b, Value& out) {
-	String method;
-	Value f = a.isObject() ?  
-		GenericSearch(thread, klass(thread, a), func, method) :  
-		GenericSearch(thread, klass(thread, b), func, method);
-	// TODO: R checks if these match for some ops (not all)
-	if(f.isFunction()) { 
-		Function func(f);
-		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
-		MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a, b), Character(0));
-		return buildStackFrame(thread, fenv, true, func.prototype(), &out, &inst+1);
-	}
-	_error("Failed to find generic for builtin function");
+Instruction const* ret_op(Thread& thread, Instruction const& inst) {
+	*(thread.frame.result) = REG(thread, inst.c);
+	// if this stack frame owns the environment, we can free it for reuse
+	// as long as we don't return a closure...
+	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
+	if(thread.frame.ownEnvironment && REG(thread, inst.c).isClosureSafe())
+		thread.environments.push_back(thread.frame.environment);
+	thread.base = thread.frame.returnbase;
+	Instruction const* returnpc = thread.frame.returnpc;
+	thread.pop();
+	return returnpc;
 }
 
 Instruction const* UseMethod_op(Thread& thread, Instruction const& inst) {
@@ -308,6 +137,112 @@ Instruction const* UseMethod_op(Thread& thread, Instruction const& inst) {
 	fenv->assign(Strings::dotClass, type); 
 	return buildStackFrame(thread, fenv, true, func.prototype(), &REG(thread, inst.c), &inst+1);
 }
+
+Instruction const* jmp_op(Thread& thread, Instruction const& inst) {
+	return &inst+inst.a;
+}
+
+Instruction const* jc_op(Thread& thread, Instruction const& inst) {
+	Value& c = REG(thread, inst.c);
+	if(c.isLogical1()) {
+		if(Logical::isTrue(c.c)) return &inst+inst.a;
+		else if(Logical::isFalse(c.c)) return &inst+inst.b;
+		else _error("NA where TRUE/FALSE needed"); 
+	} else if(c.isInteger1()) {
+		if(Integer::isNA(c.i)) _error("NA where TRUE/FALSE needed");
+		else if(c.i != 0) return &inst + inst.a;
+		else return & inst+inst.b;
+	} else if(c.isDouble1()) {
+		if(Double::isNA(c.d)) _error("NA where TRUE/FALSE needed");
+		else if(c.d != 0) return &inst + inst.a;
+		else return & inst+inst.b;
+	}
+	_error("Need single element logical in conditional jump");
+}
+
+Instruction const* branch_op(Thread& thread, Instruction const& inst) {
+	Value const& c = REG(thread, inst.a);
+	int64_t index = -1;
+	if(c.isDouble1()) index = (int64_t)c.d;
+	else if(c.isInteger1()) index = c.i;
+	else if(c.isLogical1()) index = c.i;
+	else if(c.isCharacter1()) {
+		for(int64_t i = 1; i <= inst.b; i++) {
+			if((&inst+i)->s == c.s) {
+				index = i;
+				break;
+			}
+			if(index < 0 && (&inst+i)->s == Strings::empty) {
+				index = i;
+			}
+		}
+	}
+	if(index >= 1 && index <= inst.b) {
+		return &inst + ((&inst+index)->c);
+	} else {
+		return &inst+1+inst.b;
+	}
+}
+
+Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
+	// inst.b-1 holds the loopVector
+	if((int64_t)REG(thread, inst.b-1).length <= 0) { return &inst+inst.a; }
+	Element2(REG(thread, inst.b-1), 0, REG(thread, inst.c));
+	REG(thread, inst.b).header = REG(thread, inst.b-1).length;	// warning: not a valid object, but saves a shift
+	REG(thread, inst.b).i = 1;
+	return &inst+1;
+}
+Instruction const* forend_op(Thread& thread, Instruction const& inst) {
+	if(__builtin_expect((REG(thread,inst.b).i) < REG(thread,inst.b).header, true)) {
+		Element2(REG(thread, inst.b-1), REG(thread, inst.b).i, REG(thread, inst.c));
+		REG(thread, inst.b).i++;
+		return profile_back_edge(thread,&inst+inst.a);
+	} else return &inst+1;
+}
+
+Instruction const* list_op(Thread& thread, Instruction const& inst) {
+	std::vector<String> const& dots = thread.frame.environment->dots;
+	// First time through, make a result vector...
+	if(REG(thread, inst.a).i == 0) {
+		REG(thread, inst.c) = List(dots.size());
+	}
+	// Otherwise populate result vector with next element
+	else {
+		thread.frame.environment->assign((String)-REG(thread, inst.a).i, REG(thread, inst.b));
+		((List&)REG(thread, inst.c))[REG(thread, inst.a).i-1] = REG(thread, inst.b);
+	}
+
+	// If we're all done, check to see if we need to add names and then exit
+	if(REG(thread, inst.a).i == (int64_t)dots.size()) {
+		bool nonEmptyName = false;
+		for(int i = 0; i < (int64_t)dots.size(); i++) 
+			if(dots[i] != Strings::empty) nonEmptyName = true;
+		if(nonEmptyName) {
+			// TODO: should really just use the names in the dots directly
+			Character names(dots.size());
+			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
+				names[i] = dots[i];
+			Object::Init(REG(thread, inst.c), REG(thread, inst.c), names);
+		}
+		return &inst+1;
+	}
+
+	// Not done yet, increment counter, evaluate next ..#
+	REG(thread, inst.a).i++;
+	Value const& src = thread.frame.environment->get((String)-REG(thread, inst.a).i);
+	if(!src.isPromise()) {
+		REG(thread, inst.b) = src;
+		return &inst;
+	}
+	else {
+		Environment* env = Function(src).environment();
+		if(env == 0) env = thread.frame.environment;
+		Prototype* prototype = Function(src).prototype();
+		return buildStackFrame(thread, env, false, prototype, &REG(thread, inst.b), &inst);
+	}
+}
+
+// Memory access ops
 
 Instruction const* get_op(Thread& thread, Instruction const& inst) {
 	// gets are always generated as a sequence of 2 instructions...
@@ -407,166 +342,28 @@ Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
 	Value& i = REG(thread, inst.b);
 
 	if(a.isVector()) {
-		if(i.isDouble1()) { Element2(a, i.d-1, REG(thread, inst.c)); return &inst+1; }
-		else if(i.isInteger1()) { Element2(a, i.i-1, REG(thread, inst.c)); return &inst+1; }
-		else if(i.isLogical1()) { Element2(a, Logical::isTrue(i.c) ? 0 : -1, REG(thread, inst.c)); return &inst+1; }
-		else if(i.isCharacter1()) { _error("Subscript out of bounds"); }
+		int64_t index = 0;
+		if(i.isDouble1()) { index = i.d-1; }
+		else if(i.isInteger1()) { index = i.i-1; }
+		else if(i.isLogical1() && Logical::isTrue(i.c)) { index = 1-1; }
 		else if(i.isVector() && (i.length == 0 || i.length > 1)) { 
 			_error("Attempt to select less or more than 1 element in subset2"); 
 		}
+		else { _error("Subscript out of bounds"); }
+		Element2(a, index, REG(thread, inst.c));
+		return &inst+1;
 	}
 	if(a.isObject() || i.isObject()) { return GenericDispatch(thread, inst, Strings::bb, a, i, REG(thread, inst.c)); } 
 	_error("Invalid subset2 operation");
 }
 
-Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
-	// inst.b-1 holds the loopVector
-	if((int64_t)REG(thread, inst.b-1).length <= 0) { return &inst+inst.a; }
-	Element2(REG(thread, inst.b-1), 0, REG(thread, inst.c));
-	REG(thread, inst.b).header = REG(thread, inst.b-1).length;	// warning: not a valid object, but saves a shift
-	REG(thread, inst.b).i = 1;
-	return &inst+1;
-}
-Instruction const* forend_op(Thread& thread, Instruction const& inst) {
-	if(__builtin_expect((REG(thread,inst.b).i) < REG(thread,inst.b).header, true)) {
-		Element2(REG(thread, inst.b-1), REG(thread, inst.b).i, REG(thread, inst.c));
-		REG(thread, inst.b).i++;
-		return profile_back_edge(thread,&inst+inst.a);
-	} else return &inst+1;
-}
-/*Instruction const* iforbegin_op(Thread& thread, Instruction const& inst) {
-	double m = asReal1(REG(thread, inst.c-1));
-	double n = asReal1(REG(thread, inst.c));
-	REG(thread, inst.c-1) = Integer::c(n > m ? 1 : -1);
-	REG(thread, inst.c-1).length = (int64_t)n+1;	// danger! this register no longer holds a valid object, but it saves a register and makes the for and ifor cases more similar
-	REG(thread, inst.c) = Integer::c((int64_t)m);
-	if(REG(thread, inst.c).i >= (int64_t)REG(thread, inst.c-1).length) { return &inst+inst.a; }
-	thread.frame.environment->hassign(Symbol(inst.b), Integer::c(m));
-	REG(thread, inst.c).i += REG(thread, inst.c-1).i;
-	return &inst+1;
-}
-Instruction const* iforend_op(Thread& thread, Instruction const& inst) {
-	if(REG(thread, inst.c).i < REG(thread, inst.c-1).length) { 
-		thread.frame.environment->hassign(Symbol(inst.b), REG(thread, inst.c));
-		REG(thread, inst.c).i += REG(thread, inst.c-1).i;
-		return profile_back_edge(thread,&inst+inst.a);
-	} else return &inst+1;
-}*/
-Instruction const* jc_op(Thread& thread, Instruction const& inst) {
-	Value& c = REG(thread, inst.c);
-	if(c.isLogical1()) {
-		if(Logical::isTrue(c.c)) return &inst+inst.a;
-		else if(Logical::isFalse(c.c)) return &inst+inst.b;
-		else _error("NA where TRUE/FALSE needed"); 
-	} else if(c.isInteger1()) {
-		if(Integer::isNA(c.i)) _error("NA where TRUE/FALSE needed");
-		else if(c.i != 0) return &inst + inst.a;
-		else return & inst+inst.b;
-	} else if(c.isDouble1()) {
-		if(Double::isNA(c.d)) _error("NA where TRUE/FALSE needed");
-		else if(c.d != 0) return &inst + inst.a;
-		else return & inst+inst.b;
-	}
-	_error("Need single element logical in conditional jump");
-}
-Instruction const* branch_op(Thread& thread, Instruction const& inst) {
-	Value const& c = REG(thread, inst.a);
-	int64_t index = -1;
-	if(c.isDouble1()) index = (int64_t)c.d;
-	else if(c.isInteger1()) index = c.i;
-	else if(c.isLogical1()) index = c.i;
-	else if(c.isCharacter1()) {
-		for(int64_t i = 1; i <= inst.b; i++) {
-			if((&inst+i)->s == c.s) {
-				index = i;
-				break;
-			}
-			if(index < 0 && (&inst+i)->s == Strings::empty) {
-				index = i;
-			}
-		}
-	}
-	if(index >= 1 && index <= inst.b) {
-		return &inst + ((&inst+index)->c);
-	} else {
-		return &inst+1+inst.b;
-	}
-}
 Instruction const* colon_op(Thread& thread, Instruction const& inst) {
 	double from = asReal1(REG(thread,inst.a));
 	double to = asReal1(REG(thread,inst.b));
 	REG(thread,inst.c) = Sequence(from, to>from?1:-1, fabs(to-from)+1);
 	return &inst+1;
 }
-Instruction const* list_op(Thread& thread, Instruction const& inst) {
-	std::vector<String> const& dots = thread.frame.environment->dots;
-	// First time through, make a result vector...
-	if(REG(thread, inst.a).i == 0) {
-		REG(thread, inst.c) = List(dots.size());
-	}
-	// Otherwise populate result vector with next element
-	else {
-		thread.frame.environment->assign((String)-REG(thread, inst.a).i, REG(thread, inst.b));
-		((List&)REG(thread, inst.c))[REG(thread, inst.a).i-1] = REG(thread, inst.b);
-	}
 
-	// If we're all done, check to see if we need to add names and then exit
-	if(REG(thread, inst.a).i == (int64_t)dots.size()) {
-		bool nonEmptyName = false;
-		for(int i = 0; i < (int64_t)dots.size(); i++) 
-			if(dots[i] != Strings::empty) nonEmptyName = true;
-		if(nonEmptyName) {
-			// TODO: should really just use the names in the dots directly
-			Character names(dots.size());
-			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
-				names[i] = dots[i];
-			Object::Init(REG(thread, inst.c), REG(thread, inst.c), names);
-		}
-		return &inst+1;
-	}
-
-	// Not done yet, increment counter, evaluate next ..#
-	REG(thread, inst.a).i++;
-	Value const& src = thread.frame.environment->get((String)-REG(thread, inst.a).i);
-	if(!src.isPromise()) {
-		REG(thread, inst.b) = src;
-		return &inst;
-	}
-	else {
-		Environment* env = Function(src).environment();
-		if(env == 0) env = thread.frame.environment;
-		Prototype* prototype = Function(src).prototype();
-		return buildStackFrame(thread, env, false, prototype, &REG(thread, inst.b), &inst);
-	}
-}
-
-
-bool isRecordableType(Type::Enum type) {
-	return type == Type::Double || type == Type::Integer || type == Type::Logical;
-}
-
-static Instruction const* trace(Thread& thread, Instruction const& inst, Type::Enum type, int64_t length) {
-#ifdef ENABLE_JIT
-	if(thread.state.jitEnabled && isRecordableType(type) && length >= TRACE_VECTOR_WIDTH) {
-		return thread.trace.BeginTracing(thread, &inst);
-	}
-#endif
-	return 0;
-}
-
-static Instruction const* trace(Thread& thread, Instruction const& inst, Value const& a) {
-	return trace(thread, inst, a.type, a.length);
-}
-
-static Instruction const* trace(Thread& thread, Instruction const& inst, Value const& a, Value const& b) {
-#ifdef ENABLE_JIT
-	if(thread.state.jitEnabled && isRecordableType(a.type) && isRecordableType(b.type) && 
-		(a.length >= TRACE_VECTOR_WIDTH || b.length >= TRACE_VECTOR_WIDTH)) {
-		return thread.trace.BeginTracing(thread, &inst);
-	}
-#endif
-	return 0;
-}
 
 Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	int64_t len = As<Integer>(thread, REG(thread, inst.a))[0];
@@ -646,9 +443,6 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 	return &inst+2; 
 }
 
-Instruction const* jmp_op(Thread& thread, Instruction const& inst) {
-	return &inst+inst.a;
-}
 Instruction const* function_op(Thread& thread, Instruction const& inst) {
 	REG(thread, inst.c) = Function(thread.frame.prototype->prototypes[inst.a], thread.frame.environment);
 	return &inst+1;
@@ -714,18 +508,12 @@ Instruction const* strip_op(Thread& thread, Instruction const& inst) {
 		REG(thread, inst.c) = ((Object const&)REG(thread, inst.c)).base();
 	return &inst+1;
 }
-Instruction const* ret_op(Thread& thread, Instruction const& inst) {
-	*(thread.frame.result) = REG(thread, inst.c);
-	// if this stack frame owns the environment, we can free it for reuse
-	// as long as we don't return a closure...
-	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
-	if(thread.frame.ownEnvironment && REG(thread, inst.c).isClosureSafe())
-		thread.environments.push_back(thread.frame.environment);
-	thread.base = thread.frame.returnbase;
-	Instruction const* returnpc = thread.frame.returnpc;
-	thread.pop();
-	return returnpc;
+
+Instruction const* internal_op(Thread& thread, Instruction const& inst) {
+       thread.state.internalFunctions[inst.a].ptr(thread, &REG(thread, inst.b), REG(thread, inst.c));
+       return &inst+1;
 }
+
 Instruction const* done_op(Thread& thread, Instruction const& inst) {
 	// not used. When this instruction is hit, interpreter exits.
 	return 0;
@@ -744,35 +532,6 @@ static void printCode(Thread const& thread, Prototype const* prototype) {
 	std::cout << r << std::endl;
 }
 
-#ifdef USE_THREADED_INTERPRETER
-static const void** glabels = 0;
-#endif
-
-static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc) {
-	//printCode(thread, prototype);
-	StackFrame& s = thread.push();
-	s.environment = environment;
-	s.ownEnvironment = ownEnvironment;
-	s.returnpc = returnpc;
-	s.returnbase = thread.base;
-	s.result = result;
-	s.prototype = prototype;
-	thread.base -= prototype->registers;
-	if(thread.base < thread.registers)
-		throw RiposteError("Register overflow");
-
-#ifdef USE_THREADED_INTERPRETER
-	// Initialize threaded bytecode if not yet done 
-	if(prototype->bc[0].ibc == 0)
-	{
-		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); ++i) {
-			Instruction const& inst = prototype->bc[i];
-			inst.ibc = glabels[inst.bc];
-		}
-	}
-#endif
-	return &(prototype->bc[0]);
-}
 
 //
 //    Main interpreter loop 
