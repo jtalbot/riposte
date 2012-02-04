@@ -290,6 +290,7 @@ Instruction const* UseMethod_op(Thread& thread, Instruction const& inst) {
 	if(call.dots < arguments.length)
 		ExpandDots(thread, arguments, names, call.dots);
 
+	Value object = REG(thread, inst.c);
 	Character type = klass(thread, object);
 
 	String method;
