@@ -7,14 +7,25 @@
 static const void** glabels = 0;
 #endif
 
-static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Value* result, Instruction const* returnpc) {
-	//printCode(thread, prototype);
+static void printCode(Thread const& thread, Prototype const* prototype) {
+	std::string r = "block:\nconstants: " + intToStr(prototype->constants.size()) + "\n";
+	for(int64_t i = 0; i < (int64_t)prototype->constants.size(); i++)
+		r = r + intToStr(i) + "=\t" + thread.stringify(prototype->constants[i]) + "\n";
+
+	r = r + "code: " + intToStr(prototype->bc.size()) + "\n";
+	for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++)
+		r = r + intToHexStr((uint64_t)&(prototype->bc[i])) + "--: " + intToStr(i) + ":\t" + prototype->bc[i].toString() + "\n";
+
+	std::cout << r << std::endl;
+}
+
+static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Instruction const* returnpc) {
+	printCode(thread, prototype);
 	StackFrame& s = thread.push();
 	s.environment = environment;
 	s.ownEnvironment = ownEnvironment;
 	s.returnpc = returnpc;
 	s.returnbase = thread.base;
-	s.result = result;
 	s.prototype = prototype;
 	thread.base -= prototype->registers;
 	if(thread.base < thread.registers)
@@ -33,6 +44,21 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 	return &(prototype->bc[0]);
 }
 
+static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, int64_t resultSlot, Instruction const* returnpc) {
+	Environment* env = thread.frame.environment;
+	Instruction const* i = buildStackFrame(thread, environment, ownEnvironment, prototype, returnpc);
+	thread.frame.i = resultSlot;
+	thread.frame.env = env;
+	return i;
+}
+
+static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Environment* env, String s, Instruction const* returnpc) {
+	Instruction const* i = buildStackFrame(thread, environment, ownEnvironment, prototype, returnpc);
+	thread.frame.env = env;
+	thread.frame.s = s;
+	return i;
+}
+
 static void ExpandDots(Thread& thread, List& arguments, Character& names, int64_t dots) {
 	Environment* environment = thread.frame.environment;
 	uint64_t dotslength = environment->dots.size();
@@ -40,7 +66,7 @@ static void ExpandDots(Thread& thread, List& arguments, Character& names, int64_
 	if(dots < arguments.length) {
 		List a(arguments.length + dotslength - 1);
 		for(int64_t i = 0; i < dots; i++) a[i] = arguments[i];
-		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compile(thread.state, CreateSymbol((String)-(i-dots+1))), NULL).AsPromise(); } // TODO: should cache these.
+		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compilePromise(thread.state, CreateSymbol((String)-(i-dots+1))), NULL).AsPromise(); } // TODO: should cache these.
 		for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) a[i] = arguments[i-dotslength];
 
 		arguments = a;
@@ -65,8 +91,11 @@ static void ExpandDots(Thread& thread, List& arguments, Character& names, int64_
 
 inline void argAssign(Environment* env, String n, Value const& v, Environment* execution) {
 	Value w = v;
-	if(w.isPromise() && w.p == 0) w.p = execution;
-	env->assign(n, w);
+	if(w.isPromise() || w.isDefault()) {
+		assert(w.p == 0);
+		w.p = execution;
+	}
+	env->insert(n) = w;
 }
 
 static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, List const& arguments, Character const& anames) {
@@ -83,14 +112,14 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 	if(anames.length == 0) {
 		int64_t end = std::min(arguments.length, fdots);
 		for(int64_t i = 0; i < end; ++i) {
-			if(!arguments[i].isNil()) argAssign(fenv, parameters[i], arguments[i], env);
+			if(!arguments[i].isNil()) argAssign(fenv, parameters[i], arguments[i], fenv);
 		}
 
 		// set dots if necessary
 		if(fdots < parameters.length) {
 			int64_t idx = 1;
 			for(int64_t i = fdots; i < arguments.length; i++) {
-				argAssign(fenv, (String)-idx, arguments[i], env);
+				argAssign(fenv, (String)-idx, arguments[i], fenv);
 				fenv->dots.push_back(Strings::empty);
 				idx++;
 			}
@@ -149,14 +178,14 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 		// assign all the arguments
 		for(int64_t j = 0; j < parameters.length; ++j) 
 			if(j != fdots && set[j] >= 0 && !arguments[set[j]].isNil()) 
-				argAssign(fenv, parameters[j], arguments[set[j]], env);
+				argAssign(fenv, parameters[j], arguments[set[j]], fenv);
 
 		// put unused args into the dots
 		if(fdots < parameters.length) {
 			int64_t idx = 1;
 			for(int64_t i = 0; i < arguments.length; i++) {
 				if(assignment[i] < 0) {
-					argAssign(fenv, (String)-idx, arguments[i], env);
+					argAssign(fenv, (String)-idx, arguments[i], fenv);
 					fenv->dots.push_back(anames[i]);
 					idx++;
 				}
@@ -180,12 +209,7 @@ static Environment* CreateEnvironment(Thread& thread, Environment* l, Environmen
 // Get a Value by Symbol from the current environment,
 //  TODO: UseMethod also should search in some cached library locations.
 static Value GenericGet(Thread& thread, String s) {
-	Environment* environment = thread.frame.environment;
-	Value value = environment->get(s);
-	while(value.isNil() && environment->LexicalScope() != 0) {
-		environment = environment->LexicalScope();
-		value = environment->get(s);
-	}
+	Value const& value = thread.frame.environment->getRecursive(s);
 	if(value.isPromise()) {
 		//value = force(thread, value);
 		//environment->assign(s, value);
@@ -214,19 +238,19 @@ static Value GenericSearch(Thread& thread, Character klass, String generic, Stri
 	return func;
 }
 
-static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String func, Value& a, Value& out) {
+static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String func, Value const& a, int64_t out) {
 	String method;
 	Value f = GenericSearch(thread, klass(thread, a), func, method);
 	if(f.isFunction()) {
 		Function func(f);
 		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
 		MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a), Character(0));
-		return buildStackFrame(thread, fenv, true, func.prototype(), &out, &inst+1);
+		return buildStackFrame(thread, fenv, true, func.prototype(), out, &inst+1);
 	}
 	_error("Failed to find generic for builtin function");
 }
 
-static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String func, Value& a, Value& b, Value& out) {
+static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String func, Value const& a, Value const& b, int64_t out) {
 	String method;
 	Value f = a.isObject() ?  
 		GenericSearch(thread, klass(thread, a), func, method) :  
@@ -236,7 +260,7 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
 		Function func(f);
 		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
 		MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a, b), Character(0));
-		return buildStackFrame(thread, fenv, true, func.prototype(), &out, &inst+1);
+		return buildStackFrame(thread, fenv, true, func.prototype(), out, &inst+1);
 	}
 	_error("Failed to find generic for builtin function");
 }

@@ -60,6 +60,7 @@ struct Value {
 	bool isCharacter1() const { return header == (1<<4) + Type::Character; }
 	bool isList() const { return type == Type::List; }
 	bool isPromise() const { return type == Type::Promise && !isNil(); }
+	bool isDefault() const { return type == Type::Default; }
 	bool isFunction() const { return type == Type::Function; }
 	bool isObject() const { return type == Type::Object; }
 	bool isFuture() const { return type == Type::Future; }
@@ -67,7 +68,7 @@ struct Value {
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isCharacter() || isList(); }
 	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isCharacter() || (isList() && length==0); }
-	bool isConcrete() const { return type != Type::Promise; }
+	bool isConcrete() const { return type > Type::Default; }
 
 	template<class T> T& scalar() { throw "not allowed"; }
 	template<class T> T const& scalar() const { throw "not allowed"; }
@@ -266,7 +267,7 @@ public:
 		: proto(proto), env(env) {}
 	
 	explicit Function(Value const& v) {
-		assert(v.isFunction() || v.isPromise());
+		assert(v.isFunction() || v.isPromise() || v.isDefault());
 		proto = (Prototype*)(v.length << 4);
 		env = (Environment*)v.p;
 	}
@@ -281,6 +282,13 @@ public:
 	Value AsPromise() const {
 		Value v;
 		v.header = (int64_t)proto + Type::Promise;
+		v.p = env;
+		return v;
+	}
+
+	Value AsDefault() const {
+		Value v;
+		v.header = (int64_t)proto + Type::Default;
 		v.p = env;
 		return v;
 	}
@@ -471,72 +479,49 @@ inline String SymbolStr(Value const& v) {
 
 class Dictionary : public gc {
 protected:
+	struct Pair { String n; Value v; };
 	static const uint64_t inlineSize = 16;
-	struct Pair { String n; String cn; Value v; };
 	uint64_t size, load;
 	Pair* d;
 	Pair inlineDict[inlineSize];
 
-public:
-	Dictionary() : size(inlineSize), d(inlineDict) {
-		clear();
-	}
-
 	uint64_t hash(String s) const { return (uint64_t)s>>3; }
-	
-	// simple quadratic probing
-	uint64_t find(String s) const {
-		uint64_t i = hash(s) & (size-1);
-		uint64_t j = 1;
-		while((d[i].n != s) & (d[i].n != Strings::NA)) i = (i+(j++)) & (size-1);
-		assert(i >= 0 && i < size);
-		return i; 
-	}
 
-	bool fastAssign(String name, Value const& value) ALWAYS_INLINE {
+	// Returns the location of variable `name` in this environment or
+	// an empty pair (String::NA, Value::Nil).
+	// success is set to true if the variable is found. This boolean flag
+	// is necessary for compiler optimizations to eliminate expensive control flow.
+	Pair& find(String name, bool& success) const ALWAYS_INLINE {
 		uint64_t i = hash(name) & (size-1);
-		if(__builtin_expect(d[i].cn == name, true)) { d[i].v = value; return true; }
-		i = (i+1) & (size-1);
-		if(__builtin_expect(d[i].cn == name, true)) { d[i].v = value; return true; }
-		i = (i+2) & (size-1);
-		if(__builtin_expect(d[i].cn == name, true)) { d[i].v = value; return true; }
-		return false;
-	}
-	
-	uint64_t assign(String name, Value const& value) {
-		uint64_t i = find(name);
-		if(d[i].n != name) {
-			load++;
-			if((load * 2) > size) {
-				rehash((size) * 2);
-				i = find(name);
-			}
-			d[i].n = name;
+		if(__builtin_expect(d[i].n == name, true)) {
+			success = true;
+			return d[i];
 		}
-		d[i].cn = value.isConcrete() ?  name : Strings::NA; 
-		d[i].v = value; 
-		return i;
+		uint64_t j = 0;
+		while(d[i].n != Strings::NA) {
+			i = (i+(++j)) & (size-1);
+			if(__builtin_expect(d[i].n == name, true)) {
+				success = true;
+				return d[i];
+			}
+		}
+		success = false;
+		return d[i];
 	}
 
-	bool fastGet(String name, Value& out) ALWAYS_INLINE {
+	// Returns the location where variable `name` should be inserted.
+	// Assumes that `name` doesn't exist in the hash table yet.
+	// Used for rehash and insert where this is known to be true.
+	Pair& slot(String name) const ALWAYS_INLINE {
 		uint64_t i = hash(name) & (size-1);
-		if(__builtin_expect(d[i].cn == name, true)) { out = d[i].v; return true; }
-		i = (i+1) & (size-1);
-		if(__builtin_expect(d[i].cn == name, true)) { out = d[i].v; return true; }
-		i = (i+2) & (size-1);
-		if(__builtin_expect(d[i].cn == name, true)) { out = d[i].v; return true; }
-		return false;
-	}
-
-	Value const& get(String name) const {
-		return d[find(name)].v;
-	}
-
-	void remove(String name) {
-		uint64_t i = find(name);
-		d[i].n = Strings::NA;
-		d[i].cn = Strings::NA;
-		d[i].v = Value::Nil();
+		if(__builtin_expect(d[i].n == Strings::NA, true)) {
+			return d[i];
+		}
+		uint64_t j = 0;
+		while(d[i].n != Strings::NA) {
+			i = (i+(++j)) & (size-1);
+		}
+		return d[i];
 	}
 
 	void rehash(uint64_t s) {
@@ -550,10 +535,43 @@ public:
 		clear();	// this increments the revision
 		
 		// copy over previous populated values...
+		load = 0;
 		for(uint64_t i = 0; i < old_size; i++) {
 			if(old_d[i].n != Strings::NA) {
-				d[find(old_d[i].n)] = old_d[i];
+				slot(old_d[i].n) = old_d[i];
 			}
+		}
+	}
+
+public:
+	Dictionary() : size(inlineSize), d(inlineDict) {
+		clear();
+	}
+
+	Value& get(String name) const ALWAYS_INLINE {
+		bool success;
+		return find(name, success).v;
+	}
+
+	Value& insert(String name) ALWAYS_INLINE {
+		bool success;
+		Pair& p = find(name, success);
+		if(!success) {
+			load++;
+			if((load * 2) > size)
+				rehash((size*2));
+			p = slot(name);
+			p.n = name;
+		}
+		return p.v;
+	}
+
+	void remove(String name) {
+		bool success;
+		Pair& p = find(name, success);
+		if(success) {
+			load--;
+			memset(&p, 0, sizeof(Pair));
 		}
 	}
 
@@ -576,7 +594,7 @@ public:
 	}
 
 	static void assign(Pointer const& p, Value const& value) {
-		p.env->assign(p.name, value);
+		p.env->insert(p.name) = value;
 	}
 
 };
@@ -606,6 +624,25 @@ public:
 	Environment* LexicalScope() const { return lexical; }
 	Environment* DynamicScope() const { return dynamic; }
 
+	// Look up insertion location using R <<- rules
+	// (i.e. find variable with same name in the lexical scope)
+	Value& insertRecursive(String name) const ALWAYS_INLINE {
+		bool success;
+		Environment const* env = this;
+		Pair& p = env->find(name, success);
+		while(!success && env->LexicalScope() != 0) {
+			env = env->LexicalScope();
+			p = env->find(name, success);
+		}
+		return p.v;
+	}
+	
+	// Look up variable using standard R lexical scoping rules
+	// Should be same as insertRecursive, but with extra constness
+	Value const& getRecursive(String name) const ALWAYS_INLINE {
+		return insertRecursive(name);
+	}
+	
 };
 
 class REnvironment {

@@ -88,17 +88,19 @@ static void resolveLoopReferences(Prototype* code, int64_t start, int64_t end, i
 
 int64_t Compiler::compileConstant(Value const& expr, Prototype* code) {
 	code->constants.push_back(expr);
-	int64_t reg = scopes.back().allocRegister(Register::CONSTANT);
-	emit(code, ByteCode::kget, code->constants.size()-1, 0, reg);
+	int64_t reg = allocRegister();
+	constRegisters.push_back(reg);
+	//emit(code, ByteCode::kget, -(code->constants.size()-1), 0, reg);
 	return reg;
 }
 
 int64_t Compiler::compileSymbol(Value const& symbol, Prototype* code) {
-	int64_t reg = scopes.back().allocRegister(Register::VARIABLE);
+	//int64_t reg = allocRegister();
 	String s = SymbolStr(symbol);
-	emit(code, ByteCode::get, s, 0, reg);
-	emit(code, ByteCode::assign, s, 0, reg);
-	return reg;
+	//emit(code, ByteCode::get, s, 0, reg);
+	//emit(code, ByteCode::assign, s, 0, reg);
+	//return reg;
+	return (int64_t)s;
 }
 
 CompiledCall Compiler::makeCall(List const& call, Character const& names) {
@@ -111,7 +113,7 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 			dots = i-1;
 		} else if(isCall(call[i]) || isSymbol(call[i])) {
 			// promises should have access to the slots of the enclosing scope, but have their own register assignments
-			arguments[i-1] = Function(Compiler::compile(call[i]),NULL).AsPromise();
+			arguments[i-1] = Function(Compiler::compilePromise(state, call[i]),NULL).AsPromise();
 		} else {
 			arguments[i-1] = call[i];
 		}
@@ -127,18 +129,15 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 
 // a standard call, not an op
 int64_t Compiler::compileFunctionCall(List const& call, Character const& names, Prototype* code) {
-	int64_t liveIn = scopes.back().live();
 	code->calls.push_back(makeCall(call, names));
 	int64_t function = compile(call[0], code);
-	scopes.back().deadAfter(liveIn);
-	int64_t result = scopes.back().allocRegister(Register::TEMP);
+	int64_t result = allocRegister();
 	emit(code, ByteCode::call, function, -code->calls.size(), result);
 	return result;
 }
 
 int64_t Compiler::compileInternalFunctionCall(Object const& o, Prototype* code) {
 	List const& call = (List const&)(o.base());
-	int64_t liveIn = scopes.back().live();
 	String func = SymbolStr(call[0]);
 	std::map<String, int64_t>::const_iterator itr = state.internalFunctionIndex.find(func);
 	if(itr == state.internalFunctionIndex.end()) {
@@ -150,14 +149,13 @@ int64_t Compiler::compileInternalFunctionCall(Object const& o, Prototype* code) 
 	if(state.internalFunctions[function].params != call.length-1)
 		_error(std::string("Incorrect number of arguments to internal function ") + state.externStr(func));
 	// compile parameters directly...reserve registers for them.
-	int64_t reg = liveIn;
+	int64_t reg = this->n;
 	for(int64_t i = 1; i < call.length; i++) {
 		int64_t r = compile(call[i], code);
-		assert(r == reg+1);
+		//assert(r == reg+1);
 		reg = r; 
 	}
-	scopes.back().deadAfter(liveIn);
-	int64_t result = scopes.back().allocRegister(Register::TEMP);
+	int64_t result = allocRegister();
 	emit(code, ByteCode::internal, function, reg-(call.length-2), result);
 	return result;
 }
@@ -167,8 +165,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	if(length == 0) {
 		throw CompileError("invalid empty call");
 	}
-
-	int64_t liveIn = scopes.back().live();
 
 	if(!isSymbol(call[0]) && !call[0].isCharacter1())
 		return compileFunctionCall(call, names, code);
@@ -213,20 +209,27 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		
 		// the source for the assignment
 		int64_t source = compile(value, code);
-
-		emit(code, func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, SymbolStr(dest), 0, source);
-	
-		scopes.back().deadAfter(source);
-		return source;
+		// check if we can merge the assignment into the source statement...
+		// otherwise, emit a new assignment statement
+		if(func == Strings::assign2) { 
+			emit(code, ByteCode::assign2, SymbolStr(dest), 0, source);
+			return source;
+		} else {
+			if(code->bc.size() > 0 && code->bc.back().c < 0) {
+				code->bc.back().c = (int64_t)SymbolStr(dest);
+				return (int64_t)SymbolStr(dest);
+			} else {
+				emit(code, ByteCode::mov, source, 0, (int64_t)SymbolStr(dest));
+				return source;
+			}
+		}
 	} 
 	else if(func == Strings::bracket) {
 		if(call.length != 3) return compileFunctionCall(call, names, code);
 		int64_t value = compile(call[1], code);
 		int64_t index = compile(call[2], code);
-		scopes.back().deadAfter(liveIn);	
-		int64_t reg = scopes.back().allocRegister(Register::CONSTANT);	
+		int64_t reg = allocRegister();	
 		emit(code, ByteCode::subset, value, index, reg);
-		scopes.back().deadAfter(reg);	
 		return reg;
 	} 
 	else if(func == Strings::bb ||
@@ -234,10 +237,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		if(call.length != 3) return compileFunctionCall(call, names, code);
 		int64_t value = compile(call[1], code);
 		int64_t index = compile(call[2], code);
-		scopes.back().deadAfter(liveIn);	
-		int64_t reg = scopes.back().allocRegister(Register::CONSTANT);	
+		int64_t reg = allocRegister();	
 		emit(code, ByteCode::subset2, value, index, reg);
-		scopes.back().deadAfter(reg);	
 		return reg;
 	} 
 	else if(func == Strings::bracketAssign) { 
@@ -246,7 +247,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t index = compile(call[2], code);
 		int64_t value = compile(call[3], code);
 		emit(code, ByteCode::iassign, value, index, dest);
-		scopes.back().deadAfter(dest);	
 		return dest;
 	} 
 	else if(func == Strings::bbAssign ||
@@ -256,13 +256,10 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t index = compile(call[2], code);
 		int64_t value = compile(call[3], code);
 		emit(code, ByteCode::eassign, value, index, dest);
-		scopes.back().deadAfter(dest);	
 		return dest;
 	} 
 	else if(func == Strings::function) 
 	{
-		Scope scope;
-		scope.topLevel = false;
 		//compile the default parameters
 		assert(call[1].isObject());
 		List c = List(((Object const&)call[1]).base());
@@ -271,10 +268,9 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			Character(0);
 		
 		List defaults(c.length);
-		scope.parameters = parameters;
 		for(int64_t i = 0; i < defaults.length; i++) {
 			if(!c[i].isNil()) {
-				defaults[i] = Function(compile(c[i]),NULL).AsPromise();
+				defaults[i] = Function(compilePromise(state, c[i]),NULL).AsDefault();
 			}
 			else {
 				defaults[i] = c[i];
@@ -282,9 +278,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		}
 
 		//compile the source for the body
-		scopes.push_back(scope);
-		Prototype* functionCode = compile(call[2]);
-		scopes.pop_back();
+		Prototype* functionCode = Compiler::compileFunctionBody(state, call[2], parameters);
 
 		// Populate function info
 		functionCode->parameters = parameters;
@@ -296,8 +290,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 
 		code->prototypes.push_back(functionCode);
 		
-		scopes.back().deadAfter(liveIn);	
-		int64_t reg = scopes.back().allocRegister(Register::CONSTANT);	
+		int64_t reg = allocRegister();	
 		emit(code, ByteCode::function, code->prototypes.size()-1, 0, reg);
 		return reg;
 	} 
@@ -311,7 +304,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		else
 			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
 		emit(code, ByteCode::ret, (int64_t)0, (int64_t)0, result);
-		scopes.back().deadAfter(result);
 		return result;
 	} 
 	else if(func == Strings::forSym) 
@@ -335,15 +327,15 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		}
 		else {*/
 			int64_t loop_vector = compile(call[2], code);
-			int64_t loop_counter = scopes.back().allocRegister(Register::VARIABLE);	// save space for loop counter
-			int64_t loop_variable = scopes.back().allocRegister(Register::VARIABLE);
+			int64_t loop_counter = allocRegister();	// save space for loop counter
+			int64_t loop_variable = allocRegister();
 			
 			if(loop_counter != loop_vector+1) throw CompileError("limits aren't in adjacent registers");
 			emit(code, ByteCode::forbegin, (int64_t)0, loop_counter, loop_variable);
 			loopDepth++;
 			int64_t beginbody = code->bc.size();
 
-			emit(code, ByteCode::assign, SymbolStr(call[1]), 0, loop_variable);
+			emit(code, ByteCode::mov, loop_variable, 0, (int64_t)SymbolStr(call[1]));
 			compile(call[3], code);
 
 			int64_t endbody = code->bc.size();
@@ -352,7 +344,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			emit(code, ByteCode::forend, beginbody-endbody, loop_counter , loop_variable);
 			code->bc[beginbody-1].a = endbody-beginbody+1;
 		//}
-		scopes.back().deadAfter(liveIn);
 		int64_t result = compile(Null::Singleton(), code);
 		return result;
 	} 
@@ -373,13 +364,13 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		code->bc[beginbody-1].b = endbody-beginbody+2;
 		
 		loopDepth--;
-		scopes.back().deadAfter(liveIn);
 		int64_t result = compile(Null::Singleton(), code);
 		return result;
 	} 
 	else if(func == Strings::repeatSym)
 	{
 		loopDepth++;
+		int64_t start = this->n;
 
 		int64_t beginbody = code->bc.size();
 		compile(call[1], code);
@@ -387,22 +378,21 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		resolveLoopReferences(code, beginbody, endbody, endbody, endbody+1);
 		
 		loopDepth--;
-		emit(code, ByteCode::jmp, beginbody-endbody, 0, liveIn);
-		scopes.back().deadAfter(liveIn);
+		emit(code, ByteCode::jmp, beginbody-endbody, 0, start);
 		int64_t result = compile(Null::Singleton(), code);
 		return result;
 	}
 	else if(func == Strings::nextSym)
 	{
 		if(loopDepth == 0) throw CompileError("next used outside of loop");
-		int64_t result = scopes.back().allocRegister(Register::TEMP);	
+		int64_t result = allocRegister();	
 		emit(code, ByteCode::jmp, (int64_t)0, (int64_t)1, result);
 		return result;
 	} 
 	else if(func == Strings::breakSym)
 	{
 		if(loopDepth == 0) throw CompileError("break used outside of loop");
-		int64_t result = scopes.back().allocRegister(Register::TEMP);	
+		int64_t result = allocRegister();	
 		emit(code, ByteCode::jmp, (int64_t)0, (int64_t)2, result);
 		return result;
 	} 
@@ -416,12 +406,10 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t cond = compile(call[1], code);
 		emit(code, ByteCode::jc, (int64_t)1, (int64_t)0, cond);
 		int64_t begin1 = code->bc.size(), begin2 = 0;
-		scopes.back().deadAfter(liveIn);
 		resultT = compile(call[2], code);
 		
 		if(call.length == 4) {
 			emit(code, ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0);
-			scopes.back().deadAfter(liveIn);
 			begin2 = code->bc.size();
 			resultF = compile(call[3], code);
 		}
@@ -434,7 +422,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	
 		// TODO: if this can ever happen, should probably just insert a move into the lower numbered register	
 		if(resultT != resultF) throw CompileError(std::string("then and else blocks don't put the result in the same register ") + intToStr(resultT) + " " + intToStr(resultF));
-		scopes.back().deadAfter(resultT);
 		return resultT;
 	}
 	else if(func == Strings::lor2 && call.length == 3)
@@ -443,10 +430,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t left = compile(call[1], code);
 		emit(code, ByteCode::jc, (int64_t)0, (int64_t)1, left);
 		int64_t j1 = code->bc.size()-1;
-		scopes.back().deadAfter(start);
 		int64_t right = compile(call[2], code);
 		emit(code, ByteCode::jc, (int64_t)2, (int64_t)1, right);
-		scopes.back().deadAfter(liveIn);
 		compileConstant(Logical::False(), code);
 		code->bc[j1].a = code->bc.size()-j1;
 		return start;
@@ -457,10 +442,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t left = compile(call[1], code);
 		emit(code, ByteCode::jc, (int64_t)1, (int64_t)0, left);
 		int64_t j1 = code->bc.size()-1;
-		scopes.back().deadAfter(start);
 		int64_t right = compile(call[2], code);
 		emit(code, ByteCode::jc, (int64_t)1, (int64_t)2, right);
-		scopes.back().deadAfter(liveIn);
 		compileConstant(Logical::True(), code);
 		code->bc[j1].b = code->bc.size()-j1;
 		return start;
@@ -474,7 +457,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		for(int64_t i = 2; i < call.length; i++) {
 			emit(code, ByteCode::branch, (names.length > i ? names[i] : Strings::empty), 0, 0);
 		}
-		scopes.back().deadAfter(liveIn);
 		
 		std::vector<int64_t> jmps;
 		int64_t result = compile(Null::Singleton(), code);
@@ -482,7 +464,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		
 		for(int64_t i = 1; i <= n; i++) {
 			code->bc[branch+i].c = code->bc.size()-branch;
-			scopes.back().deadAfter(liveIn);
 			if(!call[i+1].isNil()) {
 				int64_t r = compile(call[i+1], code);
 				if(r != result) throw CompileError(std::string("switch statement doesn't put all its results in the same register"));
@@ -495,7 +476,6 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		for(int64_t i = 0; i < (int64_t)jmps.size(); i++) {
 			code->bc[jmps[i]].a = code->bc.size()-jmps[i];
 		}
-		scopes.back().deadAfter(result);
 		return result;
 	} 
 	else if(func == Strings::brace) 
@@ -506,10 +486,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		} else {
 			int64_t result;
 			for(int64_t i = 1; i < length; i++) {
-				scopes.back().deadAfter(liveIn);
 				result = compile(call[i], code);
 			}
-			scopes.back().deadAfter(result);
 			return result;
 		}
 	} 
@@ -524,14 +502,12 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			throw CompileError("invalid addition");
 		if(call.length == 2) {
 			int64_t a = compile(call[1], code);
-			scopes.back().deadAfter(liveIn);
-			result = scopes.back().allocRegister(Register::TEMP);
+			result = allocRegister();
 			emit(code, ByteCode::pos, a, 0, result);
 		} else if(call.length == 3) {
 			int64_t a = compile(call[1], code);
 			int64_t b = compile(call[2], code);
-			scopes.back().deadAfter(liveIn);
-			result = scopes.back().allocRegister(Register::TEMP);
+			result = allocRegister();
 			emit(code, ByteCode::add, a, b, result);
 		}
 		return result;
@@ -543,14 +519,12 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 			throw CompileError("invalid addition");
 		if(call.length == 2) {
 			int64_t a = compile(call[1], code);
-			scopes.back().deadAfter(liveIn);
-			result = scopes.back().allocRegister(Register::TEMP);
+			result = allocRegister();
 			emit(code, ByteCode::neg, a, 0, result);
 		} else if(call.length == 3) {
 			int64_t a = compile(call[1], code);
 			int64_t b = compile(call[2], code);
-			scopes.back().deadAfter(liveIn);
-			result = scopes.back().allocRegister(Register::TEMP);
+			result = allocRegister();
 			emit(code, ByteCode::sub, a, b, result);
 		}
 		return result;
@@ -580,8 +554,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		if(call.length != 3) return compileFunctionCall(call, names, code);
 		int64_t a = compile(call[1], code);
 		int64_t b = compile(call[2], code);
-		scopes.back().deadAfter(liveIn);
-		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		int64_t result = allocRegister();
 		emit(code, op(func), a, b, result);
 		return result;
 	} 
@@ -629,38 +602,35 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		// if there isn't exactly one parameter, we should call the library version...
 		if(call.length != 2) return compileFunctionCall(call, names, code);
 		int64_t a = compile(call[1], code);
-		scopes.back().deadAfter(liveIn);
-		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		int64_t result = allocRegister();
 		emit(code, op(func), a, 0, result);
 		return result; 
 	} 
 	else if(func == Strings::UseMethod)
 	{
-		if(scopes.back().topLevel)
+		if(scope != FUNCTION)
 			throw CompileError("Attempt to use UseMethod outside of function");
 		
 		// This doesn't match R's behavior. R always uses the original value of the first argument, not the most recent value. Blah.
 		int64_t object = (call.length == 3) 
-			? compile(call[2], code) : compile(CreateSymbol(scopes.back().parameters[0]), code); 
+			? compile(call[2], code) : compile(CreateSymbol(parameters[0]), code); 
 		if(!call[1].isCharacter1())
 			throw CompileError("First parameter to UseMethod must be a string");
 		String generic = SymbolStr(call[1]);
 		
-		Character p(scopes.back().parameters);
+		Character p(parameters);
 		List gcall(p.length+1);
 		for(int64_t i = 0; i < p.length; i++) gcall[i+1] = CreateSymbol(p[i]);
 		code->calls.push_back(makeCall(gcall, Character(0)));
 	
 		emit(code, ByteCode::UseMethod, generic, code->calls.size()-1, object);
-		scopes.back().deadAfter(object);
 		return object;
 	} 
 	else if(func == Strings::seq_len)
 	{
 		int64_t len = compile(call[1], code);
 		int64_t step = compile(Integer::c(1), code);
-		scopes.back().deadAfter(liveIn);
-		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		int64_t result = allocRegister();
 		emit(code, ByteCode::seq, len, step, result);
 		return result;
 	}
@@ -671,8 +641,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t no = compile(call[3], code);
 		int64_t yes = compile(call[2], code);
 		int64_t cond = compile(call[1], code);
-		scopes.back().deadAfter(liveIn);
-		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		int64_t result = allocRegister();
 		assert(no == result);
 		emit(code, ByteCode::ifelse, cond, yes, no);
 		return result;
@@ -684,8 +653,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		int64_t levels = compile(call[3], code);
 		int64_t factor = compile(call[2], code);
 		int64_t x = compile(call[1], code);
-		scopes.back().deadAfter(liveIn);
-		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		int64_t result = allocRegister();
 		assert(levels == result);
 		emit(code, ByteCode::split, x, factor, levels);
 		return result;
@@ -694,8 +662,7 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 	{
 		int64_t what = compile(call[1], code);
 		int64_t args = compile(call[2], code);
-		scopes.back().deadAfter(liveIn);
-		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		int64_t result = allocRegister();
 		emit(code, ByteCode::call, what, args, result);
 		return result;
 	} 
@@ -704,12 +671,10 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		// we only handle the list(...) case through an op for now
 		if(call.length != 2 || !isSymbol(call[1]) || SymbolStr(call[1]) != Strings::dots)
 			return compileFunctionCall(call, names, code);
-		scopes.back().deadAfter(liveIn);
-		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		int64_t result = allocRegister();
 		int64_t counter = compileConstant(Integer::c(0), code);
-		int64_t storage = scopes.back().allocRegister(Register::TEMP);
+		int64_t storage = allocRegister();
 		emit(code, ByteCode::list, counter, storage, result); 
-		scopes.back().deadAfter(result);
 		return result;
 	} 
 	else if(func == Strings::missing)
@@ -717,9 +682,8 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 		if(call.length != 2) _error("missing requires one argument");
 		if(!isSymbol(call[1]) && !call[1].isCharacter1()) _error("wrong parameter to missing");
 		String s = SymbolStr(call[1]);
-		int64_t result = scopes.back().allocRegister(Register::TEMP);
+		int64_t result = allocRegister();
 		emit(code, ByteCode::missing, s, 0, result); 
-		scopes.back().deadAfter(result);
 		return result;
 	} 
 	else if(func == Strings::quote)
@@ -734,15 +698,12 @@ int64_t Compiler::compileCall(List const& call, Character const& names, Prototyp
 }
 
 int64_t Compiler::compileExpression(List const& values, Prototype* code) {
-	int64_t liveIn = scopes.back().live();
 	int64_t result = 0;
 	if(values.length == 0) 
 		throw CompileError("invalid empty expression");
 	for(int64_t i = 0; i < values.length; i++) {
-		scopes.back().deadAfter(liveIn);
 		result = compile(values[i], code);
 	}
-	scopes.back().deadAfter(result);
 	return result;
 }
 
@@ -784,24 +745,15 @@ Prototype* Compiler::compile(Value const& expr) {
 	Prototype* code = new Prototype();
 	assert(((int64_t)code) % 16 == 0); // our type packing assumes that this is true
 
-	int64_t oldLoopDepth = loopDepth;
-	loopDepth = 0;
-	
-	std::vector<Register> oldRegisters;
-	oldRegisters.swap(scopes.back().registers);
-	int64_t oldMaxRegister = scopes.back().maxRegister;
-	
 	int64_t result = compile(expr, code);
 
-	code->registers = scopes.back().maxRegister+1;
+	code->registers = n+1;
 	code->expression = expr;
 	// insert return statement at end of code
 	emit(code, ByteCode::ret, (int64_t)0, (int64_t)0, result);
-	
-	oldRegisters.swap(scopes.back().registers);
-	scopes.back().maxRegister = oldMaxRegister;	
-	loopDepth = oldLoopDepth;
-
+	// insert constants at the beginning
+	for(int i = 0; i < code->constants.size(); i++)
+		code->bc.insert(code->bc.begin(), Instruction(ByteCode::kget, -i, 0, constRegisters[i]));
 	return code;	
 }
 

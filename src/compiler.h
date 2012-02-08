@@ -18,34 +18,21 @@ class Compiler {
 private:
 	State& state;
 
-	struct Register {
-		enum Type { CONSTANT, VARIABLE, TEMP };
-		Type type;
-		Register() { type = VARIABLE; }
-		Register(Type type) : type(type) {}
+	enum Scope {
+		TOPLEVEL,
+		FUNCTION,
+		PROMISE
 	};
+	
+	Scope scope;
+	Character parameters;	// only valid if in FUNCTION scope 
+	uint64_t loopDepth;
+	std::vector<int64_t> constRegisters;
 
-	struct Scope {
-		Environment* env;
-		bool topLevel;
-		std::vector<Register> registers;
-		int64_t maxRegister;
-		Character parameters;
+	int64_t n;
+	int64_t allocRegister() { return --n; }
 
-		Scope() : env(0), topLevel(false), maxRegister(-1) {}
-
-		int64_t live() const { return registers.size()-1; }
-		int64_t allocRegister(Register::Type type) { int64_t r = registers.size(); registers.push_back(Register(type)); maxRegister = maxRegister > r ? maxRegister : r; return r; }
-		void deadAfter(int64_t i) { registers.resize(i+1); }
-	}; 
-
-	std::vector<Scope> scopes;
-
-	int64_t loopDepth;	
-
-	Compiler(State& state) : state(state) {
-		loopDepth = 0;
-	}
+	Compiler(State& state, Scope scope) : state(state), scope(scope), loopDepth(0), n(0) {}
 	
 	Prototype* compile(Value const& expr);			// compile function block, code ends with return
 	int64_t compile(Value const& expr, Prototype* code);		// compile into existing code block
@@ -61,12 +48,21 @@ private:
 
 	int64_t emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c);
 	int64_t emit(Prototype* code, ByteCode::Enum bc, String s, int64_t b, int64_t c);
+
 public:
-	static Prototype* compile(State& state, Value const& expr) {
-		Compiler compiler(state);
-		Scope scope;
-		scope.topLevel = true;
-		compiler.scopes.push_back(scope);
+	static Prototype* compileTopLevel(State& state, Value const& expr) {
+		Compiler compiler(state, TOPLEVEL);
+		return compiler.compile(expr);
+	}
+	
+	static Prototype* compileFunctionBody(State& state, Value const& expr, Character& parameters) {
+		Compiler compiler(state, FUNCTION);
+		compiler.parameters = parameters;
+		return compiler.compile(expr);
+	}
+	
+	static Prototype* compilePromise(State& state, Value const& expr) {
+		Compiler compiler(state, PROMISE);
 		return compiler.compile(expr);
 	}
 };

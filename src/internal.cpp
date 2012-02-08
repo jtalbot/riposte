@@ -662,7 +662,7 @@ void length(Thread& thread, Value const* args, Value& result) {
 }
 
 void eval_fn(Thread& thread, Value const* args, Value& result) {
-	result = thread.eval(Compiler::compile(thread.state, args[0]), REnvironment(args[1]).ptr());
+	result = thread.eval(Compiler::compilePromise(thread.state, args[0]), REnvironment(args[1]).ptr());
 }
 
 struct lapplyargs {
@@ -676,7 +676,7 @@ void* lapplyheader(void* args, uint64_t start, uint64_t end, Thread& thread) {
 	List apply(2);
 	apply[0] = l.func;
 	apply[1] = Value::Nil();
-	Prototype* p = Compiler::compile(thread.state, CreateCall(apply));
+	Prototype* p = Compiler::compilePromise(thread.state, CreateCall(apply));
 	return p;
 }
 
@@ -771,7 +771,7 @@ void source(Thread& thread, Value const* args, Value& result) {
 	Value value;
 	parser.execute(code.c_str(), code.length(), true, value);	
 	
-	result = thread.eval(Compiler::compile(thread.state, value));
+	result = thread.eval(Compiler::compileTopLevel(thread.state, value));
 }
 
 void environment(Thread& thread, Value const* args, Value& result) {
@@ -851,7 +851,7 @@ void substitute(Thread& thread, Value const* args, Value& result) {
 	while(v.isPromise()) v = Function(v).prototype()->expression;
 	
 	if(isSymbol(v)) {
-		Value r = thread.frame.environment->get(SymbolStr(v));
+		Value const& r = thread.frame.environment->getRecursive(SymbolStr(v));
 		if(!r.isNil()) v = r;
 		while(v.isPromise()) v = Function(v).prototype()->expression;
 	}
@@ -866,7 +866,7 @@ void type_of(Thread& thread, Value const* args, Value& result) {
 void exists(Thread& thread, Value const* args, Value& result) {
 	Character c = As<Character>(thread, args[0]);
 	REnvironment e(args[1]);
-	Value v = e.ptr()->get(c[0]);
+	Value const& v = e.ptr()->getRecursive(c[0]);
 	if(v.isNil())
 		result = Logical::False();
 	else

@@ -97,7 +97,12 @@ struct StackFrame {
 
 	Instruction const* returnpc;
 	Value* returnbase;
-	Value* result;
+	// result can go in a stack slot or in an environment
+	union {
+		int64_t i;
+		String s;
+	};
+	Environment* env;
 };
 
 // TODO: Careful, args and result might overlap!

@@ -18,9 +18,8 @@
 	_(list, "list") \
 
 #define MEMORY_ACCESS_BYTECODES(_) \
-	_(get, "get") \
 	_(kget, "kget") \
-	_(assign, "assign") \
+	_(mov, "mov") \
 	_(assign2, "assign2") \
 	_(iassign, "iassign") \
 	_(eassign, "eassign") \
@@ -211,8 +210,14 @@ struct Instruction {
 	Instruction(ByteCode::Enum bc, String s, int64_t b=0, int64_t c=0) :
 		s(s), b(b), c(c), bc(bc), ibc(0) {}
 	
+	std::string regToStr(int64_t a) const {
+		//if(a <= 0) return intToStr(-a);
+		//else return std::string((String)a);
+		return intToStr(a);
+	}
+
 	std::string toString() const {
-		return std::string("") + ByteCode::toString(bc) + "\t" + intToStr(a) + "\t" + intToStr(b) + "\t" + intToStr(c);
+		return std::string("") + ByteCode::toString(bc) + "\t" + regToStr(a) + "\t" + regToStr(b) + "\t" + regToStr(c);
 	}
 };
 
