@@ -13,31 +13,32 @@
 #include "sse.h"
 #include "call.h"
 
-extern Instruction const* kget_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+/*extern Instruction const* kget_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* get_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* assign2_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* subset_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* subset2_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* jc_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* lt_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-
+*/
 Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, String name) {
-	Function f(*a);
-	if(a->isPromise())
+	if(a->isPromise()) {
+		Function f(*a);
 		return buildStackFrame(thread, f.environment()->DynamicScope(), false, f.prototype(), f.environment(), name, &inst);
-	else if(a->isDefault())
+	} else if(a->isDefault()) {
+		Function f(*a);
 		return buildStackFrame(thread, f.environment(), false, f.prototype(), f.environment(), name, &inst);
-	else
+	} else {
 		_error(std::string("Object '") + thread.externStr(name) + "' not found");
+	}
 }
 
 #define REG(a, i) \
 Value const* a##p; \
 do { \
-	if(__builtin_expect(i < 0, true)) a##p = (thread.base-i); \
+	if(__builtin_expect(i <= 0, true)) a##p = (thread.base-i); \
 	else { \
 		a##p = &thread.frame.environment->getRecursive((String)i); \
 		if(!a##p->isConcrete()) return forceReg(thread, inst, a##p, (String)i); \
@@ -46,19 +47,19 @@ do { \
 Value const& a = *a##p; 
 
 #define UNCHECKED_REG(a, i) \
-Value const& a = __builtin_expect(i < 0, true) ? \
+Value const& a = __builtin_expect(i <= 0, true) ? \
 		*(thread.base-i) : \
 		thread.frame.environment->getRecursive((String)i); 
 	
 #define CHECK_REG(a, i) \
 do { \
-	if(i >= 0 && !a.isConcrete()) return forceReg(thread, inst, &a, (String)i); \
+	if(i > 0 && !a.isConcrete()) return forceReg(thread, inst, &a, (String)i); \
 } while(0);
 
 
 Value& OUTREG(Thread& thread, int64_t i) ALWAYS_INLINE; 
 Value& OUTREG(Thread& thread, int64_t i) {
-	if(__builtin_expect(i < 0, true)) return *(thread.base-i);
+	if(__builtin_expect(i <= 0, true)) return *(thread.base-i);
 	else return thread.frame.environment->insert((String)i);
 }
 
@@ -154,7 +155,7 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* UseMethod_op(Thread& thread, Instruction const& inst) {
-	String generic = inst.s;
+	String generic = (String)inst.a;
 
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
 	List arguments = call.arguments;
@@ -212,11 +213,11 @@ Instruction const* branch_op(Thread& thread, Instruction const& inst) {
 	else if(c.isLogical1()) index = c.i;
 	else if(c.isCharacter1()) {
 		for(int64_t i = 1; i <= inst.b; i++) {
-			if((&inst+i)->s == c.s) {
+			if((String)(&inst+i)->a == c.s) {
 				index = i;
 				break;
 			}
-			if(index < 0 && (&inst+i)->s == Strings::empty) {
+			if(index < 0 && (String)(&inst+i)->a == Strings::empty) {
 				index = i;
 			}
 		}
@@ -229,25 +230,27 @@ Instruction const* branch_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
-	// inst.b-1 holds the loopVector
-	REG(vec, inst.b-1);
-	if((int64_t)vec.length <= 0) { return &inst+inst.a; }
-	Value& iter = *(thread.base+inst.b);;
-	Value& lv = OUTREG(thread, inst.c);
-	Element2(vec, 0, lv);
-	iter.header = vec.length;	// warning: not a valid object, but saves a shift
-	iter.i = 1;
-	return &inst+1;
+	REG(vec, inst.b);
+	if((int64_t)vec.length <= 0) {
+		return &inst+(&inst+1)->a;	// offset is in following JMP, dispatch together
+	} else {
+		Element2(vec, 0, OUTREG(thread, inst.c));
+		Value& counter = *(thread.base+inst.a);
+		counter.header = vec.length;	// warning: not a valid object, but saves a shift
+		counter.i = 1;
+		return &inst+2;			// skip over following JMP
+	}
 }
 Instruction const* forend_op(Thread& thread, Instruction const& inst) {
-	Value& iter = *(thread.base+inst.b);
-	if(__builtin_expect((iter.i) < iter.header, true)) {
-		REG(vec, inst.b-1);
-		Value& lv = OUTREG(thread, inst.c);
-		Element2(vec, iter.i, lv);
-		iter.i++;
-		return profile_back_edge(thread,&inst+inst.a);
-	} else return &inst+1;
+	Value& counter = *(thread.base+inst.a);
+	if(__builtin_expect((counter.i) < counter.header, true)) {
+		REG(vec, inst.b);
+		Element2(vec, counter.i, OUTREG(thread, inst.c));
+		counter.i++;
+		return profile_back_edge(thread,&inst+(&inst+1)->a);
+	} else {
+		return &inst+2;			// skip over following JMP
+	}
 }
 
 Instruction const* list_op(Thread& thread, Instruction const& inst) {
@@ -314,9 +317,9 @@ Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 	// so start off looking up one level...
 	assert(thread.frame.environment->LexicalScope() != 0);
 	
-	REG(value, inst.c);
+	REG(value, inst.a);
 	
-	String s = inst.s;
+	String s = (String)inst.c;
 	Value& dest = thread.frame.environment->LexicalScope()->insertRecursive(s);
 
 	if(!dest.isNil()) {
@@ -465,8 +468,8 @@ Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* split_op(Thread& thread, Instruction const& inst) {
-	REG(a, inst.a);
-	Instruction const* jit = trace(thread, inst, a);
+	REG(c, inst.c);
+	Instruction const* jit = trace(thread, inst, c);
 	if(jit) return jit;
 		
 	_error("split not defined in scalar yet");
@@ -529,7 +532,7 @@ Instruction const* length_op(Thread& thread, Instruction const& inst) {
 }
 Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 	// This could be inline cached...or implemented in terms of something else?
-	String s = inst.s;
+	String s = (String)inst.a;
 	Value const& v = thread.frame.environment->get(s);
 	bool missing = v.isNil() || v.isDefault();
 	Logical::InitScalar(OUTREG(thread, inst.c), missing);

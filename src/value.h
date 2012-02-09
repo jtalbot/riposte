@@ -47,6 +47,11 @@ struct Value {
 	bool operator!=(Value const& other) const {
 		return header != other.header || p != other.p;
 	}
+
+	// Ordering solely for the purpose of putting them in a map
+	bool operator<(Value const& other) const {
+		return header < other.header || (header == other.header && p < other.p);
+	}
 	
 	bool isNil() const { return header == 0; }
 	bool isNull() const { return type == Type::Null; }
@@ -491,37 +496,37 @@ protected:
 	// an empty pair (String::NA, Value::Nil).
 	// success is set to true if the variable is found. This boolean flag
 	// is necessary for compiler optimizations to eliminate expensive control flow.
-	Pair& find(String name, bool& success) const ALWAYS_INLINE {
+	Pair* find(String name, bool& success) const ALWAYS_INLINE {
 		uint64_t i = hash(name) & (size-1);
 		if(__builtin_expect(d[i].n == name, true)) {
 			success = true;
-			return d[i];
+			return &d[i];
 		}
 		uint64_t j = 0;
 		while(d[i].n != Strings::NA) {
 			i = (i+(++j)) & (size-1);
 			if(__builtin_expect(d[i].n == name, true)) {
 				success = true;
-				return d[i];
+				return &d[i];
 			}
 		}
 		success = false;
-		return d[i];
+		return &d[i];
 	}
 
 	// Returns the location where variable `name` should be inserted.
 	// Assumes that `name` doesn't exist in the hash table yet.
 	// Used for rehash and insert where this is known to be true.
-	Pair& slot(String name) const ALWAYS_INLINE {
+	Pair* slot(String name) const ALWAYS_INLINE {
 		uint64_t i = hash(name) & (size-1);
 		if(__builtin_expect(d[i].n == Strings::NA, true)) {
-			return d[i];
+			return &d[i];
 		}
 		uint64_t j = 0;
 		while(d[i].n != Strings::NA) {
 			i = (i+(++j)) & (size-1);
 		}
-		return d[i];
+		return &d[i];
 	}
 
 	void rehash(uint64_t s) {
@@ -532,13 +537,13 @@ protected:
 
 		size = s;
 		d = new (GC) Pair[s];
-		clear();	// this increments the revision
+		clear();
 		
 		// copy over previous populated values...
-		load = 0;
 		for(uint64_t i = 0; i < old_size; i++) {
 			if(old_d[i].n != Strings::NA) {
-				slot(old_d[i].n) = old_d[i];
+				load++;
+				*slot(old_d[i].n) = old_d[i];
 			}
 		}
 	}
@@ -548,30 +553,30 @@ public:
 		clear();
 	}
 
-	Value& get(String name) const ALWAYS_INLINE {
+	Value const& get(String name) const ALWAYS_INLINE {
 		bool success;
-		return find(name, success).v;
+		return find(name, success)->v;
 	}
 
 	Value& insert(String name) ALWAYS_INLINE {
 		bool success;
-		Pair& p = find(name, success);
+		Pair* p = find(name, success);
 		if(!success) {
-			load++;
-			if((load * 2) > size)
+			if((load+1 * 2) > size)
 				rehash((size*2));
+			load++;
 			p = slot(name);
-			p.n = name;
+			p->n = name;
 		}
-		return p.v;
+		return p->v;
 	}
 
 	void remove(String name) {
 		bool success;
-		Pair& p = find(name, success);
+		Pair* p = find(name, success);
 		if(success) {
 			load--;
-			memset(&p, 0, sizeof(Pair));
+			memset(p, 0, sizeof(Pair));
 		}
 	}
 
@@ -629,12 +634,12 @@ public:
 	Value& insertRecursive(String name) const ALWAYS_INLINE {
 		bool success;
 		Environment const* env = this;
-		Pair& p = env->find(name, success);
+		Pair* p = env->find(name, success);
 		while(!success && env->LexicalScope() != 0) {
 			env = env->LexicalScope();
 			p = env->find(name, success);
 		}
-		return p.v;
+		return p->v;
 	}
 	
 	// Look up variable using standard R lexical scoping rules

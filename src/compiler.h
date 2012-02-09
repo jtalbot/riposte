@@ -27,27 +27,73 @@ private:
 	Scope scope;
 	Character parameters;	// only valid if in FUNCTION scope 
 	uint64_t loopDepth;
-	std::vector<int64_t> constRegisters;
+	std::map<Value, int64_t> constants;
 
-	int64_t n;
-	int64_t allocRegister() { return --n; }
+	enum Loc {
+		INVALID,
+		REGISTER,
+		MEMORY,
+		CONSTANT,
+		INTEGER
+	};
 
-	Compiler(State& state, Scope scope) : state(state), scope(scope), loopDepth(0), n(0) {}
+	struct Operand {
+		Loc loc;
+		union {
+			int64_t i;
+			String s;
+		};
+		Operand() : loc(INVALID), i(0) {}
+		Operand(Loc loc, int64_t i) : loc(loc), i(i) {}
+		Operand(Loc loc, String s) : loc(loc), s(s) {}
+		Operand(int64_t i) : loc(INTEGER), i(i) {}
+		Operand(int i) : loc(INTEGER), i(i) {}
+		Operand(size_t i) : loc(INTEGER), i(i) {}
+
+		bool operator==(Operand const& o) const { return loc == o.loc && i == o.i; }
+		bool operator!=(Operand const& o) const { return loc != o.loc || i != o.i; }
+		std::string toString() const {
+			if(loc == INVALID) return "I";
+			else if(loc == REGISTER) return intToStr(i) + "R";
+			else if(loc == CONSTANT) return intToStr(i) + "C";
+			else if(loc == MEMORY) return std::string(s);
+			else return intToStr(i) + "L";
+		}
+	};
+
+	struct IRNode {
+		ByteCode::Enum bc;
+		Operand a, b, c;
+		IRNode(ByteCode::Enum bc, Operand a, Operand b, Operand c) :
+			bc(bc), a(a), b(b), c(c) {}
+	};
+
+	std::vector<IRNode> ir;
+
+	int64_t n, max_n;
+	Operand allocRegister() { max_n = std::max(max_n, n+1); return Operand(REGISTER, n++); }
+	Operand kill(Operand i) { if(i.loc == REGISTER) { n = std::min(n, i.i); } return i; }
+	Operand top() { return Operand(REGISTER, n); }
+
+	Compiler(State& state, Scope scope) : state(state), scope(scope), loopDepth(0), n(0), max_n(0) {}
 	
 	Prototype* compile(Value const& expr);			// compile function block, code ends with return
-	int64_t compile(Value const& expr, Prototype* code);		// compile into existing code block
+	Operand compile(Value const& expr, Prototype* code);		// compile into existing code block
 
-	int64_t compileConstant(Value const& expr, Prototype* code);
-	int64_t compileSymbol(Value const& symbol, Prototype* code); 
-	int64_t compileCall(List const& call, Character const& names, Prototype* code); 
-	int64_t compileFunctionCall(List const& call, Character const& names, Prototype* code); 
-	int64_t compileInternalFunctionCall(Object const& o, Prototype* code); 
-	int64_t compileExpression(List const& values, Prototype* code);
+	Operand compileConstant(Value const& expr, Prototype* code);
+	Operand compileSymbol(Value const& symbol, Prototype* code); 
+	Operand compileCall(List const& call, Character const& names, Prototype* code); 
+	Operand compileFunctionCall(List const& call, Character const& names, Prototype* code); 
+	Operand compileInternalFunctionCall(Object const& o, Prototype* code); 
+	Operand compileExpression(List const& values, Prototype* code);
 	
 	CompiledCall makeCall(List const& call, Character const& names);
 
-	int64_t emit(Prototype* code, ByteCode::Enum bc, int64_t a, int64_t b, int64_t c);
-	int64_t emit(Prototype* code, ByteCode::Enum bc, String s, int64_t b, int64_t c);
+	Operand placeInRegister(Operand r);
+	int64_t emit(ByteCode::Enum bc, Operand a, Operand b, Operand c);
+	void resolveLoopExits(int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget);
+	int64_t encodeOperand(Operand op, int64_t n) const;
+	void dumpCode() const;
 
 public:
 	static Prototype* compileTopLevel(State& state, Value const& expr) {

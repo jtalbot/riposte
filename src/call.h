@@ -20,7 +20,7 @@ static void printCode(Thread const& thread, Prototype const* prototype) {
 }
 
 static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Instruction const* returnpc) {
-	printCode(thread, prototype);
+	//printCode(thread, prototype);
 	StackFrame& s = thread.push();
 	s.environment = environment;
 	s.ownEnvironment = ownEnvironment;
@@ -28,6 +28,8 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 	s.returnbase = thread.base;
 	s.prototype = prototype;
 	thread.base -= prototype->registers;
+	if(prototype->constants.size() > 0)
+		memcpy(thread.base, &prototype->constants[0], sizeof(Value)*prototype->constants.size());
 	if(thread.base < thread.registers)
 		throw RiposteError("Register overflow");
 
@@ -91,11 +93,13 @@ static void ExpandDots(Thread& thread, List& arguments, Character& names, int64_
 
 inline void argAssign(Environment* env, String n, Value const& v, Environment* execution) {
 	Value w = v;
-	if(w.isPromise() || w.isDefault()) {
-		assert(w.p == 0);
-		w.p = execution;
+	if(!w.isNil()) {
+		if(w.isPromise() || w.isDefault()) {
+			assert(w.p == 0);
+			w.p = execution;
+		}
+		env->insert(n) = w;
 	}
-	env->insert(n) = w;
 }
 
 static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, List const& arguments, Character const& anames) {
@@ -176,9 +180,11 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 		// stuff that can't be cached...
 
 		// assign all the arguments
-		for(int64_t j = 0; j < parameters.length; ++j) 
-			if(j != fdots && set[j] >= 0 && !arguments[set[j]].isNil()) 
+		for(int64_t j = 0; j < parameters.length; ++j) {
+			if(j != fdots && set[j] >= 0 && !arguments[set[j]].isNil()) {
 				argAssign(fenv, parameters[j], arguments[set[j]], fenv);
+			}
+		}
 
 		// put unused args into the dots
 		if(fdots < parameters.length) {

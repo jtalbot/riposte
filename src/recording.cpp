@@ -202,9 +202,9 @@ RecordingStatus::Enum subset_record(Thread & thread, Instruction const & inst, I
 RecordingStatus::Enum ifelse_record(Thread & thread, Instruction const & inst, Instruction const** pc) {
 	Trace& trace = thread.trace;
 	
-	Value & cond = REG(thread,inst.a);
+	Value & cond = REG(thread,inst.c);
 	Value & yes = REG(thread,inst.b);
-	Value & no = REG(thread,inst.c);
+	Value & no = REG(thread,inst.a);
 
 	Type::Enum ytype = getType(yes);	
 	Type::Enum ntype = getType(no);
@@ -228,10 +228,10 @@ RecordingStatus::Enum ifelse_record(Thread & thread, Instruction const & inst, I
 RecordingStatus::Enum split_record(Thread & thread, Instruction const & inst, Instruction const** pc) {
 	Trace& trace = thread.trace;
 	
-	Value & x = REG(thread,inst.a);
+	Value & x = REG(thread,inst.c);
 	Value & f = REG(thread,inst.b);
 	CHECK_REG(inst.c);
-	int64_t levels = As<Integer>(thread, REG(thread,inst.c))[0];
+	int64_t levels = As<Integer>(thread, REG(thread,inst.a))[0];
 
 	IRef xref = getRef(trace, x);
 	IRef fref = getRef(trace, f);	

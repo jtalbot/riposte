@@ -35,6 +35,7 @@ Incomplete language features
 -FFI
 -built in functions galore
 -factors
+-handle NAs in || and &&
 
 Implemented, but needs testing and/or additional functionality
 --------------------------------------------------------------
