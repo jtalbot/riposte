@@ -13,7 +13,7 @@
 #include "sse.h"
 #include "call.h"
 
-/*extern Instruction const* kget_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* kget_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* get_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -22,7 +22,7 @@ extern Instruction const* subset_op(Thread& thread, Instruction const& inst) ALW
 extern Instruction const* subset2_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* jc_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* lt_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-*/
+
 Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, String name) {
 	if(a->isPromise()) {
 		Function f(*a);
@@ -35,33 +35,31 @@ Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const
 	}
 }
 
-#define REG(a, i) \
+#define REGISTER(i) (*(thread.base-(i)))
+
+#define OPERAND(a, i) \
 Value const* a##p; \
 do { \
-	if(__builtin_expect(i <= 0, true)) a##p = (thread.base-i); \
+	if(__builtin_expect((i) <= 0, true)) a##p = (thread.base-i); \
 	else { \
-		a##p = &thread.frame.environment->getRecursive((String)i); \
-		if(!a##p->isConcrete()) return forceReg(thread, inst, a##p, (String)i); \
+		a##p = &thread.frame.environment->getRecursive((String)(i)); \
+		if(!a##p->isConcrete()) return forceReg(thread, inst, a##p, (String)(i)); \
 	} \
 } while(0); \
 Value const& a = *a##p; 
 
-#define UNCHECKED_REG(a, i) \
-Value const& a = __builtin_expect(i <= 0, true) ? \
-		*(thread.base-i) : \
-		thread.frame.environment->getRecursive((String)i); 
+#define UNCHECKED_OPERAND(a, i) \
+Value const& a = __builtin_expect((i) <= 0, true) ? \
+		*(thread.base-(i)) : \
+		thread.frame.environment->getRecursive((String)(i)); 
 	
-#define CHECK_REG(a, i) \
+#define CHECK_OPERAND(a, i) \
 do { \
-	if(i > 0 && !a.isConcrete()) return forceReg(thread, inst, &a, (String)i); \
+	if((i) > 0 && !a.isConcrete()) return forceReg(thread, inst, &a, (String)(i)); \
 } while(0);
 
-
-Value& OUTREG(Thread& thread, int64_t i) ALWAYS_INLINE; 
-Value& OUTREG(Thread& thread, int64_t i) {
-	if(__builtin_expect(i <= 0, true)) return *(thread.base-i);
-	else return thread.frame.environment->insert((String)i);
-}
+// Out register is currently always a register, not memory
+#define OUT(thread, i) (*(thread.base-(i)))
 
 // Tracing stuff
 
@@ -103,7 +101,7 @@ static Instruction const* trace(Thread& thread, Instruction const& inst, Value c
 // Control flow instructions
 
 Instruction const* call_op(Thread& thread, Instruction const& inst) {
-	REG(f, inst.a);
+	OPERAND(f, inst.a);
 	if(!f.isFunction())
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
 	Function func(f);
@@ -121,7 +119,7 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 			ExpandDots(thread, arguments, names, call.dots);
 		fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
 	} else {
-		REG(reg, inst.b);
+		OPERAND(reg, inst.b);
 		if(reg.isObject()) {
 			arguments = List(((Object const&)reg).base());
 			names = Character(((Object const&)reg).getNames());
@@ -140,12 +138,12 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	// if this stack frame owns the environment, we can free it for reuse
 	// as long as we don't return a closure...
 	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
-	REG(result, inst.c);	// could this be UNCHECKED?
+	OPERAND(result, inst.a);	// could this be UNCHECKED?
 	if(thread.frame.ownEnvironment && result.isClosureSafe())
 		thread.environments.push_back(thread.frame.environment);
 	thread.base = thread.frame.returnbase;
 	if(thread.frame.i <= 0) {
-		*(thread.base-(thread.frame.i)) = result;
+		REGISTER(thread.frame.i) = result;
 	} else {
 		thread.frame.env->insert(thread.frame.s) = result;
 	}
@@ -163,7 +161,7 @@ Instruction const* UseMethod_op(Thread& thread, Instruction const& inst) {
 	if(call.dots < arguments.length)
 		ExpandDots(thread, arguments, names, call.dots);
 
-	REG(object, inst.c);
+	OPERAND(object, inst.c);
 	Character type = klass(thread, object);
 
 	String method;
@@ -187,7 +185,7 @@ Instruction const* jmp_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* jc_op(Thread& thread, Instruction const& inst) {
-	UNCHECKED_REG(c, inst.c);
+	UNCHECKED_OPERAND(c, inst.c);
 	if(c.isLogical1()) {
 		if(Logical::isTrue(c.c)) return &inst+inst.a;
 		else if(Logical::isFalse(c.c)) return &inst+inst.b;
@@ -201,12 +199,12 @@ Instruction const* jc_op(Thread& thread, Instruction const& inst) {
 		else if(c.d != 0) return &inst + inst.a;
 		else return & inst+inst.b;
 	}
-	CHECK_REG(c, inst.c);
+	CHECK_OPERAND(c, inst.c);
 	_error("Need single element logical in conditional jump");
 }
 
 Instruction const* branch_op(Thread& thread, Instruction const& inst) {
-	UNCHECKED_REG(c, inst.c);
+	UNCHECKED_OPERAND(c, inst.c);
 	int64_t index = -1;
 	if(c.isDouble1()) index = (int64_t)c.d;
 	else if(c.isInteger1()) index = c.i;
@@ -225,27 +223,29 @@ Instruction const* branch_op(Thread& thread, Instruction const& inst) {
 	if(index >= 1 && index <= inst.b) {
 		return &inst + ((&inst+index)->c);
 	} 
-	CHECK_REG(c, inst.a);
+	CHECK_OPERAND(c, inst.a);
 	return &inst+1+inst.b;
 }
 
 Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
-	REG(vec, inst.b);
+	// a = loop variable (e.g. i), b = loop vector(e.g. 1:100), c = counter register
+	// following instruction is a jmp that contains offset
+	OPERAND(vec, inst.b);
 	if((int64_t)vec.length <= 0) {
 		return &inst+(&inst+1)->a;	// offset is in following JMP, dispatch together
 	} else {
-		Element2(vec, 0, OUTREG(thread, inst.c));
-		Value& counter = *(thread.base+inst.a);
+		Element2(vec, 0, thread.frame.environment->insert((String)inst.a));
+		Value& counter = REGISTER(inst.c);
 		counter.header = vec.length;	// warning: not a valid object, but saves a shift
 		counter.i = 1;
 		return &inst+2;			// skip over following JMP
 	}
 }
 Instruction const* forend_op(Thread& thread, Instruction const& inst) {
-	Value& counter = *(thread.base+inst.a);
+	Value& counter = REGISTER(inst.c);
 	if(__builtin_expect((counter.i) < counter.header, true)) {
-		REG(vec, inst.b);
-		Element2(vec, counter.i, OUTREG(thread, inst.c));
+		OPERAND(vec, inst.b);
+		Element2(vec, counter.i, thread.frame.environment->insert((String)inst.a));
 		counter.i++;
 		return profile_back_edge(thread,&inst+(&inst+1)->a);
 	} else {
@@ -256,9 +256,9 @@ Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 Instruction const* list_op(Thread& thread, Instruction const& inst) {
 	std::vector<String> const& dots = thread.frame.environment->dots;
 	
-	Value& iter = *(thread.base-inst.a);
-	Value& out = OUTREG(thread, inst.c);
-	REG(elem, inst.b);
+	Value& iter = REGISTER(inst.a);
+	Value& out = OUT(thread, inst.c);
+	OPERAND(elem, inst.b);
 	// First time through, make a result vector...
 	if(iter.i == 0) {
 		out = List(dots.size());
@@ -288,13 +288,13 @@ Instruction const* list_op(Thread& thread, Instruction const& inst) {
 	iter.i++;
 	Value const& src = thread.frame.environment->get((String)-iter.i);
 	if(!src.isPromise()) {
-		OUTREG(thread, inst.b) = src;
+		OUT(thread, inst.b) = src;
 		return &inst;
 	}
 	else {
 		Function f(src);
-		Environment* env = f.environment();
-		if(env == 0) env = thread.frame.environment;
+		Environment* env = f.environment()->DynamicScope();
+		assert(env != 0);
 		Prototype* prototype = f.prototype();
 		return buildStackFrame(thread, env, false, prototype, inst.b, &inst);
 	}
@@ -302,24 +302,20 @@ Instruction const* list_op(Thread& thread, Instruction const& inst) {
 
 // Memory access ops
 
-Instruction const* kget_op(Thread& thread, Instruction const& inst) {
-	OUTREG(thread, inst.c) = thread.frame.prototype->constants[-inst.a];
+Instruction const* assign_op(Thread& thread, Instruction const& inst) {
+	OPERAND(value, inst.c);
+	thread.frame.environment->insert((String)inst.a) = value;
 	return &inst+1;
 }
 
-Instruction const* mov_op(Thread& thread, Instruction const& inst) {
-	REG(value, inst.a);
-	OUTREG(thread, inst.c) = value;
-	return &inst+1;
-}
 Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 	// assign2 is always used to assign up at least one scope level...
 	// so start off looking up one level...
 	assert(thread.frame.environment->LexicalScope() != 0);
 	
-	REG(value, inst.a);
+	OPERAND(value, inst.c);
 	
-	String s = (String)inst.c;
+	String s = (String)inst.a;
 	Value& dest = thread.frame.environment->LexicalScope()->insertRecursive(s);
 
 	if(!dest.isNil()) {
@@ -334,40 +330,46 @@ Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 
 // everything else should be in registers
 
+Instruction const* mov_op(Thread& thread, Instruction const& inst) {
+	OPERAND(value, inst.a);
+	OUT(thread, inst.c) = value;
+	return &inst+1;
+}
+
 Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest 
-	REG(value, inst.a);
-	REG(index, inst.b);
-	REG(dest, inst.c);
-	SubsetAssign(thread, dest, true, index, value, OUTREG(thread,inst.c));
+	OPERAND(value, inst.a);
+	OPERAND(index, inst.b);
+	OPERAND(dest, inst.c);
+	SubsetAssign(thread, dest, true, index, value, OUT(thread,inst.c));
 	return &inst+1;
 }
 Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest
-	REG(value, inst.a);
-	REG(index, inst.b);
-	REG(dest, inst.c);
-	Subset2Assign(thread, dest, true, index, value, OUTREG(thread,inst.c));
+	OPERAND(value, inst.a);
+	OPERAND(index, inst.b);
+	OPERAND(dest, inst.c);
+	Subset2Assign(thread, dest, true, index, value, OUT(thread,inst.c));
 	return &inst+1; 
 }
 
 Instruction const* subset_op(Thread& thread, Instruction const& inst) {
-	REG(a, inst.a);
-	REG(i, inst.b);
+	OPERAND(a, inst.a);
+	OPERAND(i, inst.b);
 	if(a.isVector()) {
-		if(i.isDouble1()) { Element(a, i.d-1, OUTREG(thread, inst.c)); return &inst+1; }
-		else if(i.isInteger1()) { Element(a, i.i-1, OUTREG(thread, inst.c)); return &inst+1; }
-		else if(i.isLogical1()) { Element(a, Logical::isTrue(i.c) ? 0 : -1, OUTREG(thread, inst.c)); return &inst+1; }
+		if(i.isDouble1()) { Element(a, i.d-1, OUT(thread, inst.c)); return &inst+1; }
+		else if(i.isInteger1()) { Element(a, i.i-1, OUT(thread, inst.c)); return &inst+1; }
+		else if(i.isLogical1()) { Element(a, Logical::isTrue(i.c) ? 0 : -1, OUT(thread, inst.c)); return &inst+1; }
 		else if(i.isCharacter1()) { _error("Subscript out of bounds"); }
-		else if(i.isVector()) { SubsetSlow(thread, a, i, OUTREG(thread, inst.c)); return &inst+1; }
+		else if(i.isVector()) { SubsetSlow(thread, a, i, OUT(thread, inst.c)); return &inst+1; }
 	}
 	if(a.isObject() || i.isObject()) { return GenericDispatch(thread, inst, Strings::bracket, a, i, inst.c); } 
 	_error("Invalid subset operation");
 }
 
 Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
-	REG(a, inst.a);
-	REG(i, inst.b);
+	OPERAND(a, inst.a);
+	OPERAND(i, inst.b);
 	if(a.isVector()) {
 		int64_t index = 0;
 		if(i.isDouble1()) { index = i.d-1; }
@@ -377,7 +379,7 @@ Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
 			_error("Attempt to select less or more than 1 element in subset2"); 
 		}
 		else { _error("Subscript out of bounds"); }
-		Element2(a, index, OUTREG(thread, inst.c));
+		Element2(a, index, OUT(thread, inst.c));
 		return &inst+1;
 	}
 	if(a.isObject() || i.isObject()) { return GenericDispatch(thread, inst, Strings::bb, a, i, inst.c); } 
@@ -385,38 +387,38 @@ Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* colon_op(Thread& thread, Instruction const& inst) {
-	REG(From, inst.a);
-	REG(To, inst.b);
+	OPERAND(From, inst.a);
+	OPERAND(To, inst.b);
 	double from = asReal1(From);
 	double to = asReal1(To);
-	OUTREG(thread,inst.c) = Sequence(from, to>from?1:-1, fabs(to-from)+1);
+	OUT(thread,inst.c) = Sequence(from, to>from?1:-1, fabs(to-from)+1);
 	return &inst+1;
 }
 
 
 Instruction const* seq_op(Thread& thread, Instruction const& inst) {
-	REG(Len, inst.a);
-	REG(Step, inst.b);
+	OPERAND(Len, inst.a);
+	OPERAND(Step, inst.b);
 	int64_t len = As<Integer>(thread, Len)[0];
 	int64_t step = As<Integer>(thread, Step)[0];
 	
 	Instruction const* jit = trace(thread, inst, Type::Integer, len);
 	if(jit) return jit;
 	
-	OUTREG(thread, inst.c) = Sequence(len, 1, step);
+	OUT(thread, inst.c) = Sequence(len, 1, step);
 	return &inst+1;
 }
 
 
 #define OP(Name, string, Op, Group, Func) \
 Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
-	UNCHECKED_REG(a, inst.a);	\
-	Value & c = OUTREG(thread, inst.c);	\
+	UNCHECKED_OPERAND(a, inst.a);	\
+	Value & c = OUT(thread, inst.c);	\
 	if(a.isDouble1())  { Name##VOp<Double>::Scalar(thread, a.d, c); return &inst+1; } \
 	if(a.isInteger1()) { Name##VOp<Integer>::Scalar(thread, a.i, c); return &inst+1; } \
 	if(a.isLogical1()) { Name##VOp<Logical>::Scalar(thread, a.c, c); return &inst+1; } \
 	if(a.isObject()) { return GenericDispatch(thread, inst, Strings::Op, a, inst.c); } \
-	CHECK_REG(a, inst.a); \
+	CHECK_OPERAND(a, inst.a); \
 	Instruction const* jit = trace(thread, inst, a); \
 	if(jit) return jit; \
 	\
@@ -429,9 +431,9 @@ UNARY_FOLD_SCAN_BYTECODES(OP)
 
 #define OP(Name, string, Op, Group, Func) \
 Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
-	UNCHECKED_REG(a, inst.a);	\
-	UNCHECKED_REG(b, inst.b);	\
-	Value & c = OUTREG(thread, inst.c);	\
+	UNCHECKED_OPERAND(a, inst.a);	\
+	UNCHECKED_OPERAND(b, inst.b);	\
+	Value & c = OUT(thread, inst.c);	\
         if(a.isDouble1()) {			\
 		if(b.isDouble1()) { Name##VOp<Double,Double>::Scalar(thread, a.d, b.d, c); return &inst+1; } \
 		if(b.isInteger1()) { Name##VOp<Double,Integer>::Scalar(thread, a.d, b.i, c); return &inst+1; } \
@@ -447,7 +449,7 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 		if(b.isInteger1()) { Name##VOp<Logical,Integer>::Scalar(thread, a.c, b.i, c); return &inst+1; } \
 		if(b.isLogical1()) { Name##VOp<Logical,Logical>::Scalar(thread, a.c, b.c, c); return &inst+1; } \
         } \
-	CHECK_REG(a, inst.a); CHECK_REG(b, inst.b); \
+	CHECK_OPERAND(a, inst.a); CHECK_OPERAND(b, inst.b); \
 	if(a.isObject() || b.isObject()) { return GenericDispatch(thread, inst, Strings::Op, a, b, inst.c); } \
 	Instruction const* jit = trace(thread, inst, a, b); \
 	if(jit) return jit; \
@@ -459,7 +461,7 @@ BINARY_BYTECODES(OP)
 #undef OP
 
 Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
-	REG(a, inst.a);
+	OPERAND(a, inst.a);
 	Instruction const* jit = trace(thread, inst, a);
 	if(jit) return jit;
 
@@ -468,7 +470,7 @@ Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* split_op(Thread& thread, Instruction const& inst) {
-	REG(c, inst.c);
+	OPERAND(c, inst.c);
 	Instruction const* jit = trace(thread, inst, c);
 	if(jit) return jit;
 		
@@ -477,76 +479,92 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* function_op(Thread& thread, Instruction const& inst) {
-	OUTREG(thread, inst.c) = Function(thread.frame.prototype->prototypes[inst.a], thread.frame.environment);
+	OUT(thread, inst.c) = Function(thread.frame.prototype->prototypes[inst.a], thread.frame.environment);
 	return &inst+1;
 }
 Instruction const* logical1_op(Thread& thread, Instruction const& inst) {
-	REG(a, inst.a);
+	OPERAND(a, inst.a);
 	Integer i = As<Integer>(thread, a);
-	OUTREG(thread, inst.c) = Logical(i[0]);
+	OUT(thread, inst.c) = Logical(i[0]);
 	return &inst+1;
 }
 Instruction const* integer1_op(Thread& thread, Instruction const& inst) {
-	REG(a, inst.a);
+	OPERAND(a, inst.a);
 	Integer i = As<Integer>(thread, a);
-	OUTREG(thread, inst.c) = Integer(i[0]);
+	OUT(thread, inst.c) = Integer(i[0]);
 	return &inst+1;
 }
 Instruction const* double1_op(Thread& thread, Instruction const& inst) {
-	REG(a, inst.a);
+	OPERAND(a, inst.a);
 	int64_t length = asReal1(a);
 	Double d(length);
 	for(int64_t i = 0; i < length; i++) d[i] = 0;
-	OUTREG(thread, inst.c) = d;
+	OUT(thread, inst.c) = d;
 	return &inst+1;
 }
 Instruction const* character1_op(Thread& thread, Instruction const& inst) {
-	REG(a, inst.a);
+	OPERAND(a, inst.a);
 	Integer i = As<Integer>(thread, a);
 	Character r = Character(i[0]);
 	for(int64_t j = 0; j < r.length; j++) r[j] = Strings::empty;
-	OUTREG(thread, inst.c) = r;
+	OUT(thread, inst.c) = r;
 	return &inst+1;
 }
 Instruction const* raw1_op(Thread& thread, Instruction const& inst) {
-	REG(a, inst.a);
+	OPERAND(a, inst.a);
 	Integer i = As<Integer>(thread, a);
-	OUTREG(thread, inst.c) = Raw(i[0]);
+	OUT(thread, inst.c) = Raw(i[0]);
 	return &inst+1;
 }
 Instruction const* type_op(Thread& thread, Instruction const& inst) {
-	REG(a, inst.a);
+	OPERAND(a, inst.a);
 	Character c(1);
 	// Should have a direct mapping from type to symbol.
 	c[0] = thread.internStr(Type::toString(a.type));
-	OUTREG(thread, inst.c) = c;
+	OUT(thread, inst.c) = c;
 	return &inst+1;
 }
 Instruction const* length_op(Thread& thread, Instruction const& inst) {
-	REG(a, inst.a);
+	OPERAND(a, inst.a);
 	if(a.isVector())
-		Integer::InitScalar(OUTREG(thread, inst.c), a.length);
+		Integer::InitScalar(OUT(thread, inst.c), a.length);
 	else
-		Integer::InitScalar(OUTREG(thread, inst.c), 1);
+		Integer::InitScalar(OUT(thread, inst.c), 1);
 	return &inst+1;
 }
 Instruction const* missing_op(Thread& thread, Instruction const& inst) {
-	// This could be inline cached...or implemented in terms of something else?
+	// TODO: in R this is recursive. If this function was passed a parameter that
+	// was missing in the outer scope, then it should be missing here too. But
+	// missingness doesn't propogate through expressions, leading to strange behavior:
+	// 	f <- function(x,y) g(x,y)
+	//	g <- function(x,y) missing(y)
+	//	f(1) => TRUE
+	// but
+	//	f <- function(x,y) g(x,y+1)
+	//	g <- function(x,y) missing(y)
+	//	f(1) => FALSE
+	// but
+	//	f <- function(x,y) g(x,y+1)
+	//	g <- function(x,y) y
+	//	f(1) => Error in y+1: 'y' is missing
+	// For now I'll keep the simpler non-recursive semantics. Missing solely means
+	// whether or not this scope was passed a value, irregardless of whether that
+	// value is missing at a higher level.
 	String s = (String)inst.a;
 	Value const& v = thread.frame.environment->get(s);
 	bool missing = v.isNil() || v.isDefault();
-	Logical::InitScalar(OUTREG(thread, inst.c), missing);
+	Logical::InitScalar(OUT(thread, inst.c), missing);
 	return &inst+1;
 }
 Instruction const* mmul_op(Thread& thread, Instruction const& inst) {
-	REG(a, inst.a);
-	REG(b, inst.b);
-	OUTREG(thread, inst.c) = MatrixMultiply(thread, a, b);
+	OPERAND(a, inst.a);
+	OPERAND(b, inst.b);
+	OUT(thread, inst.c) = MatrixMultiply(thread, a, b);
 	return &inst+1;
 }
 Instruction const* strip_op(Thread& thread, Instruction const& inst) {
-	REG(a, inst.a);
-	Value& c = OUTREG(thread, inst.c);
+	OPERAND(a, inst.a);
+	Value& c = OUT(thread, inst.c);
 	c = a;
 	if(c.isObject())
 		c = ((Object const&)c).base();
@@ -554,7 +572,7 @@ Instruction const* strip_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* internal_op(Thread& thread, Instruction const& inst) {
-       thread.state.internalFunctions[inst.a].ptr(thread, (thread.base-inst.b), OUTREG(thread, inst.c));
+       thread.state.internalFunctions[inst.a].ptr(thread, &REGISTER(inst.b), OUT(thread, inst.c));
        return &inst+1;
 }
 

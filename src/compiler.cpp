@@ -256,7 +256,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand source = compile(value, code);
 		Operand result = Operand(MEMORY, SymbolStr(dest));
 
-		emit(func == Strings::assign2 ? ByteCode::assign2 : ByteCode::mov, source, 0, result);
+		emit(func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, result, 0, source);
 		return source;
 		
 		// PHI outputs are always in registers, so merging with previous statement is generally
@@ -317,19 +317,19 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		if(call.length == 1) {
 			result = compileConstant(Null::Singleton(), code);
 		} else if(call.length == 2)
-			result = compile(call[1], code);
+			result = placeInRegister(compile(call[1], code));
 		else
 			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
-		emit(ByteCode::ret, 0, 0, result);
+		emit(ByteCode::ret, result, 0, 0);
 		return result;
 	} 
 	else if(func == Strings::forSym) 
 	{
+		Operand loop_variable = Operand(MEMORY, SymbolStr(call[1]));
 		Operand loop_vector = compile(call[2], code);
 		Operand loop_counter = allocRegister();	// save space for loop counter
-		Operand loop_variable = Operand(MEMORY, SymbolStr(call[1]));
 
-		emit(ByteCode::forbegin, loop_counter, loop_vector, loop_variable);
+		emit(ByteCode::forbegin, loop_variable, loop_vector, loop_counter);
 		emit(ByteCode::jmp, 0, 0, 0);
 		
 		loopDepth++;
@@ -339,7 +339,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		resolveLoopExits(beginbody, endbody, endbody, endbody+1);
 		loopDepth--;
 		
-		emit(ByteCode::forend, loop_counter, loop_vector, loop_variable);
+		emit(ByteCode::forend, loop_variable, loop_vector, loop_counter);
 		emit(ByteCode::jmp, beginbody-endbody, 0, 0);
 
 		ir[beginbody-1].a.i = endbody-beginbody+4;
@@ -522,6 +522,12 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		} else {
 			Operand result;
 			for(int64_t i = 1; i < length; i++) {
+				// memory results need to be forced to handle things like:
+				// 	function(x,y) { x; y }
+				// if x is a promise, it must be forced
+				if(result.loc == MEMORY) {
+					result = placeInRegister(result);
+				}
 				kill(result);
 				result = compile(call[i], code);
 			}
@@ -676,6 +682,12 @@ Compiler::Operand Compiler::compileExpression(List const& values, Prototype* cod
 	Operand result;
 	if(values.length == 0) result = compileConstant(Null::Singleton(), code);
 	for(int64_t i = 0; i < values.length; i++) {
+		// memory results need to be forced to handle things like:
+		// 	function(x,y) { x; y }
+		// if x is a promise, it must be forced
+		if(result.loc == MEMORY) {
+			result = placeInRegister(result);
+		}
 		kill(result);
 		result = compile(values[i], code);
 	}
@@ -741,7 +753,7 @@ Prototype* Compiler::compile(Value const& expr) {
 	code->expression = expr;
 	code->registers = code->constants.size() + max_n;
 	// insert return statement at end of code
-	emit(ByteCode::ret, (int64_t)0, (int64_t)0, result);
+	emit(ByteCode::ret, result, 0, 0);
 
 	int64_t n = code->constants.size();
 	for(size_t i = 0; i < ir.size(); i++) {

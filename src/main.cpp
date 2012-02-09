@@ -72,8 +72,8 @@ Value parsetty(State& state) {
 		if (NULL == fgets(code+i, 8192-i, stdin))
                   {
                     // EOF exit
-                    l_message(0,"EOF");
-                    die = 1;
+                    //l_message(0,"EOF");
+                    //die = 1;
                     return Value::Nil();
                   }
 		i = strlen(code);

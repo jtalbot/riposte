@@ -7,20 +7,24 @@
 static const void** glabels = 0;
 #endif
 
-static void printCode(Thread const& thread, Prototype const* prototype) {
-	std::string r = "block:\nconstants: " + intToStr(prototype->constants.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)prototype->constants.size(); i++)
-		r = r + intToStr(i) + "=\t" + thread.stringify(prototype->constants[i]) + "\n";
-
-	r = r + "code: " + intToStr(prototype->bc.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++)
-		r = r + intToHexStr((uint64_t)&(prototype->bc[i])) + "--: " + intToStr(i) + ":\t" + prototype->bc[i].toString() + "\n";
-
-	std::cout << r << std::endl;
+static void printCode(Thread const& thread, Prototype const* prototype, Environment* env) {
+	std::cout << "Prototype: " << intToHexStr((int64_t)prototype) << "\t(executing in " << intToHexStr((int64_t)env) << ")" << std::endl;
+	std::cout << "\tRegisters: " << prototype->registers << std::endl;
+	if(prototype->constants.size() > 0) {
+		std::cout << "\tConstants: " << std::endl;
+		for(int64_t i = 0; i < (int64_t)prototype->constants.size(); i++)
+			std::cout << "\t\t" << i << ":\t" << thread.stringify(prototype->constants[i]) << std::endl;
+	}
+	if(prototype->bc.size() > 0) {
+		std::cout << "\tCode: " << std::endl;
+		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++)
+			std::cout << "\t\t" << i << ":\t" << prototype->bc[i].toString() << std::endl;
+	}
+	std::cout << std::endl;
 }
 
 static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Instruction const* returnpc) {
-	//printCode(thread, prototype);
+	//printCode(thread, prototype, environment);
 	StackFrame& s = thread.push();
 	s.environment = environment;
 	s.ownEnvironment = ownEnvironment;

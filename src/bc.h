@@ -18,8 +18,8 @@
 	_(list, "list") \
 
 #define MEMORY_ACCESS_BYTECODES(_) \
-	_(kget, "kget") \
 	_(mov, "mov") \
+	_(assign, "assign") \
 	_(assign2, "assign2") \
 	_(iassign, "iassign") \
 	_(eassign, "eassign") \
