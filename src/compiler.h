@@ -26,7 +26,6 @@ private:
 	};
 	
 	Scope scope;
-	Character parameters;	// only valid if in FUNCTION scope 
 	uint64_t loopDepth;
 	std::map<Value, int64_t> constants;
 
@@ -102,9 +101,8 @@ public:
 		return compiler.compile(expr);
 	}
 	
-	static Prototype* compileFunctionBody(State& state, Value const& expr, Character& parameters) {
+	static Prototype* compileFunctionBody(State& state, Value const& expr) {
 		Compiler compiler(state, FUNCTION);
-		compiler.parameters = parameters;
 		return compiler.compile(expr);
 	}
 	

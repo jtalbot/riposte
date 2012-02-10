@@ -108,15 +108,9 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	
 	// TODO: using inst.b < 0 to indicate a normal call means that do.call can never use a ..# variable. Not common, but would surely be unexpected for users. Probably best to just have a separate op for do.call?
 	
-	List arguments;
-	Character names;
 	Environment* fenv;
 	//if(inst.b < 0) {
 		CompiledCall const& call = thread.frame.prototype->calls[-(inst.b+1)];
-		arguments = call.arguments;
-		names = call.names;
-		if(call.dots < arguments.length)
-			ExpandDots(thread, arguments, names, call.dots);
 		fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
 	/*} else {
 		
@@ -132,7 +126,7 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 		fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
 	} */
 
-	MatchArgs(thread, thread.frame.environment, fenv, func, arguments, names);
+	MatchArgs(thread, thread.frame.environment, fenv, func, call);
 	return buildStackFrame(thread, fenv, true, func.prototype(), inst.c, &inst+1);
 }
 
@@ -141,14 +135,20 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	// as long as we don't return a closure...
 	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
 	OPERAND(result, inst.a);	// could this be UNCHECKED?
+
 	if(thread.frame.ownEnvironment && result.isClosureSafe())
 		thread.environments.push_back(thread.frame.environment);
+
 	thread.base = thread.frame.returnbase;
-	if(thread.frame.i <= 0) {
+
+	if(thread.frame.dest == StackFrame::REG) {
 		REGISTER(thread.frame.i) = result;
-	} else {
+	} else if(thread.frame.dest == StackFrame::MEMORY) {
 		thread.frame.env->insert(thread.frame.s) = result;
+	} else {
+		thread.frame.env->dots[thread.frame.i].v = result;
 	}
+
 	Instruction const* returnpc = thread.frame.returnpc;
 	thread.pop();
 	return returnpc;
@@ -228,50 +228,46 @@ Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* list_op(Thread& thread, Instruction const& inst) {
-	std::vector<String> const& dots = thread.frame.environment->dots;
+	PairList const& dots = thread.frame.environment->dots;
 	
 	Value& iter = REGISTER(inst.a);
 	Value& out = OUT(thread, inst.c);
-	OPERAND(elem, inst.b);
+	
 	// First time through, make a result vector...
 	if(iter.i == 0) {
 		out = List(dots.size());
 	}
 	// Otherwise populate result vector with next element
 	else {
-		thread.frame.environment->insert((String)-iter.i) = elem;
-		((List&)out)[iter.i-1] = elem;
+		((List&)out)[iter.i-1] = dots[iter.i-1].v;
 	}
 
+	// Not done yet, increment counter, evaluate next ..#
+	if(iter.i < (int64_t) dots.size()) {
+		iter.i++;
+		Value const& src = thread.frame.environment->get((String)-iter.i);
+		if(!src.isPromise()) {
+			OUT(thread, inst.b) = src;
+			return &inst;
+		}
+		else {
+			Function f(src);
+			Environment* env = f.environment()->DynamicScope();
+			assert(env != 0);
+			Prototype* prototype = f.prototype();
+			return buildStackFrame(thread, env, false, prototype, inst.b, &inst);
+		}
+	}
 	// If we're all done, check to see if we need to add names and then exit
-	if(iter.i == (int64_t)dots.size()) {
-		bool nonEmptyName = false;
-		for(int i = 0; i < (int64_t)dots.size(); i++) 
-			if(dots[i] != Strings::empty) nonEmptyName = true;
-		if(nonEmptyName) {
-			// TODO: should really just use the names in the dots directly
+	else {
+		if(thread.frame.environment->named) {
 			Character names(dots.size());
 			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
-				names[i] = dots[i];
+				names[i] = dots[i].n;
 			Object::Init((Object&)out, out);
 			((Object&)out).insertMutable(Strings::names, names);
 		}
 		return &inst+1;
-	}
-
-	// Not done yet, increment counter, evaluate next ..#
-	iter.i++;
-	Value const& src = thread.frame.environment->get((String)-iter.i);
-	if(!src.isPromise()) {
-		OUT(thread, inst.b) = src;
-		return &inst;
-	}
-	else {
-		Function f(src);
-		Environment* env = f.environment()->DynamicScope();
-		assert(env != 0);
-		Prototype* prototype = f.prototype();
-		return buildStackFrame(thread, env, false, prototype, inst.b, &inst);
 	}
 }
 
@@ -309,6 +305,36 @@ Instruction const* mov_op(Thread& thread, Instruction const& inst) {
 	OPERAND(value, inst.a);
 	OUT(thread, inst.c) = value;
 	return &inst+1;
+}
+
+Instruction const* dotdot_op(Thread& thread, Instruction const& inst) {
+	// recurse up the environments following the DotDot chain.
+	int64_t i = inst.a;
+	Environment* env = thread.frame.environment;
+
+	if(i >= (int64_t)env->dots.size()) 
+		_error(std::string("The '...' list does not contain ") + intToStr(i) + " elements");
+	
+	Pair* a = &env->dots[i];
+	while(a->v.isNil() && env->DynamicScope()) {
+		i = a->v.i;
+		env = env->DynamicScope();
+		a = &env->dots[i];
+	}
+
+	if(!a->v.isConcrete()) {
+		// defaults can't occur in ..., really promises should be it.
+		if(a->v.isPromise()) {
+			Function f(a->v);
+			return buildStackFrame(thread, f.environment()->DynamicScope(), false, f.prototype(), f.environment(), i, &inst);
+		} else {
+			_error(std::string("Object '..") + intToStr(inst.a) + "' not found, this shouldn't happen");
+		}
+	} else {
+		// TODO: should update DotDot chain, so we don't search again.
+		OUT(thread, inst.c) = a->v;
+		return &inst+1;
+	}
 }
 
 Instruction const* iassign_op(Thread& thread, Instruction const& inst) {

@@ -607,7 +607,7 @@ void lapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& 
 	for( size_t i=start; i!=end; ++i ) {
 		Value e;
 		Element2(l.in, i, e);
-		p->calls[0].arguments[0] = e;
+		p->calls[0].arguments[0].v = e;
 		l.out[i] = thread.eval(p);
 	}
 	//return 0;

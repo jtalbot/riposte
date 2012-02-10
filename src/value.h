@@ -93,6 +93,11 @@ template<> inline char const& Value::scalar<char>() const { return c; }
 template<> inline String const& Value::scalar<String>() const { return s; }
 
 
+// Name-value Pairs are used throughout the code...
+struct Pair : public gc { String n; Value v; };
+// Not the same as the publically visible PairList which is just an S3 class
+typedef std::vector<Pair, traceable_allocator<Pair> > PairList;
+
 //
 // Value type implementations
 //
@@ -307,7 +312,6 @@ public:
 
 class Dictionary : public gc {
 protected:
-	struct Pair { String n; Value v; };
 	static const uint64_t inlineSize = 8;
 	uint64_t size, load;
 	Pair* d;
@@ -523,10 +527,8 @@ private:
 	
 public:
 	Value call;
-	//List dot_values;
-	//Character dot_names;
-	
-	std::vector<String> dots;
+	PairList dots;
+	bool named;	// true if any of the dots have names	
 
 	explicit Environment(Environment* lexical=0, Environment* dynamic=0) : 
 			lexical(lexical), dynamic(dynamic), call(Null::Singleton()) {}

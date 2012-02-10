@@ -55,8 +55,7 @@ public:
 	}
 
 	std::string out(String s) const {
-		if((int64_t)s < 0) return std::string("..") + intToStr(-(int64_t)s);
-		else return std::string(s);
+		return std::string(s);
 	}
 };
 
@@ -64,22 +63,20 @@ public:
 struct CompiledCall : public gc {
 	List call;
 
-	List arguments;
-	Character names;
-	int64_t dots;
+	PairList arguments;
+	int64_t dotIndex;
+	bool named;
 	
-	explicit CompiledCall(List const& call, List const& arguments, Character const& names, int64_t dots) 
-		: call(call), arguments(arguments), names(names), dots(dots) {}
+	explicit CompiledCall(List const& call, PairList arguments, int64_t dotIndex, bool named) 
+		: call(call), arguments(arguments), dotIndex(dotIndex), named(named) {}
 };
 
 struct Prototype : public gc {
 	Value expression;
 	String string;
 
-	Character parameters;
-	List defaults;
-
-	int dots;
+	PairList parameters;
+	int dotIndex;
 
 	int registers;
 	std::vector<Value, traceable_allocator<Value> > constants;
@@ -97,7 +94,14 @@ struct StackFrame {
 
 	Instruction const* returnpc;
 	Value* returnbase;
-	// result can go in a stack slot or in an environment
+	
+	// result can go in a register or in an environment or in dots
+	enum Destination {
+		REG,
+		MEMORY,
+		DOTS
+	};
+	Destination dest;
 	union {
 		int64_t i;
 		String s;

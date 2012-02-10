@@ -121,10 +121,33 @@ Compiler::Operand Compiler::compileConstant(Value const& expr, Prototype* code) 
 	return Operand(CONSTANT, index);
 }
 
+static int64_t isDotDot(String s) {
+	if(s != 0 && s[0] == '.' && s[1] == '.') {
+		int64_t v = 0;
+		int64_t i = 2;
+		// maximum 64-bit integer has 19 digits, but really who's going to pass
+		// that many var args?
+		while(i < (19+2) && s[i] >= '0' && s[i] <= '9') {
+			v = v*10 + (s[i] - '0');
+			i++;
+		}
+		if(i < (19+2) && s[i] == 0) return v;
+	}
+	return -1;	
+}
 
 Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code) {
 	String s = SymbolStr(symbol);
-	return Operand(MEMORY, s);
+	
+	int64_t dd = isDotDot(s);
+	if(dd > 0) {
+		Operand t = allocRegister();
+		emit(ByteCode::dotdot, dd-1, 0, t);
+		return t;
+	}
+	else {
+		return Operand(MEMORY, s);
+	}
 }
 
 Compiler::Operand Compiler::placeInRegister(Operand r) {
@@ -139,24 +162,23 @@ Compiler::Operand Compiler::placeInRegister(Operand r) {
 
 CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 	// compute compiled call...precompiles promise code and some necessary values
-	int64_t dots = call.length-1;
-	List arguments(call.length-1);
+	int64_t dotIndex = call.length-1;
+	PairList arguments;
 	for(int64_t i = 1; i < call.length; i++) {
+		Pair p;
+		if(names.length > 0) p.n = names[i-1]; else p.n = Strings::NA;
+
 		if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) {
-			arguments[i-1] = call[i];
-			dots = i-1;
+			p.v = call[i];
+			dotIndex = i-1;
 		} else if(isCall(call[i]) || isSymbol(call[i])) {
-			arguments[i-1] = Function(Compiler::compilePromise(state, call[i]),NULL).AsPromise();
+			p.v = Function(Compiler::compilePromise(state, call[i]),NULL).AsPromise();
 		} else {
-			arguments[i-1] = call[i];
+			p.v = call[i];
 		}
+		arguments.push_back(p);
 	}
-	if(names.length > 0) {
-		Character c(Subset(names, 1, call.length-1));
-		return CompiledCall(call, arguments, c, dots);
-	} else {
-		return CompiledCall(call, arguments, names, dots);
-	}
+	return CompiledCall(call, arguments, dotIndex, names.length > 0);
 }
 
 // a standard call, not an op
@@ -205,6 +227,10 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		return compileFunctionCall(call, names, code);
 
 	String func = SymbolStr(call[0]);
+
+	// TODO: most of these functions can't be called directly if the arguments are named or if
+	// there is a ... in the args list
+
 	
 	if(func == Strings::internal) 
 	{
@@ -226,10 +252,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		// This is progressively turned `inside out`:
 		//	1) dim(a) <- `[<-`(dim(a), 1, x)
 		//	2) a <- `dim<-`(a, `[<-`(dim(a), 1, x))
-		// One complication is that the result value of a complex assignment is the RHS
+		// TODO: One complication is that the result value of a complex assignment is the RHS
 		// of the original expression, not the RHS of the inside out expression.
-		// This motivates our slightly more complicated semantics where
-		// 	assign a b c, assigns the value in a to b, but returns the value in c.
 		Value value = call[2];
 		while(isCall(dest)) {
 			List c = List(((Object const&)dest).base());
@@ -279,30 +303,32 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		//compile the default parameters
 		assert(call[1].isObject());
 		List c = List(((Object const&)call[1]).base());
-		Character parameters = hasNames(call[1]) ? 
+		Character names = hasNames(call[1]) ? 
 			Character(getNames((Object&)call[1])) :
 			Character(0);
 		
-		List defaults(c.length);
-		for(int64_t i = 0; i < defaults.length; i++) {
+		PairList parameters;
+		for(int64_t i = 0; i < c.length; i++) {
+			Pair p;
+			if(names.length > 0) p.n = names[i]; else p.n = Strings::NA;
 			if(!c[i].isNil()) {
-				defaults[i] = Function(compilePromise(state, c[i]),NULL).AsDefault();
+				p.v = Function(compilePromise(state, c[i]),NULL).AsDefault();
 			}
 			else {
-				defaults[i] = c[i];
+				p.v = c[i];
 			}
+			parameters.push_back(p);
 		}
 
 		//compile the source for the body
-		Prototype* functionCode = Compiler::compileFunctionBody(state, call[2], parameters);
+		Prototype* functionCode = Compiler::compileFunctionBody(state, call[2]);
 
 		// Populate function info
 		functionCode->parameters = parameters;
-		functionCode->defaults = defaults;
 		functionCode->string = SymbolStr(call[3]);
-		functionCode->dots = parameters.length;
-		for(int64_t i = 0; i < parameters.length; i++) 
-			if(parameters[i] == Strings::dots) functionCode->dots = i;
+		functionCode->dotIndex = parameters.size();
+		for(int64_t i = 0; i < parameters.size(); i++) 
+			if(parameters[i].n == Strings::dots) functionCode->dotIndex = i;
 
 		code->prototypes.push_back(functionCode);
 	

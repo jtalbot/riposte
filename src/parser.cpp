@@ -914,7 +914,7 @@ _eof_trans:
 	{{p = ((te))-1;}token( TOKEN_BREAK, CreateSymbol(Strings::breakSym) );}
 	break;
 	case 21:
-	{{p = ((te))-1;}std::string s(ts+2, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol((String)-strToInt(s))); }
+	{{p = ((te))-1;}token( TOKEN_SYMBOL, CreateSymbol(state.internStr(std::string(ts, te-ts))));}
 	break;
 	case 22:
 	{{p = ((te))-1;}token( TOKEN_SYMBOL, CreateSymbol(state.internStr(std::string(ts, te-ts))) );}

@@ -53,6 +53,7 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, int64_t resultSlot, Instruction const* returnpc) {
 	Environment* env = thread.frame.environment;
 	Instruction const* i = buildStackFrame(thread, environment, ownEnvironment, prototype, returnpc);
+	thread.frame.dest = StackFrame::REG;
 	thread.frame.i = resultSlot;
 	thread.frame.env = env;
 	return i;
@@ -60,92 +61,123 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 
 static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Environment* env, String s, Instruction const* returnpc) {
 	Instruction const* i = buildStackFrame(thread, environment, ownEnvironment, prototype, returnpc);
+	thread.frame.dest = StackFrame::MEMORY;
 	thread.frame.env = env;
 	thread.frame.s = s;
 	return i;
 }
 
-static void ExpandDots(Thread& thread, List& arguments, Character& names, int64_t dots) {
-	Environment* environment = thread.frame.environment;
-	uint64_t dotslength = environment->dots.size();
-	// Expand dots into the parameter list...
-	if(dots < arguments.length) {
-		List a(arguments.length + dotslength - 1);
-		for(int64_t i = 0; i < dots; i++) a[i] = arguments[i];
-		for(uint64_t i = dots; i < dots+dotslength; i++) { a[i] = Function(Compiler::compilePromise(thread.state, CreateSymbol((String)-(i-dots+1))), NULL).AsPromise(); } // TODO: should cache these.
-		for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) a[i] = arguments[i-dotslength];
-
-		arguments = a;
-		
-		uint64_t named = 0;
-		for(uint64_t i = 0; i < dotslength; i++) if(environment->dots[i] != Strings::empty) named++;
-
-		if(names.length > 0 || named > 0) {
-			Character n(arguments.length + dotslength - 1);
-			for(int64_t i = 0; i < n.length; i++) n[i] = Strings::empty;
-			if(names.length > 0) {
-				for(int64_t i = 0; i < dots; i++) n[i] = names[i];
-				for(uint64_t i = dots+dotslength; i < arguments.length+dotslength-1; i++) n[i] = names[i-dotslength];
-			}
-			if(named > 0) {
-				for(uint64_t i = dots; i < dots+dotslength; i++) n[i] = environment->dots[i]; 
-			}
-			names = n;
-		}
-	}
+static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Environment* env, int64_t resultSlot, Instruction const* returnpc) {
+	Instruction const* i = buildStackFrame(thread, environment, ownEnvironment, prototype, returnpc);
+	thread.frame.dest = StackFrame::DOTS;
+	thread.frame.env = env;
+	thread.frame.i = resultSlot;
+	return i;
 }
 
-inline void argAssign(Environment* env, String n, Value const& v, Environment* execution) {
-	Value w = v;
+inline void argAssign(Environment* env, Pair const& parameter, Pair const& argument, Environment* execution) {
+	Value w = argument.v;
 	if(!w.isNil()) {
 		if(w.isPromise() || w.isDefault()) {
 			assert(w.p == 0);
 			w.p = execution;
 		}
-		env->insert(n) = w;
+		env->insert(parameter.n) = w;
 	}
 }
 
-static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, List const& arguments, Character const& anames) {
-	List const& defaults = func.prototype()->defaults;
-	Character const& parameters = func.prototype()->parameters;
-	int64_t fdots = func.prototype()->dots;
+inline void dotAssign(Environment* env, Pair const& argument, Environment* execution) {
+	//assert(!argument.v.isNil());
+	Value w = argument.v;
+	if(w.isPromise() || w.isDefault()) {
+		assert(w.p == 0);
+		w.p = execution;
+	}
+	Pair p;
+	p.n = argument.n;
+	p.v = w;
+	env->dots.push_back(p);
+}
+
+static Pair argument(int64_t index, Environment* env, CompiledCall const& call) {
+	if(index < call.dotIndex) {
+		return call.arguments[index];
+	} else {
+		index -= call.dotIndex;
+		if(index < (int64_t)env->dots.size()) {
+			//return env->dots[index];
+			Pair p;
+			p.n = env->dots[index].n;
+			p.v.type = Type::Promise;
+			p.v.length = 0; 
+			p.v.i = index;
+			return p;
+		}
+		else {
+			index -= env->dots.size();
+			return call.arguments[call.dotIndex+index+1];
+		}
+	}
+}
+
+static int64_t numArguments(Environment* env, CompiledCall const& call) {
+	if(call.dotIndex < (int64_t)call.arguments.size()) {
+		return call.arguments.size() + env->dots.size();
+	} else {
+		return call.arguments.size();
+	}
+}
+
+static bool namedArguments(Environment* env, CompiledCall const& call) {
+	if(call.dotIndex < (int64_t)call.arguments.size()) {
+		return call.named || env->named;
+	} else {
+		return call.named;
+	}
+}
+
+static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call) {
+	PairList const& parameters = func.prototype()->parameters;
+	int64_t pDotIndex = func.prototype()->dotIndex;
+	int64_t numArgs = numArguments(env, call);
 
 	// set defaults
-	for(int64_t i = 0; i < defaults.length; ++i) {
-		argAssign(fenv, parameters[i], defaults[i], fenv);
+	for(int64_t i = 0; i < (int64_t)parameters.size(); ++i) {
+		argAssign(fenv, parameters[i], parameters[i], fenv);
 	}
 
-	// call arguments are not named, do posititional matching
-	if(anames.length == 0) {
-		int64_t end = std::min(arguments.length, fdots);
+	if(!namedArguments(env, call)) {
+		// call arguments are not named, do posititional matching up to the prototypes dots
+		int64_t end = std::min(numArgs, pDotIndex);
 		for(int64_t i = 0; i < end; ++i) {
-			if(!arguments[i].isNil()) argAssign(fenv, parameters[i], arguments[i], fenv);
+			Pair const& arg = argument(i, env, call);
+			argAssign(fenv, parameters[i], arg, fenv);
 		}
 
-		// set dots if necessary
-		if(fdots < parameters.length) {
-			int64_t idx = 1;
-			for(int64_t i = fdots; i < arguments.length; i++) {
-				argAssign(fenv, (String)-idx, arguments[i], fenv);
-				fenv->dots.push_back(Strings::empty);
-				idx++;
-			}
-			end++;
+		// if we have left over arguments, but no parameter dots, error
+		if(end < numArgs && pDotIndex >= (int64_t)parameters.size())
+			_error("Unused args");
+		
+		// all unused args go into ...
+		for(int64_t i = end; i < numArgs; i++) {
+			Pair const& arg = argument(i, env, call);
+			dotAssign(fenv, arg, fenv);
 		}
 	}
-	// call arguments are named, do matching by name
 	else {
+		// call arguments are named, do matching by name
 		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
+	
 		int64_t *assignment = thread.assignment, *set = thread.set;
-		for(int64_t i = 0; i < arguments.length; i++) assignment[i] = -1;
-		for(int64_t i = 0; i < parameters.length; i++) set[i] = -(i+1);
+		for(int64_t i = 0; i < numArgs; i++) assignment[i] = -1;
+		for(int64_t i = 0; i < (int64_t)parameters.size(); i++) set[i] = -(i+1);
 
 		// named args, search for complete matches
-		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] != Strings::empty) {
-				for(int64_t j = 0; j < parameters.length; ++j) {
-					if(j != fdots && anames[i] == parameters[j]) {
+		for(int64_t i = 0; i < numArgs; ++i) {
+			Pair const& arg = argument(i, env, call);
+			if(arg.n != Strings::empty) {
+				for(int64_t j = 0; j < (int64_t)parameters.size(); ++j) {
+					if(j != pDotIndex && arg.n == parameters[j].n) {
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -154,12 +186,11 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 			}
 		}
 		// named args, search for incomplete matches
-		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] != Strings::empty && assignment[i] < 0) {
-				std::string a = thread.externStr(anames[i]);
-				for(int64_t j = 0; j < parameters.length; ++j) {
-					if(set[j] < 0 && j != fdots &&
-							thread.externStr(parameters[j]).compare( 0, a.size(), a ) == 0 ) {	
+		for(int64_t i = 0; i < numArgs; ++i) {
+			Pair const& arg = argument(i, env, call);
+			if(arg.n != Strings::empty && assignment[i] < 0) {
+				for(int64_t j = 0; j < (int64_t)parameters.size(); ++j) {
+					if(set[j] < 0 && j != pDotIndex && strncmp(arg.n, parameters[j].n, strlen(arg.n)) == 0) {
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -169,9 +200,10 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 		}
 		// unnamed args, fill into first missing spot.
 		int64_t firstEmpty = 0;
-		for(int64_t i = 0; i < arguments.length; ++i) {
-			if(anames[i] == Strings::empty) {
-				for(; firstEmpty < fdots; ++firstEmpty) {
+		for(int64_t i = 0; i < numArgs; ++i) {
+			Pair const& arg = argument(i, env, call);
+			if(arg.n == Strings::empty) {
+				for(; firstEmpty < pDotIndex; ++firstEmpty) {
 					if(set[firstEmpty] < 0) {
 						assignment[i] = firstEmpty;
 						set[firstEmpty] = i;
@@ -184,21 +216,21 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 		// stuff that can't be cached...
 
 		// assign all the arguments
-		for(int64_t j = 0; j < parameters.length; ++j) {
-			if(j != fdots && set[j] >= 0 && !arguments[set[j]].isNil()) {
-				argAssign(fenv, parameters[j], arguments[set[j]], fenv);
+		for(int64_t j = 0; j < (int64_t)parameters.size(); ++j) {
+			if(j != pDotIndex && set[j] >= 0) {
+				Pair const& arg = argument(set[j], env, call);
+				argAssign(fenv, parameters[j], arg, fenv);
 			}
 		}
 
 		// put unused args into the dots
-		if(fdots < parameters.length) {
-			int64_t idx = 1;
-			for(int64_t i = 0; i < arguments.length; i++) {
-				if(assignment[i] < 0) {
-					argAssign(fenv, (String)-idx, arguments[i], fenv);
-					fenv->dots.push_back(anames[i]);
-					idx++;
-				}
+		for(int64_t i = 0; i < numArgs; i++) {
+			if(assignment[i] < 0) {
+				// if we have left over arguments, but no parameter dots, error
+				if(pDotIndex >= (int64_t)parameters.size()) _error("Unused args");
+				
+				Pair const& arg = argument(i, env, call);
+				dotAssign(fenv, arg, fenv);
 			}
 		}
 	}
@@ -221,7 +253,14 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
 	if(f.isFunction()) {
 		Function func(f);
 		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
-		MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a), Character(0));
+		List call(0);
+		Pair p;
+		p.n = Strings::NA;
+		p.v = a;
+		PairList args;
+		args.push_back(p);
+		CompiledCall cc(call, args, 1, false);
+		MatchArgs(thread, thread.frame.environment, fenv, func, cc);
 		return buildStackFrame(thread, fenv, true, func.prototype(), out, &inst+1);
 	}
 	_error("Failed to find generic for builtin op");
@@ -232,7 +271,16 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
 	if(f.isFunction()) { 
 		Function func(f);
 		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
-		MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a, b), Character(0));
+		List call(0);
+		PairList args;
+		Pair p;
+		p.n = Strings::NA;
+		p.v = a;
+		args.push_back(p);
+		p.v = b;
+		args.push_back(p);
+		CompiledCall cc(call, args, 2, false);
+		MatchArgs(thread, thread.frame.environment, fenv, func, cc);
 		return buildStackFrame(thread, fenv, true, func.prototype(), out, &inst+1);
 	}
 	_error("Failed to find generic for builtin op");
