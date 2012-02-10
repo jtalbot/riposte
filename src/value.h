@@ -305,120 +305,10 @@ public:
 	Function Clone() const { return *this; }
 };
 
-// Object implements an immutable dictionary interface.
-// Objects also have a base value which right now must be a non-object type...
-//  However S4 objects can contain S3 objects so we may have to change this.
-//  If we make this change, then all code that unwraps objects must do so recursively.
-struct Object : public Value {
-
-	struct Pair { String n; Value v; };
-
-	struct Inner : public gc {
-		Value base;
-		Pair const* attributes;
-		uint64_t capacity;
-	};
-
-	// Contract: base is a non-object type.
-	Value const& base() const { return ((Inner const*)p)->base; }
-	Pair const* attributes() const { return ((Inner const*)p)->attributes; }
-	uint64_t capacity() const { return ((Inner const*)p)->capacity; }
-
-	Object() {}
-
-	Object(Value base, uint64_t length, uint64_t capacity, Pair const* attributes) {
-		Value::Init(*this, Type::Object, length);
-		
-		assert(!base.isObject());	
-		Inner* inner = new (GC) Inner();
-		inner->base = base;
-		inner->capacity = capacity;
-		inner->attributes = attributes;
-		p = (void*)inner;
-	}
-
-	uint64_t find(String s) const {
-		uint64_t i = (uint64_t)s & (capacity()-1);	// hash this?
-		while(attributes()[i].n != s && attributes()[i].n != Strings::NA) i = (i+1) & (capacity()-1);
-		assert(i >= 0 && i < capacity());
-		return i; 
-	}
-	
-	static void Init(Value& v, Value _base) {
-		Pair* attributes = new (GC) Pair[4];
-		for(uint64_t j = 0; j < 4; j++) {
-			attributes[j].n = Strings::NA;
-			attributes[j].v = Value::Nil();
-		}
-		v = Object(_base, 0, 4, attributes);
-	}
-
-	bool hasAttribute(String s) const {
-		return attributes()[find(s)].n != Strings::NA;
-	}
-
-	Value const& getAttribute(String s) const {
-		uint64_t i = find(s);
-		if(attributes()[i].n != Strings::NA) return attributes()[i].v;
-		else _error("Subscript out of range"); 
-	}
-
-	// Generate derived versions...
-
-	Object Clone() const { 
-		Value v; 
-		Inner* inner = new (GC) Inner();
-		inner->base = ((Inner*)p)->base;
-		inner->attributes = ((Inner*)p)->attributes;
-		// doing this after ensures that it will work even if base and v overlap.
-		Value::Init(v, Type::Object, 0);
-		v.p = (void*)inner;
-		return (Object const&)v;
-	}
-
-	Object setAttribute(String s, Value const& v) const {
-		uint64_t l=0;
-		
-		uint64_t i = find(s);
-		if(!v.isNil() && attributes()[i].n == Strings::NA) l = length+1;
-		else if(v.isNil() && attributes()[i].n != Strings::NA) l = length-1;
-		else l = length;
-
-		Object out;
-		Pair* a;
-		if((l*2) > capacity()) {
-			// going to have to rehash the result
-			uint64_t c = std::max(capacity()*2ULL, 1ULL);
-			a = new Pair[c];
-			out = Object(base(), l, c, a);
-
-			memset(a, 0, sizeof(Pair)*c);
-
-			// rehash
-			for(uint64_t j = 0; j < capacity(); j++)
-				if(attributes()[j].n != Strings::NA)
-					a[out.find(attributes()[j].n)] = attributes()[j];
-		}
-		else {
-			// otherwise, just copy straight over
-			a = new Object::Pair[capacity()];
-			out = Object(base(), l, capacity(), a);
-			memcpy(a, attributes(), sizeof(Pair)*capacity());
-		}
-		if(v.isNil())
-			a[out.find(s)] = (Pair) { Strings::NA, Value::Nil() };
-		else 
-			a[out.find(s)] = (Pair) { s, v };
-
-		return out;
-	}
-};
-
-
 class Dictionary : public gc {
 protected:
 	struct Pair { String n; Value v; };
-	static const uint64_t inlineSize = 16;
+	static const uint64_t inlineSize = 8;
 	uint64_t size, load;
 	Pair* d;
 	Pair inlineDict[inlineSize];
@@ -429,7 +319,7 @@ protected:
 	// an empty pair (String::NA, Value::Nil).
 	// success is set to true if the variable is found. This boolean flag
 	// is necessary for compiler optimizations to eliminate expensive control flow.
-	Pair* find(String name, bool& success) const ALWAYS_INLINE {
+	Pair* find(String name, bool& success) const {
 		uint64_t i = hash(name) & (size-1);
 		if(__builtin_expect(d[i].n == name, true)) {
 			success = true;
@@ -464,7 +354,9 @@ protected:
 
 	void rehash(uint64_t s) {
 		uint64_t old_size = size;
+		uint64_t old_load = load;
 		Pair* old_d = d;
+
 		s = nextPow2(s);
 		if(s <= size) return; // should rehash on shrinking sometimes, when?
 
@@ -473,10 +365,12 @@ protected:
 		clear();
 		
 		// copy over previous populated values...
-		for(uint64_t i = 0; i < old_size; i++) {
-			if(old_d[i].n != Strings::NA) {
-				load++;
-				*slot(old_d[i].n) = old_d[i];
+		if(old_load > 0) {
+			for(uint64_t i = 0; i < old_size; i++) {
+				if(old_d[i].n != Strings::NA) {
+					load++;
+					*slot(old_d[i].n) = old_d[i];
+				}
 			}
 		}
 	}
@@ -484,6 +378,12 @@ protected:
 public:
 	Dictionary() : size(inlineSize), d(inlineDict) {
 		clear();
+	}
+
+	bool has(String name) const {
+		bool success;
+		find(name, success);
+		return success;
 	}
 
 	Value const& get(String name) const ALWAYS_INLINE {
@@ -495,7 +395,7 @@ public:
 		bool success;
 		Pair* p = find(name, success);
 		if(!success) {
-			if((load+1 * 2) > size)
+			if(((load+1) * 2) > size)
 				rehash((size*2));
 			load++;
 			p = slot(name);
@@ -518,23 +418,103 @@ public:
 		memset(d, 0, sizeof(Pair)*size); 
 	}
 
-	struct Pointer {
-		Dictionary* env;
-		String name;
+	// clone with room for extra elements
+	Dictionary* clone(uint64_t extra) const {
+		Dictionary* clone = new Dictionary();
+		clone->rehash(size+extra);
+		// copy over elements
+		if(load > 0) {
+			for(uint64_t i = 0; i < size; i++) {
+				if(d[i].n != Strings::NA) {
+					clone->load++;
+					*clone->slot(d[i].n) = d[i];
+				}
+			}
+		}
+		return clone;
+	}
+
+	class const_iterator {
+		Dictionary const* d;
+		int64_t i;
+	public:
+		const_iterator(Dictionary const* d, int64_t idx) {
+			this->d = d;
+			i = std::max((int64_t)0, std::min((int64_t)d->size, idx));
+			while(d->d[i].n == Strings::NA && i < (int64_t)d->size) i++;
+		}
+		String string() const { return d->d[i].n; }	
+		Value const& value() const { return d->d[i].v; }
+		const_iterator& operator++() {
+			while(d->d[++i].n == Strings::NA && i < (int64_t)d->size);
+			return *this;
+		}
+		bool operator==(const_iterator const& o) {
+			return d == o.d && i == o.i;
+		}
+		bool operator!=(const_iterator const& o) {
+			return d != o.d || i != o.i;
+		}
 	};
 
-	Pointer makePointer(String name) {
-		return (Pointer) { this, name };
+	const_iterator begin() const {
+		return const_iterator(this, 0);
 	}
 
-	static Value const& get(Pointer const& p) {
-		return p.env->get(p.name);
+	const_iterator end() const {
+		return const_iterator(this, size);
+	}
+};
+
+// Object implements an immutable dictionary interface.
+// Objects also have a base value which right now must be a non-object type...
+//  However S4 objects can contain S3 objects so we may have to change this.
+//  If we make this change, then all code that unwraps objects must do so recursively.
+class Object : public Value {
+	
+private:
+	struct Inner : public gc {
+		Value base;
+		Dictionary* d;
+		Inner(Value const& base, Dictionary* d) : base(base), d(d) {}
+	};
+
+public:
+
+	Object() {}
+	
+	static void Init(Object& o, Value const& base, Dictionary* dictionary=0) {
+		Value::Init(o, Type::Object, 0);
+		o.p = new (GC) Inner(base, dictionary == 0 ? new (GC) Dictionary() : dictionary);
 	}
 
-	static void assign(Pointer const& p, Value const& value) {
-		p.env->insert(p.name) = value;
+	Value const& base() const {
+		return ((Inner const*)p)->base;
 	}
 
+	Dictionary* dictionary() const {
+		return ((Inner const*)p)->d;
+	}
+
+	bool has(String name) const {
+		return ((Inner const*)p)->d->has(name);
+	}
+	
+	Value const& get(String name) const {
+		return ((Inner const*)p)->d->get(name);
+	}
+
+	void insertMutable(String name, Value const& v) {
+		if(!v.isNil())
+			((Inner*)p)->d->insert(name) = v;
+	}
+
+	Object insert(String name, Value const& v) {
+		Object o;
+		Object::Init(o, ((Inner*)p)->base, ((Inner*)p)->d->clone(1));
+		o.insertMutable(name, v);
+		return o;
+	}
 };
 
 class Environment : public Dictionary {
@@ -577,10 +557,26 @@ public:
 	
 	// Look up variable using standard R lexical scoping rules
 	// Should be same as insertRecursive, but with extra constness
-	Value const& getRecursive(String name) const ALWAYS_INLINE {
+	Value const& getRecursive(String name) const {
 		return insertRecursive(name);
 	}
 	
+	struct Pointer {
+		Environment* env;
+		String name;
+	};
+
+	Pointer makePointer(String name) {
+		return (Pointer) { this, name };
+	}
+
+	static Value const& getPointer(Pointer const& p) {
+		return p.env->get(p.name);
+	}
+
+	static void assignPointer(Pointer const& p, Value const& value) {
+		p.env->insert(p.name) = value;
+	}
 };
 
 class REnvironment {

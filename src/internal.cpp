@@ -110,7 +110,7 @@ void attr(Thread& thread, Value const* args, Value& result)
 	Value object = args[0];
 	if(object.isObject()) {
 		Character which = Cast<Character>(args[1]);
-		result = ((Object const&)object).getAttribute(which[0]);
+		result = ((Object const&)object).get(which[0]);
 	}
 	else {
 		result = Null::Singleton();
@@ -123,10 +123,13 @@ void assignAttr(Thread& thread, Value const* args, Value& result)
 	Character which = Cast<Character>(args[1]);
 	if(!object.isObject()) {
 		Value v;
-		Object::Init(v, object);
+		Object::Init((Object&)v, object);
 		object = v;
+		((Object&)object).insertMutable(which[0], args[2]);
+		result = object;
+	} else {
+		result = ((Object&)object).insert(which[0], args[2]);
 	}
-	result = ((Object&)object).setAttribute(which[0], args[2]);
 }
 
 template<class D>

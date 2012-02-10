@@ -120,11 +120,10 @@ std::string stringify(State const& state, Value const& value) {
 			Object const& o = (Object const&)value;
 			result = stringify(state, o.base());
 			result = result + "\nAttributes:\n";
-			for(uint64_t i = 0; i < o.capacity(); i++) {
-				if(o.attributes()[i].n != Strings::NA) {
-					result = result + "\t" + state.externStr(o.attributes()[i].n)
-							+ ":\t" + state.stringify(o.attributes()[i].v) + "\n";
-				}
+			Dictionary* d = o.dictionary();
+			for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
+				result = result + "\t" + state.externStr(i.string())
+						+ ":\t" + state.stringify(i.value()) + "\n";
 			}
 			return result;
 		}
