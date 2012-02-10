@@ -216,63 +216,26 @@ static Environment* CreateEnvironment(Thread& thread, Environment* l, Environmen
 	return env;
 }
 
-// Get a Value by Symbol from the current environment,
-//  TODO: UseMethod also should search in some cached library locations.
-static Value GenericGet(Thread& thread, String s) {
-	Value const& value = thread.frame.environment->getRecursive(s);
-	if(value.isPromise()) {
-		//value = force(thread, value);
-		//environment->assign(s, value);
-		_error("UseMethod does not yet support evaluating promises");
-	}
-	return value;
-}
-
-static Value GenericSearch(Thread& thread, Character klass, String generic, String& method) {
-		
-	// first search for type specific method
-	Value func = Value::Nil();
-	for(int64_t i = 0; i < klass.length && func.isNil(); i++) {
-		method = thread.internStr(thread.externStr(generic) + "." + thread.externStr(klass[i]));
-		func = GenericGet(thread, method);	
-	}
-
-	// TODO: look for group generics
-
-	// look for default if necessary
-	if(func.isNil()) {
-		method = thread.internStr(thread.externStr(generic) + ".default");
-		func = GenericGet(thread, method);
-	}
-
-	return func;
-}
-
-static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String func, Value const& a, int64_t out) {
-	String method;
-	Value f = GenericSearch(thread, klass(thread, a), func, method);
+static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out) {
+	Value const& f = thread.frame.environment->getRecursive(op);
 	if(f.isFunction()) {
 		Function func(f);
 		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
 		MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a), Character(0));
 		return buildStackFrame(thread, fenv, true, func.prototype(), out, &inst+1);
 	}
-	_error("Failed to find generic for builtin function");
+	_error("Failed to find generic for builtin op");
 }
 
-static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String func, Value const& a, Value const& b, int64_t out) {
-	String method;
-	Value f = a.isObject() ?  
-		GenericSearch(thread, klass(thread, a), func, method) :  
-		GenericSearch(thread, klass(thread, b), func, method);
-	// TODO: R checks if these match for some ops (not all)
+static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out) {
+	Value const& f = thread.frame.environment->getRecursive(op);
 	if(f.isFunction()) { 
 		Function func(f);
 		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
 		MatchArgs(thread, thread.frame.environment, fenv, func, List::c(a, b), Character(0));
 		return buildStackFrame(thread, fenv, true, func.prototype(), out, &inst+1);
 	}
-	_error("Failed to find generic for builtin function");
+	_error("Failed to find generic for builtin op");
 }
 
 

@@ -110,7 +110,7 @@ expr(A) ::= expr(B) OR2(C) optnl expr(D). { A = CreateCall(List::c(C, B, D)); }
 
 expr(A) ::= expr(B) LEFT_ASSIGN(C) optnl expr(D). { A = CreateCall(List::c(C, B, D)); }
 expr(A) ::= expr(B) RIGHT_ASSIGN(C) optnl expr(D). { A = CreateCall(List::c(C, D, B)); }
-expr(A) ::= FUNCTION(B) optnl LPAREN optnl formallist(C) optnl RPAREN optnl statement(D).  { Value p; Object::Init(p, C->values(), C->names(true)); A = CreateCall(List::c(B, p, D, Character::c(parser->popSource()))); }
+expr(A) ::= FUNCTION(B) optnl LPAREN optnl formallist(C) optnl RPAREN optnl statement(D).  { A = CreateCall(List::c(B, CreatePairlist(C->values(), C->names(true)), D, Character::c(parser->popSource()))); }
 expr(A) ::= expr(B) LPAREN optnl sublist(C) optnl RPAREN. { C->push_front(Strings::empty, B); A = CreateCall(C->values(), C->names(false)); } 
 expr(A) ::= IF(B) optnl LPAREN optnl expr(C) optnl RPAREN optnl statement(D). { A = CreateCall(List::c(B, C, D)); }
 expr(A) ::= IF(B) optnl LPAREN optnl expr(C) optnl RPAREN optnl statement(D) ELSE optnl statement(E). { A = CreateCall(List::c(B, C, D, E)); }

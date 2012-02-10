@@ -21,6 +21,7 @@
 	_(Environment,	"environment")	\
 	_(Object,	"object")	\
 	_(Promise, 	"promise") 	\
+	_(Default, 	"default") 	\
 	_(Nil,		"nil")		\
 	_(Future,	"future")		\
 	/* Now all other strings */	\
@@ -29,7 +30,7 @@
 	_(dots, 	"...") \
 	_(Name, 	"name") \
 	_(Numeric, 	"numeric") \
-	_(PairList,	"pairlist")	\
+	_(Pairlist,	"pairlist")	\
 	_(Symbol,	"symbol")	\
 	_(Call,		"call")		\
 	_(Expression,	"expression")	\

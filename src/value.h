@@ -79,6 +79,7 @@ struct Value {
 	template<class T> T const& scalar() const { throw "not allowed"; }
 
 	static Value const& Nil() { static const Value v = { {{Type::Promise, 0}}, {0} }; return v; }
+
 };
 
 template<> inline int64_t& Value::scalar<int64_t>() { return i; }
@@ -352,43 +353,14 @@ struct Object : public Value {
 		v = Object(_base, 0, 4, attributes);
 	}
 
-	static void Init(Value& v, Value const& _base, Value const& _names) {
-		Init(v, _base);
-		v = ((Object&)v).setNames(_names);
-	}
-	
-	static void Init(Value& v, Value const& _base, Value const& _names, Value const& className) {
-		Init(v, _base);
-		v = ((Object&)v).setNames(_names);
-		v = ((Object&)v).setClass(className);
-	}
-
 	bool hasAttribute(String s) const {
 		return attributes()[find(s)].n != Strings::NA;
 	}
-
-	bool hasNames() const { return hasAttribute(Strings::names); }
-	bool hasClass() const { return hasAttribute(Strings::classSym); }
-	bool hasDim() const   { return hasAttribute(Strings::dim); }
 
 	Value const& getAttribute(String s) const {
 		uint64_t i = find(s);
 		if(attributes()[i].n != Strings::NA) return attributes()[i].v;
 		else _error("Subscript out of range"); 
-	}
-
-	Value const& getNames() const { return getAttribute(Strings::names); }
-	Value const& getClass() const { return getAttribute(Strings::classSym); }
-	Value const& getDim() const { return getAttribute(Strings::dim); }
-
-	String className() const {
-		if(!hasClass()) {
-			return Strings::NA;
-			//return String::Init(base().type);	// TODO: make sure types line up correctly with strings
-		}
-		else {
-			return Character(getClass())[0];
-		}
 	}
 
 	// Generate derived versions...
@@ -440,47 +412,8 @@ struct Object : public Value {
 
 		return out;
 	}
-	
-	Object setNames(Value const& v) const { return setAttribute(Strings::names, v); }
-	Object setClass(Value const& v) const { return setAttribute(Strings::classSym, v); }
-	Object setDim(Value const& v) const { return setAttribute(Strings::dim, v); }
-
 };
 
-inline Value CreateSymbol(String s) {
-	Value v;
-	Object::Init(v, Character::c(s), Value::Nil(), Character::c(Strings::Symbol));
-	return v;
-}
-
-inline Value CreateExpression(List const& list) {
-	Value v;
-	Object::Init(v, list, Value::Nil(), Character::c(Strings::Expression));
-	return v;
-}
-
-inline Value CreateCall(List const& list, Value const& names = Value::Nil()) {
-	Value v;
-	Object::Init(v, list, names, Character::c(Strings::Call));
-	return v;
-}
-
-inline bool isSymbol(Value const& v) {
-	return v.isObject() && ((Object const&)v).hasClass() && ((Object const&)v).className() == Strings::Symbol;
-}
-
-inline bool isCall(Value const& v) {
-	return v.isObject() && ((Object const&)v).hasClass() && ((Object const&)v).className() == Strings::Call;
-}
-
-inline bool isExpression(Value const& v) {
-	return v.isObject() && ((Object const&)v).hasClass() && ((Object const&)v).className() == Strings::Expression;
-}
-
-inline String SymbolStr(Value const& v) {
-	if(v.isObject()) return Character(((Object const&)v).base())[0];
-	else return Character(v)[0];
-}
 
 class Dictionary : public gc {
 protected:

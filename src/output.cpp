@@ -44,7 +44,7 @@ template<> std::string stringify<List>(State const& state, List::Element a) {
 }  
 
 template<class T>
-std::string stringifyVector(State const& state, T const& v, Value const& names) {
+std::string stringifyVector(State const& state, T const& v) {
 	std::string result = "";
 	int64_t length = v.length;
 	if(length == 0)
@@ -56,47 +56,22 @@ std::string stringifyVector(State const& state, T const& v, Value const& names) 
 	for(int64_t i = 0; i < length; i++) {
 		maxlength = std::max((int64_t)maxlength, (int64_t)stringify<T>(state, v[i]).length());
 	}
-	if(names.isCharacter()) {
-		Character c = Character(names);
-		for(int64_t i = 0; i < length; i++) {
-			maxlength = std::max((int64_t)maxlength, (int64_t)state.externStr(c[i]).length());
-		}
-	}
 	int64_t indexwidth = intToStr(length+1).length();
 	int64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
-	if(names.isCharacter()) {
-		Character c = Character(names);
-		for(int64_t i = 0; i < length; i+=perline) {
-			result = result + pad("", indexwidth+2);
-			for(int64_t j = 0; j < perline && i+j < length; j++) {
-				result = result + pad(state.externStr(c[i+j]), maxlength+1);
-			}
+	for(int64_t i = 0; i < length; i+=perline) {
+		result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
+		for(int64_t j = 0; j < perline && i+j < length; j++) {
+			result = result + pad(stringify<T>(state, v[i+j]), maxlength+1);
+		}
+
+		if(i+perline < length)	
 			result = result + "\n";
-			result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
-			for(int64_t j = 0; j < perline && i+j < length; j++) {
-				result = result + pad(stringify<T>(state, v[i+j]), maxlength+1);
-			}
-	
-			if(i+perline < length)	
-				result = result + "\n";
-		}
-	}
-	else {
-		for(int64_t i = 0; i < length; i+=perline) {
-			result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
-			for(int64_t j = 0; j < perline && i+j < length; j++) {
-				result = result + pad(stringify<T>(state, v[i+j]), maxlength+1);
-			}
-	
-			if(i+perline < length)	
-				result = result + "\n";
-		}
 	}
 	if(dots) result = result + " ...";
 	return result;
 }
 
-std::string stringify(State const& state, Value const& value, Value const& names) {
+std::string stringify(State const& state, Value const& value) {
 	std::string result = "[1]";
 	bool dots = false;
 	switch(value.type)
@@ -104,15 +79,15 @@ std::string stringify(State const& state, Value const& value, Value const& names
 		case Type::Null:
 			return "NULL";
 		case Type::Raw:
-			return stringifyVector(state, Raw(value), names);
+			return stringifyVector(state, Raw(value));
 		case Type::Logical:
-			return stringifyVector(state, Logical(value), names);
+			return stringifyVector(state, Logical(value));
 		case Type::Integer:
-			return stringifyVector(state, Integer(value), names);
+			return stringifyVector(state, Integer(value));
 		case Type::Double:
-			return stringifyVector(state, Double(value), names);
+			return stringifyVector(state, Double(value));
 		case Type::Character:
-			return stringifyVector(state, Character(value), names);
+			return stringifyVector(state, Character(value));
 		
 		case Type::List:
 		{
@@ -122,24 +97,11 @@ std::string stringify(State const& state, Value const& value, Value const& names
 			if(length == 0) return "list()";
 			if(length > 100) { dots = true; length = 100; }
 			result = "";
-			if(names.isCharacter()) {
-				Character n = Character(names);
-				for(int64_t i = 0; i < length; i++) {
-					if(state.externStr(n[i])=="")
-						result = result + "[[" + intToStr(i+1) + "]]\n";
-					else
-						result = result + "$" + state.externStr(n[i]) + "\n";
-					if(!List::isNA(v[i])) result = result + state.stringify(v[i]);
-					result = result + "\n";
-					if(i < length-1) result = result + "\n";
-				}
-			} else {
-				for(int64_t i = 0; i < length; i++) {
-					result = result + "[[" + intToStr(i+1) + "]]\n";
-					if(!List::isNA(v[i])) result = result + state.stringify(v[i]);
-					result = result + "\n";
-					if(i < length-1) result = result + "\n";
-				}
+			for(int64_t i = 0; i < length; i++) {
+				result = result + "[[" + intToStr(i+1) + "]]\n";
+				if(!List::isNA(v[i])) result = result + state.stringify(v[i]);
+				result = result + "\n";
+				if(i < length-1) result = result + "\n";
 			}
 			if(dots) result = result + " ...\n\n";
 			return result;
@@ -155,9 +117,15 @@ std::string stringify(State const& state, Value const& value, Value const& names
 		}
 		case Type::Object:
 		{
-			Value names = ((Object const&)value).hasNames() ? ((Object const&)value).getNames() : Value::Nil();
-			result = stringify(state, ((Object const&)value).base(), names);
-			if(((Object const&)value).hasClass()) result += "\nclass: " + state.stringify(((Object const&)value).getClass());
+			Object const& o = (Object const&)value;
+			result = stringify(state, o.base());
+			result = result + "\nAttributes:\n";
+			for(uint64_t i = 0; i < o.capacity(); i++) {
+				if(o.attributes()[i].n != Strings::NA) {
+					result = result + "\t" + state.externStr(o.attributes()[i].n)
+							+ ":\t" + state.stringify(o.attributes()[i].v) + "\n";
+				}
+			}
 			return result;
 		}
 		case Type::Future:
@@ -169,7 +137,7 @@ std::string stringify(State const& state, Value const& value, Value const& names
 
 
 std::string State::stringify(Value const& value) const {
-	return ::stringify(*this, value, Value::Nil());
+	return ::stringify(*this, value);
 }
 
 #ifdef ENABLE_JIT
@@ -203,20 +171,11 @@ template<> std::string deparse<List>(State const& state, List::Element a) {
 }  
 
 template<class T>
-std::string deparseVectorBody(State const& state, T const& v, Value const& names) {
+std::string deparseVectorBody(State const& state, T const& v) {
 	std::string result = "";
-	if(names.isCharacter()) {
-		Character c = Character(names);
-		for(int64_t i = 0; i < v.length; i++) {
-			result = result + state.externStr(c[i]) + " = " + deparse<T>(state, v[i]);
-			if(i < v.length-1) result = result + ", ";
-		}
-	}
-	else {
-		for(int64_t i = 0; i < v.length; i++) {
-			result = result + deparse<T>(state, v[i]);
-			if(i < v.length-1) result = result + ", ";
-		}
+	for(int64_t i = 0; i < v.length; i++) {
+		result = result + deparse<T>(state, v[i]);
+		if(i < v.length-1) result = result + ", ";
 	}
 	return result;
 }
@@ -224,10 +183,10 @@ std::string deparseVectorBody(State const& state, T const& v, Value const& names
 
 
 template<class T>
-std::string deparseVector(State const& state, T const& v, Value const& names) {
+std::string deparseVector(State const& state, T const& v) {
 	if(v.length == 0) return std::string(Type::toString(v.VectorType)) + "(0)";
-	if(v.length == 1 && !names.isCharacter()) return deparseVectorBody(state, v, names);
-	else return "c(" + deparseVectorBody(state, v, names) + ")";
+	if(v.length == 1) return deparseVectorBody(state, v);
+	else return "c(" + deparseVectorBody(state, v) + ")";
 }
 /*
 template<>
@@ -240,12 +199,12 @@ std::string deparseVector<Expression>(State const& state, Expression const& v, V
 	return "expression(" + deparseVectorBody(state, v, names) + ")";
 }
 */
-std::string deparse(State const& state, Value const& value, Value const& names) {
+std::string deparse(State const& state, Value const& value) {
 	switch(value.type)
 	{
 		case Type::Null:
 			return "NULL";
-		#define CASE(Name) case Type::Name: return deparseVector(state, Name(value), names); break;
+		#define CASE(Name) case Type::Name: return deparseVector(state, Name(value)); break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
 		case Type::Function:
@@ -253,12 +212,12 @@ std::string deparse(State const& state, Value const& value, Value const& names) 
 		case Type::Environment:
 			return "environment";
 		case Type::Object:
-			return deparse(state, ((Object const&)value).base(), ((Object const&)value).getNames());
+			return deparse(state, ((Object const&)value).base());
 		default:
 			return Type::toString(value.type);
 	};
 }
 
 std::string State::deparse(Value const& value) const {
-	return ::deparse(*this, value, Value::Nil());
+	return ::deparse(*this, value);
 }

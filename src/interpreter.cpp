@@ -111,14 +111,16 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	List arguments;
 	Character names;
 	Environment* fenv;
-	if(inst.b < 0) {
+	//if(inst.b < 0) {
 		CompiledCall const& call = thread.frame.prototype->calls[-(inst.b+1)];
 		arguments = call.arguments;
 		names = call.names;
 		if(call.dots < arguments.length)
 			ExpandDots(thread, arguments, names, call.dots);
 		fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
-	} else {
+	/*} else {
+		
+		// do.call, should this be here?
 		OPERAND(reg, inst.b);
 		if(reg.isObject()) {
 			arguments = List(((Object const&)reg).base());
@@ -128,7 +130,7 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 			arguments = List(reg);
 		}
 		fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
-	}
+	} */
 
 	MatchArgs(thread, thread.frame.environment, fenv, func, arguments, names);
 	return buildStackFrame(thread, fenv, true, func.prototype(), inst.c, &inst+1);
@@ -150,34 +152,6 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	Instruction const* returnpc = thread.frame.returnpc;
 	thread.pop();
 	return returnpc;
-}
-
-Instruction const* UseMethod_op(Thread& thread, Instruction const& inst) {
-	String generic = (String)inst.a;
-
-	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
-	List arguments = call.arguments;
-	Character names = call.names;
-	if(call.dots < arguments.length)
-		ExpandDots(thread, arguments, names, call.dots);
-
-	OPERAND(object, inst.c);
-	Character type = klass(thread, object);
-
-	String method;
-	Value f = GenericSearch(thread, type, generic, method);
-
-	if(!f.isFunction()) { 
-		_error(std::string("no applicable method for '") + thread.externStr(generic) + "' applied to an object of class \"" + thread.externStr(type[0]) + "\"");
-	}
-
-	Function func(f);
-	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
-	MatchArgs(thread, thread.frame.environment, fenv, func, arguments, names);	
-	fenv->insert(Strings::dotGeneric) = CreateSymbol(generic);
-	fenv->insert(Strings::dotMethod) = CreateSymbol(method);
-	fenv->insert(Strings::dotClass) = type; 
-	return buildStackFrame(thread, fenv, true, func.prototype(), inst.c, &inst+1);
 }
 
 Instruction const* jmp_op(Thread& thread, Instruction const& inst) {
@@ -279,7 +253,8 @@ Instruction const* list_op(Thread& thread, Instruction const& inst) {
 			Character names(dots.size());
 			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
 				names[i] = dots[i];
-			Object::Init(out, out, names);
+			Object::Init(out, out);
+			((Object&)out).setAttribute(Strings::names, names);
 		}
 		return &inst+1;
 	}
@@ -554,12 +529,6 @@ Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 	Value const& v = thread.frame.environment->get(s);
 	bool missing = v.isNil() || v.isDefault();
 	Logical::InitScalar(OUT(thread, inst.c), missing);
-	return &inst+1;
-}
-Instruction const* mmul_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a);
-	OPERAND(b, inst.b);
-	OUT(thread, inst.c) = MatrixMultiply(thread, a, b);
 	return &inst+1;
 }
 Instruction const* strip_op(Thread& thread, Instruction const& inst) {

@@ -13,6 +13,7 @@
 #include "type.h"
 #include "bc.h"
 #include "interpreter.h"
+#include "frontend.h"
 
 class Compiler {
 private:

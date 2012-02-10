@@ -230,44 +230,6 @@ void OrdinalUnaryDispatch(Thread& thread, Value a, Value& c) {
 	else c = Logical::False();
 }
 
-/*template< template<class Op> class Lift, template<typename T> class Op > 
-void unaryCharacter(Thread& thread, Value a, Value& c) {
-	if(a.isVector())
-		Lift< Op<TCharacter> >::eval(thread, As<Character>(thread, a), c);
-	else if(a.isObject()) {
-		unaryCharacter<Lift, Op>(thread, ((Object const&)a).base(), c);
-		if(((Object const&)a).hasNames()) {
-			Object::Init(c, c, ((Object const&)a).getNames());
-		}
-	}
-};
-
-template< template<class Op> class Lift, template<typename T> class Op > 
-void unaryFilter(Thread& thread, Value a, Value& c) {
-	if(a.isDouble())
-		Lift< Op<TDouble> >::eval(thread, (Double const&)a, c);
-	else if(a.isInteger())
-		Lift< Op<TInteger> >::eval(thread, (Integer const&)a, c);
-	else if(a.isLogical())
-		Lift< Op<TLogical> >::eval(thread, (Logical const&)a, c);
-	else if(a.isCharacter())
-		Lift< Op<TCharacter> >::eval(thread, (Character const&)a, c);
-	else if(a.isNull())
-		Logical(0);
-	else if(a.isList())
-		Lift< Op<TList> >::eval(thread, (List const&)a, c);
-	else if(a.isObject()) {
-		unaryFilter<Lift, Op>(thread, ((Object const&)a).base(), c);
-		if(((Object const&)a).hasNames()) {
-			Object::Init(c, c, ((Object const&)a).getNames());
-		}
-	}
-	else {
-		_error("unexpected type in unaryFilter");
-	}
-};
-*/
-
 template< template<typename S, typename T> class Op > 
 void ArithBinary1Dispatch(Thread& thread, Value a, Value b, Value& c) {
 	if(a.isDouble()) {

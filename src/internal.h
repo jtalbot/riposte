@@ -9,15 +9,13 @@
 #include <set>
 #include <algorithm>
 
-#include "Eigen/Dense"
-using Eigen::MatrixXd;
-using Eigen::Map;
-
 inline double asReal1(Value const& v) { 
 	if(v.isInteger()) return ((Integer const&)v)[0]; 
 	else if(v.isDouble()) return ((Double const&)v)[0]; 
 	else _error("Can't cast argument to number"); 
 }
+
+String type2String(Type::Enum type);
 
 void Element(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 inline void Element(Value const& v, int64_t index, Value& out) {
@@ -70,7 +68,7 @@ inline void Subset2(Thread& thread, Value const& a, Value const& i, Value& out) 
 		Element2(a, i.i-1, out);
 		return;
 	}
-	else if(i.isCharacter1() && a.isObject() && ((Object const&)a).hasNames()) {
+	/*else if(i.isCharacter1() && a.isObject() && ((Object const&)a).hasNames()) {
 		Character c = Character(((Object const&)a).getNames());
 		String const* data = c.v();
 		int64_t length = c.length;
@@ -80,7 +78,7 @@ inline void Subset2(Thread& thread, Value const& a, Value const& i, Value& out) 
 				return;
 			}
 		}
-	}
+	}*/
 	_error("Invalid subset index");
 }
 
@@ -187,38 +185,6 @@ inline Double Sequence(double from, double by, double len) {
 	}
 	return r;
 }
-
-inline Character klass(Thread& thread, Value const& v)
-{
-	Type::Enum type;
-	if(v.isObject()) {
-		if(((Object const&)v).hasClass())
-			return Character(((Object const&)v).getClass());
-		else
-			type = ((Object const&)v).base().type;
-	}
-	else {
-		type = v.type;
-	}
-			
-	switch(type) {
-		case Type::Promise: return Character::c(Strings::Promise); break;
-		case Type::Object: return Character::c(Strings::Object); break;
-		case Type::Null: return Character::c(Strings::Null); break;
-		case Type::Raw: return Character::c(Strings::Raw); break;
-		case Type::Logical: return Character::c(Strings::Logical); break;
-		case Type::Integer: return Character::c(Strings::Integer); break;
-		case Type::Double: return Character::c(Strings::Double); break;
-		case Type::Character: return Character::c(Strings::Character); break;
-		case Type::List: return Character::c(Strings::List); break;
-		case Type::Function: return Character::c(Strings::Function); break;
-		case Type::Environment: return Character::c(Strings::Environment); break;
-		case Type::Future: return Character::c(Strings::Future); break;
-		default: return Character::c(Strings::Nil); break;
-	}
-}
-
-Value MatrixMultiply(Thread& thread, Value const& a, Value const& b);
 
 #endif
 

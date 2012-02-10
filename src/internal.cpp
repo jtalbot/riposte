@@ -10,11 +10,25 @@
 
 #include <pthread.h>
 
+#include "Eigen/Dense"
+using Eigen::MatrixXd;
+using Eigen::Map;
+
 template<typename T>
 T const& Cast(Value const& v) {
 	if(v.type != T::VectorType) _error("incorrect type passed to internal function");
 	return (T const&)v;
 }
+
+String type2String(Type::Enum type) {
+	switch(type) {
+		#define CASE(name, str) case Type::name: return Strings::name; break;
+		TYPES(CASE)
+		#undef CASE
+		default: _error("Unknown type in type to string, that's bad!"); break;
+	}
+}
+
 
 void cat(Thread& thread, Value const* args, Value& result) {
 	List const& a = Cast<List>(args[0]);
@@ -61,7 +75,7 @@ void readtable(Thread& thread, Value const* args, Value& result) {
 		}
 		in.close();
 		Double r(v.size());
-		for(int64_t i = 0; i < v.size(); i++) {
+		for(uint64_t i = 0; i < v.size(); i++) {
 			r[i] = v[i];
 		}
 		result = r;
@@ -88,21 +102,6 @@ void repeat(Thread& thread, Value const* args, Value& result) {
 		r[i] = v;
 	}
 	result = r;
-}
-
-void inherits(Thread& thread, Value const* args, Value& result) {
-	Value x = args[0];
-	Character what = Cast<Character>(args[1]);
-	Logical which = Cast<Logical>(args[2]);
-	// NYI: which
-	Character c = klass(thread, x);
-	bool inherits = false;
-	for(int64_t i = 0; i < what.length && !inherits; i++) {
-		for(int64_t j = 0; j < c.length && !inherits; j++) {
-			if(what[i] == c[j]) inherits = true;
-		}
-	}
-	result = Logical::c(inherits);
 }
 
 void attr(Thread& thread, Value const* args, Value& result)
@@ -243,7 +242,7 @@ void unlist<List>(Thread& thread, int64_t recurse, Value a, List& out, int64_t& 
 	else if(a.isVector()) { Insert(thread, a, 0, out, start, a.length); start += a.length; }
 	else out[start++] = a;
 }
-
+/*
 bool unlistHasNames(Thread& thread, int64_t recurse, Value a) {
 	if(a.isObject() && ((Object const&)a).hasNames()) return true;
 	if(a.isObject()) a = ((Object&)a).base();
@@ -256,7 +255,7 @@ bool unlistHasNames(Thread& thread, int64_t recurse, Value a) {
 	}
 	else return false;
 }
-
+*/
 std::string makeName(Thread& thread, std::string prefix, String name, int64_t i) {
 	if(prefix.length() > 0) {
 		if(name != Strings::empty)
@@ -268,7 +267,7 @@ std::string makeName(Thread& thread, std::string prefix, String name, int64_t i)
 		return thread.externStr(name);
 	}
 }
-
+/*
 void unlistNames(Thread& thread, int64_t recurse, Value a, Character& out, int64_t& start, std::string prefix) {
 	Character names(0);
 	if(a.isObject() && ((Object&)a).hasNames()) {
@@ -289,12 +288,11 @@ void unlistNames(Thread& thread, int64_t recurse, Value a, Character& out, int64
 	}
 	else out[start++] = thread.internStr(prefix);
 }
-
+*/
 // TODO: useNames parameter could be handled at the R level
 void unlist(Thread& thread, Value const* args, Value& result) {
 	Value v = args[0];
 	int64_t recurse = Cast<Logical>(args[1])[0] ? std::numeric_limits<int64_t>::max() : 1;
-	bool useNames = Cast<Logical>(args[2])[0];
 	
 	int64_t length = unlistLength(thread, recurse, v);
 	Type::Enum type = unlistType(thread, recurse, v);
@@ -311,13 +309,6 @@ void unlist(Thread& thread, Value const* args, Value& result) {
 		#undef CASE
 		default: _error("NYI: Insert into this type"); break;
 	};
-
-	if(useNames && unlistHasNames(thread, recurse, v)) {
-		Character outnames(length);
-		int64_t i = 0;
-		unlistNames(thread, recurse, v, outnames, i, "");
-		Object::Init(result, result, outnames);
-	}
 }
 
 
@@ -401,7 +392,7 @@ inline int64_t find(Thread& thread, A const& a, typename A::Element const& b) {
 	return -1;
 }
 
-template< class A, class B >
+/*template< class A, class B >
 struct SubsetIndexed {
 	static void eval(Thread& thread, A const& a, B const& b, B const& d, Value& out)
 	{
@@ -416,21 +407,10 @@ struct SubsetIndexed {
 		}
 		out = r;
 	}
-};
+};*/
 
 void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble() || i.isInteger()) {
-		if(a.isObject()) {
-			// TODO: this computes positive twice
-			Value r, names;
-			SubsetSlow(thread, ((Object const&)a).base(), i, r);
-			if(((Object const&)a).hasNames()) {
-				SubsetSlow(thread, ((Object const&)a).getNames(), i, names);
-				Object::Init(r, r, names);
-			}
-			out = r;
-			return;
-		}
 		Integer index = As<Integer>(thread, i);
 		int64_t positive = 0, negative = 0;
 		for(int64_t i = 0; i < index.length; i++) {
@@ -468,16 +448,6 @@ void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out) {
 		}
 	}
 	else if(i.isLogical()) {
-		if(a.isObject()) {
-			Value r, names;
-			SubsetSlow(thread, ((Object const&)a).base(), i, r);
-			if(((Object const&)a).hasNames()) {
-				SubsetSlow(thread, ((Object const&)a).getNames(), i, names);
-				Object::Init(r, r, names);
-			}
-			out = r;
-			return;
-		}
 		Logical index = Logical(i);
 		switch(a.type) {
 			case Type::Null: out = Null::Singleton(); break;
@@ -486,21 +456,6 @@ void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out) {
 #undef CASE
 			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
 		};	
-	}
-	else if(i.isCharacter()) {
-		if(a.isObject() && ((Object const&)a).hasNames()) {
-			Value const& b = ((Object const&)a).base();
-			Value const& n = ((Object const&)a).getNames();
-			switch(b.type) {
-				case Type::Null: out = Null::Singleton(); break;
-#define CASE(Name) case Type::Name: SubsetIndexed<Name, Character>::eval(thread, (Name const&)b, (Character const&)n, (Character const&)i, out); break;
-				VECTOR_TYPES_NOT_NULL(CASE)
-#undef CASE
-				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
-			};
-			Object::Init(out, out, (Character const&)i);	
-		}
-		else _error("Object does not have names for subsetting");
 	}
 	else {
 		_error("NYI indexing type");
@@ -558,7 +513,7 @@ struct SubsetAssignLogical {
 	}
 };
 
-template< class A, class B >
+/*template< class A, class B >
 struct SubsetAssignIndexed {
 	static void eval(Thread& thread, A const& a, bool clone, B const& b, B const& d, A const& v, Value& out)
 	{
@@ -583,7 +538,7 @@ struct SubsetAssignIndexed {
 		}
 		SubsetAssignInclude<A>::eval(thread, a, clone, include, v, out);
 	}
-};
+};*/
 
 void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(i.isDouble() || i.isInteger()) {
@@ -592,16 +547,6 @@ void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i
 #define CASE(Name) case Type::Name: SubsetAssignInclude<Name>::eval(thread, (Name const&)a, clone, idx, As<Name>(thread, b), c); break;
 			VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
-			case Type::Object: {
-				Value r;
-				SubsetAssignSlow(thread, ((Object const&)a).base(), clone, i, b, r);
-				if(((Object const&)a).hasNames()) {
-					Character names = (Character)((Object const&)a).getNames();
-					Resize(thread, clone, names, r.length, Strings::empty);
-					Object::Init(r, r, names);
-				}
-				c = r;
-			} break;
 			default: _error("NYI: subset assign type"); break;
 		};
 	}
@@ -611,35 +556,8 @@ void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i
 #define CASE(Name) case Type::Name: SubsetAssignLogical<Name>::eval(thread, (Name const&)a, clone, index, As<Name>(thread, b), c); break;
 					 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
-			case Type::Object: {
-				Value r;
-				SubsetAssignSlow(thread, ((Object const&)a).base(), clone, i, b, r);
-				if(((Object const&)a).hasNames()) {
-					Character names = (Character)((Object const&)a).getNames();
-					Resize(thread, clone, names, r.length, Strings::empty);
-					Object::Init(r, r, names);
-				}
-				c = r;
-			} break;
 			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
 		};	
-	}
-	else if(i.isCharacter()) {
-		if(a.isObject() && ((Object const&)a).hasNames()) {
-			Value const& base = ((Object const&)a).base();
-			Value const& names = ((Object const&)a).getNames();
-			switch(base.type) {
-				case Type::Null: c = Null::Singleton(); break;
-#define CASE(Name) case Type::Name: SubsetAssignIndexed<Name, Character>::eval(thread, (Name const&)base, clone, (Character const&)names, (Character const&)i, As<Name>(thread, b), c); break;
-				VECTOR_TYPES_NOT_NULL(CASE)
-#undef CASE
-				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
-			};
-			Value newNames;
-			SubsetAssignIndexed<Character, Character>::eval(thread, (Character const&)names, clone, (Character const&)names, (Character const&)i, (Character const&)i, newNames);
-			Object::Init(c, c, (Character const&)newNames);
-		}
-		else _error("Object does not have names for subsetting");
 	}
 	else {
 		_error("NYI indexing type");
@@ -859,8 +777,7 @@ void substitute(Thread& thread, Value const* args, Value& result) {
 }
 
 void type_of(Thread& thread, Value const* args, Value& result) {
-	// Should have a direct mapping from type to symbol.
-	result = Character::c(thread.internStr(Type::toString(args[0].type)));
+	result = Character::c(type2String(args[0].type));
 }
 
 void exists(Thread& thread, Value const* args, Value& result) {
@@ -894,30 +811,19 @@ void traceconfig(Thread & thread, Value const* args, Value& result) {
 	result = Null::Singleton();
 }
 
-Value MatrixMultiply(Thread& thread, Value const& a, Value const& b) {
-	MatrixXd aa, bb;
-	if(a.isObject() && ((Object const&)a).hasDim()) {
-		Integer ai = As<Integer>(thread, ((Object const&)a).getDim());
-		Double ad = As<Double>(thread, ((Object const&)a).base());
-		aa = Map<MatrixXd>(ad.v(), ai[0], ai[1]);
-	} else {
-		Double ad = As<Double>(thread, a);
-		aa = Map<MatrixXd>(ad.v(), 1, a.length);
-	}
-	if(b.isObject() && ((Object const&)b).hasDim()) {
-		Integer bi = As<Integer>(thread, ((Object const&)b).getDim());
-		Double bd = As<Double>(thread, ((Object const&)b).base());
-		bb = Map<MatrixXd>(bd.v(), bi[0], bi[1]);
-	} else {
-		Double bd = As<Double>(thread, b);
-		bb = Map<MatrixXd>(bd.v(), b.length, 1);
-	}
+// args( A, m, n, B, m, n )
+void matrixmultiply(Thread & thread, Value const* args, Value& result) {
+	double mA = asReal1(args[1]);
+	double nA = asReal1(args[2]);
+	MatrixXd aa = Map<MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
+	
+	double mB = asReal1(args[4]);
+	double nB = asReal1(args[5]);
+	MatrixXd bb = Map<MatrixXd>(As<Double>(thread, args[3]).v(), mB, nB);
+
 	Double c(aa.rows()*bb.cols());
 	Map<MatrixXd>(c.v(), aa.rows(), bb.cols()) = aa*bb;
-	Value result;
-	Object::Init(result, c);
-	Integer dim = Integer::c(aa.rows(), bb.cols());
-	return ((Object const&)result).setDim(dim);
+	result = c;
 }
 
 void registerCoreFunctions(State& state)
@@ -927,7 +833,6 @@ void registerCoreFunctions(State& state)
 	
 	state.registerInternalFunction(state.internStr("cat"), (cat), 1);
 	state.registerInternalFunction(state.internStr("library"), (library), 1);
-	state.registerInternalFunction(state.internStr("inherits"), (inherits), 3);
 	
 	state.registerInternalFunction(state.internStr("seq"), (sequence), 3);
 	state.registerInternalFunction(state.internStr("rep"), (repeat), 3);
@@ -964,5 +869,7 @@ void registerCoreFunctions(State& state)
 	state.registerInternalFunction(state.internStr("trace.config"), (traceconfig), 1);
 	
 	state.registerInternalFunction(state.internStr("read.table"), (readtable), 1);
+	
+	state.registerInternalFunction(state.internStr("matrix.multiply"), (matrixmultiply), 6);
 }
 

@@ -15,6 +15,7 @@
 
 #include "value.h"
 #include "interpreter.h"
+#include "frontend.h"
 
 // trim from end
 static inline std::string& rtrim(std::string &s) {

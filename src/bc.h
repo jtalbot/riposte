@@ -11,7 +11,6 @@
 	_(jmp, "jmp") \
 	_(branch, "branch") \
 	_(call, "call") \
-	_(UseMethod, "UseMethod") \
 	_(ret, "ret") \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
@@ -40,7 +39,6 @@
 	_(type, "type") \
 	_(length, "length") \
 	_(missing, "missing") \
-	_(mmul, "mmul") \
 	_(strip, "strip") \
 
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double

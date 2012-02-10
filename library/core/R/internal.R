@@ -3,7 +3,7 @@
 
 cat <- function(...) .Internal(cat(list(...)))
 library <- function(.) .Internal(library(.))
-inherits <- function(x, what, which=FALSE) .Internal(inherits(x, what, which))
+#inherits <- function(x, what, which=FALSE) .Internal(inherits(x, what, which))
 
 seq <- function(from=1, by=1, length.out=1) .Internal(seq(from, by, length.out))
 rep <- function(v, each=1, length.out=1) .Internal(rep(v, each, length.out))

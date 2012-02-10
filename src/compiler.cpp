@@ -68,7 +68,6 @@ static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::le) return ByteCode::le; 
 	if(func == Strings::lor) return ByteCode::lor; 
 	if(func == Strings::land) return ByteCode::land; 
-	if(func == Strings::mmul) return ByteCode::mmul; 
 
 	if(func == Strings::pmin) return ByteCode::pmin; 
 	if(func == Strings::pmax) return ByteCode::pmax; 
@@ -212,7 +211,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		if(!call[1].isObject())
 			throw CompileError(std::string(".Internal has invalid arguments (") + Type::toString(call[1].type) + ")");
 		Object const& o = (Object const&)call[1];
-		assert(o.className() == Strings::Call && o.base().isList());
+		assert(isCall(o) && o.base().isList());
 		return compileInternalFunctionCall(o, code);
 	} 
 	else if(func == Strings::assign ||
@@ -238,8 +237,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 			for(int64_t i = 0; i < c.length; i++) { n[i] = c[i]; }
 			Character nnames(c.length+1);
-			if(((Object const&)dest).hasNames()) {
-				Value names = ((Object const&)dest).getNames();
+			if(hasNames(dest)) {
+				Value names = getNames((Object const&)dest);
 				for(int64_t i = 0; i < c.length; i++) { nnames[i] = Character(names)[i]; }
 			} else {
 				for(int64_t i = 0; i < c.length; i++) { nnames[i] = Strings::empty; }
@@ -280,8 +279,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		//compile the default parameters
 		assert(call[1].isObject());
 		List c = List(((Object const&)call[1]).base());
-		Character parameters = ((Object const&)call[1]).hasNames() ? 
-			Character(((Object const&)call[1]).getNames()) :
+		Character parameters = hasNames(call[1]) ? 
+			Character(getNames((Object&)call[1])) :
 			Character(0);
 		
 		List defaults(c.length);
@@ -494,26 +493,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		}
 		return result;
 	} 
-	else if(func == Strings::UseMethod)
-	{
-		if(scope != FUNCTION)
-			throw CompileError("Attempt to use UseMethod outside of function");
-		
-		// This doesn't match R's behavior. R always uses the original value of the first argument, not the most recent value. Blah.
-		Operand object = (call.length == 3) 
-			? compile(call[2], code) : compile(CreateSymbol(parameters[0]), code); 
-		if(!call[1].isCharacter1())
-			throw CompileError("First parameter to UseMethod must be a string");
-		Operand generic = Operand(MEMORY, SymbolStr(call[1]));
-		
-		Character p(parameters);
-		List gcall(p.length+1);
-		for(int64_t i = 0; i < p.length; i++) gcall[i+1] = CreateSymbol(p[i]);
-		code->calls.push_back(makeCall(gcall, Character(0)));
-
-		emit(ByteCode::UseMethod, generic, code->calls.size()-1, object);
-		return object;
-	} 
 	else if(func == Strings::brace) 
 	{
 		int64_t length = call.length;
@@ -575,7 +554,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::pmax ||
 		func == Strings::lor ||
 		func == Strings::land ||
-		func == Strings::mmul ||
 		func == Strings::bracket ||
 		func == Strings::bb ||
 		func == Strings::docall) &&
@@ -700,17 +678,17 @@ Compiler::Operand Compiler::compile(Value const& expr, Prototype* code) {
 		case Type::Object:
 			{
 				Object const& o = (Object const&) expr;
-				if(o.className() == Strings::Symbol) {
+				if(isSymbol(o)) {
 					return compileSymbol(expr, code);
 				}
-				if(o.className() == Strings::Expression) {
+				if(isExpression(o)) {
 					assert(o.base().isList());
 					return compileExpression((List const&)o.base(), code);
 				}
-				else if(o.className() == Strings::Call) {
+				else if(isCall(o)) {
 					assert(o.base().isList());
 					return compileCall((List const&)o.base(), 
-						o.hasNames() ? Character(o.getNames()) : Character(0), code);
+						hasNames(o) ? Character(getNames(o)) : Character(0), code);
 				}
 				else {
 					return compileConstant(expr, code);
