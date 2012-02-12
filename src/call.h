@@ -87,9 +87,9 @@ inline void argAssign(Environment* env, Pair const& parameter, Pair const& argum
 }
 
 inline void dotAssign(Environment* env, Pair const& argument, Environment* execution) {
-	//assert(!argument.v.isNil());
 	Value w = argument.v;
-	if(w.isPromise() || w.isDefault()) {
+	assert(!w.isDefault());
+	if(w.isPromise()) {
 		assert(w.p == 0);
 		w.p = execution;
 	}
@@ -105,13 +105,20 @@ static Pair argument(int64_t index, Environment* env, CompiledCall const& call) 
 	} else {
 		index -= call.dotIndex;
 		if(index < (int64_t)env->dots.size()) {
-			//return env->dots[index];
-			Pair p;
-			p.n = env->dots[index].n;
-			p.v.type = Type::Promise;
-			p.v.length = 0; 
-			p.v.i = index;
-			return p;
+			// Promises in the dots can't be passed down (general rule is that promises only
+			//	occur once anywhere in the program). 
+			// But everything else can be passed down
+			if(env->dots[index].v.isPromise()) {
+				Pair p;
+				p.n = env->dots[index].n;
+				p.v.type = Type::Dotdot;
+				p.v.length = index;
+				p.v.p = env;
+				return p;
+			}
+			else {
+				return env->dots[index];
+			}
 		}
 		else {
 			index -= env->dots.size();
@@ -122,7 +129,8 @@ static Pair argument(int64_t index, Environment* env, CompiledCall const& call) 
 
 static int64_t numArguments(Environment* env, CompiledCall const& call) {
 	if(call.dotIndex < (int64_t)call.arguments.size()) {
-		return call.arguments.size() + env->dots.size();
+		// subtract 1 to not count the dots
+		return call.arguments.size() - 1 + env->dots.size();
 	} else {
 		return call.arguments.size();
 	}
@@ -140,14 +148,17 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 	PairList const& parameters = func.prototype()->parameters;
 	int64_t pDotIndex = func.prototype()->dotIndex;
 	int64_t numArgs = numArguments(env, call);
+	bool named = namedArguments(env, call);
 
 	// set defaults
 	for(int64_t i = 0; i < (int64_t)parameters.size(); ++i) {
 		argAssign(fenv, parameters[i], parameters[i], fenv);
 	}
 
-	if(!namedArguments(env, call)) {
-		// call arguments are not named, do posititional matching up to the prototypes dots
+	if(!named) {
+		fenv->named = false; // if no arguments are named, no dots can be either
+
+		// call arguments are not named, do posititional matching up to the prototype's dots
 		int64_t end = std::min(numArgs, pDotIndex);
 		for(int64_t i = 0; i < end; ++i) {
 			Pair const& arg = argument(i, env, call);
@@ -224,12 +235,13 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 		}
 
 		// put unused args into the dots
+		fenv->named = false;
 		for(int64_t i = 0; i < numArgs; i++) {
 			if(assignment[i] < 0) {
 				// if we have left over arguments, but no parameter dots, error
-				if(pDotIndex >= (int64_t)parameters.size()) _error("Unused args");
-				
+				if(pDotIndex >= (int64_t)parameters.size()) _error("Unused args");	
 				Pair const& arg = argument(i, env, call);
+				if(arg.n != Strings::empty) fenv->named = true;
 				dotAssign(fenv, arg, fenv);
 			}
 		}
@@ -255,7 +267,7 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
 		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
 		List call(0);
 		Pair p;
-		p.n = Strings::NA;
+		p.n = Strings::empty;
 		p.v = a;
 		PairList args;
 		args.push_back(p);
@@ -274,7 +286,7 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
 		List call(0);
 		PairList args;
 		Pair p;
-		p.n = Strings::NA;
+		p.n = Strings::empty;
 		p.v = a;
 		args.push_back(p);
 		p.v = b;

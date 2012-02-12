@@ -66,6 +66,7 @@ struct Value {
 	bool isList() const { return type == Type::List; }
 	bool isPromise() const { return type == Type::Promise && !isNil(); }
 	bool isDefault() const { return type == Type::Default; }
+	bool isDotdot() const { return type == Type::Dotdot; }
 	bool isFunction() const { return type == Type::Function; }
 	bool isObject() const { return type == Type::Object; }
 	bool isFuture() const { return type == Type::Future; }
@@ -73,7 +74,7 @@ struct Value {
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isCharacter() || isList(); }
 	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isCharacter() || (isList() && length==0); }
-	bool isConcrete() const { return type > Type::Default; }
+	bool isConcrete() const { return type > Type::Dotdot; }
 
 	template<class T> T& scalar() { throw "not allowed"; }
 	template<class T> T const& scalar() const { throw "not allowed"; }
@@ -488,8 +489,10 @@ public:
 	Object() {}
 	
 	static void Init(Object& o, Value const& base, Dictionary* dictionary=0) {
+		// Create inner first works if base and o overlap.
+		Inner* p = new (GC) Inner(base, dictionary == 0 ? new (GC) Dictionary() : dictionary);
 		Value::Init(o, Type::Object, 0);
-		o.p = new (GC) Inner(base, dictionary == 0 ? new (GC) Dictionary() : dictionary);
+		o.p = p;
 	}
 
 	Value const& base() const {
@@ -550,7 +553,7 @@ public:
 		bool success;
 		Environment const* env = this;
 		Pair* p = env->find(name, success);
-		while(!success && env->LexicalScope() != 0) {
+		while(!success && env->LexicalScope()) {
 			env = env->LexicalScope();
 			p = env->find(name, success);
 		}
@@ -562,7 +565,7 @@ public:
 	Value const& getRecursive(String name) const {
 		return insertRecursive(name);
 	}
-	
+
 	struct Pointer {
 		Environment* env;
 		String name;

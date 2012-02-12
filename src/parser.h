@@ -100,14 +100,10 @@ struct Parser {
 };
 
 struct Pairs {
-	struct Pair {
-		String n;
-		Value v;        
-	};        
 	std::deque<Pair, traceable_allocator<Value> > p;
 	int64_t length() const { return p.size(); }        
-	void push_front(String n, Value const& v) { Pair t = {n, v}; p.push_front(t); } 
-	void push_back(String n, Value const& v)  { Pair t = {n, v}; p.push_back(t); }        
+	void push_front(String n, Value const& v) { Pair t; t.n = n; t.v = v; p.push_front(t); } 
+	void push_back(String n, Value const& v)  { Pair t; t.n = n; t.v = v; p.push_back(t); }        
 	const Value& value(int64_t i) const { return p[i].v; }
 	const String& name(int64_t i) const { return p[i].n; }
 

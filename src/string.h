@@ -22,6 +22,7 @@
 	_(Object,	"object")	\
 	_(Promise, 	"promise") 	\
 	_(Default, 	"default") 	\
+	_(Dotdot, 	"dotdot") 	\
 	_(Nil,		"nil")		\
 	_(Future,	"future")		\
 	/* Now all other strings */	\

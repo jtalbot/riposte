@@ -8,6 +8,7 @@
 	/* First the internal types. Order is important here. The 'Nil' value is an invalid promise object with the header = 0*/ \
 	_(Promise, 	"promise") 	\
 	_(Default,	"default")	\
+	_(Dotdot,	"dotdot")	\
 	_(Object,	"object")	\
 	/* The R visible types */	\
 	/*   In the "standard casting order" */  \

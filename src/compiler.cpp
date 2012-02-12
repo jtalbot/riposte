@@ -166,7 +166,7 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 	PairList arguments;
 	for(int64_t i = 1; i < call.length; i++) {
 		Pair p;
-		if(names.length > 0) p.n = names[i-1]; else p.n = Strings::NA;
+		if(names.length > 0) p.n = names[i]; else p.n = Strings::empty;
 
 		if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) {
 			p.v = call[i];
@@ -310,7 +310,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		PairList parameters;
 		for(int64_t i = 0; i < c.length; i++) {
 			Pair p;
-			if(names.length > 0) p.n = names[i]; else p.n = Strings::NA;
+			if(names.length > 0) p.n = names[i]; else p.n = Strings::empty;
 			if(!c[i].isNil()) {
 				p.v = Function(compilePromise(state, c[i]),NULL).AsDefault();
 			}
@@ -327,7 +327,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		functionCode->parameters = parameters;
 		functionCode->string = SymbolStr(call[3]);
 		functionCode->dotIndex = parameters.size();
-		for(int64_t i = 0; i < parameters.size(); i++) 
+		for(int64_t i = 0; i < (int64_t)parameters.size(); i++) 
 			if(parameters[i].n == Strings::dots) functionCode->dotIndex = i;
 
 		code->prototypes.push_back(functionCode);
