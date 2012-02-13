@@ -13,13 +13,18 @@ unlist.default <- function(x, recursive = TRUE, use.names = TRUE) {
 	x <- .Internal(unlist(x, as.logical(recursive), as.logical(use.names)))
 }
 
-eval <- function(expr, envir=parent.frame()) .Internal(eval(x, envir, NULL))
+eval <- function(expr, envir=parent.frame()) .Internal(eval(expr, envir, NULL))
+evalq <- function(expr, envir=parent.frame()) .Internal(eval(quote(expr), envir, NULL))
+eval.parent <- function(expr, n=1) .Internal(eval(expr, parent.frame(n+1), NULL))
+local <- function(expr, envir=new.env()) .Internal(eval(expr, envir, NULL))
+
 source <- function(x) .Internal(source(x))
 
 lapply <- function(x, func) .Internal(lapply(x, func))
 
-environment <- function(x) .Internal(environment(x))
 parent.frame <- function(n=1) .Internal(parent.frame(n+1))
+environment <- function(x=NULL) if(is.null(x)) parent.frame() else .Internal(environment(x))
+new.env <- function() .Internal(new.env())
 sys.call <- function(which=0) .Internal(sys.call(which+1))
 alist <- function(...) as.list(sys.call())[-1L]
 rm <- function(...) .Internal(remove(as.character(sys.call())[-1L], parent.frame()))
@@ -32,7 +37,10 @@ substitute <- function(x) .Internal(substitute(x))
 
 typeof <- function(x) .Internal(typeof(x))
 
-exists <- function(x) .Internal(exists(x, NULL, NULL, NULL))
+exists <- function(x, envir, inherits=TRUE) {
+	if(missing(envir)) envir <- parent.frame()
+	.Internal(exists(x, envir, inherits, NULL))
+}
 
 proc.time <- function(x) .Internal(proc.time())
 trace.config <- function(trace=0) .Internal(trace.config(trace))

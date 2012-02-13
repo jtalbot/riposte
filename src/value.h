@@ -318,13 +318,13 @@ protected:
 	Pair* d;
 	Pair inlineDict[inlineSize];
 
-	uint64_t hash(String s) const { return (uint64_t)s>>3; }
+	uint64_t hash(String s) const ALWAYS_INLINE { return (uint64_t)s>>3; }
 
 	// Returns the location of variable `name` in this environment or
 	// an empty pair (String::NA, Value::Nil).
 	// success is set to true if the variable is found. This boolean flag
 	// is necessary for compiler optimizations to eliminate expensive control flow.
-	Pair* find(String name, bool& success) const {
+	Pair* find(String name, bool& success) const ALWAYS_INLINE {
 		uint64_t i = hash(name) & (size-1);
 		if(__builtin_expect(d[i].n == name, true)) {
 			success = true;
@@ -385,7 +385,7 @@ public:
 		clear();
 	}
 
-	bool has(String name) const {
+	bool has(String name) const ALWAYS_INLINE {
 		bool success;
 		find(name, success);
 		return success;
@@ -562,7 +562,7 @@ public:
 	
 	// Look up variable using standard R lexical scoping rules
 	// Should be same as insertRecursive, but with extra constness
-	Value const& getRecursive(String name) const {
+	Value const& getRecursive(String name) const ALWAYS_INLINE {
 		return insertRecursive(name);
 	}
 

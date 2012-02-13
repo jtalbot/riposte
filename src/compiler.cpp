@@ -186,7 +186,7 @@ Compiler::Operand Compiler::compileFunctionCall(List const& call, Character cons
 	code->calls.push_back(makeCall(call, names));
 	Operand function = compile(call[0], code);
 	Operand result = allocRegister();
-	emit(ByteCode::call, kill(function), -code->calls.size(), result);
+	emit(ByteCode::call, kill(function), code->calls.size()-1, result);
 	return result;
 }
 

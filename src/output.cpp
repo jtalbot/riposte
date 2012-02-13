@@ -113,7 +113,18 @@ std::string stringify(State const& state, Value const& value) {
 		}
 		case Type::Environment:
 		{
-			return std::string("environment <") + intToHexStr((uint64_t)REnvironment(value).ptr());// + "> (" + intToStr(REnvironment(value).ptr()->numVariables()) + " symbols defined)";
+			Environment* env = (REnvironment(value)).ptr();
+			if(env == state.global)
+				result = std::string("environment <global>");
+			else
+				result = std::string("environment <") + intToHexStr((int64_t)env) + ">";
+			result = result + "\nVariables:\n";
+			Dictionary* d = REnvironment(value).ptr();
+			for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
+				result = result + "\t" + state.externStr(i.string())
+						+ ":\t" + state.stringify(i.value()) + "\n";
+			}
+			return result;
 		}
 		case Type::Object:
 		{

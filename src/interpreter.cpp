@@ -131,26 +131,9 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
 	Function func(f);
 	
-	// TODO: using inst.b < 0 to indicate a normal call means that do.call can never use a ..# variable. Not common, but would surely be unexpected for users. Probably best to just have a separate op for do.call?
+	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
+	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
 	
-	Environment* fenv;
-	//if(inst.b < 0) {
-		CompiledCall const& call = thread.frame.prototype->calls[-(inst.b+1)];
-		fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
-	/*} else {
-		
-		// do.call, should this be here?
-		OPERAND(reg, inst.b);
-		if(reg.isObject()) {
-			arguments = List(((Object const&)reg).base());
-			names = Character(((Object const&)reg).getNames());
-		}
-		else {
-			arguments = List(reg);
-		}
-		fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
-	} */
-
 	MatchArgs(thread, thread.frame.environment, fenv, func, call);
 	return buildStackFrame(thread, fenv, true, func.prototype(), inst.c, &inst+1);
 }
@@ -545,7 +528,7 @@ Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 	String s = (String)inst.a;
 	Value const& v = thread.frame.environment->get(s);
 	bool missing = v.isNil() || v.isDefault();
-	Logical::InitScalar(OUT(thread, inst.c), missing);
+	Logical::InitScalar(OUT(thread, inst.c), missing ? Logical::TrueElement : Logical::FalseElement);
 	return &inst+1;
 }
 Instruction const* strip_op(Thread& thread, Instruction const& inst) {

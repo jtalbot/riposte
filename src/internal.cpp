@@ -697,15 +697,15 @@ void source(Thread& thread, Value const* args, Value& result) {
 
 void environment(Thread& thread, Value const* args, Value& result) {
 	Value e = args[0];
-	if(e.isNull()) {
-		result = REnvironment(thread.frame.environment);
-		return;
-	}
-	else if(e.isFunction()) {
+	if(e.isFunction()) {
 		result = REnvironment(Function(e).environment());
 		return;
 	}
 	result = Null::Singleton();
+}
+
+void newenv(Thread& thread, Value const* args, Value& result) {
+	result = REnvironment(new Environment());
 }
 
 // TODO: parent.frame and sys.call need to ignore frames for promises, etc. We may need
@@ -786,7 +786,9 @@ void type_of(Thread& thread, Value const* args, Value& result) {
 void exists(Thread& thread, Value const* args, Value& result) {
 	Character c = As<Character>(thread, args[0]);
 	REnvironment e(args[1]);
-	Value const& v = e.ptr()->getRecursive(c[0]);
+	Logical l = As<Logical>(thread, args[2]);
+
+	Value const& v = l[0] ? e.ptr()->getRecursive(c[0]) : e.ptr()->get(c[0]);
 	if(v.isNil())
 		result = Logical::False();
 	else
@@ -853,6 +855,8 @@ void registerCoreFunctions(State& state)
 	//state.registerInternalFunction(state.internStr("t.list"), (tlist));
 
 	state.registerInternalFunction(state.internStr("environment"), (environment), 1);
+	state.registerInternalFunction(state.internStr("new.env"), (newenv), 0);
+	
 	state.registerInternalFunction(state.internStr("parent.frame"), (parentframe), 1);
 	state.registerInternalFunction(state.internStr("sys.call"), (syscall), 1);
 	state.registerInternalFunction(state.internStr("remove"), (remove), 2);
