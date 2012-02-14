@@ -28,7 +28,6 @@
 
 #define UTILITY_BYTECODES(_)\
 	_(internal, "internal") \
-	_(split, "split") \
 	_(colon, "colon") \
 	_(function, "function") \
 	_(logical1, "logical") \
@@ -44,31 +43,31 @@
 
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double
 #define ARITH_UNARY_BYTECODES(_) \
-	_(pos, "pos", 	add,	ArithUnary1, 	PassNA(a, a)) \
-	_(neg, "neg", 	sub,	ArithUnary1, 	PassNA(a, -a)) \
-	_(abs, "abs", 	abs,	ArithUnary1, 	PassNA(a, Abs(a))) \
-	_(sign, "sign",	sign,	ArithUnary2, 	((a>0)-(a<0))) \
-	_(sqrt, "sqrt",	sqrt,	ArithUnary2,	sqrt(a)) \
-	_(floor, "floor",	floor,	ArithUnary2,	floor(a)) \
-	_(ceiling, "ceiling",	ceiling,	ArithUnary2,	ceil(a)) \
-	_(trunc, "trunc",	trunc,	ArithUnary2,	trunc(a)) \
-	_(exp, "exp",	exp,	ArithUnary2,	exp(a)) \
-	_(log, "log",	log,	ArithUnary2,	log(a)) \
-	_(cos, "cos",	cos,	ArithUnary2,	cos(a)) \
-	_(sin, "sin",	sin,	ArithUnary2,	sin(a)) \
-	_(tan, "tan",	tan,	ArithUnary2,	tan(a)) \
-	_(acos, "acos",	acos,	ArithUnary2,	acos(a)) \
-	_(asin, "asin",	asin,	ArithUnary2,	asin(a)) \
-	_(atan, "atan",	atan,	ArithUnary2,	atan(a)) \
+	_(pos, "pos", 	ArithUnary1, 	PassNA(a, a)) \
+	_(neg, "neg", 	ArithUnary1, 	PassNA(a, -a)) \
+	_(abs, "abs", 	ArithUnary1, 	PassNA(a, Abs(a))) \
+	_(sign, "sign",	ArithUnary2, 	((a>0)-(a<0))) \
+	_(sqrt, "sqrt",	ArithUnary2,	sqrt(a)) \
+	_(floor, "floor",	ArithUnary2,	floor(a)) \
+	_(ceiling, "ceiling",	ArithUnary2,	ceil(a)) \
+	_(trunc, "trunc",	ArithUnary2,	trunc(a)) \
+	_(exp, "exp",	ArithUnary2,	exp(a)) \
+	_(log, "log",	ArithUnary2,	log(a)) \
+	_(cos, "cos",	ArithUnary2,	cos(a)) \
+	_(sin, "sin",	ArithUnary2,	sin(a)) \
+	_(tan, "tan",	ArithUnary2,	tan(a)) \
+	_(acos, "acos",	ArithUnary2,	acos(a)) \
+	_(asin, "asin",	ArithUnary2,	asin(a)) \
+	_(atan, "atan",	ArithUnary2,	atan(a)) \
 
 #define LOGICAL_UNARY_BYTECODES(_) \
-	_(lnot, "lnot",	lnot,	LogicalUnary, PassNA(a, ~a)) \
+	_(lnot, "lnot",	LogicalUnary, PassNA(a, ~a)) \
 
 #define ORDINAL_UNARY_BYTECODES(_) \
-	_(isna,	"isna",	isna,	OrdinalUnary,	MA::isNA(a)?-1:0) \
-	_(isnan,	"isnan",	isnan,	OrdinalUnary,	MA::isNaN(a)?-1:0) \
-	_(isfinite,	"isfinite",	isfinite,	OrdinalUnary,	MA::isFinite(a)?-1:0) \
-	_(isinfinite,	"isinfinite",	isinfinite,	OrdinalUnary,	MA::isInfinite(a)?-1:0) \
+	_(isna,	"isna",	OrdinalUnary,	MA::isNA(a)?-1:0) \
+	_(isnan,	"isnan",	OrdinalUnary,	MA::isNaN(a)?-1:0) \
+	_(isfinite,	"isfinite",	OrdinalUnary,	MA::isFinite(a)?-1:0) \
+	_(isinfinite,	"isinfinite",	OrdinalUnary,	MA::isInfinite(a)?-1:0) \
 /*
 #define STRING_UNARY_BYTECODES(_) \
 	_(nchar, "nchar", nchar, StringUnary, PassNA(a, strlen(a))) \
@@ -76,23 +75,23 @@
 */
 // ArithBinary1 ops perform Integer*Integer->Integer, ArithBinary2 ops perform Integer*Integer->Double
 #define ARITH_BINARY_BYTECODES(_) \
-	_(add, "add",	add,	ArithBinary1,	PassNA(a,b,a+b)) \
-	_(sub, "sub",	sub,	ArithBinary1,	PassNA(a,b,a-b)) \
-	_(mul, "mul",	mul,	ArithBinary1,	PassNA(a,b,a*b)) \
-	_(div, "div",	div,	ArithBinary2,	a/b) \
-	_(idiv, "idiv",	idiv,	ArithBinary1,	PassNA(a,b,IDiv(a,b))) \
-	_(mod, "mod",	mod,	ArithBinary1,	PassNA(a,b,Mod(a,b))) \
-	_(pow, "pow",	pow,	ArithBinary2,	pow(a,b)) \
-	_(atan2, "atan2",	atan2,	ArithBinary2,	atan2(a,b)) \
-	_(hypot, "hypot",	hypot,	ArithBinary2,	hypot(a,b)) \
+	_(add, "add",	ArithBinary1,	PassNA(a,b,a+b)) \
+	_(sub, "sub",	ArithBinary1,	PassNA(a,b,a-b)) \
+	_(mul, "mul",	ArithBinary1,	PassNA(a,b,a*b)) \
+	_(div, "div",	ArithBinary2,	a/b) \
+	_(idiv, "idiv",	ArithBinary1,	PassNA(a,b,IDiv(a,b))) \
+	_(mod, "mod",	ArithBinary1,	PassNA(a,b,Mod(a,b))) \
+	_(pow, "pow",	ArithBinary2,	pow(a,b)) \
+	_(atan2, "atan2",	ArithBinary2,	atan2(a,b)) \
+	_(hypot, "hypot",	ArithBinary2,	hypot(a,b)) \
 
 #define LOGICAL_BINARY_BYTECODES(_) \
-	_(lor, "lor",	lor,	LogicalBinary,	a|b) \
-	_(land, "land",	land,	LogicalBinary,	a&b) \
+	_(lor, "lor",	LogicalBinary,	a|b) \
+	_(land, "land",	LogicalBinary,	a&b) \
 
 #define UNIFY_BINARY_BYTECODES(_) \
-	_(pmin, "pmin",	pmin,	UnifyBinary,	PassNA(a,b,riposte_min(thread,a,b))) \
-	_(pmax, "pmax",	pmax,	UnifyBinary,	PassNA(a,b,riposte_max(thread,a,b))) \
+	_(pmin, "pmin",	UnifyBinary,	PassNA(a,b,riposte_min(thread,a,b))) \
+	_(pmax, "pmax",	UnifyBinary,	PassNA(a,b,riposte_max(thread,a,b))) \
 
 /*
 	_(round, "round",	round,	ArithBinary2,	round(a)) \
@@ -100,35 +99,36 @@
 */
 
 #define ORDINAL_BINARY_BYTECODES(_) \
-	_(eq, "eq",	eq,	OrdinalBinary,	PassNA(a,b,a==b?-1:0)) \
-	_(neq, "neq",	neq,	OrdinalBinary,	PassNA(a,b,a!=b?-1:0)) \
-	_(gt, "gt",	gt,	OrdinalBinary,	PassNA(a,b,gt(thread,a,b)?-1:0)) \
-	_(ge, "ge",	ge,	OrdinalBinary,	PassNA(a,b,ge(thread,a,b)?-1:0)) \
-	_(lt, "lt",	lt,	OrdinalBinary,	PassNA(a,b,lt(thread,a,b)?-1:0)) \
-	_(le, "le",	le,	OrdinalBinary,	PassNA(a,b,le(thread,a,b)?-1:0)) \
+	_(eq, "eq",	OrdinalBinary,	PassNA(a,b,a==b?-1:0)) \
+	_(neq, "neq",	OrdinalBinary,	PassNA(a,b,a!=b?-1:0)) \
+	_(gt, "gt",	OrdinalBinary,	PassNA(a,b,gt(thread,a,b)?-1:0)) \
+	_(ge, "ge",	OrdinalBinary,	PassNA(a,b,ge(thread,a,b)?-1:0)) \
+	_(lt, "lt",	OrdinalBinary,	PassNA(a,b,lt(thread,a,b)?-1:0)) \
+	_(le, "le",	OrdinalBinary,	PassNA(a,b,le(thread,a,b)?-1:0)) \
 
 #define SPECIAL_MAP_BYTECODES(_) \
-	_(ifelse, "ifelse", IfElseOp, "ifelse") \
+	_(ifelse, "ifelse", IfElse) \
+	_(split, "split", Split) \
 
 #define ARITH_FOLD_BYTECODES(_) \
-	_(sum, "sum",	sum,	ArithFold, 	add) \
-	_(prod, "prod",	prod,	ArithFold, 	mul) \
+	_(sum, "sum",	ArithFold, 	add) \
+	_(prod, "prod",	ArithFold, 	mul) \
 
 #define LOGICAL_FOLD_BYTECODES(_) \
-	_(any, "any",	any,	LogicalFold, 	lor) \
-	_(all, "all",	all,	LogicalFold, 	land) \
+	_(any, "any",	LogicalFold, 	lor) \
+	_(all, "all",	LogicalFold, 	land) \
 
 #define UNIFY_FOLD_BYTECODES(_) \
-	_(min, "min",	min,	UnifyFold, 	pmin) \
-	_(max, "max",	max,	UnifyFold, 	pmax) \
+	_(min, "min",	UnifyFold, 	pmin) \
+	_(max, "max",	UnifyFold, 	pmax) \
 
 #define ARITH_SCAN_BYTECODES(_) \
-	_(cumsum, "cumsum",	cumsum,	ArithScan,	add) \
-	_(cumprod, "cumprod",	cumprod,	ArithScan,	mul) \
+	_(cumsum, "cumsum",	ArithScan,	add) \
+	_(cumprod, "cumprod",	ArithScan,	mul) \
 
 #define UNIFY_SCAN_BYTECODES(_) \
-	_(cummin, "cummin",	cummin,	UnifyScan,	pmin) \
-	_(cummax, "cummax",	cummax,	UnifyScan,	pmax) \
+	_(cummin, "cummin",	UnifyScan,	pmin) \
+	_(cummax, "cummax",	UnifyScan,	pmax) \
 
 #define SPECIAL_BYTECODES(_) 	\
 	_(done, "done") 

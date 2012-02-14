@@ -67,9 +67,9 @@ struct Value {
 	bool isPromise() const { return type == Type::Promise && !isNil(); }
 	bool isDefault() const { return type == Type::Default; }
 	bool isDotdot() const { return type == Type::Dotdot; }
+	bool isFuture() const { return type == Type::Future; }
 	bool isFunction() const { return type == Type::Function; }
 	bool isObject() const { return type == Type::Object; }
-	bool isFuture() const { return type == Type::Future; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isCharacter() || isList(); }

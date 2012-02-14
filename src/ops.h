@@ -19,7 +19,7 @@ template<class X> struct LogicalUnary  { typedef X A; typedef Logical MA; typede
 template<class X> struct OrdinalUnary  { typedef X A; typedef X MA; typedef Logical R; };
 
 // Unary operators
-#define UNARY_OP(Name, String, Op, Group, Func) \
+#define UNARY_OP(Name, String, Group, Func) \
 template<typename T> \
 struct Name##VOp {\
 	typedef typename Group<T>::A A; \
@@ -90,7 +90,7 @@ DEFAULT_TYPE_MEET(UNIFY_BINARY)
 #undef UNIFY_BINARY
 
 
-#define BINARY_OP(Name, String, Op, Group, Func) \
+#define BINARY_OP(Name, String, Group, Func) \
 template<typename S, typename T> \
 struct Name##VOp {\
 	typedef typename Group<S,T>::A A; \
@@ -153,6 +153,19 @@ LOGICAL_BINARY_BYTECODES(BINARY_OP)
 UNIFY_BINARY_BYTECODES(BINARY_OP)
 #undef BINARY_OP
 
+template<class X> struct ArithFold   { typedef X A; typedef Double MA; typedef Double R; };
+template<> struct ArithFold<Logical> { typedef Logical A; typedef Integer MA; typedef Integer R; };
+template<> struct ArithFold<Integer> { typedef Integer A; typedef Integer MA; typedef Integer R; };
+
+template<class X> struct UnifyFold { typedef X A; typedef X MA; typedef X R; };
+
+template<class X> struct LogicalFold { typedef X A; typedef Logical MA; typedef Logical R; };
+
+template<class X> struct ArithScan   { typedef X A; typedef Double MA; typedef Double R; };
+template<> struct ArithScan<Logical> { typedef Logical A; typedef Integer MA; typedef Integer R; };
+template<> struct ArithScan<Integer> { typedef Integer A; typedef Integer MA; typedef Integer R; };
+
+template<class X> struct UnifyScan { typedef X A; typedef X MA; typedef X R; };
 
 template<class X> struct addBase {};
 template<> struct addBase<Double> { static Double::Element base() { return 0; } };
@@ -181,7 +194,7 @@ template<> struct pmaxBase<Logical> { static Logical::Element base() { return Lo
 template<> struct pmaxBase<Character> { static Character::Element base() { return Strings::empty; } };
 
 // Fold and scan ops
-#define FOLD_OP(Name, String, Op, Group, Func) \
+#define FOLD_OP(Name, String, Group, Func) \
 template<typename T> \
 struct Name##VOp : public Func##VOp<typename Func##VOp<T, T>::R, T> {\
 	static typename Name##VOp::A::Element base() { return Func##Base<T>::base(); } \
@@ -355,6 +368,15 @@ void UnifyScanDispatch(Thread& thread, Value const& a, Value& c) {
 	else if(a.isNull())	Op<Double>::Scalar(thread, Op<Double>::base(), c);
 	else _error("non-numeric argument to numeric scan operator");
 }
+
+template<class X, class Y, class Z> struct IfElse  { 
+	typedef X A; typedef Y B; typedef Z C; 
+	typedef Logical MA; typedef typename UnifyBinary<Y, Z>::MA MB; typedef typename UnifyBinary<Y, Z>::MB MC;
+	typedef typename UnifyBinary<Y, Z>::R R; 
+};
+
+template<class X, class Y> struct Split
+	{ typedef X A; typedef Y B; typedef Integer MA; typedef Y MB; typedef Y R; };
 
 /*
 template<int Len>

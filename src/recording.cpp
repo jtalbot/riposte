@@ -1,129 +1,19 @@
 #include "interpreter.h"
 #include "ir.h"
-#include "ops.h"
+#include "call.h"
+#include "recording.h"
 
-#define ENUM_RECORDING_STATUS(_) \
-	_(NO_ERROR,"NO_ERROR") \
-	_(FALLBACK, "trace falling back to normal interpreter but not exiting") \
-	_(RECORD_LIMIT, "maximum record limit reached without executing any traces") \
-	_(UNSUPPORTED_OP,"trace encountered unsupported op") \
-	_(UNSUPPORTED_TYPE,"trace encountered an unsupported type") \
-	_(NO_LIVE_TRACES, "all traces are empty")
-
-DECLARE_ENUM(RecordingStatus,ENUM_RECORDING_STATUS)
-DEFINE_ENUM_TO_STRING(RecordingStatus,ENUM_RECORDING_STATUS)
-
-// Figure out the type of the operation given an input type
-
-template<class X>
-void unaryResultType(Type::Enum& mtype, Type::Enum& rtype) {
-	mtype = X::MA::VectorType;
-	rtype = X::R::VectorType;
-}
-
-
-void selectType(ByteCode::Enum bc, Type::Enum input, Type::Enum& mtype, Type::Enum& rtype) {
-	switch(bc) {
-#define UNARY_OP(Name, String, Op, Group, ...) \
-		case ByteCode::Name: \
-		switch(input) { \
-			case Type::Logical: unaryResultType< Name##VOp<Logical> >(mtype, rtype); \
-			case Type::Integer: unaryResultType< Name##VOp<Integer> >(mtype, rtype); \
-			case Type::Double:  unaryResultType< Name##VOp<Double> >(mtype, rtype); \
-			default: _error("Unsupported type in JIT"); \
-		} break;
-UNARY_FOLD_SCAN_BYTECODES(UNARY_OP)
-#undef UNARY_OP
-		default: _error("Called unaryResultType with non-unary bytecode");
-	}
-}
-
-template< template<class X, class Y> class Group, class X, class Y>
-void binaryResultType(Type::Enum& matype, Type::Enum& mbtype, Type::Enum& rtype) {
-	matype = Group<X, Y>::MA::VectorType;
-	mbtype = Group<X, Y>::MB::VectorType;
-	rtype = Group<X, Y>::R::VectorType;
-}
-
-
-void selectType(ByteCode::Enum bc, Type::Enum inputa, Type::Enum inputb, Type::Enum& matype, Type::Enum& mbtype, Type::Enum& rtype) {
-	switch(bc) {
-#define BINARY_OP(Name, String, Op, Group, ...) \
-		case ByteCode::Name: \
-		if(inputa == Type::Logical) { \
-			if(inputb == Type::Logical) \
-				binaryResultType<Group, Logical, Logical>(matype, mbtype, rtype); \
-			else if(inputb == Type::Integer) \
-				binaryResultType<Group, Logical, Integer>(matype, mbtype, rtype); \
-			else if(inputb == Type::Double) \
-				binaryResultType<Group, Logical, Double>(matype, mbtype, rtype); \
-		} else if(inputa == Type::Integer) { \
-			if(inputb == Type::Logical) \
-				binaryResultType<Group, Integer, Logical>(matype, mbtype, rtype); \
-			else if(inputb == Type::Integer) \
-				binaryResultType<Group, Integer, Integer>(matype, mbtype, rtype); \
-			else if(inputb == Type::Double) \
-				binaryResultType<Group, Integer, Double>(matype, mbtype, rtype); \
-		} else if(inputa == Type::Double) { \
-			if(inputb == Type::Logical) \
-				binaryResultType<Group, Double, Logical>(matype, mbtype, rtype); \
-			else if(inputb == Type::Integer) \
-				binaryResultType<Group, Double, Integer>(matype, mbtype, rtype); \
-			else if(inputb == Type::Double) \
-				binaryResultType<Group, Double, Double>(matype, mbtype, rtype); \
-		} else _error("Unsupported type in JIT"); 
-BINARY_BYTECODES(BINARY_OP)
-#undef BINARY_OP
-		default: _error("Called binaryResultType with non-binary bytecode");
-	}
-}
-
-//for brevity
-#define REG(thread, i) (*(thread.base+i))
-
+// We haven't even tried to make it work, fail completely.
 #define OP_NOT_IMPLEMENTED(op,...) \
 RecordingStatus::Enum op##_record(Thread & thread, Instruction const & inst, Instruction const ** pc) { \
 	return RecordingStatus::UNSUPPORTED_OP; \
 } \
 
-Type::Enum getType(Value& v) {
-	if(v.isFuture()) return v.future.typ;
-	else return v.type;
-}
-
-
-
-/*
-RecordingStatus::Enum get_record(Thread & thread, Instruction const & inst, Instruction const ** pc) {
-	*pc = get_op(thread,inst);
-	Value & r = REG(thread,inst.c);
-
-	thread.trace.UnionWithMaxLiveRegister(thread.base,inst.c);
-
-	if(r.isFuture()) {
-		thread.trace.RegOutput(r.future.ref, thread.base, inst.c);
-		thread.trace.Commit(thread);
-	}
-	return RecordingStatus::NO_ERROR;
-}
-*/
-RecordingStatus::Enum assign_record(Thread & thread, Instruction const & inst, Instruction const ** pc) {
-	*pc = assign_op(thread,inst);
-	Value& r = REG(thread, inst.c);
-	//Inline this logic here would make the recorder more fragile, so for now we simply construct the pointer again:
-	if(r.isFuture()) {
-		thread.trace.VarOutput(r.future.ref, thread.frame.environment->makePointer((String)inst.a));
-		thread.trace.Commit(thread);
-	}
-	thread.trace.SetMaxLiveRegister(thread.base,inst.c);
-	return RecordingStatus::NO_ERROR;
-}
-
-OP_NOT_IMPLEMENTED(assign2)
-
 #define CHECK_REG(r) do { \
-	thread.trace.Force(thread, REG(thread, r)); \
+	OPERAND(v, r); FORCE(v, r); \
+	thread.trace.Force(thread, v); \
 } while(0)
+
 //temporary defines to generate code for checked interpret
 #define A CHECK_REG(inst.a);
 #define B CHECK_REG(inst.b);
@@ -133,11 +23,32 @@ OP_NOT_IMPLEMENTED(assign2)
 
 //all operations that first verify their inputs are not futures, eliminating futures by flush the their trace. It then calls into the scalar interpreter to fulfill them
 #define CHECKED_INTERPRET(op, checks) \
-		RecordingStatus::Enum op##_record(Thread & thread, Instruction const & inst, Instruction const ** pc) { \
-			checks \
-			*pc = op##_op(thread,inst); \
-			return RecordingStatus::NO_ERROR; \
-		} \
+RecordingStatus::Enum op##_record(Thread & thread, Instruction const & inst, Instruction const ** pc) { \
+	checks \
+	*pc = op##_op(thread,inst); \
+	return RecordingStatus::NO_ERROR; \
+} \
+
+
+Type::Enum getType(Value& v) {
+	if(v.isFuture()) return v.future.typ;
+	else return v.type;
+}
+
+RecordingStatus::Enum assign_record(Thread & thread, Instruction const & inst, Instruction const ** pc) {
+	*pc = assign_op(thread,inst);
+	Value& r = REGISTER(thread, inst.c);
+	//Inline this logic here would make the recorder more fragile, 
+	// so for now we simply construct the pointer again:
+	if(r.isFuture()) {
+		thread.trace.outputs.push_back(thread.frame.environment->makePointer((String)inst.a));
+		thread.trace.Commit(thread);
+	}
+	//thread.trace.SetMaxLiveRegister(thread.base,inst.c);
+	return RecordingStatus::NO_ERROR;
+}
+
+OP_NOT_IMPLEMENTED(assign2)
 
 CHECKED_INTERPRET(eassign, A B C)
 CHECKED_INTERPRET(iassign, A B C)
@@ -214,10 +125,10 @@ RecordingStatus::Enum fallback(Thread & thread, Value & a, Value & b) {
 RecordingStatus::Enum subset_record(Thread & thread, Instruction const & inst, Instruction const** pc) {
 	Trace& trace = thread.trace;
 	
-	Value & b = REG(thread,inst.b);
+	OPERAND(b,inst.b); FORCE(b,inst.b);
 	if(getType(b) == Type::Integer || getType(b) == Type::Double) {
+		OPERAND(a,inst.a); FORCE(a,inst.a);
 		CHECK_REG(inst.a);
-		Value & a = REG(thread,inst.a);
 
 		IRef bref = getRef(trace,b);
 		Type::Enum rtype = a.type;
@@ -226,13 +137,13 @@ RecordingStatus::Enum subset_record(Thread & thread, Instruction const & inst, I
 		Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
 		
 		trace.RegOutput(r, thread.base,inst.c);
-		trace.SetMaxLiveRegister(thread.base,inst.c);
+		//trace.SetMaxLiveRegister(thread.base,inst.c);
 		trace.Commit(thread);
 		(*pc)++; 
 		return RecordingStatus::NO_ERROR;
 	}
 	else if(getType(b) == Type::Logical) {
-		Value& a = REG(thread, inst.a);
+		OPERAND(a,inst.a); FORCE(a,inst.a);
 
 		IRef aref = getRef(trace,a);
 		IRef bref = getRef(trace,b);
@@ -244,7 +155,7 @@ RecordingStatus::Enum subset_record(Thread & thread, Instruction const & inst, I
 		Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
 		
 		trace.RegOutput(r, thread.base, inst.c);
-		trace.SetMaxLiveRegister(thread.base,inst.c);
+		//trace.SetMaxLiveRegister(thread.base,inst.c);
 		trace.Commit(thread);
 		(*pc)++; 
 		return RecordingStatus::NO_ERROR;
@@ -278,7 +189,7 @@ RecordingStatus::Enum ifelse_record(Thread & thread, Instruction const & inst, I
 	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
 	
 	trace.RegOutput(r, thread.base, inst.c);
-	trace.SetMaxLiveRegister(thread.base, inst.c);
+	//trace.SetMaxLiveRegister(thread.base, inst.c);
 	trace.Commit(thread);
 	(*pc)++;
 	return RecordingStatus::NO_ERROR;
@@ -299,7 +210,7 @@ RecordingStatus::Enum split_record(Thread & thread, Instruction const & inst, In
 	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
 	
 	trace.RegOutput(r, thread.base, inst.c);
-	trace.SetMaxLiveRegister(thread.base, inst.c);
+	//trace.SetMaxLiveRegister(thread.base, inst.c);
 	trace.Commit(thread);
 	(*pc)++;
 	return RecordingStatus::NO_ERROR;
@@ -348,7 +259,7 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread
 	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
 	
 	trace.RegOutput(r, thread.base, inst.c);
-	trace.SetMaxLiveRegister(thread.base, inst.c);
+	//trace.SetMaxLiveRegister(thread.base, inst.c);
 	trace.Commit(thread);
 	return RecordingStatus::NO_ERROR;
 }
@@ -372,7 +283,7 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread 
 	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
 
 	trace.RegOutput(r, thread.base,inst.c);
-	trace.SetMaxLiveRegister(thread.base,inst.c);
+	//trace.SetMaxLiveRegister(thread.base,inst.c);
 	trace.Commit(thread);
 	return RecordingStatus::NO_ERROR;
 }
@@ -396,7 +307,7 @@ RecordingStatus::Enum fold_record(ByteCode::Enum bc, IROpCode::Enum op, Thread &
 	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
 
 	trace.RegOutput(r, thread.base,inst.c);
-	trace.SetMaxLiveRegister(thread.base,inst.c);
+	//trace.SetMaxLiveRegister(thread.base,inst.c);
 	trace.Commit(thread);
 	return RecordingStatus::NO_ERROR;
 }
@@ -513,7 +424,7 @@ RecordingStatus::Enum ret_record(Thread & thread, Instruction const & inst, Inst
 	int64_t offset = result - thread.frame.returnbase;
 	int64_t max_live = thread.frame.returnbase - thread.base;
 	*pc = ret_op(thread,inst); //warning: ret_op will change 'frame'
-	thread.trace.SetMaxLiveRegister(thread.base,max_live);
+	//thread.trace.SetMaxLiveRegister(thread.base,max_live);
 	if(result->isFuture()) {
 		thread.trace.RegOutput(result->future.ref, thread.base,offset);
 		thread.trace.Commit(thread);
@@ -542,7 +453,7 @@ RecordingStatus::Enum seq_record(Thread & thread, Instruction const & inst, Inst
 				     Type::Integer,
 				     len,
 				     thread.trace.EmitSpecial(IROpCode::seq,Type::Integer,len,len,step));
-		thread.trace.SetMaxLiveRegister(thread.base,inst.c);
+		//thread.trace.SetMaxLiveRegister(thread.base,inst.c);
 		(*pc)++;
 		thread.trace.Commit(thread);
 	}

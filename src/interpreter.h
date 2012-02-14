@@ -2,6 +2,7 @@
 #define _RIPOSTE_INTERPRETER_H
 
 #include <map>
+#include <set>
 #include <deque>
 
 #include "value.h"
@@ -128,113 +129,169 @@ struct InternalFunction {
 struct TraceCodeBuffer;
 class Trace : public gc {
 
-public:	
-	struct Location {
-		enum Type {REG, VAR};
-		Type type;
-		union {
-			Environment::Pointer pointer; //fat pointer to environment location
-			struct {
-				Value * base;
-				int64_t offset;
-			} reg;
+	public:	
+
+		std::vector<IRNode, traceable_allocator<IRNode> > nodes;
+		std::set<Environment*> liveEnvironments;
+
+		struct Output {
+			enum Type { REG, MEMORY };
+			Type type;
+			union {
+				Value* reg;
+				Environment::Pointer pointer;
+			};
+			IRef ref;	   //location of the associated store
 		};
-	};
 
-	struct Output {
-		Location location; //location where an output might exist
-		                   //if that location is live and contains a future then that is a live output
-		IRef ref;	   //location of the associated store
-	};
+		std::vector<Output> outputs;
 
+		TraceCodeBuffer * code_buffer;
 
-	std::vector<IRNode, traceable_allocator<IRNode> > nodes;
-	
-	std::vector<Output> outputs;
+		size_t n_recorded_since_last_exec;
 
-	TraceCodeBuffer * code_buffer;
+		Trace();
 
-	Value * max_live_register_base;
-	int64_t max_live_register;
+		void Bind(Thread& thread, Value const& v);
+		void Flush(Thread & thread);
 
-	size_t n_recorded_since_last_exec;
-	bool active;
+		IRef EmitCoerce(IRef a, Type::Enum dst_type);
+		IRef EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data); 
+		IRef EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, int64_t data);
+		IRef EmitTrinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, IRef c);
 
-	Trace();
+		IRef EmitFilter(IRef a, IRef b);
+		IRef EmitSplit(IRef x, IRef f, int64_t levels);
 
-	Instruction const * BeginTracing(Thread & state, Instruction const * inst);
-	void EndTracing(Thread & thread);
-	void Force(Thread& thread, Value& v);
-	void Flush(Thread & thread);
+		IRef EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b);
+		IRef EmitConstant(Type::Enum type, int64_t c);
+		IRef EmitLoad(Value const& v);
 
-	IRef EmitCoerce(IRef a, Type::Enum dst_type);
-	IRef EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data); 
-	IRef EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, int64_t data);
-	IRef EmitTrinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, IRef c);
-	IRef EmitFold(IROpCode::Enum op, IRef a); 
-	
-	IRef EmitFilter(IRef a, IRef b);
-	IRef EmitSplit(IRef x, IRef f, int64_t levels);
-	
-	IRef EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b);
-	IRef EmitConstant(Type::Enum type, int64_t c);
-	IRef EmitLoad(Value const& v);
-
-	void RegOutput(IRef ref, Value * base, int64_t id);
-	void VarOutput(IRef ref, const Environment::Pointer & p);
-
-	void SetMaxLiveRegister(Value * base, int64_t r) {
-		max_live_register_base = base;
-		max_live_register = r;
-	}
-	void UnionWithMaxLiveRegister(Value * base, int64_t r) {
-		if(base < max_live_register_base
-		   || (base == max_live_register_base && r > max_live_register)) {
-			SetMaxLiveRegister(base,r);
+		static Type::Enum futureType(Value const& v) {
+			if(v.isFuture()) return v.future.typ;
+			else return v.type;
 		}
-	}
-	bool LocationIsDead(const Trace::Location & l) {
-		bool dead = l.type == Trace::Location::REG &&
-		( l.reg.base < max_live_register_base ||
-		  ( l.reg.base == max_live_register_base &&
-		    l.reg.offset > max_live_register
-		  )
-		);
-		//if(dead)
-		//	printf("r%d is dead! long live r%d\n",(int)l.reg.offset,(int)trace.max_live_register);
-		return dead;
-	}
 
-	void Rollback() {
-	}
-	//commits the recorded instructions and outputs from the current op
-	//if the trace does not have enough room to record another op, it is flushed
-	//and the slot is freed for another trace
-	void Commit(Thread& thread) {
-		/*n_nodes = n_pending_nodes;
-		if(n_nodes + TRACE_MAX_NODES_PER_COMMIT >= TRACE_MAX_NODES) {
-			Flush(thread);
-		}*/
-		if(nodes.size() > 128) {
-			Flush(thread);
+		struct LoadCache {
+			IRef get(Trace & trace, const Value& v) {
+				uint64_t idx = (int64_t) v.p;
+				idx += idx >> 32;
+				idx += idx >> 16;
+				idx += idx >> 8;
+				idx &= 0xFF;
+				IRef cached = cache[idx];
+				if(cached < trace.nodes.size() &&
+						trace.nodes[cached].op == IROpCode::load &&
+						trace.nodes[cached].out.p == v.p) {
+					return cached;
+				} else {
+					return (cache[idx] = trace.EmitLoad(v));
+				}
+			}
+			IRef cache[256];
+		};
+		LoadCache loadCache;
+
+		IRef GetRef(Value const& v) {
+			if(v.isFuture()) return v.future.ref;
+			else if(v.length == 1) return EmitConstant(v.type, v.i);
+			else return loadCache.get(*this, v);
 		}
-	}
 
-private:
-	void Reset();
-	void DiscardDeadOutputs(Thread & state);
-	void WriteOutputs(Thread & state);
-	void Execute(Thread & state);
-	void Execute(Thread & state, IRef ref);
-	std::string toString(Thread & state);
+		template< template<class X> class Group >
+			Value EmitUnary(IROpCode::Enum op, Value const& a, int64_t data) {
+				IRef r;
+				if(futureType(a) == Type::Double) {
+					r = EmitUnary(op, Group<Double>::R::VectorType, EmitCoerce(GetRef(a), Group<Double>::MA::VectorType), data);
+				} else if(futureType(a) == Type::Integer) {
+					r = EmitUnary(op, Group<Integer>::R::VectorType, EmitCoerce(GetRef(a), Group<Integer>::MA::VectorType), data);
+				} else if(futureType(a) == Type::Logical) {
+					r = EmitUnary(op, Group<Logical>::R::VectorType, EmitCoerce(GetRef(a), Group<Logical>::MA::VectorType), data);
+				} else _error("Attempting to record invalid type in EmitUnary");
+				Value v;
+				Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+				return v;
+			}
 
-	void Interpret(Thread & state);
-	void JIT(Thread & state);
+		template< template<class X, class Y> class Group >
+			Value EmitBinary(IROpCode::Enum op, Value const& a, Value const& b, int64_t data) {
+				IRef r;
+				if(futureType(a) == Type::Double) {
+					if(futureType(b) == Type::Double)
+						r = EmitBinary(op, Group<Double,Double>::R::VectorType, EmitCoerce(GetRef(a), Group<Double,Double>::MA::VectorType), EmitCoerce(GetRef(b), Group<Double,Double>::MB::VectorType), data);
+					else if(futureType(b) == Type::Integer)
+						r = EmitBinary(op, Group<Double,Integer>::R::VectorType, EmitCoerce(GetRef(a), Group<Double,Integer>::MA::VectorType), EmitCoerce(GetRef(b), Group<Double,Integer>::MB::VectorType), data);
+					else if(futureType(b) == Type::Logical)
+						r = EmitBinary(op, Group<Double,Logical>::R::VectorType, EmitCoerce(GetRef(a), Group<Double,Logical>::MA::VectorType), EmitCoerce(GetRef(b), Group<Double,Logical>::MB::VectorType), data);
+					else _error("Attempting to record invalid type in EmitBinary");
+				} else if(futureType(a) == Type::Integer) {
+					if(futureType(b) == Type::Double)
+						r = EmitBinary(op, Group<Integer,Double>::R::VectorType, EmitCoerce(GetRef(a), Group<Integer,Double>::MA::VectorType), EmitCoerce(GetRef(b), Group<Integer,Double>::MB::VectorType), data);
+					else if(futureType(b) == Type::Integer)
+						r = EmitBinary(op, Group<Integer,Integer>::R::VectorType, EmitCoerce(GetRef(a), Group<Integer,Integer>::MA::VectorType), EmitCoerce(GetRef(b), Group<Integer,Integer>::MB::VectorType), data);
+					else if(futureType(b) == Type::Logical)
+						r = EmitBinary(op, Group<Integer,Logical>::R::VectorType, EmitCoerce(GetRef(a), Group<Integer,Logical>::MA::VectorType), EmitCoerce(GetRef(b), Group<Integer,Logical>::MB::VectorType), data);
+					else _error("Attempting to record invalid type in EmitBinary");
+				} else if(futureType(a) == Type::Logical) {
+					if(futureType(b) == Type::Double)
+						r = EmitBinary(op, Group<Logical,Double>::R::VectorType, EmitCoerce(GetRef(a), Group<Logical,Double>::MA::VectorType), EmitCoerce(GetRef(b), Group<Logical,Double>::MB::VectorType), data);
+					else if(futureType(b) == Type::Integer)
+						r = EmitBinary(op, Group<Logical,Integer>::R::VectorType, EmitCoerce(GetRef(a), Group<Logical,Integer>::MA::VectorType), EmitCoerce(GetRef(b), Group<Logical,Integer>::MB::VectorType), data);
+					else if(futureType(b) == Type::Logical)
+						r = EmitBinary(op, Group<Logical,Logical>::R::VectorType, EmitCoerce(GetRef(a), Group<Logical,Logical>::MA::VectorType), EmitCoerce(GetRef(b), Group<Logical,Logical>::MB::VectorType), data);
+					else _error("Attempting to record invalid type in EmitBinary");
+				} else _error("Attempting to record invalid type in EmitBinary");
+				Value v;
+				Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+				return v;
+			}
 
-	void MarkLiveOutputs(Thread& thread);
-	void SimplifyOps(Thread& thread);
-	void AlgebraicSimplification(Thread& thread);
-	void DeadCodeElimination(Thread& thread);
+		Value EmitSplit(Value const& a, Value const& b, int64_t data) {
+			IRef r = EmitSplit(GetRef(a), EmitCoerce(GetRef(b), Type::Integer), data);
+			Value v;
+			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			return v;
+		}
+
+		void addEnvironment(Environment* env) { 
+			if(nodes.size() == 0)
+				liveEnvironments.clear();
+			liveEnvironments.insert(env); 
+		}
+
+		void killEnvironment(Environment* env) {
+			liveEnvironments.erase(env);
+		}
+
+		void Rollback() {
+		}
+		//commits the recorded instructions and outputs from the current op
+		//if the trace does not have enough room to record another op, it is flushed
+		//and the slot is freed for another trace
+		void Commit(Thread& thread) {
+			/*n_nodes = n_pending_nodes;
+			  if(n_nodes + TRACE_MAX_NODES_PER_COMMIT >= TRACE_MAX_NODES) {
+			  Flush(thread);
+			  }*/
+			if(nodes.size() > 128) {
+				Flush(thread);
+			}
+		}
+
+	private:
+		void Reset();
+		void WriteOutputs(Thread & state);
+		void Execute(Thread & state);
+		void Execute(Thread & state, IRef ref);
+		std::string toString(Thread & state);
+
+		void Interpret(Thread & state);
+		void JIT(Thread & state);
+
+		void MarkLiveOutputs(Thread& thread);
+		void SimplifyOps(Thread& thread);
+		void AlgebraicSimplification(Thread& thread);
+		void DeadCodeElimination(Thread& thread);
 };
 
 #endif

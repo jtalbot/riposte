@@ -9,6 +9,7 @@
 	_(Promise, 	"promise") 	\
 	_(Default,	"default")	\
 	_(Dotdot,	"dotdot")	\
+	_(Future, 	"future")	\
 	_(Object,	"object")	\
 	/* The R visible types */	\
 	/*   In the "standard casting order" */  \
@@ -21,7 +22,6 @@
 	_(List,		"list")		\
 	_(Function,	"function")	\
 	_(Environment,	"environment")	\
-	_(Future, "future")				\
 
 DECLARE_ENUM(Type, TYPES)
 

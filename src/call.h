@@ -17,8 +17,13 @@ static void printCode(Thread const& thread, Prototype const* prototype, Environm
 	}
 	if(prototype->bc.size() > 0) {
 		std::cout << "\tCode: " << std::endl;
-		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++)
-			std::cout << "\t\t" << i << ":\t" << prototype->bc[i].toString() << std::endl;
+		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++) {
+			std::cout << "\t\t" << i << ":\t" << prototype->bc[i].toString();
+			if(prototype->bc[i].bc == ByteCode::call) {
+				std::cout << "\t\t(arguments: " << prototype->calls[prototype->bc[i].b].arguments.size() << ")";
+			}
+			std::cout << std::endl;
+		}
 	}
 	std::cout << std::endl;
 }
@@ -298,5 +303,92 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
 	_error("Failed to find generic for builtin op");
 }
 
+Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const* a, Environment* env, int64_t index);
+
+Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, String name);
+
+#define REGISTER(i) (*(thread.base-(i)))
+
+// Out register is currently always a register, not memory
+#define OUT(thread, i) (*(thread.base-(i)))
+
+#define OPERAND(a, i) \
+Value const& a = __builtin_expect((i) <= 0, true) ? \
+		*(thread.base-(i)) : \
+		thread.frame.environment->getRecursive((String)(i)); 
+	
+#define FORCE(a, i) \
+if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
+	if(a.isDotdot()) { \
+		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
+		if(t.isConcrete()) { \
+			thread.frame.environment->insert((String)(i)) = t; \
+			return &inst; \
+		} \
+		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
+	} \
+	else return forceReg(thread, inst, &a, (String)(i)); \
+} \
+
+#define DOTDOT(a, i) \
+Value const& a = thread.frame.environment->dots[(i)].v;
+
+#define FORCE_DOTDOT(a, i) \
+if(!a.isConcrete()) { \
+	if(a.isDotdot()) { \
+		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
+		if(t.isConcrete()) { \
+			thread.frame.environment->dots[(i)].v = t; \
+			return &inst; \
+		} \
+		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
+	} \
+	else return forceDot(thread, inst, &a, thread.frame.environment, (i)); \
+}
+
+#define BIND(a) \
+if(__builtin_expect(a.isFuture(), false)) { \
+	thread.trace.Bind(thread, a); \
+	return &inst; \
+}
+
+bool isTraceableType(Type::Enum type) {
+        return type == Type::Double || type == Type::Integer || type == Type::Logical ||
+		type == Type::Future;
+}
+
+template< template<class X> class Group>
+bool isTraceable(Thread const& thread, Value const& a) { 
+	return 	thread.state.jitEnabled && 
+		isTraceableType(a.type) && 
+		a.length >= TRACE_VECTOR_WIDTH; 
+}
+
+template<>
+bool isTraceable<ArithScan>(Thread const& thread, Value const& a) { return false; }
+
+template<>
+bool isTraceable<UnifyScan>(Thread const& thread, Value const& a) { return false; }
+
+template< template<class X, class Y> class Group>
+bool isTraceable(Thread const& thread, Value const& a, Value const& b) {
+	return  thread.state.jitEnabled && 
+		(isTraceableType(a.type) && isTraceableType(b.type)) &&
+		((a.length >= TRACE_VECTOR_WIDTH && b.length == 1) ||
+		 (a.length == 1 && b.length >= TRACE_VECTOR_WIDTH) ||
+		 (a.length == b.length && a.length >= TRACE_VECTOR_WIDTH)); 
+}
+
+template< template<class X, class Y, class Z> class Group>
+bool isTraceable(Thread const& thread, Value const& a, Value const& b, Value const& c) {
+	return false;
+}
+
+template<>
+bool isTraceable<IfElse>(Thread const& thread, Value const& a, Value const& b, Value const& c) { 
+	return 	thread.state.jitEnabled &&
+		isTraceableType(a.type) && isTraceableType(b.type) && isTraceableType(c.type) &&
+		a.length > TRACE_VECTOR_WIDTH;
+}
 
 #endif

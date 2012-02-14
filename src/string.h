@@ -147,6 +147,8 @@ namespace Strings {
 #define DECLARE(name, string, ...) extern String name;
 	STRINGS(DECLARE)
 #undef DECLARE
+	extern String pos;
+	extern String neg;
 }
 
 #endif

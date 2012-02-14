@@ -459,7 +459,7 @@ struct TraceJIT {
 				}
 			} break;
 			case IROpCode::sqrt: 	asm_.sqrtpd(reg(ref),reg(node.unary.a)); break;
-			case IROpCode::round:	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundToNearest); break;
+			//case IROpCode::round:	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundToNearest); break;
 			case IROpCode::floor: 	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundDown); break;
 			case IROpCode::ceiling:	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundUp); break;
 			case IROpCode::trunc: 	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundToZero); break;
@@ -650,7 +650,7 @@ struct TraceJIT {
 				asm_.blendvpd(Move(ref, node.trinary.a), reg(node.trinary.b));
 			break;
 
-			case IROpCode::signif:
+			//case IROpCode::signif:
 			default:	_error("unimplemented op"); break;
 		
 			}

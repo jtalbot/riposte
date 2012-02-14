@@ -9,45 +9,25 @@ void Trace::Reset() {
 	n_recorded_since_last_exec = 0;
 	nodes.clear();
 	outputs.clear();
+	liveEnvironments.clear();
 }
 
-Trace::Trace() : active(false) { 
+Trace::Trace() { 
 	Reset(); 
 	code_buffer = NULL;
 }
 
-Instruction const * Trace::BeginTracing(Thread & state, Instruction const * inst) {
-	if(active) {
-		_error("recursive record\n");
-	}
-	max_live_register = NULL;
-	active = true;
-	try {
-		return recording_interpret(state,inst);
-	} catch(...) {
-		Reset();
-		active = false;
-		throw;
-	}
-}
-
-void Trace::EndTracing(Thread & thread) {
-	if(active) {
-		Flush(thread);
-		active = false;
-	}
-}
-
-void Trace::Force(Thread& thread, Value& v) {
+void Trace::Bind(Thread& thread, Value const& v) {
 	if(!v.isFuture()) return;
 	Execute(thread, v.future.ref);
 }
 
 void Trace::Flush(Thread & thread) {
-	if(active) {
-		n_recorded_since_last_exec = 0;
+	n_recorded_since_last_exec = 0;
+	if(nodes.size() > 0) {
 		Execute(thread);
 	}
+	Reset();
 }
 
 std::string Trace::toString(Thread & thread) {
@@ -63,13 +43,8 @@ std::string Trace::toString(Thread & thread) {
 #define TRINARY(op,...) case IROpCode::op: out << "n" << node.trinary.a << "\tn" << node.trinary.b << "\tn" << node.trinary.c; break;
 #define BINARY(op,...) case IROpCode::op: out << "n" << node.binary.a << "\tn" << node.binary.b; break;
 #define UNARY(op,...) case IROpCode::op: out << "n" << node.unary.a; break;
-		BINARY_ARITH_MAP_BYTECODES(BINARY)
-		BINARY_LOGICAL_MAP_BYTECODES(BINARY)
-		BINARY_ORDINAL_MAP_BYTECODES(BINARY)
-		UNARY_ARITH_MAP_BYTECODES(UNARY)
-		UNARY_LOGICAL_MAP_BYTECODES(UNARY)
-		ARITH_FOLD_BYTECODES(UNARY)
-		ARITH_SCAN_BYTECODES(UNARY)
+		UNARY_FOLD_SCAN_BYTECODES(UNARY)
+		BINARY_BYTECODES(BINARY)
 		UNARY(cast)
 		BINARY(seq)
 		BINARY(filter)
@@ -85,11 +60,11 @@ std::string Trace::toString(Thread & thread) {
 			for(size_t i = 0; i < outputs.size(); i++) {
 				Output & o = outputs[i];
 				if(o.ref == j) {
-					switch(o.location.type) {
-					case Trace::Location::REG:
-						out << "r[" << o.location.reg.offset << "] "; break;
-					case Trace::Location::VAR:
-						out << thread.externStr(o.location.pointer.name) << " "; break;
+					switch(o.type) {
+					case Trace::Output::REG:
+						out << "r[" << o.reg << "] "; break;
+					case Trace::Output::MEMORY:
+						out << thread.externStr(o.pointer.name) << " "; break;
 					}
 				}
 			}
@@ -134,10 +109,17 @@ IRef Trace::EmitCoerce(IRef a, Type::Enum dst_type) {
 }
 IRef Trace::EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data) {
 	IRNode n;
-	n.enc = IRNode::UNARY;
 	n.op = op;
 	n.type = type;
-	n.shape = nodes[a].shape;
+	if(	(op == IROpCode::sum || op == IROpCode::prod || 
+		 op == IROpCode::min || op == IROpCode::max ||
+		 op == IROpCode::any || op == IROpCode::all)) {
+		n.enc = IRNode::FOLD;
+		n.shape = (IRNode::Shape) { nodes[a].shape.levels, 0, 1, 0 };
+	} else {
+		n.enc = IRNode::UNARY;
+		n.shape = nodes[a].shape;
+	}
 	n.unary.a = a;
 	n.unary.data = data;
 	nodes.push_back(n);
@@ -172,16 +154,6 @@ IRef Trace::EmitTrinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, IRef
 	n.trinary.a = a;
 	n.trinary.b = b;
 	n.trinary.c = c;
-	nodes.push_back(n);
-	return nodes.size()-1;
-}
-IRef Trace::EmitFold(IROpCode::Enum op, IRef a) {
-	IRNode n;
-	n.enc = IRNode::FOLD;
-	n.op = op;
-	n.type = nodes[a].type;
-	n.shape = (IRNode::Shape) { nodes[a].shape.levels, 0, 1, 0 };
-	n.unary.a = a;
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
@@ -254,69 +226,36 @@ IRef Trace::EmitLoad(Value const& v) {
 	return nodes.size()-1;
 }
 
-void Trace::RegOutput(IRef ref, Value * base, int64_t id) {
-	Output out;
-	out.ref = ref;
-	out.location.type = Location::REG;
-	out.location.reg.base = base;
-	out.location.reg.offset = id;
-	outputs.push_back(out);
-}
-void Trace::VarOutput(IRef ref, const Environment::Pointer & p) {
-	Output out;
-	out.ref = ref;
-	out.location.type = Trace::Location::VAR;
-	out.location.pointer = p;
-	outputs.push_back(out);
-}
-
-
-#define REG(thread, i) (*(thread.base+i))
-
-static const Value & get_location_value(Thread & thread, const Trace::Location & l) {
-	switch(l.type) {
-	case Trace::Location::REG:
-		return l.reg.base[l.reg.offset];
-	default:
-	case Trace::Location::VAR:
-		return Dictionary::get(l.pointer);
-	}
-}
-static void set_location_value(Thread & thread, const Trace::Location & l, const Value & v) {
-	switch(l.type) {
-	case Trace::Location::REG:
-		l.reg.base[l.reg.offset] = v;
-		return;
-	case Trace::Location::VAR:
-		Dictionary::assign(l.pointer,v);
-		return;
-	}
-}
-
-static bool isOutputAlive(Thread& thread, Trace& trace, Trace::Output const& o) {
-	if(thread.trace.LocationIsDead(o.location)) return false;
-	Value const& v = get_location_value(thread, o.location);
-	return v.isFuture() && (v.future.ref == o.ref);
-}
-
 void Trace::MarkLiveOutputs(Thread& thread) {
+	
+	// Can find live outputs in the stack or in the recorded set of environments
+	
 	for(size_t i = 0; i < nodes.size(); i++) {
 		nodes[i].liveOut = false;
 	}
-	for(size_t i = 0; i < outputs.size(); i++) {
-		nodes[outputs[i].ref].liveOut = true;
-	}
-}
-
-void Trace::DiscardDeadOutputs(Thread& thread) {
-	for(size_t i = 0; i < outputs.size(); ) {
-		Output & o = outputs[i];
-		if(isOutputAlive(thread,*this,o)) {
-			i++;
+	
+	for(Value* v = thread.base; v < thread.registers+DEFAULT_NUM_REGISTERS; v++) {
+		if(v->isFuture()) {
+			nodes[v->future.ref].liveOut = true;
+			Output o;
+			o.type = Output::REG;
+			o.reg = v;
+			o.ref = v->future.ref;
+			outputs.push_back(o);
 		}
-		else  {
-			o = outputs.back();
-			outputs.pop_back();
+	}
+	
+	for(std::set<Environment*>::const_iterator i = liveEnvironments.begin(); i != liveEnvironments.end(); ++i) {
+		for(Environment::const_iterator j = (*i)->begin(); j != (*i)->end(); ++j) {
+			Value const& v = j.value();
+			if(v.isFuture()) {
+				nodes[v.future.ref].liveOut = true;
+				Output o;
+				o.type = Output::MEMORY;
+				o.pointer = (*i)->makePointer(j.string());
+				o.ref = v.future.ref;
+				outputs.push_back(o);
+			}
 		}
 	}
 }
@@ -330,9 +269,19 @@ void Trace::WriteOutputs(Thread & thread) {
 			}
 		}
 	}
+
 	for(size_t i = 0; i < outputs.size(); i++) {
 		Output & o = outputs[i];
-		set_location_value(thread,o.location,nodes[o.ref].out);
+		Value const& v = nodes[o.ref].out;
+
+		switch(o.type) {
+		case Output::REG:
+			*o.reg = v;
+			break;
+		case Output::MEMORY:
+			Environment::assignPointer(o.pointer,v);
+			break;
+		}
 	}
 }
 
@@ -532,7 +481,6 @@ void Trace::Execute(Thread & thread, IRef ref) {
 // everything must be evaluated in the end...
 void Trace::Execute(Thread & thread) {
 	
-	DiscardDeadOutputs(thread);
 	MarkLiveOutputs(thread);
 
 	if(thread.state.verbose)

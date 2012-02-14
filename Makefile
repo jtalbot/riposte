@@ -10,7 +10,7 @@ ifeq ($(UNAME),Linux)
 LFLAGS += -lrt
 endif
 
-ENABLE_JIT=0
+ENABLE_JIT=1
 ENABLE_ARBB=0
 ENABLE_LIBM=0
 
@@ -35,7 +35,7 @@ SRC := main.cpp type.cpp string.cpp bc.cpp value.cpp output.cpp interpreter.cpp 
 
 ifeq ($(ENABLE_JIT),1)
 	CXXFLAGS += -DENABLE_JIT
-	SRC += ir.cpp recording.cpp trace.cpp trace_compile.cpp assembler-x64.cpp
+	SRC += ir.cpp trace.cpp trace_compile.cpp assembler-x64.cpp
 endif
 
 EXECUTABLE := bin/riposte

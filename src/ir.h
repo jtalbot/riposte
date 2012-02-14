@@ -10,6 +10,7 @@
 #define IR_ENUM(_) \
 		MAP_BYTECODES(_) \
 		FOLD_BYTECODES(_) \
+		SCAN_BYTECODES(_) \
 		_(cast, "cast", ___) \
 		_(constant,"constant", ___) \
 		_(load,"load", ___) \
