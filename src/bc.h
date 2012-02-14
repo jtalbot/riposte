@@ -65,10 +65,10 @@
 	_(lnot, "lnot",	lnot,	LogicalUnary, PassNA(a, ~a)) \
 
 #define ORDINAL_UNARY_BYTECODES(_) \
-	_(isna,	"isna",	isna,	OrdinalUnary,	M::isNA(a)?-1:0) \
-	_(isnan,	"isnan",	isnan,	OrdinalUnary,	M::isNaN(a)?-1:0) \
-	_(isfinite,	"isfinite",	isfinite,	OrdinalUnary,	M::isFinite(a)?-1:0) \
-	_(isinfinite,	"isinfinite",	isinfinite,	OrdinalUnary,	M::isInfinite(a)?-1:0) \
+	_(isna,	"isna",	isna,	OrdinalUnary,	MA::isNA(a)?-1:0) \
+	_(isnan,	"isnan",	isnan,	OrdinalUnary,	MA::isNaN(a)?-1:0) \
+	_(isfinite,	"isfinite",	isfinite,	OrdinalUnary,	MA::isFinite(a)?-1:0) \
+	_(isinfinite,	"isinfinite",	isinfinite,	OrdinalUnary,	MA::isInfinite(a)?-1:0) \
 /*
 #define STRING_UNARY_BYTECODES(_) \
 	_(nchar, "nchar", nchar, StringUnary, PassNA(a, strlen(a))) \
@@ -133,14 +133,20 @@
 #define SPECIAL_BYTECODES(_) 	\
 	_(done, "done") 
 
-#define MAP_BYTECODES(_) \
+#define UNARY_BYTECODES(_) \
 	ARITH_UNARY_BYTECODES(_) \
 	LOGICAL_UNARY_BYTECODES(_) \
 	ORDINAL_UNARY_BYTECODES(_) \
+
+#define BINARY_BYTECODES(_) \
 	ARITH_BINARY_BYTECODES(_) \
 	LOGICAL_BINARY_BYTECODES(_) \
 	UNIFY_BINARY_BYTECODES(_) \
 	ORDINAL_BINARY_BYTECODES(_) \
+
+#define MAP_BYTECODES(_) \
+	UNARY_BYTECODES(_) \
+	BINARY_BYTECODES(_) \
 
 #define FOLD_BYTECODES(_) \
 	ARITH_FOLD_BYTECODES(_) \
@@ -177,20 +183,9 @@
 	LOGICAL_UNARY_BYTECODES(_) \
 
 #define UNARY_FOLD_SCAN_BYTECODES(_) \
-	ARITH_UNARY_BYTECODES(_) \
-	LOGICAL_UNARY_BYTECODES(_) \
-	ORDINAL_UNARY_BYTECODES(_) \
-	ARITH_FOLD_BYTECODES(_) \
-	LOGICAL_FOLD_BYTECODES(_) \
-	UNIFY_FOLD_BYTECODES(_) \
-	ARITH_SCAN_BYTECODES(_) \
-	UNIFY_SCAN_BYTECODES(_) \
-
-#define BINARY_BYTECODES(_) \
-	ARITH_BINARY_BYTECODES(_) \
-	LOGICAL_BINARY_BYTECODES(_) \
-	UNIFY_BINARY_BYTECODES(_) \
-	ORDINAL_BINARY_BYTECODES(_) \
+	UNARY_BYTECODES(_) \
+	FOLD_BYTECODES(_) \
+	SCAN_BYTECODES(_) \
 
 DECLARE_ENUM(ByteCode, BYTECODES)
 

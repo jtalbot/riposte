@@ -8,28 +8,28 @@
 #include <cmath>
 #include <stdlib.h>
 
-template<class X> struct ArithUnary1   { typedef X A; typedef Double M; typedef Double R; };
-template<> struct ArithUnary1<Logical> { typedef Logical A; typedef Integer M; typedef Integer R; };
-template<> struct ArithUnary1<Integer> { typedef Integer A; typedef Integer M; typedef Integer R; };
+template<class X> struct ArithUnary1   { typedef X A; typedef Double MA; typedef Double R; };
+template<> struct ArithUnary1<Logical> { typedef Logical A; typedef Integer MA; typedef Integer R; };
+template<> struct ArithUnary1<Integer> { typedef Integer A; typedef Integer MA; typedef Integer R; };
 
-template<class X> struct ArithUnary2   { typedef X A; typedef Double M; typedef Double R; };
+template<class X> struct ArithUnary2   { typedef X A; typedef Double MA; typedef Double R; };
 
-template<class X> struct LogicalUnary  { typedef X A; typedef Logical M; typedef Logical R; };
+template<class X> struct LogicalUnary  { typedef X A; typedef Logical MA; typedef Logical R; };
 
-template<class X> struct OrdinalUnary  { typedef X A; typedef X M; typedef Logical R; };
+template<class X> struct OrdinalUnary  { typedef X A; typedef X MA; typedef Logical R; };
 
 // Unary operators
 #define UNARY_OP(Name, String, Op, Group, Func) \
 template<typename T> \
 struct Name##VOp {\
 	typedef typename Group<T>::A A; \
-	typedef typename Group<T>::M M; \
+	typedef typename Group<T>::MA MA; \
 	typedef typename Group<T>::R R; \
-	static typename R::Element PassNA(typename M::Element const a, typename R::Element const fa) { \
-		return !M::isCheckedNA(a) ? fa : R::NAelement; \
+	static typename R::Element PassNA(typename MA::Element const a, typename R::Element const fa) { \
+		return !MA::isCheckedNA(a) ? fa : R::NAelement; \
 	} \
 	static typename R::Element eval(Thread& thread, typename A::Element const v) {\
-		typename M::Element a = Cast<A, M>(thread, v); \
+		typename MA::Element a = Cast<A, MA>(thread, v); \
 		return (Func); \
 	} \
 	static void Scalar(Thread& thread, typename A::Element const a, Value& c) { \
@@ -355,48 +355,6 @@ void UnifyScanDispatch(Thread& thread, Value const& a, Value& c) {
 	else if(a.isNull())	Op<Double>::Scalar(thread, Op<Double>::base(), c);
 	else _error("non-numeric argument to numeric scan operator");
 }
-
-#ifdef ENABLE_JIT
-// Figure out the type of the operation given an input type
-inline void selectType(ByteCode::Enum bc, Type::Enum input, Type::Enum * atyp, Type::Enum * rtyp) {
-	switch(bc) {
-#define ARITH_CASE(name,str,Op,...) \
-	case ByteCode::name: \
-		if(input == Type::Integer) { *atyp = Op<TInteger>::RV::VectorType; *rtyp = Op<TInteger>::RV::VectorType; } \
-		else if(input == Type::Double || input == Type::Logical) { *atyp = Op<TDouble>::RV::VectorType; *rtyp = Op<TDouble>::RV::VectorType; } \
-		else _error("Unknown type"); \
-		break;
-#define LOGICAL_CASE(name,str,Op,...) \
-	case ByteCode::name: \
-		*atyp = Type::Logical; *rtyp = Type::Logical; \
-		break;
-#define BINARY_ORDINAL_CASE(name,str,Op,...) \
-	case ByteCode::name: /*logical inputs get promoted to double so that we can use sse ops to implement the ordinals*/\
-		*atyp = (input == Type::Logical) ? Type::Double : input; *rtyp = Type::Logical; \
-		break;
-#define ORDINAL_CASE(name,str,Op,...) \
-	case ByteCode::name: \
-		*atyp = input; *rtyp = input; \
-		break;
-ARITH_BYTECODES(ARITH_CASE)
-LOGICAL_BYTECODES(LOGICAL_CASE)
-ORDINAL_BINARY_BYTECODES(BINARY_ORDINAL_CASE)
-ORDINAL_FOLD_BYTECODES(ORDINAL_CASE)
-ORDINAL_SCAN_BYTECODES(ORDINAL_CASE)
-#undef ARITH_CASE
-#undef LOGICAL_RESULT_CASE
-#undef ORDINAL_CASE
-	default:
-		_error("Not a known op in selectType");
-	}
-
-}
-
-inline void selectType(ByteCode::Enum bc, Type::Enum a, Type::Enum b, Type::Enum * atyp, Type::Enum * btyp, Type::Enum * rtyp) {
-	selectType(bc,meetType(a,b),atyp,rtyp);
-	*btyp = *atyp;
-}
-#endif
 
 /*
 template<int Len>

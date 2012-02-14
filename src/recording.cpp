@@ -1,4 +1,3 @@
-#include "recording.h"
 #include "interpreter.h"
 #include "ir.h"
 #include "ops.h"
@@ -14,6 +13,71 @@
 DECLARE_ENUM(RecordingStatus,ENUM_RECORDING_STATUS)
 DEFINE_ENUM_TO_STRING(RecordingStatus,ENUM_RECORDING_STATUS)
 
+// Figure out the type of the operation given an input type
+
+template<class X>
+void unaryResultType(Type::Enum& mtype, Type::Enum& rtype) {
+	mtype = X::MA::VectorType;
+	rtype = X::R::VectorType;
+}
+
+
+void selectType(ByteCode::Enum bc, Type::Enum input, Type::Enum& mtype, Type::Enum& rtype) {
+	switch(bc) {
+#define UNARY_OP(Name, String, Op, Group, ...) \
+		case ByteCode::Name: \
+		switch(input) { \
+			case Type::Logical: unaryResultType< Name##VOp<Logical> >(mtype, rtype); \
+			case Type::Integer: unaryResultType< Name##VOp<Integer> >(mtype, rtype); \
+			case Type::Double:  unaryResultType< Name##VOp<Double> >(mtype, rtype); \
+			default: _error("Unsupported type in JIT"); \
+		} break;
+UNARY_FOLD_SCAN_BYTECODES(UNARY_OP)
+#undef UNARY_OP
+		default: _error("Called unaryResultType with non-unary bytecode");
+	}
+}
+
+template< template<class X, class Y> class Group, class X, class Y>
+void binaryResultType(Type::Enum& matype, Type::Enum& mbtype, Type::Enum& rtype) {
+	matype = Group<X, Y>::MA::VectorType;
+	mbtype = Group<X, Y>::MB::VectorType;
+	rtype = Group<X, Y>::R::VectorType;
+}
+
+
+void selectType(ByteCode::Enum bc, Type::Enum inputa, Type::Enum inputb, Type::Enum& matype, Type::Enum& mbtype, Type::Enum& rtype) {
+	switch(bc) {
+#define BINARY_OP(Name, String, Op, Group, ...) \
+		case ByteCode::Name: \
+		if(inputa == Type::Logical) { \
+			if(inputb == Type::Logical) \
+				binaryResultType<Group, Logical, Logical>(matype, mbtype, rtype); \
+			else if(inputb == Type::Integer) \
+				binaryResultType<Group, Logical, Integer>(matype, mbtype, rtype); \
+			else if(inputb == Type::Double) \
+				binaryResultType<Group, Logical, Double>(matype, mbtype, rtype); \
+		} else if(inputa == Type::Integer) { \
+			if(inputb == Type::Logical) \
+				binaryResultType<Group, Integer, Logical>(matype, mbtype, rtype); \
+			else if(inputb == Type::Integer) \
+				binaryResultType<Group, Integer, Integer>(matype, mbtype, rtype); \
+			else if(inputb == Type::Double) \
+				binaryResultType<Group, Integer, Double>(matype, mbtype, rtype); \
+		} else if(inputa == Type::Double) { \
+			if(inputb == Type::Logical) \
+				binaryResultType<Group, Double, Logical>(matype, mbtype, rtype); \
+			else if(inputb == Type::Integer) \
+				binaryResultType<Group, Double, Integer>(matype, mbtype, rtype); \
+			else if(inputb == Type::Double) \
+				binaryResultType<Group, Double, Double>(matype, mbtype, rtype); \
+		} else _error("Unsupported type in JIT"); 
+BINARY_BYTECODES(BINARY_OP)
+#undef BINARY_OP
+		default: _error("Called binaryResultType with non-binary bytecode");
+	}
+}
+
 //for brevity
 #define REG(thread, i) (*(thread.base+i))
 
@@ -27,6 +91,9 @@ Type::Enum getType(Value& v) {
 	else return v.type;
 }
 
+
+
+/*
 RecordingStatus::Enum get_record(Thread & thread, Instruction const & inst, Instruction const ** pc) {
 	*pc = get_op(thread,inst);
 	Value & r = REG(thread,inst.c);
@@ -39,13 +106,7 @@ RecordingStatus::Enum get_record(Thread & thread, Instruction const & inst, Inst
 	}
 	return RecordingStatus::NO_ERROR;
 }
-
-RecordingStatus::Enum kget_record(Thread & thread, Instruction const & inst, Instruction const ** pc) {
-	*pc = kget_op(thread,inst);
-	return RecordingStatus::NO_ERROR;
-}
-
-
+*/
 RecordingStatus::Enum assign_record(Thread & thread, Instruction const & inst, Instruction const ** pc) {
 	*pc = assign_op(thread,inst);
 	Value& r = REG(thread, inst.c);
@@ -80,15 +141,13 @@ OP_NOT_IMPLEMENTED(assign2)
 
 CHECKED_INTERPRET(eassign, A B C)
 CHECKED_INTERPRET(iassign, A B C)
-CHECKED_INTERPRET(jt, B)
-CHECKED_INTERPRET(jf, B)
+CHECKED_INTERPRET(jc, B)
 CHECKED_INTERPRET(branch, A)
 //CHECKED_INTERPRET(subset, A B C)
 CHECKED_INTERPRET(subset2, A B C)
 CHECKED_INTERPRET(colon, A B C)
 CHECKED_INTERPRET(forbegin, B_1)
 CHECKED_INTERPRET(forend, B_1)
-CHECKED_INTERPRET(UseMethod, A C)
 CHECKED_INTERPRET(call, A)
 #undef A
 #undef B
@@ -283,7 +342,7 @@ RecordingStatus::Enum binary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread
 	IRef bref = getRef(trace,b);
 	
 	Type::Enum rtype, atype, btype;
-	selectType(bc,trace.nodes[aref].type,trace.nodes[bref].type,&atype,&btype,&rtype);
+	selectType(bc,trace.nodes[aref].type,trace.nodes[bref].type,atype,btype,rtype);
 
 	IRef r = trace.EmitBinary(op, rtype, trace.EmitCoerce(aref,atype), trace.EmitCoerce(bref,btype), 0);
 	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
@@ -307,7 +366,7 @@ RecordingStatus::Enum unary_record(ByteCode::Enum bc, IROpCode::Enum op, Thread 
 	IRef aref = getRef(trace,a);
 
 	Type::Enum rtype,atype;
-	selectType(bc,trace.nodes[aref].type,&atype,&rtype);
+	selectType(bc,trace.nodes[aref].type,atype,rtype);
 
 	IRef r = trace.EmitUnary(op,rtype,trace.EmitCoerce(aref,atype), 0);
 	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
@@ -331,7 +390,7 @@ RecordingStatus::Enum fold_record(ByteCode::Enum bc, IROpCode::Enum op, Thread &
 	IRef aref = getRef(trace,a);
 
 	Type::Enum rtype,atype;
-	selectType(bc,trace.nodes[aref].type,&atype,&rtype);
+	selectType(bc,trace.nodes[aref].type,atype,rtype);
 
 	IRef r = trace.EmitFold(op,trace.EmitCoerce(aref,rtype));
 	Future::Init(REG(thread,inst.c), trace.nodes[r].type, trace.nodes[r].shape.length, r);
@@ -364,7 +423,7 @@ RecordingStatus::Enum fold_record(ByteCode::Enum bc, IROpCode::Enum op, Thread &
 		(*pc)++; \
 	return status; \
 }
-#define FOLD_OP(op,...) RecordingStatus::Enum op##_record(Thread & thread, Instruction const & inst, Instruction const ** pc) { \
+/*#define FOLD_OP(op,...) RecordingStatus::Enum op##_record(Thread & thread, Instruction const & inst, Instruction const ** pc) { \
 	RecordingStatus::Enum status = fold_record(ByteCode :: op, IROpCode :: op, thread, inst);\
 	if(RecordingStatus::FALLBACK == status) { \
 		*pc = op##_op(thread,inst); \
@@ -373,16 +432,14 @@ RecordingStatus::Enum fold_record(ByteCode::Enum bc, IROpCode::Enum op, Thread &
 	if(RecordingStatus::NO_ERROR == status) \
 		(*pc)++; \
 	return status; \
-}
+}*/
 
+UNARY_BYTECODES(UNARY_OP)
+FOLD_BYTECODES(UNARY_OP)
+BINARY_BYTECODES(BINARY_OP)
 
-BINARY_ARITH_MAP_BYTECODES(BINARY_OP)
-UNARY_ARITH_MAP_BYTECODES(UNARY_OP)
-ARITH_FOLD_BYTECODES(FOLD_OP)
-
-BINARY_ORDINAL_MAP_BYTECODES(BINARY_OP)
-UNARY_LOGICAL_MAP_BYTECODES(UNARY_OP)
-BINARY_LOGICAL_MAP_BYTECODES(BINARY_OP)
+#undef UNARY_OP
+#undef BINARY_OP
 
 OP_NOT_IMPLEMENTED(sland)
 OP_NOT_IMPLEMENTED(slor)
@@ -395,22 +452,24 @@ OP_NOT_IMPLEMENTED(complex1)
 OP_NOT_IMPLEMENTED(character1)
 OP_NOT_IMPLEMENTED(raw1)
 
-OP_NOT_IMPLEMENTED(min)
+/*OP_NOT_IMPLEMENTED(min)
 OP_NOT_IMPLEMENTED(max)
 OP_NOT_IMPLEMENTED(any)
 OP_NOT_IMPLEMENTED(all)
+*/
 
-UNARY_OP(cumsum)
-UNARY_OP(cumprod)
-
+OP_NOT_IMPLEMENTED(cumsum)
+OP_NOT_IMPLEMENTED(cumprod)
 OP_NOT_IMPLEMENTED(cummin)
 OP_NOT_IMPLEMENTED(cummax)
 OP_NOT_IMPLEMENTED(cumany)
 OP_NOT_IMPLEMENTED(cumall)
 
-OP_NOT_IMPLEMENTED(mmul)
 
 OP_NOT_IMPLEMENTED(apply)
+
+OP_NOT_IMPLEMENTED(dotdot)
+OP_NOT_IMPLEMENTED(mov)
 
 RecordingStatus::Enum jmp_record(Thread & thread, Instruction const & inst, Instruction const ** pc) {
 	//this is just a constant jump, nothing to record

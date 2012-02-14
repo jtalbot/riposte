@@ -9,6 +9,7 @@
 
 #define IR_ENUM(_) \
 		MAP_BYTECODES(_) \
+		FOLD_BYTECODES(_) \
 		_(cast, "cast", ___) \
 		_(constant,"constant", ___) \
 		_(load,"load", ___) \
@@ -16,8 +17,6 @@
 		_(gather, "gather", ___) \
 		_(filter, "filter", ___) \
 		_(split, "split", ___) \
-		ARITH_FOLD_BYTECODES(_) \
-		ARITH_SCAN_BYTECODES(_) \
 		_(nop, "nop", ___) \
 		_(ifelse, "ifelse", ___) \
 
