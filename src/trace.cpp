@@ -79,35 +79,9 @@ std::string Trace::toString(Thread & thread) {
 	return out.str();
 }
 
-// TODO: make this use the correct coersion functions to handle NAs 
-void coerce_scalar(IRNode & n, Type::Enum to) {
-	switch(n.type) {
-	case Type::Integer: switch(to) {
-		case Type::Double: n.constant.d = n.constant.i; break;
-		case Type::Logical: n.constant.l = n.constant.i; break;
-		default: _error("unknown cast"); break;
-	} break;
-	case Type::Double: switch(to) {
-		case Type::Integer: n.constant.i = (int64_t) n.constant.d; break;
-		case Type::Logical: n.constant.l = (char) n.constant.d; break;
-		default: _error("unknown cast"); break;
-	} break;
-	case Type::Logical: switch(to) {
-		case Type::Double: n.constant.d = n.constant.l; break;
-		case Type::Integer: n.constant.i = n.constant.l; break;
-		default: _error("unknown cast"); break;
-	} break;
-	default: _error("unknown cast"); break;
-	}
-	n.type = to;
-}
-
 IRef Trace::EmitCoerce(IRef a, Type::Enum dst_type) {
 	IRNode& n = nodes[a];
 	if(dst_type == n.type) {
-		return a;
-	} else if(n.op == IROpCode::constant) {
-		coerce_scalar(n, dst_type);
 		return a;
 	} else {
 		return EmitUnary(IROpCode::cast,dst_type,a,0);
@@ -324,6 +298,47 @@ void Trace::SimplifyOps(Thread& thread) {
 void Trace::AlgebraicSimplification(Thread& thread) {
 	for(IRef ref = 0; ref < nodes.size(); ref++) {
 		IRNode & node = nodes[ref];
+
+		// simplify casts
+		// cast to same type is a NOP, go to pos
+		if(node.op == IROpCode::cast && node.type == nodes[node.unary.a].type) {
+			node.op = IROpCode::pos;
+			node.enc = IRNode::UNARY;
+		}
+		if(node.op == IROpCode::cast && nodes[node.unary.a].op == IROpCode::constant) {
+			Type::Enum t = node.type;
+			Type::Enum s = nodes[node.unary.a].type;
+			node = nodes[node.unary.a];
+			node.type = t;
+			switch(s) {
+				case Type::Integer: switch(t) {
+					case Type::Double: node.constant.d = Cast<Integer,Double>(thread, node.constant.i); break;
+					case Type::Logical: node.constant.l = Cast<Integer,Logical>(thread, node.constant.i); break;
+					default: _error("Invalid cast");
+				} break;
+				case Type::Double: switch(t) {
+					case Type::Integer: node.constant.i = Cast<Double,Integer>(thread, node.constant.d); break;
+					case Type::Logical: node.constant.l = Cast<Double,Logical>(thread, node.constant.d); break;
+					default: _error("Invalid cast");
+				} break;
+				case Type::Logical: switch(t) {
+					case Type::Double: node.constant.d = Cast<Logical,Double>(thread, node.constant.l); break;
+					case Type::Integer: node.constant.i = Cast<Logical,Integer>(thread, node.constant.l); break;
+					default: _error("Invalid cast");
+				} break;
+				default: _error("Invalid cast");
+			} 
+		}
+		if(node.op == IROpCode::cast && nodes[node.unary.a].op == IROpCode::seq) {
+			Type::Enum t = node.type;
+			Type::Enum s = nodes[node.unary.a].type;
+			if(t == Type::Double && s == Type::Integer) {
+				node = nodes[node.unary.a];
+				node.type = Type::Double;
+				node.sequence.da = Cast<Integer,Double>(thread, node.sequence.ia);
+				node.sequence.db = Cast<Integer,Double>(thread, node.sequence.ib);
+			}	
+		}
 
 		if(node.enc == IRNode::UNARY && nodes[node.unary.a].op == IROpCode::pos)
 			node.unary.a = nodes[node.unary.a].unary.a;
