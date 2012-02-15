@@ -67,7 +67,7 @@ std::string stringifyVector(State const& state, T const& v) {
 		if(i+perline < length)	
 			result = result + "\n";
 	}
-	if(dots) result = result + " ...";
+	if(dots) result = result + " ... (" + intToStr(v.length) + " elements)";
 	return result;
 }
 
@@ -103,7 +103,7 @@ std::string stringify(State const& state, Value const& value) {
 				result = result + "\n";
 				if(i < length-1) result = result + "\n";
 			}
-			if(dots) result = result + " ...\n\n";
+			if(dots) result = result + " ... (" + intToStr(v.length) + " elements)";
 			return result;
 		}
 		case Type::Function:

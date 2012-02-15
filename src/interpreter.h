@@ -272,6 +272,13 @@ class Trace : public gc {
 			return v;
 		}
 
+		Value AddGather(Value const& a, Value const& i) {
+			IRef r = EmitUnary(IROpCode::gather, a.type, EmitCoerce(GetRef(i), Type::Integer), ((int64_t)a.p)-8);
+			Value v;
+			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			return v;
+		}
+
 		void addEnvironment(Environment* env) { 
 			if(nodes.size() > 0)
 				liveEnvironments.insert(env); 

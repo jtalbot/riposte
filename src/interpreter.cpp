@@ -268,7 +268,13 @@ Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
 
 Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
-	OPERAND(i, inst.b); FORCE(i, inst.b); BIND(i);
+	OPERAND(i, inst.b);
+
+	if(isTraceable(thread, a) && isTraceable(thread, i)) {
+		OUT(thread, inst.c) = thread.trace.AddGather(a, i);
+		return &inst+1;
+	}
+
 	if(a.isVector()) {
 		if(i.isDouble1()) { Element(a, i.d-1, OUT(thread, inst.c)); return &inst+1; }
 		else if(i.isInteger1()) { Element(a, i.i-1, OUT(thread, inst.c)); return &inst+1; }
@@ -276,13 +282,14 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 		else if(i.isCharacter1()) { _error("Subscript out of bounds"); }
 		else if(i.isVector()) { SubsetSlow(thread, a, i, OUT(thread, inst.c)); return &inst+1; }
 	}
+	FORCE(i, inst.b); BIND(i);
 	if(a.isObject() || i.isObject()) { return GenericDispatch(thread, inst, Strings::bracket, a, i, inst.c); } 
 	_error("Invalid subset operation");
 }
 
 Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
-	OPERAND(i, inst.b); FORCE(i, inst.b); BIND(i);
+	OPERAND(i, inst.b);
 	if(a.isVector()) {
 		int64_t index = 0;
 		if(i.isDouble1()) { index = i.d-1; }
@@ -295,6 +302,7 @@ Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
 		Element2(a, index, OUT(thread, inst.c));
 		return &inst+1;
 	}
+ 	FORCE(i, inst.b); BIND(i);
 	if(a.isObject() || i.isObject()) { return GenericDispatch(thread, inst, Strings::bb, a, i, inst.c); } 
 	_error("Invalid subset2 operation");
 }
@@ -379,7 +387,7 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 	OPERAND(b, inst.b); FORCE(b, inst.b);
 	OPERAND(c, inst.c); FORCE(c, inst.c);
 	if(isTraceable<Split>(thread,b,c)) {
-		OUT(thread, inst.c) = thread.trace.EmitSplit(b, c, levels);
+		OUT(thread, inst.c) = thread.trace.EmitSplit(c, b, levels);
 		thread.trace.addEnvironment(thread.frame.environment);
 		return &inst+1;
 	}
@@ -507,7 +515,8 @@ Instruction const* strip_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* internal_op(Thread& thread, Instruction const& inst) {
-	// TODO: BIND futures before internal calls
+	// TODO: BIND just the arguments 
+	thread.trace.Flush(thread);
 	thread.state.internalFunctions[inst.a].ptr(thread, &REGISTER(inst.b), OUT(thread, inst.c));
 	return &inst+1;
 }

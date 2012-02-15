@@ -1,6 +1,14 @@
 #nchar <- function(x) .Internal(nchar(x))
 #nzchar <- function(x) .Internal(nzchar(x))
 
+`%*%` <- function(x,y) {
+	xd <- dim(x)
+	if(is.null(xd)) xd <- c(1, length(x))
+	yd <- dim(y)
+	if(is.null(yd)) yd <- c(length(y), 1)
+	.Internal(matrix.multiply(strip(x),xd[1],xd[2],y,yd[1],yd[2]))
+}
+
 cat <- function(...) .Internal(cat(list(...)))
 library <- function(.) .Internal(library(.))
 #inherits <- function(x, what, which=FALSE) .Internal(inherits(x, what, which))

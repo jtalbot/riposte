@@ -263,7 +263,7 @@ static void store_conditional(__m128d input, __m128i mask, Value* out) {
 		((double*)(out->p))[out->length++] = i[1];
 }
 
-static void sum_by(__m128d add, __m128i split, Value* out, int64_t thread_index, int64_t step) {
+static void sum_by_d(__m128d add, __m128i split, Value* out, int64_t thread_index, int64_t step) {
 	union { 
 		__m128i ma; 
 		int64_t m[2]; 
@@ -275,8 +275,8 @@ static void sum_by(__m128d add, __m128i split, Value* out, int64_t thread_index,
 	ma = split;
 	in = add;
 	int off = (int)thread_index*(int)step;
-	((double*)(out->p))[off + m[0]] += i[0];
-	((double*)(out->p))[off + m[1]] += i[1];
+	((double*)(out->p))[off + m[0]*2] += i[0];
+	((double*)(out->p))[off + m[1]*2+1] += i[1];
 }
 
 #define FOLD_SCAN_FN(name, type, op) \
@@ -662,7 +662,7 @@ struct TraceJIT {
 						asm_.blendvpd(reg(ref), ConstantTable(C_DOUBLE_ZERO));
 					}
 					if(trace->nodes[node.fold.a].shape.split > 0) {
-						EmitSplitFold(ref, (void*)sum_by);
+						EmitSplitFold(ref, (void*)sum_by_d);
 						/*// add to each independently?
 						Constant c(node.dst.p);
 						Operand base = PushConstant(c);
@@ -1058,8 +1058,8 @@ struct TraceJIT {
 					int64_t step = node.out.length/thread.state.nThreads;
 					for(int64_t i = 0; i < node.shape.length; i++) {
 						for(int64_t j = 0; j < thread.state.nThreads; j++) {
-							r[i] += d[j*step+i];
-							r[i] += d[j*step+i+1];
+							r[i] += d[j*step+i*2];
+							r[i] += d[j*step+i*2+1];
 						}
 					}
 					node.out = r;
