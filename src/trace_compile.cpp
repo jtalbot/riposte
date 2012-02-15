@@ -279,6 +279,22 @@ static void sum_by_d(__m128d add, __m128i split, Value* out, int64_t thread_inde
 	((double*)(out->p))[off + m[1]*2+1] += i[1];
 }
 
+static __m128d sequenceStart_d(__m128d a, int64_t vector_index) {
+	SSEValue s, v;
+	s.D = a;
+	v.d[0] = s.d[0] + (vector_index-2)*s.d[1];
+	v.d[1] = s.d[0] + (vector_index-1)*s.d[1];
+	return v.D;
+}
+
+static __m128d sequenceStart_i(__m128d a, int64_t vector_index) {
+	SSEValue s, v;
+	s.D = a;
+	v.i[0] = s.i[0] + (vector_index-2)*s.i[1];
+	v.i[1] = s.i[0] + (vector_index-1)*s.i[1];
+	return v.D;
+}
+
 #define FOLD_SCAN_FN(name, type, op) \
 static __m128d name (__m128d input, type * last) { \
 	union { \
@@ -453,6 +469,8 @@ struct TraceJIT {
 		int64_t stackSpace = 0;
 		for(IRef ref = 0; ref < trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
+			
+			if(node.enc == IRNode::LOAD || node.enc == IRNode::SEQUENCE || (node.enc == IRNode::CONSTANT && node.shape.length > 1)) trace->code_buffer->outer_loop = node.shape.length;
 			if(node.op == IROpCode::seq)
 				stackSpace += 0x10;
 		}
@@ -468,14 +486,18 @@ struct TraceJIT {
 			IRNode & node = trace->nodes[ref];
 			if(node.op == IROpCode::seq) {
 				if(node.isDouble()) {
-					Constant initial(node.sequence.da-2*node.sequence.db, node.sequence.da-node.sequence.db);
+					Constant initial(node.sequence.da, node.sequence.db);
 					Operand o_initial = PushConstant(initial);
 					asm_.movdqa(xmm0, o_initial);
+					asm_.movq(rdi,vector_index);
+					EmitCall((void*)sequenceStart_d); 
 					asm_.movdqa(Operand(rsp, stackOffset), xmm0);
 				} else {
-					Constant initial(node.sequence.ia-2*node.sequence.ib, node.sequence.ia-node.sequence.ib);
+					Constant initial(node.sequence.ia, node.sequence.ib);
 					Operand o_initial = PushConstant(initial);
 					asm_.movdqa(xmm0, o_initial);
+					asm_.movq(rdi,vector_index);
+					EmitCall((void*)sequenceStart_i); 
 					asm_.movdqa(Operand(rsp, stackOffset), xmm0);
 				}
 				stackOffset += 0x10;
@@ -489,7 +511,6 @@ struct TraceJIT {
 		stackOffset = 0;
 		for(IRef ref = 0; ref < trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
-			if(node.enc == IRNode::LOAD || node.enc == IRNode::SEQUENCE || (node.enc == IRNode::CONSTANT && node.shape.length > 1)) trace->code_buffer->outer_loop = node.shape.length;
 
 			switch(node.op) {
 
@@ -739,7 +760,7 @@ struct TraceJIT {
 		
 			}
 
-			if(node.liveOut) {
+			if(node.liveOut && node.shape.length == trace->code_buffer->outer_loop) {
 				switch(node.enc) {
 					case IRNode::UNARY:
 					case IRNode::BINARY:
@@ -961,6 +982,10 @@ struct TraceJIT {
 		RestoreRegisters(ref);
 	}
 
+	void EmitStartCall(void * fn) {
+		// parameter is already in xmm0
+	}
+
 	void EmitDebugPrintResult(IRef i) {
 		/*RegisterSet regs = live_registers[i];
 		regs &= ~(1 << allocated_register[i]);
@@ -1019,7 +1044,7 @@ struct TraceJIT {
 	static void executebody(void* args, void* h, uint64_t start, uint64_t end, Thread& thread) {
 		//printf("%d: called with %d to %d\n", thread.index, start, end);
 		fn code = (fn)args;
-		code(thread.index*8, start, end);	
+		code(thread.index, start, end);	
 	}
 
 
@@ -1058,6 +1083,7 @@ struct TraceJIT {
 					int64_t step = node.out.length/thread.state.nThreads;
 					for(int64_t i = 0; i < node.shape.length; i++) {
 						for(int64_t j = 0; j < thread.state.nThreads; j++) {
+							//printf("%d: %f += %f + %f\n", i, r[i], d[j*step+i*2], d[j*step+i*2+1]);
 							r[i] += d[j*step+i*2];
 							r[i] += d[j*step+i*2+1];
 						}
