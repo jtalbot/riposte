@@ -79,6 +79,7 @@ std::string Trace::toString(Thread & thread) {
 	return out.str();
 }
 
+// TODO: make this use the correct coersion functions to handle NAs 
 void coerce_scalar(IRNode & n, Type::Enum to) {
 	switch(n.type) {
 	case Type::Integer: switch(to) {
@@ -314,6 +315,7 @@ void Trace::SimplifyOps(Thread& thread) {
 			case IROpCode::land:
 			case IROpCode::lor: 
 					   if(nodes[node.binary.a].shape.length == 1) std::swap(node.binary.a,node.binary.b); break;
+					   if(nodes[node.binary.a].enc == IRNode::CONSTANT && nodes[node.binary.b].enc != IRNode::CONSTANT) std::swap(node.binary.a,node.binary.b); break;
 			default: /*pass*/ break;
 		}
 	}
@@ -377,6 +379,32 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			node.unary.a = nodes[node.unary.a].unary.a;
 		}
 		if(node.op == IROpCode::add &&
+				nodes[node.binary.a].op == IROpCode::constant &&
+				nodes[node.binary.b].op == IROpCode::constant) {
+			if(node.isInteger()) {
+				node.op = IROpCode::constant;
+				node.enc = IRNode::CONSTANT;
+				node.constant.i = addVOp<Integer,Integer>::eval(thread, nodes[node.binary.a].constant.i, nodes[node.binary.b].constant.i);
+			} else {
+				node.op = IROpCode::constant;
+				node.enc = IRNode::CONSTANT;
+				node.constant.d = addVOp<Double, Double>::eval(thread, nodes[node.binary.a].constant.d, nodes[node.binary.b].constant.d);
+			}
+		}
+		if(node.op == IROpCode::mul &&
+				nodes[node.binary.a].op == IROpCode::constant &&
+				nodes[node.binary.b].op == IROpCode::constant) {
+			if(node.isInteger()) {
+				node.op = IROpCode::constant;
+				node.enc = IRNode::CONSTANT;
+				node.constant.i = mulVOp<Integer,Integer>::eval(thread, nodes[node.binary.a].constant.i, nodes[node.binary.b].constant.i);
+			} else {
+				node.op = IROpCode::constant;
+				node.enc = IRNode::CONSTANT;
+				node.constant.d = mulVOp<Double, Double>::eval(thread, nodes[node.binary.a].constant.d, nodes[node.binary.b].constant.d);
+			}
+		}
+		if(node.op == IROpCode::add &&
 				nodes[node.binary.b].op == IROpCode::constant &&
 				nodes[node.binary.a].op == IROpCode::add &&
 				nodes[nodes[node.binary.a].binary.b].op == IROpCode::constant) {
@@ -395,6 +423,42 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			else
 				nodes[node.binary.b].constant.d *= nodes[nodes[node.binary.a].binary.b].constant.d;
 			node.binary.a = nodes[node.binary.a].binary.a;
+		}
+
+		if(node.op == IROpCode::add &&
+				nodes[node.binary.a].op == IROpCode::seq &&
+				nodes[node.binary.b].op == IROpCode::constant) {
+			int64_t a = node.binary.a;
+			int64_t b = node.binary.b;
+			if(node.isInteger()) {
+				node.op = IROpCode::seq;
+				node.enc = IRNode::SEQUENCE;
+				node.sequence.ia = addVOp<Integer,Integer>::eval(thread, nodes[a].sequence.ia, nodes[b].constant.i);
+				node.sequence.ib = nodes[a].sequence.ib;
+			} else {
+				node.op = IROpCode::seq;
+				node.enc = IRNode::SEQUENCE;
+				node.sequence.da = addVOp<Double,Double>::eval(thread, nodes[a].sequence.da, nodes[b].constant.d);
+				node.sequence.db = nodes[a].sequence.db;
+			}
+		}
+		
+		if(node.op == IROpCode::mul &&
+				nodes[node.binary.a].op == IROpCode::seq &&
+				nodes[node.binary.b].op == IROpCode::constant) {
+			int64_t a = node.binary.a;
+			int64_t b = node.binary.b;
+			if(node.isInteger()) {
+				node.op = IROpCode::seq;
+				node.enc = IRNode::SEQUENCE;
+				node.sequence.ia = mulVOp<Integer,Integer>::eval(thread, nodes[a].sequence.ia, nodes[b].constant.i);
+				node.sequence.ib = mulVOp<Integer,Integer>::eval(thread, nodes[a].sequence.ib, nodes[b].constant.i);
+			} else {
+				node.op = IROpCode::seq;
+				node.enc = IRNode::SEQUENCE;
+				node.sequence.da = mulVOp<Double,Double>::eval(thread, nodes[a].sequence.da, nodes[b].constant.d);
+				node.sequence.db = mulVOp<Double,Double>::eval(thread, nodes[a].sequence.db, nodes[b].constant.d);
+			}
 		}
 
 		if(node.op == IROpCode::add &&
