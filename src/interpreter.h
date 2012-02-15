@@ -160,8 +160,9 @@ class Trace : public gc {
 		IRef EmitFilter(IRef a, IRef b);
 		IRef EmitSplit(IRef x, IRef f, int64_t levels);
 
-		IRef EmitSpecial(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b);
-		IRef EmitConstant(Type::Enum type, int64_t c);
+		IRef EmitSequence(int64_t length, int64_t a, int64_t b);
+		IRef EmitSequence(int64_t length, double a, double b);
+		IRef EmitConstant(Type::Enum type, int64_t length, int64_t c);
 		IRef EmitLoad(Value const& v);
 
 		static Type::Enum futureType(Value const& v) {
@@ -191,7 +192,7 @@ class Trace : public gc {
 
 		IRef GetRef(Value const& v) {
 			if(v.isFuture()) return v.future.ref;
-			else if(v.length == 1) return EmitConstant(v.type, v.i);
+			else if(v.length == 1) return EmitConstant(v.type, 1, v.i);
 			else return loadCache.get(*this, v);
 		}
 
@@ -245,6 +246,27 @@ class Trace : public gc {
 
 		Value EmitSplit(Value const& a, Value const& b, int64_t data) {
 			IRef r = EmitSplit(GetRef(a), EmitCoerce(GetRef(b), Type::Integer), data);
+			Value v;
+			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			return v;
+		}
+
+		Value AddConstant(Type::Enum type, int64_t length, int64_t c) {
+			IRef r = EmitConstant(type, length, c);
+			Value v;
+			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			return v;
+		}
+
+		Value AddSequence(int64_t length, int64_t a, int64_t b) {
+			IRef r = EmitSequence(length, a, b);
+			Value v;
+			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			return v;
+		}
+
+		Value AddSequence(int64_t length, double a, double b) {
+			IRef r = EmitSequence(length, a, b);
 			Value v;
 			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
 			return v;

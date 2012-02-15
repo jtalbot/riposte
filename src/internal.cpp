@@ -29,6 +29,12 @@ String type2String(Type::Enum type) {
 	}
 }
 
+Type::Enum string2Type(String str) {
+#define CASE(name, string) if(str == Strings::name) return Type::name;
+TYPES(CASE)
+#undef CASE
+	_error("Invalid type");
+}
 
 void cat(Thread& thread, Value const* args, Value& result) {
 	List const& a = Cast<List>(args[0]);

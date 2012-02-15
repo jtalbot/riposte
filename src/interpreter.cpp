@@ -299,30 +299,6 @@ Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
 	_error("Invalid subset2 operation");
 }
 
-Instruction const* colon_op(Thread& thread, Instruction const& inst) {
-	OPERAND(From, inst.a); FORCE(From, inst.a); BIND(From);
-	OPERAND(To, inst.b); FORCE(To, inst.b); BIND(To);
-	double from = asReal1(From);
-	double to = asReal1(To);
-	OUT(thread,inst.c) = Sequence(from, to>from?1:-1, fabs(to-from)+1);
-	return &inst+1;
-}
-
-
-Instruction const* seq_op(Thread& thread, Instruction const& inst) {
-	OPERAND(Len, inst.a); FORCE(Len, inst.a); BIND(Len);
-	OPERAND(Step, inst.b); FORCE(Step, inst.b); BIND(Step);
-
-	int64_t len = As<Integer>(thread, Len)[0];
-	int64_t step = As<Integer>(thread, Step)[0];
-	
-	//Instruction const* jit = trace(thread, inst, Type::Integer, len);
-	//if(jit) return jit;
-	
-	OUT(thread, inst.c) = Sequence(len, 1, step);
-	return &inst+1;
-}
-
 
 #define OP(Name, string, Group, Func) \
 Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
@@ -417,40 +393,70 @@ Instruction const* function_op(Thread& thread, Instruction const& inst) {
 	OUT(thread, inst.c) = Function(thread.frame.prototype->prototypes[inst.a], thread.frame.environment);
 	return &inst+1;
 }
-Instruction const* logical1_op(Thread& thread, Instruction const& inst) {
+
+Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
-	Integer i = As<Integer>(thread, a);
-	OUT(thread, inst.c) = Logical(i[0]);
+	OPERAND(b, inst.b); FORCE(b, inst.b); BIND(b);
+	Type::Enum type = string2Type( As<Character>(thread, a)[0] );
+	int64_t l = As<Integer>(thread, b)[0];
+	
+	// TODO: replace with isTraceable...
+	if(thread.state.jitEnabled && isTraceableType(type) && l >= TRACE_VECTOR_WIDTH) {
+		OUT(thread, inst.c) = thread.trace.AddConstant(type, l, 0);
+		return &inst+1;
+	}
+
+	if(type == Type::Logical) {
+		Logical v(l);
+		for(int64_t i = 0; i < v.length; i++) v[i] = Logical::FalseElement;
+		OUT(thread, inst.c) = v;
+	} else if(type == Type::Integer) {
+		Integer v(l);
+		for(int64_t i = 0; i < v.length; i++) v[i] = 0;
+		OUT(thread, inst.c) = v;
+	} else if(type == Type::Double) {
+		Double v(l);
+		for(int64_t i = 0; i < v.length; i++) v[i] = 0;
+		OUT(thread, inst.c) = v;
+	} else if(type == Type::Character) {
+		Character v(l);
+		for(int64_t i = 0; i < v.length; i++) v[i] = Strings::empty;
+		OUT(thread, inst.c) = v;
+	} else if(type == Type::Raw) {
+		Raw v(l);
+		for(int64_t i = 0; i < v.length; i++) v[i] = 0;
+		OUT(thread, inst.c) = v;
+	} else {
+		_error("Invalid type in vector");
+	} 
 	return &inst+1;
 }
-Instruction const* integer1_op(Thread& thread, Instruction const& inst) {
+
+Instruction const* seq_op(Thread& thread, Instruction const& inst) {
+	// c = start, b = step, a = length
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
-	Integer i = As<Integer>(thread, a);
-	OUT(thread, inst.c) = Integer(i[0]);
+	OPERAND(b, inst.b); FORCE(b, inst.b); BIND(b);
+	OPERAND(c, inst.c); FORCE(c, inst.c); BIND(c);
+
+	double start = As<Double>(thread, c)[0];
+	double step = As<Double>(thread, b)[0];
+	int64_t len = As<Integer>(thread, a)[0];
+	
+	if(len >= TRACE_VECTOR_WIDTH) {
+		if(b.isDouble() || c.isDouble())
+			OUT(thread, inst.c) = thread.trace.AddSequence(len, start, step);
+		else
+			OUT(thread, inst.c) = thread.trace.AddSequence(len, (int64_t)start, (int64_t)step);
+		return &inst+1;
+	}
+
+	if(b.isDouble() || c.isDouble())	
+		OUT(thread, inst.c) = Sequence(start, step, len);
+	else
+		OUT(thread, inst.c) = Sequence((int64_t)start, (int64_t)step, len);
 	return &inst+1;
 }
-Instruction const* double1_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
-	int64_t length = asReal1(a);
-	Double d(length);
-	for(int64_t i = 0; i < length; i++) d[i] = 0;
-	OUT(thread, inst.c) = d;
-	return &inst+1;
-}
-Instruction const* character1_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
-	Integer i = As<Integer>(thread, a);
-	Character r = Character(i[0]);
-	for(int64_t j = 0; j < r.length; j++) r[j] = Strings::empty;
-	OUT(thread, inst.c) = r;
-	return &inst+1;
-}
-Instruction const* raw1_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
-	Integer i = As<Integer>(thread, a);
-	OUT(thread, inst.c) = Raw(i[0]);
-	return &inst+1;
-}
+
 Instruction const* type_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
 	Character c(1);

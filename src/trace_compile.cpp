@@ -33,6 +33,10 @@ struct Constant {
 
 	Constant(int64_t ii0, int64_t ii1)
 	: i0(ii0), i1(ii1) {}
+
+	Constant(double d0, double d1)
+	: d0(d0), d1(d1) {}
+
 	union {
 		uint64_t u0;
 		int64_t i0;
@@ -78,7 +82,7 @@ struct TraceCodeBuffer {
 		constant_table[C_ABS_MASK] = Constant((uint64_t)0x7FFFFFFFFFFFFFFFULL);
 		constant_table[C_NEG_MASK] = Constant((uint64_t)0x8000000000000000ULL);
 		constant_table[C_NOT_MASK] = Constant((uint64_t)0xFFFFFFFFFFFFFFFFULL);
-		constant_table[C_PACK_LOGICAL] = Constant(0x0706050403020800,0x0F0E0D0C0B0A0902);
+		constant_table[C_PACK_LOGICAL] = Constant(0x0706050403020800LL,0x0F0E0D0C0B0A0902LL);
 		constant_table[C_SEQ_VEC] = Constant(1LL,2LL);
 		constant_table[C_DOUBLE_ZERO] = Constant(0.0, 0.0);
 		constant_table[C_DOUBLE_ONE] = Constant(1.0, 1.0);
@@ -346,7 +350,7 @@ struct TraceJIT {
 			} break;
 			case IRNode::CONSTANT: /*fallthrough*/
 			case IRNode::LOAD: /*fallthrough*/
-			case IRNode::SPECIAL: {
+			case IRNode::SEQUENCE: {
 				AllocateNullary(ref);
 			} break;
 			case IRNode::NOP: {
@@ -434,27 +438,58 @@ struct TraceJIT {
 		load_addr = r14;
 		vector_length = r15;
 		
-		asm_.push(thread_index);
-		asm_.push(constant_base);
-		asm_.push(vector_index);
-		asm_.push(load_addr);
-		asm_.push(vector_length);
-		asm_.push(rbx);
-		asm_.subq(rsp, Immediate(0x8));
+		asm_.push(thread_index);		// -0x08
+		asm_.push(constant_base);		// -0x10
+		asm_.push(vector_index);		// -0x18
+		asm_.push(load_addr);			// -0x20
+		asm_.push(vector_length);		// -0x28
+		asm_.push(rbx);				// -0x30
+		asm_.subq(rsp, Immediate(0x8));		// -0x38
+
+		// reserve room for loop carried variables...
+		// TODO: do this in register allocation
+		//  so that loop carried variables can be placed in registers.
+		//  Make this stack allocation simply part of spilling code.
+		int64_t stackSpace = 0;
+		for(IRef ref = 0; ref < trace->nodes.size(); ref++) {
+			IRNode & node = trace->nodes[ref];
+			if(node.op == IROpCode::seq)
+				stackSpace += 0x10;
+		}
+		asm_.subq(rsp, Immediate(stackSpace));
 
 		asm_.movq(thread_index, rdi);
 		asm_.movq(constant_base, &trace->code_buffer->constant_table[0]);
 		asm_.movq(vector_index, rsi);
 		asm_.movq(vector_length, rdx);
 
+		int64_t stackOffset = 0;
+		for(IRef ref = 0; ref < trace->nodes.size(); ref++) {
+			IRNode & node = trace->nodes[ref];
+			if(node.op == IROpCode::seq) {
+				if(node.isDouble()) {
+					Constant initial(node.sequence.da-2*node.sequence.db, node.sequence.da-node.sequence.db);
+					Operand o_initial = PushConstant(initial);
+					asm_.movdqa(xmm0, o_initial);
+					asm_.movdqa(Operand(rsp, stackOffset), xmm0);
+				} else {
+					Constant initial(node.sequence.ia-2*node.sequence.ib, node.sequence.ia-node.sequence.ib);
+					Operand o_initial = PushConstant(initial);
+					asm_.movdqa(xmm0, o_initial);
+					asm_.movdqa(Operand(rsp, stackOffset), xmm0);
+				}
+				stackOffset += 0x10;
+			}
+		}
+
 		Label begin;
 
 		asm_.bind(&begin);
 
-		for(IRef i = 0; i < trace->nodes.size(); i++) {
-			IRef ref = i;
-			IRNode & node = trace->nodes[i];
-			if(node.enc == IRNode::LOAD || node.enc == IRNode::SPECIAL) trace->code_buffer->outer_loop = node.shape.length;
+		stackOffset = 0;
+		for(IRef ref = 0; ref < trace->nodes.size(); ref++) {
+			IRNode & node = trace->nodes[ref];
+			if(node.enc == IRNode::LOAD || node.enc == IRNode::SEQUENCE || (node.enc == IRNode::CONSTANT && node.shape.length > 1)) trace->code_buffer->outer_loop = node.shape.length;
 
 			switch(node.op) {
 
@@ -599,12 +634,19 @@ struct TraceJIT {
 			} break;
 			case IROpCode::seq: {
 				if(node.isDouble()) {
-					_error("No double seq yet in JIT");
+					Constant step(2*node.sequence.db, 2*node.sequence.db);
+					Operand o_step = PushConstant(step);
+					asm_.movdqa(reg(ref), Operand(rsp, stackOffset));
+					asm_.addpd(reg(ref), o_step);
+					asm_.movdqa(Operand(rsp, stackOffset), reg(ref));
 				} else {
-					asm_.movq(reg(ref),vector_index);
-					asm_.unpcklpd(reg(ref),reg(ref));
-					asm_.paddq(reg(ref),ConstantTable(C_SEQ_VEC));
+					Constant step(2*node.sequence.ib, 2*node.sequence.ib);
+					Operand o_step = PushConstant(step);
+					asm_.movdqa(reg(ref), Operand(rsp, stackOffset));
+					asm_.paddq(reg(ref), o_step);
+					asm_.movdqa(Operand(rsp, stackOffset), reg(ref));
 				}
+				stackOffset += 0x10;
 			} break;
 
 			case IROpCode::sum:  {
@@ -702,7 +744,7 @@ struct TraceJIT {
 					case IRNode::UNARY:
 					case IRNode::BINARY:
 					case IRNode::TRINARY:
-					case IRNode::SPECIAL:
+					case IRNode::SEQUENCE:
 					case IRNode::CONSTANT: {
 						if(Type::Logical == node.type)
 							EmitLogicalStore(ref, node.out, node.shape);
@@ -723,6 +765,7 @@ struct TraceJIT {
 		asm_.cmpq(vector_index,vector_length);
 		asm_.j(less,&begin);
 
+		asm_.addq(rsp, Immediate(stackSpace));
 		asm_.addq(rsp, Immediate(0x8));
 		asm_.pop(rbx);
 		asm_.pop(vector_length);

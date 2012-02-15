@@ -1,6 +1,12 @@
 
 c <- function(...) .Internal(unlist(list(...), TRUE, TRUE))
 
+`:` <- function(from, to) { 
+	if(to > from) seq(from,1L,to-from+1L)
+	else if(to < from) seq(from,-1L,from-to+1L)
+	else seq(from,0L,1L)
+}
+
 #`[` <- function(x, ..., drop = TRUE) {
 #	i <- list(...)
 #	d <- dim(x)

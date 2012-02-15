@@ -116,7 +116,7 @@
 	_(bbAssign, 	"[[<-") \
 	_(dollarAssign, "$<-") \
 	_(UseMethod, 	"UseMethod") \
-	_(seq_len, 	"seq_len") \
+	_(seq, 		"seq") \
 	_(True, 	"TRUE") \
 	_(False, 	"FALSE") \
 	_(type, 	"typeof") \
@@ -138,6 +138,7 @@
 	_(isnan,	"is.nan") \
 	_(isfinite,	"is.finite") \
 	_(isinfinite,	"is.infinite") \
+	_(vector,	"vector") \
 	_(Maximal, "\255")
 
 typedef const char* String;

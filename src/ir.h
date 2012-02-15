@@ -13,8 +13,8 @@
 		SCAN_BYTECODES(_) \
 		_(cast, "cast", ___) \
 		_(constant,"constant", ___) \
-		_(load,"load", ___) \
 		_(seq, "seq", ___) \
+		_(load,"load", ___) \
 		_(gather, "gather", ___) \
 		_(filter, "filter", ___) \
 		_(split, "split", ___) \
@@ -35,7 +35,7 @@ struct IRNode {
 		TRINARY,
 		FOLD,
 
-		SPECIAL,
+		SEQUENCE,
 		CONSTANT,
 		LOAD
 	};
@@ -87,8 +87,11 @@ struct IRNode {
 		} trinary;
 
 		struct {
-			int64_t a,b;
-		} special;
+			union {
+				struct { int64_t ia, ib; };
+				struct { double da, db; };
+			};
+		} sequence;
 		struct {
 			union {
 				int64_t i;

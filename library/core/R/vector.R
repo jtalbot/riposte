@@ -14,18 +14,13 @@
 #  A copy of the GNU General Public License is available at
 #  http://www.r-project.org/Licenses/
 
-vector <- function(mode = "logical", length = 0)
-	switch(mode,
-		logical=logical(length),
-		integer=integer(length),
-		double=double(length),
-		numeric=double(length),
-		character=character(length),
-		complex=complex(length),
-		raw=raw(length),
-		stop("cannot make a vector of mode 'NYI'"))
-real <- function(length) double(length)
-numeric <- function(length) double(length)
+logical <- function(length = 0L) vector("logical", length)
+integer <- function(length = 0L) vector("integer", length)
+double <- function(length = 0L) vector("double", length)
+numeric <- double
+real <- double
+character <- function(length = 0L) vector("character", length)
+raw <- function(length = 0L) vector("raw", length)
 
 as.vector <- function(x, mode = "any") {
 	switch(mode,

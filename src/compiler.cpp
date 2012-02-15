@@ -38,11 +38,6 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::cummax) return ByteCode::cummax; 
 	
 	if(func == Strings::type) return ByteCode::type; 
-	if(func == Strings::Logical) return ByteCode::logical1; 	 	
-	if(func == Strings::Integer) return ByteCode::integer1; 
-	if(func == Strings::Double) return ByteCode::double1; 
-	if(func == Strings::Character) return ByteCode::character1; 
-	if(func == Strings::Raw) return ByteCode::raw1; 
 	if(func == Strings::length) return ByteCode::length; 
 	if(func == Strings::strip) return ByteCode::strip; 
 	
@@ -52,7 +47,6 @@ static ByteCode::Enum op1(String const& func) {
 static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::add) return ByteCode::add; 
 	if(func == Strings::sub) return ByteCode::sub; 
-	if(func == Strings::colon) return ByteCode::colon;
 	if(func == Strings::mul) return ByteCode::mul;
 	if(func == Strings::div) return ByteCode::div; 
 	if(func == Strings::idiv) return ByteCode::idiv; 
@@ -75,7 +69,7 @@ static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::bracket) return ByteCode::subset;
 	if(func == Strings::bb) return ByteCode::subset2;
 
-	if(func == Strings::docall) return ByteCode::call;
+	if(func == Strings::vector) return ByteCode::vector;
 
 	//if(func == Strings::round) return ByteCode::round; 
 	//if(func == Strings::signif) return ByteCode::signif; 
@@ -88,6 +82,7 @@ static ByteCode::Enum op3(String const& func) {
 	if(func == Strings::bbAssign) return ByteCode::eassign;
 	if(func == Strings::split) return ByteCode::split;
 	if(func == Strings::ifelse) return ByteCode::ifelse;
+	if(func == Strings::seq) return ByteCode::seq;
 	throw RuntimeError("unexpected symbol used as a trinary operator"); 
 }
 
@@ -548,7 +543,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if((func == Strings::bracketAssign ||
 		func == Strings::bbAssign ||
 		func == Strings::split ||
-		func == Strings::ifelse) &&
+		func == Strings::ifelse ||
+		func == Strings::seq) &&
 		call.length == 4) {
 		Operand c = placeInRegister(compile(call[1], code));
 		Operand b = compile(call[2], code);
@@ -562,7 +558,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	// Binary operators
 	else if((func == Strings::add ||
 		func == Strings::sub ||
-		func == Strings::colon ||
 		func == Strings::mul ||
 		func == Strings::div || 
 		func == Strings::idiv || 
@@ -582,7 +577,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::land ||
 		func == Strings::bracket ||
 		func == Strings::bb ||
-		func == Strings::docall) &&
+		func == Strings::vector) &&
 		call.length == 3) 
 	{
 		Operand a = compile(call[1], code);
@@ -628,11 +623,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::cummax ||
 		func == Strings::type ||
 		func == Strings::length ||
-		func == Strings::Logical ||
-		func == Strings::Integer ||
-		func == Strings::Double ||
-		func == Strings::Character ||
-		func == Strings::Raw ||
 		func == Strings::strip) &&
 		call.length == 2)
 	{
@@ -643,15 +633,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(op1(func), a, 0, result);
 		return result; 
 	} 
-	else if(func == Strings::seq_len)
-	{
-		Operand len = compile(call[1], code);
-		Operand step = compile(Integer::c(1), code);
-		kill(len); kill(step);
-		Operand result = allocRegister();
-		emit(ByteCode::seq, len, step, result);
-		return result;
-	}
 	else if(func == Strings::list)
 	{
 		// we only handle the list(...) case through an op for now

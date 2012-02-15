@@ -28,18 +28,15 @@
 
 #define UTILITY_BYTECODES(_)\
 	_(internal, "internal") \
-	_(colon, "colon") \
 	_(function, "function") \
-	_(logical1, "logical") \
-	_(integer1, "integer") \
-	_(double1, "double") \
-	_(character1, "character") \
-	_(raw1, "raw") \
-	_(seq, "seq") \
 	_(type, "type") \
 	_(length, "length") \
 	_(missing, "missing") \
 	_(strip, "strip") \
+
+#define GENERATOR_BYTECODES(_) \
+	_(vector,	"vector",	Generator) \
+	_(seq,		"seq", 		Generator) \
 
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double
 #define ARITH_UNARY_BYTECODES(_) \
@@ -160,6 +157,7 @@
 #define STANDARD_BYTECODES(_) \
 	CONTROL_FLOW_BYTECODES(_) \
 	MEMORY_ACCESS_BYTECODES(_) \
+	GENERATOR_BYTECODES(_) \
 	MAP_BYTECODES(_) \
 	SPECIAL_MAP_BYTECODES(_) \
 	FOLD_BYTECODES(_) \

@@ -16,6 +16,7 @@ inline double asReal1(Value const& v) {
 }
 
 String type2String(Type::Enum type);
+Type::Enum string2Type(String str);
 
 void Element(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 inline void Element(Value const& v, int64_t index, Value& out) {
@@ -168,7 +169,7 @@ inline T Subset(T const& src, int64_t start, int64_t length) {
 }
 
 
-inline Integer Sequence(int64_t length, int64_t start, int64_t step) {
+inline Integer Sequence(int64_t start, int64_t step, int64_t length) {
 	Integer r(length);
 	for(int64_t i = 0, j = start; i < length; i++, j+=step) {
 		r[i] = j;
@@ -176,12 +177,11 @@ inline Integer Sequence(int64_t length, int64_t start, int64_t step) {
 	return r;
 }
 
-inline Double Sequence(double from, double by, double len) {
-	Double r(len);
+inline Double Sequence(double start, double step, int64_t length) {
+	Double r(length);
 	double j = 0;
-	for(int64_t i = 0; i < len; i++) {
-		r[i] = from+j;
-		j = j + by;
+	for(int64_t i = 0; i < length; i++, j+=step) {
+		r[i] = start+j;
 	}
 	return r;
 }
