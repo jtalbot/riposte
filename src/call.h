@@ -374,8 +374,8 @@ template< template<class X, class Y> class Group>
 bool isTraceable(Thread const& thread, Value const& a, Value const& b) {
 	return  thread.state.jitEnabled && 
 		(isTraceableType(a.type) && isTraceableType(b.type)) &&
-		((a.length >= TRACE_VECTOR_WIDTH && b.length == 1) ||
-		 (a.length == 1 && b.length >= TRACE_VECTOR_WIDTH) ||
+		((a.length >= TRACE_VECTOR_WIDTH && b.length == 1 && b.type != Type::Future) ||
+		 (a.length == 1 && b.length >= TRACE_VECTOR_WIDTH && a.type != Type::Future) ||
 		 (a.length == b.length && a.length >= TRACE_VECTOR_WIDTH)); 
 }
 

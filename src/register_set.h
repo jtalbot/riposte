@@ -18,9 +18,8 @@ struct RegisterAllocator {
 		printf("\n");
 	}
 	//try to allocated preferred register
-	bool allocate(uint8_t preferred, int8_t * reg) {
-		assert(preferred < n_registers);
-		if(a & (1 << preferred)) {
+	bool allocate(int8_t preferred, int8_t * reg) {
+		if(preferred >= 0 && preferred < (int32_t)n_registers && (a & (1 << preferred))) {
 			a &= ~(1 << preferred);
 			*reg = preferred;
 			return true;

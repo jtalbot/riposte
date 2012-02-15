@@ -9,9 +9,6 @@
 #include "thread.h"
 #include "ir.h"
 
-#include "register_set.h"
-
-
 class Thread;
 
 ////////////////////////////////////////////////////////////////////
@@ -254,9 +251,8 @@ class Trace : public gc {
 		}
 
 		void addEnvironment(Environment* env) { 
-			if(nodes.size() == 0)
-				liveEnvironments.clear();
-			liveEnvironments.insert(env); 
+			if(nodes.size() > 0)
+				liveEnvironments.insert(env); 
 		}
 
 		void killEnvironment(Environment* env) {

@@ -12,7 +12,7 @@ testno <- 0
 {
 	PassIfTrue <- function(x) { fail<-fail+1; testno <<- testno + 1; cat(testno-1); if(x) { cat(" PASS\n"); fail<-fail-1 } else cat(" FAIL\n") }
 	PassIfFalse <- function(x) { fail<-fail+1;testno <<- testno + 1; cat(testno-1); if(x) cat(" FAIL\n") else { cat(" PASS\n"); fail<-fail-1 } }
-	PassIfEq <- function(x,y) { testno <<- testno + 1; cat(testno-1); if(x == y) cat(" PASS\n") else { cat(" FAIL:\nx: ");  cat(x); cat("\ny: "); cat(y); cat("\n"); fail<<-fail+1; } }
+	PassIfEq <- function(x,y) { testno <<- testno + 1; cat(testno-1); if(all(x == y)) cat(" PASS\n") else { cat(" FAIL:\nx: ");  cat(x); cat("\ny: "); cat(y); cat("\n"); fail<<-fail+1; } }
 	foo <- function(x,y) { x + y; }	
 }
 
@@ -78,9 +78,9 @@ testno <- 0
 	r43 <- typeof(d)
 	r44 <- typeof(ds)
 	r45 <- d * d / seq_len(128) - d
-	r46 <- d + d + seq_len(r40) + d + d
-	r47 <- d + d + seq_len(r40) + d + d
-	r48 <- d + d + seq_len(r40) + d + d
+	r46 <- d + d + seq_len(128) + d + d
+	r47 <- d + d + seq_len(128) + d + s
+	r48 <- d + s + seq_len(128) + d + s
 	r49 <- d + s + s + d
 	r50 <- s + s + s + s + d
 	
@@ -158,9 +158,9 @@ testno <- 0
 	v43 <- typeof(d)
 	v44 <- typeof(ds)
 	v45 <- d * d / seq_len(128) - d
-	v46 <- d + d + seq_len(v40) + d + d
-	v47 <- d + d + seq_len(v40) + d + d
-	v48 <- d + d + seq_len(v40) + d + d
+	v46 <- d + d + seq_len(128) + d + d
+	v47 <- d + d + seq_len(128) + d + s
+	v48 <- d + s + seq_len(128) + d + s
 	v49 <- d + s + s + d
 	v50 <- s + s + s + s + d
 	

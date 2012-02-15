@@ -66,8 +66,6 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
 	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
 	
-	thread.trace.addEnvironment(fenv);
-	
 	MatchArgs(thread, thread.frame.environment, fenv, func, call);
 	return buildStackFrame(thread, fenv, true, func.prototype(), inst.c, &inst+1);
 }
@@ -91,6 +89,9 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 		thread.frame.env->insert(thread.frame.s) = result;
 	} else {
 		thread.frame.env->dots[thread.frame.i].v = result;
+	}
+	if(result.isFuture() && thread.frame.env) {
+		thread.trace.addEnvironment(thread.frame.env);
 	}
 
 	Instruction const* returnpc = thread.frame.returnpc;
@@ -331,7 +332,11 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	if(a.isInteger1()) { Name##VOp<Integer>::Scalar(thread, a.i, c); return &inst+1; } \
 	if(a.isLogical1()) { Name##VOp<Logical>::Scalar(thread, a.c, c); return &inst+1; } \
 	FORCE(a, inst.a); \
-	if(isTraceable<Group>(thread,a)) { c = thread.trace.EmitUnary<Group>(IROpCode::Name, a, 0); return &inst+1; } \
+	if(isTraceable<Group>(thread,a)) { \
+		c = thread.trace.EmitUnary<Group>(IROpCode::Name, a, 0); \
+		thread.trace.addEnvironment(thread.frame.environment); \
+ 		return &inst+1; \
+	} \
 	BIND(a); \
 	if(a.isObject()) { return GenericDispatch(thread, inst, Strings::Name, a, inst.c); } \
 \
@@ -363,7 +368,11 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 		if(b.isLogical1()) { Name##VOp<Logical,Logical>::Scalar(thread, a.c, b.c, c); return &inst+1; } \
         } \
 	FORCE(a, inst.a); FORCE(b, inst.b); \
-	if(isTraceable<Group>(thread,a,b)) { c = thread.trace.EmitBinary<Group>(IROpCode::Name, a, b, 0); return &inst+1; } \
+	if(isTraceable<Group>(thread,a,b)) { \
+		c = thread.trace.EmitBinary<Group>(IROpCode::Name, a, b, 0); \
+		thread.trace.addEnvironment(thread.frame.environment); \
+		return &inst+1; \
+	} \
 	BIND(a); BIND(b); \
 	if(a.isObject() || b.isObject()) { return GenericDispatch(thread, inst, Strings::Name, a, b, inst.c); } \
 \
@@ -379,6 +388,7 @@ Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 	OPERAND(c, inst.c); FORCE(c, inst.c);
 	//if(isTraceable<IfElse>(thread,a,b,c)) {
 	//	c = thread.trace.EmitTrinary<IfElse>(IROpCode::ifelse, rtype, a, b, c);
+	//	thread.trace.addEnvironment(thread.frame.environment);
 	//	return &inst+1;
 	//}
 	BIND(a); BIND(b); BIND(c);
@@ -394,6 +404,7 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 	OPERAND(c, inst.c); FORCE(c, inst.c);
 	if(isTraceable<Split>(thread,b,c)) {
 		OUT(thread, inst.c) = thread.trace.EmitSplit(b, c, levels);
+		thread.trace.addEnvironment(thread.frame.environment);
 		return &inst+1;
 	}
 	BIND(a); BIND(b); BIND(c);
@@ -566,8 +577,6 @@ Value Thread::eval(Prototype const* prototype, Environment* environment) {
 	base -= 1;
 	Value* result = base;
 
-	trace.addEnvironment(environment);
-	
 	Instruction const* run = buildStackFrame(*this, environment, false, prototype, 0, &done);
 	try {
 		interpret(*this, run);
