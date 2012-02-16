@@ -401,11 +401,11 @@ struct TraceJIT {
 		}
 		if(trace->nodes[ref].liveOut) {
 			IRNode::Shape& s = trace->nodes[a].shape;
-			if(s.filter > 0 && allocated_register[s.filter] < 0) {
+			if(s.filter >= 0 && allocated_register[s.filter] < 0) {
 				if(!alloc.allocate(&allocated_register[s.filter]))
 					_error("exceeded available registers");
 			}
-			if(s.split > 0 && allocated_register[s.split] < 0) {
+			if(s.split >= 0 && allocated_register[s.split] < 0) {
 				if(!alloc.allocate(&allocated_register[s.split]))
 					_error("exceeded available registers");
 			}
@@ -467,7 +467,7 @@ struct TraceJIT {
 		//  so that loop carried variables can be placed in registers.
 		//  Make this stack allocation simply part of spilling code.
 		int64_t stackSpace = 0;
-		for(IRef ref = 0; ref < trace->nodes.size(); ref++) {
+		for(IRef ref = 0; ref < (int64_t)trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
 			
 			if(node.enc == IRNode::LOAD || node.enc == IRNode::SEQUENCE || (node.enc == IRNode::CONSTANT && node.shape.length > 1)) trace->code_buffer->outer_loop = node.shape.length;
@@ -482,7 +482,7 @@ struct TraceJIT {
 		asm_.movq(vector_length, rdx);
 
 		int64_t stackOffset = 0;
-		for(IRef ref = 0; ref < trace->nodes.size(); ref++) {
+		for(IRef ref = 0; ref < (int64_t)trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
 			if(node.op == IROpCode::seq) {
 				if(node.isDouble()) {
@@ -509,7 +509,7 @@ struct TraceJIT {
 		asm_.bind(&begin);
 
 		stackOffset = 0;
-		for(IRef ref = 0; ref < trace->nodes.size(); ref++) {
+		for(IRef ref = 0; ref < (int64_t)trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
 
 			switch(node.op) {
@@ -676,13 +676,13 @@ struct TraceJIT {
 					for(int64_t i = 0; i < node.out.length; i++)
 						((double*)node.out.p)[i] = 0.0;
 					Move(ref, node.unary.a);
-					if(trace->nodes[node.fold.a].shape.filter > 0) {
+					if(trace->nodes[node.fold.a].shape.filter >= 0) {
 						IRef mask = trace->nodes[node.fold.a].shape.filter;
 						EmitMove(xmm0, reg(mask));
 						asm_.xorpd(xmm0, ConstantTable(C_NOT_MASK));
 						asm_.blendvpd(reg(ref), ConstantTable(C_DOUBLE_ZERO));
 					}
-					if(trace->nodes[node.fold.a].shape.split > 0) {
+					if(trace->nodes[node.fold.a].shape.split >= 0) {
 						EmitSplitFold(ref, (void*)sum_by_d);
 						/*// add to each independently?
 						Constant c(node.dst.p);
@@ -760,7 +760,7 @@ struct TraceJIT {
 		
 			}
 
-			if(node.liveOut && node.shape.length == trace->code_buffer->outer_loop) {
+			if(node.liveOut && node.shape.length == (int64_t)trace->code_buffer->outer_loop) {
 				switch(node.enc) {
 					case IRNode::UNARY:
 					case IRNode::BINARY:
@@ -885,7 +885,7 @@ struct TraceJIT {
 
 	void EmitVectorStore(IRef ref, Value& dst, IRNode::Shape const& shape) {
 		XMMRegister src = reg(ref);
-		if(shape.filter == 0)
+		if(shape.filter < 0)
 			asm_.movdqa(EncodeOperand(dst.p,vector_index,times_8),src);
 		else {
 			dst.length = 0;
@@ -1071,7 +1071,7 @@ struct TraceJIT {
 	}
 
 	void GlobalReduce(Thread& thread) {
-		for(IRef ref = 0; ref < trace->nodes.size(); ref++) {
+		for(IRef ref = 0; ref < (int64_t)trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
 			if(node.liveOut) {
 				switch(node.op) {

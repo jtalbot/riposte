@@ -178,7 +178,7 @@ class Trace : public gc {
 				idx += idx >> 8;
 				idx &= 0xFF;
 				IRef cached = cache[idx];
-				if(cached < trace.nodes.size() &&
+				if(cached < (int64_t)trace.nodes.size() &&
 						trace.nodes[cached].op == IROpCode::load &&
 						trace.nodes[cached].out.p == v.p) {
 					return cached;

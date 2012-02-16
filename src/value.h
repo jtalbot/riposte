@@ -12,7 +12,7 @@
 #include "string.h"
 #include "exceptions.h"
 
-typedef size_t IRef;
+typedef int64_t IRef;
 
 struct Value {
 	

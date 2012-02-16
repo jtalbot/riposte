@@ -40,3 +40,5 @@ cbind <- function(...) {
 	dim(matrix) <- c(rows, length(l))
 	matrix
 }
+
+seq_len <- function(length.out) seq(1, 1, length.out)

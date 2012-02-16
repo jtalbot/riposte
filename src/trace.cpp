@@ -64,7 +64,7 @@ std::string Trace::toString(Thread & thread) {
 			out << "\t -> ";
 			for(size_t i = 0; i < outputs.size(); i++) {
 				Output & o = outputs[i];
-				if(o.ref == j) {
+				if(o.ref == (int64_t)j) {
 					switch(o.type) {
 					case Trace::Output::REG:
 						out << "r[" << o.reg << "] "; break;
@@ -139,10 +139,6 @@ IRef Trace::EmitTrinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, IRef
 }
 
 IRef Trace::EmitFilter(IRef a, IRef b) {
-	// and the filters together if necessary
-	if(nodes[a].shape.filter > 0) {
-		b = EmitBinary(IROpCode::land, Type::Logical, nodes[a].shape.filter, b, 0);
-	}
 	IRNode n;
 	n.enc = IRNode::BINARY;
 	n.op = IROpCode::filter;
@@ -179,7 +175,7 @@ IRef Trace::EmitSequence(int64_t length, int64_t a, int64_t b) {
 	n.enc = IRNode::SEQUENCE;
 	n.op = IROpCode::seq;
 	n.type = Type::Integer;
-	n.shape = (IRNode::Shape) { length, 0, 1, 0 };
+	n.shape = (IRNode::Shape) { length, -1, 1, -1 };
 	n.sequence.ia = a;
 	n.sequence.ib = b;
 	nodes.push_back(n);
@@ -191,7 +187,7 @@ IRef Trace::EmitSequence(int64_t length, double a, double b) {
 	n.enc = IRNode::SEQUENCE;
 	n.op = IROpCode::seq;
 	n.type = Type::Double;
-	n.shape = (IRNode::Shape) { length, 0, 1, 0 };
+	n.shape = (IRNode::Shape) { length, -1, 1, -1 };
 	n.sequence.da = a;
 	n.sequence.db = b;
 	nodes.push_back(n);
@@ -203,7 +199,7 @@ IRef Trace::EmitConstant(Type::Enum type, int64_t length, int64_t c) {
 	n.enc = IRNode::CONSTANT;
 	n.op = IROpCode::constant;
 	n.type = type;
-	n.shape = (IRNode::Shape) { length, 0, 1, 0 };
+	n.shape = (IRNode::Shape) { length, -1, 1, -1 };
 	n.constant.i = c;
 	nodes.push_back(n);
 	return nodes.size()-1;
@@ -213,7 +209,7 @@ IRef Trace::EmitLoad(Value const& v) {
 	n.enc = IRNode::LOAD;
 	n.op = IROpCode::load;
 	n.type = v.type;
-	n.shape = (IRNode::Shape) { v.length, 0, 1, 0 };
+	n.shape = (IRNode::Shape) { v.length, -1, 1, -1 };
 	n.out = v;
 	nodes.push_back(n);
 	return nodes.size()-1;
@@ -258,7 +254,7 @@ void Trace::WriteOutputs(Thread & thread) {
 		for(size_t i = 0; i < nodes.size(); i++) {
 			if(nodes[i].liveOut) {
 				std::string v = thread.stringify(nodes[i].out);
-				printf("n%d = %s\n", i, v.c_str());
+				printf("n%llu = %s\n", i, v.c_str());
 			}
 		}
 	}
@@ -279,7 +275,7 @@ void Trace::WriteOutputs(Thread & thread) {
 }
 
 void Trace::SimplifyOps(Thread& thread) {
-	for(IRef ref = 0; ref < nodes.size(); ref++) {
+	for(IRef ref = 0; ref < (int64_t)nodes.size(); ref++) {
 		IRNode & node = nodes[ref];
 		switch(node.op) {
 			case IROpCode::gt: node.op = IROpCode::lt; std::swap(node.binary.a,node.binary.b); break;
@@ -296,7 +292,7 @@ void Trace::SimplifyOps(Thread& thread) {
 }
 
 void Trace::AlgebraicSimplification(Thread& thread) {
-	for(IRef ref = 0; ref < nodes.size(); ref++) {
+	for(IRef ref = 0; ref < (int64_t)nodes.size(); ref++) {
 		IRNode & node = nodes[ref];
 
 		// simplify casts
@@ -503,7 +499,6 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 				Logical::isFalse(nodes[node.binary.b].constant.l)) {
 			node.op = IROpCode::constant;
 			node.enc = IRNode::CONSTANT;
-			node.shape = (IRNode::Shape) { 1, 0, 1, 0 };
 			node.constant.l = Logical::FalseElement;
 		}
 
@@ -519,7 +514,6 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 				Logical::isTrue(nodes[node.binary.b].constant.l)) {
 			node.op = IROpCode::constant;
 			node.enc = IRNode::CONSTANT;
-			node.shape = (IRNode::Shape) { 1, 0, 1, 0 };
 			node.constant.l = Logical::TrueElement;
 		}
 	}
@@ -556,14 +550,13 @@ void Trace::DeadCodeElimination(Thread& thread) {
 					break;
 			}
 			// mark used shape nodes
-			if(node.shape.filter > 0) 
+			if(node.shape.filter >= 0) 
 				nodes[node.shape.filter].live = true;
-			if(node.shape.split > 0) 
+			if(node.shape.split >= 0) 
 				nodes[node.shape.split].live = true;
 		} else {
 			node.op = IROpCode::nop;
 			node.enc = IRNode::NOP;
-			node.shape = (IRNode::Shape) { 0, 0, 0, 0 };
 		}
 	}
 }
@@ -600,7 +593,7 @@ void Trace::Execute(Thread & thread) {
 	DeadCodeElimination(thread);
 
 	// Initialize Outputs...
-	for(IRef ref = 0; ref < nodes.size(); ref++) {
+	for(IRef ref = 0; ref < (int64_t)nodes.size(); ref++) {
 		IRNode& node = nodes[ref];
 		if((node.liveOut && node.enc != IRNode::LOAD) || 
 		   (node.live && node.enc == IRNode::FOLD)) {
