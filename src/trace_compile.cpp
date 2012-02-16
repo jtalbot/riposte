@@ -403,7 +403,7 @@ struct TraceJIT {
 				_error("exceeded available registers");
 		}
 		if(trace->nodes[ref].liveOut) {
-			IRNode::Shape& s = trace->nodes[a].shape;
+			IRNode::Shape& s = trace->nodes[ref].shape;
 			if(s.filter >= 0 && allocated_register[s.filter] < 0) {
 				if(!alloc.allocate(&allocated_register[s.filter]))
 					_error("exceeded available registers");

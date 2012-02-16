@@ -46,7 +46,7 @@ std::string Trace::toString(Thread & thread) {
 		UNARY_FOLD_SCAN_BYTECODES(UNARY)
 		BINARY_BYTECODES(BINARY)
 		UNARY(cast)
-		BINARY(filter)
+		UNARY(filter)
 		BINARY(split)
 		TRINARY(ifelse)
 		case IROpCode::seq:
@@ -139,13 +139,12 @@ IRef Trace::EmitTrinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, IRef
 
 IRef Trace::EmitFilter(IRef a, IRef b) {
 	IRNode n;
-	n.enc = IRNode::BINARY;
+	n.enc = IRNode::UNARY;
 	n.op = IROpCode::filter;
 	n.type = nodes[a].type;
 	n.shape = nodes[a].shape;
 	n.shape.filter = b;
-	n.binary.a = a;
-	n.binary.b = b;
+	n.unary.a = a;
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
