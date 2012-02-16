@@ -247,20 +247,23 @@ static __m128d castl2i(__m128d input) {
 }
 
 static void store_conditional(__m128d input, __m128i mask, Value* out) {
-	union { 
-		__m128i ma; 
-		int64_t m[2]; 
-	}; 
-	union { 
-		__m128d in; 
-		double i[2]; 
-	};
-	ma = mask; 
-	in = input;
-	if(m[0] == -1) 
-		((double*)(out->p))[out->length++] = i[0];
-	if(m[1] == -1) 
-		((double*)(out->p))[out->length++] = i[1];
+	SSEValue i, m; 
+	i.D = input;
+	m.I = mask;
+	if(m.i[0] == -1) 
+		((double*)(out->p))[out->length++] = i.d[0];
+	if(m.i[1] == -1) 
+		((double*)(out->p))[out->length++] = i.d[1];
+}
+
+static void store_conditional_l(__m128d input, __m128i mask, Value* out) {
+	SSEValue i, m; 
+	i.D = input;
+	m.I = mask;
+	if(m.i[0] == -1) 
+		((char*)(out->p))[out->length++] = (char)i.i[0];
+	if(m.i[1] == -1) 
+		((char*)(out->p))[out->length++] = (char)i.i[1];
 }
 
 static void sum_by_d(__m128d add, __m128i split, Value* out, int64_t thread_index, int64_t step) {
@@ -361,11 +364,11 @@ struct TraceJIT {
 			case IRNode::FOLD: {
 				AllocateUnary(ref, node.fold.a);
 			} break;
+			case IRNode::LOAD: /*fallthrough*/
 			case IRNode::UNARY: {
 				AllocateUnary(ref,node.unary.a);
 			} break;
 			case IRNode::CONSTANT: /*fallthrough*/
-			case IRNode::LOAD: /*fallthrough*/
 			case IRNode::SEQUENCE: {
 				AllocateNullary(ref);
 			} break;
@@ -470,7 +473,7 @@ struct TraceJIT {
 		for(IRef ref = 0; ref < (int64_t)trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
 			
-			if(node.enc == IRNode::LOAD || node.enc == IRNode::SEQUENCE || (node.enc == IRNode::CONSTANT && node.shape.length > 1)) trace->code_buffer->outer_loop = node.shape.length;
+			if(node.enc == IRNode::SEQUENCE || (node.enc == IRNode::CONSTANT && node.shape.length > 1)) trace->code_buffer->outer_loop = node.shape.length;
 			if(node.op == IROpCode::seq)
 				stackSpace += 0x10;
 		}
@@ -525,10 +528,27 @@ struct TraceJIT {
 				asm_.movdqa(reg(ref),PushConstant(c));
 			} break;
 			case IROpCode::load: {
-				if(node.isLogical())
-					asm_.pmovsxbq(reg(ref), EncodeOperand(node.out.p, vector_index, times_1));
-				else
-					asm_.movdqa(reg(ref),EncodeOperand(node.out.p,vector_index,times_8));
+				if(trace->nodes[node.unary.a].op == IROpCode::seq &&
+					trace->nodes[node.unary.a].sequence.ia == 1 &&
+					trace->nodes[node.unary.a].sequence.ib == 1)
+				{
+					if(node.isLogical())
+						asm_.pmovsxbq(reg(ref), EncodeOperand(node.out.p, vector_index, times_1));
+					else
+						asm_.movdqa(reg(ref),EncodeOperand(node.out.p,vector_index,times_8));
+				}
+				else {
+					// -8 accounts for R's 1-based numbering
+					// TODO: other fast cases here when index is a known seq
+					Constant c((char*)node.out.p-8);
+					Operand base = PushConstant(c);
+					asm_.movq(r8, base);
+					asm_.movq(r9, reg(node.unary.a));
+					asm_.movhlps(reg(ref), reg(node.unary.a));
+					asm_.movq(r10, reg(ref));
+					asm_.movlpd(reg(ref),Operand(r8,r9,times_8,0));
+					asm_.movhpd(reg(ref),Operand(r8,r10,times_8,0));
+				}
 			} break;
 
 			case IROpCode::add: {
@@ -642,16 +662,6 @@ struct TraceJIT {
 				else if(node.isLogical() && trace->nodes[node.unary.a].isInteger())
 					EmitVectorizedUnaryFunction(ref, casti2l);
 				else _error("Unimplemented cast");
-			} break;
-			case IROpCode::gather: {
-				Constant c(node.unary.data);
-				Operand base = PushConstant(c);
-				asm_.movq(r8, base);
-				asm_.movq(r9, reg(node.unary.a));
-				asm_.movhlps(reg(ref), reg(node.unary.a));
-				asm_.movq(r10, reg(ref));
-				asm_.movlpd(reg(ref),Operand(r8,r9,times_8,0));
-				asm_.movhpd(reg(ref),Operand(r8,r10,times_8,0));
 			} break;
 			case IROpCode::seq: {
 				if(node.isDouble()) {
@@ -902,10 +912,22 @@ struct TraceJIT {
 
 	void EmitLogicalStore(IRef ref, Value& dst, IRNode::Shape const& shape) {
 		XMMRegister src = reg(ref);
-                asm_.pshufb(src,ConstantTable(C_PACK_LOGICAL));
-		asm_.movq(rbx, src);
-		asm_.movw(EncodeOperand(dst.p,vector_index,times_1),rbx);
-                asm_.pshufb(src,ConstantTable(C_PACK_LOGICAL));
+                if(shape.filter < 0) {
+			asm_.pshufb(src,ConstantTable(C_PACK_LOGICAL));
+			asm_.movq(rbx, src);
+			asm_.movw(EncodeOperand(dst.p,vector_index,times_1),rbx);
+       	         	asm_.pshufb(src,ConstantTable(C_PACK_LOGICAL));
+		} else {
+			dst.length = 0;
+			XMMRegister filter = reg(shape.filter);
+			
+			SaveRegisters(ref);
+			EmitMove(xmm0,src);
+			EmitMove(xmm1,filter);
+			asm_.movq(rdi,&dst);
+			EmitCall((void*)store_conditional_l);
+			RestoreRegisters(ref);
+		}
 	}
 
 	void EmitVectorizedUnaryFunction(IRef ref, __m128d (*fn)(__m128d)) {

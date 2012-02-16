@@ -163,11 +163,16 @@ class Trace : public gc {
 		IRef EmitSequence(int64_t length, int64_t a, int64_t b);
 		IRef EmitSequence(int64_t length, double a, double b);
 		IRef EmitConstant(Type::Enum type, int64_t length, int64_t c);
-		IRef EmitLoad(Value const& v);
+		IRef EmitLoad(Value const& v, IRef i);
 
 		static Type::Enum futureType(Value const& v) {
 			if(v.isFuture()) return v.future.typ;
 			else return v.type;
+		}
+
+		IRNode::Shape futureShape(Value const& v) {
+			if(v.isFuture()) return nodes[v.future.ref].shape;
+			else return (IRNode::Shape) { v.length, -1, 1, -1 };
 		}
 
 		struct LoadCache {
@@ -183,7 +188,7 @@ class Trace : public gc {
 						trace.nodes[cached].out.p == v.p) {
 					return cached;
 				} else {
-					return (cache[idx] = trace.EmitLoad(v));
+					return (cache[idx] = trace.EmitLoad(v,trace.EmitSequence(v.length,(int64_t)1,(int64_t)1)));
 				}
 			}
 			IRef cache[256];
@@ -273,7 +278,14 @@ class Trace : public gc {
 		}
 
 		Value AddGather(Value const& a, Value const& i) {
-			IRef r = EmitUnary(IROpCode::gather, a.type, EmitCoerce(GetRef(i), Type::Integer), ((int64_t)a.p)-8);
+			IRef r = EmitLoad(a, EmitCoerce(GetRef(i), Type::Integer));
+			Value v;
+			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			return v;
+		}
+
+		Value AddFilter(Value const& a, Value const& i) {
+			IRef r = EmitFilter(GetRef(a), EmitCoerce(GetRef(i), Type::Logical));
 			Value v;
 			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
 			return v;

@@ -15,7 +15,6 @@
 		_(constant,"constant", ___) \
 		_(seq, "seq", ___) \
 		_(load,"load", ___) \
-		_(gather, "gather", ___) \
 		_(filter, "filter", ___) \
 		_(split, "split", ___) \
 		_(nop, "nop", ___) \

@@ -267,24 +267,33 @@ Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* subset_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
+	OPERAND(a, inst.a); 
 	OPERAND(i, inst.b);
-
-	if(isTraceable(thread, a) && isTraceable(thread, i)) {
-		OUT(thread, inst.c) = thread.trace.AddGather(a, i);
-		return &inst+1;
-	}
 
 	if(a.isVector()) {
 		if(i.isDouble1()) { Element(a, i.d-1, OUT(thread, inst.c)); return &inst+1; }
 		else if(i.isInteger1()) { Element(a, i.i-1, OUT(thread, inst.c)); return &inst+1; }
 		else if(i.isLogical1()) { Element(a, Logical::isTrue(i.c) ? 0 : -1, OUT(thread, inst.c)); return &inst+1; }
 		else if(i.isCharacter1()) { _error("Subscript out of bounds"); }
-		else if(i.isVector()) { SubsetSlow(thread, a, i, OUT(thread, inst.c)); return &inst+1; }
 	}
-	FORCE(i, inst.b); BIND(i);
+
+	if(isTraceable(thread, a) && isTraceable(thread, i)) {
+		if(Trace::futureType(i) == Type::Integer || Trace::futureType(i) == Type::Double) {
+			OUT(thread, inst.c) = thread.trace.AddGather(a, i);
+			return &inst+1;
+		} else if(Trace::futureType(i) == Type::Logical &&
+				thread.trace.futureShape(a) == thread.trace.futureShape(i)) {
+			OUT(thread, inst.c) = thread.trace.AddFilter(a, i);
+			return &inst+1;
+		}
+	}
+
+	FORCE(a, inst.a); FORCE(i, inst.b); 
+	BIND(a); BIND(i);
 	if(a.isObject() || i.isObject()) { return GenericDispatch(thread, inst, Strings::bracket, a, i, inst.c); } 
-	_error("Invalid subset operation");
+
+	SubsetSlow(thread, a, i, OUT(thread, inst.c)); 
+	return &inst+1;
 }
 
 Instruction const* subset2_op(Thread& thread, Instruction const& inst) {

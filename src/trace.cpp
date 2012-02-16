@@ -55,9 +55,8 @@ std::string Trace::toString(Thread & thread) {
 			else
 				out << node.sequence.ia << "\t" << node.sequence.ib;
 		break;
-		case IROpCode::gather: out << "n" << node.unary.a << "\t" << "$" << (void*)node.unary.data; break;
 		case IROpCode::constant: out << ( (node.type == Type::Integer) ? node.constant.i : (node.type == Type::Logical) ? node.constant.l : node.constant.d); break;
-		case IROpCode::load: out << "$" << node.out.p; break;
+		case IROpCode::load: out << "$" << node.out.p << "\tn" << node.unary.a; break;
 		case IROpCode::nop: break;
 		}
 		if(node.liveOut) {
@@ -204,12 +203,13 @@ IRef Trace::EmitConstant(Type::Enum type, int64_t length, int64_t c) {
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
-IRef Trace::EmitLoad(Value const& v) {
+IRef Trace::EmitLoad(Value const& v, IRef i) {
 	IRNode n;
 	n.enc = IRNode::LOAD;
 	n.op = IROpCode::load;
 	n.type = v.type;
 	n.shape = (IRNode::Shape) { v.length, -1, 1, -1 };
+	n.unary.a = i;
 	n.out = v;
 	nodes.push_back(n);
 	return nodes.size()-1;
@@ -536,6 +536,7 @@ void Trace::DeadCodeElimination(Thread& thread) {
 					nodes[node.binary.a].live = true;
 					nodes[node.binary.b].live = true;
 					break;
+				case IRNode::LOAD: /*fallthrough*/
 				case IRNode::UNARY:
 					nodes[node.unary.a].live = true;
 					break;
@@ -543,7 +544,6 @@ void Trace::DeadCodeElimination(Thread& thread) {
 					nodes[node.fold.a].live = true;
 					break;
 				case IRNode::CONSTANT: /*fallthrough*/
-				case IRNode::LOAD: /*fallthrough*/
 				case IRNode::SEQUENCE: /*fallthrough*/
 				case IRNode::NOP: 
 					/* nothing */
