@@ -119,7 +119,7 @@
 	_(seq, 		"seq") \
 	_(True, 	"TRUE") \
 	_(False, 	"FALSE") \
-	_(type, 	"typeof") \
+	_(type, 	"type") \
 	_(length, 	"length") \
 	_(value, 	"value") \
 	_(dotGeneric, 	".Generic") \

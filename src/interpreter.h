@@ -317,17 +317,20 @@ class Trace : public gc {
 
 	private:
 		void Reset();
-		void WriteOutputs(Thread & state);
-		void Execute(Thread & state);
-		void Execute(Thread & state, IRef ref);
-		std::string toString(Thread & state);
+		void WriteOutputs(Thread & thread);
+		void Execute(Thread & thread);
+		void Execute(Thread & thread, IRef ref);
+		std::string toString(Thread & thread);
 
-		void Interpret(Thread & state);
-		void JIT(Thread & state);
+		void Interpret(Thread & thread);
+		void Optimize(Thread& thread);
+		void JIT(Thread & thread);
 
 		void MarkLiveOutputs(Thread& thread);
 		void SimplifyOps(Thread& thread);
 		void AlgebraicSimplification(Thread& thread);
+		void UsePropogation(Thread& thread);
+		void DefPropogation(Thread& thread);
 		void DeadCodeElimination(Thread& thread);
 };
 

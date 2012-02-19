@@ -475,11 +475,13 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* type_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
-	Character c(1);
-	// Should have a direct mapping from type to symbol.
-	c[0] = thread.internStr(Type::toString(a.type));
-	OUT(thread, inst.c) = c;
+	OPERAND(a, inst.a); FORCE(a, inst.a);
+	switch(Trace::futureType(a)) {
+                #define CASE(name, str) case Type::name: OUT(thread, inst.c) = Character::c(Strings::name); break;
+                TYPES(CASE)
+                #undef CASE
+                default: _error("Unknown type in type to string, that's bad!"); break;
+        }
 	return &inst+1;
 }
 Instruction const* length_op(Thread& thread, Instruction const& inst) {

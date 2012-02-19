@@ -518,7 +518,8 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 	}
 }
 
-void Trace::DeadCodeElimination(Thread& thread) {
+// Propogate liveOut to live
+void Trace::UsePropogation(Thread& thread) {
 	for(size_t i = 0; i < nodes.size(); i++) {
 		nodes[i].live = false | nodes[i].liveOut;
 	}
@@ -553,27 +554,64 @@ void Trace::DeadCodeElimination(Thread& thread) {
 				nodes[node.shape.filter].live = true;
 			if(node.shape.split >= 0) 
 				nodes[node.shape.split].live = true;
-		} else {
+		}
+	}
+}
+
+// Propogate live def information down to all uses
+void Trace::DefPropogation(Thread& thread) {
+	for(IRef ref = 0; ref < (IRef)nodes.size(); ref++) {
+		IRNode & node = nodes[ref];
+		if(!node.live) {
+			switch(node.enc) {
+				case IRNode::TRINARY:
+					node.live = 	nodes[node.trinary.a].live &&
+							nodes[node.trinary.b].live &&
+							nodes[node.trinary.c].live;
+					break;
+				case IRNode::BINARY: 
+					node.live = 	nodes[node.binary.a].live &&
+							nodes[node.binary.b].live;
+					break;
+				case IRNode::LOAD: /*fallthrough*/
+				case IRNode::UNARY:
+					node.live = 	nodes[node.unary.a].live;
+					break;
+				case IRNode::FOLD: 
+					node.live =	nodes[node.fold.a].live;
+					break;
+				case IRNode::CONSTANT: /*fallthrough*/
+				case IRNode::SEQUENCE: /*fallthrough*/
+				case IRNode::NOP: 
+					/* nothing */
+					break;
+			}
+			// mark used shape nodes
+			if(node.shape.filter >= 0) 
+				node.live = node.live && nodes[node.shape.filter].live;
+			if(node.shape.split >= 0) 
+				node.live = node.live && nodes[node.shape.split].live;
+		}
+	}
+}
+
+void Trace::DeadCodeElimination(Thread& thread) {
+	for(IRef ref = 0; ref < (IRef)nodes.size(); ref++) {
+		IRNode& node = nodes[ref];
+		if(!node.live) {
 			node.op = IROpCode::nop;
 			node.enc = IRNode::NOP;
 		}
 	}
 }
 
-
-// ref must be evaluated. Other stuff doesn't need to be executed unless it improves performance.
-void Trace::Execute(Thread & thread, IRef ref) {
-	Execute(thread);
-}
-
-// everything must be evaluated in the end...
-void Trace::Execute(Thread & thread) {
-	
-	MarkLiveOutputs(thread);
+void Trace::Optimize(Thread& thread) {
 
 	if(thread.state.verbose)
 		printf("executing trace:\n%s\n",toString(thread).c_str());
 
+	MarkLiveOutputs(thread);
+	UsePropogation(thread);
 	DeadCodeElimination(thread);	// avoid optimizing code that's dead anyway
 	
 	SimplifyOps(thread);
@@ -589,6 +627,7 @@ void Trace::Execute(Thread & thread) {
 		nodes[r].liveOut = true;
 	}
 	
+	UsePropogation(thread);
 	DeadCodeElimination(thread);
 
 	// Initialize Outputs...
@@ -618,11 +657,53 @@ void Trace::Execute(Thread & thread) {
 
 	if(thread.state.verbose)
 		printf("optimized:\n%s\n",toString(thread).c_str());
+}
 
+
+// ref must be evaluated. Other stuff doesn't need to be executed unless it improves performance.
+void Trace::Execute(Thread & thread, IRef ref) {
+	// partition into stuff that we will execute and stuff that we won't
+	/*std::vector<IRNode, traceable_allocator<IRNode> > left;
+
+	for(IRef i = 0; i < nodes.size(); i++) {
+		nodes[i].liveOut = false;
+	}
+	nodes[ref].liveOut = true;
 	
+	// walk backwards marking everything we'll need
+	UsePropogation(thread);
+	// walk forwards propogating use information down
+	DefPropogation(thread);	
+	
+	for(IRef i = 0; i < nodes.size(); i++) {
+		Node& node = nodes[i];
+		if(!node.live) {
+			// pull out unmarked items and put NOPs in their place
+			// update uses
+			// uses of live variables need to be replaced with a load of the output
+			// but outputs aren't defined yet.
+			// it makes a liveOut
+		}
+	}
+
+	Optimize(thread);
 	JIT(thread);
-	
 	WriteOutputs(thread);
+	
+	n_recorded_since_last_exec = 0;
+	nodes.swap(left);
+	outputs.clear();*/
 
+	Execute(thread);
+}
+
+// everything must be evaluated in the end...
+void Trace::Execute(Thread & thread) {
+	Optimize(thread);
+	// if there were any live outputs
+	if(outputs.size() > 0) {
+		JIT(thread);
+		WriteOutputs(thread);
+	}
 	Reset();
 }
