@@ -380,7 +380,7 @@ bool isTraceable(Thread const& thread, Value const& a, Value const& b) {
 		(isTraceableType(a.type) && isTraceableType(b.type)) &&
 		((a.length >= TRACE_VECTOR_WIDTH && b.length == 1 && b.type != Type::Future) ||
 		 (a.length == 1 && b.length >= TRACE_VECTOR_WIDTH && a.type != Type::Future) ||
-		 (a.length == b.length && a.length >= TRACE_VECTOR_WIDTH)); 
+		 (thread.trace.futureShape(a) == thread.trace.futureShape(b) && a.length >= TRACE_VECTOR_WIDTH)); 
 }
 
 template< template<class X, class Y, class Z> class Group>

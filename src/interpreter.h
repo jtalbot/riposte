@@ -170,7 +170,7 @@ class Trace : public gc {
 			else return v.type;
 		}
 
-		IRNode::Shape futureShape(Value const& v) {
+		IRNode::Shape futureShape(Value const& v) const {
 			if(v.isFuture()) return nodes[v.future.ref].shape;
 			else return (IRNode::Shape) { v.length, -1, 1, -1 };
 		}
