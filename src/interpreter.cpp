@@ -208,7 +208,7 @@ Instruction const* list_op(Thread& thread, Instruction const& inst) {
 // Memory access ops
 
 Instruction const* assign_op(Thread& thread, Instruction const& inst) {
-	OPERAND(value, inst.c); /*FORCE(value, inst.c);*/ // shouldn't need to force. and promises can be put back in the enviroment, no problem.
+	OPERAND(value, inst.c); FORCE(value, inst.c); // don't BIND 
 	thread.frame.environment->insert((String)inst.a) = value;
 	return &inst+1;
 }
@@ -218,7 +218,7 @@ Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 	// so start off looking up one level...
 	assert(thread.frame.environment->LexicalScope() != 0);
 	
-	OPERAND(value, inst.c); /*FORCE(value, inst.c); BIND(value);*/
+	OPERAND(value, inst.c); FORCE(value, inst.c); /*BIND(value);*/
 	
 	String s = (String)inst.a;
 	Value& dest = thread.frame.environment->LexicalScope()->insertRecursive(s);
@@ -589,6 +589,9 @@ Value Thread::eval(Prototype const* prototype) {
 
 Value Thread::eval(Prototype const* prototype, Environment* environment) {
 	Instruction done(ByteCode::done);
+	Prototype prototype0;
+	prototype0.registers = 0;
+
 #ifdef USE_THREADED_INTERPRETER
 	done.ibc = glabels[ByteCode::done];
 #endif
@@ -598,7 +601,7 @@ Value Thread::eval(Prototype const* prototype, Environment* environment) {
 	// Build a half-hearted stack frame for the result. Necessary for the trace recorder.
 	StackFrame& s = push();
 	s.environment = 0;
-	s.prototype = 0;
+	s.prototype = &prototype0;
 	s.returnbase = base;
 	base -= 1;
 	Value* result = base;

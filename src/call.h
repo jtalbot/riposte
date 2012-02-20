@@ -30,17 +30,20 @@ static void printCode(Thread const& thread, Prototype const* prototype, Environm
 
 static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Instruction const* returnpc) {
 	//printCode(thread, prototype, environment);
+	int64_t registers = thread.frame.prototype->registers;
 	StackFrame& s = thread.push();
 	s.environment = environment;
 	s.ownEnvironment = ownEnvironment;
 	s.returnpc = returnpc;
 	s.returnbase = thread.base;
 	s.prototype = prototype;
-	thread.base -= prototype->registers;
-	if(prototype->constants.size() > 0)
-		memcpy(thread.base, &prototype->constants[0], sizeof(Value)*prototype->constants.size());
-	if(thread.base < thread.registers)
+	thread.base -= registers;
+	
+	if(thread.base-prototype->registers < thread.registers)
 		throw RiposteError("Register overflow");
+	
+	if(prototype->constants.size() > 0)
+		memcpy(thread.base-prototype->constants.size(), &prototype->constants[0], sizeof(Value)*prototype->constants.size());
 
 #ifdef USE_THREADED_INTERPRETER
 	// Initialize threaded bytecode if not yet done 
@@ -307,14 +310,14 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 
 Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, String name);
 
-#define REGISTER(i) (*(thread.base-(i)))
+#define REGISTER(i) (*(thread.base+(i)))
 
 // Out register is currently always a register, not memory
-#define OUT(thread, i) (*(thread.base-(i)))
+#define OUT(thread, i) (*(thread.base+(i)))
 
 #define OPERAND(a, i) \
 Value const& a = __builtin_expect((i) <= 0, true) ? \
-		*(thread.base-(i)) : \
+		*(thread.base+(i)) : \
 		thread.frame.environment->getRecursive((String)(i)); 
 	
 #define FORCE(a, i) \

@@ -52,7 +52,7 @@ void cat(Thread& thread, Value const* args, Value& result) {
 
 void remove(Thread& thread, Value const* args, Value& result) {
 	Character const& a = Cast<Character>(args[0]);
-	REnvironment e(args[1]);
+	REnvironment e(args[-1]);
 	for(int64_t i = 0; i < a.length; i++) {
 		e.ptr()->remove(a[i]);
 	}
@@ -92,16 +92,16 @@ void readtable(Thread& thread, Value const* args, Value& result) {
 
 void sequence(Thread& thread, Value const* args, Value& result) {
 	double from = asReal1(args[0]);
-	double by = asReal1(args[1]);
-	double len = asReal1(args[2]);
+	double by = asReal1(args[-1]);
+	double len = asReal1(args[-2]);
 
 	result = Sequence(from, by, len);	
 }
 
 void repeat(Thread& thread, Value const* args, Value& result) {
 	double v = asReal1(args[0]);
-	//double e = asReal1(args[1]);
-	double l = asReal1(args[2]);
+	//double e = asReal1(args[-1]);
+	double l = asReal1(args[-2]);
 	
 	Double r(l);
 	for(int64_t i = 0; i < l; i++) {
@@ -115,7 +115,7 @@ void attr(Thread& thread, Value const* args, Value& result)
 	// NYI: exact
 	Value object = args[0];
 	if(object.isObject()) {
-		Character which = Cast<Character>(args[1]);
+		Character which = Cast<Character>(args[-1]);
 		result = ((Object const&)object).get(which[0]);
 	}
 	else {
@@ -126,15 +126,15 @@ void attr(Thread& thread, Value const* args, Value& result)
 void assignAttr(Thread& thread, Value const* args, Value& result)
 {
 	Value object = args[0];
-	Character which = Cast<Character>(args[1]);
+	Character which = Cast<Character>(args[-1]);
 	if(!object.isObject()) {
 		Value v;
 		Object::Init((Object&)v, object);
 		object = v;
-		((Object&)object).insertMutable(which[0], args[2]);
+		((Object&)object).insertMutable(which[0], args[-2]);
 		result = object;
 	} else {
-		result = ((Object&)object).insert(which[0], args[2]);
+		result = ((Object&)object).insert(which[0], args[-2]);
 	}
 }
 
@@ -301,7 +301,7 @@ void unlistNames(Thread& thread, int64_t recurse, Value a, Character& out, int64
 // TODO: useNames parameter could be handled at the R level
 void unlist(Thread& thread, Value const* args, Value& result) {
 	Value v = args[0];
-	int64_t recurse = Cast<Logical>(args[1])[0] ? std::numeric_limits<int64_t>::max() : 1;
+	int64_t recurse = Cast<Logical>(args[-1])[0] ? std::numeric_limits<int64_t>::max() : 1;
 	
 	int64_t length = unlistLength(thread, recurse, v);
 	Type::Enum type = unlistType(thread, recurse, v);
@@ -589,7 +589,7 @@ void length(Thread& thread, Value const* args, Value& result) {
 }
 
 void eval_fn(Thread& thread, Value const* args, Value& result) {
-	result = thread.eval(Compiler::compilePromise(thread.state, args[0]), REnvironment(args[1]).ptr());
+	result = thread.eval(Compiler::compilePromise(thread.state, args[0]), REnvironment(args[-1]).ptr());
 }
 
 struct lapplyargs {
@@ -623,7 +623,7 @@ void lapply(Thread& thread, Value const* args, Value& result) {
 	if(!args[0].isVector())
 		_error("Invalid type for argument to lapply");
 	Value x = args[0];
-	Value func = args[1];
+	Value func = args[-1];
 	List r(x.length);
 
 	/*List apply(2);
@@ -760,7 +760,7 @@ void nzchar_fn(Thread& thread, Value const* args, Value& result) {
 
 void paste(Thread& thread, Value const* args, Value& result) {
 	Character a = As<Character>(thread, args[0]);
-	Character sep = As<Character>(thread, args[1]);
+	Character sep = As<Character>(thread, args[-1]);
 	std::string r = "";
 	for(int64_t i = 0; i+1 < a.length; i++) {
 		r = r + thread.externStr(a[i]) + thread.externStr(sep[0]);
@@ -791,8 +791,8 @@ void type_of(Thread& thread, Value const* args, Value& result) {
 
 void exists(Thread& thread, Value const* args, Value& result) {
 	Character c = As<Character>(thread, args[0]);
-	REnvironment e(args[1]);
-	Logical l = As<Logical>(thread, args[2]);
+	REnvironment e(args[-1]);
+	Logical l = As<Logical>(thread, args[-2]);
 
 	Value const& v = l[0] ? e.ptr()->getRecursive(c[0]) : e.ptr()->get(c[0]);
 	if(v.isNil())
@@ -824,13 +824,13 @@ void traceconfig(Thread & thread, Value const* args, Value& result) {
 
 // args( A, m, n, B, m, n )
 void matrixmultiply(Thread & thread, Value const* args, Value& result) {
-	double mA = asReal1(args[1]);
-	double nA = asReal1(args[2]);
+	double mA = asReal1(args[-1]);
+	double nA = asReal1(args[-2]);
 	MatrixXd aa = Map<MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
 	
-	double mB = asReal1(args[4]);
-	double nB = asReal1(args[5]);
-	MatrixXd bb = Map<MatrixXd>(As<Double>(thread, args[3]).v(), mB, nB);
+	double mB = asReal1(args[-4]);
+	double nB = asReal1(args[-5]);
+	MatrixXd bb = Map<MatrixXd>(As<Double>(thread, args[-3]).v(), mB, nB);
 
 	Double c(aa.rows()*bb.cols());
 	Map<MatrixXd>(c.v(), aa.rows(), bb.cols()) = aa*bb;

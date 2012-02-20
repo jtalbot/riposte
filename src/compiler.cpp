@@ -718,14 +718,14 @@ void Compiler::dumpCode() const {
 
 // generate actual code from IR as follows...
 // 	MEMORY and INTEGER operands unchanged
-//	CONSTANT operands placed in lower N registers (starting at 0)
+//	CONSTANT operands placed in lower N registers (starting at -1)
 //	REGISTER operands placed in above those
 //	all register ops encoded with negative integer.
 //	INVALID operands just go to 0 since they will never be used
 int64_t Compiler::encodeOperand(Operand op, int64_t n) const {
 	if(op.loc == MEMORY || op.loc == INTEGER) return op.i;
-	else if(op.loc == CONSTANT) return -op.i;
-	else if(op.loc == REGISTER) return -(op.i + n);
+	else if(op.loc == CONSTANT) return -(op.i+1);
+	else if(op.loc == REGISTER) return -(op.i + n + 1);
 	else return 0;
 }
 
@@ -735,6 +735,7 @@ Prototype* Compiler::compile(Value const& expr) {
 
 	Operand result = compile(expr, code);
 
+	std::reverse(code->constants.begin(), code->constants.end());
 	code->expression = expr;
 	code->registers = code->constants.size() + max_n;
 	// insert return statement at end of code
@@ -743,7 +744,7 @@ Prototype* Compiler::compile(Value const& expr) {
 	int64_t n = code->constants.size();
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, encodeOperand(ir[i].a, n), encodeOperand(ir[i].b, n), encodeOperand(ir[i].c, n)));
-	}	
+	}
 
 	return code;	
 }
