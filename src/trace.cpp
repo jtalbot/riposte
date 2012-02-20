@@ -343,6 +343,8 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			node.binary.a = nodes[node.binary.a].unary.a;
 		if(node.enc == IRNode::BINARY && nodes[node.binary.b].op == IROpCode::pos)
 			node.binary.b = nodes[node.binary.b].unary.a;
+		if(node.enc == IRNode::LOAD && nodes[node.unary.a].op == IROpCode::pos)
+			node.unary.a = nodes[node.unary.a].unary.a;
 
 		if(node.op == IROpCode::pow &&
 			nodes[node.binary.b].op == IROpCode::constant) {
@@ -518,6 +520,34 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 	}
 }
 
+void Trace::CSEElimination(Thread& thread) {
+	// look for exact same op somewhere above, replace myself with pos of that one...
+	for(IRef i = 0; i < nodes.size(); i++) {
+		IRNode& node = nodes[i];
+		if(node.enc == IRNode::UNARY && nodes[node.unary.a].op == IROpCode::pos)
+			node.unary.a = nodes[node.unary.a].unary.a;
+		if(node.enc == IRNode::FOLD && nodes[node.fold.a].op == IROpCode::pos)
+			node.fold.a = nodes[node.fold.a].unary.a;
+		if(node.enc == IRNode::BINARY && nodes[node.binary.a].op == IROpCode::pos)
+			node.binary.a = nodes[node.binary.a].unary.a;
+		if(node.enc == IRNode::BINARY && nodes[node.binary.b].op == IROpCode::pos)
+			node.binary.b = nodes[node.binary.b].unary.a;
+		if(node.enc == IRNode::LOAD && nodes[node.unary.a].op == IROpCode::pos)
+			node.unary.a = nodes[node.unary.a].unary.a;
+		if(node.shape.filter >= 0 && nodes[node.shape.filter].op == IROpCode::pos)
+			node.shape.filter = nodes[node.shape.filter].unary.a;
+
+		for(IRef j = 0; j < i; j++) {
+			if(node == nodes[j]) {
+				node.op = IROpCode::pos;
+				node.enc = IRNode::UNARY;
+				node.unary.a = j;
+				break;
+			}
+		}
+	}
+}
+
 // Propogate liveOut to live
 void Trace::UsePropogation(Thread& thread) {
 	for(size_t i = 0; i < nodes.size(); i++) {
@@ -616,6 +646,7 @@ void Trace::Optimize(Thread& thread) {
 	
 	SimplifyOps(thread);
 	AlgebraicSimplification(thread);
+	CSEElimination(thread);
 
 	// move outputs up...
 	for(size_t i = 0; i < outputs.size(); i++) {

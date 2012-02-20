@@ -175,30 +175,10 @@ class Trace : public gc {
 			else return (IRNode::Shape) { v.length, -1, 1, -1 };
 		}
 
-		struct LoadCache {
-			IRef get(Trace & trace, const Value& v) {
-				uint64_t idx = (int64_t) v.p;
-				idx += idx >> 32;
-				idx += idx >> 16;
-				idx += idx >> 8;
-				idx &= 0xFF;
-				IRef cached = cache[idx];
-				if(cached < (int64_t)trace.nodes.size() &&
-						trace.nodes[cached].op == IROpCode::load &&
-						trace.nodes[cached].out.p == v.p) {
-					return cached;
-				} else {
-					return (cache[idx] = trace.EmitLoad(v,trace.EmitSequence(v.length,(int64_t)1,(int64_t)1)));
-				}
-			}
-			IRef cache[256];
-		};
-		LoadCache loadCache;
-
 		IRef GetRef(Value const& v) {
 			if(v.isFuture()) return v.future.ref;
 			else if(v.length == 1) return EmitConstant(v.type, 1, v.i);
-			else return loadCache.get(*this, v);
+			else return EmitLoad(v,EmitSequence(v.length,(int64_t)1,(int64_t)1));
 		}
 
 		template< template<class X> class Group >
@@ -329,6 +309,7 @@ class Trace : public gc {
 		void MarkLiveOutputs(Thread& thread);
 		void SimplifyOps(Thread& thread);
 		void AlgebraicSimplification(Thread& thread);
+		void CSEElimination(Thread& thread);
 		void UsePropogation(Thread& thread);
 		void DefPropogation(Thread& thread);
 		void DeadCodeElimination(Thread& thread);
