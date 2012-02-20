@@ -946,7 +946,7 @@ struct TraceJIT {
 	}
 
 	void EmitVectorizedBinaryFunction(IRef ref, __m128d (*fn)(__m128d,__m128d)) {
-		EmitBinaryFunction(ref,(void*)fn);
+		EmitVectorizedBinaryFunction(ref,(void*)fn);
 	}
 	void EmitVectorizedBinaryFunction(IRef ref, void * fn) {
 
