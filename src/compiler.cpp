@@ -340,6 +340,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			result = placeInRegister(compile(call[1], code));
 		else
 			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
+		if(scope != FUNCTION)
+			throw CompileError("Attempting to return from top-level expression or from non-function. Riposte doesn't support return inside promises currently, and may never do so");
 		emit(ByteCode::ret, result, 0, 0);
 		return result;
 	} 
@@ -738,9 +740,16 @@ Prototype* Compiler::compile(Value const& expr) {
 	std::reverse(code->constants.begin(), code->constants.end());
 	code->expression = expr;
 	code->registers = code->constants.size() + max_n;
-	// insert return statement at end of code
-	emit(ByteCode::ret, result, 0, 0);
-
+	
+	// insert appropriate termination statement at end of code
+	if(scope == FUNCTION)
+		emit(ByteCode::ret, result, 0, 0);
+	else if(scope == PROMISE)
+		emit(ByteCode::retp, result, 0, 0);
+	else { // TOPLEVEL
+		emit(ByteCode::rets, result, 0, 0);
+		emit(ByteCode::done, 0, 0, 0);
+	}
 	int64_t n = code->constants.size();
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, encodeOperand(ir[i].a, n), encodeOperand(ir[i].b, n), encodeOperand(ir[i].c, n)));

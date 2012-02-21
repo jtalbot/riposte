@@ -28,16 +28,14 @@ static void printCode(Thread const& thread, Prototype const* prototype, Environm
 	std::cout << std::endl;
 }
 
-static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Instruction const* returnpc) {
+static Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset) {
 	//printCode(thread, prototype, environment);
-	int64_t registers = thread.frame.prototype->registers;
 	StackFrame& s = thread.push();
 	s.environment = environment;
-	s.ownEnvironment = ownEnvironment;
 	s.returnpc = returnpc;
 	s.returnbase = thread.base;
 	s.prototype = prototype;
-	thread.base -= registers;
+	thread.base -= stackOffset;
 	
 	if(thread.base-prototype->registers < thread.registers)
 		throw RiposteError("Register overflow");
@@ -58,28 +56,21 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 	return &(prototype->bc[0]);
 }
 
-static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, int64_t resultSlot, Instruction const* returnpc) {
-	Environment* env = thread.frame.environment;
-	Instruction const* i = buildStackFrame(thread, environment, ownEnvironment, prototype, returnpc);
-	thread.frame.dest = StackFrame::REG;
-	thread.frame.i = resultSlot;
+static Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, int64_t resultSlot, Instruction const* returnpc) {
+	return buildStackFrame(thread, environment, prototype, returnpc, (-resultSlot)-1);
+}
+
+static Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Environment* env, String s, Instruction const* returnpc) {
+	Instruction const* i = buildStackFrame(thread, environment, prototype, returnpc, thread.frame.prototype->registers);
+	thread.frame.dest = (int64_t)s;
 	thread.frame.env = env;
 	return i;
 }
 
-static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Environment* env, String s, Instruction const* returnpc) {
-	Instruction const* i = buildStackFrame(thread, environment, ownEnvironment, prototype, returnpc);
-	thread.frame.dest = StackFrame::MEMORY;
+static Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Environment* env, int64_t resultSlot, Instruction const* returnpc) {
+	Instruction const* i = buildStackFrame(thread, environment, prototype, returnpc, thread.frame.prototype->registers);
+	thread.frame.dest = -resultSlot;
 	thread.frame.env = env;
-	thread.frame.s = s;
-	return i;
-}
-
-static Instruction const* buildStackFrame(Thread& thread, Environment* environment, bool ownEnvironment, Prototype const* prototype, Environment* env, int64_t resultSlot, Instruction const* returnpc) {
-	Instruction const* i = buildStackFrame(thread, environment, ownEnvironment, prototype, returnpc);
-	thread.frame.dest = StackFrame::DOTS;
-	thread.frame.env = env;
-	thread.frame.i = resultSlot;
 	return i;
 }
 
@@ -281,7 +272,7 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
 		args.push_back(p);
 		CompiledCall cc(call, args, 1, false);
 		MatchArgs(thread, thread.frame.environment, fenv, func, cc);
-		return buildStackFrame(thread, fenv, true, func.prototype(), out, &inst+1);
+		return buildStackFrame(thread, fenv, func.prototype(), out, &inst+1);
 	}
 	_error("Failed to find generic for builtin op");
 }
@@ -301,7 +292,7 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
 		args.push_back(p);
 		CompiledCall cc(call, args, 2, false);
 		MatchArgs(thread, thread.frame.environment, fenv, func, cc);
-		return buildStackFrame(thread, fenv, true, func.prototype(), out, &inst+1);
+		return buildStackFrame(thread, fenv, func.prototype(), out, &inst+1);
 	}
 	_error("Failed to find generic for builtin op");
 }

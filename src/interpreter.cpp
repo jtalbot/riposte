@@ -27,7 +27,7 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 	if(a->isPromise()) {
 		Function f(*a);
 		assert(f.environment()->DynamicScope());
-		return buildStackFrame(thread, f.environment()->DynamicScope(), false, f.prototype(), env, index, &inst);
+		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), env, index, &inst);
 	} else {
 		_error(std::string("Object '..") + intToStr(index+1) + "' not found, missing argument?");
 	}
@@ -37,11 +37,11 @@ Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const
 	if(a->isPromise()) {
 		Function f(*a);
 		assert(f.environment()->DynamicScope());
-		return buildStackFrame(thread, f.environment()->DynamicScope(), false, f.prototype(), f.environment(), name, &inst);
+		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), f.environment(), name, &inst);
 	} else if(a->isDefault()) {
 		Function f(*a);
 		assert(f.environment());
-		return buildStackFrame(thread, f.environment(), false, f.prototype(), f.environment(), name, &inst);
+		return buildStackFrame(thread, f.environment(), f.prototype(), f.environment(), name, &inst);
 	} else {
 		_error(std::string("Object '") + thread.externStr(name) + "' not found");
 	}
@@ -67,35 +67,69 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
 	
 	MatchArgs(thread, thread.frame.environment, fenv, func, call);
-	return buildStackFrame(thread, fenv, true, func.prototype(), inst.c, &inst+1);
+	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
 }
 
 Instruction const* ret_op(Thread& thread, Instruction const& inst) {
-	// if this stack frame owns the environment, we can free it for reuse
+	// we can return futures from functions, so don't BIND
+	OPERAND(result, inst.a); FORCE(result, inst.a);	
+	
+	// We can free this environment for reuse
 	// as long as we don't return a closure...
 	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
-	OPERAND(result, inst.a); FORCE(result, inst.a);	// we can return futures from functions, so don't BIND
-
-	if(thread.frame.ownEnvironment && result.isClosureSafe()) {
+	if(result.isClosureSafe()) {
 		thread.environments.push_back(thread.frame.environment);
 		thread.trace.killEnvironment(thread.frame.environment);
 	}
 
+	REGISTER(-1) = result;
+	
 	thread.base = thread.frame.returnbase;
+	Instruction const* returnpc = thread.frame.returnpc;
+	
+	thread.pop();
+	if(result.isFuture()) {
+		thread.trace.addEnvironment(thread.frame.environment);
+	}
 
-	if(thread.frame.dest == StackFrame::REG) {
-		REGISTER(thread.frame.i) = result;
-	} else if(thread.frame.dest == StackFrame::MEMORY) {
-		thread.frame.env->insert(thread.frame.s) = result;
+	return returnpc;
+}
+
+Instruction const* rets_op(Thread& thread, Instruction const& inst) {
+	// top-level statements can't return futures, so bind 
+	OPERAND(result, inst.a); FORCE(result, inst.a); BIND(result);	
+	
+	REGISTER(-1) = result;
+	
+	thread.base = thread.frame.returnbase;
+	thread.pop();
+	
+	// there should always be a done_op after a rets
+	return &inst+1;
+}
+
+Instruction const* done_op(Thread& thread, Instruction const& inst) {
+	return 0;
+}
+
+Instruction const* retp_op(Thread& thread, Instruction const& inst) {
+	// we can return futures from promises, so don't BIND
+	OPERAND(result, inst.a); FORCE(result, inst.a);	
+	
+	if(thread.frame.dest > 0) {
+		thread.frame.env->insert((String)thread.frame.dest) = result;
 	} else {
-		thread.frame.env->dots[thread.frame.i].v = result;
+		thread.frame.env->dots[-thread.frame.dest].v = result;
 	}
-	if(result.isFuture() && thread.frame.env) {
-		thread.trace.addEnvironment(thread.frame.env);
-	}
-
+	
+	thread.base = thread.frame.returnbase;
 	Instruction const* returnpc = thread.frame.returnpc;
 	thread.pop();
+	
+	if(result.isFuture()) {
+		thread.trace.addEnvironment(thread.frame.environment);
+	}
+
 	return returnpc;
 }
 
@@ -280,10 +314,12 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 	if(isTraceable(thread, a) && isTraceable(thread, i)) {
 		if(Trace::futureType(i) == Type::Integer || Trace::futureType(i) == Type::Double) {
 			OUT(thread, inst.c) = thread.trace.AddGather(a, i);
+			thread.trace.addEnvironment(thread.frame.environment);
 			return &inst+1;
 		} else if(Trace::futureType(i) == Type::Logical &&
 				thread.trace.futureShape(a) == thread.trace.futureShape(i)) {
 			OUT(thread, inst.c) = thread.trace.AddFilter(a, i);
+			thread.trace.addEnvironment(thread.frame.environment);
 			return &inst+1;
 		}
 	}
@@ -420,6 +456,7 @@ Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	// TODO: replace with isTraceable...
 	if(thread.state.jitEnabled && isTraceableType(type) && l >= TRACE_VECTOR_WIDTH) {
 		OUT(thread, inst.c) = thread.trace.AddConstant(type, l, 0);
+		thread.trace.addEnvironment(thread.frame.environment);
 		return &inst+1;
 	}
 
@@ -460,10 +497,13 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	int64_t len = As<Integer>(thread, a)[0];
 	
 	if(len >= TRACE_VECTOR_WIDTH) {
-		if(b.isDouble() || c.isDouble())
+		if(b.isDouble() || c.isDouble()) {
 			OUT(thread, inst.c) = thread.trace.AddSequence(len, start, step);
-		else
+			thread.trace.addEnvironment(thread.frame.environment);
+		} else {
 			OUT(thread, inst.c) = thread.trace.AddSequence(len, (int64_t)start, (int64_t)step);
+			thread.trace.addEnvironment(thread.frame.environment);
+		}
 		return &inst+1;
 	}
 
@@ -532,11 +572,6 @@ Instruction const* internal_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* done_op(Thread& thread, Instruction const& inst) {
-	// not used. When this instruction is hit, interpreter exits.
-	return 0;
-}
-
 
 
 //
@@ -569,7 +604,6 @@ void interpret(Thread& thread, Instruction const* pc) {
 	}
 #endif
 
-	thread.trace.Flush(thread);
 }
 
 // ensure glabels is inited before we need it.
@@ -588,34 +622,19 @@ Value Thread::eval(Prototype const* prototype) {
 }
 
 Value Thread::eval(Prototype const* prototype, Environment* environment) {
-	Instruction done(ByteCode::done);
-	Prototype prototype0;
-	prototype0.registers = 0;
-
-#ifdef USE_THREADED_INTERPRETER
-	done.ibc = glabels[ByteCode::done];
-#endif
 	Value* old_base = base;
 	int64_t stackSize = stack.size();
 	
-	// Build a half-hearted stack frame for the result. Necessary for the trace recorder.
-	StackFrame& s = push();
-	s.environment = 0;
-	s.prototype = &prototype0;
-	s.returnbase = base;
-	base -= 1;
-	Value* result = base;
-
-	Instruction const* run = buildStackFrame(*this, environment, false, prototype, 0, &done);
+	Instruction const* run = buildStackFrame(*this, environment, prototype, 0, (Instruction const*)0);
 	try {
 		interpret(*this, run);
-		base = old_base;
-		pop();
+		assert(base == old_base);
+		assert(stackSize == stack.size());
 	} catch(...) {
 		base = old_base;
 		stack.resize(stackSize);
 		throw;
 	}
-	return *result;
+	return *(base-1);
 }
 

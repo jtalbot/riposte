@@ -87,23 +87,12 @@ struct Prototype : public gc {
 
 struct StackFrame {
 	Environment* environment;
-	bool ownEnvironment;
 	Prototype const* prototype;
 
 	Instruction const* returnpc;
 	Value* returnbase;
 	
-	// result can go in a register or in an environment or in dots
-	enum Destination {
-		REG,
-		MEMORY,
-		DOTS
-	};
-	Destination dest;
-	union {
-		int64_t i;
-		String s;
-	};
+	int64_t dest;
 	Environment* env;
 };
 
