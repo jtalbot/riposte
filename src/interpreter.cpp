@@ -82,7 +82,7 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 		thread.trace.killEnvironment(thread.frame.environment);
 	}
 
-	REGISTER(-1) = result;
+	REGISTER(0) = result;
 	
 	thread.base = thread.frame.returnbase;
 	Instruction const* returnpc = thread.frame.returnpc;
@@ -99,7 +99,7 @@ Instruction const* rets_op(Thread& thread, Instruction const& inst) {
 	// top-level statements can't return futures, so bind 
 	OPERAND(result, inst.a); FORCE(result, inst.a); BIND(result);	
 	
-	REGISTER(-1) = result;
+	REGISTER(0) = result;
 	
 	thread.base = thread.frame.returnbase;
 	thread.pop();
@@ -624,17 +624,20 @@ Value Thread::eval(Prototype const* prototype) {
 Value Thread::eval(Prototype const* prototype, Environment* environment) {
 	Value* old_base = base;
 	int64_t stackSize = stack.size();
-	
+
+	// make room for the result
+	base--;	
 	Instruction const* run = buildStackFrame(*this, environment, prototype, 0, (Instruction const*)0);
 	try {
 		interpret(*this, run);
+		base++;
 		assert(base == old_base);
 		assert(stackSize == stack.size());
+		return *(base-1);
 	} catch(...) {
 		base = old_base;
 		stack.resize(stackSize);
 		throw;
 	}
-	return *(base-1);
 }
 

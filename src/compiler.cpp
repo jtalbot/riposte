@@ -720,14 +720,14 @@ void Compiler::dumpCode() const {
 
 // generate actual code from IR as follows...
 // 	MEMORY and INTEGER operands unchanged
-//	CONSTANT operands placed in lower N registers (starting at -1)
+//	CONSTANT operands placed in lower N registers (starting at 0)
 //	REGISTER operands placed in above those
 //	all register ops encoded with negative integer.
 //	INVALID operands just go to 0 since they will never be used
 int64_t Compiler::encodeOperand(Operand op, int64_t n) const {
 	if(op.loc == MEMORY || op.loc == INTEGER) return op.i;
-	else if(op.loc == CONSTANT) return -(op.i+1);
-	else if(op.loc == REGISTER) return -(op.i + n + 1);
+	else if(op.loc == CONSTANT) return -(op.i);
+	else if(op.loc == REGISTER) return -(op.i + n);
 	else return 0;
 }
 

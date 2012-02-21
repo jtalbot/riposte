@@ -41,7 +41,7 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 		throw RiposteError("Register overflow");
 	
 	if(prototype->constants.size() > 0)
-		memcpy(thread.base-prototype->constants.size(), &prototype->constants[0], sizeof(Value)*prototype->constants.size());
+		memcpy(thread.base-(prototype->constants.size()-1), &prototype->constants[0], sizeof(Value)*prototype->constants.size());
 
 #ifdef USE_THREADED_INTERPRETER
 	// Initialize threaded bytecode if not yet done 
@@ -57,7 +57,7 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 }
 
 static Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, int64_t resultSlot, Instruction const* returnpc) {
-	return buildStackFrame(thread, environment, prototype, returnpc, (-resultSlot)-1);
+	return buildStackFrame(thread, environment, prototype, returnpc, -resultSlot);
 }
 
 static Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Environment* env, String s, Instruction const* returnpc) {
