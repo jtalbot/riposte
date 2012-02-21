@@ -83,6 +83,7 @@ static ByteCode::Enum op3(String const& func) {
 	if(func == Strings::split) return ByteCode::split;
 	if(func == Strings::ifelse) return ByteCode::ifelse;
 	if(func == Strings::seq) return ByteCode::seq;
+	if(func == Strings::rep) return ByteCode::rep;
 	throw RuntimeError("unexpected symbol used as a trinary operator"); 
 }
 
@@ -546,7 +547,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::bbAssign ||
 		func == Strings::split ||
 		func == Strings::ifelse ||
-		func == Strings::seq) &&
+		func == Strings::seq ||
+		func == Strings::rep) &&
 		call.length == 4) {
 		Operand c = placeInRegister(compile(call[1], code));
 		Operand b = compile(call[2], code);

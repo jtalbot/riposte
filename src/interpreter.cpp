@@ -514,6 +514,26 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
+Instruction const* rep_op(Thread& thread, Instruction const& inst) {
+	// c = n, b = each, a = length
+	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
+	OPERAND(b, inst.b); FORCE(b, inst.b); BIND(b);
+	OPERAND(c, inst.c); FORCE(c, inst.c); BIND(c);
+
+	int64_t n = As<Integer>(thread, c)[0];
+	int64_t each = As<Integer>(thread, b)[0];
+	int64_t len = As<Integer>(thread, a)[0];
+	
+	if(len >= TRACE_VECTOR_WIDTH) {
+		OUT(thread, inst.c) = thread.trace.AddRepeat(len, (int64_t)n, (int64_t)each);
+		thread.trace.addEnvironment(thread.frame.environment);
+		return &inst+1;
+	}
+
+	OUT(thread, inst.c) = Repeat((int64_t)n, (int64_t)each, len);
+	return &inst+1;
+}
+
 Instruction const* type_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	switch(Trace::futureType(a)) {

@@ -186,5 +186,16 @@ inline Double Sequence(double start, double step, int64_t length) {
 	return r;
 }
 
+inline Integer Repeat(int64_t const n, int64_t const each, int64_t const length) {
+	Integer r(length);
+	for(int64_t i = 0, j = 1, e = 1; i < length; i++) {
+		r[i] = j;
+		e++; 
+		if(e > each) { e = 1; j++; }
+		if(j > n) j = 1;
+	}
+	return r;
+}
+
 #endif
 

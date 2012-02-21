@@ -14,6 +14,7 @@
 		_(cast, "cast", ___) \
 		_(constant,"constant", ___) \
 		_(seq, "seq", ___) \
+		_(rep, "rep", ___) \
 		_(load,"load", ___) \
 		_(filter, "filter", ___) \
 		_(split, "split", ___) \

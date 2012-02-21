@@ -670,7 +670,9 @@ class Assembler {
   void movzxwl(Register dst, const Operand& src);
 
   void movlpd(XMMRegister dst, const Operand& src);
+  void movlpd(const Operand& dst, XMMRegister src);
   void movhpd(XMMRegister dst, const Operand& src);
+  void movhpd(const Operand& dst, XMMRegister src);
   void movhlps(XMMRegister dst, XMMRegister src);
 
   // Repeated moves.
@@ -1304,16 +1306,22 @@ class Assembler {
   void divpd(XMMRegister dst, XMMRegister src);
 
   void pand(XMMRegister dst, XMMRegister src);
+  void pand(XMMRegister dst, const Operand& src);
   void por(XMMRegister dst, XMMRegister src);
+  void por(XMMRegister dst, const Operand& src);
+  void pxor(XMMRegister dst, XMMRegister src);
+  void pxor(XMMRegister dst, const Operand& src);
 
   void paddq(XMMRegister dst, XMMRegister src);
   void paddq(XMMRegister dst, const Operand& src);
-
   void psubq(XMMRegister dst, XMMRegister src);
   void psubq(XMMRegister dst, const Operand& src);
+
+  void pcmpeqq(XMMRegister dst, XMMRegister src);
+  void pcmpeqq(XMMRegister dst, const Operand& src);
+
   void haddpd(XMMRegister dst, XMMRegister src);
   void hsubpd(XMMRegister dst, XMMRegister src);
-
 
   void unpcklpd(XMMRegister dst, XMMRegister src);
   void unpckhpd(XMMRegister dst, XMMRegister src);

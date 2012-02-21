@@ -39,6 +39,7 @@
 #define GENERATOR_BYTECODES(_) \
 	_(vector,	"vector",	Generator) \
 	_(seq,		"seq", 		Generator) \
+	_(rep,		"rep", 		Generator) \
 
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double
 #define ARITH_UNARY_BYTECODES(_) \

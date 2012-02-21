@@ -50,6 +50,7 @@ std::string Trace::toString(Thread & thread) {
 		BINARY(split)
 		TRINARY(ifelse)
 		case IROpCode::seq:
+		case IROpCode::rep:
 			if(node.type == Type::Double)
 				out << node.sequence.da << "\t" << node.sequence.db;
 			else
@@ -164,6 +165,18 @@ IRef Trace::EmitSplit(IRef x, IRef f, int64_t levels) {
 	n.shape.levels = levels;
 	n.binary.a = x;
 	n.binary.b = f;
+	nodes.push_back(n);
+	return nodes.size()-1;
+}
+
+IRef Trace::EmitRepeat(int64_t length, int64_t a, int64_t b) {
+	IRNode n;
+	n.enc = IRNode::SEQUENCE;
+	n.op = IROpCode::rep;
+	n.type = Type::Integer;
+	n.shape = (IRNode::Shape) { length, -1, 1, -1 };
+	n.sequence.ia = a;
+	n.sequence.ib = b;
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
@@ -669,7 +682,7 @@ void Trace::Optimize(Thread& thread) {
 		   (node.live && node.enc == IRNode::FOLD)) {
 			int64_t length = node.shape.length;
 			if(node.enc == IRNode::FOLD) {
-				length = std::max(nodes[node.fold.a].shape.levels*2, 8LL) * thread.state.nThreads; 
+				length = nextPow2(std::max(nodes[node.fold.a].shape.levels*2, 8LL)) * thread.state.nThreads; 
 				// * 8 fills cache line (assuming aggregates are all stored in 8-byte fields)
 			} else {
 				if(node.shape.levels != 1)

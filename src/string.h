@@ -117,6 +117,7 @@
 	_(dollarAssign, "$<-") \
 	_(UseMethod, 	"UseMethod") \
 	_(seq, 		"seq") \
+	_(rep, 		"rep") \
 	_(True, 	"TRUE") \
 	_(False, 	"FALSE") \
 	_(type, 	"type") \

@@ -149,6 +149,7 @@ class Trace : public gc {
 		IRef EmitFilter(IRef a, IRef b);
 		IRef EmitSplit(IRef x, IRef f, int64_t levels);
 
+		IRef EmitRepeat(int64_t length, int64_t a, int64_t b);
 		IRef EmitSequence(int64_t length, int64_t a, int64_t b);
 		IRef EmitSequence(int64_t length, double a, double b);
 		IRef EmitConstant(Type::Enum type, int64_t length, int64_t c);
@@ -167,7 +168,7 @@ class Trace : public gc {
 		IRef GetRef(Value const& v) {
 			if(v.isFuture()) return v.future.ref;
 			else if(v.length == 1) return EmitConstant(v.type, 1, v.i);
-			else return EmitLoad(v,EmitSequence(v.length,(int64_t)1,(int64_t)1));
+			else return EmitLoad(v,EmitSequence(v.length,(int64_t)0,(int64_t)1));
 		}
 
 		template< template<class X> class Group >
@@ -232,6 +233,13 @@ class Trace : public gc {
 			return v;
 		}
 
+		Value AddRepeat(int64_t length, int64_t a, int64_t b) {
+			IRef r = EmitRepeat(length, a, b);
+			Value v;
+			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			return v;
+		}
+		
 		Value AddSequence(int64_t length, int64_t a, int64_t b) {
 			IRef r = EmitSequence(length, a, b);
 			Value v;
@@ -247,7 +255,9 @@ class Trace : public gc {
 		}
 
 		Value AddGather(Value const& a, Value const& i) {
-			IRef r = EmitLoad(a, EmitCoerce(GetRef(i), Type::Integer));
+			IRef o = EmitConstant(Type::Integer, 1, 1);
+			IRef im1 = EmitBinary(IROpCode::sub, Type::Integer, EmitCoerce(GetRef(i), Type::Integer), o, 0);
+			IRef r = EmitLoad(a, im1);
 			Value v;
 			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
 			return v;
