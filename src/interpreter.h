@@ -161,7 +161,7 @@ class Trace : public gc {
 		}
 
 		IRNode::Shape futureShape(Value const& v) const {
-			if(v.isFuture()) return nodes[v.future.ref].shape;
+			if(v.isFuture()) return nodes[v.future.ref].outShape;
 			else return (IRNode::Shape) { v.length, -1, 1, -1 };
 		}
 
@@ -182,7 +182,7 @@ class Trace : public gc {
 					r = EmitUnary(op, Group<Logical>::R::VectorType, EmitCoerce(GetRef(a), Group<Logical>::MA::VectorType), data);
 				} else _error("Attempting to record invalid type in EmitUnary");
 				Value v;
-				Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+				Future::Init(v, nodes[r].type, nodes[r].outShape.length, r);
 				return v;
 			}
 
@@ -215,42 +215,42 @@ class Trace : public gc {
 					else _error("Attempting to record invalid type in EmitBinary");
 				} else _error("Attempting to record invalid type in EmitBinary");
 				Value v;
-				Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+				Future::Init(v, nodes[r].type, nodes[r].outShape.length, r);
 				return v;
 			}
 
 		Value EmitSplit(Value const& a, Value const& b, int64_t data) {
 			IRef r = EmitSplit(GetRef(a), EmitCoerce(GetRef(b), Type::Integer), data);
 			Value v;
-			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			Future::Init(v, nodes[r].type, nodes[r].outShape.length, r);
 			return v;
 		}
 
 		Value AddConstant(Type::Enum type, int64_t length, int64_t c) {
 			IRef r = EmitConstant(type, length, c);
 			Value v;
-			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			Future::Init(v, nodes[r].type, nodes[r].outShape.length, r);
 			return v;
 		}
 
 		Value AddRepeat(int64_t length, int64_t a, int64_t b) {
 			IRef r = EmitRepeat(length, a, b);
 			Value v;
-			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			Future::Init(v, nodes[r].type, nodes[r].outShape.length, r);
 			return v;
 		}
 		
 		Value AddSequence(int64_t length, int64_t a, int64_t b) {
 			IRef r = EmitSequence(length, a, b);
 			Value v;
-			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			Future::Init(v, nodes[r].type, nodes[r].outShape.length, r);
 			return v;
 		}
 
 		Value AddSequence(int64_t length, double a, double b) {
 			IRef r = EmitSequence(length, a, b);
 			Value v;
-			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			Future::Init(v, nodes[r].type, nodes[r].outShape.length, r);
 			return v;
 		}
 
@@ -259,14 +259,14 @@ class Trace : public gc {
 			IRef im1 = EmitBinary(IROpCode::sub, Type::Integer, EmitCoerce(GetRef(i), Type::Integer), o, 0);
 			IRef r = EmitLoad(a, im1);
 			Value v;
-			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			Future::Init(v, nodes[r].type, nodes[r].outShape.length, r);
 			return v;
 		}
 
 		Value AddFilter(Value const& a, Value const& i) {
 			IRef r = EmitFilter(GetRef(a), EmitCoerce(GetRef(i), Type::Logical));
 			Value v;
-			Future::Init(v, nodes[r].type, nodes[r].shape.length, r);
+			Future::Init(v, nodes[r].type, nodes[r].outShape.length, r);
 			return v;
 		}
 
@@ -312,6 +312,8 @@ class Trace : public gc {
 		void UsePropogation(Thread& thread);
 		void DefPropogation(Thread& thread);
 		void DeadCodeElimination(Thread& thread);
+		void PropogateShape(IRNode::Shape shape, IRNode& node);
+		void ShapePropogation(Thread& thread);
 };
 
 #endif

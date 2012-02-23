@@ -248,17 +248,34 @@ static __m128d castl2i(__m128d input) {
 	return v.D;
 }
 
-static void store_conditional(__m128d input, __m128i mask, Value* out) {
+static void double_push(Double* d, double v) {
+	if(d->length >= 1) {
+		if(d->length == nextPow2(d->length)) {
+			// reallocate and copy
+			Double n(nextPow2(d->length+1));
+			memcpy(n.v(), d->v(), d->length*sizeof(double));
+			d->p = n.p;
+		}
+		(*d)[d->length++] = v;
+	} else {
+		Double::InitScalar(*d, v);
+	} 
+}
+
+static __m128d store_conditional(__m128d input, __m128i mask, Value* out) {
 	SSEValue i, m; 
 	i.D = input;
 	m.I = mask;
-	if(m.i[0] == -1) 
-		((double*)(out->p))[out->length++] = i.d[0];
+	if(m.i[0] == -1)
+		double_push((Double*)out, i.d[0]); 
+		//((double*)(out->p))[out->length++] = i.d[0];
 	if(m.i[1] == -1) 
-		((double*)(out->p))[out->length++] = i.d[1];
+		double_push((Double*)out, i.d[1]); 
+		//((double*)(out->p))[out->length++] = i.d[1];
+	return input;
 }
 
-static void store_conditional_l(__m128d input, __m128i mask, Value* out) {
+static __m128d store_conditional_l(__m128d input, __m128i mask, Value* out) {
 	SSEValue i, m; 
 	i.D = input;
 	m.I = mask;
@@ -266,15 +283,7 @@ static void store_conditional_l(__m128d input, __m128i mask, Value* out) {
 		((char*)(out->p))[out->length++] = (char)i.i[0];
 	if(m.i[1] == -1) 
 		((char*)(out->p))[out->length++] = (char)i.i[1];
-}
-
-static void sum_by_d(__m128d add, __m128i split, Value* out, int64_t thread_index, int64_t step) {
-	SSEValue m, v;
-	m.I = split;
-	v.D = add;
-	int64_t off = thread_index << step;
-	((double*)(out->p))[off + m.i[0]*2] += v.d[0];
-	((double*)(out->p))[off + m.i[1]*2+1] += v.d[1];
+	return input;
 }
 
 static __m128d sequenceStart_d(__m128d a, int64_t vector_index) {
@@ -371,6 +380,7 @@ struct TraceJIT {
 			case IRNode::BINARY: {
 				AllocateBinary(ref,node.binary.a,node.binary.b);
 			} break;
+			case IRNode::FILTER: /*fallthrough*/
 			case IRNode::FOLD: {
 				AllocateUnary(ref, node.fold.a);
 			} break;
@@ -412,7 +422,7 @@ struct TraceJIT {
 			if(!alloc.allocate(r,&allocated_register[a]))
 				_error("exceeded available registers");
 		}
-		if(trace->nodes[ref].liveOut) {
+		//if(trace->nodes[ref].liveOut) {
 			IRNode::Shape& s = trace->nodes[ref].shape;
 			if(s.filter >= 0 && allocated_register[s.filter] < 0) {
 				if(!alloc.allocate(&allocated_register[s.filter]))
@@ -422,7 +432,7 @@ struct TraceJIT {
 				if(!alloc.allocate(&allocated_register[s.split]))
 					_error("exceeded available registers");
 			}
-		}
+		//}
 		return r;
 	}
 
@@ -783,8 +793,8 @@ struct TraceJIT {
 					for(int64_t i = 0; i < node.out.length; i++)
 						((double*)node.out.p)[i] = 0.0;
 					Move(ref, node.fold.a);
-					if(trace->nodes[node.fold.a].shape.filter >= 0) {
-						IRef mask = trace->nodes[node.fold.a].shape.filter;
+					if(node.shape.filter >= 0) {
+						IRef mask = node.shape.filter;
 						asm_.pand(reg(ref), reg(mask));
 					}
 					if(trace->nodes[node.fold.a].shape.split >= 0) {
@@ -792,7 +802,7 @@ struct TraceJIT {
 						Operand base = PushConstant(c);
 						asm_.movq(r8, base);
 						
-						XMMRegister split = reg(trace->nodes[node.fold.a].shape.split);
+						XMMRegister split = reg(node.shape.split);
 						asm_.movapd(xmm15, split);
 						asm_.paddq(xmm15, xmm15);
 						asm_.paddq(xmm15, Operand(rsp, stackOffset));						
@@ -851,8 +861,13 @@ struct TraceJIT {
 			break;
 
 			case IROpCode::split:
-			case IROpCode::filter:
 				Move(ref, node.binary.a);
+				break;
+
+			case IROpCode::filter:
+				Move(ref, node.unary.a);
+				if(node.shape.filter >= 0)
+					asm_.pand(reg(ref),reg(node.shape.filter));
 			break;
 
 			case IROpCode::ifelse:
@@ -880,6 +895,7 @@ struct TraceJIT {
 					} break;
 
 					case IRNode::FOLD:
+					case IRNode::FILTER:
 					case IRNode::LOAD:
 					case IRNode::NOP:
 						// do nothing...
@@ -991,7 +1007,7 @@ struct TraceJIT {
 	void EmitSplitFold(IRef ref, void* fn) {
 		IRNode const& node = trace->nodes[ref];
 		XMMRegister src = reg(ref);
-		XMMRegister split = reg(trace->nodes[node.fold.a].shape.split);
+		XMMRegister split = reg(node.shape.split);
 		int64_t step = node.out.length/thread.state.nThreads;
 		SaveRegisters(ref);
 		EmitMove(xmm0,src);
@@ -1163,7 +1179,7 @@ struct TraceJIT {
 	void EmitCompare(IRef ref, Assembler::ComparisonType typ) {
 		IRNode & node = trace->nodes[ref];
 		if(Type::Double == trace->nodes[node.binary.a].type) {
-			asm_.cmppd(reg(ref),reg(node.binary.b),typ);
+			asm_.cmppd(Move(ref, node.binary.a),reg(node.binary.b),typ);
 		} else {
 			_error("NYI - integer compare");
 		}
@@ -1206,12 +1222,12 @@ struct TraceJIT {
 			if(node.liveOut) {
 				switch(node.op) {
 				case IROpCode::sum:  {
-					Double r(node.shape.length);
+					Double r(node.outShape.length);
 					for(int64_t i = 0; i < r.length; i++)
 						r[i] = 0.0;
 					double const* d = (double const*)node.out.p;
 					int64_t step = node.out.length/thread.state.nThreads;
-					for(int64_t i = 0; i < node.shape.length; i++) {
+					for(int64_t i = 0; i < node.outShape.length; i++) {
 						for(int64_t j = 0; j < thread.state.nThreads; j++) {
 							//printf("%d: %f += %f + %f\n", i, r[i], d[j*step+i*2], d[j*step+i*2+1]);
 							r[i] += d[j*step+i*2];

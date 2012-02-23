@@ -30,15 +30,22 @@ void Trace::Flush(Thread & thread) {
 	Reset();
 }
 
+std::string shape2string(IRNode::Shape const& shape) {
+	std::ostringstream out;
+	out << "[" << shape.length;
+	if(shape.filter > 0) out << "[n" << shape.filter << "]";
+	if(shape.split > 0) out << "/n" << shape.split << "(" << shape.levels << ")";
+	out << "]";
+	return out.str();
+}
+
 std::string Trace::toString(Thread & thread) {
 	std::ostringstream out;
 	for(size_t j = 0; j < nodes.size(); j++) {
 		IRNode & node = nodes[j];
-		out << "n" << j << " : " << Type::toString(node.type) << "[" << node.shape.length;
-		if(node.shape.filter > 0) out << "[n" << node.shape.filter << "]";
-		if(node.shape.split > 0) out << "/n" << node.shape.split << "(" << node.shape.levels << ")";
-		out << "]" << "\t";
-		out << " = " << IROpCode::toString(node.op) << "\t\t"; 
+		out << "n" << j << " : " << Type::toString(node.type) << "\t";
+		out << shape2string(node.shape) << "\t=>\t" << shape2string(node.outShape);
+		out << "\t = " << IROpCode::toString(node.op) << "\t\t"; 
 		switch(node.op) {
 #define TRINARY(op,...) case IROpCode::op: out << "n" << node.trinary.a << "\tn" << node.trinary.b << "\tn" << node.trinary.c; break;
 #define BINARY(op,...) case IROpCode::op: out << "n" << node.binary.a << "\tn" << node.binary.b; break;
@@ -91,14 +98,15 @@ IRef Trace::EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data) 
 	IRNode n;
 	n.op = op;
 	n.type = type;
+	n.shape = nodes[a].outShape;
 	if(	(op == IROpCode::sum || op == IROpCode::prod || 
 		 op == IROpCode::min || op == IROpCode::max ||
 		 op == IROpCode::any || op == IROpCode::all)) {
 		n.enc = IRNode::FOLD;
-		n.shape = (IRNode::Shape) { nodes[a].shape.levels, 0, 1, 0 };
+		n.outShape = (IRNode::Shape) { nodes[a].shape.levels, 0, 1, 0 };
 	} else {
 		n.enc = IRNode::UNARY;
-		n.shape = nodes[a].shape;
+		n.outShape = n.shape;
 	}
 	n.unary.a = a;
 	n.unary.data = data;
@@ -110,14 +118,19 @@ IRef Trace::EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, int64
 	n.enc = IRNode::BINARY;
 	n.op = op;
 	n.type = type;
-	if(nodes[a].shape.length == 1)
-		n.shape = nodes[b].shape;
-	else if(nodes[b].shape.length == 1)
-		n.shape = nodes[a].shape;
+	// TODO: this should really check to see if 
+	// the operands are the same length or are constants that we can insert
+	// a rep and gather for. This length == 1 check will break on sum(a) + 1 which
+	// we can't fuse.
+	if(nodes[a].outShape.length == 1)
+		n.shape = nodes[b].outShape;
+	else if(nodes[b].outShape.length == 1)
+		n.shape = nodes[a].outShape;
 	else {
-		assert(nodes[a].shape == nodes[b].shape);
-		n.shape = nodes[a].shape;
+		//assert(nodes[a].outShape == nodes[b].outShape);
+		n.shape = nodes[a].outShape;
 	}
+	n.outShape = n.shape;
 	n.binary.a = a;
 	n.binary.b = b;
 	n.binary.data = data;
@@ -129,8 +142,10 @@ IRef Trace::EmitTrinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, IRef
 	n.enc = IRNode::TRINARY;
 	n.op = op;
 	n.type = type;
-	assert(nodes[a].shape == nodes[b].shape && nodes[b].shape == nodes[c].shape);
-	n.shape = nodes[a].shape;
+	// TODO: get rid of this assert and replace with recycle rule
+	assert(nodes[a].outShape == nodes[b].outShape && nodes[b].outShape == nodes[c].outShape);
+	n.shape = nodes[a].outShape;
+	n.outShape = n.shape;
 	n.trinary.a = a;
 	n.trinary.b = b;
 	n.trinary.c = c;
@@ -139,19 +154,27 @@ IRef Trace::EmitTrinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, IRef
 }
 
 IRef Trace::EmitFilter(IRef a, IRef b) {
+	// TODO: get rid of this assert and replace with recycle rule
+	assert(nodes[a].outShape == nodes[b].outShape);
 	IRNode n;
-	n.enc = IRNode::UNARY;
+	n.enc = IRNode::FILTER;
 	n.op = IROpCode::filter;
-	n.type = nodes[a].type;
-	n.shape = nodes[a].shape;
-	n.shape.filter = b;
-	n.unary.a = a;
+	n.type = nodes[b].type;
+	n.shape = nodes[b].outShape;
+	n.outShape = n.shape;
+	n.outShape.filter = nodes.size();
+	n.unary.a = b;
 	nodes.push_back(n);
-	return nodes.size()-1;
+	IRef f = nodes.size()-1;
+	IRef r = EmitUnary(IROpCode::pos, nodes[a].type, a, 0);
+	nodes[r].shape.filter = f;
+	nodes[r].outShape.filter = f;
+	return r;
 }
+
 IRef Trace::EmitSplit(IRef x, IRef f, int64_t levels) {
 	// subsplit if necessary...
-	if(nodes[x].shape.split > 0) {
+	if(nodes[x].shape.split >= 0) {
 		levels *= nodes[x].shape.levels;
 		IRef e = EmitBinary(IROpCode::mul, Type::Integer, f, EmitConstant(Type::Integer, 1, levels), 0);
 		f = EmitBinary(IROpCode::add, Type::Integer, e, f, 0);
@@ -160,9 +183,10 @@ IRef Trace::EmitSplit(IRef x, IRef f, int64_t levels) {
 	n.enc = IRNode::BINARY;
 	n.op = IROpCode::split;
 	n.type = nodes[x].type;
-	n.shape = nodes[x].shape;
-	n.shape.split = f;
-	n.shape.levels = levels;
+	n.shape = nodes[x].outShape;
+	n.outShape = n.shape;
+	n.outShape.split = f;
+	n.outShape.levels = levels;
 	n.binary.a = x;
 	n.binary.b = f;
 	nodes.push_back(n);
@@ -175,6 +199,7 @@ IRef Trace::EmitRepeat(int64_t length, int64_t a, int64_t b) {
 	n.op = IROpCode::rep;
 	n.type = Type::Integer;
 	n.shape = (IRNode::Shape) { length, -1, 1, -1 };
+	n.outShape = n.shape;
 	n.sequence.ia = a;
 	n.sequence.ib = b;
 	nodes.push_back(n);
@@ -187,6 +212,7 @@ IRef Trace::EmitSequence(int64_t length, int64_t a, int64_t b) {
 	n.op = IROpCode::seq;
 	n.type = Type::Integer;
 	n.shape = (IRNode::Shape) { length, -1, 1, -1 };
+	n.outShape = n.shape;
 	n.sequence.ia = a;
 	n.sequence.ib = b;
 	nodes.push_back(n);
@@ -199,6 +225,7 @@ IRef Trace::EmitSequence(int64_t length, double a, double b) {
 	n.op = IROpCode::seq;
 	n.type = Type::Double;
 	n.shape = (IRNode::Shape) { length, -1, 1, -1 };
+	n.outShape = n.shape;
 	n.sequence.da = a;
 	n.sequence.db = b;
 	nodes.push_back(n);
@@ -211,6 +238,7 @@ IRef Trace::EmitConstant(Type::Enum type, int64_t length, int64_t c) {
 	n.op = IROpCode::constant;
 	n.type = type;
 	n.shape = (IRNode::Shape) { length, -1, 1, -1 };
+	n.outShape = n.shape;
 	n.constant.i = c;
 	nodes.push_back(n);
 	return nodes.size()-1;
@@ -221,6 +249,7 @@ IRef Trace::EmitLoad(Value const& v, IRef i) {
 	n.op = IROpCode::load;
 	n.type = v.type;
 	n.shape = (IRNode::Shape) { v.length, -1, 1, -1 };
+	n.outShape = n.shape;
 	n.unary.a = i;
 	n.out = v;
 	nodes.push_back(n);
@@ -536,7 +565,7 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 
 void Trace::CSEElimination(Thread& thread) {
 	// look for exact same op somewhere above, replace myself with pos of that one...
-	for(IRef i = 0; i < nodes.size(); i++) {
+	for(IRef i = 0; i < (IRef)nodes.size(); i++) {
 		IRNode& node = nodes[i];
 		if(node.enc == IRNode::UNARY && nodes[node.unary.a].op == IROpCode::pos)
 			node.unary.a = nodes[node.unary.a].unary.a;
@@ -585,6 +614,7 @@ void Trace::UsePropogation(Thread& thread) {
 					nodes[node.unary.a].live = true;
 					break;
 				case IRNode::FOLD: 
+				case IRNode::FILTER: 
 					nodes[node.fold.a].live = true;
 					break;
 				case IRNode::CONSTANT: /*fallthrough*/
@@ -622,6 +652,7 @@ void Trace::DefPropogation(Thread& thread) {
 					node.live = 	nodes[node.unary.a].live;
 					break;
 				case IRNode::FOLD: 
+				case IRNode::FILTER: 
 					node.live =	nodes[node.fold.a].live;
 					break;
 				case IRNode::CONSTANT: /*fallthrough*/
@@ -649,6 +680,64 @@ void Trace::DeadCodeElimination(Thread& thread) {
 	}
 }
 
+void Trace::PropogateShape(IRNode::Shape shape, IRNode& node) {
+	if(node.enc != IRNode::FOLD && node.enc != IRNode::FILTER) {
+		if(node.shape.length == -1) {
+			node.shape = shape;
+		} else {
+			// unify shapes
+			assert(node.shape.length == shape.length);
+			// look for meet of filters
+			while(node.shape.filter != shape.filter) {
+				if(node.shape.filter > shape.filter) {
+					node.shape.filter = nodes[node.shape.filter].shape.filter;
+				} else {
+					shape.filter = nodes[shape.filter].shape.filter;
+				}
+			}
+		}
+	}
+}
+
+void Trace::ShapePropogation(Thread& thread) {
+	
+	// wipe out original shapes on MAPs
+	for(IRef ref = (IRef)nodes.size()-1; ref >= 0; ref--) {
+		IRNode& node = nodes[ref];
+		if(node.enc != IRNode::FOLD && node.enc != IRNode::FILTER) {
+			node.shape.length = -1;
+		}
+	}
+
+	for(IRef ref = (IRef)nodes.size()-1; ref >= 0; ref--) {
+		IRNode& node = nodes[ref];
+		if(node.liveOut)
+			PropogateShape(node.outShape, node);
+		switch(node.enc) {
+			case IRNode::TRINARY:
+				PropogateShape(node.shape, nodes[node.trinary.a]);
+				PropogateShape(node.shape, nodes[node.trinary.b]);
+				PropogateShape(node.shape, nodes[node.trinary.c]);
+				break;
+			case IRNode::BINARY: 
+				PropogateShape(node.shape, nodes[node.binary.a]);
+				PropogateShape(node.shape, nodes[node.binary.b]);
+				break;
+			case IRNode::LOAD: /*fallthrough*/
+			case IRNode::UNARY:
+			case IRNode::FOLD: 
+			case IRNode::FILTER: 
+				PropogateShape(node.shape, nodes[node.unary.a]);
+				break;
+			case IRNode::CONSTANT: /*fallthrough*/
+			case IRNode::SEQUENCE: /*fallthrough*/
+			case IRNode::NOP: 
+				/* nothing */
+				break;
+		}
+	}
+}
+
 void Trace::Optimize(Thread& thread) {
 
 	if(thread.state.verbose)
@@ -657,20 +746,21 @@ void Trace::Optimize(Thread& thread) {
 	MarkLiveOutputs(thread);
 	UsePropogation(thread);
 	DeadCodeElimination(thread);	// avoid optimizing code that's dead anyway
-	
+
+	//ShapePropogation(thread);	
 	SimplifyOps(thread);
-	AlgebraicSimplification(thread);
-	CSEElimination(thread);
+	//AlgebraicSimplification(thread);
+	//CSEElimination(thread);
 
 	// move outputs up...
-	for(size_t i = 0; i < outputs.size(); i++) {
+	/*for(size_t i = 0; i < outputs.size(); i++) {
 		IRef& r = outputs[i].ref;
 		while(nodes[r].op == IROpCode::pos) {
 			nodes[r].liveOut = false;
 			r = nodes[r].unary.a;
 		}
 		nodes[r].liveOut = true;
-	}
+	}*/
 	
 	UsePropogation(thread);
 	DeadCodeElimination(thread);
@@ -680,13 +770,15 @@ void Trace::Optimize(Thread& thread) {
 		IRNode& node = nodes[ref];
 		if((node.liveOut && node.enc != IRNode::LOAD) || 
 		   (node.live && node.enc == IRNode::FOLD)) {
-			int64_t length = node.shape.length;
+			int64_t length = node.outShape.length;
 			if(node.enc == IRNode::FOLD) {
-				length = nextPow2(std::max(nodes[node.fold.a].shape.levels*2, 8LL)) * thread.state.nThreads; 
+				length = nextPow2(std::max(node.shape.levels*2, 8LL)) * thread.state.nThreads; 
 				// * 8 fills cache line (assuming aggregates are all stored in 8-byte fields)
 			} else {
 				if(node.shape.levels != 1)
 					_error("Group by without aggregate not yet supported");
+				if(node.shape.filter >= 0)
+					length = 0;
 			}
 			if(node.type == Type::Double) {
 				node.out = Double(length);

@@ -33,22 +33,15 @@ struct IRNode {
 		UNARY,
 		BINARY,
 		TRINARY,
-		FOLD,
-
+		
 		SEQUENCE,
 		CONSTANT,
-		LOAD
+		LOAD,
+
+		FILTER,
+		FOLD
 	};
 
-	Encoding enc;
-	IROpCode::Enum op;
-	Type::Enum type;
-
-	bool live;
-
-	bool liveOut;
-	Value out;
-	
 	struct Shape {
 		int64_t length;
 		IRef filter;
@@ -67,8 +60,16 @@ struct IRNode {
 		}
 	};
 
-	Shape shape;
+	Encoding enc;
+	IROpCode::Enum op;
 
+	Type::Enum type;
+	Shape shape, outShape;
+
+	bool live;
+	bool liveOut;
+	Value out;
+	
 	bool operator==(IRNode const& o) const {
 		bool eq = (enc == o.enc && op == o.op && type == o.type && shape == o.shape);
 		switch(enc) {
@@ -78,6 +79,7 @@ struct IRNode {
 			case IRNode::BINARY:
 				return eq && binary.a == o.binary.a && binary.b == o.binary.b;
 				break;
+			case IRNode::FILTER:
 			case IRNode::FOLD:
 			case IRNode::UNARY:
 				return eq && unary.a == o.unary.a;

@@ -545,11 +545,20 @@ Instruction const* type_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 Instruction const* length_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
+	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	if(a.isVector())
 		Integer::InitScalar(OUT(thread, inst.c), a.length);
+	else if(a.isFuture()) {
+		IRNode::Shape shape = thread.trace.futureShape(a);
+		if(shape.split < 0 && shape.filter < 0) {
+			Integer::InitScalar(OUT(thread, inst.c), shape.length);
+		} else {
+			BIND(a);
+		}
+	}
 	else
 		Integer::InitScalar(OUT(thread, inst.c), 1);
+
 	return &inst+1;
 }
 Instruction const* missing_op(Thread& thread, Instruction const& inst) {
