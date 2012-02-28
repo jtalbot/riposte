@@ -1,0 +1,75 @@
+permutation tests
+bootstrapping
+simulation
+
+black-scholes
+logistic regression
+
+ising model
+
+data reshaping fusing across user functions
+	data cleaning library functions
+
+kmeans
+
+
+Moments
+-variance
+-skewness, kurtosis
+-covariance
+-use Janine Bennett method
+--recurrance on lower orders, would want to avoid recomputing pieces. Does this arise elsewhere?
+
+Matrix-matrix multiplication
+-needed for decompositions
+
+Conversion to CSR format
+Sparse matrix-vector multiplication
+
+Goal: show that idiomatic R code can run fast
+
+Demonstrate: tracing through control flow
+
+1) Black-Scholes
+	Necessary: ifelse
+
+2) Logistic/linear regression
+	Perf: matrix*vector multiplication
+
+3) Data cleaning pipeline (convert missing value to NA, filter NA values and compute mean and variance, compute Z-score and mark outliers, join with other data?)
+	Perf: Delay scalar ops and fuse mean, variance computation
+
+4) Sparse matrix-vector multiplication
+	Necessary: take repeat count from vector (for CSR implementation)
+	Perf: structured group by
+
+5) PCA
+	Necessary: summary statistics (covariance matrix), (eigenvector/values (not parallel)), change of basis (matrix*matrix, for relatively thin matrices)
+
+6) Histogram
+	Necessary: unkeyed group by
+
+7) K-means
+	Necessary: outer product
+	Perf: nested reductions
+
+8) QR-decomposition
+	http://www.slideshare.net/skillsmatter/parallel-qr-decomposition
+
+9) Bootstrap a logistic regression model
+	Necessary: nested parallelism, random number generation
+	Could change sample size to demonstrate load imbalance
+
+10) Sample a mixture of gaussians
+	Necessary: random number generation, normal CDF inversion
+
+11) TPC-H Q1
+	Necessary: compute cardinality of column (make factor), order by at the end?	
+
+12) 1D gaussian blur or running average
+	This would be a "bad" example, we'd 
+
+13) Mandelbrot
+	Necessary: get conditionals working
+
+14) Ray-sphere intersection
