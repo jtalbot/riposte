@@ -50,7 +50,7 @@ static inline std::string intToHexStr( uint64_t n )
 static inline std::string doubleToStr( double n )
 {
     std::ostringstream result;
-    result << n;
+    result << std::setprecision(8) << n;
     return result.str();
 }
 

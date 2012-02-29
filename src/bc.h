@@ -32,7 +32,6 @@
 	_(internal, "internal") \
 	_(function, "function") \
 	_(type, "type") \
-	_(length, "length") \
 	_(missing, "missing") \
 	_(strip, "strip") \
 
@@ -122,6 +121,11 @@
 	_(min, "min",	UnifyFold, 	pmin) \
 	_(max, "max",	UnifyFold, 	pmax) \
 
+#define SPECIAL_FOLD_BYTECODES(_) \
+	_(length, "length", CountFold) \
+	_(mean, "mean", MomentFold) \
+	_(cm2, "cm2", Moment2Fold) \
+
 #define ARITH_SCAN_BYTECODES(_) \
 	_(cumsum, "cumsum",	ArithScan,	add) \
 	_(cumprod, "cumprod",	ArithScan,	mul) \
@@ -166,6 +170,7 @@
 	FOLD_BYTECODES(_) \
 	SCAN_BYTECODES(_) \
 	UTILITY_BYTECODES(_) \
+	SPECIAL_FOLD_BYTECODES(_) \
 
 #define BYTECODES(_) \
 	STANDARD_BYTECODES(_) \

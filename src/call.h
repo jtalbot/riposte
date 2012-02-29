@@ -354,7 +354,7 @@ bool isTraceableType(Type::Enum type) {
 bool isTraceable(Thread const& thread, Value const& a) {
 	return 	thread.state.jitEnabled && 
 		isTraceableType(a.type) && 
-		a.length >= TRACE_VECTOR_WIDTH; 
+		(a.type == Type::Future || a.length >= TRACE_VECTOR_WIDTH); 
 }
 
 template< template<class X> class Group>

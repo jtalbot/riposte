@@ -210,6 +210,12 @@ ARITH_SCAN_BYTECODES(FOLD_OP)
 UNIFY_SCAN_BYTECODES(FOLD_OP)
 #undef FOLD_OP
 
+// Some special folds that we need to formalize
+template<class X> struct CountFold   { typedef X A; typedef X MA; typedef Integer R; };
+template<class X> struct MomentFold { typedef X A; typedef Double MA; typedef Double R; };
+template<class X, class Y> struct Moment2Fold { 
+	typedef X A; typedef Y B; typedef Double MA; typedef Double MB; typedef Double R; };
+
 
 template< template<typename T> class Op > 
 void ArithUnary1Dispatch(Thread& thread, Value a, Value& c) {

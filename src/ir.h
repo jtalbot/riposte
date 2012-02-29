@@ -10,6 +10,7 @@
 #define IR_ENUM(_) \
 		MAP_BYTECODES(_) \
 		FOLD_BYTECODES(_) \
+		SPECIAL_FOLD_BYTECODES(_) \
 		SCAN_BYTECODES(_) \
 		_(cast, "cast", ___) \
 		_(constant,"constant", ___) \
@@ -27,19 +28,20 @@ struct Value;
 
 struct IRNode {
 
-	enum Encoding {
-		NOP,
-
+	enum Arity {
+		NULLARY,
 		UNARY,
 		BINARY,
-		TRINARY,
-		
-		SEQUENCE,
-		CONSTANT,
-		LOAD,
+		TRINARY
+	};
 
+	enum Group {
+		NOP,
+		GENERATOR,
+		MAP,
 		FILTER,
-		FOLD
+		FOLD,
+		SPLIT
 	};
 
 	struct Shape {
@@ -60,7 +62,8 @@ struct IRNode {
 		}
 	};
 
-	Encoding enc;
+	Arity arity;
+	Group group;
 	IROpCode::Enum op;
 
 	Type::Enum type;
@@ -71,36 +74,43 @@ struct IRNode {
 	Value out;
 	
 	bool operator==(IRNode const& o) const {
-		bool eq = (enc == o.enc && op == o.op && type == o.type && shape == o.shape);
-		switch(enc) {
-			case IRNode::TRINARY:
-				return eq && trinary.a == o.trinary.a && trinary.b == o.trinary.b && o.trinary.c == o.trinary.c;
-				break;
-			case IRNode::BINARY:
-				return eq && binary.a == o.binary.a && binary.b == o.binary.b;
-				break;
-			case IRNode::FILTER:
-			case IRNode::FOLD:
-			case IRNode::UNARY:
-				return eq && unary.a == o.unary.a;
-				break;
-			case IRNode::LOAD: /*fallthrough*/
-				return eq && unary.a == o.unary.a && out == o.out;
-				break;
-			case IRNode::CONSTANT: /*fallthrough*/
-				return eq && ((type == Type::Double && constant.d == o.constant.d) || 
-						(type == Type::Integer && constant.i == o.constant.i) || 
-						(type == Type::Logical && constant.l == o.constant.l));
-				break;
-			case IRNode::SEQUENCE: /*fallthrough*/
-				return eq && ((type == Type::Double && sequence.da == o.sequence.da && sequence.db == o.sequence.db) || 
-						(type == Type::Integer && sequence.ia == o.sequence.ia && sequence.ib == o.sequence.ia));
-				break;
+		bool eq = (op == o.op && type == o.type && shape == o.shape);
+		switch(group) {
 			case IRNode::NOP:
 				return false;
 				break;
+			case IRNode::GENERATOR: {
+				if(op == IROpCode::load) {
+					return eq && unary.a == o.unary.a && out == o.out;
+				} else if(op == IROpCode::constant) {
+					return eq && ((type == Type::Double && constant.d == o.constant.d) || 
+							(type == Type::Integer && constant.i == o.constant.i) || 
+							(type == Type::Logical && constant.l == o.constant.l));
+				} else if(op == IROpCode::seq) {
+					return eq && ((type == Type::Double && sequence.da == o.sequence.da && sequence.db == o.sequence.db) || 
+							(type == Type::Integer && sequence.ia == o.sequence.ia && sequence.ib == o.sequence.ia));
+				} else {
+					_error("NYI");
+				}
+			} break;
+			default: {
+				switch(arity) {
+					case IRNode::TRINARY:
+						return eq && trinary.a == o.trinary.a && trinary.b == o.trinary.b && o.trinary.c == o.trinary.c;
+					break;
+					case IRNode::BINARY:
+						return eq && binary.a == o.binary.a && binary.b == o.binary.b;
+					break;
+					case IRNode::UNARY:
+						return eq && unary.a == o.unary.a;
+					break;
+					case IRNode::NULLARY:
+					default:
+						return eq;
+					break;
+				}
+			} break;
 		}
-		return false;
 	}
 
 	bool isDouble() const { return type == Type::Double; }

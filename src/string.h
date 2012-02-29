@@ -97,6 +97,8 @@
 	_(atan, 	"atan") \
 	_(sum,		"sum") \
 	_(prod,		"prod") \
+	_(mean,		"mean") \
+	_(cm2,		"cm2") \
 	_(min,		"min") \
 	_(max,		"max") \
 	_(pmin,		"pmin") \

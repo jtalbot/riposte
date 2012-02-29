@@ -28,6 +28,7 @@ static ByteCode::Enum op1(String const& func) {
 	
 	if(func == Strings::sum) return ByteCode::sum; 
 	if(func == Strings::prod) return ByteCode::prod; 
+	if(func == Strings::mean) return ByteCode::mean; 
 	if(func == Strings::min) return ByteCode::min; 
 	if(func == Strings::max) return ByteCode::max; 
 	if(func == Strings::any) return ByteCode::any; 
@@ -66,6 +67,8 @@ static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::pmin) return ByteCode::pmin; 
 	if(func == Strings::pmax) return ByteCode::pmax; 
 
+	if(func == Strings::cm2) return ByteCode::cm2; 
+	
 	if(func == Strings::bracket) return ByteCode::subset;
 	if(func == Strings::bb) return ByteCode::subset2;
 
@@ -577,6 +580,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::le ||
 		func == Strings::pmin ||
 		func == Strings::pmax ||
+		func == Strings::cm2 ||
 		func == Strings::lor ||
 		func == Strings::land ||
 		func == Strings::bracket ||
@@ -617,6 +621,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::isinfinite ||
 		func == Strings::sum ||
 		func == Strings::prod ||
+		func == Strings::mean ||
 		func == Strings::min ||
 		func == Strings::max ||
 		func == Strings::any ||

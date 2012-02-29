@@ -411,6 +411,46 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 BINARY_BYTECODES(OP)
 #undef OP
 
+Instruction const* length_op(Thread& thread, Instruction const& inst) {
+	OPERAND(a, inst.a); FORCE(a, inst.a); 
+	if(a.isVector())
+		Integer::InitScalar(OUT(thread, inst.c), a.length);
+	else if(a.isFuture()) {
+		IRNode::Shape shape = thread.trace.futureShape(a);
+		if(shape.split < 0 && shape.filter < 0) {
+			Integer::InitScalar(OUT(thread, inst.c), shape.length);
+		} else {
+			OUT(thread, inst.c) = thread.trace.EmitUnary<CountFold>(IROpCode::length, a, 0);
+			thread.trace.addEnvironment(thread.frame.environment);
+		}
+	}
+	else
+		Integer::InitScalar(OUT(thread, inst.c), 1);
+
+	return &inst+1;
+}
+
+Instruction const* mean_op(Thread& thread, Instruction const& inst) {
+	OPERAND(a, inst.a); FORCE(a, inst.a); 
+	if(isTraceable<MomentFold>(thread,a)) {
+		OUT(thread, inst.c) = thread.trace.EmitUnary<MomentFold>(IROpCode::mean, a, 0);
+		thread.trace.addEnvironment(thread.frame.environment);
+ 		return &inst+1;
+	}
+	return &inst+1;
+}
+
+Instruction const* cm2_op(Thread& thread, Instruction const& inst) {
+	OPERAND(a, inst.a); FORCE(a, inst.a); 
+	OPERAND(b, inst.b); FORCE(b, inst.b); 
+	if(isTraceable<Moment2Fold>(thread,a,b)) {
+		OUT(thread, inst.c) = thread.trace.EmitBinary<Moment2Fold>(IROpCode::cm2, a, b, 0);
+		thread.trace.addEnvironment(thread.frame.environment);
+ 		return &inst+1;
+	}
+	return &inst+1;
+}
+
 Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	OPERAND(b, inst.b); FORCE(b, inst.b);
@@ -544,23 +584,7 @@ Instruction const* type_op(Thread& thread, Instruction const& inst) {
         }
 	return &inst+1;
 }
-Instruction const* length_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); 
-	if(a.isVector())
-		Integer::InitScalar(OUT(thread, inst.c), a.length);
-	else if(a.isFuture()) {
-		IRNode::Shape shape = thread.trace.futureShape(a);
-		if(shape.split < 0 && shape.filter < 0) {
-			Integer::InitScalar(OUT(thread, inst.c), shape.length);
-		} else {
-			BIND(a);
-		}
-	}
-	else
-		Integer::InitScalar(OUT(thread, inst.c), 1);
 
-	return &inst+1;
-}
 Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 	// TODO: in R this is recursive. If this function was passed a parameter that
 	// was missing in the outer scope, then it should be missing here too. But
