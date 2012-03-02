@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <string.h>
 
 // the ... arguments to these macros allow enum definitions to support enum macros that contain additional arguments
 

@@ -120,6 +120,7 @@
 	_(UseMethod, 	"UseMethod") \
 	_(seq, 		"seq") \
 	_(rep, 		"rep") \
+	_(random, 	"random") \
 	_(True, 	"TRUE") \
 	_(False, 	"FALSE") \
 	_(type, 	"type") \

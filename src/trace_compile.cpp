@@ -248,6 +248,29 @@ static __m128d castl2i(__m128d input) {
 	return v.D;
 }
 
+static __m128d random_d(__m128d input) {
+	SSEValue v; 
+	v.D = input;
+
+	uint64_t thread_index = v.i[0];
+	
+	Thread::RandomSeed& r = Thread::seed[thread_index];
+	
+	// advance three times to avoid taking powers of 2
+	r.v[0] = r.v[0] * r.m[0] + r.a[0];
+	r.v[1] = r.v[1] * r.m[1] + r.a[1];
+	r.v[0] = r.v[0] * r.m[0] + r.a[0];
+	r.v[1] = r.v[1] * r.m[1] + r.a[1];
+	r.v[0] = r.v[0] * r.m[0] + r.a[0];
+	r.v[1] = r.v[1] * r.m[1] + r.a[1];
+
+	SSEValue o;
+
+	o.d[0] = 1.0 - (double)r.v[0] / std::numeric_limits<uint64_t>::max();
+	o.d[1] = 1.0 - (double)r.v[1] / std::numeric_limits<uint64_t>::max();
+	return o.D;
+}
+
 static void double_push(Double* d, double v) {
 	if(d->length >= 1) {
 		if(d->length == (int64_t)nextPow2(d->length)) {
@@ -486,6 +509,8 @@ struct TraceJIT {
 				stackSpace += 0x10;
 			else if(node.op == IROpCode::rep)
 				stackSpace += 0x20;
+			else if(node.op == IROpCode::random)
+				stackSpace += 0x10;
 			else if(node.group == IRNode::FOLD)
 				stackSpace += 0x10;
 
@@ -567,6 +592,11 @@ struct TraceJIT {
 				asm_.movq(rdi,vector_index);
 				EmitCall((void*)repeatStart_i); 
 				asm_.movdqa(Operand(rsp, stackOffset), xmm0);
+				stackOffset += 0x10;
+			}
+			else if(node.op == IROpCode::random) {
+				asm_.movq(Operand(rsp, stackOffset), thread_index);
+				asm_.movq(Operand(rsp, stackOffset+0x8), thread_index);
 				stackOffset += 0x10;
 			}
 			else if(node.group == IRNode::FOLD) { 
@@ -825,7 +855,15 @@ struct TraceJIT {
 				}
 				stackOffset += 0x10;
 			} break;
-
+			case IROpCode::random: {
+				asm_.movdqa(reg(ref),Operand(rsp, stackOffset));
+				SaveRegisters(ref);
+				asm_.movapd(xmm0, reg(ref));
+				EmitCall((void*)random_d);
+				EmitMove(reg(ref),xmm0);
+				RestoreRegisters(ref);
+				stackOffset += 0x10;
+			} break;
 			case IROpCode::sum:  {
 				// relying on doubles and integers to be the same length
 				for(int64_t i = 0; i < node.in.length; i++)
@@ -998,9 +1036,23 @@ struct TraceJIT {
 			break;
 
 			case IROpCode::ifelse:
-				_error("ifelse NYI");
-				//EmitMove(xmm0, reg(node.trinary.c));
-				//asm_.blendvpd(Move(ref, node.trinary.a), reg(node.trinary.b));
+				SaveRegisters(ref);
+				if(reg(node.trinary.a).is(xmm0)) {
+					EmitMove(xmm15, reg(node.trinary.a));
+					EmitMove(xmm0, reg(node.trinary.c));
+					asm_.blendvpd(xmm15, reg(node.trinary.b));
+					EmitMove(reg(ref), xmm15);
+				} else if(reg(node.trinary.b).is(xmm0)) {
+					EmitMove(xmm15, reg(node.trinary.a));
+					EmitMove(reg(node.trinary.a), reg(node.trinary.b));
+					EmitMove(xmm0, reg(node.trinary.c));
+					asm_.blendvpd(xmm15, reg(node.trinary.a));
+					EmitMove(reg(ref), xmm15);
+				} else if(reg(node.trinary.c).is(xmm0)) {
+					EmitMove(reg(ref), reg(node.trinary.a));
+					asm_.blendvpd(reg(ref), reg(node.trinary.b));
+				}
+				RestoreRegisters(ref);
 			break;
 
 			//case IROpCode::signif:

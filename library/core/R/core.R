@@ -7,6 +7,14 @@ c <- function(...) .Internal(unlist(list(...), TRUE, TRUE))
 	else seq(from,0L,1L)
 }
 
+`-` <- function(x,y) {
+	if(missing(y)) {
+		-strip(x)
+	} else {
+		strip(x) - strip(y)
+	}
+}
+
 #`[` <- function(x, ..., drop = TRUE) {
 #	i <- list(...)
 #	d <- dim(x)

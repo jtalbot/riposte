@@ -403,10 +403,12 @@ bool isTraceable(Thread const& thread, Value const& a, Value const& b, Value con
 
 template<>
 bool isTraceable<IfElse>(Thread const& thread, Value const& a, Value const& b, Value const& c) { 
-	//return 	thread.state.jitEnabled &&
-	//	isTraceableType(a.type) && isTraceableType(b.type) && isTraceableType(c.type) &&
-	//	a.length > TRACE_VECTOR_WIDTH;
-	return false;
+	return	thread.state.jitEnabled &&
+		isTraceableType(thread, a) &&
+		isTraceableType(thread, b) &&
+		isTraceableType(thread, c) &&
+		isTraceableShape(thread, a, b) &&
+		isTraceableShape(thread, b, c);
 }
 
 #endif

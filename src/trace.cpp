@@ -41,6 +41,7 @@ std::string Trace::toString(Thread & thread) {
 		UNARY_FOLD_SCAN_BYTECODES(UNARY)
 		BINARY_BYTECODES(BINARY)
 		NULLARY(length)
+		NULLARY(random)
 		BINARY(mean)
 		TRINARY(cm2)
 		UNARY(cast)
@@ -217,46 +218,44 @@ IRef Trace::EmitSplit(IRef x, IRef f, int64_t levels) {
 	return nodes.size()-1;
 }
 
-IRef Trace::EmitRepeat(int64_t length, int64_t a, int64_t b) {
+IRef Trace::EmitGenerator(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b) {
 	IRNode n;
 	n.arity = IRNode::NULLARY;
 	n.group = IRNode::GENERATOR;
-	n.op = IROpCode::rep;
-	n.type = Type::Integer;
+	n.op = op;
+	n.type = type;
 	n.shape = (IRNode::Shape) { length, -1, 1, -1, false };
 	n.outShape = n.shape;
 	n.sequence.ia = a;
 	n.sequence.ib = b;
 	nodes.push_back(n);
 	return nodes.size()-1;
+}
+
+IRef Trace::EmitRandom(int64_t length) {
+	return EmitGenerator(IROpCode::random, Type::Double, length, 0, 0);
+}
+
+IRef Trace::EmitRepeat(int64_t length, int64_t a, int64_t b) {
+	return EmitGenerator(IROpCode::rep, Type::Integer, length, a, b);
 }
 
 IRef Trace::EmitSequence(int64_t length, int64_t a, int64_t b) {
-	IRNode n;
-	n.arity = IRNode::NULLARY;
-	n.group = IRNode::GENERATOR;
-	n.op = IROpCode::seq;
-	n.type = Type::Integer;
-	n.shape = (IRNode::Shape) { length, -1, 1, -1, false };
-	n.outShape = n.shape;
-	n.sequence.ia = a;
-	n.sequence.ib = b;
-	nodes.push_back(n);
-	return nodes.size()-1;
+	return EmitGenerator(IROpCode::seq, Type::Integer, length, a, b);
 }
 
 IRef Trace::EmitSequence(int64_t length, double a, double b) {
-	IRNode n;
-	n.arity = IRNode::NULLARY;
-	n.group = IRNode::GENERATOR;
-	n.op = IROpCode::seq;
-	n.type = Type::Double;
-	n.shape = (IRNode::Shape) { length, -1, 1, -1, false };
-	n.outShape = n.shape;
-	n.sequence.da = a;
-	n.sequence.db = b;
-	nodes.push_back(n);
-	return nodes.size()-1;
+	union {
+		double d1;
+		int64_t i1;
+	};
+	union {
+		double d2;
+		int64_t i2;
+	};
+	d1 = a;
+	d2 = b;
+	return EmitGenerator(IROpCode::seq, Type::Double, length, i1, i2);
 }
 
 IRef Trace::EmitConstant(Type::Enum type, int64_t length, int64_t c) {
@@ -277,13 +276,35 @@ IRef Trace::EmitLoad(Value const& v, IRef i) {
 	n.group = IRNode::GENERATOR;
 	n.op = IROpCode::load;
 	n.type = v.type;
-	n.shape = (IRNode::Shape) { nodes[i].outShape.length, -1, 1, -1, false };
+	n.shape = nodes[i].outShape;
 	n.outShape = n.shape;
 	n.unary.a = i;
 	n.in = v;
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
+
+Type::Enum UnifyTypes(Type::Enum a, Type::Enum b) {
+	#define UNIFY(X, Y, Z) if(a == Type::X && b == Type::Y) return Type::Z;
+        DEFAULT_TYPE_MEET(UNIFY)
+        #undef UNIFY
+}
+
+IRef Trace::EmitIfElse(IRef a, IRef b, IRef cond) {
+	IRNode n;
+	n.arity = IRNode::TRINARY;
+	n.group = IRNode::MAP;
+	n.op = IROpCode::ifelse;
+	n.type = UnifyTypes(nodes[a].type, nodes[b].type);
+	n.shape = nodes[cond].outShape;
+	n.outShape = n.shape;
+	n.trinary.a = EmitCoerce(a, n.type);
+	n.trinary.b = EmitCoerce(b, n.type);
+	n.trinary.c = EmitCoerce(cond, Type::Logical);
+	nodes.push_back(n);
+	return nodes.size()-1;
+}
+
 
 void Trace::MarkLiveOutputs(Thread& thread) {
 	
