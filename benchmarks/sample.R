@@ -47,9 +47,11 @@ inv.cdf <- function(p) {
 means <- c(0,2,10)
 sd <- c(1,0.1,3)
 
-a <- runif(1000000)
-i <- floor(runif(1000000)*3)+1
+a <- 1:3 / 4 #runif(1000000)
+i <- floor(1:3) #runif(1000000)*3)+1
 b <- inv.cdf(a)*sd[i] + means[i]
+
+print(b)
 
 plot(density(b))
 
