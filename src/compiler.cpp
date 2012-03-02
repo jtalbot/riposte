@@ -227,10 +227,34 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 	String func = SymbolStr(call[0]);
 
-	// TODO: most of these functions can't be called directly if the arguments are named or if
+	// list is the only built in function that handles ... or named parameters
+	if(func == Strings::list)
+	{
+		// we only handle the list(...) case through an op for now
+		if(call.length != 2 || !isSymbol(call[1]) || SymbolStr(call[1]) != Strings::dots)
+			return compileFunctionCall(call, names, code);
+		Operand result = allocRegister();
+		Operand counter = compileConstant(Integer::c(0), code);
+		Operand storage = allocRegister();
+		kill(storage); kill(counter);
+		emit(ByteCode::list, counter, storage, result); 
+		return result;
+	}
+
+	// These functions can't be called directly if the arguments are named or if
 	// there is a ... in the args list
 
-	
+	bool complicated = false;
+	for(int64_t i = 0; i < length; i++) {
+		if(names.length > i && names[i] != Strings::empty) 
+			complicated = true;
+		if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) 
+			complicated = true;
+	}
+
+	if(complicated)
+		return compileFunctionCall(call, names, code);
+
 	if(func == Strings::internal) 
 	{
 		if(!call[1].isObject())
@@ -641,18 +665,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand result = allocRegister();
 		emit(op1(func), a, 0, result);
 		return result; 
-	} 
-	else if(func == Strings::list)
-	{
-		// we only handle the list(...) case through an op for now
-		if(call.length != 2 || !isSymbol(call[1]) || SymbolStr(call[1]) != Strings::dots)
-			return compileFunctionCall(call, names, code);
-		Operand result = allocRegister();
-		Operand counter = compileConstant(Integer::c(0), code);
-		Operand storage = allocRegister();
-		kill(storage); kill(counter);
-		emit(ByteCode::list, counter, storage, result); 
-		return result;
 	} 
 	else if(func == Strings::missing)
 	{

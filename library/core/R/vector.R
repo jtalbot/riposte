@@ -41,4 +41,10 @@ cbind <- function(...) {
 	matrix
 }
 
+array <- function(data, dims) {
+	r <- strip(data)
+	dim(r) <- strip(dims)
+	r
+}
+
 seq_len <- function(length.out) seq(1, 1, length.out)

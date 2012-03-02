@@ -8,8 +8,8 @@ bench <- function() {
 		# these two lines force the promises, allowing us to fuse m and stdev
 		# otherwise they are separated by the barrier (data-m), and don't fuse.
 		# can we do better?
-		m
-		stdev
+		#m
+		#stdev
 		(data-m) / stdev
 	}
 

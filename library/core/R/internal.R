@@ -6,15 +6,26 @@
 	if(is.null(xd)) xd <- c(1, length(x))
 	yd <- dim(y)
 	if(is.null(yd)) yd <- c(length(y), 1)
-	.Internal(matrix.multiply(strip(x),xd[1],xd[2],y,yd[1],yd[2]))
+	r <- .Internal(matrix.multiply(strip(x),xd[1],xd[2],y,yd[1],yd[2]))
+	dim(r) <- c(xd[1],yd[2])
+	r
+}
+	
+eigen <- function(x, symmetric=FALSE) {
+	xd <- dim(x)
+	if(is.null(xd)) xd <- c(1, length(x))
+	if(symmetric)
+		r <- .Internal(eigen.symmetric(strip(x), xd[1], xd[2]))
+	else
+		r <- .Internal(eigen(strip(x), xd[1], xd[2]))
+	vec <- r[[2]]
+	dim(vec) <- xd
+	list(values=r[[1]], vectors=vec)
 }
 
 cat <- function(...) .Internal(cat(list(...)))
 library <- function(.) .Internal(library(.))
 #inherits <- function(x, what, which=FALSE) .Internal(inherits(x, what, which))
-
-seq <- function(from=1, by=1, length.out=1) .Internal(seq(from, by, length.out))
-rep <- function(v, each=1, length.out=1) .Internal(rep(v, each, length.out))
 
 unlist <- function(x, recursive = TRUE, use.names = TRUE) UseMethod("unlist")
 unlist.default <- function(x, recursive = TRUE, use.names = TRUE) {

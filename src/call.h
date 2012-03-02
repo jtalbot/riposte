@@ -74,23 +74,28 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 	return i;
 }
 
-inline void argAssign(Environment* env, Pair const& parameter, Pair const& argument, Environment* execution) {
+inline void argAssign(Thread& thread, Environment* env, Pair const& parameter, Pair const& argument, Environment* execution) {
 	Value w = argument.v;
 	if(!w.isNil()) {
 		if(w.isPromise() || w.isDefault()) {
 			assert(w.p == 0);
 			w.p = execution;
+		} else if(w.isFuture()) {
+			thread.LiveEnvironment(env, w);
 		}
 		env->insert(parameter.n) = w;
 	}
 }
 
-inline void dotAssign(Environment* env, Pair const& argument, Environment* execution) {
+inline void dotAssign(Thread& thread, Environment* env, Pair const& argument, Environment* execution) {
 	Value w = argument.v;
 	assert(!w.isDefault());
 	if(w.isPromise()) {
 		assert(w.p == 0);
 		w.p = execution;
+	}
+	else if(w.isFuture()) {
+		thread.LiveEnvironment(env, w);
 	}
 	Pair p;
 	p.n = argument.n;
@@ -104,9 +109,10 @@ static Pair argument(int64_t index, Environment* env, CompiledCall const& call) 
 	} else {
 		index -= call.dotIndex;
 		if(index < (int64_t)env->dots.size()) {
-			// Promises in the dots can't be passed down (general rule is that promises only
+			// Promises in the dots can't be passed down 
+			//     (general rule is that promises only
 			//	occur once anywhere in the program). 
-			// But everything else can be passed down
+			// But everything else can be passed down.
 			if(env->dots[index].v.isPromise()) {
 				Pair p;
 				p.n = env->dots[index].n;
@@ -114,7 +120,7 @@ static Pair argument(int64_t index, Environment* env, CompiledCall const& call) 
 				p.v.length = index;
 				p.v.p = env;
 				return p;
-			}
+			} 
 			else {
 				return env->dots[index];
 			}
@@ -151,7 +157,7 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 
 	// set defaults
 	for(int64_t i = 0; i < (int64_t)parameters.size(); ++i) {
-		argAssign(fenv, parameters[i], parameters[i], fenv);
+		argAssign(thread, fenv, parameters[i], parameters[i], fenv);
 	}
 
 	if(!named) {
@@ -161,7 +167,7 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 		int64_t end = std::min(numArgs, pDotIndex);
 		for(int64_t i = 0; i < end; ++i) {
 			Pair const& arg = argument(i, env, call);
-			argAssign(fenv, parameters[i], arg, fenv);
+			argAssign(thread, fenv, parameters[i], arg, fenv);
 		}
 
 		// if we have left over arguments, but no parameter dots, error
@@ -171,7 +177,7 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 		// all unused args go into ...
 		for(int64_t i = end; i < numArgs; i++) {
 			Pair const& arg = argument(i, env, call);
-			dotAssign(fenv, arg, fenv);
+			dotAssign(thread, fenv, arg, fenv);
 		}
 	}
 	else {
@@ -229,7 +235,7 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 		for(int64_t j = 0; j < (int64_t)parameters.size(); ++j) {
 			if(j != pDotIndex && set[j] >= 0) {
 				Pair const& arg = argument(set[j], env, call);
-				argAssign(fenv, parameters[j], arg, fenv);
+				argAssign(thread, fenv, parameters[j], arg, fenv);
 			}
 		}
 
@@ -241,7 +247,7 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 				if(pDotIndex >= (int64_t)parameters.size()) _error("Unused args");	
 				Pair const& arg = argument(i, env, call);
 				if(arg.n != Strings::empty) fenv->named = true;
-				dotAssign(fenv, arg, fenv);
+				dotAssign(thread, fenv, arg, fenv);
 			}
 		}
 	}
@@ -342,19 +348,33 @@ if(!a.isConcrete()) { \
 
 #define BIND(a) \
 if(__builtin_expect(a.isFuture(), false)) { \
-	thread.trace.Bind(thread, a); \
+	thread.Bind(a); \
 	return &inst; \
 }
 
-bool isTraceableType(Type::Enum type) {
-        return type == Type::Double || type == Type::Integer || type == Type::Logical ||
-		type == Type::Future;
+bool isTraceableType(Thread const& thread, Value const& a) {
+	Type::Enum type = thread.futureType(a);
+        return type == Type::Double || type == Type::Integer || type == Type::Logical;
+}
+
+bool isTraceableShape(Thread const& thread, Value const& a) {
+	IRNode::Shape const& shape = thread.futureShape(a);
+	return !shape.blocking && shape.length >= TRACE_VECTOR_WIDTH;
+}
+
+bool isTraceableShape(Thread const& thread, Value const& a, Value const& b) {
+	IRNode::Shape const& shapea = thread.futureShape(a);
+	IRNode::Shape const& shapeb = thread.futureShape(b);
+	return 	!shapea.blocking &&
+		!shapeb.blocking &&
+		(shapea.length >= TRACE_VECTOR_WIDTH || shapeb.length >=TRACE_VECTOR_WIDTH) &&
+		!(a.isFuture() && b.isFuture() && shapea.length != shapeb.length);
 }
 
 bool isTraceable(Thread const& thread, Value const& a) {
 	return 	thread.state.jitEnabled && 
-		isTraceableType(a.type) && 
-		(a.type == Type::Future || a.length >= TRACE_VECTOR_WIDTH); 
+		isTraceableType(thread, a) &&
+		isTraceableShape(thread, a);
 }
 
 template< template<class X> class Group>
@@ -370,11 +390,10 @@ bool isTraceable<UnifyScan>(Thread const& thread, Value const& a) { return false
 
 template< template<class X, class Y> class Group>
 bool isTraceable(Thread const& thread, Value const& a, Value const& b) {
-	return  thread.state.jitEnabled && 
-		(isTraceableType(a.type) && isTraceableType(b.type)) &&
-		((a.length >= TRACE_VECTOR_WIDTH && b.length == 1 && b.type != Type::Future) ||
-		 (a.length == 1 && b.length >= TRACE_VECTOR_WIDTH && a.type != Type::Future) ||
-		 (thread.trace.futureShape(a) == thread.trace.futureShape(b) && a.length >= TRACE_VECTOR_WIDTH)); 
+	return  thread.state.jitEnabled &&
+		isTraceableType(thread, a) && 
+		isTraceableType(thread, b) && 
+		isTraceableShape(thread, a, b);
 }
 
 template< template<class X, class Y, class Z> class Group>
@@ -384,9 +403,10 @@ bool isTraceable(Thread const& thread, Value const& a, Value const& b, Value con
 
 template<>
 bool isTraceable<IfElse>(Thread const& thread, Value const& a, Value const& b, Value const& c) { 
-	return 	thread.state.jitEnabled &&
-		isTraceableType(a.type) && isTraceableType(b.type) && isTraceableType(c.type) &&
-		a.length > TRACE_VECTOR_WIDTH;
+	//return 	thread.state.jitEnabled &&
+	//	isTraceableType(a.type) && isTraceableType(b.type) && isTraceableType(c.type) &&
+	//	a.length > TRACE_VECTOR_WIDTH;
+	return false;
 }
 
 #endif

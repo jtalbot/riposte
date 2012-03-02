@@ -262,6 +262,7 @@ const XMMRegister xmm12 = { 12 };
 const XMMRegister xmm13 = { 13 };
 const XMMRegister xmm14 = { 14 };
 const XMMRegister xmm15 = { 15 };
+const XMMRegister no_xmm = { -1 };
 
 
 typedef XMMRegister DoubleRegister;

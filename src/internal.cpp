@@ -11,8 +11,6 @@
 #include <pthread.h>
 
 #include "Eigen/Dense"
-using Eigen::MatrixXd;
-using Eigen::Map;
 
 template<typename T>
 T const& Cast(Value const& v) {
@@ -88,26 +86,6 @@ void readtable(Thread& thread, Value const* args, Value& result) {
 	} else {
 		result = Null::Singleton();
 	}
-}
-
-void sequence(Thread& thread, Value const* args, Value& result) {
-	double from = asReal1(args[0]);
-	double by = asReal1(args[-1]);
-	double len = asReal1(args[-2]);
-
-	result = Sequence(from, by, len);	
-}
-
-void repeat(Thread& thread, Value const* args, Value& result) {
-	double v = asReal1(args[0]);
-	//double e = asReal1(args[-1]);
-	double l = asReal1(args[-2]);
-	
-	Double r(l);
-	for(int64_t i = 0; i < l; i++) {
-		r[i] = v;
-	}
-	result = r;
 }
 
 void attr(Thread& thread, Value const* args, Value& result)
@@ -826,15 +804,52 @@ void traceconfig(Thread & thread, Value const* args, Value& result) {
 void matrixmultiply(Thread & thread, Value const* args, Value& result) {
 	double mA = asReal1(args[-1]);
 	double nA = asReal1(args[-2]);
-	MatrixXd aa = Map<MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
+	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
 	
 	double mB = asReal1(args[-4]);
 	double nB = asReal1(args[-5]);
-	MatrixXd bb = Map<MatrixXd>(As<Double>(thread, args[-3]).v(), mB, nB);
+	Eigen::MatrixXd bb = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[-3]).v(), mB, nB);
 
 	Double c(aa.rows()*bb.cols());
-	Map<MatrixXd>(c.v(), aa.rows(), bb.cols()) = aa*bb;
+	Eigen::Map<Eigen::MatrixXd>(c.v(), aa.rows(), bb.cols()) = aa*bb;
 	result = c;
+}
+
+// args( A, m, n )
+void eigen_symmetric(Thread & thread, Value const* args, Value& result) {
+	double mA = asReal1(args[-1]);
+	double nA = asReal1(args[-2]);
+	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
+	
+	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigenSolver(aa);
+	Double c(aa.rows()*aa.cols());
+	Eigen::Map<Eigen::MatrixXd>(c.v(), aa.rows(), aa.cols()) = eigenSolver.eigenvectors();
+	Double v(aa.rows());
+	Eigen::Map<Eigen::MatrixXd>(v.v(), aa.rows(), 1) = eigenSolver.eigenvalues();
+	
+	List r(2);
+	r[0] = v;
+	r[1] = c;
+	result = r;
+}
+
+// args( A, m, n )
+void eigen(Thread & thread, Value const* args, Value& result) {
+	/*double mA = asReal1(args[-1]);
+	double nA = asReal1(args[-2]);
+	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
+	
+	Eigen::EigenSolver<Eigen::MatrixXd> eigenSolver(aa);
+	Double c(aa.rows()*aa.cols());
+	Eigen::Map<Eigen::MatrixXd>(c.v(), aa.rows(), aa.cols()) = eigenSolver.eigenvectors();
+	Double v(aa.rows());
+	//Eigen::Map<Eigen::MatrixXd>(v.v(), aa.rows(), 1) = eigenSolver.eigenvalues();
+	
+	List r(2);
+	r[0] = v;
+	r[1] = c;
+	result = r;*/
+	throw("NYI: eigen");
 }
 
 void registerCoreFunctions(State& state)
@@ -844,9 +859,6 @@ void registerCoreFunctions(State& state)
 	
 	state.registerInternalFunction(state.internStr("cat"), (cat), 1);
 	state.registerInternalFunction(state.internStr("library"), (library), 1);
-	
-	state.registerInternalFunction(state.internStr("seq"), (sequence), 3);
-	state.registerInternalFunction(state.internStr("rep"), (repeat), 3);
 	
 	state.registerInternalFunction(state.internStr("attr"), (attr), 3);
 	state.registerInternalFunction(state.internStr("attr<-"), (assignAttr), 3);
@@ -884,5 +896,7 @@ void registerCoreFunctions(State& state)
 	state.registerInternalFunction(state.internStr("read.table"), (readtable), 1);
 	
 	state.registerInternalFunction(state.internStr("matrix.multiply"), (matrixmultiply), 6);
+	state.registerInternalFunction(state.internStr("eigen"), (eigen), 3);
+	state.registerInternalFunction(state.internStr("eigen.symmetric"), (eigen_symmetric), 3);
 }
 

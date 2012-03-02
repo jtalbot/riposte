@@ -74,7 +74,6 @@ static int make_executable(char * data, size_t size) {
 struct TraceCodeBuffer {
 	Constant constant_table[128] __attribute__((aligned(16)));
 	char code[CODE_BUFFER_SIZE] __attribute__((aligned(16)));
-	uint64_t outer_loop;
 	TraceCodeBuffer() {
 		//make the code executable
 		if(0 != make_executable(code,CODE_BUFFER_SIZE)) {
@@ -90,7 +89,6 @@ struct TraceCodeBuffer {
 		constant_table[C_DOUBLE_ZERO] = Constant(0.0, 0.0);
 		constant_table[C_DOUBLE_ONE] = Constant(1.0, 1.0);
 		constant_table[C_DOUBLE_NA] = Constant(Double::NAelement, Double::NAelement);
-		outer_loop = 0;
 	}
 };
 
@@ -484,9 +482,6 @@ struct TraceJIT {
 		for(IRef ref = 0; ref < (int64_t)trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
 			
-			if(node.group == IRNode::GENERATOR && node.shape.length > 1)
-				trace->code_buffer->outer_loop = node.shape.length;
-			
 			if(node.op == IROpCode::seq)
 				stackSpace += 0x10;
 			else if(node.op == IROpCode::rep)
@@ -495,19 +490,32 @@ struct TraceJIT {
 				stackSpace += 0x10;
 
 
-			// allocate outputs
 			// TODO: allocate thread split filtered output (how to maintain ordering?)
-			if(node.liveOut || node.group == IRNode::FOLD) { 
-				int64_t length = node.outShape.length;
-				if(node.group == IRNode::FOLD) {
-					length = nextPow2(std::max(node.shape.levels*2, 8LL)) * thread.state.nThreads;
-					// 8 min fills cache line (assuming aggregates are all stored in 8-byte fields)
+			// allocate temporary space for folds (put in IRNode::in)
+			if(node.group == IRNode::FOLD) { 
+				int64_t length = nextPow2(std::max(node.shape.levels*2, 8LL)) 
+					* thread.state.nThreads;
+				// 8 min fills cache line (assuming aggregates are all stored in 8-byte fields)
+				if(node.type == Type::Double) {
+					node.in = Double(length);
+				} else if(node.type == Type::Integer) {
+					node.in = Integer(length);
+				} else if(node.type == Type::Logical) {
+					node.in = Logical(length);
 				} else {
-					if(node.shape.levels != 1)
-						_error("Group by without aggregate not yet supported");
-					if(node.shape.filter >= 0)
-						length = 0;
+					_error("Unknown type in initialize temporary space");
 				}
+			}
+
+			// allocate outputs
+			if(node.liveOut) { 
+				int64_t length = node.outShape.length;
+				
+				if(node.shape.levels != 1 && node.group != IRNode::FOLD)
+					_error("Group by without aggregate not yet supported");
+				if(node.shape.filter >= 0 && node.group != IRNode::FOLD)
+					length = 0;
+				
 				if(node.type == Type::Double) {
 					node.out = Double(length);
 				} else if(node.type == Type::Integer) {
@@ -562,7 +570,7 @@ struct TraceJIT {
 				stackOffset += 0x10;
 			}
 			else if(node.group == IRNode::FOLD) { 
-				int64_t step = node.out.length / thread.state.nThreads;
+				int64_t step = node.in.length / thread.state.nThreads;
 				int64_t shl = 0;
 				while(step >>= 1) shl++;
 				asm_.movq(r11, thread_index);
@@ -600,20 +608,31 @@ struct TraceJIT {
 					trace->nodes[node.unary.a].sequence.ib == 1)
 				{
 					if(node.isLogical())
-						asm_.pmovsxbq(reg(ref), EncodeOperand(node.out.p, vector_index, times_1));
+						asm_.pmovsxbq(reg(ref), EncodeOperand(node.in.p, vector_index, times_1));
 					else
-						asm_.movdqa(reg(ref),EncodeOperand(node.out.p,vector_index,times_8));
+						asm_.movdqa(reg(ref),EncodeOperand(node.in.p,vector_index,times_8));
+				}
+				else if(trace->nodes[node.unary.a].op == IROpCode::seq &&
+					trace->nodes[node.unary.a].sequence.ia % 2 == 0 &&
+					trace->nodes[node.unary.a].sequence.ib == 1)
+				{
+					asm_.movq(r8, reg(node.unary.a));
+					asm_.movdqa(reg(ref),EncodeOperand(node.in.p,r8,times_8));
+				}
+				else if(trace->nodes[node.unary.a].op == IROpCode::seq &&
+					trace->nodes[node.unary.a].sequence.ia % 2 != 0 &&
+					trace->nodes[node.unary.a].sequence.ib == 1)
+				{
+					asm_.movq(r8, reg(node.unary.a));
+					asm_.movdqu(reg(ref),EncodeOperand(node.in.p,r8,times_8));
 				}
 				else {
 					// TODO: other fast cases here when index is a known seq
-					Constant c((char*)node.out.p);
-					Operand base = PushConstant(c);
-					asm_.movq(r8, base);
-					asm_.movq(r9, reg(node.unary.a));
+					asm_.movq(r8, reg(node.unary.a));
 					asm_.movhlps(reg(ref), reg(node.unary.a));
-					asm_.movq(r10, reg(ref));
-					asm_.movlpd(reg(ref),Operand(r8,r9,times_8,0));
-					asm_.movhpd(reg(ref),Operand(r8,r10,times_8,0));
+					asm_.movq(r9, reg(ref));
+					asm_.movlpd(reg(ref),EncodeOperand(node.in.p,r8,times_8));
+					asm_.movhpd(reg(ref),EncodeOperand(node.in.p,r9,times_8));
 				}
 			} break;
 
@@ -808,173 +827,130 @@ struct TraceJIT {
 			} break;
 
 			case IROpCode::sum:  {
-				assert(node.live);
 				// relying on doubles and integers to be the same length
-				for(int64_t i = 0; i < node.out.length; i++)
-					((double*)node.out.p)[i] = 0.0;
+				for(int64_t i = 0; i < node.in.length; i++)
+					((double*)node.in.p)[i] = 0.0;
 				
-				Move(ref, node.fold.a);
+				Operand offset = Operand(rsp, stackOffset);
+				XMMRegister index = no_xmm;
+				
+				Move(ref, node.unary.a);
+				
+				if(node.shape.split >= 0) {
+					asm_.movapd(xmm15, reg(node.shape.split));
+					asm_.paddq(xmm15, xmm15);
+					index = xmm15;
+				}
+				EmitGather(xmm15, node, index, offset);
+				
 				if(node.shape.filter >= 0) {
 					IRef mask = node.shape.filter;
 					asm_.pand(reg(ref), reg(mask));
 				}
 
-				if(node.isDouble()) {
-					if(node.shape.split >= 0) {
-						Constant c(node.out.p);
-						Operand base = PushConstant(c);
-						asm_.movq(r8, base);
+				if(node.isDouble()) 	asm_.addpd(reg(ref), xmm15);
+				else 			asm_.paddq(reg(ref), xmm15);
+				
+				EmitScatter(node, reg(ref), index);
 						
-						XMMRegister split = reg(node.shape.split);
-						asm_.movapd(xmm15, split);
-						asm_.paddq(xmm15, xmm15);
-						asm_.paddq(xmm15, Operand(rsp, stackOffset));						
-						asm_.movq(r9, xmm15);
-						asm_.movhlps(xmm15, xmm15);
-						asm_.movq(r10, xmm15);
-						asm_.movlpd(xmm15,Operand(r8,r9,times_8,0));
-						asm_.movhpd(xmm15,Operand(r8,r10,times_8,0));
-						asm_.addpd(reg(ref), xmm15);
-						asm_.movlpd(Operand(r8,r9,times_8,0), reg(ref));
-						asm_.movhpd(Operand(r8,r10,times_8,0), reg(ref));
-						
-					} else {
-						asm_.movq(r8, Operand(rsp, stackOffset));
-						Operand op = EncodeOperand(node.out.p, r8, times_8);
-						asm_.addpd(reg(ref), op);
-						asm_.movdqa(op,reg(ref));
-					}
-				} 
-				else {
-					asm_.movq(r8, Operand(rsp, stackOffset));
-					Operand op = EncodeOperand(node.out.p, r8, times_8);
-					asm_.paddq(Move(ref, node.unary.a), op);
-					asm_.movdqa(op, reg(ref));
-				}
 				stackOffset += 0x10;
 			} break;
 
 			case IROpCode::length: {
-				for(int64_t i = 0; i < node.out.length; i++)
-					((double*)node.out.p)[i] = 0;
-			
-				if(node.type == Type::Integer) {	
-					asm_.movdqa(xmm15, ConstantTable(C_INTEGER_ONE));
-					if(node.shape.filter >= 0) {
-						IRef mask = node.shape.filter;
-						asm_.pand(xmm15, reg(mask));
-					}
+				for(int64_t i = 0; i < node.in.length; i++)
+					((double*)node.in.p)[i] = 0.0;
+				
+				Operand offset = Operand(rsp, stackOffset);
+				XMMRegister index = no_xmm;
 
-					if(node.shape.split >= 0) {
-						Constant c(node.out.p);
-						Operand base = PushConstant(c);
-						asm_.movq(r8, base);
+				if(node.isInteger())
+					asm_.movdqa(reg(ref), ConstantTable(C_INTEGER_ONE));
+				else 	
+					asm_.movdqa(reg(ref), ConstantTable(C_DOUBLE_ONE));
 
-						XMMRegister split = reg(node.shape.split);
-						asm_.movapd(reg(ref), split);
-						asm_.paddq(reg(ref), reg(ref));
-						asm_.paddq(reg(ref), Operand(rsp, stackOffset));						
-						asm_.movq(r9, reg(ref));
-						asm_.movhlps(reg(ref), reg(ref));
-						asm_.movq(r10, reg(ref));
-						asm_.movlpd(reg(ref),Operand(r8,r9,times_8,0));
-						asm_.movhpd(reg(ref),Operand(r8,r10,times_8,0));
-						asm_.paddq(xmm15, reg(ref));
-						asm_.movlpd(Operand(r8,r9,times_8,0), xmm15);
-						asm_.movhpd(Operand(r8,r10,times_8,0), xmm15);
-					}
-					else { 
-						asm_.movq(r8, Operand(rsp, stackOffset));
-						Operand op = EncodeOperand(node.out.p, r8, times_8);
-						asm_.movdqa(reg(ref), op);
-						asm_.paddq(xmm15, reg(ref));
-						asm_.movdqa(op, xmm15);
-					}
+				if(node.shape.split >= 0) {
+					asm_.movapd(xmm15, reg(node.shape.split));
+					asm_.paddq(xmm15, xmm15);
+					index = xmm15;
 				}
-				else {
-					asm_.movdqa(xmm15, ConstantTable(C_DOUBLE_ONE));
-					if(node.shape.filter >= 0) {
-						IRef mask = node.shape.filter;
-						asm_.pand(xmm15, reg(mask));
-					}
+				EmitGather(xmm15, node, index, offset);
 
-					if(node.shape.split >= 0) {
-						Constant c(node.out.p);
-						Operand base = PushConstant(c);
-						asm_.movq(r8, base);
-
-						XMMRegister split = reg(node.shape.split);
-						asm_.movapd(reg(ref), reg(ref));
-						asm_.paddq(reg(ref), reg(ref));
-						asm_.paddq(reg(ref), Operand(rsp, stackOffset));						
-						asm_.movq(r9, reg(ref));
-						asm_.movhlps(reg(ref), reg(ref));
-						asm_.movq(r10, reg(ref));
-						asm_.movlpd(reg(ref),Operand(r8,r9,times_8,0));
-						asm_.movhpd(reg(ref),Operand(r8,r10,times_8,0));
-						asm_.addpd(xmm15, reg(ref));
-						asm_.movlpd(Operand(r8,r9,times_8,0), xmm15);
-						asm_.movhpd(Operand(r8,r10,times_8,0), xmm15);
-					}
-					else { 
-						asm_.movq(r8, Operand(rsp, stackOffset));
-						Operand op = EncodeOperand(node.out.p, r8, times_8);
-						asm_.movdqa(reg(ref), op);
-						asm_.addpd(xmm15, reg(ref));
-						asm_.movdqa(op, xmm15);
-					}
+				if(node.shape.filter >= 0) {
+					IRef mask = node.shape.filter;
+					asm_.pand(reg(ref), reg(mask));
 				}
+				
+				if(node.isDouble()) 	asm_.addpd(reg(ref), xmm15);
+				else 			asm_.paddq(reg(ref), xmm15);
+				
+				EmitScatter(node, reg(ref), index);
+				
 				stackOffset += 0x10;
 			} break;
 
 			case IROpCode::mean: {
-				for(int64_t i = 0; i < node.out.length; i++)
-					((double*)node.out.p)[i] = 0;
+				for(int64_t i = 0; i < node.in.length; i++)
+					((double*)node.in.p)[i] = 0;
 				
-				// m = m + (x-m)/n
-				asm_.movq(r8, Operand(rsp, stackOffset));
-				Operand op = EncodeOperand(node.out.p, r8, times_8);
+				// m = m + 1/n * (x-m)
+
+				Operand offset = Operand(rsp, stackOffset);
+				XMMRegister index = no_xmm;
 				
-				asm_.subpd(EmitMove(xmm15, reg(node.unary.a)), op);
-				asm_.movapd(reg(ref), reg(node.binary.b));
-				asm_.addpd(reg(ref), ConstantTable(C_DOUBLE_ONE));
-				asm_.divpd(xmm15, reg(ref));
+				EmitMove(reg(ref), reg(node.unary.a));		// x
+				
+				if(node.shape.split >= 0) {
+					asm_.movapd(xmm15, reg(node.shape.split));
+					asm_.paddq(xmm15, xmm15);
+					index = xmm15;
+				}
+				EmitGather(xmm15, node, index, offset);		// m
+				
+				asm_.subpd(reg(ref), xmm15);
+				asm_.mulpd(reg(ref), reg(node.binary.b));
 
 				if(node.shape.filter >= 0) {
 					IRef mask = node.shape.filter;
-					asm_.pand(xmm15, reg(mask));
+					asm_.pand(reg(ref), reg(mask));
 				}
 
-				asm_.movdqa(reg(ref), op);
-				asm_.addpd(xmm15, reg(ref));
-				asm_.movdqa(op, xmm15);
+				asm_.addpd(reg(ref), xmm15);
+				EmitScatter(node, reg(ref), index);
+				EmitMove(reg(ref), xmm15);
+
 				stackOffset += 0x10;
 			} break;
 
 			case IROpCode::cm2: {
 				// c = c + (n-1)/n * (s-m1) * (t-m2)
-				// (s-m1) is in a, (t-m2) is in b, (n-1) is in c
-				for(int64_t i = 0; i < node.out.length; i++)
-					((double*)node.out.p)[i] = 0;
+				// (s-m1) is in a, (t-m2) is in b, 1/n is in c
+				for(int64_t i = 0; i < node.in.length; i++)
+					((double*)node.in.p)[i] = 0;
+				
+				Operand offset = Operand(rsp, stackOffset);
+				XMMRegister index = no_xmm;
 				
 				EmitMove(xmm15, reg(node.unary.a));
+				
 				asm_.mulpd(xmm15, reg(node.binary.b));
-				asm_.mulpd(xmm15, reg(node.trinary.c));
-				EmitMove(reg(ref), reg(node.trinary.c));
-				asm_.addpd(reg(ref), ConstantTable(C_DOUBLE_ONE));
-				asm_.divpd(xmm15, reg(ref));
+				asm_.movdqa(reg(ref), ConstantTable(C_DOUBLE_ONE));
+				asm_.subpd(reg(ref), reg(node.trinary.c));
+				asm_.mulpd(xmm15, reg(ref));
 
+				if(node.shape.split >= 0) {
+					asm_.movapd(reg(ref), reg(node.shape.split));
+					asm_.paddq(reg(ref), reg(ref));
+					index = reg(ref);
+				}
+				EmitGather(reg(ref), node, index, offset);
+				
 				if(node.shape.filter >= 0) {
 					IRef mask = node.shape.filter;
 					asm_.pand(xmm15, reg(mask));
 				}
 
-				asm_.movq(r8, Operand(rsp, stackOffset));
-				Operand op = EncodeOperand(node.out.p, r8, times_8);
-				
-				asm_.movdqa(reg(ref), op);
-				asm_.addpd(xmm15, reg(ref));
-				asm_.movdqa(op, xmm15);
+				asm_.addpd(reg(ref), xmm15);
+				EmitScatter(node, reg(ref), index);
 				stackOffset += 0x10;
 			} break;
 
@@ -1032,7 +1008,7 @@ struct TraceJIT {
 		
 			}
 
-			if(node.liveOut && node.shape.length == (int64_t)trace->code_buffer->outer_loop) {
+			if(node.liveOut && node.shape.length == (int64_t)trace->Size) {
 				switch(node.group) {
 					case IRNode::MAP:
 					case IRNode::GENERATOR: {
@@ -1285,6 +1261,33 @@ struct TraceJIT {
 		RestoreRegisters(i);*/
 	}
 
+	void EmitGather(XMMRegister dest, IRNode const& node, XMMRegister index, Operand offset) {
+		// TODO: other fast cases here when index is a known seq
+		if(!index.is(no_xmm)) {
+			EmitMove(dest, index);
+			asm_.paddq(dest, offset);
+		
+			asm_.movq(r8, dest);
+			asm_.movhlps(dest, dest);
+			asm_.movq(r9, dest);
+			asm_.movlpd(dest, EncodeOperand(node.in.p, r8, times_8));
+			asm_.movhpd(dest, EncodeOperand(node.in.p, r9, times_8));
+		} else {
+			asm_.movq(r8, offset);
+			asm_.movdqa(dest, EncodeOperand(node.in.p, r8, times_8));
+		}
+	}
+
+	void EmitScatter(IRNode const& node, XMMRegister src, XMMRegister index) {
+		if(!index.is(no_xmm)) {
+			asm_.movlpd(EncodeOperand(node.in.p, r8, times_8), src);
+			asm_.movhpd(EncodeOperand(node.in.p, r9, times_8), src);
+		}
+		else {
+			asm_.movdqa(EncodeOperand(node.in.p, r8, times_8), src);
+		}
+	}
+	
 	void SaveRegisters(IRef i) {
 		// We only need to save live out
 		// minus the register allocated for this instruction
@@ -1344,12 +1347,12 @@ struct TraceJIT {
 		if(thread.state.verbose) {
 			//timespec begin;
 			//get_time(begin);
-			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->code_buffer->outer_loop, 4, 16*1024); 
+			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->Size, 4, 16*1024); 
 			//trace_code(thread.index, 0, trace->length);
 			//double s = trace->length / (time_elapsed(begin) * 10e9);
 			//printf("elements computed / us: %f\n",s);
 		} else {
-			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->code_buffer->outer_loop, 4, 16*1024); 
+			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->Size, 4, 16*1024); 
 			//trace_code(thread.index, 0, trace->length);
 		}
 	}
@@ -1357,54 +1360,60 @@ struct TraceJIT {
 	// merge value in j into i
 	void mergeSum(IRNode& node, int64_t i, int64_t j) {
 		if(node.isDouble())
-			((double*)node.out.p)[i] += ((double*)node.out.p)[j];
+			((double*)node.in.p)[i] += ((double*)node.in.p)[j];
 		else
-			((int64_t*)node.out.p)[i] += ((int64_t*)node.out.p)[j];
+			((int64_t*)node.in.p)[i] += ((int64_t*)node.in.p)[j];
 	}
 
 	void mergeProd(IRNode& node, int64_t i, int64_t j) {
 		if(node.isDouble())
-			((double*)node.out.p)[i] *= ((double*)node.out.p)[j];
+			((double*)node.in.p)[i] *= ((double*)node.in.p)[j];
 		else
-			((int64_t*)node.out.p)[i] *= ((int64_t*)node.out.p)[j];
+			((int64_t*)node.in.p)[i] *= ((int64_t*)node.in.p)[j];
 	}
 
 	void mergeLength(IRNode& node, int64_t i, int64_t j) {
 		if(node.isDouble())
-			((double*)node.out.p)[i] += ((double*)node.out.p)[j];
+			((double*)node.in.p)[i] += ((double*)node.in.p)[j];
 		else
-			((int64_t*)node.out.p)[i] += ((int64_t*)node.out.p)[j];
+			((int64_t*)node.in.p)[i] += ((int64_t*)node.in.p)[j];
 	}
 
 	void mergeMean(IRNode& node, int64_t i, int64_t j) {
-		IRNode& b = trace->nodes[node.binary.b];
+		IRNode& b = trace->nodes[trace->nodes[node.binary.b].binary.b];
 
+		/*printf("Merging %d => %d: %f %f %f %f\n", i, j,
+			((double*)node.in.p)[i],
+			((double*)b.in.p)[i],
+			((double*)node.in.p)[j],
+			((double*)b.in.p)[j]);
+*/
 		// u2 in a, n2 in b
-		if(((double*)b.out.p)[i] > 0) {
-			double m1 = ((double*)node.out.p)[i];
+		if(((double*)b.in.p)[i] > 0) {
+			double m1 = ((double*)node.in.p)[i];
 
-			((double*)node.out.p)[i] += 
-				((double*)b.out.p)[j] / ((double*)b.out.p)[i]
-				* (((double*)node.out.p)[j] - ((double*)node.out.p)[i] );
+			((double*)node.in.p)[i] += 
+				((double*)b.in.p)[j] / ((double*)b.in.p)[i]
+				* (((double*)node.in.p)[j] - ((double*)node.in.p)[i] );
 
 			// put m2-m1 in j for the cov to use
-			((double*)node.out.p)[j] -= m1;
+			((double*)node.in.p)[j] -= m1;
 		}
 	}
 
 	void mergeCm2(IRNode& node, int64_t i, int64_t j) {
 		IRNode& a = trace->nodes[trace->nodes[node.binary.a].binary.b];
 		IRNode& b = trace->nodes[trace->nodes[node.binary.b].binary.b];
-		IRNode& c = trace->nodes[node.trinary.c];
+		IRNode& c = trace->nodes[trace->nodes[node.trinary.c].binary.b];
 
-		double d1 = ((double*)a.out.p)[j];
-		double d2 = ((double*)b.out.p)[j];
-		double nn = (((double*)c.out.p)[i] - ((double*)c.out.p)[j])
-				* ((double*)c.out.p)[j] / ((double*)c.out.p)[i];
+		double d1 = ((double*)a.in.p)[j];
+		double d2 = ((double*)b.in.p)[j];
+		double nn = (((double*)c.in.p)[i] - ((double*)c.in.p)[j])
+				* ((double*)c.in.p)[j] / ((double*)c.in.p)[i];
 
-		if(((double*)c.out.p)[i] > 0) {
-			((double*)node.out.p)[i] +=
-				((double*)node.out.p)[j] +
+		if(((double*)c.in.p)[i] > 0) {
+			((double*)node.in.p)[i] +=
+				((double*)node.in.p)[j] +
 				nn * d1 * d2;
 		}
 	}
@@ -1415,7 +1424,7 @@ struct TraceJIT {
 			IRNode & node = trace->nodes[ref];
 
 			if(node.group == IRNode::FOLD) {
-				int64_t step = node.out.length/thread.state.nThreads;
+				int64_t step = node.in.length/thread.state.nThreads;
 
 				for(int64_t j = 0; j < thread.state.nThreads; j++) {
 					for(int64_t i = 0; i < node.outShape.length; i++) {
@@ -1450,7 +1459,7 @@ struct TraceJIT {
 			IRNode & node = trace->nodes[ref];
 	
 			if(node.group == IRNode::FOLD) {
-				int64_t step = node.out.length/thread.state.nThreads;
+				int64_t step = node.in.length/thread.state.nThreads;
 				for(int64_t j = 1; j < thread.state.nThreads; j++) {
 					for(int64_t i = 0; i < node.outShape.length; i++) {
 						int64_t a = 0*step+i*2;
@@ -1485,18 +1494,16 @@ struct TraceJIT {
 			IRNode & node = trace->nodes[ref];
 			if(node.group == IRNode::FOLD && node.liveOut) {
 				if(node.isDouble()) {
-					Double r(node.outShape.length);
-					for(int64_t i = 0, j = 0; i < r.length; i++, j+=2) {
-						r[i] = ((double*)node.out.p)[j];
+					Double& d = (Double&)node.out;
+					for(int64_t i = 0, j = 0; i < node.outShape.length; i++, j+=2) {
+						d[i] = ((double*)node.in.p)[j];
 					}
-					node.out = r;
 				}
 				else if(node.isInteger()) {
-					Integer r(node.outShape.length);
-					for(int64_t i = 0, j = 0; i < r.length; i++, j+=2) {
-						r[i] = ((int64_t*)node.out.p)[j];
+					Integer& d = (Integer&)node.out;
+					for(int64_t i = 0, j = 0; i < node.outShape.length; i++, j+=2) {
+						d[i] = ((int64_t*)node.in.p)[j];
 					}
-					node.out = r;
 				}
 				else {
 					_error("NYI");

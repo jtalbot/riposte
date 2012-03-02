@@ -47,3 +47,9 @@ class <- function(x) attr(x, 'class')
 `class<-` <- function(x, value) attr(x, 'class') <- as.character(value)
 dimnames <- function(x) attr(x, 'dimnames')
 `dimnames<-` <- function(x, value) attr(x, 'dimnames') <- value   #NYI: check length and dim
+
+#seq <- function(from=1, by=1, length.out=1) .Internal(seq(from, by, length.out))
+
+rep <- function(x, times=1, length.out=times*each*length(x), each=1) {
+	x[rep(length(x), strip(each), strip(length.out))]
+}

@@ -18,21 +18,33 @@ c <- function(...) .Internal(unlist(list(...), TRUE, TRUE))
 #	a <- cumprod(nd)
 #}
 
-`[[` <- function(x, ..., exact = TRUE) UseMethod('[[')
+`[` <- function(x, i) strip(x)[strip(i)]
 
-`[[.default` <- function(x, ..., exact = TRUE) {
-	i <- as.integer(list(...))
-	
-	d <- dim(x)
-	if(is.null(d)) d <- length(x)
-	
-	if(length(i) != length(d)) stop("incorrect number of subscripts")
-	if(any(i < 1) || any(i > d)) stop("subscript out of bounds")
+`[<-` <- function(x, i, ..., value) `[<-`(strip(x), strip(i), strip(value))
 
-	if(length(d) > 1) {
-		d <- c(1,d[-length(d)])
-		d <- sum((i-1)*cumprod(d))+1
-	}
-	strip(x)[[d]]
+#`[[` <- function(x, ..., exact = TRUE) UseMethod('[[')
+
+#`[[` <- function(x, ..., exact = TRUE) {
+#	i <- as.integer(list(...))
+#	
+#	d <- dim(x)
+#	if(is.null(d)) d <- length(x)
+#	
+#	if(length(i) != length(d)) stop("incorrect number of subscripts")
+#	if(any(i < 1) || any(i > d)) stop("subscript out of bounds")
+#
+#	if(length(d) > 1) {
+#		d <- c(1,d[-length(d)])
+#		d <- sum((i-1)*cumprod(d))+1
+#	}
+#	strip(x)[[d]]
+#}
+
+`[[` <- function(x, i) {
+	strip(x)[[strip(i)]]
 }
 
+length <- function(x) length(strip(x))
+
+nrow <- function(x) dim(x)[1L]
+ncol <- function(x) dim(x)[2L]

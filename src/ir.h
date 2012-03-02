@@ -49,12 +49,14 @@ struct IRNode {
 		IRef filter;
 		int64_t levels;
 		IRef split;
+		bool blocking;
 
 		bool operator==(Shape const& o) const {
 			return length == o.length &&
 				filter == o.filter &&
 				levels == o.levels &&
-				split == o.split;
+				split == o.split &&
+				blocking == o.blocking;
 		}
 
 		bool operator!=(Shape const& o) const {
@@ -71,6 +73,7 @@ struct IRNode {
 
 	bool live;
 	bool liveOut;
+	Value in;
 	Value out;
 	
 	bool operator==(IRNode const& o) const {
@@ -81,16 +84,16 @@ struct IRNode {
 				break;
 			case IRNode::GENERATOR: {
 				if(op == IROpCode::load) {
-					return eq && unary.a == o.unary.a && out == o.out;
+					return eq && unary.a == o.unary.a && in == o.in;
 				} else if(op == IROpCode::constant) {
 					return eq && ((type == Type::Double && constant.d == o.constant.d) || 
 							(type == Type::Integer && constant.i == o.constant.i) || 
 							(type == Type::Logical && constant.l == o.constant.l));
-				} else if(op == IROpCode::seq) {
+				} else if(op == IROpCode::seq || op == IROpCode::rep) {
 					return eq && ((type == Type::Double && sequence.da == o.sequence.da && sequence.db == o.sequence.db) || 
-							(type == Type::Integer && sequence.ia == o.sequence.ia && sequence.ib == o.sequence.ia));
+							(type == Type::Integer && sequence.ia == o.sequence.ia && sequence.ib == o.sequence.ib));
 				} else {
-					_error("NYI");
+					_error("Bad generator in node equality");
 				}
 			} break;
 			default: {

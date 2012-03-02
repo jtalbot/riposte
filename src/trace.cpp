@@ -17,19 +17,6 @@ Trace::Trace() {
 	code_buffer = NULL;
 }
 
-void Trace::Bind(Thread& thread, Value const& v) {
-	if(!v.isFuture()) return;
-	Execute(thread, v.future.ref);
-}
-
-void Trace::Flush(Thread & thread) {
-	n_recorded_since_last_exec = 0;
-	if(nodes.size() > 0) {
-		Execute(thread);
-	}
-	Reset();
-}
-
 std::string shape2string(IRNode::Shape const& shape) {
 	std::ostringstream out;
 	out << "[" << shape.length;
@@ -50,9 +37,10 @@ std::string Trace::toString(Thread & thread) {
 #define TRINARY(op,...) case IROpCode::op: out << "n" << node.trinary.a << "\tn" << node.trinary.b << "\tn" << node.trinary.c; break;
 #define BINARY(op,...) case IROpCode::op: out << "n" << node.binary.a << "\tn" << node.binary.b; break;
 #define UNARY(op,...) case IROpCode::op: out << "n" << node.unary.a; break;
+#define NULLARY(op,...) case IROpCode::op: break;
 		UNARY_FOLD_SCAN_BYTECODES(UNARY)
 		BINARY_BYTECODES(BINARY)
-		UNARY(length)
+		NULLARY(length)
 		BINARY(mean)
 		TRINARY(cm2)
 		UNARY(cast)
@@ -67,7 +55,7 @@ std::string Trace::toString(Thread & thread) {
 				out << node.sequence.ia << "\t" << node.sequence.ib;
 		break;
 		case IROpCode::constant: out << ( (node.type == Type::Integer) ? node.constant.i : (node.type == Type::Logical) ? node.constant.l : node.constant.d); break;
-		case IROpCode::load: out << "$" << node.out.p << "\tn" << node.unary.a; break;
+		case IROpCode::load: out << "$" << node.in.p << "\tn" << node.unary.a; break;
 		case IROpCode::nop: break;
 		}
 		if(node.liveOut) {
@@ -109,13 +97,18 @@ IRef Trace::EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data) 
 		 op == IROpCode::any || op == IROpCode::all ||
 		 op == IROpCode::length)) {
 		n.group = IRNode::FOLD;
-		n.arity = IRNode::UNARY;
-		n.outShape = (IRNode::Shape) { nodes[a].outShape.levels, 0, 1, 0 };
+		n.arity = op == IROpCode::length ? IRNode::NULLARY : IRNode::UNARY;
+		n.outShape = (IRNode::Shape) { nodes[a].outShape.levels, -1, 1, -1, true };
 	} else if(op == IROpCode::mean) {
-		n.binary.b = EmitUnary(IROpCode::length, Type::Double, a, 0);
+		union {
+			double d;
+			int64_t i;
+		};
+		d = 1.0;
+		n.binary.b = EmitBinary(IROpCode::div, Type::Double, EmitConstant(Type::Double, 1, i), EmitUnary(IROpCode::length, Type::Double, a, 0), 0);
 		n.group = IRNode::FOLD;
 		n.arity = IRNode::BINARY;
-		n.outShape = (IRNode::Shape) { nodes[a].outShape.levels, 0, 1, 0 };
+		n.outShape = (IRNode::Shape) { nodes[a].outShape.levels, -1, 1, -1, true };
 	} else {
 		n.group = IRNode::MAP;
 		n.arity = IRNode::UNARY;
@@ -135,10 +128,10 @@ IRef Trace::EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, int64
 	// the operands are the same length or are constants that we can insert
 	// a rep and gather for. This length == 1 check will break on sum(a) + 1 which
 	// we can't fuse.
-	if(nodes[a].outShape.length == 1)
-		n.shape = nodes[b].outShape;
-	else if(nodes[b].outShape.length == 1)
-		n.shape = nodes[a].outShape;
+	if(nodes[a].shape.length == 1)
+		n.shape = nodes[b].shape;
+	else if(nodes[b].shape.length == 1)
+		n.shape = nodes[a].shape;
 	else {
 		//assert(nodes[a].outShape == nodes[b].outShape);
 		n.shape = nodes[a].outShape;
@@ -148,10 +141,15 @@ IRef Trace::EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, int64
 					a, EmitUnary(IROpCode::mean, Type::Double, a, 0), 0);
 		n.binary.b = EmitBinary(IROpCode::sub, Type::Double,
 					b, EmitUnary(IROpCode::mean, Type::Double, b, 0), 0);
-		n.trinary.c = EmitUnary(IROpCode::length, Type::Double, a, 0);
+		union {
+			double d;
+			int64_t i;
+		};
+		d = 1.0;
+		n.trinary.c = EmitBinary(IROpCode::div, Type::Double, EmitConstant(Type::Double, 1, i), EmitUnary(IROpCode::length, Type::Double, a, 0), 0);
 		n.arity = IRNode::TRINARY;
 		n.group = IRNode::FOLD;
-		n.outShape = (IRNode::Shape) { nodes[a].outShape.levels, 0, 1, 0 };
+		n.outShape = (IRNode::Shape) { nodes[a].outShape.levels, -1, 1, -1, true };
 	} else {
 		n.arity = IRNode::BINARY;
 		n.group = IRNode::MAP;
@@ -225,7 +223,7 @@ IRef Trace::EmitRepeat(int64_t length, int64_t a, int64_t b) {
 	n.group = IRNode::GENERATOR;
 	n.op = IROpCode::rep;
 	n.type = Type::Integer;
-	n.shape = (IRNode::Shape) { length, -1, 1, -1 };
+	n.shape = (IRNode::Shape) { length, -1, 1, -1, false };
 	n.outShape = n.shape;
 	n.sequence.ia = a;
 	n.sequence.ib = b;
@@ -239,7 +237,7 @@ IRef Trace::EmitSequence(int64_t length, int64_t a, int64_t b) {
 	n.group = IRNode::GENERATOR;
 	n.op = IROpCode::seq;
 	n.type = Type::Integer;
-	n.shape = (IRNode::Shape) { length, -1, 1, -1 };
+	n.shape = (IRNode::Shape) { length, -1, 1, -1, false };
 	n.outShape = n.shape;
 	n.sequence.ia = a;
 	n.sequence.ib = b;
@@ -253,7 +251,7 @@ IRef Trace::EmitSequence(int64_t length, double a, double b) {
 	n.group = IRNode::GENERATOR;
 	n.op = IROpCode::seq;
 	n.type = Type::Double;
-	n.shape = (IRNode::Shape) { length, -1, 1, -1 };
+	n.shape = (IRNode::Shape) { length, -1, 1, -1, false };
 	n.outShape = n.shape;
 	n.sequence.da = a;
 	n.sequence.db = b;
@@ -267,7 +265,7 @@ IRef Trace::EmitConstant(Type::Enum type, int64_t length, int64_t c) {
 	n.group = IRNode::GENERATOR;
 	n.op = IROpCode::constant;
 	n.type = type;
-	n.shape = (IRNode::Shape) { length, -1, 1, -1 };
+	n.shape = (IRNode::Shape) { length, -1, 1, -1, false };
 	n.outShape = n.shape;
 	n.constant.i = c;
 	nodes.push_back(n);
@@ -279,10 +277,10 @@ IRef Trace::EmitLoad(Value const& v, IRef i) {
 	n.group = IRNode::GENERATOR;
 	n.op = IROpCode::load;
 	n.type = v.type;
-	n.shape = (IRNode::Shape) { v.length, -1, 1, -1 };
+	n.shape = (IRNode::Shape) { nodes[i].outShape.length, -1, 1, -1, false };
 	n.outShape = n.shape;
 	n.unary.a = i;
-	n.out = v;
+	n.in = v;
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
@@ -297,7 +295,7 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 	
 	for(Value* v = thread.base-thread.frame.prototype->registers; 
 		v < thread.registers+DEFAULT_NUM_REGISTERS; v++) {
-		if(v->isFuture()) {
+		if(v->isFuture() && v->length == Size) {
 			nodes[v->future.ref].liveOut = true;
 			Output o;
 			o.type = Output::REG;
@@ -310,11 +308,23 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 	for(std::set<Environment*>::const_iterator i = liveEnvironments.begin(); i != liveEnvironments.end(); ++i) {
 		for(Environment::const_iterator j = (*i)->begin(); j != (*i)->end(); ++j) {
 			Value const& v = j.value();
-			if(v.isFuture()) {
+			if(v.isFuture() && v.length == Size) {
 				nodes[v.future.ref].liveOut = true;
 				Output o;
 				o.type = Output::MEMORY;
 				o.pointer = (*i)->makePointer(j.string());
+				o.ref = v.future.ref;
+				outputs.push_back(o);
+			}
+		}
+
+		for(int64_t j = 0; j < (*i)->dots.size(); j++) {
+			Value const& v = (*i)->dots[j].v;
+			if(v.isFuture() && v.length == Size) {
+				nodes[v.future.ref].liveOut = true;
+				Output o;
+				o.type = Output::REG;
+				o.reg = (Value*)&v;
 				o.ref = v.future.ref;
 				outputs.push_back(o);
 			}
@@ -535,6 +545,26 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			}
 		}
 		
+		if(node.op == IROpCode::sub &&
+				nodes[node.binary.a].op == IROpCode::seq &&
+				nodes[node.binary.b].op == IROpCode::constant) {
+			int64_t a = node.binary.a;
+			int64_t b = node.binary.b;
+			if(node.isInteger()) {
+				node.op = IROpCode::seq;
+				node.arity = IRNode::NULLARY;
+				node.group = IRNode::GENERATOR;
+				node.sequence.ia = subVOp<Integer,Integer>::eval(thread, nodes[a].sequence.ia, nodes[b].constant.i);
+				node.sequence.ib = nodes[a].sequence.ib;
+			} else {
+				node.op = IROpCode::seq;
+				node.arity = IRNode::NULLARY;
+				node.group = IRNode::GENERATOR;
+				node.sequence.da = subVOp<Double,Double>::eval(thread, nodes[a].sequence.da, nodes[b].constant.d);
+				node.sequence.db = nodes[a].sequence.db;
+			}
+		}
+
 		if(node.op == IROpCode::mul &&
 				nodes[node.binary.a].op == IROpCode::seq &&
 				nodes[node.binary.b].op == IROpCode::constant) {
@@ -606,6 +636,18 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			node.arity = IRNode::NULLARY;
 			node.group = IRNode::GENERATOR;
 			node.constant.l = Logical::TrueElement;
+		}
+		
+		if(node.op == IROpCode::sub &&
+				nodes[node.binary.b].op == IROpCode::constant &&
+				nodes[node.binary.b].constant.i == 1 &&
+				nodes[node.binary.a].op == IROpCode::add &&
+				nodes[nodes[node.binary.a].binary.b].op == IROpCode::constant &&
+				nodes[nodes[node.binary.a].binary.b].constant.i == 1) {
+			node.op = IROpCode::pos;
+			node.arity = IRNode::UNARY;
+			node.group = IRNode::MAP;
+			node.unary.a = nodes[node.binary.a].binary.a;
 		}
 	}
 }
@@ -787,18 +829,18 @@ void Trace::Optimize(Thread& thread) {
 	
 	// Turn these back on when I'm sure about optimizing across shape changes...
 	// E.g. a <- 1:64; a[a < 32]
-	//AlgebraicSimplification(thread);
-	//CSEElimination(thread);
+	AlgebraicSimplification(thread);
+	CSEElimination(thread);
 
 	// move outputs up...
-	/*for(size_t i = 0; i < outputs.size(); i++) {
+	for(size_t i = 0; i < outputs.size(); i++) {
 		IRef& r = outputs[i].ref;
 		while(nodes[r].op == IROpCode::pos) {
 			nodes[r].liveOut = false;
 			r = nodes[r].unary.a;
 		}
 		nodes[r].liveOut = true;
-	}*/
+	}
 	
 	UsePropogation(thread);
 	DeadCodeElimination(thread);
