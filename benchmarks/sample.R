@@ -58,4 +58,3 @@ benchmark <- function(n) {
 }
 
 system.time(benchmark(10000000))
-
