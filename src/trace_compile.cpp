@@ -266,8 +266,8 @@ static __m128d random_d(__m128d input) {
 
 	SSEValue o;
 
-	o.d[0] = 1.0 - (double)r.v[0] / std::numeric_limits<uint64_t>::max();
-	o.d[1] = 1.0 - (double)r.v[1] / std::numeric_limits<uint64_t>::max();
+	o.d[0] = (double)r.v[0] / ((double)std::numeric_limits<uint64_t>::max() + 1);
+	o.d[1] = (double)r.v[1] / ((double)std::numeric_limits<uint64_t>::max() + 1);
 	return o.D;
 }
 
