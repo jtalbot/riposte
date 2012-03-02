@@ -1,31 +1,94 @@
 
 # pca (via eigen values of covariance matrix) + reprojection onto new basis
 
-N <- 100000
+N <- 100000L
+D <- 50L
 
-library(MASS)
-a <- mvrnorm(N, c(0,0), matrix(c(0.25,0.2,0.25,0.2),2,2))
+#library(clusterGeneration)
+#library(MASS)
+#cov.matrix <- genPositiveDefMat(D, ratioLambda=100)
+#a <- mvrnorm(N, rep(0,D), cov.matrix$Sigma)
+#write.table(as.vector(a), "~/riposte/benchmarks/pca.txt",row.names=FALSE,col.names=FALSE)
 
-outer.columns <- function(x,y,f) {
-	m <- nrow(x)
-	n <- ncol(x)
-	z <- length(x)
+a <- read.table("/Users/jtalbot/riposte/benchmarks/pca.txt")
+dim(a) <- c(N, D)
 
-	a <- x[rep(1:z, times=n)]
-	b <- y[rep(1:m, times=n^2)+rep((1:n)-1, each=z)*m]
-	array(f(a,b), dim=c(m,n,n))
+cat("done reading\n")
+
+## TODO: this is in its own function so that the intermediate variables go dead
+## 	 before this executes. Better liveness handling of registers would fix this
+cm <- function(x, y, i, j) {
+	cm2(x[(0L:(N-1L))+N*i+1L],y[(0L:(N-1L))+N*j+1L])
 }
 
-mycov <- function(a,b) {
+means <- function(x, i) {
+	mean(x[(0L:(N-1L))+N*i+1L])
+}
+
+covv <- function(x, y, i, j, mx, my) {
+	sum( (x[(0L:(N-1L))+N*i+1L] - mx) * (y[(0L:(N-1L))+N*j+1L] - my))
+}
+
+my.cov <- function(a,b) {
 	# replace with single pass cov computation 
 	if(!all(dim(a) == dim(b))) stop("matrices must be same shape")
-	s <- colSums(outer.columns(a,b,`*`)) - outer(colSums(a),colSums(b))/nrow(a)
-	s/(nrow(a)-1)
+
+	m <- nrow(a)
+	n <- ncol(a)
+	z <- length(a)
+
+	r <- double(n*n)
+	for(i in 0L:(n-1L)) {
+		for(j in i:(n-1L)) {
+			k <- cm(a, b, i, j)
+			r[i*n+j+1L] <- k
+			r[j*n+i+1L] <- k
+		}
+	}
+	r <- r/(m-1)
+	dim(r) <- c(n,n)
+	r
 }
 
-pca <- function(a) {
-	cm <- mycov(a,a)
-	# eigen decomposition
-	basis <- eigen(cm, symmetric=TRUE)$vectors
-	a %*% basis
+my.cov2 <- function(a,b) {
+	# replace with single pass cov computation 
+	if(!all(dim(a) == dim(b))) stop("matrices must be same shape")
+
+	m <- nrow(a)
+	n <- ncol(a)
+	z <- length(a)
+
+	ma <- double(n)
+	mb <- double(n)
+	for(i in 0L:(n-1L)) {
+		k <- means(a, i)
+		k <- means(b, i)
+		ma[i+1L] <- k
+		mb[i+1L] <- k
+	}
+
+	r <- double(n*n)	
+	for(i in 0L:(n-1L)) {
+		for(j in i:(n-1L)) {
+			k <- covv(a, b, i, j, ma[i], mb[j])
+			r[i*n+j+1L] <- k
+			r[j*n+i+1L] <- k
+		}
+	}
+	r <- r/(m-1)
+	dim(r) <- c(n,n)
+	r
 }
+
+## TODO: matrix multiplication cost dominates
+## Could just compute the principal components
+
+pca <- function(a) {
+	cm <- my.cov2(a,a)
+	basis <- eigen(cm, symmetric=TRUE)[[2]]
+	#a %*% basis
+	basis
+}
+
+system.time(pca(a))
+#pca(a)
