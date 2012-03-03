@@ -7,31 +7,36 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-//#include <vdb.h>
-
+//#define VIEW
+#ifdef VIEW
+#include <vdb.h>
+#endif
 double drand() {
 	double r = arc4random() / (double)0xFFFFFFFF;
 	return r;
 }
 int main() {
-	//vdb_color(1,1,1);
 	double * w = new double[N_DIMS + 1];
-	bzero(w, sizeof(double) * N_DIMS + 1);
+	bzero(w, sizeof(double) * (N_DIMS + 1));
 	double (*data)[N_DIMS] = (double(*)[N_DIMS]) malloc(sizeof(double) * N_DIMS * N_ROWS);
 	double * response = new double[N_ROWS];
+	
 	for(int i = 0; i < N_ROWS; i++) {
 		double p = drand();
+		response[i] = 3;
 		for(int d = 0; d < N_DIMS; d++) {
-			data[i][d] = p + .1 * (drand() - .5);
+			data[i][d] = drand();
+			response[i] += (d + 1)*data[i][d] + (drand() - .5) * .1; 
 		}
-		response[i] = p + .1 * (drand() - .5) + 2;
-		//vdb_point(data[i][0],data[i][1],response[i]);
+		#ifdef VIEW
+		vdb_color(1,1,1);
+		vdb_point(data[i][0],data[i][1],response[i]);
+		#endif
 	}
 	
-	double result;
 	double * grad = new double[N_DIMS + 1];
 	for(int round = 0; round < N_ITERATIONS; round++) {
-		bzero(grad,sizeof(double) * N_DIMS + 1);
+		bzero(grad,sizeof(double) * (N_DIMS + 1));
 		
 		for(int r = 0; r < N_ROWS; r++) {
 			double diff = w[0];
@@ -44,17 +49,16 @@ int main() {
 				grad[d+1] += (diff*data[r][d] - grad[d+1]) / (r + 1);
 			}
 		}
-		result = 0.0;
+		
 		for(int d = 0; d < N_DIMS + 1; d++) {
-			w[d] -= 0.07 * grad[d];
-			result += w[d];
+			w[d] -= .07 * grad[d];
 		}
 	}
 	
-	
-	//vdb_color(1,0,0);
-	//vdb_line(0,0,w[0],1,1,result);
-	
+	#ifdef VIEW
+	vdb_color(1,0,0);
+	vdb_triangle(0,0,w[0],1,0,w[0]+ w[1],0,1,w[0]+w[2]);
+	#endif
 	
 	return 0;
 	
