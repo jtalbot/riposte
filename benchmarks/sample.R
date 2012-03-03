@@ -44,14 +44,17 @@ inv.cdf <- function(p) {
 		  ((((cd[1]*q+cd[2])*q+cd[3])*q+cd[4])*q+1)}))
 }
 
-means <- c(0,2,10)
-sd <- c(1,0.1,3)
+rnorm <- function(n, m=0, sd=1) {
+	inv.cdf(runif(n))*sd + m
+}
 
-a <- 1:3 / 4 #runif(1000000)
-i <- floor(1:3) #runif(1000000)*3)+1
-b <- inv.cdf(a)*sd[i] + means[i]
+benchmark <- function(n) {
+	means <- c(0,2,10)
+	sd <- c(1,0.1,3)
 
-print(b)
+	a <- runif(n)
+	i <- floor(runif(n)*3)+1L
+	rnorm(n, means[i], sd[i])
+}
 
-plot(density(b))
-
+system.time(benchmark(10000000))

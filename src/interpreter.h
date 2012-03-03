@@ -144,10 +144,13 @@ class Trace : public gc {
 		IRef EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data); 
 		IRef EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, int64_t data);
 		IRef EmitTrinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, IRef c);
+		IRef EmitIfElse(IRef a, IRef b, IRef cond);
 
 		IRef EmitFilter(IRef a, IRef b);
 		IRef EmitSplit(IRef x, IRef f, int64_t levels);
 
+		IRef EmitGenerator(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b);
+		IRef EmitRandom(int64_t length);
 		IRef EmitRepeat(int64_t length, int64_t a, int64_t b);
 		IRef EmitSequence(int64_t length, int64_t a, int64_t b);
 		IRef EmitSequence(int64_t length, double a, double b);
@@ -296,10 +299,16 @@ public:
 
 	int64_t assignment[64], set[64]; // temporary space for matching arguments
 	
-	Thread(State& state, uint64_t index) : state(state), index(index), steals(1) {
-		registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
-		this->base = registers + DEFAULT_NUM_REGISTERS;
-	}
+	struct RandomSeed {
+		uint64_t v[2];
+		uint64_t m[2];
+		uint64_t a[2];
+		uint64_t padding[2];
+	};
+
+	static RandomSeed seed[100];
+
+	Thread(State& state, uint64_t index);
 
 	StackFrame& push() {
 		stack.push_back(frame);
@@ -464,7 +473,6 @@ public:
 			traces[length] = t;
 			availableTraces.pop_back();
 		}
-		Trace* t = traces[length];
 		return traces[length];
 	}
 
@@ -553,6 +561,15 @@ public:
 		return v;
 	}
 
+	Value EmitRandom(Environment* env, int64_t length) {
+		Trace* trace = getTrace(length);
+		trace->liveEnvironments.insert(env);
+		IRef r = trace->EmitRandom(length);
+		Value v;
+		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		return v;
+	}
+
 	Value EmitRepeat(Environment* env, int64_t length, int64_t a, int64_t b) {
 		Trace* trace = getTrace(length);
 		trace->liveEnvironments.insert(env);
@@ -600,6 +617,18 @@ public:
 		return v;
 	}
 
+	Value EmitIfElse(Environment* env, Value const& a, Value const& b, Value const& cond) {
+		Trace* trace = getTrace(a);
+		trace->liveEnvironments.insert(env);
+		
+		IRef r = trace->EmitIfElse( 	trace->GetRef(a),
+						trace->GetRef(b),
+						trace->GetRef(cond));
+		Value v;
+		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		return v;
+	}
+	
 	void LiveEnvironment(Environment* env, Value const& a) {
 		if(a.isFuture()) {
 			Trace* trace = getTrace(a);
@@ -634,7 +663,6 @@ public:
 		}
 		traces.clear();
 	}
-
 };
 
 inline State::State(uint64_t threads) : nThreads(threads), verbose(false), jitEnabled(true), done(0) {

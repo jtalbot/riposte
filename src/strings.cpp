@@ -1,4 +1,4 @@
-#include "string.h"
+#include "strings.h"
 
 #define DEFINE(name, string, ...) String Strings::name = string;
 STRINGS(DEFINE)

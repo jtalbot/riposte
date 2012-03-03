@@ -9,7 +9,7 @@
 #include "common.h"
 #include "type.h"
 #include "bc.h"
-#include "string.h"
+#include "strings.h"
 #include "exceptions.h"
 
 typedef int64_t IRef;

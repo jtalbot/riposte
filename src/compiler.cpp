@@ -42,6 +42,8 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::length) return ByteCode::length; 
 	if(func == Strings::strip) return ByteCode::strip; 
 	
+	if(func == Strings::random) return ByteCode::random; 
+	
 	else throw RuntimeError("unexpected symbol used as a unary operator"); 
 }
 
@@ -656,7 +658,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::cummax ||
 		func == Strings::type ||
 		func == Strings::length ||
-		func == Strings::strip) &&
+		func == Strings::strip ||
+		func == Strings::random) &&
 		call.length == 2)
 	{
 		// if there isn't exactly one parameter, we should call the library version...

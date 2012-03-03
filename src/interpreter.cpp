@@ -13,6 +13,28 @@
 #include "sse.h"
 #include "call.h"
 
+#include "primes.h"
+
+Thread::RandomSeed Thread::seed[100];
+
+Thread::Thread(State& state, uint64_t index) : state(state), index(index), steals(1) {
+	registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
+	this->base = registers + DEFAULT_NUM_REGISTERS;
+	RandomSeed& r = seed[index];
+
+	r.v[0] = 1;
+	r.v[1] = 1;
+	r.m[0] = 0x27bb2ee687b0b0fd;
+	r.m[1] = 0x27bb2ee687b0b0fd;
+	r.a[0] = primes[index*2];
+	r.a[1] = primes[index*2+1];
+	// advance a few?
+	for(int64_t i = 0; i < 1000; i++) {
+		r.v[0] = r.v[0] * r.m[0] + r.a[0];
+		r.v[1] = r.v[1] * r.m[1] + r.a[1];
+	}
+}
+
 extern Instruction const* kget_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* get_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -456,11 +478,10 @@ Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	OPERAND(b, inst.b); FORCE(b, inst.b);
 	OPERAND(c, inst.c); FORCE(c, inst.c);
-	//if(isTraceable<IfElse>(thread,a,b,c)) {
-	//	c = thread.trace.EmitTrinary<IfElse>(IROpCode::ifelse, rtype, a, b, c);
-	//	thread.trace.addEnvironment(thread.frame.environment);
-	//	return &inst+1;
-	//}
+	if(isTraceable<IfElse>(thread,a,b,c)) {
+		OUT(thread, inst.c) = thread.EmitIfElse(thread.frame.environment, a, b, c);
+		return &inst+1;
+	}
 	BIND(a); BIND(b); BIND(c);
 
 	_error("ifelse not defined in scalar yet");
@@ -569,6 +590,20 @@ Instruction const* rep_op(Thread& thread, Instruction const& inst) {
 	}
 
 	OUT(thread, inst.c) = Repeat((int64_t)n, (int64_t)each, len);
+	return &inst+1;
+}
+
+Instruction const* random_op(Thread& thread, Instruction const& inst) {
+	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
+
+	int64_t len = As<Integer>(thread, a)[0];
+	
+	if(len >= TRACE_VECTOR_WIDTH) {
+		OUT(thread, inst.c) = thread.EmitRandom(thread.frame.environment, len);
+		return &inst+1;
+	}
+
+	_error("NYI");
 	return &inst+1;
 }
 

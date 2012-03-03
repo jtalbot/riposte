@@ -16,6 +16,7 @@
 		_(constant,"constant", ___) \
 		_(seq, "seq", ___) \
 		_(rep, "rep", ___) \
+		_(random, "random", ___) \
 		_(load,"load", ___) \
 		_(filter, "filter", ___) \
 		_(split, "split", ___) \
@@ -92,7 +93,10 @@ struct IRNode {
 				} else if(op == IROpCode::seq || op == IROpCode::rep) {
 					return eq && ((type == Type::Double && sequence.da == o.sequence.da && sequence.db == o.sequence.db) || 
 							(type == Type::Integer && sequence.ia == o.sequence.ia && sequence.ib == o.sequence.ib));
-				} else {
+				} else if(op == IROpCode::random) {
+					return false;	// two random number sources are never the same
+				} 
+				else {
 					_error("Bad generator in node equality");
 				}
 			} break;

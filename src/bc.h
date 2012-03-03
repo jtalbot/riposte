@@ -4,7 +4,7 @@
 
 #include "enum.h"
 #include "common.h"
-#include "string.h"
+#include "strings.h"
 
 #define CONTROL_FLOW_BYTECODES(_) 	\
 	_(jc, "jc") \
@@ -39,6 +39,7 @@
 	_(vector,	"vector",	Generator) \
 	_(seq,		"seq", 		Generator) \
 	_(rep,		"rep", 		Generator) \
+	_(random,	"random", 	Generator) \
 
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double
 #define ARITH_UNARY_BYTECODES(_) \
