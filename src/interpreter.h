@@ -491,6 +491,20 @@ public:
 			_error("Shouldn't get here");
 	}
 
+	Trace* getTrace(Value const& a, Value const& b, Value const& c) {
+		int64_t la = a.length;
+		int64_t lb = b.length;
+		int64_t lc = c.length;
+		if(la != 1)
+			return getTrace(la);
+		else if(lb != 1)
+			return getTrace(lb);
+		else if(lc != 1)
+			return getTrace(lc);
+		else
+			_error("Shouldn't get here");
+	}
+
 	template< template<class X> class Group >
 	Value EmitUnary(Environment* env, IROpCode::Enum op, Value const& a, int64_t data) {
 		IRef r;
@@ -618,7 +632,7 @@ public:
 	}
 
 	Value EmitIfElse(Environment* env, Value const& a, Value const& b, Value const& cond) {
-		Trace* trace = getTrace(a);
+		Trace* trace = getTrace(a,b,cond);
 		trace->liveEnvironments.insert(env);
 		
 		IRef r = trace->EmitIfElse( 	trace->GetRef(a),

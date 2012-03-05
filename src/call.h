@@ -407,7 +407,7 @@ bool isTraceable<IfElse>(Thread const& thread, Value const& a, Value const& b, V
 		isTraceableType(thread, a) &&
 		isTraceableType(thread, b) &&
 		isTraceableType(thread, c) &&
-		isTraceableShape(thread, a, b) &&
+		isTraceableShape(thread, a, c) &&
 		isTraceableShape(thread, b, c);
 }
 

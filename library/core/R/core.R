@@ -1,5 +1,7 @@
+nargs <- function() { length(.Internal(sys.call(1L)))-1L }
 
 c <- function(...) .Internal(unlist(list(...), TRUE, TRUE))
+print <- function(...) cat(...)
 
 `:` <- function(from, to) { 
 	if(to > from) seq(from,1L,to-from+1L)
@@ -26,9 +28,23 @@ c <- function(...) .Internal(unlist(list(...), TRUE, TRUE))
 #	a <- cumprod(nd)
 #}
 
-`[` <- function(x, i) strip(x)[strip(i)]
+`[` <- function(x, i, j) {
+	if(nargs() == 2L || nargs() == -1L) {
+		strip(x)[strip(i)]
+	} else {
+		d <- dim(x)
+		if(missing(i) && missing(j))
+			x
+		else if(missing(i))
+			strip(x)[(1L:d[[1]])+(d[[1]]*(strip(j)-1L))]
+		else if(missing(j))
+			strip(x)[(0L:(d[[2]]-1L))*(d[[1]])+strip(i)]
+			
+	}
+}
 
 `[<-` <- function(x, i, ..., value) `[<-`(strip(x), strip(i), strip(value))
+`[[<-` <- function(x, i, ..., value) `[[<-`(strip(x), strip(i), strip(value))
 
 #`[[` <- function(x, ..., exact = TRUE) UseMethod('[[')
 
