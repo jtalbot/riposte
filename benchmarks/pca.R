@@ -10,7 +10,7 @@ D <- 50L
 #a <- mvrnorm(N, rep(0,D), cov.matrix$Sigma)
 #write.table(as.vector(a), "~/riposte/benchmarks/pca.txt",row.names=FALSE,col.names=FALSE)
 
-a <- read.table("/Users/zdevito/riposte/benchmarks/pca.txt")[[1]]
+a <- read.table("/Users/jtalbot/riposte/benchmarks/pca.txt")
 dim(a) <- c(N, D)
 
 cat("done reading\n")
@@ -66,7 +66,7 @@ my.cov2 <- function(a,b) {
 		ma[i+1L] <- k
 		mb[i+1L] <- k
 	}
-	print(ma)
+	#print(ma)
 	
 	r <- double(n*n)	
 	for(i in 0L:(n-1L)) {
@@ -91,5 +91,5 @@ pca <- function(a) {
 	basis
 }
 
-#system.time(pca(a))
-pca(a)
+system.time(pca(a))
+#pca(a)

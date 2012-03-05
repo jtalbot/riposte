@@ -16,7 +16,7 @@
 using namespace v8::internal;
 
 #define SIMD_WIDTH (2 * sizeof(double))
-#define CODE_BUFFER_SIZE (16 * 1024)
+#define CODE_BUFFER_SIZE (16 * 2048)
 
 struct Constant {
 	Constant() {}
@@ -72,7 +72,7 @@ static int make_executable(char * data, size_t size) {
 
 //scratch space that is reused across traces
 struct TraceCodeBuffer {
-	Constant constant_table[128] __attribute__((aligned(16)));
+	Constant constant_table[256] __attribute__((aligned(16)));
 	char code[CODE_BUFFER_SIZE] __attribute__((aligned(16)));
 	TraceCodeBuffer() {
 		//make the code executable
@@ -901,17 +901,17 @@ struct TraceJIT {
 				Operand offset = Operand(rsp, stackOffset);
 				XMMRegister index = no_xmm;
 
-				if(node.isInteger())
-					asm_.movdqa(reg(ref), ConstantTable(C_INTEGER_ONE));
-				else 	
-					asm_.movdqa(reg(ref), ConstantTable(C_DOUBLE_ONE));
-
 				if(node.shape.split >= 0) {
 					asm_.movapd(xmm15, reg(node.shape.split));
 					asm_.paddq(xmm15, xmm15);
 					index = xmm15;
 				}
 				EmitGather(xmm15, node, index, offset);
+
+				if(node.isInteger())
+					asm_.movdqa(reg(ref), ConstantTable(C_INTEGER_ONE));
+				else 	
+					asm_.movdqa(reg(ref), ConstantTable(C_DOUBLE_ONE));
 
 				if(node.shape.filter >= 0) {
 					IRef mask = node.shape.filter;
@@ -1036,23 +1036,31 @@ struct TraceJIT {
 			break;
 
 			case IROpCode::ifelse:
-				SaveRegisters(ref);
 				if(reg(node.trinary.a).is(xmm0)) {
+					SaveRegisters(ref);
 					EmitMove(xmm15, reg(node.trinary.a));
 					EmitMove(xmm0, reg(node.trinary.c));
 					asm_.blendvpd(xmm15, reg(node.trinary.b));
 					EmitMove(reg(ref), xmm15);
+					RestoreRegisters(ref);
 				} else if(reg(node.trinary.b).is(xmm0)) {
+					SaveRegisters(ref);
 					EmitMove(xmm15, reg(node.trinary.a));
 					EmitMove(reg(node.trinary.a), reg(node.trinary.b));
 					EmitMove(xmm0, reg(node.trinary.c));
 					asm_.blendvpd(xmm15, reg(node.trinary.a));
 					EmitMove(reg(ref), xmm15);
+					RestoreRegisters(ref);
 				} else if(reg(node.trinary.c).is(xmm0)) {
 					EmitMove(reg(ref), reg(node.trinary.a));
 					asm_.blendvpd(reg(ref), reg(node.trinary.b));
+				} else {
+					SaveRegisters(ref);
+					EmitMove(xmm0, reg(node.trinary.c));
+					EmitMove(reg(ref), reg(node.trinary.a));
+					asm_.blendvpd(reg(ref), reg(node.trinary.b));
+					RestoreRegisters(ref);
 				}
-				RestoreRegisters(ref);
 			break;
 
 			//case IROpCode::signif:

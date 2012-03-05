@@ -288,6 +288,7 @@ Type::Enum UnifyTypes(Type::Enum a, Type::Enum b) {
 	#define UNIFY(X, Y, Z) if(a == Type::X && b == Type::Y) return Type::Z;
         DEFAULT_TYPE_MEET(UNIFY)
         #undef UNIFY
+	else _error("Unknown unify types");
 }
 
 IRef Trace::EmitIfElse(IRef a, IRef b, IRef cond) {

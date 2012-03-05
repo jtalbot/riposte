@@ -7,6 +7,7 @@
 
 #include <math.h>
 #include <fstream>
+#include <cstdio>
 
 #include <pthread.h>
 
@@ -68,16 +69,26 @@ void library(Thread& thread, Value const* args, Value& result) {
 void readtable(Thread& thread, Value const* args, Value& result) {
 	Character from = As<Character>(thread, args[0]);
 	if(from.length > 0) {
-		std::string file = thread.externStr(from[0]);
-		std::ifstream in(file.c_str());
+		std::string name = thread.externStr(from[0]);
 		std::vector<double> v;
+		
+		FILE* file = fopen(name.c_str(), "r");
+		if(file) {
+			while(!feof(file)) {
+				double d;
+				if(fscanf(file, "%lf", &d) == 1)
+					v.push_back(d);
+			}
+			fclose(file);
+		}
+		/*std::ifstream in(name.c_str());
 		std::string line;
 		while(std::getline(in, line)) {
 			double d;
 			std::istringstream(line) >> d;
 			v.push_back(d);
-		}
-		in.close();
+		}*/
+		//in.close();
 		Double r(v.size());
 		for(uint64_t i = 0; i < v.size(); i++) {
 			r[i] = v[i];
@@ -552,8 +563,22 @@ void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i
 }
 
 void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
-	if(i.isDouble() || i.isInteger() || i.isCharacter())
-		SubsetAssignSlow(thread, a, clone, i, b, c);
+	if(i.length == 1 && (i.isDouble() || i.isInteger())) {
+		if(a.isList()) {
+			List r = (List&)a;
+			int64_t index = asReal1(i)-1;
+			if(index >= 0) {
+				Resize(thread, clone, r, std::max(index, a.length));
+				((List&)r)[index] = b;
+				c = r;
+			}
+			else {
+				_error("NYI negative indexes on [[");
+			}
+		} else {
+			SubsetAssignSlow(thread, a, clone, i, b, c);
+		}
+	}
 	// Frankly it seems pointless to support this case. We should make this an error.
 	//else if(i.isLogical() && i.length == 1 && ((Logical const&)i)[0])
 	//	SubsetAssignSlow(thread, a, clone, As<Integer>(thread, i), b, c);

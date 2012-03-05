@@ -652,8 +652,10 @@ Instruction const* strip_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* internal_op(Thread& thread, Instruction const& inst) {
-	// TODO: BIND just the arguments 
-	thread.Flush(thread);
+	int64_t nargs = thread.state.internalFunctions[inst.a].params;
+	for(int64_t i = 0; i < nargs; i++) {
+		BIND(REGISTER(inst.b+i));
+	}
 	thread.state.internalFunctions[inst.a].ptr(thread, &REGISTER(inst.b), OUT(thread, inst.c));
 	return &inst+1;
 }
