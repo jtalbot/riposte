@@ -39,7 +39,8 @@ print <- function(...) cat(...)
 			strip(x)[(1L:d[[1]])+(d[[1]]*(strip(j)-1L))]
 		else if(missing(j))
 			strip(x)[(0L:(d[[2]]-1L))*(d[[1]])+strip(i)]
-			
+		else
+			strip(x)[(strip(i)-1L)*d[[1]]+strip(j)]	
 	}
 }
 

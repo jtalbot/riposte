@@ -16,7 +16,7 @@
 using namespace v8::internal;
 
 #define SIMD_WIDTH (2 * sizeof(double))
-#define CODE_BUFFER_SIZE (128 * 2048)
+#define CODE_BUFFER_SIZE (256 * 2048)
 
 struct Constant {
 	Constant() {}
@@ -79,7 +79,7 @@ static int make_executable(char * data, size_t size) {
 
 //scratch space that is reused across traces
 struct TraceCodeBuffer {
-	Constant constant_table[2048] __attribute__((aligned(16)));
+	Constant constant_table[8192] __attribute__((aligned(16)));
 	char code[CODE_BUFFER_SIZE] __attribute__((aligned(16)));
 	TraceCodeBuffer() {
 		//make the code executable
@@ -1231,6 +1231,9 @@ struct TraceJIT {
 	}
 	uint64_t PushConstantOffset(const Constant& data) {
 		uint32_t offset = next_constant_slot;
+		if(next_constant_slot > 8192) {
+			printf("Used up all the constants!: %d\n", next_constant_slot);
+		}
 		trace->code_buffer->constant_table[offset] = data;
 		next_constant_slot++;
 		return offset;

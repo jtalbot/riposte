@@ -18,14 +18,13 @@ mv <- function(m, v) {
 vm <- function(v, m) {
 	r <- 0
 	for(i in 1L:ncol(m)) {
-		r <- r + v[[i]]*m[i,]
+		r <- r + m[i,]*v[[i]]
 	}
 	r
 }
 
 outer <- function(v) {
-	rep(length(v),1L,length(v)^2)
-	rep(length(v),length(v),length(v)^2)
+	v[rep(length(v),1L,length(v)^2)]*v[rep(length(v),length(v),length(v)^2)]
 }
 
 
@@ -34,17 +33,15 @@ myqr <- function(m) {
 	for(i in 1L:ncol(m)) {
 		a <- (m[,i])[i:nrow(m)]
 		n <- -sign(m[,i][i])*sqrt(sum(a*a))
-		print(n,'\n')
-		#v <- ifelse(1:nrow(m) < i, 0,
-	#		ifelse(1:nrow(m) == i, m[i,i]-n, m[,i]))
-		v <- ifelse(1:nrow(m) < i, 0, m[,i])
-		print(v,'\n')
-		#v <- matrix(v, ncol=1)
+		v <- ifelse(1:nrow(m) < i, 0,
+			ifelse(1:nrow(m) == i, m[i,i]-n, m[,i]))
 		b <- sum(v*v)
 		if(b == 0) next
-		m <- m - 2/b * outer((vm(v,m)))
+		m <- strip(m) - 2/b * outer((vm(v,m)))
+		dim(m) <- c(N,N)
 		#m <- m - 2/b * (v %*% (t(v) %*% m))
 		#q <- q - 2/b * ((q %*% v) %*% t(v))
+		print(i,'\n')
 	}
 	#list(q, m)
 	m

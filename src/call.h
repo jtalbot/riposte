@@ -323,6 +323,7 @@ if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
 		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
 		if(t.isConcrete()) { \
 			thread.frame.environment->insert((String)(i)) = t; \
+			thread.LiveEnvironment(thread.frame.environment, t); \
 			return &inst; \
 		} \
 		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
@@ -339,6 +340,7 @@ if(!a.isConcrete()) { \
 		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
 		if(t.isConcrete()) { \
 			thread.frame.environment->dots[(i)].v = t; \
+			thread.LiveEnvironment(thread.frame.environment, t); \
 			return &inst; \
 		} \
 		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \

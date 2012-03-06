@@ -236,7 +236,8 @@ Instruction const* list_op(Thread& thread, Instruction const& inst) {
 	}
 	
 	if(iter.i < (int64_t)dots.size()) {
-		DOTDOT(a, iter.i); FORCE_DOTDOT(a, iter.i); BIND(a); // BIND since we don't yet support futures in lists
+		DOTDOT(a, iter.i); FORCE_DOTDOT(a, iter.i); 
+		BIND(a); // BIND since we don't yet support futures in lists
 		((List&)out)[iter.i] = a;
 		iter.i++;
 	}

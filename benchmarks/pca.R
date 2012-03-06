@@ -44,7 +44,6 @@ my.cov <- function(a,b) {
 }
 
 my.cov2 <- function(a,b) {
-	# replace with single pass cov computation 
 	if(!all(dim(a) == dim(b))) stop("matrices must be same shape")
 
 	m <- nrow(a)
@@ -59,7 +58,6 @@ my.cov2 <- function(a,b) {
 		ma[i+1L] <- k
 		mb[i+1L] <- k
 	}
-	#print(ma)
 	
 	r <- double(n*n)	
 	for(i in 0L:(n-1L)) {
@@ -78,7 +76,7 @@ my.cov2 <- function(a,b) {
 ## Could just compute the principal components
 
 pca <- function(a) {
-	cm <- my.cov(a,a)
+	cm <- my.cov2(a,a)
 	basis <- eigen(cm, symmetric=TRUE)[[2]]
 	#a %*% basis
 	basis
