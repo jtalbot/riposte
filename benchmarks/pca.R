@@ -24,7 +24,6 @@ covv <- function(x, y, i, j, mx, my) {
 }
 
 my.cov <- function(a,b) {
-	# replace with single pass cov computation 
 	if(!all(dim(a) == dim(b))) stop("matrices must be same shape")
 
 	m <- nrow(a)
