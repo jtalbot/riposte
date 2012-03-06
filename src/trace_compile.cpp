@@ -698,6 +698,15 @@ struct TraceJIT {
 					EmitVectorizedBinaryFunction(ref,idiv_i);
 				}
 			} break;
+
+			case IROpCode::pmin: {
+				if(node.isDouble()) {
+					asm_.minpd(Move(ref, node.binary.a), reg(node.binary.b));
+				} else {
+					_error("NYI: pmin on integers");
+				}
+			} break;
+
 			case IROpCode::sqrt: 	asm_.sqrtpd(reg(ref),reg(node.unary.a)); break;
 			//case IROpCode::round:	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundToNearest); break;
 			case IROpCode::floor: 	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundDown); break;

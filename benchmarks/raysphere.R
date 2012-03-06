@@ -26,10 +26,7 @@ intersect <- function() {
 	t1 <- (-b + sqrt(disc))/2
 
 	cond <- disc > 0
-	mt0 <- min(t0[cond])
-	mt1 <- min(t1[cond])
-	cat(mt1)
-	pmin(mt0, mt1)
+	min(pmin(t0[cond], t1[cond]))
 }
 
 system.time(intersect())
