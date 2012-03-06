@@ -3,6 +3,8 @@
 #include <math.h>
 #include <float.h>
 
+#include "timing.h"
+
 int main() {
 
 	int n = 10000000;
@@ -17,24 +19,29 @@ int main() {
 	double * yc = new double[n];
 	double * zc = new double[n];
 	for(int i = 0; i < n; i++) {
-		xc[i] = i + 1;
-		yc[i] = i + 1;
-		zc[i] = i + 1;
+		xc[i] = i;
+		yc[i] = i;
+		zc[i] = i;
 	}
 	
+	double begin = current_time();
+
 	double a = 1;
 	
 	double r = DBL_MAX;
 	for(int i = 0; i < n; i++) {
 	
 		double b = 2*(xd*(xo-xc[i])+yd*(yo-yc[i])+zd*(zo-zc[i]));
-		double c = (xo-xc[i])*(xo-xc[i])+(yo-yc[i])*(yo-yc[i])+(zo-zc[i])*(zo-zc[i]);
+		double c = (xo-xc[i])*(xo-xc[i])+(yo-yc[i])*(yo-yc[i])+(zo-zc[i])*(zo-zc[i])-1;
 		
-		double t0 = (-b - sqrt(b*b-4*c))/2;
-		double t1 = (-b + sqrt(b*b-4*c))/2;
-		
-		r = std::min(r,std::min(t0,t1));
+		double disc = b*b-4*c;
+		if(disc > 0) {
+			double t0 = (-b - sqrt(disc))/2;
+			double t1 = (-b + sqrt(disc))/2;
+			r = std::min(r,std::min(t0,t1));
+		}
 	}
 	printf("%f\n",r);
+	printf("Elapsed: %f\n", current_time()-begin);
 	return 0;
 }

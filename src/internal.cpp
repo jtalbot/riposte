@@ -35,6 +35,19 @@ TYPES(CASE)
 	_error("Invalid type");
 }
 
+Double Random(Thread& thread, int64_t const length) {
+	Thread::RandomSeed& r = Thread::seed[thread.index];
+	Double o(length);
+	for(int64_t i = 0; i < length; i++) {
+		r.v[0] = r.v[0] * r.m[0] + r.a[0];
+		r.v[0] = r.v[0] * r.m[0] + r.a[0];
+		r.v[0] = r.v[0] * r.m[0] + r.a[0];
+
+		o[i] = (double)r.v[0] / ((double)std::numeric_limits<uint64_t>::max() + 1);
+	}
+	return o;
+}
+
 void cat(Thread& thread, Value const* args, Value& result) {
 	List const& a = Cast<List>(args[0]);
 	for(int64_t i = 0; i < a.length; i++) {
@@ -877,6 +890,10 @@ void eigen(Thread & thread, Value const* args, Value& result) {
 	throw("NYI: eigen");
 }
 
+void force(Thread& thread, Value const* args, Value& result) {
+	result = args[0];
+}
+
 void registerCoreFunctions(State& state)
 {
 	//state.registerInternalFunction(state.internStr("nchar"), (nchar_fn), 1);
@@ -923,5 +940,7 @@ void registerCoreFunctions(State& state)
 	state.registerInternalFunction(state.internStr("matrix.multiply"), (matrixmultiply), 6);
 	state.registerInternalFunction(state.internStr("eigen"), (eigen), 3);
 	state.registerInternalFunction(state.internStr("eigen.symmetric"), (eigen_symmetric), 3);
+
+	state.registerInternalFunction(state.internStr("force"), (force), 1);
 }
 

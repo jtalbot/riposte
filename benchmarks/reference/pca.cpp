@@ -12,21 +12,16 @@ using Eigen::Map;
 
 #include<iostream>
 
-#include <sys/time.h>
+#include "timing.h"
 
 #define R 100000
 #define C 50
 
-double current_time() {
-	struct timeval v;
-	gettimeofday(&v, NULL);
-	return v.tv_sec +  v.tv_usec / 1000000.0;
-}
 //double results[2];
 int main() {
 
 	double (*data)[R] = (double (*) [R]) malloc(R * C * sizeof(double));
-	FILE * file = fopen("../pca.txt","r");
+	FILE * file = fopen("../data/pca.txt","r");
 	assert(file);
 	
 	for(int c = 0; c < C; c++) {
@@ -38,8 +33,9 @@ int main() {
 	fclose(file);
 	
 	double begin = current_time();
+
 	double * means = new double[C];
-	std::fill(means,means+R,0.0);
+	std::fill(means,means+C,0.0);
 	for(int c = 0; c < C; c++) {
 		double m = 0.0;
 		for(int r = 0; r < R; r++) {
@@ -67,9 +63,9 @@ int main() {
 				for(int r = rr; r < end; r += 2) {
 					__m128d a = _mm_load_pd(&data[c0][r]);
 					__m128d c = _mm_load_pd(&data[c1][r]);
-					__m128d r = _mm_mul_pd(_mm_sub_pd(a,b),_mm_sub_pd(c,d));
+					__m128d r2 = _mm_mul_pd(_mm_sub_pd(a,b),_mm_sub_pd(c,d));
 					
-					acc = _mm_add_pd(acc,r);
+					acc = _mm_add_pd(acc,r2);
 					
 					//v += (data[c0][r] - means[c0]) * (data[c1][r] - means[c1]);
 				}
@@ -93,7 +89,7 @@ int main() {
 	MatrixXd cov_m = Map<MatrixXd>((double*)cov, C, C);
 	
 	
-	std::cout << cov_m << std::endl;
+	//std::cout << cov_m << std::endl;
 	
 	double (*eig)[C] = (double (*)[C]) malloc(C * C * sizeof(double));
 	
@@ -106,16 +102,15 @@ int main() {
 	double end = current_time();
 	
 	std::cout << eig_m(0,0) << std::endl;
-	printf("%f\n",end - begin);
+	printf("Elapsed: %f\n",end - begin);
 	//std::cout << eig_m << std::endl;
-	
-	
+/*
 	double (*result)[C] = (double (*)[C]) malloc(R * C * sizeof(double));
 	
 	
 	
 	MatrixXd data_m = Map<MatrixXd>((double*)data, R, C);
 	Map<MatrixXd>((double*)result, R, C) = data_m * eig_m;	
-	
+*/	
 	return 0;
 }

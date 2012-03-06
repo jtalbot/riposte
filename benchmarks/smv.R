@@ -10,6 +10,7 @@ m <- list(
 	)
 
 v <- runif(1000000)
+force(v)
 
 smv <- function(m, v) {
 	sum(split(m[[3]]*v[m[[2]]], m[[1]]-1, length(v)))

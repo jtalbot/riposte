@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "timing.h"
+
 double ca[] = {
    	-3.969683028665376e+01,
    	 2.209460984245205e+02,
@@ -51,11 +53,15 @@ double means[] = { 0,2,10 };
 double sd[] = { 1,0.1,3 };
 
 int main() {
-	int N = 1000000;
+	int N = 10000000;
 	double * b = new double[N];
+
+	double begin = current_time();
 	for(int i = 0; i < N; i++) {
-		double a = arc4random() / (double) 0xFFFFFFFF;
-		size_t idx = arc4random() % 3;
+		double a = rand() / (double) 0xFFFFFFFF;
+		size_t idx = rand() % 3;
 		b[i] = cdf(a) * sd[idx] + means[idx];
 	}
+	printf("%f\n", b[0]);
+	printf("Elapsed: %f\n", current_time()-begin);
 }

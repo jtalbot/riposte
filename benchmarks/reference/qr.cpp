@@ -1,7 +1,12 @@
 #include<stdio.h>
 #include<math.h>
+#include<stdlib.h>
+#include "timing.h"
 
-double R[4][4] = {  12,    6, -4, 1,
+static const int N_ROWS = 1000;
+static const int N_COLS = 1000;
+
+/*double R[4][4] = {  12,    6, -4, 1,
                    -51,  167, 24, 2,
                      4,  -68,-41, 4,
                      5,  -70,-40, 3};
@@ -9,9 +14,12 @@ double Q[4][4] = { 1, 0, 0, 0,
                    0, 1, 0, 0,
                    0, 0, 1, 0,
                    0, 0, 0, 1};
+*/
 
-static const int N_ROWS = 4;
-static const int N_COLS = 4;
+double drand() {
+	double s1 = rand()  /  (double) RAND_MAX;
+	return s1;
+}
 
 double sign(double a) {
 	if(a > 0)
@@ -24,6 +32,18 @@ double sign(double a) {
 
 int main() {
 	double v[N_ROWS];
+	double (*R)[N_ROWS] = (double(*)[N_ROWS]) malloc(sizeof(double) * N_COLS * N_ROWS);
+	double (*Q)[N_ROWS] = (double(*)[N_ROWS]) malloc(sizeof(double) * N_COLS * N_ROWS);
+
+	for(int i = 0; i < N_ROWS; i++) {
+		for(int j = 0; j < N_COLS; j++) {
+			R[i][j] = drand();
+			Q[i][j] = (i==j) ? 1 : 0;
+		}
+	}
+
+	double begin = current_time();
+
 	for(int c = 0; c < N_COLS-1; c++) {
 		double lcl = 0.0;
 		
@@ -81,8 +101,10 @@ int main() {
 			}
 		}
 	}
+
+	printf("Elapsed: %f\n", current_time()-begin);
 	
-	for(int rr = 0; rr < N_ROWS; rr++) {
+	/*for(int rr = 0; rr < N_ROWS; rr++) {
 		for(int cc = 0; cc < N_COLS; cc++) {
 			printf("%f ",Q[rr][cc]);
 		}
@@ -93,6 +115,6 @@ int main() {
 			printf("%f ",R[cc][rr]);
 		}
 		printf("\n");
-	}
+	}*/
 	return 0;
 }

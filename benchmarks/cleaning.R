@@ -1,6 +1,7 @@
 
 #data <- sample(0:9999, 100000, TRUE)
 data <- as.double(1:20000000)
+force(data)
 
 bench <- function() {
 

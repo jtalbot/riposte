@@ -329,24 +329,26 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 		else if(i.isCharacter1()) { _error("Subscript out of bounds"); }
 	}
 
+	if(isTraceable(thread, a, i) 
+		&& thread.futureType(i) == Type::Logical 
+		&& thread.futureShape(a) == thread.futureShape(i)) {
+		OUT(thread, inst.c) = thread.EmitFilter(thread.frame.environment, a, i);
+		return &inst+1;
+	}
+
 	FORCE(a, inst.a);
 	BIND(a);
+
+	if(isTraceable(thread, a, i) 
+		&& (thread.futureType(i) == Type::Integer || thread.futureType(i) == Type::Double)) {
+		OUT(thread, inst.c) = thread.EmitGather(thread.frame.environment, a, i);
+		return &inst+1;
+	}
 
 	if(a.isObject()) { 
 		return GenericDispatch(thread, inst, Strings::bracket, a, i, inst.c); 
 	} 
 	
-	if(isTraceable(thread, i) && isTraceableType(thread, a)) {
-		if(thread.futureType(i) == Type::Integer || thread.futureType(i) == Type::Double) {
-			OUT(thread, inst.c) = thread.EmitGather(thread.frame.environment, a, i);
-			return &inst+1;
-		} else if(thread.futureType(i) == Type::Logical &&
-				thread.futureShape(a) == thread.futureShape(i)) {
-			OUT(thread, inst.c) = thread.EmitFilter(thread.frame.environment, a, i);
-			return &inst+1;
-		}
-	}
-
 	FORCE(i, inst.b); 
 	BIND(i);
 
@@ -603,7 +605,7 @@ Instruction const* random_op(Thread& thread, Instruction const& inst) {
 		return &inst+1;
 	}
 
-	_error("NYI");
+	OUT(thread, inst.c) = Random(thread, len);
 	return &inst+1;
 }
 

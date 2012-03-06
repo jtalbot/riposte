@@ -377,6 +377,13 @@ bool isTraceable(Thread const& thread, Value const& a) {
 		isTraceableShape(thread, a);
 }
 
+bool isTraceable(Thread const& thread, Value const& a, Value const& b) {
+	return  thread.state.jitEnabled &&
+		isTraceableType(thread, a) && 
+		isTraceableType(thread, b) && 
+		isTraceableShape(thread, a, b);
+}
+
 template< template<class X> class Group>
 bool isTraceable(Thread const& thread, Value const& a) { 
 	return 	isTraceable(thread, a);
@@ -390,10 +397,7 @@ bool isTraceable<UnifyScan>(Thread const& thread, Value const& a) { return false
 
 template< template<class X, class Y> class Group>
 bool isTraceable(Thread const& thread, Value const& a, Value const& b) {
-	return  thread.state.jitEnabled &&
-		isTraceableType(thread, a) && 
-		isTraceableType(thread, b) && 
-		isTraceableShape(thread, a, b);
+	return  isTraceable(thread, a, b);
 }
 
 template< template<class X, class Y, class Z> class Group>

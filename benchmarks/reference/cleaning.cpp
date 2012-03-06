@@ -1,7 +1,9 @@
 #include <cmath>
 #include <stdio.h>
+#include "timing.h"
 
 bool is_outlier(double x) { return std::isnan(x) || x == 9999; }
+
 
 
 int main() {
@@ -10,7 +12,8 @@ int main() {
 	
 	for(int i = 0; i < N; i++)
 		data[i] = i + 1;
-		
+
+	double begin = current_time();		
 	
 	double mean = 0.0;
 	double mean_2 = 0.0;
@@ -31,5 +34,6 @@ int main() {
 		if(!is_outlier(data[i]))
 			r += fabs((data[i] - mean) / stddev) > 1;
 	}
-	printf("%f\n",r);
+	printf("Result: %f\n",r);
+	printf("Elapsed: %f\n", current_time()-begin);
 }

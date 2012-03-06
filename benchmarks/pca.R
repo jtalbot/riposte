@@ -4,13 +4,7 @@
 N <- 100000L
 D <- 50L
 
-#library(clusterGeneration)
-#library(MASS)
-#cov.matrix <- genPositiveDefMat(D, ratioLambda=100)
-#a <- mvrnorm(N, rep(0,D), cov.matrix$Sigma)
-#write.table(as.vector(a), "~/riposte/benchmarks/pca.txt",row.names=FALSE,col.names=FALSE)
-
-a <- read.table("/Users/jtalbot/riposte/benchmarks/pca.txt")
+a <- read.table("benchmarks/data/pca.txt")
 dim(a) <- c(N, D)
 
 cat("done reading\n")
@@ -85,9 +79,9 @@ my.cov2 <- function(a,b) {
 ## Could just compute the principal components
 
 pca <- function(a) {
-	cm <- my.cov2(a,a)
+	cm <- my.cov(a,a)
 	basis <- eigen(cm, symmetric=TRUE)[[2]]
-	a %*% basis
+	#a %*% basis
 	basis
 }
 

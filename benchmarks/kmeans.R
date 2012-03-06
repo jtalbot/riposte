@@ -2,20 +2,8 @@
 N <- 100000L
 K <- 5L
 
-#library(MASS)
-#
-#a <- rbind(
-#	mvrnorm(N,c(0,0), matrix(c(1,0,0,1), 2,2)),
-##	mvrnorm(N,c(4,0), matrix(c(0.5,0,0,0.5), 2,2)),
-##	mvrnorm(N,c(0,4), matrix(c(1,0,0,1), 2,2)),
-##	mvrnorm(N,c(2,2), matrix(c(0.25,0.2,0.2,0.25), 2,2)),
-##	mvrnorm(N,c(1,0), matrix(c(0.25,0.22,0.22,0.25), 2,2))
-#	)
-#write.table(as.vector(a), "/Users/jtalbot/riposte/benchmarks/kmeans.txt", col.names=FALSE, row.names=FALSE)
-
-a <- read.table("/Users/jtalbot/riposte/benchmarks/kmeans.txt")
+a <- read.table("benchmarks/data/kmeans.txt")
 dim(a) <- c(N*5,2)
-#print(a)
 
 means <- list(
 	a[1,],
@@ -55,17 +43,22 @@ update.means <- function(data, index) {
 	}
 }
 
-for(i in 1:100) {
-i <- assignment(a, means)
-update.means(a, i)
-print(means[[1]],"\n")
-print(means[[2]],"\n")
-print(means[[3]],"\n")
-print(means[[4]],"\n")
-print(means[[5]],"\n")
-print("\n")
+benchmark <- function(reps) {
+
+	for(i in 1L:reps) {
+		i <- assignment(a, means)
+		update.means(a, i)
+		#print(means[[1]],"\n")
+		#print(means[[2]],"\n")
+		#print(means[[3]],"\n")
+		#print(means[[4]],"\n")
+		#print(means[[5]],"\n")
+		#print("\n")
+	}
+
 }
 
+system.time(benchmark(100L))
 
 #colSum <- function(data) {
 #	result <- 0

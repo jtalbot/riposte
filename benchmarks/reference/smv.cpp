@@ -1,23 +1,53 @@
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <algorithm>
 
-double v[] = { 1, 2 , 3 , 4};
+#include "timing.h"
 
-int    row_idx[] = {0,1,3,4,5}; 
-int    columns[] = {0,0,1,2,3};
-double values[] = {2.5,1.5,1,9.5,1};
-
+double drand() {
+	double s1 = rand()  /  (double) RAND_MAX;
+	return s1;
+}
 
 int main() {
-	double result[4];
+	static const int N = 1000000;
+	static const int M = 10000000;
+	double result[N];
+
+	double* v = new double[N];
+	int* row_idx = new int[M];
+	int* col_idx =new  int[M];
+	double* values = new double[M];
+
+	for(int i = 0; i < N; i++) 
+		result[i] = 0;
 	
-	for(int r = 0; r < 4; r++) {
+	for(int i = 0; i < M; i++) {
+		row_idx[i] = (int)(drand()*N);
+		col_idx[i] = (int)(drand()*N);
+		values[i] = drand();
+	}
+	std::sort(&col_idx[0], &col_idx[M]);
+
+	double begin = current_time();
+
+	/*for(int r = 0; r < M; r++) {
 		double a = 0;
 		for(int i = row_idx[r]; i < row_idx[r+1]; i++) {
 			int c = columns[i];
 			a += values[i] * v[c]; 
 		}
 		result[r] = a;
+		
+	}*/
+
+	for(int i = 0; i < M; i++) {
+		int c = col_idx[i];
+		int r = row_idx[i];
+		result[r] += values[i] * v[c];
 	}
+
+	printf("Elapsed: %f\n", current_time()-begin);
 	printf("%f %f %f %f\n",result[0],result[1],result[2],result[3]);
 }

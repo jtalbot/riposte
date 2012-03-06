@@ -197,5 +197,7 @@ inline Integer Repeat(int64_t const n, int64_t const each, int64_t const length)
 	return r;
 }
 
+Double Random(Thread& thread, int64_t const length);
+
 #endif
 
