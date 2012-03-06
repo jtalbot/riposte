@@ -19,14 +19,14 @@
 int main() {
 	double * w = new double[N_DIMS];
 	bzero(w, sizeof(double) * (N_DIMS));
-	double (*data)[N_ROWS] = (double(*)[N_ROWS]) malloc(sizeof(double) * N_DIMS * N_ROWS);
+	double (*data)[N_DIMS] = (double(*)[N_DIMS]) malloc(sizeof(double) * N_DIMS * N_ROWS);
 	double * response = new double[N_ROWS];
 	
 	FILE * file = fopen("../data/lr_p.txt","r");
 	assert(file);
 	for(int j = 0; j < N_DIMS; j++) {
 		for(int i = 0; i < N_ROWS; i++) {
-			fscanf(file,"%lf",&data[j][i]);
+			fscanf(file,"%lf",&data[i][j]);
 		}
 	}
 
@@ -62,15 +62,17 @@ int main() {
 		bzero(grad,sizeof(double) * (N_DIMS));
 		
 		for(int r = 0; r < N_ROWS; r++) {
-			double diff = w[0];
-			for(int d = 1; d < N_DIMS; d++) {
-				diff += w[d] * data[d][r];
+			double r_1 = 1.0 / (r + 1);
+			double diff[2] = {0.,0.};
+			for(int d = 0; d < N_DIMS; d += 2) {
+				diff[0] += w[d + 0] * data[r][d + 0];
+				diff[1] += w[d + 1] * data[r][d + 1];
 			}
-			diff = 1.0/(1.0+exp(-diff));
-			diff -= response[r];
-			grad[0] += (diff - grad[0]) / (r + 1);
-			for(int d = 1; d < N_DIMS; d++) {
-				grad[d] += (diff*data[d][r] - grad[d]) / (r + 1);
+			double diff_ = (diff[0] + diff[1]);
+			diff_ = 1.0/(1.0+exp(-diff_));
+			diff_ -= response[r];
+			for(int d = 0; d < N_DIMS; d++) {
+				grad[d] += (diff_*data[r][d] - grad[d]) * r_1;
 			}
 		}
 		

@@ -20,7 +20,7 @@ int main() {
 	std::fill(result,result+100,0);
 	
 	for(int i = 0; i < N; i++) {
-		result[(int)floor(data[i])]++;
+		result[(int)data[i]]++;
 	}
 
 	//for(int i = 0; i < 100; i++)
