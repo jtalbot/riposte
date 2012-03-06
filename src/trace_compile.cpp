@@ -16,7 +16,7 @@
 using namespace v8::internal;
 
 #define SIMD_WIDTH (2 * sizeof(double))
-#define CODE_BUFFER_SIZE (16 * 2048)
+#define CODE_BUFFER_SIZE (128 * 2048)
 
 struct Constant {
 	Constant() {}
@@ -79,7 +79,7 @@ static int make_executable(char * data, size_t size) {
 
 //scratch space that is reused across traces
 struct TraceCodeBuffer {
-	Constant constant_table[256] __attribute__((aligned(16)));
+	Constant constant_table[2048] __attribute__((aligned(16)));
 	char code[CODE_BUFFER_SIZE] __attribute__((aligned(16)));
 	TraceCodeBuffer() {
 		//make the code executable

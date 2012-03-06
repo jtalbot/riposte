@@ -18,15 +18,19 @@ j <- floor(c / width)
 c_re <- x0 + i * dx
 c_im <- y0 + j * dy
 
+force(c_re)
+force(c_im)
+
 mandel <- function(maxIterations) {
 	z_re <- c_re
 	z_im <- c_im
 	cnt <- 0
 	for(i in 1:maxIterations) {
-		ndone <- z_re * z_re + z_im * z_im <= 4
-		z_re <- c_re + ndone * (z_re*z_re - z_im*z_im)
-		z_im <- c_im + ndone * (2. * z_re * z_im)
-		cnt <- cnt + ndone
+		cnt <- cnt + ifelse(z_re * z_re + z_im * z_im <= 4, 1, 0)
+		z_re2 <- c_re + (z_re*z_re - z_im*z_im)
+		z_im2 <- c_im + (2. * z_re * z_im)
+		z_re <- z_re2
+		z_im <- z_im2
 	}
 	cnt
 }

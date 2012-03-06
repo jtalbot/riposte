@@ -103,7 +103,7 @@ struct IRNode {
 			default: {
 				switch(arity) {
 					case IRNode::TRINARY:
-						return eq && trinary.a == o.trinary.a && trinary.b == o.trinary.b && o.trinary.c == o.trinary.c;
+						return eq && trinary.a == o.trinary.a && trinary.b == o.trinary.b && trinary.c == o.trinary.c;
 					break;
 					case IRNode::BINARY:
 						return eq && binary.a == o.binary.a && binary.b == o.binary.b;
