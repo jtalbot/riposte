@@ -15,15 +15,7 @@ cm <- function(x, y, i, j) {
 	cm2(x[(0L:(N-1L))+N*i+1L],y[(0L:(N-1L))+N*j+1L])
 }
 
-means <- function(x, i) {
-	mean(x[(0L:(N-1L))+N*i+1L])
-}
-
-covv <- function(x, y, i, j, mx, my) {
-	sum( (x[(0L:(N-1L))+N*i+1L] - mx) * (y[(0L:(N-1L))+N*j+1L] - my))
-}
-
-my.cov <- function(a,b) {
+cov2 <- function(a,b) {
 	if(!all(dim(a) == dim(b))) stop("matrices must be same shape")
 
 	m <- nrow(a)
@@ -43,7 +35,7 @@ my.cov <- function(a,b) {
 	r
 }
 
-my.cov2 <- function(a,b) {
+cov <- function(a,b) {
 	if(!all(dim(a) == dim(b))) stop("matrices must be same shape")
 
 	m <- nrow(a)
@@ -52,19 +44,19 @@ my.cov2 <- function(a,b) {
 
 	ma <- double(n)
 	mb <- double(n)
-	for(i in 0L:(n-1L)) {
-		k <- means(a, i)
-		k <- means(b, i)
-		ma[i+1L] <- k
-		mb[i+1L] <- k
+	for(i in 1L:n) {
+		j <- mean(a[,i])
+		k <- mean(b[,i])
+		ma[i] <- j
+		mb[i] <- k
 	}
 	
 	r <- double(n*n)	
-	for(i in 0L:(n-1L)) {
-		for(j in i:(n-1L)) {
-			k <- covv(a, b, i, j, ma[i], mb[j])
-			r[i*n+j+1L] <- k
-			r[j*n+i+1L] <- k
+	for(i in 1L:n) {
+		for(j in 1L:n) {
+			k <- sum((a[,i]-ma[[i]])*(b[,j]-mb[[j]]))
+			r[(i-1L)*n+j] <- k
+			r[(j-1L)*n+i] <- k
 		}
 	}
 	r <- r/(m-1)
@@ -76,7 +68,7 @@ my.cov2 <- function(a,b) {
 ## Could just compute the principal components
 
 pca <- function(a) {
-	cm <- my.cov2(a,a)
+	cm <- cov(a,a)
 	basis <- eigen(cm, symmetric=TRUE)[[2]]
 	#a %*% basis
 	basis
