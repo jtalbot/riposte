@@ -7,18 +7,19 @@
 
 #define N_DIMS 2
 #define N_MEANS 5
-#define N_POINTS 500
+#define N_POINTS 500000
 #define MAX_ITERATIONS 100
 #ifdef VDB_DEBUG
 #include <vdb.h>
 #endif
 #include<assert.h>
 
+#include "timing.h"
 
-double drand() {
+/*double drand() {
 	double s1 = arc4random()  /  (double) 0xFFFFFFFF;
 	return (arc4random() % 2) + .5 * s1;
-}
+}*/
 int main() {
 	double (*points)[N_DIMS] = (double(*)[N_DIMS]) malloc(sizeof(double) * N_POINTS * N_DIMS);
 	
@@ -31,7 +32,7 @@ int main() {
 	vdb_point(.75,.75,0);
 	#endif
 	
-	FILE * file = fopen("../kmeans.txt","r");
+	FILE * file = fopen("../data/kmeans.txt","r");
 	assert(file);
 	for(int j = 0; j < N_DIMS; j++) {
 		for(int i = 0; i < N_POINTS; i++) {
@@ -50,7 +51,6 @@ int main() {
 	}
 	#endif
 		
-		
 	for(int i = 0; i < N_MEANS; i++) {
 		for(int j = 0; j < N_DIMS; j++) {
 			means[i][j] = points[i][j];
@@ -65,6 +65,8 @@ int main() {
 	}
 	#endif
 		
+	double begin = current_time();
+	
 	for(int n = 0; n < MAX_ITERATIONS; n++) {
 		bzero(new_means,sizeof(double) * N_MEANS * N_DIMS);
 		bzero(count,sizeof(int) * N_MEANS * N_DIMS);
@@ -93,13 +95,15 @@ int main() {
 		}
 		#endif
 	}
+
+	printf("%f\n", current_time()-begin);
 	
-	for(int i = 0; i < N_MEANS; i++) {
+	/*for(int i = 0; i < N_MEANS; i++) {
 		for(int m = 0; m < N_DIMS; m++) {
 			printf("%f \n",means[i][m]);
 		}
 		printf("\n");
-	}
+	}*/
 	
 	return 0;
 }

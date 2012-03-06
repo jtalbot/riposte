@@ -31,17 +31,17 @@ cd <- c( 7.784695709041462e-03,
 inv.cdf <- function(p) {
 	ifelse(p < 0.02425,
 		{q <- sqrt(-2*log(p));
-		 (((((cc[1]*q+cc[2])*q+cc[3])*q+cc[4])*q+cc[5])*q+cc[6]) /
-		 ((((cd[1]*q+cd[2])*q+cd[3])*q+cd[4])*q+1)},
+		 (((((cc[1L]*q+cc[2L])*q+cc[3L])*q+cc[4L])*q+cc[5L])*q+cc[6L]) /
+		 ((((cd[1L]*q+cd[2L])*q+cd[3L])*q+cd[4L])*q+1)},
 	ifelse(p <= (1-0.02425),
 		{q <- (p-0.5);
 		 r <- q*q;
-		 (((((ca[1]*r+ca[2])*r+ca[3])*r+ca[4])*r+ca[5])*r+ca[6])*q /
-		 (((((cb[1]*r+cb[2])*r+cb[3])*r+cb[4])*r+cb[5])*r+1)},
+		 (((((ca[1L]*r+ca[2L])*r+ca[3L])*r+ca[4L])*r+ca[5L])*r+ca[6L])*q /
+		 (((((cb[1L]*r+cb[2L])*r+cb[3L])*r+cb[4L])*r+cb[5L])*r+1)},
 	# p > p.high
 		{q <- sqrt(-2*log(1-p));
-		 -(((((cc[1]*q+cc[2])*q+cc[3])*q+cc[4])*q+cc[5])*q+cc[6]) /
-		  ((((cd[1]*q+cd[2])*q+cd[3])*q+cd[4])*q+1)}))
+		 -(((((cc[1L]*q+cc[2L])*q+cc[3L])*q+cc[4L])*q+cc[5L])*q+cc[6L]) /
+		  ((((cd[1L]*q+cd[2L])*q+cd[3L])*q+cd[4L])*q+1)}))
 }
 
 rnorm <- function(n, m=0, sd=1) {

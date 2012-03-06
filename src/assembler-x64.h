@@ -1306,6 +1306,10 @@ class Assembler {
   void mulpd(XMMRegister dst, XMMRegister src);
   void mulpd(XMMRegister dst, const Operand& src);
   void divpd(XMMRegister dst, XMMRegister src);
+  void minpd(XMMRegister dst, XMMRegister src);
+  void minpd(XMMRegister dst, const Operand& src);
+  void maxpd(XMMRegister dst, XMMRegister src);
+  void maxpd(XMMRegister dst, const Operand& src);
 
   void pand(XMMRegister dst, XMMRegister src);
   void pand(XMMRegister dst, const Operand& src);

@@ -100,7 +100,7 @@ inline void Element2Assign(Value const& v, int64_t index, Value& out) {
 		#define CASE(Name) case Type::Name: ((Name&)out)[index] = ((Name const&)v)[0]; break;
 		ATOMIC_VECTOR_TYPES(CASE)
 		#undef CASE
-		#define CASE(Name) case Type::Name: ((Name&)out)[index] = ((Name const&)v); break;
+		#define CASE(Name) case Type::Name: ((Name&)out)[index] = v; break;
 		LISTLIKE_VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: Element of this type"); break;
@@ -133,7 +133,7 @@ inline void SubsetAssign(Thread& thread, Value const& a, bool clone, Value const
 }
 
 inline void Subset2Assign(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
-	if(!clone && a.type == b.type) {
+	if(!clone && (a.type == b.type || a.isList())) {
 		if(i.isDouble1()) {
 			int64_t index = (int64_t)i.d-1;
 			if(index >= 0 && index < a.length) {
@@ -196,6 +196,8 @@ inline Integer Repeat(int64_t const n, int64_t const each, int64_t const length)
 	}
 	return r;
 }
+
+Double Random(Thread& thread, int64_t const length);
 
 #endif
 

@@ -1,15 +1,19 @@
 
 # sparse matrix-vector multiplication
+# TODO: sort input by row for perf?
 
-smv <- function(m, v) {
-	sum(split(m$val*v[m$col], m$row-1, length(v)))
-}
-
+# random 1M x 1M matrix with 10M entries
 m <- list(
-	row=c(1,2,2,3,4),
-	col=c(1,1,2,3,4),
-	val=c(2.5,1.5,1,9.5,1)
+	row=as.integer(runif(10000000), 0, 1000000),
+	col=as.integer(runif(10000000), 0, 1000000),
+	val=runif(10000000)
 	)
 
-v <- c(1,2,3,4)
-smv(m,v)
+v <- runif(1000000)
+force(v)
+
+smv <- function(m, v) {
+	sum(split(m[[3]]*v[m[[2]]], m[[1]]-1, length(v)))
+}
+
+system.time(smv(m,v))

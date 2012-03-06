@@ -1,16 +1,10 @@
 
-library(MASS)
+N <- 100000L
+K <- 5L
 
-#a <- rbind(
-#	mvrnorm(100,c(0,0), matrix(c(1,0,0,1), 2,2)),
-#	mvrnorm(100,c(4,0), matrix(c(0.5,0,0,0.5), 2,2)),
-#	mvrnorm(100,c(0,4), matrix(c(1,0,0,1), 2,2)),
-#	mvrnorm(100,c(2,2), matrix(c(0.25,0.2,0.2,0.25), 2,2)),
-#	mvrnorm(100,c(1,0), matrix(c(0.25,0.22,0.22,0.25), 2,2))
-#	)
-a <- read.table("/Users/zdevito/riposte/benchmarks/kmeans.txt")[[1]]
-dim(a) <- c(500,2)
-print(a)
+a <- read.table("benchmarks/data/kmeans.txt")
+dim(a) <- c(N*5,2)
+
 means <- list(
 	a[1,],
 	a[2,],
@@ -18,36 +12,92 @@ means <- list(
 	a[4,],
 	a[5,]
 	)
+print(means[[1]],"\n")
+print(means[[2]],"\n")
+print(means[[3]],"\n")
+print(means[[4]],"\n")
+print(means[[5]],"\n")
+
 
 # assignment step
 assignment <- function(data, means) {
-	# explicit for loop over means avoids need to concat reductions
-	# at the cost of parallelism and locality(!)
-	min.value <- rep(Inf, nrow(data))
-	min.index <- rep(0, nrow(data))
-	for(k in 1:length(means)) {
-		d2 <- rowSums((data - rep(means[[k]],each=nrow(data)))^2)
+	min.value <- Inf
+	min.index <- 0L
+	for(k in 1L:length(means)) {
+		d2 <- 0
+		for(j in 1L:ncol(data)) {
+			d2 <- d2 + (data[,j]-means[[k]][[j]])^2
+		}
 		lt <- d2 < min.value
+		min.index <- ifelse(lt, k, min.index)
 		min.value <- ifelse(lt, d2, min.value)
-		min.index <- ifelse(lt, k, min.index) 
 	}
 	min.index
 }
 
-split.df <- function (x, f) 
-	lapply(split(x = seq_len(nrow(x)), f = f), 
-    		function(ind) x[ind, , drop = FALSE])
-
-# update mean
 update.means <- function(data, index) {
-	lapply(split.df(a,as.factor(index)), function(x) apply(x,2,mean))
-}
-
-kmeans <- function(data, means) {
-	for(i in 1:100) {
-		means <- update.means(data, assignment(data, means))
+	d1 <- mean(split(data[,1L], index-1L, K))
+	d2 <- mean(split(data[,2L], index-1L, K))
+	for(i in 1L:K) {
+		means[[i]] <<- c(d1[[i]], d2[[i]])
 	}
-	means
 }
 
-kmeans(a, means)
+benchmark <- function(reps) {
+
+	for(i in 1L:reps) {
+		i <- assignment(a, means)
+		update.means(a, i)
+		#print(means[[1]],"\n")
+		#print(means[[2]],"\n")
+		#print(means[[3]],"\n")
+		#print(means[[4]],"\n")
+		#print(means[[5]],"\n")
+		#print("\n")
+	}
+
+}
+
+system.time(benchmark(100L))
+
+#colSum <- function(data) {
+#	result <- 0
+#	if(nrow(data) >= ncol(data)) {
+#		for(d in 1L:ncol(data)) {
+#			result[d] <- sum(data[,d])
+#		}
+#		# or
+#		#as.vector(lapply(1L:ncol(data), function(d) sum(data[,d])))
+#	} else {
+#		for(d in 1L:nrow(data)) {
+#			result <- result + data[d,]
+#		}
+#	}
+#	result
+#}
+
+#update.means <- function(data, index) {
+#	for(k in 1L:K) {
+#		means[[k]] <- colSum(data[k==index,])
+#	}
+	# or
+	#lapply((1L:K), function(k) colSum(data[k==index,]))
+#}
+
+## handle nested lapplys
+##	lapply handles reductions where computation is perpindicular to result
+##	=> result is short compared to computation
+##	=> could unroll
+##	=> how to distinguish from dynamic lapply?
+##	=> for loop implies loop carried dependencies
+##		lapply doesn't
+
+#kmeans <- function(data, means) {
+#	for(i in 1:100) {
+#		means <- update.means(data, assignment(data, means))
+#	}
+#	means
+#}
+
+#kmeans(a, means)
+

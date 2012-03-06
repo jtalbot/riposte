@@ -323,6 +323,7 @@ if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
 		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
 		if(t.isConcrete()) { \
 			thread.frame.environment->insert((String)(i)) = t; \
+			thread.LiveEnvironment(thread.frame.environment, t); \
 			return &inst; \
 		} \
 		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
@@ -339,6 +340,7 @@ if(!a.isConcrete()) { \
 		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
 		if(t.isConcrete()) { \
 			thread.frame.environment->dots[(i)].v = t; \
+			thread.LiveEnvironment(thread.frame.environment, t); \
 			return &inst; \
 		} \
 		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
@@ -377,6 +379,13 @@ bool isTraceable(Thread const& thread, Value const& a) {
 		isTraceableShape(thread, a);
 }
 
+bool isTraceable(Thread const& thread, Value const& a, Value const& b) {
+	return  thread.state.jitEnabled &&
+		isTraceableType(thread, a) && 
+		isTraceableType(thread, b) && 
+		isTraceableShape(thread, a, b);
+}
+
 template< template<class X> class Group>
 bool isTraceable(Thread const& thread, Value const& a) { 
 	return 	isTraceable(thread, a);
@@ -390,10 +399,7 @@ bool isTraceable<UnifyScan>(Thread const& thread, Value const& a) { return false
 
 template< template<class X, class Y> class Group>
 bool isTraceable(Thread const& thread, Value const& a, Value const& b) {
-	return  thread.state.jitEnabled &&
-		isTraceableType(thread, a) && 
-		isTraceableType(thread, b) && 
-		isTraceableShape(thread, a, b);
+	return  isTraceable(thread, a, b);
 }
 
 template< template<class X, class Y, class Z> class Group>
@@ -407,7 +413,7 @@ bool isTraceable<IfElse>(Thread const& thread, Value const& a, Value const& b, V
 		isTraceableType(thread, a) &&
 		isTraceableType(thread, b) &&
 		isTraceableType(thread, c) &&
-		isTraceableShape(thread, a, b) &&
+		isTraceableShape(thread, a, c) &&
 		isTraceableShape(thread, b, c);
 }
 

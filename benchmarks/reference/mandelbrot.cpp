@@ -31,6 +31,9 @@
    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.  
 */
 
+#include <stdio.h>
+#include "timing.h"
+
 //#include<vdb.h>
 static int mandel(double c_re, double c_im, int count) {
     double z_re = c_re, z_im = c_im;
@@ -78,6 +81,10 @@ int main() {
 	
 	double * output = new double[V_WIDTH];
 	
+	double begin = current_time();
+
 	mandelbrot_serial(-2,-1,1,1,width,height,100,output);
+
+	printf("Elapsed: %f\n", current_time()-begin);
 	return 0;
 }

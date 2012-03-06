@@ -16,7 +16,7 @@
 using namespace v8::internal;
 
 #define SIMD_WIDTH (2 * sizeof(double))
-#define CODE_BUFFER_SIZE (16 * 1024)
+#define CODE_BUFFER_SIZE (256 * 2048)
 
 struct Constant {
 	Constant() {}
@@ -33,6 +33,9 @@ struct Constant {
 
 	Constant(int64_t ii0, int64_t ii1)
 	: i0(ii0), i1(ii1) {}
+
+	Constant(uint64_t ii0, uint64_t ii1)
+	: u0(ii0), u1(ii1) {}
 
 	Constant(double d0, double d1)
 	: d0(d0), d1(d1) {}
@@ -61,7 +64,11 @@ enum ConstantTableEntry {
 	C_DOUBLE_ZERO = 0x7,
 	C_DOUBLE_ONE = 0x8,
 	C_DOUBLE_NA = 0x9,
-	C_FIRST_TRACE_CONST = 0xa
+	C_INTEGER_MIN  = 0xa,
+	C_INTEGER_MAX  = 0xb,
+	C_DOUBLE_MIN  = 0xc,
+	C_DOUBLE_MAX  = 0xd,
+	C_FIRST_TRACE_CONST = 0xe
 };
 
 static int make_executable(char * data, size_t size) {
@@ -72,7 +79,7 @@ static int make_executable(char * data, size_t size) {
 
 //scratch space that is reused across traces
 struct TraceCodeBuffer {
-	Constant constant_table[128] __attribute__((aligned(16)));
+	Constant constant_table[8192] __attribute__((aligned(16)));
 	char code[CODE_BUFFER_SIZE] __attribute__((aligned(16)));
 	TraceCodeBuffer() {
 		//make the code executable
@@ -83,12 +90,16 @@ struct TraceCodeBuffer {
 		constant_table[C_ABS_MASK] = Constant((uint64_t)0x7FFFFFFFFFFFFFFFULL);
 		constant_table[C_NEG_MASK] = Constant((uint64_t)0x8000000000000000ULL);
 		constant_table[C_NOT_MASK] = Constant((uint64_t)0xFFFFFFFFFFFFFFFFULL);
-		constant_table[C_PACK_LOGICAL] = Constant(0x0706050403020800LL,0x0F0E0D0C0B0A0901LL);
-		constant_table[C_INTEGER_ONE] = Constant(1LL,1LL);
-		constant_table[C_INTEGER_TWO] = Constant(2LL,2LL);
+		constant_table[C_PACK_LOGICAL] = Constant((uint64_t)0x0706050403020800LL,(uint64_t)0x0F0E0D0C0B0A0901LL);
+		constant_table[C_INTEGER_ONE] = Constant((int64_t)1LL,(int64_t)1LL);
+		constant_table[C_INTEGER_TWO] = Constant((int64_t)2LL,(int64_t)2LL);
 		constant_table[C_DOUBLE_ZERO] = Constant(0.0, 0.0);
 		constant_table[C_DOUBLE_ONE] = Constant(1.0, 1.0);
 		constant_table[C_DOUBLE_NA] = Constant(Double::NAelement, Double::NAelement);
+		constant_table[C_INTEGER_MIN] = Constant((int64_t)std::numeric_limits<int64_t>::min(),(int64_t)std::numeric_limits<int64_t>::min());
+		constant_table[C_INTEGER_MAX] = Constant((int64_t)std::numeric_limits<int64_t>::max(),(int64_t)std::numeric_limits<int64_t>::max());
+		constant_table[C_DOUBLE_MIN] = Constant(-std::numeric_limits<double>::infinity(),-std::numeric_limits<double>::infinity());
+		constant_table[C_DOUBLE_MAX] = Constant(std::numeric_limits<double>::infinity(),std::numeric_limits<double>::infinity());
 	}
 };
 
@@ -369,7 +380,7 @@ FOLD_SCAN_FN(cumsumd, double , +)
 
 struct TraceJIT {
 	TraceJIT(Trace * t, Thread& thread)
-	:  trace(t), thread(thread), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), alloc(XMMRegister::kNumAllocatableRegisters-1), next_constant_slot(C_FIRST_TRACE_CONST) {
+	:  trace(t), thread(thread), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), alloc(XMMRegister::kNumAllocatableRegisters-2), next_constant_slot(C_FIRST_TRACE_CONST) {
 		// preserve the last register (xmm15) as a temporary exchange register
 		// to make code gen easier for now 
 		live_registers = new (PointerFreeGC) RegisterSet[trace->nodes.size()];
@@ -518,7 +529,7 @@ struct TraceJIT {
 			// TODO: allocate thread split filtered output (how to maintain ordering?)
 			// allocate temporary space for folds (put in IRNode::in)
 			if(node.group == IRNode::FOLD) { 
-				int64_t length = nextPow2(std::max(node.shape.levels*2, 8LL)) 
+				int64_t length = nextPow2(std::max(node.shape.levels*2, (int64_t)8LL)) 
 					* thread.state.nThreads;
 				// 8 min fills cache line (assuming aggregates are all stored in 8-byte fields)
 				if(node.type == Type::Double) {
@@ -687,6 +698,15 @@ struct TraceJIT {
 					EmitVectorizedBinaryFunction(ref,idiv_i);
 				}
 			} break;
+
+			case IROpCode::pmin: {
+				if(node.isDouble()) {
+					asm_.minpd(Move(ref, node.binary.a), reg(node.binary.b));
+				} else {
+					_error("NYI: pmin on integers");
+				}
+			} break;
+
 			case IROpCode::sqrt: 	asm_.sqrtpd(reg(ref),reg(node.unary.a)); break;
 			//case IROpCode::round:	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundToNearest); break;
 			case IROpCode::floor: 	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundDown); break;
@@ -901,17 +921,17 @@ struct TraceJIT {
 				Operand offset = Operand(rsp, stackOffset);
 				XMMRegister index = no_xmm;
 
-				if(node.isInteger())
-					asm_.movdqa(reg(ref), ConstantTable(C_INTEGER_ONE));
-				else 	
-					asm_.movdqa(reg(ref), ConstantTable(C_DOUBLE_ONE));
-
 				if(node.shape.split >= 0) {
 					asm_.movapd(xmm15, reg(node.shape.split));
 					asm_.paddq(xmm15, xmm15);
 					index = xmm15;
 				}
 				EmitGather(xmm15, node, index, offset);
+
+				if(node.isInteger())
+					asm_.movdqa(reg(ref), ConstantTable(C_INTEGER_ONE));
+				else 	
+					asm_.movdqa(reg(ref), ConstantTable(C_DOUBLE_ONE));
 
 				if(node.shape.filter >= 0) {
 					IRef mask = node.shape.filter;
@@ -991,6 +1011,72 @@ struct TraceJIT {
 				EmitScatter(node, reg(ref), index);
 				stackOffset += 0x10;
 			} break;
+			
+			case IROpCode::min:  {
+				// relying on doubles and integers to be the same length
+				for(int64_t i = 0; i < node.in.length; i++)
+					((double*)node.in.p)[i] = std::numeric_limits<double>::infinity();
+				
+				Operand offset = Operand(rsp, stackOffset);
+				XMMRegister index = no_xmm;
+				
+				Move(ref, node.unary.a);
+				
+				if(node.shape.split >= 0) {
+					asm_.movapd(xmm15, reg(node.shape.split));
+					asm_.paddq(xmm15, xmm15);
+					index = xmm15;
+				}
+				EmitGather(xmm15, node, index, offset);
+				
+				if(node.shape.filter >= 0) {
+					IRef mask = node.shape.filter;
+					asm_.pand(reg(ref), reg(mask));
+					asm_.pxor(EmitMove(xmm14, reg(mask)), ConstantTable(C_NOT_MASK));
+					asm_.pand(xmm14, ConstantTable(C_DOUBLE_MAX));
+					asm_.por(reg(ref), xmm14);
+				}
+
+				if(node.isDouble()) 	asm_.minpd(reg(ref), xmm15);
+				else 			_error("NYI: min on integers");
+				
+				EmitScatter(node, reg(ref), index);
+						
+				stackOffset += 0x10;
+			} break;
+
+			case IROpCode::max:  {
+				// relying on doubles and integers to be the same length
+				for(int64_t i = 0; i < node.in.length; i++)
+					((double*)node.in.p)[i] = -std::numeric_limits<double>::infinity();
+				
+				Operand offset = Operand(rsp, stackOffset);
+				XMMRegister index = no_xmm;
+				
+				Move(ref, node.unary.a);
+				
+				if(node.shape.split >= 0) {
+					asm_.movapd(xmm15, reg(node.shape.split));
+					asm_.paddq(xmm15, xmm15);
+					index = xmm15;
+				}
+				EmitGather(xmm15, node, index, offset);
+				
+				if(node.shape.filter >= 0) {
+					IRef mask = node.shape.filter;
+					asm_.pand(reg(ref), reg(mask));
+					asm_.pxor(EmitMove(xmm14, reg(mask)), ConstantTable(C_NOT_MASK));
+					asm_.pand(xmm14, ConstantTable(C_DOUBLE_MIN));
+					asm_.por(reg(ref), xmm14);
+				}
+
+				if(node.isDouble()) 	asm_.maxpd(reg(ref), xmm15);
+				else 			_error("NYI: max on integers");
+				
+				EmitScatter(node, reg(ref), index);
+						
+				stackOffset += 0x10;
+			} break;
 
 			case IROpCode::prod: { 
 				if(node.isDouble()) {
@@ -1036,23 +1122,31 @@ struct TraceJIT {
 			break;
 
 			case IROpCode::ifelse:
-				SaveRegisters(ref);
 				if(reg(node.trinary.a).is(xmm0)) {
+					SaveRegisters(ref);
 					EmitMove(xmm15, reg(node.trinary.a));
 					EmitMove(xmm0, reg(node.trinary.c));
 					asm_.blendvpd(xmm15, reg(node.trinary.b));
 					EmitMove(reg(ref), xmm15);
+					RestoreRegisters(ref);
 				} else if(reg(node.trinary.b).is(xmm0)) {
+					SaveRegisters(ref);
 					EmitMove(xmm15, reg(node.trinary.a));
 					EmitMove(reg(node.trinary.a), reg(node.trinary.b));
 					EmitMove(xmm0, reg(node.trinary.c));
 					asm_.blendvpd(xmm15, reg(node.trinary.a));
 					EmitMove(reg(ref), xmm15);
+					RestoreRegisters(ref);
 				} else if(reg(node.trinary.c).is(xmm0)) {
 					EmitMove(reg(ref), reg(node.trinary.a));
 					asm_.blendvpd(reg(ref), reg(node.trinary.b));
+				} else {
+					SaveRegisters(ref);
+					EmitMove(xmm0, reg(node.trinary.c));
+					EmitMove(reg(ref), reg(node.trinary.a));
+					asm_.blendvpd(reg(ref), reg(node.trinary.b));
+					RestoreRegisters(ref);
 				}
-				RestoreRegisters(ref);
 			break;
 
 			//case IROpCode::signif:
@@ -1146,6 +1240,9 @@ struct TraceJIT {
 	}
 	uint64_t PushConstantOffset(const Constant& data) {
 		uint32_t offset = next_constant_slot;
+		if(next_constant_slot > 8192) {
+			printf("Used up all the constants!: %d\n", next_constant_slot);
+		}
 		trace->code_buffer->constant_table[offset] = data;
 		next_constant_slot++;
 		return offset;
@@ -1409,6 +1506,20 @@ struct TraceJIT {
 		}
 	}
 
+	void mergeMin(IRNode& node, int64_t i, int64_t j) {
+		if(node.isDouble())
+			((double*)node.in.p)[i] = std::min(((double*)node.in.p)[i], ((double*)node.in.p)[j]);
+		else
+			((int64_t*)node.in.p)[i] = std::min(((int64_t*)node.in.p)[i], ((int64_t*)node.in.p)[j]);
+	}
+	
+	void mergeMax(IRNode& node, int64_t i, int64_t j) {
+		if(node.isDouble())
+			((double*)node.in.p)[i] = std::max(((double*)node.in.p)[i], ((double*)node.in.p)[j]);
+		else
+			((int64_t*)node.in.p)[i] = std::max(((int64_t*)node.in.p)[i], ((int64_t*)node.in.p)[j]);
+	}
+	
 	// merge value in j into i
 	void mergeSum(IRNode& node, int64_t i, int64_t j) {
 		if(node.isDouble())
@@ -1469,7 +1580,7 @@ struct TraceJIT {
 				nn * d1 * d2;
 		}
 	}
-	
+
 	void GlobalReduce(Thread& thread) {
 		// merge across vector lanes
 		for(IRef ref = 0; ref < (int64_t)trace->nodes.size(); ref++) {
@@ -1498,6 +1609,12 @@ struct TraceJIT {
 								break;
 							case IROpCode::cm2:
 								mergeCm2(node, a, b);
+								break;
+							case IROpCode::min:
+								mergeMin(node, a, b);
+								break;
+							case IROpCode::max:
+								mergeMax(node, a, b);
 								break;
 							default: /* do nothing */ break;
 						}
@@ -1531,6 +1648,12 @@ struct TraceJIT {
 								break;
 							case IROpCode::cm2:
 								mergeCm2(node, a, b);
+								break;
+							case IROpCode::min:
+								mergeMin(node, a, b);
+								break;
+							case IROpCode::max:
+								mergeMax(node, a, b);
 								break;
 							default: /* do nothing */ break;
 						}

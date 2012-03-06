@@ -2451,6 +2451,41 @@ void Assembler::addpd(XMMRegister dst, const Operand& src) {
 	emit(0x58);
 	emit_sse_operand(dst, src);
 }
+
+void Assembler::minpd(XMMRegister dst, XMMRegister src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x5D);
+	emit_sse_operand(dst, src);
+}
+void Assembler::minpd(XMMRegister dst, const Operand& src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x5D);
+	emit_sse_operand(dst, src);
+}
+
+void Assembler::maxpd(XMMRegister dst, XMMRegister src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x5F);
+	emit_sse_operand(dst, src);
+}
+void Assembler::maxpd(XMMRegister dst, const Operand& src) {
+	EnsureSpace ensure_space(this);
+	emit(0x66);
+	emit_optional_rex_32(dst, src);
+	emit(0x0F);
+	emit(0x5F);
+	emit_sse_operand(dst, src);
+}
+
 void Assembler::pshufb(XMMRegister dst, const Operand& src) {
 	EnsureSpace ensure_space(this);
 	emit(0x66);

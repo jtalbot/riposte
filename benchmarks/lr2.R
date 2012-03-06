@@ -1,27 +1,52 @@
 # logistic regression test case
 
-x <- read.table("tests/lr_x2.csv")
-x <- c(rep(1,1,4000),x)
-cat(length(x), "\n")
-y <- read.table("tests/lr_y2.csv")
-cat(length(y), "\n")
+N <- 50000L
+D <- 30L
 
+p <- read.table("benchmarks/data/lr_p.txt")
+dim(p) <- c(N,D)
+print(length(p),'\n')
+
+r <- read.table("benchmarks/data/lr_r.txt")
+print(length(r),'\n')
+
+wi <- read.table("benchmarks/data/lr_wi.txt")
 
 g <- function(z) 1/(1+exp(-z))
-w <- c(0,0,0,0)
 
-i <- rep(4, 4000, 16000)
-k <- rep(4000,1,16000)+1
-
-z <- x
-dim(z) <- c(4000,4)
-
-update <- function(w) sum(split((g(z %*% w)-y)[k]*x, i, 4))/4000
-epsilon <- 0.07
-for(j in 1:100000) {
-	grad <- update(w)
-	delta <- grad*epsilon
-	w <- w - delta
+mv <- function(m, v) {
+	r <- 0
+	for(i in 1L:ncol(m)) {
+		r <- r + m[,i]*v[[i]]	
+	}
+	r
 }
 
-w
+update <- function(w) {
+	grad <- rep(0,D)
+	diff <- g(mv(p,w))-r
+	for(i in 1L:D) {
+		grad[i] <- mean((p[,i]*diff))
+	}
+	grad
+}
+
+#i <- rep(4, 4000, 16000)
+#k <- rep(4000,1,16000)+1
+#update <- function(w) sum(split((g(z %*% w)-y)[k]*x, i, 4))/4000
+
+benchmark <- function(reps) {
+
+	w <- wi
+	epsilon <- 0.07
+
+	for(j in 1L:reps) {
+		grad <- update(w)
+		delta <- grad*epsilon
+		w <- w - delta
+	}
+	
+	w
+}
+
+system.time(benchmark(3000L))

@@ -1,11 +1,11 @@
 
-force <- function(x) x
+force <- function(x) .Internal(force(x))
 
 list <- function(...) list(...)
 
 system.time <- function(expr) {
 	start <- .Internal(proc.time())
-	expr
+	.Internal(force(expr))
 	.Internal(proc.time())-start
 }
 
