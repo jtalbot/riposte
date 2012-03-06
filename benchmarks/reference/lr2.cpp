@@ -2,7 +2,7 @@
 
 #define N_DIMS 30 
 #define N_ROWS 50000
-#define N_ITERATIONS 3000
+#define N_ITERATIONS 300
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,15 +62,16 @@ int main() {
 		bzero(grad,sizeof(double) * (N_DIMS));
 		
 		for(int r = 0; r < N_ROWS; r++) {
+			double r_1 = 1.0 / (r + 1);
 			double diff = w[0];
 			for(int d = 1; d < N_DIMS; d++) {
 				diff += w[d] * data[d][r];
 			}
 			diff = 1.0/(1.0+exp(-diff));
 			diff -= response[r];
-			grad[0] += (diff - grad[0]) / (r + 1);
+			grad[0] += (diff - grad[0]) * r_1;
 			for(int d = 1; d < N_DIMS; d++) {
-				grad[d] += (diff*data[d][r] - grad[d]) / (r + 1);
+				grad[d] += (diff*data[d][r] - grad[d]) * r_1;
 			}
 		}
 		
