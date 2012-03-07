@@ -667,6 +667,7 @@ public:
 		availableTraces.push_back(trace);
 		traces.erase(i);
 	}
+
 	void Flush(Thread & thread) {
 		// execute all traces
 		for(std::map<int64_t, Trace*, std::less<int64_t>, traceable_allocator<std::pair<int64_t, Trace*> > >::const_iterator i = traces.begin(); i != traces.end(); i++) {
@@ -676,6 +677,17 @@ public:
 			availableTraces.push_back(trace);
 		}
 		traces.clear();
+	}
+
+	void OptBind(Value const& v) {
+		if(!v.isFuture()) return;
+		std::map<int64_t, Trace*, std::less<int64_t>, traceable_allocator<std::pair<int64_t, Trace*> > >::iterator i = traces.find(v.length);
+		if(i == traces.end()) 
+			_error("Unevaluated future left behind");
+		Trace* trace = i->second;
+		if(trace->nodes.size() > 100) {
+			Bind(v);
+		}
 	}
 };
 

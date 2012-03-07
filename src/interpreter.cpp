@@ -334,6 +334,7 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 		&& thread.futureType(i) == Type::Logical 
 		&& thread.futureShape(a) == thread.futureShape(i)) {
 		OUT(thread, inst.c) = thread.EmitFilter(thread.frame.environment, a, i);
+		thread.OptBind(OUT(thread, inst.c));
 		return &inst+1;
 	}
 
@@ -343,6 +344,7 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 	if(isTraceable(thread, a, i) 
 		&& (thread.futureType(i) == Type::Integer || thread.futureType(i) == Type::Double)) {
 		OUT(thread, inst.c) = thread.EmitGather(thread.frame.environment, a, i);
+		thread.OptBind(OUT(thread, inst.c));
 		return &inst+1;
 	}
 
@@ -392,6 +394,7 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	FORCE(a, inst.a); \
 	if(isTraceable<Group>(thread,a)) { \
 		c = thread.EmitUnary<Group>(thread.frame.environment, IROpCode::Name, a, 0); \
+		thread.OptBind(c); \
  		return &inst+1; \
 	} \
 	BIND(a); \
@@ -427,6 +430,7 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	FORCE(a, inst.a); FORCE(b, inst.b); \
 	if(isTraceable<Group>(thread,a,b)) { \
 		c = thread.EmitBinary<Group>(thread.frame.environment, IROpCode::Name, a, b, 0); \
+		thread.OptBind(c); \
 		return &inst+1; \
 	} \
 	BIND(a); BIND(b); \
@@ -448,6 +452,7 @@ Instruction const* length_op(Thread& thread, Instruction const& inst) {
 			Integer::InitScalar(OUT(thread, inst.c), shape.length);
 		} else {
 			OUT(thread, inst.c) = thread.EmitUnary<CountFold>(thread.frame.environment, IROpCode::length, a, 0);
+			thread.OptBind(OUT(thread,inst.c));
 		}
 	}
 	else if(a.isObject()) { 
@@ -462,6 +467,7 @@ Instruction const* mean_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	if(isTraceable<MomentFold>(thread,a)) {
 		OUT(thread, inst.c) = thread.EmitUnary<MomentFold>(thread.frame.environment, IROpCode::mean, a, 0);
+		thread.OptBind(OUT(thread,inst.c));
  		return &inst+1;
 	}
 	return &inst+1;
@@ -472,6 +478,7 @@ Instruction const* cm2_op(Thread& thread, Instruction const& inst) {
 	OPERAND(b, inst.b); FORCE(b, inst.b); 
 	if(isTraceable<Moment2Fold>(thread,a,b)) {
 		OUT(thread, inst.c) = thread.EmitBinary<Moment2Fold>(thread.frame.environment, IROpCode::cm2, a, b, 0);
+		thread.OptBind(OUT(thread,inst.c));
  		return &inst+1;
 	}
 	return &inst+1;
@@ -483,6 +490,7 @@ Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 	OPERAND(c, inst.c); FORCE(c, inst.c);
 	if(isTraceable<IfElse>(thread,a,b,c)) {
 		OUT(thread, inst.c) = thread.EmitIfElse(thread.frame.environment, a, b, c);
+		thread.OptBind(OUT(thread,inst.c));
 		return &inst+1;
 	}
 	BIND(a); BIND(b); BIND(c);
@@ -498,6 +506,7 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 	OPERAND(c, inst.c); FORCE(c, inst.c);
 	if(isTraceable<Split>(thread,b,c)) {
 		OUT(thread, inst.c) = thread.EmitSplit(thread.frame.environment, c, b, levels);
+		thread.OptBind(OUT(thread,inst.c));
 		return &inst+1;
 	}
 	BIND(a); BIND(b); BIND(c);
@@ -522,6 +531,7 @@ Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 		&& (type == Type::Double || type == Type::Integer || type == Type::Logical)
 		&& l >= TRACE_VECTOR_WIDTH) {
 		OUT(thread, inst.c) = thread.EmitConstant(thread.frame.environment, type, l, 0);
+		thread.OptBind(OUT(thread,inst.c));
 		return &inst+1;
 	}
 
@@ -564,8 +574,10 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	if(len >= TRACE_VECTOR_WIDTH) {
 		if(b.isDouble() || c.isDouble()) {
 			OUT(thread, inst.c) = thread.EmitSequence(thread.frame.environment, len, start, step);
+			thread.OptBind(OUT(thread,inst.c));
 		} else {
 			OUT(thread, inst.c) = thread.EmitSequence(thread.frame.environment, len, (int64_t)start, (int64_t)step);
+			thread.OptBind(OUT(thread,inst.c));
 		}
 		return &inst+1;
 	}
@@ -589,6 +601,7 @@ Instruction const* rep_op(Thread& thread, Instruction const& inst) {
 	
 	if(len >= TRACE_VECTOR_WIDTH) {
 		OUT(thread, inst.c) = thread.EmitRepeat(thread.frame.environment, len, (int64_t)n, (int64_t)each);
+		thread.OptBind(OUT(thread,inst.c));
 		return &inst+1;
 	}
 
@@ -603,6 +616,7 @@ Instruction const* random_op(Thread& thread, Instruction const& inst) {
 	
 	if(len >= TRACE_VECTOR_WIDTH) {
 		OUT(thread, inst.c) = thread.EmitRandom(thread.frame.environment, len);
+		thread.OptBind(OUT(thread,inst.c));
 		return &inst+1;
 	}
 
