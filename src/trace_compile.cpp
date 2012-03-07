@@ -401,94 +401,170 @@ struct TraceJIT {
 	Register load_addr; //holds address of input vectors
 	Register vector_length; //holds length of long vector
 	uint32_t next_constant_slot;
+	uint64_t spills;
+
+	struct RegisterAssignment {
+		int8_t r;
+		int8_t o;
+	};
+
+	struct OpAssignment {
+		RegisterAssignment r, a, b, c, f, s;
+	};
+
+	std::vector<OpAssignment> assignment;
+	IRef liveRegisters[14]; 
+
+	bool usesNode(IRef ref, IRef use) {
+		IRNode node = trace->nodes[ref];
+		switch(node.arity) {
+		case IRNode::TRINARY:
+			if(node.trinary.c == use) return true;
+		case IRNode::BINARY:
+			if(node.binary.b == use) return true;
+		case IRNode::UNARY:
+			if(node.unary.a == use) return true;
+		default:
+			if(ref == use) return true;
+			if(node.shape.filter == use) return true;
+			if(node.shape.split == use) return true;
+		}
+		return false;
+	}
+
+	int8_t spillRegister(IRef currentOp) {
+		spills++;
+		// look for register with the farthest away use?
+		// for now just do slow search backwards
+		IRef minUse = 1000000;
+		int8_t minReg = 0;
+		for(int8_t i = 0; i < 14; i++) {
+			for(IRef ref = currentOp; ref >= 0; ref--) {
+				if(usesNode(ref, liveRegisters[i])) {
+					if(ref < minUse) {
+						minUse = ref;
+						minReg = i;
+					}
+					break;
+				}
+			}
+		}
+		int8_t r = minReg;
+		printf("spilled %d (%d => %d)\n", minReg, liveRegisters[r], currentOp);
+		allocated_register[liveRegisters[r]] = spills++; // mark node as spilled
+		liveRegisters[r] = -1;	// unassign spilled register
+		return r;
+	}
+
+	void allocate(IRef currentOp, IRef node, RegisterAssignment& assignment, int8_t preferred) {
+		int8_t r = allocated_register[node];
+		// if b is not already assigned to a register
+		assignment.o = r;
+		if(r < 0 || r >= 14) {
+			// Attempt to allocate
+			if(!alloc.allocate(preferred, &r)) {
+				printf("spilling\n");
+				r = spillRegister(currentOp);
+			}
+		}
+		assignment.r = r;
+		allocated_register[node] = r;
+		liveRegisters[r] = node;
+	}
+
+	int8_t deallocate(IRef node) {
+		int8_t r = allocated_register[node];
+		if(r >= 0) {
+			allocated_register[node] = -1;
+			liveRegisters[r] = -1;
+			alloc.free(r);
+		}
+		return r;
+	}
 
 	void RegisterAllocate() {
-		//pass 1 register allocation
-		for(IRef i = trace->nodes.size(); i > 0; i--) {
-			IRef ref = i - 1;
+		spills = 16;
+		assignment.resize(trace->nodes.size());
+		for(size_t i = 0; i < trace->nodes.size(); i++) {
+			allocated_register[i] = -1;
+		}
+		
+		for(IRef ref = trace->nodes.size()-1; ref >= 0; ref--) {
+			
+			allocate(ref, ref, assignment[ref].r, -1);	
+			
 			IRNode & node = trace->nodes[ref];
 			switch(node.arity) {
-			case IRNode::TRINARY: {
-				AllocateTrinary(ref, node.trinary.a, node.trinary.b, node.trinary.c);
-			} break;
-			case IRNode::BINARY: {
-				AllocateBinary(ref,node.binary.a,node.binary.b);
-			} break;
-			case IRNode::UNARY: {
-				AllocateUnary(ref,node.unary.a);
-			} break;
-			case IRNode::NULLARY: {
-				AllocateNullary(ref);
-			} break;
+			case IRNode::TRINARY:
+				allocate(ref, node.trinary.c, assignment[ref].c, -1);
+			case IRNode::BINARY:
+				allocate(ref, node.binary.b, assignment[ref].b, -1);
+			case IRNode::UNARY:
+				allocate(ref, node.unary.a, assignment[ref].a, deallocate(ref));
+			default:
+				if(node.shape.filter >= 0)
+					allocate(ref, node.shape.filter, assignment[ref].f, -1);
+				if(node.shape.split >= 0)
+					allocate(ref, node.shape.split,  assignment[ref].s, -1);
+				deallocate(ref);
 			}
-		}
-	}
-
-	int8_t AllocateNullary(IRef ref) {
-		if(allocated_register[ref] < 0) {
-			if(!alloc.allocate(&allocated_register[ref]))
-				_error("exceeded available registers");
+			live_registers[ref] = alloc.live_registers();
 		}
 		
-		int8_t r = allocated_register[ref];
-		alloc.free(r);
-		
-		live_registers[ref] = alloc.live_registers();
-		
-		return r;
 	}
 
-	int8_t AllocateUnary(IRef ref, IRef a) {
-		int8_t r = AllocateNullary(ref);
-		if(allocated_register[a] < 0) {
-			//try to allocated register a and r to the same location,  this avoids moves in binary instructions
-			if(!alloc.allocate(r,&allocated_register[a]))
-				_error("exceeded available registers");
+	void unspill(RegisterAssignment const& a, int8_t& r) {
+		if(a.r != r) {
+			assert(a.r >= 0 && a.r < 14);
+			asm_.movdqa(XMMRegister::FromAllocationIndex(a.r),
+					Operand(rsp, r*0x10));
+			r = a.r;
 		}
-		//if(trace->nodes[ref].liveOut) {
-			IRNode::Shape& s = trace->nodes[ref].shape;
-			if(s.filter >= 0 && allocated_register[s.filter] < 0) {
-				if(!alloc.allocate(&allocated_register[s.filter]))
-					_error("exceeded available registers");
-			}
-			if(s.split >= 0 && allocated_register[s.split] < 0) {
-				if(!alloc.allocate(&allocated_register[s.split]))
-					_error("exceeded available registers");
-			}
-		//}
-		return r;
 	}
 
-	int8_t AllocateBinary(IRef ref, IRef a, IRef b) {
-		int8_t r = AllocateUnary(ref,a);
-		if(allocated_register[b] < 0) {
-			RegisterSet mask = ~(1 << allocated_register[ref]);
-			//we avoid allocating registers such that r = a op r occurs
-			if(!alloc.allocateWithMask(mask,&allocated_register[b])) {
-				_error("exceeded available registers");
-			}
-			assert(allocated_register[ref] != allocated_register[b]);
+	void spill(RegisterAssignment const& a, int8_t& r) {
+		if(a.o >= 14) {
+			asm_.movdqa(Operand(rsp, a.o*0x10),
+				XMMRegister::FromAllocationIndex(a.r));
 		}
-
-		//we need to avoid binary threadments of the form r = a op r, a != r because these are hard to code gen with 2-op codes
-		assert(!reg(ref).is(reg(b)) || reg(ref).is(reg(a)));
-		//proof:
-		// case: b is not live out of this stmt and b != a -> we allocated b s.t. r != b
-		// case: b is not live out this stmt and b == a -> either this stmt is r = a + a or r = r + r, either of which is allowed in codegen
-		// case: b is live out of this stmt -> b and r are live at the same time so b != r
-
-		return r;
+		r = a.o;
 	}
 
-	IRef AllocateTrinary(IRef ref, IRef a, IRef b, IRef c) {
-		IRef r = AllocateBinary(ref, a, b);
-		if(allocated_register[c] < 0) {
-			if(!alloc.allocate(&allocated_register[c]))
-				_error("exceeded available registers");
+	// a*1+(a*2+(a*3+(a*4+(a*5+(a*6+(a*7+(a*8+(a*9+(a*10+(a*11+(a*12+(a*13+(a*14+(a*15))))))))))))))
+
+	XMMRegister RegR(IRef r) {
+		return XMMRegister::FromAllocationIndex(assignment[r].r.r);
+	}
+
+	XMMRegister RegA(IRef r) {
+		return XMMRegister::FromAllocationIndex(assignment[r].a.r);
+	}
+
+	XMMRegister RegB(IRef r) {
+		return XMMRegister::FromAllocationIndex(assignment[r].b.r);
+	}
+
+	XMMRegister RegC(IRef r) {
+		return XMMRegister::FromAllocationIndex(assignment[r].c.r);
+	}
+
+	XMMRegister RegF(IRef r) {
+		return XMMRegister::FromAllocationIndex(assignment[r].f.r);
+	}
+
+	XMMRegister RegS(IRef r) {
+		return XMMRegister::FromAllocationIndex(assignment[r].s.r);
+	}
+
+	XMMRegister MoveA2R(IRef r) {
+		XMMRegister a = RegA(r);
+		XMMRegister d = RegR(r);
+		if(!a.is(d)) {
+			asm_.movapd(d, a);
 		}
-		return r;
+		return d;
 	}
-
+	
 	void InstructionSelection() {
 		//pass 2 instruction selection
 
@@ -512,7 +588,7 @@ struct TraceJIT {
 		// TODO: do this in register allocation
 		//  so that loop carried variables can be placed in registers.
 		//  Make this stack allocation simply part of spilling code.
-		int64_t stackSpace = 0;
+		int64_t stackSpace = spills*0x10;
 		for(IRef ref = 0; ref < (int64_t)trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
 			
@@ -570,7 +646,7 @@ struct TraceJIT {
 		asm_.movq(vector_index, rsi);
 		asm_.movq(vector_length, rdx);
 
-		int64_t stackOffset = 0;
+		int64_t stackOffset = spills*0x10;
 		for(IRef ref = 0; ref < (int64_t)trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
 			if(node.op == IROpCode::seq) {
@@ -623,13 +699,35 @@ struct TraceJIT {
 			}
 		}
 
+		// clear register assignments
+		for(size_t i = 0; i < trace->nodes.size(); i++) {
+			allocated_register[i] = -1;
+		}
+		
 		Label begin;
 
 		asm_.bind(&begin);
 
-		stackOffset = 0;
+		stackOffset = spills*0x10;
 		for(IRef ref = 0; ref < (int64_t)trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
+
+
+			// unspill if necessary...
+			switch(node.arity) {
+			case IRNode::TRINARY: 
+				unspill(assignment[ref].c, allocated_register[node.trinary.c]);
+			case IRNode::BINARY:
+				unspill(assignment[ref].b, allocated_register[node.binary.b]);
+			case IRNode::UNARY:
+				unspill(assignment[ref].a, allocated_register[node.unary.a]);
+			default:
+				if(node.shape.filter >= 0)
+					unspill(assignment[ref].f, allocated_register[node.shape.filter]);
+				if(node.shape.split >= 0)
+					unspill(assignment[ref].s, allocated_register[node.shape.split]);
+			}
+			allocated_register[ref] = assignment[ref].r.r;
 
 			switch(node.op) {
 
@@ -641,7 +739,7 @@ struct TraceJIT {
 					case Type::Double:  c = Constant(node.constant.d); break;
 					default: _error("unexpected type");
 				}
-				asm_.movdqa(reg(ref),PushConstant(c));
+				asm_.movdqa(RegR(ref),PushConstant(c));
 			} break;
 			case IROpCode::load: {
 				if(trace->nodes[node.unary.a].op == IROpCode::seq &&
@@ -649,51 +747,51 @@ struct TraceJIT {
 					trace->nodes[node.unary.a].sequence.ib == 1)
 				{
 					if(node.isLogical())
-						asm_.pmovsxbq(reg(ref), EncodeOperand(node.in.p, vector_index, times_1));
+						asm_.pmovsxbq(RegR(ref), EncodeOperand(node.in.p, vector_index, times_1));
 					else
-						asm_.movdqa(reg(ref),EncodeOperand(node.in.p,vector_index,times_8));
+						asm_.movdqa(RegR(ref),EncodeOperand(node.in.p,vector_index,times_8));
 				}
 				else if(trace->nodes[node.unary.a].op == IROpCode::seq &&
 					trace->nodes[node.unary.a].sequence.ia % 2 == 0 &&
 					trace->nodes[node.unary.a].sequence.ib == 1)
 				{
-					asm_.movq(r8, reg(node.unary.a));
-					asm_.movdqa(reg(ref),EncodeOperand(node.in.p,r8,times_8));
+					asm_.movq(r8, RegA(ref));
+					asm_.movdqa(RegR(ref),EncodeOperand(node.in.p,r8,times_8));
 				}
 				else if(trace->nodes[node.unary.a].op == IROpCode::seq &&
 					trace->nodes[node.unary.a].sequence.ia % 2 != 0 &&
 					trace->nodes[node.unary.a].sequence.ib == 1)
 				{
-					asm_.movq(r8, reg(node.unary.a));
-					asm_.movdqu(reg(ref),EncodeOperand(node.in.p,r8,times_8));
+					asm_.movq(r8, RegA(ref));
+					asm_.movdqu(RegR(ref),EncodeOperand(node.in.p,r8,times_8));
 				}
 				else {
 					// TODO: other fast cases here when index is a known seq
-					asm_.movq(r8, reg(node.unary.a));
-					asm_.movhlps(reg(ref), reg(node.unary.a));
-					asm_.movq(r9, reg(ref));
-					asm_.movlpd(reg(ref),EncodeOperand(node.in.p,r8,times_8));
-					asm_.movhpd(reg(ref),EncodeOperand(node.in.p,r9,times_8));
+					asm_.movq(r8, RegA(ref));
+					asm_.movhlps(RegR(ref), RegA(ref));
+					asm_.movq(r9, RegR(ref));
+					asm_.movlpd(RegR(ref),EncodeOperand(node.in.p,r8,times_8));
+					asm_.movhpd(RegR(ref),EncodeOperand(node.in.p,r9,times_8));
 				}
 			} break;
 
 			case IROpCode::add: {
-				if(node.isDouble()) 	asm_.addpd(Move(ref, node.binary.a),reg(node.binary.b)); 
-				else		 	asm_.paddq(Move(ref, node.binary.a),reg(node.binary.b));
+				if(node.isDouble()) 	asm_.addpd(MoveA2R(ref),RegB(ref)); 
+				else		 	asm_.paddq(MoveA2R(ref),RegB(ref));
 			} break;
 			case IROpCode::sub: {
-				if(node.isDouble()) 	asm_.subpd(Move(ref, node.binary.a),reg(node.binary.b)); 
-				else		 	asm_.psubq(Move(ref, node.binary.a),reg(node.binary.b));
+				if(node.isDouble()) 	asm_.subpd(MoveA2R(ref),RegB(ref)); 
+				else		 	asm_.psubq(MoveA2R(ref),RegB(ref));
 			} break;
 			case IROpCode::mul: {
-				if(node.isDouble()) 	asm_.mulpd(Move(ref, node.binary.a),reg(node.binary.b)); 
+				if(node.isDouble()) 	asm_.mulpd(MoveA2R(ref),RegB(ref)); 
 				else			EmitVectorizedBinaryFunction(ref,mul_i);
 			} break;
-			case IROpCode::div: 	asm_.divpd(Move(ref, node.binary.a),reg(node.binary.b)); break;
+			case IROpCode::div: 	asm_.divpd(MoveA2R(ref),RegB(ref)); break;
 			case IROpCode::idiv: {
 				if(node.isDouble()) {	
-					asm_.divpd(Move(ref, node.binary.a),reg(node.binary.b)); 
-					asm_.roundpd(reg(ref), reg(ref), Assembler::kRoundDown);	
+					asm_.divpd(MoveA2R(ref),RegB(ref)); 
+					asm_.roundpd(RegR(ref), RegR(ref), Assembler::kRoundDown);	
 				} else	{ 
 					EmitVectorizedBinaryFunction(ref,idiv_i);
 				}
@@ -701,21 +799,20 @@ struct TraceJIT {
 
 			case IROpCode::pmin: {
 				if(node.isDouble()) {
-					asm_.minpd(Move(ref, node.binary.a), reg(node.binary.b));
+					asm_.minpd(MoveA2R(ref), RegB(ref));
 				} else {
 					_error("NYI: pmin on integers");
 				}
 			} break;
 
-			case IROpCode::sqrt: 	asm_.sqrtpd(reg(ref),reg(node.unary.a)); break;
-			//case IROpCode::round:	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundToNearest); break;
-			case IROpCode::floor: 	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundDown); break;
-			case IROpCode::ceiling:	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundUp); break;
-			case IROpCode::trunc: 	asm_.roundpd(reg(ref),reg(node.unary.a), Assembler::kRoundToZero); break;
+			case IROpCode::sqrt: 	asm_.sqrtpd(RegR(ref),RegA(ref)); break;
+			//case IROpCode::round:	asm_.roundpd(RegR(ref),RegA(ref), Assembler::kRoundToNearest); break;
+			case IROpCode::floor: 	asm_.roundpd(RegR(ref),RegA(ref), Assembler::kRoundDown); break;
+			case IROpCode::ceiling:	asm_.roundpd(RegR(ref),RegA(ref), Assembler::kRoundUp); break;
+			case IROpCode::trunc: 	asm_.roundpd(RegR(ref),RegA(ref), Assembler::kRoundToZero); break;
 			case IROpCode::abs: {
 				if(node.isDouble()) {
-					EmitMove(reg(ref),reg(node.unary.a));
-					asm_.andpd(reg(ref), ConstantTable(C_ABS_MASK));
+					asm_.andpd(MoveA2R(ref), ConstantTable(C_ABS_MASK));
 				} else {			
 					//this could be inlined using bit-whacking, but we would need an additional register
 					// if(r < 0) f = ~0 else 0; r = r xor f; r -= f;
@@ -724,15 +821,13 @@ struct TraceJIT {
 			} break;
 			case IROpCode::neg: {
 				if(node.isDouble()) {	
-					EmitMove(reg(ref),reg(node.unary.a));
-					asm_.xorpd(reg(ref), ConstantTable(C_NEG_MASK));	
+					asm_.xorpd(MoveA2R(ref), ConstantTable(C_NEG_MASK));	
 				} else {
-					EmitMove(reg(ref),reg(node.unary.a));
-					asm_.pxor(reg(ref),ConstantTable(C_NOT_MASK)); //r = ~r
-					asm_.psubq(reg(ref),ConstantTable(C_NOT_MASK)); //r -= -1	
+					asm_.pxor(MoveA2R(ref),ConstantTable(C_NOT_MASK)); //r = ~r
+					asm_.psubq(RegR(ref),ConstantTable(C_NOT_MASK)); //r -= -1	
 				}
 			} break;
-			case IROpCode::pos: EmitMove(reg(ref), reg(node.unary.a)); break;
+			case IROpCode::pos: MoveA2R(ref); break;
 #ifdef USE_AMD_LIBM
 			case IROpCode::exp: 	EmitVectorizedUnaryFunction(ref,amd_vrd2_exp); break;
 			case IROpCode::log: 	EmitVectorizedUnaryFunction(ref,amd_vrd2_log); break;
@@ -760,15 +855,15 @@ struct TraceJIT {
 			case IROpCode::hypot: 	EmitBinaryFunction(ref,hypot); break;
 #endif
 			case IROpCode::isna:
-				asm_.pcmpeqq(Move(ref, node.unary.a), ConstantTable(C_DOUBLE_NA)); break;
+				asm_.pcmpeqq(MoveA2R(ref), ConstantTable(C_DOUBLE_NA)); break;
 			case IROpCode::sign: 	EmitVectorizedUnaryFunction(ref,sign_d); break;
 			case IROpCode::mod: {
 				if(node.isDouble()) {
-					EmitMove(xmm15, reg(node.binary.a));
-					asm_.divpd(xmm15, reg(node.binary.b)); 
+					EmitMove(xmm15, RegA(ref));
+					asm_.divpd(xmm15, RegB(ref)); 
 					asm_.roundpd(xmm15, xmm15, Assembler::kRoundDown);
-					asm_.mulpd(xmm15, reg(node.binary.b));
-					asm_.subpd(Move(ref, node.binary.a), xmm15);
+					asm_.mulpd(xmm15, RegB(ref));
+					asm_.subpd(MoveA2R(ref), xmm15);
 				} else {
 					EmitVectorizedBinaryFunction(ref, mod_i);
 				}
@@ -779,13 +874,13 @@ struct TraceJIT {
 			case IROpCode::le: EmitCompare(ref,Assembler::kLE); break;
 			case IROpCode::neq: EmitCompare(ref,Assembler::kNEQ); break;
 
-			case IROpCode::land: asm_.pand(reg(ref),reg(node.binary.b)); break;
-			case IROpCode::lor: asm_.por(reg(ref),reg(node.binary.b)); break;
-			case IROpCode::lnot: asm_.pxor(Move(ref, node.unary.a), ConstantTable(C_NOT_MASK)); break;
+			case IROpCode::land: asm_.pand(RegR(ref),RegB(ref)); break;
+			case IROpCode::lor: asm_.por(RegR(ref),RegB(ref)); break;
+			case IROpCode::lnot: asm_.pxor(MoveA2R(ref), ConstantTable(C_NOT_MASK)); break;
 			
 			case IROpCode::cast: {
 				if(node.type == trace->nodes[node.unary.a].type)
-					EmitMove(reg(ref), reg(node.unary.a));
+					MoveA2R(ref);
 				else if(node.isDouble() && trace->nodes[node.unary.a].isInteger())
 					EmitVectorizedUnaryFunction(ref, casti2d);
 				else if(node.isDouble() && trace->nodes[node.unary.a].isLogical())
@@ -806,55 +901,55 @@ struct TraceJIT {
 				Operand maxN = PushConstant(Constant(node.sequence.ia, node.sequence.ia));
 				if(node.sequence.ib == 1) {
 					// if each=1, no need to update
-					asm_.movdqa(reg(ref), Operand(rsp, stackOffset+0x10));
+					asm_.movdqa(RegR(ref), Operand(rsp, stackOffset+0x10));
 					for(int i = 0; i < 2; i++) {
-						asm_.paddq(reg(ref), ConstantTable(C_INTEGER_ONE));
+						asm_.paddq(RegR(ref), ConstantTable(C_INTEGER_ONE));
 						asm_.movdqa(xmm15, maxN);
-						asm_.pcmpeqq(xmm15, reg(ref));
+						asm_.pcmpeqq(xmm15, RegR(ref));
 						asm_.pxor(xmm15, ConstantTable(C_NOT_MASK));
-						asm_.pand(reg(ref), xmm15);
+						asm_.pand(RegR(ref), xmm15);
 					}
-					asm_.movdqa(Operand(rsp, stackOffset+0x10), reg(ref));
+					asm_.movdqa(Operand(rsp, stackOffset+0x10), RegR(ref));
 				}
 				else if(node.sequence.ia*node.sequence.ib >= node.shape.length) {
 					// if j will never wrap, no need to check
-					asm_.movdqa(reg(ref), Operand(rsp, stackOffset));
+					asm_.movdqa(RegR(ref), Operand(rsp, stackOffset));
 					for(int i = 0; i < 2; i++) {
-						asm_.paddq(reg(ref), ConstantTable(C_INTEGER_ONE));
+						asm_.paddq(RegR(ref), ConstantTable(C_INTEGER_ONE));
 						asm_.movdqa(xmm15, maxEach);
-						asm_.pcmpeqq(xmm15, reg(ref));
+						asm_.pcmpeqq(xmm15, RegR(ref));
 						asm_.pxor(xmm15, ConstantTable(C_NOT_MASK));
-						asm_.pand(reg(ref), xmm15);
+						asm_.pand(RegR(ref), xmm15);
 						// load j and increment masked
 						asm_.pxor(xmm15, ConstantTable(C_NOT_MASK));
 						asm_.pand(xmm15, ConstantTable(C_INTEGER_ONE));
 						asm_.paddq(xmm15, Operand(rsp, stackOffset+0x10));
 						asm_.movdqa(Operand(rsp, stackOffset+0x10), xmm15);
 					}
-					asm_.movdqa(Operand(rsp, stackOffset), reg(ref));
-					asm_.movapd(reg(ref), xmm15);
+					asm_.movdqa(Operand(rsp, stackOffset), RegR(ref));
+					asm_.movapd(RegR(ref), xmm15);
 				}
 				else {
 					for(int i = 0; i < 2; i++) {
 						// update each
-						asm_.movdqa(reg(ref), Operand(rsp, stackOffset));
-						asm_.paddq(reg(ref), ConstantTable(C_INTEGER_ONE));
+						asm_.movdqa(RegR(ref), Operand(rsp, stackOffset));
+						asm_.paddq(RegR(ref), ConstantTable(C_INTEGER_ONE));
 						asm_.movdqa(xmm15, maxEach);
-						asm_.pcmpeqq(xmm15, reg(ref));
+						asm_.pcmpeqq(xmm15, RegR(ref));
 						asm_.pxor(xmm15, ConstantTable(C_NOT_MASK));
-						asm_.pand(reg(ref), xmm15);
-						asm_.movdqa(Operand(rsp, stackOffset), reg(ref));
+						asm_.pand(RegR(ref), xmm15);
+						asm_.movdqa(Operand(rsp, stackOffset), RegR(ref));
 						// load j and increment masked
 						asm_.pxor(xmm15, ConstantTable(C_NOT_MASK));
 						asm_.pand(xmm15, ConstantTable(C_INTEGER_ONE));
 						asm_.paddq(xmm15, Operand(rsp, stackOffset+0x10));
 						// compare j to n and conditionally set to 0
-						asm_.movdqa(reg(ref), maxN);
-						asm_.pcmpeqq(reg(ref), xmm15);
-						asm_.pxor(reg(ref), ConstantTable(C_NOT_MASK));
-						asm_.pand(reg(ref), xmm15);
+						asm_.movdqa(RegR(ref), maxN);
+						asm_.pcmpeqq(RegR(ref), xmm15);
+						asm_.pxor(RegR(ref), ConstantTable(C_NOT_MASK));
+						asm_.pand(RegR(ref), xmm15);
 						// store j
-						asm_.movdqa(Operand(rsp, stackOffset+0x10), reg(ref));
+						asm_.movdqa(Operand(rsp, stackOffset+0x10), RegR(ref));
 					}
 				}
 				stackOffset += 0x20;
@@ -863,24 +958,24 @@ struct TraceJIT {
 				if(node.isDouble()) {
 					Constant step(2*node.sequence.db, 2*node.sequence.db);
 					Operand o_step = PushConstant(step);
-					asm_.movdqa(reg(ref), Operand(rsp, stackOffset));
-					asm_.addpd(reg(ref), o_step);
-					asm_.movdqa(Operand(rsp, stackOffset), reg(ref));
+					asm_.movdqa(RegR(ref), Operand(rsp, stackOffset));
+					asm_.addpd(RegR(ref), o_step);
+					asm_.movdqa(Operand(rsp, stackOffset), RegR(ref));
 				} else {
 					Constant step(2*node.sequence.ib, 2*node.sequence.ib);
 					Operand o_step = PushConstant(step);
-					asm_.movdqa(reg(ref), Operand(rsp, stackOffset));
-					asm_.paddq(reg(ref), o_step);
-					asm_.movdqa(Operand(rsp, stackOffset), reg(ref));
+					asm_.movdqa(RegR(ref), Operand(rsp, stackOffset));
+					asm_.paddq(RegR(ref), o_step);
+					asm_.movdqa(Operand(rsp, stackOffset), RegR(ref));
 				}
 				stackOffset += 0x10;
 			} break;
 			case IROpCode::random: {
-				asm_.movdqa(reg(ref),Operand(rsp, stackOffset));
+				asm_.movdqa(RegR(ref),Operand(rsp, stackOffset));
 				SaveRegisters(ref);
-				asm_.movapd(xmm0, reg(ref));
+				asm_.movapd(xmm0, RegR(ref));
 				EmitCall((void*)random_d);
-				EmitMove(reg(ref),xmm0);
+				EmitMove(RegR(ref),xmm0);
 				RestoreRegisters(ref);
 				stackOffset += 0x10;
 			} break;
@@ -892,24 +987,23 @@ struct TraceJIT {
 				Operand offset = Operand(rsp, stackOffset);
 				XMMRegister index = no_xmm;
 				
-				Move(ref, node.unary.a);
+				MoveA2R(ref);
 				
 				if(node.shape.split >= 0) {
-					asm_.movapd(xmm15, reg(node.shape.split));
+					asm_.movapd(xmm15, RegS(ref));
 					asm_.paddq(xmm15, xmm15);
 					index = xmm15;
 				}
 				EmitGather(xmm15, node, index, offset);
 				
 				if(node.shape.filter >= 0) {
-					IRef mask = node.shape.filter;
-					asm_.pand(reg(ref), reg(mask));
+					asm_.pand(RegR(ref), RegF(ref));
 				}
 
-				if(node.isDouble()) 	asm_.addpd(reg(ref), xmm15);
-				else 			asm_.paddq(reg(ref), xmm15);
+				if(node.isDouble()) 	asm_.addpd(RegR(ref), xmm15);
+				else 			asm_.paddq(RegR(ref), xmm15);
 				
-				EmitScatter(node, reg(ref), index);
+				EmitScatter(node, RegR(ref), index);
 						
 				stackOffset += 0x10;
 			} break;
@@ -922,26 +1016,25 @@ struct TraceJIT {
 				XMMRegister index = no_xmm;
 
 				if(node.shape.split >= 0) {
-					asm_.movapd(xmm15, reg(node.shape.split));
+					asm_.movapd(xmm15, RegS(ref));
 					asm_.paddq(xmm15, xmm15);
 					index = xmm15;
 				}
 				EmitGather(xmm15, node, index, offset);
 
 				if(node.isInteger())
-					asm_.movdqa(reg(ref), ConstantTable(C_INTEGER_ONE));
+					asm_.movdqa(RegR(ref), ConstantTable(C_INTEGER_ONE));
 				else 	
-					asm_.movdqa(reg(ref), ConstantTable(C_DOUBLE_ONE));
+					asm_.movdqa(RegR(ref), ConstantTable(C_DOUBLE_ONE));
 
 				if(node.shape.filter >= 0) {
-					IRef mask = node.shape.filter;
-					asm_.pand(reg(ref), reg(mask));
+					asm_.pand(RegR(ref), RegF(ref));
 				}
 				
-				if(node.isDouble()) 	asm_.addpd(reg(ref), xmm15);
-				else 			asm_.paddq(reg(ref), xmm15);
+				if(node.isDouble()) 	asm_.addpd(RegR(ref), xmm15);
+				else 			asm_.paddq(RegR(ref), xmm15);
 				
-				EmitScatter(node, reg(ref), index);
+				EmitScatter(node, RegR(ref), index);
 				
 				stackOffset += 0x10;
 			} break;
@@ -955,26 +1048,25 @@ struct TraceJIT {
 				Operand offset = Operand(rsp, stackOffset);
 				XMMRegister index = no_xmm;
 				
-				EmitMove(reg(ref), reg(node.unary.a));		// x
+				MoveA2R(ref);		// x
 				
 				if(node.shape.split >= 0) {
-					asm_.movapd(xmm15, reg(node.shape.split));
+					asm_.movapd(xmm15, RegS(ref));
 					asm_.paddq(xmm15, xmm15);
 					index = xmm15;
 				}
 				EmitGather(xmm15, node, index, offset);		// m
 				
-				asm_.subpd(reg(ref), xmm15);
-				asm_.mulpd(reg(ref), reg(node.binary.b));
+				asm_.subpd(RegR(ref), xmm15);
+				asm_.mulpd(RegR(ref), RegB(ref));
 
 				if(node.shape.filter >= 0) {
-					IRef mask = node.shape.filter;
-					asm_.pand(reg(ref), reg(mask));
+					asm_.pand(RegR(ref), RegF(ref));
 				}
 
-				asm_.addpd(reg(ref), xmm15);
-				EmitScatter(node, reg(ref), index);
-				EmitMove(reg(ref), xmm15);
+				asm_.addpd(RegR(ref), xmm15);
+				EmitScatter(node, RegR(ref), index);
+				EmitMove(RegR(ref), xmm15);
 
 				stackOffset += 0x10;
 			} break;
@@ -988,27 +1080,26 @@ struct TraceJIT {
 				Operand offset = Operand(rsp, stackOffset);
 				XMMRegister index = no_xmm;
 				
-				EmitMove(xmm15, reg(node.unary.a));
+				EmitMove(xmm15, RegA(ref));
 				
-				asm_.mulpd(xmm15, reg(node.binary.b));
-				asm_.movdqa(reg(ref), ConstantTable(C_DOUBLE_ONE));
-				asm_.subpd(reg(ref), reg(node.trinary.c));
-				asm_.mulpd(xmm15, reg(ref));
+				asm_.mulpd(xmm15, RegB(ref));
+				asm_.movdqa(RegR(ref), ConstantTable(C_DOUBLE_ONE));
+				asm_.subpd(RegR(ref), RegC(ref));
+				asm_.mulpd(xmm15, RegR(ref));
 
 				if(node.shape.split >= 0) {
-					asm_.movapd(reg(ref), reg(node.shape.split));
-					asm_.paddq(reg(ref), reg(ref));
-					index = reg(ref);
+					asm_.movapd(RegR(ref), RegS(ref));
+					asm_.paddq(RegR(ref), RegR(ref));
+					index = RegR(ref);
 				}
-				EmitGather(reg(ref), node, index, offset);
+				EmitGather(RegR(ref), node, index, offset);
 				
 				if(node.shape.filter >= 0) {
-					IRef mask = node.shape.filter;
-					asm_.pand(xmm15, reg(mask));
+					asm_.pand(xmm15, RegF(ref));
 				}
 
-				asm_.addpd(reg(ref), xmm15);
-				EmitScatter(node, reg(ref), index);
+				asm_.addpd(RegR(ref), xmm15);
+				EmitScatter(node, RegR(ref), index);
 				stackOffset += 0x10;
 			} break;
 			
@@ -1020,27 +1111,26 @@ struct TraceJIT {
 				Operand offset = Operand(rsp, stackOffset);
 				XMMRegister index = no_xmm;
 				
-				Move(ref, node.unary.a);
+				MoveA2R(ref);
 				
 				if(node.shape.split >= 0) {
-					asm_.movapd(xmm15, reg(node.shape.split));
+					asm_.movapd(xmm15, RegS(ref));
 					asm_.paddq(xmm15, xmm15);
 					index = xmm15;
 				}
 				EmitGather(xmm15, node, index, offset);
 				
 				if(node.shape.filter >= 0) {
-					IRef mask = node.shape.filter;
-					asm_.pand(reg(ref), reg(mask));
-					asm_.pxor(EmitMove(xmm14, reg(mask)), ConstantTable(C_NOT_MASK));
+					asm_.pand(RegR(ref), RegF(ref));
+					asm_.pxor(EmitMove(xmm14, RegF(ref)), ConstantTable(C_NOT_MASK));
 					asm_.pand(xmm14, ConstantTable(C_DOUBLE_MAX));
-					asm_.por(reg(ref), xmm14);
+					asm_.por(RegR(ref), xmm14);
 				}
 
-				if(node.isDouble()) 	asm_.minpd(reg(ref), xmm15);
+				if(node.isDouble()) 	asm_.minpd(RegR(ref), xmm15);
 				else 			_error("NYI: min on integers");
 				
-				EmitScatter(node, reg(ref), index);
+				EmitScatter(node, RegR(ref), index);
 						
 				stackOffset += 0x10;
 			} break;
@@ -1053,27 +1143,26 @@ struct TraceJIT {
 				Operand offset = Operand(rsp, stackOffset);
 				XMMRegister index = no_xmm;
 				
-				Move(ref, node.unary.a);
+				MoveA2R(ref);
 				
 				if(node.shape.split >= 0) {
-					asm_.movapd(xmm15, reg(node.shape.split));
+					asm_.movapd(xmm15, RegS(ref));
 					asm_.paddq(xmm15, xmm15);
 					index = xmm15;
 				}
 				EmitGather(xmm15, node, index, offset);
 				
 				if(node.shape.filter >= 0) {
-					IRef mask = node.shape.filter;
-					asm_.pand(reg(ref), reg(mask));
-					asm_.pxor(EmitMove(xmm14, reg(mask)), ConstantTable(C_NOT_MASK));
+					asm_.pand(RegR(ref), RegF(ref));
+					asm_.pxor(EmitMove(xmm14, RegF(ref)), ConstantTable(C_NOT_MASK));
 					asm_.pand(xmm14, ConstantTable(C_DOUBLE_MIN));
-					asm_.por(reg(ref), xmm14);
+					asm_.por(RegR(ref), xmm14);
 				}
 
-				if(node.isDouble()) 	asm_.maxpd(reg(ref), xmm15);
+				if(node.isDouble()) 	asm_.maxpd(RegR(ref), xmm15);
 				else 			_error("NYI: max on integers");
 				
-				EmitScatter(node, reg(ref), index);
+				EmitScatter(node, RegR(ref), index);
 						
 				stackOffset += 0x10;
 			} break;
@@ -1085,8 +1174,8 @@ struct TraceJIT {
 					for(uint64_t i = 0; i < 128; i++)
 						((double*)str.store.dst.p)[i] = 1.0;
 					Operand op = EncodeOperand(str.store.dst.p, thread_index, times_8);
-					asm_.mulpd(reg(ref),op);
-					asm_.movdqa(op,reg(ref));*/
+					asm_.mulpd(RegR(ref),op);
+					asm_.movdqa(op,RegR(ref));*/
 				}
 				else {
 					EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)0LL)); break;
@@ -1112,39 +1201,39 @@ struct TraceJIT {
 			break;
 
 			case IROpCode::split:
-				Move(ref, node.binary.a);
+				MoveA2R(ref);
 				break;
 
 			case IROpCode::filter:
-				Move(ref, node.unary.a);
+				MoveA2R(ref);
 				if(node.shape.filter >= 0)
-					asm_.pand(reg(ref),reg(node.shape.filter));
+					asm_.pand(RegR(ref),RegF(ref));
 			break;
 
 			case IROpCode::ifelse:
-				if(reg(node.trinary.a).is(xmm0)) {
+				if(RegA(ref).is(xmm0)) {
 					SaveRegisters(ref);
-					EmitMove(xmm15, reg(node.trinary.a));
-					EmitMove(xmm0, reg(node.trinary.c));
-					asm_.blendvpd(xmm15, reg(node.trinary.b));
-					EmitMove(reg(ref), xmm15);
+					EmitMove(xmm15, RegA(ref));
+					EmitMove(xmm0, RegC(ref));
+					asm_.blendvpd(xmm15, RegB(ref));
+					EmitMove(RegR(ref), xmm15);
 					RestoreRegisters(ref);
-				} else if(reg(node.trinary.b).is(xmm0)) {
+				} else if(RegB(ref).is(xmm0)) {
 					SaveRegisters(ref);
-					EmitMove(xmm15, reg(node.trinary.a));
-					EmitMove(reg(node.trinary.a), reg(node.trinary.b));
-					EmitMove(xmm0, reg(node.trinary.c));
-					asm_.blendvpd(xmm15, reg(node.trinary.a));
-					EmitMove(reg(ref), xmm15);
+					EmitMove(xmm15, RegA(ref));
+					EmitMove(RegA(ref), RegB(ref));
+					EmitMove(xmm0, RegC(ref));
+					asm_.blendvpd(xmm15, RegA(ref));
+					EmitMove(RegR(ref), xmm15);
 					RestoreRegisters(ref);
-				} else if(reg(node.trinary.c).is(xmm0)) {
-					EmitMove(reg(ref), reg(node.trinary.a));
-					asm_.blendvpd(reg(ref), reg(node.trinary.b));
+				} else if(RegC(ref).is(xmm0)) {
+					EmitMove(RegR(ref), RegA(ref));
+					asm_.blendvpd(RegR(ref), RegB(ref));
 				} else {
 					SaveRegisters(ref);
-					EmitMove(xmm0, reg(node.trinary.c));
-					EmitMove(reg(ref), reg(node.trinary.a));
-					asm_.blendvpd(reg(ref), reg(node.trinary.b));
+					EmitMove(xmm0, RegC(ref));
+					EmitMove(RegR(ref), RegA(ref));
+					asm_.blendvpd(RegR(ref), RegB(ref));
 					RestoreRegisters(ref);
 				}
 			break;
@@ -1168,6 +1257,24 @@ struct TraceJIT {
 					break;
 				}
 			}
+
+
+			// spill if necessary...
+			switch(node.arity) {
+			case IRNode::TRINARY: 
+				spill(assignment[ref].c, allocated_register[node.trinary.c]);
+			case IRNode::BINARY:
+				spill(assignment[ref].b, allocated_register[node.binary.b]);
+			case IRNode::UNARY:
+				spill(assignment[ref].a, allocated_register[node.unary.a]);
+			default:
+				if(node.shape.filter >= 0)
+					spill(assignment[ref].f, allocated_register[node.shape.filter]);
+				if(node.shape.split >= 0)
+					spill(assignment[ref].s, allocated_register[node.shape.split]);
+			
+				spill(assignment[ref].r, allocated_register[ref]);
+			}
 		}
 
 		asm_.addq(vector_index, Immediate(2));
@@ -1184,18 +1291,7 @@ struct TraceJIT {
 		asm_.pop(thread_index);
 		asm_.ret(0);
 	}
-	XMMRegister reg(IRef r) {
-		assert(allocated_register[r] >= 0);
-		return XMMRegister::FromAllocationIndex(allocated_register[r]);
-	}
-	XMMRegister Move(IRef d, IRef s) {
-		XMMRegister dst = reg(d);
-		XMMRegister src = reg(s);
-		if(!dst.is(src)) {
-			asm_.movapd(dst,src);
-		}
-		return dst;
-	}
+	
 	XMMRegister EmitMove(XMMRegister dst, XMMRegister src) {
 		if(!dst.is(src)) {
 			asm_.movapd(dst,src);
@@ -1249,20 +1345,19 @@ struct TraceJIT {
 	}
 	//slow path for Folds that don't have inline assembly
 	void EmitFoldFunction(IRef ref, void * fn, const Constant& identity) {
-		IRNode & node = trace->nodes[ref];
 		uint64_t offset = PushConstantOffset(identity);
 		SaveRegisters(ref);
-		EmitMove(xmm0,reg(node.unary.a));
+		EmitMove(xmm0,RegA(ref));
 		asm_.movq(rdi,(void*)&trace->code_buffer->constant_table[offset]);
 		EmitCall(fn);
-		EmitMove(reg(ref),xmm0);
+		EmitMove(RegR(ref),xmm0);
 		RestoreRegisters(ref);
 	}
 
 	void EmitSplitFold(IRef ref, void* fn) {
 		IRNode const& node = trace->nodes[ref];
-		XMMRegister src = reg(ref);
-		XMMRegister split = reg(node.shape.split);
+		XMMRegister src = RegR(ref);
+		XMMRegister split = RegS(ref);
 		int64_t step = node.out.length/thread.state.nThreads;
 		SaveRegisters(ref);
 		EmitMove(xmm0,src);
@@ -1285,24 +1380,24 @@ struct TraceJIT {
 	}
 
 	void EmitVectorStore(IRef ref, Value& dst, IRNode::Shape const& shape) {
-		XMMRegister src = reg(ref);
+		XMMRegister src = RegR(ref);
 		if(shape.filter < 0)
 			asm_.movdqa(EncodeOperand(dst.p,vector_index,times_8),src);
 		else {
 			dst.length = 0;
-			XMMRegister filter = reg(shape.filter);
+			XMMRegister filter = RegF(ref);
 			
 			SaveRegisters(ref);
 			Arguments2(src, filter);
 			asm_.movq(rdi,&dst);
 			EmitCall((void*)store_conditional);
-			EmitMove(reg(ref),xmm0);
+			EmitMove(RegR(ref),xmm0);
 			RestoreRegisters(ref);
 		}
 	}
 
 	void EmitLogicalStore(IRef ref, Value& dst, IRNode::Shape const& shape) {
-		XMMRegister src = reg(ref);
+		XMMRegister src = RegR(ref);
                 if(shape.filter < 0) {
 			asm_.pshufb(src,ConstantTable(C_PACK_LOGICAL));
 			asm_.movq(rbx, src);
@@ -1310,13 +1405,13 @@ struct TraceJIT {
        	         	asm_.pshufb(src,ConstantTable(C_PACK_LOGICAL));
 		} else {
 			dst.length = 0;
-			XMMRegister filter = reg(shape.filter);
+			XMMRegister filter = RegF(ref);
 			
 			SaveRegisters(ref);
 			Arguments2(src, filter);
 			asm_.movq(rdi,&dst);
 			EmitCall((void*)store_conditional_l);
-			EmitMove(reg(ref),xmm0);
+			EmitMove(RegR(ref),xmm0);
 			RestoreRegisters(ref);
 		}
 	}
@@ -1328,9 +1423,9 @@ struct TraceJIT {
 
 		SaveRegisters(ref);
 
-		EmitMove(xmm0,reg(trace->nodes[ref].unary.a));
+		EmitMove(xmm0,RegA(ref));
 		EmitCall(fn);
-		EmitMove(reg(ref),xmm0);
+		EmitMove(RegR(ref),xmm0);
 
 		RestoreRegisters(ref);
 
@@ -1343,10 +1438,10 @@ struct TraceJIT {
 
 		SaveRegisters(ref);
 
-		EmitMove(xmm0, reg(trace->nodes[ref].binary.a));
-		EmitMove(xmm1, reg(trace->nodes[ref].binary.b));
+		EmitMove(xmm0, RegA(ref));
+		EmitMove(xmm1, RegB(ref));
 		EmitCall(fn);
-		EmitMove(reg(ref),xmm0);
+		EmitMove(RegR(ref),xmm0);
 
 		RestoreRegisters(ref);
 
@@ -1358,7 +1453,7 @@ struct TraceJIT {
 
 		SaveRegisters(ref);
 
-		EmitMove(xmm0,reg(trace->nodes[ref].unary.a));
+		EmitMove(xmm0, RegA(ref));
 		asm_.movapd(xmm1,xmm0);
 		asm_.unpckhpd(xmm1,xmm1);
 		asm_.movq(load_addr,xmm1);//we need the high value for the second call
@@ -1368,7 +1463,7 @@ struct TraceJIT {
 		EmitCall(fn);
 		asm_.movq(xmm1,rbx);
 		asm_.unpcklpd(xmm1,xmm0);
-		EmitMove(reg(ref),xmm1);
+		EmitMove(RegR(ref),xmm1);
 
 		RestoreRegisters(ref);
 	}
@@ -1378,10 +1473,9 @@ struct TraceJIT {
 	void EmitBinaryFunction(IRef ref, void * fn) {
 		//this isn't the most optimized way to do this but it works for now
 		SaveRegisters(ref);
-		IRNode & node = trace->nodes[ref];
 		asm_.subq(rsp, Immediate(0x20));
-		asm_.movdqu(Operand(rsp,0),reg(node.binary.a));
-		asm_.movdqu(Operand(rsp,0x10),reg(node.binary.b));
+		asm_.movdqu(Operand(rsp,0),RegA(ref));
+		asm_.movdqu(Operand(rsp,0x10),RegB(ref));
 		asm_.movsd(xmm0,Operand(rsp,0));
 		asm_.movsd(xmm1,Operand(rsp,0x10));
 		EmitCall(fn);
@@ -1390,7 +1484,7 @@ struct TraceJIT {
 		asm_.movsd(xmm1,Operand(rsp, 0x18));
 		EmitCall(fn);
 		asm_.movsd(Operand(rsp, 0x8),xmm0);
-		asm_.movdqu(reg(ref),Operand(rsp, 0));
+		asm_.movdqu(RegR(ref),Operand(rsp, 0));
 		asm_.addq(rsp, Immediate(0x20));
 		RestoreRegisters(ref);
 	}
@@ -1469,7 +1563,7 @@ struct TraceJIT {
 	void EmitCompare(IRef ref, Assembler::ComparisonType typ) {
 		IRNode & node = trace->nodes[ref];
 		if(Type::Double == trace->nodes[node.binary.a].type) {
-			asm_.cmppd(Move(ref, node.binary.a),reg(node.binary.b),typ);
+			asm_.cmppd(MoveA2R(ref),RegB(ref),typ);
 		} else {
 			_error("NYI - integer compare");
 		}

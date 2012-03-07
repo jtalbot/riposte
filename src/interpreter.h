@@ -685,7 +685,7 @@ public:
 		if(i == traces.end()) 
 			_error("Unevaluated future left behind");
 		Trace* trace = i->second;
-		if(trace->nodes.size() > 100) {
+		if(trace->nodes.size() > 256) {
 			Bind(v);
 		}
 	}
