@@ -27,7 +27,7 @@ enum {
 const char * return_item_codes = "ANR";
 const char * line_status_codes = "FO";
 const char * date_format = "%Y-%m-%d";
-const char * time_for_filter = "1992-12-01";
+const char * time_for_filter = "1998-12-01";
 
 time_t convert_time(const char * time) {
 	struct tm t;
@@ -36,9 +36,9 @@ time_t convert_time(const char * time) {
 	return mktime(&t);
 }
 
-static int interval = 7776000; //in seconds
+static int interval = 90; //in days
 
-static int N_ROWS = 60012; //6001215;
+static int N_ROWS = 6001215;
 
 const static int N_GROUPS = 6;
 
@@ -65,7 +65,7 @@ int main() {
 	int * ship_date = new int[N_ROWS];
 	
 	
-	FILE * file = fopen("/Users/zdevito/Downloads/tpch_2_14_3/dbgen/stuff/lineitem.tbl","r");
+	FILE * file = fopen("../data/lineitem.tbl","r");
 	assert(file);
 	for(int i = 0; i < N_ROWS; i++) {
 		char buf[4096];
@@ -102,8 +102,9 @@ int main() {
 	CREATE(int,count);
 
 	int ref_date = convert_time(time_for_filter);
+	
 	for(int i = 0; i < N_ROWS; i++) {
-		if(ship_date[i] < ref_date - interval) {
+		if(ship_date[i] <= ref_date - 24 * 60 * 60 * interval) {
 			int group = (return_flag[i] << 1) + line_status[i];
 			sum_qty[group] += quantity[i];
 			sum_base_price[group] += extended_price[i];
@@ -126,7 +127,9 @@ int main() {
 
 #define PRINT_int(x) printf("%d,",x)
 #define PRINT_double(x) printf("%f, ",x)
-
+	for(int i = 0; i < N_GROUPS; i++) {
+		printf("%c %c\n", return_item_codes[i>>1], line_status_codes[i&1]);
+	}
 	REPORT(int,sum_qty);
 	REPORT(double,sum_base_price);
 	REPORT(double,sum_disc_price);
