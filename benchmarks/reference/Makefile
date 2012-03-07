@@ -1,5 +1,5 @@
 CXX = clang++
-FLAGS = -O3 -funroll-loops -g -I../../src/Eigen -I/Users/zdevito/Dropbox/vdb-cocoa
+FLAGS = -O3 -msse4.1 -funroll-loops -g -I../../src/Eigen -I/Users/zdevito/Dropbox/vdb-cocoa
 LFLAGS =
 
 .SUFFIXES:
