@@ -19,10 +19,10 @@ cov <- function(a,b) {
 	ma <- double(n)
 	mb <- double(n)
 	for(i in 1L:n) {
-		j <- mean(a[,i])
-		k <- mean(b[,i])
-		ma[[i]] <- j
-		mb[[i]] <- k
+		#j <- mean(a[,i])
+		#k <- mean(b[,i])
+		ma[[i]] <- i
+		mb[[i]] <- i
 	}
 	
 	r <- double(n*n)
