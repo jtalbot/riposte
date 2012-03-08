@@ -12,9 +12,11 @@ m <- list(
 v <- runif(1000000)
 force(v)
 
+f <- factor(m[[1]]-1L, 1L:1000000L-1L)
+force(f)
+
 smv <- function(m, v) {
-	lapply(split(m[[3]]*v[m[[2]]], m[[1]]-1L, length(v)), "sum")
-	#sum(split(m[[3]]*v[m[[2]]], m[[1]]-1L, length(v)))
+	lapply(split(m[[3]]*v[m[[2]]], f, length(v)), "sum")
 }
 
 system.time(smv(m,v))

@@ -1,5 +1,7 @@
 nargs <- function() { length(.Internal(sys.call(1L)))-1L }
 
+factor <- function(x, levels) x
+
 c <- function(...) .Internal(unlist(list(...), TRUE, TRUE))
 print <- function(...) cat(...)
 
