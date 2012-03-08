@@ -4,7 +4,7 @@
 N <- 100000L
 D <- 50L
 
-a <- read.table("benchmarks/data/pca.txt")
+a <- read.table("benchmarks/data/pca.txt")[[1]]
 dim(a) <- c(N, D)
 
 cat("done reading\n")
@@ -19,13 +19,13 @@ cov <- function(a,b) {
 	ma <- double(n)
 	mb <- double(n)
 	for(i in 1L:n) {
-		#j <- mean(a[,i])
-		#k <- mean(b[,i])
-		ma[[i]] <- i
-		mb[[i]] <- i
+		j <- mean(a[,i])
+		k <- mean(b[,i])
+		ma[[i]] <- j 
+		mb[[i]] <- k
 	}
 	
-	r <- double(n*n)
+	r <- double(0)
 	for(i in 1L:n) {
 		for(j in i:n) {
 			k <- sum((a[,i]-ma[[i]])*(b[,j]-mb[[j]]))
@@ -44,8 +44,8 @@ cov <- function(a,b) {
 pca <- function(a) {
 	cm <- cov(a,a)
 	cm
-	basis <- eigen(cm, symmetric=TRUE)[[2]]
-	basis
+	#basis <- eigen(cm, symmetric=TRUE)[[2]]
+	#basis
 }
 
 system.time(pca(a))

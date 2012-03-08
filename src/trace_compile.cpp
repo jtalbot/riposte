@@ -439,7 +439,8 @@ struct TraceJIT {
 		IRef minUse = 1000000;
 		int8_t minReg = 0;
 		for(int8_t i = 0; i < 14; i++) {
-			for(IRef ref = currentOp; ref >= 0; ref--) {
+			IRef ref = currentOp;
+			for(; ref >= 0; ref--) {
 				if(usesNode(ref, liveRegisters[i])) {
 					if(ref < minUse) {
 						minUse = ref;
