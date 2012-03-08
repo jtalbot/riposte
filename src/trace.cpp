@@ -226,6 +226,7 @@ IRef Trace::EmitGenerator(IROpCode::Enum op, Type::Enum type, int64_t length, in
 	n.type = type;
 	n.shape = (IRNode::Shape) { length, -1, 1, -1, false };
 	n.outShape = n.shape;
+	n.sequence.a = nodes.size();
 	n.sequence.ia = a;
 	n.sequence.ib = b;
 	nodes.push_back(n);

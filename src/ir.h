@@ -138,6 +138,7 @@ struct IRNode {
 		} trinary;
 
 		struct {
+			IRef a;
 			union {
 				struct { int64_t ia, ib; };
 				struct { double da, db; };
