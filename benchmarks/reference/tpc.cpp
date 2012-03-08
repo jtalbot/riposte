@@ -31,6 +31,7 @@ const char * time_for_filter = "1998-12-01";
 
 time_t convert_time(const char * time) {
 	struct tm t;
+	memset(&t,0,sizeof(struct tm));
 	const char * r = strptime(time,date_format,&t);
 	assert(r != NULL);
 	return mktime(&t);
@@ -63,7 +64,8 @@ int main() {
 	char * return_flag = new char[N_ROWS];
 	char * line_status = new char[N_ROWS];
 	int * ship_date = new int[N_ROWS];
-	
+
+	int ref_date = convert_time(time_for_filter);
 	
 	FILE * file = fopen("../data/lineitem.tbl","r");
 	assert(file);
@@ -101,8 +103,6 @@ int main() {
 	CREATE(double,avg_disc);
 	CREATE(int,count);
 
-	int ref_date = convert_time(time_for_filter);
-	
 	for(int i = 0; i < N_ROWS; i++) {
 		if(ship_date[i] <= ref_date - 24 * 60 * 60 * interval) {
 			int group = (return_flag[i] << 1) + line_status[i];
