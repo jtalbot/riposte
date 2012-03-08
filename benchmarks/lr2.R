@@ -3,37 +3,25 @@
 N <- 50000L
 D <- 30L
 
-p <- read.table("benchmarks/data/lr_p.txt")
+p <- read.table("benchmarks/data/lr_p.txt")[[1]]
 dim(p) <- c(N,D)
-print(length(p),'\n')
+cat(length(p),'\n')
 
-r <- read.table("benchmarks/data/lr_r.txt")
-print(length(r),'\n')
+r <- read.table("benchmarks/data/lr_r.txt")[[1]]
+cat(length(r),'\n')
 
-wi <- read.table("benchmarks/data/lr_wi.txt")
+wi <- read.table("benchmarks/data/lr_wi.txt")[[1]]
 
 g <- function(z) 1/(1+exp(-z))
 
-mv <- function(m, v) {
-	r <- 0
-	for(i in 1L:ncol(m)) {
-		r <- r + m[,i]*v[[i]]	
-	}
-	r
-}
-
 update <- function(w) {
 	grad <- rep(0,D)
-	diff <- g(mv(p,w))-r
+	diff <- g(p %*% w)-r
 	for(i in 1L:D) {
 		grad[i] <- mean((p[,i]*diff))
 	}
 	grad
 }
-
-#i <- rep(4, 4000, 16000)
-#k <- rep(4000,1,16000)+1
-#update <- function(w) sum(split((g(z %*% w)-y)[k]*x, i, 4))/4000
 
 benchmark <- function(reps) {
 
@@ -47,6 +35,7 @@ benchmark <- function(reps) {
 	}
 	
 	w
+	#glm(r~p-1, family=binomial(link="logit"), na.action=na.pass)
 }
 
 system.time(benchmark(3000L))

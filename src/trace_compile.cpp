@@ -742,36 +742,43 @@ struct TraceJIT {
 				asm_.movdqa(RegR(ref),PushConstant(c));
 			} break;
 			case IROpCode::load: {
+				void* p;
+				if(node.in.isLogical())
+					p = ((Logical&)node.in).v();
+				else if(node.in.isInteger())
+					p = ((Integer&)node.in).v();
+				else if(node.in.isDouble())
+					p = ((Double&)node.in).v();
 				if(trace->nodes[node.unary.a].op == IROpCode::seq &&
 					trace->nodes[node.unary.a].sequence.ia == 0 &&
 					trace->nodes[node.unary.a].sequence.ib == 1)
 				{
 					if(node.isLogical())
-						asm_.pmovsxbq(RegR(ref), EncodeOperand(node.in.p, vector_index, times_1));
+						asm_.pmovsxbq(RegR(ref), EncodeOperand(p, vector_index, times_1));
 					else
-						asm_.movdqa(RegR(ref),EncodeOperand(node.in.p,vector_index,times_8));
+						asm_.movdqa(RegR(ref),EncodeOperand(p,vector_index,times_8));
 				}
 				else if(trace->nodes[node.unary.a].op == IROpCode::seq &&
 					trace->nodes[node.unary.a].sequence.ia % 2 == 0 &&
 					trace->nodes[node.unary.a].sequence.ib == 1)
 				{
 					asm_.movq(r8, RegA(ref));
-					asm_.movdqa(RegR(ref),EncodeOperand(node.in.p,r8,times_8));
+					asm_.movdqa(RegR(ref),EncodeOperand(p,r8,times_8));
 				}
 				else if(trace->nodes[node.unary.a].op == IROpCode::seq &&
 					trace->nodes[node.unary.a].sequence.ia % 2 != 0 &&
 					trace->nodes[node.unary.a].sequence.ib == 1)
 				{
 					asm_.movq(r8, RegA(ref));
-					asm_.movdqu(RegR(ref),EncodeOperand(node.in.p,r8,times_8));
+					asm_.movdqu(RegR(ref),EncodeOperand(p,r8,times_8));
 				}
 				else {
 					// TODO: other fast cases here when index is a known seq
 					asm_.movq(r8, RegA(ref));
 					asm_.movhlps(RegR(ref), RegA(ref));
 					asm_.movq(r9, RegR(ref));
-					asm_.movlpd(RegR(ref),EncodeOperand(node.in.p,r8,times_8));
-					asm_.movhpd(RegR(ref),EncodeOperand(node.in.p,r9,times_8));
+					asm_.movlpd(RegR(ref),EncodeOperand(p,r8,times_8));
+					asm_.movhpd(RegR(ref),EncodeOperand(p,r9,times_8));
 				}
 			} break;
 

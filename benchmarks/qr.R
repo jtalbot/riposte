@@ -47,4 +47,5 @@ myqr <- function(m) {
 	m
 }
 
-system.time(myqr(m))
+#system.time(myqr(m))
+system.time(qr(m))

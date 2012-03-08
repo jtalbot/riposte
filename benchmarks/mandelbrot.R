@@ -21,18 +21,30 @@ c_im <- y0 + j * dy
 force(c_re)
 force(c_im)
 
+c_ <- complex(real=c_re, imaginary=c_im)
+
 mandel <- function(maxIterations) {
-	z_re <- c_re
-	z_im <- c_im
+	z_ <- c_
 	cnt <- 0
 	for(i in 1:maxIterations) {
-		cnt <- cnt + ifelse(z_re * z_re + z_im * z_im <= 4, 1, 0)
-		z_re2 <- c_re + (z_re*z_re - z_im*z_im)
-		z_im2 <- c_im + (2. * z_re * z_im)
-		z_re <- z_re2
-		z_im <- z_im2
+		z_ <- z_*z_ + c
+		cnt <- cnt + ifelse(Mod(z_) < 2, 1, 0)
 	}
 	cnt
 }
+
+#mandel <- function(maxIterations) {
+#	z_re <- c_re
+#	z_im <- c_im
+#	cnt <- 0
+#	for(i in 1:maxIterations) {
+#		cnt <- cnt + ifelse(z_re * z_re + z_im * z_im <= 4, 1, 0)
+#		z_re2 <- c_re + (z_re*z_re - z_im*z_im)
+#		z_im2 <- c_im + (2. * z_re * z_im)
+#		z_re <- z_re2
+#		z_im <- z_im2
+#	}
+#	cnt
+#}
 
 system.time(mandel(100))

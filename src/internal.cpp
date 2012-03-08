@@ -93,6 +93,8 @@ void readtable(Thread& thread, Value const* args, Value& result) {
 					v.push_back(d);
 			}
 			fclose(file);
+		} else {
+			_error("Unable to open file");
 		}
 		/*std::ifstream in(name.c_str());
 		std::string line;
@@ -106,7 +108,9 @@ void readtable(Thread& thread, Value const* args, Value& result) {
 		for(uint64_t i = 0; i < v.size(); i++) {
 			r[i] = v[i];
 		}
-		result = r;
+		List l(1);
+		l[0] = r;
+		result = l;
 	} else {
 		result = Null::Singleton();
 	}

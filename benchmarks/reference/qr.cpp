@@ -3,6 +3,11 @@
 #include<stdlib.h>
 #include "timing.h"
 
+#include "Dense"
+
+using Eigen::MatrixXd;
+using Eigen::Map;
+
 static const int N_ROWS = 1000;
 static const int N_COLS = 1000;
 
@@ -47,11 +52,6 @@ int main() {
 	for(int c = 0; c < N_COLS-1; c++) {
 		double lcl = 0.0;
 		
-		/*
-		for(int r = 0; r < c; r++) {
-			v[r] = 1.0/0.0;
-		}*/
-		
 		double b = 0.0;
 		lcl += R[c][c] * R[c][c];
 		
@@ -89,18 +89,28 @@ int main() {
 			Q_v[rr] = tmp;
 			//printf("Q_v[%d] = %f\n",rr,Q_v[rr]);
 		}
-		
+
+		for(int k = 0; k < N_ROWS; k++) {
+			v[k] *= two_on_b;
+		}
+
 		for(int cc = 0; cc < N_COLS; cc++) {
 			for(int rr = c; rr < N_ROWS; rr++) {
-				R[cc][rr] -= two_on_b * v[rr] * v_t_R[cc];
+				R[cc][rr] -= v[rr] * v_t_R[cc];
 			}
 		}
-		for(int cc = c; cc < N_COLS; cc++) {
-			for(int rr = 0; rr < N_ROWS; rr++) {
-				Q[rr][cc] -= two_on_b * Q_v[rr] * v[cc];
+		for(int rr = 0; rr < N_ROWS; rr++) {
+			for(int cc = c; cc < N_COLS; cc++) {
+				Q[rr][cc] -= Q_v[rr] * v[cc];
 			}
 		}
 	}
+
+	/*MatrixXd qr_m  = Map<MatrixXd>((double*)R, N_ROWS, N_COLS);
+
+        Eigen::HouseholderQR<MatrixXd> hqr(qr_m);
+	MatrixXd r = hqr.matrixQR();
+	std::cout << r(500,500) << std::endl;	*/
 
 	printf("Elapsed: %f\n", current_time()-begin);
 	

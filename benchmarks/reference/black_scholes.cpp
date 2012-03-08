@@ -1,7 +1,10 @@
 #include<stdio.h>
 #include<math.h>
 #include<algorithm>
-static const int N_OPTIONS = 1024;
+
+#include "timing.h"
+
+static const int N_OPTIONS = 10000000;
 static const int N_BLACK_SCHOLES_ROUNDS = 1;
 
 static const double invSqrt2Pi = 0.39894228040;
@@ -12,8 +15,8 @@ double cnd(double X) {
 	double k = 1.0 / (1.0 + 0.2316419 * fabs(X)); 
 	double w = (((((1.330274429*k) - 1.821255978)*k + 1.781477937)*k - 0.356563782)*k + 0.31938153)*k;
 	w = w * invSqrt2Pi * exp(X * X * -.5);
-	return w;
-	//TODO: if then else
+	if(X > 0) return 1.0-w;
+	else return w;
 }
 
 double * fill(int n, double v) {
@@ -29,6 +32,8 @@ int main() {
 	double * r = fill(N_OPTIONS, .02);
 	double * v = fill(N_OPTIONS, 5);
 	
+	double begin = current_time();
+
 	double acc = 0.0;
 	for(int j = 0; j < N_BLACK_SCHOLES_ROUNDS; j++) {
 	
@@ -41,4 +46,5 @@ int main() {
 	}
 	acc /= (N_BLACK_SCHOLES_ROUNDS * N_OPTIONS);
 	printf("%f\n",acc);
+	printf("Elapsed: %f\n", current_time()-begin);
 }

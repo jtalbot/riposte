@@ -2,7 +2,7 @@
 N <- 100000L
 K <- 5L
 
-a <- read.table("benchmarks/data/kmeans.txt")
+a <- read.table("benchmarks/data/kmeans.txt")[[1]]
 dim(a) <- c(N*5,2)
 
 means <- list(

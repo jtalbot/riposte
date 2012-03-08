@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+
+#include "timing.h"
+
 enum {
 	ORDERKEY,
 	PARTKEY,
@@ -103,6 +106,8 @@ int main() {
 	CREATE(double,avg_disc);
 	CREATE(int,count);
 
+	double begin = current_time();
+
 	for(int i = 0; i < N_ROWS; i++) {
 		if(ship_date[i] <= ref_date - 24 * 60 * 60 * interval) {
 			int group = (return_flag[i] << 1) + line_status[i];
@@ -117,6 +122,8 @@ int main() {
 		}
 	}
 
+	printf("Elapsed: %f\n", current_time()-begin);
+	
 #define REPORT(typ,name) do {\
 	printf("%s = {",#name); \
 	for(int i = 0; i < N_GROUPS; i++) { \
