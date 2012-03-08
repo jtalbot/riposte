@@ -449,10 +449,6 @@ struct TraceJIT {
 					break;
 				}
 			}
-			if(ref < 0) {
-				minUse = ref;
-				minReg = i;
-			}
 		}
 		int8_t r = minReg;
 		printf("spilled %d (%d => %d)\n", minReg, liveRegisters[r], currentOp);
@@ -494,16 +490,6 @@ struct TraceJIT {
 			allocated_register[i] = -1;
 		}
 		
-		// allocate loop carried dependencies
-		for(IRef ref = trace->nodes.size()-1; ref >= 0; ref--) {
-			IRNode & node = trace->nodes[ref];
-			if(node.op == IROpCode::seq) {
-				allocate(ref, ref, assignment[ref].r, -1);
-				allocate(ref, ref, assignment[ref].a, deallocate(ref));
-			}	
-		}
-
-		// allocate everything else
 		for(IRef ref = trace->nodes.size()-1; ref >= 0; ref--) {
 			
 			allocate(ref, ref, assignment[ref].r, -1);	
@@ -525,14 +511,7 @@ struct TraceJIT {
 			}
 			live_registers[ref] = alloc.live_registers();
 		}
-
-		// check for spills of loop-carried dependencies
-		for(IRef ref = trace->nodes.size()-1; ref >= 0; ref--) {
-			IRNode & node = trace->nodes[ref];
-			if(node.op == IROpCode::seq) {
-				allocate(ref, ref, assignment[ref].r, -1);
-			}	
-		}
+		
 	}
 
 	void unspill(RegisterAssignment const& a, int8_t& r) {
@@ -661,12 +640,6 @@ struct TraceJIT {
 				}
 			}
 		}
-		
-		// clear register assignments
-		for(size_t i = 0; i < trace->nodes.size(); i++) {
-			allocated_register[i] = -1;
-		}
-		
 		asm_.subq(rsp, Immediate(stackSpace));
 
 		asm_.movq(thread_index, rdi);
@@ -683,9 +656,8 @@ struct TraceJIT {
 					Operand o_initial = PushConstant(initial);
 					asm_.movdqa(xmm0, o_initial);
 					asm_.movq(rdi,vector_index);
-					EmitCall((void*)sequenceStart_d);
+					EmitCall((void*)sequenceStart_d); 
 					asm_.movdqa(Operand(rsp, stackOffset), xmm0);
-					allocated_register[ref] = stackOffset>>4;
 				} else {
 					Constant initial(node.sequence.ia, node.sequence.ib);
 					Operand o_initial = PushConstant(initial);
@@ -693,7 +665,6 @@ struct TraceJIT {
 					asm_.movq(rdi,vector_index);
 					EmitCall((void*)sequenceStart_i); 
 					asm_.movdqa(Operand(rsp, stackOffset), xmm0);
-					allocated_register[ref] = stackOffset>>4;
 				}
 				stackOffset += 0x10;
 			}
@@ -729,6 +700,11 @@ struct TraceJIT {
 			}
 		}
 
+		// clear register assignments
+		for(size_t i = 0; i < trace->nodes.size(); i++) {
+			allocated_register[i] = -1;
+		}
+		
 		Label begin;
 
 		asm_.bind(&begin);
@@ -990,11 +966,15 @@ struct TraceJIT {
 				if(node.isDouble()) {
 					Constant step(2*node.sequence.db, 2*node.sequence.db);
 					Operand o_step = PushConstant(step);
+					asm_.movdqa(RegR(ref), Operand(rsp, stackOffset));
 					asm_.addpd(RegR(ref), o_step);
+					asm_.movdqa(Operand(rsp, stackOffset), RegR(ref));
 				} else {
 					Constant step(2*node.sequence.ib, 2*node.sequence.ib);
 					Operand o_step = PushConstant(step);
+					asm_.movdqa(RegR(ref), Operand(rsp, stackOffset));
 					asm_.paddq(RegR(ref), o_step);
+					asm_.movdqa(Operand(rsp, stackOffset), RegR(ref));
 				}
 				stackOffset += 0x10;
 			} break;
