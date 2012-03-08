@@ -585,7 +585,7 @@ void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& 
 			List r = (List&)a;
 			int64_t index = asReal1(i)-1;
 			if(index >= 0) {
-				Resize(thread, clone, r, std::max(index, a.length));
+				Resize(thread, clone, r, std::max(index+1, a.length));
 				((List&)r)[index] = b;
 				c = r;
 			}
@@ -894,6 +894,25 @@ void eigen(Thread & thread, Value const* args, Value& result) {
 	throw("NYI: eigen");
 }
 
+void sort(Thread& thread, Value const* args, Value& result) {
+	Value a = args[0];
+	if(a.isDouble()) {
+		Double& r = (Double&)a;
+		Resize(thread, true, r, a.length);
+		std::sort(r.v(), r.v()+r.length);
+		result = r;
+	}
+	else if(a.isInteger()) {
+		Integer& r = (Integer&)a;
+		Resize(thread, true, r, a.length);
+		std::sort(r.v(), r.v()+r.length);
+		result = r;
+	}
+	else {
+		_error("NYI: sort on this type");
+	}
+}
+
 void force(Thread& thread, Value const* args, Value& result) {
 	result = args[0];
 }
@@ -946,5 +965,7 @@ void registerCoreFunctions(State& state)
 	state.registerInternalFunction(state.internStr("eigen.symmetric"), (eigen_symmetric), 3);
 
 	state.registerInternalFunction(state.internStr("force"), (force), 1);
+	
+	state.registerInternalFunction(state.internStr("sort"), (sort), 1);
 }
 

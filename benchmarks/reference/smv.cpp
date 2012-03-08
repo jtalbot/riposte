@@ -32,16 +32,6 @@ int main() {
 
 	double begin = current_time();
 
-	/*for(int r = 0; r < M; r++) {
-		double a = 0;
-		for(int i = row_idx[r]; i < row_idx[r+1]; i++) {
-			int c = columns[i];
-			a += values[i] * v[c]; 
-		}
-		result[r] = a;
-		
-	}*/
-
 	for(int i = 0; i < M; i++) {
 		int c = col_idx[i];
 		int r = row_idx[i];

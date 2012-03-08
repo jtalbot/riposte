@@ -1,6 +1,8 @@
 #nchar <- function(x) .Internal(nchar(x))
 #nzchar <- function(x) .Internal(nzchar(x))
 
+sort <- function(x) .Internal(sort(x))
+
 eigen <- function(x, symmetric=FALSE) {
 	xd <- dim(x)
 	if(is.null(xd)) xd <- c(1, length(x))
@@ -28,8 +30,6 @@ eval.parent <- function(expr, n=1) .Internal(eval(expr, parent.frame(n+1), NULL)
 local <- function(expr, envir=new.env()) .Internal(eval(expr, envir, NULL))
 
 source <- function(x) .Internal(source(x))
-
-lapply <- function(x, func) .Internal(lapply(x, func))
 
 parent.frame <- function(n=1) .Internal(parent.frame(n+1))
 environment <- function(x=NULL) if(is.null(x)) parent.frame() else .Internal(environment(x))

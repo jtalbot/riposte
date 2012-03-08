@@ -73,3 +73,25 @@ length <- function(x) length(strip(x))
 
 nrow <- function(x) dim(x)[1L]
 ncol <- function(x) dim(x)[2L]
+
+lapply <- function(x, func) {
+	# should check that input is actually a list
+	if(func == "sum") {
+		sum(x)
+	}
+	else if(func == "prod") {
+		prod(x)
+	}
+	else if(func == "mean") {
+		mean(x)
+	}
+	else if(func == "min") {
+		min(x)
+	}
+	else if(func == "max") {
+		max(x)
+	} else {
+		.Internal(lapply(x, func))
+	}
+}
+
