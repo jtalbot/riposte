@@ -54,4 +54,4 @@ exists <- function(x, envir, inherits=TRUE) {
 proc.time <- function(x) .Internal(proc.time())
 trace.config <- function(trace=0) .Internal(trace.config(trace))
 
-read.table <- function(file,sep,fmt) .Internal(read.table(file,sep,fmt))
+read.table <- function(file,sep=" ",colClasses=c("double")) .Internal(read.table(file,sep,colClasses))

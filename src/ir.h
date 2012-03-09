@@ -12,6 +12,8 @@
 		FOLD_BYTECODES(_) \
 		SPECIAL_FOLD_BYTECODES(_) \
 		SCAN_BYTECODES(_) \
+		_(addc, "addc", ___) \
+		_(mulc, "mulc", ___) \
 		_(cast, "cast", ___) \
 		_(constant,"constant", ___) \
 		_(seq, "seq", ___) \
@@ -109,7 +111,10 @@ struct IRNode {
 						return eq && binary.a == o.binary.a && binary.b == o.binary.b;
 					break;
 					case IRNode::UNARY:
-						return eq && unary.a == o.unary.a;
+						if(op == IROpCode::addc || op == IROpCode::mulc)
+							return eq && unary.a == o.unary.a && constant.i == o.constant.i;
+						else
+							return eq && unary.a == o.unary.a;
 					break;
 					case IRNode::NULLARY:
 					default:
@@ -144,6 +149,7 @@ struct IRNode {
 			};
 		} sequence;
 		struct {
+			IRef a;
 			union {
 				int64_t i;
 				double d;

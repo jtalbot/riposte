@@ -787,6 +787,10 @@ struct TraceJIT {
 				if(node.isDouble()) 	asm_.addpd(MoveA2R(ref),RegB(ref)); 
 				else		 	asm_.paddq(MoveA2R(ref),RegB(ref));
 			} break;
+			case IROpCode::addc: {
+				if(node.isDouble()) 	asm_.addpd(MoveA2R(ref),PushConstant(Constant(node.constant.d))); 
+				else 			asm_.paddq(MoveA2R(ref),PushConstant(Constant(node.constant.i)));
+			} break;
 			case IROpCode::sub: {
 				if(node.isDouble()) 	asm_.subpd(MoveA2R(ref),RegB(ref)); 
 				else		 	asm_.psubq(MoveA2R(ref),RegB(ref));
@@ -794,6 +798,10 @@ struct TraceJIT {
 			case IROpCode::mul: {
 				if(node.isDouble()) 	asm_.mulpd(MoveA2R(ref),RegB(ref)); 
 				else			EmitVectorizedBinaryFunction(ref,mul_i);
+			} break;
+			case IROpCode::mulc: {
+				if(node.isDouble()) 	asm_.mulpd(MoveA2R(ref),PushConstant(Constant(node.constant.d))); 
+				else			_error("NYI: mulc for integers");
 			} break;
 			case IROpCode::div: 	asm_.divpd(MoveA2R(ref),RegB(ref)); break;
 			case IROpCode::idiv: {
