@@ -59,7 +59,8 @@ std::string Trace::toString(Thread & thread) {
 		case IROpCode::addc: 
 		case IROpCode::mulc: 
 			out << "n" << node.unary.a << "\t" << ( (node.type == Type::Integer) ? node.constant.i : (node.type == Type::Logical) ? node.constant.l : node.constant.d); break;
-		case IROpCode::load: out << "$" << node.in.p << "\tn" << node.unary.a; break;
+		case IROpCode::load: out << "$" << node.in.p << "[" << node.constant.i << "]\t"; break;
+		case IROpCode::gather: out << "$" << node.in.p << "\tn" << node.unary.a; break;
 		case IROpCode::nop: break;
 		}
 		if(node.liveOut) {
@@ -273,15 +274,29 @@ IRef Trace::EmitConstant(Type::Enum type, int64_t length, int64_t c) {
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
-IRef Trace::EmitLoad(Value const& v, IRef i) {
+IRef Trace::EmitGather(Value const& v, IRef i) {
 	IRNode n;
 	n.arity = IRNode::UNARY;
 	n.group = IRNode::GENERATOR;
-	n.op = IROpCode::load;
+	n.op = IROpCode::gather;
 	n.type = v.type;
 	n.shape = nodes[i].outShape;
 	n.outShape = n.shape;
 	n.unary.a = i;
+	n.in = v;
+	nodes.push_back(n);
+	return nodes.size()-1;
+}
+
+IRef Trace::EmitLoad(Value const& v, int64_t length, int64_t offset) {
+	IRNode n;
+	n.arity = IRNode::NULLARY;
+	n.group = IRNode::GENERATOR;
+	n.op = IROpCode::load;
+	n.type = v.type;
+	n.shape = (IRNode::Shape) { length, -1, 1, -1, false };
+	n.outShape = n.shape;
+	n.constant.i = offset;
 	n.in = v;
 	nodes.push_back(n);
 	return nodes.size()-1;
@@ -562,22 +577,20 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			node.binary.a = nodes[node.binary.a].binary.a;
 		}
 
-		if(node.op == IROpCode::add &&
-				nodes[node.binary.a].op == IROpCode::seq &&
-				nodes[node.binary.b].op == IROpCode::constant) {
+		if(node.op == IROpCode::addc &&
+				nodes[node.binary.a].op == IROpCode::seq) {
 			int64_t a = node.binary.a;
-			int64_t b = node.binary.b;
 			if(node.isInteger()) {
 				node.op = IROpCode::seq;
 				node.arity = IRNode::NULLARY;
 				node.group = IRNode::GENERATOR;
-				node.sequence.ia = addVOp<Integer,Integer>::eval(thread, nodes[a].sequence.ia, nodes[b].constant.i);
+				node.sequence.ia = addVOp<Integer,Integer>::eval(thread, nodes[a].sequence.ia, node.constant.i);
 				node.sequence.ib = nodes[a].sequence.ib;
 			} else {
 				node.op = IROpCode::seq;
 				node.arity = IRNode::NULLARY;
 				node.group = IRNode::GENERATOR;
-				node.sequence.da = addVOp<Double,Double>::eval(thread, nodes[a].sequence.da, nodes[b].constant.d);
+				node.sequence.da = addVOp<Double,Double>::eval(thread, nodes[a].sequence.da, node.constant.d);
 				node.sequence.db = nodes[a].sequence.db;
 			}
 		}
@@ -602,23 +615,22 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			}
 		}
 
-		if(node.op == IROpCode::mul &&
-				nodes[node.binary.a].op == IROpCode::seq &&
-				nodes[node.binary.b].op == IROpCode::constant) {
+		if(node.op == IROpCode::mulc && nodes[node.binary.a].op == IROpCode::seq) {
 			int64_t a = node.binary.a;
-			int64_t b = node.binary.b;
 			if(node.isInteger()) {
 				node.op = IROpCode::seq;
 				node.arity = IRNode::NULLARY;
 				node.group = IRNode::GENERATOR;
-				node.sequence.ia = mulVOp<Integer,Integer>::eval(thread, nodes[a].sequence.ia, nodes[b].constant.i);
-				node.sequence.ib = mulVOp<Integer,Integer>::eval(thread, nodes[a].sequence.ib, nodes[b].constant.i);
+				int64_t i = node.constant.i;
+				node.sequence.ia = mulVOp<Integer,Integer>::eval(thread, nodes[a].sequence.ia, i);
+				node.sequence.ib = mulVOp<Integer,Integer>::eval(thread, nodes[a].sequence.ib, i);
 			} else {
 				node.op = IROpCode::seq;
 				node.arity = IRNode::NULLARY;
 				node.group = IRNode::GENERATOR;
-				node.sequence.da = mulVOp<Double,Double>::eval(thread, nodes[a].sequence.da, nodes[b].constant.d);
-				node.sequence.db = mulVOp<Double,Double>::eval(thread, nodes[a].sequence.db, nodes[b].constant.d);
+				double d = node.constant.d;
+				node.sequence.da = mulVOp<Double,Double>::eval(thread, nodes[a].sequence.da, d);
+				node.sequence.db = mulVOp<Double,Double>::eval(thread, nodes[a].sequence.db, d);
 			}
 		}
 
@@ -680,6 +692,15 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			node.arity = IRNode::UNARY;
 			node.group = IRNode::MAP;
 			node.unary.a = nodes[node.binary.a].binary.a;
+		}
+
+		if(node.op == IROpCode::gather &&
+			nodes[node.unary.a].op == IROpCode::seq &&
+			nodes[node.unary.a].sequence.ib == 1) {
+			node.op = IROpCode::load;
+			node.arity = IRNode::NULLARY;
+			node.group = IRNode::GENERATOR;
+			node.constant.i = nodes[node.unary.a].sequence.ia;
 		}
 	}
 }

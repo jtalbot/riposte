@@ -155,12 +155,13 @@ class Trace : public gc {
 		IRef EmitSequence(int64_t length, int64_t a, int64_t b);
 		IRef EmitSequence(int64_t length, double a, double b);
 		IRef EmitConstant(Type::Enum type, int64_t length, int64_t c);
-		IRef EmitLoad(Value const& v, IRef i);
+		IRef EmitGather(Value const& v, IRef i);
+		IRef EmitLoad(Value const& v, int64_t length, int64_t offset);
 
 		IRef GetRef(Value const& v) {
 			if(v.isFuture()) return v.future.ref;
 			else if(v.length == 1) return EmitConstant(v.type, 1, v.i);
-			else return EmitLoad(v,EmitSequence(v.length,(int64_t)0,(int64_t)1));
+			else return EmitLoad(v,v.length,0);
 		}
 
 		void Execute(Thread & thread);
@@ -616,7 +617,7 @@ public:
 		trace->liveEnvironments.insert(env);
 		IRef o = trace->EmitConstant(Type::Integer, 1, 1);
 		IRef im1 = trace->EmitBinary(IROpCode::sub, Type::Integer, trace->EmitCoerce(trace->GetRef(i), Type::Integer), o, 0);
-		IRef r = trace->EmitLoad(a, im1);
+		IRef r = trace->EmitGather(a, im1);
 		Value v;
 		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
 		return v;
@@ -685,7 +686,7 @@ public:
 		if(i == traces.end()) 
 			_error("Unevaluated future left behind");
 		Trace* trace = i->second;
-		if(trace->nodes.size() > 256) {
+		if(trace->nodes.size() > 128) {
 			Bind(v);
 		}
 	}

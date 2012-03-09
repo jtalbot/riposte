@@ -750,31 +750,30 @@ struct TraceJIT {
 					p = ((Integer&)node.in).v();
 				else if(node.in.isDouble())
 					p = ((Double&)node.in).v();
-				if(trace->nodes[node.unary.a].op == IROpCode::seq &&
-					trace->nodes[node.unary.a].sequence.ia == 0 &&
-					trace->nodes[node.unary.a].sequence.ib == 1)
-				{
+				int64_t offset = node.constant.i;
+				if(offset % 2 == 0) {
 					if(node.isLogical())
-						asm_.pmovsxbq(RegR(ref), EncodeOperand(p, vector_index, times_1));
+						asm_.pmovsxbq(RegR(ref), EncodeOperand((char*)p+offset, vector_index, times_1));
 					else
-						asm_.movdqa(RegR(ref),EncodeOperand(p,vector_index,times_8));
+						asm_.movdqa(RegR(ref),EncodeOperand((char*)p+offset*8,vector_index,times_8));
+				} else {
+					if(node.isLogical())
+						_error("NYI: unaligned load of logical");
+					else
+						asm_.movdqu(RegR(ref),EncodeOperand((char*)p+offset*8,vector_index,times_8));
 				}
-				else if(trace->nodes[node.unary.a].op == IROpCode::seq &&
-					trace->nodes[node.unary.a].sequence.ia % 2 == 0 &&
-					trace->nodes[node.unary.a].sequence.ib == 1)
-				{
-					asm_.movq(r8, RegA(ref));
-					asm_.movdqa(RegR(ref),EncodeOperand(p,r8,times_8));
-				}
-				else if(trace->nodes[node.unary.a].op == IROpCode::seq &&
-					trace->nodes[node.unary.a].sequence.ia % 2 != 0 &&
-					trace->nodes[node.unary.a].sequence.ib == 1)
-				{
-					asm_.movq(r8, RegA(ref));
-					asm_.movdqu(RegR(ref),EncodeOperand(p,r8,times_8));
-				}
-				else {
-					// TODO: other fast cases here when index is a known seq
+			} break;
+			case IROpCode::gather: {
+				void* p;
+				if(node.in.isLogical()) {
+					p = ((Logical&)node.in).v();
+					_error("NYI: gather of logical");
+				} else {
+					if(node.in.isInteger())
+						p = ((Integer&)node.in).v();
+					else if(node.in.isDouble())
+						p = ((Double&)node.in).v();
+			
 					asm_.movq(r8, RegA(ref));
 					asm_.movhlps(RegR(ref), RegA(ref));
 					asm_.movq(r9, RegR(ref));
