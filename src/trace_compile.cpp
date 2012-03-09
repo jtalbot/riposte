@@ -801,7 +801,9 @@ struct TraceJIT {
 			} break;
 			case IROpCode::mulc: {
 				if(node.isDouble()) 	asm_.mulpd(MoveA2R(ref),PushConstant(Constant(node.constant.d))); 
-				else			_error("NYI: mulc for integers");
+				else {
+					EmitVectorizedUCFunction(ref,(void*)mul_i);
+				}
 			} break;
 			case IROpCode::div: 	asm_.divpd(MoveA2R(ref),RegB(ref)); break;
 			case IROpCode::idiv: {
@@ -1218,6 +1220,15 @@ struct TraceJIT {
 
 			case IROpCode::split:
 				MoveA2R(ref);
+				// subsplit if necessary...
+				if(node.shape.split >= 0) {
+					/*
+					levels *= nodes[x].shape.levels;
+					IRef e = EmitBinary(IROpCode::mul, Type::Integer, f, EmitConstant(Type::Integer, 1, levels), 0);
+					f = EmitBinary(IROpCode::add, Type::Integer, e, f, 0);
+					*/
+					_error("NYI: subsplitting");
+				}
 				break;
 
 			case IROpCode::filter:
@@ -1456,6 +1467,18 @@ struct TraceJIT {
 
 		EmitMove(xmm0, RegA(ref));
 		EmitMove(xmm1, RegB(ref));
+		EmitCall(fn);
+		EmitMove(RegR(ref),xmm0);
+
+		RestoreRegisters(ref);
+
+	}
+
+	void EmitVectorizedUCFunction(IRef ref, void * fn) {
+		SaveRegisters(ref);
+
+		EmitMove(xmm0, RegA(ref));
+		asm_.movdqa(xmm1, PushConstant(Constant(trace->nodes[ref].constant.i)));
 		EmitCall(fn);
 		EmitMove(RegR(ref),xmm0);
 

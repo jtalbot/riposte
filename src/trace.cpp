@@ -200,24 +200,23 @@ IRef Trace::EmitFilter(IRef a, IRef b) {
 }
 
 IRef Trace::EmitSplit(IRef x, IRef f, int64_t levels) {
-	// subsplit if necessary...
-	if(nodes[x].shape.split >= 0) {
-		levels *= nodes[x].shape.levels;
-		IRef e = EmitBinary(IROpCode::mul, Type::Integer, f, EmitConstant(Type::Integer, 1, levels), 0);
-		f = EmitBinary(IROpCode::add, Type::Integer, e, f, 0);
-	}
 	IRNode n;
-	n.arity = IRNode::BINARY;
-	n.group = IRNode::MAP;
+	n.arity = IRNode::UNARY;
+	n.group = IRNode::SPLIT;
 	n.op = IROpCode::split;
-	n.type = nodes[x].type;
-	n.shape = nodes[x].outShape;
+	n.type = nodes[f].type;
+	n.shape = nodes[f].outShape;
 	n.outShape = n.shape;
-	n.outShape.split = f;
+	n.outShape.split = nodes.size();
 	n.outShape.levels = levels;
-	n.binary.a = x;
-	n.binary.b = f;
+	n.unary.a = f;
 	nodes.push_back(n);
+	IRef s = nodes.size()-1;
+	IRef r = EmitUnary(IROpCode::pos, nodes[x].type, x, 0);
+	nodes[r].shape.split = s;
+	nodes[r].shape.levels = levels;
+	nodes[r].outShape.split = s;
+	nodes[r].outShape.levels = levels;
 	return nodes.size()-1;
 }
 
@@ -702,6 +701,8 @@ void Trace::CSEElimination(Thread& thread) {
 		
 		if(node.shape.filter >= 0 && nodes[node.shape.filter].op == IROpCode::pos)
 			node.shape.filter = nodes[node.shape.filter].unary.a;
+		if(node.shape.split >= 0 && nodes[node.shape.split].op == IROpCode::pos)
+			node.shape.split = nodes[node.shape.split].unary.a;
 
 		for(IRef j = 0; j < i; j++) {
 			if(node == nodes[j]) {

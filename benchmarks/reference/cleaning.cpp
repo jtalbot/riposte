@@ -10,7 +10,7 @@
 bool is_outlier(double x) { return x == 9999; }
 
 
-#define VECTORIZE
+//#define VECTORIZE
 
 double s_mean[2];
 double s_mean_2[2];

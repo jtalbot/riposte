@@ -693,10 +693,10 @@ void interpret(Thread& thread, Instruction const* pc) {
 		return;
 	}
 
-	goto *(pc->ibc);
+	goto *(void*)(pc->ibc);
 	#define LABELED_OP(name,type,...) \
 		name##_label: \
-			{ pc = name##_op(thread, *pc); goto *(pc->ibc); } 
+			{ pc = name##_op(thread, *pc); goto *(void*)(pc->ibc); } 
 	STANDARD_BYTECODES(LABELED_OP)
 	done_label: {}
 #else

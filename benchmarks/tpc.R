@@ -46,11 +46,11 @@ c(  NA,
 	NA,
 	NA
 )
-r <- read.table("data/lineitem.tbl","|",fmt)
-a <- ifelse(r[[5]] == 'A', 0, ifelse(r[[5]] == 'N', 1, 2))
-b <- ifelse(r[[6]] == 'F', 0, 1)
-f <- factor(a*2+b, 0:5)
-start_date <- 912499200
+r <- read.table("benchmarks/data/lineitem.tbl",sep="|",colClasses=format)
+a <- ifelse(r[[5]] == 'A', 0L, ifelse(r[[5]] == 'N', 1L, 2L))
+b <- ifelse(r[[6]] == 'F', 0L, 1L)
+f <- factor(a*2L+b, 0L:5L)
+start_date <- 912499200-(90*24*60*60)
 
 benchmark <- function() {
 	sum_qty <- lapply(split(r[[1]][r[[7]]<=start_date], f), 'sum')
@@ -60,7 +60,7 @@ benchmark <- function() {
 	avg_qty <- lapply(split(r[[1]][r[[7]]<=start_date], f), 'mean')
 	avg_price <- lapply(split(r[[2]][r[[7]]<=start_date], f), 'mean')
 	avg_disc <- lapply(split(r[[3]][r[[7]]<=start_date], f), 'mean')
-	count_order <- lapply(split(r[[7]][r[[7]]<=start_date], f), 'length')
+	count_order <- lapply(split(r[[1]][r[[7]]<=start_date], f), 'length')
 
 	cat(sum_qty,"\n")
 	cat(sum_base_price,"\n")
@@ -72,4 +72,4 @@ benchmark <- function() {
 	cat(count_order,"\n")
 }
 
-benchmark()
+system.time(benchmark())

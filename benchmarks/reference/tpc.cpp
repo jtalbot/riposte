@@ -55,8 +55,8 @@ char intern_string(const char * fmt, const char * data) {
 	return 0;
 }
 
-double update_average(double cur, double new_value, int N) {
-	return cur + (new_value - cur) / (N + 1);
+double update_average(double cur, double new_value, double invnp1) {
+	return cur + (new_value - cur) * invnp1;
 }
 
 int main() {
@@ -69,7 +69,7 @@ int main() {
 	int * ship_date = new int[N_ROWS];
 
 	int ref_date = convert_time(time_for_filter);
-	
+	printf("%d\n", ref_date);	
 	FILE * file = fopen("../data/lineitem.tbl","r");
 	assert(file);
 	for(int i = 0; i < N_ROWS; i++) {
@@ -115,9 +115,10 @@ int main() {
 			sum_base_price[group] += extended_price[i];
 			sum_disc_price[group] += extended_price[i] * (1 - discount[i]);
 			sum_charge[group] += extended_price[i]*(1-discount[i])*(1+tax[i]);
-			avg_qty[group] = update_average(avg_qty[group],quantity[i],count[group]);
-			avg_price[group] = update_average(avg_price[group],extended_price[i],count[group]);
-			avg_disc[group] = update_average(avg_disc[group],discount[i],count[group]);
+			double invnp1 = 1.0/(count[group]+1);
+			avg_qty[group] = update_average(avg_qty[group],quantity[i],invnp1);
+			avg_price[group] = update_average(avg_price[group],extended_price[i],invnp1);
+			avg_disc[group] = update_average(avg_disc[group],discount[i],invnp1);
 			count[group]++;
 		}
 	}
