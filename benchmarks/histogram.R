@@ -1,12 +1,12 @@
 
 #data <- sample(1:100, 100000, replace=TRUE)
 
-data <- as.integer(runif(10000000,0,100))
-force(data)
+data <- as.integer(runif(100000000,0,100))
+f <- factor(data, 0L:99L)
 
 benchmark <- function() {
-	#length(split(data,data,100L))
-	tabulate(data,100L)
+	lapply(split(data,f), "length")
+	#tabulate(data,100L)
 }
 
 system.time(benchmark())

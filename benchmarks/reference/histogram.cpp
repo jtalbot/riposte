@@ -8,7 +8,7 @@
 #include "timing.h"
 
 int main() {
-	int N = 10000000;
+	int N = 100000000;
 	double * data = new double[N];
 	for(int i = 0; i < N; i++)
 		data[i] = rand() % 100;

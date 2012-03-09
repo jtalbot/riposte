@@ -12,11 +12,11 @@ means <- list(
 	a[4,],
 	a[5,]
 	)
-print(means[[1]],"\n")
-print(means[[2]],"\n")
-print(means[[3]],"\n")
-print(means[[4]],"\n")
-print(means[[5]],"\n")
+cat(means[[1]],"\n")
+cat(means[[2]],"\n")
+cat(means[[3]],"\n")
+cat(means[[4]],"\n")
+cat(means[[5]],"\n")
 
 
 # assignment step
@@ -36,8 +36,11 @@ assignment <- function(data, means) {
 }
 
 update.means <- function(data, index) {
-	d1 <- mean(split(data[,1L], index-1L, K))
-	d2 <- mean(split(data[,2L], index-1L, K))
+	#d1 <- mean(split(data[,1L], index-1L, K))
+	#d2 <- mean(split(data[,2L], index-1L, K))
+	f <- factor(index-1L, (1L:K)-1L)
+	d1 <- lapply(split(data[,1L], f), "mean")
+	d2 <- lapply(split(data[,2L], f), "mean")
 	for(i in 1L:K) {
 		means[[i]] <<- c(d1[[i]], d2[[i]])
 	}
@@ -46,14 +49,13 @@ update.means <- function(data, index) {
 benchmark <- function(reps) {
 
 	for(i in 1L:reps) {
-		i <- assignment(a, means)
-		update.means(a, i)
-		#print(means[[1]],"\n")
-		#print(means[[2]],"\n")
-		#print(means[[3]],"\n")
-		#print(means[[4]],"\n")
-		#print(means[[5]],"\n")
-		#print("\n")
+		update.means(a, assignment(a, means))
+		#cat(means[[1]],"\n")
+		#cat(means[[2]],"\n")
+		#cat(means[[3]],"\n")
+		#cat(means[[4]],"\n")
+		#cat(means[[5]],"\n")
+		#cat("\n")
 	}
 
 }
