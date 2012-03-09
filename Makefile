@@ -1,7 +1,7 @@
 # This Makefile requires GNU make.
 UNAME := $(shell uname -s)
  
-CXX := icc
+CXX := g++ 
 CXXFLAGS := -Wall -DRIPOSTE_DISABLE_TRACING -msse4.1
 LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
 
@@ -53,7 +53,7 @@ debug: $(EXECUTABLE)
 release: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize 
 release: $(EXECUTABLE)
 
-irelease: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize
+irelease: CXXFLAGS += -DNDEBUG -O3 -g
 irelease: CXX := icc
 irelease: $(EXECUTABLE)
           

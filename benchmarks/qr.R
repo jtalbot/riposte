@@ -43,9 +43,8 @@ myqr <- function(m) {
 		#q <- q - 2/b * ((q %*% v) %*% t(v))
 		print(i,'\n')
 	}
-	#list(q, m)
-	m
+	list(q, m)
 }
 
-#system.time(myqr(m))
-system.time(qr(m))
+system.time(myqr(m))
+#system.time(qr(m))

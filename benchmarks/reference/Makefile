@@ -1,5 +1,5 @@
 CXX = icc
-FLAGS = -O3 -fp-model precise -msse4.1 -funroll-loops -g -I../../src/Eigen -I/Users/zdevito/Dropbox/vdb-cocoa -vec-report
+FLAGS = -O3 -msse4.1 -funroll-loops -g -I../../src/Eigen -I/Users/zdevito/Dropbox/vdb-cocoa -vec-report
 LFLAGS =
 
 .SUFFIXES:
