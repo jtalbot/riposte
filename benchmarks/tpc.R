@@ -26,3 +26,24 @@ l_linestatus
 order by 
 l_returnflag, 
 l_linestatus;
+
+
+format <- 
+c(  NA,
+	NA,
+	NA,
+	NA,
+	"double", #quantity
+	"double", #extendedprice
+	"double", #discount
+	"double", #tax
+	"character", #returnflag 
+	"character", #linestatus
+	"date", #shipdate
+	NA,
+	NA,
+	NA,
+	NA,
+	NA
+)
+r <- read.table("data/lineitem.tbl","|",fmt)

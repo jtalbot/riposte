@@ -25,6 +25,7 @@
 	_(Dotdot, 	"dotdot") 	\
 	_(Nil,		"nil")		\
 	_(Future,	"future")		\
+	_(Date, "date")		\
 	/* Now all other strings */	\
 	_(NArep, 	"<NA>") \
 	_(empty, 	"") \

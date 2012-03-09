@@ -81,35 +81,87 @@ void library(Thread& thread, Value const* args, Value& result) {
 
 void readtable(Thread& thread, Value const* args, Value& result) {
 	Character from = As<Character>(thread, args[0]);
-	if(from.length > 0) {
+	Character sep_list = As<Character>(thread,args[-1]);
+	Character format = As<Character>(thread, args[-2]);
+	if(from.length > 0 && sep_list.length > 0 && format.length > 0) {
 		std::string name = thread.externStr(from[0]);
-		std::vector<double> v;
+		std::string sep = thread.externStr(sep_list[0]);
 		
+		std::vector<void*> lists;
+		
+		for(int64_t i = 0; i < format.length; i++) {
+			if(Strings::Double == format[i] || Strings::Date == format[i]) {
+				lists.push_back(new std::vector<double>);
+			} else if(Strings::Character == format[i]) {
+				lists.push_back(new std::vector<String>);
+			}
+			else if(Strings::NA !=format[i]) {
+				_error("Unknown format specifier");
+			}
+		}
 		FILE* file = fopen(name.c_str(), "r");
 		if(file) {
-			while(!feof(file)) {
-				double d;
-				if(fscanf(file, "%lf", &d) == 1)
-					v.push_back(d);
+			char buf[4096];
+			for(int64_t line = 0;fgets(buf,4096,file);line++) {
+				char * rest = buf;
+				for(int64_t i = 0, list_idx = 0; i < format.length; i++) {
+					int sep_length = sep.length();
+					char * sep_location = strstr(rest,sep.c_str());
+					if(sep_location == NULL && i + 1 == format.length) {
+						sep_location = strstr(rest,"\n");
+						sep_length = 1;
+					}
+					if(sep_location == NULL) {
+						printf("line = %d, col = %d\n",(int)line, (int) (rest - buf));
+						_error("Number of rows does not match format specifier");
+					}
+					*sep_location = '\0';
+					if(Strings::Double == format[i]) {
+						((std::vector<double>*)lists[list_idx])->push_back(atof(rest));
+						list_idx++;
+					} else if(Strings::Date == format[i]) {
+						struct tm tm;
+						memset(&tm,0,sizeof(struct tm));
+						const char * result = strptime(rest,"%Y-%m-%d",&tm);
+						if(result == NULL)
+							_error("Value is not a date");
+						double date = mktime(&tm);
+						((std::vector<double>*)lists[list_idx])->push_back(date);
+						list_idx++;
+					} else if(Strings::Character == format[i]) {
+						String s = thread.internStr(rest);
+						((std::vector<String>*)lists[list_idx])->push_back(s);
+						list_idx++;
+					}
+					rest = sep_location + sep_length;
+				}
 			}
 			fclose(file);
 		} else {
 			_error("Unable to open file");
 		}
-		/*std::ifstream in(name.c_str());
-		std::string line;
-		while(std::getline(in, line)) {
-			double d;
-			std::istringstream(line) >> d;
-			v.push_back(d);
-		}*/
-		//in.close();
-		Double r(v.size());
-		for(uint64_t i = 0; i < v.size(); i++) {
-			r[i] = v[i];
+		List l(lists.size());
+		for(int64_t i = 0, list_idx = 0; i < format.length; i++) {
+			if(Strings::Double == format[i] || Strings::Date == format[i]) {
+				std::vector<double> * data = (std::vector<double>*) lists[list_idx];
+				Double r(data->size());
+				for(uint64_t j = 0; j < data->size(); j++) {
+					r[j] = (*data)[j];
+				}
+				l[list_idx] = r;
+				delete data;
+				list_idx++;
+			} else if(Strings::Character == format[i]) {
+				std::vector<String> * data = (std::vector<String>*) lists[list_idx];
+				Character r(data->size());
+				for(uint64_t j = 0; j < data->size(); j++) {
+					r[j] = (*data)[j];
+				}
+				l[list_idx] = r;
+				delete data;
+				list_idx++;
+			}
 		}
-		List l(1);
-		l[0] = r;
 		result = l;
 	} else {
 		result = Null::Singleton();
@@ -958,7 +1010,7 @@ void registerCoreFunctions(State& state)
 	state.registerInternalFunction(state.internStr("proc.time"), (proctime), 0);
 	state.registerInternalFunction(state.internStr("trace.config"), (traceconfig), 1);
 	
-	state.registerInternalFunction(state.internStr("read.table"), (readtable), 1);
+	state.registerInternalFunction(state.internStr("read.table"), (readtable), 3);
 	
 	state.registerInternalFunction(state.internStr("matrix.multiply"), (matrixmultiply), 6);
 	state.registerInternalFunction(state.internStr("eigen"), (eigen), 3);
