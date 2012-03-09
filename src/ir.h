@@ -20,6 +20,7 @@
 		_(rep, "rep", ___) \
 		_(random, "random", ___) \
 		_(load,"load", ___) \
+		_(gather,"gather", ___) \
 		_(filter, "filter", ___) \
 		_(split, "split", ___) \
 		_(nop, "nop", ___) \
@@ -87,6 +88,8 @@ struct IRNode {
 				break;
 			case IRNode::GENERATOR: {
 				if(op == IROpCode::load) {
+					return eq && in == o.in && constant.i == o.constant.i;
+				} else if(op == IROpCode::gather) {
 					return eq && unary.a == o.unary.a && in == o.in;
 				} else if(op == IROpCode::constant) {
 					return eq && ((type == Type::Double && constant.d == o.constant.d) || 
