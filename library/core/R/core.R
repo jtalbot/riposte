@@ -1,6 +1,13 @@
 nargs <- function() { length(.Internal(sys.call(1L)))-1L }
 
-factor <- function(x, levels) x
+factor <- function(x, levels) {
+	attr(x, 'levels') <- levels
+	x
+}
+
+split <- function(x, f) {
+	split(strip(x), strip(f), length(attr(f, 'levels')))
+}
 
 c <- function(...) .Internal(unlist(list(...), TRUE, TRUE))
 print <- function(...) cat(...)
@@ -86,6 +93,9 @@ lapply <- function(x, func) {
 	}
 	else if(func == "mean") {
 		mean(x)
+	}
+	else if(func == "length") {
+		length(x)
 	}
 	else if(func == "min") {
 		min(x)
