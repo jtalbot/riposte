@@ -259,6 +259,20 @@ static __m128d castl2i(__m128d input) {
 	return v.D;
 }
 
+static __m128d exp_d(__m128d input) {
+       SSEValue v;
+       v.D = input;
+       for(int i = 0; i < 2; i++) v.d[i] = exp(v.d[i]);
+       return v.D;
+}
+
+static __m128d log_d(__m128d input) {
+       SSEValue v;
+       v.D = input;
+       for(int i = 0; i < 2; i++) v.d[i] = log(v.d[i]);
+       return v.D;
+}
+
 static __m128d random_d(__m128d input) {
 	SSEValue v; 
 	v.D = input;
@@ -451,7 +465,7 @@ struct TraceJIT {
 			}
 		}
 		int8_t r = minReg;
-		//printf("spilled %d (%d => %d)\n", minReg, liveRegisters[r], currentOp);
+		printf("spilled %d (%d => %d)\n", minReg, liveRegisters[r], currentOp);
 		allocated_register[liveRegisters[r]] = spills++; // mark node as spilled
 		liveRegisters[r] = -1;	// unassign spilled register
 		return r;
@@ -864,8 +878,8 @@ struct TraceJIT {
 			case IROpCode::atan2: 	EmitBinaryFunction(ref,amd_atan2); break;
 			case IROpCode::hypot: 	EmitBinaryFunction(ref,amd_hypot); break;
 #else
-			case IROpCode::exp: 	EmitUnaryFunction(ref,exp); break;
-			case IROpCode::log: 	EmitUnaryFunction(ref,log); break;
+			case IROpCode::exp: 	EmitVectorizedUnaryFunction(ref,exp_d); break;
+			case IROpCode::log: 	EmitVectorizedUnaryFunction(ref,log_d); break;
 			case IROpCode::cos: 	EmitUnaryFunction(ref,cos); break;
 			case IROpCode::sin: 	EmitUnaryFunction(ref,sin); break;
 			case IROpCode::tan: 	EmitUnaryFunction(ref,tan); break;
