@@ -1,13 +1,13 @@
+#include <sys/mman.h>
+#include <math.h>
+#include <pthread.h>
+
 #include "interpreter.h"
 #include "vector.h"
 #include "ops.h"
-#include <sys/mman.h>
 #include "assembler-x64.h"
-#include <math.h>
-
-#include <pthread.h>
-
 #include "register_set.h"
+#include "internal.h"
 
 #ifdef USE_AMD_LIBM
 #include <amdlibm.h>
@@ -451,7 +451,7 @@ struct TraceJIT {
 			}
 		}
 		int8_t r = minReg;
-		printf("spilled %d (%d => %d)\n", minReg, liveRegisters[r], currentOp);
+		//printf("spilled %d (%d => %d)\n", minReg, liveRegisters[r], currentOp);
 		allocated_register[liveRegisters[r]] = spills++; // mark node as spilled
 		liveRegisters[r] = -1;	// unassign spilled register
 		return r;
@@ -464,7 +464,7 @@ struct TraceJIT {
 		if(r < 0 || r >= 14) {
 			// Attempt to allocate
 			if(!alloc.allocate(preferred, &r)) {
-				printf("spilling\n");
+				//printf("spilling\n");
 				r = spillRegister(currentOp);
 			}
 		}
@@ -491,10 +491,13 @@ struct TraceJIT {
 		}
 		
 		for(IRef ref = trace->nodes.size()-1; ref >= 0; ref--) {
+			IRNode & node = trace->nodes[ref];
 			
+			if(node.group == IRNode::SCALAR)	
+				continue;
+
 			allocate(ref, ref, assignment[ref].r, -1);	
 			
-			IRNode & node = trace->nodes[ref];
 			switch(node.arity) {
 			case IRNode::TRINARY:
 				allocate(ref, node.trinary.c, assignment[ref].c, -1);
@@ -621,7 +624,7 @@ struct TraceJIT {
 			}
 
 			// allocate outputs
-			if(node.liveOut) { 
+			if(node.liveOut || node.group == IRNode::FOLD) { 
 				int64_t length = node.outShape.length;
 				
 				if(node.shape.levels != 1 && node.group != IRNode::FOLD)
@@ -1264,12 +1267,16 @@ struct TraceJIT {
 				}
 			break;
 
+			case IROpCode::sload:
+			case IROpCode::sstore:
+			break;
+
 			//case IROpCode::signif:
 			default:	_error("unimplemented op"); break;
 		
 			}
 
-			if(node.liveOut && node.shape.length == (int64_t)trace->Size) {
+			if(node.liveOut) {
 				switch(node.group) {
 					case IRNode::MAP:
 					case IRNode::GENERATOR: {
@@ -1799,7 +1806,19 @@ struct TraceJIT {
 		// copy to output vector
 		for(IRef ref = 0; ref < (int64_t)trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
-			if(node.group == IRNode::FOLD && node.liveOut) {
+
+			if(node.op == IROpCode::sload) {
+				node.out = node.in;
+			} else if(node.op == IROpCode::sstore) {
+				Integer index = Integer::c(node.binary.data);
+				Subset2Assign(thread, 
+					trace->nodes[node.binary.a].out, 
+					true, 
+					index, 
+					trace->nodes[node.binary.b].out, 
+					node.out);
+			}
+			else if(node.group == IRNode::FOLD) {
 				if(node.isDouble()) {
 					Double& d = (Double&)node.out;
 					for(int64_t i = 0, j = 0; i < node.outShape.length; i++, j+=2) {

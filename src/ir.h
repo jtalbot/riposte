@@ -25,6 +25,8 @@
 		_(split, "split", ___) \
 		_(nop, "nop", ___) \
 		_(ifelse, "ifelse", ___) \
+		_(sload, "sload", ___) \
+		_(sstore, "sstore", ___) \
 
 DECLARE_ENUM(IROpCode,IR_ENUM)
 
@@ -45,7 +47,8 @@ struct IRNode {
 		MAP,
 		FILTER,
 		FOLD,
-		SPLIT
+		SPLIT,
+		SCALAR
 	};
 
 	struct Shape {

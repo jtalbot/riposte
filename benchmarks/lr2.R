@@ -15,10 +15,10 @@ wi <- read.table("benchmarks/data/lr_wi.txt")[[1]]
 g <- function(z) 1/(1+exp(-z))
 
 update <- function(w) {
-	grad <- rep(0,D)
 	diff <- g(p %*% w)-r
+	grad <- double(0)
 	for(i in 1L:D) {
-		grad[i] <- mean((p[,i]*diff))
+		grad[[i]] <- mean((p[,i]*diff))
 	}
 	grad
 }

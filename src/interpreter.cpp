@@ -304,17 +304,49 @@ Instruction const* dotdot_op(Thread& thread, Instruction const& inst) {
 
 Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest 
-	OPERAND(value, inst.a); FORCE(value, inst.a); BIND(value);
-	OPERAND(index, inst.b); FORCE(index, inst.b); BIND(index);
-	OPERAND(dest, inst.c); FORCE(dest, inst.c); BIND(dest);
+	OPERAND(value, inst.a); FORCE(value, inst.a); 
+	OPERAND(index, inst.b); FORCE(index, inst.b); 
+	OPERAND(dest, inst.c); FORCE(dest, inst.c); 
+
+	BIND(dest);
+	BIND(index);
+	
+	if(value.isFuture() && (dest.isVector() || dest.isFuture())) {
+		if(index.isInteger() && index.length == 1) {
+			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
+			return &inst+1;
+		}
+		else if(index.isDouble() && index.length == 1) {
+			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Double&)index)[0], value);
+			return &inst+1;
+		}
+	}
+
+	BIND(value);
 	SubsetAssign(thread, dest, true, index, value, OUT(thread,inst.c));
 	return &inst+1;
 }
 Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest
-	OPERAND(value, inst.a); FORCE(value, inst.a); BIND(value);
-	OPERAND(index, inst.b); FORCE(index, inst.b); BIND(index);
-	OPERAND(dest, inst.c); FORCE(dest, inst.c); BIND(dest);
+	OPERAND(value, inst.a); FORCE(value, inst.a);
+	OPERAND(index, inst.b); FORCE(index, inst.b);
+	OPERAND(dest, inst.c); FORCE(dest, inst.c);
+
+	BIND(index);
+	
+	if(value.isFuture() && (dest.isVector() || dest.isFuture())) {
+		if(index.isInteger() && index.length == 1) {
+			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
+			return &inst+1;
+		}
+		else if(index.isDouble() && index.length == 1) {
+			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Double&)index)[0], value);
+			return &inst+1;
+		}
+	}
+
+	BIND(dest);
+	BIND(value);
 	Subset2Assign(thread, dest, true, index, value, OUT(thread,inst.c));
 	return &inst+1; 
 }

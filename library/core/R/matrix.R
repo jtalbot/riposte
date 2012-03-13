@@ -14,7 +14,7 @@
 	} else if(xd[[1L]] == 1L) {
 		r <- double(0)
 		for(i in 1L:yd[[2L]])
-			r[i] <- sum(strip(x)*strip(y[,i]))
+			r[[i]] <- sum(strip(x)*strip(y[,i]))
 		return(r)
 	}
 	else if(yd[[2L]] == 1L) {

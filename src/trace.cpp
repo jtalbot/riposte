@@ -2,7 +2,7 @@
 #include "vector.h"
 #include "ops.h"
 #include "sse.h"
-
+//#include <unordered_set>
 #include <stdlib.h>
 
 void Trace::Reset() {
@@ -61,6 +61,8 @@ std::string Trace::toString(Thread & thread) {
 			out << "n" << node.unary.a << "\t" << ( (node.type == Type::Integer) ? node.constant.i : (node.type == Type::Logical) ? node.constant.l : node.constant.d); break;
 		case IROpCode::load: out << "$" << node.in.p << "[" << node.constant.i << "]\t"; break;
 		case IROpCode::gather: out << "$" << node.in.p << "\tn" << node.unary.a; break;
+		case IROpCode::sload: out << "$" << node.in.p; break;
+		case IROpCode::sstore: out << "n" << node.binary.a << "[" << node.binary.data << "]\tn" << node.binary.b; break;
 		case IROpCode::nop: break;
 		}
 		if(node.liveOut) {
@@ -323,6 +325,33 @@ IRef Trace::EmitIfElse(IRef a, IRef b, IRef cond) {
 	return nodes.size()-1;
 }
 
+IRef Trace::EmitSLoad(Value const& v) {
+	IRNode n;
+	n.arity = IRNode::NULLARY;
+	n.group = IRNode::SCALAR;
+	n.op = IROpCode::sload;
+	n.type = v.type;
+	n.shape = (IRNode::Shape) { Size, -1, 1, -1, false };
+	n.outShape = (IRNode::Shape) { v.length, -1, 1, -1, true };
+	n.in = v;
+	nodes.push_back(n);
+	return nodes.size()-1;
+}
+
+IRef Trace::EmitSStore(IRef ref, int64_t index, IRef v) {
+	IRNode n;
+	n.arity = IRNode::BINARY;
+	n.group = IRNode::SCALAR;
+	n.op = IROpCode::sstore;
+	n.type = nodes[ref].type;
+	n.shape = (IRNode::Shape) { Size, -1, 1, -1, false };
+	n.outShape = (IRNode::Shape) { std::max(nodes[ref].outShape.length, index), -1, 1, -1, true };
+	n.binary.a = ref;
+	n.binary.b = v;
+	n.binary.data = index;
+	nodes.push_back(n);
+	return nodes.size()-1;
+}
 
 void Trace::MarkLiveOutputs(Thread& thread) {
 	
@@ -706,25 +735,29 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 
 void Trace::CSEElimination(Thread& thread) {
 	// look for exact same op somewhere above, replace myself with pos of that one...
+	//std::tr1::unordered_set<IRNode, IRHash> hash;
 	for(IRef i = 0; i < (IRef)nodes.size(); i++) {
 		IRNode& node = nodes[i];
-		if((node.arity == IRNode::UNARY ||
-		    node.arity == IRNode::BINARY ||
-		    node.arity == IRNode::TRINARY)
-			 && nodes[node.unary.a].op == IROpCode::pos)
-			node.unary.a = nodes[node.unary.a].unary.a;
-		if((node.arity == IRNode::BINARY || node.arity == IRNode::TRINARY) 
-			&& nodes[node.binary.b].op == IROpCode::pos)
-			node.binary.b = nodes[node.binary.b].unary.a;
-		if((node.arity == IRNode::TRINARY) 
-			&& nodes[node.trinary.c].op == IROpCode::pos)
-			node.trinary.c = nodes[node.trinary.c].unary.a;
-		
-		if(node.shape.filter >= 0 && nodes[node.shape.filter].op == IROpCode::pos)
-			node.shape.filter = nodes[node.shape.filter].unary.a;
-		if(node.shape.split >= 0 && nodes[node.shape.split].op == IROpCode::pos)
-			node.shape.split = nodes[node.shape.split].unary.a;
-
+		switch(node.arity) {
+			case IRNode::TRINARY:
+				if(nodes[node.trinary.c].op == IROpCode::pos)
+					node.trinary.c = nodes[node.trinary.c].unary.a;
+			case IRNode::BINARY:
+				if(nodes[node.binary.b].op == IROpCode::pos)
+					node.binary.b = nodes[node.binary.b].unary.a;
+			case IRNode::UNARY:
+				if(nodes[node.unary.a].op == IROpCode::pos)
+					node.unary.a = nodes[node.unary.a].unary.a;
+			case IRNode::NULLARY:
+			default:
+				if(node.shape.filter >= 0 && nodes[node.shape.filter].op == IROpCode::pos)
+					node.shape.filter = nodes[node.shape.filter].unary.a;
+				if(node.shape.split >= 0 && nodes[node.shape.split].op == IROpCode::pos)
+					node.shape.split = nodes[node.shape.split].unary.a;
+		}
+		/*std::ir1::unordered_set<IRNode, IRHash>::const_iterator j =
+			hash.find(node);
+		if(j != */
 		for(IRef j = 0; j < i; j++) {
 			if(node == nodes[j]) {
 				node.op = IROpCode::pos;

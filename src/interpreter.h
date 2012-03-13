@@ -157,6 +157,8 @@ class Trace : public gc {
 		IRef EmitConstant(Type::Enum type, int64_t length, int64_t c);
 		IRef EmitGather(Value const& v, IRef i);
 		IRef EmitLoad(Value const& v, int64_t length, int64_t offset);
+		IRef EmitSLoad(Value const& v);
+		IRef EmitSStore(IRef ref, int64_t index, IRef value);
 
 		IRef GetRef(Value const& v) {
 			if(v.isFuture()) return v.future.ref;
@@ -644,6 +646,19 @@ public:
 		return v;
 	}
 	
+	Value EmitSStore(Environment* env, Value const& a, int64_t index, Value const& b) {
+		Trace* trace = getTrace(b);
+		trace->liveEnvironments.insert(env);
+		
+		IRef m = a.isFuture() ? a.future.ref : trace->EmitSLoad(a);
+
+		IRef r = trace->EmitSStore(m, index, trace->GetRef(b));
+		
+		Value v;
+		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		return v;
+	}
+	
 	void LiveEnvironment(Environment* env, Value const& a) {
 		if(a.isFuture()) {
 			Trace* trace = getTrace(a);
@@ -686,7 +701,7 @@ public:
 		if(i == traces.end()) 
 			_error("Unevaluated future left behind");
 		Trace* trace = i->second;
-		if(trace->nodes.size() > 128) {
+		if(trace->nodes.size() > 1024) {
 			Bind(v);
 		}
 	}
