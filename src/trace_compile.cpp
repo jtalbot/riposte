@@ -638,6 +638,8 @@ struct TraceJIT {
 					node.out = Integer(length);
 				} else if(node.type == Type::Logical) {
 					node.out = Logical(length);
+				} else if(node.type == Type::List) {
+					node.out = List(length);
 				} else {
 					_error("Unknown type in initialize outputs");
 				}

@@ -715,7 +715,7 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 				nodes[node.binary.b].op == IROpCode::constant &&
 				nodes[node.binary.b].constant.i == 1 &&
 				nodes[node.binary.a].op == IROpCode::addc &&
-				node.constant.i == 1) {
+				nodes[node.binary.a].constant.i == 1) {
 			node.op = IROpCode::pos;
 			node.arity = IRNode::UNARY;
 			node.group = IRNode::MAP;

@@ -36,20 +36,26 @@ assignment <- function(data, means) {
 }
 
 update.means <- function(data, index) {
-	#d1 <- mean(split(data[,1L], index-1L, K))
-	#d2 <- mean(split(data[,2L], index-1L, K))
-	f <- factor(index-1L, (1L:K)-1L)
-	d1 <- lapply(split(data[,1L], f), "mean")
-	d2 <- lapply(split(data[,2L], f), "mean")
-	for(i in 1L:K) {
-		means[[i]] <<- c(d1[[i]], d2[[i]])
-	}
+	means <- list()
+	#for(i in 1L:2L) {
+#		means[[i]] <- lapply(split(data[,i], index-1L, K), "mean")
+#	}
+	means[[1]] <- lapply(split(data[,1], index-1L, K), "mean")
+	means[[2]] <- lapply(split(data[,2], index-1L, K), "mean")
+	means
 }
 
 benchmark <- function(reps) {
 
 	for(i in 1L:reps) {
-		update.means(a, assignment(a, means))
+		m <- update.means(a, assignment(a, means))
+		#cat("------\n")
+		#cat(m[[1]], "\n")
+		#cat(m[[2]], "\n")
+		# reorganize means from SoA to AoS
+		for(i in 1L:K) {
+			means[[i]] <<- c(m[[1]][[i]], m[[2]][[i]])
+		}
 		#cat(means[[1]],"\n")
 		#cat(means[[2]],"\n")
 		#cat(means[[3]],"\n")
