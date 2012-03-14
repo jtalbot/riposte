@@ -29,8 +29,8 @@ cov <- function(a,b) {
 	for(i in 1L:n) {
 		for(j in i:n) {
 			k <- sum((a[,i]-ma[[i]])*(b[,j]-mb[[j]]))
-			r[(i-1L)*n+j] <- k
-			r[(j-1L)*n+i] <- k
+			r[[(i-1L)*n+j]] <- k
+			r[[(j-1L)*n+i]] <- k
 		}
 	}
 	r <- r/(m-1)
