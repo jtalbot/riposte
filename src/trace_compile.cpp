@@ -465,7 +465,7 @@ struct TraceJIT {
 			}
 		}
 		int8_t r = minReg;
-		printf("spilled %d (%d => %d)\n", minReg, liveRegisters[r], currentOp);
+		//printf("spilled %d (%d => %d)\n", minReg, liveRegisters[r], currentOp);
 		allocated_register[liveRegisters[r]] = spills++; // mark node as spilled
 		liveRegisters[r] = -1;	// unassign spilled register
 		return r;
@@ -622,23 +622,22 @@ struct TraceJIT {
 
 			// TODO: allocate thread split filtered output (how to maintain ordering?)
 			// allocate temporary space for folds (put in IRNode::in)
-			if(node.group == IRNode::FOLD) { 
-				int64_t length = nextPow2(std::max(node.shape.levels*2, (int64_t)8LL)) 
-					* thread.state.nThreads;
-				// 8 min fills cache line (assuming aggregates are all stored in 8-byte fields)
+			if(node.group == IRNode::FOLD) {
+				int64_t size = node.shape.levels <= 1024 ? node.shape.levels*2 : node.shape.levels;
 				if(node.type == Type::Double) {
-					node.in = Double(length);
+					// 8 min fills cache line
+					node.in = Double(std::max(size, (int64_t)8LL)*thread.state.nThreads);
 				} else if(node.type == Type::Integer) {
-					node.in = Integer(length);
+					node.in = Integer(std::max(size, (int64_t)8LL)*thread.state.nThreads);
 				} else if(node.type == Type::Logical) {
-					node.in = Logical(length);
+					node.in = Logical(std::max(size, (int64_t)64LL)*thread.state.nThreads);
 				} else {
 					_error("Unknown type in initialize temporary space");
 				}
 			}
 
 			// allocate outputs
-			if(node.liveOut || node.group == IRNode::FOLD) { 
+			if(node.liveOut && (node.group != IRNode::FOLD || node.outShape.length <= 1024)) { 
 				int64_t length = node.outShape.length;
 				
 				if(node.shape.levels != 1 && node.group != IRNode::FOLD)
@@ -708,12 +707,9 @@ struct TraceJIT {
 			}
 			else if(node.group == IRNode::FOLD) { 
 				int64_t step = node.in.length / thread.state.nThreads;
-				int64_t shl = 0;
-				while(step >>= 1) shl++;
-				asm_.movq(r11, thread_index);
-				asm_.shl(r11, Immediate(shl));
+				asm_.movq(r11, Immediate(step*8LL));
+				asm_.imulq(r11, thread_index);
 				asm_.movq(Operand(rsp, stackOffset), r11);
-				asm_.addq(r11, Immediate(1));
 				asm_.movq(Operand(rsp, stackOffset+0x8), r11);
 				stackOffset += 0x10;
 			}
@@ -1017,46 +1013,63 @@ struct TraceJIT {
 			} break;
 			case IROpCode::sum:  {
 				// relying on doubles and integers to be the same length
-				for(int64_t i = 0; i < node.in.length; i++)
-					((double*)node.in.p)[i] = 0.0;
-				
-				Operand offset = Operand(rsp, stackOffset);
-				XMMRegister index = no_xmm;
+				memset(node.in.p, 0, node.in.length*sizeof(double));
 				
 				MoveA2R(ref);
-				
-				if(node.shape.split >= 0) {
-					asm_.movapd(xmm15, RegS(ref));
-					asm_.paddq(xmm15, xmm15);
-					index = xmm15;
-				}
-				EmitGather(xmm15, node, index, offset);
-				
 				if(node.shape.filter >= 0) {
 					asm_.pand(RegR(ref), RegF(ref));
 				}
 
-				if(node.isDouble()) 	asm_.addpd(RegR(ref), xmm15);
-				else 			asm_.paddq(RegR(ref), xmm15);
+				Operand offset = Operand(rsp, stackOffset);
+				if(node.shape.split >= 0 && node.shape.levels > 1) {
+					asm_.movapd(xmm15, RegS(ref));
+					if(node.shape.levels <= 1024)
+						asm_.paddq(xmm15, xmm15);
+					asm_.paddq(xmm15, offset);
+					asm_.movq(r8, xmm15);
+					asm_.movhlps(xmm15, xmm15);
+					asm_.movq(r9, xmm15);
+					Operand operand0 = EncodeOperand(node.in.p, r8, times_8);
+					Operand operand1 = EncodeOperand(node.in.p, r9, times_8);
 				
-				EmitScatter(node, RegR(ref), index);
-						
+					if(node.shape.levels > 1024) {
+						asm_.movhlps(xmm15, RegR(ref));
+						if(node.isDouble())	asm_.addsd(RegR(ref), operand0);
+						else {
+							asm_.movq(xmm14, operand0);
+							asm_.paddq(RegR(ref), xmm14);
+						}
+						asm_.movq(operand0, RegR(ref));
+						if(node.isDouble())	asm_.addsd(xmm15, operand1);
+						else {
+							asm_.movq(xmm14, operand1);
+							asm_.paddq(xmm15, xmm14);
+						}
+						asm_.movq(operand1, xmm15);
+						asm_.movlhps(RegR(ref), xmm15);
+					} else {
+						asm_.movlpd(xmm15, operand0);
+						asm_.movhpd(xmm15, operand1);
+						if(node.isDouble())	asm_.addpd(RegR(ref), xmm15);
+						else 			asm_.paddq(RegR(ref), xmm15);
+						asm_.movlpd(operand0, RegR(ref));
+						asm_.movhpd(operand1, RegR(ref));
+					}
+				} else {
+					asm_.movq(r8, offset);
+					Operand operand = EncodeOperand(node.in.p, r8, times_8);
+					if(node.isDouble()) 	asm_.addpd(RegR(ref), operand);
+					else			asm_.paddq(RegR(ref), operand);
+					asm_.movdqa(operand, RegR(ref));
+				}
 				stackOffset += 0x10;
 			} break;
 
 			case IROpCode::length: {
-				for(int64_t i = 0; i < node.in.length; i++)
-					((double*)node.in.p)[i] = 0.0;
+				// relying on doubles and integers to be the same length
+				memset(node.in.p, 0, node.in.length*sizeof(double));
 				
 				Operand offset = Operand(rsp, stackOffset);
-				XMMRegister index = no_xmm;
-
-				if(node.shape.split >= 0) {
-					asm_.movapd(xmm15, RegS(ref));
-					asm_.paddq(xmm15, xmm15);
-					index = xmm15;
-				}
-				EmitGather(xmm15, node, index, offset);
 
 				if(node.isInteger())
 					asm_.movdqa(RegR(ref), ConstantTable(C_INTEGER_ONE));
@@ -1067,80 +1080,174 @@ struct TraceJIT {
 					asm_.pand(RegR(ref), RegF(ref));
 				}
 				
-				if(node.isDouble()) 	asm_.addpd(RegR(ref), xmm15);
-				else 			asm_.paddq(RegR(ref), xmm15);
+				if(node.shape.split >= 0 && node.shape.levels > 1) {
+					asm_.movapd(xmm15, RegS(ref));
+					if(node.shape.levels <= 1024)
+						asm_.paddq(xmm15, xmm15);
+					asm_.paddq(xmm15, offset);
+					asm_.movq(r8, xmm15);
+					asm_.movhlps(xmm15, xmm15);
+					asm_.movq(r9, xmm15);
+					Operand operand0 = EncodeOperand(node.in.p, r8, times_8);
+					Operand operand1 = EncodeOperand(node.in.p, r9, times_8);
 				
-				EmitScatter(node, RegR(ref), index);
-				
+					if(node.shape.levels <= 1024) {
+						asm_.movhlps(xmm15, RegR(ref));
+						if(node.isDouble())	asm_.addsd(RegR(ref), operand0);
+						else {
+							asm_.movq(xmm14, operand0);
+							asm_.paddq(RegR(ref), xmm14);
+						}
+						asm_.movq(operand0, RegR(ref));
+						if(node.isDouble())	asm_.addsd(xmm15, operand1);
+						else {
+							asm_.movq(xmm14, operand1);
+							asm_.paddq(xmm15, xmm14);
+						}
+						asm_.movq(operand1, xmm15);
+						asm_.movlhps(RegR(ref), xmm15);
+					} else {
+						asm_.movlpd(RegR(ref), operand0);
+						asm_.movhpd(RegR(ref), operand1);
+						if(node.isDouble())	asm_.addpd(RegR(ref), operand0);
+						else 			asm_.paddq(RegR(ref), operand1);
+						asm_.movlpd(operand0, RegR(ref));
+						asm_.movhpd(operand1, RegR(ref));
+					}
+				} else {
+					asm_.movq(r8, offset);
+					Operand operand = EncodeOperand(node.in.p, r8, times_8);
+					if(node.isDouble()) 	asm_.addpd(RegR(ref), operand);
+					else			asm_.paddq(RegR(ref), operand);
+					asm_.movdqa(operand, RegR(ref));
+				}
 				stackOffset += 0x10;
 			} break;
 
 			case IROpCode::mean: {
-				for(int64_t i = 0; i < node.in.length; i++)
-					((double*)node.in.p)[i] = 0;
+				// relying on doubles and integers to be the same length
+				memset(node.in.p, 0, node.in.length*sizeof(double));
 				
-				// m = m + 1/n * (x-m)
+				// m' = m + 1/n * (x-m)
+				// (x-m) must be in RegR at the end
 
 				Operand offset = Operand(rsp, stackOffset);
-				XMMRegister index = no_xmm;
 				
 				MoveA2R(ref);		// x
 				
-				if(node.shape.split >= 0) {
+				if(node.shape.split >= 0 && node.shape.levels > 1) {
 					asm_.movapd(xmm15, RegS(ref));
-					asm_.paddq(xmm15, xmm15);
-					index = xmm15;
-				}
-				EmitGather(xmm15, node, index, offset);		// m
+					if(node.shape.levels <= 1024)
+						asm_.paddq(xmm15, xmm15);
+					asm_.paddq(xmm15, offset);
+					asm_.movq(r8, xmm15);
+					asm_.movhlps(xmm15, xmm15);
+					asm_.movq(r9, xmm15);
+					Operand operand0 = EncodeOperand(node.in.p, r8, times_8);
+					Operand operand1 = EncodeOperand(node.in.p, r9, times_8);
 				
-				asm_.subpd(RegR(ref), xmm15);
-				asm_.mulpd(RegR(ref), RegB(ref));
+					if(node.shape.levels > 1024) {
+						asm_.movhlps(xmm15, RegR(ref));
 
-				if(node.shape.filter >= 0) {
-					asm_.pand(RegR(ref), RegF(ref));
+						asm_.subsd(RegR(ref), operand0);
+						asm_.movapd(xmm14, RegR(ref));
+						asm_.mulsd(xmm14, RegB(ref));
+						if(node.shape.filter >= 0) {
+							asm_.pand(xmm14, xmm14);
+						}
+						asm_.addsd(xmm14, operand0);
+						asm_.movq(operand0, xmm14);
+
+						asm_.movhlps(xmm14, RegB(ref));
+						asm_.subsd(xmm15, operand1);
+						asm_.movlhps(RegR(ref), xmm15);
+						asm_.mulsd(xmm15, xmm14);
+						if(node.shape.filter >= 0) {
+							asm_.pand(xmm15, RegF(ref));
+						}
+						asm_.addsd(xmm15, operand1);
+						asm_.movq(operand1, xmm15);
+						asm_.movlhps(RegR(ref), xmm15);
+					} else {
+						asm_.movlpd(xmm14, operand0);
+						asm_.movhpd(xmm14, operand1);
+
+						asm_.subpd(RegR(ref), xmm14);
+						asm_.movapd(xmm15, RegR(ref));
+						asm_.mulpd(xmm15, RegB(ref));
+						if(node.shape.filter >= 0) {
+							asm_.pand(xmm15, xmm15);
+						}
+						asm_.addpd(xmm15, xmm14);
+						asm_.movlpd(operand0, xmm15);
+						asm_.movhpd(operand1, xmm15);
+					}
+				} else {
+					asm_.movq(r8, offset);
+					Operand operand = EncodeOperand(node.in.p, r8, times_8);
+					asm_.subpd(RegR(ref), operand);
+					asm_.movapd(xmm15, RegR(ref));
+					asm_.mulpd(xmm15, RegB(ref));
+					if(node.shape.filter >= 0) {
+						asm_.pand(xmm15, xmm15);
+					}
+					asm_.addpd(xmm15, operand);
+					asm_.movdqa(operand, xmm15);
 				}
-
-				asm_.addpd(RegR(ref), xmm15);
-				EmitScatter(node, RegR(ref), index);
-				EmitMove(RegR(ref), xmm15);
-
 				stackOffset += 0x10;
 			} break;
 
 			case IROpCode::cm2: {
-				// c = c + (n-1)/n * (s-m1) * (t-m2)
+				// c' = c + (n-1)/n * (s-m1) * (t-m2)
 				// (s-m1) is in a, (t-m2) is in b, 1/n is in c
-				for(int64_t i = 0; i < node.in.length; i++)
-					((double*)node.in.p)[i] = 0;
+				// compute as c' = c + (1-1/n)*(s-m1)*(t-m2) 
+				memset(node.in.p, 0, node.in.length*sizeof(double));
 				
 				Operand offset = Operand(rsp, stackOffset);
-				XMMRegister index = no_xmm;
 				
-				EmitMove(xmm15, RegA(ref));
-				
-				asm_.mulpd(xmm15, RegB(ref));
-				asm_.movdqa(RegR(ref), ConstantTable(C_DOUBLE_ONE));
-				asm_.subpd(RegR(ref), RegC(ref));
-				asm_.mulpd(xmm15, RegR(ref));
-
-				if(node.shape.split >= 0) {
-					asm_.movapd(RegR(ref), RegS(ref));
-					asm_.paddq(RegR(ref), RegR(ref));
-					index = RegR(ref);
-				}
-				EmitGather(RegR(ref), node, index, offset);
-				
+				MoveA2R(ref);		// (s-m1)
+				asm_.mulpd(RegR(ref), RegB(ref));
+				asm_.movdqa(xmm15, ConstantTable(C_DOUBLE_ONE));
+				asm_.subpd(xmm15, RegC(ref));
+				asm_.mulpd(RegR(ref), xmm15);
 				if(node.shape.filter >= 0) {
-					asm_.pand(xmm15, RegF(ref));
+					asm_.pand(RegR(ref), RegF(ref));
 				}
 
-				asm_.addpd(RegR(ref), xmm15);
-				EmitScatter(node, RegR(ref), index);
+				if(node.shape.split >= 0 && node.shape.levels > 1) {
+					asm_.movapd(xmm15, RegS(ref));
+					if(node.shape.levels <= 1024)
+						asm_.paddq(xmm15, xmm15);
+					asm_.paddq(xmm15, offset);
+					asm_.movq(r8, xmm15);
+					asm_.movhlps(xmm15, xmm15);
+					asm_.movq(r9, xmm15);
+					Operand operand0 = EncodeOperand(node.in.p, r8, times_8);
+					Operand operand1 = EncodeOperand(node.in.p, r9, times_8);
+				
+					if(node.shape.levels > 1024) {
+						asm_.movhlps(xmm15, RegR(ref));
+						asm_.addsd(RegR(ref), operand0);
+						asm_.movq(operand0, RegR(ref));
+						asm_.addsd(xmm15, operand1);
+						asm_.movq(operand1, xmm15);
+					} else {
+						asm_.movlpd(xmm15, operand0);
+						asm_.movhpd(xmm15, operand1);
+						asm_.addpd(xmm15, RegR(ref));
+						asm_.movlpd(operand0, xmm15);
+						asm_.movhpd(operand1, xmm15);
+					}
+				} else {
+					asm_.movq(r8, offset);
+					Operand operand = EncodeOperand(node.in.p, r8, times_8);
+					asm_.addpd(RegR(ref), operand);
+					asm_.movdqa(operand, RegR(ref));
+				}
 				stackOffset += 0x10;
 			} break;
 			
 			case IROpCode::min:  {
-				// relying on doubles and integers to be the same length
 				for(int64_t i = 0; i < node.in.length; i++)
 					((double*)node.in.p)[i] = std::numeric_limits<double>::infinity();
 				
@@ -1148,14 +1255,6 @@ struct TraceJIT {
 				XMMRegister index = no_xmm;
 				
 				MoveA2R(ref);
-				
-				if(node.shape.split >= 0) {
-					asm_.movapd(xmm15, RegS(ref));
-					asm_.paddq(xmm15, xmm15);
-					index = xmm15;
-				}
-				EmitGather(xmm15, node, index, offset);
-				
 				if(node.shape.filter >= 0) {
 					asm_.pand(RegR(ref), RegF(ref));
 					asm_.pxor(EmitMove(xmm14, RegF(ref)), ConstantTable(C_NOT_MASK));
@@ -1163,11 +1262,41 @@ struct TraceJIT {
 					asm_.por(RegR(ref), xmm14);
 				}
 
-				if(node.isDouble()) 	asm_.minpd(RegR(ref), xmm15);
-				else 			_error("NYI: min on integers");
+				if(node.shape.split >= 0 && node.shape.levels > 1) {
+					asm_.movapd(xmm15, RegS(ref));
+					if(node.shape.levels <= 1024)
+						asm_.paddq(xmm15, xmm15);
+					asm_.paddq(xmm15, offset);
+					asm_.movq(r8, xmm15);
+					asm_.movhlps(xmm15, xmm15);
+					asm_.movq(r9, xmm15);
+					Operand operand0 = EncodeOperand(node.in.p, r8, times_8);
+					Operand operand1 = EncodeOperand(node.in.p, r9, times_8);
 				
-				EmitScatter(node, RegR(ref), index);
-						
+					if(node.shape.levels <= 1024) {
+						asm_.movhlps(xmm15, RegR(ref));
+						if(node.isDouble())	asm_.minsd(RegR(ref), operand0);
+						else			_error("NYI: min on integers");
+						asm_.movq(operand0, RegR(ref));
+						if(node.isDouble())	asm_.minsd(xmm15, operand1);
+						else 			_error("NYI: min on integers");
+						asm_.movq(operand1, xmm15);
+						asm_.movlhps(RegR(ref), xmm15);
+					} else {
+						asm_.movlpd(RegR(ref), operand0);
+						asm_.movhpd(RegR(ref), operand1);
+						if(node.isDouble())	asm_.minpd(RegR(ref), operand0);
+						else 			_error("NYI: min on integers");
+						asm_.movlpd(operand0, RegR(ref));
+						asm_.movhpd(operand1, RegR(ref));
+					}
+				} else {
+					asm_.movq(r8, offset);
+					Operand operand = EncodeOperand(node.in.p, r8, times_8);
+					if(node.isDouble()) 	asm_.minpd(RegR(ref), operand);
+					else			_error("NYI: min on integers");
+					asm_.movdqa(operand, RegR(ref));
+				}
 				stackOffset += 0x10;
 			} break;
 
@@ -1180,14 +1309,6 @@ struct TraceJIT {
 				XMMRegister index = no_xmm;
 				
 				MoveA2R(ref);
-				
-				if(node.shape.split >= 0) {
-					asm_.movapd(xmm15, RegS(ref));
-					asm_.paddq(xmm15, xmm15);
-					index = xmm15;
-				}
-				EmitGather(xmm15, node, index, offset);
-				
 				if(node.shape.filter >= 0) {
 					asm_.pand(RegR(ref), RegF(ref));
 					asm_.pxor(EmitMove(xmm14, RegF(ref)), ConstantTable(C_NOT_MASK));
@@ -1195,11 +1316,41 @@ struct TraceJIT {
 					asm_.por(RegR(ref), xmm14);
 				}
 
-				if(node.isDouble()) 	asm_.maxpd(RegR(ref), xmm15);
-				else 			_error("NYI: max on integers");
+				if(node.shape.split >= 0 && node.shape.levels > 1) {
+					asm_.movapd(xmm15, RegS(ref));
+					if(node.shape.levels <= 1024)
+						asm_.paddq(xmm15, xmm15);
+					asm_.paddq(xmm15, offset);
+					asm_.movq(r8, xmm15);
+					asm_.movhlps(xmm15, xmm15);
+					asm_.movq(r9, xmm15);
+					Operand operand0 = EncodeOperand(node.in.p, r8, times_8);
+					Operand operand1 = EncodeOperand(node.in.p, r9, times_8);
 				
-				EmitScatter(node, RegR(ref), index);
-						
+					if(node.shape.levels <= 1024) {
+						asm_.movhlps(xmm15, RegR(ref));
+						if(node.isDouble())	asm_.maxsd(RegR(ref), operand0);
+						else			_error("NYI: max on integers");
+						asm_.movq(operand0, RegR(ref));
+						if(node.isDouble())	asm_.maxsd(xmm15, operand1);
+						else 			_error("NYI: max on integers");
+						asm_.movq(operand1, xmm15);
+						asm_.movlhps(RegR(ref), xmm15);
+					} else {
+						asm_.movlpd(RegR(ref), operand0);
+						asm_.movhpd(RegR(ref), operand1);
+						if(node.isDouble())	asm_.maxpd(RegR(ref), operand0);
+						else 			_error("NYI: max on integers");
+						asm_.movlpd(operand0, RegR(ref));
+						asm_.movhpd(operand1, RegR(ref));
+					}
+				} else {
+					asm_.movq(r8, offset);
+					Operand operand = EncodeOperand(node.in.p, r8, times_8);
+					if(node.isDouble()) 	asm_.maxpd(RegR(ref), operand);
+					else			_error("NYI: max on integers");
+					asm_.movdqa(operand, RegR(ref));
+				}
 				stackOffset += 0x10;
 			} break;
 
@@ -1403,23 +1554,6 @@ struct TraceJIT {
 		RestoreRegisters(ref);
 	}
 
-	void EmitSplitFold(IRef ref, void* fn) {
-		IRNode const& node = trace->nodes[ref];
-		XMMRegister src = RegR(ref);
-		XMMRegister split = RegS(ref);
-		int64_t step = node.out.length/thread.state.nThreads;
-		SaveRegisters(ref);
-		EmitMove(xmm0,src);
-		EmitMove(xmm1,split);
-		asm_.movq(rdi,(int64_t)&node.out);
-		asm_.movq(rsi,thread_index);
-		int64_t shl = 0;
-		while(step >>= 1) shl++;
-		asm_.movq(rdx,Immediate(shl));
-		EmitCall(fn);
-		RestoreRegisters(ref);
-	}
-
 	// put r0 in xmm0 and r1 in xmm1 being careful that they might overlap
 	void Arguments2(XMMRegister r0, XMMRegister r1) {
 		if(r1.is(xmm0)) EmitMove(xmm15, xmm0);
@@ -1537,14 +1671,14 @@ struct TraceJIT {
 		asm_.subq(rsp, Immediate(0x20));
 		asm_.movdqu(Operand(rsp,0),RegA(ref));
 		asm_.movdqu(Operand(rsp,0x10),RegB(ref));
-		asm_.movsd(xmm0,Operand(rsp,0));
-		asm_.movsd(xmm1,Operand(rsp,0x10));
+		asm_.movq(xmm0,Operand(rsp,0));
+		asm_.movq(xmm1,Operand(rsp,0x10));
 		EmitCall(fn);
-		asm_.movsd(Operand(rsp, 0),xmm0);
-		asm_.movsd(xmm0,Operand(rsp, 0x8));
-		asm_.movsd(xmm1,Operand(rsp, 0x18));
+		asm_.movq(Operand(rsp, 0),xmm0);
+		asm_.movq(xmm0,Operand(rsp, 0x8));
+		asm_.movq(xmm1,Operand(rsp, 0x18));
 		EmitCall(fn);
-		asm_.movsd(Operand(rsp, 0x8),xmm0);
+		asm_.movq(Operand(rsp, 0x8),xmm0);
 		asm_.movdqu(RegR(ref),Operand(rsp, 0));
 		asm_.addq(rsp, Immediate(0x20));
 		RestoreRegisters(ref);
@@ -1720,8 +1854,8 @@ struct TraceJIT {
 	}
 
 	void mergeCm2(IRNode& node, int64_t i, int64_t j) {
-		IRNode& a = trace->nodes[trace->nodes[node.binary.a].binary.b];
-		IRNode& b = trace->nodes[trace->nodes[node.binary.b].binary.b];
+		IRNode& a = trace->nodes[node.binary.a];
+		IRNode& b = trace->nodes[node.binary.b];
 		IRNode& c = trace->nodes[trace->nodes[node.trinary.c].binary.b];
 
 		double d1 = ((double*)a.in.p)[j];
@@ -1741,7 +1875,7 @@ struct TraceJIT {
 		for(IRef ref = 0; ref < (int64_t)trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
 
-			if(node.group == IRNode::FOLD) {
+			if(node.group == IRNode::FOLD && node.outShape.length <= 1024) {
 				int64_t step = node.in.length/thread.state.nThreads;
 
 				for(int64_t j = 0; j < thread.state.nThreads; j++) {
@@ -1771,7 +1905,8 @@ struct TraceJIT {
 							case IROpCode::max:
 								mergeMax(node, a, b);
 								break;
-							default: /* do nothing */ break;
+							default: // do nothing
+								break;
 						}
 					}
 				}
@@ -1786,8 +1921,8 @@ struct TraceJIT {
 				int64_t step = node.in.length/thread.state.nThreads;
 				for(int64_t j = 1; j < thread.state.nThreads; j++) {
 					for(int64_t i = 0; i < node.outShape.length; i++) {
-						int64_t a = 0*step+i*2;
-						int64_t b = j*step+i*2;
+						int64_t a = 0*step+i;
+						int64_t b = j*step+i;
 						switch(node.op) {
 							case IROpCode::sum: 
 								mergeSum(node, a, b);
@@ -1835,20 +1970,26 @@ struct TraceJIT {
 					node.out);
 			}
 			else if(node.group == IRNode::FOLD) {
-				if(node.isDouble()) {
-					Double& d = (Double&)node.out;
-					for(int64_t i = 0, j = 0; i < node.outShape.length; i++, j+=2) {
-						d[i] = ((double*)node.in.p)[j];
+				if(node.shape.levels <= 1024 && node.liveOut) {
+					if(node.isDouble()) {
+						Double& d = (Double&)node.out;
+						for(int64_t i = 0, j = 0; i < node.outShape.length; i++, j+=2) {
+							d[i] = ((Double&)node.in)[j];
+						}
 					}
-				}
-				else if(node.isInteger()) {
-					Integer& d = (Integer&)node.out;
-					for(int64_t i = 0, j = 0; i < node.outShape.length; i++, j+=2) {
-						d[i] = ((int64_t*)node.in.p)[j];
+					else if(node.isInteger()) {
+						Integer& d = (Integer&)node.out;
+						for(int64_t i = 0, j = 0; i < node.outShape.length; i++, j+=2) {
+							d[i] = ((Integer&)node.in)[j];
+						}
+					}
+					else {
+						_error("NYI");
 					}
 				}
 				else {
-					_error("NYI");
+					node.out = node.in;
+					node.out.length = node.outShape.length;
 				}
 			}
 		}

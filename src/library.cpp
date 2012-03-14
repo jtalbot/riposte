@@ -36,9 +36,9 @@ void sourceFile(Thread& thread, std::string name, Environment* env) {
 void openDynamic(Thread& thread, std::string path, Environment* env) {
 	std::string p = std::string("/Users/jtalbot/riposte/")+path;
 	void* lib = dlopen(p.c_str(), RTLD_LAZY);
-	if(lib == NULL) {
-		_error(std::string("failed to open: ") + p + " (" + dlerror() + ")");
-	}
+	//if(lib == NULL) {
+	//	_error(std::string("failed to open: ") + p + " (" + dlerror() + ")");
+	//}
 	// set lib in env...
 }
 

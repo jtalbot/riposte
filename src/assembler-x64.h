@@ -670,10 +670,13 @@ class Assembler {
   void movzxwq(Register dst, const Operand& src);
   void movzxwl(Register dst, const Operand& src);
 
+  void movq(XMMRegister dst, const Operand& src);
+  void movq(const Operand& dst, XMMRegister src);
   void movlpd(XMMRegister dst, const Operand& src);
   void movlpd(const Operand& dst, XMMRegister src);
   void movhpd(XMMRegister dst, const Operand& src);
   void movhpd(const Operand& dst, XMMRegister src);
+  void movlhps(XMMRegister dst, XMMRegister src);
   void movhlps(XMMRegister dst, XMMRegister src);
 
   // Repeated moves.
@@ -884,6 +887,10 @@ class Assembler {
   void imull(Register dst, Register src);                 // dst = dst * src.
   void imull(Register dst, const Operand& src);           // dst = dst * src.
   void imull(Register dst, Register src, Immediate imm);  // dst = src * imm.
+  // Signed 64-bit multiply instructions.
+  void imulq(Register dst, Register src);                 // dst = dst * src.
+  void imulq(Register dst, const Operand& src);           // dst = dst * src.
+  void imulq(Register dst, Register src, Immediate imm);  // dst = src * imm.
 
   void incq(Register dst);
   void incq(const Operand& dst);
@@ -1295,9 +1302,14 @@ class Assembler {
   void addsd(XMMRegister dst, XMMRegister src);
   void addsd(XMMRegister dst, const Operand& src);
   void subsd(XMMRegister dst, XMMRegister src);
+  void subsd(XMMRegister dst, const Operand& src);
   void mulsd(XMMRegister dst, XMMRegister src);
   void mulsd(XMMRegister dst, const Operand& src);
   void divsd(XMMRegister dst, XMMRegister src);
+  void minsd(XMMRegister dst, XMMRegister src);
+  void minsd(XMMRegister dst, const Operand& src);
+  void maxsd(XMMRegister dst, XMMRegister src);
+  void maxsd(XMMRegister dst, const Operand& src);
 
   void addpd(XMMRegister dst, XMMRegister src);
   void addpd(XMMRegister dst, const Operand& src);

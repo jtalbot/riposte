@@ -144,10 +144,8 @@ IRef Trace::EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, int64
 		n.shape = nodes[a].outShape;
 	}
 	if(op == IROpCode::cm2) {
-		n.binary.a = EmitBinary(IROpCode::sub, Type::Double,
-					a, EmitUnary(IROpCode::mean, Type::Double, a, 0), 0);
-		n.binary.b = EmitBinary(IROpCode::sub, Type::Double,
-					b, EmitUnary(IROpCode::mean, Type::Double, b, 0), 0);
+		n.binary.a = EmitUnary(IROpCode::mean, Type::Double, a, 0); 
+		n.binary.b = EmitUnary(IROpCode::mean, Type::Double, b, 0);
 		union {
 			double d;
 			int64_t i;
