@@ -45,11 +45,11 @@ print <- function(...) cat(...)
 		if(missing(i) && missing(j))
 			x
 		else if(missing(i))
-			strip(x)[(1L:d[[1]])+(d[[1]]*(strip(j)-1L))]
+			strip(x)[(1L:d[[1L]])+(d[[1L]]*(as.integer(strip(j))-1L))]
 		else if(missing(j))
-			strip(x)[(0L:(d[[2]]-1L))*(d[[1]])+strip(i)]
+			strip(x)[(0L:(d[[2L]]-1L))*(d[[1L]])+as.integer(strip(i))]
 		else
-			strip(x)[(strip(i)-1L)*d[[1]]+strip(j)]	
+			strip(x)[(as.integer(strip(i))-1L)*d[[1L]]+as.integer(strip(j))]	
 	}
 }
 

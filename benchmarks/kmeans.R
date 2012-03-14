@@ -37,11 +37,9 @@ assignment <- function(data, means) {
 
 update.means <- function(data, index) {
 	means <- list()
-	#for(i in 1L:2L) {
-#		means[[i]] <- lapply(split(data[,i], index-1L, K), "mean")
-#	}
-	means[[1]] <- lapply(split(data[,1], index-1L, K), "mean")
-	means[[2]] <- lapply(split(data[,2], index-1L, K), "mean")
+	for(i in 1L:ncol(data)) {
+		means[[i]] <- lapply(split(data[,i], index-1L, K), "mean")
+	}
 	means
 }
 

@@ -465,7 +465,7 @@ struct TraceJIT {
 			}
 		}
 		int8_t r = minReg;
-		//printf("spilled %d (%d => %d)\n", minReg, liveRegisters[r], currentOp);
+		printf("spilled r%d (replaced n%d with n%d)\n", minReg, liveRegisters[r], currentOp);
 		allocated_register[liveRegisters[r]] = spills++; // mark node as spilled
 		liveRegisters[r] = -1;	// unassign spilled register
 		return r;
@@ -481,6 +481,7 @@ struct TraceJIT {
 				//printf("spilling\n");
 				r = spillRegister(currentOp);
 			}
+			//printf("Assigned n%d to r%d\n", node, r);
 		}
 		assignment.r = r;
 		allocated_register[node] = r;
@@ -730,21 +731,22 @@ struct TraceJIT {
 
 
 			// unspill if necessary...
-			switch(node.arity) {
-			case IRNode::TRINARY: 
-				unspill(assignment[ref].c, allocated_register[node.trinary.c]);
-			case IRNode::BINARY:
-				unspill(assignment[ref].b, allocated_register[node.binary.b]);
-			case IRNode::UNARY:
-				unspill(assignment[ref].a, allocated_register[node.unary.a]);
-			default:
-				if(node.shape.filter >= 0)
-					unspill(assignment[ref].f, allocated_register[node.shape.filter]);
-				if(node.shape.split >= 0)
-					unspill(assignment[ref].s, allocated_register[node.shape.split]);
+			if(node.group != IRNode::SCALAR) {
+				switch(node.arity) {
+					case IRNode::TRINARY: 
+						unspill(assignment[ref].c, allocated_register[node.trinary.c]);
+					case IRNode::BINARY:
+						unspill(assignment[ref].b, allocated_register[node.binary.b]);
+					case IRNode::UNARY:
+						unspill(assignment[ref].a, allocated_register[node.unary.a]);
+					default:
+						if(node.shape.filter >= 0)
+							unspill(assignment[ref].f, allocated_register[node.shape.filter]);
+						if(node.shape.split >= 0)
+							unspill(assignment[ref].s, allocated_register[node.shape.split]);
+				}
+				allocated_register[ref] = assignment[ref].r.r;
 			}
-			allocated_register[ref] = assignment[ref].r.r;
-
 			switch(node.op) {
 
 			case IROpCode::constant: {
@@ -1460,20 +1462,22 @@ struct TraceJIT {
 
 
 			// spill if necessary...
-			switch(node.arity) {
-			case IRNode::TRINARY: 
-				spill(assignment[ref].c, allocated_register[node.trinary.c]);
-			case IRNode::BINARY:
-				spill(assignment[ref].b, allocated_register[node.binary.b]);
-			case IRNode::UNARY:
-				spill(assignment[ref].a, allocated_register[node.unary.a]);
-			default:
-				if(node.shape.filter >= 0)
-					spill(assignment[ref].f, allocated_register[node.shape.filter]);
-				if(node.shape.split >= 0)
-					spill(assignment[ref].s, allocated_register[node.shape.split]);
-			
-				spill(assignment[ref].r, allocated_register[ref]);
+			if(node.group != IRNode::SCALAR) {
+				switch(node.arity) {
+					case IRNode::TRINARY: 
+						spill(assignment[ref].c, allocated_register[node.trinary.c]);
+					case IRNode::BINARY:
+						spill(assignment[ref].b, allocated_register[node.binary.b]);
+					case IRNode::UNARY:
+						spill(assignment[ref].a, allocated_register[node.unary.a]);
+					default:
+						if(node.shape.filter >= 0)
+							spill(assignment[ref].f, allocated_register[node.shape.filter]);
+						if(node.shape.split >= 0)
+							spill(assignment[ref].s, allocated_register[node.shape.split]);
+
+						spill(assignment[ref].r, allocated_register[ref]);
+				}
 			}
 		}
 
