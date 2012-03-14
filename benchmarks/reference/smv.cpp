@@ -16,12 +16,14 @@ int main() {
 	double result[N];
 
 	double* v = new double[N];
-	int* row_idx = new int[M];
-	int* col_idx =new  int[M];
+	int64_t* row_idx = new int64_t[M];
+	int64_t* col_idx =new  int64_t[M];
 	double* values = new double[M];
 
-	for(int i = 0; i < N; i++) 
+	for(int i = 0; i < N; i++) { 
 		result[i] = 0;
+		v[i] = drand();
+	}
 	
 	for(int i = 0; i < M; i++) {
 		row_idx[i] = (int)(drand()*N);

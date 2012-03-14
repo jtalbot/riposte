@@ -46,7 +46,7 @@ c(  NA,
 	NA,
 	NA
 )
-r <- read.table("benchmarks/data/lineitem.tbl",sep="|",colClasses=format)
+r <- read.table("benchmarks/data/lineitem_10.tbl",sep="|",colClasses=format)
 a <- ifelse(r[[5]] == 'A', 0L, ifelse(r[[5]] == 'N', 1L, 2L))
 b <- ifelse(r[[6]] == 'F', 0L, 1L)
 f <- factor(a*2L+b, 0L:5L)

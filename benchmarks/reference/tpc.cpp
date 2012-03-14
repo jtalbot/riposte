@@ -43,7 +43,7 @@ time_t convert_time(const char * time) {
 static int interval = 90; //in days
 
 //define N_ROWS for the correct problem size...
-//static int N_ROWS = ;
+static int N_ROWS = 59986052;
 
 const static int N_GROUPS = 6;
 
@@ -72,7 +72,7 @@ int main() {
 
 	int ref_date = convert_time(time_for_filter);
 	printf("%d\n", ref_date);	
-	FILE * file = fopen("../data/lineitem.tbl","r");
+	FILE * file = fopen("../data/lineitem_10.tbl","r");
 	assert(file);
 	for(int i = 0; i < N_ROWS; i++) {
 		char buf[4096];
