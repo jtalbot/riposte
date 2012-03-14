@@ -465,7 +465,7 @@ struct TraceJIT {
 			}
 		}
 		int8_t r = minReg;
-		printf("spilled r%d (replaced n%d with n%d)\n", minReg, liveRegisters[r], currentOp);
+		//printf("spilled r%d (replaced n%d with n%d)\n", minReg, liveRegisters[r], currentOp);
 		allocated_register[liveRegisters[r]] = spills++; // mark node as spilled
 		liveRegisters[r] = -1;	// unassign spilled register
 		return r;

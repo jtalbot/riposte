@@ -701,7 +701,7 @@ public:
 		if(i == traces.end()) 
 			_error("Unevaluated future left behind");
 		Trace* trace = i->second;
-		if(trace->nodes.size() > 1024) {
+		if(trace->nodes.size() > 2048) {
 			Bind(v);
 		}
 	}
