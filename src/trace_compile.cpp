@@ -626,12 +626,12 @@ struct TraceJIT {
 			if(node.group == IRNode::FOLD) {
 				int64_t size = node.shape.levels <= 1024 ? node.shape.levels*2 : node.shape.levels;
 				if(node.type == Type::Double) {
-					// 8 min fills cache line
-					node.in = Double(std::max(size, (int64_t)8LL)*thread.state.nThreads);
+					// 16 min fills possibly unaligned cache line
+					node.in = Double(std::max(size, (int64_t)16LL)*thread.state.nThreads);
 				} else if(node.type == Type::Integer) {
-					node.in = Integer(std::max(size, (int64_t)8LL)*thread.state.nThreads);
+					node.in = Integer(std::max(size, (int64_t)16LL)*thread.state.nThreads);
 				} else if(node.type == Type::Logical) {
-					node.in = Logical(std::max(size, (int64_t)64LL)*thread.state.nThreads);
+					node.in = Logical(std::max(size, (int64_t)128LL)*thread.state.nThreads);
 				} else {
 					_error("Unknown type in initialize temporary space");
 				}
@@ -708,7 +708,7 @@ struct TraceJIT {
 			}
 			else if(node.group == IRNode::FOLD) { 
 				int64_t step = node.in.length / thread.state.nThreads;
-				asm_.movq(r11, Immediate(step*8LL));
+				asm_.movq(r11, Immediate(step));
 				asm_.imulq(r11, thread_index);
 				asm_.movq(Operand(rsp, stackOffset), r11);
 				if(node.shape.levels <= 1024)
