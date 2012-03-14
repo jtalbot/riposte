@@ -638,7 +638,7 @@ struct TraceJIT {
 			}
 
 			// allocate outputs
-			if(node.liveOut && (node.group != IRNode::FOLD || node.outShape.length <= 1024)) { 
+			if(node.liveOut || (node.group == IRNode::FOLD && node.outShape.length <= 1024)) { 
 				int64_t length = node.outShape.length;
 				
 				if(node.shape.levels != 1 && node.group != IRNode::FOLD)
@@ -711,6 +711,8 @@ struct TraceJIT {
 				asm_.movq(r11, Immediate(step*8LL));
 				asm_.imulq(r11, thread_index);
 				asm_.movq(Operand(rsp, stackOffset), r11);
+				if(node.shape.levels <= 1024)
+					asm_.addq(r11, Immediate(1));
 				asm_.movq(Operand(rsp, stackOffset+0x8), r11);
 				stackOffset += 0x10;
 			}
@@ -1410,29 +1412,32 @@ struct TraceJIT {
 
 			case IROpCode::ifelse:
 				if(RegA(ref).is(xmm0)) {
-					SaveRegisters(ref);
+					EmitMove(xmm14, xmm0);
 					EmitMove(xmm15, RegA(ref));
 					EmitMove(xmm0, RegC(ref));
 					asm_.blendvpd(xmm15, RegB(ref));
 					EmitMove(RegR(ref), xmm15);
-					RestoreRegisters(ref);
+					if(!RegR(ref).is(xmm0))
+						EmitMove(xmm0, xmm14);
 				} else if(RegB(ref).is(xmm0)) {
-					SaveRegisters(ref);
+					EmitMove(xmm14, xmm0);
 					EmitMove(xmm15, RegA(ref));
 					EmitMove(RegA(ref), RegB(ref));
 					EmitMove(xmm0, RegC(ref));
 					asm_.blendvpd(xmm15, RegA(ref));
 					EmitMove(RegR(ref), xmm15);
-					RestoreRegisters(ref);
+					if(!RegR(ref).is(xmm0))
+						EmitMove(xmm0, xmm14);
 				} else if(RegC(ref).is(xmm0)) {
 					EmitMove(RegR(ref), RegA(ref));
 					asm_.blendvpd(RegR(ref), RegB(ref));
 				} else {
-					SaveRegisters(ref);
+					EmitMove(xmm14, xmm0);
 					EmitMove(xmm0, RegC(ref));
 					EmitMove(RegR(ref), RegA(ref));
 					asm_.blendvpd(RegR(ref), RegB(ref));
-					RestoreRegisters(ref);
+					if(!RegR(ref).is(xmm0))
+						EmitMove(xmm0, xmm14);
 				}
 			break;
 
@@ -1815,6 +1820,7 @@ struct TraceJIT {
 	
 	// merge value in j into i
 	void mergeSum(IRNode& node, int64_t i, int64_t j) {
+		//printf("summing (%d=>%d): %f %f\n", j, i, ((double*)node.in.p)[i], ((double*)node.in.p)[j]);
 		if(node.isDouble())
 			((double*)node.in.p)[i] += ((double*)node.in.p)[j];
 		else
@@ -1843,7 +1849,7 @@ struct TraceJIT {
 			((double*)b.in.p)[i],
 			((double*)node.in.p)[j],
 			((double*)b.in.p)[j]);
-*/
+		*/
 		// u2 in a, n2 in b
 		if(((double*)b.in.p)[i] > 0) {
 			double m1 = ((double*)node.in.p)[i];
@@ -1974,7 +1980,7 @@ struct TraceJIT {
 					node.out);
 			}
 			else if(node.group == IRNode::FOLD) {
-				if(node.shape.levels <= 1024 && node.liveOut) {
+				if(node.shape.levels <= 1024) {
 					if(node.isDouble()) {
 						Double& d = (Double&)node.out;
 						for(int64_t i = 0, j = 0; i < node.outShape.length; i++, j+=2) {

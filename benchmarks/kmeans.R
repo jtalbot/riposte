@@ -17,6 +17,7 @@ cat(means[[2]],"\n")
 cat(means[[3]],"\n")
 cat(means[[4]],"\n")
 cat(means[[5]],"\n")
+cat("\n")
 
 
 # assignment step
@@ -47,13 +48,11 @@ benchmark <- function(reps) {
 
 	for(i in 1L:reps) {
 		m <- update.means(a, assignment(a, means))
-		#cat("------\n")
-		#cat(m[[1]], "\n")
-		#cat(m[[2]], "\n")
 		# reorganize means from SoA to AoS
 		for(i in 1L:K) {
 			means[[i]] <<- c(m[[1]][[i]], m[[2]][[i]])
 		}
+		#cat("\n")
 		#cat(means[[1]],"\n")
 		#cat(means[[2]],"\n")
 		#cat(means[[3]],"\n")
