@@ -42,7 +42,8 @@ time_t convert_time(const char * time) {
 
 static int interval = 90; //in days
 
-static int N_ROWS = 6001215;
+//define N_ROWS for the correct problem size...
+//static int N_ROWS = ;
 
 const static int N_GROUPS = 6;
 
@@ -60,13 +61,14 @@ double update_average(double cur, double new_value, double invnp1) {
 }
 
 int main() {
-	int * quantity = new int[N_ROWS];
+	int64_t * quantity = new int64_t[N_ROWS];
 	double * extended_price = new double[N_ROWS];
 	double * discount = new double[N_ROWS];
 	double * tax = new double[N_ROWS];
-	char * return_flag = new char[N_ROWS];
-	char * line_status = new char[N_ROWS];
-	int * ship_date = new int[N_ROWS];
+	int64_t * group = new int64_t[N_ROWS];
+	//char * return_flag = new char[N_ROWS];
+	//char * line_status = new char[N_ROWS];
+	int64_t * ship_date = new int64_t[N_ROWS];
 
 	int ref_date = convert_time(time_for_filter);
 	printf("%d\n", ref_date);	
@@ -88,8 +90,9 @@ int main() {
 		extended_price[i] = atof(columns[EXTENDEDPRICE]);
 		discount[i] = atof(columns[DISCOUNT]);
 		tax[i] = atof(columns[TAX]);
-		return_flag[i] = intern_string(return_item_codes,columns[RETURNFLAG]);
-		line_status[i] = intern_string(line_status_codes, columns[LINESTATUS]);
+		char return_flag = intern_string(return_item_codes,columns[RETURNFLAG]);
+		char line_status = intern_string(line_status_codes, columns[LINESTATUS]);
+		group[i] = (return_flag << 1) + line_status;
 		ship_date[i] = convert_time(columns[SHIPDATE]);
 	}
 	
@@ -97,29 +100,29 @@ int main() {
 	typ name[N_GROUPS]; \
 	memset(name,0,sizeof(typ) * N_GROUPS);
 	
-	CREATE(int,sum_qty);
+	CREATE(int64_t,sum_qty);
 	CREATE(double,sum_base_price);
 	CREATE(double,sum_disc_price);
 	CREATE(double,sum_charge);
 	CREATE(double,avg_qty);
 	CREATE(double,avg_price);
 	CREATE(double,avg_disc);
-	CREATE(int,count);
+	CREATE(int64_t,count);
 
 	double begin = current_time();
 
 	for(int i = 0; i < N_ROWS; i++) {
 		if(ship_date[i] <= ref_date - 24 * 60 * 60 * interval) {
-			int group = (return_flag[i] << 1) + line_status[i];
-			sum_qty[group] += quantity[i];
-			sum_base_price[group] += extended_price[i];
-			sum_disc_price[group] += extended_price[i] * (1 - discount[i]);
-			sum_charge[group] += extended_price[i]*(1-discount[i])*(1+tax[i]);
-			double invnp1 = 1.0/(count[group]+1);
-			avg_qty[group] = update_average(avg_qty[group],quantity[i],invnp1);
-			avg_price[group] = update_average(avg_price[group],extended_price[i],invnp1);
-			avg_disc[group] = update_average(avg_disc[group],discount[i],invnp1);
-			count[group]++;
+			int grp = group[i];
+			sum_qty[grp] += quantity[i];
+			sum_base_price[grp] += extended_price[i];
+			sum_disc_price[grp] += extended_price[i] * (1 - discount[i]);
+			sum_charge[grp] += extended_price[i]*(1-discount[i])*(1+tax[i]);
+			double invnp1 = 1.0/(count[grp]+1);
+			avg_qty[grp] = update_average(avg_qty[grp],quantity[i],invnp1);
+			avg_price[grp] = update_average(avg_price[grp],extended_price[i],invnp1);
+			avg_disc[grp] = update_average(avg_disc[grp],discount[i],invnp1);
+			count[grp]++;
 		}
 	}
 
@@ -133,19 +136,19 @@ int main() {
 	printf("}\n"); \
 } while(0)
 
-#define PRINT_int(x) printf("%d,",x)
+#define PRINT_int64_t(x) printf("%d,",(int)x)
 #define PRINT_double(x) printf("%f, ",x)
 	for(int i = 0; i < N_GROUPS; i++) {
 		printf("%c %c\n", return_item_codes[i>>1], line_status_codes[i&1]);
 	}
-	REPORT(int,sum_qty);
+	REPORT(int64_t,sum_qty);
 	REPORT(double,sum_base_price);
 	REPORT(double,sum_disc_price);
 	REPORT(double,sum_charge);
 	REPORT(double,avg_qty);
 	REPORT(double,avg_price);
 	REPORT(double,avg_disc);
-	REPORT(int,count);
+	REPORT(int64_t,count);
 	
 	
 	return 0;
