@@ -627,11 +627,11 @@ struct TraceJIT {
 				int64_t size = node.shape.levels <= 1024 ? node.shape.levels*2 : node.shape.levels;
 				if(node.type == Type::Double) {
 					// 16 min fills possibly unaligned cache line
-					node.in = Double(std::max(size, (int64_t)16LL)*thread.state.nThreads);
+					node.in = Double((size+16LL)*thread.state.nThreads);
 				} else if(node.type == Type::Integer) {
-					node.in = Integer(std::max(size, (int64_t)16LL)*thread.state.nThreads);
+					node.in = Integer((size+16LL)*thread.state.nThreads);
 				} else if(node.type == Type::Logical) {
-					node.in = Logical(std::max(size, (int64_t)128LL)*thread.state.nThreads);
+					node.in = Logical((size+128LL)*thread.state.nThreads);
 				} else {
 					_error("Unknown type in initialize temporary space");
 				}
@@ -1794,12 +1794,12 @@ struct TraceJIT {
 		if(thread.state.verbose) {
 			//timespec begin;
 			//get_time(begin);
-			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->Size, 4, 16*1024); 
+			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->Size, 4, 1024); 
 			//trace_code(thread.index, 0, trace->length);
 			//double s = trace->length / (time_elapsed(begin) * 10e9);
 			//printf("elements computed / us: %f\n",s);
 		} else {
-			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->Size, 4, 16*1024); 
+			thread.doall(NULL, executebody, (void*)trace_code, 0, trace->Size, 4, 1024); 
 			//trace_code(thread.index, 0, trace->length);
 		}
 	}
