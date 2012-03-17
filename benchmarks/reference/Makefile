@@ -4,8 +4,11 @@ LFLAGS =
 
 .SUFFIXES:
 
-bin/%:	%.cpp
-	$(CXX) $(LFLAGS) $(FLAGS) $< -o $@
+bin/%:	%.cpp vec.o
+	$(CXX) $(LFLAGS) $(FLAGS) $< vec.o -o $@
+	
+vec.o:	vec.ispc
+	ispc --target=sse4 $< -o $@
 	
 #bin/pca:	../pca.txt
 #bin/kmeans:	../kmeans.txt
