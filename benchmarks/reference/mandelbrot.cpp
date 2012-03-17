@@ -87,7 +87,7 @@ int main() {
 	
 	double begin = current_time();
 
-	mandelbrot_serial(-2,-1,1,1,width,height,100,output);
+	mandelbrot_loop(-2,-1,1,1,width,height,100,output);
 
 	printf("Elapsed: %f\n", current_time()-begin);
 	return 0;

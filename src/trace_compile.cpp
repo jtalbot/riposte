@@ -1157,7 +1157,7 @@ struct TraceJIT {
 						asm_.movapd(xmm14, RegR(ref));
 						asm_.mulsd(xmm14, RegB(ref));
 						if(node.shape.filter >= 0) {
-							asm_.pand(xmm14, xmm14);
+							asm_.pand(xmm14, RegF(ref));
 						}
 						asm_.addsd(xmm14, operand0);
 						asm_.movq(operand0, xmm14);
@@ -1180,7 +1180,7 @@ struct TraceJIT {
 						asm_.movapd(xmm15, RegR(ref));
 						asm_.mulpd(xmm15, RegB(ref));
 						if(node.shape.filter >= 0) {
-							asm_.pand(xmm15, xmm15);
+							asm_.pand(xmm15, RegF(ref));
 						}
 						asm_.addpd(xmm15, xmm14);
 						asm_.movlpd(operand0, xmm15);
@@ -1193,7 +1193,7 @@ struct TraceJIT {
 					asm_.movapd(xmm15, RegR(ref));
 					asm_.mulpd(xmm15, RegB(ref));
 					if(node.shape.filter >= 0) {
-						asm_.pand(xmm15, xmm15);
+						asm_.pand(xmm15, RegF(ref));
 					}
 					asm_.addpd(xmm15, operand);
 					asm_.movdqa(operand, xmm15);
