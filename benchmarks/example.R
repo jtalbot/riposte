@@ -7,7 +7,7 @@ bin <- function(x) { ifelse(x > 0, 1, ifelse(x < 0, -1, 0)) }
 ignore <- function(x) { is.na(x) | x == 9999 }
 
 clean <- function(data) {
-	data[[2]][!is.na(data[[1]]) & bin(data[[1]]) == 1]
+	data[[2]][!ignore(data[[1]]) & bin(data[[1]]) == 1]
 }
 
 mean(clean(data))
