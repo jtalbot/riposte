@@ -51,17 +51,30 @@ double cdf(double p) {
 
 double means[] = { 0,2,10 };
 double sd[] = { 1,0.1,3 };
-
+#define BLK 100
 int main() {
 	int N = 10000000;
 	double * b = new double[N];
 
 	double begin = current_time();
+	#if 1
+	for(int i = 0; i < N; i += BLK) {
+		double a[BLK];
+		int idx[BLK];
+		for(int j = 0; j < BLK; j++) {
+			a[j] = rand() / (double) 0xFFFFFFFF;
+			idx[j] = rand() % 3;
+		}
+		for(int j = 0; j < BLK; j++)
+			b[i+j] = cdf(a[j]) * sd[idx[j]] + means[idx[j]];
+	}
+	#else
 	for(int i = 0; i < N; i++) {
 		double a = rand() / (double) 0xFFFFFFFF;
 		size_t idx = rand() % 3;
 		b[i] = cdf(a) * sd[idx] + means[idx];
 	}
+	#endif
 	printf("%f\n", b[0]);
 	printf("Elapsed: %f\n", current_time()-begin);
 }

@@ -306,7 +306,7 @@ public:
 		uint64_t v[2];
 		uint64_t m[2];
 		uint64_t a[2];
-		uint64_t padding[2];
+		uint64_t padding[10];
 	};
 
 	static RandomSeed seed[100];

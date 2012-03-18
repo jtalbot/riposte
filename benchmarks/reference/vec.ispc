@@ -1,3 +1,13 @@
+
+export uniform int smv_loop(uniform int64 col_idx[], uniform int64 row_idx[], uniform double values[], uniform double result[], uniform int64 M) {
+	for(uniform int64 i = 0; i < M; i += 2) {
+		varying int64 c = col_idx[i + (programIndex%2)];
+		varying int64 r = row_idx[i + (programIndex%2)];
+		result[r] += values[i + (programIndex%2)] * values[c];
+	}
+	return programCount;
+}
+
 /*
   Copyright (c) 2010-2011, Intel Corporation
   All rights reserved.
@@ -30,12 +40,7 @@
    NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.  
 */
-
-#include <stdio.h>
-#include "timing.h"
-
-//#include<vdb.h>
-static int mandel(double c_re, double c_im, int count) {
+static inline int mandel(double c_re, double c_im, int count) {
     double z_re = c_re, z_im = c_im;
     int i;
     for (i = 0; i < count; ++i) {
@@ -51,44 +56,30 @@ static int mandel(double c_re, double c_im, int count) {
     return i;
 }
 
-void mandelbrot_serial(double x0, double y0, double x1, double y1,
-                       int width, int height, int maxIterations,
-                       double output[])
+export void mandelbrot_loop(uniform double x0, uniform double y0, 
+                            uniform double x1, uniform double y1,
+                            uniform int width, uniform int height, 
+                            uniform int maxIterations,
+                            uniform int output[])
 {
     double dx = (x1 - x0) / width;
     double dy = (y1 - y0) / height;
 
-    for (int j = 0; j < height; j++) {
-        for (int i = 0; i < width; ++i) {
+    for (uniform int j = 0; j < height; j++) {
+        // Note that we'll be doing programCount computations in parallel,
+        // so increment i by that much.  This assumes that width evenly
+        // divides programCount.
+        foreach (i = 0 ... width) {
+            // Figure out the position on the complex plane to compute the
+            // number of iterations at.  Note that the x values are
+            // different across different program instances, since its
+            // initializer incorporates the value of the programIndex
+            // variable.
             double x = x0 + i * dx;
             double y = y0 + j * dy;
 
-            int index = (j * width + i);
+            int index = j * width + i;
             output[index] = mandel(x, y, maxIterations);
-        	#if 0
-        	double v = .5 * (1 - output[index] / maxIterations);
-        	vdb_color(.5+v,.5+v,.5+v);
-        	vdb_point(x,y,v / 10);
-        	#endif
         }
     }
-}
-extern "C" {
-void mandelbrot_loop(double x0, double y0, double x1, double y1,
-                       int width, int height, int maxIterations,
-                       double output[]);
-}
-static const int V_WIDTH = 1024 * 768;
-int main() {
-	int width = 1024;
-	int height = V_WIDTH / width;
-	
-	double * output = new double[V_WIDTH];
-	
-	double begin = current_time();
-
-	mandelbrot_loop(-2,-1,1,1,width,height,100,output);
-
-	printf("Elapsed: %f\n", current_time()-begin);
-	return 0;
 }
