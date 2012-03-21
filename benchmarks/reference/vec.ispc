@@ -83,3 +83,30 @@ export void mandelbrot_loop(uniform double x0, uniform double y0,
         }
     }
 }
+
+#define N_DIMS 2
+#define N_MEANS 5
+#define N_POINTS 1000000
+#define DBL_MAX 10000000000000.0
+export void kmeans_loop(uniform double points[], uniform int32 count[], uniform double means[], uniform double new_means[]) {
+	for(uniform int ii = 0; ii < N_POINTS; ii += programCount) {
+		int i = ii + programIndex;
+		double min_dist_2 = DBL_MAX;
+		int index = 0;
+		for(uniform int m = 0; m < N_MEANS; m++) {
+			double dist_2 = 0.0;
+			for(uniform int d = 0; d < N_DIMS; d++) {
+				uniform double mm = means[N_DIMS * m + d];
+				double diff = points[N_POINTS * d + i] - mm;
+				dist_2 += diff * diff;
+			}
+			if(dist_2 < min_dist_2) {
+				min_dist_2 = dist_2;
+				index = m;
+			}
+		}
+		count[programCount * N_MEANS +index]++;
+		for(uniform int d = 0; d < N_DIMS; d++)
+			new_means[programCount * N_MEANS * N_DIMS + index * N_DIMS + d] += (points[d * N_POINTS + i] - new_means[programCount * N_MEANS * N_DIMS + index * N_DIMS + d]) / count[programCount * N_MEANS +index];
+	}
+}
