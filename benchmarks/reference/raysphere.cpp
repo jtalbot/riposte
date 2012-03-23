@@ -5,6 +5,9 @@
 
 #include "timing.h"
 
+extern "C" {
+	double raysphere_loop(int n,double start,double,double,double, double xo, double xc[], double yo, double yc[], double zo, double zc[]);
+}
 int main() {
 
 	int n = 10000000;
@@ -28,6 +31,11 @@ int main() {
 
 	double a = 1;
 	
+	
+	#if 0
+	double r = raysphere_loop(n,DBL_MAX, xd,yd,zd,xo, xc, yo, yc, zo, zc);
+	#else
+	
 	double r = DBL_MAX;
 	for(int i = 0; i < n; i++) {
 	
@@ -41,6 +49,7 @@ int main() {
 			r = std::min(r,std::min(t0,t1));
 		}
 	}
+	#endif
 	printf("%f\n",r);
 	printf("Elapsed: %f\n", current_time()-begin);
 	return 0;
