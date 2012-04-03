@@ -1,13 +1,4 @@
 
-export uniform int smv_loop(uniform int64 col_idx[], uniform int64 row_idx[], uniform double values[], uniform double result[], uniform int64 M) {
-	for(uniform int64 i = 0; i < M; i += 2) {
-		varying int64 c = col_idx[i + (programIndex%2)];
-		varying int64 r = row_idx[i + (programIndex%2)];
-		result[r] += values[i + (programIndex%2)] * values[c];
-	}
-	return programCount;
-}
-
 /*
   Copyright (c) 2010-2011, Intel Corporation
   All rights reserved.
@@ -109,4 +100,31 @@ export void kmeans_loop(uniform double points[], uniform int32 count[], uniform 
 		for(uniform int d = 0; d < N_DIMS; d++)
 			new_means[programCount * N_MEANS * N_DIMS + index * N_DIMS + d] += (points[d * N_POINTS + i] - new_means[programCount * N_MEANS * N_DIMS + index * N_DIMS + d]) / count[programCount * N_MEANS +index];
 	}
+}
+
+
+export void smv_loop(uniform int M, uniform int64 col_idx[], uniform int64 row_idx[], uniform double values[],uniform double v[],uniform double result[]) {
+	for(uniform int ii = 0; ii < M; ii += programCount) {
+		int i = ii + programIndex;
+		int c = col_idx[i];
+		int r = row_idx[i];
+		result[r] += values[i] * v[c];
+	}
+}
+
+export uniform double raysphere_loop(uniform int n,uniform double start, uniform double xd, uniform double yd, uniform double zd, uniform double xo, uniform double xc[], uniform double yo, uniform double yc[], uniform double zo, uniform double zc[]) {
+	double r = start;
+	for(uniform int ii = 0; ii < n; ii += programCount) {
+		int i = ii + programIndex;
+		double b = 2*(xd*(xo-xc[i])+yd*(yo-yc[i])+zd*(zo-zc[i]));
+		double c = (xo-xc[i])*(xo-xc[i])+(yo-yc[i])*(yo-yc[i])+(zo-zc[i])*(zo-zc[i])-1;
+		
+		double disc = b*b-4*c;
+		if(disc > 0) {
+			double t0 = (-b - sqrt(disc))/2;
+			double t1 = (-b + sqrt(disc))/2;
+			r = min(r,min(t0,t1));
+		}
+	}
+	return reduce_min(r);
 }
