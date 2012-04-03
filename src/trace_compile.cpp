@@ -18,6 +18,8 @@ using namespace v8::internal;
 #define SIMD_WIDTH (2 * sizeof(double))
 #define CODE_BUFFER_SIZE (256 * 2048)
 
+#define BIG_CARDINALITY 1024 
+
 struct Constant {
 	Constant() {}
 	Constant(int64_t i)
@@ -587,6 +589,8 @@ struct TraceJIT {
 	void InstructionSelection() {
 		//pass 2 instruction selection
 
+		int qq = 0;
+
 		//registers are callee saved so that we can make external function calls without saving the registers the tight loop
 		//we need to explicitly save and restore these on entrace and exit to the function
 		thread_index = rbp;
@@ -624,7 +628,7 @@ struct TraceJIT {
 			// TODO: allocate thread split filtered output (how to maintain ordering?)
 			// allocate temporary space for folds (put in IRNode::in)
 			if(node.group == IRNode::FOLD) {
-				int64_t size = node.shape.levels <= 1024 ? node.shape.levels*2 : node.shape.levels;
+				int64_t size = node.shape.levels <= BIG_CARDINALITY ? node.shape.levels*2 : node.shape.levels;
 				if(node.type == Type::Double) {
 					// 16 min fills possibly unaligned cache line
 					node.in = Double((size+16LL)*thread.state.nThreads);
@@ -638,7 +642,7 @@ struct TraceJIT {
 			}
 
 			// allocate outputs
-			if(node.liveOut || (node.group == IRNode::FOLD && node.outShape.length <= 1024)) { 
+			if(node.liveOut || (node.group == IRNode::FOLD && node.outShape.length <= BIG_CARDINALITY)) { 
 				int64_t length = node.outShape.length;
 				
 				if(node.shape.levels != 1 && node.group != IRNode::FOLD)
@@ -711,7 +715,7 @@ struct TraceJIT {
 				asm_.movq(r11, Immediate(step));
 				asm_.imulq(r11, thread_index);
 				asm_.movq(Operand(rsp, stackOffset), r11);
-				if(node.shape.levels <= 1024)
+				if(node.shape.levels <= BIG_CARDINALITY)
 					asm_.addq(r11, Immediate(1));
 				asm_.movq(Operand(rsp, stackOffset+0x8), r11);
 				stackOffset += 0x10;
@@ -769,6 +773,7 @@ struct TraceJIT {
 					p = ((Integer&)node.in).v();
 				else if(node.in.isDouble())
 					p = ((Double&)node.in).v();
+				//printf("load: %x\n", p);
 				int64_t offset = node.constant.i;
 				if(offset % 2 == 0) {
 					if(node.isLogical())
@@ -1018,7 +1023,7 @@ struct TraceJIT {
 			case IROpCode::sum:  {
 				// relying on doubles and integers to be the same length
 				memset(node.in.p, 0, node.in.length*sizeof(double));
-				
+				//printf("sum intermediate: %x\n", node.in.p);	
 				MoveA2R(ref);
 				if(node.shape.filter >= 0) {
 					asm_.pand(RegR(ref), RegF(ref));
@@ -1026,17 +1031,20 @@ struct TraceJIT {
 
 				Operand offset = Operand(rsp, stackOffset);
 				if(node.shape.split >= 0 && node.shape.levels > 1) {
+					if(qq == 0) {
 					asm_.movapd(xmm15, RegS(ref));
-					if(node.shape.levels <= 1024)
+					if(node.shape.levels <= BIG_CARDINALITY)
 						asm_.paddq(xmm15, xmm15);
 					asm_.paddq(xmm15, offset);
 					asm_.movq(r8, xmm15);
 					asm_.movhlps(xmm15, xmm15);
 					asm_.movq(r9, xmm15);
+					qq++;
+					}
 					Operand operand0 = EncodeOperand(node.in.p, r8, times_8);
 					Operand operand1 = EncodeOperand(node.in.p, r9, times_8);
 				
-					if(node.shape.levels > 1024) {
+					if(node.shape.levels > BIG_CARDINALITY) {
 						asm_.movhlps(xmm15, RegR(ref));
 						if(node.isDouble())	asm_.addsd(RegR(ref), operand0);
 						else {
@@ -1086,7 +1094,7 @@ struct TraceJIT {
 				
 				if(node.shape.split >= 0 && node.shape.levels > 1) {
 					asm_.movapd(xmm15, RegS(ref));
-					if(node.shape.levels <= 1024)
+					if(node.shape.levels <= BIG_CARDINALITY)
 						asm_.paddq(xmm15, xmm15);
 					asm_.paddq(xmm15, offset);
 					asm_.movq(r8, xmm15);
@@ -1095,7 +1103,7 @@ struct TraceJIT {
 					Operand operand0 = EncodeOperand(node.in.p, r8, times_8);
 					Operand operand1 = EncodeOperand(node.in.p, r9, times_8);
 				
-					if(node.shape.levels <= 1024) {
+					if(node.shape.levels <= BIG_CARDINALITY) {
 						asm_.movhlps(xmm15, RegR(ref));
 						if(node.isDouble())	asm_.addsd(RegR(ref), operand0);
 						else {
@@ -1141,7 +1149,7 @@ struct TraceJIT {
 				
 				if(node.shape.split >= 0 && node.shape.levels > 1) {
 					asm_.movapd(xmm15, RegS(ref));
-					if(node.shape.levels <= 1024)
+					if(node.shape.levels <= BIG_CARDINALITY)
 						asm_.paddq(xmm15, xmm15);
 					asm_.paddq(xmm15, offset);
 					asm_.movq(r8, xmm15);
@@ -1150,7 +1158,7 @@ struct TraceJIT {
 					Operand operand0 = EncodeOperand(node.in.p, r8, times_8);
 					Operand operand1 = EncodeOperand(node.in.p, r9, times_8);
 				
-					if(node.shape.levels > 1024) {
+					if(node.shape.levels > BIG_CARDINALITY) {
 						asm_.movhlps(xmm15, RegR(ref));
 
 						asm_.subsd(RegR(ref), operand0);
@@ -1220,7 +1228,7 @@ struct TraceJIT {
 
 				if(node.shape.split >= 0 && node.shape.levels > 1) {
 					asm_.movapd(xmm15, RegS(ref));
-					if(node.shape.levels <= 1024)
+					if(node.shape.levels <= BIG_CARDINALITY)
 						asm_.paddq(xmm15, xmm15);
 					asm_.paddq(xmm15, offset);
 					asm_.movq(r8, xmm15);
@@ -1229,7 +1237,7 @@ struct TraceJIT {
 					Operand operand0 = EncodeOperand(node.in.p, r8, times_8);
 					Operand operand1 = EncodeOperand(node.in.p, r9, times_8);
 				
-					if(node.shape.levels > 1024) {
+					if(node.shape.levels > BIG_CARDINALITY) {
 						asm_.movhlps(xmm15, RegR(ref));
 						asm_.addsd(RegR(ref), operand0);
 						asm_.movq(operand0, RegR(ref));
@@ -1268,7 +1276,7 @@ struct TraceJIT {
 
 				if(node.shape.split >= 0 && node.shape.levels > 1) {
 					asm_.movapd(xmm15, RegS(ref));
-					if(node.shape.levels <= 1024)
+					if(node.shape.levels <= BIG_CARDINALITY)
 						asm_.paddq(xmm15, xmm15);
 					asm_.paddq(xmm15, offset);
 					asm_.movq(r8, xmm15);
@@ -1277,7 +1285,7 @@ struct TraceJIT {
 					Operand operand0 = EncodeOperand(node.in.p, r8, times_8);
 					Operand operand1 = EncodeOperand(node.in.p, r9, times_8);
 				
-					if(node.shape.levels <= 1024) {
+					if(node.shape.levels <= BIG_CARDINALITY) {
 						asm_.movhlps(xmm15, RegR(ref));
 						if(node.isDouble())	asm_.minsd(RegR(ref), operand0);
 						else			_error("NYI: min on integers");
@@ -1322,7 +1330,7 @@ struct TraceJIT {
 
 				if(node.shape.split >= 0 && node.shape.levels > 1) {
 					asm_.movapd(xmm15, RegS(ref));
-					if(node.shape.levels <= 1024)
+					if(node.shape.levels <= BIG_CARDINALITY)
 						asm_.paddq(xmm15, xmm15);
 					asm_.paddq(xmm15, offset);
 					asm_.movq(r8, xmm15);
@@ -1331,7 +1339,7 @@ struct TraceJIT {
 					Operand operand0 = EncodeOperand(node.in.p, r8, times_8);
 					Operand operand1 = EncodeOperand(node.in.p, r9, times_8);
 				
-					if(node.shape.levels <= 1024) {
+					if(node.shape.levels <= BIG_CARDINALITY) {
 						asm_.movhlps(xmm15, RegR(ref));
 						if(node.isDouble())	asm_.maxsd(RegR(ref), operand0);
 						else			_error("NYI: max on integers");
@@ -1885,7 +1893,7 @@ struct TraceJIT {
 		for(IRef ref = 0; ref < (int64_t)trace->nodes.size(); ref++) {
 			IRNode & node = trace->nodes[ref];
 
-			if(node.group == IRNode::FOLD && node.outShape.length <= 1024) {
+			if(node.group == IRNode::FOLD && node.outShape.length <= BIG_CARDINALITY) {
 				int64_t step = node.in.length/thread.state.nThreads;
 
 				for(int64_t j = 0; j < thread.state.nThreads; j++) {
@@ -1980,7 +1988,7 @@ struct TraceJIT {
 					node.out);
 			}
 			else if(node.group == IRNode::FOLD) {
-				if(node.shape.levels <= 1024) {
+				if(node.shape.levels <= BIG_CARDINALITY) {
 					if(node.isDouble()) {
 						Double& d = (Double&)node.out;
 						for(int64_t i = 0, j = 0; i < node.outShape.length; i++, j+=2) {

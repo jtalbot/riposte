@@ -1,7 +1,7 @@
 
 # pca (via eigen values of covariance matrix) + reprojection onto new basis
 
-N <- 100000L
+N <- 1000000L
 D <- 50L
 
 a <- read.table("benchmarks/data/pca.txt")[[1]]

@@ -1,7 +1,6 @@
 #adapted from https://github.com/ispc/ispc/tree/master/examples/mandelbrot
-
-width <- 1024
-height <- 768
+width <- 2048
+height <- 1536
 x0 <- -2
 x1 <- 1
 y0 <- -1
@@ -38,7 +37,8 @@ mandel <- function(maxIterations) {
 	z_im <- c_im
 	cnt <- 0
 	for(i in 1:maxIterations) {
-		cnt <- cnt + ifelse(z_re * z_re + z_im * z_im <= 4, 1, 0)
+		#cnt <- cnt + ifelse(z_re * z_re + z_im * z_im <= 4, 1, 0)
+		cnt <- cnt + (z_re*z_re + z_im*z_im <= 4)
 		z_re2 <- c_re + (z_re*z_re - z_im*z_im)
 		z_im2 <- c_im + (2. * z_re * z_im)
 		z_re <- z_re2

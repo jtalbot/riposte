@@ -1,8 +1,8 @@
 
 
 #define N_DIMS 30 
-#define N_ROWS 50000
-#define N_ITERATIONS 3000
+#define N_ROWS 1000000
+#define N_ITERATIONS 100
 
 #include <stdio.h>
 #include <stdlib.h>

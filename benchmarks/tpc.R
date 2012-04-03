@@ -46,30 +46,39 @@ c(  NA,
 	NA,
 	NA
 )
-r <- read.table("benchmarks/data/lineitem_10.tbl",sep="|",colClasses=format)
+r <- read.table("benchmarks/data/lineitem_small.tbl",sep="|",colClasses=format)
 a <- ifelse(r[[5]] == 'A', 0L, ifelse(r[[5]] == 'N', 1L, 2L))
 b <- ifelse(r[[6]] == 'F', 0L, 1L)
-f <- factor(a*2L+b, 0L:5L)
 start_date <- 912499200-(90*24*60*60)
+#f <- factor((a*2L+b)[r[[7]] <= start_date], 0L:5L)
+f <- factor((a*2L+b), 0L:5L)
 
 benchmark <- function() {
-	sum_qty <- lapply(split(r[[1]][r[[7]]<=start_date], f), 'sum')
-	sum_base_price <- lapply(split(r[[2]][r[[7]]<=start_date], f), 'sum')
-	sum_disc_price <- lapply(split((r[[2]]*(1-r[[3]]))[r[[7]]<=start_date], f), 'sum')
-	sum_charge <- lapply(split((r[[2]]*(1-r[[3]])*(1+r[[4]]))[r[[7]]<=start_date], f), 'sum')
-	avg_qty <- lapply(split(r[[1]][r[[7]]<=start_date], f), 'mean')
-	avg_price <- lapply(split(r[[2]][r[[7]]<=start_date], f), 'mean')
-	avg_disc <- lapply(split(r[[3]][r[[7]]<=start_date], f), 'mean')
-	count_order <- lapply(split(r[[1]][r[[7]]<=start_date], f), 'length')
+	z <- list(0)
 
-	cat(sum_qty,"\n")
-	cat(sum_base_price,"\n")
-	cat(sum_disc_price,"\n")
-	cat(sum_charge,"\n")
-	cat(avg_qty,"\n")
-	cat(avg_price,"\n")
-	cat(avg_disc,"\n")
-	cat(count_order,"\n")
+	#filter <- r[[7]] <= start_date
+	#z[[1]] <- lapply(split(r[[1]][filter], f), 'sum')
+	#z[[2]] <- lapply(split(r[[2]][filter], f), 'sum')
+	#z[[3]] <- lapply(split((r[[2]]*(1-r[[3]]))[filter], f), 'sum')
+	#z[[4]] <- lapply(split((r[[2]]*(1-r[[3]])*(1+r[[4]]))[filter], f), 'sum')
+	#z[[5]] <- lapply(split(r[[1]][filter], f), 'mean')
+	#z[[6]] <- lapply(split(r[[2]][filter], f), 'mean')
+	#z[[7]] <- lapply(split(r[[3]][filter], f), 'mean')
+	#z[[8]] <- lapply(split(r[[1]][filter], f), 'length')
+
+	z[[1]] <- lapply(split(r[[1]], f), 'sum')
+	z[[2]] <- lapply(split(r[[2]], f), 'sum')
+	z[[3]] <- sum(r[[3]])
+	z[[4]] <- sum(r[[4]])
+	#z[[1]] <- lapply(split(r[[1]], f), 'sum')
+	#z[[2]] <- lapply(split(r[[2]], f), 'sum')
+	#z[[3]] <- lapply(split((r[[2]]*(1-r[[3]])), f), 'sum')
+	#z[[4]] <- lapply(split((r[[2]]*(1-r[[3]])*(1+r[[4]])), f), 'sum')
+	#z[[5]] <- lapply(split(r[[1]], f), 'mean')
+	#z[[6]] <- lapply(split(r[[2]], f), 'mean')
+	#z[[7]] <- lapply(split(r[[3]], f), 'mean')
+	#z[[8]] <- lapply(split(r[[1]], f), 'length')
+	z
 }
 
-system.time(benchmark())
+system.time(for(i in 1:100) force(benchmark()))

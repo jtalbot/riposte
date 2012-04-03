@@ -1,18 +1,20 @@
 
 # sparse matrix-vector multiplication
 # TODO: sort input by row for perf?
+# random 1M x 1M matrix with 100M entries
+M <- 20000000L
+N <- 500000L
 
-# random 1M x 1M matrix with 10M entries
+v <- runif(N)
 m <- list(
-	row=as.integer(runif(10000000, 1, 1000000)),
-	col=sort(as.integer(runif(10000000, 1, 1000000))),
-	val=runif(10000000)
+	row=force(sort(as.integer(runif(M, 1, N)))),
+	col=force(as.integer(runif(M, 1, N))),
+	val=force(runif(M))
 	)
 
-v <- runif(1000000)
 force(v)
 
-f <- factor(m[[1]]-1L, 1L:1000000L-1L)
+f <- factor(m[[1]]-1L, (1L:N)-1L)
 force(f)
 
 smv <- function(m, v) {

@@ -39,11 +39,13 @@ Double Random(Thread& thread, int64_t const length) {
 	Thread::RandomSeed& r = Thread::seed[thread.index];
 	Double o(length);
 	for(int64_t i = 0; i < length; i++) {
-		r.v[0] = r.v[0] * r.m[0] + r.a[0];
+		/*r.v[0] = r.v[0] * r.m[0] + r.a[0];
 		r.v[0] = r.v[0] * r.m[0] + r.a[0];
 		r.v[0] = r.v[0] * r.m[0] + r.a[0];
 
-		o[i] = (double)r.v[0] / ((double)std::numeric_limits<uint64_t>::max() + 1);
+		o[i] = (double)r.v[0] / ((double)std::numeric_limits<uint64_t>::max() + 1);*/
+
+		o[i] = rand() / (double)RAND_MAX;
 	}
 	return o;
 }

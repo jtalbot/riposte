@@ -43,8 +43,8 @@ time_t convert_time(const char * time) {
 static int interval = 90; //in days
 
 //define N_ROWS for the correct problem size...
-static int N_ROWS = 59986052;
-
+//static int N_ROWS = 59986052;
+static int N_ROWS = 200000;
 const static int N_GROUPS = 6;
 
 char intern_string(const char * fmt, const char * data) {
@@ -72,7 +72,7 @@ int main() {
 
 	int ref_date = convert_time(time_for_filter);
 	printf("%d\n", ref_date);	
-	FILE * file = fopen("../data/lineitem_10.tbl","r");
+	FILE * file = fopen("../data/lineitem_small.tbl","r");
 	assert(file);
 	for(int i = 0; i < N_ROWS; i++) {
 		char buf[4096];
@@ -97,7 +97,7 @@ int main() {
 	}
 	
 #define CREATE(typ, name) \
-	typ name[N_GROUPS]; \
+	typ* name = new typ[N_GROUPS]; \
 	memset(name,0,sizeof(typ) * N_GROUPS);
 	
 	CREATE(int64_t,sum_qty);
@@ -110,20 +110,23 @@ int main() {
 	CREATE(int64_t,count);
 
 	double begin = current_time();
-
+	for(int k = 0; k < 100; k++) {
 	for(int i = 0; i < N_ROWS; i++) {
 		if(ship_date[i] <= ref_date - 24 * 60 * 60 * interval) {
 			int grp = group[i];
 			sum_qty[grp] += quantity[i];
 			sum_base_price[grp] += extended_price[i];
-			sum_disc_price[grp] += extended_price[i] * (1 - discount[i]);
-			sum_charge[grp] += extended_price[i]*(1-discount[i])*(1+tax[i]);
-			double invnp1 = 1.0/(count[grp]+1);
-			avg_qty[grp] = update_average(avg_qty[grp],quantity[i],invnp1);
-			avg_price[grp] = update_average(avg_price[grp],extended_price[i],invnp1);
-			avg_disc[grp] = update_average(avg_disc[grp],discount[i],invnp1);
-			count[grp]++;
+			sum_disc_price[0] += discount[i];
+			sum_charge[0] += tax[i];
+			//sum_disc_price[grp] += extended_price[i] * (1 - discount[i]);
+			//sum_charge[grp] += extended_price[i]*(1-discount[i])*(1+tax[i]);
+			//double invnp1 = 1.0/(count[grp]+1);
+			//avg_qty[grp] = update_average(avg_qty[grp],quantity[i],invnp1);
+			//avg_price[grp] = update_average(avg_price[grp],extended_price[i],invnp1);
+			//avg_disc[grp] = update_average(avg_disc[grp],discount[i],invnp1);
+			//count[grp]++;
 		}
+	}
 	}
 
 	printf("Elapsed: %f\n", current_time()-begin);

@@ -1,9 +1,9 @@
 
-N <- 100000L
+N <- 1000000L
 K <- 5L
 
 a <- read.table("benchmarks/data/kmeans.txt")[[1]]
-dim(a) <- c(N*5,2)
+dim(a) <- c(N,2)
 
 means <- list(
 	a[1,],
@@ -29,15 +29,19 @@ assignment <- function(data, means) {
 		for(j in 1L:ncol(data)) {
 			d2 <- d2 + (data[,j]-means[[k]][[j]])^2
 		}
-		lt <- d2 < min.value
-		min.index <- ifelse(lt, k, min.index)
-		min.value <- ifelse(lt, d2, min.value)
+		min.index <- ifelse(d2 < min.value, k, min.index)
+		#min.index[d2 < min.value] <- k
+		min.value <- pmin(d2, min.value)
 	}
 	min.index
 }
 
 update.means <- function(data, index) {
 	means <- list()
+	#idx <- factor(index-1L, 1:K)
+	#for(i in 1L:ncol(data)) {
+	#	means[[i]] <- lapply(split(data[,i], idx), "mean")
+	#}
 	for(i in 1L:ncol(data)) {
 		means[[i]] <- lapply(split(data[,i], index-1L, K), "mean")
 	}

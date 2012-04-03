@@ -21,9 +21,10 @@ intersect <- function() {
 	c <- rx*rx+ry*ry+rz*rz-1
 
 	disc <- b*b-4*a*c
-		
-	t0 <- (-b - sqrt(disc))/2
-	t1 <- (-b + sqrt(disc))/2
+
+	m <- sqrt(disc)		
+	t0 <- (-b - m)/2
+	t1 <- (-b + m)/2
 
 	cond <- disc > 0
 	min(pmin(t0[cond], t1[cond]))

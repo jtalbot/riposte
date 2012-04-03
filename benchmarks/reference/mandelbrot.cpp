@@ -78,9 +78,9 @@ void mandelbrot_loop(double x0, double y0, double x1, double y1,
                        int width, int height, int maxIterations,
                        double output[]);
 }
-static const int V_WIDTH = 1024 * 768;
+static const int V_WIDTH = 2048 * 1536;
 int main() {
-	int width = 1024;
+	int width = 2048;
 	int height = V_WIDTH / width;
 	
 	double * output = new double[V_WIDTH];

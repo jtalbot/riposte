@@ -7,7 +7,7 @@
 
 #define N_DIMS 2
 #define N_MEANS 5
-#define N_POINTS 500000
+#define N_POINTS 1000000
 #define MAX_ITERATIONS 100
 #ifdef VDB_DEBUG
 #include <vdb.h>

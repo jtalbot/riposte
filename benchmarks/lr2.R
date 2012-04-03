@@ -1,6 +1,6 @@
 # logistic regression test case
 
-N <- 50000L
+N <- 1000000L
 D <- 30L
 
 p <- read.table("benchmarks/data/lr_p.txt")[[1]]
@@ -38,4 +38,4 @@ benchmark <- function(reps) {
 	#glm(r~p-1, family=binomial(link="logit"), na.action=na.pass)
 }
 
-system.time(benchmark(3000L))
+system.time(benchmark(100L))

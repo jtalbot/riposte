@@ -5,8 +5,8 @@ data <- as.integer(runif(100000000,0,100))
 f <- factor(data, 0L:99L)
 
 benchmark <- function() {
-	lapply(split(data,f), "length")
-	#tabulate(data,100L)
+	#lapply(split(data,f), "length")
+	tabulate(data,100L)
 }
 
 system.time(benchmark())
