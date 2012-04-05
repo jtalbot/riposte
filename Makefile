@@ -2,8 +2,8 @@
 UNAME := $(shell uname -s)
  
 CXX := g++ 
-CXXFLAGS := -Wall -DRIPOSTE_DISABLE_TRACING -msse4.1
-LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
+CXXFLAGS := -Wall -DRIPOSTE_DISABLE_TRACING -msse4.1 `/usr/local/bin/llvm-config --cppflags` 
+LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g `/usr/local/bin/llvm-config --ldflags --libs core jit native`
 
 ifeq ($(UNAME),Linux)
 #for clock_gettime

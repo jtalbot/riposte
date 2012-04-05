@@ -3,13 +3,13 @@
 
 _doublena doublena = {0x7fff000000001953};
 
-const unsigned char Null::NAelement = 255;
+const uint8_t Null::NAelement = 255;
 
-const unsigned char Raw::NAelement = 255;
+const uint8_t Raw::NAelement = 255;
 
-const char Logical::TrueElement = -1;
-const char Logical::FalseElement = 0;
-const char Logical::NAelement = 1;
+const int8_t Logical::TrueElement = -1;
+const int8_t Logical::FalseElement = 0;
+const int8_t Logical::NAelement = 1;
 
 const int64_t Integer::NAelement = std::numeric_limits<int64_t>::min();
 

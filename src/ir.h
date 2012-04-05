@@ -159,7 +159,7 @@ struct IRNode {
 			union {
 				int64_t i;
 				double d;
-				char l;
+				int8_t l;
 			};
 		} constant;
 

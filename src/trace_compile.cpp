@@ -13,6 +13,20 @@
 #include <amdlibm.h>
 #endif
 
+#include "llvm/DerivedTypes.h"
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/ExecutionEngine/JIT.h"
+#include "llvm/LLVMContext.h"
+#include "llvm/Module.h"
+#include "llvm/PassManager.h"
+#include "llvm/Analysis/Verifier.h"
+#include "llvm/Analysis/Passes.h"
+#include "llvm/Target/TargetData.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Support/IRbuilder.h"
+#include "llvm/Support/TargetSelect.h"
+
+
 using namespace v8::internal;
 
 #define SIMD_WIDTH (2 * sizeof(double))
@@ -30,7 +44,7 @@ struct Constant {
 	: d0(d), d1(d) {}
 	Constant(void * f)
 	: f0(f),f1(f)  {}
-	Constant(char l)
+	Constant(int8_t l)
 	: i0(l), i1(l) {}
 
 	Constant(int64_t ii0, int64_t ii1)
@@ -261,14 +275,16 @@ static __m128d castl2i(__m128d input) {
 	return v.D;
 }
 
-static __m128d exp_d(__m128d input) {
+extern "C"
+__m128d exp_d(__m128d input) {
        SSEValue v;
        v.D = input;
        for(int i = 0; i < 2; i++) v.d[i] = exp(v.d[i]);
        return v.D;
 }
 
-static __m128d log_d(__m128d input) {
+extern "C"
+__m128d log_d(__m128d input) {
        SSEValue v;
        v.D = input;
        for(int i = 0; i < 2; i++) v.d[i] = log(v.d[i]);
@@ -2014,13 +2030,450 @@ struct TraceJIT {
 	}
 };
 
+
+struct LLVMJIT {
+	Trace& trace;
+	Thread& thread;
+
+	llvm::LLVMContext& context;
+	llvm::IRBuilder<> builder;
+	llvm::Module *module;
+	llvm::FunctionPassManager fpm;
+	llvm::ExecutionEngine *engine;
+	llvm::Function* func;
+
+	llvm::Type *VoidTy, *Int32Ty;
+	llvm::Type *Int8Ty, *Int64Ty, *DoubleTy, *Int8Ptr, *Int64Ptr, *DoublePtr;
+	llvm::Type *Int8x2Ty, *Int64x2Ty, *Doublex2Ty, *Int8x2Ptr, *Int64x2Ptr, *Doublex2Ptr;
+
+	// External functions
+	llvm::Function *g_exp, *g_log, *g_sqrt;
+
+
+	LLVMJIT(Trace* trace, Thread& thread) 
+		: 	trace(*trace), 
+			thread(thread), 
+			context(llvm::getGlobalContext()),
+			builder(context), 
+			module(new llvm::Module("jit", context)),
+			fpm(module)
+	{
+		llvm::InitializeNativeTarget();
+
+		std::string ErrStr;
+		engine = llvm::EngineBuilder(module).setErrorStr(&ErrStr).create();
+		if (!engine) {
+			fprintf(stderr, "Could not create ExecutionEngine: %s\n", ErrStr.c_str());
+			exit(1);
+		}
+		
+		// Set up the optimizer pipeline.  Start with registering info about how the
+		// target lays out data structures.
+		fpm.add(new llvm::TargetData(*engine->getTargetData()));
+		// Provide basic AliasAnalysis support for GVN.
+		fpm.add(llvm::createBasicAliasAnalysisPass());
+		fpm.add(llvm::createPromoteMemoryToRegisterPass());
+		// Do simple "peephole" optimizations and bit-twiddling optzns.
+		fpm.add(llvm::createInstructionCombiningPass());
+		// Reassociate expressions.
+		fpm.add(llvm::createReassociatePass());
+		// Eliminate Common SubExpressions.
+		fpm.add(llvm::createGVNPass());
+		// Simplify the control flow graph (deleting unreachable blocks, etc).
+		fpm.add(llvm::createCFGSimplificationPass());
+
+		fpm.doInitialization();
+	
+
+		VoidTy =	llvm::Type::getVoidTy(context);
+		Int8Ty = 	llvm::Type::getInt8Ty(context);
+		Int32Ty = 	llvm::Type::getInt32Ty(context);
+		Int64Ty = 	llvm::Type::getInt64Ty(context);
+		DoubleTy = 	llvm::Type::getDoubleTy(context);
+		Int8Ptr = 	llvm::PointerType::getUnqual(Int8Ty);
+		Int64Ptr = 	llvm::PointerType::getUnqual(Int64Ty);
+		DoublePtr = 	llvm::PointerType::getUnqual(DoubleTy);
+	
+		Int8x2Ty = 	llvm::VectorType::get(Int8Ty,2);
+		Int64x2Ty = 	llvm::VectorType::get(Int64Ty,2);
+		Doublex2Ty = 	llvm::VectorType::get(DoubleTy,2);
+		Int8x2Ptr = 	llvm::PointerType::getUnqual(Int8x2Ty);
+		Int64x2Ptr = 	llvm::PointerType::getUnqual(Int64x2Ty);
+		Doublex2Ptr = 	llvm::PointerType::getUnqual(Doublex2Ty);
+	
+
+		std::vector<llvm::Type*> Args;
+		Args.push_back(Doublex2Ty);
+		llvm::FunctionType* uvDouble = llvm::FunctionType::get(Doublex2Ty, Args, false);
+		g_exp = llvm::Function::Create(uvDouble, llvm::Function::ExternalLinkage, "exp_d", module);
+		g_log = llvm::Function::Create(uvDouble, llvm::Function::ExternalLinkage, "log_d", module);
+		g_sqrt = llvm::Function::Create(uvDouble, llvm::Function::ExternalLinkage, "llvm.x86.sse2.sqrt.pd", module);
+	}
+
+	llvm::Constant* Constant(int8_t i) 
+		{ return llvm::ConstantInt::get(Int8Ty, i); } 
+	llvm::Constant* Constant(int32_t i) 
+		{ return llvm::ConstantInt::get(Int32Ty, i); } 
+	llvm::Constant* Constant(int64_t i) 
+		{ return llvm::ConstantInt::get(Int64Ty, i); } 
+	llvm::Constant* Constant(double i) 
+		{ return llvm::ConstantFP::get(DoubleTy, i); } 
+	
+	llvm::Constant* Constant(int8_t* i) 
+		{ return llvm::ConstantExpr::getIntToPtr(llvm::ConstantInt::get(Int64Ty, (uint64_t)i), Int8Ptr); } 
+	llvm::Constant* Constant(int64_t* i) 
+		{ return llvm::ConstantExpr::getIntToPtr(llvm::ConstantInt::get(Int64Ty, (uint64_t)i), Int64Ptr); } 
+	llvm::Constant* Constant(double* i) 
+		{ return llvm::ConstantExpr::getIntToPtr(llvm::ConstantInt::get(Int64Ty, (uint64_t)i), DoublePtr); } 
+
+	llvm::Constant* Constant(int8_t i, int8_t j) {
+		std::vector<llvm::Constant*> m;
+		m.push_back(Constant(i));
+		m.push_back(Constant(j));
+		return llvm::ConstantVector::get(m);
+	}
+
+	llvm::Constant* Constant(int64_t i, int64_t j) {
+		std::vector<llvm::Constant*> m;
+		m.push_back(Constant(i));
+		m.push_back(Constant(j));
+		return llvm::ConstantVector::get(m);
+	}
+
+	llvm::Constant* Constant(double i, double j) {
+		std::vector<llvm::Constant*> m;
+		m.push_back(Constant(i));
+		m.push_back(Constant(j));
+		return llvm::ConstantVector::get(m);
+	}
+
+	llvm::Constant* Constant(int8_t* i, int8_t* j) {
+		std::vector<llvm::Constant*> m;
+		m.push_back(Constant(i));
+		m.push_back(Constant(j));
+		return llvm::ConstantVector::get(m);
+	}
+
+	llvm::Constant* Constant(int64_t* i, int64_t* j) {
+		std::vector<llvm::Constant*> m;
+		m.push_back(Constant(i));
+		m.push_back(Constant(j));
+		return llvm::ConstantVector::get(m);
+	}
+
+	llvm::Constant* Constant(double* i, double* j) {
+		std::vector<llvm::Constant*> m;
+		m.push_back(Constant(i));
+		m.push_back(Constant(j));
+		return llvm::ConstantVector::get(m);
+	}
+
+	void GenerateOutputs() {
+		for(IRef ref = 0; ref < (int64_t)trace.nodes.size(); ref++) {
+			IRNode & node = trace.nodes[ref];
+			
+			// allocate outputs
+			if(node.liveOut) { 
+				int64_t length = node.outShape.length;
+				
+				if(node.shape.levels != 1 && node.group != IRNode::FOLD)
+					_error("Group by without aggregate not yet supported");
+				if(node.shape.filter >= 0 && node.group != IRNode::FOLD)
+					length = 0;
+				
+				if(node.type == Type::Double) {
+					node.out = Double(length);
+				} else if(node.type == Type::Integer) {
+					node.out = Integer(length);
+				} else if(node.type == Type::Logical) {
+					node.out = Logical(length);
+				} else if(node.type == Type::List) {
+					node.out = List(length);
+				} else {
+					_error("Unknown type in initialize outputs");
+				}
+			}
+		}
+	}
+
+	void Compile() {
+		// Make the function type:  double(double,double) etc.
+		std::vector<llvm::Type*> args(3, Int64Ty);
+		std::vector<std::string> names;
+		names.push_back("thread");
+		names.push_back("begin");
+		names.push_back("end");
+		std::vector<llvm::Value*> Args;
+
+		GenerateOutputs();
+
+		llvm::FunctionType *FT = llvm::FunctionType::get(VoidTy, args, false);
+
+		llvm::Function* OF;
+		OF = module->getFunction("JIT");
+		if (OF) {
+			OF->eraseFromParent();
+		}
+
+		llvm::Function *F = llvm::Function::Create(FT, llvm::Function::ExternalLinkage, "JIT", module);
+
+		// Set names for all arguments.
+		unsigned idx = 0;
+		for (llvm::Function::arg_iterator AI = F->arg_begin(); idx != args.size();
+				++AI, ++idx) {
+			AI->setName(names[idx]);
+			Args.push_back(AI);
+		}	
+
+		// Create a new basic block to start insertion into.
+		llvm::BasicBlock *PreBB = llvm::BasicBlock::Create(context, "entry", F);
+		builder.SetInsertPoint(PreBB);
+
+		llvm::BasicBlock* BodyBB = llvm::BasicBlock::Create(context, "loop", F);
+		builder.SetInsertPoint(BodyBB);
+		llvm::PHINode *Variable = builder.CreatePHI(Int64Ty, 2);
+  		Variable->addIncoming(Args[1], PreBB);
+
+		llvm::PHINode* vector_index = Variable;
+
+		std::vector<llvm::Value*> in;
+		llvm::Value* r;
+		for(IRef ref = 0; ref < (int64_t)trace.nodes.size(); ref++) {
+			IRNode & node = trace.nodes[ref];
+
+			switch(node.op) {
+			case IROpCode::load: {
+				if(node.in.isLogical()) {
+					r = Constant(((Logical&)node.in).v() + node.constant.i); 
+					r = builder.CreatePointerCast(builder.CreateGEP(r, vector_index),Int8x2Ptr);
+					r = builder.CreateSExt(builder.CreateLoad(r), Int64x2Ptr);
+				}
+				else if(node.in.isInteger()) {
+					r = Constant(((Integer&)node.in).v() + node.constant.i); 
+					r = builder.CreatePointerCast(builder.CreateGEP(r, vector_index), Int64x2Ptr);
+					r = builder.CreateLoad(r);
+				}
+				else if(node.in.isDouble()) {
+					r = Constant(((Double&)node.in).v() + node.constant.i); 
+					r = builder.CreatePointerCast(builder.CreateGEP(r, vector_index),Doublex2Ptr);
+					r = builder.CreateLoad(r);
+				}
+			} break;
+			
+			case IROpCode::gather: {
+				if(node.in.isLogical()) {
+					r = Constant(((Logical&)node.in).v(), ((Logical&)node.in).v()); 
+					r = builder.CreateSExt(builder.CreateLoad(builder.CreateGEP(r,in[node.unary.a])), Int64x2Ptr);
+				} else if(node.in.isInteger()) {
+					llvm::Value* a = Constant(((Integer&)node.in).v(), ((Integer&)node.in).v());
+					a = builder.CreateGEP(a,in[node.unary.a]);
+					r = Constant((int64_t)0, (int64_t)0);
+					r = builder.CreateInsertElement(r, builder.CreateLoad(builder.CreateExtractElement(a, Constant((int32_t)0))), Constant((int32_t)0));
+					r = builder.CreateInsertElement(r, builder.CreateLoad(builder.CreateExtractElement(a, Constant((int32_t)1))), Constant((int32_t)1));
+				} else {
+					llvm::Value* a = Constant(((Double&)node.in).v(), ((Double&)node.in).v());
+					a = builder.CreateGEP(a,in[node.unary.a]);
+					r = Constant(0.0, 0.0);
+					llvm::Value* b = builder.CreateExtractElement(a, Constant((int32_t)0));
+					b->dump();
+					b = builder.CreateLoad(b);
+					r = builder.CreateInsertElement(r, b, Constant((int32_t)0));
+					r = builder.CreateInsertElement(r, builder.CreateLoad(builder.CreateExtractElement(a, Constant((int32_t)1))), Constant((int32_t)1));
+				}
+			} break;
+
+			case IROpCode::constant: {
+				switch(node.type) {
+					case Type::Logical: r = Constant(node.constant.l, node.constant.l); break;
+					case Type::Integer: r = Constant(node.constant.i, node.constant.i); break;
+					case Type::Double:  r = Constant(node.constant.d, node.constant.d); break;
+					default: _error("unexpected type");
+				}
+			} break;
+
+			case IROpCode::cast: {
+				// TODO: Handle NAs correctly
+				if(node.type == trace.nodes[node.unary.a].type)
+					r = in[node.unary.a];
+				else if(node.isDouble() && trace.nodes[node.unary.a].isInteger())
+					r = builder.CreateSIToFP(in[node.unary.a], Doublex2Ty);
+				else if(node.isInteger() && trace.nodes[node.unary.a].isDouble())
+					r = builder.CreateFPToSI(in[node.unary.a], Int64x2Ty);
+				//else if(node.isDouble() && trace->nodes[node.unary.a].isLogical())
+				//else if(node.isInteger() && trace->nodes[node.unary.a].isLogical())
+				//else if(node.isLogical() && trace->nodes[node.unary.a].isDouble())
+				//else if(node.isLogical() && trace->nodes[node.unary.a].isInteger())
+				else _error("Unimplemented cast");
+			} break;
+			
+			case IROpCode::seq: {
+				if(node.isInteger()) {
+					builder.SetInsertPoint(PreBB);
+					llvm::Value* i = builder.CreateAlloca(Int64x2Ty);
+					builder.CreateStore(Constant(node.sequence.ia-2*node.sequence.ib, node.sequence.ia-node.sequence.ib), i);
+					builder.SetInsertPoint(BodyBB);
+					r = builder.CreateAdd(builder.CreateLoad(i), Constant(2*node.sequence.ib, 2*node.sequence.ib));
+					builder.CreateStore(r, i);
+				} else {
+					builder.SetInsertPoint(PreBB);
+					llvm::Value* i = builder.CreateAlloca(Doublex2Ty);
+					builder.CreateStore(Constant(node.sequence.da-2*node.sequence.db, node.sequence.da-node.sequence.db), i);
+					builder.SetInsertPoint(BodyBB);
+					r = builder.CreateFAdd(builder.CreateLoad(i), Constant(2*node.sequence.db, 2*node.sequence.db));
+					builder.CreateStore(r, i);
+				}
+			} break;
+
+			case IROpCode::rep: {
+				r = Constant((int64_t)0, (int64_t)0);
+				//printf("%d %d %d\n", node.sequence.ia, node.sequence.ib, node.shape.length);
+			} break;
+
+			case IROpCode::ifelse: {
+				// TODO: handle NA
+				r = builder.CreateSelect(in[node.trinary.c], in[node.trinary.a], in[node.trinary.b]);
+			} break;
+			
+			case IROpCode::neg: {
+				if(node.isDouble()) {
+					r = builder.CreateBitCast(builder.CreateXor(
+						builder.CreateBitCast(in[node.unary.a], Int64x2Ty),
+						Constant((int64_t)0x8000000000000000ULL, (int64_t)0x8000000000000000ULL)), Doublex2Ty);
+				}
+				else			r = builder.CreateMul(in[node.unary.a], Constant((int64_t)-1, (int64_t)-1));
+			} break;
+			case IROpCode::add: {
+				if(node.isDouble()) 	r = builder.CreateFAdd(in[node.binary.a], in[node.binary.b]);
+				else			r = builder.CreateAdd(in[node.binary.a], in[node.binary.b]);
+			} break;
+			case IROpCode::sub: {
+				if(node.isDouble()) 	r = builder.CreateFSub(in[node.binary.a], in[node.binary.b]);
+				else			r = builder.CreateSub(in[node.binary.a], in[node.binary.b]);
+			} break;
+			case IROpCode::mul: {
+				if(node.isDouble()) 	r = builder.CreateFMul(in[node.binary.a], in[node.binary.b]);
+				else			r = builder.CreateMul(in[node.binary.a], in[node.binary.b]);
+			} break;
+			case IROpCode::div: {
+				r = builder.CreateFDiv(in[node.binary.a], in[node.binary.b]);
+			} break;
+			case IROpCode::abs: {
+				if(node.isDouble()) {
+					r = builder.CreateBitCast(builder.CreateAnd(
+						builder.CreateBitCast(in[node.unary.a], Int64x2Ty),
+						Constant((int64_t)0x7FFFFFFFFFFFFFFFULL, (int64_t)0x7FFFFFFFFFFFFFFFULL)), Doublex2Ty);
+				} else {
+					// TODO: implement me 
+				}
+			} break;
+
+			case IROpCode::exp: {
+				r = builder.CreateCall(g_exp, in[node.unary.a]);
+			} break;
+			case IROpCode::log: {
+				r = builder.CreateCall(g_log, in[node.unary.a]);
+			} break;
+			case IROpCode::sqrt: {
+				r = builder.CreateCall(g_sqrt, in[node.unary.a]);
+			} break;
+
+			case IROpCode::lt: {
+				if(trace.nodes[node.binary.a].isDouble())
+					r = builder.CreateFCmpULT(in[node.binary.a], in[node.binary.b]);
+				else			
+					r = builder.CreateICmpSLT(in[node.binary.a], in[node.binary.b]);
+			} break;
+			case IROpCode::gt: {
+				if(trace.nodes[node.binary.a].isDouble())
+					r = builder.CreateFCmpUGT(in[node.binary.a], in[node.binary.b]);
+				else			
+					r = builder.CreateICmpSGT(in[node.binary.a], in[node.binary.b]);
+			} break;
+			};
+
+			if(node.liveOut) {
+				switch(node.group) {
+					case IRNode::MAP:
+					case IRNode::GENERATOR: {
+						if(Type::Logical == node.type) {
+							//EmitLogicalStore(ref, node.out, node.shape);
+						} else if(Type::Integer == node.type) {
+							llvm::Value* p = Constant(((Integer&)node.out).v()); 
+							p = builder.CreatePointerCast(builder.CreateGEP(p, vector_index), Int64x2Ptr);
+							builder.CreateStore(r, p);
+						} else if(Type::Double == node.type) {
+							llvm::Value* p = Constant(((Double&)node.out).v()); 
+							p = builder.CreatePointerCast(builder.CreateGEP(p, vector_index),Doublex2Ptr);
+							builder.CreateStore(r, p);
+						}
+					} break;
+					default:
+						// do nothing...
+					break;
+				}
+			}
+			
+			in.push_back(r);
+		}
+
+		llvm::Value* Step = Constant((int64_t)2);
+		llvm::Value* Next = builder.CreateAdd(Variable, Step, "next");
+		llvm::Value* End = builder.CreateICmpULT(Next, Args[2]);
+	
+		llvm::BasicBlock* LoopEndBB = builder.GetInsertBlock();
+		llvm::BasicBlock* AfterBB = llvm::BasicBlock::Create(context, "after", F);
+		builder.CreateCondBr(End, BodyBB, AfterBB);
+		Variable->addIncoming(Next, LoopEndBB);
+		
+		builder.SetInsertPoint(PreBB);
+		builder.CreateBr(BodyBB);
+		
+		// Finish off the function.
+		builder.SetInsertPoint(AfterBB);
+		builder.CreateRetVoid();
+
+		// Validate the generated code, checking for consistency.
+		llvm::verifyFunction(*F);
+
+		// Optimize the function.
+		fpm.run(*F);
+
+		func = F;
+	}
+
+	typedef void (*fn) (uint64_t thread_index, uint64_t start, uint64_t end);
+
+	static void executebody(void* args, void* h, uint64_t start, uint64_t end, Thread& thread) {
+		//printf("%d: called with %d to %d\n", thread.index, start, end);
+		fn code = (fn)args;
+		code(thread.index, start, end);	
+	}
+
+	void Execute(Thread & thread) {
+		func->dump();
+		fn trace_code = (fn)engine->getPointerToFunction(func);
+		
+		if(thread.state.verbose) {
+			//timespec begin;
+			//get_time(begin);
+			thread.doall(NULL, executebody, (void*)trace_code, 0, trace.Size, 4, 1024); 
+			//trace_code(thread.index, 0, trace->length);
+			//double s = trace->length / (time_elapsed(begin) * 10e9);
+			//printf("elements computed / us: %f\n",s);
+		} else {
+			thread.doall(NULL, executebody, (void*)trace_code, 0, trace.Size, 4, 1024); 
+			//trace_code(thread.index, 0, trace->length);
+		}
+	}
+};
+
 void Trace::JIT(Thread & thread) {
 	if(code_buffer == NULL) { //since it is expensive to reallocate this, we reuse it across traces
 		code_buffer = new TraceCodeBuffer();
 	}
 
-	TraceJIT trace_code(this, thread);
+	LLVMJIT trace_code(this, thread);
 	trace_code.Compile();
 	trace_code.Execute(thread);
-	trace_code.GlobalReduce(thread);
+	//trace_code.GlobalReduce(thread);
 }

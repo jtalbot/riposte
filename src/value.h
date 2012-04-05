@@ -27,7 +27,7 @@ struct Value {
 		void* p;
 		int64_t i;
 		double d;
-		char c;
+		int8_t c;
 		String s;
 		struct {
 			Type::Enum typ;
@@ -85,12 +85,12 @@ struct Value {
 
 template<> inline int64_t& Value::scalar<int64_t>() { return i; }
 template<> inline double& Value::scalar<double>() { return d; }
-template<> inline char& Value::scalar<char>() { return c; }
+template<> inline int8_t& Value::scalar<int8_t>() { return c; }
 template<> inline String& Value::scalar<String>() { return s; }
 
 template<> inline int64_t const& Value::scalar<int64_t>() const { return i; }
 template<> inline double const& Value::scalar<double>() const { return d; }
-template<> inline char const& Value::scalar<char>() const { return c; }
+template<> inline int8_t const& Value::scalar<int8_t>() const { return c; }
 template<> inline String const& Value::scalar<String>() const { return s; }
 
 
@@ -192,26 +192,26 @@ struct Name : public Vector<Type::Name, Element, Recursive> { 			\
 	Name Clone() const { Name c(length); memcpy(c.v(), v(), length*width); return c; }
 /* note missing }; */
 
-VECTOR_IMPL(Null, unsigned char, false)  
+VECTOR_IMPL(Null, uint8_t, false)  
 	static Null Singleton() { static Null s = Null::c(); return s; } 
 	static bool isNA() { return false; }
 	static bool isCheckedNA() { return false; }
 };
 
-VECTOR_IMPL(Logical, char, false)
-	const static char TrueElement;
-	const static char FalseElement;
+VECTOR_IMPL(Logical, int8_t, false)
+	const static int8_t TrueElement;
+	const static int8_t FalseElement;
 
 	static Logical True() { static Logical t = Logical::c(-1); return t; }
 	static Logical False() { static Logical f = Logical::c(0); return f; } 
 	
-	static bool isTrue(char c) { return c == -1; }
-	static bool isFalse(char c) { return c == 0; }
-	static bool isNA(char c) { return c == 1; }
-	static bool isCheckedNA(char c) { return isNA(c); }
-	static bool isNaN(char c) { return false; }
-	static bool isFinite(char c) { return false; }
-	static bool isInfinite(char c) { return false; }
+	static bool isTrue(int8_t c) { return c == -1; }
+	static bool isFalse(int8_t c) { return c == 0; }
+	static bool isNA(int8_t c) { return c == 1; }
+	static bool isCheckedNA(int8_t c) { return isNA(c); }
+	static bool isNaN(int8_t c) { return false; }
+	static bool isFinite(int8_t c) { return false; }
+	static bool isInfinite(int8_t c) { return false; }
 };
 
 VECTOR_IMPL(Integer, int64_t, false)
@@ -242,12 +242,12 @@ VECTOR_IMPL(Character, String, false)
 	static bool isInfinite(String c) { return false; }
 };
 
-VECTOR_IMPL(Raw, unsigned char, false) 
-	static bool isNA(unsigned char c) { return false; }
-	static bool isCheckedNA(unsigned char c) { return false; }
-	static bool isNaN(unsigned char c) { return false; }
-	static bool isFinite(unsigned char c) { return false; }
-	static bool isInfinite(unsigned char c) { return false; }
+VECTOR_IMPL(Raw, uint8_t, false) 
+	static bool isNA(uint8_t c) { return false; }
+	static bool isCheckedNA(uint8_t c) { return false; }
+	static bool isNaN(uint8_t c) { return false; }
+	static bool isFinite(uint8_t c) { return false; }
+	static bool isInfinite(uint8_t c) { return false; }
 };
 
 VECTOR_IMPL(List, Value, true) 

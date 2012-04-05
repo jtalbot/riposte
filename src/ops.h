@@ -46,13 +46,13 @@ ORDINAL_UNARY_BYTECODES(UNARY_OP)
 #undef UNARY_OP 
 /*
 template<typename T>
-struct NcharOp : UnaryOp<Character, Integer> {
-	static typename NcharOp::R eval(Thread& thread, typename NcharOp::A const a) { return (a == Strings::NA) ? 2 : thread.externStr(a).length(); }
+struct Nint8_tOp : UnaryOp<Character, Integer> {
+	static typename Nint8_tOp::R eval(Thread& thread, typename Nint8_tOp::A const a) { return (a == Strings::NA) ? 2 : thread.externStr(a).length(); }
 };
 
 template<typename T>
-struct NzcharOp : UnaryOp<Character, Logical> {
-	static typename NzcharOp::R eval(Thread& thread, typename NzcharOp::A const a) { return a != Strings::empty; }
+struct Nzint8_tOp : UnaryOp<Character, Logical> {
+	static typename Nzint8_tOp::R eval(Thread& thread, typename Nzint8_tOp::A const a) { return a != Strings::empty; }
 };
 */
 
@@ -119,32 +119,32 @@ inline int64_t Mod(int64_t a, int64_t b) { return a % b; }
 
 inline double riposte_max(Thread& thread, double a, double b) { return a > b ? a : b; }
 inline int64_t riposte_max(Thread& thread, int64_t a, int64_t b) { return a > b ? a : b; }
-inline int64_t riposte_max(Thread& thread, char a, char b) { return a | b; }
+inline int64_t riposte_max(Thread& thread, int8_t a, int8_t b) { return a | b; }
 inline String riposte_max(Thread& thread, String a, String b) { return strcmp(a,b) > 0 ? a : b; } 
 
 inline double riposte_min(Thread& thread, double a, double b) { return a < b ? a : b; }
 inline int64_t riposte_min(Thread& thread, int64_t a, int64_t b) { return a < b ? a : b; }
-inline int64_t riposte_min(Thread& thread, char a, char b) { return a & b; }
+inline int64_t riposte_min(Thread& thread, int8_t a, int8_t b) { return a & b; }
 inline String riposte_min(Thread& thread, String a, String b) { return strcmp(a,b) < 0 ? a : b; }
 
 inline bool gt(Thread& thread, double a, double b) { return a > b; }
 inline bool gt(Thread& thread, int64_t a, int64_t b) { return a > b; }
-inline bool gt(Thread& thread, char a, char b) { return (unsigned char)a > (unsigned char)b; }
+inline bool gt(Thread& thread, int8_t a, int8_t b) { return (uint8_t)a > (uint8_t)b; }
 inline bool gt(Thread& thread, String a, String b) { return strcmp(a,b) > 0; }
 
 inline bool ge(Thread& thread, double a, double b) { return a >= b; }
 inline bool ge(Thread& thread, int64_t a, int64_t b) { return a >= b; }
-inline bool ge(Thread& thread, char a, char b) { return (unsigned char)a >= (unsigned char)b; }
+inline bool ge(Thread& thread, int8_t a, int8_t b) { return (uint8_t)a >= (uint8_t)b; }
 inline bool ge(Thread& thread, String a, String b) { return strcmp(a,b) >= 0; }
 
 inline bool lt(Thread& thread, double a, double b) { return a < b; }
 inline bool lt(Thread& thread, int64_t a, int64_t b) { return a < b; }
-inline bool lt(Thread& thread, char a, char b) { return (unsigned char)a < (unsigned char)b; }
+inline bool lt(Thread& thread, int8_t a, int8_t b) { return (uint8_t)a < (uint8_t)b; }
 inline bool lt(Thread& thread, String a, String b) { return strcmp(a,b) < 0; }
 
 inline bool le(Thread& thread, double a, double b) { return a <= b; }
 inline bool le(Thread& thread, int64_t a, int64_t b) { return a <= b; }
-inline bool le(Thread& thread, char a, char b) { return (unsigned char)a <= (unsigned char)b; }
+inline bool le(Thread& thread, int8_t a, int8_t b) { return (uint8_t)a <= (uint8_t)b; }
 inline bool le(Thread& thread, String a, String b) { return strcmp(a,b) <= 0; }
 
 ARITH_BINARY_BYTECODES(BINARY_OP)
