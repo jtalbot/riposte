@@ -2197,6 +2197,10 @@ struct LLVMJIT {
 	}
 
 	void Compile() {
+
+		timespec begin;
+		get_time(begin);
+		
 		// Make the function type:  double(double,double) etc.
 		std::vector<llvm::Type*> args(3, Int64Ty);
 		std::vector<std::string> names;
@@ -2227,9 +2231,9 @@ struct LLVMJIT {
 
 		// Create a new basic block to start insertion into.
 		llvm::BasicBlock *PreBB = llvm::BasicBlock::Create(context, "entry", F);
-		builder.SetInsertPoint(PreBB);
-
 		llvm::BasicBlock* BodyBB = llvm::BasicBlock::Create(context, "loop", F);
+		llvm::BasicBlock* PostBB = llvm::BasicBlock::Create(context, "after", F);
+		
 		builder.SetInsertPoint(BodyBB);
 		llvm::PHINode *Variable = builder.CreatePHI(Int64Ty, 2);
   		Variable->addIncoming(Args[1], PreBB);
@@ -2275,7 +2279,6 @@ struct LLVMJIT {
 					a = builder.CreateGEP(a,in[node.unary.a]);
 					r = Constant(0.0, 0.0);
 					llvm::Value* b = builder.CreateExtractElement(a, Constant((int32_t)0));
-					b->dump();
 					b = builder.CreateLoad(b);
 					r = builder.CreateInsertElement(r, b, Constant((int32_t)0));
 					r = builder.CreateInsertElement(r, builder.CreateLoad(builder.CreateExtractElement(a, Constant((int32_t)1))), Constant((int32_t)1));
@@ -2329,9 +2332,46 @@ struct LLVMJIT {
 				//printf("%d %d %d\n", node.sequence.ia, node.sequence.ib, node.shape.length);
 			} break;
 
+			case IROpCode::sum: {
+				if(node.isInteger()) {
+					builder.SetInsertPoint(PreBB);
+					llvm::Value* i = builder.CreateAlloca(Int64x2Ty);
+					builder.CreateStore(Constant((int64_t)0,(int64_t)0), i);
+
+					builder.SetInsertPoint(BodyBB);
+					r = builder.CreateAdd(builder.CreateLoad(i), in[node.unary.a]);
+					builder.CreateStore(r, i);
+
+					builder.SetInsertPoint(PostBB);
+					// do horizontal add...
+					llvm::Value* a = builder.CreateExtractElement(r, Constant((int32_t)0));
+					llvm::Value* b = builder.CreateExtractElement(r, Constant((int32_t)1));
+					builder.CreateStore(builder.CreateAdd(a,b), Constant(((Integer&)node.out).v()));
+
+					builder.SetInsertPoint(BodyBB);
+				} else {
+					builder.SetInsertPoint(PreBB);
+					llvm::Value* i = builder.CreateAlloca(Doublex2Ty);
+					builder.CreateStore(Constant(0.0,0.0), i);
+					
+					builder.SetInsertPoint(BodyBB);
+					r = builder.CreateFAdd(builder.CreateLoad(i), in[node.unary.a]);
+					builder.CreateStore(r, i);
+				
+					builder.SetInsertPoint(PostBB);
+					
+					// do horizontal add...
+					llvm::Value* a = builder.CreateExtractElement(r, Constant((int32_t)0));
+					llvm::Value* b = builder.CreateExtractElement(r, Constant((int32_t)1));
+					builder.CreateStore(builder.CreateFAdd(a,b), Constant(((Double&)node.out).v()));
+
+					builder.SetInsertPoint(BodyBB);
+				}
+			} break;
+
 			case IROpCode::ifelse: {
 				// TODO: handle NA
-				r = builder.CreateSelect(in[node.trinary.c], in[node.trinary.a], in[node.trinary.b]);
+				r = builder.CreateSelect(in[node.trinary.c], in[node.trinary.b], in[node.trinary.a]);
 			} break;
 			
 			case IROpCode::neg: {
@@ -2421,23 +2461,24 @@ struct LLVMJIT {
 		llvm::Value* End = builder.CreateICmpULT(Next, Args[2]);
 	
 		llvm::BasicBlock* LoopEndBB = builder.GetInsertBlock();
-		llvm::BasicBlock* AfterBB = llvm::BasicBlock::Create(context, "after", F);
-		builder.CreateCondBr(End, BodyBB, AfterBB);
+		builder.CreateCondBr(End, BodyBB, PostBB);
 		Variable->addIncoming(Next, LoopEndBB);
 		
 		builder.SetInsertPoint(PreBB);
 		builder.CreateBr(BodyBB);
 		
 		// Finish off the function.
-		builder.SetInsertPoint(AfterBB);
+		builder.SetInsertPoint(PostBB);
 		builder.CreateRetVoid();
 
 		// Validate the generated code, checking for consistency.
 		llvm::verifyFunction(*F);
 
+			printf("Code gen time %f\n", time_elapsed(begin));
 		// Optimize the function.
 		fpm.run(*F);
 
+			printf("Code gen time + opt %f\n", time_elapsed(begin));
 		func = F;
 	}
 
@@ -2450,8 +2491,12 @@ struct LLVMJIT {
 	}
 
 	void Execute(Thread & thread) {
-		func->dump();
+		//func->dump();
+			
+			timespec begin;
+			get_time(begin);
 		fn trace_code = (fn)engine->getPointerToFunction(func);
+			printf("JIT compile time %f\n", time_elapsed(begin));
 		
 		if(thread.state.verbose) {
 			//timespec begin;
