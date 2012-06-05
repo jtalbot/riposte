@@ -20,8 +20,9 @@ Trace::Trace() {
 std::string shape2string(IRNode::Shape const& shape) {
 	std::ostringstream out;
 	out << "[" << shape.length;
-	if(shape.filter > 0) out << "[n" << shape.filter << "]";
-	if(shape.split > 0) out << "/n" << shape.split << "(" << shape.levels << ")";
+	if(shape.filter >= 0) out << "[n" << shape.filter << "]";
+	if(shape.split >= 0) out << "/n" << shape.split << "(" << shape.levels << ")";
+	if(shape.na >= 0) out << "-" << shape.na;
 	out << "]";
 	return out.str();
 }
@@ -56,10 +57,11 @@ std::string Trace::toString(Thread & thread) {
 				out << node.sequence.ia << "\t" << node.sequence.ib;
 		break;
 		case IROpCode::constant: out << ( (node.type == Type::Integer) ? node.constant.i : (node.type == Type::Logical) ? node.constant.l : node.constant.d); break;
-		case IROpCode::addc: 
-		case IROpCode::mulc: 
-			out << "n" << node.unary.a << "\t" << ( (node.type == Type::Integer) ? node.constant.i : (node.type == Type::Logical) ? node.constant.l : node.constant.d); break;
+		//case IROpCode::addc: 
+		//case IROpCode::mulc: 
+		//	out << "n" << node.unary.a << "\t" << ( (node.type == Type::Integer) ? node.constant.i : (node.type == Type::Logical) ? node.constant.l : node.constant.d); break;
 		case IROpCode::load: out << "$" << node.in.p << "[" << node.constant.i << "]\t"; break;
+		case IROpCode::loadna: out << "$" << node.in.p << "[" << node.constant.i << "]\t"; break;
 		case IROpCode::gather: out << "$" << node.in.p << "\tn" << node.unary.a; break;
 		case IROpCode::sload: out << "$" << node.in.p; break;
 		case IROpCode::sstore: out << "n" << node.binary.a << "[" << node.binary.data << "]\tn" << node.binary.b; break;
@@ -105,7 +107,7 @@ IRef Trace::EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data) 
 		 op == IROpCode::length)) {
 		n.group = IRNode::FOLD;
 		n.arity = op == IROpCode::length ? IRNode::NULLARY : IRNode::UNARY;
-		n.outShape = (IRNode::Shape) { nodes[a].outShape.levels, -1, 1, -1, true };
+		n.outShape = (IRNode::Shape) { nodes[a].outShape.levels, -1, 1, -1, true, -1 };
 	} else if(op == IROpCode::mean) {
 		union {
 			double d;
@@ -115,7 +117,7 @@ IRef Trace::EmitUnary(IROpCode::Enum op, Type::Enum type, IRef a, int64_t data) 
 		n.binary.b = EmitBinary(IROpCode::div, Type::Double, EmitConstant(Type::Double, 1, i), EmitUnary(IROpCode::length, Type::Double, a, 0), 0);
 		n.group = IRNode::FOLD;
 		n.arity = IRNode::BINARY;
-		n.outShape = (IRNode::Shape) { nodes[a].outShape.levels, -1, 1, -1, true };
+		n.outShape = (IRNode::Shape) { nodes[a].outShape.levels, -1, 1, -1, true, -1 };
 	} else {
 		n.group = IRNode::MAP;
 		n.arity = IRNode::UNARY;
@@ -143,6 +145,7 @@ IRef Trace::EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, int64
 		//assert(nodes[a].outShape == nodes[b].outShape);
 		n.shape = nodes[a].outShape;
 	}
+	n.shape.na = EmitMergeNA(a,b);
 	if(op == IROpCode::cm2) {
 		n.binary.a = EmitUnary(IROpCode::mean, Type::Double, a, 0); 
 		n.binary.b = EmitUnary(IROpCode::mean, Type::Double, b, 0);
@@ -154,7 +157,7 @@ IRef Trace::EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, int64
 		n.trinary.c = EmitBinary(IROpCode::div, Type::Double, EmitConstant(Type::Double, 1, i), EmitUnary(IROpCode::length, Type::Double, a, 0), 0);
 		n.arity = IRNode::TRINARY;
 		n.group = IRNode::FOLD;
-		n.outShape = (IRNode::Shape) { nodes[a].outShape.levels, -1, 1, -1, true };
+		n.outShape = (IRNode::Shape) { nodes[a].outShape.levels, -1, 1, -1, true, -1 };
 	} else {
 		n.arity = IRNode::BINARY;
 		n.group = IRNode::MAP;
@@ -227,7 +230,7 @@ IRef Trace::EmitGenerator(IROpCode::Enum op, Type::Enum type, int64_t length, in
 	n.group = IRNode::GENERATOR;
 	n.op = op;
 	n.type = type;
-	n.shape = (IRNode::Shape) { length, -1, 1, -1, false };
+	n.shape = (IRNode::Shape) { length, -1, 1, -1, false, -1 };
 	n.outShape = n.shape;
 	n.sequence.ia = a;
 	n.sequence.ib = b;
@@ -267,7 +270,7 @@ IRef Trace::EmitConstant(Type::Enum type, int64_t length, int64_t c) {
 	n.group = IRNode::GENERATOR;
 	n.op = IROpCode::constant;
 	n.type = type;
-	n.shape = (IRNode::Shape) { length, -1, 1, -1, false };
+	n.shape = (IRNode::Shape) { length, -1, 1, -1, false, -1 };
 	n.outShape = n.shape;
 	n.constant.i = c;
 	nodes.push_back(n);
@@ -293,10 +296,41 @@ IRef Trace::EmitLoad(Value const& v, int64_t length, int64_t offset) {
 	n.group = IRNode::GENERATOR;
 	n.op = IROpCode::load;
 	n.type = v.type;
-	n.shape = (IRNode::Shape) { length, -1, 1, -1, false };
+	n.shape = (IRNode::Shape) { length, -1, 1, -1, false, EmitLoadNA(v, length, offset) };
 	n.outShape = n.shape;
 	n.constant.i = offset;
 	n.in = v;
+	nodes.push_back(n);
+	return nodes.size()-1;
+}
+
+IRef Trace::EmitLoadNA(Value const& v, int64_t length, int64_t offset) {
+	IRNode n;
+	n.arity = IRNode::NULLARY;
+	n.group = IRNode::GENERATOR;
+	n.op = IROpCode::loadna;
+	n.type = v.type;
+	n.shape = (IRNode::Shape) { length, -1, 1, -1, false, -1 };
+	n.outShape = n.shape;
+	n.constant.i = offset;
+	n.in = v;
+	nodes.push_back(n);
+	return nodes.size()-1;
+}
+
+IRef Trace::EmitMergeNA(IRef a, IRef b) {
+	if(nodes[a].outShape.na == nodes[b].outShape.na) return nodes[a].outShape.na;
+	if(nodes[a].outShape.na == -1) return nodes[b].outShape.na;
+	if(nodes[b].outShape.na == -1) return nodes[a].outShape.na;
+	IRNode n;
+	n.arity = IRNode::BINARY;
+	n.group = IRNode::MAP;
+	n.op = IROpCode::lor;
+	n.type = Type::Logical;
+	n.binary.a = nodes[a].outShape.na;
+	n.binary.b = nodes[b].outShape.na;
+	n.shape = (IRNode::Shape) { nodes[a].outShape.length, -1, 1, -1, false, -1 };
+	n.outShape = n.shape;
 	nodes.push_back(n);
 	return nodes.size()-1;
 }
@@ -329,8 +363,8 @@ IRef Trace::EmitSLoad(Value const& v) {
 	n.group = IRNode::SCALAR;
 	n.op = IROpCode::sload;
 	n.type = v.type;
-	n.shape = (IRNode::Shape) { Size, -1, 1, -1, false };
-	n.outShape = (IRNode::Shape) { v.length, -1, 1, -1, true };
+	n.shape = (IRNode::Shape) { Size, -1, 1, -1, false, -1 };
+	n.outShape = (IRNode::Shape) { v.length, -1, 1, -1, true, -1 };
 	n.in = v;
 	nodes.push_back(n);
 	return nodes.size()-1;
@@ -342,8 +376,8 @@ IRef Trace::EmitSStore(IRef ref, int64_t index, IRef v) {
 	n.group = IRNode::SCALAR;
 	n.op = IROpCode::sstore;
 	n.type = nodes[ref].type;
-	n.shape = (IRNode::Shape) { Size, -1, 1, -1, false };
-	n.outShape = (IRNode::Shape) { std::max(nodes[ref].outShape.length, index), -1, 1, -1, true };
+	n.shape = (IRNode::Shape) { Size, -1, 1, -1, false, -1 };
+	n.outShape = (IRNode::Shape) { std::max(nodes[ref].outShape.length, index), -1, 1, -1, true, -1 };
 	n.binary.a = ref;
 	n.binary.b = v;
 	n.binary.data = index;
@@ -571,7 +605,7 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			}
 		}
 
-		if(node.op == IROpCode::add && nodes[node.binary.b].op == IROpCode::constant) {
+		/*if(node.op == IROpCode::add && nodes[node.binary.b].op == IROpCode::constant) {
 			if(node.isInteger())
 				node.constant.i = nodes[node.binary.b].constant.i;
 			else
@@ -619,7 +653,7 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 				node.sequence.da = addVOp<Double,Double>::eval(thread, nodes[a].sequence.da, node.constant.d);
 				node.sequence.db = nodes[a].sequence.db;
 			}
-		}
+		}*/
 		
 		if(node.op == IROpCode::sub &&
 				nodes[node.binary.a].op == IROpCode::seq &&
@@ -641,7 +675,7 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			}
 		}
 
-		if(node.op == IROpCode::mulc && nodes[node.binary.a].op == IROpCode::seq) {
+		/*if(node.op == IROpCode::mulc && nodes[node.binary.a].op == IROpCode::seq) {
 			int64_t a = node.binary.a;
 			if(node.isInteger()) {
 				node.op = IROpCode::seq;
@@ -671,7 +705,7 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			node.arity = IRNode::UNARY;
 			node.group = IRNode::MAP;
 			node.unary.a = node.binary.a;
-		}
+		}*/
 		
 		if(node.op == IROpCode::land &&
 				nodes[node.binary.b].op == IROpCode::constant &&
@@ -709,7 +743,7 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			node.constant.l = Logical::TrueElement;
 		}
 		
-		if(node.op == IROpCode::sub &&
+		/*if(node.op == IROpCode::sub &&
 				nodes[node.binary.b].op == IROpCode::constant &&
 				nodes[node.binary.b].constant.i == 1 &&
 				nodes[node.binary.a].op == IROpCode::addc &&
@@ -718,7 +752,7 @@ void Trace::AlgebraicSimplification(Thread& thread) {
 			node.arity = IRNode::UNARY;
 			node.group = IRNode::MAP;
 			node.unary.a = nodes[node.binary.a].binary.a;
-		}
+		}*/
 
 		if(node.op == IROpCode::gather &&
 			nodes[node.unary.a].op == IROpCode::seq &&
@@ -797,6 +831,8 @@ void Trace::UsePropogation(Thread& thread) {
 				nodes[node.shape.filter].live = true;
 			if(node.shape.split >= 0) 
 				nodes[node.shape.split].live = true;
+			if(node.shape.na >= 0) 
+				nodes[node.shape.na].live = true;
 		}
 	}
 }
@@ -978,6 +1014,8 @@ void Trace::Execute(Thread & thread) {
 	// if there were any live outputs
 	if(outputs.size() > 0) {
 		JIT(thread);
+	if(thread.state.verbose)
+		printf("optimized:\n%s\n",toString(thread).c_str());
 		WriteOutputs(thread);
 	}
 	Reset();

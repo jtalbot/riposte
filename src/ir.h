@@ -12,14 +12,13 @@
 		FOLD_BYTECODES(_) \
 		SPECIAL_FOLD_BYTECODES(_) \
 		SCAN_BYTECODES(_) \
-		_(addc, "addc", ___) \
-		_(mulc, "mulc", ___) \
 		_(cast, "cast", ___) \
 		_(constant,"constant", ___) \
 		_(seq, "seq", ___) \
 		_(rep, "rep", ___) \
 		_(random, "random", ___) \
 		_(load,"load", ___) \
+		_(loadna, "loadna", ___) \
 		_(gather,"gather", ___) \
 		_(filter, "filter", ___) \
 		_(split, "split", ___) \
@@ -57,13 +56,15 @@ struct IRNode {
 		int64_t levels;
 		IRef split;
 		bool blocking;
+		IRef na;
 
 		bool operator==(Shape const& o) const {
 			return length == o.length &&
 				filter == o.filter &&
 				levels == o.levels &&
 				split == o.split &&
-				blocking == o.blocking;
+				blocking == o.blocking &&
+				na == o.na;
 		}
 
 		bool operator!=(Shape const& o) const {
@@ -117,9 +118,9 @@ struct IRNode {
 						return eq && binary.a == o.binary.a && binary.b == o.binary.b;
 					break;
 					case IRNode::UNARY:
-						if(op == IROpCode::addc || op == IROpCode::mulc)
-							return eq && unary.a == o.unary.a && constant.i == o.constant.i;
-						else
+						//if(op == IROpCode::addc || op == IROpCode::mulc)
+						//	return eq && unary.a == o.unary.a && constant.i == o.constant.i;
+						//else
 							return eq && unary.a == o.unary.a;
 					break;
 					case IRNode::NULLARY:

@@ -165,9 +165,9 @@ struct Vector : public Value {
 		p = v.p;
 	}
 
-	operator Value() const {
-		return (Value&)*this;
-	}
+	//operator Value() const {
+	//	return (Value&)*this;
+	//}
 };
 
 union _doublena {

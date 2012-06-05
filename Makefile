@@ -3,7 +3,7 @@ UNAME := $(shell uname -s)
  
 CXX := g++ 
 CXXFLAGS := -Wall -DRIPOSTE_DISABLE_TRACING -msse4.1 `/usr/local/bin/llvm-config --cppflags` 
-LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g `/usr/local/bin/llvm-config --ldflags --libs core jit native`
+LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g `/usr/local/bin/llvm-config --ldflags --libs core jit native bitreader linker ipo`
 
 ifeq ($(UNAME),Linux)
 #for clock_gettime
@@ -47,30 +47,33 @@ ASM := $(patsubst %.cpp,bin/%.s,$(SRC))
 
 default: debug 
 
-debug: CXXFLAGS += -DDEBUG -O0 -g
-debug: $(EXECUTABLE)
+debug: CXXFLAGS += -DDEBUG -O0
+debug: $(EXECUTABLE) bin/trace_lib.bc
 
-release: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize 
-release: $(EXECUTABLE)
+release: CXXFLAGS += -DNDEBUG -O3 -ftree-vectorize 
+release: $(EXECUTABLE) bin/trace_lib.bc
 
-irelease: CXXFLAGS += -DNDEBUG -O3 -g
+irelease: CXXFLAGS += -DNDEBUG -O3
 irelease: CXX := icc
-irelease: $(EXECUTABLE)
+irelease: $(EXECUTABLE) bin/trace_lib.bc
           
-asm: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize 
+asm: CXXFLAGS += -DNDEBUG -O3 -ftree-vectorize 
 asm: $(ASM)
 
 $(EXECUTABLE): $(OBJECTS)
 	$(CXX) $(LFLAGS) -o $@ $^ $(LIBS)
 
 bin/%.o: src/%.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@ 
+	$(CXX) $(CXXFLAGS) -g -c $< -o $@ 
 
 bin/%.s: src/%.cpp
-	$(CXX) $(CXXFLAGS) -S -c $< -o $@ 
+	$(CXX) $(CXXFLAGS) -g -S -c $< -o $@ 
+
+bin/trace_lib.bc : src/trace_lib.cpp
+	clang++ $(CXXFLAGS) -emit-llvm -c $^ -o $@
 
 clean:
-	rm -rf $(EXECUTABLE) $(OBJECTS) $(DEPENDENCIES)
+	rm -rf $(EXECUTABLE) $(OBJECTS) $(DEPENDENCIES) bin/trace_lib.bc
 
 coverage: CXXFLAGS += -fprofile-arcs -ftest-coverage
 coverage: LFLAGS += -fprofile-arcs -ftest-coverage

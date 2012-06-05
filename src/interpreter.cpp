@@ -646,11 +646,11 @@ Instruction const* random_op(Thread& thread, Instruction const& inst) {
 
 	int64_t len = As<Integer>(thread, a)[0];
 	
-	/*if(len >= TRACE_VECTOR_WIDTH) {
+	if(len >= TRACE_VECTOR_WIDTH) {
 		OUT(thread, inst.c) = thread.EmitRandom(thread.frame.environment, len);
 		thread.OptBind(OUT(thread,inst.c));
 		return &inst+1;
-	}*/
+	}
 
 	OUT(thread, inst.c) = Random(thread, len);
 	return &inst+1;

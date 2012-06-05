@@ -18,22 +18,29 @@
 #include "llvm/ExecutionEngine/JIT.h"
 #include "llvm/LLVMContext.h"
 #include "llvm/Module.h"
+#include "llvm/Linker.h"
 #include "llvm/PassManager.h"
 #include "llvm/Analysis/Verifier.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Target/TargetData.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/IPO.h"
 #include "llvm/Support/IRbuilder.h"
 #include "llvm/Support/TargetSelect.h"
-
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/system_error.h"
+#include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/ADT/OwningPtr.h"
 
 using namespace v8::internal;
 
 #define SIMD_WIDTH (2 * sizeof(double))
 #define CODE_BUFFER_SIZE (256 * 2048)
 
-#define BIG_CARDINALITY 1024 
+#define BIG_CARDINALITY 1024
 
+#define CALL_MEMBER_FN(object,ptrToMember)  ((object).*(ptrToMember)) 
+/*
 struct Constant {
 	Constant() {}
 	Constant(int64_t i)
@@ -140,9 +147,9 @@ struct SSEValue {
 		int64_t i[2];
 		double  d[2];
 	};
-};
+};*/
 
-static __m128d sign_d(__m128d input) {
+/*static __m128d sign_d(__m128d input) {
 	SSEValue v;
 	v.D = input;
 
@@ -193,9 +200,9 @@ static __m128d abs_i(__m128d input) {
 	v.i[1] = (v.i[1] < 0) ? -v.i[1] : v.i[1];
 
 	return v.D;
-}
+}*/
 
-static __m128d casti2d(__m128d input) {
+/*static __m128d casti2d(__m128d input) {
 	SSEValue v; 
 	v.D = input;
 	
@@ -273,9 +280,9 @@ static __m128d castl2i(__m128d input) {
 	else v.i[1] = Integer::NAelement;
 
 	return v.D;
-}
+}*/
 
-extern "C"
+/*extern "C"
 __m128d exp_d(__m128d input) {
        SSEValue v;
        v.D = input;
@@ -289,8 +296,8 @@ __m128d log_d(__m128d input) {
        v.D = input;
        for(int i = 0; i < 2; i++) v.d[i] = log(v.d[i]);
        return v.D;
-}
-
+}*/
+/*
 static __m128d random_d(__m128d input) {
 	SSEValue v; 
 	v.D = input;
@@ -409,7 +416,8 @@ FOLD_SCAN_FN(prodi, int64_t, *)
 FOLD_SCAN_FN(prodd, double , *)
 FOLD_SCAN_FN(cumsumi, int64_t, +)
 FOLD_SCAN_FN(cumsumd, double , +)
-
+*/
+/*
 struct TraceJIT {
 	TraceJIT(Trace * t, Thread& thread)
 	:  trace(t), thread(thread), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), alloc(XMMRegister::kNumAllocatableRegisters-2), next_constant_slot(C_FIRST_TRACE_CONST) {
@@ -899,7 +907,8 @@ struct TraceJIT {
 			case IROpCode::atan2: 	EmitBinaryFunction(ref,amd_atan2); break;
 			case IROpCode::hypot: 	EmitBinaryFunction(ref,amd_hypot); break;
 #else
-			case IROpCode::exp: 	EmitVectorizedUnaryFunction(ref,exp_d); break;
+			case IROpCode::exp: 	//EmitVectorizedUnaryFunction(ref,exp_d); 
+				break;
 			case IROpCode::log: 	EmitVectorizedUnaryFunction(ref,log_d); break;
 			case IROpCode::cos: 	EmitUnaryFunction(ref,cos); break;
 			case IROpCode::sin: 	EmitUnaryFunction(ref,sin); break;
@@ -1384,13 +1393,13 @@ struct TraceJIT {
 
 			case IROpCode::prod: { 
 				if(node.isDouble()) {
-					/*assert(store_inst[ref] != NULL);
-					IRNode & str = *store_inst[ref];
-					for(uint64_t i = 0; i < 128; i++)
-						((double*)str.store.dst.p)[i] = 1.0;
-					Operand op = EncodeOperand(str.store.dst.p, thread_index, times_8);
-					asm_.mulpd(RegR(ref),op);
-					asm_.movdqa(op,RegR(ref));*/
+					//assert(store_inst[ref] != NULL);
+					//IRNode & str = *store_inst[ref];
+					//for(uint64_t i = 0; i < 128; i++)
+					//	((double*)str.store.dst.p)[i] = 1.0;
+					//Operand op = EncodeOperand(str.store.dst.p, thread_index, times_8);
+					//asm_.mulpd(RegR(ref),op);
+					//asm_.movdqa(op,RegR(ref));
 				}
 				else {
 					EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)0LL)); break;
@@ -1412,18 +1421,16 @@ struct TraceJIT {
 			} break;
 
 			case IROpCode::nop:
-			/* nothing */
+			// nothing 
 			break;
 
 			case IROpCode::split:
 				MoveA2R(ref);
 				// subsplit if necessary...
 				if(node.shape.split >= 0) {
-					/*
-					levels *= nodes[x].shape.levels;
-					IRef e = EmitBinary(IROpCode::mul, Type::Integer, f, EmitConstant(Type::Integer, 1, levels), 0);
-					f = EmitBinary(IROpCode::add, Type::Integer, e, f, 0);
-					*/
+					//levels *= nodes[x].shape.levels;
+					//IRef e = EmitBinary(IROpCode::mul, Type::Integer, f, EmitConstant(Type::Integer, 1, levels), 0);
+					//f = EmitBinary(IROpCode::add, Type::Integer, e, f, 0);
 					_error("NYI: subsplitting");
 				}
 				break;
@@ -1722,14 +1729,14 @@ struct TraceJIT {
 	}
 
 	void EmitDebugPrintResult(IRef i) {
-		/*RegisterSet regs = live_registers[i];
-		regs &= ~(1 << allocated_register[i]);
+		//RegisterSet regs = live_registers[i];
+		//regs &= ~(1 << allocated_register[i]);
 
-		SaveRegisters(i);
-		EmitMove(xmm0,reg(i));
-		asm_.movq(rdi,vector_index);
-		EmitCall((void*) debug_print);
-		RestoreRegisters(i);*/
+		//SaveRegisters(i);
+		//EmitMove(xmm0,reg(i));
+		//asm_.movq(rdi,vector_index);
+		//EmitCall((void*) debug_print);
+		//RestoreRegisters(i);
 	}
 
 	void EmitGather(XMMRegister dest, IRNode const& node, XMMRegister index, Operand offset) {
@@ -1868,12 +1875,11 @@ struct TraceJIT {
 	void mergeMean(IRNode& node, int64_t i, int64_t j) {
 		IRNode& b = trace->nodes[trace->nodes[node.binary.b].binary.b];
 
-		/*printf("Merging %d => %d: %f %f %f %f\n", i, j,
-			((double*)node.in.p)[i],
-			((double*)b.in.p)[i],
-			((double*)node.in.p)[j],
-			((double*)b.in.p)[j]);
-		*/
+		//printf("Merging %d => %d: %f %f %f %f\n", i, j,
+		//	((double*)node.in.p)[i],
+		//	((double*)b.in.p)[i],
+		//	((double*)node.in.p)[j],
+		//	((double*)b.in.p)[j]);
 		// u2 in a, n2 in b
 		if(((double*)b.in.p)[i] > 0) {
 			double m1 = ((double*)node.in.p)[i];
@@ -1979,7 +1985,8 @@ struct TraceJIT {
 							case IROpCode::max:
 								mergeMax(node, a, b);
 								break;
-							default: /* do nothing */ break;
+							default: // do nothing 
+								break;
 						}
 					}
 				}
@@ -2028,8 +2035,7 @@ struct TraceJIT {
 			}
 		}
 	}
-};
-
+};*/
 
 struct LLVMJIT {
 	Trace& trace;
@@ -2037,26 +2043,23 @@ struct LLVMJIT {
 
 	llvm::LLVMContext& context;
 	llvm::IRBuilder<> builder;
-	llvm::Module *module;
+	llvm::Module *module, *lib;
 	llvm::FunctionPassManager fpm;
+	llvm::PassManager pm;
 	llvm::ExecutionEngine *engine;
 	llvm::Function* func;
 
 	llvm::Type *VoidTy, *Int32Ty;
-	llvm::Type *Int8Ty, *Int64Ty, *DoubleTy, *Int8Ptr, *Int64Ptr, *DoublePtr;
-	llvm::Type *Int8x2Ty, *Int64x2Ty, *Doublex2Ty, *Int8x2Ptr, *Int64x2Ptr, *Doublex2Ptr;
-
-	// External functions
-	llvm::Function *g_exp, *g_log, *g_sqrt;
-
+	llvm::Type *Int1Ty, *Int8Ty, *Int64Ty, *DoubleTy, *Int8Ptr, *Int64Ptr, *DoublePtr;
+	llvm::Type *Int1x2Ty, *Int8x2Ty, *Int64x2Ty, *Doublex2Ty, *Int8x2Ptr, *Int64x2Ptr, *Doublex2Ptr;
 
 	LLVMJIT(Trace* trace, Thread& thread) 
 		: 	trace(*trace), 
-			thread(thread), 
-			context(llvm::getGlobalContext()),
-			builder(context), 
-			module(new llvm::Module("jit", context)),
-			fpm(module)
+		thread(thread), 
+		context(llvm::getGlobalContext()),
+		builder(context), 
+		module(new llvm::Module("jit", context)),
+		fpm(module)
 	{
 		llvm::InitializeNativeTarget();
 
@@ -2066,7 +2069,7 @@ struct LLVMJIT {
 			fprintf(stderr, "Could not create ExecutionEngine: %s\n", ErrStr.c_str());
 			exit(1);
 		}
-		
+
 		// Set up the optimizer pipeline.  Start with registering info about how the
 		// target lays out data structures.
 		fpm.add(new llvm::TargetData(*engine->getTargetData()));
@@ -2083,9 +2086,20 @@ struct LLVMJIT {
 		fpm.add(llvm::createCFGSimplificationPass());
 
 		fpm.doInitialization();
-	
+
+		pm.add(llvm::createInternalizePass(false));
+		pm.add(llvm::createGlobalDCEPass());	
+		pm.add(llvm::createGlobalOptimizerPass());	
+		pm.add(llvm::createAlwaysInlinerPass());	
+		pm.add(llvm::createPromoteMemoryToRegisterPass());
+		pm.add(llvm::createInstructionCombiningPass());	
+		pm.add(llvm::createEarlyCSEPass());	
+		pm.add(llvm::createLICMPass());	
+		//pm.doInitialization();
+
 
 		VoidTy =	llvm::Type::getVoidTy(context);
+		Int1Ty = 	llvm::Type::getInt1Ty(context);
 		Int8Ty = 	llvm::Type::getInt8Ty(context);
 		Int32Ty = 	llvm::Type::getInt32Ty(context);
 		Int64Ty = 	llvm::Type::getInt64Ty(context);
@@ -2093,94 +2107,248 @@ struct LLVMJIT {
 		Int8Ptr = 	llvm::PointerType::getUnqual(Int8Ty);
 		Int64Ptr = 	llvm::PointerType::getUnqual(Int64Ty);
 		DoublePtr = 	llvm::PointerType::getUnqual(DoubleTy);
-	
+
+		Int1x2Ty = 	llvm::VectorType::get(Int1Ty,2);
 		Int8x2Ty = 	llvm::VectorType::get(Int8Ty,2);
 		Int64x2Ty = 	llvm::VectorType::get(Int64Ty,2);
 		Doublex2Ty = 	llvm::VectorType::get(DoubleTy,2);
 		Int8x2Ptr = 	llvm::PointerType::getUnqual(Int8x2Ty);
 		Int64x2Ptr = 	llvm::PointerType::getUnqual(Int64x2Ty);
 		Doublex2Ptr = 	llvm::PointerType::getUnqual(Doublex2Ty);
-	
 
-		std::vector<llvm::Type*> Args;
-		Args.push_back(Doublex2Ty);
-		llvm::FunctionType* uvDouble = llvm::FunctionType::get(Doublex2Ty, Args, false);
-		g_exp = llvm::Function::Create(uvDouble, llvm::Function::ExternalLinkage, "exp_d", module);
-		g_log = llvm::Function::Create(uvDouble, llvm::Function::ExternalLinkage, "log_d", module);
-		g_sqrt = llvm::Function::Create(uvDouble, llvm::Function::ExternalLinkage, "llvm.x86.sse2.sqrt.pd", module);
+		llvm::OwningPtr<llvm::MemoryBuffer> buffer;
+		llvm::MemoryBuffer::getFile("bin/trace_lib.bc", buffer);
+		lib = ParseBitcodeFile(buffer.get(), context);
 	}
 
+	llvm::Function* ExternalFunction(std::string name, llvm::Type* arg1, llvm::Type* r) {
+		if(module->getFunction(name))
+			return module->getFunction(name);
+		std::vector<llvm::Type*> args;
+		args.push_back(arg1);
+		llvm::FunctionType* type = llvm::FunctionType::get(r, args, false);
+		return llvm::Function::Create(type, llvm::Function::ExternalLinkage, name, module);
+	}
+
+	llvm::Function* ExternalFunction(std::string name, llvm::Type* arg1, llvm::Type* arg2, llvm::Type* r) {
+		if(module->getFunction(name))
+			return module->getFunction(name);
+		std::vector<llvm::Type*> args;
+		args.push_back(arg1);
+		args.push_back(arg2);
+		llvm::FunctionType* type = llvm::FunctionType::get(r, args, false);
+		return llvm::Function::Create(type, llvm::Function::ExternalLinkage, name, module);
+	}
+
+	llvm::Value* ExternalCall(std::string name, llvm::Value* arg1, llvm::Type* r) {
+		llvm::Function* func = ExternalFunction(name, arg1->getType(), r);
+		return builder.CreateCall(func, arg1);
+	}
+
+	llvm::Value* ExternalCall(std::string name, llvm::Value* arg1, llvm::Value* arg2, llvm::Type* r) {
+		llvm::Function* func = ExternalFunction(name, arg1->getType(), arg2->getType(), r);
+		return builder.CreateCall2(func, arg1, arg2);
+	}
+
+	llvm::Constant* Constant(bool i) 
+	{ return llvm::ConstantInt::get(Int1Ty, i?1:0); } 
 	llvm::Constant* Constant(int8_t i) 
-		{ return llvm::ConstantInt::get(Int8Ty, i); } 
+	{ return llvm::ConstantInt::get(Int8Ty, i?1:0); } 
 	llvm::Constant* Constant(int32_t i) 
-		{ return llvm::ConstantInt::get(Int32Ty, i); } 
+	{ return llvm::ConstantInt::get(Int32Ty, i); } 
 	llvm::Constant* Constant(int64_t i) 
-		{ return llvm::ConstantInt::get(Int64Ty, i); } 
+	{ return llvm::ConstantInt::get(Int64Ty, i); } 
 	llvm::Constant* Constant(double i) 
-		{ return llvm::ConstantFP::get(DoubleTy, i); } 
-	
+	{ return llvm::ConstantFP::get(DoubleTy, i); } 
+
 	llvm::Constant* Constant(int8_t* i) 
-		{ return llvm::ConstantExpr::getIntToPtr(llvm::ConstantInt::get(Int64Ty, (uint64_t)i), Int8Ptr); } 
+	{ return llvm::ConstantExpr::getIntToPtr(llvm::ConstantInt::get(Int64Ty, (uint64_t)i), Int8Ptr); } 
 	llvm::Constant* Constant(int64_t* i) 
-		{ return llvm::ConstantExpr::getIntToPtr(llvm::ConstantInt::get(Int64Ty, (uint64_t)i), Int64Ptr); } 
+	{ return llvm::ConstantExpr::getIntToPtr(llvm::ConstantInt::get(Int64Ty, (uint64_t)i), Int64Ptr); } 
 	llvm::Constant* Constant(double* i) 
-		{ return llvm::ConstantExpr::getIntToPtr(llvm::ConstantInt::get(Int64Ty, (uint64_t)i), DoublePtr); } 
+	{ return llvm::ConstantExpr::getIntToPtr(llvm::ConstantInt::get(Int64Ty, (uint64_t)i), DoublePtr); } 
 
-	llvm::Constant* Constant(int8_t i, int8_t j) {
+	llvm::Constant* Constant(llvm::Constant* i) 
+	{ return i; } 
+
+	llvm::Constant* Constant(Value& v) {
+		if(v.isInteger()) return Constant(((Integer&)v).v());
+		else if(v.isDouble()) return Constant(((Double&)v).v());
+		else if(v.isLogical()) return Constant(((Logical&)v).v());
+		else throw RuntimeError("unknown type used in JIT");	
+	}
+
+	template<typename T>
+	llvm::Constant* Constant(T i, T j) {
 		std::vector<llvm::Constant*> m;
 		m.push_back(Constant(i));
 		m.push_back(Constant(j));
 		return llvm::ConstantVector::get(m);
 	}
 
-	llvm::Constant* Constant(int64_t i, int64_t j) {
-		std::vector<llvm::Constant*> m;
-		m.push_back(Constant(i));
-		m.push_back(Constant(j));
-		return llvm::ConstantVector::get(m);
+	llvm::Value* VectorInt(llvm::Value* a, llvm::Value* b) {
+		llvm::Value* r = Constant((int64_t)0, (int64_t)0);
+		r = builder.CreateInsertElement(r, a, Constant((int32_t)0));
+		r = builder.CreateInsertElement(r, b, Constant((int32_t)1));
+		return r;
+	}
+	
+	llvm::Value* VectorDouble(llvm::Value* a, llvm::Value* b) {
+		llvm::Value* r = Constant((double)0.0, (double)0.0);
+		r = builder.CreateInsertElement(r, a, Constant((int32_t)0));
+		r = builder.CreateInsertElement(r, b, Constant((int32_t)1));
+		return r;
 	}
 
-	llvm::Constant* Constant(double i, double j) {
-		std::vector<llvm::Constant*> m;
-		m.push_back(Constant(i));
-		m.push_back(Constant(j));
-		return llvm::ConstantVector::get(m);
+	typedef  llvm::Value* (LLVMJIT::*BuilderBinaryFn)(llvm::Value* LHS, llvm::Value* RHS);
+
+	llvm::Value* CreateAdd(llvm::Value* LHS, llvm::Value* RHS) {
+		return builder.CreateAdd(LHS, RHS);
 	}
 
-	llvm::Constant* Constant(int8_t* i, int8_t* j) {
-		std::vector<llvm::Constant*> m;
-		m.push_back(Constant(i));
-		m.push_back(Constant(j));
-		return llvm::ConstantVector::get(m);
+	llvm::Value* CreateFAdd(llvm::Value* LHS, llvm::Value* RHS) {
+		return builder.CreateFAdd(LHS, RHS);
 	}
 
-	llvm::Constant* Constant(int64_t* i, int64_t* j) {
-		std::vector<llvm::Constant*> m;
-		m.push_back(Constant(i));
-		m.push_back(Constant(j));
-		return llvm::ConstantVector::get(m);
+	llvm::Value* CreateMul(llvm::Value* LHS, llvm::Value* RHS) {
+		return builder.CreateMul(LHS, RHS);
 	}
 
-	llvm::Constant* Constant(double* i, double* j) {
-		std::vector<llvm::Constant*> m;
-		m.push_back(Constant(i));
-		m.push_back(Constant(j));
-		return llvm::ConstantVector::get(m);
+	llvm::Value* CreateFMul(llvm::Value* LHS, llvm::Value* RHS) {
+		return builder.CreateFMul(LHS, RHS);
+	}
+
+	llvm::Value* CreateMin(llvm::Value* LHS, llvm::Value* RHS) {
+		return ExternalCall("pmin_i1", LHS, RHS, Int64Ty);
+	}
+
+	llvm::Value* CreateFMin(llvm::Value* LHS, llvm::Value* RHS) {
+		return ExternalCall("pmin_d1", LHS, RHS, DoubleTy);
+	}
+
+	llvm::Value* CreateMax(llvm::Value* LHS, llvm::Value* RHS) {
+		return ExternalCall("pmax_i1", LHS, RHS, Int64Ty);
+	}
+
+	llvm::Value* CreateFMax(llvm::Value* LHS, llvm::Value* RHS) {
+		return ExternalCall("pmax_d1", LHS, RHS, DoubleTy);
+	}
+
+	llvm::Value* CreateAll(llvm::Value* LHS, llvm::Value* RHS) {
+		return builder.CreateAnd(LHS, RHS);
+	}
+
+	llvm::Value* CreateAny(llvm::Value* LHS, llvm::Value* RHS) {
+		return builder.CreateOr(LHS, RHS);
+	}
+
+	llvm::Value* CreateLength(llvm::Value* LHS, llvm::Value* RHS) {
+		return builder.CreateAdd(LHS, Constant((int64_t)1));
+	}
+
+	llvm::Value* CreateMean(llvm::Value* LHS, llvm::Value* RHS) {
+		// m' = m + 1/n * (x-m)
+		return builder.CreateAdd(LHS, Constant((int64_t)1));
+	}
+	// TODO:
+	//	Make work for multicore
+	//		-Partitioning step?
+	//			- Aggregate into fixed size buffer with max(levels, 256) bins, checking if last entry is equal to current?
+	//		-Aggregation step?
+	//			- Aggregate into final vector in separate pass...
+	//	Make work for prefix sums
+	//	?
+
+
+	llvm::Value* Aggregate( 
+			llvm::BasicBlock* PreBB,
+			llvm::BasicBlock*& BodyBB,
+			llvm::BasicBlock* PostBB,
+			llvm::Value* Thread,
+			llvm::Value* value, 
+			int64_t levels, llvm::Value* level, 
+			llvm::Value* filter,
+			llvm::Constant* base, 
+			BuilderBinaryFn func,
+			llvm::Value* out) {
+		builder.SetInsertPoint(PreBB);
+		out = builder.CreateGEP(out, builder.CreateMul(Thread, Constant(levels+16)));
+		llvm::Value* bins = out;
+		//llvm::Value* bins = builder.CreateAlloca(base->getType(), Constant(levels));
+		//for(int64_t j = 0; j < levels; j++) 
+		//	builder.CreateStore(base, builder.CreateConstGEP1_64(bins,j));
+		llvm::Value* r = Constant(base, base);
+
+		builder.SetInsertPoint(BodyBB);
+		for(int64_t j = 0; j < 2; j++) {
+			llvm::Function* Function = builder.GetInsertBlock()->getParent();
+			llvm::BasicBlock* ThenBB = llvm::BasicBlock::Create(context, "then", Function);
+			llvm::BasicBlock* ContBB = llvm::BasicBlock::Create(context, "cont");
+			llvm::Value* f = builder.CreateExtractElement(filter, Constant((int32_t)j));
+			builder.CreateCondBr(f, ThenBB, ContBB);
+			builder.SetInsertPoint(ThenBB);
+			
+			llvm::Value* a = builder.CreateExtractElement(value, Constant((int32_t)j));
+			llvm::Value* x = builder.CreateExtractElement(level, Constant((int32_t)j));
+			a = CALL_MEMBER_FN(*this, func)(a, builder.CreateLoad(builder.CreateGEP(bins, x)));
+			builder.CreateStore(a, builder.CreateGEP(bins, x));
+			llvm::Value* r2 = builder.CreateInsertElement(r, a, Constant((int32_t)j));
+			builder.CreateBr(ContBB);
+			
+			ThenBB = builder.GetInsertBlock();
+			Function->getBasicBlockList().push_back(ContBB);
+			builder.SetInsertPoint(ContBB);
+		 	llvm::PHINode *PN = builder.CreatePHI(r->getType(), 2, "iftmp");
+			PN->addIncoming(r, BodyBB);
+			PN->addIncoming(r2, ThenBB);
+			BodyBB = ContBB;
+			r = PN;
+		}
+
+		/*if(out != bins) {
+			builder.SetInsertPoint(PostBB);
+
+			for(int64_t j = 0; j < levels; j++) {
+				llvm::Value* a = builder.CreateLoad(builder.CreateConstGEP1_64(bins,j));
+				llvm::Value* b = builder.CreateLoad(builder.CreateConstGEP1_64(out, j));
+				llvm::Value* c = CALL_MEMBER_FN(*this, func)(a, b);
+				builder.CreateStore(c, builder.CreateConstGEP1_64(out, j));
+			}
+		}*/
+
+		builder.SetInsertPoint(BodyBB);
+		return r;
 	}
 
 	void GenerateOutputs() {
 		for(IRef ref = 0; ref < (int64_t)trace.nodes.size(); ref++) {
 			IRNode & node = trace.nodes[ref];
-			
+
+			// TODO: allocate thread split filtered output (how to maintain ordering?)
+			// allocate temporary space for folds (put in IRNode::in)
+			if(node.group == IRNode::FOLD) {
+				int64_t size = node.shape.levels;
+				if(node.type == Type::Double) {
+					// 16 min fills possibly unaligned cache line
+					node.in = Double((size+16LL)*thread.state.nThreads);
+				} else if(node.type == Type::Integer) {
+					node.in = Integer((size+16LL)*thread.state.nThreads);
+				} else if(node.type == Type::Logical) {
+					node.in = Logical((size+128LL)*thread.state.nThreads);
+				} else {
+					_error("Unknown type in initialize temporary space");
+				}
+			}
+
 			// allocate outputs
 			if(node.liveOut) { 
 				int64_t length = node.outShape.length;
-				
+
 				if(node.shape.levels != 1 && node.group != IRNode::FOLD)
 					_error("Group by without aggregate not yet supported");
 				if(node.shape.filter >= 0 && node.group != IRNode::FOLD)
 					length = 0;
-				
+
 				if(node.type == Type::Double) {
 					node.out = Double(length);
 				} else if(node.type == Type::Integer) {
@@ -2200,8 +2368,8 @@ struct LLVMJIT {
 
 		timespec begin;
 		get_time(begin);
-		
-		// Make the function type:  double(double,double) etc.
+
+		// Make the function type
 		std::vector<llvm::Type*> args(3, Int64Ty);
 		std::vector<std::string> names;
 		names.push_back("thread");
@@ -2231,255 +2399,538 @@ struct LLVMJIT {
 
 		// Create a new basic block to start insertion into.
 		llvm::BasicBlock *PreBB = llvm::BasicBlock::Create(context, "entry", F);
-		llvm::BasicBlock* BodyBB = llvm::BasicBlock::Create(context, "loop", F);
+		llvm::BasicBlock* LoopBB = llvm::BasicBlock::Create(context, "loop", F);
 		llvm::BasicBlock* PostBB = llvm::BasicBlock::Create(context, "after", F);
-		
+
+		llvm::BasicBlock* BodyBB = LoopBB;
+		llvm::Value* Thread = Args[0];
+
 		builder.SetInsertPoint(BodyBB);
 		llvm::PHINode *Variable = builder.CreatePHI(Int64Ty, 2);
-  		Variable->addIncoming(Args[1], PreBB);
+		Variable->addIncoming(Args[1], PreBB);
 
 		llvm::PHINode* vector_index = Variable;
 
 		std::vector<llvm::Value*> in;
+		std::vector<llvm::Value*> na;
+
 		llvm::Value* r;
 		for(IRef ref = 0; ref < (int64_t)trace.nodes.size(); ref++) {
 			IRNode & node = trace.nodes[ref];
 
 			switch(node.op) {
-			case IROpCode::load: {
-				if(node.in.isLogical()) {
-					r = Constant(((Logical&)node.in).v() + node.constant.i); 
-					r = builder.CreatePointerCast(builder.CreateGEP(r, vector_index),Int8x2Ptr);
-					r = builder.CreateSExt(builder.CreateLoad(r), Int64x2Ptr);
-				}
-				else if(node.in.isInteger()) {
-					r = Constant(((Integer&)node.in).v() + node.constant.i); 
-					r = builder.CreatePointerCast(builder.CreateGEP(r, vector_index), Int64x2Ptr);
-					r = builder.CreateLoad(r);
-				}
-				else if(node.in.isDouble()) {
-					r = Constant(((Double&)node.in).v() + node.constant.i); 
-					r = builder.CreatePointerCast(builder.CreateGEP(r, vector_index),Doublex2Ptr);
-					r = builder.CreateLoad(r);
-				}
-			} break;
-			
-			case IROpCode::gather: {
-				if(node.in.isLogical()) {
-					r = Constant(((Logical&)node.in).v(), ((Logical&)node.in).v()); 
-					r = builder.CreateSExt(builder.CreateLoad(builder.CreateGEP(r,in[node.unary.a])), Int64x2Ptr);
-				} else if(node.in.isInteger()) {
-					llvm::Value* a = Constant(((Integer&)node.in).v(), ((Integer&)node.in).v());
-					a = builder.CreateGEP(a,in[node.unary.a]);
-					r = Constant((int64_t)0, (int64_t)0);
-					r = builder.CreateInsertElement(r, builder.CreateLoad(builder.CreateExtractElement(a, Constant((int32_t)0))), Constant((int32_t)0));
-					r = builder.CreateInsertElement(r, builder.CreateLoad(builder.CreateExtractElement(a, Constant((int32_t)1))), Constant((int32_t)1));
-				} else {
-					llvm::Value* a = Constant(((Double&)node.in).v(), ((Double&)node.in).v());
-					a = builder.CreateGEP(a,in[node.unary.a]);
-					r = Constant(0.0, 0.0);
-					llvm::Value* b = builder.CreateExtractElement(a, Constant((int32_t)0));
-					b = builder.CreateLoad(b);
-					r = builder.CreateInsertElement(r, b, Constant((int32_t)0));
-					r = builder.CreateInsertElement(r, builder.CreateLoad(builder.CreateExtractElement(a, Constant((int32_t)1))), Constant((int32_t)1));
-				}
-			} break;
+				case IROpCode::load: 
+					{
+						if(node.in.isLogical()) {
+							r = Constant(((Logical&)node.in).v() + node.constant.i); 
+							r = builder.CreatePointerCast(builder.CreateGEP(r, vector_index),Int8x2Ptr);
+							r = builder.CreateICmpNE(builder.CreateLoad(r), Constant((int8_t)0,(int8_t)0));
+						}
+						else if(node.in.isInteger()) {
+							r = Constant(((Integer&)node.in).v() + node.constant.i); 
+							r = builder.CreatePointerCast(builder.CreateGEP(r, vector_index), Int64x2Ptr);
+							r = builder.CreateLoad(r);
+						}
+						else if(node.in.isDouble()) {
+							r = Constant(((Double&)node.in).v() + node.constant.i); 
+							r = builder.CreatePointerCast(builder.CreateGEP(r, vector_index),Doublex2Ptr);
+							r = builder.CreateLoad(r);
+						}
+					} break;
 
-			case IROpCode::constant: {
-				switch(node.type) {
-					case Type::Logical: r = Constant(node.constant.l, node.constant.l); break;
-					case Type::Integer: r = Constant(node.constant.i, node.constant.i); break;
-					case Type::Double:  r = Constant(node.constant.d, node.constant.d); break;
-					default: _error("unexpected type");
-				}
-			} break;
+				case IROpCode::loadna: 
+					{
+						if(node.in.isLogical()) {
+							r = Constant(((Logical&)node.in).v() + node.constant.i); 
+							r = builder.CreatePointerCast(builder.CreateGEP(r, vector_index),Int8x2Ptr);
+							r = builder.CreateICmpEQ(builder.CreateLoad(r), Constant((int8_t)Logical::NAelement,(int8_t)Logical::NAelement));
+						}
+						else if(node.in.isInteger()) {
+							r = Constant(((Integer&)node.in).v() + node.constant.i); 
+							r = builder.CreatePointerCast(builder.CreateGEP(r, vector_index), Int64x2Ptr);
+							r = builder.CreateICmpEQ(builder.CreateLoad(r), Constant(Integer::NAelement, Integer::NAelement));
+						}
+						else if(node.in.isDouble()) {
+							r = Constant(((Double&)node.in).v() + node.constant.i); 
+							r = builder.CreatePointerCast(builder.CreateGEP(r, vector_index),Doublex2Ptr);
+							r = builder.CreateTrunc(ExternalCall("isna_d", builder.CreateLoad(r), Int64x2Ty), Int1x2Ty);
+						}
+					} break;
 
-			case IROpCode::cast: {
-				// TODO: Handle NAs correctly
-				if(node.type == trace.nodes[node.unary.a].type)
-					r = in[node.unary.a];
-				else if(node.isDouble() && trace.nodes[node.unary.a].isInteger())
-					r = builder.CreateSIToFP(in[node.unary.a], Doublex2Ty);
-				else if(node.isInteger() && trace.nodes[node.unary.a].isDouble())
-					r = builder.CreateFPToSI(in[node.unary.a], Int64x2Ty);
-				//else if(node.isDouble() && trace->nodes[node.unary.a].isLogical())
-				//else if(node.isInteger() && trace->nodes[node.unary.a].isLogical())
-				//else if(node.isLogical() && trace->nodes[node.unary.a].isDouble())
-				//else if(node.isLogical() && trace->nodes[node.unary.a].isInteger())
-				else _error("Unimplemented cast");
-			} break;
-			
-			case IROpCode::seq: {
-				if(node.isInteger()) {
-					builder.SetInsertPoint(PreBB);
-					llvm::Value* i = builder.CreateAlloca(Int64x2Ty);
-					builder.CreateStore(Constant(node.sequence.ia-2*node.sequence.ib, node.sequence.ia-node.sequence.ib), i);
-					builder.SetInsertPoint(BodyBB);
-					r = builder.CreateAdd(builder.CreateLoad(i), Constant(2*node.sequence.ib, 2*node.sequence.ib));
-					builder.CreateStore(r, i);
-				} else {
-					builder.SetInsertPoint(PreBB);
-					llvm::Value* i = builder.CreateAlloca(Doublex2Ty);
-					builder.CreateStore(Constant(node.sequence.da-2*node.sequence.db, node.sequence.da-node.sequence.db), i);
-					builder.SetInsertPoint(BodyBB);
-					r = builder.CreateFAdd(builder.CreateLoad(i), Constant(2*node.sequence.db, 2*node.sequence.db));
-					builder.CreateStore(r, i);
-				}
-			} break;
 
-			case IROpCode::rep: {
-				r = Constant((int64_t)0, (int64_t)0);
-				//printf("%d %d %d\n", node.sequence.ia, node.sequence.ib, node.shape.length);
-			} break;
+				case IROpCode::gather: 
+					{
+						if(node.in.isLogical()) {
+							llvm::Value* a = Constant(((Logical&)node.in).v(), ((Logical&)node.in).v());
+							a = builder.CreateGEP(a,in[node.unary.a]);
+							r = Constant(false, false);
+							r = builder.CreateInsertElement(r, builder.CreateICmpNE(builder.CreateLoad(builder.CreateExtractElement(a, Constant((int32_t)0))), Constant((int8_t)0)), Constant((int32_t)0));
+							r = builder.CreateInsertElement(r, builder.CreateICmpNE(builder.CreateLoad(builder.CreateExtractElement(a, Constant((int32_t)1))), Constant((int8_t)0)), Constant((int32_t)1));
+						} else if(node.in.isInteger()) {
+							llvm::Value* a = Constant(((Integer&)node.in).v(), ((Integer&)node.in).v());
+							a = builder.CreateGEP(a,in[node.unary.a]);
+							r = Constant((int64_t)0, (int64_t)0);
+							r = builder.CreateInsertElement(r, builder.CreateLoad(builder.CreateExtractElement(a, Constant((int32_t)0))), Constant((int32_t)0));
+							r = builder.CreateInsertElement(r, builder.CreateLoad(builder.CreateExtractElement(a, Constant((int32_t)1))), Constant((int32_t)1));
+						} else {
+							llvm::Value* a = Constant(((Double&)node.in).v(), ((Double&)node.in).v());
+							a = builder.CreateGEP(a,in[node.unary.a]);
+							r = Constant(0.0, 0.0);
+							llvm::Value* b = builder.CreateExtractElement(a, Constant((int32_t)0));
+							b = builder.CreateLoad(b);
+							r = builder.CreateInsertElement(r, b, Constant((int32_t)0));
+							r = builder.CreateInsertElement(r, builder.CreateLoad(builder.CreateExtractElement(a, Constant((int32_t)1))), Constant((int32_t)1));
+						}
+					} break;
 
-			case IROpCode::sum: {
-				if(node.isInteger()) {
-					builder.SetInsertPoint(PreBB);
-					llvm::Value* i = builder.CreateAlloca(Int64x2Ty);
-					builder.CreateStore(Constant((int64_t)0,(int64_t)0), i);
+				case IROpCode::constant: 
+					{
+						switch(node.type) {
+							case Type::Logical: r = Constant(node.constant.l!=0, node.constant.l!=0); break;
+							case Type::Integer: r = Constant(node.constant.i, node.constant.i); break;
+							case Type::Double:  r = Constant(node.constant.d, node.constant.d); break;
+							default: _error("unexpected type");
+						}
+					} break;
 
-					builder.SetInsertPoint(BodyBB);
-					r = builder.CreateAdd(builder.CreateLoad(i), in[node.unary.a]);
-					builder.CreateStore(r, i);
+				case IROpCode::cast: 
+					{
+						if(node.type == trace.nodes[node.unary.a].type)
+							r = in[node.unary.a];
+						else if(node.isDouble() && trace.nodes[node.unary.a].isInteger())
+							r = builder.CreateSIToFP(in[node.unary.a], Doublex2Ty);
+						else if(node.isInteger() && trace.nodes[node.unary.a].isDouble())
+							r = builder.CreateFPToSI(in[node.unary.a], Int64x2Ty);
+						else if(node.isDouble() && trace.nodes[node.unary.a].isLogical())
+							r = builder.CreateUIToFP(in[node.unary.a], Doublex2Ty);
+						else if(node.isInteger() && trace.nodes[node.unary.a].isLogical())
+							r = builder.CreateZExt(in[node.unary.a], Int64x2Ty);
+						else if(node.isLogical() && trace.nodes[node.unary.a].isDouble())
+							r = builder.CreateFCmpONE(in[node.unary.a], Constant(0.0, 0.0));
+						else if(node.isLogical() && trace.nodes[node.unary.a].isInteger())
+							r = builder.CreateICmpNE(in[node.unary.a], Constant((int8_t)0,(int8_t)0));
+						else _error("Unimplemented cast");
+					} break;
 
-					builder.SetInsertPoint(PostBB);
-					// do horizontal add...
-					llvm::Value* a = builder.CreateExtractElement(r, Constant((int32_t)0));
-					llvm::Value* b = builder.CreateExtractElement(r, Constant((int32_t)1));
-					builder.CreateStore(builder.CreateAdd(a,b), Constant(((Integer&)node.out).v()));
+				case IROpCode::seq: 
+					{
+						if(node.isInteger()) {
+							builder.SetInsertPoint(PreBB);
+							llvm::Value* i = builder.CreateAlloca(Int64x2Ty);
+							llvm::Value* start = Constant(node.sequence.ia-2*node.sequence.ib, node.sequence.ia-node.sequence.ib);
+							llvm::Value* step = Constant(node.sequence.ib, node.sequence.ib);
+							start = builder.CreateAdd(start, builder.CreateMul(step, VectorInt(Args[1], Args[1])));
+							builder.CreateStore(start, i);
+							builder.SetInsertPoint(BodyBB);
+							r = builder.CreateAdd(builder.CreateLoad(i), Constant(2*node.sequence.ib, 2*node.sequence.ib));
+							builder.CreateStore(r, i);
+						} else {
+							builder.SetInsertPoint(PreBB);
+							llvm::Value* i = builder.CreateAlloca(Doublex2Ty);
+							llvm::Value* start = Constant(node.sequence.da-2*node.sequence.db, node.sequence.da-node.sequence.db);
+							llvm::Value* step = Constant(node.sequence.db, node.sequence.db);
+							llvm::Value* offset = builder.CreateSIToFP(VectorInt(Args[1], Args[1]), Doublex2Ty);
+							start = builder.CreateFAdd(start, builder.CreateFMul(step, offset));
+							builder.CreateStore(start, i);
+							builder.SetInsertPoint(BodyBB);
+							r = builder.CreateFAdd(builder.CreateLoad(i), Constant(2*node.sequence.db, 2*node.sequence.db));
+							builder.CreateStore(r, i);
+						}
+					} break;
 
-					builder.SetInsertPoint(BodyBB);
-				} else {
-					builder.SetInsertPoint(PreBB);
-					llvm::Value* i = builder.CreateAlloca(Doublex2Ty);
-					builder.CreateStore(Constant(0.0,0.0), i);
-					
-					builder.SetInsertPoint(BodyBB);
-					r = builder.CreateFAdd(builder.CreateLoad(i), in[node.unary.a]);
-					builder.CreateStore(r, i);
-				
-					builder.SetInsertPoint(PostBB);
-					
-					// do horizontal add...
-					llvm::Value* a = builder.CreateExtractElement(r, Constant((int32_t)0));
-					llvm::Value* b = builder.CreateExtractElement(r, Constant((int32_t)1));
-					builder.CreateStore(builder.CreateFAdd(a,b), Constant(((Double&)node.out).v()));
+				case IROpCode::rep: 
+					{
+						r = Constant((int64_t)0, (int64_t)0);
+						//printf("%d %d %d\n", node.sequence.ia, node.sequence.ib, node.shape.length);
+					} break;
 
-					builder.SetInsertPoint(BodyBB);
-				}
-			} break;
+				case IROpCode::random: 
+					{
+						r = ExternalCall("random_d", Args[0], Doublex2Ty);
+					} break;
 
-			case IROpCode::ifelse: {
-				// TODO: handle NA
-				r = builder.CreateSelect(in[node.trinary.c], in[node.trinary.b], in[node.trinary.a]);
-			} break;
-			
-			case IROpCode::neg: {
-				if(node.isDouble()) {
-					r = builder.CreateBitCast(builder.CreateXor(
-						builder.CreateBitCast(in[node.unary.a], Int64x2Ty),
-						Constant((int64_t)0x8000000000000000ULL, (int64_t)0x8000000000000000ULL)), Doublex2Ty);
-				}
-				else			r = builder.CreateMul(in[node.unary.a], Constant((int64_t)-1, (int64_t)-1));
-			} break;
-			case IROpCode::add: {
-				if(node.isDouble()) 	r = builder.CreateFAdd(in[node.binary.a], in[node.binary.b]);
-				else			r = builder.CreateAdd(in[node.binary.a], in[node.binary.b]);
-			} break;
-			case IROpCode::sub: {
-				if(node.isDouble()) 	r = builder.CreateFSub(in[node.binary.a], in[node.binary.b]);
-				else			r = builder.CreateSub(in[node.binary.a], in[node.binary.b]);
-			} break;
-			case IROpCode::mul: {
-				if(node.isDouble()) 	r = builder.CreateFMul(in[node.binary.a], in[node.binary.b]);
-				else			r = builder.CreateMul(in[node.binary.a], in[node.binary.b]);
-			} break;
-			case IROpCode::div: {
-				r = builder.CreateFDiv(in[node.binary.a], in[node.binary.b]);
-			} break;
-			case IROpCode::abs: {
-				if(node.isDouble()) {
-					r = builder.CreateBitCast(builder.CreateAnd(
-						builder.CreateBitCast(in[node.unary.a], Int64x2Ty),
-						Constant((int64_t)0x7FFFFFFFFFFFFFFFULL, (int64_t)0x7FFFFFFFFFFFFFFFULL)), Doublex2Ty);
-				} else {
-					// TODO: implement me 
-				}
-			} break;
+				case IROpCode::sum: 
+					{
+						r = Aggregate(PreBB, BodyBB, PostBB, Thread, in[node.unary.a], 
+								node.shape.levels, 
+								node.shape.levels > 1 ?   in[node.shape.split] 
+								: Constant((int64_t)0,(int64_t)0),
+								node.shape.filter >= 0 ? in[node.shape.filter] : Constant(true, true),
+								node.isInteger() ? Constant((int64_t)0) : Constant(0.0), 
+								node.isInteger() ? &LLVMJIT::CreateAdd : &LLVMJIT::CreateFAdd,
+								Constant(node.in));
+					} break;
 
-			case IROpCode::exp: {
-				r = builder.CreateCall(g_exp, in[node.unary.a]);
-			} break;
-			case IROpCode::log: {
-				r = builder.CreateCall(g_log, in[node.unary.a]);
-			} break;
-			case IROpCode::sqrt: {
-				r = builder.CreateCall(g_sqrt, in[node.unary.a]);
-			} break;
+				case IROpCode::prod: {
+							     r = Aggregate(PreBB, BodyBB, PostBB, Thread, in[node.unary.a], 
+									     node.shape.levels, 
+									     node.shape.levels > 1 ?   in[node.shape.split] 
+									     : Constant((int64_t)0,(int64_t)0),
+										node.shape.filter >= 0 ? in[node.shape.filter] : Constant(true, true),
+									     node.isInteger() ? Constant((int64_t)0) : Constant(0.0), 
+									     node.isInteger() ? &LLVMJIT::CreateMul : &LLVMJIT::CreateFMul,
+									     Constant(node.out));
+						     } break;
 
-			case IROpCode::lt: {
-				if(trace.nodes[node.binary.a].isDouble())
-					r = builder.CreateFCmpULT(in[node.binary.a], in[node.binary.b]);
-				else			
-					r = builder.CreateICmpSLT(in[node.binary.a], in[node.binary.b]);
-			} break;
-			case IROpCode::gt: {
-				if(trace.nodes[node.binary.a].isDouble())
-					r = builder.CreateFCmpUGT(in[node.binary.a], in[node.binary.b]);
-				else			
-					r = builder.CreateICmpSGT(in[node.binary.a], in[node.binary.b]);
-			} break;
+				case IROpCode::min: {
+							    r = Aggregate(PreBB, BodyBB, PostBB, Thread, in[node.unary.a], 
+									    node.shape.levels, 
+									    node.shape.levels > 1 ?   in[node.shape.split] 
+									    : Constant((int64_t)0,(int64_t)0),
+								node.shape.filter >= 0 ? in[node.shape.filter] : Constant(true, true),
+									    node.isInteger() ? Constant(std::numeric_limits<int64_t>::max()) : Constant(std::numeric_limits<double>::infinity()), 
+									    node.isInteger() ? &LLVMJIT::CreateMin : &LLVMJIT::CreateFMin,
+									    Constant(node.out));
+						    } break;
+
+				case IROpCode::max: {
+							    r = Aggregate(PreBB, BodyBB, PostBB, Thread, in[node.unary.a], 
+									    node.shape.levels, 
+									    node.shape.levels > 1 ?   in[node.shape.split] 
+									    : Constant((int64_t)0,(int64_t)0),
+								node.shape.filter >= 0 ? in[node.shape.filter] : Constant(true, true),
+									    node.isInteger() ? Constant(std::numeric_limits<int64_t>::min()) : Constant(-std::numeric_limits<double>::infinity()), 
+									    node.isInteger() ? &LLVMJIT::CreateMax : &LLVMJIT::CreateFMax,
+									    Constant(node.out));
+						    } break;
+
+				case IROpCode::all: {
+							    r = Aggregate(PreBB, BodyBB, PostBB, Thread, in[node.unary.a], 
+									    node.shape.levels, 
+									    node.shape.levels > 1 ?   in[node.shape.split] 
+									    : Constant((int64_t)0,(int64_t)0),
+								node.shape.filter >= 0 ? in[node.shape.filter] : Constant(true, true),
+									    Constant((bool)true), 
+									    &LLVMJIT::CreateAll,
+									    Constant(node.out));
+						    } break;
+
+				case IROpCode::any: {
+							    r = Aggregate(PreBB, BodyBB, PostBB, Thread, in[node.unary.a], 
+									    node.shape.levels, 
+									    node.shape.levels > 1 ?   in[node.shape.split] 
+									    : Constant((int64_t)0,(int64_t)0),
+								node.shape.filter >= 0 ? in[node.shape.filter] : Constant(true, true),
+									    Constant((bool)false), 
+									    &LLVMJIT::CreateAny,
+									    Constant(node.out));
+						    } break;
+
+				case IROpCode::length: {
+							       r = Aggregate(PreBB, BodyBB, PostBB, Thread, in[node.unary.a], 
+									       node.shape.levels, 
+									       node.shape.levels > 1 ?   in[node.shape.split] 
+									       : Constant((int64_t)0,(int64_t)0),
+								node.shape.filter >= 0 ? in[node.shape.filter] : Constant(true, true),
+									       Constant((int64_t)0), 
+									       &LLVMJIT::CreateLength,
+									       Constant(node.out));
+						       } break;
+
+
+				case IROpCode::ifelse:
+						       {
+							       // TODO: handle NA
+							       r = builder.CreateSelect(in[node.trinary.c], in[node.trinary.b], in[node.trinary.a]);
+						       } break;
+
+				case IROpCode::neg: {
+							    if(node.isDouble()) {
+								    r = builder.CreateBitCast(builder.CreateXor(
+											    builder.CreateBitCast(in[node.unary.a], Int64x2Ty),
+											    Constant((int64_t)0x8000000000000000ULL, (int64_t)0x8000000000000000ULL)), Doublex2Ty);
+							    }
+							    else {
+								    // can we do this faster?
+								    r = builder.CreateMul(in[node.unary.a], Constant((int64_t)1,(int64_t)1));
+							    }
+						    } break;
+				case IROpCode::abs: {
+							    if(node.isDouble()) {
+								    r = builder.CreateBitCast(builder.CreateAnd(
+											    builder.CreateBitCast(in[node.unary.a], Int64x2Ty),
+											    Constant((int64_t)0x7FFFFFFFFFFFFFFFULL, (int64_t)0x7FFFFFFFFFFFFFFFULL)), Doublex2Ty);
+							    } else {
+								    // if(r < 0) f = ~0 else 0; r = r xor f; r -= f;
+								    r = ExternalCall("abs_i", in[node.unary.a], Int64x2Ty); 
+							    }
+						    } break;
+				case IROpCode::sign: {
+							     r = ExternalCall("sign_d", in[node.unary.a], Doublex2Ty);
+						     } break;
+				case IROpCode::sqrt: {
+							     r = ExternalCall("sqrt_d", in[node.unary.a], Doublex2Ty);
+						     } break;
+				case IROpCode::floor: {
+							      r = ExternalCall("floor_d", in[node.unary.a], Doublex2Ty);
+						      } break;
+				case IROpCode::ceiling: {
+								r = ExternalCall("ceiling_d", in[node.unary.a], Doublex2Ty);
+							} break;
+				case IROpCode::trunc: {
+							      r = ExternalCall("trunc_d", in[node.unary.a], Doublex2Ty);
+						      } break;
+				case IROpCode::exp: {
+							    r = ExternalCall("exp_d", in[node.unary.a], Doublex2Ty);
+						    } break;
+				case IROpCode::log: {
+							    r = ExternalCall("log_d", in[node.unary.a], Doublex2Ty);
+						    } break;
+				case IROpCode::cos: {
+							    r = ExternalCall("cos_d", in[node.unary.a], Doublex2Ty);
+						    } break;
+				case IROpCode::sin: {
+							    r = ExternalCall("sin_d", in[node.unary.a], Doublex2Ty);
+						    } break;
+				case IROpCode::tan: {
+							    r = ExternalCall("tan_d", in[node.unary.a], Doublex2Ty);
+						    } break;
+				case IROpCode::acos: {
+							     r = ExternalCall("acos_d", in[node.unary.a], Doublex2Ty);
+						     } break;
+				case IROpCode::asin: {
+							     r = ExternalCall("asin_d", in[node.unary.a], Doublex2Ty);
+						     } break;
+				case IROpCode::atan: {
+							     r = ExternalCall("atan_d", in[node.unary.a], Doublex2Ty);
+						     } break;
+
+				case IROpCode::land: {
+							     // F & (T or NA) == F
+							     // NA & T => NA
+							     r = builder.CreateAnd(in[node.binary.a], in[node.binary.b]);
+						     } break;
+				case IROpCode::lor: {
+							    // (F or NA or T) | T == T
+							    // NA & F => NA
+							    r = builder.CreateOr(in[node.binary.a], in[node.binary.b]);
+						    } break;
+				case IROpCode::lnot: {
+							     r = builder.CreateXor(in[node.binary.a], Constant(true,true));
+						     } break;
+
+				case IROpCode::add: {
+							    if(node.isDouble()) 	r = builder.CreateFAdd(in[node.binary.a], in[node.binary.b]);
+							    else			r = builder.CreateAdd(in[node.binary.a], in[node.binary.b]);
+						    } break;
+				case IROpCode::sub: {
+							    if(node.isDouble()) 	r = builder.CreateFSub(in[node.binary.a], in[node.binary.b]);
+							    else			r = builder.CreateSub(in[node.binary.a], in[node.binary.b]);
+						    } break;
+				case IROpCode::mul: {
+							    if(node.isDouble()) 	r = builder.CreateFMul(in[node.binary.a], in[node.binary.b]);
+							    else			r = builder.CreateMul(in[node.binary.a], in[node.binary.b]);
+						    } break;
+				case IROpCode::div: {
+							    r = builder.CreateFDiv(in[node.binary.a], in[node.binary.b]);
+						    } break;
+				case IROpCode::idiv: {
+							     if(node.isDouble())	r = builder.CreateFDiv(in[node.binary.a], in[node.binary.b]);
+							     else 			r = builder.CreateSDiv(in[node.binary.a], in[node.binary.b]);
+						     } break;
+				case IROpCode::mod: {
+							    if(node.isDouble())	r = builder.CreateFRem(in[node.binary.a], in[node.binary.b]);
+							    else 			r = builder.CreateSRem(in[node.binary.a], in[node.binary.b]);
+						    } break;
+				case IROpCode::pow: {
+							    r = ExternalCall("pow_d", in[node.binary.a], in[node.binary.b], Doublex2Ty);
+						    } break;
+				case IROpCode::atan2: {
+							      r = ExternalCall("atan2_d", in[node.binary.a], in[node.binary.b], Doublex2Ty);
+						      } break;
+				case IROpCode::hypot: {
+							      r = ExternalCall("hypot_d", in[node.binary.a], in[node.binary.b], Doublex2Ty);
+						      } break;
+
+				case IROpCode::eq: {
+							   if(trace.nodes[node.binary.a].isDouble())
+								   r = builder.CreateFCmpOEQ(in[node.binary.a], in[node.binary.b]);
+							   else			
+								   r = builder.CreateICmpEQ(in[node.binary.a], in[node.binary.b]);
+						   } break;
+				case IROpCode::neq: {
+							    if(trace.nodes[node.binary.a].isDouble())
+								    r = builder.CreateFCmpONE(in[node.binary.a], in[node.binary.b]);
+							    else			
+								    r = builder.CreateICmpNE(in[node.binary.a], in[node.binary.b]);
+						    } break;
+				case IROpCode::lt: {
+							   if(trace.nodes[node.binary.a].isDouble())
+								   r = builder.CreateFCmpULT(in[node.binary.a], in[node.binary.b]);
+							   else			
+								   r = builder.CreateICmpSLT(in[node.binary.a], in[node.binary.b]);
+						   } break;
+				case IROpCode::gt: {
+							   if(trace.nodes[node.binary.a].isDouble())
+								   r = builder.CreateFCmpUGT(in[node.binary.a], in[node.binary.b]);
+							   else			
+								   r = builder.CreateICmpSGT(in[node.binary.a], in[node.binary.b]);
+						   } break;
+				case IROpCode::le: {
+							   if(trace.nodes[node.binary.a].isDouble())
+								   r = builder.CreateFCmpOLE(in[node.binary.a], in[node.binary.b]);
+							   else			
+								   r = builder.CreateICmpSLE(in[node.binary.a], in[node.binary.b]);
+						   } break;
+				case IROpCode::ge: {
+							   if(trace.nodes[node.binary.a].isDouble())
+								   r = builder.CreateFCmpOGE(in[node.binary.a], in[node.binary.b]);
+							   else			
+								   r = builder.CreateICmpSGE(in[node.binary.a], in[node.binary.b]);
+						   } break;
+
+				case IROpCode::pmin: {
+							     if(node.isDouble())	r = ExternalCall("pmin_d", in[node.binary.a], in[node.binary.b], Doublex2Ty);
+							     else			r = ExternalCall("pmin_i", in[node.binary.a], in[node.binary.b], Int64x2Ty);
+						     } break;
+				case IROpCode::pmax: {
+							     if(node.isDouble())	r = ExternalCall("pmax_d", in[node.binary.a], in[node.binary.b], Doublex2Ty);
+							     else			r = ExternalCall("pmax_i", in[node.binary.a], in[node.binary.b], Int64x2Ty);
+						     } break;
+
+				case IROpCode::isnan: {
+							      if(node.isDouble())	r = builder.CreateTrunc(ExternalCall("isnan_d", in[node.binary.a], Int64x2Ty), Int1x2Ty);
+							      else			r = Constant(false, false);
+						      } break;
+
+				case IROpCode::isfinite: {
+								 if(node.isDouble())	r = builder.CreateTrunc(ExternalCall("isfinite_d", in[node.binary.a], Int64x2Ty), Int1x2Ty);
+								 else			r = Constant(true, true);
+							 } break;
+
+				case IROpCode::isinfinite: {
+								   if(node.isDouble())	r = builder.CreateTrunc(ExternalCall("isinfinite_d", in[node.binary.a], Int64x2Ty), Int1x2Ty);
+								   else			r = Constant(false, false);
+							   } break;
+
+				case IROpCode::pos:
+				case IROpCode::split:
+				case IROpCode::filter:
+							   r = in[node.unary.a];
+							   break;
+				case IROpCode::nop:
+							   break;
 			};
 
 			if(node.liveOut) {
 				switch(node.group) {
 					case IRNode::MAP:
-					case IRNode::GENERATOR: {
-						if(Type::Logical == node.type) {
-							//EmitLogicalStore(ref, node.out, node.shape);
-						} else if(Type::Integer == node.type) {
-							llvm::Value* p = Constant(((Integer&)node.out).v()); 
-							p = builder.CreatePointerCast(builder.CreateGEP(p, vector_index), Int64x2Ptr);
-							builder.CreateStore(r, p);
-						} else if(Type::Double == node.type) {
-							llvm::Value* p = Constant(((Double&)node.out).v()); 
-							p = builder.CreatePointerCast(builder.CreateGEP(p, vector_index),Doublex2Ptr);
-							builder.CreateStore(r, p);
-						}
-					} break;
+					case IRNode::GENERATOR: 
+						{
+							if(Type::Logical == node.type) {
+								llvm::Value* p = Constant(((Logical&)node.out).v()); 
+								p = builder.CreatePointerCast(builder.CreateGEP(p, vector_index), Int8x2Ptr);
+								if(node.outShape.na >= 0)
+									builder.CreateStore(builder.CreateSelect(in[node.outShape.na], Constant(Logical::NAelement, Logical::NAelement), builder.CreateSExt(r,Int8x2Ty)), p);
+								else
+									builder.CreateStore(builder.CreateSExt(r,Int8x2Ty), p);
+							} else if(Type::Integer == node.type) {
+								llvm::Value* p = Constant(((Integer&)node.out).v()); 
+								p = builder.CreatePointerCast(builder.CreateGEP(p, vector_index), Int64x2Ptr);
+								if(node.outShape.na >= 0)
+									builder.CreateStore(builder.CreateSelect(in[node.outShape.na], Constant(Integer::NAelement, Integer::NAelement), r), p);
+								else
+									builder.CreateStore(r, p);
+							} else if(Type::Double == node.type) {
+								llvm::Value* p = Constant(((Double&)node.out).v()); 
+								p = builder.CreatePointerCast(builder.CreateGEP(p, vector_index),Doublex2Ptr);
+								if(node.outShape.na >= 0)
+									builder.CreateStore(builder.CreateSelect(in[node.outShape.na], Constant(Double::NAelement, Double::NAelement), r), p);
+								else
+									builder.CreateStore(r, p);
+							}
+						} break;
 					default:
-						// do nothing...
-					break;
+								// do nothing...
+								break;
 				}
 			}
-			
+
 			in.push_back(r);
 		}
 
 		llvm::Value* Step = Constant((int64_t)2);
 		llvm::Value* Next = builder.CreateAdd(Variable, Step, "next");
 		llvm::Value* End = builder.CreateICmpULT(Next, Args[2]);
-	
+
 		llvm::BasicBlock* LoopEndBB = builder.GetInsertBlock();
-		builder.CreateCondBr(End, BodyBB, PostBB);
+		builder.CreateCondBr(End, LoopBB, PostBB);
 		Variable->addIncoming(Next, LoopEndBB);
-		
+
 		builder.SetInsertPoint(PreBB);
-		builder.CreateBr(BodyBB);
-		
+		builder.CreateBr(LoopBB);
+
 		// Finish off the function.
 		builder.SetInsertPoint(PostBB);
 		builder.CreateRetVoid();
 
+		// Link in library
+		std::string error;
+		llvm::Linker::LinkModules(module, lib, 1, &error);
+
+		F->dump();
+
 		// Validate the generated code, checking for consistency.
 		llvm::verifyFunction(*F);
 
-			printf("Code gen time %f\n", time_elapsed(begin));
+		printf("Code gen time %f\n", time_elapsed(begin));
 		// Optimize the function.
 		fpm.run(*F);
+		pm.run(*module);
 
-			printf("Code gen time + opt %f\n", time_elapsed(begin));
+		printf("Code gen time + opt %f\n", time_elapsed(begin));
 		func = F;
+	}
+
+	// merge value in j into i
+	void mergeSum(IRNode& node, int64_t i, int64_t j) {
+		printf("summing (%d=>%d): %f %f\n", j, i, ((Double&)node.out).v()[i], ((Double&)node.in).v()[j]);
+		if(node.isDouble())
+			((Double&)node.out).v()[i] += ((Double&)node.in).v()[j];
+		else
+			((Integer&)node.out).v()[i] += ((Integer&)node.in).v()[j];
+	}
+
+	void GlobalReduce(Thread& thread) {
+		// merge across threads
+		for(IRef ref = 0; ref < (int64_t)trace.nodes.size(); ref++) {
+			IRNode & node = trace.nodes[ref];
+	
+			if(node.group == IRNode::FOLD) {
+				int64_t step = node.in.length/thread.state.nThreads;
+				for(int64_t j = 0; j < thread.state.nThreads; j++) {
+					for(int64_t i = 0; i < node.outShape.length; i++) {
+						int64_t a = i;
+						int64_t b = j*step+i;
+						switch(node.op) {
+							case IROpCode::sum: 
+								mergeSum(node, a, b);
+								break;
+							/*case IROpCode::prod:
+								mergeProd(node, a, b);
+								break;
+							case IROpCode::length:
+								mergeLength(node, a, b);
+								break;
+							case IROpCode::mean:
+								mergeMean(node, a, b);
+								break;
+							case IROpCode::cm2:
+								mergeCm2(node, a, b);
+								break;
+							case IROpCode::min:
+								mergeMin(node, a, b);
+								break;
+							case IROpCode::max:
+								mergeMax(node, a, b);
+								break;*/
+							default: // do nothing 
+								break;
+						}
+					}
+				}
+			}
+		}
 	}
 
 	typedef void (*fn) (uint64_t thread_index, uint64_t start, uint64_t end);
@@ -2491,13 +2942,14 @@ struct LLVMJIT {
 	}
 
 	void Execute(Thread & thread) {
-		//func->dump();
-			
-			timespec begin;
-			get_time(begin);
+		func->dump();
+
+		timespec begin;
+		get_time(begin);
+
 		fn trace_code = (fn)engine->getPointerToFunction(func);
-			printf("JIT compile time %f\n", time_elapsed(begin));
-		
+		printf("JIT compile time %f\n", time_elapsed(begin));
+
 		if(thread.state.verbose) {
 			//timespec begin;
 			//get_time(begin);
@@ -2513,12 +2965,12 @@ struct LLVMJIT {
 };
 
 void Trace::JIT(Thread & thread) {
-	if(code_buffer == NULL) { //since it is expensive to reallocate this, we reuse it across traces
-		code_buffer = new TraceCodeBuffer();
-	}
+	//if(code_buffer == NULL) { //since it is expensive to reallocate this, we reuse it across traces
+	//	code_buffer = new TraceCodeBuffer();
+	//}
 
 	LLVMJIT trace_code(this, thread);
 	trace_code.Compile();
 	trace_code.Execute(thread);
-	//trace_code.GlobalReduce(thread);
+	trace_code.GlobalReduce(thread);
 }

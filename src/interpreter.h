@@ -160,9 +160,12 @@ class Trace : public gc {
 		IRef EmitSLoad(Value const& v);
 		IRef EmitSStore(IRef ref, int64_t index, IRef value);
 
+		IRef EmitLoadNA(Value const& v, int64_t length, int64_t offset);
+		IRef EmitMergeNA(IRef a, IRef b);
+
 		IRef GetRef(Value const& v) {
 			if(v.isFuture()) return v.future.ref;
-			else if(v.length == 1) return EmitConstant(v.type, 1, v.i);
+			else if(v.length == 1) return EmitConstant(v.type, Size, v.i);
 			else return EmitLoad(v,v.length,0);
 		}
 
@@ -521,7 +524,7 @@ public:
 			r = trace->EmitUnary(op, Group<Logical>::R::VectorType, trace->EmitCoerce(trace->GetRef(a), Group<Logical>::MA::VectorType), data);
 		} else _error("Attempting to record invalid type in EmitUnary");
 		Value v;
-		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		Future::Init(v, trace->nodes[r].type, trace->Size, r);
 		return v;
 	}
 
@@ -556,7 +559,7 @@ public:
 			else _error("Attempting to record invalid type in EmitBinary");
 		} else _error("Attempting to record invalid type in EmitBinary");
 		Value v;
-		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		Future::Init(v, trace->nodes[r].type, trace->Size, r);
 		return v;
 	}
 
@@ -565,7 +568,7 @@ public:
 		trace->liveEnvironments.insert(env);
 		IRef r = trace->EmitSplit(trace->GetRef(a), trace->EmitCoerce(trace->GetRef(b), Type::Integer), data);
 		Value v;
-		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		Future::Init(v, trace->nodes[r].type, trace->Size, r);
 		return v;
 	}
 
@@ -574,7 +577,7 @@ public:
 		trace->liveEnvironments.insert(env);
 		IRef r = trace->EmitConstant(type, length, c);
 		Value v;
-		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		Future::Init(v, trace->nodes[r].type, trace->Size, r);
 		return v;
 	}
 
@@ -583,7 +586,7 @@ public:
 		trace->liveEnvironments.insert(env);
 		IRef r = trace->EmitRandom(length);
 		Value v;
-		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		Future::Init(v, trace->nodes[r].type, trace->Size, r);
 		return v;
 	}
 
@@ -592,7 +595,7 @@ public:
 		trace->liveEnvironments.insert(env);
 		IRef r = trace->EmitBinary(IROpCode::add, Type::Integer, trace->EmitRepeat(length, a, b), trace->EmitConstant(Type::Integer, length, 1), 0);
 		Value v;
-		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		Future::Init(v, trace->nodes[r].type, trace->Size, r);
 		return v;
 	}
 		
@@ -601,7 +604,7 @@ public:
 		trace->liveEnvironments.insert(env);
 		IRef r = trace->EmitSequence(length, a, b);
 		Value v;
-		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		Future::Init(v, trace->nodes[r].type, trace->Size, r);
 		return v;
 	}
 
@@ -610,7 +613,7 @@ public:
 		trace->liveEnvironments.insert(env);
 		IRef r = trace->EmitSequence(length, a, b);
 		Value v;
-		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		Future::Init(v, trace->nodes[r].type, trace->Size, r);
 		return v;
 	}
 
@@ -621,7 +624,7 @@ public:
 		IRef im1 = trace->EmitBinary(IROpCode::sub, Type::Integer, trace->EmitCoerce(trace->GetRef(i), Type::Integer), o, 0);
 		IRef r = trace->EmitGather(a, im1);
 		Value v;
-		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		Future::Init(v, trace->nodes[r].type, trace->Size, r);
 		return v;
 	}
 
@@ -630,7 +633,7 @@ public:
 		trace->liveEnvironments.insert(env);
 		IRef r = trace->EmitFilter(trace->GetRef(a), trace->EmitCoerce(trace->GetRef(i), Type::Logical));
 		Value v;
-		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		Future::Init(v, trace->nodes[r].type, trace->Size, r);
 		return v;
 	}
 
@@ -642,7 +645,7 @@ public:
 						trace->GetRef(b),
 						trace->GetRef(cond));
 		Value v;
-		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		Future::Init(v, trace->nodes[r].type, trace->Size, r);
 		return v;
 	}
 	
@@ -655,7 +658,7 @@ public:
 		IRef r = trace->EmitSStore(m, index, trace->GetRef(b));
 		
 		Value v;
-		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+		Future::Init(v, trace->nodes[r].type, trace->Size, r);
 		return v;
 	}
 	
