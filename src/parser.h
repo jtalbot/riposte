@@ -48,6 +48,7 @@ static inline std::string& unescape(std::string& s) {
 				case 'r': r += '\r'; break;
 				case 't': r += '\t'; break;
 				case 'v': r += '\v'; break;
+				case 'x': r += (char)(strToHexInt(std::string(i, i+2))); i+=2; break;
 				case '\\': r += '\\'; break;
 				case '"': r += '"'; break;
 				case '\'': r += '\''; break;

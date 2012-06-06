@@ -144,6 +144,8 @@
 	_(isfinite,	"is.finite") \
 	_(isinfinite,	"is.infinite") \
 	_(vector,	"vector") \
+	_(Re,	"Re") \
+	_(Im,	"Im") \
 	_(Maximal, "\255")
 
 typedef const char* String;

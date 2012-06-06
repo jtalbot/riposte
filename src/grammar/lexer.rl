@@ -64,11 +64,11 @@
 	( float exponent? ) 
 		{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );};
 	
-	#( float exponent? 'i' ) 
-	#	{token( TOKEN_NUM_CONST, Complex::c(std::complex<double>(0, atof(std::string(ts, te-ts-1).c_str()))) );};
-	
 	( float exponent? 'L' ) 
 		{token( TOKEN_NUM_CONST, Integer::c(atof(std::string(ts, te-ts-1).c_str())) );};
+	
+	( float exponent? 'i' ) 
+		{token( TOKEN_NUM_CONST, CreateComplex(atof(std::string(ts, te-ts-1).c_str())) );};
 	
 	# Integer octal. Leading part buffered by float.
 	#( '0' [0-9]+ [ulUL]{0,2} ) 

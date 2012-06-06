@@ -65,7 +65,13 @@ static inline std::string complexToStr( std::complex<double> n )
 
 static inline int64_t strToInt( std::string const& s) {
 	int64_t r;
-	std::istringstream(s) >> r;
+	std::istringstream(s) >> std::dec >> r;
+	return r;
+}
+
+static inline int64_t strToHexInt( std::string const& s) {
+	int64_t r;
+	std::istringstream(s) >> std::hex >> r;
 	return r;
 }
 

@@ -186,8 +186,9 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 Compiler::Operand Compiler::compileFunctionCall(List const& call, Character const& names, Prototype* code) {
 	Operand function = compile(call[0], code);
 	code->calls.push_back(makeCall(call, names));
+	kill(function);
 	Operand result = allocRegister();
-	emit(ByteCode::call, kill(function), code->calls.size()-1, result);
+	emit(ByteCode::call, function, code->calls.size()-1, result);
 	return result;
 }
 
@@ -462,18 +463,17 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		
 		emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0);
 		begin2 = ir.size();
-		
+	
 		kill(resultT);
 		resultF = placeInRegister(
 			call.length == 4 ? 	compile(call[3], code) :
 						compileConstant(Null::Singleton(), code) );
-		
+		assert(resultT == resultF || resultT.loc == INVALID || resultF.loc == INVALID);
 		int64_t end = ir.size();
 		ir[begin2-1].a = end-begin2+1;
 		
 		ir[begin1-1].b = begin2-begin1+1;
 
-		assert(resultT == resultF || resultT.loc == INVALID || resultF.loc == INVALID);
 		return resultT;
 	}
 	else if(func == Strings::lor2 && call.length == 3)

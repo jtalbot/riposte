@@ -265,7 +265,7 @@ main(int argc, char** argv)
 		registerCoreFunctions(state);	
 		registerCoerceFunctions(state);	
 		loadLibrary(thread, "library", "core");
-		//loadLibrary(thread, "library", "base");
+		loadLibrary(thread, "library", "base");
 		//loadLibrary(thread, "library", "stats");
 
 	} catch(RiposteError& error) { 

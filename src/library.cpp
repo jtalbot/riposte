@@ -11,7 +11,7 @@
 #include <dlfcn.h>
 
 void sourceFile(Thread& thread, std::string name, Environment* env) {
-	//std::cout << "Sourcing " << name << std::endl;
+	std::cout << "Sourcing " << name << std::endl;
 	try {
 		std::ifstream t(name.c_str());
 		std::stringstream buffer;

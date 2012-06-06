@@ -82,5 +82,12 @@ inline String SymbolStr(Value const& v) {
         else return Character(v)[0];
 }
 
+inline Value CreateComplex(double d) {
+	Object o;
+	Object::Init(o, List::c(Double::c(0), Double::c(d)));
+	o.insertMutable(Strings::names, Character::c(Strings::Re, Strings::Im));
+	o.insertMutable(Strings::classSym, Character::c(Strings::Complex));
+	return o;
+}
 
 #endif
