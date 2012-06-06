@@ -11,7 +11,7 @@
 #include <dlfcn.h>
 
 void sourceFile(Thread& thread, std::string name, Environment* env) {
-	std::cout << "Sourcing " << name << std::endl;
+	//std::cout << "Sourcing " << name << std::endl;
 	try {
 		std::ifstream t(name.c_str());
 		std::stringstream buffer;
@@ -23,7 +23,7 @@ void sourceFile(Thread& thread, std::string name, Environment* env) {
 		FILE* trace = NULL;//fopen((name+"_trace").c_str(), "w");
 		parser.execute(code.c_str(), code.length(), true, value, trace);
 		//fclose(trace);	
-		thread.eval(Compiler::compileTopLevel(thread.state, value), env);
+		thread.eval(Compiler::compileTopLevel(thread, value), env);
 	} catch(RiposteError& error) {
 		_warning(thread, "unable to load library " + name + ": " + error.what().c_str());
 	} catch(RuntimeError& error) {
@@ -34,8 +34,8 @@ void sourceFile(Thread& thread, std::string name, Environment* env) {
 }
 
 void openDynamic(Thread& thread, std::string path, Environment* env) {
-	std::string p = std::string("/Users/jtalbot/riposte/")+path;
-	void* lib = dlopen(p.c_str(), RTLD_LAZY);
+	//std::string p = std::string("/Users/jtalbot/riposte/")+path;
+	//void* lib = dlopen(p.c_str(), RTLD_LAZY);
 	//if(lib == NULL) {
 	//	_error(std::string("failed to open: ") + p + " (" + dlerror() + ")");
 	//}

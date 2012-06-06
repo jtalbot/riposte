@@ -17,6 +17,7 @@
 
 class Compiler {
 private:
+	Thread& thread;
 	State& state;
 
 	enum Scope {
@@ -75,7 +76,7 @@ private:
 	Operand kill(Operand i) { if(i.loc == REGISTER) { n = std::min(n, i.i); } return i; }
 	Operand top() { return Operand(REGISTER, n); }
 
-	Compiler(State& state, Scope scope) : state(state), scope(scope), loopDepth(0), n(0), max_n(0) {}
+	Compiler(Thread& thread, Scope scope) : thread(thread), state(thread.state), scope(scope), loopDepth(0), n(0), max_n(0) {}
 	
 	Prototype* compile(Value const& expr);			// compile function block, code ends with return
 	Operand compile(Value const& expr, Prototype* code);		// compile into existing code block
@@ -96,18 +97,18 @@ private:
 	void dumpCode() const;
 
 public:
-	static Prototype* compileTopLevel(State& state, Value const& expr) {
-		Compiler compiler(state, TOPLEVEL);
+	static Prototype* compileTopLevel(Thread& thread, Value const& expr) {
+		Compiler compiler(thread, TOPLEVEL);
 		return compiler.compile(expr);
 	}
 	
-	static Prototype* compileFunctionBody(State& state, Value const& expr) {
-		Compiler compiler(state, FUNCTION);
+	static Prototype* compileFunctionBody(Thread& thread, Value const& expr) {
+		Compiler compiler(thread, FUNCTION);
 		return compiler.compile(expr);
 	}
 	
-	static Prototype* compilePromise(State& state, Value const& expr) {
-		Compiler compiler(state, PROMISE);
+	static Prototype* compilePromise(Thread& thread, Value const& expr) {
+		Compiler compiler(thread, PROMISE);
 		return compiler.compile(expr);
 	}
 };

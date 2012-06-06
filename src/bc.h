@@ -93,10 +93,9 @@
 	_(pmin, "pmin",	UnifyBinary,	PassNA(a,b,riposte_min(thread,a,b))) \
 	_(pmax, "pmax",	UnifyBinary,	PassNA(a,b,riposte_max(thread,a,b))) \
 
-/*
-	_(round, "round",	round,	ArithBinary2,	round(a)) \
-	_(signif, "signif",	signif,	ArithBinary2,	signif(a)) \
-*/
+#define ROUND_BINARY_BYTECODES(_) \
+	_(round, "round", 	RoundBinary,	PassNA(a,b,riposte_round(thread,a,b))) \
+	_(signif, "signif",	RoundBinary,	PassNA(a,b,riposte_signif(thread,a,b))) \
 
 #define ORDINAL_BINARY_BYTECODES(_) \
 	_(eq, "eq",	OrdinalBinary,	PassNA(a,b,a==b?-1:0)) \
@@ -148,6 +147,7 @@
 	LOGICAL_BINARY_BYTECODES(_) \
 	UNIFY_BINARY_BYTECODES(_) \
 	ORDINAL_BINARY_BYTECODES(_) \
+	ROUND_BINARY_BYTECODES(_) \
 
 #define MAP_BYTECODES(_) \
 	UNARY_BYTECODES(_) \

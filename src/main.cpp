@@ -124,7 +124,7 @@ int dostdin(State& state) {
 			value = parsetty(state);
 			if(value.isNil()) continue;
 			//std::cout << "Parsed: " << value.toString() << std::endl;
-			Prototype* proto = Compiler::compileTopLevel(state, value);
+			Prototype* proto = Compiler::compileTopLevel(thread, value);
 			//std::cout << "Compiled code: " << thread.stringify(Closure(code,NULL)) << std::endl;
 			result = thread.eval(proto, state.global);
 			std::cout << state.stringify(result) << std::endl;
@@ -167,7 +167,7 @@ static int dofile(const char * file, std::istream & in, State& state, bool echo)
 	if(value.isNil()) return -1;
 
 	try {
-		Prototype* proto = Compiler::compileTopLevel(state, value);
+		Prototype* proto = Compiler::compileTopLevel(state.getMainThread(), value);
 		Value result = state.getMainThread().eval(proto, state.global);
 		if(echo)
 			std::cout << state.stringify(result) << std::endl;

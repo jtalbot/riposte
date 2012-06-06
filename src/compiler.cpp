@@ -44,7 +44,7 @@ static ByteCode::Enum op1(String const& func) {
 	
 	if(func == Strings::random) return ByteCode::random; 
 	
-	else throw RuntimeError("unexpected symbol used as a unary operator"); 
+	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
 }
 
 static ByteCode::Enum op2(String const& func) {
@@ -76,10 +76,10 @@ static ByteCode::Enum op2(String const& func) {
 
 	if(func == Strings::vector) return ByteCode::vector;
 
-	//if(func == Strings::round) return ByteCode::round; 
-	//if(func == Strings::signif) return ByteCode::signif; 
+	if(func == Strings::round) return ByteCode::round; 
+	if(func == Strings::signif) return ByteCode::signif; 
 	
-	throw RuntimeError("unexpected symbol used as a binary operator"); 
+	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a binary operator"); 
 }
 
 static ByteCode::Enum op3(String const& func) {
@@ -89,7 +89,7 @@ static ByteCode::Enum op3(String const& func) {
 	if(func == Strings::ifelse) return ByteCode::ifelse;
 	if(func == Strings::seq) return ByteCode::seq;
 	if(func == Strings::rep) return ByteCode::rep;
-	throw RuntimeError("unexpected symbol used as a trinary operator"); 
+	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a trinary operator"); 
 }
 
 int64_t Compiler::emit(ByteCode::Enum bc, Operand a, Operand b, Operand c) {
@@ -173,7 +173,7 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 			p.v = call[i];
 			dotIndex = i-1;
 		} else if(isCall(call[i]) || isSymbol(call[i])) {
-			p.v = Function(Compiler::compilePromise(state, call[i]),NULL).AsPromise();
+			p.v = Function(Compiler::compilePromise(thread, call[i]),NULL).AsPromise();
 		} else {
 			p.v = call[i];
 		}
@@ -196,14 +196,19 @@ Compiler::Operand Compiler::compileInternalFunctionCall(Object const& o, Prototy
 	List const& call = (List const&)(o.base());
 	String func = SymbolStr(call[0]);
 	std::map<String, int64_t>::const_iterator itr = state.internalFunctionIndex.find(func);
+	
+	int64_t function = -1;
+	
 	if(itr == state.internalFunctionIndex.end()) {
-		_error(std::string("Unimplemented internal function ") + state.externStr(func));
+		// this should eventually be an error, but so many are unimplemented right now that we'll just make it a warning
+		_warning(thread, std::string("Unimplemented internal function ") + state.externStr(func));
 	}
-	int64_t function = itr->second;
-	// check parameter count
-	if(state.internalFunctions[function].params != call.length-1)
-		_error(std::string("Incorrect number of arguments to internal function ") + state.externStr(func));
-
+	else {
+		function = itr->second;
+		// check parameter count
+		if(state.internalFunctions[function].params != call.length-1)
+			_error(std::string("Incorrect number of arguments to internal function ") + state.externStr(func));
+	}
 	// compile parameters directly...reserve registers for them.
 	Operand liveIn = top();
 	int64_t reg = liveIn.i-1;
@@ -338,7 +343,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			Pair p;
 			if(names.length > 0) p.n = names[i]; else p.n = Strings::empty;
 			if(!c[i].isNil()) {
-				p.v = Function(compilePromise(state, c[i]),NULL).AsDefault();
+				p.v = Function(compilePromise(thread, c[i]),NULL).AsDefault();
 			}
 			else {
 				p.v = c[i];
@@ -347,7 +352,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		}
 
 		//compile the source for the body
-		Prototype* functionCode = Compiler::compileFunctionBody(state, call[2]);
+		Prototype* functionCode = Compiler::compileFunctionBody(thread, call[2]);
 
 		// Populate function info
 		functionCode->parameters = parameters;
@@ -474,7 +479,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		
 		ir[begin1-1].b = begin2-begin1+1;
 
-		return resultT;
+		return resultT.loc == INVALID ? resultF : resultT;
 	}
 	else if(func == Strings::lor2 && call.length == 3)
 	{
@@ -611,7 +616,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::land ||
 		func == Strings::bracket ||
 		func == Strings::bb ||
-		func == Strings::vector) &&
+		func == Strings::vector ||
+		func == Strings::round ||
+		func == Strings::signif) &&
 		call.length == 3) 
 	{
 		Operand a = compile(call[1], code);
@@ -631,8 +638,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::floor ||
 		func == Strings::ceiling || 
 		func == Strings::trunc ||
-		func == Strings::round ||
-		func == Strings::signif ||
 		func == Strings::exp ||
 		func == Strings::log ||
 		func == Strings::cos ||

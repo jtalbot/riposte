@@ -73,6 +73,8 @@ template<class X, class Y> struct ArithBinary2
 template<class X, class Y> struct LogicalBinary
 	{ typedef X A; typedef Y B; typedef Logical MA; typedef Logical MB; typedef Logical R; };
 
+template<class X, class Y> struct RoundBinary
+	{ typedef X A; typedef Y B; typedef Double MA; typedef Integer MB; typedef Double R; };
 
 
 template<class X, class Y> struct OrdinalBinary {};
@@ -127,6 +129,12 @@ inline int64_t riposte_min(Thread& thread, int64_t a, int64_t b) { return a < b 
 inline int64_t riposte_min(Thread& thread, char a, char b) { return a & b; }
 inline String riposte_min(Thread& thread, String a, String b) { return strcmp(a,b) < 0 ? a : b; }
 
+inline double riposte_round(Thread& thread, double a, int64_t b) { double s = pow(10, b); return round(a*s)/s; }
+inline double riposte_signif(Thread& thread, double a, int64_t b) {
+	double d = ceil(log10(a < 0 ? -a : a));
+	return riposte_round(thread, a,b-(int64_t)d);
+}
+
 inline bool gt(Thread& thread, double a, double b) { return a > b; }
 inline bool gt(Thread& thread, int64_t a, int64_t b) { return a > b; }
 inline bool gt(Thread& thread, char a, char b) { return (unsigned char)a > (unsigned char)b; }
@@ -151,6 +159,7 @@ ARITH_BINARY_BYTECODES(BINARY_OP)
 ORDINAL_BINARY_BYTECODES(BINARY_OP)
 LOGICAL_BINARY_BYTECODES(BINARY_OP)
 UNIFY_BINARY_BYTECODES(BINARY_OP)
+ROUND_BINARY_BYTECODES(BINARY_OP)
 #undef BINARY_OP
 
 template<class X> struct ArithFold   { typedef X A; typedef Double MA; typedef Double R; };
@@ -326,6 +335,11 @@ void UnifyBinaryDispatch(Thread& thread, Value const& a, Value const& b, Value& 
 template< template<typename S, typename T> class Op > 
 void OrdinalBinaryDispatch(Thread& thread, Value const& a, Value const& b, Value& c) {
 	UnifyBinaryDispatch<Op>(thread, a, b, c);
+}
+
+template< template<typename S, typename T> class Op > 
+void RoundBinaryDispatch(Thread& thread, Value a, Value b, Value& c) {
+	ArithBinary1Dispatch<Op>(thread, a, b, c);
 }
 
 template< template<typename T> class Op >

@@ -701,6 +701,8 @@ Instruction const* strip_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* internal_op(Thread& thread, Instruction const& inst) {
+	if(inst.a < 0)
+		_error("Attempting to use undefined internal function");
 	int64_t nargs = thread.state.internalFunctions[inst.a].params;
 	for(int64_t i = 0; i < nargs; i++) {
 		BIND(REGISTER(inst.b-i));
