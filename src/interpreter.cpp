@@ -35,8 +35,7 @@ Thread::Thread(State& state, uint64_t index) : state(state), index(index), steal
 	}
 }
 
-extern Instruction const* kget_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* get_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -44,6 +43,9 @@ extern Instruction const* subset_op(Thread& thread, Instruction const& inst) ALW
 extern Instruction const* subset2_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* jc_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* lt_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* ret_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* retp_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* internal_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 
 Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const* a, Environment* env, int64_t index) {
 	if(a->isPromise()) {
@@ -175,14 +177,14 @@ Instruction const* jc_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* branch_op(Thread& thread, Instruction const& inst) {
-	OPERAND(c, inst.c);
+	OPERAND(a, inst.a);
 	int64_t index = -1;
-	if(c.isDouble1()) index = (int64_t)c.d;
-	else if(c.isInteger1()) index = c.i;
-	else if(c.isLogical1()) index = c.i;
-	else if(c.isCharacter1()) {
+	if(a.isDouble1()) index = (int64_t)a.d;
+	else if(a.isInteger1()) index = a.i;
+	else if(a.isLogical1()) index = a.i;
+	else if(a.isCharacter1()) {
 		for(int64_t i = 1; i <= inst.b; i++) {
-			if((String)(&inst+i)->a == c.s) {
+			if((String)(&inst+i)->a == a.s) {
 				index = i;
 				break;
 			}
@@ -194,7 +196,7 @@ Instruction const* branch_op(Thread& thread, Instruction const& inst) {
 	if(index >= 1 && index <= inst.b) {
 		return &inst + ((&inst+index)->c);
 	} 
-	FORCE(c, inst.a); BIND(c);
+	FORCE(a, inst.a); BIND(a);
 	return &inst+1+inst.b;
 }
 
@@ -286,7 +288,6 @@ Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 	}
 	return &inst+1;
 }
-
 
 Instruction const* mov_op(Thread& thread, Instruction const& inst) {
 	OPERAND(value, inst.a); FORCE(value, inst.a); // can load from memory, so must force. But no need for bind.
@@ -520,6 +521,18 @@ Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	OPERAND(b, inst.b); FORCE(b, inst.b);
 	OPERAND(c, inst.c); FORCE(c, inst.c);
+	if(c.isLogical1()) {
+		OUT(thread, inst.c) = Logical::isTrue(c.c) ? b : a;
+		return &inst+1; 
+	}
+	else if(c.isInteger1()) {
+		OUT(thread, inst.c) = c.i ? b : a;
+		return &inst+1; 
+	}
+	else if(c.isDouble1()) {
+		OUT(thread, inst.c) = c.d ? b : a;
+		return &inst+1; 
+	}
 	if(isTraceable<IfElse>(thread,a,b,c)) {
 		OUT(thread, inst.c) = thread.EmitIfElse(thread.frame.environment, a, b, c);
 		thread.OptBind(OUT(thread,inst.c));
@@ -710,8 +723,6 @@ Instruction const* internal_op(Thread& thread, Instruction const& inst) {
 	thread.state.internalFunctions[inst.a].ptr(thread, &REGISTER(inst.b), OUT(thread, inst.c));
 	return &inst+1;
 }
-
-
 
 //
 //    Main interpreter loop 

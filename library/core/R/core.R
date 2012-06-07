@@ -1,4 +1,8 @@
+pi <- 3.1415926535897932384626433832795
+
 nargs <- function() { length(.Internal(sys.call(1L)))-1L }
+
+options <- function(...) {}
 
 factor <- function(x, levels) {
 	attr(x, 'levels') <- levels
@@ -18,12 +22,62 @@ print <- function(...) cat(...)
 	else seq(from,0L,1L)
 }
 
+dispatch1 <- function(op, x, default) {
+	fun <- .Internal(paste(c(op, '.', class(x)), ""))
+	if(exists(fun)) {
+		get(fun)(x)
+	}
+	else {
+		default(x)
+	}
+}
+
+dispatch2 <- function(op, x, y, default) {
+	funx <- .Internal(paste(c(op, '.', class(x)), ""))
+	if(exists(funx)) {
+		return(get(funx)(x,y))
+	}
+	funy <- .Internal(paste(c(op, '.', class(y)), ""))
+	if(exists(funy)) {
+		return(get(funy)(x,y))
+	}
+	default(x,y)
+}
+
+`+` <- function(x,y) {
+	if(missing(y)) {
+		dispatch1('+', x, function(x) x)
+	} else {
+		dispatch2('+', x, y, function(x,y) strip(x)+strip(y))
+	}
+}
+
 `-` <- function(x,y) {
 	if(missing(y)) {
-		-strip(x)
+		dispatch1('-', x, function(x) -strip(x))
 	} else {
-		strip(x) - strip(y)
+		dispatch2('-', x, y, function(x,y) strip(x)-strip(y))
 	}
+}
+
+`*` <- function(x,y) {
+	dispatch2('*', x, y, function(x,y) strip(x)*strip(y))
+}
+
+`/` <- function(x,y) {
+	dispatch2('/', x, y, function(x,y) strip(x)*strip(y))
+}
+
+`<=` <- function(x,y) {
+	dispatch2('<=', x, y, function(x,y) strip(x)<=strip(y))
+}
+
+`<` <- function(x,y) {
+	dispatch2('<', x, y, function(x,y) strip(x)<strip(y))
+}
+
+`sqrt` <- function(x) {
+	dispatch1('sqrt', x, function(x) sqrt(strip(x)))
 }
 
 #`[` <- function(x, ..., drop = TRUE) {
@@ -85,25 +139,29 @@ ncol <- function(x) dim(x)[2L]
 
 lapply <- function(x, func) {
 	# should check that input is actually a list
-	if(func == "sum") {
-		sum(x)
+	if(is.character(func)) {
+		if(func == "sum") {
+			return(sum(x))
+		}
+		else if(func == "prod") {
+			return(prod(x))
+		}
+		else if(func == "mean") {
+			return(mean(x))
+		}
+		else if(func == "length") {
+			return(length(x))
+		}
+		else if(func == "min") {
+			return(min(x))
+		}
+		else if(func == "max") {
+			return(max(x))
+		}
 	}
-	else if(func == "prod") {
-		prod(x)
-	}
-	else if(func == "mean") {
-		mean(x)
-	}
-	else if(func == "length") {
-		length(x)
-	}
-	else if(func == "min") {
-		min(x)
-	}
-	else if(func == "max") {
-		max(x)
-	} else {
-		.Internal(lapply(x, func))
-	}
+	.Internal(mapply(list(x), func))
 }
 
+mapply <- function(FUN, ...) {
+	.Internal(mapply(list(...), FUN))
+}

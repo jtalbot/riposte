@@ -52,12 +52,14 @@ Double Random(Thread& thread, int64_t const length) {
 
 void cat(Thread& thread, Value const* args, Value& result) {
 	List const& a = Cast<List>(args[0]);
+	Character const& b = As<Character>(thread, args[-1]);
 	for(int64_t i = 0; i < a.length; i++) {
 		if(!List::isNA(a[i])) {
 			Character c = As<Character>(thread, a[i]);
 			for(int64_t j = 0; j < c.length; j++) {
 				printf("%s", thread.externStr(c[j]).c_str());
-				if(j < c.length-1) printf(" ");
+				if(!(i == a.length-1 && j == c.length-1))
+					printf("%s", thread.externStr(b[0]).c_str());
 			}
 		}
 	}
@@ -666,39 +668,55 @@ void eval_fn(Thread& thread, Value const* args, Value& result) {
 	result = thread.eval(Compiler::compilePromise(thread, args[0]), REnvironment(args[-1]).ptr());
 }
 
-struct lapplyargs {
+struct mapplyargs {
 	Value& in;
 	List& out;
 	Value func;
 };
 
-void* lapplyheader(void* args, uint64_t start, uint64_t end, Thread& thread) {
-	lapplyargs& l = *(lapplyargs*)args;
-	List apply(2);
+void* mapplyheader(void* args, uint64_t start, uint64_t end, Thread& thread) {
+	mapplyargs& l = *(mapplyargs*)args;
+	List apply(1+l.in.length);
 	apply[0] = l.func;
-	apply[1] = Value::Nil();
-	Prototype* p = Compiler::compilePromise(thread, CreateCall(apply));
+	for(int64_t i = 0; i < l.in.length; i++)
+		apply[i+1] = Value::Nil();
+	Prototype* p = Compiler::compileTopLevel(thread, CreateCall(apply));
 	return p;
 }
 
-void lapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& thread) {
-	lapplyargs& l = *(lapplyargs*)args;
+void mapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& thread) {
+	mapplyargs& l = *(mapplyargs*)args;
 	Prototype* p = (Prototype*) header;
 	for( size_t i=start; i!=end; ++i ) {
-		Value e;
-		Element2(l.in, i, e);
-		p->calls[0].arguments[0].v = e;
+		for(int64_t j=0; j < l.in.length; j++) {
+			Value e;
+			Element2(l.in, j, e);
+			Value a;
+			if(e.isVector())
+				Element2(e, i % e.length, a);
+			else
+				a = e;
+			p->calls[0].arguments[j].v = a;
+		}
 		l.out[i] = thread.eval(p);
 	}
 	//return 0;
 }
 
-void lapply(Thread& thread, Value const* args, Value& result) {
+void mapply(Thread& thread, Value const* args, Value& result) {
 	if(!args[0].isVector())
-		_error("Invalid type for argument to lapply");
+		_error("Invalid type for argument to mapply");
 	Value x = args[0];
 	Value func = args[-1];
-	List r(x.length);
+	// figure out result length
+	int64_t len = 1;
+	for(int i = 0; i < x.length; i++) {
+		Value e;
+		Element2(x, i, e);
+		if(e.isVector()) 
+			len = (e.length == 0 || len == 0) ? 0 : std::max(e.length, len);
+	}
+	List r(len);
 
 	/*List apply(2);
 	apply[0] = func;
@@ -732,8 +750,8 @@ void lapply(Thread& thread, Value const* args, Value& result) {
 	pthread_join(h2, NULL);
 	*/
 
-	lapplyargs a1 = (lapplyargs) {x, r, func};
-	thread.doall(lapplyheader, lapplybody, &a1, 0, x.length, 1, 1); 
+	mapplyargs a1 = (mapplyargs) {x, r, func};
+	thread.doall(mapplyheader, mapplybody, &a1, 0, r.length, 1, 1); 
 
 	result = r;
 }
@@ -875,6 +893,14 @@ void exists(Thread& thread, Value const* args, Value& result) {
 		result = Logical::True();
 }
 
+void get(Thread& thread, Value const* args, Value& result) {
+	Character c = As<Character>(thread, args[0]);
+	REnvironment e(args[-1]);
+	Logical l = As<Logical>(thread, args[-2]);
+
+	result = l[0] ? e.ptr()->getRecursive(c[0]) : e.ptr()->get(c[0]);
+}
+
 #include <sys/time.h>
 
 uint64_t readTime()
@@ -971,12 +997,39 @@ void force(Thread& thread, Value const* args, Value& result) {
 	result = args[0];
 }
 
+void commandArgs(Thread& thread, Value const* args, Value& result) {
+	result = thread.state.arguments;
+}
+
+void match(Thread& thread, Value const* args, Value& result) {
+	Character a = As<Character>(thread, args[0]);
+	Character b = As<Character>(thread, args[-1]);
+	
+	Integer r(a.length);
+	for(int64_t i = 0; i < a.length; i++) {
+		int64_t j = 0;
+		for(; j < b.length; j++) {
+			if(a[i] == b[j]) break;
+		}
+		r[i] = (j < b.length) ? (j+1) : Integer::NAelement;
+	}
+
+	result = r;
+}
+
+void repeat2(Thread& thread, Value const* args, Value& result) {
+	Integer a = Cast<Integer>(args[0]);
+	int64_t len = Cast<Integer>(args[-1])[0];
+
+	result = Repeat(a, len);
+}
+
 void registerCoreFunctions(State& state)
 {
 	//state.registerInternalFunction(state.internStr("nchar"), (nchar_fn), 1);
 	//state.registerInternalFunction(state.internStr("nzchar"), (nzchar_fn), 1);
 	
-	state.registerInternalFunction(state.internStr("cat"), (cat), 1);
+	state.registerInternalFunction(state.internStr("cat"), (cat), 2);
 	state.registerInternalFunction(state.internStr("library"), (library), 1);
 	
 	state.registerInternalFunction(state.internStr("attr"), (attr), 3);
@@ -988,7 +1041,7 @@ void registerCoreFunctions(State& state)
 	state.registerInternalFunction(state.internStr("eval"), (eval_fn), 3);
 	state.registerInternalFunction(state.internStr("source"), (source), 1);
 
-	state.registerInternalFunction(state.internStr("lapply"), (lapply), 2);
+	state.registerInternalFunction(state.internStr("mapply"), (mapply), 2);
 	//state.registerInternalFunction(state.internStr("t.list"), (tlist));
 
 	state.registerInternalFunction(state.internStr("environment"), (environment), 1);
@@ -1008,6 +1061,7 @@ void registerCoreFunctions(State& state)
 	state.registerInternalFunction(state.internStr("typeof"), (type_of), 1);
 	
 	state.registerInternalFunction(state.internStr("exists"), (exists), 4);
+	state.registerInternalFunction(state.internStr("get"), (get), 4);
 
 	state.registerInternalFunction(state.internStr("proc.time"), (proctime), 0);
 	state.registerInternalFunction(state.internStr("trace.config"), (traceconfig), 1);
@@ -1021,5 +1075,9 @@ void registerCoreFunctions(State& state)
 	state.registerInternalFunction(state.internStr("force"), (force), 1);
 	
 	state.registerInternalFunction(state.internStr("sort"), (sort), 1);
+	
+	state.registerInternalFunction(state.internStr("commandArgs"), (commandArgs), 0);
+	state.registerInternalFunction(state.internStr("match"), (match), 2);
+	state.registerInternalFunction(state.internStr("repeat2"), (repeat2), 2);
 }
 

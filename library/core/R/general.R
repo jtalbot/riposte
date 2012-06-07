@@ -9,14 +9,10 @@ system.time <- function(expr) {
 	.Internal(proc.time())-start
 }
 
-#mapply <- function(FUN, ...) {
-#	lapply(t.list(...), FUN)
-#}
-
 paste <- function(..., sep = " ", collapse = NULL) {
-	r <- mapply(function(x) .Internal(paste(x, sep)), ...)
+	r <- mapply(function(...) .Internal(paste(list(...), sep)), ...)
 	if(!is.null(collapse)) .Internal(paste(r, collapse))
-	else unlist(r)
+	else unlist.default(r)
 }
 
 anyDuplicated <- function(x) {
@@ -52,4 +48,12 @@ dimnames <- function(x) attr(x, 'dimnames')
 
 rep <- function(x, times=1, length.out=times*each*length(x), each=1) {
 	x[rep(length(x), strip(each), strip(length.out))]
+}
+
+rep.int <- function(x, times) {
+	times <- as.integer(times)
+	if(length(times) == length(x))
+		x[.Internal(repeat2(times, sum(times)))]
+	else
+		x[rep(length(x), 1, times*length(x))]
 }

@@ -319,6 +319,8 @@ void LogicalBinaryDispatch(Thread& thread, Value a, Value b, Value& c) {
 
 template< template<typename S, typename T> class Op > 
 void UnifyBinaryDispatch(Thread& thread, Value const& a, Value const& b, Value& c) {
+	if(!a.isVector() || !b.isVector())
+		_error("comparison is possible only for atomic and list types");
 	if(a.isCharacter() || b.isCharacter())
 		Zip2< Op<Character, Character> >::eval(thread, As<Character>(thread, a), As<Character>(thread, b), c);
 	else if(a.isDouble() || b.isDouble())

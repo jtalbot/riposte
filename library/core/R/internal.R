@@ -15,7 +15,7 @@ eigen <- function(x, symmetric=FALSE) {
 	list(values=r[[1]], vectors=vec)
 }
 
-cat <- function(...) .Internal(cat(list(...)))
+cat <- function(..., sep = " ") .Internal(cat(list(...), sep))
 library <- function(.) .Internal(library(.))
 #inherits <- function(x, what, which=FALSE) .Internal(inherits(x, what, which))
 
@@ -51,7 +51,29 @@ exists <- function(x, envir, inherits=TRUE) {
 	.Internal(exists(x, envir, inherits, NULL))
 }
 
+get <- function(x, envir, inherits=TRUE) {
+	if(missing(envir)) envir <- parent.frame()
+	.Internal(get(x, envir, inherits, NULL))
+}
+
 proc.time <- function(x) .Internal(proc.time())
 trace.config <- function(trace=0) .Internal(trace.config(trace))
 
 read.table <- function(file,sep=" ",colClasses=c("double")) .Internal(read.table(file,sep,colClasses))
+
+match <- function(x, table, nomatch = NA_integer_) {
+	r <- .Internal(match(x, table))
+	r[is.na(r)] <- nomatch
+}
+
+commandArgs <- function (trailingOnly = FALSE) 
+{
+    args <- .Internal(commandArgs())
+    if (trailingOnly) {
+        m <- match("--args", args, 0L)
+        if (m) 
+            args[(m+1):length(args)]
+        else character()
+    }
+    else args
+}

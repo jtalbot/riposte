@@ -5,6 +5,7 @@ as.integer <- function(x,...) .Internal(as.integer(x))
 as.double <- function(x,...) .Internal(as.double(x))
 as.character <- function(x,...) .Internal(as.character(x))
 as.list <- function(x,...) .Internal(as.list(x))
+as.numeric <- function(x,...) .Internal(as.double(x))
 
 is.null <- function(x) .Internal(typeof(x)) == "NULL"
 is.logical <- function(x) .Internal(typeof(x)) == "logical"

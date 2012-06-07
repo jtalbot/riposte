@@ -216,7 +216,9 @@ public:
 
 	int64_t done;
 
-	State(uint64_t threads);
+	Character arguments;
+
+	State(uint64_t threads, int64_t argc, char** argv);
 
 	~State() {
 		fetch_and_add(&done, 1);
@@ -707,10 +709,16 @@ public:
 	}
 };
 
-inline State::State(uint64_t threads) : nThreads(threads), verbose(false), jitEnabled(true), done(0) {
+inline State::State(uint64_t threads, int64_t argc, char** argv) 
+	: nThreads(threads), verbose(false), jitEnabled(true), done(0) {
 	Environment* base = new (GC) Environment(0);
 	this->global = new (GC) Environment(base);
 	path.push_back(base);
+
+	arguments = Character(argc);
+	for(int64_t i = 0; i < argc; i++) {
+		arguments[i] = internStr(std::string(argv[i]));
+	}
 	
 	pthread_attr_t  attr;
 	pthread_attr_init (&attr);

@@ -20,6 +20,8 @@
 void registerCoreFunctions(State& state);
 void registerCoerceFunctions(State& state);
 
+extern int opterr;
+
 /*  Globals  */
 static int debug = 0;
 static int die   = 0;      /* end session */
@@ -125,7 +127,8 @@ int dostdin(State& state) {
 			if(value.isNil()) continue;
 			//std::cout << "Parsed: " << value.toString() << std::endl;
 			Prototype* proto = Compiler::compileTopLevel(thread, value);
-			//std::cout << "Compiled code: " << thread.stringify(Closure(code,NULL)) << std::endl;
+			//printCode(thread, proto);
+			//std::cout << "Compiled code: " << thread.stringify(proto) << std::endl;
 			result = thread.eval(proto, state.global);
 			std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) { 
@@ -169,7 +172,7 @@ static int dofile(const char * file, std::istream & in, State& state, bool echo)
 	try {
 		Prototype* proto = Compiler::compileTopLevel(state.getMainThread(), value);
 		Value result = state.getMainThread().eval(proto, state.global);
-		if(echo)
+		//if(echo)
 			std::cout << state.stringify(result) << std::endl;
 	} catch(RiposteError& error) {
 		e_message("Error", "riposte", error.what().c_str());
@@ -210,7 +213,7 @@ main(int argc, char** argv)
 	};
 
 	/*  Parse commandline options  */
-
+	opterr = 0;
 	while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
 		switch (ch) {
 			case 'd':
@@ -240,13 +243,13 @@ main(int argc, char** argv)
 				}
 				break;
 			default:
-				usage();
-				exit (-1);
+				//usage();
+				//exit (-1);
+				break;
 		}
 
-	argc -= optind;
-	argv += optind;
-
+	//argc -= optind;
+	//argv += optind;
 
 	d_message(1,NULL,"Command option processing complete");
 
@@ -257,7 +260,7 @@ main(int argc, char** argv)
 	CALLGRIND_START_INSTRUMENTATION
 #endif
 
-	State state(threads);
+	State state(threads, argc, argv);
 	state.verbose = verbose;
 	Thread& thread = state.getMainThread();
 
@@ -265,7 +268,7 @@ main(int argc, char** argv)
 		registerCoreFunctions(state);	
 		registerCoerceFunctions(state);	
 		loadLibrary(thread, "library", "core");
-		loadLibrary(thread, "library", "base");
+		//loadLibrary(thread, "library", "base");
 		//loadLibrary(thread, "library", "stats");
 
 	} catch(RiposteError& error) { 

@@ -254,14 +254,61 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 	bool complicated = false;
 	for(int64_t i = 0; i < length; i++) {
-		if(names.length > i && names[i] != Strings::empty) 
-			complicated = true;
 		if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) 
 			complicated = true;
 	}
 
 	if(complicated)
 		return compileFunctionCall(call, names, code);
+
+	// switch statement supports named args
+	if(func == Strings::switchSym)
+	{
+		if(call.length == 0) _error("'EXPR' is missing");
+		Operand c = compile(call[1], code);
+		int64_t n = call.length-2;
+
+		int64_t branch = emit(ByteCode::branch, kill(c), n, 0);
+		for(int64_t i = 2; i < call.length; i++) {
+			emit(ByteCode::branch, (int64_t)(names.length > i ? names[i] : Strings::empty), 0, 0);
+		}
+		
+		std::vector<int64_t> jmps;
+		Operand result = placeInRegister(compileConstant(Null::Singleton(), code));
+		jmps.push_back(emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0));
+		
+		for(int64_t i = 1; i <= n; i++) {
+			ir[branch+i].c = (int64_t)ir.size()-branch;
+			if(!call[i+1].isNil()) {
+				kill(result);
+				Operand r = placeInRegister(compile(call[i+1], code));
+				if(r != result) 
+					throw CompileError(std::string("switch statement doesn't put all its results in the same register"));
+				if(i < n)
+					jmps.push_back(emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0));
+				result = r;
+			} else if(i == n) {
+				kill(result);
+				Operand r = placeInRegister(compileConstant(Null::Singleton(), code));
+				if(r != result) 
+					throw CompileError(std::string("switch statement doesn't put all its results in the same register"));
+				result = r;
+			}
+		}
+		for(int64_t i = 0; i < (int64_t)jmps.size(); i++) {
+			ir[jmps[i]].a = (int64_t)ir.size()-jmps[i];
+		}
+		return result;
+	}
+
+	for(int64_t i = 0; i < length; i++) {
+		if(names.length > i && names[i] != Strings::empty) 
+			complicated = true;
+	}
+	
+	if(complicated)
+		return compileFunctionCall(call, names, code);
+
 
 	if(func == Strings::internal) 
 	{
@@ -394,7 +441,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		int64_t beginbody = ir.size();
 		Operand body = compile(call[3], code);
 		int64_t endbody = ir.size();
-		resolveLoopExits(beginbody, endbody, endbody, endbody+1);
+		resolveLoopExits(beginbody, endbody, endbody, endbody+2);
 		loopDepth--;
 		
 		emit(ByteCode::forend, loop_variable, loop_vector, loop_counter);
@@ -513,44 +560,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		assert(r0 == r1 || r0.loc == INVALID || r1.loc == INVALID);
 		return r0;
 	}
-	else if(func == Strings::switchSym)
-	{
-		if(call.length == 0) _error("'EXPR' is missing");
-		Operand c = compile(call[1], code);
-		int64_t n = call.length-2;
-
-		int64_t branch = emit(ByteCode::branch, kill(c), n, 0);
-		for(int64_t i = 2; i < call.length; i++) {
-			emit(ByteCode::branch, (int64_t)(names.length > i ? names[i] : Strings::empty), 0, 0);
-		}
-		
-		std::vector<int64_t> jmps;
-		Operand result = placeInRegister(compileConstant(Null::Singleton(), code));
-		jmps.push_back(emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0));
-		
-		for(int64_t i = 1; i <= n; i++) {
-			ir[branch+i].c = (int64_t)ir.size()-branch;
-			if(!call[i+1].isNil()) {
-				kill(result);
-				Operand r = placeInRegister(compile(call[i+1], code));
-				if(r != result) 
-					throw CompileError(std::string("switch statement doesn't put all its results in the same register"));
-				if(i < n)
-					jmps.push_back(emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0));
-				result = r;
-			} else if(i == n) {
-				kill(result);
-				Operand r = placeInRegister(compileConstant(Null::Singleton(), code));
-				if(r != result) 
-					throw CompileError(std::string("switch statement doesn't put all its results in the same register"));
-				result = r;
-			}
-		}
-		for(int64_t i = 0; i < (int64_t)jmps.size(); i++) {
-			ir[jmps[i]].a = (int64_t)ir.size()-jmps[i];
-		}
-		return result;
-	} 
 	else if(func == Strings::brace) 
 	{
 		int64_t length = call.length;

@@ -30,7 +30,7 @@ as.vector <- function(x, mode = "any") {
 		numeric = .Internal(as.double(x)),
 		complex = as.complex(x),
 		character = .Internal(as.character(x)),
-		any = x)
+		any = strip(x))
 }
 
 cbind <- function(...) {
@@ -45,6 +45,10 @@ array <- function(data, dims) {
 	r <- strip(data)
 	dim(r) <- strip(dims)
 	r
+}
+
+seq.int <- function(from, to, by, length.out, along.with, ...) {
+	seq(from, by, (to-from)/by+1)
 }
 
 seq_len <- function(length.out) seq(1, 1, length.out)

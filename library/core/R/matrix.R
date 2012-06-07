@@ -31,8 +31,139 @@
 	}
 }
 
+`%o%` <- function(x,y) {
+	outer(x,y,`*`)
+}
+
+`+.matrix` <- function(x,y) {
+	xd <- dim(x)
+	yd <- dim(y)
+	if(!all(xd == yd))
+		stop("Matrices are not conformable")
+	r <- strip(x) + strip(y)
+	matrix(r, xd[[1L]], xd[[2L]])
+}
+
+`*.matrix` <- function(x,y) {
+	xd <- dim(x)
+	yd <- dim(y)
+	if(!all(xd == yd))
+		stop("Matrices are not conformable")
+	r <- strip(x) * strip(y)
+	matrix(r, xd[[1L]], xd[[2L]])
+}
+
+`/.matrix` <- function(x,y) {
+	xd <- dim(x)
+	yd <- dim(y)
+	if(!all(xd == yd))
+		stop("Matrices are not conformable")
+	r <- strip(x) / strip(y)
+	if(is.null(yd))
+		matrix(r, xd[[1L]], xd[[2L]])
+	else
+		matrix(r, yd[[1L]], yd[[2L]])
+}
+
+`<=.matrix` <- function(x,y) {
+	xd <- dim(x)
+	yd <- dim(y)
+	if(!all(xd == yd))
+		stop("Matrices are not conformable")
+	r <- strip(x) <= strip(y)
+	matrix(r, xd[[1L]], xd[[2L]])
+}
+
+`<.matrix` <- function(x,y) {
+	xd <- dim(x)
+	yd <- dim(y)
+	if(!all(xd == yd))
+		stop("Matrices are not conformable")
+	r <- strip(x) < strip(y)
+	matrix(r, xd[[1L]], xd[[2L]])
+}
+
+`sqrt.matrix` <- function(x) {
+	xd <- dim(x)
+	matrix(sqrt(strip(x)), xd[[1L]], xd[[2L]])
+}
+
 matrix <- function(data = NA, nrow = 1, ncol = 1) {
-	r <- rep(data, length.out=nrow*ncol)
-	dim(r) <- c(nrow, ncol)
-	r
+	if(length(data) < nrow*ncol)
+		data <- rep(data, length.out=nrow*ncol)
+	dim(data) <- c(nrow, ncol)
+	class(data) <- 'matrix'
+	data
+}
+
+outer <- function (X, Y, FUN = "*", ...) 
+{
+    if (is.array(X)) {
+        dX <- dim(X)
+        nx <- dimnames(X)
+        no.nx <- is.null(nx)
+    }
+    else {
+        dX <- length(X)
+        no.nx <- is.null(names(X))
+        if (!no.nx) 
+            nx <- list(names(X))
+    }
+    if (is.array(Y)) {
+        dY <- dim(Y)
+        ny <- dimnames(Y)
+        no.ny <- is.null(ny)
+    }
+    else {
+        dY <- length(Y)
+        no.ny <- is.null(names(Y))
+        if (!no.ny) 
+            ny <- list(names(Y))
+    }
+    if (is.character(FUN) && FUN == "*") {
+        robj <- as.vector(X) %*% t(as.vector(Y))
+        dim(robj) <- c(dX, dY)
+	class(robj) <- 'matrix'
+    }
+    else {
+        #FUN <- match.fun(FUN)
+        Y <- rep.int(Y, rep.int(length(X), length(Y)))
+        if (length(X)) 
+            X <- rep(X, times = ceiling(length(Y)/length(X)))
+        robj <- FUN(X, Y, ...)
+        dim(robj) <- c(dX, dY)
+	class(robj) <- 'matrix'
+    }
+    #if (no.nx) 
+    #    nx <- vector("list", length(dX))
+    #else if (no.ny) 
+    #    ny <- vector("list", length(dY))
+    #if (!(no.nx && no.ny)) 
+    #    dimnames(robj) <- c(nx, ny)
+    robj
+}
+
+upper.tri <- function(x, diag=FALSE) {
+	if(diag)
+		row(x) <= col(x)
+	else
+		row(x) < col(x)
+}
+
+row <- function(x) {
+	xd <- dim(x)
+	matrix(rep(xd[[1L]], 1L, xd[[1L]]*xd[[2L]]), xd[[1L]], xd[[2L]])
+}
+
+col <- function(x) {
+	xd <- dim(x)
+	matrix(rep(xd[[2L]], xd[[1L]], xd[[1L]]*xd[[2L]]), xd[[1L]], xd[[2L]])
+}
+
+`diag<-` <- function(x, value) {
+	xd <- dim(x)
+	len <- min(xd)
+	r <- strip(x)
+	r[(seq_len(len)-1L)*xd[[1L]]+seq_len(len)] <- value
+	matrix(r, xd[[1L]], xd[[2L]])
 }

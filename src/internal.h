@@ -197,6 +197,17 @@ inline Integer Repeat(int64_t const n, int64_t const each, int64_t const length)
 	return r;
 }
 
+inline Integer Repeat(Integer const& each, int64_t const length) {
+	Integer r(length);
+	for(int64_t i = 0, j = 0, e = 1; i < length; i++) {
+		r[i] = j+1;
+		e++; 
+		if(e > each[j]) { e = 1; j++; }
+		if(j >= each.length) j = 0;
+	}
+	return r;
+}
+
 Double Random(Thread& thread, int64_t const length);
 
 #endif
