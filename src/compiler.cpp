@@ -185,10 +185,14 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 // a standard call, not an op
 Compiler::Operand Compiler::compileFunctionCall(List const& call, Character const& names, Prototype* code) {
 	Operand function = compile(call[0], code);
-	code->calls.push_back(makeCall(call, names));
+	CompiledCall a = makeCall(call, names);
+	code->calls.push_back(a);
 	kill(function);
 	Operand result = allocRegister();
-	emit(ByteCode::call, function, code->calls.size()-1, result);
+	if(!a.named && a.dotIndex >= (int64_t)a.arguments.size())
+		emit(ByteCode::call, function, code->calls.size()-1, result);
+	else
+		emit(ByteCode::ncall, function, code->calls.size()-1, result);
 	return result;
 }
 
@@ -234,7 +238,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		return compileFunctionCall(call, names, code);
 
 	String func = SymbolStr(call[0]);
-
 	// list is the only built in function that handles ... or named parameters
 	if(func == Strings::list)
 	{
@@ -338,17 +341,24 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			List n(c.length+1);
 
 			for(int64_t i = 0; i < c.length; i++) { n[i] = c[i]; }
-			Character nnames(c.length+1);
-			if(hasNames(dest)) {
-				Value names = getNames((Object const&)dest);
-				for(int64_t i = 0; i < c.length; i++) { nnames[i] = Character(names)[i]; }
-			} else {
-				for(int64_t i = 0; i < c.length; i++) { nnames[i] = Strings::empty; }
-			}
-
-			n[0] = CreateSymbol(state.internStr(state.externStr(SymbolStr(c[0])) + "<-"));
+			String as = state.internStr(state.externStr(SymbolStr(c[0])) + "<-");
+			n[0] = CreateSymbol(as);
 			n[c.length] = value;
-			nnames[c.length] = Strings::value;
+
+			Character nnames(c.length+1);
+	
+			if(!hasNames(dest) && (as == Strings::bracketAssign || as == Strings::bbAssign) && c.length == 3) {
+				for(int64_t i = 0; i < c.length+1; i++) { nnames[i] = Strings::empty; }
+			}
+			else {
+				if(hasNames(dest)) {
+					Value names = getNames((Object const&)dest);
+					for(int64_t i = 0; i < c.length; i++) { nnames[i] = Character(names)[i]; }
+				} else {
+					for(int64_t i = 0; i < c.length; i++) { nnames[i] = Strings::empty; }
+				}
+				nnames[c.length] = Strings::value;
+			}
 			value = CreateCall(n, nnames);
 			dest = c[1];
 		}

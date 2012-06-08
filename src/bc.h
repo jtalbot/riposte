@@ -11,6 +11,7 @@
 	_(jmp, "jmp") \
 	_(branch, "branch") \
 	_(call, "call") \
+	_(ncall, "ncall") \
 	_(ret, "ret") /* return from function */ \
 	_(rets, "rets") /* return from top-level statement */ \
 	_(retp, "retp") /* return from a promise or default */ \

@@ -852,12 +852,13 @@ void nzchar_fn(Thread& thread, Value const* args, Value& result) {
 
 void paste(Thread& thread, Value const* args, Value& result) {
 	Character a = As<Character>(thread, args[0]);
-	Character sep = As<Character>(thread, args[-1]);
+	String sep = As<Character>(thread, args[-1])[0];
 	std::string r = "";
-	for(int64_t i = 0; i+1 < a.length; i++) {
-		r = r + thread.externStr(a[i]) + thread.externStr(sep[0]);
+	for(int64_t i = 0; i < a.length-1; i++) {
+		r += a[i];
+		r += sep; 
 	}
-	if(a.length > 0) r = r + thread.externStr(a[a.length-1]);
+	if(0 < a.length) r += a[a.length-1];
 	result = Character::c(thread.internStr(r));
 }
 

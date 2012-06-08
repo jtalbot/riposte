@@ -74,35 +74,6 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 	return i;
 }
 
-inline void argAssign(Thread& thread, Environment* env, Pair const& parameter, Pair const& argument, Environment* execution) {
-	Value w = argument.v;
-	if(!w.isNil()) {
-		if(w.isPromise() || w.isDefault()) {
-			assert(w.p == 0);
-			w.p = execution;
-		} else if(w.isFuture()) {
-			thread.LiveEnvironment(env, w);
-		}
-		env->insert(parameter.n) = w;
-	}
-}
-
-inline void dotAssign(Thread& thread, Environment* env, Pair const& argument, Environment* execution) {
-	Value w = argument.v;
-	assert(!w.isDefault());
-	if(w.isPromise()) {
-		assert(w.p == 0);
-		w.p = execution;
-	}
-	else if(w.isFuture()) {
-		thread.LiveEnvironment(env, w);
-	}
-	Pair p;
-	p.n = argument.n;
-	p.v = w;
-	env->dots.push_back(p);
-}
-
 static Pair argument(int64_t index, Environment* env, CompiledCall const& call) {
 	if(index < call.dotIndex) {
 		return call.arguments[index];
@@ -149,7 +120,65 @@ static bool namedArguments(Environment* env, CompiledCall const& call) {
 	}
 }
 
-static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call) {
+inline void argAssign(Thread& thread, Environment* env, Pair const& parameter, Pair const& argument) {
+	Value w = argument.v;
+	if(!w.isNil()) {
+		if(w.isPromise() || w.isDefault()) {
+			assert(w.p == 0);
+			w.p = env;
+		} else if(w.isFuture()) {
+			thread.LiveEnvironment(env, w);
+		}
+		env->insert(parameter.n) = w;
+	}
+}
+
+inline void dotAssign(Thread& thread, Environment* env, Pair const& argument) {
+	Value w = argument.v;
+	assert(!w.isDefault());
+	if(w.isPromise()) {
+		assert(w.p == 0);
+		w.p = env;
+	}
+	else if(w.isFuture()) {
+		thread.LiveEnvironment(env, w);
+	}
+	Pair p;
+	p.n = argument.n;
+	p.v = w;
+	env->dots.push_back(p);
+}
+
+static void MatchArgs(Thread& thread, Environment const* env, Environment* fenv, Function const& func, CompiledCall const& call) {
+	PairList const& parameters = func.prototype()->parameters;
+	PairList const& arguments = call.arguments;
+
+	int64_t const pDotIndex = func.prototype()->dotIndex;
+	int64_t const end = std::min((int64_t)arguments.size(), pDotIndex);
+
+	// set parameters from arguments & defaults
+	for(int64_t i = 0; i < (int64_t)parameters.size(); i++) {
+		argAssign(thread, fenv, parameters[i], 
+			(i < end && !arguments[i].v.isNil()) ? arguments[i] : parameters[i]);
+	}
+
+	// handle unused arguments
+	if(pDotIndex >= (int64_t)parameters.size()) {
+		// called function doesn't take dots, unused args is an error 
+		if(arguments.size() > parameters.size())
+			_error("Unused arguments");
+	}
+	else {
+		// called function has dots, all unused args go into ...
+		fenv->named = false; // if no arguments are named, no dots can be either
+		fenv->dots.reserve(arguments.size()-end);
+		for(int64_t i = end; i < (int64_t)arguments.size(); i++) {
+			dotAssign(thread, fenv, arguments[i]);
+		}
+	}
+}
+
+static void MatchNamedArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call) {
 	PairList const& parameters = func.prototype()->parameters;
 	int64_t pDotIndex = func.prototype()->dotIndex;
 	int64_t numArgs = numArguments(env, call);
@@ -157,7 +186,7 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 
 	// set defaults
 	for(int64_t i = 0; i < (int64_t)parameters.size(); ++i) {
-		argAssign(thread, fenv, parameters[i], parameters[i], fenv);
+		argAssign(thread, fenv, parameters[i], parameters[i]);
 	}
 
 	if(!named) {
@@ -167,7 +196,7 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 		int64_t end = std::min(numArgs, pDotIndex);
 		for(int64_t i = 0; i < end; ++i) {
 			Pair const& arg = argument(i, env, call);
-			argAssign(thread, fenv, parameters[i], arg, fenv);
+			argAssign(thread, fenv, parameters[i], arg);
 		}
 
 		// if we have left over arguments, but no parameter dots, error
@@ -177,7 +206,7 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 		// all unused args go into ...
 		for(int64_t i = end; i < numArgs; i++) {
 			Pair const& arg = argument(i, env, call);
-			dotAssign(thread, fenv, arg, fenv);
+			dotAssign(thread, fenv, arg);
 		}
 	}
 	else {
@@ -235,7 +264,7 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 		for(int64_t j = 0; j < (int64_t)parameters.size(); ++j) {
 			if(j != pDotIndex && set[j] >= 0) {
 				Pair const& arg = argument(set[j], env, call);
-				argAssign(thread, fenv, parameters[j], arg, fenv);
+				argAssign(thread, fenv, parameters[j], arg);
 			}
 		}
 
@@ -247,7 +276,7 @@ static void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Funct
 				if(pDotIndex >= (int64_t)parameters.size()) _error("Unused args");	
 				Pair const& arg = argument(i, env, call);
 				if(arg.n != Strings::empty) fenv->named = true;
-				dotAssign(thread, fenv, arg, fenv);
+				dotAssign(thread, fenv, arg);
 			}
 		}
 	}

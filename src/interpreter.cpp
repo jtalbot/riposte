@@ -46,6 +46,7 @@ extern Instruction const* lt_op(Thread& thread, Instruction const& inst) ALWAYS_
 extern Instruction const* ret_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* retp_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* internal_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* strip_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 
 Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const* a, Environment* env, int64_t index) {
 	if(a->isPromise()) {
@@ -91,6 +92,19 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
 	
 	MatchArgs(thread, thread.frame.environment, fenv, func, call);
+	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
+}
+
+Instruction const* ncall_op(Thread& thread, Instruction const& inst) {
+	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
+	if(!f.isFunction())
+		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
+	Function func(f);
+	
+	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
+	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
+	
+	MatchNamedArgs(thread, thread.frame.environment, fenv, func, call);
 	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
 }
 
@@ -707,9 +721,10 @@ Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 Instruction const* strip_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	Value& c = OUT(thread, inst.c);
-	c = a;
-	if(c.isObject())
-		c = ((Object const&)c).base();
+	if(a.isObject())
+		c = ((Object const&)a).base();
+	else
+		c = a;
 	return &inst+1;
 }
 
