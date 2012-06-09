@@ -346,7 +346,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		// of the original expression, not the RHS of the inside out expression.
 		Value value = call[2];
 		while(isCall(dest)) {
-			List c = List(((Object const&)dest).base());
+			List const& c = (List const&)((Object const&)dest).base();
 			List n(c.length+1);
 
 			for(int64_t i = 0; i < c.length; i++) { n[i] = c[i]; }
@@ -362,7 +362,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			else {
 				if(hasNames(dest)) {
 					Value names = getNames((Object const&)dest);
-					for(int64_t i = 0; i < c.length; i++) { nnames[i] = Character(names)[i]; }
+					for(int64_t i = 0; i < c.length; i++) { nnames[i] = ((Character const&)names)[i]; }
 				} else {
 					for(int64_t i = 0; i < c.length; i++) { nnames[i] = Strings::empty; }
 				}
@@ -399,9 +399,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		//compile the default parameters
 		assert(call[1].isObject());
-		List c = List(((Object const&)call[1]).base());
+		List const& c = (List const&)((Object const&)call[1]).base();
 		Character names = hasNames(call[1]) ? 
-			Character(getNames((Object&)call[1])) :
+			(Character const&)getNames((Object&)call[1]) :
 			Character(0);
 		
 		PairList parameters;
@@ -768,7 +768,7 @@ Compiler::Operand Compiler::compile(Value const& expr, Prototype* code) {
 				else if(isCall(o)) {
 					assert(o.base().isList());
 					return compileCall((List const&)o.base(), 
-						hasNames(o) ? Character(getNames(o)) : Character(0), code);
+						hasNames(o) ? (Character const&)getNames(o) : Character(0), code);
 				}
 				else {
 					return compileConstant(expr, code);

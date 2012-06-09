@@ -128,10 +128,6 @@ struct Vector : public Value {
 	ElementType& operator[](int64_t index) { return v()[index]; }
 	ElementType const& operator[](int64_t index) const { return v()[index]; }
 
-	explicit Vector(int64_t length=0) {
-		Init(*this, length);
-	}
-
 	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
 		Value::Init(v, VectorType, length);
 		if((canPack && length > 1) || (!canPack && length > 0)) {
@@ -157,17 +153,6 @@ struct Vector : public Value {
 			*(Element*)v.p = d;
 		}
 	}
-
-	explicit Vector(Value const& v) {
-		assert(v.type == VType);
-		type = VType;
-		length = v.length;
-		p = v.p;
-	}
-
-	operator Value() const {
-		return (Value&)*this;
-	}
 };
 
 union _doublena {
@@ -178,8 +163,7 @@ union _doublena {
 
 #define VECTOR_IMPL(Name, Element, Recursive) 				\
 struct Name : public Vector<Type::Name, Element, Recursive> { 			\
-	explicit Name(int64_t length=0) : Vector<Type::Name, Element, Recursive>(length) {} 	\
-	explicit Name(Value const& v) : Vector<Type::Name, Element, Recursive>(v) {} 	\
+	explicit Name(int64_t length=0) { Init(*this, length); } 	\
 	static Name c() { Name c(0); return c; } \
 	static Name c(Element v0) { Name c(1); c[0] = v0; return c; } \
 	static Name c(Element v0, Element v1) { Name c(2); c[0] = v0; c[1] = v1; return c; } \

@@ -79,19 +79,19 @@ std::string stringify(State const& state, Value const& value) {
 		case Type::Null:
 			return "NULL";
 		case Type::Raw:
-			return stringifyVector(state, Raw(value));
+			return stringifyVector(state, (Raw const&)value);
 		case Type::Logical:
-			return stringifyVector(state, Logical(value));
+			return stringifyVector(state, (Logical const&)value);
 		case Type::Integer:
-			return stringifyVector(state, Integer(value));
+			return stringifyVector(state, (Integer const&)value);
 		case Type::Double:
-			return stringifyVector(state, Double(value));
+			return stringifyVector(state, (Double const&)value);
 		case Type::Character:
-			return stringifyVector(state, Character(value));
+			return stringifyVector(state, (Character const&)value);
 		
 		case Type::List:
 		{
-			List v(value);
+			List const& v = (List const&)value;
 
 			int64_t length = v.length;
 			if(length == 0) return "list()";
@@ -214,7 +214,7 @@ std::string deparse(State const& state, Value const& value) {
 	{
 		case Type::Null:
 			return "NULL";
-		#define CASE(Name) case Type::Name: return deparseVector(state, Name(value)); break;
+		#define CASE(Name) case Type::Name: return deparseVector(state, (Name const&)value); break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
 		case Type::Function:

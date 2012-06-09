@@ -11,7 +11,7 @@
 
 // Casting between scalar types
 template<typename I, typename O>
-static void Cast1(Thread& thread, I const& i, O& o) { o = (O)i; }
+static void Cast1(Thread& thread, I const& i, O& o) { o = (O const&)i; }
 
 // Casting functions between vector types
 template<typename I, typename O>

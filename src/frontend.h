@@ -78,8 +78,8 @@ inline Value CreatePairlist(List const& list, Value const& names = Value::Nil())
 }
 
 inline String SymbolStr(Value const& v) {
-        if(v.isObject()) return Character(((Object const&)v).base())[0];
-        else return Character(v)[0];
+        if(v.isObject()) return ((Character const&)((Object const&)v).base())[0];
+        else return ((Character const&)v)[0];
 }
 
 inline Value CreateComplex(double d) {
