@@ -31,7 +31,7 @@ ifneq ($(ENABLE_LIBM),0)
 	LFLAGS += -L$(AMD_LIBM_HOME)/lib/dynamic -lamdlibm
 endif
 
-SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp
+SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp rgc.cpp
 
 ifeq ($(ENABLE_JIT),1)
 	CXXFLAGS += -DENABLE_JIT

@@ -9,6 +9,7 @@
 #include "common.h"
 #include "type.h"
 #include "bc.h"
+#include "rgc.h"
 #include "strings.h"
 #include "exceptions.h"
 
@@ -311,7 +312,7 @@ public:
 	Function Clone() const { return *this; }
 };
 
-class Dictionary : public gc {
+class Dictionary : public HeapObject {
 protected:
 	static const uint64_t inlineSize = 8;
 	uint64_t size, load;
@@ -469,6 +470,8 @@ public:
 	const_iterator end() const {
 		return const_iterator(this, size);
 	}
+
+	virtual void visit() const;
 };
 
 // Object implements an immutable dictionary interface.
@@ -582,6 +585,8 @@ public:
 	static void assignPointer(Pointer const& p, Value const& value) {
 		p.env->insert(p.name) = value;
 	}
+	
+	virtual void visit() const;
 };
 
 class REnvironment {

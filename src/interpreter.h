@@ -69,7 +69,7 @@ struct CompiledCall : public gc {
 		: call(call), arguments(arguments), dotIndex(dotIndex), named(named) {}
 };
 
-struct Prototype : public gc {
+struct Prototype : public HeapObject {
 	Value expression;
 	String string;
 
@@ -83,6 +83,8 @@ struct Prototype : public gc {
 
 	std::vector<Instruction> bc;			// bytecode
 	mutable std::vector<Instruction> tbc;		// threaded bytecode
+
+	virtual void visit() const;
 };
 
 struct StackFrame {
