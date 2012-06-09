@@ -915,7 +915,7 @@ void Trace::Optimize(Thread& thread) {
 	// Turn these back on when I'm sure about optimizing across shape changes...
 	// E.g. a <- 1:64; a[a < 32]
 	AlgebraicSimplification(thread);
-	CSEElimination(thread);
+	//CSEElimination(thread);
 
 	// move outputs up...
 	for(size_t i = 0; i < outputs.size(); i++) {

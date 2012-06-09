@@ -36,6 +36,7 @@ Thread::Thread(State& state, uint64_t index) : state(state), index(index), steal
 }
 
 extern Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* fastmov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -240,7 +241,7 @@ Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 	}
 }
 
-Instruction const* list_op(Thread& thread, Instruction const& inst) {
+Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 	PairList const& dots = thread.frame.environment->dots;
 	
 	Value& iter = REGISTER(inst.a);
@@ -274,6 +275,16 @@ Instruction const* list_op(Thread& thread, Instruction const& inst) {
 	return &inst;
 }
 
+Instruction const* list_op(Thread& thread, Instruction const& inst) {
+	List out(inst.b);
+	for(int64_t i = 0; i < inst.b; i++) {
+		Value& r = REGISTER(inst.a-i);
+		out[i] = r;
+	}
+	OUT(thread, inst.c) = out;
+	return &inst+1;
+}
+
 // Memory access ops
 
 Instruction const* assign_op(Thread& thread, Instruction const& inst) {
@@ -304,7 +315,13 @@ Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* mov_op(Thread& thread, Instruction const& inst) {
-	OPERAND(value, inst.a); FORCE(value, inst.a); // can load from memory, so must force. But no need for bind.
+	OPERAND(value, inst.a); FORCE(value, inst.a); BIND(value);
+	OUT(thread, inst.c) = value;
+	return &inst+1;
+}
+
+Instruction const* fastmov_op(Thread& thread, Instruction const& inst) {
+	OPERAND(value, inst.a); FORCE(value, inst.a); // fastmov assumes we don't need to bind. So next op better be able to handle a future 
 	OUT(thread, inst.c) = value;
 	return &inst+1;
 }

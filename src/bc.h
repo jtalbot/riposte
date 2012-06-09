@@ -18,9 +18,11 @@
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
 	_(list, "list") \
+	_(dotslist, "dotslist") \
 
 #define MEMORY_ACCESS_BYTECODES(_) \
 	_(mov, "mov") \
+	_(fastmov, "fastmov") \
 	_(dotdot, "dotdot") \
 	_(assign, "assign") \
 	_(assign2, "assign2") \

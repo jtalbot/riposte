@@ -155,6 +155,16 @@ Compiler::Operand Compiler::placeInRegister(Operand r) {
 	if(r.loc != REGISTER && r.loc != INVALID) {
 		kill(r);
 		Operand t = allocRegister();
+		emit(ByteCode::fastmov, r, 0, t);
+		return t;
+	}
+	return r;
+}
+
+Compiler::Operand Compiler::forceInRegister(Operand r) {
+	if(r.loc != INVALID) {
+		kill(r);
+		Operand t = allocRegister();
 		emit(ByteCode::mov, r, 0, t);
 		return t;
 	}
@@ -239,16 +249,15 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 	String func = SymbolStr(call[0]);
 	// list is the only built in function that handles ... or named parameters
-	if(func == Strings::list)
+	// we only handle the list(...) case through an op for now
+	if(func == Strings::list && call.length == 2 
+		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
 	{
-		// we only handle the list(...) case through an op for now
-		if(call.length != 2 || !isSymbol(call[1]) || SymbolStr(call[1]) != Strings::dots)
-			return compileFunctionCall(call, names, code);
 		Operand result = allocRegister();
 		Operand counter = compileConstant(Integer::c(0), code);
 		Operand storage = allocRegister();
 		kill(storage); kill(counter);
-		emit(ByteCode::list, counter, storage, result); 
+		emit(ByteCode::dotslist, counter, storage, result); 
 		return result;
 	}
 
@@ -596,6 +605,20 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		return compile(call[1], code);
 	}
+	else if(func == Strings::list) 
+	{
+		Operand f, r;
+		for(int64_t i = 1; i < call.length; i++) {
+			Operand t = forceInRegister(compile(call[i], code));
+			if(f.loc == INVALID) { f = t; r = t; }
+			else { assert(t.i == r.i+1); r = t; }
+		}
+		if(call.length > 1)
+			kill(f);
+		Operand result = allocRegister();
+		emit(ByteCode::list, f, Operand((int64_t)call.length-1), result);
+		return result;
+	}
  
 	// Trinary operators
 	else if((func == Strings::bracketAssign ||
@@ -787,8 +810,7 @@ Prototype* Compiler::compile(Value const& expr) {
 
 	std::reverse(code->constants.begin(), code->constants.end());
 	code->expression = expr;
-	//code->registers = code->constants.size() + max_n;
-	code->registers = max_n;
+	code->registers = code->constants.size() + max_n;
 	
 	// insert appropriate termination statement at end of code
 	if(scope == FUNCTION)
