@@ -297,8 +297,7 @@ static Environment* CreateEnvironment(Thread& thread, Environment* l, Environmen
 static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out) {
 	Value const& f = thread.frame.environment->getRecursive(op);
 	if(f.isFunction()) {
-		Function func(f);
-		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
+		Environment* fenv = CreateEnvironment(thread, ((Function const&)f).environment(), thread.frame.environment, Null::Singleton());
 		List call(0);
 		Pair p;
 		p.n = Strings::empty;
@@ -306,8 +305,8 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
 		PairList args;
 		args.push_back(p);
 		CompiledCall cc(call, args, 1, false);
-		MatchArgs(thread, thread.frame.environment, fenv, func, cc);
-		return buildStackFrame(thread, fenv, func.prototype(), out, &inst+1);
+		MatchArgs(thread, thread.frame.environment, fenv, ((Function const&)f), cc);
+		return buildStackFrame(thread, fenv, ((Function const&)f).prototype(), out, &inst+1);
 	}
 	_error("Failed to find generic for builtin op");
 }
@@ -315,8 +314,7 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
 static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out) {
 	Value const& f = thread.frame.environment->getRecursive(op);
 	if(f.isFunction()) { 
-		Function func(f);
-		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
+		Environment* fenv = CreateEnvironment(thread, ((Function const&)f).environment(), thread.frame.environment, Null::Singleton());
 		List call(0);
 		PairList args;
 		Pair p;
@@ -326,8 +324,8 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
 		p.v = b;
 		args.push_back(p);
 		CompiledCall cc(call, args, 2, false);
-		MatchArgs(thread, thread.frame.environment, fenv, func, cc);
-		return buildStackFrame(thread, fenv, func.prototype(), out, &inst+1);
+		MatchArgs(thread, thread.frame.environment, fenv, ((Function const&)f), cc);
+		return buildStackFrame(thread, fenv, ((Function const&)f).prototype(), out, &inst+1);
 	}
 	_error("Failed to find generic for builtin op");
 }

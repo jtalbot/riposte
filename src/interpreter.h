@@ -78,7 +78,6 @@ struct Prototype : public gc {
 
 	int registers;
 	std::vector<Value, traceable_allocator<Value> > constants;
-	std::vector<Prototype*, traceable_allocator<Prototype*> > prototypes; 	
 	std::vector<CompiledCall, traceable_allocator<CompiledCall> > calls; 
 
 	std::vector<Instruction> bc;			// bytecode
@@ -339,7 +338,6 @@ public:
 		return 0;
 	}
 
-	Value eval(Function const& function);
 	Value eval(Prototype const* prototype, Environment* environment); 
 	Value eval(Prototype const* prototype);
 	

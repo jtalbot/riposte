@@ -173,7 +173,7 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 			p.v = call[i];
 			dotIndex = i-1;
 		} else if(isCall(call[i]) || isSymbol(call[i])) {
-			p.v = Function(Compiler::compilePromise(thread, call[i]),NULL).AsPromise();
+			Promise::Init(p.v, Compiler::compilePromise(thread, call[i]),NULL);
 		} else {
 			p.v = call[i];
 		}
@@ -400,7 +400,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			Pair p;
 			if(names.length > 0) p.n = names[i]; else p.n = Strings::empty;
 			if(!c[i].isNil()) {
-				p.v = Function(compilePromise(thread, c[i]),NULL).AsDefault();
+				Default::Init(p.v, compilePromise(thread, c[i]),NULL);
 			}
 			else {
 				p.v = c[i];
@@ -418,10 +418,12 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		for(int64_t i = 0; i < (int64_t)parameters.size(); i++) 
 			if(parameters[i].n == Strings::dots) functionCode->dotIndex = i;
 
-		code->prototypes.push_back(functionCode);
+		Value function;
+		Function::Init(function, functionCode, 0);
+		Operand funcOp = compileConstant(function, code);
 	
 		Operand reg = allocRegister();	
-		emit(ByteCode::function, code->prototypes.size()-1, 0, reg);
+		emit(ByteCode::function, funcOp, 0, reg);
 		return reg;
 	} 
 	else if(func == Strings::returnSym)
@@ -785,7 +787,8 @@ Prototype* Compiler::compile(Value const& expr) {
 
 	std::reverse(code->constants.begin(), code->constants.end());
 	code->expression = expr;
-	code->registers = code->constants.size() + max_n;
+	//code->registers = code->constants.size() + max_n;
+	code->registers = max_n;
 	
 	// insert appropriate termination statement at end of code
 	if(scope == FUNCTION)

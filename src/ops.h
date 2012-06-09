@@ -226,6 +226,26 @@ template<class X, class Y> struct Moment2Fold {
 	typedef X A; typedef Y B; typedef Double MA; typedef Double MB; typedef Double R; };
 
 
+// More complicated ops
+template<class X, class Y, class Z> struct IfElse  { 
+	typedef X A; typedef Y B; typedef Z C; 
+	typedef Logical MA; typedef typename UnifyBinary<Y, Z>::MA MB; typedef typename UnifyBinary<Y, Z>::MB MC;
+	typedef typename UnifyBinary<Y, Z>::R R; 
+};
+
+template<class X, class Y> struct Split
+	{ typedef X A; typedef Y B; typedef Integer MA; typedef Y MB; typedef Y R; };
+
+/*
+template<int Len>
+inline void Sequence(int64_t start, int64_t step, int64_t* dest) {
+	for(int64_t i = 0, j = start; i < Len; i++, j += step) {
+		dest[i] = j;
+	}
+}
+*/
+
+
 template< template<typename T> class Op > 
 void ArithUnary1Dispatch(Thread& thread, Value a, Value& c) {
 	if(a.isDouble())	Zip1< Op<Double> >::eval(thread, (Double const&)a, c);
@@ -390,24 +410,6 @@ void UnifyScanDispatch(Thread& thread, Value const& a, Value& c) {
 	else if(a.isNull())	Op<Double>::Scalar(thread, Op<Double>::base(), c);
 	else _error("non-numeric argument to numeric scan operator");
 }
-
-template<class X, class Y, class Z> struct IfElse  { 
-	typedef X A; typedef Y B; typedef Z C; 
-	typedef Logical MA; typedef typename UnifyBinary<Y, Z>::MA MB; typedef typename UnifyBinary<Y, Z>::MB MC;
-	typedef typename UnifyBinary<Y, Z>::R R; 
-};
-
-template<class X, class Y> struct Split
-	{ typedef X A; typedef Y B; typedef Integer MA; typedef Y MB; typedef Y R; };
-
-/*
-template<int Len>
-inline void Sequence(int64_t start, int64_t step, int64_t* dest) {
-	for(int64_t i = 0, j = start; i < Len; i++, j += step) {
-		dest[i] = j;
-	}
-}
-*/
 
 #endif
 

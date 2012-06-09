@@ -189,7 +189,6 @@ struct Name : public Vector<Type::Name, Element, Recursive> { 			\
 	static Name NA() { static Name na = Name::c(NAelement); return na; }  \
 	static Name& Init(Value& v, int64_t length) { return (Name&)Vector<Type::Name, Element, Recursive>::Init(v, length); } \
 	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); }\
-	Name Clone() const { Name c(length); memcpy(c.v(), v(), length*width); return c; }
 /* note missing }; */
 
 VECTOR_IMPL(Null, unsigned char, false)  
@@ -260,55 +259,45 @@ VECTOR_IMPL(List, Value, true)
 
 
 struct Future : public Value {
-	static void Init(Value & f, Type::Enum typ,int64_t length,IRef ref) {
+	static Future& Init(Value& f, Type::Enum typ,int64_t length,IRef ref) {
 		Value::Init(f,Type::Future,length);
 		f.future.ref = ref;
 		f.future.typ = typ;
+		return (Future&)f;
 	}
-	
-	Future Clone() const { throw("shouldn't be cloning futures"); }
 };
 
-
-class Function {
-private:
-	Prototype* proto;
-	Environment* env;
-public:
-	explicit Function(Prototype* proto, Environment* env)
-		: proto(proto), env(env) {}
-	
-	explicit Function(Value const& v) {
-		assert(v.isFunction() || v.isPromise() || v.isDefault());
-		proto = (Prototype*)(v.length << 4);
-		env = (Environment*)v.p;
-	}
-
-	operator Value() const {
-		Value v;
+struct Function : public Value {
+	static Function& Init(Value& v, Prototype* proto, Environment* env) {
 		v.header = (int64_t)proto + Type::Function;
 		v.p = env;
-		return v;
+		return (Function&)v;
 	}
 
-	Value AsPromise() const {
-		Value v;
+	Prototype* prototype() const { return (Prototype*)(length << 4); }
+	Environment* environment() const { return (Environment*)p; }
+};
+
+struct Promise : public Value {
+	static Promise& Init(Value& v, Prototype* proto, Environment* env) {
 		v.header = (int64_t)proto + Type::Promise;
 		v.p = env;
-		return v;
+		return (Promise&)v;
 	}
 
-	Value AsDefault() const {
-		Value v;
+	Prototype* prototype() const { return (Prototype*)(length << 4); }
+	Environment* environment() const { return (Environment*)p; }
+};
+
+struct Default : public Value {
+	static Default& Init(Value& v, Prototype* proto, Environment* env) {
 		v.header = (int64_t)proto + Type::Default;
 		v.p = env;
-		return v;
+		return (Default&)v;
 	}
 
-	Prototype* prototype() const { return proto; }
-	Environment* environment() const { return env; }
-
-	Function Clone() const { return *this; }
+	Prototype* prototype() const { return (Prototype*)(length << 4); }
+	Environment* environment() const { return (Environment*)p; }
 };
 
 class Dictionary : public gc {
@@ -604,8 +593,6 @@ public:
 	Environment* ptr() const {
 		return env;
 	}
-
-	REnvironment Clone() const { return *this; }
 };
 
 #endif

@@ -108,7 +108,7 @@ std::string stringify(State const& state, Value const& value) {
 		}
 		case Type::Function:
 		{
-			result = state.externStr(Function(value).prototype()->string);
+			result = state.externStr(((Function const&)value).prototype()->string);
 			return result;
 		}
 		case Type::Environment:
@@ -218,7 +218,7 @@ std::string deparse(State const& state, Value const& value) {
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
 		case Type::Function:
-			return state.externStr(Function(value).prototype()->string);
+			return state.externStr(((Function const&)value).prototype()->string);
 		case Type::Environment:
 			return "environment";
 		case Type::Object:

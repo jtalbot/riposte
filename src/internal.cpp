@@ -796,7 +796,7 @@ void source(Thread& thread, Value const* args, Value& result) {
 void environment(Thread& thread, Value const* args, Value& result) {
 	Value e = args[0];
 	if(e.isFunction()) {
-		result = REnvironment(Function(e).environment());
+		result = REnvironment(((Function const&)e).environment());
 		return;
 	}
 	result = Null::Singleton();
@@ -868,12 +868,12 @@ void deparse(Thread& thread, Value const* args, Value& result) {
 
 void substitute(Thread& thread, Value const* args, Value& result) {
 	Value v = args[0];
-	while(v.isPromise()) v = Function(v).prototype()->expression;
+	while(v.isPromise()) v = ((Function const&)v).prototype()->expression;
 	
 	if(isSymbol(v)) {
 		Value const& r = thread.frame.environment->getRecursive(SymbolStr(v));
 		if(!r.isNil()) v = r;
-		while(v.isPromise()) v = Function(v).prototype()->expression;
+		while(v.isPromise()) v = ((Function const&)v).prototype()->expression;
 	}
  	result = v;
 }

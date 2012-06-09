@@ -50,7 +50,7 @@ extern Instruction const* strip_op(Thread& thread, Instruction const& inst) ALWA
 
 Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const* a, Environment* env, int64_t index) {
 	if(a->isPromise()) {
-		Function f(*a);
+		Function const& f = (Function const&)(*a);
 		assert(f.environment()->DynamicScope());
 		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), env, index, &inst);
 	} else {
@@ -60,11 +60,11 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 
 Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, String name) {
 	if(a->isPromise()) {
-		Function f(*a);
+		Function const& f = (Function const&)(*a);
 		assert(f.environment()->DynamicScope());
 		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), f.environment(), name, &inst);
 	} else if(a->isDefault()) {
-		Function f(*a);
+		Function const& f = (Function const&)(*a);
 		assert(f.environment());
 		return buildStackFrame(thread, f.environment(), f.prototype(), f.environment(), name, &inst);
 	} else {
@@ -86,7 +86,7 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
 	if(!f.isFunction())
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
-	Function func(f);
+	Function const& func = (Function const&)f;
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
 	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
@@ -99,7 +99,7 @@ Instruction const* ncall_op(Thread& thread, Instruction const& inst) {
 	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
 	if(!f.isFunction())
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
-	Function func(f);
+	Function const& func = (Function const&)f;
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
 	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
@@ -575,7 +575,10 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* function_op(Thread& thread, Instruction const& inst) {
-	OUT(thread, inst.c) = Function(thread.frame.prototype->prototypes[inst.a], thread.frame.environment);
+	OPERAND(function, inst.a); FORCE(function, inst.a);
+	Value& out = OUT(thread, inst.c);
+	out.header = function.header;
+	out.p = (void*)thread.frame.environment;
 	return &inst+1;
 }
 
@@ -776,10 +779,6 @@ void State::interpreter_init(Thread& thread) {
 #ifdef USE_THREADED_INTERPRETER
 	interpret(thread, 0);
 #endif
-}
-
-Value Thread::eval(Function const& function) {
-	return eval(function.prototype(), function.environment());
 }
 
 Value Thread::eval(Prototype const* prototype) {
