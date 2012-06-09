@@ -204,7 +204,7 @@ template<class D>
 void Insert(Thread& thread, D const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
 	if((length > 0 && srcIndex+length > src.length) || dstIndex+length > dst.length)
 		_error("insert index out of bounds");
-	memcpy(dst.v()+dstIndex, src.v()+srcIndex, length*src.width);
+	memcpy(dst.v()+dstIndex, src.v()+srcIndex, length*sizeof(typename D::Element));
 }
 
 template<class S, class D>

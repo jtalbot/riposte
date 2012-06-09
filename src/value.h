@@ -76,6 +76,8 @@ struct Value {
 	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isCharacter() || (isList() && length==0); }
 	bool isConcrete() const { return type > Type::Dotdot; }
 
+	bool isScalar() const { return length == 1; }
+
 	template<class T> T& scalar() { throw "not allowed"; }
 	template<class T> T const& scalar() const { throw "not allowed"; }
 
@@ -110,20 +112,23 @@ class Environment;
 
 template<Type::Enum VType, typename ElementType, bool Recursive>
 struct Vector : public Value {
+
 	typedef ElementType Element;
-	static const bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive;
-	static const int64_t width = sizeof(ElementType); 
 	static const Type::Enum VectorType = VType;
+	static const bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive;
 
-	bool isScalar() const {
-		return length == 1;
+	struct Inner : public gc {
+		ElementType data[];
+	};
+
+	ElementType const* v() const { 
+		return (canPack && isScalar()) ? 
+			&Value::scalar<ElementType>() : ((Inner*)p)->data; 
 	}
-
-	ElementType& s() { return canPack ? Value::scalar<ElementType>() : *(ElementType*)p; }
-	ElementType const& s() const { return canPack ? Value::scalar<ElementType>() : *(ElementType const*)p; }
-
-	ElementType const* v() const { return (canPack && isScalar()) ? &Value::scalar<ElementType>() : (ElementType const*)p; }
-	ElementType* v() { return (canPack && isScalar()) ? &Value::scalar<ElementType>() : (ElementType*)p; }
+	ElementType* v() { 
+		return (canPack && isScalar()) ? 
+			&Value::scalar<ElementType>() : ((Inner*)p)->data; 
+	}
 	
 	ElementType& operator[](int64_t index) { return v()[index]; }
 	ElementType const& operator[](int64_t index) const { return v()[index]; }
@@ -135,8 +140,11 @@ struct Vector : public Value {
 			// round l up to nearest even number so SSE can work on tail region
 			l += (int64_t)((uint64_t)l & 1);
 			int64_t length_aligned = (l < 128) ? (l + 1) : l;
-			v.p = Recursive ? new (GC) Element[length_aligned] :
-				new (PointerFreeGC) Element[length_aligned];
+			//v.p = Recursive ? new (GC, sizeof(Element)*length_aligned) Inner() :
+			//	new (PointerFreeGC, sizeof(Element)*length_aligned) Inner();
+			v. p = Recursive ?
+					GC_malloc(sizeof(Element)*length_aligned) :
+					GC_malloc_atomic(sizeof(Element)*length_aligned);
 			assert(l < 128 || (0xF & (int64_t)v.p) == 0);
 			if( (0xF & (int64_t)v.p) != 0)
 				v.p =  (char*)v.p + 0x8;
@@ -149,7 +157,9 @@ struct Vector : public Value {
 		if(canPack)
 			v.scalar<ElementType>() = d;
 		else {
-			v.p = Recursive ? new (GC) Element[4] : new (PointerFreeGC) Element[4];
+			v.p = Recursive ?
+					GC_malloc(sizeof(Element)*4) :
+					GC_malloc_atomic(sizeof(Element)*4);
 			*(Element*)v.p = d;
 		}
 	}

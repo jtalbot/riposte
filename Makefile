@@ -2,7 +2,7 @@
 UNAME := $(shell uname -s)
  
 CXX := g++ 
-CXXFLAGS := -Wall -DRIPOSTE_DISABLE_TRACING -msse4.1
+CXXFLAGS := -Wall -msse4.1
 LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
 
 ifeq ($(UNAME),Linux)
