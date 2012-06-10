@@ -48,7 +48,7 @@ std::string stringifyVector(State const& state, T const& v) {
 	std::string result = "";
 	int64_t length = v.length;
 	if(length == 0)
-		return std::string(Type::toString(v.VectorType)) + "(0)";
+		return std::string(Type::toString(v.ValueType)) + "(0)";
 
 	bool dots = false;
 	if(length > 100) { dots = true; length = 100; }
@@ -79,19 +79,19 @@ std::string stringify(State const& state, Value const& value) {
 		case Type::Null:
 			return "NULL";
 		case Type::Raw:
-			return stringifyVector(state, Raw(value));
+			return stringifyVector(state, (Raw const&)value);
 		case Type::Logical:
-			return stringifyVector(state, Logical(value));
+			return stringifyVector(state, (Logical const&)value);
 		case Type::Integer:
-			return stringifyVector(state, Integer(value));
+			return stringifyVector(state, (Integer const&)value);
 		case Type::Double:
-			return stringifyVector(state, Double(value));
+			return stringifyVector(state, (Double const&)value);
 		case Type::Character:
-			return stringifyVector(state, Character(value));
+			return stringifyVector(state, (Character const&)value);
 		
 		case Type::List:
 		{
-			List v(value);
+			List const& v = (List const&)value;
 
 			int64_t length = v.length;
 			if(length == 0) return "list()";
@@ -108,18 +108,18 @@ std::string stringify(State const& state, Value const& value) {
 		}
 		case Type::Function:
 		{
-			result = state.externStr(Function(value).prototype()->string);
+			result = state.externStr(((Function const&)value).prototype()->string);
 			return result;
 		}
 		case Type::Environment:
 		{
-			Environment* env = (REnvironment(value)).ptr();
-			if(env == state.global)
+			REnvironment const& renv = (REnvironment const&)value;
+			if(renv.environment() == state.global)
 				result = std::string("environment <global>");
 			else
-				result = std::string("environment <") + intToHexStr((int64_t)env) + ">";
+				result = std::string("environment <") + intToHexStr((int64_t)renv.environment()) + ">";
 			result = result + "\nVariables:\n";
-			Dictionary* d = REnvironment(value).ptr();
+			Dictionary* d = renv.environment();
 			for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
 				result = result + "\t" + state.externStr(i.string())
 						+ ":\t" + state.stringify(i.value()) + "\n";
@@ -194,7 +194,7 @@ std::string deparseVectorBody(State const& state, T const& v) {
 
 template<class T>
 std::string deparseVector(State const& state, T const& v) {
-	if(v.length == 0) return std::string(Type::toString(v.VectorType)) + "(0)";
+	if(v.length == 0) return std::string(Type::toString(v.ValueType)) + "(0)";
 	if(v.length == 1) return deparseVectorBody(state, v);
 	else return "c(" + deparseVectorBody(state, v) + ")";
 }
@@ -214,11 +214,11 @@ std::string deparse(State const& state, Value const& value) {
 	{
 		case Type::Null:
 			return "NULL";
-		#define CASE(Name) case Type::Name: return deparseVector(state, Name(value)); break;
+		#define CASE(Name) case Type::Name: return deparseVector(state, (Name const&)value); break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
 		case Type::Function:
-			return state.externStr(Function(value).prototype()->string);
+			return state.externStr(((Function const&)value).prototype()->string);
 		case Type::Environment:
 			return "environment";
 		case Type::Object:

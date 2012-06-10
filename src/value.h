@@ -77,6 +77,8 @@ struct Value {
 	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isCharacter() || (isList() && length==0); }
 	bool isConcrete() const { return type > Type::Dotdot; }
 
+	bool isScalar() const { return length == 1; }
+
 	template<class T> T& scalar() { throw "not allowed"; }
 	template<class T> T const& scalar() const { throw "not allowed"; }
 
@@ -96,9 +98,9 @@ template<> inline String const& Value::scalar<String>() const { return s; }
 
 
 // Name-value Pairs are used throughout the code...
-struct Pair : public gc { String n; Value v; };
+struct Pair { String n; Value v; };
 // Not the same as the publically visible PairList which is just an S3 class
-typedef std::vector<Pair, traceable_allocator<Pair> > PairList;
+typedef std::vector<Pair> PairList;
 
 //
 // Value type implementations
@@ -111,37 +113,44 @@ class Environment;
 
 template<Type::Enum VType, typename ElementType, bool Recursive>
 struct Vector : public Value {
-	typedef ElementType Element;
-	static const bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive;
-	static const int64_t width = sizeof(ElementType); 
-	static const Type::Enum VectorType = VType;
 
-	bool isScalar() const {
-		return length == 1;
+	typedef ElementType Element;
+	static const Type::Enum ValueType = VType;
+	static const bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive;
+
+	struct Inner {
+		int64_t length;
+		int64_t padding;
+		ElementType data[];
+		//virtual void visit() const;
+		//Inner(int64_t length) : length(length) {}
+	};
+
+	ElementType const* v() const { 
+		return (canPack && isScalar()) ? 
+			&Value::scalar<ElementType>() : ((Inner*)p)->data; 
+	}
+	ElementType* v() { 
+		return (canPack && isScalar()) ? 
+			&Value::scalar<ElementType>() : ((Inner*)p)->data; 
 	}
 
-	ElementType& s() { return canPack ? Value::scalar<ElementType>() : *(ElementType*)p; }
-	ElementType const& s() const { return canPack ? Value::scalar<ElementType>() : *(ElementType const*)p; }
-
-	ElementType const* v() const { return (canPack && isScalar()) ? &Value::scalar<ElementType>() : (ElementType const*)p; }
-	ElementType* v() { return (canPack && isScalar()) ? &Value::scalar<ElementType>() : (ElementType*)p; }
+	Inner* inner() const {
+		return (length > canPack) ? (Inner*)p : 0;
+	}
 	
 	ElementType& operator[](int64_t index) { return v()[index]; }
 	ElementType const& operator[](int64_t index) const { return v()[index]; }
 
-	explicit Vector(int64_t length=0) {
-		Init(*this, length);
-	}
-
 	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
-		Value::Init(v, VectorType, length);
+		Value::Init(v, ValueType, length);
 		if((canPack && length > 1) || (!canPack && length > 0)) {
 			int64_t l = length;
 			// round l up to nearest even number so SSE can work on tail region
 			l += (int64_t)((uint64_t)l & 1);
 			int64_t length_aligned = (l < 128) ? (l + 1) : l;
-			v.p = Recursive ? new (GC) Element[length_aligned] :
-				new (PointerFreeGC) Element[length_aligned];
+			//v.p = new (sizeof(Element)*length_aligned) Inner(length);
+			v.p = malloc(sizeof(Element)*length_aligned + sizeof(Inner));
 			assert(l < 128 || (0xF & (int64_t)v.p) == 0);
 			if( (0xF & (int64_t)v.p) != 0)
 				v.p =  (char*)v.p + 0x8;
@@ -150,24 +159,21 @@ struct Vector : public Value {
 	}
 
 	static void InitScalar(Value& v, ElementType const& d) {
-		Value::Init(v, VectorType, 1);
+		Value::Init(v, ValueType, 1);
 		if(canPack)
 			v.scalar<ElementType>() = d;
 		else {
-			v.p = Recursive ? new (GC) Element[4] : new (PointerFreeGC) Element[4];
-			*(Element*)v.p = d;
+			//Inner* i = new (sizeof(Element)*4) Inner(1);
+			//i->data[0] = d;
+			//v.p = i;
+			Inner* i = (Inner*)malloc(sizeof(Element)*4 + sizeof(Inner));
+			i->data[0] = d;
+			v.p = i;
+			//i->length = 1;
+			//v.p = malloc(sizeof(Element)*4) :
+			//		malloc(sizeof(Element)*4);
+			//*(Element*)v.p = d;
 		}
-	}
-
-	explicit Vector(Value const& v) {
-		assert(v.type == VType);
-		type = VType;
-		length = v.length;
-		p = v.p;
-	}
-
-	operator Value() const {
-		return (Value&)*this;
 	}
 };
 
@@ -179,8 +185,7 @@ union _doublena {
 
 #define VECTOR_IMPL(Name, Element, Recursive) 				\
 struct Name : public Vector<Type::Name, Element, Recursive> { 			\
-	explicit Name(int64_t length=0) : Vector<Type::Name, Element, Recursive>(length) {} 	\
-	explicit Name(Value const& v) : Vector<Type::Name, Element, Recursive>(v) {} 	\
+	explicit Name(int64_t length=0) { Init(*this, length); } 	\
 	static Name c() { Name c(0); return c; } \
 	static Name c(Element v0) { Name c(1); c[0] = v0; return c; } \
 	static Name c(Element v0, Element v1) { Name c(2); c[0] = v0; c[1] = v1; return c; } \
@@ -190,7 +195,6 @@ struct Name : public Vector<Type::Name, Element, Recursive> { 			\
 	static Name NA() { static Name na = Name::c(NAelement); return na; }  \
 	static Name& Init(Value& v, int64_t length) { return (Name&)Vector<Type::Name, Element, Recursive>::Init(v, length); } \
 	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); }\
-	Name Clone() const { Name c(length); memcpy(c.v(), v(), length*width); return c; }
 /* note missing }; */
 
 VECTOR_IMPL(Null, unsigned char, false)  
@@ -259,65 +263,69 @@ VECTOR_IMPL(List, Value, true)
 	static bool isInfinite(Value const& c) { return false; }
 };
 
+/*template<Type::Enum VType, typename ElementType, bool Recursive>
+void Vector<VType, ElementType, Recursive>::Inner::visit() const {}
 
+template<>
+void Vector<Type::List, Value, true>::Inner::visit() const;
+*/
 struct Future : public Value {
-	static void Init(Value & f, Type::Enum typ,int64_t length,IRef ref) {
+	static const Type::Enum ValueType = Type::Future;
+	static Future& Init(Value& f, Type::Enum typ,int64_t length,IRef ref) {
 		Value::Init(f,Type::Future,length);
 		f.future.ref = ref;
 		f.future.typ = typ;
+		return (Future&)f;
 	}
-	
-	Future Clone() const { throw("shouldn't be cloning futures"); }
 };
 
-
-class Function {
-private:
-	Prototype* proto;
-	Environment* env;
-public:
-	explicit Function(Prototype* proto, Environment* env)
-		: proto(proto), env(env) {}
-	
-	explicit Function(Value const& v) {
-		assert(v.isFunction() || v.isPromise() || v.isDefault());
-		proto = (Prototype*)(v.length << 4);
-		env = (Environment*)v.p;
-	}
-
-	operator Value() const {
-		Value v;
+struct Function : public Value {
+	static const Type::Enum ValueType = Type::Function;
+	static Function& Init(Value& v, Prototype* proto, Environment* env) {
 		v.header = (int64_t)proto + Type::Function;
 		v.p = env;
-		return v;
+		return (Function&)v;
 	}
 
-	Value AsPromise() const {
-		Value v;
+	Prototype* prototype() const { return (Prototype*)(length << 4); }
+	Environment* environment() const { return (Environment*)p; }
+};
+
+struct Promise : public Value {
+	static const Type::Enum ValueType = Type::Promise;
+	static Promise& Init(Value& v, Prototype* proto, Environment* env) {
 		v.header = (int64_t)proto + Type::Promise;
 		v.p = env;
-		return v;
+		return (Promise&)v;
 	}
 
-	Value AsDefault() const {
-		Value v;
+	Prototype* prototype() const { return (Prototype*)(length << 4); }
+	Environment* environment() const { return (Environment*)p; }
+};
+
+struct Default : public Value {
+	static const Type::Enum ValueType = Type::Default;
+	static Default& Init(Value& v, Prototype* proto, Environment* env) {
 		v.header = (int64_t)proto + Type::Default;
 		v.p = env;
-		return v;
+		return (Default&)v;
 	}
 
-	Prototype* prototype() const { return proto; }
-	Environment* environment() const { return env; }
-
-	Function Clone() const { return *this; }
+	Prototype* prototype() const { return (Prototype*)(length << 4); }
+	Environment* environment() const { return (Environment*)p; }
 };
 
 class Dictionary : public HeapObject {
 protected:
 	static const uint64_t inlineSize = 8;
 	uint64_t size, load;
-	Pair* d;
-	Pair inlineDict[inlineSize];
+	
+	struct Inner : public HeapObject {
+		Pair d[];
+		virtual void visit() const;
+	};
+
+	Inner* d;
 
 	uint64_t hash(String s) const ALWAYS_INLINE { return (uint64_t)s>>3; }
 
@@ -327,20 +335,20 @@ protected:
 	// is necessary for compiler optimizations to eliminate expensive control flow.
 	Pair* find(String name, bool& success) const ALWAYS_INLINE {
 		uint64_t i = hash(name) & (size-1);
-		if(__builtin_expect(d[i].n == name, true)) {
+		if(__builtin_expect(d->d[i].n == name, true)) {
 			success = true;
-			return &d[i];
+			return &d->d[i];
 		}
 		uint64_t j = 0;
-		while(d[i].n != Strings::NA) {
+		while(d->d[i].n != Strings::NA) {
 			i = (i+(++j)) & (size-1);
-			if(__builtin_expect(d[i].n == name, true)) {
+			if(__builtin_expect(d->d[i].n == name, true)) {
 				success = true;
-				return &d[i];
+				return &d->d[i];
 			}
 		}
 		success = false;
-		return &d[i];
+		return &d->d[i];
 	}
 
 	// Returns the location where variable `name` should be inserted.
@@ -348,41 +356,41 @@ protected:
 	// Used for rehash and insert where this is known to be true.
 	Pair* slot(String name) const ALWAYS_INLINE {
 		uint64_t i = hash(name) & (size-1);
-		if(__builtin_expect(d[i].n == Strings::NA, true)) {
-			return &d[i];
+		if(__builtin_expect(d->d[i].n == Strings::NA, true)) {
+			return &d->d[i];
 		}
 		uint64_t j = 0;
-		while(d[i].n != Strings::NA) {
+		while(d->d[i].n != Strings::NA) {
 			i = (i+(++j)) & (size-1);
 		}
-		return &d[i];
+		return &d->d[i];
 	}
 
 	void rehash(uint64_t s) {
 		uint64_t old_size = size;
 		uint64_t old_load = load;
-		Pair* old_d = d;
+		Inner* old_d = d;
 
 		s = nextPow2(s);
 		if(s <= size) return; // should rehash on shrinking sometimes, when?
 
 		size = s;
-		d = new (GC) Pair[s];
+		d = new (sizeof(Pair)*s) Inner();
 		clear();
 		
 		// copy over previous populated values...
 		if(old_load > 0) {
 			for(uint64_t i = 0; i < old_size; i++) {
-				if(old_d[i].n != Strings::NA) {
+				if(old_d->d[i].n != Strings::NA) {
 					load++;
-					*slot(old_d[i].n) = old_d[i];
+					*slot(old_d->d[i].n) = old_d->d[i];
 				}
 			}
 		}
 	}
 
 public:
-	Dictionary() : size(inlineSize), d(inlineDict) {
+	Dictionary() : size(inlineSize), d(new (sizeof(Pair) * 8) Inner()) {
 		clear();
 	}
 
@@ -421,7 +429,7 @@ public:
 
 	void clear() {
 		load = 0;
-		memset(d, 0, sizeof(Pair)*size); 
+		memset(d->d, 0, sizeof(Pair)*size); 
 	}
 
 	// clone with room for extra elements
@@ -431,9 +439,9 @@ public:
 		// copy over elements
 		if(load > 0) {
 			for(uint64_t i = 0; i < size; i++) {
-				if(d[i].n != Strings::NA) {
+				if(d->d[i].n != Strings::NA) {
 					clone->load++;
-					*clone->slot(d[i].n) = d[i];
+					*clone->slot(d->d[i].n) = d->d[i];
 				}
 			}
 		}
@@ -447,12 +455,12 @@ public:
 		const_iterator(Dictionary const* d, int64_t idx) {
 			this->d = d;
 			i = std::max((int64_t)0, std::min((int64_t)d->size, idx));
-			while(d->d[i].n == Strings::NA && i < (int64_t)d->size) i++;
+			while(d->d->d[i].n == Strings::NA && i < (int64_t)d->size) i++;
 		}
-		String string() const { return d->d[i].n; }	
-		Value const& value() const { return d->d[i].v; }
+		String string() const { return d->d->d[i].n; }	
+		Value const& value() const { return d->d->d[i].v; }
 		const_iterator& operator++() {
-			while(d->d[++i].n == Strings::NA && i < (int64_t)d->size);
+			while(d->d->d[++i].n == Strings::NA && i < (int64_t)d->size);
 			return *this;
 		}
 		bool operator==(const_iterator const& o) {
@@ -481,19 +489,20 @@ public:
 class Object : public Value {
 	
 private:
-	struct Inner : public gc {
+	struct Inner {
 		Value base;
 		Dictionary* d;
 		Inner(Value const& base, Dictionary* d) : base(base), d(d) {}
 	};
 
 public:
-
+	static const Type::Enum ValueType = Type::Object;
+	
 	Object() {}
 	
 	static void Init(Object& o, Value const& base, Dictionary* dictionary=0) {
 		// Create inner first works if base and o overlap.
-		Inner* p = new (GC) Inner(base, dictionary == 0 ? new (GC) Dictionary() : dictionary);
+		Inner* p = new Inner(base, dictionary == 0 ? new Dictionary() : dictionary);
 		Value::Init(o, Type::Object, 0);
 		o.p = p;
 	}
@@ -589,28 +598,18 @@ public:
 	virtual void visit() const;
 };
 
-class REnvironment {
-private:
-	Environment* env;
-public:
-	explicit REnvironment(Environment* env) : env(env) {
-	}
-	explicit REnvironment(Value const& v) {
-		assert(v.type == Type::Environment);
-		env = (Environment*)v.p;
-	}
+struct REnvironment : public Value {
+	static const Type::Enum ValueType = Type::Environment;
 	
-	operator Value() const {
-		Value v;
+	static REnvironment& Init(Value& v, Environment* env) {
 		Value::Init(v, Type::Environment, 0);
 		v.p = (void*)env;
-		return v;
+		return (REnvironment&)v;
 	}
-	Environment* ptr() const {
-		return env;
+	
+	Environment* environment() const {
+		return (Environment*)p;
 	}
-
-	REnvironment Clone() const { return *this; }
 };
 
 #endif

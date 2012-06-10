@@ -15,7 +15,7 @@
 
 template<typename T>
 T const& Cast(Value const& v) {
-	if(v.type != T::VectorType) _error("incorrect type passed to internal function");
+	if(v.type != T::ValueType) _error("incorrect type passed to internal function");
 	return (T const&)v;
 }
 
@@ -36,7 +36,7 @@ TYPES(CASE)
 }
 
 Double Random(Thread& thread, int64_t const length) {
-	Thread::RandomSeed& r = Thread::seed[thread.index];
+	//Thread::RandomSeed& r = Thread::seed[thread.index];
 	Double o(length);
 	for(int64_t i = 0; i < length; i++) {
 		/*r.v[0] = r.v[0] * r.m[0] + r.a[0];
@@ -68,9 +68,9 @@ void cat(Thread& thread, Value const* args, Value& result) {
 
 void remove(Thread& thread, Value const* args, Value& result) {
 	Character const& a = Cast<Character>(args[0]);
-	REnvironment e(args[-1]);
+	REnvironment const& e = Cast<REnvironment>(args[-1]);
 	for(int64_t i = 0; i < a.length; i++) {
-		e.ptr()->remove(a[i]);
+		e.environment()->remove(a[i]);
 	}
 	result = Null::Singleton();
 }
@@ -204,7 +204,7 @@ template<class D>
 void Insert(Thread& thread, D const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
 	if((length > 0 && srcIndex+length > src.length) || dstIndex+length > dst.length)
 		_error("insert index out of bounds");
-	memcpy(dst.v()+dstIndex, src.v()+srcIndex, length*src.width);
+	memcpy(dst.v()+dstIndex, src.v()+srcIndex, length*sizeof(typename D::Element));
 }
 
 template<class S, class D>
@@ -265,7 +265,7 @@ Type::Enum cTypeCast(Type::Enum s, Type::Enum t)
 int64_t unlistLength(Thread& thread, int64_t recurse, Value a) {
 	if(a.isObject()) a = ((Object&)a).base();
 	if(recurse > 0 && a.isList()) {
-		List l(a);
+		List const& l = (List const&)a;
 		int64_t t = 0;
 		for(int64_t i = 0; i < l.length; i++) 
 			t += unlistLength(thread, recurse-1, l[i]);
@@ -278,7 +278,7 @@ int64_t unlistLength(Thread& thread, int64_t recurse, Value a) {
 Type::Enum unlistType(Thread& thread, int64_t recurse, Value a) {
 	if(a.isObject()) a = ((Object&)a).base();
 	if(a.isList()) {
-		List l(a);
+		List const& l = (List const&)a;
 		Type::Enum t = Type::Null;
 		for(int64_t i = 0; i < l.length; i++) 
 			t = cTypeCast(recurse > 0 ? unlistType(thread, recurse-1, l[i]) : l[i].type, t);
@@ -292,7 +292,7 @@ template< class T >
 void unlist(Thread& thread, int64_t recurse, Value a, T& out, int64_t& start) {
 	if(a.isObject()) a = ((Object&)a).base();
 	if(recurse > 0 && a.isList()) {
-		List l(a);
+		List const& l = (List const&)a;
 		for(int64_t i = 0; i < l.length; i++) 
 			unlist(thread, recurse-1, l[i], out, start);
 		return;
@@ -305,7 +305,7 @@ template<>
 void unlist<List>(Thread& thread, int64_t recurse, Value a, List& out, int64_t& start) {
 	if(a.isObject()) a = ((Object&)a).base();
 	if(recurse > 0 && a.isList()) {
-		List l(a);
+		List const& l = (List const&)a;
 		for(int64_t i = 0; i < l.length; i++) 
 			unlist(thread, recurse-1, l[i], out, start);
 		return;
@@ -519,7 +519,7 @@ void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out) {
 		}
 	}
 	else if(i.isLogical()) {
-		Logical index = Logical(i);
+		Logical const& index = (Logical const&)i;
 		switch(a.type) {
 			case Type::Null: out = Null::Singleton(); break;
 #define CASE(Name) case Type::Name: SubsetLogical<Name>::eval(thread, (Name const&)a, index, out); break;
@@ -622,7 +622,7 @@ void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i
 		};
 	}
 	else if(i.isLogical()) {
-		Logical index = Logical(i);
+		Logical const& index = (Logical const&)i;
 		switch(a.type) {
 #define CASE(Name) case Type::Name: SubsetAssignLogical<Name>::eval(thread, (Name const&)a, clone, index, As<Name>(thread, b), c); break;
 					 VECTOR_TYPES_NOT_NULL(CASE)
@@ -665,7 +665,8 @@ void length(Thread& thread, Value const* args, Value& result) {
 }
 
 void eval_fn(Thread& thread, Value const* args, Value& result) {
-	result = thread.eval(Compiler::compilePromise(thread, args[0]), REnvironment(args[-1]).ptr());
+	result = thread.eval(Compiler::compilePromise(thread, args[0]), 
+			Cast<REnvironment>(args[-1]).environment());
 }
 
 struct mapplyargs {
@@ -796,14 +797,14 @@ void source(Thread& thread, Value const* args, Value& result) {
 void environment(Thread& thread, Value const* args, Value& result) {
 	Value e = args[0];
 	if(e.isFunction()) {
-		result = REnvironment(Function(e).environment());
+		REnvironment::Init(result, ((Function const&)e).environment());
 		return;
 	}
 	result = Null::Singleton();
 }
 
 void newenv(Thread& thread, Value const* args, Value& result) {
-	result = REnvironment(new Environment());
+	REnvironment::Init(result, new Environment());
 }
 
 // TODO: parent.frame and sys.call need to ignore frames for promises, etc. We may need
@@ -815,7 +816,7 @@ void parentframe(Thread& thread, Value const* args, Value& result) {
 		env = env->DynamicScope();
 		i--;
 	}
-	result = REnvironment(env);
+	REnvironment::Init(result, env);
 }
 
 void syscall(Thread& thread, Value const* args, Value& result) {
@@ -868,12 +869,12 @@ void deparse(Thread& thread, Value const* args, Value& result) {
 
 void substitute(Thread& thread, Value const* args, Value& result) {
 	Value v = args[0];
-	while(v.isPromise()) v = Function(v).prototype()->expression;
+	while(v.isPromise()) v = ((Function const&)v).prototype()->expression;
 	
 	if(isSymbol(v)) {
 		Value const& r = thread.frame.environment->getRecursive(SymbolStr(v));
 		if(!r.isNil()) v = r;
-		while(v.isPromise()) v = Function(v).prototype()->expression;
+		while(v.isPromise()) v = ((Function const&)v).prototype()->expression;
 	}
  	result = v;
 }
@@ -884,10 +885,10 @@ void type_of(Thread& thread, Value const* args, Value& result) {
 
 void exists(Thread& thread, Value const* args, Value& result) {
 	Character c = As<Character>(thread, args[0]);
-	REnvironment e(args[-1]);
+	REnvironment const& e = Cast<REnvironment>(args[-1]);
 	Logical l = As<Logical>(thread, args[-2]);
 
-	Value const& v = l[0] ? e.ptr()->getRecursive(c[0]) : e.ptr()->get(c[0]);
+	Value const& v = l[0] ? e.environment()->getRecursive(c[0]) : e.environment()->get(c[0]);
 	if(v.isNil())
 		result = Logical::False();
 	else
@@ -896,10 +897,10 @@ void exists(Thread& thread, Value const* args, Value& result) {
 
 void get(Thread& thread, Value const* args, Value& result) {
 	Character c = As<Character>(thread, args[0]);
-	REnvironment e(args[-1]);
+	REnvironment const& e = Cast<REnvironment>(args[-1]);
 	Logical l = As<Logical>(thread, args[-2]);
 
-	result = l[0] ? e.ptr()->getRecursive(c[0]) : e.ptr()->get(c[0]);
+	result = l[0] ? e.environment()->getRecursive(c[0]) : e.environment()->get(c[0]);
 }
 
 #include <sys/time.h>

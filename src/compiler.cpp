@@ -155,6 +155,16 @@ Compiler::Operand Compiler::placeInRegister(Operand r) {
 	if(r.loc != REGISTER && r.loc != INVALID) {
 		kill(r);
 		Operand t = allocRegister();
+		emit(ByteCode::fastmov, r, 0, t);
+		return t;
+	}
+	return r;
+}
+
+Compiler::Operand Compiler::forceInRegister(Operand r) {
+	if(r.loc != INVALID) {
+		kill(r);
+		Operand t = allocRegister();
 		emit(ByteCode::mov, r, 0, t);
 		return t;
 	}
@@ -173,7 +183,7 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 			p.v = call[i];
 			dotIndex = i-1;
 		} else if(isCall(call[i]) || isSymbol(call[i])) {
-			p.v = Function(Compiler::compilePromise(thread, call[i]),NULL).AsPromise();
+			Promise::Init(p.v, Compiler::compilePromise(thread, call[i]),NULL);
 		} else {
 			p.v = call[i];
 		}
@@ -239,16 +249,15 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 	String func = SymbolStr(call[0]);
 	// list is the only built in function that handles ... or named parameters
-	if(func == Strings::list)
+	// we only handle the list(...) case through an op for now
+	if(func == Strings::list && call.length == 2 
+		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
 	{
-		// we only handle the list(...) case through an op for now
-		if(call.length != 2 || !isSymbol(call[1]) || SymbolStr(call[1]) != Strings::dots)
-			return compileFunctionCall(call, names, code);
 		Operand result = allocRegister();
 		Operand counter = compileConstant(Integer::c(0), code);
 		Operand storage = allocRegister();
 		kill(storage); kill(counter);
-		emit(ByteCode::list, counter, storage, result); 
+		emit(ByteCode::dotslist, counter, storage, result); 
 		return result;
 	}
 
@@ -337,7 +346,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		// of the original expression, not the RHS of the inside out expression.
 		Value value = call[2];
 		while(isCall(dest)) {
-			List c = List(((Object const&)dest).base());
+			List const& c = (List const&)((Object const&)dest).base();
 			List n(c.length+1);
 
 			for(int64_t i = 0; i < c.length; i++) { n[i] = c[i]; }
@@ -353,7 +362,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			else {
 				if(hasNames(dest)) {
 					Value names = getNames((Object const&)dest);
-					for(int64_t i = 0; i < c.length; i++) { nnames[i] = Character(names)[i]; }
+					for(int64_t i = 0; i < c.length; i++) { nnames[i] = ((Character const&)names)[i]; }
 				} else {
 					for(int64_t i = 0; i < c.length; i++) { nnames[i] = Strings::empty; }
 				}
@@ -390,9 +399,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		//compile the default parameters
 		assert(call[1].isObject());
-		List c = List(((Object const&)call[1]).base());
+		List const& c = (List const&)((Object const&)call[1]).base();
 		Character names = hasNames(call[1]) ? 
-			Character(getNames((Object&)call[1])) :
+			(Character const&)getNames((Object&)call[1]) :
 			Character(0);
 		
 		PairList parameters;
@@ -400,7 +409,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			Pair p;
 			if(names.length > 0) p.n = names[i]; else p.n = Strings::empty;
 			if(!c[i].isNil()) {
-				p.v = Function(compilePromise(thread, c[i]),NULL).AsDefault();
+				Default::Init(p.v, compilePromise(thread, c[i]),NULL);
 			}
 			else {
 				p.v = c[i];
@@ -418,10 +427,12 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		for(int64_t i = 0; i < (int64_t)parameters.size(); i++) 
 			if(parameters[i].n == Strings::dots) functionCode->dotIndex = i;
 
-		code->prototypes.push_back(functionCode);
+		Value function;
+		Function::Init(function, functionCode, 0);
+		Operand funcOp = compileConstant(function, code);
 	
 		Operand reg = allocRegister();	
-		emit(ByteCode::function, code->prototypes.size()-1, 0, reg);
+		emit(ByteCode::function, funcOp, 0, reg);
 		return reg;
 	} 
 	else if(func == Strings::returnSym)
@@ -443,6 +454,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand loop_variable = Operand(MEMORY, SymbolStr(call[1]));
 		Operand loop_vector = compile(call[2], code);
 		Operand loop_counter = allocRegister();	// save space for loop counter
+		Operand loop_limit = allocRegister(); // save space for the loop limit
 
 		emit(ByteCode::forbegin, loop_variable, loop_vector, loop_counter);
 		emit(ByteCode::jmp, 0, 0, 0);
@@ -459,7 +471,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 		ir[beginbody-1].a.i = endbody-beginbody+4;
 
-		kill(body); kill(loop_variable); kill(loop_counter); kill(loop_vector);
+		kill(body); kill(loop_limit); kill(loop_variable); 
+		kill(loop_counter); kill(loop_vector);
 		return compileConstant(Null::Singleton(), code);
 	} 
 	else if(func == Strings::whileSym)
@@ -593,6 +606,20 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::paren) 
 	{
 		return compile(call[1], code);
+	}
+	else if(func == Strings::list) 
+	{
+		Operand f, r;
+		for(int64_t i = 1; i < call.length; i++) {
+			Operand t = forceInRegister(compile(call[i], code));
+			if(f.loc == INVALID) { f = t; r = t; }
+			else { assert(t.i == r.i+1); r = t; }
+		}
+		if(call.length > 1)
+			kill(f);
+		Operand result = allocRegister();
+		emit(ByteCode::list, f, Operand((int64_t)call.length-1), result);
+		return result;
 	}
  
 	// Trinary operators
@@ -743,7 +770,7 @@ Compiler::Operand Compiler::compile(Value const& expr, Prototype* code) {
 				else if(isCall(o)) {
 					assert(o.base().isList());
 					return compileCall((List const&)o.base(), 
-						hasNames(o) ? Character(getNames(o)) : Character(0), code);
+						hasNames(o) ? (Character const&)getNames(o) : Character(0), code);
 				}
 				else {
 					return compileConstant(expr, code);

@@ -254,8 +254,6 @@ main(int argc, char** argv)
 	d_message(1,NULL,"Command option processing complete");
 
 	/* start garbage collector */
-	GC_INIT();
-	GC_disable();
 #ifdef USE_CALLGRIND
 	CALLGRIND_START_INSTRUMENTATION
 #endif

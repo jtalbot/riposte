@@ -18,7 +18,7 @@
 Thread::RandomSeed Thread::seed[100];
 
 Thread::Thread(State& state, uint64_t index) : state(state), index(index), steals(1) {
-	registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
+	registers = new Value[DEFAULT_NUM_REGISTERS];
 	this->base = registers + DEFAULT_NUM_REGISTERS;
 	RandomSeed& r = seed[index];
 
@@ -36,6 +36,7 @@ Thread::Thread(State& state, uint64_t index) : state(state), index(index), steal
 }
 
 extern Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* fastmov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -50,7 +51,7 @@ extern Instruction const* strip_op(Thread& thread, Instruction const& inst) ALWA
 
 Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const* a, Environment* env, int64_t index) {
 	if(a->isPromise()) {
-		Function f(*a);
+		Function const& f = (Function const&)(*a);
 		assert(f.environment()->DynamicScope());
 		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), env, index, &inst);
 	} else {
@@ -60,11 +61,11 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 
 Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, String name) {
 	if(a->isPromise()) {
-		Function f(*a);
+		Function const& f = (Function const&)(*a);
 		assert(f.environment()->DynamicScope());
 		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), f.environment(), name, &inst);
 	} else if(a->isDefault()) {
-		Function f(*a);
+		Function const& f = (Function const&)(*a);
 		assert(f.environment());
 		return buildStackFrame(thread, f.environment(), f.prototype(), f.environment(), name, &inst);
 	} else {
@@ -83,10 +84,11 @@ static Instruction const * profile_back_edge(Thread & thread, Instruction const 
 // Control flow instructions
 
 Instruction const* call_op(Thread& thread, Instruction const& inst) {
+	Heap::Global.collect(thread.state);
 	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
 	if(!f.isFunction())
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
-	Function func(f);
+	Function const& func = (Function const&)f;
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
 	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
@@ -96,10 +98,11 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* ncall_op(Thread& thread, Instruction const& inst) {
+	Heap::Global.collect(thread.state);
 	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
 	if(!f.isFunction())
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
-	Function func(f);
+	Function const& func = (Function const&)f;
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
 	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
@@ -116,7 +119,6 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	// as long as we don't return a closure...
 	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
 	if(result.isClosureSafe()) {
-		thread.environments.push_back(thread.frame.environment);
 		thread.KillEnvironment(thread.frame.environment);
 	}
 
@@ -222,15 +224,15 @@ Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
 		return &inst+(&inst+1)->a;	// offset is in following JMP, dispatch together
 	} else {
 		Element2(vec, 0, thread.frame.environment->insert((String)inst.a));
-		Value& counter = REGISTER(inst.c);
-		counter.header = vec.length;	// warning: not a valid object, but saves a shift
-		counter.i = 1;
+		Integer::InitScalar(REGISTER(inst.c), 1);
+		Integer::InitScalar(REGISTER(inst.c-1), vec.length);
 		return &inst+2;			// skip over following JMP
 	}
 }
 Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 	Value& counter = REGISTER(inst.c);
-	if(__builtin_expect((counter.i) < counter.header, true)) {
+	Value& limit = REGISTER(inst.c-1);
+	if(__builtin_expect(counter.i < limit.i, true)) {
 		OPERAND(vec, inst.b); //FORCE(vec, inst.b); BIND(vec); // this must have necessarily been forced by the forbegin.
 		Element2(vec, counter.i, thread.frame.environment->insert((String)inst.a));
 		counter.i++;
@@ -240,7 +242,8 @@ Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 	}
 }
 
-Instruction const* list_op(Thread& thread, Instruction const& inst) {
+Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
+	Heap::Global.collect(thread.state);
 	PairList const& dots = thread.frame.environment->dots;
 	
 	Value& iter = REGISTER(inst.a);
@@ -274,6 +277,17 @@ Instruction const* list_op(Thread& thread, Instruction const& inst) {
 	return &inst;
 }
 
+Instruction const* list_op(Thread& thread, Instruction const& inst) {
+	Heap::Global.collect(thread.state);
+	List out(inst.b);
+	for(int64_t i = 0; i < inst.b; i++) {
+		Value& r = REGISTER(inst.a-i);
+		out[i] = r;
+	}
+	OUT(thread, inst.c) = out;
+	return &inst+1;
+}
+
 // Memory access ops
 
 Instruction const* assign_op(Thread& thread, Instruction const& inst) {
@@ -304,7 +318,13 @@ Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* mov_op(Thread& thread, Instruction const& inst) {
-	OPERAND(value, inst.a); FORCE(value, inst.a); // can load from memory, so must force. But no need for bind.
+	OPERAND(value, inst.a); FORCE(value, inst.a); BIND(value);
+	OUT(thread, inst.c) = value;
+	return &inst+1;
+}
+
+Instruction const* fastmov_op(Thread& thread, Instruction const& inst) {
+	OPERAND(value, inst.a); FORCE(value, inst.a); // fastmov assumes we don't need to bind. So next op better be able to handle a future 
 	OUT(thread, inst.c) = value;
 	return &inst+1;
 }
@@ -575,7 +595,10 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* function_op(Thread& thread, Instruction const& inst) {
-	OUT(thread, inst.c) = Function(thread.frame.prototype->prototypes[inst.a], thread.frame.environment);
+	OPERAND(function, inst.a); FORCE(function, inst.a);
+	Value& out = OUT(thread, inst.c);
+	out.header = function.header;
+	out.p = (void*)thread.frame.environment;
 	return &inst+1;
 }
 
@@ -776,10 +799,6 @@ void State::interpreter_init(Thread& thread) {
 #ifdef USE_THREADED_INTERPRETER
 	interpret(thread, 0);
 #endif
-}
-
-Value Thread::eval(Function const& function) {
-	return eval(function.prototype(), function.environment());
 }
 
 Value Thread::eval(Prototype const* prototype) {

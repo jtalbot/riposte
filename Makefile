@@ -2,8 +2,8 @@
 UNAME := $(shell uname -s)
  
 CXX := g++ 
-CXXFLAGS := -Wall -DRIPOSTE_DISABLE_TRACING -msse4.1
-LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
+CXXFLAGS := -Wall -msse4.1
+LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -g
 
 ifeq ($(UNAME),Linux)
 #for clock_gettime
@@ -31,7 +31,7 @@ ifneq ($(ENABLE_LIBM),0)
 	LFLAGS += -L$(AMD_LIBM_HOME)/lib/dynamic -lamdlibm
 endif
 
-SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp rgc.cpp
+SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp call.cpp rgc.cpp
 
 ifeq ($(ENABLE_JIT),1)
 	CXXFLAGS += -DENABLE_JIT

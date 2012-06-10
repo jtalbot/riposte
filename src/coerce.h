@@ -11,7 +11,7 @@
 
 // Casting between scalar types
 template<typename I, typename O>
-static void Cast1(Thread& thread, I const& i, O& o) { o = (O)i; }
+static void Cast1(Thread& thread, I const& i, O& o) { o = (O const&)i; }
 
 // Casting functions between vector types
 template<typename I, typename O>
@@ -30,7 +30,7 @@ void As(Thread& thread, Value src, O& out) {
 	if(src.isObject())
 		src = ((Object const&)src).base();
 
-	if(src.type == O::VectorType) {
+	if(src.type == O::ValueType) {
 		out = (O const&)src;
 		return;
 	}
@@ -43,7 +43,7 @@ void As(Thread& thread, Value src, O& out) {
 			Cast1<Function, O>(thread, (Function const&)src, out); return; break;
 		default: break;
 	};
-	_error(std::string("Invalid cast from ") + Type::toString(src.type) + " to " + Type::toString(O::VectorType));
+	_error(std::string("Invalid cast from ") + Type::toString(src.type) + " to " + Type::toString(O::ValueType));
 }
 
 template<>

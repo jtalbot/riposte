@@ -43,7 +43,8 @@ struct HeapObject {
 	}
 
 	GCObject* gcObject() const {
-		return (GCObject*)((uint64_t)this & ~(PAGE_SIZE-1));
+		//return (GCObject*)((uint64_t)this & ~(PAGE_SIZE-1));
+		return (GCObject*)((uint64_t)this - sizeof(GCObject));
 	}
 
 	virtual void visit() const = 0;
@@ -72,9 +73,10 @@ public:
 };
 
 inline HeapObject* Heap::alloc(uint64_t bytes) {
+	bytes += sizeof(GCObject);
 	total += bytes;
-	GCObject* g = (GCObject*)malloc(sizeof(GCObject)+bytes);
-	root = g->init(sizeof(GCObject)+bytes, root);
+	GCObject* g = (GCObject*)malloc(bytes);
+	root = g->init(bytes, root);
 	return (HeapObject*)((char*)g+sizeof(GCObject));
 }
 
@@ -82,7 +84,7 @@ inline void Heap::collect(State& state) {
 	if(total > heapSize) {
 		mark(state);
 		sweep();
-		if(heapSize < (1<<30))
+		if(total > heapSize && heapSize < (1<<30))
 			heapSize *= 2;
 	}
 }

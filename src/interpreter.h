@@ -58,7 +58,7 @@ public:
 };
 
 
-struct CompiledCall : public gc {
+struct CompiledCall {
 	List call;
 
 	PairList arguments;
@@ -67,6 +67,8 @@ struct CompiledCall : public gc {
 	
 	explicit CompiledCall(List const& call, PairList arguments, int64_t dotIndex, bool named) 
 		: call(call), arguments(arguments), dotIndex(dotIndex), named(named) {}
+	
+	virtual void visit() const;
 };
 
 struct Prototype : public HeapObject {
@@ -77,9 +79,8 @@ struct Prototype : public HeapObject {
 	int dotIndex;
 
 	int registers;
-	std::vector<Value, traceable_allocator<Value> > constants;
-	std::vector<Prototype*, traceable_allocator<Prototype*> > prototypes; 	
-	std::vector<CompiledCall, traceable_allocator<CompiledCall> > calls; 
+	std::vector<Value> constants;
+	std::vector<CompiledCall> calls; 
 
 	std::vector<Instruction> bc;			// bytecode
 	mutable std::vector<Instruction> tbc;		// threaded bytecode
@@ -115,11 +116,11 @@ struct InternalFunction {
 #define TRACE_MAX_RECORDED (1024)
 
 struct TraceCodeBuffer;
-class Trace : public gc {
+class Trace {
 
 	public:	
 
-		std::vector<IRNode, traceable_allocator<IRNode> > nodes;
+		std::vector<IRNode> nodes;
 		std::set<Environment*> liveEnvironments;
 
 		struct Output {
@@ -200,17 +201,17 @@ class Trace : public gc {
 // Global shared state 
 ///////////////////////////////////////////////////////////////////
 
-class State : public gc {
+class State {
 public:
 	StringTable strings;
 	
 	std::vector<InternalFunction> internalFunctions;
 	std::map<String, int64_t> internalFunctionIndex;
 	
-	std::vector<Environment*, traceable_allocator<Environment*> > path;
+	std::vector<Environment*> path;
 	Environment* global;
 
-	std::vector<Thread*, traceable_allocator<Thread*> > threads;
+	std::vector<Thread*> threads;
 	int64_t nThreads;
 
 	bool verbose;
@@ -262,9 +263,9 @@ public:
 typedef void* (*TaskHeaderPtr)(void* args, uint64_t a, uint64_t b, Thread& thread);
 typedef void (*TaskFunctionPtr)(void* args, void* header, uint64_t a, uint64_t b, Thread& thread);
 
-class Thread : public gc {
+class Thread {
 public:
-	struct Task : public gc {
+	struct Task {
 		TaskHeaderPtr header;
 		TaskFunctionPtr func;
 		void* args;
@@ -276,7 +277,7 @@ public:
 		Task() : func(0), args(0), done(0) {}
 		Task(TaskHeaderPtr header, TaskFunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment, uint64_t ppt) 
 			: header(header), func(func), args(args), a(a), b(b), alignment(alignment), ppt(ppt) {
-			done = new (GC) int64_t(1);
+			done = new int64_t(1);
 		}
 	};
 
@@ -287,16 +288,15 @@ public:
 	Value* base;
 	Value* registers;
 
-	std::vector<StackFrame, traceable_allocator<StackFrame> > stack;
+	std::vector<StackFrame> stack;
 	StackFrame frame;
-	std::vector<Environment*, traceable_allocator<Environment*> > environments;
 
 	std::vector<std::string> warnings;
 
 #ifdef ENABLE_JIT
 private:
-	std::vector<Trace*, traceable_allocator<Trace*> > availableTraces;
-	std::map<int64_t, Trace*, std::less<int64_t>, traceable_allocator<std::pair<int64_t, Trace*> > > traces;
+	std::vector<Trace*> availableTraces;
+	std::map<int64_t, Trace*> traces;
 public:
 #endif
 
@@ -341,7 +341,6 @@ public:
 		return 0;
 	}
 
-	Value eval(Function const& function);
 	Value eval(Prototype const* prototype, Environment* environment); 
 	Value eval(Prototype const* prototype);
 	
@@ -471,7 +470,7 @@ public:
 	Trace* getTrace(int64_t length) {
 		if(traces.find(length) == traces.end()) {
 			if(availableTraces.size() == 0) {
-				Trace* t = new (GC) Trace();
+				Trace* t = new Trace();
 				availableTraces.push_back(t);
 			}
 			Trace* t = availableTraces.back();
@@ -518,11 +517,11 @@ public:
 		Trace* trace = getTrace(a);
 		trace->liveEnvironments.insert(env);
 		if(futureType(a) == Type::Double) {
-			r = trace->EmitUnary(op, Group<Double>::R::VectorType, trace->EmitCoerce(trace->GetRef(a), Group<Double>::MA::VectorType), data);
+			r = trace->EmitUnary(op, Group<Double>::R::ValueType, trace->EmitCoerce(trace->GetRef(a), Group<Double>::MA::ValueType), data);
 		} else if(futureType(a) == Type::Integer) {
-			r = trace->EmitUnary(op, Group<Integer>::R::VectorType, trace->EmitCoerce(trace->GetRef(a), Group<Integer>::MA::VectorType), data);
+			r = trace->EmitUnary(op, Group<Integer>::R::ValueType, trace->EmitCoerce(trace->GetRef(a), Group<Integer>::MA::ValueType), data);
 		} else if(futureType(a) == Type::Logical) {
-			r = trace->EmitUnary(op, Group<Logical>::R::VectorType, trace->EmitCoerce(trace->GetRef(a), Group<Logical>::MA::VectorType), data);
+			r = trace->EmitUnary(op, Group<Logical>::R::ValueType, trace->EmitCoerce(trace->GetRef(a), Group<Logical>::MA::ValueType), data);
 		} else _error("Attempting to record invalid type in EmitUnary");
 		Value v;
 		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
@@ -536,27 +535,27 @@ public:
 		trace->liveEnvironments.insert(env);
 		if(futureType(a) == Type::Double) {
 			if(futureType(b) == Type::Double)
-				r = trace->EmitBinary(op, Group<Double,Double>::R::VectorType, trace->EmitCoerce(trace->GetRef(a), Group<Double,Double>::MA::VectorType), trace->EmitCoerce(trace->GetRef(b), Group<Double,Double>::MB::VectorType), data);
+				r = trace->EmitBinary(op, Group<Double,Double>::R::ValueType, trace->EmitCoerce(trace->GetRef(a), Group<Double,Double>::MA::ValueType), trace->EmitCoerce(trace->GetRef(b), Group<Double,Double>::MB::ValueType), data);
 			else if(futureType(b) == Type::Integer)
-				r = trace->EmitBinary(op, Group<Double,Integer>::R::VectorType, trace->EmitCoerce(trace->GetRef(a), Group<Double,Integer>::MA::VectorType), trace->EmitCoerce(trace->GetRef(b), Group<Double,Integer>::MB::VectorType), data);
+				r = trace->EmitBinary(op, Group<Double,Integer>::R::ValueType, trace->EmitCoerce(trace->GetRef(a), Group<Double,Integer>::MA::ValueType), trace->EmitCoerce(trace->GetRef(b), Group<Double,Integer>::MB::ValueType), data);
 			else if(futureType(b) == Type::Logical)
-				r = trace->EmitBinary(op, Group<Double,Logical>::R::VectorType, trace->EmitCoerce(trace->GetRef(a), Group<Double,Logical>::MA::VectorType), trace->EmitCoerce(trace->GetRef(b), Group<Double,Logical>::MB::VectorType), data);
+				r = trace->EmitBinary(op, Group<Double,Logical>::R::ValueType, trace->EmitCoerce(trace->GetRef(a), Group<Double,Logical>::MA::ValueType), trace->EmitCoerce(trace->GetRef(b), Group<Double,Logical>::MB::ValueType), data);
 			else _error("Attempting to record invalid type in EmitBinary");
 		} else if(futureType(a) == Type::Integer) {
 			if(futureType(b) == Type::Double)
-				r = trace->EmitBinary(op, Group<Integer,Double>::R::VectorType, trace->EmitCoerce(trace->GetRef(a), Group<Integer,Double>::MA::VectorType), trace->EmitCoerce(trace->GetRef(b), Group<Integer,Double>::MB::VectorType), data);
+				r = trace->EmitBinary(op, Group<Integer,Double>::R::ValueType, trace->EmitCoerce(trace->GetRef(a), Group<Integer,Double>::MA::ValueType), trace->EmitCoerce(trace->GetRef(b), Group<Integer,Double>::MB::ValueType), data);
 			else if(futureType(b) == Type::Integer)
-				r = trace->EmitBinary(op, Group<Integer,Integer>::R::VectorType, trace->EmitCoerce(trace->GetRef(a), Group<Integer,Integer>::MA::VectorType), trace->EmitCoerce(trace->GetRef(b), Group<Integer,Integer>::MB::VectorType), data);
+				r = trace->EmitBinary(op, Group<Integer,Integer>::R::ValueType, trace->EmitCoerce(trace->GetRef(a), Group<Integer,Integer>::MA::ValueType), trace->EmitCoerce(trace->GetRef(b), Group<Integer,Integer>::MB::ValueType), data);
 			else if(futureType(b) == Type::Logical)
-				r = trace->EmitBinary(op, Group<Integer,Logical>::R::VectorType, trace->EmitCoerce(trace->GetRef(a), Group<Integer,Logical>::MA::VectorType), trace->EmitCoerce(trace->GetRef(b), Group<Integer,Logical>::MB::VectorType), data);
+				r = trace->EmitBinary(op, Group<Integer,Logical>::R::ValueType, trace->EmitCoerce(trace->GetRef(a), Group<Integer,Logical>::MA::ValueType), trace->EmitCoerce(trace->GetRef(b), Group<Integer,Logical>::MB::ValueType), data);
 			else _error("Attempting to record invalid type in EmitBinary");
 		} else if(futureType(a) == Type::Logical) {
 			if(futureType(b) == Type::Double)
-				r = trace->EmitBinary(op, Group<Logical,Double>::R::VectorType, trace->EmitCoerce(trace->GetRef(a), Group<Logical,Double>::MA::VectorType), trace->EmitCoerce(trace->GetRef(b), Group<Logical,Double>::MB::VectorType), data);
+				r = trace->EmitBinary(op, Group<Logical,Double>::R::ValueType, trace->EmitCoerce(trace->GetRef(a), Group<Logical,Double>::MA::ValueType), trace->EmitCoerce(trace->GetRef(b), Group<Logical,Double>::MB::ValueType), data);
 			else if(futureType(b) == Type::Integer)
-				r = trace->EmitBinary(op, Group<Logical,Integer>::R::VectorType, trace->EmitCoerce(trace->GetRef(a), Group<Logical,Integer>::MA::VectorType), trace->EmitCoerce(trace->GetRef(b), Group<Logical,Integer>::MB::VectorType), data);
+				r = trace->EmitBinary(op, Group<Logical,Integer>::R::ValueType, trace->EmitCoerce(trace->GetRef(a), Group<Logical,Integer>::MA::ValueType), trace->EmitCoerce(trace->GetRef(b), Group<Logical,Integer>::MB::ValueType), data);
 			else if(futureType(b) == Type::Logical)
-				r = trace->EmitBinary(op, Group<Logical,Logical>::R::VectorType, trace->EmitCoerce(trace->GetRef(a), Group<Logical,Logical>::MA::VectorType), trace->EmitCoerce(trace->GetRef(b), Group<Logical,Logical>::MB::VectorType), data);
+				r = trace->EmitBinary(op, Group<Logical,Logical>::R::ValueType, trace->EmitCoerce(trace->GetRef(a), Group<Logical,Logical>::MA::ValueType), trace->EmitCoerce(trace->GetRef(b), Group<Logical,Logical>::MB::ValueType), data);
 			else _error("Attempting to record invalid type in EmitBinary");
 		} else _error("Attempting to record invalid type in EmitBinary");
 		Value v;
@@ -671,14 +670,14 @@ public:
 	}
 
 	void KillEnvironment(Environment* env) {
-		for(std::map<int64_t, Trace*, std::less<int64_t>, traceable_allocator<std::pair<int64_t, Trace*> > >::const_iterator i = traces.begin(); i != traces.end(); i++) {
+		for(std::map<int64_t, Trace*>::const_iterator i = traces.begin(); i != traces.end(); i++) {
 			i->second->liveEnvironments.erase(env);
 		}
 	}
 
 	void Bind(Value const& v) {
 		if(!v.isFuture()) return;
-		std::map<int64_t, Trace*, std::less<int64_t>, traceable_allocator<std::pair<int64_t, Trace*> > >::iterator i = traces.find(v.length);
+		std::map<int64_t, Trace*>::iterator i = traces.find(v.length);
 		if(i == traces.end()) 
 			_error("Unevaluated future left behind");
 		Trace* trace = i->second;
@@ -690,7 +689,7 @@ public:
 
 	void Flush(Thread & thread) {
 		// execute all traces
-		for(std::map<int64_t, Trace*, std::less<int64_t>, traceable_allocator<std::pair<int64_t, Trace*> > >::const_iterator i = traces.begin(); i != traces.end(); i++) {
+		for(std::map<int64_t, Trace*>::const_iterator i = traces.begin(); i != traces.end(); i++) {
 			Trace* trace = i->second;
 			trace->Execute(*this);
 			trace->Reset();
@@ -701,7 +700,7 @@ public:
 
 	void OptBind(Value const& v) {
 		if(!v.isFuture()) return;
-		std::map<int64_t, Trace*, std::less<int64_t>, traceable_allocator<std::pair<int64_t, Trace*> > >::iterator i = traces.find(v.length);
+		std::map<int64_t, Trace*>::iterator i = traces.find(v.length);
 		if(i == traces.end()) 
 			_error("Unevaluated future left behind");
 		Trace* trace = i->second;
@@ -713,8 +712,8 @@ public:
 
 inline State::State(uint64_t threads, int64_t argc, char** argv) 
 	: nThreads(threads), verbose(false), jitEnabled(true), done(0) {
-	Environment* base = new (GC) Environment(0);
-	this->global = new (GC) Environment(base);
+	Environment* base = new Environment(0);
+	this->global = new Environment(base);
 	path.push_back(base);
 
 	arguments = Character(argc);
@@ -727,7 +726,7 @@ inline State::State(uint64_t threads, int64_t argc, char** argv)
 	pthread_attr_setscope (&attr, PTHREAD_SCOPE_SYSTEM);
 	pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
 
-	Thread* t = new (GC) Thread(*this, 0);
+	Thread* t = new Thread(*this, 0);
 	this->threads.push_back(t);
 
 	for(uint64_t i = 1; i < threads; i++) {

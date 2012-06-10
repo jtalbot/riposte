@@ -53,7 +53,7 @@ struct Zip1 {
 	static void eval(Thread& thread, typename Op::A const& a, Value& out)
 	{
 		if(a.isScalar()) {
-			Op::Scalar(thread, a.s(), out);
+			Op::Scalar(thread, a[0], out);
 		}
 		else {
 			typename Op::R r(a.length);
@@ -73,13 +73,13 @@ struct Zip2 {
 	static void eval(Thread& thread, typename Op::A const& a, typename Op::B const& b, Value& out)
 	{
 		if(a.isScalar() && b.isScalar()) {
-			Op::Scalar(thread, a.s(), b.s(), out);
+			Op::Scalar(thread, a[0], b[0], out);
 		}
 		else if(b.isScalar()) {
 			typename Op::R r(a.length);
 			typename Op::R::Element* re = r.v();
 			typename Op::A::Element const* ae = a.v();
-			typename Op::B::Element be = b.s();
+			typename Op::B::Element be = b[0];
 			int64_t length = a.length;
 			int64_t i = 0;
 			for(; i < length-3; i+=4) Map2VS<Op,4>::eval(thread, ae+i, be, re+i);
@@ -89,7 +89,7 @@ struct Zip2 {
 		else if(a.isScalar()) {
 			typename Op::R r(b.length);
 			typename Op::R::Element* re = r.v();
-			typename Op::A::Element ae = a.s();
+			typename Op::A::Element ae = a[0];
 			typename Op::B::Element const* be = b.v();
 			int64_t length = b.length;
 			int64_t i = 0;

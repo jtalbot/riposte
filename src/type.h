@@ -5,14 +5,13 @@
 #include "enum.h"
 
 #define TYPES(_) 			\
-	/* First the internal types. Order is important here. The 'Nil' value is an invalid promise object with the header = 0*/ \
+	/* First the internal types. */ \
 	_(Promise, 	"promise") 	\
 	_(Default,	"default")	\
 	_(Dotdot,	"dotdot")	\
 	_(Future, 	"future")	\
 	_(Object,	"object")	\
 	/* The R visible types */	\
-	/*   In the "standard casting order" */  \
 	_(Null, 	"NULL")		\
 	_(Raw, 		"raw")		\
 	_(Logical, 	"logical")	\
