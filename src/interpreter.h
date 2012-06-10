@@ -67,8 +67,6 @@ struct CompiledCall {
 	
 	explicit CompiledCall(List const& call, PairList arguments, int64_t dotIndex, bool named) 
 		: call(call), arguments(arguments), dotIndex(dotIndex), named(named) {}
-	
-	virtual void visit() const;
 };
 
 struct Prototype : public HeapObject {
@@ -85,7 +83,7 @@ struct Prototype : public HeapObject {
 	std::vector<Instruction> bc;			// bytecode
 	mutable std::vector<Instruction> tbc;		// threaded bytecode
 
-	virtual void visit() const;
+	void visit() const;
 };
 
 struct StackFrame {
@@ -292,6 +290,8 @@ public:
 	StackFrame frame;
 
 	std::vector<std::string> warnings;
+
+	std::vector<Value> gcStack;
 
 #ifdef ENABLE_JIT
 private:

@@ -243,7 +243,6 @@ Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
-	Heap::Global.collect(thread.state);
 	PairList const& dots = thread.frame.environment->dots;
 	
 	Value& iter = REGISTER(inst.a);
@@ -251,7 +250,9 @@ Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 	
 	// First time through, make a result vector...
 	if(iter.i == 0) {
+		Heap::Global.collect(thread.state);
 		out = List(dots.size());
+		memset(((List&)out).v(), 0, dots.size()*sizeof(List::Element));
 	}
 	
 	if(iter.i < (int64_t)dots.size()) {

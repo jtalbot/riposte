@@ -118,12 +118,8 @@ struct Vector : public Value {
 	static const Type::Enum ValueType = VType;
 	static const bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive;
 
-	struct Inner {
-		int64_t length;
-		int64_t padding;
+	struct Inner : public HeapObject {
 		ElementType data[];
-		//virtual void visit() const;
-		//Inner(int64_t length) : length(length) {}
 	};
 
 	ElementType const* v() const { 
@@ -149,11 +145,13 @@ struct Vector : public Value {
 			// round l up to nearest even number so SSE can work on tail region
 			l += (int64_t)((uint64_t)l & 1);
 			int64_t length_aligned = (l < 128) ? (l + 1) : l;
-			//v.p = new (sizeof(Element)*length_aligned) Inner(length);
-			v.p = malloc(sizeof(Element)*length_aligned + sizeof(Inner));
-			assert(l < 128 || (0xF & (int64_t)v.p) == 0);
-			if( (0xF & (int64_t)v.p) != 0)
-				v.p =  (char*)v.p + 0x8;
+			
+			Inner* i = new (sizeof(Element)*length_aligned) Inner();
+			v.p = (void*)i;
+		
+			//assert(l < 128 || (0xF & (int64_t)v.p) == 0);
+			//if( (0xF & (int64_t)v.p) != 0)
+			//	v.p =  (char*)v.p + 0x8;
 		}
 		return (Vector<VType, ElementType, Recursive>&)v;
 	}
@@ -163,16 +161,9 @@ struct Vector : public Value {
 		if(canPack)
 			v.scalar<ElementType>() = d;
 		else {
-			//Inner* i = new (sizeof(Element)*4) Inner(1);
-			//i->data[0] = d;
-			//v.p = i;
-			Inner* i = (Inner*)malloc(sizeof(Element)*4 + sizeof(Inner));
+			Inner* i = new (sizeof(Element)*2) Inner();
 			i->data[0] = d;
-			v.p = i;
-			//i->length = 1;
-			//v.p = malloc(sizeof(Element)*4) :
-			//		malloc(sizeof(Element)*4);
-			//*(Element*)v.p = d;
+			v.p = (void*)i;
 		}
 	}
 };
@@ -194,7 +185,8 @@ struct Name : public Vector<Type::Name, Element, Recursive> { 			\
 	const static Element NAelement; \
 	static Name NA() { static Name na = Name::c(NAelement); return na; }  \
 	static Name& Init(Value& v, int64_t length) { return (Name&)Vector<Type::Name, Element, Recursive>::Init(v, length); } \
-	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); }\
+	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); \
+}\
 /* note missing }; */
 
 VECTOR_IMPL(Null, unsigned char, false)  
@@ -263,12 +255,6 @@ VECTOR_IMPL(List, Value, true)
 	static bool isInfinite(Value const& c) { return false; }
 };
 
-/*template<Type::Enum VType, typename ElementType, bool Recursive>
-void Vector<VType, ElementType, Recursive>::Inner::visit() const {}
-
-template<>
-void Vector<Type::List, Value, true>::Inner::visit() const;
-*/
 struct Future : public Value {
 	static const Type::Enum ValueType = Type::Future;
 	static Future& Init(Value& f, Type::Enum typ,int64_t length,IRef ref) {
@@ -317,12 +303,10 @@ struct Default : public Value {
 
 class Dictionary : public HeapObject {
 protected:
-	static const uint64_t inlineSize = 8;
 	uint64_t size, load;
 	
 	struct Inner : public HeapObject {
 		Pair d[];
-		virtual void visit() const;
 	};
 
 	Inner* d;
@@ -390,8 +374,8 @@ protected:
 	}
 
 public:
-	Dictionary() : size(inlineSize), d(new (sizeof(Pair) * 8) Inner()) {
-		clear();
+	Dictionary() : size(0), load(0), d(0) {
+		rehash(8);
 	}
 
 	bool has(String name) const ALWAYS_INLINE {
@@ -479,23 +463,22 @@ public:
 		return const_iterator(this, size);
 	}
 
-	virtual void visit() const;
+	 void visit() const;
 };
 
 // Object implements an immutable dictionary interface.
 // Objects also have a base value which right now must be a non-object type...
 //  However S4 objects can contain S3 objects so we may have to change this.
 //  If we make this change, then all code that unwraps objects must do so recursively.
-class Object : public Value {
+struct Object : public Value {
 	
-private:
-	struct Inner {
+	struct Inner : public HeapObject {
 		Value base;
 		Dictionary* d;
 		Inner(Value const& base, Dictionary* d) : base(base), d(d) {}
+		void visit() const;
 	};
 
-public:
 	static const Type::Enum ValueType = Type::Object;
 	
 	Object() {}
@@ -595,7 +578,7 @@ public:
 		p.env->insert(p.name) = value;
 	}
 	
-	virtual void visit() const;
+	void visit() const;
 };
 
 struct REnvironment : public Value {

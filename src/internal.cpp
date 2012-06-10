@@ -670,9 +670,9 @@ void eval_fn(Thread& thread, Value const* args, Value& result) {
 }
 
 struct mapplyargs {
-	Value& in;
+	Value const& in;
 	List& out;
-	Value func;
+	Value const& func;
 };
 
 void* mapplyheader(void* args, uint64_t start, uint64_t end, Thread& thread) {
@@ -707,8 +707,8 @@ void mapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& 
 void mapply(Thread& thread, Value const* args, Value& result) {
 	if(!args[0].isVector())
 		_error("Invalid type for argument to mapply");
-	Value x = args[0];
-	Value func = args[-1];
+	Value const& x = args[0];
+	Value const& func = args[-1];
 	// figure out result length
 	int64_t len = 1;
 	for(int i = 0; i < x.length; i++) {
@@ -718,6 +718,7 @@ void mapply(Thread& thread, Value const* args, Value& result) {
 			len = (e.length == 0 || len == 0) ? 0 : std::max(e.length, len);
 	}
 	List r(len);
+	thread.gcStack.push_back(r);
 
 	/*List apply(2);
 	apply[0] = func;
@@ -754,6 +755,7 @@ void mapply(Thread& thread, Value const* args, Value& result) {
 	mapplyargs a1 = (mapplyargs) {x, r, func};
 	thread.doall(mapplyheader, mapplybody, &a1, 0, r.length, 1, 1); 
 
+	thread.gcStack.pop_back();
 	result = r;
 }
 

@@ -29,12 +29,12 @@ struct GCObject {
 };
 
 struct HeapObject {
-	
-	bool marked() const { 
+
+	bool marked() const {
 		return (gcObject()->flags & slot()) != 0;
 	}
-
-	void mark() const {
+	
+	void visit() const {
 		gcObject()->flags |= slot();
 	}
 
@@ -46,8 +46,6 @@ struct HeapObject {
 		//return (GCObject*)((uint64_t)this & ~(PAGE_SIZE-1));
 		return (GCObject*)((uint64_t)this - sizeof(GCObject));
 	}
-
-	virtual void visit() const = 0;
 
 	void* operator new(unsigned long bytes);
 	void* operator new(unsigned long bytes, unsigned long extra);
@@ -64,7 +62,7 @@ private:
 	void mark(State& state);
 	void sweep();
 public:
-	Heap() : root(0), heapSize(1<<20), total(0) {}
+	Heap() : root(0), heapSize(1<<22), total(0) {}
 
 	HeapObject* alloc(uint64_t bytes);
 	void collect(State& state);

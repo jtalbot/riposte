@@ -3,82 +3,88 @@
 #include "value.h"
 #include "interpreter.h"
 
-static void traverse(HeapObject const* ho) {
-	if(ho != 0 && !ho->marked()) {
-		ho->mark();
-		ho->visit();
-	}
-}
+#define VISIT(p) if((p) != 0 && !(p)->marked()) (p)->visit()
 
 static void traverse(Value const& v) {
 	switch(v.type) {
 		case Type::Object:
-			traverse(((Object&)v).base());
-			traverse(((Object&)v).dictionary());
+			VISIT((Object::Inner const*)v.p);
 			break;
 		case Type::Environment:
-			traverse(((REnvironment&)v).environment());
+			VISIT(((REnvironment&)v).environment());
 			break;
 		case Type::Function:
-			traverse(((Function&)v).prototype());
-			traverse(((Function&)v).environment());
+			VISIT(((Function&)v).prototype());
+			VISIT(((Function&)v).environment());
 			break;
 		case Type::Promise:
-			traverse(((Promise&)v).prototype());
-			traverse(((Promise&)v).environment());
+			VISIT(((Promise&)v).prototype());
+			VISIT(((Promise&)v).environment());
 			break;
 		case Type::Default:
-			traverse(((Default&)v).prototype());
-			traverse(((Default&)v).environment());
+			VISIT(((Default&)v).prototype());
+			VISIT(((Default&)v).environment());
 			break;
-		/*case Type::Double:
-			traverse(((Double const&)v).inner());
+		case Type::Double:
+			VISIT(((Double const&)v).inner());
 			break;
 		case Type::Integer:
-			traverse(((Integer const&)v).inner());
+			VISIT(((Integer const&)v).inner());
 			break;
 		case Type::Logical:
-			traverse(((Logical const&)v).inner());
+			VISIT(((Logical const&)v).inner());
 			break;
 		case Type::Character:
-			traverse(((Character const&)v).inner());
+			VISIT(((Character const&)v).inner());
 			break;
 		case Type::Raw:
-			traverse(((Raw const&)v).inner());
+			VISIT(((Raw const&)v).inner());
 			break;
 		case Type::List:
-			traverse(((List const&)v).inner());
-			break;*/
+			VISIT(((List const&)v).inner());
+			{
+				List const& l = (List const&)v;
+				for(int64_t i = 0; i < l.length; i++)
+					traverse(l[i]);
+			}
+			break;
 		default:
 			// do nothing
 			break;
 	}
 }
 
-void Dictionary::Inner::visit() const {
-	/*for(uint64_t i = 0; i < size; i++) {
+/*void Dictionary::Inner::visit() const {
+	for(uint64_t i = 0; i < size; i++) {
 		if(d[i].n != Strings::NA)
 			traverse(d[i].v);
-	}*/
+	}
 	// do nothing for now
-}
+}*/
 
 void Dictionary::visit() const {
-	traverse(d);
+	HeapObject::visit();
+	VISIT(d);
 	for(uint64_t i = 0; i < size; i++) {
 		if(d->d[i].n != Strings::NA)
 			traverse(d->d[i].v);
 	}
 }
 
+void Object::Inner::visit() const {
+	HeapObject::visit();
+	traverse(base);
+	VISIT(d);
+}
+
 void Environment::visit() const {
-	traverse(lexical);
-	traverse(dynamic);
+	Dictionary::visit();
+	VISIT(lexical);
+	VISIT(dynamic);
 	traverse(call);
 	for(int64_t i = 0; i < dots.size(); i++) {
 		traverse(dots[i].v);
 	}
-	Dictionary::visit();
 	/*for(uint64_t i = 0; i < size; i++) {
 		if(d[i].n != Strings::NA)
 			traverse(d[i].v);
@@ -86,6 +92,8 @@ void Environment::visit() const {
 }
 
 void Prototype::visit() const {
+	HeapObject::visit();
+
 	traverse(expression);
 	for(int64_t i = 0; i < parameters.size(); i++) {
 		traverse(parameters[i].v);
@@ -94,6 +102,7 @@ void Prototype::visit() const {
 		traverse(constants[i]);
 	}
 	for(int64_t i = 0; i < calls.size(); i++) {
+		traverse(calls[i].call);
 		for(int64_t j = 0; j < calls[i].arguments.size(); j++) {
 			traverse(calls[i].arguments[j].v);
 		}
@@ -103,16 +112,6 @@ void Prototype::visit() const {
 	//}
 }
 
-void CompiledCall::visit() const {
-}
-/*
-template<>
-void Vector<Type::List, Value, true>::Inner::visit() const {
-	for(int64_t i = 0; i < length; i++) {
-		traverse(data[i]);
-	}
-}
-*/
 void Heap::mark(State& state) {
 	// traverse root set
 	//printf("Marking\n");
@@ -120,40 +119,46 @@ void Heap::mark(State& state) {
 	// iterate over path, then stack, then trace locations, then registers
 	//printf("--path--\n");
 	for(uint64_t i = 0; i < state.path.size(); i++) {
-		traverse(state.path[i]);
+		VISIT(state.path[i]);
 	}
 	//printf("--global--\n");
-	traverse(state.global);
+	VISIT(state.global);
+	traverse(state.arguments);
 
 	for(uint64_t t = 0; t < state.threads.size(); t++) {
 		Thread* thread = state.threads[t];
 
 		//printf("--stack--\n");
 		for(uint64_t i = 0; i < thread->stack.size(); i++) {
-			traverse(thread->stack[i].environment);
-			traverse(thread->stack[i].prototype);
+			VISIT(thread->stack[i].environment);
+			VISIT(thread->stack[i].prototype);
 		}
 		//printf("--frame--\n");
-		traverse(thread->frame.environment);
-		traverse(thread->frame.prototype);
+		VISIT(thread->frame.environment);
+		VISIT(thread->frame.prototype);
 
 		//printf("--trace--\n");
 		// traces only hold weak references...
 
 		//printf("--registers--\n");
-		for(Value* r = thread->base; r < thread->registers+DEFAULT_NUM_REGISTERS; ++r) {
+		for(Value const* r = thread->base-(thread->frame.prototype->registers); r < thread->registers+DEFAULT_NUM_REGISTERS; ++r) {
 			traverse(*r);
+		}
+
+		for(uint64_t i = 0; i < thread->gcStack.size(); i++) {
+			traverse(thread->gcStack[i]);
 		}
 	}
 }
 
 void Heap::sweep() {
-	printf("Sweeping %d\n", total);
+	//printf("Sweeping %d\n", total);
 	total = 0;
 	GCObject** g = &root;
 	while(*g != 0) {
 		GCObject* h = *g;
 		if(!h->marked()) {
+		//	//printf("Deleting %llx\n", h);
 			*g = h->next;
 			assert(memset(h, 0xff, h->size) == h);
 			free(h);	
@@ -163,7 +168,7 @@ void Heap::sweep() {
 			g = &(h->next);
 		}
 	}
-	printf("Swept to %d\n", total);
+	//printf("Swept to %d\n", total);
 }
 
 Heap Heap::Global;
