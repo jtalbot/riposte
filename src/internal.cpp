@@ -805,7 +805,7 @@ void environment(Thread& thread, Value const* args, Value& result) {
 }
 
 void newenv(Thread& thread, Value const* args, Value& result) {
-	REnvironment::Init(result, new Environment());
+	REnvironment::Init(result, new Environment(0,0,Null::Singleton()));
 }
 
 // TODO: parent.frame and sys.call need to ignore frames for promises, etc. We may need

@@ -79,16 +79,15 @@ public:
 
 inline HeapObject* Heap::smallalloc(uint64_t bytes) {
 	bytes = (bytes + 63) & (~63);
-	
 	if(bump+bytes >= limit)
 		popRegion();
+	
 	//printf("Region: allocating %d at %llx\n", bytes, (uint64_t)bump);
 	HeapObject* o = (HeapObject*)bump;
 	assert(((uint64_t) o & 63) == 0);
 	//memset(o, 0xba, bytes);
 	bump += bytes;
 	return o;
-	//return alloc(bytes);
 }
 
 inline HeapObject* Heap::alloc(uint64_t bytes) {

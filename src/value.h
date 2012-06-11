@@ -190,7 +190,7 @@ struct Name : public Vector<Type::Name, Element, Recursive> { 			\
 /* note missing }; */
 
 VECTOR_IMPL(Null, unsigned char, false)  
-	static Null Singleton() { static Null s = Null::c(); return s; } 
+	static Null const& Singleton() { static Null s = Null::c(); return s; } 
 	static bool isNA() { return false; }
 	static bool isCheckedNA() { return false; }
 };
@@ -199,8 +199,8 @@ VECTOR_IMPL(Logical, char, false)
 	const static char TrueElement;
 	const static char FalseElement;
 
-	static Logical True() { static Logical t = Logical::c(-1); return t; }
-	static Logical False() { static Logical f = Logical::c(0); return f; } 
+	static Logical const& True() { static Logical t = Logical::c(-1); return t; }
+	static Logical const& False() { static Logical f = Logical::c(0); return f; } 
 	
 	static bool isTrue(char c) { return c == -1; }
 	static bool isFalse(char c) { return c == 0; }
@@ -220,9 +220,9 @@ VECTOR_IMPL(Integer, int64_t, false)
 }; 
 
 VECTOR_IMPL(Double, double, false)
-	static Double Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
-	static Double NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
-	static Double NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } 
+	static Double const& Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
+	static Double const& NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
+	static Double const& NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } 
 	
 	static bool isNA(double c) { _doublena a, b; a.d = c; b.d = NAelement; return a.i==b.i; }
 	static bool isCheckedNA(int64_t c) { return false; }
@@ -355,8 +355,8 @@ protected:
 		uint64_t old_load = load;
 		Inner* old_d = d;
 
-		size = s;
 		d = new (sizeof(Pair)*s) Inner();
+		size = s;
 		clear();
 		
 		// copy over previous populated values...
@@ -515,26 +515,16 @@ struct Object : public Value {
 };
 
 class Environment : public Dictionary {
-private:
-	Environment* lexical, *dynamic;
-	
 public:
+	Environment* lexical, *dynamic;
 	Value call;
 	PairList dots;
 	bool named;	// true if any of the dots have names	
 
-	explicit Environment(Environment* lexical=0, Environment* dynamic=0) :
+	explicit Environment(Environment* lexical, Environment* dynamic, Value const& call) :
 			Dictionary(8), 
-			lexical(lexical), dynamic(dynamic), call(Null::Singleton()) {}
+			lexical(lexical), dynamic(dynamic), call(call), named(false) {}
 
-	void init(Environment* l, Environment* d, Value const& call) {
-		lexical = l;
-		dynamic = d;
-		this->call = call;
-		clear();
-		dots.clear();
-	}
-	
 	Environment* LexicalScope() const { return lexical; }
 	Environment* DynamicScope() const { return dynamic; }
 

@@ -81,7 +81,6 @@ struct Prototype : public HeapObject {
 	std::vector<CompiledCall> calls; 
 
 	std::vector<Instruction> bc;			// bytecode
-	mutable std::vector<Instruction> tbc;		// threaded bytecode
 
 	void visit() const;
 };
@@ -712,8 +711,8 @@ public:
 
 inline State::State(uint64_t threads, int64_t argc, char** argv) 
 	: nThreads(threads), verbose(false), jitEnabled(true), done(0) {
-	Environment* base = new Environment(0);
-	this->global = new Environment(base);
+	Environment* base = new Environment(0,0,Null::Singleton());
+	this->global = new Environment(base,0,Null::Singleton());
 	path.push_back(base);
 
 	arguments = Character(argc);

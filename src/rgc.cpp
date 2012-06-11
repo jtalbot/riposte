@@ -199,7 +199,7 @@ void Heap::sweep() {
 			g = &(h->next);
 		}
 	}
-	printf("Swept: \t%d => \t %d\n", old_total, total);
+	//printf("Swept: \t%d => \t %d\n", old_total, total);
 }
 
 void Heap::makeRegions(uint64_t regions) {

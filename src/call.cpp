@@ -131,6 +131,33 @@ inline void argAssign(Thread& thread, Environment* env, Pair const& parameter, P
 	}
 }
 
+inline void assignArgument(Thread& thread, Environment* env, String n, Value const& v) {
+	if(v.isPromise()) {
+		assert(v.p == 0);
+		Value w = v;
+		w.p = env;
+		env->insert(n) = w;
+	}
+	else {
+		assert(!v.isFuture());
+		//if(v.isFuture())
+		//	thread.LiveEnvironment(env, v);
+		env->insert(n) = v;
+	}
+}
+
+inline void assignDefault(Thread& thread, Environment* env, String n, Value const& v) {
+	if(v.isDefault()) {
+		assert(v.p == 0);
+		Value w = v;
+		w.p = env;
+		env->insert(n) = w;
+	}
+	else if(!v.isNil()) {
+		env->insert(n) = v;
+	}
+}
+
 inline void dotAssign(Thread& thread, Environment* env, Pair const& argument) {
 	Value w = argument.v;
 	assert(!w.isDefault());
@@ -148,16 +175,19 @@ inline void dotAssign(Thread& thread, Environment* env, Pair const& argument) {
 }
 
 void MatchArgs(Thread& thread, Environment const* env, Environment* fenv, Function const& func, CompiledCall const& call) {
-	PairList const& parameters = func.prototype()->parameters;
+	Prototype const* prototype = func.prototype();
+	PairList const& parameters = prototype->parameters;
 	PairList const& arguments = call.arguments;
 
-	int64_t const pDotIndex = func.prototype()->dotIndex;
+	int64_t const pDotIndex = prototype->dotIndex;
 	int64_t const end = std::min((int64_t)arguments.size(), pDotIndex);
 
 	// set parameters from arguments & defaults
 	for(int64_t i = 0; i < (int64_t)parameters.size(); i++) {
-		argAssign(thread, fenv, parameters[i], 
-			(i < end && !arguments[i].v.isNil()) ? arguments[i] : parameters[i]);
+		if(i < end && !arguments[i].v.isNil())
+			assignArgument(thread, fenv, parameters[i].n, arguments[i].v);
+		else
+			assignDefault(thread, fenv, parameters[i].n, parameters[i].v);
 	}
 
 	// handle unused arguments

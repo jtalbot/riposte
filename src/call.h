@@ -25,15 +25,7 @@ void MatchArgs(Thread& thread, Environment const* env, Environment* fenv, Functi
 void MatchNamedArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
 
 inline Environment* CreateEnvironment(Thread& thread, Environment* l, Environment* d, Value const& call) {
-	/*Environment* env;
-	if(thread.environments.size() == 0) {
-		env = new Environment();
-	} else {
-		env = thread.environments.back();
-		thread.environments.pop_back();
-	}*/
-	Environment* env = new Environment();
-	env->init(l, d, call);
+	Environment* env = new Environment(l, d, call);
 	return env;
 }
 
