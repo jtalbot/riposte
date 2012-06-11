@@ -3,6 +3,27 @@
 #include "value.h"
 #include "interpreter.h"
 
+bool HeapObject::marked() const {
+	return (gcObject()->flags & slot()) != 0;
+}
+
+void HeapObject::visit() const {
+	gcObject()->flags |= slot();
+}
+
+uint64_t HeapObject::slot() const {
+	assert(((uint64_t)this & 63) == 0);
+	uint64_t s = ((uint64_t)this & (PAGE_SIZE-1)) >> 6;
+	assert(s >= 1 && s <= 63);
+	return (((uint64_t)1) << s);
+}
+
+GCObject* HeapObject::gcObject() const {
+	return (GCObject*)((uint64_t)this & ~(PAGE_SIZE-1));
+	//return (GCObject*)((uint64_t)this - sizeof(GCObject));
+}
+
+
 #define VISIT(p) if((p) != 0 && !(p)->marked()) (p)->visit()
 
 static void traverse(Value const& v) {
@@ -93,7 +114,7 @@ void Environment::visit() const {
 
 void Prototype::visit() const {
 	HeapObject::visit();
-
+	
 	traverse(expression);
 	for(int64_t i = 0; i < parameters.size(); i++) {
 		traverse(parameters[i].v);
@@ -114,7 +135,9 @@ void Prototype::visit() const {
 
 void Heap::mark(State& state) {
 	// traverse root set
-	//printf("Marking\n");
+	// mark the region that I'm currently allocating into
+	((GCObject*)((uint64_t)bump & ~(PAGE_SIZE-1)))->flags |= 1;
+	gcObject(bump)->flags |= 1;
 	
 	// iterate over path, then stack, then trace locations, then registers
 	//printf("--path--\n");
@@ -152,23 +175,60 @@ void Heap::mark(State& state) {
 }
 
 void Heap::sweep() {
-	//printf("Sweeping %d\n", total);
+	uint64_t old_total = total;
 	total = 0;
-	GCObject** g = &root;
+	void** g = &root;
 	while(*g != 0) {
-		GCObject* h = *g;
+		void* t = *g;
+		GCObject* h = gcObject(t);
 		if(!h->marked()) {
 		//	//printf("Deleting %llx\n", h);
 			*g = h->next;
-			assert(memset(h, 0xff, h->size) == h);
-			free(h);	
+			if(h->size == 4096) {
+				//printf("Freeing region %llx\n", t);
+				//memset(t, 0xff, h->size);
+				freeRegions.push_back(t);
+			}
+			else {
+				//memset(t, 0xff, h->size);
+				free(t);
+			}
 		} else {
 			total += h->size;
 			h->unmark();
 			g = &(h->next);
 		}
 	}
-	//printf("Swept to %d\n", total);
+	printf("Swept: \t%d => \t %d\n", old_total, total);
+}
+
+void Heap::makeRegions(uint64_t regions) {
+	char* head = (char*)malloc((regions+1)*regionSize);
+	head = (char*)(((uint64_t)head+regionSize-1) & (~(regionSize-1)));
+	for(uint64_t i = 0; i < regions; i++) {
+		GCObject* r = (GCObject*)head;
+		r->init(regionSize, 0);
+		assert(((uint64_t)r & (regionSize-1)) == 0);
+		freeRegions.push_back(r);
+		head += regionSize;
+	}
+}
+
+void Heap::popRegion() {
+	//printf("Making new region: %d\n", freeRegions.size());
+	if(freeRegions.empty())
+		makeRegions(256);
+
+	void* r = freeRegions.front();
+	freeRegions.pop_front();
+	GCObject* g = gcObject(r);
+	//printf("Popping to %llx\n", g);
+	g->init(regionSize, root);
+	total += g->size;
+	root = r;
+
+	bump = (char*)(g->data);
+	limit = ((char*)g) + regionSize;
 }
 
 Heap Heap::Global;

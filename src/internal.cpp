@@ -52,7 +52,7 @@ Double Random(Thread& thread, int64_t const length) {
 
 void cat(Thread& thread, Value const* args, Value& result) {
 	List const& a = Cast<List>(args[0]);
-	Character const& b = As<Character>(thread, args[-1]);
+	Character const& b = Cast<Character>(args[-1]);
 	for(int64_t i = 0; i < a.length; i++) {
 		if(!List::isNA(a[i])) {
 			Character c = As<Character>(thread, a[i]);
@@ -190,9 +190,7 @@ void assignAttr(Thread& thread, Value const* args, Value& result)
 	Value object = args[0];
 	Character which = Cast<Character>(args[-1]);
 	if(!object.isObject()) {
-		Value v;
-		Object::Init((Object&)v, object);
-		object = v;
+		Object::Init(object, object);
 		((Object&)object).insertMutable(which[0], args[-2]);
 		result = object;
 	} else {
@@ -718,6 +716,7 @@ void mapply(Thread& thread, Value const* args, Value& result) {
 			len = (e.length == 0 || len == 0) ? 0 : std::max(e.length, len);
 	}
 	List r(len);
+	memset(r.v(), 0, len*sizeof(List::Element));
 	thread.gcStack.push_back(r);
 
 	/*List apply(2);

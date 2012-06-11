@@ -273,7 +273,7 @@ struct Function : public Value {
 		return (Function&)v;
 	}
 
-	Prototype* prototype() const { return (Prototype*)(length << 4); }
+	Prototype* prototype() const { return (Prototype*)(header & ~15); }
 	Environment* environment() const { return (Environment*)p; }
 };
 
@@ -285,7 +285,7 @@ struct Promise : public Value {
 		return (Promise&)v;
 	}
 
-	Prototype* prototype() const { return (Prototype*)(length << 4); }
+	Prototype* prototype() const { return (Prototype*)(header & ~15); }
 	Environment* environment() const { return (Environment*)p; }
 };
 
@@ -297,7 +297,7 @@ struct Default : public Value {
 		return (Default&)v;
 	}
 
-	Prototype* prototype() const { return (Prototype*)(length << 4); }
+	Prototype* prototype() const { return (Prototype*)(header & ~15); }
 	Environment* environment() const { return (Environment*)p; }
 };
 
@@ -355,9 +355,6 @@ protected:
 		uint64_t old_load = load;
 		Inner* old_d = d;
 
-		s = nextPow2(s);
-		if(s <= size) return; // should rehash on shrinking sometimes, when?
-
 		size = s;
 		d = new (sizeof(Pair)*s) Inner();
 		clear();
@@ -374,8 +371,8 @@ protected:
 	}
 
 public:
-	Dictionary() : size(0), load(0), d(0) {
-		rehash(8);
+	Dictionary(int64_t initialSize) : size(0), load(0), d(0) {
+		rehash(nextPow2(initialSize));
 	}
 
 	bool has(String name) const ALWAYS_INLINE {
@@ -418,8 +415,7 @@ public:
 
 	// clone with room for extra elements
 	Dictionary* clone(uint64_t extra) const {
-		Dictionary* clone = new Dictionary();
-		clone->rehash(size+extra);
+		Dictionary* clone = new Dictionary((load+extra)*2);
 		// copy over elements
 		if(load > 0) {
 			for(uint64_t i = 0; i < size; i++) {
@@ -481,13 +477,12 @@ struct Object : public Value {
 
 	static const Type::Enum ValueType = Type::Object;
 	
-	Object() {}
-	
-	static void Init(Object& o, Value const& base, Dictionary* dictionary=0) {
+	static Object& Init(Value& v, Value const& base, Dictionary* dictionary=0) {
 		// Create inner first works if base and o overlap.
-		Inner* p = new Inner(base, dictionary == 0 ? new Dictionary() : dictionary);
-		Value::Init(o, Type::Object, 0);
-		o.p = p;
+		Inner* p = new Inner(base, dictionary == 0 ? new Dictionary(4) : dictionary);
+		Value::Init(v, Type::Object, 0);
+		v.p = p;
+		return (Object&)v;
 	}
 
 	Value const& base() const {
@@ -528,7 +523,8 @@ public:
 	PairList dots;
 	bool named;	// true if any of the dots have names	
 
-	explicit Environment(Environment* lexical=0, Environment* dynamic=0) : 
+	explicit Environment(Environment* lexical=0, Environment* dynamic=0) :
+			Dictionary(8), 
 			lexical(lexical), dynamic(dynamic), call(Null::Singleton()) {}
 
 	void init(Environment* l, Environment* d, Value const& call) {

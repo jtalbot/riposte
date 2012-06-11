@@ -268,7 +268,7 @@ Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 			Character names(dots.size());
 			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
 				names[i] = dots[i].n;
-			Object::Init((Object&)out, out);
+			Object::Init(out, out);
 			((Object&)out).insertMutable(Strings::names, names);
 		}
 		return &inst+1;

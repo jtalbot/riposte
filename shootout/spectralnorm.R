@@ -32,7 +32,6 @@ run <- function() {
           v <- AtAv(u,N)
 	  u <- AtAv(v,N)
 	}
-
 	vBv <- sum(u*v)
 	vv <- sum(v*v)
 	cat(sqrt(vBv/vv), '\n')

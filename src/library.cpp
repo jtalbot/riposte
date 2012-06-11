@@ -82,7 +82,7 @@ void loadLibrary(Thread& thread, std::string path, std::string name) {
 		}
 		closedir(dir);
 	}
-
+	
 	thread.state.path.push_back(env);
 	thread.state.global->init(thread.state.path.back(), 0, Null::Singleton());
 }
