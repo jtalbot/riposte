@@ -98,7 +98,7 @@ template<> inline String const& Value::scalar<String>() const { return s; }
 
 
 // Name-value Pairs are used throughout the code...
-struct Pair { String n; Value v; };
+struct Pair { String n; String pad; Value v; };
 // Not the same as the publically visible PairList which is just an S3 class
 typedef std::vector<Pair> PairList;
 

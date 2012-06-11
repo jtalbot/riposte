@@ -109,7 +109,7 @@ inline void Heap::collect(State& state) {
 	if(total > heapSize) {
 		mark(state);
 		sweep();
-		if(total > heapSize && heapSize < (1<<30))
+		if(total > heapSize*0.6 && heapSize < (1<<30))
 			heapSize *= 2;
 	}
 }

@@ -12,6 +12,8 @@ extern const void** glabels;
 
 void printCode(Thread const& thread, Prototype const* prototype, Environment* env);
 
+void threadByteCode(Prototype* prototype);
+
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset);
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, int64_t resultSlot, Instruction const* returnpc);

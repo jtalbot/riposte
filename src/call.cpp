@@ -26,31 +26,34 @@ void printCode(Thread const& thread, Prototype const* prototype, Environment* en
 	std::cout << std::endl;
 }
 
+void threadByteCode(Prototype*  prototype) {
+#ifdef USE_THREADED_INTERPRETER
+	for(int64_t i = 0; i < (int64_t)prototype->bc.size(); ++i) {
+		Instruction const& inst = prototype->bc[i];
+		inst.ibc = glabels[inst.bc];
+	}
+#endif
+}
+
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset) {
 	//printCode(thread, prototype, environment);
+	
+	// make new stack frame
 	StackFrame& s = thread.push();
 	s.environment = environment;
+	s.prototype = prototype;
 	s.returnpc = returnpc;
 	s.returnbase = thread.base;
-	s.prototype = prototype;
-	thread.base -= stackOffset;
 	
+	// make room for registers
+	thread.base -= stackOffset;
 	if(thread.base-prototype->registers < thread.registers)
 		throw RiposteError("Register overflow");
 	
+	// copy constants into registers
 	if(prototype->constants.size() > 0)
 		memcpy(thread.base-(prototype->constants.size()-1), &prototype->constants[0], sizeof(Value)*prototype->constants.size());
 
-#ifdef USE_THREADED_INTERPRETER
-	// Initialize threaded bytecode if not yet done 
-	if(prototype->bc[0].ibc == 0)
-	{
-		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); ++i) {
-			Instruction const& inst = prototype->bc[i];
-			inst.ibc = glabels[inst.bc];
-		}
-	}
-#endif
 	return &(prototype->bc[0]);
 }
 
