@@ -1,11 +1,17 @@
-/*	A Lemon parser for R.
+/*	
+	A Lemon parser for R.
 	Almost exactly the same as the R parser definition.
 	But, forcond folded into for rule.
-	TODO: support for interactive input
-		combine SYMBOL and STR_CONST into a single rule, rather than have 4 variations for sub, NS_GET, and NS_GET_INT 
-		similarly, combine NEWLINE and SEMICOLON into single rule, rather than have 2 variations.
-		R parser supports a rule: expr % expr, but this doesn't appear to work with the lexer which treats anything that starts with % as a special op. 
-		can I factor out the actions?
+	TODO: Some potential clean up compared to the R parser. Have to verify that
+		it would still produce the same results. 
+		1. combine SYMBOL and STR_CONST into a single rule, 
+			rather than have 4 variations for sub, NS_GET, and NS_GET_INT 
+		2. similarly, combine NEWLINE and SEMICOLON into single rule, 
+			rather than have 2 variations.
+		3. R parser supports a rule: expr % expr, but this doesn't appear 
+			to work with the lexer which treats anything that starts 
+			with % as a special op. 
+		can I factor out the actions into separate code?
  */
 
 %stack_size 1000
@@ -47,7 +53,7 @@
 
 %include {
 	#include <iostream>
-	#include "internal.h"
+	#include "../internal.h"
 }
 
 %syntax_error {

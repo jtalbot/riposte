@@ -1,6 +1,6 @@
 
 #include "library.h"
-#include "parser.h"
+#include "parser/parser.h"
 #include "compiler.h"
 #include "value.h"
 

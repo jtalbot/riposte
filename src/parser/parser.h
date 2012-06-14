@@ -9,9 +9,9 @@
 #include <algorithm>
 #include <locale>
 
-#include "value.h"
-#include "interpreter.h"
-#include "frontend.h"
+#include "../value.h"
+#include "../interpreter.h"
+#include "../frontend.h"
 
 // trim from end
 static inline std::string& rtrim(std::string &s) {
@@ -44,7 +44,7 @@ static inline std::string& unescape(std::string& s) {
 				case 'r': r += '\r'; break;
 				case 't': r += '\t'; break;
 				case 'v': r += '\v'; break;
-				case 'x': r += (char)(strToHexInt(std::string(i, i+2))); i+=2; break;
+				case 'x': r += (char)(hexStrToInt(std::string(i, i+2))); i+=2; break;
 				case '\\': r += '\\'; break;
 				case '"': r += '"'; break;
 				case '\'': r += '\''; break;

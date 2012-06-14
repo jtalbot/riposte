@@ -1,7 +1,7 @@
 
 #include "internal.h"
 #include "compiler.h"
-#include "parser.h"
+#include "parser/parser.h"
 #include "library.h"
 #include "coerce.h"
 

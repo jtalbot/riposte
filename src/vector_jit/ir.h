@@ -1,11 +1,11 @@
 #ifndef _RIPOSTE_IR_H
 #define _RIPOSTE_IR_H
 
-#include "enum.h"
-#include "common.h"
-#include "bc.h"
-#include "type.h"
-#include "value.h"
+#include "../enum.h"
+#include "../common.h"
+#include "../bc.h"
+#include "../type.h"
+#include "../value.h"
 
 #define IR_ENUM(_) \
 		MAP_BYTECODES(_) \

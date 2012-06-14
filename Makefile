@@ -35,7 +35,7 @@ SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp
 
 ifeq ($(ENABLE_JIT),1)
 	CXXFLAGS += -DENABLE_JIT
-	SRC += ir.cpp trace.cpp trace_compile.cpp assembler-x64.cpp
+	SRC += vector_jit/ir.cpp vector_jit/trace.cpp vector_jit/trace_compile.cpp vector_jit/assembler-x64.cpp
 endif
 
 EXECUTABLE := bin/riposte

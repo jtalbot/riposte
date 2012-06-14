@@ -64,9 +64,15 @@ static inline int64_t strToInt( std::string const& s) {
 	return r;
 }
 
-static inline int64_t strToHexInt( std::string const& s) {
+static inline int64_t hexStrToInt( std::string const& s) {
 	int64_t r;
 	std::istringstream(s) >> std::hex >> r;
+	return r;
+}
+
+static inline int64_t octStrToInt( std::string const& s) {
+	int64_t r;
+	std::istringstream(s) >> std::oct >> r;
 	return r;
 }
 

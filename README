@@ -34,3 +34,9 @@ Riposte is in heavy development. Many things haven't been implemented
 and many things have been implemented incorrectly. Use with caution.
 Fixes welcome.
 
+License
+-------
+
+The Riposte code itself is released under the BSD 2-clause license.
+The repository also includes the base library functions 
+from the official R project; these are licensed under the GPL. 

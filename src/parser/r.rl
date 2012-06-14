@@ -3,10 +3,10 @@
  *	In ragel, the lexer drives the parsing process, so this also has the basic parsing functions.
  *	Use this to generate parser.cpp
  *      TODO: 
- *            Parse escape sequences embedded in strings.
  *            Include the double-to-int warnings, e.g. on 1.0L  and 1.5L
  *            Generate hex numbers
- *            Do we really want to allow '.' inside hex numbers? R allows them, but ignores them when parsing to a number.
+ *            Do we really want to allow '.' inside hex numbers? 
+ *			R allows them, but ignores them when parsing to a number.
  *            R parser has a rule for OP % OP. Is this ever used?
  */
 
@@ -62,21 +62,21 @@
 		{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol(state.internStr(unescape(s))) );};
 	# Numeric literals.
 	( float exponent? ) 
-		{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );};
+		{token( TOKEN_NUM_CONST, Double::c(strToDouble(std::string(ts, te-ts).c_str())) );};
 	
 	( float exponent? 'L' ) 
-		{token( TOKEN_NUM_CONST, Integer::c(atof(std::string(ts, te-ts-1).c_str())) );};
+		{token( TOKEN_NUM_CONST, Integer::c(strToDouble(std::string(ts, te-ts-1).c_str())) );};
 	
 	( float exponent? 'i' ) 
-		{token( TOKEN_NUM_CONST, CreateComplex(atof(std::string(ts, te-ts-1).c_str())) );};
+		{token( TOKEN_NUM_CONST, CreateComplex(strToDouble(std::string(ts, te-ts-1))) );};
 	
-	# Integer octal. Leading part buffered by float.
+	# Integer octal.
 	#( '0' [0-9]+ [ulUL]{0,2} ) 
-	#	{token( TK_IntegerOctal );};
+	#	{token( TOKEN_NUM_CONST, Integer::c(octStrToInt(std::string(ts, te-ts-1))) );};
 
-	# Hex. Leading 0 buffered by float.
-	( '0' ( 'x' [0-9a-fA-F]+ hexponent?) ) 
-		{token( TOKEN_NUM_CONST );};
+	# Hex.
+	#( '0' ( 'x' [0-9a-fA-F]+ hexponent?) ) 
+	#	{token( TOKEN_NUM_CONST, Integer::c(hexStrToInt(std::string(ts, te-ts-1))) );};
 
 	# Operators. 
 	'=' {token( TOKEN_EQ_ASSIGN, CreateSymbol(Strings::eqassign) );};

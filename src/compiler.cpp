@@ -255,7 +255,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
 	{
 		Operand result = allocRegister();
-		Operand counter = compileConstant(Integer::c(0), code);
+		Operand counter = placeInRegister(compile(Integer::c(0), code));
 		Operand storage = allocRegister();
 		kill(storage); kill(counter);
 		emit(ByteCode::dotslist, counter, storage, result); 
@@ -800,7 +800,7 @@ void Compiler::dumpCode() const {
 //	INVALID operands just go to 0 since they will never be used
 int64_t Compiler::encodeOperand(Operand op, int64_t n) const {
 	if(op.loc == MEMORY || op.loc == INTEGER) return op.i;
-	else if(op.loc == CONSTANT) return -(op.i);
+	else if(op.loc == CONSTANT) return (op.i+1);
 	else if(op.loc == REGISTER) return -(op.i + n);
 	else return 0;
 }
@@ -811,7 +811,7 @@ Prototype* Compiler::compile(Value const& expr) {
 
 	Operand result = compile(expr, code);
 
-	std::reverse(code->constants.begin(), code->constants.end());
+	//std::reverse(code->constants.begin(), code->constants.end());
 	code->expression = expr;
 	code->registers = code->constants.size() + max_n;
 	

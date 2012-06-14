@@ -51,8 +51,8 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
 		throw RiposteError("Register overflow");
 	
 	// copy constants into registers
-	if(prototype->constants.size() > 0)
-		memcpy(thread.base-(prototype->constants.size()-1), &prototype->constants[0], sizeof(Value)*prototype->constants.size());
+	//if(prototype->constants.size() > 0)
+	//	memcpy(thread.base-(prototype->constants.size()-1), &prototype->constants[0], sizeof(Value)*prototype->constants.size());
 
 	return &(prototype->bc[0]);
 }

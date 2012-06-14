@@ -13,7 +13,7 @@
 #endif
 
 #include "value.h"
-#include "parser.h"
+#include "parser/parser.h"
 #include "compiler.h"
 #include "library.h"
 

@@ -1,7 +1,8 @@
-#include "interpreter.h"
-#include "vector.h"
-#include "ops.h"
-#include "sse.h"
+
+#include "../interpreter.h"
+#include "../vector.h"
+#include "../ops.h"
+#include "../sse.h"
 //#include <unordered_set>
 #include <stdlib.h>
 
