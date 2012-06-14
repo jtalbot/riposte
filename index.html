@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Riposte by jtalbot</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>Riposte</h1>
+        <p></p>
+        <p class="view"><a href="https://github.com/jtalbot/riposte">View the Project on GitHub <small>jtalbot/riposte</small></a></p>
+        <ul>
+          <li><a href="https://github.com/jtalbot/riposte/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/jtalbot/riposte/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/jtalbot/riposte">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <h3>A Fast Interpreter and Vector JIT for R</h3>
+
+<p>Riposte is an academic interpreter and JIT for the <a href="http://www.r-project.org/">R language</a>. Riposte is in heavy development. Many things haven't been implemented and many things have been implemented incorrectly. Use with caution. Fixes welcome.</p>
+
+<p>Riposte is currently developed at Stanford University by Justin Talbot (<a href="https://github.com/jtalbot" class="user-mention">@jtalbot</a>) and Zach DeVito (<a href="https://github.com/zdevito" class="user-mention">@zdevito</a>).</p>
+
+<h3>Compiling Riposte</h3>
+
+<p>We do development on OSX and Linux. Windows compilation is completely untested and we doubt the JIT will work on Windows.</p>
+
+<ol>
+<li><p>Install the Boehm GC. Available in macports, port install boehmgc.
+Install rlwrap. Available in macports, port install rlwrap.</p></li>
+<li><p>Run make release in the riposte directory, or make debug for the debug version</p></li>
+<li><p>Execute ./riposte to start</p></li>
+</ol><h3>Flags</h3>
+
+<p><code>-j #</code>: start with <code>#</code> worker threads (defaults to <code>1</code>)</p>
+
+<p><code>-f &lt;filename&gt;</code>: execute R script</p>
+
+<p><code>-v</code>: verbose debug output for the vector trace recorder and JIT</p>
+
+<p><code>--args</code>: pass arguments after <code>--args</code> to the R script</p>
+
+<h3>License</h3>
+
+<p>Riposte is distributed under the <a href="http://www.opensource.org/licenses/bsd-license.php">BSD 2-clause license</a>.</p>
+
+<p>Riposte uses Eigen which is distributed under the <a href="http://www.gnu.org/copyleft/lesser.html">LGPL3 license</a>.</p>
+      </section>
+      <footer>
+        <p>This project is maintained by <a href="https://github.com/jtalbot">jtalbot</a></p>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="javascripts/scale.fix.js"></script>
+    
+  </body>
+</html>
