@@ -13,9 +13,21 @@
 #include "sse.h"
 #include "call.h"
 
-Thread::Thread(State& state, uint64_t index) : state(state), index(index), random1(index), random2(index),steals(1) {
+
+const int64_t Random::primes[100] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43,
+47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131,
+137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223,
+227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311,
+313, 317, 331, 337, 347, 349, 353, 359, 367, 373, 379, 383, 389, 397, 401, 409,
+419, 421, 431, 433, 439, 443, 449, 457, 461, 463, 467, 479, 487, 491, 499, 503,
+509, 521, 523, 541};
+
+Thread::Thread(State& state, uint64_t index) : state(state), index(index), random(index),steals(1) {
 	registers = new Value[DEFAULT_NUM_REGISTERS];
 	this->base = registers + DEFAULT_NUM_REGISTERS;
+
+	random[index].r[0] = Random(index*2+0);
+	random[index].r[1] = Random(index*2+1);
 }
 
 extern Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -686,7 +698,7 @@ Instruction const* random_op(Thread& thread, Instruction const& inst) {
 		return &inst+1;
 	}*/
 
-	OUT(thread, inst.c) = Random(thread, len);
+	OUT(thread, inst.c) = RandomVector(thread, len);
 	return &inst+1;
 }
 

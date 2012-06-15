@@ -208,7 +208,7 @@ inline Integer Repeat(Integer const& each, int64_t const length) {
 	return r;
 }
 
-Double Random(Thread& thread, int64_t const length);
+Double RandomVector(Thread& thread, int64_t const length);
 
 #endif
 

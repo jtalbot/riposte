@@ -1,6 +1,6 @@
 
 #include "../value.h"
-
+#include "ir.h"
 #ifdef ENABLE_JIT
 
 #define TRACE_MAX_VECTOR_REGISTERS (32)
