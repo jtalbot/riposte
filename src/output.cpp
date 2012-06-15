@@ -150,12 +150,6 @@ std::string State::stringify(Value const& value) const {
 	return ::stringify(*this, value);
 }
 
-#ifdef ENABLE_JIT
-std::string State::stringify(Trace const & t) const {
-	return "NYI";
-}
-#endif
-
 template<class T> std::string deparse(State const& state, typename T::Element a) {
 	return "";
 }

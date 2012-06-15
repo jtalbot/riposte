@@ -110,7 +110,7 @@ int dostdin(State& state) {
 	int rc = 0;
 
 	printf("\n");
-	printf("Riposte (%d threads) -- A Fast Interpreter and JIT for R\n", state.nThreads);
+	printf("Riposte (%d threads) -- A Fast Interpreter and JIT for R\n", state.threads.size());
 	printf("Flags: \t-v\t verbose vector output\n");
 	printf("\t-j #\t start with # worker threads\n");
 	printf("\n");

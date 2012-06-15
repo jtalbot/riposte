@@ -6,14 +6,15 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <map>
 
 #include "common.h"
 #include "exceptions.h"
 #include "value.h"
 #include "type.h"
 #include "bc.h"
-#include "interpreter.h"
 #include "frontend.h"
+#include "interpreter.h"
 
 class Compiler {
 private:

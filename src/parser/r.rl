@@ -13,6 +13,7 @@
 #include "parser.h"
 #include "r.h"
 #include "r.cpp"
+#include "../interpreter.h"
 
 %%{
 	machine Scanner; 
@@ -265,4 +266,12 @@ int Parser::buffer_execute( )
 	return 0;
 }
 */
+
+String Parser::popSource() {
+	assert(source.size() > 0);
+	std::string s(source.top(), le-source.top());
+	String result = state.internStr(rtrim(s));
+	source.pop();
+	return result;	
+}
 

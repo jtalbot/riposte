@@ -5,14 +5,14 @@
 
 #include "interpreter.h"
 #include "ops.h"
+#include "vector.h"
+#include "exceptions.h"
 
 #ifdef USE_THREADED_INTERPRETER
 extern const void** glabels;
 #endif
 
 void printCode(Thread const& thread, Prototype const* prototype, Environment* env);
-
-void threadByteCode(Prototype* prototype);
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset);
 
@@ -56,7 +56,7 @@ if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
 		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
 		if(t.isConcrete()) { \
 			thread.frame.environment->insert((String)(i)) = t; \
-			thread.LiveEnvironment(thread.frame.environment, t); \
+			thread.traces.LiveEnvironment(thread.frame.environment, t); \
 			return &inst; \
 		} \
 		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
@@ -73,7 +73,7 @@ if(!a.isConcrete()) { \
 		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
 		if(t.isConcrete()) { \
 			thread.frame.environment->dots[(i)].v = t; \
-			thread.LiveEnvironment(thread.frame.environment, t); \
+			thread.traces.LiveEnvironment(thread.frame.environment, t); \
 			return &inst; \
 		} \
 		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
@@ -83,71 +83,174 @@ if(!a.isConcrete()) { \
 
 #define BIND(a) \
 if(__builtin_expect(a.isFuture(), false)) { \
-	thread.Bind(a); \
+	thread.traces.Bind(thread,a); \
 	return &inst; \
 }
 
-inline bool isTraceableType(Thread const& thread, Value const& a) {
-	Type::Enum type = thread.futureType(a);
-        return type == Type::Double || type == Type::Integer || type == Type::Logical;
+template< template<typename T> class Op > 
+void ArithUnary1Dispatch(Thread& thread, Value a, Value& c) {
+	if(a.isDouble())	Zip1< Op<Double> >::eval(thread, (Double const&)a, c);
+	else if(a.isInteger())	Zip1< Op<Integer> >::eval(thread, (Integer const&)a, c);
+	else if(a.isLogical())	Zip1< Op<Logical> >::eval(thread, (Logical const&)a, c);
+	else if(a.isNull())	c = Null::Singleton();
+	else _error("non-numeric argument to unary numeric operator");
 }
 
-inline bool isTraceableShape(Thread const& thread, Value const& a) {
-	IRNode::Shape const& shape = thread.futureShape(a);
-	return !shape.blocking && shape.length >= TRACE_VECTOR_WIDTH;
+template< template<typename T> class Op > 
+void ArithUnary2Dispatch(Thread& thread, Value a, Value& c) {
+	ArithUnary1Dispatch<Op>(thread, a, c);
 }
 
-inline bool isTraceableShape(Thread const& thread, Value const& a, Value const& b) {
-	IRNode::Shape const& shapea = thread.futureShape(a);
-	IRNode::Shape const& shapeb = thread.futureShape(b);
-	return 	!shapea.blocking &&
-		!shapeb.blocking &&
-		(shapea.length >= TRACE_VECTOR_WIDTH || shapeb.length >=TRACE_VECTOR_WIDTH) &&
-		!(a.isFuture() && b.isFuture() && shapea.length != shapeb.length);
+template< template<typename T> class Op > 
+void LogicalUnaryDispatch(Thread& thread, Value a, Value& c) {
+	if(a.isLogical())	Zip1< Op<Logical> >::eval(thread, (Logical const&)a, c);
+	else if(a.isDouble())	Zip1< Op<Double> >::eval(thread, (Double const&)a, c);
+	else if(a.isInteger())	Zip1< Op<Integer> >::eval(thread, (Integer const&)a, c);
+	else if(a.isNull())	c = Logical(0);
+	else _error("non-logical argument to unary logical operator");
+};
+
+template< template<typename T> class Op > 
+void OrdinalUnaryDispatch(Thread& thread, Value a, Value& c) {
+	if(a.isDouble())	Zip1< Op<Double> >::eval(thread, (Double const&)a, c);
+	else if(a.isInteger())	Zip1< Op<Integer> >::eval(thread, (Integer const&)a, c);
+	else if(a.isLogical())	Zip1< Op<Logical> >::eval(thread, (Logical const&)a, c);
+	else if(a.isCharacter())Zip1< Op<Character> >::eval(thread, (Character const&)a, c);
+	else c = Logical::False();
 }
 
-inline bool isTraceable(Thread const& thread, Value const& a) {
-	return 	thread.state.jitEnabled && 
-		isTraceableType(thread, a) &&
-		isTraceableShape(thread, a);
+template< template<typename S, typename T> class Op > 
+void ArithBinary1Dispatch(Thread& thread, Value a, Value b, Value& c) {
+	if(a.isDouble()) {
+		if(b.isDouble()) 	Zip2< Op<Double,Double> >::eval(thread, (Double const&)a, (Double const&)b, c);
+		else if(b.isInteger()) 	Zip2< Op<Double,Integer> >::eval(thread, (Double const&)a, (Integer const&)b, c);
+		else if(b.isLogical()) 	Zip2< Op<Double,Logical> >::eval(thread, (Double const&)a, (Logical const&)b, c);
+		else if(b.isNull())	c = Double(0);
+		else _error("non-numeric argument to binary numeric operator");
+	} else if(a.isInteger()) {
+		if(b.isDouble()) 	Zip2< Op<Integer,Double> >::eval(thread, (Integer const&)a, (Double const&)b, c);
+		else if(b.isInteger()) 	Zip2< Op<Integer,Integer> >::eval(thread, (Integer const&)a, (Integer const&)b, c);
+		else if(b.isLogical()) 	Zip2< Op<Integer,Logical> >::eval(thread, (Integer const&)a, (Logical const&)b, c);
+		else if(b.isNull())	c = Double(0);
+		else _error("non-numeric argument to binary numeric operator");
+	} else if(a.isLogical()) {
+		if(b.isDouble()) 	Zip2< Op<Logical,Double> >::eval(thread, (Logical const&)a, (Double const&)b, c);
+		else if(b.isInteger()) 	Zip2< Op<Logical,Integer> >::eval(thread, (Logical const&)a, (Integer const&)b, c);
+		else if(b.isLogical()) 	Zip2< Op<Logical,Logical> >::eval(thread, (Logical const&)a, (Logical const&)b, c);
+		else if(b.isNull())	c = Double(0);
+		else _error("non-numeric argument to binary numeric operator");
+	} else if(a.isNull()) {
+		if(b.isDouble() || b.isInteger() || b.isLogical()) c = Double(0);
+		else _error("non-numeric argument to binary numeric operator");
+	} 
+	else	_error("non-numeric argument to binary numeric operator");
 }
 
-inline bool isTraceable(Thread const& thread, Value const& a, Value const& b) {
-	return  thread.state.jitEnabled &&
-		isTraceableType(thread, a) && 
-		isTraceableType(thread, b) && 
-		isTraceableShape(thread, a, b);
+template< template<typename S, typename T> class Op > 
+void ArithBinary2Dispatch(Thread& thread, Value a, Value b, Value& c) {
+	ArithBinary1Dispatch<Op>(thread, a, b, c);
 }
 
-template< template<class X> class Group>
-bool isTraceable(Thread const& thread, Value const& a) { 
-	return 	isTraceable(thread, a);
+template< template<typename S, typename T> class Op >
+void LogicalBinaryDispatch(Thread& thread, Value a, Value b, Value& c) {
+	if(a.isLogical()) {
+		if(b.isLogical()) 	Zip2< Op<Logical,Logical> >::eval(thread, (Logical const&)a, (Logical const&)b, c);
+		else if(b.isDouble()) 	Zip2< Op<Logical,Double> >::eval(thread, (Logical const&)a, (Double const&)b, c);
+		else if(b.isInteger()) 	Zip2< Op<Logical,Integer> >::eval(thread, (Logical const&)a, (Integer const&)b, c);
+		else if(b.isNull())	c = Logical(0);
+		else _error("non-logical argument to binary logical operator");
+	} else if(a.isDouble()) {
+		if(b.isLogical()) 	Zip2< Op<Double,Logical> >::eval(thread, (Double const&)a, (Logical const&)b, c);
+		else if(b.isDouble()) 	Zip2< Op<Double,Double> >::eval(thread, (Double const&)a, (Double const&)b, c);
+		else if(b.isInteger()) 	Zip2< Op<Double,Integer> >::eval(thread, (Double const&)a, (Integer const&)b, c);
+		else if(b.isNull())	c = Logical(0);
+		else _error("non-logical argument to binary logical operator");
+	} else if(a.isInteger()) {
+		if(b.isLogical()) 	Zip2< Op<Integer,Logical> >::eval(thread, (Integer const&)a, (Logical const&)b, c);
+		else if(b.isDouble()) 	Zip2< Op<Integer,Double> >::eval(thread, (Integer const&)a, (Double const&)b, c);
+		else if(b.isInteger()) 	Zip2< Op<Integer,Integer> >::eval(thread, (Integer const&)a, (Integer const&)b, c);
+		else if(b.isNull())	c = Logical(0);
+		else _error("non-logical argument to binary logical operator");
+	} else if(a.isNull()) {
+		if(b.isDouble() || b.isInteger() || b.isLogical() || b.isNull()) c = Logical(0);
+		else _error("non-logical argument to binary logical operator");
+	} 
+	else _error("non-logical argument to binary logical operator");
 }
 
-template<>
-inline bool isTraceable<ArithScan>(Thread const& thread, Value const& a) { return false; }
-
-template<>
-inline bool isTraceable<UnifyScan>(Thread const& thread, Value const& a) { return false; }
-
-template< template<class X, class Y> class Group>
-bool isTraceable(Thread const& thread, Value const& a, Value const& b) {
-	return  isTraceable(thread, a, b);
+template< template<typename S, typename T> class Op > 
+void UnifyBinaryDispatch(Thread& thread, Value const& a, Value const& b, Value& c) {
+	if(!a.isVector() || !b.isVector())
+		_error("comparison is possible only for atomic and list types");
+	if(a.isCharacter() || b.isCharacter())
+		Zip2< Op<Character, Character> >::eval(thread, As<Character>(thread, a), As<Character>(thread, b), c);
+	else if(a.isDouble() || b.isDouble())
+		Zip2< Op<Double, Double> >::eval(thread, As<Double>(thread, a), As<Double>(thread, b), c);
+	else if(a.isInteger() || b.isInteger())	
+		Zip2< Op<Integer, Integer> >::eval(thread, As<Integer>(thread, a), As<Integer>(thread, b), c);
+	else if(a.isLogical() || b.isLogical())	
+		Zip2< Op<Logical, Logical> >::eval(thread, As<Logical>(thread, a), As<Logical>(thread, b), c);
+	else if(a.isNull() || b.isNull())
+		c = Null::Singleton();
+	else	_error("non-ordinal argument to ordinal operator");
 }
 
-template< template<class X, class Y, class Z> class Group>
-bool isTraceable(Thread const& thread, Value const& a, Value const& b, Value const& c) {
-	return false;
+template< template<typename S, typename T> class Op > 
+void OrdinalBinaryDispatch(Thread& thread, Value const& a, Value const& b, Value& c) {
+	UnifyBinaryDispatch<Op>(thread, a, b, c);
 }
 
-template<>
-inline bool isTraceable<IfElse>(Thread const& thread, Value const& a, Value const& b, Value const& c) { 
-	return	thread.state.jitEnabled &&
-		isTraceableType(thread, a) &&
-		isTraceableType(thread, b) &&
-		isTraceableType(thread, c) &&
-		isTraceableShape(thread, a, c) &&
-		isTraceableShape(thread, b, c);
+template< template<typename S, typename T> class Op > 
+void RoundBinaryDispatch(Thread& thread, Value a, Value b, Value& c) {
+	ArithBinary1Dispatch<Op>(thread, a, b, c);
 }
+
+template< template<typename T> class Op >
+void ArithFoldDispatch(Thread& thread, Value const& a, Value& c) {
+	if(a.isDouble())	FoldLeft< Op<Double> >::eval(thread, (Double const&)a, c);
+	else if(a.isInteger())	FoldLeft< Op<Integer> >::eval(thread, (Integer const&)a, c);
+	else if(a.isLogical())	FoldLeft< Op<Logical> >::eval(thread, (Logical const&)a, c);
+	else if(a.isNull())	Op<Double>::Scalar(thread, Op<Double>::base(), c);
+	else _error("non-numeric argument to numeric fold operator");
+}
+
+template< template<typename T> class Op >
+void LogicalFoldDispatch(Thread& thread, Value const& a, Value& c) {
+	if(a.isLogical())	FoldLeft< Op<Logical> >::eval(thread, (Logical const&)a, c);
+	else if(a.isDouble())	FoldLeft< Op<Double> >::eval(thread, (Double const&)a, c);
+	else if(a.isInteger())	FoldLeft< Op<Integer> >::eval(thread, (Integer const&)a, c);
+	else if(a.isNull())	Op<Logical>::Scalar(thread, Op<Logical>::base(), c);
+	else _error("non-logical argument to logical fold operator");
+}
+
+template< template<typename T> class Op >
+void UnifyFoldDispatch(Thread& thread, Value const& a, Value& c) {
+	if(a.isCharacter())	FoldLeft< Op<Character> >::eval(thread, (Character const&)a, c);
+	else if(a.isDouble())	FoldLeft< Op<Double> >::eval(thread, (Double const&)a, c);
+	else if(a.isInteger())	FoldLeft< Op<Integer> >::eval(thread, (Integer const&)a, c);
+	else if(a.isLogical())	FoldLeft< Op<Logical> >::eval(thread, (Logical const&)a, c);
+	else if(a.isNull())	c = Null::Singleton();
+	else _error("non-numeric argument to numeric fold operator");
+}
+
+template< template<typename T> class Op >
+void ArithScanDispatch(Thread& thread, Value const& a, Value& c) {
+	if(a.isDouble())	ScanLeft< Op<Double> >::eval(thread, (Double const&)a, c);
+	else if(a.isInteger())	ScanLeft< Op<Integer> >::eval(thread, (Integer const&)a, c);
+	else if(a.isLogical())	ScanLeft< Op<Logical> >::eval(thread, (Logical const&)a, c);
+	else if(a.isNull())	Op<Double>::Scalar(thread, Op<Double>::base(), c);
+	else _error("non-numeric argument to numeric scan operator");
+}
+
+template< template<typename T> class Op >
+void UnifyScanDispatch(Thread& thread, Value const& a, Value& c) {
+	if(a.isCharacter())	ScanLeft< Op<Character> >::eval(thread, (Character const&)a, c);
+	else if(a.isDouble())	ScanLeft< Op<Double> >::eval(thread, (Double const&)a, c);
+	else if(a.isInteger())	ScanLeft< Op<Integer> >::eval(thread, (Integer const&)a, c);
+	else if(a.isLogical())	ScanLeft< Op<Logical> >::eval(thread, (Logical const&)a, c);
+	else if(a.isNull())	Op<Double>::Scalar(thread, Op<Double>::base(), c);
+	else _error("non-numeric argument to numeric scan operator");
+}
+
 
 #endif

@@ -1,7 +1,6 @@
 
 #include "compiler.h"
 #include "internal.h"
-#include "call.h"
 
 static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::add) return ByteCode::pos; 
@@ -828,7 +827,7 @@ Prototype* Compiler::compile(Value const& expr) {
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, encodeOperand(ir[i].a, n), encodeOperand(ir[i].b, n), encodeOperand(ir[i].c, n)));
 	}
-	threadByteCode(code);
+	Prototype::threadByteCode(code);
 
 	return code;	
 }

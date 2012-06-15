@@ -1,10 +1,6 @@
 
 #include "call.h"
 
-#ifdef USE_THREADED_INTERPRETER
-const void** glabels = 0;
-#endif
-
 void printCode(Thread const& thread, Prototype const* prototype, Environment* env) {
 	std::cout << "Prototype: " << intToHexStr((int64_t)prototype) << "\t(executing in " << intToHexStr((int64_t)env) << ")" << std::endl;
 	std::cout << "\tRegisters: " << prototype->registers << std::endl;
@@ -24,15 +20,6 @@ void printCode(Thread const& thread, Prototype const* prototype, Environment* en
 		}
 	}
 	std::cout << std::endl;
-}
-
-void threadByteCode(Prototype*  prototype) {
-#ifdef USE_THREADED_INTERPRETER
-	for(int64_t i = 0; i < (int64_t)prototype->bc.size(); ++i) {
-		Instruction const& inst = prototype->bc[i];
-		inst.ibc = glabels[inst.bc];
-	}
-#endif
 }
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset) {
@@ -128,7 +115,7 @@ inline void argAssign(Thread& thread, Environment* env, Pair const& parameter, P
 			assert(w.p == 0);
 			w.p = env;
 		} else if(w.isFuture()) {
-			thread.LiveEnvironment(env, w);
+			thread.traces.LiveEnvironment(env, w);
 		}
 		env->insert(parameter.n) = w;
 	}
@@ -169,7 +156,7 @@ inline void dotAssign(Thread& thread, Environment* env, Pair const& argument) {
 		w.p = env;
 	}
 	else if(w.isFuture()) {
-		thread.LiveEnvironment(env, w);
+		thread.traces.LiveEnvironment(env, w);
 	}
 	Pair p;
 	p.n = argument.n;

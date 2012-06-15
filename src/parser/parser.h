@@ -10,7 +10,6 @@
 #include <locale>
 
 #include "../value.h"
-#include "../interpreter.h"
 #include "../frontend.h"
 
 // trim from end
@@ -82,18 +81,11 @@ struct Parser {
 	// To provide user with function source have to track beginning locations
 	// Parser pops when function rule is reduced
 	std::stack<const char*> source;
-	String popSource() {
-		assert(source.size() > 0);
-		std::string s(source.top(), le-source.top());
-		String result = state.internStr(rtrim(s));
-		source.pop();
-		return result;
-	}
+	String popSource();
 
 	void token( int tok, Value v=Value::Nil() );
-
-	Parser(State& state); 
 	int execute( const char* data, int len, bool isEof, Value& result, FILE* trace=NULL );
+	Parser(State& state); 
 };
 
 struct Pairs {
