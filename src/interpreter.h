@@ -219,11 +219,7 @@ public:
 
 	int64_t assignment[64], set[64]; // temporary space for matching arguments
 	
-	struct RandomVector {
-		Random r[2];
-		uint64_t padding[8];
-	};
-	static RandomVector random[256];	
+	Random random;	
 
 	Thread(State& state, uint64_t index);
 

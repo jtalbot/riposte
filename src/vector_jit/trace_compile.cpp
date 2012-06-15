@@ -279,7 +279,9 @@ static __m128d random_d(__m128d input) {
 	SSEValue v; 
 	v.D = input;
 
-	uint64_t thread_index = v.i[0];
+	// TODO: fix me
+
+	/*uint64_t thread_index = v.i[0];
 	
 	Thread::RandomSeed& r = Thread::seed[thread_index];
 	
@@ -295,7 +297,11 @@ static __m128d random_d(__m128d input) {
 
 	o.d[0] = (double)r.v[0] / ((double)std::numeric_limits<uint64_t>::max() + 1);
 	o.d[1] = (double)r.v[1] / ((double)std::numeric_limits<uint64_t>::max() + 1);
+	
 	return o.D;
+	*/
+
+	return input;
 }
 
 static void double_push(Double* d, double v) {

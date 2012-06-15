@@ -11,8 +11,8 @@
  */
 
 #include "parser.h"
-#include "tokens.h"
-#include "ast.cpp"
+#include "r.h"
+#include "r.cpp"
 
 %%{
 	machine Scanner; 

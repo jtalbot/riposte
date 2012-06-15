@@ -25,9 +25,6 @@ const int64_t Random::primes[100] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37,
 Thread::Thread(State& state, uint64_t index) : state(state), index(index), random(index),steals(1) {
 	registers = new Value[DEFAULT_NUM_REGISTERS];
 	this->base = registers + DEFAULT_NUM_REGISTERS;
-
-	random[index].r[0] = Random(index*2+0);
-	random[index].r[1] = Random(index*2+1);
 }
 
 extern Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;

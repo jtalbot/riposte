@@ -10,6 +10,7 @@ lemon: lemon.c
 
 parser: lexer lemon
 	-./lemon -q r.y
+	mv r.c r.cpp
 
 clean:
 	rm -rf lemon 

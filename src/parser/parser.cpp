@@ -13,8 +13,8 @@
  */
 
 #include "parser.h"
-#include "tokens.h"
-#include "ast.cpp"
+#include "r.h"
+#include "r.cpp"
 
 
 #line 21 "parser.cpp"
