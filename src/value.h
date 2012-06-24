@@ -409,8 +409,8 @@ public:
 	}
 
 	void clear() {
-		load = 0;
 		memset(d->d, 0, sizeof(Pair)*size); 
+		load = 0;
 	}
 
 	// clone with room for extra elements
