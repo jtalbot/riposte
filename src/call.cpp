@@ -75,8 +75,8 @@ Pair argument(int64_t index, Environment* env, CompiledCall const& call) {
 			if(env->dots[index].v.isPromise()) {
 				Pair p;
 				p.n = env->dots[index].n;
-				p.v.type = Type::Dotdot;
-				p.v.len = index;
+				Value::Init(p.v, Type::Dotdot, 0);
+				p.v.z(index);
 				p.v.p = env;
 				return p;
 			} 

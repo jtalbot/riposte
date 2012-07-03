@@ -206,8 +206,7 @@ Compiler::Operand Compiler::compileFunctionCall(List const& call, Character cons
 	return result;
 }
 
-Compiler::Operand Compiler::compileInternalFunctionCall(Object const& o, Prototype* code) {
-	List const& call = (List const&)(o.base());
+Compiler::Operand Compiler::compileInternalFunctionCall(List const& call, Prototype* code) {
 	String func = SymbolStr(call[0]);
 	std::map<String, int64_t>::const_iterator itr = state.internalFunctionIndex.find(func);
 	
@@ -324,11 +323,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 	if(func == Strings::internal) 
 	{
-		if(!call[1].isObject())
-			throw CompileError(std::string(".Internal has invalid arguments (") + Type::toString(call[1].type) + ")");
-		Object const& o = (Object const&)call[1];
-		assert(isCall(o) && o.base().isList());
-		return compileInternalFunctionCall(o, code);
+		if(!call[1].isList() || !isCall(call[1]))
+			throw CompileError(std::string(".Internal has invalid arguments (") + Type::toString(call[1].type()) + ")");
+		return compileInternalFunctionCall((List const&)call[1], code);
 	} 
 	else if(func == Strings::assign ||
 		func == Strings::eqassign || 
@@ -346,7 +343,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		// of the original expression, not the RHS of the inside out expression.
 		Value value = call[2];
 		while(isCall(dest)) {
-			List const& c = (List const&)((Object const&)dest).base();
+			List const& c = (List const&)dest;
 			List n(c.length()+1);
 
 			for(int64_t i = 0; i < c.length(); i++) { n[i] = c[i]; }
@@ -361,7 +358,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			}
 			else {
 				if(hasNames(dest)) {
-					Value names = getNames((Object const&)dest);
+					Value names = getNames(dest);
 					for(int64_t i = 0; i < c.length(); i++) { nnames[i] = ((Character const&)names)[i]; }
 				} else {
 					for(int64_t i = 0; i < c.length(); i++) { nnames[i] = Strings::empty; }
@@ -398,11 +395,10 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::function) 
 	{
 		//compile the default parameters
-		assert(call[1].isObject());
-		List const& c = (List const&)((Object const&)call[1]).base();
-		Character names = hasNames(call[1]) ? 
-			(Character const&)getNames((Object&)call[1]) :
-			Character(0);
+		assert(call[1].isList() && call[1].isObject());
+		List const& c = (List const&)call[1];
+		Character names = hasNames(c) ? 
+			(Character const&)getNames(c) : Character(0);
 		
 		PairList parameters;
 		for(int64_t i = 0; i < c.length(); i++) {
@@ -755,32 +751,24 @@ Compiler::Operand Compiler::compileExpression(List const& values, Prototype* cod
 }
 
 Compiler::Operand Compiler::compile(Value const& expr, Prototype* code) {
-	switch(expr.type)
-	{
-		case Type::Object:
-			{
-				Object const& o = (Object const&) expr;
-				if(isSymbol(o)) {
-					return compileSymbol(expr, code);
-				}
-				if(isExpression(o)) {
-					assert(o.base().isList());
-					return compileExpression((List const&)o.base(), code);
-				}
-				else if(isCall(o)) {
-					assert(o.base().isList());
-					return compileCall((List const&)o.base(), 
-						hasNames(o) ? (Character const&)getNames(o) : Character(0), code);
-				}
-				else {
-					return compileConstant(expr, code);
-				}
-			} break;
-		default: 
-			{
-			return compileConstant(expr, code);
-			} break;
-	};
+	if(isSymbol(expr)) {
+		return compileSymbol(expr, code);
+	}
+	if(isExpression(expr)) {
+		assert(expr.isList());
+		return compileExpression((List const&)expr, code);
+	}
+	else if(isCall(expr)) {
+		assert(expr.isList());
+		return compileCall((List const&)expr, 
+			hasNames(expr) ? 
+				(Character const&)getNames(expr) : 
+				Character(0), 
+			code);
+	}
+	else {
+		return compileConstant(expr, code);
+	}
 }
 
 

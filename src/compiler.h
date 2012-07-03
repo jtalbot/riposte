@@ -86,7 +86,7 @@ private:
 	Operand compileSymbol(Value const& symbol, Prototype* code); 
 	Operand compileCall(List const& call, Character const& names, Prototype* code); 
 	Operand compileFunctionCall(List const& call, Character const& names, Prototype* code); 
-	Operand compileInternalFunctionCall(Object const& o, Prototype* code); 
+	Operand compileInternalFunctionCall(List const& call, Prototype* code); 
 	Operand compileExpression(List const& values, Prototype* code);
 	
 	CompiledCall makeCall(List const& call, Character const& names);

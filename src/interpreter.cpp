@@ -91,7 +91,7 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	Heap::Global.collect(thread.state);
 	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
 	if(!f.isFunction())
-		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
+		_error(std::string("Non-function (") + Type::toString(f.type()) + ") as first parameter to call\n");
 	Function const& func = (Function const&)f;
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
@@ -105,7 +105,7 @@ Instruction const* ncall_op(Thread& thread, Instruction const& inst) {
 	Heap::Global.collect(thread.state);
 	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
 	if(!f.isFunction())
-		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
+		_error(std::string("Non-function (") + Type::toString(f.type()) + ") as first parameter to call\n");
 	Function const& func = (Function const&)f;
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
@@ -275,8 +275,9 @@ Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 			Character names(dots.size());
 			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
 				names[i] = dots[i].n;
-			Object::Init(out, out);
-			((Object&)out).insertMutable(Strings::names, names);
+			Dictionary* d = new Dictionary(1);
+			d->insert(Strings::names) = names;
+			out.z((uint64_t)d);
 		}
 		return &inst+1;
 	}
@@ -753,10 +754,8 @@ Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 Instruction const* strip_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	Value& c = OUT(thread, inst.c);
-	if(a.isObject())
-		c = ((Object const&)a).base();
-	else
-		c = a;
+	c = a;
+	c.z(0);
 	return &inst+1;
 }
 

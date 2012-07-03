@@ -53,13 +53,13 @@ Value const& a = __builtin_expect((i) <= 0, true) ? \
 #define FORCE(a, i) \
 if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
 	if(a.isDotdot()) { \
-		Value const& t = ((Environment*)a.p)->dots[a.len].v; \
+		Value const& t = ((Environment*)a.p)->dots[a.z()].v; \
 		if(t.isConcrete()) { \
 			thread.frame.environment->insert((String)(i)) = t; \
 			thread.traces.LiveEnvironment(thread.frame.environment, t); \
 			return &inst; \
 		} \
-		else return forceDot(thread, inst, &t, (Environment*)a.p, a.len); \
+		else return forceDot(thread, inst, &t, (Environment*)a.p, a.z()); \
 	} \
 	else return forceReg(thread, inst, &a, (String)(i)); \
 } \
@@ -70,13 +70,13 @@ Value const& a = thread.frame.environment->dots[(i)].v;
 #define FORCE_DOTDOT(a, i) \
 if(!a.isConcrete()) { \
 	if(a.isDotdot()) { \
-		Value const& t = ((Environment*)a.p)->dots[a.len].v; \
+		Value const& t = ((Environment*)a.p)->dots[a.z()].v; \
 		if(t.isConcrete()) { \
 			thread.frame.environment->dots[(i)].v = t; \
 			thread.traces.LiveEnvironment(thread.frame.environment, t); \
 			return &inst; \
 		} \
-		else return forceDot(thread, inst, &t, (Environment*)a.p, a.len); \
+		else return forceDot(thread, inst, &t, (Environment*)a.p, a.z()); \
 	} \
 	else return forceDot(thread, inst, &a, thread.frame.environment, (i)); \
 }

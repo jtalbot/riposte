@@ -27,14 +27,11 @@ struct CastOp {
 
 template<class O>
 void As(Thread& thread, Value src, O& out) {
-	if(src.isObject())
-		src = ((Object const&)src).base();
-
-	if(src.type == O::ValueType) {
+	if(src.type() == O::ValueType) {
 		out = (O const&)src;
 		return;
 	}
-	switch(src.type) {
+	switch(src.type()) {
 		case Type::Null: O(0); return; break;
 		#define CASE(Name,...) case Type::Name: Zip1< CastOp<Name, O> >::eval(thread, (Name const&)src, out); return; break;
 		VECTOR_TYPES_NOT_NULL(CASE)
@@ -43,7 +40,8 @@ void As(Thread& thread, Value src, O& out) {
 			Cast1<Function, O>(thread, (Function const&)src, out); return; break;
 		default: break;
 	};
-	_error(std::string("Invalid cast from ") + Type::toString(src.type) + " to " + Type::toString(O::ValueType));
+	out.z(src.z());
+	_error(std::string("Invalid cast from ") + Type::toString(src.type()) + " to " + Type::toString(O::ValueType));
 }
 
 template<>
@@ -59,14 +57,14 @@ O As(Thread& thread, Value const& src) {
 }
 
 inline Value As(Thread& thread, Type::Enum type, Value const& src) {
-	if(src.type == type)
+	if(src.type() == type)
 		return src;
 	switch(type) {
 		case Type::Null: return Null::Singleton(); break;
 		#define CASE(Name,...) case Type::Name: return As<Name>(thread, src); break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
-		default: _error(std::string("Invalid cast from ") + Type::toString(src.type) + " to " + Type::toString(type)); break;
+		default: _error(std::string("Invalid cast from ") + Type::toString(src.type()) + " to " + Type::toString(type)); break;
 	};
 }
 

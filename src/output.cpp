@@ -72,22 +72,28 @@ std::string stringifyVector(State const& state, T const& v) {
 }
 
 std::string stringify(State const& state, Value const& value) {
-	std::string result = "[1]";
+	std::string result;
 	bool dots = false;
-	switch(value.type)
+	switch(value.type())
 	{
 		case Type::Null:
-			return "NULL";
+			result = "NULL";
+			break;
 		case Type::Raw:
-			return stringifyVector(state, (Raw const&)value);
+			result = stringifyVector(state, (Raw const&)value);
+			break;
 		case Type::Logical:
-			return stringifyVector(state, (Logical const&)value);
+			result = stringifyVector(state, (Logical const&)value);
+			break;
 		case Type::Integer:
-			return stringifyVector(state, (Integer const&)value);
+			result = stringifyVector(state, (Integer const&)value);
+			break;
 		case Type::Double:
-			return stringifyVector(state, (Double const&)value);
+			result = stringifyVector(state, (Double const&)value);
+			break;
 		case Type::Character:
-			return stringifyVector(state, (Character const&)value);
+			result = stringifyVector(state, (Character const&)value);
+			break;
 		
 		case Type::List:
 		{
@@ -104,13 +110,11 @@ std::string stringify(State const& state, Value const& value) {
 				if(i < length-1) result = result + "\n";
 			}
 			if(dots) result = result + " ... (" + intToStr(v.length()) + " elements)";
-			return result;
-		}
+		} break;
 		case Type::Function:
 		{
 			result = state.externStr(((Function const&)value).prototype()->string);
-			return result;
-		}
+		} break;
 		case Type::Environment:
 		{
 			REnvironment const& renv = (REnvironment const&)value;
@@ -124,25 +128,23 @@ std::string stringify(State const& state, Value const& value) {
 				result = result + "\t" + state.externStr(i.string())
 						+ ":\t" + state.stringify(i.value()) + "\n";
 			}
-			return result;
-		}
-		case Type::Object:
-		{
-			Object const& o = (Object const&)value;
-			result = stringify(state, o.base());
-			result = result + "\nAttributes:\n";
-			Dictionary* d = o.dictionary();
-			for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
-				result = result + "\t" + state.externStr(i.string())
-						+ ":\t" + state.stringify(i.value()) + "\n";
-			}
-			return result;
-		}
+		} break;
 		case Type::Future:
-			return std::string("future") + intToStr(value.i);
+			result = std::string("future") + intToStr(value.i);
+			break;
 		default:
-			return Type::toString(value.type);
+			result = Type::toString(value.type());
+			break;
 	};
+	if(value.isObject()) {
+		result = result + "\nAttributes:\n";
+		Dictionary* d = (Dictionary*)value.z();
+		for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
+			result = result + "\t" + state.externStr(i.string())
+				+ ":\t" + state.stringify(i.value()) + "\n";
+		}
+	}
+	return result;
 }
 
 
@@ -204,7 +206,7 @@ std::string deparseVector<Expression>(State const& state, Expression const& v, V
 }
 */
 std::string deparse(State const& state, Value const& value) {
-	switch(value.type)
+	switch(value.type())
 	{
 		case Type::Null:
 			return "NULL";
@@ -215,10 +217,8 @@ std::string deparse(State const& state, Value const& value) {
 			return state.externStr(((Function const&)value).prototype()->string);
 		case Type::Environment:
 			return "environment";
-		case Type::Object:
-			return deparse(state, ((Object const&)value).base());
 		default:
-			return Type::toString(value.type);
+			return Type::toString(value.type());
 	};
 }
 

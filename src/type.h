@@ -20,7 +20,6 @@
 	_(Function,	"function", 56)	\
 	_(Environment,	"environment", 55)	\
 	_(Future, 	"future", 54)	\
-	_(Object,	"object", 53)	\
 
 DECLARE_ENUM_WITH_VALUES(Type, TYPES)
 

@@ -13,22 +13,13 @@
 #include "strings.h"
 #include "exceptions.h"
 
-typedef int64_t IRef;
+typedef int16_t IRef;
 
 struct Value {
 	
 	union {
-		struct {
-			union {
-				struct {
-					uint64_t packed:2;
-					Type::Enum type:6;
-				};
-				int8_t ptype;
-			};
-			int64_t len:56;
-		};
-		int64_t header;
+		uint64_t header;
+		uint8_t b[8];
 	};
 	union {
 		void* p;
@@ -36,14 +27,10 @@ struct Value {
 		double d;
 		char c;
 		String s;
-		struct {
-			Type::Enum typ;
-			uint16_t ref;
-		} future;
 	};
 
 	static void Init(Value& v, Type::Enum type, int64_t packed) {
-		v.header =  (type<<2) + packed;
+		v.header = (type<<2) + packed;
 	}
 
 	// Warning: shallow equality!
@@ -60,33 +47,38 @@ struct Value {
 		return header < other.header || (header == other.header && p < other.p);
 	}
 	
+	Type::Enum type() const { return (Type::Enum)(b[0] >> 2); }
+	uint64_t packed() const { return b[0] & 3; }
+	uint64_t z() const { return header >> 8; }
+	void z(uint64_t i) { header = (i << 8) | b[0]; }
+
 	bool isNil() const { return header == 0; }
-	bool isNull() const { return type == Type::Null; }
-	bool isLogical() const { return type == Type::Logical; }
-	bool isInteger() const { return type == Type::Integer; }
+	bool isNull() const { return type() == Type::Null; }
+	bool isLogical() const { return type() == Type::Logical; }
+	bool isInteger() const { return type() == Type::Integer; }
 	bool isLogical1() const { return header == (Type::Logical<<2)+1; }
 	bool isInteger1() const { return header == (Type::Integer<<2)+1; }
-	bool isDouble() const { return type == Type::Double; }
+	bool isDouble() const { return type() == Type::Double; }
 	bool isDouble1() const { return header == (Type::Double<<2)+1; }
-	bool isCharacter() const { return type == Type::Character; }
+	bool isCharacter() const { return type() == Type::Character; }
 	bool isCharacter1() const { return header == (Type::Character<<2)+1; }
-	bool isList() const { return type == Type::List; }
-	bool isPromise() const { return type == Type::Promise && !isNil(); }
-	bool isDefault() const { return type == Type::Default; }
-	bool isDotdot() const { return type == Type::Dotdot; }
-	bool isFuture() const { return type == Type::Future; }
-	bool isFunction() const { return type == Type::Function; }
-	bool isObject() const { return type == Type::Object; }
+	bool isList() const { return type() == Type::List; }
+	bool isPromise() const { return type() == Type::Promise && !isNil(); }
+	bool isDefault() const { return type() == Type::Default; }
+	bool isDotdot() const { return type() == Type::Dotdot; }
+	bool isFuture() const { return type() == Type::Future; }
+	bool isFunction() const { return type() == Type::Function; }
+	bool isObject() const { return isConcrete() && z() != 0; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isCharacter() || isList(); }
 	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isCharacter(); }
-	bool isConcrete() const { return (ptype) < 0; }
+	bool isConcrete() const { return ((int8_t)b[0]) < 0; }
 
 	template<class T> T& scalar() { throw "not allowed"; }
 	template<class T> T const& scalar() const { throw "not allowed"; }
 
-	static Value const& Nil() { static const Value v = { {{{{Type::Promise, 0}}}}, {0} }; return v; }
+	static Value const& Nil() { static const Value v = {{0}, {0}}; return v; }
 
 };
 
@@ -121,7 +113,7 @@ struct Vector : public Value {
 		int64_t capacity;
 	};
 
-	int64_t length() const { return packed <= 1 ? packed : ((Inner*)p)->length; }
+	int64_t length() const { return packed() <= 1 ? (int64_t)packed() : ((Inner*)p)->length; }
 	bool isScalar() const { return length() == 1; }
 	void* raw() { return (void*)(((Inner*)p)+1); }	// assumes that data is immediately after capacity
 	void const* raw() const { return (void const*)(((Inner*)p)+1); }	// assumes that data is immediately after capacity
@@ -139,11 +131,11 @@ struct VectorImpl : public Vector {
 	};
 
 	ElementType const* v() const { 
-		return (canPack && packed==1) ? 
+		return (canPack && packed()==1) ? 
 			&Value::scalar<ElementType>() : ((Inner*)p)->data; 
 	}
 	ElementType* v() { 
-		return (canPack && packed==1) ? 
+		return (canPack && packed()==1) ? 
 			&Value::scalar<ElementType>() : ((Inner*)p)->data; 
 	}
 
@@ -273,15 +265,17 @@ VECTOR_IMPL(List, Value, true)
 	static bool isInfinite(Value const& c) { return false; }
 };
 
+class Trace;
 struct Future : public Value {
 	static const Type::Enum ValueType = Type::Future;
-	static Future& Init(Value& f, Type::Enum typ,int64_t length,IRef ref) {
+	static Future& Init(Value& f, Trace* trace, IRef ref) {
 		Value::Init(f,Type::Future,0);
-		f.len = length;
-		f.future.ref = ref;
-		f.future.typ = typ;
+		f.i = (((uint64_t)trace) << 16) + ref;
 		return (Future&)f;
 	}
+
+	Trace* trace() const { return (Trace*)(((uint64_t)i)>>16); }
+	IRef ref() const { return (IRef)(uint64_t)i; }
 };
 
 struct Function : public Value {
@@ -398,8 +392,8 @@ protected:
 	}
 
 public:
-	Dictionary(int64_t initialSize) : size(0), load(0), d(0) {
-		rehash(nextPow2(initialSize));
+	Dictionary(int64_t initialLoad) : size(0), load(0), d(0) {
+		rehash(nextPow2(initialLoad*2));
 	}
 
 	bool has(String name) const ALWAYS_INLINE {
@@ -489,6 +483,7 @@ public:
 	 void visit() const;
 };
 
+/*
 // Object implements an immutable dictionary interface.
 // Objects also have a base value which right now must be a non-object type...
 //  However S4 objects can contain S3 objects so we may have to change this.
@@ -540,7 +535,7 @@ struct Object : public Value {
 		return o;
 	}
 };
-
+*/
 class Environment : public Dictionary {
 public:
 	Environment* lexical, *dynamic;
@@ -549,7 +544,7 @@ public:
 	bool named;	// true if any of the dots have names	
 
 	explicit Environment(Environment* lexical, Environment* dynamic, Value const& call) :
-			Dictionary(8), 
+			Dictionary(4), 
 			lexical(lexical), dynamic(dynamic), call(call), named(false) {}
 
 	Environment* LexicalScope() const { return lexical; }

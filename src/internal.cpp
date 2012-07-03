@@ -15,7 +15,7 @@
 
 template<typename T>
 T const& Cast(Value const& v) {
-	if(v.type != T::ValueType) _error("incorrect type passed to internal function");
+	if(v.type() != T::ValueType) _error("incorrect type passed to internal function");
 	return (T const&)v;
 }
 
@@ -176,9 +176,9 @@ void attr(Thread& thread, Value const* args, Value& result)
 {
 	// NYI: exact
 	Value object = args[0];
-	if(object.isObject()) {
-		Character which = Cast<Character>(args[-1]);
-		result = ((Object const&)object).get(which[0]);
+	Character which = Cast<Character>(args[-1]);
+	if(object.isObject() && ((Dictionary*)object.z())->has(which[0])) {
+		result = ((Dictionary*)object.z())->get(which[0]);
 	}
 	else {
 		result = Null::Singleton();
@@ -189,13 +189,12 @@ void assignAttr(Thread& thread, Value const* args, Value& result)
 {
 	Value object = args[0];
 	Character which = Cast<Character>(args[-1]);
-	if(!object.isObject()) {
-		Object::Init(object, object);
-		((Object&)object).insertMutable(which[0], args[-2]);
-		result = object;
-	} else {
-		result = ((Object&)object).insert(which[0], args[-2]);
-	}
+	Dictionary* d = object.isObject() 
+		? ((Dictionary*)object.z())->clone(1)
+		: new Dictionary(1);
+	d->insert(which[0]) = args[-2];
+	object.z((uint64_t)d);
+	result = object;
 }
 
 template<class D>
@@ -213,7 +212,7 @@ void Insert(Thread& thread, S const& src, int64_t srcIndex, D& dst, int64_t dstI
 
 template<class D>
 void Insert(Thread& thread, Value const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
-	switch(src.type) {
+	switch(src.type()) {
 		#define CASE(Name) case Type::Name: Insert(thread, (Name const&)src, srcIndex, dst, dstIndex, length); break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
@@ -222,7 +221,7 @@ void Insert(Thread& thread, Value const& src, int64_t srcIndex, D& dst, int64_t 
 }
 
 void Insert(Thread& thread, Value const& src, int64_t srcIndex, Value& dst, int64_t dstIndex, int64_t length) {
-	switch(dst.type) {
+	switch(dst.type()) {
 		#define CASE(Name) case Type::Name: { Insert(thread, src, srcIndex, (Name&) dst, dstIndex, length); } break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
@@ -244,7 +243,7 @@ void Resize(Thread& thread, bool clone, D& src, int64_t newLength, typename D::E
 }
 
 void Resize(Thread& thread, bool clone, Value& src, int64_t newLength) {
-	switch(src.type) {
+	switch(src.type()) {
 		#define CASE(Name) case Type::Name: { Resize(thread, clone, src, newLength); } break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
@@ -257,13 +256,11 @@ Type::Enum cTypeCast(Type::Enum s, Type::Enum t)
 	#define MEET(X, Y, Z) if(s == Type::X && t == Type::Y) return Type::Z;
 	DEFAULT_TYPE_MEET(MEET);
 	#undef MEET
-	if(s == Type::Object || t == Type::Object) return Type::List;
 	_error("Unexpected non-basic type in unlist (cTypeCast)");
 }
 
 // These are all tree-based reductions. Should we have a tree reduction byte code?
 int64_t unlistLength(Thread& thread, int64_t recurse, Value a) {
-	if(a.isObject()) a = ((Object&)a).base();
 	if(recurse > 0 && a.isList()) {
 		List const& l = (List const&)a;
 		int64_t t = 0;
@@ -276,21 +273,19 @@ int64_t unlistLength(Thread& thread, int64_t recurse, Value a) {
 }
 
 Type::Enum unlistType(Thread& thread, int64_t recurse, Value a) {
-	if(a.isObject()) a = ((Object&)a).base();
 	if(a.isList()) {
 		List const& l = (List const&)a;
 		Type::Enum t = Type::Null;
 		for(int64_t i = 0; i < l.length(); i++) 
-			t = cTypeCast(recurse > 0 ? unlistType(thread, recurse-1, l[i]) : l[i].type, t);
+			t = cTypeCast(recurse > 0 ? unlistType(thread, recurse-1, l[i]) : l[i].type(), t);
 		return t;
 	}
-	else if(a.isVector()) return a.type;
+	else if(a.isVector()) return a.type();
 	else return Type::List;
 }
 
 template< class T >
 void unlist(Thread& thread, int64_t recurse, Value a, T& out, int64_t& start) {
-	if(a.isObject()) a = ((Object&)a).base();
 	if(recurse > 0 && a.isList()) {
 		List const& l = (List const&)a;
 		for(int64_t i = 0; i < l.length(); i++) 
@@ -303,7 +298,6 @@ void unlist(Thread& thread, int64_t recurse, Value a, T& out, int64_t& start) {
 
 template<>
 void unlist<List>(Thread& thread, int64_t recurse, Value a, List& out, int64_t& start) {
-	if(a.isObject()) a = ((Object&)a).base();
 	if(recurse > 0 && a.isList()) {
 		List const& l = (List const&)a;
 		for(int64_t i = 0; i < l.length(); i++) 
@@ -491,41 +485,41 @@ void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out) {
 		if(positive > 0 && negative > 0)
 			_error("mixed subscripts not allowed");
 		else if(positive > 0) {
-			switch(a.type) {
+			switch(a.type()) {
 				case Type::Null: out = Null::Singleton(); break;
 #define CASE(Name,...) case Type::Name: SubsetInclude<Name>::eval(thread, (Name const&)a, index, positive, out); break;
 						 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
-				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
+				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type())); break;
 			};
 		}
 		else if(negative > 0) {
-			switch(a.type) {
+			switch(a.type()) {
 				case Type::Null: out = Null::Singleton(); break;
 #define CASE(Name) case Type::Name: SubsetExclude<Name>::eval(thread, (Name const&)a, index, negative, out); break;
 						 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
-				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
+				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type())); break;
 			};	
 		}
 		else {
-			switch(a.type) {
+			switch(a.type()) {
 				case Type::Null: out = Null::Singleton(); break;
 #define CASE(Name) case Type::Name: out = Name(0); break;
 						 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
-				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
+				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type())); break;
 			};	
 		}
 	}
 	else if(i.isLogical()) {
 		Logical const& index = (Logical const&)i;
-		switch(a.type) {
+		switch(a.type()) {
 			case Type::Null: out = Null::Singleton(); break;
 #define CASE(Name) case Type::Name: SubsetLogical<Name>::eval(thread, (Name const&)a, index, out); break;
 					 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
-			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
+			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type())); break;
 		};	
 	}
 	else {
@@ -614,7 +608,7 @@ struct SubsetAssignIndexed {
 void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(i.isDouble() || i.isInteger()) {
 		Integer idx = As<Integer>(thread, i);
-		switch(a.type) {
+		switch(a.type()) {
 #define CASE(Name) case Type::Name: SubsetAssignInclude<Name>::eval(thread, (Name const&)a, clone, idx, As<Name>(thread, b), c); break;
 			VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
@@ -623,11 +617,11 @@ void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i
 	}
 	else if(i.isLogical()) {
 		Logical const& index = (Logical const&)i;
-		switch(a.type) {
+		switch(a.type()) {
 #define CASE(Name) case Type::Name: SubsetAssignLogical<Name>::eval(thread, (Name const&)a, clone, index, As<Name>(thread, b), c); break;
 					 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
-			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type)); break;
+			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type())); break;
 		};	
 	}
 	else {
@@ -876,7 +870,7 @@ void substitute(Thread& thread, Value const* args, Value& result) {
 }
 
 void type_of(Thread& thread, Value const* args, Value& result) {
-	result = Character::c(type2String(args[0].type));
+	result = Character::c(type2String(args[0].type()));
 }
 
 void exists(Thread& thread, Value const* args, Value& result) {

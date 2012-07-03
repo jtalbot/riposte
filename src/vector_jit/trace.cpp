@@ -279,7 +279,7 @@ IRef Trace::EmitGather(Vector const& v, IRef i) {
 	n.arity = IRNode::UNARY;
 	n.group = IRNode::GENERATOR;
 	n.op = IROpCode::gather;
-	n.type = v.type;
+	n.type = v.type();
 	n.shape = nodes[i].outShape;
 	n.outShape = n.shape;
 	n.unary.a = i;
@@ -293,7 +293,7 @@ IRef Trace::EmitLoad(Vector const& v, int64_t length, int64_t offset) {
 	n.arity = IRNode::NULLARY;
 	n.group = IRNode::GENERATOR;
 	n.op = IROpCode::load;
-	n.type = v.type;
+	n.type = v.type();
 	n.shape = (IRNode::Shape) { length, -1, 1, -1, false };
 	n.outShape = n.shape;
 	n.constant.i = offset;
@@ -329,7 +329,7 @@ IRef Trace::EmitSLoad(Vector const& v) {
 	n.arity = IRNode::NULLARY;
 	n.group = IRNode::SCALAR;
 	n.op = IROpCode::sload;
-	n.type = v.type;
+	n.type = v.type();
 	n.shape = (IRNode::Shape) { Size, -1, 1, -1, false };
 	n.outShape = (IRNode::Shape) { v.length(), -1, 1, -1, true };
 	n.in = v;
@@ -362,12 +362,12 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 	
 	for(Value* v = thread.base-thread.frame.prototype->registers; 
 		v < thread.registers+DEFAULT_NUM_REGISTERS; v++) {
-		if(v->isFuture() && v->len == Size) {
-			nodes[v->future.ref].liveOut = true;
+		if(v->isFuture() && ((Future const&)*v).trace() == this) {
+			nodes[((Future const&)*v).ref()].liveOut = true;
 			Output o;
 			o.type = Output::REG;
 			o.reg = v;
-			o.ref = v->future.ref;
+			o.ref = ((Future const&)*v).ref();
 			outputs.push_back(o);
 		}
 	}
@@ -375,24 +375,24 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 	for(std::set<Environment*>::const_iterator i = liveEnvironments.begin(); i != liveEnvironments.end(); ++i) {
 		for(Environment::const_iterator j = (*i)->begin(); j != (*i)->end(); ++j) {
 			Value const& v = j.value();
-			if(v.isFuture() && v.len == Size) {
-				nodes[v.future.ref].liveOut = true;
+			if(v.isFuture() && ((Future const&)v).trace() == this) {
+				nodes[((Future const&)v).ref()].liveOut = true;
 				Output o;
 				o.type = Output::MEMORY;
 				o.pointer = (*i)->makePointer(j.string());
-				o.ref = v.future.ref;
+				o.ref = ((Future const&)v).ref();
 				outputs.push_back(o);
 			}
 		}
 
 		for(int64_t j = 0; j < (*i)->dots.size(); j++) {
 			Value const& v = (*i)->dots[j].v;
-			if(v.isFuture() && v.len == Size) {
-				nodes[v.future.ref].liveOut = true;
+			if(v.isFuture() && ((Future const&)v).trace() == this) {
+				nodes[((Future const&)v).ref()].liveOut = true;
 				Output o;
 				o.type = Output::REG;
 				o.reg = (Value*)&v;
-				o.ref = v.future.ref;
+				o.ref = ((Future const&)v).ref();
 				outputs.push_back(o);
 			}
 		}

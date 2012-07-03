@@ -27,17 +27,45 @@ GCObject* HeapObject::gcObject() const {
 #define VISIT(p) if((p) != 0 && !(p)->marked()) (p)->visit()
 
 static void traverse(Value const& v) {
-	switch(v.type) {
-		case Type::Object:
-			VISIT((Object::Inner const*)v.p);
-			break;
+	switch(v.type()) {
 		case Type::Environment:
+			VISIT((Dictionary*)v.z());
 			VISIT(((REnvironment&)v).environment());
 			break;
 		case Type::Function:
+			VISIT((Dictionary*)v.z());
 			VISIT((Function::Inner const*)v.p);
 			VISIT(((Function&)v).prototype());
 			VISIT(((Function&)v).environment());
+			break;
+		case Type::Double:
+			VISIT((Dictionary*)v.z());
+			VISIT(((Double const&)v).inner());
+			break;
+		case Type::Integer:
+			VISIT((Dictionary*)v.z());
+			VISIT(((Integer const&)v).inner());
+			break;
+		case Type::Logical:
+			VISIT((Dictionary*)v.z());
+			VISIT(((Logical const&)v).inner());
+			break;
+		case Type::Character:
+			VISIT((Dictionary*)v.z());
+			VISIT(((Character const&)v).inner());
+			break;
+		case Type::Raw:
+			VISIT((Dictionary*)v.z());
+			VISIT(((Raw const&)v).inner());
+			break;
+		case Type::List:
+			VISIT((Dictionary*)v.z());
+			VISIT(((List const&)v).inner());
+			{
+				List const& l = (List const&)v;
+				for(int64_t i = 0; i < l.length(); i++)
+					traverse(l[i]);
+			}
 			break;
 		case Type::Promise:
 			VISIT(((Promise&)v).prototype());
@@ -46,29 +74,6 @@ static void traverse(Value const& v) {
 		case Type::Default:
 			VISIT(((Default&)v).prototype());
 			VISIT(((Default&)v).environment());
-			break;
-		case Type::Double:
-			VISIT(((Double const&)v).inner());
-			break;
-		case Type::Integer:
-			VISIT(((Integer const&)v).inner());
-			break;
-		case Type::Logical:
-			VISIT(((Logical const&)v).inner());
-			break;
-		case Type::Character:
-			VISIT(((Character const&)v).inner());
-			break;
-		case Type::Raw:
-			VISIT(((Raw const&)v).inner());
-			break;
-		case Type::List:
-			VISIT(((List const&)v).inner());
-			{
-				List const& l = (List const&)v;
-				for(int64_t i = 0; i < l.length(); i++)
-					traverse(l[i]);
-			}
 			break;
 		default:
 			// do nothing
@@ -91,12 +96,6 @@ void Dictionary::visit() const {
 		if(d->d[i].n != Strings::NA)
 			traverse(d->d[i].v);
 	}
-}
-
-void Object::Inner::visit() const {
-	HeapObject::visit();
-	traverse(base);
-	VISIT(d);
 }
 
 void Environment::visit() const {
