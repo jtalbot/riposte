@@ -55,35 +55,60 @@ extern Instruction const* internal_op(Thread& thread, Instruction const& inst) A
 extern Instruction const* strip_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 */
 
-Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const* a, Environment* env, int64_t index) {
-	if(a->isPromise()) {
-		Promise const& f = (Promise const&)(*a);
-		assert(f.environment()->DynamicScope());
-		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), env, index, &inst);
+// forces a value stored in the Environments dotdot slot: dest[index]
+// call through FORCE_DOTDOT macro which inlines some performance-important checks
+Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const& a, Environment* dest, int64_t index) {
+	if(a.isPromise()) {
+		Promise const& f = (Promise const&)a;
+		return buildStackFrame(thread, f.environment(), f.prototype(), dest, index, &inst);
+	} else if(a.isDotdot()) {
+		Promise const& f = (Promise const&)a;
+                Value const& t = f.environment()->dots[f.z()].v;
+		Instruction const* result = &inst;
+		if(!t.isConcrete()) {
+			result = forceDot(thread, inst, t, f.environment(), f.z());
+		}
+		if(t.isConcrete()) {
+			dest->dots[index].v = t;
+			thread.traces.LiveEnvironment(dest, t);
+		}
+		return result;
 	} else {
 		_error(std::string("Object '..") + intToStr(index+1) + "' not found, missing argument?");
 	}
 }
 
-Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, Environment* dest, String name) {
-	if(a->isPromise()) {
-		Promise const& f = (Promise const&)(*a);
-		return buildStackFrame(thread, f.environment(), f.prototype(), dest, name, &inst);
-	} else if(a->isDefault()) {
-		Default const& f = (Default const&)(*a);
-		assert(f.environment());
-		return buildStackFrame(thread, f.environment(), f.prototype(), dest, name, &inst);
-	} else {
-		_error(std::string("Object '") + thread.externStr(name) + "' not found");
-	}
-}
-
-// Tracing stuff
-
-//track the heat of back edge operations and invoke the recorder on hot traces
-//unused until we begin tracing loops again
-static Instruction const * profile_back_edge(Thread & thread, Instruction const * inst) {
-	return inst;
+// forces a value stored in the Environment slot: dest->name
+// call through FORCE macro which inlines some performance-important checks
+//  for the common cases.
+// Environments can have promises, defaults, or dotdots (references to ..n in the parent).
+Instruction const* force(Thread& thread, Instruction const& inst, Value const& a, Environment
+* dest, String name) {
+        if(a.isPromise()) {
+                Promise const& f = (Promise const&)a;
+                return buildStackFrame(thread, f.environment(), f.prototype(), dest, name, &inst);
+        } else if(a.isDefault()) {
+                Default const& f = (Default const&)a;
+                return buildStackFrame(thread, f.environment(), f.prototype(), dest, name, &inst);
+        } else if(a.isDotdot()) {
+		Promise const& f = (Promise const&)a;
+                Value const& t = f.environment()->dots[f.z()].v;
+		Instruction const* result = &inst;
+		// if we're this dotdot is a promise, attempt to force.
+		// first time through this will return the address of the 
+		//	promise's new stack frame.
+		// second time through this will return the resulting value
+		// => Thus, evaluating dotdot requires at most 2 sweeps up the dotdot chain
+		if(!t.isConcrete()) {
+			result = forceDot(thread, inst, t, f.environment(), f.z());
+		}
+                if(t.isConcrete()) {
+                        dest->insert(name) = t;
+                        thread.traces.LiveEnvironment(dest, t);
+                }
+                return result;
+        } else {
+                _error(std::string("Object '") + thread.externStr(name) + "' not found");        }
 }
 
 // Control flow instructions
@@ -244,7 +269,7 @@ Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 		OPERAND(vec, inst.b); //FORCE(vec, inst.b); BIND(vec); // this must have necessarily been forced by the forbegin.
 		Element2(vec, counter.i, thread.frame.environment->insert((String)inst.a));
 		counter.i++;
-		return profile_back_edge(thread,&inst+(&inst+1)->a);
+		return &inst+(&inst+1)->a;
 	} else {
 		return &inst+2;			// skip over following JMP
 	}
