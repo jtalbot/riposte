@@ -181,12 +181,6 @@ struct VectorImpl : public Vector {
 	}
 };
 
-union _doublena {
-	int64_t i;
-	double d;
-};
-
-
 #define VECTOR_IMPL(Name, Element, Recursive) 				\
 struct Name : public VectorImpl<Type::Name, Element, Recursive> { 			\
 	explicit Name(int64_t length=0) { Init(*this, length); } 	\
@@ -233,6 +227,11 @@ VECTOR_IMPL(Integer, int64_t, false)
 }; 
 
 VECTOR_IMPL(Double, double, false)
+	union _doublena {
+		int64_t i;
+		double d;
+	};
+
 	static Double const& Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
 	static Double const& NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
 	static Double const& NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } 

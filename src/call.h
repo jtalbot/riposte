@@ -24,7 +24,7 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
 
 void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
 
-void MatchNamedArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
+void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
 
 inline Environment* CreateEnvironment(Thread& thread, Environment* l, Environment* d, Value const& call) {
 	Environment* env = new Environment(l, d, call);

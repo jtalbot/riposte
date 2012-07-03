@@ -200,9 +200,9 @@ Compiler::Operand Compiler::compileFunctionCall(List const& call, Character cons
 	kill(function);
 	Operand result = allocRegister();
 	if(!a.named && a.dotIndex >= (int64_t)a.arguments.size())
-		emit(ByteCode::call, function, code->calls.size()-1, result);
+		emit(ByteCode::fastcall, function, code->calls.size()-1, result);
 	else
-		emit(ByteCode::ncall, function, code->calls.size()-1, result);
+		emit(ByteCode::call, function, code->calls.size()-1, result);
 	return result;
 }
 
