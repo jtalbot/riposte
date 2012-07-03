@@ -164,19 +164,19 @@ SPECIALIZED_STATIC List::Element Cast<Raw, List>(Thread& thread, Raw::Element co
 
 
 template<>
-SPECIALIZED_STATIC Raw::Element Cast<List, Raw>(Thread& thread, List::Element const& i) { Raw a = As<Raw>(thread, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to raw"); }
+SPECIALIZED_STATIC Raw::Element Cast<List, Raw>(Thread& thread, List::Element const& i) { Raw a = As<Raw>(thread, i); if(a.length()==1) return a[0]; else _error("Invalid cast from list to raw"); }
 
 template<>
-SPECIALIZED_STATIC Logical::Element Cast<List, Logical>(Thread& thread, List::Element const& i) { Logical a = As<Logical>(thread, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to logical"); }
+SPECIALIZED_STATIC Logical::Element Cast<List, Logical>(Thread& thread, List::Element const& i) { Logical a = As<Logical>(thread, i); if(a.length()==1) return a[0]; else _error("Invalid cast from list to logical"); }
 
 template<>
-SPECIALIZED_STATIC Integer::Element Cast<List, Integer>(Thread& thread, List::Element const& i) { Integer a = As<Integer>(thread, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to integer"); }
+SPECIALIZED_STATIC Integer::Element Cast<List, Integer>(Thread& thread, List::Element const& i) { Integer a = As<Integer>(thread, i); if(a.length()==1) return a[0]; else _error("Invalid cast from list to integer"); }
 
 template<>
-SPECIALIZED_STATIC Double::Element Cast<List, Double>(Thread& thread, List::Element const& i) { Double a = As<Double>(thread, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to double"); }
+SPECIALIZED_STATIC Double::Element Cast<List, Double>(Thread& thread, List::Element const& i) { Double a = As<Double>(thread, i); if(a.length()==1) return a[0]; else _error("Invalid cast from list to double"); }
 
 template<>
-SPECIALIZED_STATIC Character::Element Cast<List, Character>(Thread& thread, List::Element const& i) { Character a = As<Character>(thread, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to character"); }
+SPECIALIZED_STATIC Character::Element Cast<List, Character>(Thread& thread, List::Element const& i) { Character a = As<Character>(thread, i); if(a.length()==1) return a[0]; else _error("Invalid cast from list to character"); }
 
 
 

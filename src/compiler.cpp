@@ -173,11 +173,11 @@ Compiler::Operand Compiler::forceInRegister(Operand r) {
 
 CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 	// compute compiled call...precompiles promise code and some necessary values
-	int64_t dotIndex = call.length-1;
+	int64_t dotIndex = call.length()-1;
 	PairList arguments;
-	for(int64_t i = 1; i < call.length; i++) {
+	for(int64_t i = 1; i < call.length(); i++) {
 		Pair p;
-		if(names.length > 0) p.n = names[i]; else p.n = Strings::empty;
+		if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
 
 		if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) {
 			p.v = call[i];
@@ -189,7 +189,7 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 		}
 		arguments.push_back(p);
 	}
-	return CompiledCall(call, arguments, dotIndex, names.length > 0);
+	return CompiledCall(call, arguments, dotIndex, names.length() > 0);
 }
 
 // a standard call, not an op
@@ -220,13 +220,13 @@ Compiler::Operand Compiler::compileInternalFunctionCall(Object const& o, Prototy
 	else {
 		function = itr->second;
 		// check parameter count
-		if(state.internalFunctions[function].params != call.length-1)
+		if(state.internalFunctions[function].params != call.length()-1)
 			_error(std::string("Incorrect number of arguments to internal function ") + state.externStr(func));
 	}
 	// compile parameters directly...reserve registers for them.
 	Operand liveIn = top();
 	int64_t reg = liveIn.i-1;
-	for(int64_t i = 1; i < call.length; i++) {
+	for(int64_t i = 1; i < call.length(); i++) {
 		Operand r = placeInRegister(compile(call[i], code));
 		assert(r.i == reg+1);
 		reg = r.i; 
@@ -239,7 +239,7 @@ Compiler::Operand Compiler::compileInternalFunctionCall(Object const& o, Prototy
 }
 
 Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Prototype* code) {
-	int64_t length = call.length;
+	int64_t length = call.length();
 	if(length == 0) {
 		throw CompileError("invalid empty call");
 	}
@@ -250,7 +250,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	String func = SymbolStr(call[0]);
 	// list is the only built in function that handles ... or named parameters
 	// we only handle the list(...) case through an op for now
-	if(func == Strings::list && call.length == 2 
+	if(func == Strings::list && call.length() == 2 
 		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
 	{
 		Operand result = allocRegister();
@@ -276,13 +276,13 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	// switch statement supports named args
 	if(func == Strings::switchSym)
 	{
-		if(call.length == 0) _error("'EXPR' is missing");
+		if(call.length() == 0) _error("'EXPR' is missing");
 		Operand c = compile(call[1], code);
-		int64_t n = call.length-2;
+		int64_t n = call.length()-2;
 
 		int64_t branch = emit(ByteCode::branch, kill(c), n, 0);
-		for(int64_t i = 2; i < call.length; i++) {
-			emit(ByteCode::branch, (int64_t)(names.length > i ? names[i] : Strings::empty), 0, 0);
+		for(int64_t i = 2; i < call.length(); i++) {
+			emit(ByteCode::branch, (int64_t)(names.length() > i ? names[i] : Strings::empty), 0, 0);
 		}
 		
 		std::vector<int64_t> jmps;
@@ -314,7 +314,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	}
 
 	for(int64_t i = 0; i < length; i++) {
-		if(names.length > i && names[i] != Strings::empty) 
+		if(names.length() > i && names[i] != Strings::empty) 
 			complicated = true;
 	}
 	
@@ -347,26 +347,26 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Value value = call[2];
 		while(isCall(dest)) {
 			List const& c = (List const&)((Object const&)dest).base();
-			List n(c.length+1);
+			List n(c.length()+1);
 
-			for(int64_t i = 0; i < c.length; i++) { n[i] = c[i]; }
+			for(int64_t i = 0; i < c.length(); i++) { n[i] = c[i]; }
 			String as = state.internStr(state.externStr(SymbolStr(c[0])) + "<-");
 			n[0] = CreateSymbol(as);
-			n[c.length] = value;
+			n[c.length()] = value;
 
-			Character nnames(c.length+1);
+			Character nnames(c.length()+1);
 	
-			if(!hasNames(dest) && (as == Strings::bracketAssign || as == Strings::bbAssign) && c.length == 3) {
-				for(int64_t i = 0; i < c.length+1; i++) { nnames[i] = Strings::empty; }
+			if(!hasNames(dest) && (as == Strings::bracketAssign || as == Strings::bbAssign) && c.length() == 3) {
+				for(int64_t i = 0; i < c.length()+1; i++) { nnames[i] = Strings::empty; }
 			}
 			else {
 				if(hasNames(dest)) {
 					Value names = getNames((Object const&)dest);
-					for(int64_t i = 0; i < c.length; i++) { nnames[i] = ((Character const&)names)[i]; }
+					for(int64_t i = 0; i < c.length(); i++) { nnames[i] = ((Character const&)names)[i]; }
 				} else {
-					for(int64_t i = 0; i < c.length; i++) { nnames[i] = Strings::empty; }
+					for(int64_t i = 0; i < c.length(); i++) { nnames[i] = Strings::empty; }
 				}
-				nnames[c.length] = Strings::value;
+				nnames[c.length()] = Strings::value;
 			}
 			value = CreateCall(n, nnames);
 			dest = c[1];
@@ -405,9 +405,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			Character(0);
 		
 		PairList parameters;
-		for(int64_t i = 0; i < c.length; i++) {
+		for(int64_t i = 0; i < c.length(); i++) {
 			Pair p;
-			if(names.length > 0) p.n = names[i]; else p.n = Strings::empty;
+			if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
 			if(!c[i].isNil()) {
 				Default::Init(p.v, compilePromise(thread, c[i]),NULL);
 			}
@@ -438,9 +438,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::returnSym)
 	{
 		Operand result;
-		if(call.length == 1) {
+		if(call.length() == 1) {
 			result = compileConstant(Null::Singleton(), code);
-		} else if(call.length == 2)
+		} else if(call.length() == 2)
 			result = placeInRegister(compile(call[1], code));
 		else
 			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
@@ -523,7 +523,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::ifSym) 
 	{
 		Operand resultT, resultF;
-		if(call.length != 3 && call.length != 4)	
+		if(call.length() != 3 && call.length() != 4)	
 			throw CompileError("invalid if statement");
 		
 		// resultT and resultF need to be in the same register so if statements can be used as expressions.
@@ -541,7 +541,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	
 		kill(resultT);
 		resultF = placeInRegister(
-			call.length == 4 ? 	compile(call[3], code) :
+			call.length() == 4 ? 	compile(call[3], code) :
 						compileConstant(Null::Singleton(), code) );
 		assert(resultT == resultF || resultT.loc == INVALID || resultF.loc == INVALID);
 		int64_t end = ir.size();
@@ -551,7 +551,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 		return resultT.loc == INVALID ? resultF : resultT;
 	}
-	else if(func == Strings::lor2 && call.length == 3)
+	else if(func == Strings::lor2 && call.length() == 3)
 	{
 		Operand r0 = placeInRegister(compileConstant(Logical::True(), code));
 		
@@ -567,7 +567,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		assert(r0 == r1 || r0.loc == INVALID || r1.loc == INVALID);
 		return r0;
 	}
-	else if(func == Strings::land2 && call.length == 3)
+	else if(func == Strings::land2 && call.length() == 3)
 	{
 		Operand r0 = placeInRegister(compileConstant(Logical::False(), code));
 
@@ -585,7 +585,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	}
 	else if(func == Strings::brace) 
 	{
-		int64_t length = call.length;
+		int64_t length = call.length();
 		if(length <= 1) {
 			return compileConstant(Null::Singleton(), code);
 		} else {
@@ -610,15 +610,15 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::list) 
 	{
 		Operand f, r;
-		for(int64_t i = 1; i < call.length; i++) {
+		for(int64_t i = 1; i < call.length(); i++) {
 			Operand t = forceInRegister(compile(call[i], code));
 			if(f.loc == INVALID) { f = t; r = t; }
 			else { assert(t.i == r.i+1); r = t; }
 		}
-		if(call.length > 1)
+		if(call.length() > 1)
 			kill(f);
 		Operand result = allocRegister();
-		emit(ByteCode::list, f, Operand((int64_t)call.length-1), result);
+		emit(ByteCode::list, f, Operand((int64_t)call.length()-1), result);
 		return result;
 	}
  
@@ -629,7 +629,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::ifelse ||
 		func == Strings::seq ||
 		func == Strings::rep) &&
-		call.length == 4) {
+		call.length() == 4) {
 		Operand c = placeInRegister(compile(call[1], code));
 		Operand b = compile(call[2], code);
 		Operand a = compile(call[3], code);
@@ -665,7 +665,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::vector ||
 		func == Strings::round ||
 		func == Strings::signif) &&
-		call.length == 3) 
+		call.length() == 3) 
 	{
 		Operand a = compile(call[1], code);
 		Operand b = compile(call[2], code);
@@ -711,7 +711,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::length ||
 		func == Strings::strip ||
 		func == Strings::random) &&
-		call.length == 2)
+		call.length() == 2)
 	{
 		// if there isn't exactly one parameter, we should call the library version...
 		Operand a = compile(call[1], code);
@@ -722,7 +722,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	} 
 	else if(func == Strings::missing)
 	{
-		if(call.length != 2) _error("missing requires one argument");
+		if(call.length() != 2) _error("missing requires one argument");
 		if(!isSymbol(call[1]) && !call[1].isCharacter1()) _error("wrong parameter to missing");
 		Operand s = Operand(MEMORY, SymbolStr(call[1]));
 		Operand result = allocRegister();
@@ -731,7 +731,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	} 
 	else if(func == Strings::quote)
 	{
-		if(call.length != 2) _error("quote requires one argument");
+		if(call.length() != 2) _error("quote requires one argument");
 		return compileConstant(call[1], code);
 	}
 	
@@ -740,8 +740,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 Compiler::Operand Compiler::compileExpression(List const& values, Prototype* code) {
 	Operand result;
-	if(values.length == 0) result = compileConstant(Null::Singleton(), code);
-	for(int64_t i = 0; i < values.length; i++) {
+	if(values.length() == 0) result = compileConstant(Null::Singleton(), code);
+	for(int64_t i = 0; i < values.length(); i++) {
 		// memory results need to be forced to handle things like:
 		// 	function(x,y) { x; y }
 		// if x is a promise, it must be forced
@@ -800,7 +800,7 @@ void Compiler::dumpCode() const {
 int64_t Compiler::encodeOperand(Operand op, int64_t n) const {
 	if(op.loc == MEMORY || op.loc == INTEGER) return op.i;
 	else if(op.loc == CONSTANT) return (op.i+1);
-	else if(op.loc == REGISTER) return -(op.i + n);
+	else if(op.loc == REGISTER) return -(op.i);
 	else return 0;
 }
 

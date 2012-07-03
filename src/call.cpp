@@ -76,7 +76,7 @@ Pair argument(int64_t index, Environment* env, CompiledCall const& call) {
 				Pair p;
 				p.n = env->dots[index].n;
 				p.v.type = Type::Dotdot;
-				p.v.length = index;
+				p.v.len = index;
 				p.v.p = env;
 				return p;
 			} 

@@ -19,8 +19,14 @@ struct Value {
 	
 	union {
 		struct {
-			Type::Enum type:4;
-			int64_t length:60;
+			union {
+				struct {
+					uint64_t packed:2;
+					Type::Enum type:6;
+				};
+				int8_t ptype;
+			};
+			int64_t len:56;
 		};
 		int64_t header;
 	};
@@ -36,8 +42,8 @@ struct Value {
 		} future;
 	};
 
-	static void Init(Value& v, Type::Enum type, int64_t length) {
-		v.header =  type + (length<<4);
+	static void Init(Value& v, Type::Enum type, int64_t packed) {
+		v.header =  (type<<2) + packed;
 	}
 
 	// Warning: shallow equality!
@@ -58,12 +64,12 @@ struct Value {
 	bool isNull() const { return type == Type::Null; }
 	bool isLogical() const { return type == Type::Logical; }
 	bool isInteger() const { return type == Type::Integer; }
-	bool isLogical1() const { return header == (1<<4) + Type::Logical; }
-	bool isInteger1() const { return header == (1<<4) + Type::Integer; }
+	bool isLogical1() const { return header == (Type::Logical<<2)+1; }
+	bool isInteger1() const { return header == (Type::Integer<<2)+1; }
 	bool isDouble() const { return type == Type::Double; }
-	bool isDouble1() const { return header == (1<<4) + Type::Double; }
+	bool isDouble1() const { return header == (Type::Double<<2)+1; }
 	bool isCharacter() const { return type == Type::Character; }
-	bool isCharacter1() const { return header == (1<<4) + Type::Character; }
+	bool isCharacter1() const { return header == (Type::Character<<2)+1; }
 	bool isList() const { return type == Type::List; }
 	bool isPromise() const { return type == Type::Promise && !isNil(); }
 	bool isDefault() const { return type == Type::Default; }
@@ -74,15 +80,13 @@ struct Value {
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isCharacter() || isList(); }
-	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isCharacter() || (isList() && length==0); }
-	bool isConcrete() const { return type > Type::Dotdot; }
-
-	bool isScalar() const { return length == 1; }
+	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isCharacter(); }
+	bool isConcrete() const { return (ptype) < 0; }
 
 	template<class T> T& scalar() { throw "not allowed"; }
 	template<class T> T const& scalar() const { throw "not allowed"; }
 
-	static Value const& Nil() { static const Value v = { {{Type::Promise, 0}}, {0} }; return v; }
+	static Value const& Nil() { static const Value v = { {{{{Type::Promise, 0}}}}, {0} }; return v; }
 
 };
 
@@ -111,49 +115,61 @@ class Thread;
 struct Prototype;
 class Environment;
 
-template<Type::Enum VType, typename ElementType, bool Recursive>
 struct Vector : public Value {
+	struct Inner : public HeapObject {
+		int64_t length;
+		int64_t capacity;
+	};
+
+	int64_t length() const { return packed <= 1 ? packed : ((Inner*)p)->length; }
+	bool isScalar() const { return length() == 1; }
+	void* raw() { return (void*)(((Inner*)p)+1); }	// assumes that data is immediately after capacity
+	void const* raw() const { return (void const*)(((Inner*)p)+1); }	// assumes that data is immediately after capacity
+};
+
+template<Type::Enum VType, typename ElementType, bool Recursive>
+struct VectorImpl : public Vector {
 
 	typedef ElementType Element;
 	static const Type::Enum ValueType = VType;
 	static const bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive;
 
-	struct Inner : public HeapObject {
+	struct Inner : public Vector::Inner {
 		ElementType data[];
 	};
 
 	ElementType const* v() const { 
-		return (canPack && isScalar()) ? 
+		return (canPack && packed==1) ? 
 			&Value::scalar<ElementType>() : ((Inner*)p)->data; 
 	}
 	ElementType* v() { 
-		return (canPack && isScalar()) ? 
+		return (canPack && packed==1) ? 
 			&Value::scalar<ElementType>() : ((Inner*)p)->data; 
 	}
 
 	Inner* inner() const {
-		return (length > canPack) ? (Inner*)p : 0;
+		return (length() > canPack) ? (Inner*)p : 0;
 	}
 	
 	ElementType& operator[](int64_t index) { return v()[index]; }
 	ElementType const& operator[](int64_t index) const { return v()[index]; }
 
-	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
-		Value::Init(v, ValueType, length);
+	static VectorImpl<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
 		if((canPack && length > 1) || (!canPack && length > 0)) {
+			Value::Init(v, ValueType, 2);
 			int64_t l = length;
 			// round l up to nearest even number so SSE can work on tail region
 			l += (int64_t)((uint64_t)l & 1);
 			int64_t length_aligned = (l < 128) ? (l + 1) : l;
 			
 			Inner* i = new (sizeof(Element)*length_aligned) Inner();
+			i->length = length;
+			i->capacity = length_aligned; 
 			v.p = (void*)i;
-		
-			//assert(l < 128 || (0xF & (int64_t)v.p) == 0);
-			//if( (0xF & (int64_t)v.p) != 0)
-			//	v.p =  (char*)v.p + 0x8;
+		} else {
+			Value::Init(v, ValueType, length);
 		}
-		return (Vector<VType, ElementType, Recursive>&)v;
+		return (VectorImpl<VType, ElementType, Recursive>&)v;
 	}
 
 	static void InitScalar(Value& v, ElementType const& d) {
@@ -162,6 +178,8 @@ struct Vector : public Value {
 			v.scalar<ElementType>() = d;
 		else {
 			Inner* i = new (sizeof(Element)*2) Inner();
+			i->length = 1;
+			i->capacity = 1;
 			i->data[0] = d;
 			v.p = (void*)i;
 		}
@@ -175,7 +193,7 @@ union _doublena {
 
 
 #define VECTOR_IMPL(Name, Element, Recursive) 				\
-struct Name : public Vector<Type::Name, Element, Recursive> { 			\
+struct Name : public VectorImpl<Type::Name, Element, Recursive> { 			\
 	explicit Name(int64_t length=0) { Init(*this, length); } 	\
 	static Name c() { Name c(0); return c; } \
 	static Name c(Element v0) { Name c(1); c[0] = v0; return c; } \
@@ -184,8 +202,8 @@ struct Name : public Vector<Type::Name, Element, Recursive> { 			\
 	static Name c(Element v0, Element v1, Element v2, Element v3) { Name c(4); c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; return c; } \
 	const static Element NAelement; \
 	static Name NA() { static Name na = Name::c(NAelement); return na; }  \
-	static Name& Init(Value& v, int64_t length) { return (Name&)Vector<Type::Name, Element, Recursive>::Init(v, length); } \
-	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); \
+	static Name& Init(Value& v, int64_t length) { return (Name&)VectorImpl<Type::Name, Element, Recursive>::Init(v, length); } \
+	static void InitScalar(Value& v, Element const& d) { VectorImpl<Type::Name, Element, Recursive>::InitScalar(v, d); \
 }\
 /* note missing }; */
 
@@ -258,7 +276,8 @@ VECTOR_IMPL(List, Value, true)
 struct Future : public Value {
 	static const Type::Enum ValueType = Type::Future;
 	static Future& Init(Value& f, Type::Enum typ,int64_t length,IRef ref) {
-		Value::Init(f,Type::Future,length);
+		Value::Init(f,Type::Future,0);
+		f.len = length;
 		f.future.ref = ref;
 		f.future.typ = typ;
 		return (Future&)f;
@@ -267,37 +286,45 @@ struct Future : public Value {
 
 struct Function : public Value {
 	static const Type::Enum ValueType = Type::Function;
+		
+	struct Inner : public HeapObject {
+		Prototype* proto;
+		Environment* env;
+		Inner(Prototype* proto, Environment* env)
+			: proto(proto), env(env) {}
+	};
+
 	static Function& Init(Value& v, Prototype* proto, Environment* env) {
-		v.header = (int64_t)proto + Type::Function;
-		v.p = env;
+		Value::Init(v, Type::Function, 0);
+		v.p = new Inner(proto, env);
 		return (Function&)v;
 	}
 
-	Prototype* prototype() const { return (Prototype*)(header & ~15); }
-	Environment* environment() const { return (Environment*)p; }
+	Prototype* prototype() const { return ((Inner*)p)->proto; }
+	Environment* environment() const { return ((Inner*)p)->env; }
 };
 
 struct Promise : public Value {
 	static const Type::Enum ValueType = Type::Promise;
 	static Promise& Init(Value& v, Prototype* proto, Environment* env) {
-		v.header = (int64_t)proto + Type::Promise;
+		v.header = (((uint64_t)proto) << 8) + (Type::Promise<<2);
 		v.p = env;
 		return (Promise&)v;
 	}
 
-	Prototype* prototype() const { return (Prototype*)(header & ~15); }
+	Prototype* prototype() const { return (Prototype*)(((uint64_t)header) >> 8); }
 	Environment* environment() const { return (Environment*)p; }
 };
 
 struct Default : public Value {
 	static const Type::Enum ValueType = Type::Default;
 	static Default& Init(Value& v, Prototype* proto, Environment* env) {
-		v.header = (int64_t)proto + Type::Default;
+		v.header = (((int64_t)proto) << 8) + (Type::Default<<2);
 		v.p = env;
 		return (Default&)v;
 	}
 
-	Prototype* prototype() const { return (Prototype*)(header & ~15); }
+	Prototype* prototype() const { return (Prototype*)(((uint64_t)header) >> 8); }
 	Environment* environment() const { return (Environment*)p; }
 };
 

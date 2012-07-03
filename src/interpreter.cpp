@@ -55,7 +55,7 @@ extern Instruction const* strip_op(Thread& thread, Instruction const& inst) ALWA
 
 Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const* a, Environment* env, int64_t index) {
 	if(a->isPromise()) {
-		Function const& f = (Function const&)(*a);
+		Promise const& f = (Promise const&)(*a);
 		assert(f.environment()->DynamicScope());
 		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), env, index, &inst);
 	} else {
@@ -65,11 +65,11 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 
 Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, String name) {
 	if(a->isPromise()) {
-		Function const& f = (Function const&)(*a);
+		Promise const& f = (Promise const&)(*a);
 		assert(f.environment()->DynamicScope());
 		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), f.environment(), name, &inst);
 	} else if(a->isDefault()) {
-		Function const& f = (Function const&)(*a);
+		Default const& f = (Default const&)(*a);
 		assert(f.environment());
 		return buildStackFrame(thread, f.environment(), f.prototype(), f.environment(), name, &inst);
 	} else {
@@ -224,12 +224,15 @@ Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
 	// a = loop variable (e.g. i), b = loop vector(e.g. 1:100), c = counter register
 	// following instruction is a jmp that contains offset
 	OPERAND(vec, inst.b); FORCE(vec, inst.b); BIND(vec);
-	if((int64_t)vec.length <= 0) {
+	if(!vec.isVector())
+		_error("Invalid for() loop sequence");
+	Vector const& v = (Vector const&)vec;
+	if((int64_t)v.length() <= 0) {
 		return &inst+(&inst+1)->a;	// offset is in following JMP, dispatch together
 	} else {
-		Element2(vec, 0, thread.frame.environment->insert((String)inst.a));
+		Element2(v, 0, thread.frame.environment->insert((String)inst.a));
 		Integer::InitScalar(REGISTER(inst.c), 1);
-		Integer::InitScalar(REGISTER(inst.c-1), vec.length);
+		Integer::InitScalar(REGISTER(inst.c-1), v.length());
 		return &inst+2;			// skip over following JMP
 	}
 }
@@ -352,11 +355,11 @@ Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
 	BIND(index);
 	
 	if(value.isFuture() && (dest.isVector() || dest.isFuture())) {
-		if(index.isInteger() && index.length == 1) {
+		if(index.isInteger() && ((Integer const&)index).length() == 1) {
 			OUT(thread, inst.c) = thread.traces.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
 			return &inst+1;
 		}
-		else if(index.isDouble() && index.length == 1) {
+		else if(index.isDouble() && ((Double const&)index).length() == 1) {
 			OUT(thread, inst.c) = thread.traces.EmitSStore(thread.frame.environment, dest, ((Double&)index)[0], value);
 			return &inst+1;
 		}
@@ -375,11 +378,11 @@ Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
 	BIND(index);
 	
 	if(value.isFuture() && (dest.isVector() || dest.isFuture())) {
-		if(index.isInteger() && index.length == 1) {
+		if(index.isInteger() && ((Integer const&)index).length() == 1) {
 			OUT(thread, inst.c) = thread.traces.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
 			return &inst+1;
 		}
-		else if(index.isDouble() && index.length == 1) {
+		else if(index.isDouble() && ((Double const&)index).length() == 1) {
 			OUT(thread, inst.c) = thread.traces.EmitSStore(thread.frame.environment, dest, ((Double&)index)[0], value);
 			return &inst+1;
 		}
@@ -445,7 +448,7 @@ Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
 		if(i.isDouble1()) { index = i.d-1; }
 		else if(i.isInteger1()) { index = i.i-1; }
 		else if(i.isLogical1() && Logical::isTrue(i.c)) { index = 1-1; }
-		else if(i.isVector() && (i.length == 0 || i.length > 1)) { 
+		else if(i.isVector() && (((Vector const&)i).length() == 0 || ((Vector const&)i).length() > 1)) { 
 			_error("Attempt to select less or more than 1 element in subset2"); 
 		}
 		else { _error("Subscript out of bounds"); }
@@ -519,7 +522,7 @@ BINARY_BYTECODES(OP)
 Instruction const* length_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	if(a.isVector())
-		Integer::InitScalar(OUT(thread, inst.c), a.length);
+		Integer::InitScalar(OUT(thread, inst.c), ((Vector const&)a).length());
 	else if(a.isFuture()) {
 		IRNode::Shape shape = thread.traces.futureShape(a);
 		if(shape.split < 0 && shape.filter < 0) {
@@ -602,10 +605,9 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* function_op(Thread& thread, Instruction const& inst) {
-	OPERAND(function, inst.a); FORCE(function, inst.a);
+	Value const& function = CONSTANT(inst.a);
 	Value& out = OUT(thread, inst.c);
-	out.header = function.header;
-	out.p = (void*)thread.frame.environment;
+	Function::Init(out, ((Function const&)function).prototype(), thread.frame.environment);
 	return &inst+1;
 }
 
@@ -626,23 +628,23 @@ Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 
 	if(type == Type::Logical) {
 		Logical v(l);
-		for(int64_t i = 0; i < v.length; i++) v[i] = Logical::FalseElement;
+		for(int64_t i = 0; i < l; i++) v[i] = Logical::FalseElement;
 		OUT(thread, inst.c) = v;
 	} else if(type == Type::Integer) {
 		Integer v(l);
-		for(int64_t i = 0; i < v.length; i++) v[i] = 0;
+		for(int64_t i = 0; i < l; i++) v[i] = 0;
 		OUT(thread, inst.c) = v;
 	} else if(type == Type::Double) {
 		Double v(l);
-		for(int64_t i = 0; i < v.length; i++) v[i] = 0;
+		for(int64_t i = 0; i < l; i++) v[i] = 0;
 		OUT(thread, inst.c) = v;
 	} else if(type == Type::Character) {
 		Character v(l);
-		for(int64_t i = 0; i < v.length; i++) v[i] = Strings::empty;
+		for(int64_t i = 0; i < l; i++) v[i] = Strings::empty;
 		OUT(thread, inst.c) = v;
 	} else if(type == Type::Raw) {
 		Raw v(l);
-		for(int64_t i = 0; i < v.length; i++) v[i] = 0;
+		for(int64_t i = 0; i < l; i++) v[i] = 0;
 		OUT(thread, inst.c) = v;
 	} else {
 		_error("Invalid type in vector");
@@ -716,7 +718,7 @@ Instruction const* random_op(Thread& thread, Instruction const& inst) {
 Instruction const* type_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	switch(thread.traces.futureType(a)) {
-                #define CASE(name, str) case Type::name: OUT(thread, inst.c) = Character::c(Strings::name); break;
+                #define CASE(name, str, ...) case Type::name: OUT(thread, inst.c) = Character::c(Strings::name); break;
                 TYPES(CASE)
                 #undef CASE
                 default: _error("Unknown type in type to string, that's bad!"); break;

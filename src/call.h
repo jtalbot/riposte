@@ -40,7 +40,7 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, String name);
 
 #define REGISTER(i) (*(thread.base+(i)))
-
+#define CONSTANT(i) (thread.frame.prototype->constants[i-1])
 // Out register is currently always a register, not memory
 #define OUT(thread, i) (*(thread.base+(i)))
 
@@ -53,13 +53,13 @@ Value const& a = __builtin_expect((i) <= 0, true) ? \
 #define FORCE(a, i) \
 if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
 	if(a.isDotdot()) { \
-		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
+		Value const& t = ((Environment*)a.p)->dots[a.len].v; \
 		if(t.isConcrete()) { \
 			thread.frame.environment->insert((String)(i)) = t; \
 			thread.traces.LiveEnvironment(thread.frame.environment, t); \
 			return &inst; \
 		} \
-		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
+		else return forceDot(thread, inst, &t, (Environment*)a.p, a.len); \
 	} \
 	else return forceReg(thread, inst, &a, (String)(i)); \
 } \
@@ -70,13 +70,13 @@ Value const& a = thread.frame.environment->dots[(i)].v;
 #define FORCE_DOTDOT(a, i) \
 if(!a.isConcrete()) { \
 	if(a.isDotdot()) { \
-		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
+		Value const& t = ((Environment*)a.p)->dots[a.len].v; \
 		if(t.isConcrete()) { \
 			thread.frame.environment->dots[(i)].v = t; \
 			thread.traces.LiveEnvironment(thread.frame.environment, t); \
 			return &inst; \
 		} \
-		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
+		else return forceDot(thread, inst, &t, (Environment*)a.p, a.len); \
 	} \
 	else return forceDot(thread, inst, &a, thread.frame.environment, (i)); \
 }

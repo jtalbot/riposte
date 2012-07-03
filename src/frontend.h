@@ -25,7 +25,7 @@ inline Value const& getClass(Object const& v) {
 inline String className(Object const& o) {
 	if(hasClass(o)) {
 		Value const& v = getClass(o);
-		if(v.isCharacter() && v.length > 0)
+		if(v.isCharacter() && ((Character const&)v).length() > 0)
 			return ((Character const&)v)[0];
 	}
 	return Strings::NA;

@@ -56,10 +56,10 @@ struct Zip1 {
 			Op::Scalar(thread, a[0], out);
 		}
 		else {
-			typename Op::R r(a.length);
+			typename Op::R r(a.length());
 			typename Op::R::Element* re = r.v();
 			typename Op::A::Element const* ae = a.v();
-			int64_t length = a.length;
+			int64_t length = a.length();
 			int64_t i = 0;
 			for(; i < length-3; i+=4) Map1<Op,4>::eval(thread, ae+i, re+i);
 			for(; i < length; i++) Map1<Op,1>::eval(thread, ae+i, re+i);
@@ -76,48 +76,48 @@ struct Zip2 {
 			Op::Scalar(thread, a[0], b[0], out);
 		}
 		else if(b.isScalar()) {
-			typename Op::R r(a.length);
+			typename Op::R r(a.length());
 			typename Op::R::Element* re = r.v();
 			typename Op::A::Element const* ae = a.v();
 			typename Op::B::Element be = b[0];
-			int64_t length = a.length;
+			int64_t length = a.length();
 			int64_t i = 0;
 			for(; i < length-3; i+=4) Map2VS<Op,4>::eval(thread, ae+i, be, re+i);
 			for(; i < length; i++) Map2VS<Op,1>::eval(thread, ae+i, be, re+i);
 			out = (Value&)r;
 		}
 		else if(a.isScalar()) {
-			typename Op::R r(b.length);
+			typename Op::R r(b.length());
 			typename Op::R::Element* re = r.v();
 			typename Op::A::Element ae = a[0];
 			typename Op::B::Element const* be = b.v();
-			int64_t length = b.length;
+			int64_t length = b.length();
 			int64_t i = 0;
 			for(; i < length-3; i+=4) Map2SV<Op,4>::eval(thread, ae, be+i, re+i);
 			for(; i < length; i++) Map2SV<Op,1>::eval(thread, ae, be+i, re+i);
 			out = (Value&)r;
 		}
-		else if(a.length == b.length) {
-			typename Op::R r(a.length);
+		else if(a.length() == b.length()) {
+			typename Op::R r(a.length());
 			typename Op::R::Element* re = r.v();
 			typename Op::A::Element const* ae = a.v();
 			typename Op::B::Element const* be = b.v();
-			int64_t length = a.length;
+			int64_t length = a.length();
 			int64_t i = 0;
 			for(; i < length-3; i+=4) Map2VV<Op,4>::eval(thread, ae+i, be+i, re+i);
 			for(; i < length; i++) Map2VV<Op,1>::eval(thread, ae+i, be+i, re+i);
 			out = (Value&)r;
 		}
-		else if(a.length == 0 || b.length == 0) {
+		else if(a.length() == 0 || b.length() == 0) {
 			Op::R::Init(out, 0);
 		}
-		else if(a.length > b.length) {
-			typename Op::R r(a.length);
+		else if(a.length() > b.length()) {
+			typename Op::R r(a.length());
 			typename Op::R::Element* re = r.v();
 			typename Op::A::Element const* ae = a.v();
 			typename Op::B::Element const* be = b.v();
-			int64_t alength = a.length;
-			int64_t blength = b.length;
+			int64_t alength = a.length();
+			int64_t blength = b.length();
 			int64_t j = 0;
 			for(int64_t i = 0; i < alength; ++i) {
 				re[i] = Op::eval(thread, ae[i], be[j]);
@@ -127,12 +127,12 @@ struct Zip2 {
 			out = (Value&)r;
 		}
 		else {
-			typename Op::R r(b.length);
+			typename Op::R r(b.length());
 			typename Op::R::Element* re = r.v();
 			typename Op::A::Element const* ae = a.v();
 			typename Op::B::Element const* be = b.v();
-			int64_t alength = a.length;
-			int64_t blength = b.length;
+			int64_t alength = a.length();
+			int64_t blength = b.length();
 			int64_t j = 0;
 			for(int64_t i = 0; i < blength; ++i) {
 				re[i] = Op::eval(thread, ae[j], be[i]);
@@ -168,7 +168,7 @@ struct FoldLeft {
 	{
 		typename Op::B::Element const* be = b.v();
 		typename Op::R::Element a = Op::base();
-		int64_t length = b.length;
+		int64_t length = b.length();
 		for(int64_t i = 0; i < length; ++i) {
 			a = Op::eval(thread, a, be[i]);
 		}
@@ -182,9 +182,9 @@ struct ScanLeft {
 	{
 		typename Op::B::Element const* be = b.v();
 		typename Op::R::Element a = Op::base();
-		typename Op::R r(b.length);
+		typename Op::R r(b.length());
 		typename Op::R::Element* re = r.v();
-		int64_t length = b.length;
+		int64_t length = b.length();
 		for(int64_t i = 0; i < length; ++i) {
 			re[i] = a = Op::eval(thread, a, be[i]);
 		}

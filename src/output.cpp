@@ -46,7 +46,7 @@ template<> std::string stringify<List>(State const& state, List::Element a) {
 template<class T>
 std::string stringifyVector(State const& state, T const& v) {
 	std::string result = "";
-	int64_t length = v.length;
+	int64_t length = v.length();
 	if(length == 0)
 		return std::string(Type::toString(v.ValueType)) + "(0)";
 
@@ -67,7 +67,7 @@ std::string stringifyVector(State const& state, T const& v) {
 		if(i+perline < length)	
 			result = result + "\n";
 	}
-	if(dots) result = result + " ... (" + intToStr(v.length) + " elements)";
+	if(dots) result = result + " ... (" + intToStr(v.length()) + " elements)";
 	return result;
 }
 
@@ -93,7 +93,7 @@ std::string stringify(State const& state, Value const& value) {
 		{
 			List const& v = (List const&)value;
 
-			int64_t length = v.length;
+			int64_t length = v.length();
 			if(length == 0) return "list()";
 			if(length > 100) { dots = true; length = 100; }
 			result = "";
@@ -103,7 +103,7 @@ std::string stringify(State const& state, Value const& value) {
 				result = result + "\n";
 				if(i < length-1) result = result + "\n";
 			}
-			if(dots) result = result + " ... (" + intToStr(v.length) + " elements)";
+			if(dots) result = result + " ... (" + intToStr(v.length()) + " elements)";
 			return result;
 		}
 		case Type::Function:
@@ -177,9 +177,9 @@ template<> std::string deparse<List>(State const& state, List::Element a) {
 template<class T>
 std::string deparseVectorBody(State const& state, T const& v) {
 	std::string result = "";
-	for(int64_t i = 0; i < v.length; i++) {
+	for(int64_t i = 0; i < v.length(); i++) {
 		result = result + deparse<T>(state, v[i]);
-		if(i < v.length-1) result = result + ", ";
+		if(i < v.length()-1) result = result + ", ";
 	}
 	return result;
 }
@@ -188,8 +188,8 @@ std::string deparseVectorBody(State const& state, T const& v) {
 
 template<class T>
 std::string deparseVector(State const& state, T const& v) {
-	if(v.length == 0) return std::string(Type::toString(v.ValueType)) + "(0)";
-	if(v.length == 1) return deparseVectorBody(state, v);
+	if(v.length() == 0) return std::string(Type::toString(v.ValueType)) + "(0)";
+	if(v.length() == 1) return deparseVectorBody(state, v);
 	else return "c(" + deparseVectorBody(state, v) + ")";
 }
 /*

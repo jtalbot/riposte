@@ -35,6 +35,7 @@ static void traverse(Value const& v) {
 			VISIT(((REnvironment&)v).environment());
 			break;
 		case Type::Function:
+			VISIT((Function::Inner const*)v.p);
 			VISIT(((Function&)v).prototype());
 			VISIT(((Function&)v).environment());
 			break;
@@ -65,7 +66,7 @@ static void traverse(Value const& v) {
 			VISIT(((List const&)v).inner());
 			{
 				List const& l = (List const&)v;
-				for(int64_t i = 0; i < l.length; i++)
+				for(int64_t i = 0; i < l.length(); i++)
 					traverse(l[i]);
 			}
 			break;
@@ -175,7 +176,7 @@ void Heap::mark(State& state) {
 }
 
 void Heap::sweep() {
-	uint64_t old_total = total;
+	//uint64_t old_total = total;
 	total = 0;
 	void** g = &root;
 	while(*g != 0) {

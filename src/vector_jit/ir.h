@@ -80,8 +80,8 @@ struct IRNode {
 
 	bool live;
 	bool liveOut;
-	Value in;
-	Value out;
+	Vector in;
+	Vector out;
 	
 	bool operator==(IRNode const& o) const {
 		bool eq = (op == o.op && type == o.type && shape == o.shape);

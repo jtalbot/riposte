@@ -21,7 +21,7 @@ T const& Cast(Value const& v) {
 
 String type2String(Type::Enum type) {
 	switch(type) {
-		#define CASE(name, str) case Type::name: return Strings::name; break;
+		#define CASE(name, str, ...) case Type::name: return Strings::name; break;
 		TYPES(CASE)
 		#undef CASE
 		default: _error("Unknown type in type to string, that's bad!"); break;
@@ -29,7 +29,7 @@ String type2String(Type::Enum type) {
 }
 
 Type::Enum string2Type(String str) {
-#define CASE(name, string) if(str == Strings::name) return Type::name;
+#define CASE(name, string, ...) if(str == Strings::name) return Type::name;
 TYPES(CASE)
 #undef CASE
 	_error("Invalid type");
@@ -53,12 +53,12 @@ Double RandomVector(Thread& thread, int64_t const length) {
 void cat(Thread& thread, Value const* args, Value& result) {
 	List const& a = Cast<List>(args[0]);
 	Character const& b = Cast<Character>(args[-1]);
-	for(int64_t i = 0; i < a.length; i++) {
+	for(int64_t i = 0; i < a.length(); i++) {
 		if(!List::isNA(a[i])) {
 			Character c = As<Character>(thread, a[i]);
-			for(int64_t j = 0; j < c.length; j++) {
+			for(int64_t j = 0; j < c.length(); j++) {
 				printf("%s", thread.externStr(c[j]).c_str());
-				if(!(i == a.length-1 && j == c.length-1))
+				if(!(i == a.length()-1 && j == c.length()-1))
 					printf("%s", thread.externStr(b[0]).c_str());
 			}
 		}
@@ -69,7 +69,7 @@ void cat(Thread& thread, Value const* args, Value& result) {
 void remove(Thread& thread, Value const* args, Value& result) {
 	Character const& a = Cast<Character>(args[0]);
 	REnvironment const& e = Cast<REnvironment>(args[-1]);
-	for(int64_t i = 0; i < a.length; i++) {
+	for(int64_t i = 0; i < a.length(); i++) {
 		e.environment()->remove(a[i]);
 	}
 	result = Null::Singleton();
@@ -77,7 +77,7 @@ void remove(Thread& thread, Value const* args, Value& result) {
 
 void library(Thread& thread, Value const* args, Value& result) {
 	Character from = As<Character>(thread, args[0]);
-	if(from.length > 0) {
+	if(from.length() > 0) {
 		loadLibrary(thread, "library", thread.externStr(from[0]));
 	}
 	result = Null::Singleton();
@@ -87,13 +87,13 @@ void readtable(Thread& thread, Value const* args, Value& result) {
 	Character from = As<Character>(thread, args[0]);
 	Character sep_list = As<Character>(thread,args[-1]);
 	Character format = As<Character>(thread, args[-2]);
-	if(from.length > 0 && sep_list.length > 0 && format.length > 0) {
+	if(from.length() > 0 && sep_list.length() > 0 && format.length() > 0) {
 		std::string name = thread.externStr(from[0]);
 		std::string sep = thread.externStr(sep_list[0]);
 		
 		std::vector<void*> lists;
 		
-		for(int64_t i = 0; i < format.length; i++) {
+		for(int64_t i = 0; i < format.length(); i++) {
 			if(Strings::Double == format[i] || Strings::Date == format[i]) {
 				lists.push_back(new std::vector<double>);
 			} else if(Strings::Character == format[i]) {
@@ -108,10 +108,10 @@ void readtable(Thread& thread, Value const* args, Value& result) {
 			char buf[4096];
 			for(int64_t line = 0;fgets(buf,4096,file);line++) {
 				char * rest = buf;
-				for(int64_t i = 0, list_idx = 0; i < format.length; i++) {
+				for(int64_t i = 0, list_idx = 0; i < format.length(); i++) {
 					int sep_length = sep.length();
 					char * sep_location = strstr(rest,sep.c_str());
-					if(sep_location == NULL && i + 1 == format.length) {
+					if(sep_location == NULL && i + 1 == format.length()) {
 						sep_location = strstr(rest,"\n");
 						sep_length = 1;
 					}
@@ -145,7 +145,7 @@ void readtable(Thread& thread, Value const* args, Value& result) {
 			_error("Unable to open file");
 		}
 		List l(lists.size());
-		for(int64_t i = 0, list_idx = 0; i < format.length; i++) {
+		for(int64_t i = 0, list_idx = 0; i < format.length(); i++) {
 			if(Strings::Double == format[i] || Strings::Date == format[i]) {
 				std::vector<double> * data = (std::vector<double>*) lists[list_idx];
 				Double r(data->size());
@@ -200,7 +200,7 @@ void assignAttr(Thread& thread, Value const* args, Value& result)
 
 template<class D>
 void Insert(Thread& thread, D const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
-	if((length > 0 && srcIndex+length > src.length) || dstIndex+length > dst.length)
+	if((length > 0 && srcIndex+length > src.length()) || dstIndex+length > dst.length())
 		_error("insert index out of bounds");
 	memcpy(dst.v()+dstIndex, src.v()+srcIndex, length*sizeof(typename D::Element));
 }
@@ -232,16 +232,15 @@ void Insert(Thread& thread, Value const& src, int64_t srcIndex, Value& dst, int6
 
 template<class D>
 void Resize(Thread& thread, bool clone, D& src, int64_t newLength, typename D::Element fill = D::NAelement) {
-	if(clone || newLength > src.length) {
+	if(clone || newLength != src.length()) {
 		D r(newLength);
-		Insert(thread, src, 0, r, 0, std::min(src.length, newLength));
-		for(int64_t i = src.length; i < newLength; i++) r[i] = fill;	
+		Insert(thread, src, 0, r, 0, std::min(src.length(), newLength));
+		for(int64_t i = src.length(); i < newLength; i++) r[i] = fill;	
 		src = r; 
-	} else if(newLength < src.length) {
-		src.length = newLength;
 	} else {
 		// No resizing to do, so do nothing...
 	}
+	// TODO: could be smarter about shrinking if not cloning
 }
 
 void Resize(Thread& thread, bool clone, Value& src, int64_t newLength) {
@@ -255,8 +254,11 @@ void Resize(Thread& thread, bool clone, Value& src, int64_t newLength) {
 
 Type::Enum cTypeCast(Type::Enum s, Type::Enum t)
 {
+	#define MEET(X, Y, Z) if(s == Type::X && t == Type::Y) return Type::Z;
+	DEFAULT_TYPE_MEET(MEET);
+	#undef MEET
 	if(s == Type::Object || t == Type::Object) return Type::List;
-	else return std::max(s, t);
+	_error("Unexpected non-basic type in unlist (cTypeCast)");
 }
 
 // These are all tree-based reductions. Should we have a tree reduction byte code?
@@ -265,11 +267,11 @@ int64_t unlistLength(Thread& thread, int64_t recurse, Value a) {
 	if(recurse > 0 && a.isList()) {
 		List const& l = (List const&)a;
 		int64_t t = 0;
-		for(int64_t i = 0; i < l.length; i++) 
+		for(int64_t i = 0; i < l.length(); i++) 
 			t += unlistLength(thread, recurse-1, l[i]);
 		return t;
 	}
-	else if(a.isVector()) return a.length;
+	else if(a.isVector()) return ((Vector const&)a).length();
 	else return 1;
 }
 
@@ -278,7 +280,7 @@ Type::Enum unlistType(Thread& thread, int64_t recurse, Value a) {
 	if(a.isList()) {
 		List const& l = (List const&)a;
 		Type::Enum t = Type::Null;
-		for(int64_t i = 0; i < l.length; i++) 
+		for(int64_t i = 0; i < l.length(); i++) 
 			t = cTypeCast(recurse > 0 ? unlistType(thread, recurse-1, l[i]) : l[i].type, t);
 		return t;
 	}
@@ -291,11 +293,11 @@ void unlist(Thread& thread, int64_t recurse, Value a, T& out, int64_t& start) {
 	if(a.isObject()) a = ((Object&)a).base();
 	if(recurse > 0 && a.isList()) {
 		List const& l = (List const&)a;
-		for(int64_t i = 0; i < l.length; i++) 
+		for(int64_t i = 0; i < l.length(); i++) 
 			unlist(thread, recurse-1, l[i], out, start);
 		return;
 	}
-	else if(a.isVector()) { Insert(thread, a, 0, out, start, a.length); start += a.length; }
+	else if(a.isVector()) { Insert(thread, a, 0, out, start, ((Vector const&)a).length()); start += ((Vector const&)a).length(); }
 	else _error("Unexpected non-basic type in unlist");
 }
 
@@ -304,11 +306,11 @@ void unlist<List>(Thread& thread, int64_t recurse, Value a, List& out, int64_t& 
 	if(a.isObject()) a = ((Object&)a).base();
 	if(recurse > 0 && a.isList()) {
 		List const& l = (List const&)a;
-		for(int64_t i = 0; i < l.length; i++) 
+		for(int64_t i = 0; i < l.length(); i++) 
 			unlist(thread, recurse-1, l[i], out, start);
 		return;
 	}
-	else if(a.isVector()) { Insert(thread, a, 0, out, start, a.length); start += a.length; }
+	else if(a.isVector()) { Insert(thread, a, 0, out, start, ((Vector const&)a).length()); start += ((Vector const&)a).length(); }
 	else out[start++] = a;
 }
 /*
@@ -390,7 +392,7 @@ struct SubsetInclude {
 		typename A::Element const* ae = a.v();
 		typename Integer::Element const* de = d.v();
 		typename A::Element* re = r.v();
-		int64_t length = d.length;
+		int64_t length = d.length();
 		for(int64_t i = 0; i < length; i++) {
 			if(Integer::isNA(de[i])) re[j++] = A::NAelement;	
 			else if(de[i] != 0) re[j++] = ae[de[i]-1];
@@ -406,10 +408,10 @@ struct SubsetExclude {
 		std::set<Integer::Element> index; 
 		typename A::Element const* ae = a.v();
 		typename Integer::Element const* de = d.v();
-		int64_t length = d.length;
-		for(int64_t i = 0; i < length; i++) if(-de[i] > 0 && -de[i] <= (int64_t)a.length) index.insert(-de[i]);
+		int64_t length = d.length();
+		for(int64_t i = 0; i < length; i++) if(-de[i] > 0 && -de[i] <= (int64_t)a.length()) index.insert(-de[i]);
 		// iterate through excluded elements copying intervening ranges.
-		A r(a.length-index.size());
+		A r(a.length()-index.size());
 		typename A::Element* re = r.v();
 		int64_t start = 1;
 		int64_t k = 0;
@@ -418,7 +420,7 @@ struct SubsetExclude {
 			for(int64_t j = start; j < end; j++) re[k++] = ae[j-1];
 			start = end+1;
 		}
-		for(int64_t j = start; j <= a.length; j++) re[k++] = ae[j-1];
+		for(int64_t j = start; j <= a.length(); j++) re[k++] = ae[j-1];
 		out = r;
 	}
 };
@@ -431,21 +433,21 @@ struct SubsetLogical {
 		typename Logical::Element const* de = d.v();
 		// determine length
 		int64_t length = 0;
-		if(d.length > 0) {
+		if(d.length() > 0) {
 			int64_t j = 0;
-			int64_t maxlength = std::max(a.length, d.length);
+			int64_t maxlength = std::max(a.length(), d.length());
 			for(int64_t i = 0; i < maxlength; i++) {
 				if(!Logical::isFalse(de[j])) length++;
-				if(++j >= d.length) j = 0;
+				if(++j >= d.length()) j = 0;
 			}
 		}
 		A r(length);
 		typename A::Element* re = r.v();
 		int64_t j = 0, k = 0;
-		for(int64_t i = 0; i < std::max(a.length, d.length) && k < length; i++) {
-			if(i >= a.length || Logical::isNA(de[j])) re[k++] = A::NAelement;
+		for(int64_t i = 0; i < std::max(a.length(), d.length()) && k < length; i++) {
+			if(i >= a.length() || Logical::isNA(de[j])) re[k++] = A::NAelement;
 			else if(Logical::isTrue(de[j])) re[k++] = ae[i];
-			if(++j >= d.length) j = 0;
+			if(++j >= d.length()) j = 0;
 		}
 		out = r;
 	}
@@ -482,7 +484,7 @@ void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble() || i.isInteger()) {
 		Integer index = As<Integer>(thread, i);
 		int64_t positive = 0, negative = 0;
-		for(int64_t i = 0; i < index.length; i++) {
+		for(int64_t i = 0; i < index.length(); i++) {
 			if(index[i] > 0 || Integer::isNA(index[i])) positive++;
 			else if(index[i] < 0) negative++;
 		}
@@ -539,8 +541,8 @@ struct SubsetAssignInclude {
 		typename Integer::Element const* de = d.v();
 
 		// compute max index 
-		int64_t outlength = a.length;
-		int64_t length = d.length;
+		int64_t outlength = a.length();
+		int64_t length = d.length();
 		for(int64_t i = 0; i < length; i++) {
 			outlength = std::max(outlength, de[i]);
 		}
@@ -550,7 +552,7 @@ struct SubsetAssignInclude {
 		Resize(thread, clone, r, outlength);
 		typename A::Element* re = r.v();
 		for(int64_t i = 0, j = 0; i < length; i++, j++) {	
-			if(j >= b.length) j = 0;
+			if(j >= b.length()) j = 0;
 			int64_t idx = de[i];
 			if(idx != 0)
 				re[idx-1] = be[j];
@@ -567,16 +569,16 @@ struct SubsetAssignLogical {
 		typename Logical::Element const* de = d.v();
 		
 		// determine length
-		int64_t length = std::max(a.length, d.length);
+		int64_t length = std::max(a.length(), d.length());
 		A r = a;
 		Resize(thread, clone, r, length);
 		typename A::Element* re = r.v();
 		int64_t j = 0, k = 0;
 		for(int64_t i = 0; i < length; i++) {
-			if(i >= a.length && !Logical::isTrue(de[j])) re[i] = A::NAelement;
+			if(i >= a.length() && !Logical::isTrue(de[j])) re[i] = A::NAelement;
 			else if(Logical::isTrue(de[j])) re[i] = be[k++];
-			if(++j >= d.length) j = 0;
-			if(k >= b.length) k = 0;
+			if(++j >= d.length()) j = 0;
+			if(k >= b.length()) k = 0;
 		}
 		out = r;
 	}
@@ -634,13 +636,13 @@ void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i
 }
 
 void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
-	if(i.length == 1 && (i.isDouble() || i.isInteger())) {
+	if((i.isDouble() || i.isInteger()) && ((Vector const&)i).length() == 1) {
 		if(a.isList()) {
 			List r = (List&)a;
 			int64_t index = asReal1(i)-1;
 			if(index >= 0) {
-				Resize(thread, clone, r, std::max(index+1, a.length));
-				((List&)r)[index] = b;
+				Resize(thread, clone, r, std::max(index+1, r.length()));
+				r[index] = b;
 				c = r;
 			}
 			else {
@@ -657,27 +659,22 @@ void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& 
 		_error("NYI indexing type");
 }
 
-
-void length(Thread& thread, Value const* args, Value& result) {
-	result = Integer::c(args[0].length);
-}
-
 void eval_fn(Thread& thread, Value const* args, Value& result) {
 	result = thread.eval(Compiler::compilePromise(thread, args[0]), 
 			Cast<REnvironment>(args[-1]).environment());
 }
 
 struct mapplyargs {
-	Value const& in;
+	List const& in;
 	List& out;
 	Value const& func;
 };
 
 void* mapplyheader(void* args, uint64_t start, uint64_t end, Thread& thread) {
 	mapplyargs& l = *(mapplyargs*)args;
-	List apply(1+l.in.length);
+	List apply(1+l.in.length());
 	apply[0] = l.func;
-	for(int64_t i = 0; i < l.in.length; i++)
+	for(int64_t i = 0; i < l.in.length(); i++)
 		apply[i+1] = Value::Nil();
 	Prototype* p = Compiler::compileTopLevel(thread, CreateCall(apply));
 	return p;
@@ -687,12 +684,12 @@ void mapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& 
 	mapplyargs& l = *(mapplyargs*)args;
 	Prototype* p = (Prototype*) header;
 	for( size_t i=start; i!=end; ++i ) {
-		for(int64_t j=0; j < l.in.length; j++) {
+		for(int64_t j=0; j < l.in.length(); j++) {
 			Value e;
 			Element2(l.in, j, e);
 			Value a;
 			if(e.isVector())
-				Element2(e, i % e.length, a);
+				Element2(e, i % ((Vector const&)e).length(), a);
 			else
 				a = e;
 			p->calls[0].arguments[j].v = a;
@@ -703,17 +700,15 @@ void mapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& 
 }
 
 void mapply(Thread& thread, Value const* args, Value& result) {
-	if(!args[0].isVector())
-		_error("Invalid type for argument to mapply");
-	Value const& x = args[0];
+	List const& x = (List const&)args[0];
 	Value const& func = args[-1];
 	// figure out result length
 	int64_t len = 1;
-	for(int i = 0; i < x.length; i++) {
+	for(int i = 0; i < x.length(); i++) {
 		Value e;
 		Element2(x, i, e);
 		if(e.isVector()) 
-			len = (e.length == 0 || len == 0) ? 0 : std::max(e.length, len);
+			len = (((Vector const&)e).length() == 0 || len == 0) ? 0 : std::max(((Vector const&)e).length(), len);
 	}
 	List r(len);
 	memset(r.v(), 0, len*sizeof(List::Element));
@@ -752,7 +747,7 @@ void mapply(Thread& thread, Value const* args, Value& result) {
 	*/
 
 	mapplyargs a1 = (mapplyargs) {x, r, func};
-	thread.doall(mapplyheader, mapplybody, &a1, 0, r.length, 1, 1); 
+	thread.doall(mapplyheader, mapplybody, &a1, 0, r.length(), 1, 1); 
 
 	thread.gcStack.pop_back();
 	result = r;
@@ -856,11 +851,11 @@ void paste(Thread& thread, Value const* args, Value& result) {
 	Character a = As<Character>(thread, args[0]);
 	String sep = As<Character>(thread, args[-1])[0];
 	std::string r = "";
-	for(int64_t i = 0; i < a.length-1; i++) {
+	for(int64_t i = 0; i < a.length()-1; i++) {
 		r += a[i];
 		r += sep; 
 	}
-	if(0 < a.length) r += a[a.length-1];
+	if(0 < a.length()) r += a[a.length()-1];
 	result = Character::c(thread.internStr(r));
 }
 
@@ -920,7 +915,7 @@ void proctime(Thread& thread, Value const* args, Value& result) {
 
 void traceconfig(Thread & thread, Value const* args, Value& result) {
 	Logical c = As<Logical>(thread, args[0]);
-	if(c.length == 0) _error("condition is of zero length");
+	if(c.length() == 0) _error("condition is of zero length");
 	thread.state.jitEnabled = Logical::isTrue(c[0]);
 	result = Null::Singleton();
 }
@@ -981,14 +976,14 @@ void sort(Thread& thread, Value const* args, Value& result) {
 	Value a = args[0];
 	if(a.isDouble()) {
 		Double& r = (Double&)a;
-		Resize(thread, true, r, a.length);
-		std::sort(r.v(), r.v()+r.length);
+		Resize(thread, true, r, r.length()); // just cloning
+		std::sort(r.v(), r.v()+r.length());
 		result = r;
 	}
 	else if(a.isInteger()) {
 		Integer& r = (Integer&)a;
-		Resize(thread, true, r, a.length);
-		std::sort(r.v(), r.v()+r.length);
+		Resize(thread, true, r, r.length()); // just cloning
+		std::sort(r.v(), r.v()+r.length());
 		result = r;
 	}
 	else {
@@ -1008,13 +1003,13 @@ void match(Thread& thread, Value const* args, Value& result) {
 	Character a = As<Character>(thread, args[0]);
 	Character b = As<Character>(thread, args[-1]);
 	
-	Integer r(a.length);
-	for(int64_t i = 0; i < a.length; i++) {
+	Integer r(a.length());
+	for(int64_t i = 0; i < a.length(); i++) {
 		int64_t j = 0;
-		for(; j < b.length; j++) {
+		for(; j < b.length(); j++) {
 			if(a[i] == b[j]) break;
 		}
-		r[i] = (j < b.length) ? (j+1) : Integer::NAelement;
+		r[i] = (j < b.length()) ? (j+1) : Integer::NAelement;
 	}
 
 	result = r;
@@ -1039,7 +1034,6 @@ void registerCoreFunctions(State& state)
 	state.registerInternalFunction(state.internStr("attr<-"), (assignAttr), 3);
 	
 	state.registerInternalFunction(state.internStr("unlist"), (unlist), 3);
-	state.registerInternalFunction(state.internStr("length"), (length), 1);
 	
 	state.registerInternalFunction(state.internStr("eval"), (eval_fn), 3);
 	state.registerInternalFunction(state.internStr("source"), (source), 1);
