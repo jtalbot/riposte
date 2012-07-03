@@ -22,7 +22,7 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Environment* env, int64_t resultSlot, Instruction const* returnpc);
 
-void MatchArgs(Thread& thread, Environment const* env, Environment* fenv, Function const& func, CompiledCall const& call);
+void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
 
 void MatchNamedArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
 
@@ -37,7 +37,7 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 
 Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const* a, Environment* env, int64_t index);
 
-Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, String name);
+Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, Environment*env, String name);
 
 #define REGISTER(i) (*(thread.base+(i)))
 #define CONSTANT(i) (thread.frame.prototype->constants[i-1])
@@ -45,23 +45,24 @@ Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const
 #define OUT(thread, i) (*(thread.base+(i)))
 
 #define OPERAND(a, i) \
+Environment* a##Env; \
 Value const& a = __builtin_expect((i) <= 0, true) ? \
 		*(thread.base+(i)) : \
 		(i < 256) ? thread.frame.prototype->constants[i-1] : \
-			thread.frame.environment->getRecursive((String)(i)); 
+			thread.frame.environment->getRecursive((String)(i), a##Env); 
 	
 #define FORCE(a, i) \
 if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
 	if(a.isDotdot()) { \
-		Value const& t = ((Environment*)a.p)->dots[a.z()].v; \
+		Value const& t = a##Env->dots[a.z()].v; \
 		if(t.isConcrete()) { \
 			thread.frame.environment->insert((String)(i)) = t; \
 			thread.traces.LiveEnvironment(thread.frame.environment, t); \
 			return &inst; \
 		} \
-		else return forceDot(thread, inst, &t, (Environment*)a.p, a.z()); \
+		else return forceDot(thread, inst, &t, a##Env, a.z()); \
 	} \
-	else return forceReg(thread, inst, &a, (String)(i)); \
+	else return forceReg(thread, inst, &a, a##Env, (String)(i)); \
 } \
 
 #define DOTDOT(a, i) \

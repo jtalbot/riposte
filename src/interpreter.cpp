@@ -39,6 +39,7 @@ void Prototype::threadByteCode(Prototype*  prototype) {
 #endif
 }
 
+/*
 extern Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* fastmov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -52,6 +53,7 @@ extern Instruction const* ret_op(Thread& thread, Instruction const& inst) ALWAYS
 extern Instruction const* retp_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* internal_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* strip_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+*/
 
 Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const* a, Environment* env, int64_t index) {
 	if(a->isPromise()) {
@@ -63,15 +65,14 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 	}
 }
 
-Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, String name) {
+Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, Environment* dest, String name) {
 	if(a->isPromise()) {
 		Promise const& f = (Promise const&)(*a);
-		assert(f.environment()->DynamicScope());
-		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), f.environment(), name, &inst);
+		return buildStackFrame(thread, f.environment(), f.prototype(), dest, name, &inst);
 	} else if(a->isDefault()) {
 		Default const& f = (Default const&)(*a);
 		assert(f.environment());
-		return buildStackFrame(thread, f.environment(), f.prototype(), f.environment(), name, &inst);
+		return buildStackFrame(thread, f.environment(), f.prototype(), dest, name, &inst);
 	} else {
 		_error(std::string("Object '") + thread.externStr(name) + "' not found");
 	}
@@ -313,11 +314,12 @@ Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 	OPERAND(value, inst.c); FORCE(value, inst.c); /*BIND(value);*/
 	
 	String s = (String)inst.a;
-	Value& dest = thread.frame.environment->LexicalScope()->insertRecursive(s);
+	Environment* penv;
+	Value& dest = thread.frame.environment->LexicalScope()->insertRecursive(s, penv);
 
 	if(!dest.isNil()) {
 		dest = value;
-		// TODO: should add dest's environment to the liveEnvironments list
+		thread.traces.LiveEnvironment(penv, dest);
 	}
 	else {
 		thread.state.global->insert(s) = value;

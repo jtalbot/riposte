@@ -108,43 +108,43 @@ bool namedArguments(Environment* env, CompiledCall const& call) {
 	}
 }
 
-inline void argAssign(Thread& thread, Environment* env, Pair const& parameter, Pair const& argument) {
+inline void argAssign(Thread& thread, Environment* evalEnv, Environment* assignEnv, Pair const& parameter, Pair const& argument) {
 	Value w = argument.v;
 	if(!w.isNil()) {
 		if(w.isPromise() || w.isDefault()) {
 			assert(w.p == 0);
-			w.p = env;
+			w.p = evalEnv;
 		} else if(w.isFuture()) {
-			thread.traces.LiveEnvironment(env, w);
+			thread.traces.LiveEnvironment(assignEnv, w);
 		}
-		env->insert(parameter.n) = w;
+		assignEnv->insert(parameter.n) = w;
 	}
 }
 
-inline void assignArgument(Thread& thread, Environment* env, String n, Value const& v) {
+inline void assignArgument(Thread& thread, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {
 	if(v.isPromise()) {
 		assert(v.p == 0);
 		Value w = v;
-		w.p = env;
-		env->insert(n) = w;
+		w.p = evalEnv;
+		assignEnv->insert(n) = w;
 	}
 	else {
 		assert(!v.isFuture());
 		//if(v.isFuture())
 		//	thread.LiveEnvironment(env, v);
-		env->insert(n) = v;
+		assignEnv->insert(n) = v;
 	}
 }
 
-inline void assignDefault(Thread& thread, Environment* env, String n, Value const& v) {
+inline void assignDefault(Thread& thread, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {
 	if(v.isDefault()) {
 		assert(v.p == 0);
 		Value w = v;
-		w.p = env;
-		env->insert(n) = w;
+		w.p = evalEnv;
+		assignEnv->insert(n) = w;
 	}
 	else if(!v.isNil()) {
-		env->insert(n) = v;
+		assignEnv->insert(n) = v;
 	}
 }
 
@@ -164,7 +164,7 @@ inline void dotAssign(Thread& thread, Environment* env, Pair const& argument) {
 	env->dots.push_back(p);
 }
 
-void MatchArgs(Thread& thread, Environment const* env, Environment* fenv, Function const& func, CompiledCall const& call) {
+void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call) {
 	Prototype const* prototype = func.prototype();
 	PairList const& parameters = prototype->parameters;
 	PairList const& arguments = call.arguments;
@@ -175,9 +175,9 @@ void MatchArgs(Thread& thread, Environment const* env, Environment* fenv, Functi
 	// set parameters from arguments & defaults
 	for(int64_t i = 0; i < (int64_t)parameters.size(); i++) {
 		if(i < end && !arguments[i].v.isNil())
-			assignArgument(thread, fenv, parameters[i].n, arguments[i].v);
+			assignArgument(thread, env, fenv, parameters[i].n, arguments[i].v);
 		else
-			assignDefault(thread, fenv, parameters[i].n, parameters[i].v);
+			assignDefault(thread, fenv, fenv, parameters[i].n, parameters[i].v);
 	}
 
 	// handle unused arguments
@@ -204,7 +204,7 @@ void MatchNamedArgs(Thread& thread, Environment* env, Environment* fenv, Functio
 
 	// set defaults
 	for(int64_t i = 0; i < (int64_t)parameters.size(); ++i) {
-		argAssign(thread, fenv, parameters[i], parameters[i]);
+		argAssign(thread, fenv, fenv, parameters[i], parameters[i]);
 	}
 
 	if(!named) {
@@ -214,7 +214,7 @@ void MatchNamedArgs(Thread& thread, Environment* env, Environment* fenv, Functio
 		int64_t end = std::min(numArgs, pDotIndex);
 		for(int64_t i = 0; i < end; ++i) {
 			Pair const& arg = argument(i, env, call);
-			argAssign(thread, fenv, parameters[i], arg);
+			argAssign(thread, env, fenv, parameters[i], arg);
 		}
 
 		// if we have left over arguments, but no parameter dots, error
@@ -282,7 +282,7 @@ void MatchNamedArgs(Thread& thread, Environment* env, Environment* fenv, Functio
 		for(int64_t j = 0; j < (int64_t)parameters.size(); ++j) {
 			if(j != pDotIndex && set[j] >= 0) {
 				Pair const& arg = argument(set[j], env, call);
-				argAssign(thread, fenv, parameters[j], arg);
+				argAssign(thread, env, fenv, parameters[j], arg);
 			}
 		}
 
@@ -301,7 +301,8 @@ void MatchNamedArgs(Thread& thread, Environment* env, Environment* fenv, Functio
 }
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out) {
-	Value const& f = thread.frame.environment->getRecursive(op);
+	Environment* penv;
+	Value const& f = thread.frame.environment->getRecursive(op, penv);
 	if(f.isFunction()) {
 		Environment* fenv = CreateEnvironment(thread, ((Function const&)f).environment(), thread.frame.environment, Null::Singleton());
 		List call(0);
@@ -318,7 +319,8 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 }
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out) {
-	Value const& f = thread.frame.environment->getRecursive(op);
+	Environment* penv;
+	Value const& f = thread.frame.environment->getRecursive(op, penv);
 	if(f.isFunction()) { 
 		Environment* fenv = CreateEnvironment(thread, ((Function const&)f).environment(), thread.frame.environment, Null::Singleton());
 		List call(0);

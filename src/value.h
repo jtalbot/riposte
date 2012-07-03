@@ -102,12 +102,15 @@ typedef std::vector<Pair> PairList;
 // Value type implementations
 //
 
+class Object : public Value {
+};
+
 class State;
 class Thread;
 struct Prototype;
 class Environment;
 
-struct Vector : public Value {
+struct Vector : public Object {
 	struct Inner : public HeapObject {
 		int64_t length;
 		int64_t capacity;
@@ -266,7 +269,7 @@ VECTOR_IMPL(List, Value, true)
 };
 
 class Trace;
-struct Future : public Value {
+struct Future : public Object {
 	static const Type::Enum ValueType = Type::Future;
 	static Future& Init(Value& f, Trace* trace, IRef ref) {
 		Value::Init(f,Type::Future,0);
@@ -278,7 +281,7 @@ struct Future : public Value {
 	IRef ref() const { return (IRef)(uint64_t)i; }
 };
 
-struct Function : public Value {
+struct Function : public Object {
 	static const Type::Enum ValueType = Type::Function;
 		
 	struct Inner : public HeapObject {
@@ -483,59 +486,6 @@ public:
 	 void visit() const;
 };
 
-/*
-// Object implements an immutable dictionary interface.
-// Objects also have a base value which right now must be a non-object type...
-//  However S4 objects can contain S3 objects so we may have to change this.
-//  If we make this change, then all code that unwraps objects must do so recursively.
-struct Object : public Value {
-	
-	struct Inner : public HeapObject {
-		Value base;
-		Dictionary* d;
-		Inner(Value const& base, Dictionary* d) : base(base), d(d) {}
-		void visit() const;
-	};
-
-	static const Type::Enum ValueType = Type::Object;
-	
-	static Object& Init(Value& v, Value const& base, Dictionary* dictionary=0) {
-		// Create inner first works if base and o overlap.
-		Inner* p = new Inner(base, dictionary == 0 ? new Dictionary(4) : dictionary);
-		Value::Init(v, Type::Object, 0);
-		v.p = p;
-		return (Object&)v;
-	}
-
-	Value const& base() const {
-		return ((Inner const*)p)->base;
-	}
-
-	Dictionary* dictionary() const {
-		return ((Inner const*)p)->d;
-	}
-
-	bool has(String name) const {
-		return ((Inner const*)p)->d->has(name);
-	}
-	
-	Value const& get(String name) const {
-		return ((Inner const*)p)->d->get(name);
-	}
-
-	void insertMutable(String name, Value const& v) {
-		if(!v.isNil())
-			((Inner*)p)->d->insert(name) = v;
-	}
-
-	Object insert(String name, Value const& v) {
-		Object o;
-		Object::Init(o, ((Inner*)p)->base, ((Inner*)p)->d->clone(1));
-		o.insertMutable(name, v);
-		return o;
-	}
-};
-*/
 class Environment : public Dictionary {
 public:
 	Environment* lexical, *dynamic;
@@ -552,12 +502,11 @@ public:
 
 	// Look up insertion location using R <<- rules
 	// (i.e. find variable with same name in the lexical scope)
-	Value& insertRecursive(String name) const ALWAYS_INLINE {
+	Value& insertRecursive(String name, Environment*& env) const ALWAYS_INLINE {
 		bool success;
-		Environment const* env = this;
+		env = (Environment*)this;
 		Pair* p = env->find(name, success);
-		while(!success && env->LexicalScope()) {
-			env = env->LexicalScope();
+		while(!success && (env = env->LexicalScope())) {
 			p = env->find(name, success);
 		}
 		return p->v;
@@ -565,8 +514,8 @@ public:
 	
 	// Look up variable using standard R lexical scoping rules
 	// Should be same as insertRecursive, but with extra constness
-	Value const& getRecursive(String name) const ALWAYS_INLINE {
-		return insertRecursive(name);
+	Value const& getRecursive(String name, Environment*& env) const ALWAYS_INLINE {
+		return insertRecursive(name, env);
 	}
 
 	struct Pointer {
@@ -589,7 +538,7 @@ public:
 	void visit() const;
 };
 
-struct REnvironment : public Value {
+struct REnvironment : public Object {
 	static const Type::Enum ValueType = Type::Environment;
 	
 	static REnvironment& Init(Value& v, Environment* env) {

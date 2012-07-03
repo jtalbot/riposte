@@ -862,7 +862,8 @@ void substitute(Thread& thread, Value const* args, Value& result) {
 	while(v.isPromise()) v = ((Function const&)v).prototype()->expression;
 	
 	if(isSymbol(v)) {
-		Value const& r = thread.frame.environment->getRecursive(SymbolStr(v));
+		Environment* penv;
+		Value const& r = thread.frame.environment->getRecursive(SymbolStr(v), penv);
 		if(!r.isNil()) v = r;
 		while(v.isPromise()) v = ((Function const&)v).prototype()->expression;
 	}
@@ -878,7 +879,8 @@ void exists(Thread& thread, Value const* args, Value& result) {
 	REnvironment const& e = Cast<REnvironment>(args[-1]);
 	Logical l = As<Logical>(thread, args[-2]);
 
-	Value const& v = l[0] ? e.environment()->getRecursive(c[0]) : e.environment()->get(c[0]);
+	Environment* penv;
+	Value const& v = l[0] ? e.environment()->getRecursive(c[0], penv) : e.environment()->get(c[0]);
 	if(v.isNil())
 		result = Logical::False();
 	else
@@ -890,7 +892,8 @@ void get(Thread& thread, Value const* args, Value& result) {
 	REnvironment const& e = Cast<REnvironment>(args[-1]);
 	Logical l = As<Logical>(thread, args[-2]);
 
-	result = l[0] ? e.environment()->getRecursive(c[0]) : e.environment()->get(c[0]);
+	Environment* penv;
+	result = l[0] ? e.environment()->getRecursive(c[0], penv) : e.environment()->get(c[0]);
 }
 
 #include <sys/time.h>
