@@ -26,11 +26,6 @@ void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function con
 
 void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
 
-inline Environment* CreateEnvironment(Thread& thread, Environment* l, Environment* d, Value const& call) {
-	Environment* env = new Environment(l, d, call);
-	return env;
-}
-
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out);
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out);
@@ -51,8 +46,8 @@ Value const& a = \
 			: thread.frame.environment->getRecursive((String)(i), a##Env); 
 
 #define FORCE(a, i) \
-if(__builtin_expect((i) > 0 && a.isPromise(), false)) { \
-	return force(thread, inst, (Promise const&)a, a##Env, (String)(i)); \
+if(__builtin_expect((i) > 0 && !a.isObject(), false)) { \
+	return force(thread, inst, a, a##Env, (String)(i)); \
 }
 
 
@@ -62,8 +57,8 @@ Value const& a = \
 	(thread.frame.environment->dots[(i)].v);
 	
 #define FORCE_DOTDOT(a, i) \
-if(__builtin_expect(a.isPromise(), false)) { \
-	return forceDot(thread, inst, (Promise const&)a, a##Env, (i)); \
+if(__builtin_expect(!a.isObject(), false)) { \
+	return forceDot(thread, inst, a, a##Env, (i)); \
 }
 
 

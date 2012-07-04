@@ -48,9 +48,9 @@ struct Value {
 	Type::Enum type() const { return (Type::Enum)typ; }
 	uint64_t packed() const { return pac; }
 
-	bool isNil() const 	{ return header == 0; }
+	bool isNil() const 	{ return type() == Type::Nil; }
 	bool isPromise() const 	{ return type() == Type::Promise; }
-	bool isObject() const 	{ return type() != Type::Promise; }
+	bool isObject() const 	{ return type() > Type::Promise; }
 	
 	bool isFuture() const 	{ return type() == Type::Future; }
 	bool isFunction() const { return type() == Type::Function; }
@@ -544,8 +544,8 @@ public:
 	PairList dots;
 	bool named;	// true if any of the dots have names	
 
-	explicit Environment(Environment* lexical, Environment* dynamic, Value const& call) :
-			Dictionary(4), 
+	explicit Environment(int64_t initialLoad, Environment* lexical, Environment* dynamic, Value const& call) :
+			Dictionary(initialLoad), 
 			lexical(lexical), dynamic(dynamic), call(call), named(false) {}
 
 	Environment* LexicalScope() const { return lexical; }

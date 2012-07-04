@@ -17,45 +17,32 @@
 const void** glabels = 0;
 #endif
 
-/*
-extern Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* fastmov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* subset_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* subset2_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* jc_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* lt_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* ret_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* retp_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* internal_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* strip_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-*/
-
 // forces a value stored in the Environments dotdot slot: dest[index]
 // call through FORCE_DOTDOT macro which inlines some performance-important checks
-Instruction const* forceDot(Thread& thread, Instruction const& inst, Promise const& a, Environment* dest, int64_t index) {
-	if(a.isNil()) {
-		_error(std::string("Object '..") + intToStr(index+1) + "' not found, missing argument?");
-	} 
-	else if(a.isPrototype()) {
-		return buildStackFrame(thread, a.environment(), a.prototype(), dest, index, &inst);
-	} 
-	else if(a.isDotdot()) {
-                Value const& t = a.environment()->dots[a.dotIndex()].v;
-		Instruction const* result = &inst;
-		if(t.isPromise()) {
-			result = forceDot(thread, inst, (Promise const&)t, a.environment(), a.dotIndex());
+Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, int64_t index) {
+	if(v.isPromise()) {
+		Promise const& a = (Promise const&)v;
+		if(a.isPrototype()) {
+			return buildStackFrame(thread, a.environment(), a.prototype(), dest, index, &inst);
+		} 
+		else if(a.isDotdot()) {
+       	        	Value const& t = a.environment()->dots[a.dotIndex()].v;
+			Instruction const* result = &inst;
+			if(!t.isObject()) {
+				result = forceDot(thread, inst, t, a.environment(), a.dotIndex());
+			}
+			if(t.isObject()) {
+				dest->dots[index].v = t;
+				thread.traces.LiveEnvironment(dest, t);
+			}
+			return result;
 		}
-		if(!t.isPromise()) {
-			dest->dots[index].v = t;
-			thread.traces.LiveEnvironment(dest, t);
+		else {
+			_error("Invalid promise type");
 		}
-		return result;
 	}
 	else {
-		_error("Unexpected type in forceDot");
+		_error(std::string("Object '..") + intToStr(index+1) + "' not found, missing argument?");
 	} 
 }
 
@@ -63,33 +50,36 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Promise con
 // call through FORCE macro which inlines some performance-important checks
 //  for the common cases.
 // Environments can have promises, defaults, or dotdots (references to ..n in the parent).
-Instruction const* force(Thread& thread, Instruction const& inst, Promise const& a, Environment
+Instruction const* force(Thread& thread, Instruction const& inst, Value const& v, Environment
 * dest, String name) {
-        if(a.isNil()) {
-		_error(std::string("Object '") + thread.externStr(name) + "' not found"); 
-        } 
-	else if(a.isPrototype()) {
-                return buildStackFrame(thread, a.environment(), a.prototype(), dest, name, &inst);
-        }
-	else if(a.isDotdot()) {
-                Value const& t = a.environment()->dots[a.dotIndex()].v;
-		Instruction const* result = &inst;
-		// if we're this dotdot is a promise, attempt to force.
-		// first time through this will return the address of the 
-		//	promise's new stack frame.
-		// second time through this will return the resulting value
-		// => Thus, evaluating dotdot requires at most 2 sweeps up the dotdot chain
-		if(t.isPromise()) {
-			result = forceDot(thread, inst, (Promise const&)t, a.environment(), a.dotIndex());
+	if(v.isPromise()) {
+		Promise const& a = (Promise const&)v;
+		if(a.isPrototype()) {
+       	        	return buildStackFrame(thread, a.environment(), a.prototype(), dest, name, &inst);
+        	}
+		else if(a.isDotdot()) {
+                	Value const& t = a.environment()->dots[a.dotIndex()].v;
+			Instruction const* result = &inst;
+			// if this dotdot is a promise, attempt to force.
+			// first time through this will return the address of the 
+			//	promise's new stack frame.
+			// second time through this will return the resulting value
+			// => Thus, evaluating dotdot requires at most 2 sweeps up the dotdot chain
+			if(!t.isObject()) {
+				result = forceDot(thread, inst, (Promise const&)t, a.environment(), a.dotIndex());
+			}
+       	        	if(t.isObject()) {
+       	                	dest->insert(name) = t;
+       	                 	thread.traces.LiveEnvironment(dest, t);
+                	}
+                	return result;
+        	}
+		else {
+			_error("Invalid promise type");
 		}
-                if(!t.isPromise()) {
-                        dest->insert(name) = t;
-                        thread.traces.LiveEnvironment(dest, t);
-                }
-                return result;
-        } 
+	}
 	else {
-		_error("Unexpected type in force");
+		_error(std::string("Object '") + thread.externStr(name) + "' not found"); 
 	} 
 }
 
@@ -103,7 +93,7 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	Function const& func = (Function const&)f;
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
-	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
+	Environment* fenv = new Environment((int64_t)call.arguments.size(), func.environment(), thread.frame.environment, call.call);
 	
 	MatchArgs(thread, thread.frame.environment, fenv, func, call);
 	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
@@ -117,7 +107,7 @@ Instruction const* fastcall_op(Thread& thread, Instruction const& inst) {
 	Function const& func = (Function const&)f;
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
-	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
+	Environment* fenv = new Environment((int64_t)call.arguments.size(), func.environment(), thread.frame.environment, call.call);
 	
 	FastMatchArgs(thread, thread.frame.environment, fenv, func, call);
 	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
@@ -468,6 +458,39 @@ Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
  	FORCE(i, inst.b); BIND(i);
 	if(((Object const&)a).hasAttributes() || ((Object const&)i).hasAttributes()) { return GenericDispatch(thread, inst, Strings::bb, a, i, inst.c); } 
 	_error("Invalid subset2 operation");
+}
+
+Instruction const* attrget_op(Thread& thread, Instruction const& inst) {
+	OPERAND(a, inst.a); FORCE(a, inst.a);
+	OPERAND(i, inst.b); FORCE(i, inst.b); BIND(i);
+	if(a.isObject() && i.isCharacter1()) {
+		String name = ((Character const&)i)[0];
+		Object const& o = (Object const&)a;
+		if(o.hasAttributes() && o.attributes()->has(name))
+			OUT(thread, inst.c) = o.attributes()->get(name);
+		else
+			OUT(thread, inst.c) = Null::Singleton();
+		return &inst+1;
+	}
+	_error("Invalid attrget operation");
+}
+
+Instruction const* attrset_op(Thread& thread, Instruction const& inst) {
+	OPERAND(a, inst.c); FORCE(a, inst.c);
+	OPERAND(i, inst.b); FORCE(i, inst.b); BIND(i);
+	OPERAND(v, inst.a); FORCE(v, inst.a); BIND(v);
+	if(a.isObject() && i.isCharacter1()) {
+		String name = ((Character const&)i)[0];
+		Object o = (Object const&)a;
+		Dictionary* d = o.hasAttributes()
+                	? o.attributes()->clone(1)
+                	: new Dictionary(1);
+		d->insert(name) = v;
+		o.attributes(d);
+		OUT(thread, inst.c) = o;
+		return &inst+1;
+	}
+	_error("Invalid attrset operation");
 }
 
 

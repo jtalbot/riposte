@@ -54,11 +54,12 @@ struct CompiledCall {
 	List call;
 
 	PairList arguments;
+	int64_t argumentsSize;
 	int64_t dotIndex;
 	bool named;
 	
 	explicit CompiledCall(List const& call, PairList arguments, int64_t dotIndex, bool named) 
-		: call(call), arguments(arguments), dotIndex(dotIndex), named(named) {}
+		: call(call), arguments(arguments), argumentsSize(arguments.size()), dotIndex(dotIndex), named(named) {}
 };
 
 struct Prototype : public HeapObject {
@@ -66,6 +67,7 @@ struct Prototype : public HeapObject {
 	String string;
 
 	PairList parameters;
+	int64_t parametersSize;
 	int dotIndex;
 
 	int registers;
@@ -349,8 +351,8 @@ public:
 
 inline State::State(uint64_t threads, int64_t argc, char** argv) 
 	: verbose(false), jitEnabled(true), done(0) {
-	Environment* base = new Environment(0,0,Null::Singleton());
-	this->global = new Environment(base,0,Null::Singleton());
+	Environment* base = new Environment(1,0,0,Null::Singleton());
+	this->global = new Environment(1,base,0,Null::Singleton());
 	path.push_back(base);
 
 	arguments = Character(argc);

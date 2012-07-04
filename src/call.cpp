@@ -39,16 +39,12 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
 }
 
 inline void assignArgument(Thread& thread, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {
+	assert(!v.isFuture());
+	
+	Value& w = assignEnv->insert(n);
+	w = v;
 	if(v.isPromise()) {
-		Promise w = (Promise const&)v;
-		w.environment(evalEnv);
-		assignEnv->insert(n) = w;
-	}
-	else {
-		assert(!v.isFuture());
-		//if(v.isFuture())
-		//	thread.LiveEnvironment(env, v);
-		assignEnv->insert(n) = v;
+		((Promise&)w).environment(evalEnv);
 	}
 }
 
@@ -228,11 +224,14 @@ void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Function
 	PairList const& parameters = prototype->parameters;
 	PairList const& arguments = call.arguments;
 
+	int64_t const parametersSize = prototype->parametersSize;
+	int64_t const argumentsSize = call.argumentsSize;
+
 	int64_t const pDotIndex = prototype->dotIndex;
-	int64_t const end = std::min((int64_t)arguments.size(), pDotIndex);
+	int64_t const end = std::min(argumentsSize, pDotIndex);
 
 	// set parameters from arguments & defaults
-	for(int64_t i = 0; i < (int64_t)parameters.size(); i++) {
+	for(int64_t i = 0; i < parametersSize; i++) {
 		if(i < end && !arguments[i].v.isNil())
 			assignArgument(thread, env, fenv, parameters[i].n, arguments[i].v);
 		else
@@ -240,16 +239,16 @@ void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Function
 	}
 
 	// handle unused arguments
-	if(pDotIndex >= (int64_t)parameters.size()) {
+	if(pDotIndex >= parametersSize) {
 		// called function doesn't take dots, unused args is an error 
-		if(arguments.size() > parameters.size())
+		if(argumentsSize > parametersSize)
 			_error("Unused arguments");
 	}
 	else {
 		// called function has dots, all unused args go into ...
 		fenv->named = false; // if no arguments are named, no dots can be either
-		fenv->dots.reserve(arguments.size()-end);
-		for(int64_t i = end; i < (int64_t)arguments.size(); i++) {
+		fenv->dots.reserve(argumentsSize-end);
+		for(int64_t i = end; i < (int64_t)argumentsSize; i++) {
 			assignDot(thread, env, fenv, arguments[i].n, arguments[i].v);
 		}
 	}
@@ -259,7 +258,7 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 	Environment* penv;
 	Value const& f = thread.frame.environment->getRecursive(op, penv);
 	if(f.isFunction()) {
-		Environment* fenv = CreateEnvironment(thread, ((Function const&)f).environment(), thread.frame.environment, Null::Singleton());
+		Environment* fenv = new Environment(1, ((Function const&)f).environment(), thread.frame.environment, Null::Singleton());
 		List call(0);
 		Pair p;
 		p.n = Strings::empty;
@@ -277,7 +276,7 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 	Environment* penv;
 	Value const& f = thread.frame.environment->getRecursive(op, penv);
 	if(f.isFunction()) { 
-		Environment* fenv = CreateEnvironment(thread, ((Function const&)f).environment(), thread.frame.environment, Null::Singleton());
+		Environment* fenv = new Environment(2, ((Function const&)f).environment(), thread.frame.environment, Null::Singleton());
 		List call(0);
 		PairList args;
 		Pair p;

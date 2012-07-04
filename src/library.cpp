@@ -43,7 +43,7 @@ void openDynamic(Thread& thread, std::string path, Environment* env) {
 }
 
 void loadLibrary(Thread& thread, std::string path, std::string name) {
-	Environment* env = new Environment(thread.state.path.back(),0,Null::Singleton());
+	Environment* env = new Environment(1,thread.state.path.back(),0,Null::Singleton());
 	
 	std::string p = path + "/" + name + ("/R/");
 

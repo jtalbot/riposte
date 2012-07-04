@@ -5,18 +5,19 @@
 #include "enum.h"
 
 #define TYPES(_) 			   \
-	_(Promise, 	"promise",	0) \
+	_(Nil,		"nil",		0) \
+	_(Promise, 	"promise",	1) \
 	/* Objects ... */		   \
-	_(Future, 	"future",       1) \
-	_(Function,	"function",	2) \
-	_(Environment,	"environment",	3) \
-	_(Null, 	"NULL",		4) \
-	_(Raw, 		"raw",		5) \
-	_(Logical, 	"logical",	6) \
-	_(Integer, 	"integer",	7) \
-	_(Double, 	"double",	8) \
-	_(Character, 	"character",	9) \
-	_(List,		"list",	       10) \
+	_(Future, 	"future",       2) \
+	_(Function,	"function",	3) \
+	_(Environment,	"environment",	4) \
+	_(Null, 	"NULL",		5) \
+	_(Raw, 		"raw",		6) \
+	_(Logical, 	"logical",	7) \
+	_(Integer, 	"integer",	8) \
+	_(Double, 	"double",	9) \
+	_(Character, 	"character",   10) \
+	_(List,		"list",	       11) \
 
 DECLARE_ENUM_WITH_VALUES(Type, TYPES)
 

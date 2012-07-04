@@ -172,7 +172,7 @@ void readtable(Thread& thread, Value const* args, Value& result) {
 	}
 }
 
-void attr(Thread& thread, Value const* args, Value& result)
+/*void attr(Thread& thread, Value const* args, Value& result)
 {
 	// NYI: exact
 	Object const& object = (Object const&)args[0];
@@ -195,7 +195,7 @@ void assignAttr(Thread& thread, Value const* args, Value& result)
 	d->insert(which[0]) = args[-2];
 	object.attributes(d);
 	result = object;
-}
+}*/
 
 template<class D>
 void Insert(Thread& thread, D const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
@@ -794,7 +794,7 @@ void environment(Thread& thread, Value const* args, Value& result) {
 }
 
 void newenv(Thread& thread, Value const* args, Value& result) {
-	REnvironment::Init(result, new Environment(0,0,Null::Singleton()));
+	REnvironment::Init(result, new Environment(1,0,0,Null::Singleton()));
 }
 
 // TODO: parent.frame and sys.call need to ignore frames for promises, etc. We may need
@@ -1027,8 +1027,8 @@ void registerCoreFunctions(State& state)
 	state.registerInternalFunction(state.internStr("cat"), (cat), 2);
 	state.registerInternalFunction(state.internStr("library"), (library), 1);
 	
-	state.registerInternalFunction(state.internStr("attr"), (attr), 3);
-	state.registerInternalFunction(state.internStr("attr<-"), (assignAttr), 3);
+	//state.registerInternalFunction(state.internStr("attr"), (attr), 3);
+	//state.registerInternalFunction(state.internStr("attr<-"), (assignAttr), 3);
 	
 	state.registerInternalFunction(state.internStr("unlist"), (unlist), 3);
 	

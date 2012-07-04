@@ -144,6 +144,8 @@
 	_(isfinite,	"is.finite") \
 	_(isinfinite,	"is.infinite") \
 	_(vector,	"vector") \
+	_(attrget,	"attr") \
+	_(attrset,	"attr<-") \
 	_(Re,	"Re") \
 	_(Im,	"Im") \
 	_(Maximal, "\255")

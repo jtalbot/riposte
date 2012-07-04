@@ -78,6 +78,8 @@ static ByteCode::Enum op2(String const& func) {
 
 	if(func == Strings::round) return ByteCode::round; 
 	if(func == Strings::signif) return ByteCode::signif; 
+
+	if(func == Strings::attrget) return ByteCode::attrget;
 	
 	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a binary operator"); 
 }
@@ -89,6 +91,7 @@ static ByteCode::Enum op3(String const& func) {
 	if(func == Strings::ifelse) return ByteCode::ifelse;
 	if(func == Strings::seq) return ByteCode::seq;
 	if(func == Strings::rep) return ByteCode::rep;
+	if(func == Strings::attrset) return ByteCode::attrset;
 	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a trinary operator"); 
 }
 
@@ -352,8 +355,11 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			n[c.length()] = value;
 
 			Character nnames(c.length()+1);
-	
-			if(!hasNames(c) && (as == Strings::bracketAssign || as == Strings::bbAssign) && c.length() == 3) {
+
+			// Hacky, hacky, hacky...	
+			if(!hasNames(c) 
+				&& ((as == Strings::bracketAssign || as == Strings::bbAssign) && c.length() == 3) || 
+				(as == Strings::attrset && c.length() == 3)) {
 				for(int64_t i = 0; i < c.length()+1; i++) { nnames[i] = Strings::empty; }
 			}
 			else {
@@ -418,6 +424,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 		// Populate function info
 		functionCode->parameters = parameters;
+		functionCode->parametersSize = parameters.size();
 		functionCode->string = SymbolStr(call[3]);
 		functionCode->dotIndex = parameters.size();
 		for(int64_t i = 0; i < (int64_t)parameters.size(); i++) 
@@ -624,7 +631,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::split ||
 		func == Strings::ifelse ||
 		func == Strings::seq ||
-		func == Strings::rep) &&
+		func == Strings::rep ||
+		func == Strings::attrset) &&
 		call.length() == 4) {
 		Operand c = placeInRegister(compile(call[1], code));
 		Operand b = compile(call[2], code);
@@ -660,7 +668,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::bb ||
 		func == Strings::vector ||
 		func == Strings::round ||
-		func == Strings::signif) &&
+		func == Strings::signif ||
+		func == Strings::attrget) &&
 		call.length() == 3) 
 	{
 		Operand a = compile(call[1], code);
