@@ -35,58 +35,62 @@ extern Instruction const* strip_op(Thread& thread, Instruction const& inst) ALWA
 
 // forces a value stored in the Environments dotdot slot: dest[index]
 // call through FORCE_DOTDOT macro which inlines some performance-important checks
-Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const& a, Environment* dest, int64_t index) {
-	if(a.isPromise()) {
-		Promise const& f = (Promise const&)a;
-		return buildStackFrame(thread, f.environment(), f.prototype(), dest, index, &inst);
-	} else if(a.isDotdot()) {
-		Promise const& f = (Promise const&)a;
-                Value const& t = f.environment()->dots[f.z()].v;
+Instruction const* forceDot(Thread& thread, Instruction const& inst, Promise const& a, Environment* dest, int64_t index) {
+	if(a.isNil()) {
+		_error(std::string("Object '..") + intToStr(index+1) + "' not found, missing argument?");
+	} 
+	else if(a.isPrototype()) {
+		return buildStackFrame(thread, a.environment(), a.prototype(), dest, index, &inst);
+	} 
+	else if(a.isDotdot()) {
+                Value const& t = a.environment()->dots[a.dotIndex()].v;
 		Instruction const* result = &inst;
-		if(!t.isConcrete()) {
-			result = forceDot(thread, inst, t, f.environment(), f.z());
+		if(t.isPromise()) {
+			result = forceDot(thread, inst, (Promise const&)t, a.environment(), a.dotIndex());
 		}
-		if(t.isConcrete()) {
+		if(!t.isPromise()) {
 			dest->dots[index].v = t;
 			thread.traces.LiveEnvironment(dest, t);
 		}
 		return result;
-	} else {
-		_error(std::string("Object '..") + intToStr(index+1) + "' not found, missing argument?");
 	}
+	else {
+		_error("Unexpected type in forceDot");
+	} 
 }
 
 // forces a value stored in the Environment slot: dest->name
 // call through FORCE macro which inlines some performance-important checks
 //  for the common cases.
 // Environments can have promises, defaults, or dotdots (references to ..n in the parent).
-Instruction const* force(Thread& thread, Instruction const& inst, Value const& a, Environment
+Instruction const* force(Thread& thread, Instruction const& inst, Promise const& a, Environment
 * dest, String name) {
-        if(a.isPromise()) {
-                Promise const& f = (Promise const&)a;
-                return buildStackFrame(thread, f.environment(), f.prototype(), dest, name, &inst);
-        } else if(a.isDefault()) {
-                Default const& f = (Default const&)a;
-                return buildStackFrame(thread, f.environment(), f.prototype(), dest, name, &inst);
-        } else if(a.isDotdot()) {
-		Promise const& f = (Promise const&)a;
-                Value const& t = f.environment()->dots[f.z()].v;
+        if(a.isNil()) {
+		_error(std::string("Object '") + thread.externStr(name) + "' not found"); 
+        } 
+	else if(a.isPrototype()) {
+                return buildStackFrame(thread, a.environment(), a.prototype(), dest, name, &inst);
+        }
+	else if(a.isDotdot()) {
+                Value const& t = a.environment()->dots[a.dotIndex()].v;
 		Instruction const* result = &inst;
 		// if we're this dotdot is a promise, attempt to force.
 		// first time through this will return the address of the 
 		//	promise's new stack frame.
 		// second time through this will return the resulting value
 		// => Thus, evaluating dotdot requires at most 2 sweeps up the dotdot chain
-		if(!t.isConcrete()) {
-			result = forceDot(thread, inst, t, f.environment(), f.z());
+		if(t.isPromise()) {
+			result = forceDot(thread, inst, (Promise const&)t, a.environment(), a.dotIndex());
 		}
-                if(t.isConcrete()) {
+                if(!t.isPromise()) {
                         dest->insert(name) = t;
                         thread.traces.LiveEnvironment(dest, t);
                 }
                 return result;
-        } else {
-                _error(std::string("Object '") + thread.externStr(name) + "' not found");        }
+        } 
+	else {
+		_error("Unexpected type in force");
+	} 
 }
 
 // Control flow instructions
@@ -281,7 +285,7 @@ Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 				names[i] = dots[i].n;
 			Dictionary* d = new Dictionary(1);
 			d->insert(Strings::names) = names;
-			out.z((uint64_t)d);
+			((Object&)out).attributes(d);
 		}
 		return &inst+1;
 	}
@@ -431,14 +435,14 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 		return &inst+1;
 	}
 
-	if(a.isObject()) { 
+	if(((Object const&)a).hasAttributes()) { 
 		return GenericDispatch(thread, inst, Strings::bracket, a, i, inst.c); 
 	} 
 	
 	FORCE(i, inst.b); 
 	BIND(i);
 
-	if(i.isObject()) { 
+	if(((Object const&)i).hasAttributes()) { 
 		return GenericDispatch(thread, inst, Strings::bracket, a, i, inst.c); 
 	} 
 	
@@ -462,7 +466,7 @@ Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
 		return &inst+1;
 	}
  	FORCE(i, inst.b); BIND(i);
-	if(a.isObject() || i.isObject()) { return GenericDispatch(thread, inst, Strings::bb, a, i, inst.c); } 
+	if(((Object const&)a).hasAttributes() || ((Object const&)i).hasAttributes()) { return GenericDispatch(thread, inst, Strings::bb, a, i, inst.c); } 
 	_error("Invalid subset2 operation");
 }
 
@@ -481,7 +485,7 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
  		return &inst+1; \
 	} \
 	BIND(a); \
-	if(a.isObject()) { return GenericDispatch(thread, inst, Strings::Name, a, inst.c); } \
+	if(((Object const&)a).hasAttributes()) { return GenericDispatch(thread, inst, Strings::Name, a, inst.c); } \
 \
 	Group##Dispatch<Name##VOp>(thread, a, c); \
 	return &inst+1; \
@@ -517,7 +521,7 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 		return &inst+1; \
 	} \
 	BIND(a); BIND(b); \
-	if(a.isObject() || b.isObject()) { return GenericDispatch(thread, inst, Strings::Name, a, b, inst.c); } \
+	if(((Object const&)a).hasAttributes() || ((Object const&)b).hasAttributes()) { return GenericDispatch(thread, inst, Strings::Name, a, b, inst.c); } \
 \
 	Group##Dispatch<Name##VOp>(thread, a, b, c);	\
 	return &inst+1;	\
@@ -538,7 +542,7 @@ Instruction const* length_op(Thread& thread, Instruction const& inst) {
 			thread.traces.OptBind(thread, OUT(thread,inst.c));
 		}
 	}
-	else if(a.isObject()) { 
+	else if(((Object const&)a).hasAttributes()) { 
 		return GenericDispatch(thread, inst, Strings::length, a, inst.c); 
 	} else {
 		Integer::InitScalar(OUT(thread, inst.c), 1);
@@ -752,7 +756,7 @@ Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 	// value is missing at a higher level.
 	String s = (String)inst.a;
 	Value const& v = thread.frame.environment->get(s);
-	bool missing = v.isNil() || v.isDefault();
+	bool missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
 	Logical::InitScalar(OUT(thread, inst.c), missing ? Logical::TrueElement : Logical::FalseElement);
 	return &inst+1;
 }
@@ -760,7 +764,7 @@ Instruction const* strip_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	Value& c = OUT(thread, inst.c);
 	c = a;
-	c.z(0);
+	((Object&)c).attributes(0);
 	return &inst+1;
 }
 
@@ -820,7 +824,7 @@ Value Thread::eval(Prototype const* prototype) {
 
 Value Thread::eval(Prototype const* prototype, Environment* environment) {
 	Value* old_base = base;
-	int64_t stackSize = stack.size();
+	uint64_t stackSize = stack.size();
 
 	// make room for the result
 	base--;	

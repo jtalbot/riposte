@@ -175,10 +175,10 @@ void readtable(Thread& thread, Value const* args, Value& result) {
 void attr(Thread& thread, Value const* args, Value& result)
 {
 	// NYI: exact
-	Value object = args[0];
+	Object const& object = (Object const&)args[0];
 	Character which = Cast<Character>(args[-1]);
-	if(object.isObject() && ((Dictionary*)object.z())->has(which[0])) {
-		result = ((Dictionary*)object.z())->get(which[0]);
+	if(object.hasAttributes() && object.attributes()->has(which[0])) {
+		result = object.attributes()->get(which[0]);
 	}
 	else {
 		result = Null::Singleton();
@@ -187,13 +187,13 @@ void attr(Thread& thread, Value const* args, Value& result)
 
 void assignAttr(Thread& thread, Value const* args, Value& result)
 {
-	Value object = args[0];
+	Object object = (Object const&)args[0];
 	Character which = Cast<Character>(args[-1]);
-	Dictionary* d = object.isObject() 
-		? ((Dictionary*)object.z())->clone(1)
+	Dictionary* d = object.hasAttributes() 
+		? object.attributes()->clone(1)
 		: new Dictionary(1);
 	d->insert(which[0]) = args[-2];
-	object.z((uint64_t)d);
+	object.attributes(d);
 	result = object;
 }
 

@@ -19,7 +19,10 @@ struct Value {
 	
 	union {
 		uint64_t header;
-		uint8_t b[8];
+		struct {
+			Type::Enum typ:8;
+			uint8_t pac;
+		};
 	};
 	union {
 		void* p;
@@ -30,7 +33,7 @@ struct Value {
 	};
 
 	static void Init(Value& v, Type::Enum type, int64_t packed) {
-		v.header = (type<<2) + packed;
+		v.header = type + (packed<<8);
 	}
 
 	// Warning: shallow equality!
@@ -47,33 +50,36 @@ struct Value {
 		return header < other.header || (header == other.header && p < other.p);
 	}
 	
-	Type::Enum type() const { return (Type::Enum)(b[0] >> 2); }
-	uint64_t packed() const { return b[0] & 3; }
-	uint64_t z() const { return header >> 8; }
-	void z(uint64_t i) { header = (i << 8) | b[0]; }
+	Type::Enum type() const { return (Type::Enum)typ; }
+	uint64_t packed() const { return pac; }
 
-	bool isNil() const { return header == 0; }
-	bool isNull() const { return type() == Type::Null; }
-	bool isLogical() const { return type() == Type::Logical; }
-	bool isInteger() const { return type() == Type::Integer; }
-	bool isLogical1() const { return header == (Type::Logical<<2)+1; }
-	bool isInteger1() const { return header == (Type::Integer<<2)+1; }
-	bool isDouble() const { return type() == Type::Double; }
-	bool isDouble1() const { return header == (Type::Double<<2)+1; }
-	bool isCharacter() const { return type() == Type::Character; }
-	bool isCharacter1() const { return header == (Type::Character<<2)+1; }
-	bool isList() const { return type() == Type::List; }
-	bool isPromise() const { return type() == Type::Promise && !isNil(); }
-	bool isDefault() const { return type() == Type::Default; }
-	bool isDotdot() const { return type() == Type::Dotdot; }
-	bool isFuture() const { return type() == Type::Future; }
+	bool isNil() const 	{ return header == 0; }
+	bool isPromise() const 	{ return type() == Type::Promise; }
+	bool isObject() const 	{ return type() != Type::Promise; }
+	
+	bool isFuture() const 	{ return type() == Type::Future; }
 	bool isFunction() const { return type() == Type::Function; }
-	bool isObject() const { return isConcrete() && z() != 0; }
-	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical(); }
-	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }
-	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isCharacter() || isList(); }
+	bool isEnvironment() const { return type() == Type::Environment; }
+	
+	bool isNull() const 	{ return type() == Type::Null; }
+	bool isRaw() const 	{ return type() == Type::Raw; }
+	bool isLogical() const 	{ return type() == Type::Logical; }
+	bool isInteger() const 	{ return type() == Type::Integer; }
+	bool isDouble() const 	{ return type() == Type::Double; }
+	bool isCharacter() const { return type() == Type::Character; }
+	bool isList() const 	{ return type() == Type::List; }
+	
+	bool isRaw1() const 	{ return header == Type::Raw+(1<<8); }
+	bool isLogical1() const { return header == Type::Logical+(1<<8); }
+	bool isInteger1() const { return header == Type::Integer+(1<<8); }
+	bool isDouble1() const 	{ return header == Type::Double+(1<<8); }
+	bool isCharacter1() const { return header == Type::Character+(1<<8); }
+	
+	bool isMathCoerce() const { return type() >= Type::Logical && type() <= Type::Double; }
+	bool isLogicalCoerce() const { return type() >= Type::Logical && type() <= Type::Double; }
+	bool isVector() const { return type() >= Type::Null && type() <= Type::List; }
+	
 	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isCharacter(); }
-	bool isConcrete() const { return ((int8_t)b[0]) < 0; }
 
 	template<class T> T& scalar() { throw "not allowed"; }
 	template<class T> T const& scalar() const { throw "not allowed"; }
@@ -101,14 +107,124 @@ typedef std::vector<Pair> PairList;
 //
 // Value type implementations
 //
-
-class Object : public Value {
-};
-
 class State;
 class Thread;
 struct Prototype;
 class Environment;
+struct Dictionary;
+class Trace;
+
+
+// Promises
+
+struct Promise : public Value {
+	enum PromiseType {
+		NIL = 0,
+		PROTOTYPE = 1,
+		PROTOTYPE_DEFAULT = 2,
+		DOTDOT = 3,
+		DOTDOT_DEFAULT = 4
+	};
+	static const Type::Enum ValueType = Type::Promise;
+	static Promise& Init(Value& v, Environment* env, Prototype* proto, bool isDefault) {
+		Value::Init(v, Type::Promise, isDefault ? PROTOTYPE_DEFAULT : PROTOTYPE);
+		v.header += (((uint64_t)env) << 16);
+		v.p = proto;
+		return (Promise&)v;
+	}
+	static Promise& Init(Value& v, Environment* env, uint64_t dotindex, bool isDefault) {
+		Value::Init(v, Type::Promise, isDefault ? DOTDOT_DEFAULT : DOTDOT);
+		v.header += (((uint64_t)env) << 16);
+		v.i = dotindex;
+		return (Promise&)v;
+	}
+
+	bool isDefault() const { 
+		return packed() == PROTOTYPE_DEFAULT || packed() == DOTDOT_DEFAULT; 
+	}
+	bool isPrototype() const {
+		return packed() == PROTOTYPE || packed() == PROTOTYPE_DEFAULT;
+	}
+	bool isDotdot() const {
+		return packed() == DOTDOT || packed() == DOTDOT_DEFAULT;
+	}
+	Environment* environment() const { 
+		return (Environment*)(((uint64_t)header) >> 16); 
+	}
+	Prototype* prototype() const { 
+		return (Prototype*)p; 
+	}
+	uint64_t dotIndex() const {
+		return i;
+	}
+	
+	void environment(Environment* env) {
+		header = (((uint64_t)env) << 16) + (pac << 8) + Type::Promise;
+	}
+};
+
+
+// Objects
+
+struct Object : public Value {
+	Dictionary* attributes() const { 
+		return (Dictionary*)(header >> 16); 
+	}
+	
+	void attributes(Dictionary* d) {
+		header = (header & ((1<<16)-1)) | ((uint64_t)d << 16);
+	}
+
+	bool hasAttributes() const { 
+		return attributes() != 0; 
+	}
+};
+
+struct REnvironment : public Object {
+	static const Type::Enum ValueType = Type::Environment;
+	
+	static REnvironment& Init(Value& v, Environment* env) {
+		Value::Init(v, Type::Environment, 0);
+		v.p = (void*)env;
+		return (REnvironment&)v;
+	}
+	
+	Environment* environment() const {
+		return (Environment*)p;
+	}
+};
+
+struct Future : public Object {
+	static const Type::Enum ValueType = Type::Future;
+	static Future& Init(Value& f, Trace* trace, IRef ref) {
+		Value::Init(f,Type::Future,0);
+		f.i = (((uint64_t)trace) << 16) + ref;
+		return (Future&)f;
+	}
+
+	Trace* trace() const { return (Trace*)(((uint64_t)i)>>16); }
+	IRef ref() const { return (IRef)(uint64_t)i; }
+};
+
+struct Function : public Object {
+	static const Type::Enum ValueType = Type::Function;
+		
+	struct Inner : public HeapObject {
+		Prototype* proto;
+		Environment* env;
+		Inner(Prototype* proto, Environment* env)
+			: proto(proto), env(env) {}
+	};
+
+	static Function& Init(Value& v, Prototype* proto, Environment* env) {
+		Value::Init(v, Type::Function, 0);
+		v.p = new Inner(proto, env);
+		return (Function&)v;
+	}
+
+	Prototype* prototype() const { return ((Inner*)p)->proto; }
+	Environment* environment() const { return ((Inner*)p)->env; }
+};
 
 struct Vector : public Object {
 	struct Inner : public HeapObject {
@@ -267,62 +383,6 @@ VECTOR_IMPL(List, Value, true)
 	static bool isInfinite(Value const& c) { return false; }
 };
 
-class Trace;
-struct Future : public Object {
-	static const Type::Enum ValueType = Type::Future;
-	static Future& Init(Value& f, Trace* trace, IRef ref) {
-		Value::Init(f,Type::Future,0);
-		f.i = (((uint64_t)trace) << 16) + ref;
-		return (Future&)f;
-	}
-
-	Trace* trace() const { return (Trace*)(((uint64_t)i)>>16); }
-	IRef ref() const { return (IRef)(uint64_t)i; }
-};
-
-struct Function : public Object {
-	static const Type::Enum ValueType = Type::Function;
-		
-	struct Inner : public HeapObject {
-		Prototype* proto;
-		Environment* env;
-		Inner(Prototype* proto, Environment* env)
-			: proto(proto), env(env) {}
-	};
-
-	static Function& Init(Value& v, Prototype* proto, Environment* env) {
-		Value::Init(v, Type::Function, 0);
-		v.p = new Inner(proto, env);
-		return (Function&)v;
-	}
-
-	Prototype* prototype() const { return ((Inner*)p)->proto; }
-	Environment* environment() const { return ((Inner*)p)->env; }
-};
-
-struct Promise : public Value {
-	static const Type::Enum ValueType = Type::Promise;
-	static Promise& Init(Value& v, Prototype* proto, Environment* env) {
-		v.header = (((uint64_t)proto) << 8) + (Type::Promise<<2);
-		v.p = env;
-		return (Promise&)v;
-	}
-
-	Prototype* prototype() const { return (Prototype*)(((uint64_t)header) >> 8); }
-	Environment* environment() const { return (Environment*)p; }
-};
-
-struct Default : public Value {
-	static const Type::Enum ValueType = Type::Default;
-	static Default& Init(Value& v, Prototype* proto, Environment* env) {
-		v.header = (((int64_t)proto) << 8) + (Type::Default<<2);
-		v.p = env;
-		return (Default&)v;
-	}
-
-	Prototype* prototype() const { return (Prototype*)(((uint64_t)header) >> 8); }
-	Environment* environment() const { return (Environment*)p; }
-};
 
 class Dictionary : public HeapObject {
 protected:
@@ -535,20 +595,6 @@ public:
 	}
 	
 	void visit() const;
-};
-
-struct REnvironment : public Object {
-	static const Type::Enum ValueType = Type::Environment;
-	
-	static REnvironment& Init(Value& v, Environment* env) {
-		Value::Init(v, Type::Environment, 0);
-		v.p = (void*)env;
-		return (REnvironment&)v;
-	}
-	
-	Environment* environment() const {
-		return (Environment*)p;
-	}
 };
 
 #endif

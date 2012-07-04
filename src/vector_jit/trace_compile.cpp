@@ -107,18 +107,6 @@ struct TraceCodeBuffer {
 
 #include <xmmintrin.h>
 
-double debug_print(int64_t offset, __m128 a) {
-	union {
-		__m128 c;
-		double d[2];
-		int64_t i[2];
-	};
-	c = a;
-	printf("%d %f %f %ld %ld\n", (int) offset, d[0],d[1],i[0],i[1]);
-
-	return d[0];
-}
-
 struct SSEValue {
 	union {
 		__m128d D;
@@ -374,32 +362,6 @@ static __m128d repeatEach_i(__m128d a, int64_t vector_index) {
 	return v.D;
 }
 
-#define FOLD_SCAN_FN(name, type, op) \
-static __m128d name (__m128d input, type * last) { \
-	union { \
-		__m128d in; \
-		type i[2]; \
-	}; \
-	in = input; \
-	*last = i[0] = *last op i[0] op i[1]; \
-	return in; \
-} \
-static __m128d cum##name(__m128d input, type * last) { \
-	union { \
-		__m128d in; \
-		type i[2]; \
-	}; \
-	in = input; \
-	i[0] = *last op i[0]; \
-	*last = i[1] = i[0] op i[1]; \
-	return in; \
-}
-
-FOLD_SCAN_FN(prodi, int64_t, *)
-FOLD_SCAN_FN(prodd, double , *)
-FOLD_SCAN_FN(cumsumi, int64_t, +)
-FOLD_SCAN_FN(cumsumd, double , +)
-
 struct TraceJIT {
 	TraceJIT(Trace * t, Thread& thread)
 	:  trace(t), thread(thread), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), alloc(XMMRegister::kNumAllocatableRegisters-2), next_constant_slot(C_FIRST_TRACE_CONST) {
@@ -458,7 +420,7 @@ struct TraceJIT {
 		spills++;
 		// look for register with the farthest away use?
 		// for now just do slow search backwards
-		IRef minUse = 1000000;
+		IRef minUse = std::numeric_limits<IRef>::max();
 		int8_t minReg = 0;
 		for(int8_t i = 0; i < 14; i++) {
 			IRef ref = currentOp;
@@ -1383,22 +1345,22 @@ struct TraceJIT {
 					asm_.movdqa(op,RegR(ref));*/
 				}
 				else {
-					EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)0LL)); break;
+					_error("Undefined vector op");
 				}
 			} break;
 	
 			//placeholder for now
 			case IROpCode::cumsum: {
 				if(node.isDouble()) 
-					EmitFoldFunction(ref,(void*)cumsumd,Constant(0.0)); 
+					_error("Undefined vector op");
 				else
-					EmitFoldFunction(ref,(void*)cumsumi,Constant((int64_t)0LL));
+					_error("Undefined vector op");
 			} break;
 			case IROpCode::cumprod: {
 				if(node.isDouble()) 
-					EmitFoldFunction(ref,(void*)cumprodd,Constant(1.0)); 
+					_error("Undefined vector op");
 				else
-					EmitFoldFunction(ref,(void*)cumprodi,Constant((int64_t)1LL));
+					_error("Undefined vector op");
 			} break;
 
 			case IROpCode::nop:
@@ -1709,17 +1671,6 @@ struct TraceJIT {
 		// parameter is already in xmm0
 	}
 
-	void EmitDebugPrintResult(IRef i) {
-		/*RegisterSet regs = live_registers[i];
-		regs &= ~(1 << allocated_register[i]);
-
-		SaveRegisters(i);
-		EmitMove(xmm0,reg(i));
-		asm_.movq(rdi,vector_index);
-		EmitCall((void*) debug_print);
-		RestoreRegisters(i);*/
-	}
-
 	void EmitGather(XMMRegister dest, IRNode const& node, XMMRegister index, Operand offset) {
 		// TODO: other fast cases here when index is a known seq
 		if(!index.is(no_xmm)) {
@@ -1900,7 +1851,7 @@ struct TraceJIT {
 			if(node.group == IRNode::FOLD && node.outShape.length <= BIG_CARDINALITY) {
 				int64_t step = node.in.length()/thread.state.threads.size();
 
-				for(int64_t j = 0; j < thread.state.threads.size(); j++) {
+				for(uint64_t j = 0; j < thread.state.threads.size(); j++) {
 					for(int64_t i = 0; i < node.outShape.length; i++) {
 						int64_t a = j*step+i*2;
 						int64_t b = j*step+i*2+1;
@@ -1941,7 +1892,7 @@ struct TraceJIT {
 	
 			if(node.group == IRNode::FOLD) {
 				int64_t step = node.in.length()/thread.state.threads.size();
-				for(int64_t j = 1; j < thread.state.threads.size(); j++) {
+				for(uint64_t j = 1; j < thread.state.threads.size(); j++) {
 					for(int64_t i = 0; i < node.outShape.length; i++) {
 						int64_t a = 0*step+i;
 						int64_t b = j*step+i;

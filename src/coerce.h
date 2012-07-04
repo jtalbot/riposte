@@ -40,7 +40,7 @@ void As(Thread& thread, Value src, O& out) {
 			Cast1<Function, O>(thread, (Function const&)src, out); return; break;
 		default: break;
 	};
-	out.z(src.z());
+	out.attributes(((Object const&)src).attributes());
 	_error(std::string("Invalid cast from ") + Type::toString(src.type()) + " to " + Type::toString(O::ValueType));
 }
 

@@ -40,9 +40,8 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
 
 inline void assignArgument(Thread& thread, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {
 	if(v.isPromise()) {
-		assert(v.p == 0);
-		Value w = v;
-		w.p = evalEnv;
+		Promise w = (Promise const&)v;
+		w.environment(evalEnv);
 		assignEnv->insert(n) = w;
 	}
 	else {
@@ -53,31 +52,18 @@ inline void assignArgument(Thread& thread, Environment* evalEnv, Environment* as
 	}
 }
 
-inline void assignDefault(Thread& thread, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {
-	if(v.isDefault()) {
-		assert(v.p == 0);
-		Value w = v;
-		w.p = evalEnv;
-		assignEnv->insert(n) = w;
-	}
-	else if(!v.isNil()) {
-		assignEnv->insert(n) = v;
-	}
-}
-
 inline void assignDot(Thread& thread, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {
 	Pair p;
 	p.n = n;
 	p.v = v;
 
 	if(v.isPromise()) {
-		assert(v.p == 0);
-		p.v.p = evalEnv;
+		((Promise&)p.v).environment(evalEnv);
 	}
-	else if(v.isFuture()) {
-		thread.traces.LiveEnvironment(assignEnv, v);
-	}
-	assert(!v.isDefault());
+	assert(!v.isFuture());
+	//else if(v.isFuture()) {
+	//	thread.traces.LiveEnvironment(assignEnv, v);
+	//}
 	
 	assignEnv->dots.push_back(p);
 }
@@ -96,9 +82,7 @@ Pair argument(int64_t index, Environment* env, CompiledCall const& call) {
 			if(env->dots[index].v.isPromise()) {
 				Pair p;
 				p.n = env->dots[index].n;
-				Value::Init(p.v, Type::Dotdot, 0);
-				p.v.z(index);
-				p.v.p = env;
+				Promise::Init(p.v, env, index, false);
 				return p;
 			} 
 			else {
@@ -139,7 +123,7 @@ void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function con
 
 	// set defaults
 	for(int64_t i = 0; i < (int64_t)parameters.size(); ++i) {
-		assignDefault(thread, fenv, fenv, parameters[i].n, parameters[i].v);
+		assignArgument(thread, fenv, fenv, parameters[i].n, parameters[i].v);
 	}
 
 	if(!named) {
@@ -149,7 +133,8 @@ void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function con
 		int64_t end = std::min(numArgs, pDotIndex);
 		for(int64_t i = 0; i < end; ++i) {
 			Pair const& arg = argument(i, env, call);
-			assignArgument(thread, env, fenv, parameters[i].n, arg.v);
+			if(!arg.v.isNil())
+				assignArgument(thread, env, fenv, parameters[i].n, arg.v);
 		}
 
 		// if we have left over arguments, but no parameter dots, error
@@ -217,7 +202,8 @@ void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function con
 		for(int64_t j = 0; j < (int64_t)parameters.size(); ++j) {
 			if(j != pDotIndex && set[j] >= 0) {
 				Pair const& arg = argument(set[j], env, call);
-				assignArgument(thread, env, fenv, parameters[j].n, arg.v);
+				if(!arg.v.isNil())
+					assignArgument(thread, env, fenv, parameters[j].n, arg.v);
 			}
 		}
 
@@ -250,7 +236,7 @@ void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Function
 		if(i < end && !arguments[i].v.isNil())
 			assignArgument(thread, env, fenv, parameters[i].n, arguments[i].v);
 		else
-			assignDefault(thread, fenv, fenv, parameters[i].n, parameters[i].v);
+			assignArgument(thread, fenv, fenv, parameters[i].n, parameters[i].v);
 	}
 
 	// handle unused arguments

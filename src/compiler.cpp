@@ -183,7 +183,7 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 			p.v = call[i];
 			dotIndex = i-1;
 		} else if(isCall(call[i]) || isSymbol(call[i])) {
-			Promise::Init(p.v, Compiler::compilePromise(thread, call[i]),NULL);
+			Promise::Init(p.v, NULL, Compiler::compilePromise(thread, call[i]), false);
 		} else {
 			p.v = call[i];
 		}
@@ -353,12 +353,12 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 			Character nnames(c.length()+1);
 	
-			if(!hasNames(dest) && (as == Strings::bracketAssign || as == Strings::bbAssign) && c.length() == 3) {
+			if(!hasNames(c) && (as == Strings::bracketAssign || as == Strings::bbAssign) && c.length() == 3) {
 				for(int64_t i = 0; i < c.length()+1; i++) { nnames[i] = Strings::empty; }
 			}
 			else {
-				if(hasNames(dest)) {
-					Value names = getNames(dest);
+				if(hasNames(c)) {
+					Value names = getNames(c);
 					for(int64_t i = 0; i < c.length(); i++) { nnames[i] = ((Character const&)names)[i]; }
 				} else {
 					for(int64_t i = 0; i < c.length(); i++) { nnames[i] = Strings::empty; }
@@ -395,7 +395,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::function) 
 	{
 		//compile the default parameters
-		assert(call[1].isList() && call[1].isObject());
+		assert(call[1].isList());
 		List const& c = (List const&)call[1];
 		Character names = hasNames(c) ? 
 			(Character const&)getNames(c) : Character(0);
@@ -405,7 +405,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			Pair p;
 			if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
 			if(!c[i].isNil()) {
-				Default::Init(p.v, compilePromise(thread, c[i]),NULL);
+				Promise::Init(p.v, NULL, compilePromise(thread, c[i]), true);
 			}
 			else {
 				p.v = c[i];
@@ -761,8 +761,8 @@ Compiler::Operand Compiler::compile(Value const& expr, Prototype* code) {
 	else if(isCall(expr)) {
 		assert(expr.isList());
 		return compileCall((List const&)expr, 
-			hasNames(expr) ? 
-				(Character const&)getNames(expr) : 
+			hasNames((List const&)expr) ? 
+				(Character const&)getNames((List const&)expr) : 
 				Character(0), 
 			code);
 	}

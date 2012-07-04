@@ -8,10 +8,6 @@
 #include <fstream>
 #include <iostream>
 
-#ifdef USE_CALLGRIND
-	#include <valgrind/callgrind.h>
-#endif
-
 #include "value.h"
 #include "parser/parser.h"
 #include "compiler.h"
@@ -94,29 +90,17 @@ Value parsetty(State& state) {
 	return ppr;
 }
 
-static void printCode(Thread const& thread, Prototype const* code) {
-	std::string r = "block:\nconstants: " + intToStr(code->constants.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)code->constants.size(); i++)
-		r = r + intToStr(i) + "=\t" + thread.stringify(code->constants[i]) + "\n";
-
-	r = r + "code: " + intToStr(code->bc.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)code->bc.size(); i++)
-		r = r + intToStr(i) + ":\t" + code->bc[i].toString() + "\n";
-
-	std::cout << r << std::endl;
-}
-
 int dostdin(State& state) {
 	int rc = 0;
 
-	printf("\n");
-	printf("Riposte (%d threads) -- A Fast Interpreter and JIT for R\n", state.threads.size());
-	printf("Flags: \t-v\t verbose vector output\n");
-	printf("\t-j #\t start with # worker threads\n");
-	printf("\n");
-	printf("Stanford University\n");
-	printf("jtalbot@stanford.edu\n");
-	printf("\n");
+	std::cout << std::endl;
+	std::cout << "Riposte (" << state.threads.size() << " threads) -- A Fast Interpreter and JIT for R" << std::endl;
+	std::cout << "Flags: \t-v\t verbose vector output" << std::endl;
+	std::cout << "\t-j #\t start with # worker threads" << std::endl;
+	std::cout << std::endl;
+	std::cout << "Stanford University" << std::endl;
+	std::cout << "jtalbot@stanford.edu" << std::endl;
+	std::cout << std::endl;
 
 	Thread& thread = state.getMainThread();
 
@@ -125,10 +109,8 @@ int dostdin(State& state) {
 			Value value, result;
 			value = parsetty(state);
 			if(value.isNil()) continue;
-			//std::cout << "Parsed: " << value.toString() << std::endl;
 			Prototype* proto = Compiler::compileTopLevel(thread, value);
-			//printCode(thread, proto);
-			//std::cout << "Compiled code: " << thread.stringify(proto) << std::endl;
+			//Prototype::printByteCode(proto, state);
 			result = thread.eval(proto, state.global);
 			std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) { 
@@ -248,15 +230,7 @@ main(int argc, char** argv)
 				break;
 		}
 
-	//argc -= optind;
-	//argv += optind;
-
 	d_message(1,NULL,"Command option processing complete");
-
-	/* start garbage collector */
-#ifdef USE_CALLGRIND
-	CALLGRIND_START_INSTRUMENTATION
-#endif
 
 	State state(threads, argc, argv);
 	state.verbose = verbose;

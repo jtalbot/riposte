@@ -51,8 +51,8 @@ Value const& a = \
 			: thread.frame.environment->getRecursive((String)(i), a##Env); 
 
 #define FORCE(a, i) \
-if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
-	return force(thread, inst, a, a##Env, (String)(i)); \
+if(__builtin_expect((i) > 0 && a.isPromise(), false)) { \
+	return force(thread, inst, (Promise const&)a, a##Env, (String)(i)); \
 }
 
 
@@ -62,8 +62,8 @@ Value const& a = \
 	(thread.frame.environment->dots[(i)].v);
 	
 #define FORCE_DOTDOT(a, i) \
-if(__builtin_expect(!a.isConcrete(), false)) { \
-	return forceDot(thread, inst, a, a##Env, (i)); \
+if(__builtin_expect(a.isPromise(), false)) { \
+	return forceDot(thread, inst, (Promise const&)a, a##Env, (i)); \
 }
 
 

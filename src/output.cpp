@@ -136,9 +136,9 @@ std::string stringify(State const& state, Value const& value) {
 			result = Type::toString(value.type());
 			break;
 	};
-	if(value.isObject()) {
+	if(value.isObject() && ((Object const&)value).hasAttributes()) {
 		result = result + "\nAttributes:\n";
-		Dictionary* d = (Dictionary*)value.z();
+		Dictionary* d = ((Object const&)value).attributes();
 		for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
 			result = result + "\t" + state.externStr(i.string())
 				+ ":\t" + state.stringify(i.value()) + "\n";

@@ -385,7 +385,7 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 			}
 		}
 
-		for(int64_t j = 0; j < (*i)->dots.size(); j++) {
+		for(uint64_t j = 0; j < (*i)->dots.size(); j++) {
 			Value const& v = (*i)->dots[j].v;
 			if(v.isFuture() && ((Future const&)v).trace() == this) {
 				nodes[((Future const&)v).ref()].liveOut = true;
@@ -404,7 +404,7 @@ void Trace::WriteOutputs(Thread & thread) {
 		for(size_t i = 0; i < nodes.size(); i++) {
 			if(nodes[i].liveOut) {
 				std::string v = thread.stringify(nodes[i].out);
-				printf("n%llu = %s\n", i, v.c_str());
+				std::cout << "n" << i << " = " << v.c_str() << std::endl;
 			}
 		}
 	}

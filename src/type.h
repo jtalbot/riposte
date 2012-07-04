@@ -4,22 +4,19 @@
 
 #include "enum.h"
 
-#define TYPES(_) 			\
-	/* First the internal types. */ \
-	_(Promise, 	"promise", 0) 	\
-	_(Default,	"default", 1)	\
-	_(Dotdot,	"dotdot", 2)	\
-	/* The R visible types */	\
-	_(Null, 	"NULL", 63)		\
-	_(Raw, 		"raw", 62)		\
-	_(Logical, 	"logical", 61)	\
-	_(Integer, 	"integer", 60)	\
-	_(Double, 	"double", 59)	\
-	_(Character, 	"character", 58)	\
-	_(List,		"list", 57)		\
-	_(Function,	"function", 56)	\
-	_(Environment,	"environment", 55)	\
-	_(Future, 	"future", 54)	\
+#define TYPES(_) 			   \
+	_(Promise, 	"promise",	0) \
+	/* Objects ... */		   \
+	_(Future, 	"future",       1) \
+	_(Function,	"function",	2) \
+	_(Environment,	"environment",	3) \
+	_(Null, 	"NULL",		4) \
+	_(Raw, 		"raw",		5) \
+	_(Logical, 	"logical",	6) \
+	_(Integer, 	"integer",	7) \
+	_(Double, 	"double",	8) \
+	_(Character, 	"character",	9) \
+	_(List,		"list",	       10) \
 
 DECLARE_ENUM_WITH_VALUES(Type, TYPES)
 
@@ -52,6 +49,8 @@ DECLARE_ENUM_WITH_VALUES(Type, TYPES)
 #define LISTLIKE_VECTOR_TYPES(_) \
 	_(List)		\
 
+// Note that the Meet can be expresed as the max of the types
+//  assuming all are vector types
 #define DEFAULT_TYPE_MEET(_) \
 	_(Null, Null, Null) \
 	_(Logical, Null, Logical) \
