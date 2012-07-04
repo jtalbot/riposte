@@ -45,11 +45,6 @@ struct Value {
 		return header != other.header || p != other.p;
 	}
 
-	// Ordering solely for the purpose of putting them in a map
-	bool operator<(Value const& other) const {
-		return header < other.header || (header == other.header && p < other.p);
-	}
-	
 	Type::Enum type() const { return (Type::Enum)typ; }
 	uint64_t packed() const { return pac; }
 
@@ -79,13 +74,10 @@ struct Value {
 	bool isLogicalCoerce() const { return type() >= Type::Logical && type() <= Type::Double; }
 	bool isVector() const { return type() >= Type::Null && type() <= Type::List; }
 	
-	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isCharacter(); }
-
 	template<class T> T& scalar() { throw "not allowed"; }
 	template<class T> T const& scalar() const { throw "not allowed"; }
 
 	static Value const& Nil() { static const Value v = {{0}, {0}}; return v; }
-
 };
 
 template<> inline int64_t& Value::scalar<int64_t>() { return i; }
@@ -100,7 +92,7 @@ template<> inline String const& Value::scalar<String>() const { return s; }
 
 
 // Name-value Pairs are used throughout the code...
-struct Pair { String n; String pad; Value v; };
+struct Pair { String n; Value v; };
 // Not the same as the publically visible PairList which is just an S3 class
 typedef std::vector<Pair> PairList;
 

@@ -130,7 +130,7 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	// We can free this environment for reuse
 	// as long as we don't return a closure...
 	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
-	if(result.isClosureSafe()) {
+	if(!(result.isFunction() || result.isEnvironment() || result.isList())) {
 		thread.traces.KillEnvironment(thread.frame.environment);
 	}
 

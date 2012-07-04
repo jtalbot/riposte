@@ -29,7 +29,15 @@ private:
 	
 	Scope scope;
 	uint64_t loopDepth;
-	std::map<Value, int64_t> constants;
+
+	struct ValueComp {
+		bool operator()(Value const& a, Value const& b) {
+			return a.header < b.header || 
+				(a.header == b.header && a.i < b.i);
+		}
+	};
+
+	std::map<Value, int64_t, ValueComp> constants;
 
 	enum Loc {
 		INVALID,

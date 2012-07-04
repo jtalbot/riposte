@@ -42,7 +42,7 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 #define OUT(thread, i) (*(thread.base+(i)))
 
 #define OPERAND(a, i) \
-Environment* a##Env; \
+Environment* a##Env = 0; \
 Value const& a = \
 	__builtin_expect((i) <= 0, true) \
 		? *(thread.base+(i)) \
