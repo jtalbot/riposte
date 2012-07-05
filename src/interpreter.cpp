@@ -17,9 +17,24 @@
 const void** glabels = 0;
 #endif
 
+static inline Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* fastmov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* subset_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* subset2_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* jc_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* lt_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* ret_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* retp_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* internal_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* strip_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+
+
 // forces a value stored in the Environments dotdot slot: dest[index]
 // call through FORCE_DOTDOT macro which inlines some performance-important checks
-Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, int64_t index) {
+static inline Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, int64_t index) {
 	if(v.isPromise()) {
 		Promise const& a = (Promise const&)v;
 		if(a.isPrototype()) {
@@ -50,7 +65,7 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 // call through FORCE macro which inlines some performance-important checks
 //  for the common cases.
 // Environments can have promises, defaults, or dotdots (references to ..n in the parent).
-Instruction const* force(Thread& thread, Instruction const& inst, Value const& v, Environment
+static inline Instruction const* force(Thread& thread, Instruction const& inst, Value const& v, Environment
 * dest, String name) {
 	if(v.isPromise()) {
 		Promise const& a = (Promise const&)v;
@@ -85,7 +100,7 @@ Instruction const* force(Thread& thread, Instruction const& inst, Value const& v
 
 // Control flow instructions
 
-Instruction const* call_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	Heap::Global.collect(thread.state);
 	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
 	if(!f.isFunction())
@@ -99,7 +114,7 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
 }
 
-Instruction const* fastcall_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* fastcall_op(Thread& thread, Instruction const& inst) {
 	Heap::Global.collect(thread.state);
 	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
 	if(!f.isFunction())
@@ -113,7 +128,7 @@ Instruction const* fastcall_op(Thread& thread, Instruction const& inst) {
 	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
 }
 
-Instruction const* ret_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	// we can return futures from functions, so don't BIND
 	OPERAND(result, inst.a); FORCE(result, inst.a);	
 	
@@ -136,7 +151,7 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	return returnpc;
 }
 
-Instruction const* rets_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* rets_op(Thread& thread, Instruction const& inst) {
 	// top-level statements can't return futures, so bind 
 	OPERAND(result, inst.a); FORCE(result, inst.a); BIND(result);	
 	
@@ -149,11 +164,11 @@ Instruction const* rets_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* done_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* done_op(Thread& thread, Instruction const& inst) {
 	return 0;
 }
 
-Instruction const* retp_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* retp_op(Thread& thread, Instruction const& inst) {
 	// we can return futures from promises, so don't BIND
 	OPERAND(result, inst.a); FORCE(result, inst.a);	
 	
@@ -171,11 +186,11 @@ Instruction const* retp_op(Thread& thread, Instruction const& inst) {
 	return returnpc;
 }
 
-Instruction const* jmp_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* jmp_op(Thread& thread, Instruction const& inst) {
 	return &inst+inst.a;
 }
 
-Instruction const* jc_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* jc_op(Thread& thread, Instruction const& inst) {
 	OPERAND(c, inst.c);
 	if(c.isLogical1()) {
 		if(Logical::isTrue(c.c)) return &inst+inst.a;
@@ -194,7 +209,7 @@ Instruction const* jc_op(Thread& thread, Instruction const& inst) {
 	_error("Need single element logical in conditional jump");
 }
 
-Instruction const* branch_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* branch_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a);
 	int64_t index = -1;
 	if(a.isDouble1()) index = (int64_t)a.d;
@@ -218,7 +233,7 @@ Instruction const* branch_op(Thread& thread, Instruction const& inst) {
 	return &inst+1+inst.b;
 }
 
-Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
 	// a = loop variable (e.g. i), b = loop vector(e.g. 1:100), c = counter register
 	// following instruction is a jmp that contains offset
 	OPERAND(vec, inst.b); FORCE(vec, inst.b); BIND(vec);
@@ -234,7 +249,7 @@ Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
 		return &inst+2;			// skip over following JMP
 	}
 }
-Instruction const* forend_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 	Value& counter = REGISTER(inst.c);
 	Value& limit = REGISTER(inst.c-1);
 	if(__builtin_expect(counter.i < limit.i, true)) {
@@ -247,7 +262,7 @@ Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 	}
 }
 
-Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 	PairList const& dots = thread.frame.environment->dots;
 	
 	Value& iter = REGISTER(inst.a);
@@ -284,7 +299,7 @@ Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 	return &inst;
 }
 
-Instruction const* list_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* list_op(Thread& thread, Instruction const& inst) {
 	Heap::Global.collect(thread.state);
 	List out(inst.b);
 	for(int64_t i = 0; i < inst.b; i++) {
@@ -297,13 +312,13 @@ Instruction const* list_op(Thread& thread, Instruction const& inst) {
 
 // Memory access ops
 
-Instruction const* assign_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* assign_op(Thread& thread, Instruction const& inst) {
 	OPERAND(value, inst.c); FORCE(value, inst.c); // don't BIND 
 	thread.frame.environment->insert((String)inst.a) = value;
 	return &inst+1;
 }
 
-Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 	// assign2 is always used to assign up at least one scope level...
 	// so start off looking up one level...
 	assert(thread.frame.environment->LexicalScope() != 0);
@@ -325,19 +340,19 @@ Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* mov_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* mov_op(Thread& thread, Instruction const& inst) {
 	OPERAND(value, inst.a); FORCE(value, inst.a); BIND(value);
 	OUT(thread, inst.c) = value;
 	return &inst+1;
 }
 
-Instruction const* fastmov_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* fastmov_op(Thread& thread, Instruction const& inst) {
 	OPERAND(value, inst.a); FORCE(value, inst.a); // fastmov assumes we don't need to bind. So next op better be able to handle a future 
 	OUT(thread, inst.c) = value;
 	return &inst+1;
 }
 
-Instruction const* dotdot_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* dotdot_op(Thread& thread, Instruction const& inst) {
 	if(inst.a >= (int64_t)thread.frame.environment->dots.size())
         	_error(std::string("The '...' list does not contain ") + intToStr(inst.a+1) + " elements");
 	DOTDOT(a, inst.a); FORCE_DOTDOT(a, inst.a); // no need to bind since value is in a register
@@ -345,7 +360,7 @@ Instruction const* dotdot_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest 
 	OPERAND(value, inst.a); FORCE(value, inst.a); 
 	OPERAND(index, inst.b); FORCE(index, inst.b); 
@@ -369,7 +384,7 @@ Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
 	SubsetAssign(thread, dest, true, index, value, OUT(thread,inst.c));
 	return &inst+1;
 }
-Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest
 	OPERAND(value, inst.a); FORCE(value, inst.a);
 	OPERAND(index, inst.b); FORCE(index, inst.b);
@@ -394,7 +409,7 @@ Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
 	return &inst+1; 
 }
 
-Instruction const* subset_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); 
 	OPERAND(i, inst.b);
 
@@ -440,7 +455,7 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
 	OPERAND(i, inst.b);
 	if(a.isVector()) {
@@ -460,7 +475,7 @@ Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
 	_error("Invalid subset2 operation");
 }
 
-Instruction const* attrget_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* attrget_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	OPERAND(i, inst.b); FORCE(i, inst.b); BIND(i);
 	if(a.isObject() && i.isCharacter1()) {
@@ -475,7 +490,7 @@ Instruction const* attrget_op(Thread& thread, Instruction const& inst) {
 	_error("Invalid attrget operation");
 }
 
-Instruction const* attrset_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* attrset_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.c); FORCE(a, inst.c);
 	OPERAND(i, inst.b); FORCE(i, inst.b); BIND(i);
 	OPERAND(v, inst.a); FORCE(v, inst.a); BIND(v);
@@ -495,7 +510,7 @@ Instruction const* attrset_op(Thread& thread, Instruction const& inst) {
 
 
 #define OP(Name, string, Group, Func) \
-Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
+static inline Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	OPERAND(a, inst.a);	\
 	Value & c = OUT(thread, inst.c);	\
 	if(a.isDouble1())  { Name##VOp<Double>::Scalar(thread, a.d, c); return &inst+1; } \
@@ -518,7 +533,7 @@ UNARY_FOLD_SCAN_BYTECODES(OP)
 
 
 #define OP(Name, string, Group, Func) \
-Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
+static inline Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	OPERAND(a, inst.a);	\
 	OPERAND(b, inst.b);	\
 	Value & c = OUT(thread, inst.c);	\
@@ -552,7 +567,7 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 BINARY_BYTECODES(OP)
 #undef OP
 
-Instruction const* length_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* length_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	if(a.isVector())
 		Integer::InitScalar(OUT(thread, inst.c), ((Vector const&)a).length());
@@ -573,7 +588,7 @@ Instruction const* length_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* mean_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* mean_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	if(thread.traces.isTraceable<MomentFold>(a)) {
 		OUT(thread, inst.c) = thread.traces.EmitUnary<MomentFold>(thread.frame.environment, IROpCode::mean, a, 0);
@@ -583,7 +598,7 @@ Instruction const* mean_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* cm2_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* cm2_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	OPERAND(b, inst.b); FORCE(b, inst.b); 
 	if(thread.traces.isTraceable<Moment2Fold>(a,b)) {
@@ -594,7 +609,7 @@ Instruction const* cm2_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	OPERAND(b, inst.b); FORCE(b, inst.b);
 	OPERAND(c, inst.c); FORCE(c, inst.c);
@@ -621,7 +636,7 @@ Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 	return &inst+1; 
 }
 
-Instruction const* split_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* split_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
 	int64_t levels = As<Integer>(thread, a)[0];
 	OPERAND(b, inst.b); FORCE(b, inst.b);
@@ -637,14 +652,14 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 	return &inst+1; 
 }
 
-Instruction const* function_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* function_op(Thread& thread, Instruction const& inst) {
 	Value const& function = CONSTANT(inst.a);
 	Value& out = OUT(thread, inst.c);
 	Function::Init(out, ((Function const&)function).prototype(), thread.frame.environment);
 	return &inst+1;
 }
 
-Instruction const* vector_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
 	OPERAND(b, inst.b); FORCE(b, inst.b); BIND(b);
 	Type::Enum type = string2Type( As<Character>(thread, a)[0] );
@@ -685,7 +700,7 @@ Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* seq_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	// c = start, b = step, a = length
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
 	OPERAND(b, inst.b); FORCE(b, inst.b); BIND(b);
@@ -713,7 +728,7 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* rep_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* rep_op(Thread& thread, Instruction const& inst) {
 	// c = n, b = each, a = length
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
 	OPERAND(b, inst.b); FORCE(b, inst.b); BIND(b);
@@ -733,7 +748,7 @@ Instruction const* rep_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* random_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* random_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
 
 	int64_t len = As<Integer>(thread, a)[0];
@@ -748,7 +763,7 @@ Instruction const* random_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* type_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* type_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	switch(thread.traces.futureType(a)) {
                 #define CASE(name, str, ...) case Type::name: OUT(thread, inst.c) = Character::c(Strings::name); break;
@@ -759,7 +774,7 @@ Instruction const* type_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* missing_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 	// TODO: in R this is recursive. If this function was passed a parameter that
 	// was missing in the outer scope, then it should be missing here too. But
 	// missingness doesn't propogate through expressions, leading to strange behavior:
@@ -783,7 +798,7 @@ Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 	Logical::InitScalar(OUT(thread, inst.c), missing ? Logical::TrueElement : Logical::FalseElement);
 	return &inst+1;
 }
-Instruction const* strip_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* strip_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	Value& c = OUT(thread, inst.c);
 	c = a;
@@ -791,7 +806,7 @@ Instruction const* strip_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* internal_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* internal_op(Thread& thread, Instruction const& inst) {
 	if(inst.a < 0)
 		_error("Attempting to use undefined internal function");
 	int64_t nargs = thread.state.internalFunctions[inst.a].params;

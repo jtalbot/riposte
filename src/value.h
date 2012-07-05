@@ -378,7 +378,7 @@ VECTOR_IMPL(List, Value, true)
 
 class Dictionary : public HeapObject {
 protected:
-	uint64_t size, load;
+	uint64_t size, load, ksize;
 	
 	struct Inner : public HeapObject {
 		Pair d[];
@@ -386,21 +386,20 @@ protected:
 
 	Inner* d;
 
-	uint64_t hash(String s) const ALWAYS_INLINE { return (uint64_t)s>>3; }
-
 	// Returns the location of variable `name` in this environment or
 	// an empty pair (String::NA, Value::Nil).
 	// success is set to true if the variable is found. This boolean flag
 	// is necessary for compiler optimizations to eliminate expensive control flow.
 	Pair* find(String name, bool& success) const ALWAYS_INLINE {
-		uint64_t i = hash(name) & (size-1);
-		if(__builtin_expect(d->d[i].n == name, true)) {
+		uint64_t i = ((uint64_t)name >> 3) & ksize;
+		Pair* first = &d->d[i];
+		if(__builtin_expect(first->n == name, true)) {
 			success = true;
-			return &d->d[i];
+			return first;
 		}
 		uint64_t j = 0;
 		while(d->d[i].n != Strings::NA) {
-			i = (i+(++j)) & (size-1);
+			i = (i+(++j)) & ksize;
 			if(__builtin_expect(d->d[i].n == name, true)) {
 				success = true;
 				return &d->d[i];
@@ -414,13 +413,13 @@ protected:
 	// Assumes that `name` doesn't exist in the hash table yet.
 	// Used for rehash and insert where this is known to be true.
 	Pair* slot(String name) const ALWAYS_INLINE {
-		uint64_t i = hash(name) & (size-1);
+		uint64_t i = ((uint64_t)name >> 3) & ksize;
 		if(__builtin_expect(d->d[i].n == Strings::NA, true)) {
 			return &d->d[i];
 		}
 		uint64_t j = 0;
 		while(d->d[i].n != Strings::NA) {
-			i = (i+(++j)) & (size-1);
+			i = (i+(++j)) & ksize;
 		}
 		return &d->d[i];
 	}
@@ -432,6 +431,7 @@ protected:
 
 		d = new (sizeof(Pair)*s) Inner();
 		size = s;
+		ksize = s-1;
 		clear();
 		
 		// copy over previous populated values...
