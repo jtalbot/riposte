@@ -78,7 +78,6 @@ struct Prototype : public HeapObject {
 
 	void visit() const;
 
-	static void threadByteCode(Prototype* prototype);
 	static void printByteCode(Prototype const* prototype, State const& state); 
 };
 

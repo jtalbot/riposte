@@ -456,7 +456,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::forSym) 
 	{
 		Operand loop_variable = Operand(MEMORY, SymbolStr(call[1]));
-		Operand loop_vector = compile(call[2], code);
+		Operand loop_vector = forceInRegister(compile(call[2], code));
 		Operand loop_counter = allocRegister();	// save space for loop counter
 		Operand loop_limit = allocRegister(); // save space for the loop limit
 
@@ -825,7 +825,6 @@ Prototype* Compiler::compile(Value const& expr) {
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, encodeOperand(ir[i].a, n), encodeOperand(ir[i].b, n), encodeOperand(ir[i].c, n)));
 	}
-	Prototype::threadByteCode(code);
 
 	return code;	
 }

@@ -448,7 +448,7 @@ protected:
 
 public:
 	Dictionary(int64_t initialLoad) : size(0), load(0), d(0) {
-		rehash(nextPow2(initialLoad*2));
+		rehash(std::max((uint64_t)1, nextPow2(initialLoad*2)));
 	}
 
 	bool has(String name) const ALWAYS_INLINE {

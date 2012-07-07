@@ -8,10 +8,6 @@
 #include "vector.h"
 #include "exceptions.h"
 
-#ifdef USE_THREADED_INTERPRETER
-extern const void** glabels;
-#endif
-
 void printCode(Thread const& thread, Prototype const* prototype, Environment* env);
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset);
@@ -34,37 +30,37 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 #define CONSTANT(i) (thread.frame.prototype->constants[i-1])
 
 // Out register is currently always a register, not memory
-#define OUT(thread, i) (*(thread.base+(i)))
+#define OUT(X) (*(thread.base+(inst.X)))
 
-#define OPERAND(a, i) \
-Environment* a##Env = 0; \
-Value const& a = \
-	__builtin_expect((i) <= 0, true) \
-		? *(thread.base+(i)) \
-		: (i < 256) \
-			? thread.frame.prototype->constants[i-1] \
-			: thread.frame.environment->getRecursive((String)(i), a##Env); 
+#define DECODE(X) \
+Environment* X##Env = 0; \
+Value const& X = \
+	__builtin_expect((inst.X) <= 0, true) \
+		? *(thread.base+(inst.X)) \
+		: ((inst.X) < 256) \
+			? thread.frame.prototype->constants[(inst.X)-1] \
+			: thread.frame.environment->getRecursive((String)(inst.X), X##Env); 
 
-#define FORCE(a, i) \
-if(__builtin_expect((i) > 0 && !a.isObject(), false)) { \
-	return force(thread, inst, a, a##Env, (String)(i)); \
+#define FORCE(X) \
+if(__builtin_expect((inst.X) > 0 && !X.isObject(), false)) { \
+	return force(thread, inst, X, X##Env, (String)(inst.X)); \
 }
 
 
-#define DOTDOT(a, i) \
-Environment* a##Env = thread.frame.environment; \
-Value const& a = \
+#define DOTDOT(X, i) \
+Environment* X##Env = thread.frame.environment; \
+Value const& X = \
 	(thread.frame.environment->dots[(i)].v);
 	
-#define FORCE_DOTDOT(a, i) \
-if(__builtin_expect(!a.isObject(), false)) { \
-	return forceDot(thread, inst, a, a##Env, (i)); \
+#define FORCE_DOTDOT(X, i) \
+if(__builtin_expect(!X.isObject(), false)) { \
+	return forceDot(thread, inst, X, X##Env, (i)); \
 }
 
 
-#define BIND(a) \
-if(__builtin_expect(a.isFuture(), false)) { \
-	thread.traces.Bind(thread,a); \
+#define BIND(X) \
+if(__builtin_expect(X.isFuture(), false)) { \
+	thread.traces.Bind(thread,X); \
 	return &inst; \
 }
 
