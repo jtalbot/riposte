@@ -271,6 +271,7 @@ struct VectorImpl : public Vector {
 			v.p = (void*)i;
 		} else {
 			Value::Init(v, ValueType, length);
+			v.p = 0;
 		}
 		return (VectorImpl<VType, ElementType, Recursive>&)v;
 	}

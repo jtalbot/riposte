@@ -100,7 +100,6 @@ static inline double time_diff (
 static inline void get_time (timespec& ts)
 {
 #ifdef TIMING
-    volatile long noskip;
     #if _POSIX_TIMERS > 0
         clock_gettime(CLOCK_REALTIME, &ts);
     #else
@@ -109,7 +108,6 @@ static inline void get_time (timespec& ts)
         ts.tv_sec = tv.tv_sec;
         ts.tv_nsec = tv.tv_usec*1000;
     #endif
-    noskip = ts.tv_nsec;
 #endif
 }
 

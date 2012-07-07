@@ -234,6 +234,7 @@ Compiler::Operand Compiler::compileInternalFunctionCall(List const& call, Protot
 		reg = r.i; 
 	}
 	// kill all parameters
+	kill(reg); 	// only necessary to silence unused warning
 	kill(liveIn); 
 	Operand result = allocRegister();
 	emit(ByteCode::internal, function, result, result);
@@ -358,8 +359,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 			// Hacky, hacky, hacky...	
 			if(!hasNames(c) 
-				&& ((as == Strings::bracketAssign || as == Strings::bbAssign) && c.length() == 3) || 
-				(as == Strings::attrset && c.length() == 3)) {
+				&& (((as == Strings::bracketAssign || as == Strings::bbAssign) && c.length() == 3) || 
+				(as == Strings::attrset && c.length() == 3))) {
 				for(int64_t i = 0; i < c.length()+1; i++) { nnames[i] = Strings::empty; }
 			}
 			else {
@@ -568,7 +569,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand r1 = placeInRegister(compileConstant(Logical::False(), code));
 		ir[j1].a = (int64_t)ir.size()-j1;
 		assert(r0 == r1 || r0.loc == INVALID || r1.loc == INVALID);
-		return r0;
+		return r1;
 	}
 	else if(func == Strings::land2 && call.length() == 3)
 	{
@@ -584,7 +585,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand r1 = placeInRegister(compileConstant(Logical::True(), code));
 		ir[j1].b = (int64_t)ir.size()-j1;
 		assert(r0 == r1 || r0.loc == INVALID || r1.loc == INVALID);
-		return r0;
+		return r1;
 	}
 	else if(func == Strings::brace) 
 	{

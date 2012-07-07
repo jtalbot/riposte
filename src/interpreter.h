@@ -179,7 +179,7 @@ public:
 		uint64_t alignment;
 		uint64_t ppt;
 		int64_t* done;
-		Task() : func(0), args(0), done(0) {}
+		Task() : header(0), func(0), args(0), a(0), b(0), alignment(0), ppt(0), done(0) {}
 		Task(HeaderPtr header, FunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment, uint64_t ppt) 
 			: header(header), func(func), args(args), a(a), b(b), alignment(alignment), ppt(ppt) {
 			done = new int64_t(1);

@@ -537,8 +537,8 @@ static inline Instruction const* Name##_op(Thread& thread, Instruction const& in
 	OPERAND(a, inst.a);	\
 	OPERAND(b, inst.b);	\
 	Value & c = OUT(thread, inst.c);	\
-        if(a.isDouble1()) {			\
-		if(b.isDouble1()) { Name##VOp<Double,Double>::Scalar(thread, a.d, b.d, c); return &inst+1; } \
+        if(__builtin_expect(a.isDouble1(),true)) {			\
+		if(__builtin_expect(b.isDouble1(),true)) { Name##VOp<Double,Double>::Scalar(thread, a.d, b.d, c); return &inst+1; } \
 		if(b.isInteger1()) { Name##VOp<Double,Integer>::Scalar(thread, a.d, b.i, c); return &inst+1; } \
 		if(b.isLogical1()) { Name##VOp<Double,Logical>::Scalar(thread, a.d, b.c, c); return &inst+1; } \
         }	\
