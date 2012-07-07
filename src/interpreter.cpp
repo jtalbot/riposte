@@ -245,6 +245,7 @@ static inline Instruction const* forbegin_op(Thread& thread, Instruction const& 
 		return &inst+2;			// skip over following JMP
 	}
 }
+
 static inline Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 	Value& counter = REGISTER(inst.c);
 	Value& limit = REGISTER(inst.c-1);
