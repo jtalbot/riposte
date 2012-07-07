@@ -136,10 +136,7 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
 	}
 
 	REGISTER(0) = a;
-	
-	thread.base = thread.frame.returnbase;
 	Instruction const* returnpc = thread.frame.returnpc;
-	
 	thread.pop();
 	
 	thread.traces.LiveEnvironment(thread.frame.environment, a);
@@ -158,7 +155,6 @@ static inline Instruction const* retp_op(Thread& thread, Instruction const& inst
 	}
 	thread.traces.LiveEnvironment(thread.frame.env, a);
 	
-	thread.base = thread.frame.returnbase;
 	Instruction const* returnpc = thread.frame.returnpc;
 	thread.pop();
 	
@@ -170,8 +166,6 @@ static inline Instruction const* rets_op(Thread& thread, Instruction const& inst
 	DECODE(a); FORCE(a); BIND(a);	
 	
 	REGISTER(0) = a;
-	
-	thread.base = thread.frame.returnbase;
 	thread.pop();
 	
 	// there should always be a done_op after a rets
@@ -845,20 +839,15 @@ Value Thread::eval(Prototype const* prototype) {
 }
 
 Value Thread::eval(Prototype const* prototype, Environment* environment) {
-	Value* old_base = base;
 	uint64_t stackSize = stack.size();
 
 	// make room for the result
-	base--;	
 	Instruction const* run = buildStackFrame(*this, environment, prototype, 0, (Instruction const*)0);
 	try {
 		interpret(*this, run);
-		base++;
-		assert(base == old_base);
 		assert(stackSize == stack.size());
-		return *(base-1);
+		return frame.registers[0];
 	} catch(...) {
-		base = old_base;
 		stack.resize(stackSize);
 		throw;
 	}
@@ -877,7 +866,7 @@ const int64_t Random::primes[100] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37,
 
 Thread::Thread(State& state, uint64_t index) : state(state), index(index), random(index),steals(1) {
 	registers = new Value[DEFAULT_NUM_REGISTERS];
-	this->base = registers + DEFAULT_NUM_REGISTERS;
+	frame.registers = registers;
 }
 
 void Prototype::printByteCode(Prototype const* prototype, State const& state) {

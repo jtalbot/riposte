@@ -82,11 +82,11 @@ struct Prototype : public HeapObject {
 };
 
 struct StackFrame {
+	Value* registers;
 	Environment* environment;
 	Prototype const* prototype;
 
 	Instruction const* returnpc;
-	Value* returnbase;
 	
 	int64_t dest;
 	Environment* env;
@@ -189,7 +189,6 @@ public:
 	uint64_t index;
 	pthread_t thread;
 	
-	Value* base;
 	Value* registers;
 
 	std::vector<StackFrame> stack;

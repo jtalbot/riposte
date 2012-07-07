@@ -26,17 +26,17 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out);
 
-#define REGISTER(i) (*(thread.base+(i)))
-#define CONSTANT(i) (thread.frame.prototype->constants[i-1])
+#define REGISTER(i) (*(thread.frame.registers+(-(i))))
+#define CONSTANT(i) (thread.frame.prototype->constants[(i)-1])
 
 // Out register is currently always a register, not memory
-#define OUT(X) (*(thread.base+(inst.X)))
+#define OUT(X) (*(thread.frame.registers+(-inst.X)))
 
 #define DECODE(X) \
 Environment* X##Env = 0; \
 Value const& X = \
 	__builtin_expect((inst.X) <= 0, true) \
-		? *(thread.base+(inst.X)) \
+		? *(thread.frame.registers+(-inst.X)) \
 		: ((inst.X) < 256) \
 			? thread.frame.prototype->constants[(inst.X)-1] \
 			: thread.frame.environment->getRecursive((String)(inst.X), X##Env); 
