@@ -30,6 +30,7 @@
 	_(eassign, "eassign") \
 	_(subset, "subset") \
 	_(subset2, "subset2") \
+	_(get, "get") \
 	_(attrget, "attr") \
 	_(attrset, "attr<-")
 

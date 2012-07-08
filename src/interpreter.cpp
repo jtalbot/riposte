@@ -207,11 +207,12 @@ static inline Instruction const* branch_op(Thread& thread, Instruction const& in
 	else if(a.isLogical1()) index = a.i;
 	else if(a.isCharacter1()) {
 		for(int64_t i = 1; i <= inst.b; i++) {
-			if((String)(&inst+i)->a == a.s) {
+			String s = CONSTANT((&inst+i)->a).s;
+			if(s == a.s) {
 				index = i;
 				break;
 			}
-			if(index < 0 && (String)(&inst+i)->a == Strings::empty) {
+			if(index < 0 && s == Strings::empty) {
 				index = i;
 			}
 		}
@@ -316,7 +317,7 @@ static inline Instruction const* assign2_op(Thread& thread, Instruction const& i
 	
 	DECODE(c); FORCE(c); /*BIND(value);*/
 	
-	String s = (String)inst.a;
+	String s = ((Character const&)CONSTANT(inst.a)).s;
 	Environment* penv;
 	Value& dest = thread.frame.environment->LexicalScope()->insertRecursive(s, penv);
 
@@ -458,6 +459,20 @@ static inline Instruction const* subset2_op(Thread& thread, Instruction const& i
  	FORCE(b); BIND(b);
 	if(((Object const&)a).hasAttributes() || ((Object const&)b).hasAttributes()) { return GenericDispatch(thread, inst, Strings::bb, a, b, inst.c); } 
 	_error("Invalid subset2 operation");
+}
+
+static inline Instruction const* get_op(Thread& thread, Instruction const& inst) {
+	String s = ((Character const&)CONSTANT(inst.a)).s;
+	Environment* env;
+	Value const& v = thread.frame.environment->getRecursive(s, env);
+
+	if(!v.isObject()) {
+		return force(thread, inst, v, env, s);
+	}
+	else {
+		OUT(c) = v;
+		return &inst+1;
+	}
 }
 
 static inline Instruction const* attrget_op(Thread& thread, Instruction const& inst) {
@@ -777,7 +792,7 @@ static inline Instruction const* missing_op(Thread& thread, Instruction const& i
 	// For now I'll keep the simpler non-recursive semantics. Missing solely means
 	// whether or not this scope was passed a value, irregardless of whether that
 	// value is missing at a higher level.
-	String s = (String)inst.a;
+	String s = ((Character const&)CONSTANT(inst.a)).s;
 	Value const& v = thread.frame.environment->get(s);
 	bool missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
 	Logical::InitScalar(OUT(c), missing ? Logical::TrueElement : Logical::FalseElement);

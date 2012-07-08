@@ -150,7 +150,10 @@ Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code) 
 		return t;
 	}
 	else {
-		return Operand(MEMORY, s);
+		Operand sym = compileConstant(Character::c(s), code);
+		Operand t = allocRegister();
+		emit(ByteCode::get, sym, 0, t);
+		return t;
 	}
 }
 
@@ -285,7 +288,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 		int64_t branch = emit(ByteCode::branch, kill(c), n, 0);
 		for(int64_t i = 2; i < call.length(); i++) {
-			emit(ByteCode::branch, (int64_t)(names.length() > i ? names[i] : Strings::empty), 0, 0);
+			Character ni = Character::c(names.length() > i ? names[i] : Strings::empty);
+			emit(ByteCode::branch, compileConstant(ni, code), 0, 0);
 		}
 		
 		std::vector<int64_t> jmps;
@@ -311,6 +315,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			}
 		}
 		for(int64_t i = 0; i < (int64_t)jmps.size(); i++) {
+			ir[jmps[i]].a = (int64_t)ir.size()-jmps[i];
 			ir[jmps[i]].a = (int64_t)ir.size()-jmps[i];
 		}
 		return result;
@@ -378,9 +383,15 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		
 		// the source for the assignment
 		Operand source = compile(value, code);
-		Operand result = Operand(MEMORY, SymbolStr(dest));
 
-		emit(func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, result, 0, source);
+		if(func == Strings::assign2) {
+			Character r = Character::c(SymbolStr(dest));
+			Operand result = compileConstant(r, code);
+			emit(ByteCode::assign2, result, 0, source);
+		} else {
+			Operand result = Operand(MEMORY, SymbolStr(dest));
+			emit(ByteCode::assign, result, 0, source);
+		}
 		return source;
 		
 		// PHI outputs are always in registers, so merging with previous statement is generally
@@ -730,7 +741,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		if(call.length() != 2) _error("missing requires one argument");
 		if(!isSymbol(call[1]) && !call[1].isCharacter1()) _error("wrong parameter to missing");
-		Operand s = Operand(MEMORY, SymbolStr(call[1]));
+		Operand s = compileConstant(call[1], code);
 		Operand result = allocRegister();
 		emit(ByteCode::missing, s, 0, result); 
 		return result;
