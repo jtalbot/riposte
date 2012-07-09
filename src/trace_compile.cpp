@@ -2014,6 +2014,8 @@ struct TraceJIT {
 	}
 };
 
+#ifndef USE_LLVM_COMPILER
+
 void Trace::JIT(Thread & thread) {
 	if(code_buffer == NULL) { //since it is expensive to reallocate this, we reuse it across traces
 		code_buffer = new TraceCodeBuffer();
@@ -2024,3 +2026,5 @@ void Trace::JIT(Thread & thread) {
 	trace_code.Execute(thread);
 	trace_code.GlobalReduce(thread);
 }
+
+#endif

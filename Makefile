@@ -1,7 +1,7 @@
 # This Makefile requires GNU make.
 UNAME := $(shell uname -s)
  
-CXX := g++ 
+CXX := clang++ 
 CXXFLAGS := -Wall -msse4.1
 LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
 
@@ -31,12 +31,17 @@ ifneq ($(ENABLE_LIBM),0)
 	LFLAGS += -L$(AMD_LIBM_HOME)/lib/dynamic -lamdlibm
 endif
 
-SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp
+SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp trace_llvm_compiler.cpp
 
 ifeq ($(ENABLE_JIT),1)
 	CXXFLAGS += -DENABLE_JIT
 	SRC += ir.cpp trace.cpp trace_compile.cpp assembler-x64.cpp
 endif
+
+
+LLVM_CONFIG=/usr/local/bin/llvm-config
+CXXFLAGS += -I/usr/local/include -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -fno-rtti -fno-common -Woverloaded-virtual -Wcast-qual -fvisibility-inlines-hidden
+LFLAGS += $(shell $(LLVM_CONFIG) --ldflags --libs engine)
 
 EXECUTABLE := bin/riposte
 

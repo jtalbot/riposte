@@ -9,6 +9,8 @@
 #include "thread.h"
 #include "ir.h"
 
+#define USE_LLVM_COMPILER
+
 class Thread;
 
 ////////////////////////////////////////////////////////////////////
@@ -192,6 +194,9 @@ class Trace : public gc {
 
 #define DEFAULT_NUM_REGISTERS 10000
 
+#ifdef USE_LLVM_COMPILER
+struct LLVMState;
+#endif
 
 ////////////////////////////////////////////////////////////////////
 // Global shared state 
@@ -250,6 +255,10 @@ public:
 	std::string externStr(String s) const {
 		return strings.out(s);
 	}
+
+#ifdef USE_LLVM_COMPILER
+    LLVMState * llvmState;
+#endif
 };
 
 ////////////////////////////////////////////////////////////////////
@@ -707,6 +716,10 @@ public:
 	}
 };
 
+#ifdef USE_LLVM_COMPILER
+void TraceLLVMCompiler_init(State & state);
+#endif
+
 inline State::State(uint64_t threads, int64_t argc, char** argv) 
 	: nThreads(threads), verbose(false), jitEnabled(true), done(0) {
 	Environment* base = new (GC) Environment(0);
@@ -732,6 +745,10 @@ inline State::State(uint64_t threads, int64_t argc, char** argv)
 		this->threads.push_back(t);
 	}
 
+#ifdef USE_LLVM_COMPILER
+    TraceLLVMCompiler_init(*this);
+#endif
+    
 	interpreter_init(getMainThread());
 }
 
