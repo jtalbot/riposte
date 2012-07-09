@@ -100,9 +100,9 @@ struct TraceLLVMCompiler {
         }
         */
         
-        llvm::Constant * Size = Constant(trace->Size);
+        llvm::Constant * Size = ConstantInt(trace->Size);
         loopIndexAddr = B->CreateAlloca(intType);
-        B->CreateStore(Constant(0LL),loopIndexAddr);
+        B->CreateStore(ConstantInt(0LL),loopIndexAddr);
         
         
         llvm::BasicBlock * cond = createAndInsertBB("cond");
@@ -116,7 +116,7 @@ struct TraceLLVMCompiler {
         
         B->SetInsertPoint(body);
         CompileLoopBody();
-        B->CreateStore(B->CreateAdd(loopIndex(), Constant(1LL)),loopIndexAddr);
+        B->CreateStore(B->CreateAdd(loopIndex(), ConstantInt(1LL)),loopIndexAddr);
         B->CreateBr(cond);
         
         B->SetInsertPoint(end);
@@ -130,13 +130,13 @@ struct TraceLLVMCompiler {
         
         delete B;
     }
-    llvm::Constant * Constant(int64_t i) {
+    llvm::Constant * ConstantInt(int64_t i) {
         return llvm::ConstantInt::get(intType,i);
     }
-    llvm::Constant * Constant(double d) {
+    llvm::Constant * ConstantDouble(double d) {
         return llvm::ConstantFP::get(doubleType, d);
     }
-    llvm::Value * Constant(void * ptr, llvm::Type * typ) {
+    llvm::Value * ConstantPointer(void * ptr, llvm::Type * typ) {
         llvm::Constant* ci = llvm::ConstantInt::get(intType, (uint64_t)ptr); 
         llvm::Value* cp = llvm::ConstantExpr::getIntToPtr(ci, llvm::PointerType::getUnqual(typ));
         return cp; 
@@ -163,7 +163,7 @@ struct TraceLLVMCompiler {
                     llvm::Type * t = getType(n.type);
                     
                     
-                    llvm::Value * vector = Constant(p, t);
+                    llvm::Value * vector = ConstantPointer(p, t);
                     llvm::Value * elementAddr = B->CreateGEP(vector, loopIndexArray);
                      
                     values[i] = B->CreateLoad(elementAddr);
@@ -195,10 +195,10 @@ struct TraceLLVMCompiler {
                 case IROpCode::constant:
                     switch(n.type) {
                         case Type::Double:
-                            values[i] = Constant(n.constant.d);
+                            values[i] = ConstantDouble(n.constant.d);
                             break;
                         case Type::Integer:
-                            values[i] = Constant(n.constant.i);
+                            values[i] = ConstantInt(n.constant.i);
                             break;
                         default:
                             _error("unsupported type");
@@ -226,7 +226,7 @@ struct TraceLLVMCompiler {
 					_error("Unknown type in initialize outputs");
 				}
                 llvm::Type * t = getType(n.type);
-                llvm::Value * vector = Constant(p,t);
+                llvm::Value * vector = ConstantPointer(p,t);
                 llvm::Value * elementAddr = B->CreateGEP(vector, loopIndexArray); 
                 B->CreateStore(values[i], elementAddr);
             }

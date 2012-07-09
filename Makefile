@@ -1,7 +1,7 @@
 # This Makefile requires GNU make.
 UNAME := $(shell uname -s)
  
-CXX := clang++ 
+CXX := g++ 
 CXXFLAGS := -Wall -msse4.1
 LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
 
@@ -41,7 +41,7 @@ endif
 
 LLVM_CONFIG=/usr/local/bin/llvm-config
 CXXFLAGS += -I/usr/local/include -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -fno-rtti -fno-common -Woverloaded-virtual -Wcast-qual -fvisibility-inlines-hidden
-LFLAGS += $(shell $(LLVM_CONFIG) --ldflags --libs engine)
+LFLAGS += $(shell $(LLVM_CONFIG) --ldflags --libs engine) -ldl
 
 EXECUTABLE := bin/riposte
 
@@ -66,7 +66,7 @@ asm: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize
 asm: $(ASM)
 
 $(EXECUTABLE): $(OBJECTS)
-	$(CXX) $(LFLAGS) -o $@ $^ $(LIBS)
+	$(CXX) -o $@ $^ $(LFLAGS) $(LIBS)
 
 bin/%.o: src/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@ 
