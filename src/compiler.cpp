@@ -112,7 +112,7 @@ void Compiler::resolveLoopExits(int64_t start, int64_t end, int64_t nextTarget, 
 	}
 }
 
-Compiler::Operand Compiler::compileConstant(Value const& expr, Prototype* code) {
+Compiler::Operand Compiler::compileConstant(Value const& expr, Prototype* code, Operand result) {
 	std::map<Value, int64_t>::const_iterator i = constants.find(expr);
 	int64_t index = 0;
 	if(i == constants.end()) {
@@ -122,7 +122,13 @@ Compiler::Operand Compiler::compileConstant(Value const& expr, Prototype* code) 
 	} else {
 		index = i->second;
 	}
-	return Operand(CONSTANT, index);
+	if(result.loc == MEMORY || result.loc == REGISTER) {
+		emit(ByteCode::fastmov, Operand(CONSTANT, index), 0, result);
+		return result;
+	}
+	else {
+		return Operand(CONSTANT, index);
+	}
 }
 
 static int64_t isDotDot(String s) {
@@ -140,21 +146,33 @@ static int64_t isDotDot(String s) {
 	return -1;	
 }
 
-Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code) {
-	String s = SymbolStr(symbol);
-	
-	int64_t dd = isDotDot(s);
-	if(dd > 0) {
-		Operand t = allocRegister();
-		emit(ByteCode::dotdot, dd-1, 0, t);
-		return t;
+Compiler::Operand Compiler::allocResult(Operand const& t) {
+	if(t.loc == INVALID) {
+		return allocRegister();
+	}
+	else if(t.loc == REGISTER) {
+		Operand tmp = allocRegister();
+		assert(t == tmp);
+		return tmp;
 	}
 	else {
-		Operand sym = compileConstant(Character::c(s), code);
-		Operand t = allocRegister();
-		emit(ByteCode::get, sym, 0, t);
 		return t;
 	}
+}
+
+Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code, Operand result) {
+	String s = SymbolStr(symbol);
+	int64_t dd = isDotDot(s);
+	
+	result = allocResult(result);
+	if(dd > 0) {
+		emit(ByteCode::dotdot, dd-1, 0, result);
+	}
+	else {
+		Operand sym = compileConstant(Character::c(s), code, Operand());
+		emit(ByteCode::get, sym, 0, result);
+	}
+	return result;
 }
 
 Compiler::Operand Compiler::placeInRegister(Operand r) {
@@ -199,20 +217,24 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 }
 
 // a standard call, not an op
-Compiler::Operand Compiler::compileFunctionCall(List const& call, Character const& names, Prototype* code) {
-	Operand function = compile(call[0], code);
+Compiler::Operand Compiler::compileFunctionCall(List const& call, Character const& names, Prototype* code, Operand result) {
+	Operand function = compile(call[0], code, Operand());
 	CompiledCall a = makeCall(call, names);
 	code->calls.push_back(a);
 	kill(function);
-	Operand result = allocRegister();
+	Operand out = allocRegister();
 	if(!a.named && a.dotIndex >= (int64_t)a.arguments.size())
-		emit(ByteCode::fastcall, function, code->calls.size()-1, result);
+		emit(ByteCode::fastcall, function, code->calls.size()-1, out);
 	else
-		emit(ByteCode::call, function, code->calls.size()-1, result);
+		emit(ByteCode::call, function, code->calls.size()-1, out);
+	kill(out);
+	result = allocResult(result);
+	if(out != result)
+		emit(ByteCode::fastmov, out, 0, result);
 	return result;
 }
 
-Compiler::Operand Compiler::compileInternalFunctionCall(List const& call, Prototype* code) {
+Compiler::Operand Compiler::compileInternalFunctionCall(List const& call, Prototype* code, Operand result) {
 	String func = SymbolStr(call[0]);
 	std::map<String, int64_t>::const_iterator itr = state.internalFunctionIndex.find(func);
 	
@@ -232,26 +254,26 @@ Compiler::Operand Compiler::compileInternalFunctionCall(List const& call, Protot
 	Operand liveIn = top();
 	int64_t reg = liveIn.i-1;
 	for(int64_t i = 1; i < call.length(); i++) {
-		Operand r = placeInRegister(compile(call[i], code));
+		Operand r = placeInRegister(compile(call[i], code, Operand()));
 		assert(r.i == reg+1);
 		reg = r.i; 
 	}
 	// kill all parameters
 	kill(reg); 	// only necessary to silence unused warning
 	kill(liveIn); 
-	Operand result = allocRegister();
+	result = allocResult(result);
 	emit(ByteCode::internal, function, result, result);
 	return result;
 }
 
-Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Prototype* code) {
+Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Prototype* code, Operand result) {
 	int64_t length = call.length();
 	if(length == 0) {
 		throw CompileError("invalid empty call");
 	}
 
 	if(!isSymbol(call[0]) && !call[0].isCharacter1())
-		return compileFunctionCall(call, names, code);
+		return compileFunctionCall(call, names, code, result);
 
 	String func = SymbolStr(call[0]);
 	// list is the only built in function that handles ... or named parameters
@@ -259,8 +281,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	if(func == Strings::list && call.length() == 2 
 		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
 	{
-		Operand result = allocRegister();
-		Operand counter = placeInRegister(compile(Integer::c(0), code));
+		result = allocResult(result);
+		Operand counter = placeInRegister(compile(Integer::c(0), code, Operand()));
 		Operand storage = allocRegister();
 		kill(storage); kill(counter);
 		emit(ByteCode::dotslist, counter, storage, result); 
@@ -277,41 +299,38 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	}
 
 	if(complicated)
-		return compileFunctionCall(call, names, code);
+		return compileFunctionCall(call, names, code, result);
 
 	// switch statement supports named args
 	if(func == Strings::switchSym)
 	{
 		if(call.length() == 0) _error("'EXPR' is missing");
-		Operand c = compile(call[1], code);
+		Operand c = compile(call[1], code, Operand());
 		int64_t n = call.length()-2;
 
 		int64_t branch = emit(ByteCode::branch, kill(c), n, 0);
 		for(int64_t i = 2; i < call.length(); i++) {
 			Character ni = Character::c(names.length() > i ? names[i] : Strings::empty);
-			emit(ByteCode::branch, compileConstant(ni, code), 0, 0);
+			emit(ByteCode::branch, compileConstant(ni, code, Operand()), 0, 0);
 		}
 		
 		std::vector<int64_t> jmps;
-		Operand result = placeInRegister(compileConstant(Null::Singleton(), code));
+		result = allocResult(result);
+
+		kill(result);
+		result = compileConstant(Null::Singleton(), code, result);
 		jmps.push_back(emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0));
 		
 		for(int64_t i = 1; i <= n; i++) {
 			ir[branch+i].c = (int64_t)ir.size()-branch;
+			
+			kill(result);
 			if(!call[i+1].isNil()) {
-				kill(result);
-				Operand r = placeInRegister(compile(call[i+1], code));
-				if(r != result) 
-					throw CompileError(std::string("switch statement doesn't put all its results in the same register"));
+				result = compile(call[i+1], code, result);
 				if(i < n)
 					jmps.push_back(emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0));
-				result = r;
 			} else if(i == n) {
-				kill(result);
-				Operand r = placeInRegister(compileConstant(Null::Singleton(), code));
-				if(r != result) 
-					throw CompileError(std::string("switch statement doesn't put all its results in the same register"));
-				result = r;
+				result = compileConstant(Null::Singleton(), code, result);
 			}
 		}
 		for(int64_t i = 0; i < (int64_t)jmps.size(); i++) {
@@ -327,14 +346,14 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	}
 	
 	if(complicated)
-		return compileFunctionCall(call, names, code);
+		return compileFunctionCall(call, names, code, result);
 
 
 	if(func == Strings::internal) 
 	{
 		if(!call[1].isList() || !isCall(call[1]))
 			throw CompileError(std::string(".Internal has invalid arguments (") + Type::toString(call[1].type()) + ")");
-		return compileInternalFunctionCall((List const&)call[1], code);
+		return compileInternalFunctionCall((List const&)call[1], code, result);
 	} 
 	else if(func == Strings::assign ||
 		func == Strings::eqassign || 
@@ -381,34 +400,22 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			dest = c[1];
 		}
 		
-		// the source for the assignment
-		Operand source = compile(value, code);
-
 		if(func == Strings::assign2) {
+			result = compile(value, code, result);
 			Character r = Character::c(SymbolStr(dest));
-			Operand result = compileConstant(r, code);
-			emit(ByteCode::assign2, result, 0, source);
+			Operand target = compileConstant(r, code, Operand());
+			emit(ByteCode::assign2, target, 0, result);
 		} else {
-			Operand result = Operand(MEMORY, SymbolStr(dest));
-			emit(ByteCode::assign, result, 0, source);
-		}
-		return source;
-		
-		// PHI outputs are always in registers, so merging with previous statement is generally
-		// dangerous. Can we improve this?
-
-		/*if(func == Strings::assign2) { 
-			emit(ByteCode::assign2, source, 0, result);
-			return source;
-		} else {
-			if(ir.size() > 0 && ir.back().c.loc == REGISTER) {
-				kill(ir.back().c);
-				ir.back().c  = result;
-			} else {
-				emit(ByteCode::mov, source, 0, result);
+			Operand assignResult = Operand(MEMORY, SymbolStr(dest));
+			assignResult = compile(value, code, assignResult);
+			if(result.loc == MEMORY || result.loc == REGISTER) {
+				emit(ByteCode::fastmov, assignResult, 0, result);
 			}
-			return result;
-		}*/
+			else {
+				result = assignResult;
+			}
+		}
+		return result;
 	} 
 	else if(func == Strings::function) 
 	{
@@ -444,19 +451,18 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 		Value function;
 		Function::Init(function, functionCode, 0);
-		Operand funcOp = compileConstant(function, code);
+		Operand funcOp = compileConstant(function, code, Operand());
 	
-		Operand reg = allocRegister();	
-		emit(ByteCode::function, funcOp, 0, reg);
-		return reg;
+		result = allocResult(result);	
+		emit(ByteCode::function, funcOp, 0, result);
+		return result;
 	} 
 	else if(func == Strings::returnSym)
 	{
-		Operand result;
 		if(call.length() == 1) {
-			result = compileConstant(Null::Singleton(), code);
+			result = compileConstant(Null::Singleton(), code, result);
 		} else if(call.length() == 2)
-			result = placeInRegister(compile(call[1], code));
+			result = compile(call[1], code, result);
 		else
 			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
 		if(scope != FUNCTION)
@@ -467,7 +473,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::forSym) 
 	{
 		Operand loop_variable = Operand(MEMORY, SymbolStr(call[1]));
-		Operand loop_vector = forceInRegister(compile(call[2], code));
+		Operand loop_vector = forceInRegister(compile(call[2], code, Operand()));
 		Operand loop_counter = allocRegister();	// save space for loop counter
 		Operand loop_limit = allocRegister(); // save space for the loop limit
 
@@ -476,7 +482,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		
 		loopDepth++;
 		int64_t beginbody = ir.size();
-		Operand body = compile(call[3], code);
+		Operand body = compile(call[3], code, Operand());
 		int64_t endbody = ir.size();
 		resolveLoopExits(beginbody, endbody, endbody, endbody+2);
 		loopDepth--;
@@ -488,19 +494,19 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 		kill(body); kill(loop_limit); kill(loop_variable); 
 		kill(loop_counter); kill(loop_vector);
-		return compileConstant(Null::Singleton(), code);
+		return compileConstant(Null::Singleton(), code, result);
 	} 
 	else if(func == Strings::whileSym)
 	{
-		Operand head_condition = compile(call[1], code);
+		Operand head_condition = compile(call[1], code, Operand());
 		emit(ByteCode::jc, 1, 0, kill(head_condition));
 		loopDepth++;
 		
 		int64_t beginbody = ir.size();
-		Operand body = compile(call[2], code);
+		Operand body = compile(call[2], code, Operand());
 		kill(body);
 		int64_t tail = ir.size();
-		Operand tail_condition = compile(call[1], code);
+		Operand tail_condition = compile(call[1], code, Operand());
 		int64_t endbody = ir.size();
 		
 		emit(ByteCode::jc, beginbody-endbody, 1, kill(tail_condition));
@@ -508,131 +514,114 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		ir[beginbody-1].b = endbody-beginbody+2;
 		loopDepth--;
 		
-		return compileConstant(Null::Singleton(), code);
+		return compileConstant(Null::Singleton(), code, result);
 	} 
 	else if(func == Strings::repeatSym)
 	{
 		loopDepth++;
 		int64_t beginbody = ir.size();
-		Operand body = compile(call[1], code);
+		Operand body = compile(call[1], code, Operand());
 		int64_t endbody = ir.size();
 		resolveLoopExits(beginbody, endbody, endbody, endbody+1);
 		loopDepth--;
 		emit(ByteCode::jmp, beginbody-endbody, 0, 0);
 		
 		kill(body);
-		return compileConstant(Null::Singleton(), code);
+		return compileConstant(Null::Singleton(), code, result);
 	}
 	else if(func == Strings::nextSym)
 	{
 		if(loopDepth == 0) throw CompileError("next used outside of loop");
 		emit(ByteCode::jmp, 0, 1, 0);
-		return Operand(INVALID, (int64_t)0);
+		return result;
 	} 
 	else if(func == Strings::breakSym)
 	{
 		if(loopDepth == 0) throw CompileError("break used outside of loop");
 		emit(ByteCode::jmp, 0, 2, 0);
-		return Operand(INVALID, (int64_t)0);
+		return result;
 	} 
 	else if(func == Strings::ifSym) 
 	{
-		Operand resultT, resultF;
 		if(call.length() != 3 && call.length() != 4)	
 			throw CompileError("invalid if statement");
 		
-		// resultT and resultF need to be in the same register so if statements can be used as expressions.
-		// if either one is not in a register move into register. They should be in the same register at
-		// the end. They could also be in the same MEMORY location at the end, but that's harder to code
-		// gen for...
-		
-		Operand cond = compile(call[1], code);
+		Operand cond = compile(call[1], code, Operand());
 		emit(ByteCode::jc, 1, 0, kill(cond));
 		int64_t begin1 = ir.size(), begin2 = 0;
-		resultT = placeInRegister(compile(call[2], code));
+		result = compile(call[2], code, result);
 		
 		emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0);
 		begin2 = ir.size();
 	
-		kill(resultT);
-		resultF = placeInRegister(
-			call.length() == 4 ? 	compile(call[3], code) :
-						compileConstant(Null::Singleton(), code) );
-		assert(resultT == resultF || resultT.loc == INVALID || resultF.loc == INVALID);
+		kill(result);
+		result = call.length() == 4 ? 	compile(call[3], code, result) :
+						compileConstant(Null::Singleton(), code, result);
 		int64_t end = ir.size();
 		ir[begin2-1].a = end-begin2+1;
-		
 		ir[begin1-1].b = begin2-begin1+1;
 
-		return resultT.loc == INVALID ? resultF : resultT;
+		return result;
 	}
 	else if(func == Strings::lor2 && call.length() == 3)
 	{
-		Operand r0 = placeInRegister(compileConstant(Logical::True(), code));
+		result = compileConstant(Logical::True(), code, result);
 		
-		Operand left = compile(call[1], code);
+		Operand left = compile(call[1], code, Operand());
 		emit(ByteCode::jc, 0, 1, kill(left));
 		int64_t j1 = ir.size()-1;
-		Operand right = compile(call[2], code);
+		Operand right = compile(call[2], code, Operand());
 		emit(ByteCode::jc, 2, 1, kill(right));
 	
-		kill(r0);	
-		Operand r1 = placeInRegister(compileConstant(Logical::False(), code));
+		result = compileConstant(Logical::False(), code, result);
 		ir[j1].a = (int64_t)ir.size()-j1;
-		assert(r0 == r1 || r0.loc == INVALID || r1.loc == INVALID);
-		return r1;
+		return result;
 	}
 	else if(func == Strings::land2 && call.length() == 3)
 	{
-		Operand r0 = placeInRegister(compileConstant(Logical::False(), code));
-
-		Operand left = compile(call[1], code);
+		result = compileConstant(Logical::False(), code, result);
+		Operand left = compile(call[1], code, Operand());
 		emit(ByteCode::jc, 1, 0, kill(left));
 		int64_t j1 = ir.size()-1;
-		Operand right = compile(call[2], code);
+		Operand right = compile(call[2], code, Operand());
 		emit(ByteCode::jc, 1, 2, kill(right));
 
-		kill(r0);
-		Operand r1 = placeInRegister(compileConstant(Logical::True(), code));
+		result = compileConstant(Logical::True(), code, result);
 		ir[j1].b = (int64_t)ir.size()-j1;
-		assert(r0 == r1 || r0.loc == INVALID || r1.loc == INVALID);
-		return r1;
+		return result;
 	}
 	else if(func == Strings::brace) 
 	{
 		int64_t length = call.length();
 		if(length <= 1) {
-			return compileConstant(Null::Singleton(), code);
+			return compileConstant(Null::Singleton(), code, result);
 		} else {
-			Operand result;
-			for(int64_t i = 1; i < length; i++) {
+			for(int64_t i = 1; i < length-1; i++) {
 				// memory results need to be forced to handle things like:
 				// 	function(x,y) { x; y }
 				// if x is a promise, it must be forced
-				if(result.loc == MEMORY) {
-					result = placeInRegister(result);
-				}
-				kill(result);
-				result = compile(call[i], code);
+				kill(placeInRegister(compile(call[i], code, Operand())));
 			}
-			return result;
+			return compile(call[length-1], code, result);
 		}
 	} 
 	else if(func == Strings::paren) 
 	{
-		return compile(call[1], code);
+		return compile(call[1], code, result);
 	}
 	else if(func == Strings::list) 
 	{
 		Operand f, r;
+		f = r = allocRegister();
 		for(int64_t i = 1; i < call.length(); i++) {
-			Operand t = forceInRegister(compile(call[i], code));
-			if(f.loc == INVALID) { f = t; r = t; }
-			else { assert(t.i == r.i+1); r = t; }
+			kill(r);
+			Operand t = forceInRegister(compile(call[i], code, r));
+			r = allocRegister();
+			assert(r.i == t.i+1);
 		}
-		if(call.length() > 1)
-			kill(f);
-		Operand result = allocRegister();
+		kill(r);
+		kill(f);
+		result = allocResult(result);
 		emit(ByteCode::list, f, Operand((int64_t)call.length()-1), result);
 		return result;
 	}
@@ -646,13 +635,14 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::rep ||
 		func == Strings::attrset) &&
 		call.length() == 4) {
-		Operand c = placeInRegister(compile(call[1], code));
-		Operand b = compile(call[2], code);
-		Operand a = compile(call[3], code);
+		Operand c = placeInRegister(compile(call[1], code, Operand()));
+		Operand b = compile(call[2], code, Operand());
+		Operand a = compile(call[3], code, Operand());
 		kill(a); kill(b); kill(c);
-		Operand result = allocRegister();
-		assert(c == result);
-		emit(op3(func), a, b, result);
+		emit(op3(func), a, b, c);
+		result = allocResult(result);
+		if(c != result)
+			emit(ByteCode::fastmov, c, 0, result);
 		return result;
 	}
 	// Binary operators
@@ -684,10 +674,10 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::attrget) &&
 		call.length() == 3) 
 	{
-		Operand a = compile(call[1], code);
-		Operand b = compile(call[2], code);
+		Operand a = compile(call[1], code, Operand());
+		Operand b = compile(call[2], code, Operand());
 		kill(b); kill(a);
-		Operand result = allocRegister();
+		result = allocResult(result);
 		emit(op2(func), a, b, result);
 		return result;
 	} 
@@ -731,9 +721,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		call.length() == 2)
 	{
 		// if there isn't exactly one parameter, we should call the library version...
-		Operand a = compile(call[1], code);
+		Operand a = compile(call[1], code, Operand());
 		kill(a);
-		Operand result = allocRegister();
+		result = allocResult(result);
 		emit(op1(func), a, 0, result);
 		return result; 
 	} 
@@ -741,43 +731,39 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		if(call.length() != 2) _error("missing requires one argument");
 		if(!isSymbol(call[1]) && !call[1].isCharacter1()) _error("wrong parameter to missing");
-		Operand s = compileConstant(call[1], code);
-		Operand result = allocRegister();
+		Operand s = compileConstant(call[1], code, Operand());
+		result = allocResult(result);
 		emit(ByteCode::missing, s, 0, result); 
 		return result;
 	} 
 	else if(func == Strings::quote)
 	{
 		if(call.length() != 2) _error("quote requires one argument");
-		return compileConstant(call[1], code);
+		return compileConstant(call[1], code, result);
 	}
 	
-	return compileFunctionCall(call, names, code);
+	return compileFunctionCall(call, names, code, result);
 }
 
-Compiler::Operand Compiler::compileExpression(List const& values, Prototype* code) {
-	Operand result;
-	if(values.length() == 0) result = compileConstant(Null::Singleton(), code);
-	for(int64_t i = 0; i < values.length(); i++) {
-		// memory results need to be forced to handle things like:
-		// 	function(x,y) { x; y }
-		// if x is a promise, it must be forced
-		if(result.loc == MEMORY) {
-			result = placeInRegister(result);
-		}
-		kill(result);
-		result = compile(values[i], code);
+Compiler::Operand Compiler::compileExpression(List const& values, Prototype* code, Operand result) {
+	if(values.length() == 0) {
+		return compileConstant(Null::Singleton(), code, result);
 	}
-	return result;
+	else {
+		for(int64_t i = 0; i < values.length()-1; i++) {
+			kill(placeInRegister(compile(values[i], code, Operand())));
+		}
+		return compile(values[values.length()-1], code, result);
+	}
 }
 
-Compiler::Operand Compiler::compile(Value const& expr, Prototype* code) {
+Compiler::Operand Compiler::compile(Value const& expr, Prototype* code, Operand result) {
 	if(isSymbol(expr)) {
-		return compileSymbol(expr, code);
+		return compileSymbol(expr, code, result);
 	}
 	if(isExpression(expr)) {
 		assert(expr.isList());
-		return compileExpression((List const&)expr, code);
+		return compileExpression((List const&)expr, code, result);
 	}
 	else if(isCall(expr)) {
 		assert(expr.isList());
@@ -785,10 +771,10 @@ Compiler::Operand Compiler::compile(Value const& expr, Prototype* code) {
 			hasNames((List const&)expr) ? 
 				(Character const&)getNames((List const&)expr) : 
 				Character(0), 
-			code);
+			code, result);
 	}
 	else {
-		return compileConstant(expr, code);
+		return compileConstant(expr, code, result);
 	}
 }
 
@@ -817,7 +803,7 @@ Prototype* Compiler::compile(Value const& expr) {
 	Prototype* code = new Prototype();
 	assert(((int64_t)code) % 16 == 0); // our type packing assumes that this is true
 
-	Operand result = compile(expr, code);
+	Operand result = compile(expr, code, Operand());
 
 	//std::reverse(code->constants.begin(), code->constants.end());
 	code->expression = expr;

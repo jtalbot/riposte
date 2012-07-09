@@ -82,20 +82,21 @@ private:
 
 	int64_t n, max_n;
 	Operand allocRegister() { max_n = std::max(max_n, n+1); return Operand(REGISTER, n++); }
+	Operand allocResult(Operand const& t);
 	Operand kill(Operand i) { if(i.loc == REGISTER) { n = std::min(n, i.i); } return i; }
 	Operand top() { return Operand(REGISTER, n); }
 
 	Compiler(Thread& thread, Scope scope) : thread(thread), state(thread.state), scope(scope), loopDepth(0), n(0), max_n(0) {}
 	
 	Prototype* compile(Value const& expr);			// compile function block, code ends with return
-	Operand compile(Value const& expr, Prototype* code);		// compile into existing code block
+	Operand compile(Value const& expr, Prototype* code, Operand result);		// compile into existing code block
 
-	Operand compileConstant(Value const& expr, Prototype* code);
-	Operand compileSymbol(Value const& symbol, Prototype* code); 
-	Operand compileCall(List const& call, Character const& names, Prototype* code); 
-	Operand compileFunctionCall(List const& call, Character const& names, Prototype* code); 
-	Operand compileInternalFunctionCall(List const& call, Prototype* code); 
-	Operand compileExpression(List const& values, Prototype* code);
+	Operand compileConstant(Value const& expr, Prototype* code, Operand result);
+	Operand compileSymbol(Value const& symbol, Prototype* code, Operand result); 
+	Operand compileCall(List const& call, Character const& names, Prototype* code, Operand result); 
+	Operand compileFunctionCall(List const& call, Character const& names, Prototype* code, Operand result); 
+	Operand compileInternalFunctionCall(List const& call, Prototype* code, Operand result); 
+	Operand compileExpression(List const& values, Prototype* code, Operand result);
 	
 	CompiledCall makeCall(List const& call, Character const& names);
 

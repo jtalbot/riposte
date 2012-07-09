@@ -30,7 +30,10 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 #define CONSTANT(i) (thread.frame.prototype->constants[(i)-1])
 
 // Out register is currently always a register, not memory
-#define OUT(X) (*(thread.frame.registers+(-inst.X)))
+#define OUT(X) \
+	(inst.X <= 0 \
+		? *(thread.frame.registers+(-inst.X)) \
+		: thread.frame.environment->insert((String)(inst.X)))
 
 #define DECODE(X) \
 Environment* X##Env = 0; \

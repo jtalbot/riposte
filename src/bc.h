@@ -7,39 +7,39 @@
 #include "strings.h"
 
 #define CONTROL_FLOW_BYTECODES(_) 	\
-	_(jc, "jc") \
-	_(jmp, "jmp") \
-	_(branch, "branch") \
-	_(call, "call") \
-	_(fastcall, "fastcall") \
-	_(ret, "ret") /* return from function */ \
-	_(rets, "rets") /* return from top-level statement */ \
-	_(retp, "retp") /* return from a promise or default */ \
-	_(forbegin, "forbegin") \
-	_(forend, "forend") \
-	_(list, "list") \
-	_(dotslist, "dotslist") \
+	_(jc, 		"jc") \
+	_(jmp, 		"jmp") \
+	_(branch, 	"branch") \
+	_(call, 	"call") \
+	_(fastcall, 	"fastcall") \
+	_(ret, 		"ret") /* return from function */ \
+	_(rets, 	"rets") /* return from top-level statement */ \
+	_(retp, 	"retp") /* return from a promise or default */ \
+	_(forbegin, 	"forbegin") \
+	_(forend, 	"forend") \
+	_(list, 	"list") \
+	_(dotslist, 	"dotslist") \
 
 #define MEMORY_ACCESS_BYTECODES(_) \
-	_(mov, "mov") \
-	_(fastmov, "fastmov") \
-	_(dotdot, "dotdot") \
-	_(assign, "assign") \
-	_(assign2, "assign2") \
-	_(iassign, "iassign") \
-	_(eassign, "eassign") \
-	_(subset, "subset") \
-	_(subset2, "subset2") \
-	_(get, "get") \
-	_(attrget, "attr") \
-	_(attrset, "attr<-")
+	_(mov, 		"mov") \
+	_(fastmov, 	"fastmov") \
+	_(dotdot, 	"dotdot") \
+	_(assign, 	"assign") \
+	_(assign2, 	"assign2") \
+	_(iassign, 	"iassign") \
+	_(eassign, 	"eassign") \
+	_(subset, 	"subset") \
+	_(subset2, 	"subset2") \
+	_(get, 		"get") \
+	_(attrget, 	"attr") \
+	_(attrset, 	"attr<-")
 
 #define UTILITY_BYTECODES(_)\
-	_(internal, "internal") \
-	_(function, "function") \
-	_(type, "type") \
-	_(missing, "missing") \
-	_(strip, "strip") \
+	_(internal, 	"internal") \
+	_(function, 	"function") \
+	_(type, 	"type") \
+	_(missing, 	"missing") \
+	_(strip, 	"strip") \
 
 #define GENERATOR_BYTECODES(_) \
 	_(vector,	"vector",	Generator) \
