@@ -26,26 +26,22 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out);
 
-#define REGISTER(i) (*(thread.frame.registers+(-(i))))
-#define CONSTANT(i) (thread.frame.prototype->constants[(i)-1])
+#define REGISTER(i) (*(thread.frame.registers+(i)))
+#define CONSTANT(i) (thread.frame.prototype->constants[(i)])
 
 // Out register is currently always a register, not memory
-#define OUT(X) \
-	(inst.X <= 0 \
-		? *(thread.frame.registers+(-inst.X)) \
-		: thread.frame.environment->insert((String)(inst.X)))
+#define OUT(X) *(thread.frame.registers+(inst.X)) 
 
 #define DECODE(X) \
 Environment* X##Env = 0; \
 Value const& X = \
-	__builtin_expect((inst.X) <= 0, true) \
-		? *(thread.frame.registers+(-inst.X)) \
-		: ((inst.X) < 256) \
-			? thread.frame.prototype->constants[(inst.X)-1] \
-			: thread.frame.environment->getRecursive((String)(inst.X), X##Env); 
-
+	*(thread.frame.registers+(inst.X))
+/*	__builtin_expect((inst.X) < 256, true) \
+		? *(thread.frame.registers+(inst.X)) \
+		: thread.frame.prototype->constants[(inst.X)-256] 
+*/
 #define FORCE(X) \
-if(__builtin_expect((inst.X) > 0 && !X.isObject(), false)) { \
+if(__builtin_expect((inst.X) < 0 && !X.isObject(), false)) { \
 	return force(thread, inst, X, X##Env, (String)(inst.X)); \
 }
 

@@ -654,7 +654,8 @@ void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& 
 }
 
 void eval_fn(Thread& thread, Value const* args, Value& result) {
-	result = thread.eval(Compiler::compilePromise(thread, args[0]), 
+	result = thread.eval(Compiler::compilePromise(thread, 
+			Cast<REnvironment>(args[1]).environment(), args[0]), 
 			Cast<REnvironment>(args[1]).environment());
 }
 
@@ -670,7 +671,7 @@ void* mapplyheader(void* args, uint64_t start, uint64_t end, Thread& thread) {
 	apply[0] = l.func;
 	for(int64_t i = 0; i < l.in.length(); i++)
 		apply[i+1] = Value::Nil();
-	Prototype* p = Compiler::compileTopLevel(thread, CreateCall(apply));
+	Prototype* p = Compiler::compileTopLevel(thread, thread.frame.environment, CreateCall(apply));
 	return p;
 }
 
@@ -781,7 +782,7 @@ void source(Thread& thread, Value const* args, Value& result) {
 	Value value;
 	parser.execute(code.c_str(), code.length(), true, value);	
 	
-	result = thread.eval(Compiler::compileTopLevel(thread, value));
+	result = thread.eval(Compiler::compileTopLevel(thread, thread.frame.environment, value));
 }
 
 void environment(Thread& thread, Value const* args, Value& result) {

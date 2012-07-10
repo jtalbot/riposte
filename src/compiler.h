@@ -20,6 +20,7 @@ class Compiler {
 private:
 	Thread& thread;
 	State& state;
+	Environment* env;
 
 	enum Scope {
 		TOPLEVEL,
@@ -42,7 +43,7 @@ private:
 	enum Loc {
 		INVALID,
 		REGISTER,
-		MEMORY,
+		SLOT,
 		CONSTANT,
 		INTEGER
 	};
@@ -66,7 +67,7 @@ private:
 			if(loc == INVALID) return "I";
 			else if(loc == REGISTER) return intToStr(i) + "R";
 			else if(loc == CONSTANT) return intToStr(i) + "C";
-			else if(loc == MEMORY) return std::string(s);
+			else if(loc == SLOT) return intToStr(i) + "S";
 			else return intToStr(i) + "L";
 		}
 	};
@@ -86,7 +87,8 @@ private:
 	Operand kill(Operand i) { if(i.loc == REGISTER) { n = std::min(n, i.i); } return i; }
 	Operand top() { return Operand(REGISTER, n); }
 
-	Compiler(Thread& thread, Scope scope) : thread(thread), state(thread.state), scope(scope), loopDepth(0), n(0), max_n(0) {}
+	Compiler(Thread& thread, Environment* env, Scope scope) 
+		: thread(thread), state(thread.state), env(env), scope(scope), loopDepth(0), n(0), max_n(0) {}
 	
 	Prototype* compile(Value const& expr);			// compile function block, code ends with return
 	Operand compile(Value const& expr, Prototype* code, Operand result);		// compile into existing code block
@@ -108,18 +110,18 @@ private:
 	void dumpCode() const;
 
 public:
-	static Prototype* compileTopLevel(Thread& thread, Value const& expr) {
-		Compiler compiler(thread, TOPLEVEL);
+	static Prototype* compileTopLevel(Thread& thread, Environment* env, Value const& expr) {
+		Compiler compiler(thread, env, TOPLEVEL);
 		return compiler.compile(expr);
 	}
 	
-	static Prototype* compileFunctionBody(Thread& thread, Value const& expr) {
-		Compiler compiler(thread, FUNCTION);
+	static Prototype* compileFunctionBody(Thread& thread, Environment* env, Value const& expr) {
+		Compiler compiler(thread, env, FUNCTION);
 		return compiler.compile(expr);
 	}
 	
-	static Prototype* compilePromise(Thread& thread, Value const& expr) {
-		Compiler compiler(thread, PROMISE);
+	static Prototype* compilePromise(Thread& thread, Environment* env, Value const& expr) {
+		Compiler compiler(thread, env, PROMISE);
 		return compiler.compile(expr);
 	}
 };

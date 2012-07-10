@@ -122,13 +122,16 @@ Compiler::Operand Compiler::compileConstant(Value const& expr, Prototype* code, 
 	} else {
 		index = i->second;
 	}
-	if(result.loc == MEMORY || result.loc == REGISTER) {
+	result = allocResult(result);
+	emit(ByteCode::constant, index, 0, result);
+	return result;
+/*	if(result.loc == SLOT || result.loc == REGISTER) {
 		emit(ByteCode::fastmov, Operand(CONSTANT, index), 0, result);
 		return result;
 	}
 	else {
 		return Operand(CONSTANT, index);
-	}
+	}*/
 }
 
 static int64_t isDotDot(String s) {
@@ -164,13 +167,28 @@ Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code, 
 	String s = SymbolStr(symbol);
 	int64_t dd = isDotDot(s);
 	
-	result = allocResult(result);
 	if(dd > 0) {
+		result = allocResult(result);
 		emit(ByteCode::dotdot, dd-1, 0, result);
 	}
 	else {
-		Operand sym = compileConstant(Character::c(s), code, Operand());
-		emit(ByteCode::get, sym, 0, result);
+		std::map<String, int64_t>::iterator i = env->m.find(s);
+		if(i != env->m.end()) {
+			Operand d = Operand(SLOT, i->second);
+			if(result.loc != INVALID && d != result) {
+				std::cout << "Not a match: " << result.toString() << " " << d.toString() << std::endl;
+				emit(ByteCode::fastmov, d, 0, result);
+				return result;
+			}
+			else {
+				return d;
+			}
+		}
+		else {
+			result = allocResult(result);
+			Operand sym = compileConstant(Character::c(s), code, Operand());
+			emit(ByteCode::get, sym, 0, result);
+		}
 	}
 	return result;
 }
@@ -207,7 +225,7 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 			p.v = call[i];
 			dotIndex = i-1;
 		} else if(isCall(call[i]) || isSymbol(call[i])) {
-			Promise::Init(p.v, NULL, Compiler::compilePromise(thread, call[i]), false);
+			Promise::Init(p.v, NULL, Compiler::compilePromise(thread, env, call[i]), false);
 		} else {
 			p.v = call[i];
 		}
@@ -406,9 +424,10 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			Operand target = compileConstant(r, code, Operand());
 			emit(ByteCode::assign2, target, 0, result);
 		} else {
-			Operand assignResult = Operand(MEMORY, SymbolStr(dest));
+			env->insert(SymbolStr(dest));
+			Operand assignResult = Operand(SLOT, env->m[SymbolStr(dest)]);
 			assignResult = compile(value, code, assignResult);
-			if(result.loc == MEMORY || result.loc == REGISTER) {
+			if(result.loc != INVALID && result != assignResult) {
 				emit(ByteCode::fastmov, assignResult, 0, result);
 			}
 			else {
@@ -430,7 +449,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			Pair p;
 			if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
 			if(!c[i].isNil()) {
-				Promise::Init(p.v, NULL, compilePromise(thread, c[i]), true);
+				Promise::Init(p.v, NULL, compilePromise(thread, env, c[i]), true);
 			}
 			else {
 				p.v = c[i];
@@ -439,7 +458,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		}
 
 		//compile the source for the body
-		Prototype* functionCode = Compiler::compileFunctionBody(thread, call[2]);
+		Prototype* functionCode = Compiler::compileFunctionBody(thread, env, call[2]);
 
 		// Populate function info
 		functionCode->parameters = parameters;
@@ -472,7 +491,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	} 
 	else if(func == Strings::forSym) 
 	{
-		Operand loop_variable = Operand(MEMORY, SymbolStr(call[1]));
+		env->insert(SymbolStr(call[1]));
+		Operand loop_variable = Operand(SLOT, env->m[SymbolStr(call[1])]);
 		Operand loop_vector = forceInRegister(compile(call[2], code, Operand()));
 		Operand loop_counter = allocRegister();	// save space for loop counter
 		Operand loop_limit = allocRegister(); // save space for the loop limit
@@ -787,15 +807,16 @@ void Compiler::dumpCode() const {
 }
 
 // generate actual code from IR as follows...
-// 	MEMORY and INTEGER operands unchanged
+// 	INTEGER operands unchanged
 //	CONSTANT operands placed in lower N registers (starting at 0)
 //	REGISTER operands placed in above those
 //	all register ops encoded with negative integer.
 //	INVALID operands just go to 0 since they will never be used
 int64_t Compiler::encodeOperand(Operand op, int64_t n) const {
-	if(op.loc == MEMORY || op.loc == INTEGER) return op.i;
-	else if(op.loc == CONSTANT) return (op.i+1);
-	else if(op.loc == REGISTER) return -(op.i);
+	if(op.loc == INTEGER) return op.i;
+	else if(op.loc == CONSTANT) return (op.i);
+	else if(op.loc == SLOT) return (op.i-n);
+	else if(op.loc == REGISTER) return op.i;
 	else return 0;
 }
 
@@ -818,7 +839,7 @@ Prototype* Compiler::compile(Value const& expr) {
 		emit(ByteCode::rets, result, 0, 0);
 		emit(ByteCode::done, 0, 0, 0);
 	}
-	int64_t n = code->constants.size();
+	int64_t n = env->s.size();
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, encodeOperand(ir[i].a, n), encodeOperand(ir[i].b, n), encodeOperand(ir[i].c, n)));
 	}

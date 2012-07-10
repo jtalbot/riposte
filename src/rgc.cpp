@@ -96,17 +96,16 @@ void Dictionary::visit() const {
 }
 
 void Environment::visit() const {
-	Dictionary::visit();
+	//Dictionary::visit();
 	VISIT(lexical);
 	VISIT(dynamic);
 	traverse(call);
 	for(uint64_t i = 0; i < dots.size(); i++) {
 		traverse(dots[i].v);
 	}
-	/*for(uint64_t i = 0; i < size; i++) {
-		if(d[i].n != Strings::NA)
-			traverse(d[i].v);
-	}*/
+	for(uint64_t i = 0; i < s.size(); i++) {
+		traverse(s[i]);
+	}
 }
 
 void Prototype::visit() const {

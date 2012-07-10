@@ -3,6 +3,7 @@
 #define _RIPOSTE_VALUE_H
 
 #include <vector>
+#include <map>
 #include <assert.h>
 #include <limits>
 
@@ -538,30 +539,81 @@ public:
 	 void visit() const;
 };
 
-class Environment : public Dictionary {
+/*
+	Environments have two pieces:
+		(1) static slots used by the constructor
+		(2) resizeable map for dynamic addition of symbols
+*/
+
+class Environment : public HeapObject {
 public:
 	Environment* lexical, *dynamic;
 	Value call;
 	PairList dots;
 	bool named;	// true if any of the dots have names	
 
+	std::map<String, int64_t> m;
+	std::vector<Value> s;
+
 	explicit Environment(int64_t initialLoad, Environment* lexical, Environment* dynamic, Value const& call) :
-			Dictionary(initialLoad), 
 			lexical(lexical), dynamic(dynamic), call(call), named(false) {}
 
 	Environment* LexicalScope() const { return lexical; }
 	Environment* DynamicScope() const { return dynamic; }
+
+	Value* find(String name, bool& success) const ALWAYS_INLINE {
+		std::map<String, int64_t>::const_iterator i = m.find(name);
+		if(i != m.end()) {
+			success = true;
+			return (Value*)&s[i->second];
+		}
+		else {
+			success = false;
+			return 0;
+		}
+	}
+
+	bool has(String name) const ALWAYS_INLINE {
+		bool success;
+		find(name, success);
+		return success;
+	}
+
+	Value const& get(String name) const ALWAYS_INLINE {
+		bool success;
+		return *find(name, success);
+	}
+
+	Value& insert(String name) ALWAYS_INLINE {
+		bool success;
+		Value* r = find(name, success);
+		if(!success) {
+			int64_t i = s.size();
+			s.push_back(Value::Nil());
+			m[name] = i;
+			r = &s[i];
+		}
+		return *r;
+	}
+
+	void remove(String name) {
+		std::map<String, int64_t>::iterator i = m.find(name);
+		if(i != m.end()) {
+			s[i->second] = Value::Nil();
+			m.erase(i);
+		}
+	}
 
 	// Look up insertion location using R <<- rules
 	// (i.e. find variable with same name in the lexical scope)
 	Value& insertRecursive(String name, Environment*& env) const ALWAYS_INLINE {
 		bool success;
 		env = (Environment*)this;
-		Pair* p = env->find(name, success);
+		Value* v = env->find(name, success);
 		while(!success && (env = env->LexicalScope())) {
-			p = env->find(name, success);
+			v = env->find(name, success);
 		}
-		return p->v;
+		return *v;
 	}
 	
 	// Look up variable using standard R lexical scoping rules

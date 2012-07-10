@@ -13,6 +13,7 @@
 #include "sse.h"
 #include "call.h"
 
+static inline Instruction const* constant_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* fastmov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -164,8 +165,7 @@ static inline Instruction const* retp_op(Thread& thread, Instruction const& inst
 static inline Instruction const* rets_op(Thread& thread, Instruction const& inst) {
 	// top-level statements can't return futures, so bind 
 	DECODE(a); FORCE(a); BIND(a);	
-	
-	REGISTER(0) = a;
+	REGISTER(-10) = a;
 	thread.pop();
 	
 	// there should always be a done_op after a rets
@@ -330,6 +330,11 @@ static inline Instruction const* assign2_op(Thread& thread, Instruction const& i
 		global = c;
 		thread.traces.LiveEnvironment(thread.state.global, global);
 	}
+	return &inst+1;
+}
+
+static inline Instruction const* constant_op(Thread& thread, Instruction const& inst) {
+	OUT(c) = CONSTANT(inst.a);
 	return &inst+1;
 }
 
@@ -830,7 +835,9 @@ void interpret(Thread& thread, Instruction const* pc) {
 	goto *(void*)(labels[pc->bc]);
 	#define LABELED_OP(name,type,...) \
 		name##_label: \
-			{ pc = name##_op(thread, *pc); goto *(void*)(labels[pc->bc]); } 
+			{ pc = name##_op(thread, *pc); \
+			  goto *(void*)(labels[pc->bc]); } 
+			  //asm("jmp *0(%0,%1,8)" : : "r" (labels), "r" ((int64_t)pc->bc)); }
 	STANDARD_BYTECODES(LABELED_OP)
 	done_label: {}
 #else

@@ -374,7 +374,8 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 	}
 	
 	for(std::set<Environment*>::const_iterator i = liveEnvironments.begin(); i != liveEnvironments.end(); ++i) {
-		for(Environment::const_iterator j = (*i)->begin(); j != (*i)->end(); ++j) {
+		_error("Not yet traversing environments");
+		/*for(Environment::const_iterator j = (*i)->begin(); j != (*i)->end(); ++j) {
 			Value const& v = j.value();
 			if(v.isFuture() && ((Future const&)v).trace() == this) {
 				nodes[((Future const&)v).ref()].liveOut = true;
@@ -384,7 +385,7 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 				o.ref = ((Future const&)v).ref();
 				outputs.push_back(o);
 			}
-		}
+		}*/
 
 		for(uint64_t j = 0; j < (*i)->dots.size(); j++) {
 			Value const& v = (*i)->dots[j].v;

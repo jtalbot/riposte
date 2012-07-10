@@ -21,6 +21,7 @@
 	_(dotslist, 	"dotslist") \
 
 #define MEMORY_ACCESS_BYTECODES(_) \
+	_(constant, 	"constant") \
 	_(mov, 		"mov") \
 	_(fastmov, 	"fastmov") \
 	_(dotdot, 	"dotdot") \
@@ -203,11 +204,11 @@
 DECLARE_ENUM(ByteCode, BYTECODES)
 
 struct Instruction {
-	int64_t a, b, c;
 	ByteCode::Enum bc;
+	int64_t a, b, c;
 
 	Instruction(ByteCode::Enum bc, int64_t a=0, int64_t b=0, int64_t c=0) :
-		a(a), b(b), c(c), bc(bc) {}
+		bc(bc), a(a), b(b), c(c) {}
 	
 	std::string regToStr(int64_t a) const {
 		//if(a <= 0) return intToStr(-a);

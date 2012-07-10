@@ -123,11 +123,12 @@ std::string stringify(State const& state, Value const& value) {
 			else
 				result = std::string("environment <") + intToHexStr((int64_t)renv.environment()) + ">";
 			result = result + "\nVariables:\n";
-			Dictionary* d = renv.environment();
+			result = result + "NYI, fix me\n";
+			/*Dictionary* d = renv.environment();
 			for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
 				result = result + "\t" + state.externStr(i.string())
 						+ ":\t" + state.stringify(i.value()) + "\n";
-			}
+			}*/
 		} break;
 		case Type::Future:
 			result = std::string("future") + intToStr(value.i);
