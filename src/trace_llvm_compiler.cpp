@@ -29,7 +29,7 @@ struct LLVMState {
     llvm::ExecutionEngine * EE;
     llvm::FunctionPassManager * FPM;
 };
-
+//inside pieces of the compiler
 
 void TraceLLVMCompiler_init(State & state) {
     LLVMState * L = state.llvmState = new (GC) LLVMState;
@@ -157,14 +157,14 @@ struct TraceLLVMCompiler {
                     else if(n.in.isInteger())
                         p = ((Integer&)n.in).v();
                     else if(n.in.isDouble())
-                        p = ((Double&)n.in).v();
+                        p = ((Double&)n.in).v();//checking for type, then declare a pointer for it
                     else
                         _error("unsupported type");
                     llvm::Type * t = getType(n.type);
                     
                     
-                    llvm::Value * vector = ConstantPointer(p, t);
-                    llvm::Value * elementAddr = B->CreateGEP(vector, loopIndexArray);
+                    llvm::Value * vector = ConstantPointer(p, t);//creates a pointer to p
+                    llvm::Value * elementAddr = B->CreateGEP(vector, loopIndexArray);//gep creates address
                      
                     values[i] = B->CreateLoad(elementAddr);
                 } break;
@@ -203,7 +203,20 @@ struct TraceLLVMCompiler {
                         default:
                             _error("unsupported type");
                             break;
+					}
+                    break;
+                case IROpCode::mul:
+                    switch(n.type) {
+                        case Type::Double:
+                            values[i] = B->CreateFMul(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        case Type::Integer:
+                            values[i] =  B->CreateMul(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        default:
+                            _error("unsupported type");
                     }
+					
                     break;
                 default:
                     _error("unsupported op");
