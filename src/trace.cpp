@@ -976,9 +976,15 @@ void Trace::Execute(Thread & thread, IRef ref) {
 void Trace::Execute(Thread & thread) {
 	Optimize(thread);
 	// if there were any live outputs
-	if(outputs.size() > 0) {
-		JIT(thread);
-		WriteOutputs(thread);
+	try {
+		if(outputs.size() > 0) {
+			JIT(thread);
+			WriteOutputs(thread);
+		}
+		Reset();
 	}
-	Reset();
+	catch(...) {
+		Reset();
+		throw;
+	}
 }

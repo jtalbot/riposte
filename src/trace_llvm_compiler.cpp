@@ -80,6 +80,7 @@ struct TraceLLVMCompiler {
     
     TraceLLVMCompiler(Thread * th, Trace * tr) 
     : L(th->state.llvmState), thread(th), trace(tr), values(tr->nodes.size(),NULL) {}
+    
     void Compile() {
         intType = llvm::Type::getInt64Ty(*L->C);
         doubleType = llvm::Type::getDoubleTy(*L->C);
