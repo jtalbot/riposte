@@ -2,9 +2,9 @@
 #include "call.h"
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset) {
-	std::cout << "\t(Executing in " << intToHexStr((int64_t)environment) << ")" << std::endl;
-	Prototype::printByteCode(prototype, thread.state);
-	
+	//std::cout << "\t(Executing in " << intToHexStr((int64_t)environment) << ")" << std::endl;
+	//Prototype::printByteCode(prototype, thread.state);
+
 	// make new stack frame
 	StackFrame& s = thread.push();
 	s.environment = environment;
@@ -12,6 +12,7 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
 	s.returnpc = returnpc;
 	s.registers += stackOffset;
 	s.registers += 10;
+	s.constants = &prototype->constants[0];
 	
 	if(s.registers+prototype->registers > thread.registers+DEFAULT_NUM_REGISTERS)
 		throw RiposteError("Register overflow");

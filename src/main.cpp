@@ -10,7 +10,8 @@
 
 #include "value.h"
 #include "parser/parser.h"
-#include "compiler.h"
+#include "interpreter.h"
+#include "jit.h"
 #include "library.h"
 
 void registerCoreFunctions(State& state);
@@ -109,7 +110,7 @@ int dostdin(State& state) {
 			Value value, result;
 			value = parsetty(state);
 			if(value.isNil()) continue;
-			Prototype* proto = Compiler::compileTopLevel(thread, state.global, value);
+			Prototype* proto = JITCompiler::compileTopLevel(thread, state.global, value);
 			//Prototype::printByteCode(proto, state);
 			result = thread.eval(proto, state.global);
 			std::cout << state.stringify(result) << std::endl;
@@ -152,7 +153,7 @@ static int dofile(const char * file, std::istream & in, State& state, bool echo)
 	if(value.isNil()) return -1;
 
 	try {
-		Prototype* proto = Compiler::compileTopLevel(state.getMainThread(), state.global, value);
+		Prototype* proto = JITCompiler::compileTopLevel(state.getMainThread(), state.global, value);
 		Value result = state.getMainThread().eval(proto, state.global);
 		//if(echo)
 			std::cout << state.stringify(result) << std::endl;

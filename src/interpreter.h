@@ -73,7 +73,7 @@ struct Prototype : public HeapObject {
 	int registers;
 	std::vector<Value> constants;
 	std::vector<CompiledCall> calls; 
-
+	void* func;
 	std::vector<Instruction> bc;
 
 	void visit() const;
@@ -83,6 +83,7 @@ struct Prototype : public HeapObject {
 
 struct StackFrame {
 	Value* registers;
+	Value const* constants;
 	Environment* environment;
 	Prototype const* prototype;
 

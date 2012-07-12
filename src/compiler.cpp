@@ -122,16 +122,16 @@ Compiler::Operand Compiler::compileConstant(Value const& expr, Prototype* code, 
 	} else {
 		index = i->second;
 	}
-	result = allocResult(result);
-	emit(ByteCode::constant, index, 0, result);
-	return result;
-/*	if(result.loc == SLOT || result.loc == REGISTER) {
+	//result = allocResult(result);
+	//emit(ByteCode::constant, index, 0, result);
+	//return result;
+	if(result.loc == SLOT || result.loc == REGISTER) {
 		emit(ByteCode::fastmov, Operand(CONSTANT, index), 0, result);
 		return result;
 	}
 	else {
 		return Operand(CONSTANT, index);
-	}*/
+	}
 }
 
 static int64_t isDotDot(String s) {
@@ -519,7 +519,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::whileSym)
 	{
 		Operand head_condition = compile(call[1], code, Operand());
-		emit(ByteCode::jc, 1, 0, kill(head_condition));
+		emit(ByteCode::jc, kill(head_condition), 1, 0);
 		loopDepth++;
 		
 		int64_t beginbody = ir.size();
@@ -529,9 +529,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand tail_condition = compile(call[1], code, Operand());
 		int64_t endbody = ir.size();
 		
-		emit(ByteCode::jc, beginbody-endbody, 1, kill(tail_condition));
+		emit(ByteCode::jc, kill(tail_condition), beginbody-endbody, 1);
 		resolveLoopExits(beginbody, endbody, tail, endbody+1);
-		ir[beginbody-1].b = endbody-beginbody+2;
+		ir[beginbody-1].c = endbody-beginbody+2;
 		loopDepth--;
 		
 		return compileConstant(Null::Singleton(), code, result);
@@ -567,7 +567,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			throw CompileError("invalid if statement");
 		
 		Operand cond = compile(call[1], code, Operand());
-		emit(ByteCode::jc, 1, 0, kill(cond));
+		emit(ByteCode::jc, kill(cond), 1, 0);
 		int64_t begin1 = ir.size(), begin2 = 0;
 		result = compile(call[2], code, result);
 		
@@ -588,10 +588,10 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		result = compileConstant(Logical::True(), code, result);
 		
 		Operand left = compile(call[1], code, Operand());
-		emit(ByteCode::jc, 0, 1, kill(left));
+		emit(ByteCode::jc, kill(left), 0, 1);
 		int64_t j1 = ir.size()-1;
 		Operand right = compile(call[2], code, Operand());
-		emit(ByteCode::jc, 2, 1, kill(right));
+		emit(ByteCode::jc, kill(right), 2, 1);
 	
 		result = compileConstant(Logical::False(), code, result);
 		ir[j1].a = (int64_t)ir.size()-j1;
@@ -601,10 +601,10 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		result = compileConstant(Logical::False(), code, result);
 		Operand left = compile(call[1], code, Operand());
-		emit(ByteCode::jc, 1, 0, kill(left));
+		emit(ByteCode::jc, kill(left), 1, 0);
 		int64_t j1 = ir.size()-1;
 		Operand right = compile(call[2], code, Operand());
-		emit(ByteCode::jc, 1, 2, kill(right));
+		emit(ByteCode::jc, kill(right), 1, 2);
 
 		result = compileConstant(Logical::True(), code, result);
 		ir[j1].b = (int64_t)ir.size()-j1;
@@ -620,9 +620,15 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 				// memory results need to be forced to handle things like:
 				// 	function(x,y) { x; y }
 				// if x is a promise, it must be forced
-				kill(placeInRegister(compile(call[i], code, Operand())));
+				if(isSymbol(call[i]))
+					kill(placeInRegister(compile(call[i], code, Operand())));
+				else
+					kill(compile(call[i], code, Operand()));
 			}
-			return compile(call[length-1], code, result);
+			if(isSymbol(call[length-1]))
+				return compile(call[length-1], code, result);
+			else
+				return placeInRegister(compile(call[length-1], code, result));
 		}
 	} 
 	else if(func == Strings::paren) 
@@ -771,9 +777,15 @@ Compiler::Operand Compiler::compileExpression(List const& values, Prototype* cod
 	}
 	else {
 		for(int64_t i = 0; i < values.length()-1; i++) {
-			kill(placeInRegister(compile(values[i], code, Operand())));
+			if(isSymbol(values[i]))
+				kill(placeInRegister(compile(values[i], code, Operand())));
+			else
+				kill(compile(values[i], code, Operand()));
 		}
-		return compile(values[values.length()-1], code, result);
+		if(isSymbol(values[values.length()-1]))
+			return placeInRegister(compile(values[values.length()-1], code, result));
+		else
+			return compile(values[values.length()-1], code, result);
 	}
 }
 
@@ -814,7 +826,7 @@ void Compiler::dumpCode() const {
 //	INVALID operands just go to 0 since they will never be used
 int64_t Compiler::encodeOperand(Operand op, int64_t n) const {
 	if(op.loc == INTEGER) return op.i;
-	else if(op.loc == CONSTANT) return (op.i);
+	else if(op.loc == CONSTANT) return (op.i+256);
 	else if(op.loc == SLOT) return (op.i-n);
 	else if(op.loc == REGISTER) return op.i;
 	else return 0;
@@ -837,7 +849,6 @@ Prototype* Compiler::compile(Value const& expr) {
 		emit(ByteCode::retp, result, 0, 0);
 	else { // TOPLEVEL
 		emit(ByteCode::rets, result, 0, 0);
-		emit(ByteCode::done, 0, 0, 0);
 	}
 	int64_t n = env->s.size();
 	for(size_t i = 0; i < ir.size(); i++) {

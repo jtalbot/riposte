@@ -105,12 +105,12 @@
 	_(signif, "signif",	RoundBinary,	PassNA(a,b,riposte_signif(thread,a,b))) \
 
 #define ORDINAL_BINARY_BYTECODES(_) \
-	_(eq, "eq",	OrdinalBinary,	PassNA(a,b,a==b?-1:0)) \
-	_(neq, "neq",	OrdinalBinary,	PassNA(a,b,a!=b?-1:0)) \
-	_(gt, "gt",	OrdinalBinary,	PassNA(a,b,gt(thread,a,b)?-1:0)) \
-	_(ge, "ge",	OrdinalBinary,	PassNA(a,b,ge(thread,a,b)?-1:0)) \
-	_(lt, "lt",	OrdinalBinary,	PassNA(a,b,lt(thread,a,b)?-1:0)) \
-	_(le, "le",	OrdinalBinary,	PassNA(a,b,le(thread,a,b)?-1:0)) \
+	_(eq, "eq",	OrdinalBinary,	PassNA(a,b,a==b?1:0)) \
+	_(neq, "neq",	OrdinalBinary,	PassNA(a,b,a!=b?1:0)) \
+	_(gt, "gt",	OrdinalBinary,	PassNA(a,b,gt(thread,a,b)?1:0)) \
+	_(ge, "ge",	OrdinalBinary,	PassNA(a,b,ge(thread,a,b)?1:0)) \
+	_(lt, "lt",	OrdinalBinary,	PassNA(a,b,lt(thread,a,b)?1:0)) \
+	_(le, "le",	OrdinalBinary,	PassNA(a,b,le(thread,a,b)?1:0)) \
 
 #define SPECIAL_MAP_BYTECODES(_) \
 	_(ifelse, "ifelse", IfElse) \

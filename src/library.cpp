@@ -1,8 +1,9 @@
 
 #include "library.h"
 #include "parser/parser.h"
-#include "compiler.h"
+#include "jit.h"
 #include "value.h"
+#include "interpreter.h"
 
 #include <iostream>
 #include <dirent.h>
@@ -23,7 +24,7 @@ void sourceFile(Thread& thread, std::string name, Environment* env) {
 		FILE* trace = NULL;//fopen((name+"_trace").c_str(), "w");
 		parser.execute(code.c_str(), code.length(), true, value, trace);
 		//fclose(trace);	
-		thread.eval(Compiler::compileTopLevel(thread, env, value), env);
+		thread.eval(JITCompiler::compileTopLevel(thread, env, value), env);
 	} catch(RiposteError& error) {
 		_warning(thread, "unable to load library " + name + ": " + error.what().c_str());
 	} catch(RuntimeError& error) {

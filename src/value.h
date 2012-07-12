@@ -26,8 +26,8 @@ struct Value {
 		};
 	};
 	union {
-		void* p;
 		int64_t i;
+		void* p;
 		double d;
 		char c;
 		String s;
@@ -316,12 +316,12 @@ VECTOR_IMPL(Logical, char, false)
 	const static char TrueElement;
 	const static char FalseElement;
 
-	static Logical const& True() { static Logical t = Logical::c(-1); return t; }
+	static Logical const& True() { static Logical t = Logical::c(1); return t; }
 	static Logical const& False() { static Logical f = Logical::c(0); return f; } 
 	
-	static bool isTrue(char c) { return c == -1; }
+	static bool isTrue(char c) { return c == 1; }
 	static bool isFalse(char c) { return c == 0; }
-	static bool isNA(char c) { return c == 1; }
+	static bool isNA(char c) { return c == -1; }
 	static bool isCheckedNA(char c) { return isNA(c); }
 	static bool isNaN(char c) { return false; }
 	static bool isFinite(char c) { return false; }
