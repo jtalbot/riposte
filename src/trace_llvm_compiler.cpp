@@ -242,10 +242,11 @@ struct TraceLLVMCompiler {
                             _error("unsupported type");
                     }					
                     break;
-				case IROpCode::cast:
+		    case IROpCode::cast:
+			{
 					_error("cast not yet implemented");
 					break;
-					Type::Enum output = n.type;
+			/*		Type::Enum output = n.type;
 					Type::Enum input = trace->nodes[n.unary.a].type;
 
 					
@@ -278,7 +279,7 @@ struct TraceLLVMCompiler {
 							 _error("unsupported type");
 					 }	
 					
-					
+			*/		
 					/*
                     switch(n.type) {
                         case Type::Double:
@@ -290,7 +291,7 @@ struct TraceLLVMCompiler {
                         default:
                             _error("unsupported type");
                     }*/					
-                    break;
+                    } break;
                 default:
                     _error("unsupported op");
                     break;
