@@ -216,8 +216,80 @@ struct TraceLLVMCompiler {
                             break;
                         default:
                             _error("unsupported type");
-                    }
+                    }					
+                    break;
+				case IROpCode::div:
+                    switch(n.type) {
+                        case Type::Double:
+                            values[i] = B->CreateFDiv(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        case Type::Integer:
+                            values[i] =  B->CreateSDiv(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        default:
+                            _error("unsupported type");
+                    }					
+                    break;
+				case IROpCode::mod:
+                    switch(n.type) {
+                        case Type::Double:
+                            values[i] = B->CreateFRem(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        case Type::Integer:
+                            values[i] =  B->CreateSRem(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        default:
+                            _error("unsupported type");
+                    }					
+                    break;
+				case IROpCode::cast:
+					_error("cast not yet implemented");
+					break;
+					Type::Enum output = n.type;
+					Type::Enum input = trace->nodes[n.unary.a].type;
+
 					
+					 switch(n.type) {
+						 case Type::Double:
+							 // convert input to double
+							 break;
+						 case Type::Integer:
+							 // convert input to integer
+							 break;
+						 case Type::Logical:
+							 switch(input) {
+								 case Type::Double:
+									 // check if equal to 0
+									 B->CreateFCmpONE(values[trace->nodes[n.unary.a]], 0.0);
+									 break;
+								 case Type::Integer:
+									 // convert input to integer
+									 break;
+								 case Type::Logical:
+									 // convert input to logical (pass thru?)
+									 break;
+									 
+								 default:
+									 _error("unsupported type");
+							 }
+							 break;
+							 
+					 default:
+							 _error("unsupported type");
+					 }	
+					
+					
+					/*
+                    switch(n.type) {
+                        case Type::Double:
+                            values[i] = B->CreateFRem(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        case Type::Integer:
+                            values[i] =  B->CreateSRem(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        default:
+                            _error("unsupported type");
+                    }*/					
                     break;
                 default:
                     _error("unsupported op");
