@@ -397,20 +397,25 @@ public:
 	Code* jit(Value const& expr);
 };
 
-#define EMIT_1_0(fn, A)	\
-	builder.CreateCall2( jitContext.mod->getFunction(std::string(fn)+"_op"), thread_var, A.v );
+#define CALL0(fn) \
+	builder.CreateCall( jitContext.mod->getFunction(std::string(fn)+"_op"), \
+		thread_var );
 
-#define EMIT_1_1(fn, A, C)	\
-	builder.CreateCall3( jitContext.mod->getFunction(std::string(fn)+"_op"), thread_var, A.v, C.v);
+#define CALL1(fn, A) \
+	builder.CreateCall2( jitContext.mod->getFunction(std::string(fn)+"_op"), \
+		thread_var, A );
 
-#define EMIT_121(fn, A, B, C, D)	\
-	builder.CreateCall5( jitContext.mod->getFunction(std::string(fn)+"_op"), thread_var, A.v, createInt64(B), createInt64(C), D.v);
+#define CALL2(fn, A, B) \
+	builder.CreateCall3( jitContext.mod->getFunction(std::string(fn)+"_op"), \
+		thread_var, A, B );
 
-#define EMIT_2_1(fn, A, B, C)	\
-	builder.CreateCall4( jitContext.mod->getFunction(std::string(fn)+"_op"), thread_var, A.v, B.v, C.v);
+#define CALL3(fn, A, B, C) \
+	builder.CreateCall4( jitContext.mod->getFunction(std::string(fn)+"_op"), \
+		thread_var, A, B, C );
 
-#define EMIT_3_1(fn, A, B, C, D)	\
-	builder.CreateCall5( jitContext.mod->getFunction(std::string(fn)+"_op"), thread_var, A.v, B.v, C.v, D.v);
+#define CALL4(fn, A, B, C, D) \
+	builder.CreateCall5( jitContext.mod->getFunction(std::string(fn)+"_op"), \
+		thread_var, A, B, C, D );
 
 llvm::Value* JIT::createEntryBlockAlloca(llvm::Type* type) {
 	llvm::IRBuilder<> tmp(&function->getEntryBlock(), 
@@ -464,7 +469,7 @@ JIT::Operand JIT::store(Operand value, Operand dest) {
 
 JIT::Operand JIT::force(Operand r) {
 	if(r.loc == SYMBOL) {
-		EMIT_1_0("force", r);
+		CALL1("force", r.v);
 		r.loc = SLOT;
 	}
 	return r;
@@ -530,7 +535,7 @@ JIT::Operand JIT::compileSymbol(Character const& symbol, Operand dest) {
 		}
 		else {
 			dest = ref(dest);
-			//c = EMIT_1_0("get", compileConstant(Character::c(s)));
+			c = CALL2("get", createInt64((int64_t)s), dest.v);
 			return dest;
 		}
 	}
@@ -595,7 +600,7 @@ JIT::Operand JIT::compileUnary(char const* fn, List const& call, Operand dest) {
 	Operand a = compile(call[1]);
 	kill(a);
 	dest = ref(dest);
-	EMIT_1_1(fn, a, dest)
+	CALL2(fn, a.v, dest.v)
 	return dest;
 }
 
@@ -604,7 +609,7 @@ JIT::Operand JIT::compileBinary(char const* fn, List const& call, Operand dest) 
 	Operand b = compile(call[2]);
 	kill(b); kill(a);
 	dest = ref(dest);
-	EMIT_2_1(fn, a, b, dest)
+	CALL3(fn, a.v, b.v, dest.v)
 	return dest;
 }
 
@@ -614,7 +619,7 @@ JIT::Operand JIT::compileTernary(char const* fn, List const& call, Operand dest)
 	Operand c = compile(call[3]);
 	kill(c); kill(b); kill(a);
 	dest = ref(dest);
-	EMIT_3_1(fn, a, b, c, dest)
+	CALL4(fn, a.v, b.v, c.v, dest.v)
 	return dest;
 }
 
@@ -623,14 +628,14 @@ JIT::Operand JIT::compileWhile(List const& call, Operand dest) {
 	llvm::BasicBlock* end =  llvm::BasicBlock::Create(llvm::getGlobalContext(), "while_end", function);
 
 	Operand a = kill(compile(call[1]));
-	llvm::Value* condition = EMIT_1_0("jc", a);
+	llvm::Value* condition = CALL1("jc", a.v);
 	llvm::Value* br = builder.CreateICmpEQ(condition, createInt64(1));
 	builder.CreateCondBr(br, body, end);
 
 	builder.SetInsertPoint(body);
 	kill(compile(call[2]));
 	a = kill(compile(call[1]));
-	condition = EMIT_1_0("jc", a);
+	condition = CALL1("jc", a.v);
 	br = builder.CreateICmpEQ(condition, createInt64(1));
 	builder.CreateCondBr(br, body, end);
 	
@@ -669,7 +674,8 @@ JIT::Operand JIT::compileFunctionCall(List const& call, Character const& names, 
 	kill(function);
 	
 	dest = ref(dest);
-	EMIT_121("call", function, calls.size()-1, stackDepth, dest);
+	CALL4("call", function.v, 
+		createInt64(calls.size()-1), createInt64(stackDepth), dest.v);
 	return dest;
 }
 
@@ -725,7 +731,7 @@ JIT::Operand JIT::compileFunction(List const& call, Operand dest) {
 	Function::Init(function, p, 0);
 	Operand funcOp = kill(compileConstant(function, Operand()));
 	dest = ref(dest);
-	EMIT_1_1("function", funcOp, dest);
+	CALL2("function", funcOp.v, dest.v);
 	return dest;
 }
 
@@ -795,7 +801,7 @@ JIT::Operand JIT::compileBrace(List const& call, Operand dest) {
 
 JIT::Operand JIT::compileDotslist(List const& call, Operand dest) {
 	dest = ref(dest);
-	EMIT_1_0("dotslist", dest)
+	CALL1("dotslist", dest.v)
 	return dest;
 }
 
@@ -993,7 +999,7 @@ Code* JIT::jit(Value const& expr) {
 	
 	result = force(result);
 	if(scope == TOPLEVEL && result.loc != CONSTANT) {
-		EMIT_1_0("bind", result);
+		CALL1("bind", result.v);
 	} 
 
 	builder.CreateRet(builder.CreateLoad(result.v));
@@ -1027,11 +1033,11 @@ Code* JIT::jit(Value const& expr) {
 // on the stack to start with.
 
 Code* JITCompiler::compile(Thread& thread, Value const& expr) { 
-	return compile(thread, expr, new StackLayout());
+	return compile(thread, expr, thread.frame.environment);
 }
 
-Code* JITCompiler::compile(Thread& thread, Value const& expr, StackLayout* layout) { 
-	JIT jit(thread, layout, JIT::TOPLEVEL);
+Code* JITCompiler::compile(Thread& thread, Value const& expr, Environment* env) { 
+	JIT jit(thread, (StackLayout*)env->layout, JIT::TOPLEVEL);
 	return jit.jit(expr);
 }
         

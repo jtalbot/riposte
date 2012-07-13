@@ -690,7 +690,7 @@ void mapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& 
 				a = e;
 			p->calls[0].arguments[j].v = a;
 		}
-		l.out[i] = thread.eval(p, thread.frame.environment);
+		l.out[i] = thread.eval(p, thread.frame.environment, thread.frame.environment);
 	}
 	//return 0;
 }
@@ -783,7 +783,7 @@ void source(Thread& thread, Value const* args, Value& result) {
 	Value value;
 	parser.execute(code.c_str(), code.length(), true, value);	
 	
-	result = thread.eval(JITCompiler::compile(thread, value), thread.frame.environment);
+	result = thread.eval(JITCompiler::compile(thread, value), thread.frame.environment, 0);
 }
 
 void environment(Thread& thread, Value const* args, Value& result) {

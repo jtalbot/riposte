@@ -130,19 +130,19 @@ public:
 	Value call;
 	bool dotsNamed; 	// true if any of the dots have names	
 
-	StackLayout* t;
+	StackLayout const* layout;
 	Value* dots;
 	Value* slots;
 
-	explicit Environment(StackLayout* t, Environment* lexical, Environment* dynamic, Value const& call) :
-			lexical(lexical), dynamic(dynamic), call(call), dotsNamed(false), t(t) {}
+	explicit Environment(StackLayout* layout, Environment* lexical, Environment* dynamic, Value const& call) :
+			lexical(lexical), dynamic(dynamic), call(call), dotsNamed(false), layout(layout) {}
 
 	Environment* LexicalScope() const { return lexical; }
 	Environment* DynamicScope() const { return dynamic; }
 
 	Value* find(String name, bool& success) const ALWAYS_INLINE {
-		std::map<String, size_t>::const_iterator i = t->m.find(name);
-		if(i != t->m.end()) {
+		std::map<String, size_t>::const_iterator i = layout->m.find(name);
+		if(i != layout->m.end()) {
 			success = true;
 			return (Value*)&slots[i->second];
 		}
@@ -178,15 +178,15 @@ public:
 
 	void remove(String name) {
 		_error("Environment remove NYI");
-		std::map<String, size_t>::iterator i = t->m.find(name);
-		if(i != t->m.end()) {
+		std::map<String, size_t>::const_iterator i = layout->m.find(name);
+		if(i != layout->m.end()) {
 			slots[i->second] = Value::Nil();
-			t->m.erase(i);
 		}
 	}
 
 	// Look up insertion location using R <<- rules
 	// (i.e. find variable with same name in the lexical scope)
+	// Note: doesn't actually insert anything.
 	Value& insertRecursive(String name, Environment*& env) const ALWAYS_INLINE {
 		bool success;
 		env = (Environment*)this;
@@ -342,11 +342,11 @@ public:
 		return 0;
 	}
 
-	void beginEval(Environment* environment);
+	Environment* beginEval(Environment* lexicalScope, Environment* dynamicScope);
 	Value continueEval(Code const* code);
-	void endEval();
+	Environment* endEval(bool liveOut);
 
-	Value eval(Code const* code, Environment* environment); 
+	Value eval(Code const* code, Environment* lexicalScope, Environment* dynamicScope); 
 	
 	void doall(Task::HeaderPtr header, Task::FunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment=1, uint64_t ppt = 1) {
 		if(a < b && func != 0) {
@@ -462,10 +462,7 @@ public:
 
 inline State::State(uint64_t threads, int64_t argc, char** argv) 
 	: verbose(false), jitEnabled(true), done(0) {
-	Environment* base = new Environment(new StackLayout(),0,0,Null::Singleton());
-	this->global = new Environment(new StackLayout(),base,0,Null::Singleton());
-	path.push_back(base);
-
+	
 	arguments = Character(argc);
 	for(int64_t i = 0; i < argc; i++) {
 		arguments[i] = internStr(std::string(argv[i]));
@@ -486,6 +483,11 @@ inline State::State(uint64_t threads, int64_t argc, char** argv)
 	}
 
 	interpreter_init(getMainThread());
+	
+	Environment* base = new Environment(new StackLayout(),0,0,Null::Singleton());
+	path.push_back(base);
+	
+	this->global = getMainThread().beginEval(base, 0);
 }
 
 #endif

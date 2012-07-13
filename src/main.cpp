@@ -105,14 +105,12 @@ int dostdin(State& state) {
 
 	Thread& thread = state.getMainThread();
 
-	thread.beginEval(state.global);
-	StackLayout* stackLayout = new StackLayout();
 	while(!die) {
 		try { 
 			Value value, result;
 			value = parsetty(state);
 			if(value.isNil()) continue;
-			Code* code = JITCompiler::compile(thread, value, stackLayout);
+			Code* code = JITCompiler::compile(thread, value);
 			result = thread.continueEval(code);
 			std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) { 
@@ -130,7 +128,6 @@ int dostdin(State& state) {
 		}
 		thread.warnings.clear();
 	}
-	thread.endEval();
 	return rc;
 }
 
@@ -156,7 +153,7 @@ static int dofile(const char * file, std::istream & in, State& state, bool echo)
 
 	try {
 		Code* code = JITCompiler::compile(state.getMainThread(), value);
-		Value result = state.getMainThread().eval(code, state.global);
+		Value result = state.getMainThread().continueEval(code);
 		//if(echo)
 			std::cout << state.stringify(result) << std::endl;
 	} catch(RiposteError& error) {

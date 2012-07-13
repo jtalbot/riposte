@@ -16,20 +16,32 @@ void State::interpreter_init(Thread& thread) {
 	// nothing for now
 }
 
-void Thread::beginEval(Environment* environment) {
+Environment* Thread::beginEval(Environment* lexicalScope, Environment* dynamicScope) {
+	
 	// Create a stack frame for interactive evaluation...
 	push();
-	frame.environment = environment;
-	// Point env's slots to stack
+	frame.dots = frame.reservedTo;
 	frame.slots = frame.reservedTo;
-	environment->slots = frame.reservedTo;
+	frame.registers = frame.reservedTo;
+	frame.calls = 0;
+
+	Environment* env = 
+		new Environment(new StackLayout(), lexicalScope, dynamicScope, Null::Singleton());
+	env->dots = frame.dots;
+	env->slots = frame.slots;
+	frame.environment = env;
+	return env;
 }
 
 Value Thread::continueEval(Code const* code) {
-	// TODO: merge with buildStackFrame?
-	// reserve stack space for registers after slots
-	frame.registers = frame.slots + code->layout->m.size();
-	// update reserved stack size
+	assert(frame.environment->layout == code->layout);
+
+	// move registers up to make room for more slots
+	Value* newregisters = frame.slots + code->layout->m.size();
+	memset(frame.registers, 0, (newregisters-frame.registers)*sizeof(Value));
+	frame.registers = newregisters;
+
+	// update reserved stack size with room for registers
 	frame.reservedTo = frame.registers + code->registers;
 	frame.calls = &code->calls[0];
 	
@@ -39,15 +51,22 @@ Value Thread::continueEval(Code const* code) {
 	return result;
 }
 
-void Thread::endEval() {
+Environment* Thread::endEval(bool liveOut) {
+	Environment* result = 0;
+	if(liveOut) {
+		// copy Environment off the stack and put in result
+	}
+
 	// pop stack frame
 	pop();
+
+	return result;
 }
 
-Value Thread::eval(Code const* code, Environment* environment) {
-	beginEval(environment);
+Value Thread::eval(Code const* code, Environment* lexicalScope, Environment* dynamicScope) {
+	beginEval(lexicalScope, dynamicScope);
 	Value result = continueEval(code);
-	endEval();
+	endEval(false);
 	return result;
 }
 

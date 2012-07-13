@@ -12,7 +12,7 @@ struct StackLayout;
 struct JITCompiler {
 
 	static Code* compile(Thread& thread, Value const& expr);
-	static Code* compile(Thread& thread, Value const& expr, StackLayout* layout);
+	static Code* compile(Thread& thread, Value const& expr, Environment* env);
 
 };
 

@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 #include <dlfcn.h>
 
-void sourceFile(Thread& thread, std::string name, Environment* env) {
+void sourceFile(Thread& thread, std::string name) {
 	//std::cout << "Sourcing " << name << std::endl;
 	try {
 		std::ifstream t(name.c_str());
@@ -24,7 +24,7 @@ void sourceFile(Thread& thread, std::string name, Environment* env) {
 		FILE* trace = NULL;//fopen((name+"_trace").c_str(), "w");
 		parser.execute(code.c_str(), code.length(), true, value, trace);
 		//fclose(trace);	
-		thread.eval(JITCompiler::compile(thread, value), env);
+		thread.continueEval(JITCompiler::compile(thread, value));
 	} catch(RiposteError& error) {
 		_warning(thread, "unable to load library " + name + ": " + error.what().c_str());
 	} catch(RuntimeError& error) {
@@ -34,7 +34,7 @@ void sourceFile(Thread& thread, std::string name, Environment* env) {
 	}
 }
 
-void openDynamic(Thread& thread, std::string path, Environment* env) {
+void openDynamic(Thread& thread, std::string path) {
 	//std::string p = std::string("/Users/jtalbot/riposte/")+path;
 	//void* lib = dlopen(p.c_str(), RTLD_LAZY);
 	//if(lib == NULL) {
@@ -44,7 +44,7 @@ void openDynamic(Thread& thread, std::string path, Environment* env) {
 }
 
 void loadLibrary(Thread& thread, std::string path, std::string name) {
-	Environment* env = new Environment(new StackLayout(),thread.state.path.back(),0,Null::Singleton());
+	thread.beginEval(thread.state.path.back(), 0);
 	
 	std::string p = path + "/" + name + ("/R/");
 
@@ -60,7 +60,7 @@ void loadLibrary(Thread& thread, std::string path, std::string name) {
 				std::string name = file->d_name;
 				if(!S_ISDIR(info.st_mode) && 
 						(name.length()>2 && name.substr(name.length()-2,2)==".R")) {
-					sourceFile(thread, p+name, env);
+					sourceFile(thread, p+name);
 				}
 			}
 		}
@@ -77,13 +77,14 @@ void loadLibrary(Thread& thread, std::string path, std::string name) {
 				std::string name = file->d_name;
 				if(!S_ISDIR(info.st_mode) && 
 						(name.length()>2 && name.substr(name.length()-3,3)==".so")) {
-					openDynamic(thread, p+name, env);
+					openDynamic(thread, p+name);
 				}
 			}
 		}
 		closedir(dir);
 	}
-	
+
+	Environment* env = thread.endEval(true);	
 	thread.state.path.push_back(env);
 	thread.state.global->lexical = env;
 }
