@@ -102,6 +102,7 @@ typedef std::vector<Pair> PairList;
 //
 class State;
 class Thread;
+struct Code;
 struct Prototype;
 class Environment;
 struct Dictionary;
@@ -113,16 +114,16 @@ class Trace;
 struct Promise : public Value {
 	enum PromiseType {
 		NIL = 0,
-		PROTOTYPE = 1,
-		PROTOTYPE_DEFAULT = 2,
+		CODE = 1,
+		CODE_DEFAULT = 2,
 		DOTDOT = 3,
 		DOTDOT_DEFAULT = 4
 	};
 	static const Type::Enum ValueType = Type::Promise;
-	static Promise& Init(Value& v, Environment* env, Prototype* proto, bool isDefault) {
-		Value::Init(v, Type::Promise, isDefault ? PROTOTYPE_DEFAULT : PROTOTYPE);
+	static Promise& Init(Value& v, Environment* env, Code* code, bool isDefault) {
+		Value::Init(v, Type::Promise, isDefault ? CODE_DEFAULT : CODE);
 		v.header += (((uint64_t)env) << 16);
-		v.p = proto;
+		v.p = code;
 		return (Promise&)v;
 	}
 	static Promise& Init(Value& v, Environment* env, uint64_t dotindex, bool isDefault) {
@@ -133,10 +134,10 @@ struct Promise : public Value {
 	}
 
 	bool isDefault() const { 
-		return packed() == PROTOTYPE_DEFAULT || packed() == DOTDOT_DEFAULT; 
+		return packed() == CODE_DEFAULT || packed() == DOTDOT_DEFAULT; 
 	}
-	bool isPrototype() const {
-		return packed() == PROTOTYPE || packed() == PROTOTYPE_DEFAULT;
+	bool isCode() const {
+		return packed() == CODE || packed() == CODE_DEFAULT;
 	}
 	bool isDotdot() const {
 		return packed() == DOTDOT || packed() == DOTDOT_DEFAULT;
@@ -144,8 +145,8 @@ struct Promise : public Value {
 	Environment* environment() const { 
 		return (Environment*)(((uint64_t)header) >> 16); 
 	}
-	Prototype* prototype() const { 
-		return (Prototype*)p; 
+	Code* code() const { 
+		return (Code*)p; 
 	}
 	uint64_t dotIndex() const {
 		return i;
@@ -539,107 +540,5 @@ public:
 	 void visit() const;
 };
 
-/*
-	Environments have two pieces:
-		(1) static slots used by the constructor
-		(2) resizeable map for dynamic addition of symbols
-*/
-
-class Environment : public HeapObject {
-public:
-	Environment* lexical, *dynamic;
-	Value call;
-	PairList dots;
-	bool named;	// true if any of the dots have names	
-
-	std::map<String, int64_t> m;
-	std::vector<Value> s;
-
-	explicit Environment(int64_t initialLoad, Environment* lexical, Environment* dynamic, Value const& call) :
-			lexical(lexical), dynamic(dynamic), call(call), named(false) {}
-
-	Environment* LexicalScope() const { return lexical; }
-	Environment* DynamicScope() const { return dynamic; }
-
-	Value* find(String name, bool& success) const ALWAYS_INLINE {
-		std::map<String, int64_t>::const_iterator i = m.find(name);
-		if(i != m.end()) {
-			success = true;
-			return (Value*)&s[i->second];
-		}
-		else {
-			success = false;
-			return 0;
-		}
-	}
-
-	bool has(String name) const ALWAYS_INLINE {
-		bool success;
-		find(name, success);
-		return success;
-	}
-
-	Value const& get(String name) const ALWAYS_INLINE {
-		bool success;
-		return *find(name, success);
-	}
-
-	Value& insert(String name) ALWAYS_INLINE {
-		bool success;
-		Value* r = find(name, success);
-		if(!success) {
-			int64_t i = s.size();
-			s.push_back(Value::Nil());
-			m[name] = i;
-			r = &s[i];
-		}
-		return *r;
-	}
-
-	void remove(String name) {
-		std::map<String, int64_t>::iterator i = m.find(name);
-		if(i != m.end()) {
-			s[i->second] = Value::Nil();
-			m.erase(i);
-		}
-	}
-
-	// Look up insertion location using R <<- rules
-	// (i.e. find variable with same name in the lexical scope)
-	Value& insertRecursive(String name, Environment*& env) const ALWAYS_INLINE {
-		bool success;
-		env = (Environment*)this;
-		Value* v = env->find(name, success);
-		while(!success && (env = env->LexicalScope())) {
-			v = env->find(name, success);
-		}
-		return *v;
-	}
-	
-	// Look up variable using standard R lexical scoping rules
-	// Should be same as insertRecursive, but with extra constness
-	Value const& getRecursive(String name, Environment*& env) const ALWAYS_INLINE {
-		return insertRecursive(name, env);
-	}
-
-	struct Pointer {
-		Environment* env;
-		String name;
-	};
-
-	Pointer makePointer(String name) {
-		return (Pointer) { this, name };
-	}
-
-	static Value const& getPointer(Pointer const& p) {
-		return p.env->get(p.name);
-	}
-
-	static void assignPointer(Pointer const& p, Value const& value) {
-		p.env->insert(p.name) = value;
-	}
-	
-	void visit() const;
-};
-
 #endif
+

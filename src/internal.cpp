@@ -1,6 +1,6 @@
 
 #include "internal.h"
-#include "compiler.h"
+#include "jit.h"
 #include "parser/parser.h"
 #include "library.h"
 #include "coerce.h"
@@ -654,9 +654,10 @@ void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& 
 }
 
 void eval_fn(Thread& thread, Value const* args, Value& result) {
-	result = thread.eval(Compiler::compilePromise(thread, 
-			Cast<REnvironment>(args[1]).environment(), args[0]), 
-			Cast<REnvironment>(args[1]).environment());
+	_error("eval NYI");
+	//result = thread.eval(Compiler::compilePromise(thread, 
+	//		Cast<REnvironment>(args[1]).environment(), args[0]), 
+	//		Cast<REnvironment>(args[1]).environment());
 }
 
 struct mapplyargs {
@@ -671,13 +672,13 @@ void* mapplyheader(void* args, uint64_t start, uint64_t end, Thread& thread) {
 	apply[0] = l.func;
 	for(int64_t i = 0; i < l.in.length(); i++)
 		apply[i+1] = Value::Nil();
-	Prototype* p = Compiler::compileTopLevel(thread, thread.frame.environment, CreateCall(apply));
+	Code* p = JITCompiler::compile(thread, CreateCall(apply));
 	return p;
 }
 
 void mapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& thread) {
 	mapplyargs& l = *(mapplyargs*)args;
-	Prototype* p = (Prototype*) header;
+	Code* p = (Code*) header;
 	for( size_t i=start; i!=end; ++i ) {
 		for(int64_t j=0; j < l.in.length(); j++) {
 			Value e;
@@ -689,7 +690,7 @@ void mapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& 
 				a = e;
 			p->calls[0].arguments[j].v = a;
 		}
-		l.out[i] = thread.eval(p);
+		l.out[i] = thread.eval(p, thread.frame.environment);
 	}
 	//return 0;
 }
@@ -782,7 +783,7 @@ void source(Thread& thread, Value const* args, Value& result) {
 	Value value;
 	parser.execute(code.c_str(), code.length(), true, value);	
 	
-	result = thread.eval(Compiler::compileTopLevel(thread, thread.frame.environment, value));
+	result = thread.eval(JITCompiler::compile(thread, value), thread.frame.environment);
 }
 
 void environment(Thread& thread, Value const* args, Value& result) {
@@ -795,7 +796,7 @@ void environment(Thread& thread, Value const* args, Value& result) {
 }
 
 void newenv(Thread& thread, Value const* args, Value& result) {
-	REnvironment::Init(result, new Environment(1,0,0,Null::Singleton()));
+	REnvironment::Init(result, new Environment(new StackLayout(),0,0,Null::Singleton()));
 }
 
 // TODO: parent.frame and sys.call need to ignore frames for promises, etc. We may need

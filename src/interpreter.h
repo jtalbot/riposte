@@ -49,17 +49,46 @@ public:
 	}
 };
 
-
-struct CompiledCall {
+struct CallSite {
 	List call;
 
 	PairList arguments;
 	int64_t argumentsSize;
 	int64_t dotIndex;
-	bool named;
+	bool hasNames;
+	bool hasDots;
+
+	explicit CallSite(
+		List const& call, 
+		PairList arguments, 
+		int64_t dotIndex, 
+		bool hasNames,
+		bool hasDots) 
+		: call(call)
+		, arguments(arguments)
+		, argumentsSize(arguments.size())
+		, dotIndex(dotIndex)
+		, hasNames(hasNames) 
+		, hasDots(hasDots) {}
+};
+
+struct StackLayout {
+	std::map<String, size_t> m;
+	void staticAdd(String s) {
+		if(m.find(s) == m.end()) {
+			size_t i = m.size();
+			m[s] = i;
+		}
+	} 
+};
+
+struct Code {
+	typedef Value (*Ptr)(Thread* thread);
+	Ptr ptr;
+	size_t registers;
+	StackLayout* layout;
 	
-	explicit CompiledCall(List const& call, PairList arguments, int64_t dotIndex, bool named) 
-		: call(call), arguments(arguments), argumentsSize(arguments.size()), dotIndex(dotIndex), named(named) {}
+	std::vector<CallSite> calls;
 };
 
 struct Prototype : public HeapObject {
@@ -69,28 +98,22 @@ struct Prototype : public HeapObject {
 	PairList parameters;
 	int64_t parametersSize;
 	int dotIndex;
+	bool hasDots;
 
-	int registers;
-	std::vector<Value> constants;
-	std::vector<CompiledCall> calls; 
-	void* func;
-	std::vector<Instruction> bc;
+	Code const* code;
 
 	void visit() const;
 
-	static void printByteCode(Prototype const* prototype, State const& state); 
+	//static void printByteCode(Prototype const* prototype, State const& state); 
 };
 
 struct StackFrame {
-	Value* registers;
-	Value const* constants;
+	Value* dots;		// dots start here
+	Value* slots;		// slots start here
+	Value* registers;	// registers start here
+	Value* reservedTo;	// end of registers
 	Environment* environment;
-	Prototype const* prototype;
-
-	Instruction const* returnpc;
-	
-	int64_t dest;
-	Environment* env;
+	CallSite const* calls;
 };
 
 struct InternalFunction {
@@ -99,6 +122,92 @@ struct InternalFunction {
 
 	Ptr ptr;
 	int64_t params;
+};
+
+class Environment : public HeapObject {
+public:
+	Environment* lexical, *dynamic;
+	Value call;
+	bool dotsNamed; 	// true if any of the dots have names	
+
+	StackLayout* t;
+	Value* dots;
+	Value* slots;
+
+	explicit Environment(StackLayout* t, Environment* lexical, Environment* dynamic, Value const& call) :
+			lexical(lexical), dynamic(dynamic), call(call), dotsNamed(false), t(t) {}
+
+	Environment* LexicalScope() const { return lexical; }
+	Environment* DynamicScope() const { return dynamic; }
+
+	Value* find(String name, bool& success) const ALWAYS_INLINE {
+		std::map<String, size_t>::const_iterator i = t->m.find(name);
+		if(i != t->m.end()) {
+			success = true;
+			return (Value*)&slots[i->second];
+		}
+		else {
+			success = false;
+			return 0;
+		}
+	}
+
+	bool has(String name) const ALWAYS_INLINE {
+		bool success;
+		find(name, success);
+		return success;
+	}
+
+	Value const& get(String name) const ALWAYS_INLINE {
+		bool success;
+		return *find(name, success);
+	}
+
+	Value& insert(String name) ALWAYS_INLINE {
+		bool success;
+		Value* r = find(name, success);
+		/*if(!success) {
+			int64_t i = s.size();
+			s.push_back(Value::Nil());
+			t->m[name] = i;
+			r = &s[i];
+		}*/
+		_error("Environment insert NYI");
+		return *r;
+	}
+
+	void remove(String name) {
+		_error("Environment remove NYI");
+		std::map<String, size_t>::iterator i = t->m.find(name);
+		if(i != t->m.end()) {
+			slots[i->second] = Value::Nil();
+			t->m.erase(i);
+		}
+	}
+
+	// Look up insertion location using R <<- rules
+	// (i.e. find variable with same name in the lexical scope)
+	Value& insertRecursive(String name, Environment*& env) const ALWAYS_INLINE {
+		bool success;
+		env = (Environment*)this;
+		Value* v = env->find(name, success);
+		while(!success && (env = env->LexicalScope())) {
+			v = env->find(name, success);
+		}
+		return *v;
+	}
+	
+	// Look up variable using standard R lexical scoping rules
+	// Should be same as insertRecursive, but with extra constness
+	Value const& getRecursive(String name, Environment*& env) const ALWAYS_INLINE {
+		return insertRecursive(name, env);
+	}
+
+	void visit() const;
+
+	size_t numDots() const {
+		return (slots-dots)>>1;
+	}
 };
 
 #define DEFAULT_NUM_REGISTERS 10000
@@ -233,8 +342,11 @@ public:
 		return 0;
 	}
 
-	Value eval(Prototype const* prototype, Environment* environment); 
-	Value eval(Prototype const* prototype);
+	void beginEval(Environment* environment);
+	Value continueEval(Code const* code);
+	void endEval();
+
+	Value eval(Code const* code, Environment* environment); 
 	
 	void doall(Task::HeaderPtr header, Task::FunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment=1, uint64_t ppt = 1) {
 		if(a < b && func != 0) {
@@ -350,8 +462,8 @@ public:
 
 inline State::State(uint64_t threads, int64_t argc, char** argv) 
 	: verbose(false), jitEnabled(true), done(0) {
-	Environment* base = new Environment(1,0,0,Null::Singleton());
-	this->global = new Environment(1,base,0,Null::Singleton());
+	Environment* base = new Environment(new StackLayout(),0,0,Null::Singleton());
+	this->global = new Environment(new StackLayout(),base,0,Null::Singleton());
 	path.push_back(base);
 
 	arguments = Character(argc);

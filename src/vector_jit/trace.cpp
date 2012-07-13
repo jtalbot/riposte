@@ -75,7 +75,7 @@ std::string Trace::toString(Thread & thread) {
 					case Trace::Output::REG:
 						out << "r[" << o.reg << "] "; break;
 					case Trace::Output::MEMORY:
-						out << thread.externStr(o.pointer.name) << " "; break;
+						out << thread.externStr(o.env_s) << " "; break;
 					}
 				}
 			}
@@ -360,7 +360,8 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 		nodes[i].liveOut = false;
 	}
 	
-	for(Value* v = thread.registers;
+	_error("Not yet traversing registers");
+	/*for(Value* v = thread.registers;
 		v < thread.frame.registers + thread.frame.prototype->registers; 
 		v++) {
 		if(v->isFuture() && ((Future const&)*v).trace() == this) {
@@ -371,7 +372,7 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 			o.ref = ((Future const&)*v).ref();
 			outputs.push_back(o);
 		}
-	}
+	}*/
 	
 	for(std::set<Environment*>::const_iterator i = liveEnvironments.begin(); i != liveEnvironments.end(); ++i) {
 		_error("Not yet traversing environments");
@@ -387,7 +388,7 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 			}
 		}*/
 
-		for(uint64_t j = 0; j < (*i)->dots.size(); j++) {
+		/*for(uint64_t j = 0; j < (*i)->dots.size(); j++) {
 			Value const& v = (*i)->dots[j].v;
 			if(v.isFuture() && ((Future const&)v).trace() == this) {
 				nodes[((Future const&)v).ref()].liveOut = true;
@@ -397,7 +398,7 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 				o.ref = ((Future const&)v).ref();
 				outputs.push_back(o);
 			}
-		}
+		}*/
 	}
 }
 
@@ -420,7 +421,7 @@ void Trace::WriteOutputs(Thread & thread) {
 			*o.reg = v;
 			break;
 		case Output::MEMORY:
-			Environment::assignPointer(o.pointer,v);
+			o.env_p->insert(o.env_s) = v;
 			break;
 		}
 	}

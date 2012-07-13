@@ -40,9 +40,9 @@
 #include "ops.h"
 #include "internal.h"
 #include "interpreter.h"
-#include "compiler.h"
 #include "sse.h"
 #include "call.h"
+#include "frontend.h"
 
 static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::add) return ByteCode::pos; 
@@ -296,6 +296,7 @@ private:
 		INVALID,
 		STACK,
 		SLOT,
+		SYMBOL,
 		CONSTANT
 	};
 
@@ -312,11 +313,12 @@ private:
 
 	Thread& thread;
 	State& state;
-	Environment* env;
+	StackLayout* layout;
 
 	Scope scope;
 	uint64_t loopDepth;
 	uint64_t stackDepth;
+	uint64_t stackHighWater;
 
         struct ValueComp {
                 bool operator()(Value const& a, Value const& b) {
@@ -326,6 +328,7 @@ private:
         };
 
         std::map<Value, Operand, ValueComp> constants;
+	std::vector<CallSite> calls;
 
 	llvm::IRBuilder<> builder;
 	llvm::Function* function;
@@ -340,6 +343,7 @@ private:
 	Operand ref(Operand dest);
 	Operand kill(Operand dest);
 	Operand store(Operand value, Operand dest);
+	Operand force(Operand dest);
 
 	// Language-level constructs	
 	Operand compile(Value const& expr, Operand dest=Operand());
@@ -350,29 +354,63 @@ private:
 
 	// Control-flow
 	Operand compileWhile(List const& call, Operand dest);
-	//Operand compileBrace(List const& call, Operand dest);
+	Operand compileFor(List const& call, Operand dest);
+	Operand compileBrace(List const& call, Operand dest);
+	Operand compileFunctionCall(List const& call, Character const& names, Operand dest);
 
+	// Type constructors
+	Operand compileFunction(List const& call, Operand dest);
+	
 	// Memory ops
 	Operand compileAssign(List const& call, Operand dest);
 	
-	// Math
+	// Common functions 
 	Operand compileUnary(char const* fn, List const& call, Operand dest);
 	Operand compileBinary(char const* fn, List const& call, Operand dest);
+	Operand compileTernary(char const* fn, List const& call, Operand dest);
+	Operand compileDotslist(List const& call, Operand dest);
 	
 
+	Code* compileFunctionBody(Value const& expr, StackLayout* layout) {
+		JIT jit(thread, layout, JIT::FUNCTION);
+		return jit.jit(expr);
+	}
+
+	Code* compilePromise(Value const& expr) { 
+		JIT jit(thread, layout, JIT::PROMISE);
+		return jit.jit(expr);
+	}
+
 public:
-	JIT(Thread& thread, Environment* env, Scope scope)
+	JIT(Thread& thread, StackLayout* layout, Scope scope)
 		: thread(thread)
 		, state(thread.state)
-		, env(env)
+		, layout(layout)
 		, scope(scope)
 		, loopDepth(0)
 		, stackDepth(0)
+		, stackHighWater(0)
 		, builder(llvm::getGlobalContext()) 
 	{
 	}
-	Prototype* jit(Value const& expr);
+
+	Code* jit(Value const& expr);
 };
+
+#define EMIT_1_0(fn, A)	\
+	builder.CreateCall2( jitContext.mod->getFunction(std::string(fn)+"_op"), thread_var, A.v );
+
+#define EMIT_1_1(fn, A, C)	\
+	builder.CreateCall3( jitContext.mod->getFunction(std::string(fn)+"_op"), thread_var, A.v, C.v);
+
+#define EMIT_121(fn, A, B, C, D)	\
+	builder.CreateCall5( jitContext.mod->getFunction(std::string(fn)+"_op"), thread_var, A.v, createInt64(B), createInt64(C), D.v);
+
+#define EMIT_2_1(fn, A, B, C)	\
+	builder.CreateCall4( jitContext.mod->getFunction(std::string(fn)+"_op"), thread_var, A.v, B.v, C.v);
+
+#define EMIT_3_1(fn, A, B, C, D)	\
+	builder.CreateCall5( jitContext.mod->getFunction(std::string(fn)+"_op"), thread_var, A.v, B.v, C.v, D.v);
 
 llvm::Value* JIT::createEntryBlockAlloca(llvm::Type* type) {
 	llvm::IRBuilder<> tmp(&function->getEntryBlock(), 
@@ -399,6 +437,7 @@ JIT::Operand JIT::ref(Operand dest) {
 		dest.i = stackDepth++;
 		dest.v = builder.CreateConstGEP1_64(stack_var, stackDepth);
 		dest.loc = STACK;
+		stackHighWater = std::max(stackHighWater, stackDepth);
 	}
 	return dest;
 }
@@ -410,13 +449,25 @@ JIT::Operand JIT::kill(Operand dest) {
 
 JIT::Operand JIT::store(Operand value, Operand dest) {
 	if(dest.loc == STACK || dest.loc == SLOT) {
+		force(value);
 		builder.CreateStore(builder.CreateLoad(value.v), dest.v);
 		kill(value);
 		return dest;
 	}
-	else {
+	else if(dest.loc == INVALID) {
 		return value;
 	}
+	else {
+		_error("Unexpected dest");
+	}
+}
+
+JIT::Operand JIT::force(Operand r) {
+	if(r.loc == SYMBOL) {
+		EMIT_1_0("force", r);
+		r.loc = SLOT;
+	}
+	return r;
 }
 
 JIT::Operand JIT::compileConstant(Value const& expr, Operand dest) {
@@ -462,15 +513,6 @@ static int64_t isDotDot(String s) {
 	return -1;	
 }
 
-#define EMIT_A(fn, A)	\
-	builder.CreateCall2( jitContext.mod->getFunction(std::string(fn)+"_op"), thread_var, kill(A).v );
-
-#define EMIT_A_C(fn, A, C)	\
-	builder.CreateCall3( jitContext.mod->getFunction(std::string(fn)+"_op"), thread_var, kill(A).v, C.v);
-
-#define EMIT_ABC(fn, A, B, C)	\
-	builder.CreateCall4( jitContext.mod->getFunction(std::string(fn)+"_op"), thread_var, kill(A).v, kill(B).v, C.v);
-
 JIT::Operand JIT::compileSymbol(Character const& symbol, Operand dest) {
 	String s = symbol.s;
 	int64_t dd = isDotDot(s);
@@ -481,14 +523,14 @@ JIT::Operand JIT::compileSymbol(Character const& symbol, Operand dest) {
 		//emit(ByteCode::dotdot, dd-1, 0, result);
 	}
 	else {
-		std::map<String, int64_t>::iterator i = env->m.find(s);
-		if(i != env->m.end()) {
+		std::map<String, size_t>::iterator i = layout->m.find(s);
+		if(i != layout->m.end()) {
 			c = builder.CreateConstGEP1_64(slots_var, i->second);
-			return store(Operand(SLOT, c), dest);
+			return store(Operand(SYMBOL, c), dest);
 		}
 		else {
 			dest = ref(dest);
-			//c = EMIT_A("get", compileConstant(Character::c(s)));
+			//c = EMIT_1_0("get", compileConstant(Character::c(s)));
 			return dest;
 		}
 	}
@@ -515,44 +557,6 @@ Compiler::Operand Compiler::forceInRegister(Operand r) {
 	return r;
 }
 
-CompiledCall Compiler::makeCall(List const& call, Character const& names) {
-	// compute compiled call...precompiles promise code and some necessary values
-	int64_t dotIndex = call.length()-1;
-	PairList arguments;
-	for(int64_t i = 1; i < call.length(); i++) {
-		Pair p;
-		if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
-
-		if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) {
-			p.v = call[i];
-			dotIndex = i-1;
-		} else if(isCall(call[i]) || isSymbol(call[i])) {
-			Promise::Init(p.v, NULL, Compiler::compilePromise(thread, env, call[i]), false);
-		} else {
-			p.v = call[i];
-		}
-		arguments.push_back(p);
-	}
-	return CompiledCall(call, arguments, dotIndex, names.length() > 0);
-}
-
-// a standard call, not an op
-Compiler::Operand Compiler::compileFunctionCall(List const& call, Character const& names, Prototype* code, Operand result) {
-	Operand function = compile(call[0], code, Operand());
-	CompiledCall a = makeCall(call, names);
-	code->calls.push_back(a);
-	kill(function);
-	Operand out = allocRegister();
-	if(!a.named && a.dotIndex >= (int64_t)a.arguments.size())
-		emit(ByteCode::fastcall, function, code->calls.size()-1, out);
-	else
-		emit(ByteCode::call, function, code->calls.size()-1, out);
-	kill(out);
-	result = allocResult(result);
-	if(out != result)
-		emit(ByteCode::fastmov, out, 0, result);
-	return result;
-}
 
 Compiler::Operand Compiler::compileInternalFunctionCall(List const& call, Prototype* code, Operand result) {
 	String func = SymbolStr(call[0]);
@@ -588,37 +592,141 @@ Compiler::Operand Compiler::compileInternalFunctionCall(List const& call, Protot
 */
 
 JIT::Operand JIT::compileUnary(char const* fn, List const& call, Operand dest) {
+	Operand a = compile(call[1]);
+	kill(a);
 	dest = ref(dest);
-	//llvm::Function * op_fn = jitContext.mod->getFunction(std::string(fn)+"_op");
-	//op_fn->addFnAttr(llvm::Attribute::AlwaysInline);
-	EMIT_A_C(fn, compile(call[1]), dest)
+	EMIT_1_1(fn, a, dest)
 	return dest;
 }
 
 JIT::Operand JIT::compileBinary(char const* fn, List const& call, Operand dest) {
+	Operand a = compile(call[1]);
+	Operand b = compile(call[2]);
+	kill(b); kill(a);
 	dest = ref(dest);
-	//llvm::Function * op_fn = jitContext.mod->getFunction(std::string(fn)+"_op");
-	//op_fn->addFnAttr(llvm::Attribute::AlwaysInline);
-	EMIT_ABC(fn, compile(call[1]), compile(call[2]), dest)
+	EMIT_2_1(fn, a, b, dest)
+	return dest;
+}
+
+JIT::Operand JIT::compileTernary(char const* fn, List const& call, Operand dest) {
+	Operand a = compile(call[1]);
+	Operand b = compile(call[2]);
+	Operand c = compile(call[3]);
+	kill(c); kill(b); kill(a);
+	dest = ref(dest);
+	EMIT_3_1(fn, a, b, c, dest)
 	return dest;
 }
 
 JIT::Operand JIT::compileWhile(List const& call, Operand dest) {
 	llvm::BasicBlock* body = llvm::BasicBlock::Create(llvm::getGlobalContext(), "while_body", function);
 	llvm::BasicBlock* end =  llvm::BasicBlock::Create(llvm::getGlobalContext(), "while_end", function);
-	
-	llvm::Value* condition = EMIT_A("jc", compile(call[1]));
+
+	Operand a = kill(compile(call[1]));
+	llvm::Value* condition = EMIT_1_0("jc", a);
 	llvm::Value* br = builder.CreateICmpEQ(condition, createInt64(1));
 	builder.CreateCondBr(br, body, end);
 
 	builder.SetInsertPoint(body);
-	compile(call[2]);
-	condition = EMIT_A("jc", compile(call[1]));
+	kill(compile(call[2]));
+	a = kill(compile(call[1]));
+	condition = EMIT_1_0("jc", a);
 	br = builder.CreateICmpEQ(condition, createInt64(1));
 	builder.CreateCondBr(br, body, end);
 	
 	builder.SetInsertPoint(end);
 	return compileConstant(Null::Singleton(), dest);
+}
+
+JIT::Operand JIT::compileFunctionCall(List const& call, Character const& names, Operand dest) {
+	// compute compiled call...precompiles promise code and some necessary values
+	size_t dotIndex = call.length()-1;
+	PairList arguments;
+	for(int64_t i = 1; i < call.length(); i++) {
+		Pair p;
+		if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
+
+		if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) {
+			p.v = call[i];
+			dotIndex = i-1;
+		} else if(isCall(call[i]) || isSymbol(call[i])) {
+			Promise::Init(p.v, NULL, compilePromise(call[i]), false);
+		} else {
+			p.v = call[i];
+		}
+		arguments.push_back(p);
+	}
+
+	CallSite a(
+		call,
+		arguments, 
+		dotIndex, 
+		names.length() > 0, 
+		dotIndex < arguments.size());
+	calls.push_back(a);
+
+	Operand function = kill(compile(call[0], Operand()));
+	kill(function);
+	
+	dest = ref(dest);
+	EMIT_121("call", function, calls.size()-1, stackDepth, dest);
+	return dest;
+}
+
+JIT::Operand JIT::compileFor(List const& call, Operand dest) {
+	_error("For NYI");
+}
+
+JIT::Operand JIT::compileFunction(List const& call, Operand dest) {
+	//compile the default parameters
+	assert(call[1].isList());
+	List const& c = (List const&)call[1];
+	Character names = hasNames(c) ?
+		(Character const&)getNames(c) : Character(0);
+
+	PairList parameters;
+	for(int64_t i = 0; i < c.length(); i++) {
+		Pair p;
+		if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
+		if(!c[i].isNil()) {
+			Promise::Init(p.v, NULL, compilePromise(c[i]), true);
+		}
+		else {
+			p.v = c[i];
+		}
+		parameters.push_back(p);
+	}
+
+	StackLayout* functionLayout = new StackLayout();
+	for(int64_t i = 0; i < names.length(); i++) {
+		functionLayout->staticAdd(names[i]);
+	}
+	//compile the source for the body
+	Code* functionCode = compileFunctionBody(call[2], functionLayout);
+
+	// Populate prototype
+	Prototype* p 	= new Prototype();
+	p->expression 	= call[2];
+	p->string 	= SymbolStr(call[3]);
+	p->parameters	= parameters;
+	p->parametersSize = parameters.size();
+	p->dotIndex	= parameters.size();
+	p->hasDots	= false;
+	p->code		= functionCode;
+
+	for(int64_t i = 0; i < (int64_t)parameters.size(); i++) {
+		if(parameters[i].n == Strings::dots) {
+			p->dotIndex = i;
+			p->hasDots = true;
+		}
+	}
+
+	Value function;
+	Function::Init(function, p, 0);
+	Operand funcOp = kill(compileConstant(function, Operand()));
+	dest = ref(dest);
+	EMIT_1_1("function", funcOp, dest);
+	return dest;
 }
 
 JIT::Operand JIT::compileAssign(List const& call, Operand dest) {
@@ -663,14 +771,14 @@ JIT::Operand JIT::compileAssign(List const& call, Operand dest) {
 		target = c[1];
 	}
 
-	env->insert(SymbolStr(target));
+	layout->staticAdd(SymbolStr(target));
 	Operand assignDest(SLOT,
-		builder.CreateConstGEP1_64(slots_var, env->m[SymbolStr(target)]));
+		builder.CreateConstGEP1_64(slots_var, layout->m[SymbolStr(target)]));
 	assignDest = compile(value, assignDest);
 	return store(assignDest, dest);
 }
 
-/*llvm::Value* JIT::compileBrace(List const& call, llvm::Value* dest) {
+JIT::Operand JIT::compileBrace(List const& call, Operand dest) {
 	int64_t length = call.length();
 	if(length <= 1) {
 		return compileConstant(Null::Singleton(), dest);
@@ -679,31 +787,31 @@ JIT::Operand JIT::compileAssign(List const& call, Operand dest) {
 			// memory results need to be forced to handle things like:
 			// 	function(x,y) { x; y }
 			// if x is a promise, it must be forced
-			if(isSymbol(call[i]))
-				kill(placeInRegister(compile(call[i], code, Operand())));
-			else
-				kill(compile(call[i], code, Operand()));
+			kill(force(compile(call[i], Operand())));
 		}
-		if(isSymbol(call[length-1]))
-			return compile(call[length-1], code, result);
-		else
-			return placeInRegister(compile(call[length-1], code, result));
+		return compile(call[length-1], Operand());
 	}
-}*/
+}
+
+JIT::Operand JIT::compileDotslist(List const& call, Operand dest) {
+	dest = ref(dest);
+	EMIT_1_0("dotslist", dest)
+	return dest;
+}
 
 JIT::Operand JIT::compileCall(List const& call, Character const& names, Operand dest) {
 	int64_t length = call.length();
 	if(length <= 0) throw CompileError("invalid empty call");
 
-	//if(!isSymbol(call[0]) && !call[0].isCharacter1())
-	//	return compileFunctionCall(call, names, code, result);
+	if(!isSymbol(call[0]) && !call[0].isCharacter1())
+		return compileFunctionCall(call, names, dest);
 
 	String func = SymbolStr(call[0]);
 	
 	
-	//if(func == Strings::list && call.length() == 2 
-	//	&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
-	//	return compileDotslist(call, dest);
+	if(func == Strings::list && call.length() == 2 
+		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
+		return compileDotslist(call, dest);
 	
 	// These functions can't be called directly if the arguments are named or if
 	// there is a ... in the args list
@@ -715,8 +823,7 @@ JIT::Operand JIT::compileCall(List const& call, Character const& names, Operand 
 	}
 
 	if(complicated)
-		_error("Function call NYI");
-		//return compileFunctionCall(call, names, code, result);
+		return compileFunctionCall(call, names, dest);
 
 	if(func == Strings::switchSym)
 		_error("Switch NYI");
@@ -728,18 +835,28 @@ JIT::Operand JIT::compileCall(List const& call, Character const& names, Operand 
 	}
 	
 	if(complicated)
-		_error("Function call NYI");
-		//return compileFunctionCall(call, names, code, result);
+		return compileFunctionCall(call, names, dest);
 
 	if(func == Strings::assign || func == Strings::eqassign)
 		return compileAssign(call, dest);
 	else if(func == Strings::whileSym)
 		return compileWhile(call, dest);
-	//else if(func == Strings::brace)
-	//	return compileBrace(call, dest);
+	else if(func == Strings::brace)
+		return compileBrace(call, dest);
+	else if(func == Strings::function)
+		return compileFunction(call, dest);
 	else if(func == Strings::paren) 
 		return compile(call[1], dest);
-	// Binary operators
+        else if((func == Strings::bracketAssign ||
+                func == Strings::bbAssign ||
+                func == Strings::split ||
+                func == Strings::ifelse ||
+                func == Strings::seq ||
+                func == Strings::rep ||
+                func == Strings::attrset) &&
+                call.length() == 4) {
+		return compileTernary(ByteCode::toString(op3(func)), call, dest);
+        }
 	else if((func == Strings::add ||
 		func == Strings::sub ||
 		func == Strings::mul ||
@@ -808,8 +925,7 @@ JIT::Operand JIT::compileCall(List const& call, Character const& names, Operand 
 		call.length() == 2)
 		return compileUnary(ByteCode::toString(op1(func)), call, dest);
 	else
-		_error("Not yet implemented bytecode");
-		//return compileFunctionCall(call, names, code, result);
+		return compileFunctionCall(call, names, dest);
 }
 
 JIT::Operand JIT::compileExpression(List const& expr, Operand dest) {
@@ -852,14 +968,14 @@ JIT::Operand JIT::compile(Value const& expr, Operand dest) {
 	}
 }
 
-Prototype* JIT::jit(Value const& expr) {
+Code* JIT::jit(Value const& expr) {
 
 	timespec time_a = get_time();
 
 	char fn_name[128];
 	static int count = 0;
 	sprintf(fn_name,"function_%d",count++);
-	function = llvm::cast<llvm::Function>(jitContext.mod->getOrInsertFunction(fn_name, jitContext.value_type->getPointerTo(), jitContext.thread_type,NULL));
+	function = llvm::cast<llvm::Function>(jitContext.mod->getOrInsertFunction(fn_name, jitContext.value_type, jitContext.thread_type,NULL));
 	llvm::Function::arg_iterator arguments = function->arg_begin();
 	thread_var = arguments++;
 	thread_var->setName("thread");
@@ -873,49 +989,50 @@ Prototype* JIT::jit(Value const& expr) {
 	stack_var = builder.CreateCall(
 		jitContext.mod->getFunction("getStack"), thread_var);
 	
-	Operand result = compile(expr);
+	Operand result = kill(compile(expr));
 	
-	// insert appropriate termination statement at end of code
-	if(scope == FUNCTION) {
-		//emit(ByteCode::ret, result, 0, 0);
-	}
-	else if(scope == PROMISE) {
-		//emit(ByteCode::retp, result, 0, 0);
+	result = force(result);
+	if(scope == TOPLEVEL && result.loc != CONSTANT) {
+		EMIT_1_0("bind", result);
 	} 
-	else { // TOPLEVEL
-		EMIT_A("rets", result);
-		builder.CreateRet(result.v);
-	}
+
+	builder.CreateRet(builder.CreateLoad(result.v));
+	
+	//function->dump();
+
+	//jitContext.pm->run(*jitContext.mod);
+	jitContext.fpm->run(*function);
 
 	function->dump();
 
-	jitContext.pm->run(*jitContext.mod);
-	jitContext.fpm->run(*function);
-
-	//function->dump();
-
-	Prototype* prototype = new Prototype();
-	void * impl = jitContext.execution_engine->getPointerToFunction(function);
-	prototype->func = impl;
-
+	Code* code = new Code();
+	code->ptr = (Code::Ptr)jitContext.execution_engine->getPointerToFunction(function);
+	code->registers = stackHighWater;
+	code->layout = layout;
+	code->calls.swap(calls);
+	
 	printf("Compile time elapsed: %f\n", time_elapsed(time_a));
 	
-	return prototype;	
+	return code;
 }
 
+// Template strategy
+// Compile new template for all scopes
+// For top level, do a "restructuring" pass where
+//  we restructure the environment to match the new template.
 
-Prototype* JITCompiler::compileTopLevel(Thread& thread, Environment* env, Value const& expr) {                
-	JIT jit(thread, env, JIT::TOPLEVEL);
+// Have separate addressing spaces for stack and slots means
+// that they can be separated on the stack OR separated between
+// the stack and the heap. So we can still allocate environment slots
+// on the stack to start with.
+
+Code* JITCompiler::compile(Thread& thread, Value const& expr) { 
+	return compile(thread, expr, new StackLayout());
+}
+
+Code* JITCompiler::compile(Thread& thread, Value const& expr, StackLayout* layout) { 
+	JIT jit(thread, layout, JIT::TOPLEVEL);
 	return jit.jit(expr);
 }
         
-Prototype* JITCompiler::compileFunctionBody(Thread& thread, Environment* env, Value const& expr) {                
-	JIT jit(thread, env, JIT::FUNCTION);
-	return jit.jit(expr);
-}
-
-Prototype* JITCompiler::compilePromise(Thread& thread, Environment* env, Value const& expr) {                
-	JIT jit(thread, env, JIT::PROMISE);
-	return jit.jit(expr);
-}
 

@@ -25,7 +25,10 @@ class Trace {
 			Type type;
 			union {
 				Value* reg;
-				Environment::Pointer pointer;
+				struct {
+					Environment* 	env_p;
+					String 		env_s;
+				};
 			};
 			IRef ref;	   //location of the associated store
 		};

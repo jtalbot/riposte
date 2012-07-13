@@ -3,15 +3,16 @@
 #define JIT_H
 
 struct Value;
-class Environment;
-class Thread;
+struct Code;
 struct Prototype;
+class Thread;
+class Environment;
+struct StackLayout;
 
 struct JITCompiler {
 
-	static Prototype* compileTopLevel(Thread& thread, Environment* env, Value const& expr);
-	static Prototype* compileFunctionBody(Thread& thread, Environment* env, Value const& expr);
-	static Prototype* compilePromise(Thread& thread, Environment* env, Value const& expr);
+	static Code* compile(Thread& thread, Value const& expr);
+	static Code* compile(Thread& thread, Value const& expr, StackLayout* layout);
 
 };
 

@@ -24,7 +24,7 @@ void sourceFile(Thread& thread, std::string name, Environment* env) {
 		FILE* trace = NULL;//fopen((name+"_trace").c_str(), "w");
 		parser.execute(code.c_str(), code.length(), true, value, trace);
 		//fclose(trace);	
-		thread.eval(JITCompiler::compileTopLevel(thread, env, value), env);
+		thread.eval(JITCompiler::compile(thread, value), env);
 	} catch(RiposteError& error) {
 		_warning(thread, "unable to load library " + name + ": " + error.what().c_str());
 	} catch(RuntimeError& error) {
@@ -44,7 +44,7 @@ void openDynamic(Thread& thread, std::string path, Environment* env) {
 }
 
 void loadLibrary(Thread& thread, std::string path, std::string name) {
-	Environment* env = new Environment(1,thread.state.path.back(),0,Null::Singleton());
+	Environment* env = new Environment(new StackLayout(),thread.state.path.back(),0,Null::Singleton());
 	
 	std::string p = path + "/" + name + ("/R/");
 

@@ -2,7 +2,7 @@
 UNAME := $(shell uname -s)
  
 CXX := g++ 
-CXXFLAGS := -Wall -msse4.1 `llvm-config --cppflags`
+CXXFLAGS := -Wall -msse4.1 `llvm-config --cppflags` -fexceptions
 LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -g `llvm-config --ldflags --libs engine bitreader scalaropts ipo`
 
 ifeq ($(UNAME),Linux)
@@ -31,7 +31,7 @@ ifneq ($(ENABLE_LIBM),0)
 	LFLAGS += -L$(AMD_LIBM_HOME)/lib/dynamic -lamdlibm
 endif
 
-SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp coerce.cpp library.cpp call.cpp rgc.cpp parser/parser.cpp ops_slow.cpp jit.cpp
+SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp internal.cpp coerce.cpp library.cpp call.cpp rgc.cpp parser/parser.cpp ops_slow.cpp jit.cpp
 
 ifeq ($(ENABLE_JIT),1)
 	CXXFLAGS += -DENABLE_JIT

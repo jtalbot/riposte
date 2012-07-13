@@ -172,8 +172,8 @@ Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code, 
 		emit(ByteCode::dotdot, dd-1, 0, result);
 	}
 	else {
-		std::map<String, int64_t>::iterator i = env->m.find(s);
-		if(i != env->m.end()) {
+		std::map<String, int64_t>::iterator i = env->t->m.find(s);
+		if(i != env->t->m.end()) {
 			Operand d = Operand(SLOT, i->second);
 			if(result.loc != INVALID && d != result) {
 				std::cout << "Not a match: " << result.toString() << " " << d.toString() << std::endl;
@@ -425,7 +425,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			emit(ByteCode::assign2, target, 0, result);
 		} else {
 			env->insert(SymbolStr(dest));
-			Operand assignResult = Operand(SLOT, env->m[SymbolStr(dest)]);
+			Operand assignResult = Operand(SLOT, env->t->m[SymbolStr(dest)]);
 			assignResult = compile(value, code, assignResult);
 			if(result.loc != INVALID && result != assignResult) {
 				emit(ByteCode::fastmov, assignResult, 0, result);
@@ -492,7 +492,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::forSym) 
 	{
 		env->insert(SymbolStr(call[1]));
-		Operand loop_variable = Operand(SLOT, env->m[SymbolStr(call[1])]);
+		Operand loop_variable = Operand(SLOT, env->t->m[SymbolStr(call[1])]);
 		Operand loop_vector = forceInRegister(compile(call[2], code, Operand()));
 		Operand loop_counter = allocRegister();	// save space for loop counter
 		Operand loop_limit = allocRegister(); // save space for the loop limit
@@ -850,10 +850,10 @@ Prototype* Compiler::compile(Value const& expr) {
 	else { // TOPLEVEL
 		emit(ByteCode::rets, result, 0, 0);
 	}
-	int64_t n = env->s.size();
+	/*int64_t n = env->s.size();
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, encodeOperand(ir[i].a, n), encodeOperand(ir[i].b, n), encodeOperand(ir[i].c, n)));
-	}
+	}*/
 
 	return code;	
 }

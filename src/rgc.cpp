@@ -69,8 +69,8 @@ static void traverse(Value const& v) {
 			break;
 		case Type::Promise:
 			VISIT(((Promise&)v).environment());
-			if(((Promise&)v).isPrototype())
-				VISIT(((Promise&)v).prototype());
+			//if(((Promise&)v).isCode())
+			//	VISIT(((Promise&)v).code());
 			break;
 		default:
 			// do nothing
@@ -100,12 +100,12 @@ void Environment::visit() const {
 	VISIT(lexical);
 	VISIT(dynamic);
 	traverse(call);
-	for(uint64_t i = 0; i < dots.size(); i++) {
-		traverse(dots[i].v);
-	}
-	for(uint64_t i = 0; i < s.size(); i++) {
-		traverse(s[i]);
-	}
+	//for(uint64_t i = 0; i < dots.size(); i++) {
+	//	traverse(dots[i].v);
+	//}
+	//for(uint64_t i = 0; i < s.size(); i++) {
+	//	traverse(s[i]);
+	//}
 }
 
 void Prototype::visit() const {
@@ -115,21 +115,19 @@ void Prototype::visit() const {
 	for(uint64_t i = 0; i < parameters.size(); i++) {
 		traverse(parameters[i].v);
 	}
-	for(uint64_t i = 0; i < constants.size(); i++) {
-		traverse(constants[i]);
-	}
-	for(uint64_t i = 0; i < calls.size(); i++) {
-		traverse(calls[i].call);
-		for(uint64_t j = 0; j < calls[i].arguments.size(); j++) {
-			traverse(calls[i].arguments[j].v);
-		}
-	}
+	//for(uint64_t i = 0; i < calls.size(); i++) {
+	//	traverse(calls[i].call);
+	//	for(uint64_t j = 0; j < calls[i].arguments.size(); j++) {
+	//		traverse(calls[i].arguments[j].v);
+	//	}
+	//}
 	//for(int64_t i = 0; i < prototypes.size(); i++) {
 	//	traverse(prototypes[i]);
 	//}
 }
 
 void Heap::mark(State& state) {
+	return;
 	// traverse root set
 	// mark the region that I'm currently allocating into
 	((GCObject*)((uint64_t)bump & ~(PAGE_SIZE-1)))->flags |= 1;
@@ -150,19 +148,19 @@ void Heap::mark(State& state) {
 		//printf("--stack--\n");
 		for(uint64_t i = 0; i < thread->stack.size(); i++) {
 			VISIT(thread->stack[i].environment);
-			VISIT(thread->stack[i].prototype);
+			//VISIT(thread->stack[i].prototype);
 		}
 		//printf("--frame--\n");
 		VISIT(thread->frame.environment);
-		VISIT(thread->frame.prototype);
+		//VISIT(thread->frame.prototype);
 
 		//printf("--trace--\n");
 		// traces only hold weak references...
 
 		//printf("--registers--\n");
-		for(Value const* r = thread->registers; r < thread->frame.registers+thread->frame.prototype->registers; ++r) {
-			traverse(*r);
-		}
+		//for(Value const* r = thread->registers; r < thread->frame.registers+thread->frame.prototype->registers; ++r) {
+		//	traverse(*r);
+		//}
 
 		for(uint64_t i = 0; i < thread->gcStack.size(); i++) {
 			traverse(thread->gcStack[i]);
@@ -171,6 +169,7 @@ void Heap::mark(State& state) {
 }
 
 void Heap::sweep() {
+	return;
 	//uint64_t old_total = total;
 	total = 0;
 	void** g = &root;

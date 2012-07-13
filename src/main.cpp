@@ -105,14 +105,15 @@ int dostdin(State& state) {
 
 	Thread& thread = state.getMainThread();
 
+	thread.beginEval(state.global);
+	StackLayout* stackLayout = new StackLayout();
 	while(!die) {
 		try { 
 			Value value, result;
 			value = parsetty(state);
 			if(value.isNil()) continue;
-			Prototype* proto = JITCompiler::compileTopLevel(thread, state.global, value);
-			//Prototype::printByteCode(proto, state);
-			result = thread.eval(proto, state.global);
+			Code* code = JITCompiler::compile(thread, value, stackLayout);
+			result = thread.continueEval(code);
 			std::cout << state.stringify(result) << std::endl;
 		} catch(RiposteError& error) { 
 			e_message("Error", "riposte", error.what().c_str());
@@ -129,6 +130,7 @@ int dostdin(State& state) {
 		}
 		thread.warnings.clear();
 	}
+	thread.endEval();
 	return rc;
 }
 
@@ -137,24 +139,24 @@ static int dofile(const char * file, std::istream & in, State& state, bool echo)
 	std::string s;
 
 	// Read in the file
-	std::string code;
+	std::string codeStr;
 	std::string line;
        	d_message(1,"Parsing file (%s)\n",file);
 	while(std::getline(in,line))
         {
 		if (echo && verbose) l_message(1,line.c_str());
-		code += line + '\n';
+		codeStr += line + '\n';
         }
 
 	Parser parser(state);
 	Value value;
-	parser.execute(code.c_str(), code.length(), true, value);	
+	parser.execute(codeStr.c_str(), codeStr.length(), true, value);	
 
 	if(value.isNil()) return -1;
 
 	try {
-		Prototype* proto = JITCompiler::compileTopLevel(state.getMainThread(), state.global, value);
-		Value result = state.getMainThread().eval(proto, state.global);
+		Code* code = JITCompiler::compile(state.getMainThread(), value);
+		Value result = state.getMainThread().eval(code, state.global);
 		//if(echo)
 			std::cout << state.stringify(result) << std::endl;
 	} catch(RiposteError& error) {

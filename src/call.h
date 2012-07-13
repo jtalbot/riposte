@@ -8,19 +8,22 @@
 #include "vector.h"
 #include "exceptions.h"
 
-void printCode(Thread const& thread, Prototype const* prototype, Environment* env);
+void PrepareStack(
+        Thread& thread,
+        Prototype const* prototype,
+        Environment* lexicalScope,
+        Environment* dynamicScope,
+        CallSite const& callSite,
+        size_t liveRegistersInCaller);
+ 
+void PreparePromiseStack(
+        Thread& thread,
+        Environment* lexicalScope,
+        Code const* code);
+	
+void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CallSite const& call);
 
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset);
-
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, int64_t resultSlot, Instruction const* returnpc);
-
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Environment* env, String s, Instruction const* returnpc);
-
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Environment* env, int64_t resultSlot, Instruction const* returnpc);
-
-void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
-
-void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
+void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CallSite const& call);
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out);
 
@@ -41,9 +44,7 @@ Value const& X = \
 		: thread.frame.prototype->constants[(inst.X)-256] 
 */
 #define FORCE(X) \
-if(__builtin_expect((inst.X) < 0 && !X.isObject(), false)) { \
-	return force(thread, inst, X, X##Env, (String)(inst.X)); \
-}
+	if(!X.isObject()) force(thread, X);
 
 // Out register is currently always a register, not memory
 #define OUT2(X) (registers[(inst##X)]) 
