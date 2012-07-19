@@ -12,7 +12,7 @@
 #include <dlfcn.h>
 
 void sourceFile(Thread& thread, std::string name) {
-	//std::cout << "Sourcing " << name << std::endl;
+	std::cout << "Sourcing " << name << std::endl;
 	try {
 		std::ifstream t(name.c_str());
 		std::stringstream buffer;
@@ -44,6 +44,8 @@ void openDynamic(Thread& thread, std::string path) {
 }
 
 void loadLibrary(Thread& thread, std::string path, std::string name) {
+	timespec time = get_time();
+
 	thread.beginEval(thread.state.path.back(), 0);
 	
 	std::string p = path + "/" + name + ("/R/");
@@ -87,5 +89,7 @@ void loadLibrary(Thread& thread, std::string path, std::string name) {
 	Environment* env = thread.endEval(true);	
 	thread.state.path.push_back(env);
 	thread.state.global->lexical = env;
+
+	printf("Library loaded in %f sec\n", time_elapsed(time));
 }
 

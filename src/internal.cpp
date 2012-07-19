@@ -796,7 +796,7 @@ void environment(Thread& thread, Value const* args, Value& result) {
 }
 
 void newenv(Thread& thread, Value const* args, Value& result) {
-	REnvironment::Init(result, new Environment(new StackLayout(),0,0,Null::Singleton()));
+	REnvironment::Init(result, new Environment(NULL,NULL,new Shape(),0,Null::Singleton()));
 }
 
 // TODO: parent.frame and sys.call need to ignore frames for promises, etc. We may need
@@ -865,9 +865,11 @@ void substitute(Thread& thread, Value const* args, Value& result) {
 	
 	if(isSymbol(v)) {
 		Environment* penv;
-		Value const& r = thread.frame.environment->getRecursive(SymbolStr(v), penv);
-		if(!r.isNil()) v = r;
-		while(v.isPromise()) v = ((Function const&)v).prototype()->expression;
+		Value const* r = thread.frame.environment->getRecursive(SymbolStr(v), penv);
+		if(r) {
+			v = *r;
+			while(v.isPromise()) v = ((Function const&)v).prototype()->expression;
+		}
 	}
  	result = v;
 }
@@ -882,11 +884,13 @@ void exists(Thread& thread, Value const* args, Value& result) {
 	Logical l = As<Logical>(thread, args[2]);
 
 	Environment* penv;
-	Value const& v = l[0] ? e.environment()->getRecursive(c[0], penv) : e.environment()->get(c[0]);
-	if(v.isNil())
-		result = Logical::False();
-	else
+	Value const* v = l[0] 
+		? e.environment()->getRecursive(c[0], penv) 
+		: e.environment()->get(c[0]);
+	if(v)
 		result = Logical::True();
+	else
+		result = Logical::False();
 }
 
 void get(Thread& thread, Value const* args, Value& result) {
@@ -895,7 +899,13 @@ void get(Thread& thread, Value const* args, Value& result) {
 	Logical l = As<Logical>(thread, args[2]);
 
 	Environment* penv;
-	result = l[0] ? e.environment()->getRecursive(c[0], penv) : e.environment()->get(c[0]);
+	Value const* v = l[0] 
+		? e.environment()->getRecursive(c[0], penv) 
+		: e.environment()->get(c[0]);
+	if(v)
+		result = *v;
+	else
+		result = Value::Nil();
 }
 
 #include <sys/time.h>

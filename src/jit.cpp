@@ -31,6 +31,7 @@
 #include "llvm/Transforms/IPO.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Transforms/Utils/BasicInliner.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 
 #include "jit.h"
 #include "internal.h"
@@ -152,6 +153,7 @@ struct JITContext {
 	llvm::PointerType* i8pp;
 	llvm::StructType* value_type;
 	llvm::PointerType* thread_type;
+	llvm::FunctionType* internalfunction_type;
 	
 	llvm::Function*	gcroot;
 
@@ -160,9 +162,16 @@ struct JITContext {
 		llvm::OwningPtr<llvm::MemoryBuffer> buffer;
 		llvm::MemoryBuffer::getFile("bin/ops.bc",buffer);
 		mod = llvm::ParseBitcodeFile(buffer.get(),llvm::getGlobalContext());
+
 		std::string ErrStr;
-		llvm::ExecutionEngine * ee = llvm::EngineBuilder(mod).setEngineKind(llvm::EngineKind::JIT)
+		llvm::TargetOptions to;
+		to.EnableFastISel = true;
+		to.JITExceptionHandling = true;
+		llvm::ExecutionEngine * ee = llvm::EngineBuilder(mod)
+			.setEngineKind(llvm::EngineKind::JIT)
 			.setOptLevel(llvm::CodeGenOpt::Aggressive)
+			.setTargetOptions(to)
+			.setUseMCJIT(true)
 			.setErrorStr(&ErrStr).create();
 		if(!ee) {
 			fprintf(stderr,"%s",ErrStr.c_str());
@@ -178,6 +187,9 @@ struct JITContext {
 		void_type = llvm::Type::getVoidTy(llvm::getGlobalContext());
 		value_type = mod->getTypeByName("struct.Value");
 		thread_type = mod->getTypeByName("class.Thread")->getPointerTo();
+		llvm::Type* internalfunction_args[] = 
+			{ thread_type, value_type->getPointerTo(), value_type->getPointerTo() };
+		internalfunction_type = llvm::FunctionType::get(void_type, internalfunction_args, false);
 		gcroot = mod->getFunction("gcroot");
 		
 		pm = new llvm::PassManager();
@@ -222,7 +234,6 @@ struct JITContext {
 		  fpm->add(llvm::createBasicAliasAnalysisPass());
 		  fpm->add(llvm::createGVNPass());
 		  fpm->add(llvm::createCFGSimplificationPass());
-		  fpm->doInitialization();
 	/*	
 		// list of passes from vmkit (& julia)
 		fpm->add(llvm::createCFGSimplificationPass()); // Clean up disgusting code
@@ -296,7 +307,6 @@ private:
 		INVALID,
 		STACK,
 		SLOT,
-		SYMBOL,
 		CONSTANT
 	};
 
@@ -308,12 +318,17 @@ private:
 		Operand()
 			: loc(INVALID), v(0), i(1000000000) {}
 		Operand(Loc loc, llvm::Value* v)
-			: loc(loc), v(v) {}
+			: loc(loc), v(v), i(1000000000) {}
+	};
+
+	struct LoopEscape {
+		llvm::BasicBlock* nxt;
+		llvm::BasicBlock* brk;
 	};
 
 	Thread& thread;
 	State& state;
-	StackLayout* layout;
+	Shape* shape;
 
 	Scope scope;
 	uint64_t loopDepth;
@@ -329,21 +344,28 @@ private:
 
         std::map<Value, Operand, ValueComp> constants;
 	std::vector<CallSite> calls;
+	std::map<String, size_t> ic_map;
+	std::vector<IC> ics;
+	std::vector<LoopEscape> loops;
 
 	llvm::IRBuilder<> builder;
 	llvm::Function* function;
+	llvm::Value* dots_var;
 	llvm::Value* slots_var;
-	llvm::Value* stack_var;
+	llvm::Value* register_var;
 	llvm::Value* thread_var;
+	Operand returnDest;
+	llvm::BasicBlock* returnBlock;
+	std::vector<llvm::CallInst*> callInsts;
 
 	llvm::Value* createEntryBlockAlloca(llvm::Type* type);
-	llvm::Constant* createInt64(int64_t i);
+	llvm::ConstantInt* createInt64(int64_t i);
+	llvm::ConstantExpr* createString(String s);
 	llvm::Function* getCPPFunction(std::string s);
 
 	Operand ref(Operand dest);
 	Operand kill(Operand dest);
 	Operand store(Operand value, Operand dest);
-	Operand force(Operand dest);
 
 	// Language-level constructs	
 	Operand compile(Value const& expr, Operand dest=Operand());
@@ -353,16 +375,23 @@ private:
 	Operand compileExpression(List const& call, Operand dest);
 
 	// Control-flow
+	Operand compileIf(List const& call, Operand dest);
+	Operand compileSwitch(List const& call, Character const& names, Operand dest);
 	Operand compileWhile(List const& call, Operand dest);
 	Operand compileFor(List const& call, Operand dest);
+	Operand compileNext(List const& call, Operand dest);
+	Operand compileBreak(List const& call, Operand dest);
 	Operand compileBrace(List const& call, Operand dest);
 	Operand compileFunctionCall(List const& call, Character const& names, Operand dest);
+	Operand compileInternalFunctionCall(List const& call, Operand dest);
+	Operand compileReturn(List const& call, Operand dest);
 
 	// Type constructors
 	Operand compileFunction(List const& call, Operand dest);
 	
 	// Memory ops
 	Operand compileAssign(List const& call, Operand dest);
+	Operand compileAssign2(List const& call, Operand dest);
 	
 	// Common functions 
 	Operand compileUnary(char const* fn, List const& call, Operand dest);
@@ -371,21 +400,26 @@ private:
 	Operand compileDotslist(List const& call, Operand dest);
 	
 
-	Code* compileFunctionBody(Value const& expr, StackLayout* layout) {
-		JIT jit(thread, layout, JIT::FUNCTION);
+	Code* compileFunctionBody(Value const& expr, Shape* shape) {
+		JIT jit(thread, shape, JIT::FUNCTION);
 		return jit.jit(expr);
 	}
 
 	Code* compilePromise(Value const& expr) { 
-		JIT jit(thread, layout, JIT::PROMISE);
+		JIT jit(thread, shape, JIT::PROMISE);
 		return jit.jit(expr);
 	}
 
+	llvm::CallInst* record(llvm::CallInst* ci) {
+		callInsts.push_back(ci);
+		return ci;
+	}
+
 public:
-	JIT(Thread& thread, StackLayout* layout, Scope scope)
+	JIT(Thread& thread, Shape* shape, Scope scope)
 		: thread(thread)
 		, state(thread.state)
-		, layout(layout)
+		, shape(shape)
 		, scope(scope)
 		, loopDepth(0)
 		, stackDepth(0)
@@ -397,25 +431,27 @@ public:
 	Code* jit(Value const& expr);
 };
 
-#define CALL0(fn) \
+#define CALL0(fn) record(\
 	builder.CreateCall( jitContext.mod->getFunction(std::string(fn)+"_op"), \
-		thread_var );
+		thread_var ));
 
-#define CALL1(fn, A) \
+#define CALL1(fn, A) record(\
 	builder.CreateCall2( jitContext.mod->getFunction(std::string(fn)+"_op"), \
-		thread_var, A );
+		thread_var, A ));
 
-#define CALL2(fn, A, B) \
+#define CALL2(fn, A, B) record(\
 	builder.CreateCall3( jitContext.mod->getFunction(std::string(fn)+"_op"), \
-		thread_var, A, B );
+		thread_var, A, B ));
 
-#define CALL3(fn, A, B, C) \
+#define CALL3(fn, A, B, C) record(\
 	builder.CreateCall4( jitContext.mod->getFunction(std::string(fn)+"_op"), \
-		thread_var, A, B, C );
+		thread_var, A, B, C ));
 
-#define CALL4(fn, A, B, C, D) \
+#define CALL4(fn, A, B, C, D) record(\
 	builder.CreateCall5( jitContext.mod->getFunction(std::string(fn)+"_op"), \
-		thread_var, A, B, C, D );
+		thread_var, A, B, C, D ));
+
+
 
 llvm::Value* JIT::createEntryBlockAlloca(llvm::Type* type) {
 	llvm::IRBuilder<> tmp(&function->getEntryBlock(), 
@@ -423,8 +459,13 @@ llvm::Value* JIT::createEntryBlockAlloca(llvm::Type* type) {
 	return tmp.CreateAlloca(type);
 }
 
-llvm::Constant* JIT::createInt64(int64_t i) {
-	return llvm::ConstantInt::get(jitContext.i64, i, true);
+llvm::ConstantInt* JIT::createInt64(int64_t i) {
+	return (llvm::ConstantInt*)llvm::ConstantInt::get(jitContext.i64, i, true);
+}
+
+llvm::ConstantExpr* JIT::createString(String s) {
+	llvm::Constant* c = llvm::ConstantInt::get(jitContext.i64, (int64_t)s, true);
+	return (llvm::ConstantExpr*)llvm::ConstantExpr::getIntToPtr(c, jitContext.i8p);
 }
 
 llvm::Function* JIT::getCPPFunction(std::string name) {
@@ -440,9 +481,12 @@ llvm::Function* JIT::getCPPFunction(std::string name) {
 JIT::Operand JIT::ref(Operand dest) {
 	if(dest.loc == INVALID) {
 		dest.i = stackDepth++;
-		dest.v = builder.CreateConstGEP1_64(stack_var, stackDepth);
+		dest.v = builder.CreateConstGEP1_64(register_var, stackDepth);
 		dest.loc = STACK;
 		stackHighWater = std::max(stackHighWater, stackDepth);
+	}
+	else if(dest.loc == CONSTANT) {
+		_error("Invalid destination ref");
 	}
 	return dest;
 }
@@ -454,7 +498,6 @@ JIT::Operand JIT::kill(Operand dest) {
 
 JIT::Operand JIT::store(Operand value, Operand dest) {
 	if(dest.loc == STACK || dest.loc == SLOT) {
-		force(value);
 		builder.CreateStore(builder.CreateLoad(value.v), dest.v);
 		kill(value);
 		return dest;
@@ -465,14 +508,6 @@ JIT::Operand JIT::store(Operand value, Operand dest) {
 	else {
 		_error("Unexpected dest");
 	}
-}
-
-JIT::Operand JIT::force(Operand r) {
-	if(r.loc == SYMBOL) {
-		CALL1("force", r.v);
-		r.loc = SLOT;
-	}
-	return r;
 }
 
 JIT::Operand JIT::compileConstant(Value const& expr, Operand dest) {
@@ -487,13 +522,27 @@ JIT::Operand JIT::compileConstant(Value const& expr, Operand dest) {
 	} else {
 		std::map<Value, Operand>::const_iterator i = constants.find(expr);
 		if(i == constants.end()) {
-			llvm::Value* v = createEntryBlockAlloca(jitContext.value_type);
-			builder.CreateStore(
+			llvm::IRBuilder<> tmp(&function->getEntryBlock(), 
+				function->getEntryBlock().begin());
+			llvm::Value* v = tmp.CreateAlloca(jitContext.value_type);
+			tmp.CreateStore(
                                 createInt64(expr.header),
-                                builder.CreateStructGEP(builder.CreateStructGEP(v,0),0));
-        	        builder.CreateStore(
+                                tmp.CreateStructGEP(tmp.CreateStructGEP(v,0),0));
+        	        tmp.CreateStore(
                                 createInt64(expr.i),
-                                builder.CreateStructGEP(builder.CreateStructGEP(v,1),0));
+                                tmp.CreateStructGEP(tmp.CreateStructGEP(v,1),0));
+			/*llvm::Value* cv = tmp.CreatePointerCast(v, jitContext.i8p);
+			llvm::Value* start = tmp.CreateCall2(
+				llvm::Intrinsic::getDeclaration(jitContext.mod, llvm::Intrinsic::invariant_start),
+				createInt64(sizeof(Value)), cv);
+
+			
+			llvm::IRBuilder<> tmp2(returnBlock, 
+				returnBlock->end());
+			tmp2.CreateCall3(
+				llvm::Intrinsic::getDeclaration(jitContext.mod, llvm::Intrinsic::invariant_end),
+				start, createInt64(sizeof(Value)), cv);
+			*/
 			dest = Operand(CONSTANT, v);
 			constants[expr] = dest;
 			return dest;
@@ -522,47 +571,24 @@ JIT::Operand JIT::compileSymbol(Character const& symbol, Operand dest) {
 	String s = symbol.s;
 	int64_t dd = isDotDot(s);
 
-	llvm::Value* c = 0;	
+	dest = ref(dest);
+
 	if(dd > 0) {
-		_error("dotdot not yet implemented");
-		//emit(ByteCode::dotdot, dd-1, 0, result);
+		CALL2("getDot", createInt64(dd-1), dest.v);
 	}
 	else {
-		std::map<String, size_t>::iterator i = layout->m.find(s);
-		if(i != layout->m.end()) {
-			c = builder.CreateConstGEP1_64(slots_var, i->second);
-			return store(Operand(SYMBOL, c), dest);
+		std::map<String, size_t>::const_iterator i = shape->m.find(s);
+		if(i != shape->m.end()) {
+			CALL3("getSlot", createInt64(i->second), createString(s), dest.v);
 		}
 		else {
-			dest = ref(dest);
-			c = CALL2("get", createInt64((int64_t)s), dest.v);
-			return dest;
+			CALL2("get", createString(s), dest.v);
 		}
 	}
+	return dest;
 }
 
 /*
-Compiler::Operand Compiler::placeInRegister(Operand r) {
-	if(r.loc != REGISTER && r.loc != INVALID) {
-		kill(r);
-		Operand t = allocRegister();
-		emit(ByteCode::fastmov, r, 0, t);
-		return t;
-	}
-	return r;
-}
-
-Compiler::Operand Compiler::forceInRegister(Operand r) {
-	if(r.loc != INVALID) {
-		kill(r);
-		Operand t = allocRegister();
-		emit(ByteCode::mov, r, 0, t);
-		return t;
-	}
-	return r;
-}
-
-
 Compiler::Operand Compiler::compileInternalFunctionCall(List const& call, Prototype* code, Operand result) {
 	String func = SymbolStr(call[0]);
 	std::map<String, int64_t>::const_iterator itr = state.internalFunctionIndex.find(func);
@@ -624,23 +650,102 @@ JIT::Operand JIT::compileTernary(char const* fn, List const& call, Operand dest)
 }
 
 JIT::Operand JIT::compileWhile(List const& call, Operand dest) {
+	llvm::BasicBlock* cond = llvm::BasicBlock::Create(llvm::getGlobalContext(), "while_body", function);
 	llvm::BasicBlock* body = llvm::BasicBlock::Create(llvm::getGlobalContext(), "while_body", function);
 	llvm::BasicBlock* end =  llvm::BasicBlock::Create(llvm::getGlobalContext(), "while_end", function);
+	builder.CreateBr(cond);
 
+	builder.SetInsertPoint(cond);
 	Operand a = kill(compile(call[1]));
 	llvm::Value* condition = CALL1("jc", a.v);
 	llvm::Value* br = builder.CreateICmpEQ(condition, createInt64(1));
 	builder.CreateCondBr(br, body, end);
 
+	LoopEscape le = { cond, end };
+	loops.push_back(le);
 	builder.SetInsertPoint(body);
 	kill(compile(call[2]));
 	a = kill(compile(call[1]));
-	condition = CALL1("jc", a.v);
-	br = builder.CreateICmpEQ(condition, createInt64(1));
-	builder.CreateCondBr(br, body, end);
+	builder.CreateBr(cond);
 	
 	builder.SetInsertPoint(end);
+	loops.pop_back();
 	return compileConstant(Null::Singleton(), dest);
+}
+
+JIT::Operand JIT::compileFor(List const& call, Operand dest) {
+	llvm::BasicBlock* cond = llvm::BasicBlock::Create(llvm::getGlobalContext(), "while_body", function);
+	llvm::BasicBlock* body = llvm::BasicBlock::Create(llvm::getGlobalContext(), "while_body", function);
+	llvm::BasicBlock* end =  llvm::BasicBlock::Create(llvm::getGlobalContext(), "while_end", function);
+	
+	size_t i = shape->add(SymbolStr(call[1]));
+	Operand index(SLOT,
+		builder.CreateConstGEP1_64(slots_var, (int64_t)i));
+	index = compileConstant(Null::Singleton(), index);
+
+	llvm::Value* internalIndex = createEntryBlockAlloca(jitContext.i64);
+	builder.CreateStore(createInt64(0), internalIndex);
+	
+	Operand vector = compile(call[2]);
+	llvm::Value* length = CALL1("forbegin", vector.v);
+	builder.CreateBr(cond);
+
+	builder.SetInsertPoint(cond);
+	llvm::Value* br = builder.CreateICmpSLT(builder.CreateLoad(internalIndex), length);
+	builder.CreateCondBr(br, body, end);
+
+	LoopEscape le = { cond, end };
+	loops.push_back(le);
+	builder.SetInsertPoint(body);
+	CALL3("element2", vector.v, builder.CreateLoad(internalIndex), index.v);
+	kill(compile(call[3]));
+	builder.CreateStore(builder.CreateAdd(builder.CreateLoad(internalIndex), createInt64(1)), internalIndex);
+	builder.CreateBr(cond);
+	
+	builder.SetInsertPoint(end);
+	loops.pop_back();
+	return compileConstant(Null::Singleton(), dest);
+}
+
+JIT::Operand JIT::compileNext(List const& call, Operand dest) {
+	if(loops.size() == 0)
+		_error("no loop for break/next");
+	builder.CreateBr(loops.back().nxt);
+	llvm::BasicBlock* dead = llvm::BasicBlock::Create(llvm::getGlobalContext(), "", function);
+	builder.SetInsertPoint(dead);
+	return dest;
+}
+
+JIT::Operand JIT::compileBreak(List const& call, Operand dest) {
+	if(loops.size() == 0)
+		_error("no loop for break/next");
+	builder.CreateBr(loops.back().brk);
+	llvm::BasicBlock* dead = llvm::BasicBlock::Create(llvm::getGlobalContext(), "", function);
+	builder.SetInsertPoint(dead);
+	return dest;
+}
+
+JIT::Operand JIT::compileIf(List const& call, Operand dest) {
+	llvm::BasicBlock* ifB = llvm::BasicBlock::Create(llvm::getGlobalContext(), "if", function);
+	llvm::BasicBlock* elseB = llvm::BasicBlock::Create(llvm::getGlobalContext(), "else", function);
+	llvm::BasicBlock* end =  llvm::BasicBlock::Create(llvm::getGlobalContext(), "if_end", function);
+
+	dest = ref(dest);
+	Operand a = kill(compile(call[1]));
+	llvm::Value* condition = CALL1("jc", a.v);
+	llvm::Value* br = builder.CreateICmpEQ(condition, createInt64(1));
+
+	builder.CreateCondBr(br, ifB, elseB);
+	
+	builder.SetInsertPoint(ifB);
+	dest = compile(call[2], dest);
+	builder.CreateBr(end);
+	builder.SetInsertPoint(elseB);
+	dest = call.length() == 4 	? compile(call[3], dest)
+					: compileConstant(Null::Singleton(), dest);
+	builder.CreateBr(end);
+	builder.SetInsertPoint(end);
+	return dest;
 }
 
 JIT::Operand JIT::compileFunctionCall(List const& call, Character const& names, Operand dest) {
@@ -679,8 +784,129 @@ JIT::Operand JIT::compileFunctionCall(List const& call, Character const& names, 
 	return dest;
 }
 
-JIT::Operand JIT::compileFor(List const& call, Operand dest) {
-	_error("For NYI");
+JIT::Operand JIT::compileInternalFunctionCall(List const& outerCall, Operand dest) {
+	if(outerCall.length() != 2 || !outerCall[1].isList() || !isCall(outerCall[1]))
+		throw CompileError(std::string(".Internal has invalid arguments (") + Type::toString(outerCall[1].type()) + ")");
+
+	List const& call = (List const&)outerCall[1];	
+	
+	String func = SymbolStr(call[0]);
+	std::map<String, int64_t>::const_iterator i = 
+		state.internalFunctionIndex.find(func);
+	int64_t f = -1;
+	if(i == state.internalFunctionIndex.end())
+		// TODO: make this an error when more internal functions are implemented
+		_warning(thread, std::string("Unimplemented internal function ")
+			+ state.externStr(func));
+	else if(state.internalFunctions[i->second].params != call.length()-1)
+		_error(std::string("Incorrect number of parameters to internal function ")
+			+ state.externStr(func));	
+	else
+		f = i->second;
+
+	llvm::Value* registerPtr = llvm::ConstantPointerNull::get(jitContext.value_type->getPointerTo());
+	for(int64_t i = 1; i < call.length(); i++) {
+		Operand a = ref(Operand());
+		compile(call[i], a);
+		if(i == 1)
+			registerPtr = a.v;
+	}
+
+	dest = ref(dest);
+
+	llvm::Value* intfunc = builder.CreateIntToPtr(
+		createInt64((int64_t)state.internalFunctions[i->second].ptr),
+		jitContext.internalfunction_type->getPointerTo());
+	builder.CreateCall3(intfunc, thread_var, registerPtr, dest.v);
+	return dest;
+}
+
+JIT::Operand JIT::compileReturn(List const& call, Operand dest) {
+	if(scope != FUNCTION)
+		_error("Attempting to return from top-level expression or from non-function. Riposte doesn't support return inside promises currently, and may never do so");
+
+	if(call.length() == 1) {
+		compileConstant(Null::Singleton(), returnDest);
+	}
+	else if(call.length() == 2) {
+		compile(call[1], returnDest);
+	}
+	else
+		_error("Too many return value");
+
+	builder.CreateBr(returnBlock);
+	llvm::BasicBlock* dead = llvm::BasicBlock::Create(llvm::getGlobalContext(), "", function);
+	builder.SetInsertPoint(dead);
+	return returnDest;
+}
+
+JIT::Operand JIT::compileSwitch(List const& call, Character const& names, Operand dest) {
+	if(call.length() < 2) {
+		_error("'EXPR' is missing");
+	}
+	
+	dest = ref(dest);
+	
+	llvm::BasicBlock* end = llvm::BasicBlock::Create(llvm::getGlobalContext(), "switch_end", function);
+	
+	// Last block handles the case: switch("d", a=1, b=2, c=3, d=)
+	// This should return NULL.
+	llvm::BasicBlock* last = llvm::BasicBlock::Create(llvm::getGlobalContext(), "switch_end", function);
+
+	llvm::ArrayType* at = llvm::ArrayType::get(jitContext.i8p, call.length()-2);
+	std::vector<llvm::Constant*> strs;
+	for(size_t i = 2; i < (size_t)call.length(); i++) {
+		strs.push_back(createString(
+			i < (size_t)names.length()
+				? names[i]
+				: Strings::empty
+			));
+	}
+
+	llvm::Constant* strArray = llvm::ConstantArray::get(at, strs);
+	llvm::Value* gg = new llvm::GlobalVariable(
+		*jitContext.mod, 
+		strArray->getType(),
+		true, 
+		llvm::GlobalValue::PrivateLinkage, 
+		strArray, 
+		"");
+	llvm::Value* strPtr = builder.CreatePointerCast(
+		builder.CreateConstGEP1_64(gg, 0), jitContext.i8pp);
+
+	Operand c = compile(call[1], Operand());
+	llvm::Value* switchCase = CALL3("switch", c.v, strPtr, createInt64(call.length()-2));
+	llvm::SwitchInst* s = builder.CreateSwitch(switchCase, last, call.length()-2);
+
+	
+	std::vector<llvm::BasicBlock*> bbs;
+
+	builder.SetInsertPoint(last);
+	compileConstant(Null::Singleton(), dest);
+	builder.CreateBr(end);
+	bbs.push_back(last);
+
+	for(size_t i = call.length()-1; i >= 2; i--) {
+		if(!call[i].isNil()) {
+			llvm::BasicBlock* bb = 
+				llvm::BasicBlock::Create(llvm::getGlobalContext(), "switch", function);
+			builder.SetInsertPoint(bb);
+			compile(call[i], dest);
+			builder.CreateBr(end);
+			bbs.push_back(bb);
+		}
+		else {
+			bbs.push_back(bbs.back());
+		}
+	}
+	std::reverse(bbs.begin(), bbs.end());
+
+	for(size_t i = 2; i < call.length(); i++) {
+		s->addCase(createInt64(i-2), bbs[i-2]);
+	}
+	
+	builder.SetInsertPoint(end);
+	return dest;
 }
 
 JIT::Operand JIT::compileFunction(List const& call, Operand dest) {
@@ -703,9 +929,9 @@ JIT::Operand JIT::compileFunction(List const& call, Operand dest) {
 		parameters.push_back(p);
 	}
 
-	StackLayout* functionLayout = new StackLayout();
+	Shape* functionLayout = new Shape();
 	for(int64_t i = 0; i < names.length(); i++) {
-		functionLayout->staticAdd(names[i]);
+		functionLayout->add(names[i]);
 	}
 	//compile the source for the body
 	Code* functionCode = compileFunctionBody(call[2], functionLayout);
@@ -735,9 +961,7 @@ JIT::Operand JIT::compileFunction(List const& call, Operand dest) {
 	return dest;
 }
 
-JIT::Operand JIT::compileAssign(List const& call, Operand dest) {
-	Value target = call[1];
-
+void assignLHS(State& state, Value& target, Value& value) {
 	// handle complex LHS assignment instructions...
 	// semantics here are kind of tricky. Consider compiling:
 	//	 dim(a)[1] <- x
@@ -746,7 +970,6 @@ JIT::Operand JIT::compileAssign(List const& call, Operand dest) {
 	//	2) a <- `dim<-`(a, `[<-`(dim(a), 1, x))
 	// TODO: One complication is that the result value of a complex assignment is the RHS
 	// of the original expression, not the RHS of the inside out expression.
-	Value value = call[2];
 	while(isCall(target)) {
 		List const& c = (List const&)target;
 		List n(c.length()+1);
@@ -776,12 +999,29 @@ JIT::Operand JIT::compileAssign(List const& call, Operand dest) {
 		value = CreateCall(n, nnames);
 		target = c[1];
 	}
+} 
 
-	layout->staticAdd(SymbolStr(target));
+JIT::Operand JIT::compileAssign(List const& call, Operand dest) {
+	Value target = call[1];
+	Value value = call[2];
+	assignLHS(state, target, value);
+
+	
+	size_t i = shape->add(SymbolStr(target));
 	Operand assignDest(SLOT,
-		builder.CreateConstGEP1_64(slots_var, layout->m[SymbolStr(target)]));
+		builder.CreateConstGEP1_64(slots_var, (int64_t)i));
 	assignDest = compile(value, assignDest);
 	return store(assignDest, dest);
+}
+
+JIT::Operand JIT::compileAssign2(List const& call, Operand dest) {
+	Value target = call[1];
+	Value value = call[2];
+	assignLHS(state, target, value);
+
+	dest = compile(value, dest);
+	CALL2("assign2", dest.v, createInt64((int64_t)SymbolStr(target)));
+	return dest;
 }
 
 JIT::Operand JIT::compileBrace(List const& call, Operand dest) {
@@ -790,12 +1030,9 @@ JIT::Operand JIT::compileBrace(List const& call, Operand dest) {
 		return compileConstant(Null::Singleton(), dest);
 	} else {
 		for(int64_t i = 1; i < length-1; i++) {
-			// memory results need to be forced to handle things like:
-			// 	function(x,y) { x; y }
-			// if x is a promise, it must be forced
-			kill(force(compile(call[i], Operand())));
+			kill(compile(call[i], Operand()));
 		}
-		return compile(call[length-1], Operand());
+		return compile(call[length-1], dest);
 	}
 }
 
@@ -813,8 +1050,7 @@ JIT::Operand JIT::compileCall(List const& call, Character const& names, Operand 
 		return compileFunctionCall(call, names, dest);
 
 	String func = SymbolStr(call[0]);
-	
-	
+
 	if(func == Strings::list && call.length() == 2 
 		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
 		return compileDotslist(call, dest);
@@ -832,8 +1068,7 @@ JIT::Operand JIT::compileCall(List const& call, Character const& names, Operand 
 		return compileFunctionCall(call, names, dest);
 
 	if(func == Strings::switchSym)
-		_error("Switch NYI");
-		//return compileSwitch(call, names, dest);
+		return compileSwitch(call, names, dest);
 
 	for(int64_t i = 0; i < length; i++) {
 		if(names.length() > i && names[i] != Strings::empty) 
@@ -845,14 +1080,28 @@ JIT::Operand JIT::compileCall(List const& call, Character const& names, Operand 
 
 	if(func == Strings::assign || func == Strings::eqassign)
 		return compileAssign(call, dest);
+	else if(func == Strings::assign2)
+		return compileAssign2(call, dest);
 	else if(func == Strings::whileSym)
 		return compileWhile(call, dest);
+	else if(func == Strings::forSym)
+		return compileFor(call, dest);
+	else if(func == Strings::nextSym)
+		return compileNext(call, dest);
+	else if(func == Strings::breakSym)
+		return compileBreak(call, dest);
+	else if(func == Strings::ifSym)
+		return compileIf(call, dest);
+	else if(func == Strings::returnSym)
+		return compileReturn(call, dest);
 	else if(func == Strings::brace)
 		return compileBrace(call, dest);
 	else if(func == Strings::function)
 		return compileFunction(call, dest);
 	else if(func == Strings::paren) 
 		return compile(call[1], dest);
+	else if(func == Strings::internal)
+                return compileInternalFunctionCall(call, dest);
         else if((func == Strings::bracketAssign ||
                 func == Strings::bbAssign ||
                 func == Strings::split ||
@@ -982,6 +1231,7 @@ Code* JIT::jit(Value const& expr) {
 	static int count = 0;
 	sprintf(fn_name,"function_%d",count++);
 	function = llvm::cast<llvm::Function>(jitContext.mod->getOrInsertFunction(fn_name, jitContext.value_type, jitContext.thread_type,NULL));
+	function->addFnAttr(llvm::Attribute::UWTable);
 	llvm::Function::arg_iterator arguments = function->arg_begin();
 	thread_var = arguments++;
 	thread_var->setName("thread");
@@ -989,35 +1239,47 @@ Code* JIT::jit(Value const& expr) {
 	llvm::BasicBlock* entry = llvm::BasicBlock::Create(llvm::getGlobalContext(),"entry",function);
 	builder.SetInsertPoint(entry);
 	
-	slots_var = builder.CreateCall(
-		jitContext.mod->getFunction("getSlots"), thread_var);
+	returnDest = Operand(STACK, createEntryBlockAlloca(jitContext.value_type));
+	returnBlock = llvm::BasicBlock::Create(llvm::getGlobalContext(),"return",function);
 	
-	stack_var = builder.CreateCall(
-		jitContext.mod->getFunction("getStack"), thread_var);
+	dots_var = CALL0("dotsAddress");
+	slots_var = CALL0("slotsAddress");
+	register_var = CALL0("registersAddress");
+
+	returnDest = kill(compile(expr, returnDest));
 	
-	Operand result = kill(compile(expr));
-	
-	result = force(result);
-	if(scope == TOPLEVEL && result.loc != CONSTANT) {
-		CALL1("bind", result.v);
+	if(scope == TOPLEVEL) {
+		CALL1("bind", returnDest.v);
 	} 
 
-	builder.CreateRet(builder.CreateLoad(result.v));
+	builder.CreateBr(returnBlock);
+	builder.SetInsertPoint(returnBlock);
+	builder.CreateRet(builder.CreateLoad(returnDest.v));
 	
-	//function->dump();
 
+	// inline all always inline call sites
+	// note, relying on modular arithmetic in loop.
+	for(size_t i = callInsts.size()-1; i < callInsts.size(); i--) {
+		if(callInsts[i]->getCalledFunction()->hasFnAttr(
+			llvm::Attribute::AlwaysInline)) {
+			llvm::InlineFunctionInfo ifi;
+			llvm::InlineFunction(callInsts[i], ifi);
+		}
+	}
+	//function->dump();
+	// optimize
 	//jitContext.pm->run(*jitContext.mod);
 	jitContext.fpm->run(*function);
-
-	function->dump();
-
+	//function->dump();
+	
 	Code* code = new Code();
 	code->ptr = (Code::Ptr)jitContext.execution_engine->getPointerToFunction(function);
 	code->registers = stackHighWater;
-	code->layout = layout;
+	code->shape = shape;
 	code->calls.swap(calls);
+	code->ics.swap(ics);
 	
-	printf("Compile time elapsed: %f\n", time_elapsed(time_a));
+	//printf("Compile time elapsed: %f\n", time_elapsed(time_a));
 	
 	return code;
 }
@@ -1037,7 +1299,8 @@ Code* JITCompiler::compile(Thread& thread, Value const& expr) {
 }
 
 Code* JITCompiler::compile(Thread& thread, Value const& expr, Environment* env) { 
-	JIT jit(thread, (StackLayout*)env->layout, JIT::TOPLEVEL);
+	Shape* s = new Shape();
+	JIT jit(thread, s, JIT::TOPLEVEL);
 	return jit.jit(expr);
 }
         

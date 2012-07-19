@@ -661,10 +661,10 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::rep ||
 		func == Strings::attrset) &&
 		call.length() == 4) {
-		Operand c = placeInRegister(compile(call[1], code, Operand()));
+		Operand a = placeInRegister(compile(call[1], code, Operand()));
 		Operand b = compile(call[2], code, Operand());
-		Operand a = compile(call[3], code, Operand());
-		kill(a); kill(b); kill(c);
+		Operand c = compile(call[3], code, Operand());
+		kill(c); kill(b); kill(a);
 		emit(op3(func), a, b, c);
 		result = allocResult(result);
 		if(c != result)

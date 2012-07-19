@@ -421,7 +421,7 @@ void Trace::WriteOutputs(Thread & thread) {
 			*o.reg = v;
 			break;
 		case Output::MEMORY:
-			o.env_p->insert(o.env_s) = v;
+			o.env_p->set(o.env_s, v);
 			break;
 		}
 	}
@@ -985,4 +985,32 @@ void Trace::Execute(Thread & thread) {
 		WriteOutputs(thread);
 	}
 	Reset();
+}
+
+void Traces::Bind(Thread& thread, Value const& v) {
+	if(!v.isFuture()) return;
+	Trace* trace = ((Future const&)v).trace();
+	trace->Execute(thread, ((Future const&)v).ref());
+	trace->Reset();
+	availableTraces.push_back(trace);
+	traces.erase(trace->Size);
+}
+
+void Traces::Flush(Thread & thread) {
+	// execute all traces
+	for(std::map<int64_t, Trace*>::const_iterator i = traces.begin(); i != traces.end(); i++) {
+		Trace* trace = i->second;
+		trace->Execute(thread);
+		trace->Reset();
+		availableTraces.push_back(trace);
+	}
+	traces.clear();
+}
+
+void Traces::OptBind(Thread& thread, Value const& v) {
+	if(!v.isFuture()) return;
+	Trace* trace = ((Future const&)v).trace();
+	if(trace->nodes.size() > 2048) {
+		Bind(thread, v);
+	}
 }

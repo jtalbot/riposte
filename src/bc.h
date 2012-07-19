@@ -32,8 +32,8 @@
 	_(subset, 	"subset") \
 	_(subset2, 	"subset2") \
 	_(get, 		"get") \
-	_(attrget, 	"attr") \
-	_(attrset, 	"attr<-")
+	_(attrget, 	"attrget") \
+	_(attrset, 	"attrset")
 
 #define UTILITY_BYTECODES(_)\
 	_(internal, 	"internal") \
@@ -68,13 +68,13 @@
 	_(atan, "atan",	ArithUnary2,	atan(a)) \
 
 #define LOGICAL_UNARY_BYTECODES(_) \
-	_(lnot, "lnot",	LogicalUnary, PassNA(a, ~a)) \
+	_(lnot, "lnot",	LogicalUnary, PassNA(a, (a==0)?1:0)) \
 
 #define ORDINAL_UNARY_BYTECODES(_) \
-	_(isna,	"isna",	OrdinalUnary,	MA::isNA(a)?-1:0) \
-	_(isnan,	"isnan",	OrdinalUnary,	MA::isNaN(a)?-1:0) \
-	_(isfinite,	"isfinite",	OrdinalUnary,	MA::isFinite(a)?-1:0) \
-	_(isinfinite,	"isinfinite",	OrdinalUnary,	MA::isInfinite(a)?-1:0) \
+	_(isna,	"isna",	OrdinalUnary,	MA::isNA(a)?1:0) \
+	_(isnan,	"isnan",	OrdinalUnary,	MA::isNaN(a)?1:0) \
+	_(isfinite,	"isfinite",	OrdinalUnary,	MA::isFinite(a)?1:0) \
+	_(isinfinite,	"isinfinite",	OrdinalUnary,	MA::isInfinite(a)?1:0) \
 /*
 #define STRING_UNARY_BYTECODES(_) \
 	_(nchar, "nchar", nchar, StringUnary, PassNA(a, strlen(a))) \

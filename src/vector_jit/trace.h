@@ -291,7 +291,7 @@ class Traces {
 			return v;
 		}
 
-		Value EmitIfElse(Environment* env, Value const& a, Value const& b, Value const& cond) {
+		Value EmitIfElse(Environment* env, Value const& cond, Value const& a, Value const& b) {
 			Trace* trace = getTrace(a,b,cond);
 			trace->liveEnvironments.insert(env);
 
@@ -329,33 +329,9 @@ class Traces {
 			}
 		}
 
-		void Bind(Thread& thread, Value const& v) {
-			if(!v.isFuture()) return;
-			Trace* trace = ((Future const&)v).trace();
-			trace->Execute(thread, ((Future const&)v).ref());
-			trace->Reset();
-			availableTraces.push_back(trace);
-			traces.erase(trace->Size);
-		}
-
-		void Flush(Thread & thread) {
-			// execute all traces
-			for(std::map<int64_t, Trace*>::const_iterator i = traces.begin(); i != traces.end(); i++) {
-				Trace* trace = i->second;
-				trace->Execute(thread);
-				trace->Reset();
-				availableTraces.push_back(trace);
-			}
-			traces.clear();
-		}
-
-		void OptBind(Thread& thread, Value const& v) {
-			if(!v.isFuture()) return;
-			Trace* trace = ((Future const&)v).trace();
-			if(trace->nodes.size() > 2048) {
-				Bind(thread, v);
-			}
-		}
+		void Bind(Thread& thread, Value const& v);
+		void Flush(Thread & thread);
+		void OptBind(Thread& thread, Value const& v);
 
 		bool isTraceableType(Value const& a) {
 			Type::Enum type = futureType(a);

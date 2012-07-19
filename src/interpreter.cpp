@@ -20,44 +20,39 @@ Environment* Thread::beginEval(Environment* lexicalScope, Environment* dynamicSc
 	
 	// Create a stack frame for interactive evaluation...
 	push();
-	frame.dots = frame.reservedTo;
-	frame.slots = frame.reservedTo;
 	frame.registers = frame.reservedTo;
 	frame.calls = 0;
 
 	Environment* env = 
-		new Environment(new StackLayout(), lexicalScope, dynamicScope, Null::Singleton());
-	env->dots = frame.dots;
-	env->slots = frame.slots;
+		new Environment(lexicalScope, dynamicScope, new Shape(), 0, Null::Singleton());
 	frame.environment = env;
 	return env;
 }
 
 Value Thread::continueEval(Code const* code) {
-	assert(frame.environment->layout == code->layout);
 
-	// move registers up to make room for more slots
-	Value* newregisters = frame.slots + code->layout->m.size();
-	memset(frame.registers, 0, (newregisters-frame.registers)*sizeof(Value));
-	frame.registers = newregisters;
+	frame.environment->mutateShape(code->shape);
 
 	// update reserved stack size with room for registers
 	frame.reservedTo = frame.registers + code->registers;
 	frame.calls = &code->calls[0];
+	frame.ics = (IC*)&code->ics[0];
 	
 	// execute code in continuation's stack frame
-	Value result = (code->ptr)(this);
-	
-	return result;
+	size_t oldStackDepth = stack.size();
+	try {
+		return (code->ptr)(this);
+	}
+	catch(...) {
+		while(stack.size() > oldStackDepth)
+			pop();
+		throw;
+	}
 }
 
 Environment* Thread::endEval(bool liveOut) {
-	Environment* result = 0;
-	if(liveOut) {
-		// copy Environment off the stack and put in result
-	}
-
-	// pop stack frame
+	Environment* result = frame.environment;
+	
 	pop();
 
 	return result;
@@ -81,6 +76,6 @@ const int64_t Random::primes[100] =
 
 Thread::Thread(State& state, uint64_t index) : state(state), index(index), random(index),steals(1) {
 	registers = new Value[DEFAULT_NUM_REGISTERS];
-	frame.slots = frame.registers = frame.reservedTo = registers;
+	frame.registers = frame.reservedTo = registers;
 }
 

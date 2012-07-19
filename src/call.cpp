@@ -40,39 +40,29 @@ void BuildStackFrame(
 	size_t liveRegistersInCaller,
 	size_t varargs) {
 
-	varargs *= 2; // since we need space for the names too.
+	// allocate slots for environment
+	Environment* env = new Environment(
+		lexicalScope, dynamicScope, code->shape, varargs, callSite.call);
 
 	// make new stack frame
 	StackFrame& s = thread.push();
-	s.dots = s.registers + liveRegistersInCaller;
-	s.slots = s.dots + varargs;
-	s.registers = s.slots + code->layout->m.size();
+	s.registers = s.registers + liveRegistersInCaller;
 	s.reservedTo = s.registers + code->registers;
 	s.calls = &code->calls[0];
+	s.ics = (IC*)&code->ics[0];
+	s.environment = env;
 
 	if(s.reservedTo > thread.registers+DEFAULT_NUM_REGISTERS)
 		throw RiposteError("Register overflow");
 
-	// clear memory. We know the dots will be completely filled in
-	//	by AssignArgs, so no need to clear that.
-	// Could do better by not clearing parameter slots too.
-	// Clearing registers is not needed for correctness, but
-	//	avoids false roots for the GC.
-	memset((void*)s.slots, 0, (s.reservedTo-s.slots)*sizeof(Value));
-
-	// make a new environment
-	Environment* env = new Environment(
-		code->layout, lexicalScope, dynamicScope, callSite.call);
-	env->dots = s.dots;
-	env->slots = s.slots;
-	s.environment = env;
+	memset((void*)s.registers, 0, code->registers*sizeof(Value));
 }
 
 
 int64_t numArguments(Environment* env, CallSite const& call) {
 	if(call.dotIndex < (int64_t)call.arguments.size()) {
 		// subtract 1 to not count the dots
-		return call.arguments.size() - 1 + env->numDots();
+		return call.arguments.size() - 1 + env->numDots;
 	} else {
 		return call.arguments.size();
 	}
@@ -91,10 +81,10 @@ Pair argument(int64_t index, Environment* env, CallSite const& call) {
 		return call.arguments[index];
 	} else {
 		index -= call.dotIndex;
-		if(index < (int64_t)env->numDots()) {
+		if(index < (int64_t)env->numDots) {
 			Pair p;
-			p.n = env->dots[index*2].s;
-			p.v = env->dots[index*2+1];
+			p.n = env->Dots()[index*2].s;
+			p.v = env->Dots()[index*2+1];
 			// Promises in the dots can't be passed down 
 			//     (general rule is that promises only
 			//	occur once anywhere in the program). 
@@ -105,7 +95,7 @@ Pair argument(int64_t index, Environment* env, CallSite const& call) {
 			return p;
 		}
 		else {
-			index -= env->numDots();
+			index -= env->numDots;
 			return call.arguments[call.dotIndex+index+1];
 		}
 	}
@@ -124,7 +114,9 @@ size_t MatchArgs(Thread& thread, Prototype const* prototype, CallSite const& cal
 	if(!named) {
 		// if the arguments are not named, then we'll just
 		// match up to the pDotIndex, after that, everything is varargs. 
-		return (size_t)std::max(numArgs - pDotIndex, (size_t)0);
+		return numArgs >= pDotIndex
+			? numArgs - pDotIndex
+			: 0;
 	}
 	else {
 		// call arguments are named, do matching by name
@@ -194,7 +186,7 @@ size_t MatchArgs(Thread& thread, Prototype const* prototype, CallSite const& cal
 inline void assignArgument(size_t i, Value const& v, Environment* evalEnv, Environment* assignEnv) {
 	assert(!v.isFuture());
 	
-	Value& w = assignEnv->slots[i];
+	Value& w = assignEnv->Slots()[i];
 	w = v;
 	if(w.isPromise()) {
 		((Promise&)w).environment(evalEnv);
@@ -204,9 +196,9 @@ inline void assignArgument(size_t i, Value const& v, Environment* evalEnv, Envir
 inline void assignDot(size_t i, String n, Value const& v, Environment* evalEnv, Environment* assignEnv) {
 	assert(!v.isFuture());
 
-	assignEnv->dots[i*2+0] = Character::c(n);
+	assignEnv->Dots()[i*2+0] = Character::c(n);
 
-	Value& w = assignEnv->dots[i*2+1];
+	Value& w = assignEnv->Dots()[i*2+1];
 	w = v;
 	if(w.isPromise()) {
 		((Promise&)w).environment(evalEnv);
@@ -246,7 +238,7 @@ void AssignArgs(Thread& thread, Prototype const* prototype, CallSite const& call
 		// all unused args go into ...
 		for(size_t i = end; i < numArgs; i++) {
 			Pair const& arg = argument(i, env, call);
-			assignDot(i, arg.n, arg.v, env, fenv);
+			assignDot(i-end, arg.n, arg.v, env, fenv);
 		}
 	}
 	else {
@@ -281,7 +273,9 @@ size_t FastMatchArgs(Thread& thread, Prototype const* prototype, CallSite const&
 	size_t const pDotIndex = (size_t)prototype->dotIndex;
 
 	// Everything after the dot index is vararg
-	return std::max(argumentsSize - pDotIndex, (size_t)0);
+	return argumentsSize >= pDotIndex
+		? argumentsSize - pDotIndex
+		: 0;
 }
 
 // Assumes no names and no ... in the argument list.
@@ -356,11 +350,10 @@ void PreparePromiseStack(
 
 	// make new stack frame
 	StackFrame& s = thread.push();
-	s.dots = lexicalScope->dots;
-	s.slots = lexicalScope->slots;
 	s.registers = s.reservedTo;
 	s.reservedTo = s.registers + code->registers;
 	s.calls = &code->calls[0];
+	s.ics = (IC*)&code->ics[0];
 
 	if(s.reservedTo > thread.registers+DEFAULT_NUM_REGISTERS)
 		throw RiposteError("Register overflow");
@@ -372,7 +365,7 @@ void PreparePromiseStack(
 	s.environment = lexicalScope;
 }
 
-Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out) {
+void GenericDispatch(Thread& thread, String op, Value const& a, Value& c) {
 	/*Environment* penv;
 	Value const& f = thread.frame.environment->getRecursive(op, penv);
 	if(f.isFunction()) {
@@ -390,7 +383,7 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 	_error("Failed to find generic for builtin op");
 }
 
-Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out) {
+void GenericDispatch(Thread& thread, String op, Value const& a, Value const& b, Value& c) {
 	/*Environment* penv;
 	Value const& f = thread.frame.environment->getRecursive(op, penv);
 	if(f.isFunction()) { 

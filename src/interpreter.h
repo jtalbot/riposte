@@ -72,23 +72,35 @@ struct CallSite {
 		, hasDots(hasDots) {}
 };
 
-struct StackLayout {
+struct Shape {
 	std::map<String, size_t> m;
-	void staticAdd(String s) {
-		if(m.find(s) == m.end()) {
-			size_t i = m.size();
-			m[s] = i;
+	size_t add(String s) {
+		std::map<String, size_t>::const_iterator i = m.find(s);
+		if(i != m.end()) {
+			return i->second;
 		}
-	} 
+		else {
+			size_t size = m.size();
+			m[s] = size;
+			return size;
+		}
+	}
+};
+
+struct IC {
+	Shape* shape;
+	size_t slot;
+	String s;
 };
 
 struct Code {
 	typedef Value (*Ptr)(Thread* thread);
 	Ptr ptr;
 	size_t registers;
-	StackLayout* layout;
+	Shape* shape;
 	
 	std::vector<CallSite> calls;
+	std::vector<IC> ics;
 };
 
 struct Prototype : public HeapObject {
@@ -103,17 +115,14 @@ struct Prototype : public HeapObject {
 	Code const* code;
 
 	void visit() const;
-
-	//static void printByteCode(Prototype const* prototype, State const& state); 
 };
 
 struct StackFrame {
-	Value* dots;		// dots start here
-	Value* slots;		// slots start here
 	Value* registers;	// registers start here
 	Value* reservedTo;	// end of registers
 	Environment* environment;
 	CallSite const* calls;
+	IC* ics;
 };
 
 struct InternalFunction {
@@ -126,88 +135,129 @@ struct InternalFunction {
 
 class Environment : public HeapObject {
 public:
-	Environment* lexical, *dynamic;
+	Environment* lexical;
+	Environment* dynamic;
 	Value call;
-	bool dotsNamed; 	// true if any of the dots have names	
+	std::map<String, Value> dictionary;
+	
+	Shape* shape;
+	size_t numDots;
+	bool dotsNamed;
+	Value* data;
 
-	StackLayout const* layout;
-	Value* dots;
-	Value* slots;
+	explicit Environment(
+		Environment* lexical, 
+		Environment* dynamic, 
+		Shape* shape,
+		int64_t dots,
+		Value const& call) 
+		: lexical(lexical)
+		, dynamic(dynamic)
+		, call(call)
+		, shape(shape)
+		, numDots(dots)
+		, dotsNamed(false) {
+		data = new Value[shape->m.size()+numDots*2];
+		memset(data, 0, (shape->m.size()+numDots*2)*sizeof(Value));
+	}
 
-	explicit Environment(StackLayout* layout, Environment* lexical, Environment* dynamic, Value const& call) :
-			lexical(lexical), dynamic(dynamic), call(call), dotsNamed(false), layout(layout) {}
-
+	void mutateShape(Shape* s) {
+		// copy out old data
+		std::map<String, size_t>::const_iterator i;
+		for(i = shape->m.begin(); i != shape->m.end(); i++) {
+			dictionary[i->first] = Slots()[i->second];
+		}
+	
+		// make new room
+		shape = s;
+		data = new Value[shape->m.size()+numDots*2];
+	
+		// copy over stuff, assuming no dots for now.
+		std::map<String, size_t>::const_iterator j;
+		for(j = shape->m.begin(); j != shape->m.end(); j++) {
+			std::map<String, Value>::const_iterator k;
+			k = dictionary.find(j->first);
+			if(k != dictionary.end()) {
+				Slots()[j->second] = k->second;
+				dictionary.erase(j->first);
+			}
+			else {
+				Slots()[j->second] = Value::Nil();
+			}
+		}
+			
+	}
+		
 	Environment* LexicalScope() const { return lexical; }
 	Environment* DynamicScope() const { return dynamic; }
 
-	Value* find(String name, bool& success) const ALWAYS_INLINE {
-		std::map<String, size_t>::const_iterator i = layout->m.find(name);
-		if(i != layout->m.end()) {
-			success = true;
-			return (Value*)&slots[i->second];
+	Value const* Slots() const {
+		return data;
+	}
+	
+	Value const* Dots() const {
+		return data+shape->m.size();
+	}
+
+	Value* Slots() {
+		return data;
+	}
+	
+	Value* Dots() {
+		return data+shape->m.size();
+	}
+
+	Value const* get(String name) const {
+		std::map<String, size_t>::const_iterator i = 
+			shape->m.find(name);
+		if(i != shape->m.end())
+			return Slots() + i->second;
+	
+		std::map<String, Value>::const_iterator j =
+			dictionary.find(name);
+		if(j != dictionary.end())
+			return &j->second;
+	
+		return 0;
+	}
+
+	Value* set(String name, Value const& v) {
+		Value* a = (Value*)get(name);
+		if(!a) {
+			a = &(dictionary[name]);
 		}
-		else {
-			success = false;
-			return 0;
-		}
+		*a = v;
+		return a;
 	}
 
 	bool has(String name) const ALWAYS_INLINE {
-		bool success;
-		find(name, success);
-		return success;
-	}
-
-	Value const& get(String name) const ALWAYS_INLINE {
-		bool success;
-		return *find(name, success);
-	}
-
-	Value& insert(String name) ALWAYS_INLINE {
-		bool success;
-		Value* r = find(name, success);
-		/*if(!success) {
-			int64_t i = s.size();
-			s.push_back(Value::Nil());
-			t->m[name] = i;
-			r = &s[i];
-		}*/
-		_error("Environment insert NYI");
-		return *r;
+		return get(name) != 0;
 	}
 
 	void remove(String name) {
-		_error("Environment remove NYI");
-		std::map<String, size_t>::const_iterator i = layout->m.find(name);
-		if(i != layout->m.end()) {
-			slots[i->second] = Value::Nil();
-		}
+		_error("NYI: remove");
 	}
 
 	// Look up insertion location using R <<- rules
 	// (i.e. find variable with same name in the lexical scope)
 	// Note: doesn't actually insert anything.
-	Value& insertRecursive(String name, Environment*& env) const ALWAYS_INLINE {
-		bool success;
+	Value* insertRecursive(String name, Environment*& env) const ALWAYS_INLINE {
 		env = (Environment*)this;
-		Value* v = env->find(name, success);
-		while(!success && (env = env->LexicalScope())) {
-			v = env->find(name, success);
+		Value* v = (Value*)env->get(name);
+		while(!v && (env = env->LexicalScope())) {
+			v = (Value*)env->get(name);
 		}
-		return *v;
+		return v;
 	}
 	
 	// Look up variable using standard R lexical scoping rules
 	// Should be same as insertRecursive, but with extra constness
-	Value const& getRecursive(String name, Environment*& env) const ALWAYS_INLINE {
+	Value const* getRecursive(String name, Environment*& env) const ALWAYS_INLINE {
 		return insertRecursive(name, env);
 	}
 
 	void visit() const;
 
-	size_t numDots() const {
-		return (slots-dots)>>1;
-	}
 };
 
 #define DEFAULT_NUM_REGISTERS 10000
@@ -484,7 +534,7 @@ inline State::State(uint64_t threads, int64_t argc, char** argv)
 
 	interpreter_init(getMainThread());
 	
-	Environment* base = new Environment(new StackLayout(),0,0,Null::Singleton());
+	Environment* base = new Environment(NULL,NULL,new Shape(),0,Null::Singleton());
 	path.push_back(base);
 	
 	this->global = getMainThread().beginEval(base, 0);

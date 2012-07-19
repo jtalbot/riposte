@@ -119,6 +119,8 @@ int dostdin(State& state) {
 			e_message("Error", "runtime", error.what().c_str());
 		} catch(CompileError& error) {
 			e_message("Error", "compiler", error.what().c_str());
+		} catch(...) {
+			e_message("Error", "", "unknown exception thrown");
 		}
 		if(thread.warnings.size() > 0) {
 			std::cout << "There were " << intToStr(thread.warnings.size()) << " warnings." << std::endl;
@@ -162,6 +164,8 @@ static int dofile(const char * file, std::istream & in, State& state, bool echo)
 		e_message("Error", "runtime", error.what().c_str());
 	} catch(CompileError& error) {
 		e_message("Error", "compiler", error.what().c_str());
+	} catch(...) {
+		e_message("Error", "", "unknown exception thrown");
 	}
 
 	return rc;
@@ -239,7 +243,7 @@ main(int argc, char** argv)
 	try {
 		registerCoreFunctions(state);	
 		registerCoerceFunctions(state);	
-		//loadLibrary(thread, "library", "core");
+		loadLibrary(thread, "library", "core");
 		//loadLibrary(thread, "library", "base");
 		//loadLibrary(thread, "library", "stats");
 

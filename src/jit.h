@@ -7,7 +7,6 @@ struct Code;
 struct Prototype;
 class Thread;
 class Environment;
-struct StackLayout;
 
 struct JITCompiler {
 

@@ -25,51 +25,13 @@ void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function con
 
 void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CallSite const& call);
 
-Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out);
+void GenericDispatch(Thread& thread, String op, Value const& a, Value& c);
 
-Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out);
-
-#define REGISTER(i) (thread.frame.registers[(i)])
-#define CONSTANT(i) (thread.frame.constants[(i)-256])
-
-// Out register is currently always a register, not memory
-#define OUT(X) (thread.frame.registers[(inst.X)]) 
-
-#define DECODE(X) \
-Environment* X##Env = 0; \
-Value const& X = \
-	*(thread.frame.registers+(inst.X))
-/*	__builtin_expect((inst.X) < 256, true) \
-		? *(thread.frame.registers+(inst.X)) \
-		: thread.frame.prototype->constants[(inst.X)-256] 
-*/
-#define FORCE(X) \
-	if(!X.isObject()) force(thread, X);
-
-// Out register is currently always a register, not memory
-#define OUT2(X) (registers[(inst##X)]) 
-
-#define DECODE2(X) \
-Environment* X##Env = 0; \
-Value const& X = (inst##X < 256)\
-	? (registers[(inst##X)]) \
-	: (constants[(inst##X)-256])
-
-#define DOTDOT(X, i) \
-Environment* X##Env = thread.frame.environment; \
-Value const& X = \
-	(thread.frame.environment->dots[(i)].v);
-	
-#define FORCE_DOTDOT(X, i) \
-if(__builtin_expect(!X.isObject(), false)) { \
-	return forceDot(thread, inst, X, X##Env, (i)); \
-}
-
+void GenericDispatch(Thread& thread, String op, Value const& a, Value const& b, Value& c);
 
 #define BIND(X) \
 if(__builtin_expect(X.isFuture(), false)) { \
 	thread.traces.Bind(thread,X); \
-	return &inst; \
 }
 
 template< template<typename T> class Op > 

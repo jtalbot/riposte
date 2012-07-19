@@ -39,11 +39,11 @@ struct Value {
 
 	// Warning: shallow equality!
 	bool operator==(Value const& other) const {
-		return header == other.header && p == other.p;
+		return header == other.header && i == other.i;
 	}
 	
 	bool operator!=(Value const& other) const {
-		return header != other.header || p != other.p;
+		return header != other.header || i != other.i;
 	}
 
 	Type::Enum type() const { return (Type::Enum)typ; }
