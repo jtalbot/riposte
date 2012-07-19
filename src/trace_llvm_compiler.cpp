@@ -1,27 +1,67 @@
 
 #include "interpreter.h"
+#include "nvvm.h"
+
+#include <cassert>
+#include <climits>
+#include <vector>
+#include <map>
+#include <string>
+#include <cstdlib>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <cuda.h>
+#include <cuda_runtime_api.h>
+#include <builtin_types.h>
 
 #ifdef USE_LLVM_COMPILER
 
+#if defined(_MSC_VER)
+// llvm/Instructions.h runs into this
+#pragma warning (disable : 4355)
+#endif
+
+#include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/Verifier.h"
+#include "llvm/Bitcode/BitstreamWriter.h"
+#include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/DerivedTypes.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JIT.h"
 #include "llvm/LLVMContext.h"
 #include "llvm/Linker.h"
 #include "llvm/Module.h"
+#include "llvm/Pass.h"
 #include "llvm/PassManager.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/IRBuilder.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetData.h"
+#include "llvm/Type.h"
+#include "llvm/DerivedTypes.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Value.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Program.h"
+#include "llvm/Support/ValueHandle.h"
+#include "llvm/Module.h"
+#include "llvm/LLVMContext.h"
 
+#define checkCudaErrors(Err)  checkCudaErrors_internal (Err, __FILE__, __LINE__)
+//#define USE_TEXT_NVVM_INTERFACE 1 
+
+#define __NVVM_SAFE_CALL(X) do { \
+nvvmResult ResCode = (X); \
+if (ResCode != NVVM_SUCCESS) { \
+    std::cout << "NVVM call (" << #X << ") failed. Error Code : " << ResCode << std::endl;\
+} \
+} while (0)
 
 struct LLVMState {
     llvm::Module * M;
@@ -30,6 +70,7 @@ struct LLVMState {
     llvm::FunctionPassManager * FPM;
 };
 //inside pieces of the compiler
+
 
 void TraceLLVMCompiler_init(State & state) {
     LLVMState * L = state.llvmState = new (GC) LLVMState;
@@ -71,28 +112,96 @@ struct TraceLLVMCompiler {
     Thread * thread;
     Trace * trace;
     llvm::Function * function;
+    llvm::Function *KernelFunc;
     llvm::BasicBlock * entry;
     llvm::Value * loopIndexAddr;
     llvm::Type * doubleType;
     llvm::Type * intType;
     llvm::IRBuilder<> * B;
+    llvm::Module * mainModule;
+    
+    llvm::LLVMContext * C;
+    llvm::ExecutionEngine * EE;
+    llvm::FunctionPassManager * FPM;
+    
+    
     std::vector<llvm::Value *> values;
+    std::vector<void *> outputGPU;
+    std::vector<llvm::Value *> outputGPUAddr;
+    std::vector<void *> inputGPU;
+    std::vector<llvm::Value *> inputGPUAddr;
     
     TraceLLVMCompiler(Thread * th, Trace * tr) 
-    : L(th->state.llvmState), thread(th), trace(tr), values(tr->nodes.size(),NULL) {}
+    : L(th->state.llvmState), thread(th), trace(tr), values(tr->nodes.size(),NULL) {
+
+        llvm::InitializeNativeTarget();
+        C = &llvm::getGlobalContext();
+        mainModule = new llvm::Module("riposte",*C);
+        
+        
+        
+        std::string lTargDescrStr;
+        if (sizeof(void *) == 8) { // pointer size, alignment == 8
+            lTargDescrStr= "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-"
+            "i64:64:64-f32:32:32-f64:64:64-v16:16:16-"
+            "v32:32:32-v64:64:64-v128:128:128-n16:32:64";
+        } else {
+            lTargDescrStr= "e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-"
+            "i64:64:64-f32:32:32-f64:64:64-v16:16:16-"
+            "v32:32:32-v64:64:64-v128:128:128-n16:32:64";
+        }
+        
+        mainModule->setDataLayout(lTargDescrStr);
+        
+        
+        std::string err;
+        EE = llvm::EngineBuilder(mainModule).setErrorStr(&err).setEngineKind(llvm::EngineKind::JIT).create();
+        if (!EE) {
+            _error(err);
+        }
+        
+        FPM = new llvm::FunctionPassManager(mainModule);
+        
+        //TODO: add optimization passes here, these are just from llvm tutorial and are probably not good
+        //look here: http://lists.cs.uiuc.edu/pipermail/llvmdev/2011-December/045867.html
+        FPM->add(new llvm::TargetData(*L->EE->getTargetData()));
+        // Provide basic AliasAnalysis support for GVN.
+        FPM->add(llvm::createBasicAliasAnalysisPass());
+        // Promote allocas to registers.
+        FPM->add(llvm::createPromoteMemoryToRegisterPass());
+        // Also promote aggregates like structs....
+        FPM->add(llvm::createScalarReplAggregatesPass());
+        // Do simple "peephole" optimizations and bit-twiddling optzns.
+        FPM->add(llvm::createInstructionCombiningPass());
+        // Reassociate expressions.
+        FPM->add(llvm::createReassociatePass());
+        // Eliminate Common SubExpressions.
+        FPM->add(llvm::createGVNPass());
+        // Simplify the control flow graph (deleting unreachable blocks, etc).
+        FPM->add(llvm::createCFGSimplificationPass());
+        
+        FPM->doInitialization();
+    
+    }
     
     void Compile() {
-        intType = llvm::Type::getInt64Ty(*L->C);
-        doubleType = llvm::Type::getDoubleTy(*L->C);
         
-        llvm::FunctionType * ftype = llvm::FunctionType::get(llvm::Type::getVoidTy(*L->C),false);
         
-        function = llvm::Function::Create(ftype, llvm::Function::ExternalLinkage,"",L->M);
+        intType = llvm::Type::getInt64Ty(*C);
+        doubleType = llvm::Type::getDoubleTy(*C);
         
-        entry = llvm::BasicBlock::Create(*L->C,"entry",function);
-        B = new llvm::IRBuilder<>(*L->C);
+        
+        llvm::Constant *cons = mainModule->getOrInsertFunction("opLevelFunc", llvm::Type::getVoidTy(*C), intType, NULL);
+        function = llvm::cast<llvm::Function>(cons);
+        function->setCallingConv(llvm::CallingConv::C);
+        
+        llvm::Function::arg_iterator args = function->arg_begin();
+        llvm::Value* index = args++;
+        index->setName("index");
+        
+        entry = llvm::BasicBlock::Create(*C,"entry",function);
+        B = new llvm::IRBuilder<>(*C);
         B->SetInsertPoint(entry);
-        
         
         //create the enclosing loop:
         /*
@@ -102,32 +211,134 @@ struct TraceLLVMCompiler {
         */
         
         llvm::Constant * Size = ConstantInt(trace->Size);
+        
         loopIndexAddr = B->CreateAlloca(intType);
-        B->CreateStore(ConstantInt(0LL),loopIndexAddr);
-        
-        
-        llvm::BasicBlock * cond = createAndInsertBB("cond");
-        llvm::BasicBlock * body = createAndInsertBB("body");
-        llvm::BasicBlock * end = createAndInsertBB("end");
-        
-        B->CreateBr(cond);
-        B->SetInsertPoint(cond);
-        llvm::Value * c = B->CreateICmpULT(loopIndex(), Size);
-        B->CreateCondBr(c,body,end);
-        
-        B->SetInsertPoint(body);
+        B->CreateStore(index, loopIndexAddr);
+
         CompileLoopBody();
-        B->CreateStore(B->CreateAdd(loopIndex(), ConstantInt(1LL)),loopIndexAddr);
-        B->CreateBr(cond);
-        
-        B->SetInsertPoint(end);
+
         B->CreateRetVoid();
         
-        L->M->dump();
+
         llvm::verifyFunction(*function);
         
-        L->FPM->run(*function);
-        L->M->dump();
+        //Gavin changes
+        //end Gavin changes
+        
+        if (thread->state.verbose)
+            mainModule->dump();
+        
+        
+                
+        
+        
+        FPM->run(*function);
+        
+
+        
+        
+        ///IMPORTANT: TEST RUN AT MOVING KERNEL FUNCTION INTO COMPILE PART OF PROGRAM
+        //WE have a function and we want a new function
+        
+        
+        llvm::Function *TidXFunc, *BlockDimXFunc, *BlockIdxXFunc;
+        
+        llvm::LLVMContext &VMContext = llvm::getGlobalContext();
+        llvm::Type *Int32Ty = llvm::Type::getInt32Ty(VMContext);
+        TidXFunc = llvm::Function::Create(llvm::FunctionType::get(Int32Ty, false),
+                                          llvm::Function::ExternalLinkage,
+                                          "llvm.nvvm.read.ptx.sreg.tid.x", mainModule);
+        BlockDimXFunc = llvm::Function::Create(llvm::FunctionType::get(Int32Ty, false),
+                                               llvm::Function::ExternalLinkage,
+                                               "llvm.nvvm.read.ptx.sreg.ntid.x", mainModule);
+        BlockIdxXFunc = llvm::Function::Create(llvm::FunctionType::get(Int32Ty, false),
+                                               llvm::Function::ExternalLinkage,
+                                               "llvm.nvvm.read.ptx.sreg.ctaid.x", mainModule);
+        
+        std::vector<llvm::Type *>ArgTys;
+
+        llvm::FunctionType *ElementFuncTy = function->getFunctionType(); //create new function type
+
+        
+        
+        llvm::FunctionType *KernelFuncTy = llvm::FunctionType::get(
+                                                                   llvm::Type::getVoidTy(VMContext),
+                                                                   ArgTys, /*isVarArg=*/false);
+  
+
+        KernelFunc = llvm::Function::Create(KernelFuncTy,
+                                            llvm::Function::ExternalLinkage,
+                                            "ker", mainModule);
+        
+        
+        
+        std::vector<llvm::Value *> Vals;
+        //there used to be a VMContext here
+        Int32Ty = llvm::Type::getInt32Ty(VMContext); 
+        llvm::NamedMDNode *Annot = mainModule->getOrInsertNamedMetadata("nvvm.annotations");
+        llvm::MDString *Str = llvm::MDString::get(VMContext, "kernel");
+        Vals.push_back(KernelFunc);
+        Vals.push_back(Str);
+        Vals.push_back(llvm::ConstantInt::get(Int32Ty, 1));
+        llvm::MDNode *MdNode = llvm::MDNode::get(VMContext, Vals);
+        Annot->addOperand(MdNode);
+        
+        
+        
+        /* create the following body for the kernel function:
+         {
+         unsigned id = blockDim.x * blockIdx.x + threadIdx.x;
+         if (id < len) {
+         ResType temp;
+         ElementFunc(Arg1[id], Arg2[id], ..., &temp);
+         Result[tid] = temp;
+         }
+         }
+        */
+        llvm::BasicBlock *EntryBB = llvm::BasicBlock::Create(VMContext, "entry", KernelFunc, /*InserBefore*/0);
+    
+
+        B = new llvm::IRBuilder<>(VMContext);
+        B->SetInsertPoint(EntryBB);
+         
+         // id = blockDim.x * blockIdx.x + threadIdx.x
+        llvm::Value *TidXRead = B->CreateSExt(B->CreateCall(TidXFunc, std::vector<llvm::Value *>(),"calltmp"), intType);
+        llvm::Value *BlockDimXRead = B->CreateSExt(B->CreateCall(BlockDimXFunc, std::vector<llvm::Value *>(), "calltmp"), intType);
+        llvm::Value *BlockIdxXRead = B->CreateSExt(B->CreateCall(BlockIdxXFunc, std::vector<llvm::Value *>(), "calltmp"), intType);
+        llvm::Value *Id = B->CreateMul(BlockDimXRead, BlockIdxXRead);
+        Id = B->CreateAdd(Id, TidXRead);
+        
+ 
+         
+         // if (id < len)
+
+        llvm::BasicBlock *EndBlock = llvm::BasicBlock::Create(VMContext, "if.end", 0, 0);
+        llvm::BasicBlock *IfBlock = llvm::BasicBlock::Create(VMContext, "if.body", 0, 0);
+        llvm::Value *Length = Size;
+        
+        
+        llvm::Value *Cond = B->CreateICmpSLT(Id, Length);
+        B->CreateCondBr(Cond, IfBlock, EndBlock);
+        KernelFunc->getBasicBlockList().push_back(IfBlock);
+        B->SetInsertPoint(IfBlock);
+         
+
+        std::vector<llvm::Value *> EleFuncArgs;
+        EleFuncArgs.push_back(Id);
+        
+        B->CreateCall(function, EleFuncArgs);
+         
+         //save it to dest
+
+        //complete the function
+        
+        B->CreateBr(EndBlock);
+        KernelFunc->getBasicBlockList().push_back(EndBlock);
+        
+
+        B->SetInsertPoint(EndBlock);
+        B->CreateRetVoid();
+        //END ATTEMPT AT KERNEL FUNCTION
         
         delete B;
     }
@@ -142,6 +353,24 @@ struct TraceLLVMCompiler {
         llvm::Value* cp = llvm::ConstantExpr::getIntToPtr(ci, llvm::PointerType::getUnqual(typ));
         return cp; 
     }
+    void Output() {
+        int output = 0;
+        for(size_t i = 0; i < trace->nodes.size(); i++) {
+            IRNode & n = trace->nodes[i];
+            if (n.liveOut) {
+                if(n.type == Type::Double) {
+                    cudaMemcpy(n.out.p, outputGPU[output], n.out.length * sizeof(Double::Element), cudaMemcpyDeviceToHost);
+                } else if(n.type == Type::Integer) {
+					cudaMemcpy(n.out.p, outputGPU[output], n.out.length * sizeof(Integer::Element), cudaMemcpyDeviceToHost);
+                } else if(n.type == Type::Logical) {
+					cudaMemcpy(n.out.p, outputGPU[output], n.out.length * sizeof(Logical::Element), cudaMemcpyDeviceToHost);
+				} else {
+					_error("Unknown type in initialize outputs");
+				}
+                output++;
+            }
+        }
+    }
     void CompileLoopBody() {
         llvm::Value * loopIndexValue = loopIndex();
         
@@ -153,20 +382,33 @@ struct TraceLLVMCompiler {
             switch(n.op) {
                 case IROpCode::load: {
                     void * p;
-                    if(n.in.isLogical())
-                        p = ((Logical&)n.in).v();
-                    else if(n.in.isInteger())
-                        p = ((Integer&)n.in).v();
-                    else if(n.in.isDouble())
-                        p = ((Double&)n.in).v();//checking for type, then declare a pointer for it
+                    if(n.in.isLogical()) {
+                        //p = ((Logical&)n.in).v();
+                        int size = ((Logical&)n.in).length*sizeof(Logical::Element);
+                        cudaMalloc((void**)&p, size);
+                        cudaMemcpy(p, ((Logical&)n.in).v(), size, cudaMemcpyHostToDevice);
+
+                    }
+                    else if(n.in.isInteger()) {
+                        //p = ((Integer&)n.in).v();
+                        int size = ((Integer&)n.in).length*sizeof(Integer::Element);
+                        cudaMalloc((void**)&p, size);
+                        cudaMemcpy(p, ((Integer&)n.in).v(), size, cudaMemcpyHostToDevice);
+                    }
+                    else if(n.in.isDouble()) {
+                        //p = ((Double&)n.in).v();
+                        int size = ((Double&)n.in).length*sizeof(Double::Element);
+                        cudaMalloc((void**)&p, size);
+                        cudaMemcpy(p, ((Double&)n.in).v(), size, cudaMemcpyHostToDevice);
+                    }
                     else
                         _error("unsupported type");
                     llvm::Type * t = getType(n.type);
                     
-                    
-                    llvm::Value * vector = ConstantPointer(p, t);//creates a pointer to p
-                    llvm::Value * elementAddr = B->CreateGEP(vector, loopIndexArray);//gep creates address
-                     
+                    inputGPU.push_back(p);
+                    llvm::Value * vector = ConstantPointer(p, t);
+                    llvm::Value * elementAddr = B->CreateGEP(vector, loopIndexArray);
+                    inputGPUAddr.push_back(elementAddr);
                     values[i] = B->CreateLoad(elementAddr);
                 } break;
                 case IROpCode::add:
@@ -175,7 +417,7 @@ struct TraceLLVMCompiler {
                             values[i] = B->CreateFAdd(values[n.binary.a],values[n.binary.b]);
                             break;
                         case Type::Integer:
-                            values[i] =  B->CreateAdd(values[n.binary.a],values[n.binary.b]);
+                            values[i] = B->CreateAdd(values[n.binary.a],values[n.binary.b]);
                             break;
                         default:
                             _error("unsupported type");
@@ -187,7 +429,7 @@ struct TraceLLVMCompiler {
                             values[i] = B->CreateFSub(values[n.binary.a],values[n.binary.b]);
                             break;
                         case Type::Integer:
-                            values[i] =  B->CreateSub(values[n.binary.a],values[n.binary.b]);
+                            values[i] = B->CreateSub(values[n.binary.a],values[n.binary.b]);
                             break;
                         default:
                             _error("unsupported type");
@@ -212,7 +454,7 @@ struct TraceLLVMCompiler {
                             values[i] = B->CreateFMul(values[n.binary.a],values[n.binary.b]);
                             break;
                         case Type::Integer:
-                            values[i] =  B->CreateMul(values[n.binary.a],values[n.binary.b]);
+                            values[i] = B->CreateMul(values[n.binary.a],values[n.binary.b]);
                             break;
                         default:
                             _error("unsupported type");
@@ -224,7 +466,7 @@ struct TraceLLVMCompiler {
                             values[i] = B->CreateFDiv(values[n.binary.a],values[n.binary.b]);
                             break;
                         case Type::Integer:
-                            values[i] =  B->CreateSDiv(values[n.binary.a],values[n.binary.b]);
+                            values[i] = B->CreateSDiv(values[n.binary.a],values[n.binary.b]);
                             break;
                         default:
                             _error("unsupported type");
@@ -236,7 +478,7 @@ struct TraceLLVMCompiler {
                             values[i] = B->CreateFRem(values[n.binary.a],values[n.binary.b]);
                             break;
                         case Type::Integer:
-                            values[i] =  B->CreateSRem(values[n.binary.a],values[n.binary.b]);
+                            values[i] = B->CreateSRem(values[n.binary.a],values[n.binary.b]);
                             break;
                         default:
                             _error("unsupported type");
@@ -300,15 +542,40 @@ struct TraceLLVMCompiler {
             if(n.liveOut) {
 				int64_t length = n.outShape.length;
 				void * p;
+               
                 if(n.type == Type::Double) {
                     n.out = Double(length);
-                    p = ((Double&)n.out).v();
+                    //p = ((Double&)n.out).v();
+                    int size = ((Double&)n.in).length*sizeof(Double::Element);
+                    cudaMalloc((void**)&p, size);
+                    
+                    int * dummy = new int[size];
+                    for (int i = 0; i < size; i++) {
+                        dummy[i] = 2;
+                    }
+                    cudaMemcpy(p, (const void *)dummy, size, cudaMemcpyHostToDevice);
                 } else if(n.type == Type::Integer) {
 					n.out = Integer(length);
-                    p = ((Integer&)n.out).v();
+                    //p = ((Integer&)n.out).v();
+                    int size = ((Integer&)n.in).length*sizeof(Integer::Element);
+                    cudaMalloc((void**)&p, size);
+                    
+                    int * dummy = new int[size];
+                    for (int i = 0; i < size; i++) {
+                        dummy[i] = 2;
+                    }
+                    cudaMemcpy(p, (const void *)dummy, size, cudaMemcpyHostToDevice);
                 } else if(n.type == Type::Logical) {
 					n.out = Logical(length);
-                    p = ((Logical&)n.out).v();
+                    //p = ((Logical&)n.out).v();
+                    int size = ((Logical&)n.in).length*sizeof(Logical::Element);
+                    cudaMalloc((void**)&p, size);
+                    
+                    int * dummy = new int[size];
+                    for (int i = 0; i < size; i++) {
+                        dummy[i] = 2;
+                    }
+                    cudaMemcpy(p, (const void *)dummy, size, cudaMemcpyHostToDevice);
 				} else {
 					_error("Unknown type in initialize outputs");
 				}
@@ -316,14 +583,104 @@ struct TraceLLVMCompiler {
                 llvm::Value * vector = ConstantPointer(p,t);
                 llvm::Value * elementAddr = B->CreateGEP(vector, loopIndexArray); 
                 B->CreateStore(values[i], elementAddr);
+                outputGPU.push_back(p);
+
+                outputGPUAddr.push_back(elementAddr);
             }
         }
     
     }
     
+    
     void Execute() {
-        void (*fptr)(void) = (void(*)(void)) L->EE->getPointerToFunction(function);
-        fptr();
+        
+
+       // createKernelF(function, ResultType, mainModule, "");
+        
+#if defined(USE_TEXT_NVVM_INTERFACE)
+        std::string BitCodeBuf;
+        raw_string_ostream BitCodeBufStream(BitCodeBuf);
+        BitCodeBufStream << *mainModule;
+        BitCodeBufStream.str();
+#else /* USE_TEXT_NVVM_INTERFACE */
+        std::vector<unsigned char> BitCodeBuf;
+        llvm::BitstreamWriter Stream(BitCodeBuf);
+        
+        BitCodeBuf.reserve(256*1024);
+        llvm::WriteBitcodeToStream(mainModule, Stream);
+#endif /* USE_TEXT_NVVM_INTERFACE */
+        
+        // generate PTX
+        nvvmCU CU;
+        size_t Size;
+        char *PtxBuf;
+        __NVVM_SAFE_CALL(nvvmCreateCU(&CU));
+        
+#if defined(USE_TEXT_NVVM_INTERFACE)
+        __NVVM_SAFE_CALL(nvvmCUAddModule(CU, BitCodeBuf.c_str(), BitCodeBuf.size()));
+#else /* USE_TEXT_NVVM_INTERFACE */
+        __NVVM_SAFE_CALL(nvvmCUAddModule(CU, (char *)&BitCodeBuf.front(), BitCodeBuf.size()));
+#endif /* USE_TEXT_NVVM_INTERFACE */
+        
+        __NVVM_SAFE_CALL(nvvmCompileCU(CU, /*numOptions = */0, /*options = */NULL));
+        __NVVM_SAFE_CALL(nvvmGetCompiledResultSize(CU, &Size));
+        PtxBuf = new char[Size+1];
+        __NVVM_SAFE_CALL(nvvmGetCompiledResult(CU, PtxBuf));
+        PtxBuf[Size] = 0;
+        __NVVM_SAFE_CALL(nvvmDestroyCU(&CU));
+                
+
+        
+        const char *ptxstr = PtxBuf;
+        const char *kname = "ker";
+        unsigned len = trace->Size;
+        //need to get the maxlength
+        
+        unsigned nthreads = 512;
+        unsigned nblocks;
+        if (nthreads >= len) {
+            nthreads = len;
+            nblocks = 1;
+        }
+        else {
+            nblocks = 1 + (len - 1)/nthreads;
+        }
+        CUmodule module;
+        CUfunction kernel;
+        
+
+        
+        CUresult error = cuModuleLoadDataEx(&module, ptxstr, 0, 0, 0);
+        assert(error == 0);
+        error = cuModuleGetFunction(&kernel, module, kname);
+        assert(error == 0);
+        error = cuFuncSetBlockShape(kernel, nthreads, 1, 1);
+        assert(error == 0);
+        
+        std::vector<void *> args;
+        args.push_back((void *)&len);
+        
+        
+        for (unsigned int i =0; i < outputGPUAddr.size(); ++i) {
+            args.push_back(outputGPUAddr[i]);
+        }
+        for (unsigned int i =0; i < inputGPUAddr.size(); ++i) {
+            args.push_back(inputGPUAddr[i]);
+        }
+        
+        
+
+        
+        error = cuLaunchKernel(kernel,
+                       nblocks, 1, 1,
+                       nthreads, 1, 1,
+                       0, 0,
+                       0,
+                                   0);
+        
+
+        Output();
+
         
     }
     llvm::BasicBlock * createAndInsertBB(const char * name) {
@@ -351,8 +708,11 @@ struct TraceLLVMCompiler {
 void Trace::JIT(Thread & thread) {
     std::cout << toString(thread) << "\n";
     TraceLLVMCompiler c(&thread,this);
+    cuInit(0);
+    nvvmInit();
     c.Compile();
     c.Execute();
+  //  c.Output();
 }
 
 #endif
