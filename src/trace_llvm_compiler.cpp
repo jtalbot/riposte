@@ -111,6 +111,7 @@ struct TraceLLVMCompiler {
     LLVMState * L;
     Thread * thread;
     Trace * trace;
+    llvm::Constant * Size;
     llvm::Function * function;
     llvm::Function *KernelFunc;
     llvm::BasicBlock * entry;
@@ -184,9 +185,7 @@ struct TraceLLVMCompiler {
     
     }
     
-    void Compile() {
-        
-        
+    void GenerateIndexFunction() {
         intType = llvm::Type::getInt64Ty(*C);
         doubleType = llvm::Type::getDoubleTy(*C);
         
@@ -203,23 +202,17 @@ struct TraceLLVMCompiler {
         B = new llvm::IRBuilder<>(*C);
         B->SetInsertPoint(entry);
         
-        //create the enclosing loop:
-        /*
-        for(i = 0; i < trace->Size; i++) {
-           <CompileLoopBody>
-        }
-        */
         
-        llvm::Constant * Size = ConstantInt(trace->Size);
+        Size = ConstantInt(trace->Size);
         
         loopIndexAddr = B->CreateAlloca(intType);
         B->CreateStore(index, loopIndexAddr);
-
-        CompileLoopBody();
-
+        
+        CompileBody();
+        
         B->CreateRetVoid();
         
-
+        
         llvm::verifyFunction(*function);
         
         //Gavin changes
@@ -229,14 +222,15 @@ struct TraceLLVMCompiler {
             mainModule->dump();
         
         
-                
+        
         
         
         FPM->run(*function);
-        
-
-        
-        
+    }
+    
+    
+    
+    void GenerateKernelFunction() {
         ///IMPORTANT: TEST RUN AT MOVING KERNEL FUNCTION INTO COMPILE PART OF PROGRAM
         //WE have a function and we want a new function
         
@@ -256,24 +250,23 @@ struct TraceLLVMCompiler {
                                                "llvm.nvvm.read.ptx.sreg.ctaid.x", mainModule);
         
         std::vector<llvm::Type *>ArgTys;
-
-        llvm::FunctionType *ElementFuncTy = function->getFunctionType(); //create new function type
-
+        
         
         
         llvm::FunctionType *KernelFuncTy = llvm::FunctionType::get(
                                                                    llvm::Type::getVoidTy(VMContext),
                                                                    ArgTys, /*isVarArg=*/false);
-  
-
+        
+        
         KernelFunc = llvm::Function::Create(KernelFuncTy,
                                             llvm::Function::ExternalLinkage,
                                             "ker", mainModule);
         
-        
+        /*
+         *This code is used to annotate which function we will use as an entry point
+         */
         
         std::vector<llvm::Value *> Vals;
-        //there used to be a VMContext here
         Int32Ty = llvm::Type::getInt32Ty(VMContext); 
         llvm::NamedMDNode *Annot = mainModule->getOrInsertNamedMetadata("nvvm.annotations");
         llvm::MDString *Str = llvm::MDString::get(VMContext, "kernel");
@@ -289,29 +282,27 @@ struct TraceLLVMCompiler {
          {
          unsigned id = blockDim.x * blockIdx.x + threadIdx.x;
          if (id < len) {
-         ResType temp;
-         ElementFunc(Arg1[id], Arg2[id], ..., &temp);
-         Result[tid] = temp;
+                IndexFunc(id);
+            }
          }
-         }
-        */
+         */
         llvm::BasicBlock *EntryBB = llvm::BasicBlock::Create(VMContext, "entry", KernelFunc, /*InserBefore*/0);
-    
-
+        
+        
         B = new llvm::IRBuilder<>(VMContext);
         B->SetInsertPoint(EntryBB);
-         
-         // id = blockDim.x * blockIdx.x + threadIdx.x
+        
+        // id = blockDim.x * blockIdx.x + threadIdx.x
         llvm::Value *TidXRead = B->CreateSExt(B->CreateCall(TidXFunc, std::vector<llvm::Value *>(),"calltmp"), intType);
         llvm::Value *BlockDimXRead = B->CreateSExt(B->CreateCall(BlockDimXFunc, std::vector<llvm::Value *>(), "calltmp"), intType);
         llvm::Value *BlockIdxXRead = B->CreateSExt(B->CreateCall(BlockIdxXFunc, std::vector<llvm::Value *>(), "calltmp"), intType);
         llvm::Value *Id = B->CreateMul(BlockDimXRead, BlockIdxXRead);
         Id = B->CreateAdd(Id, TidXRead);
         
- 
-         
-         // if (id < len)
-
+        
+        
+        // if (id < len)
+        
         llvm::BasicBlock *EndBlock = llvm::BasicBlock::Create(VMContext, "if.end", 0, 0);
         llvm::BasicBlock *IfBlock = llvm::BasicBlock::Create(VMContext, "if.body", 0, 0);
         llvm::Value *Length = Size;
@@ -321,26 +312,38 @@ struct TraceLLVMCompiler {
         B->CreateCondBr(Cond, IfBlock, EndBlock);
         KernelFunc->getBasicBlockList().push_back(IfBlock);
         B->SetInsertPoint(IfBlock);
-         
-
-        std::vector<llvm::Value *> EleFuncArgs;
-        EleFuncArgs.push_back(Id);
         
-        B->CreateCall(function, EleFuncArgs);
-         
-         //save it to dest
-
+        
+        std::vector<llvm::Value *> IndexArgs;
+        IndexArgs.push_back(Id);
+        
+        //call index function
+        B->CreateCall(function, IndexArgs);
+        
+        
         //complete the function
         
         B->CreateBr(EndBlock);
         KernelFunc->getBasicBlockList().push_back(EndBlock);
         
-
+        
         B->SetInsertPoint(EndBlock);
         B->CreateRetVoid();
         //END ATTEMPT AT KERNEL FUNCTION
         
         delete B;
+
+        
+    }
+    
+    void Compile() {
+        
+        
+        GenerateIndexFunction();
+        
+        GenerateKernelFunction();
+        
+        
     }
     llvm::Constant * ConstantInt(int64_t i) {
         return llvm::ConstantInt::get(intType,i);
@@ -354,6 +357,7 @@ struct TraceLLVMCompiler {
         return cp; 
     }
     void Output() {
+        //We loaded the addresses sequentially, so we can access them in order via this hack.
         int output = 0;
         for(size_t i = 0; i < trace->nodes.size(); i++) {
             IRNode & n = trace->nodes[i];
@@ -371,7 +375,7 @@ struct TraceLLVMCompiler {
             }
         }
     }
-    void CompileLoopBody() {
+    void CompileBody() {
         llvm::Value * loopIndexValue = loopIndex();
         
         std::vector<llvm::Value *> loopIndexArray;
@@ -545,40 +549,26 @@ struct TraceLLVMCompiler {
                
                 if(n.type == Type::Double) {
                     n.out = Double(length);
-                    //p = ((Double&)n.out).v();
+
                     int size = ((Double&)n.in).length*sizeof(Double::Element);
                     cudaMalloc((void**)&p, size);
                     
-                    int * dummy = new int[size];
-                    for (int i = 0; i < size; i++) {
-                        dummy[i] = 2;
-                    }
-                    cudaMemcpy(p, (const void *)dummy, size, cudaMemcpyHostToDevice);
                 } else if(n.type == Type::Integer) {
 					n.out = Integer(length);
-                    //p = ((Integer&)n.out).v();
                     int size = ((Integer&)n.in).length*sizeof(Integer::Element);
                     cudaMalloc((void**)&p, size);
                     
-                    int * dummy = new int[size];
-                    for (int i = 0; i < size; i++) {
-                        dummy[i] = 2;
-                    }
-                    cudaMemcpy(p, (const void *)dummy, size, cudaMemcpyHostToDevice);
                 } else if(n.type == Type::Logical) {
 					n.out = Logical(length);
-                    //p = ((Logical&)n.out).v();
+
                     int size = ((Logical&)n.in).length*sizeof(Logical::Element);
                     cudaMalloc((void**)&p, size);
                     
-                    int * dummy = new int[size];
-                    for (int i = 0; i < size; i++) {
-                        dummy[i] = 2;
-                    }
-                    cudaMemcpy(p, (const void *)dummy, size, cudaMemcpyHostToDevice);
 				} else {
 					_error("Unknown type in initialize outputs");
 				}
+                
+                //Grab the addresses and save them because we'll access them to put the output into
                 llvm::Type * t = getType(n.type);
                 llvm::Value * vector = ConstantPointer(p,t);
                 llvm::Value * elementAddr = B->CreateGEP(vector, loopIndexArray); 
@@ -595,7 +585,7 @@ struct TraceLLVMCompiler {
     void Execute() {
         
 
-       // createKernelF(function, ResultType, mainModule, "");
+      //Get the bitcode from the module
         
 #if defined(USE_TEXT_NVVM_INTERFACE)
         std::string BitCodeBuf;
@@ -622,6 +612,8 @@ struct TraceLLVMCompiler {
         __NVVM_SAFE_CALL(nvvmCUAddModule(CU, (char *)&BitCodeBuf.front(), BitCodeBuf.size()));
 #endif /* USE_TEXT_NVVM_INTERFACE */
         
+        
+        //Turn LLVM IR to PTX
         __NVVM_SAFE_CALL(nvvmCompileCU(CU, /*numOptions = */0, /*options = */NULL));
         __NVVM_SAFE_CALL(nvvmGetCompiledResultSize(CU, &Size));
         PtxBuf = new char[Size+1];
@@ -630,6 +622,8 @@ struct TraceLLVMCompiler {
         __NVVM_SAFE_CALL(nvvmDestroyCU(&CU));
                 
 
+        
+        //Create the threads based on the size
         
         const char *ptxstr = PtxBuf;
         const char *kname = "ker";
@@ -645,6 +639,9 @@ struct TraceLLVMCompiler {
         else {
             nblocks = 1 + (len - 1)/nthreads;
         }
+        
+        //Create the CUthings you need and make sure that none of them are zero
+        
         CUmodule module;
         CUfunction kernel;
         
@@ -657,18 +654,6 @@ struct TraceLLVMCompiler {
         error = cuFuncSetBlockShape(kernel, nthreads, 1, 1);
         assert(error == 0);
         
-        std::vector<void *> args;
-        args.push_back((void *)&len);
-        
-        
-        for (unsigned int i =0; i < outputGPUAddr.size(); ++i) {
-            args.push_back(outputGPUAddr[i]);
-        }
-        for (unsigned int i =0; i < inputGPUAddr.size(); ++i) {
-            args.push_back(inputGPUAddr[i]);
-        }
-        
-        
 
         
         error = cuLaunchKernel(kernel,
@@ -676,9 +661,9 @@ struct TraceLLVMCompiler {
                        nthreads, 1, 1,
                        0, 0,
                        0,
-                                   0);
-        
-
+                       0);
+        assert(error == 0);
+        //Print out the output
         Output();
 
         
