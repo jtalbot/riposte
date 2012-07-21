@@ -9,7 +9,6 @@
 #define CONTROL_FLOW_BYTECODES(_) 	\
 	_(jc, "jc") \
 	_(jmp, "jmp") \
-	_(branch, "branch") \
 	_(call, "call") \
 	_(ncall, "ncall") \
 	_(ret, "ret") /* return from function */ \
@@ -17,37 +16,52 @@
 	_(retp, "retp") /* return from a promise or default */ \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
+
+#ifdef TRACE_DEVELOPMENT
+	_(branch, "branch") \
 	_(list, "list") \
-	_(dotslist, "dotslist") \
+	_(dotslist, "dotslist")
+#endif
 
 #define MEMORY_ACCESS_BYTECODES(_) \
 	_(mov, "mov") \
 	_(fastmov, "fastmov") \
-	_(dotdot, "dotdot") \
 	_(assign, "assign") \
+
+#ifdef TRACE_DEVELOPMENT
+	_(dotdot, "dotdot") \
 	_(assign2, "assign2") \
 	_(iassign, "iassign") \
 	_(eassign, "eassign") \
 	_(subset, "subset") \
-	_(subset2, "subset2") \
+	_(subset2, "subset2")
+#endif
 
 #define UTILITY_BYTECODES(_)\
-	_(internal, "internal") \
 	_(function, "function") \
+
+#ifdef TRACE_DEVELOPMENT
+	_(internal, "internal") \
 	_(type, "type") \
 	_(missing, "missing") \
-	_(strip, "strip") \
+	_(strip, "strip")
+#endif
 
 #define GENERATOR_BYTECODES(_) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(vector,	"vector",	Generator) \
 	_(seq,		"seq", 		Generator) \
 	_(rep,		"rep", 		Generator) \
-	_(random,	"random", 	Generator) \
+	_(random,	"random", 	Generator)
+#endif
 
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double
 #define ARITH_UNARY_BYTECODES(_) \
 	_(pos, "pos", 	ArithUnary1, 	PassNA(a, a)) \
 	_(neg, "neg", 	ArithUnary1, 	PassNA(a, -a)) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(abs, "abs", 	ArithUnary1, 	PassNA(a, Abs(a))) \
 	_(sign, "sign",	ArithUnary2, 	((a>0)-(a<0))) \
 	_(sqrt, "sqrt",	ArithUnary2,	sqrt(a)) \
@@ -61,16 +75,21 @@
 	_(tan, "tan",	ArithUnary2,	tan(a)) \
 	_(acos, "acos",	ArithUnary2,	acos(a)) \
 	_(asin, "asin",	ArithUnary2,	asin(a)) \
-	_(atan, "atan",	ArithUnary2,	atan(a)) \
+	_(atan, "atan",	ArithUnary2,	atan(a))
+#endif
 
 #define LOGICAL_UNARY_BYTECODES(_) \
 	_(lnot, "lnot",	LogicalUnary, PassNA(a, ~a)) \
 
 #define ORDINAL_UNARY_BYTECODES(_) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(isna,	"isna",	OrdinalUnary,	MA::isNA(a)?-1:0) \
 	_(isnan,	"isnan",	OrdinalUnary,	MA::isNaN(a)?-1:0) \
 	_(isfinite,	"isfinite",	OrdinalUnary,	MA::isFinite(a)?-1:0) \
-	_(isinfinite,	"isinfinite",	OrdinalUnary,	MA::isInfinite(a)?-1:0) \
+	_(isinfinite,	"isinfinite",	OrdinalUnary,	MA::isInfinite(a)?-1:0)
+#endif
+
 /*
 #define STRING_UNARY_BYTECODES(_) \
 	_(nchar, "nchar", nchar, StringUnary, PassNA(a, strlen(a))) \
@@ -80,25 +99,34 @@
 #define ARITH_BINARY_BYTECODES(_) \
 	_(add, "add",	ArithBinary1,	PassNA(a,b,a+b)) \
 	_(sub, "sub",	ArithBinary1,	PassNA(a,b,a-b)) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(mul, "mul",	ArithBinary1,	PassNA(a,b,a*b)) \
 	_(div, "div",	ArithBinary2,	a/b) \
 	_(idiv, "idiv",	ArithBinary1,	PassNA(a,b,IDiv(a,b))) \
 	_(mod, "mod",	ArithBinary1,	PassNA(a,b,Mod(a,b))) \
 	_(pow, "pow",	ArithBinary2,	pow(a,b)) \
 	_(atan2, "atan2",	ArithBinary2,	atan2(a,b)) \
-	_(hypot, "hypot",	ArithBinary2,	hypot(a,b)) \
+	_(hypot, "hypot",	ArithBinary2,	hypot(a,b))
+#endif
 
 #define LOGICAL_BINARY_BYTECODES(_) \
 	_(lor, "lor",	LogicalBinary,	a|b) \
 	_(land, "land",	LogicalBinary,	a&b) \
 
 #define UNIFY_BINARY_BYTECODES(_) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(pmin, "pmin",	UnifyBinary,	PassNA(a,b,riposte_min(thread,a,b))) \
-	_(pmax, "pmax",	UnifyBinary,	PassNA(a,b,riposte_max(thread,a,b))) \
+	_(pmax, "pmax",	UnifyBinary,	PassNA(a,b,riposte_max(thread,a,b)))
+#endif 
 
 #define ROUND_BINARY_BYTECODES(_) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(round, "round", 	RoundBinary,	PassNA(a,b,riposte_round(thread,a,b))) \
-	_(signif, "signif",	RoundBinary,	PassNA(a,b,riposte_signif(thread,a,b))) \
+	_(signif, "signif",	RoundBinary,	PassNA(a,b,riposte_signif(thread,a,b)))
+#endif
 
 #define ORDINAL_BINARY_BYTECODES(_) \
 	_(eq, "eq",	OrdinalBinary,	PassNA(a,b,a==b?-1:0)) \
@@ -109,33 +137,54 @@
 	_(le, "le",	OrdinalBinary,	PassNA(a,b,le(thread,a,b)?-1:0)) \
 
 #define SPECIAL_MAP_BYTECODES(_) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(ifelse, "ifelse", IfElse) \
-	_(split, "split", Split) \
+	_(split, "split", Split)
+#endif
 
 #define ARITH_FOLD_BYTECODES(_) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(sum, "sum",	ArithFold, 	add) \
-	_(prod, "prod",	ArithFold, 	mul) \
+	_(prod, "prod",	ArithFold, 	mul)
+#endif
 
 #define LOGICAL_FOLD_BYTECODES(_) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(any, "any",	LogicalFold, 	lor) \
-	_(all, "all",	LogicalFold, 	land) \
+	_(all, "all",	LogicalFold, 	land)
+#endif
 
 #define UNIFY_FOLD_BYTECODES(_) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(min, "min",	UnifyFold, 	pmin) \
-	_(max, "max",	UnifyFold, 	pmax) \
+	_(max, "max",	UnifyFold, 	pmax)
+#endif
 
 #define SPECIAL_FOLD_BYTECODES(_) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(length, "length", CountFold) \
 	_(mean, "mean", MomentFold) \
-	_(cm2, "cm2", Moment2Fold) \
+	_(cm2, "cm2", Moment2Fold)
+#endif
 
 #define ARITH_SCAN_BYTECODES(_) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(cumsum, "cumsum",	ArithScan,	add) \
-	_(cumprod, "cumprod",	ArithScan,	mul) \
+	_(cumprod, "cumprod",	ArithScan,	mul)
+#endif
 
 #define UNIFY_SCAN_BYTECODES(_) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(cummin, "cummin",	UnifyScan,	pmin) \
-	_(cummax, "cummax",	UnifyScan,	pmax) \
+	_(cummax, "cummax",	UnifyScan,	pmax)
+#endif
 
 #define SPECIAL_BYTECODES(_) 	\
 	_(done, "done") 

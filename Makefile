@@ -10,7 +10,7 @@ ifeq ($(UNAME),Linux)
 LFLAGS += -lrt
 endif
 
-ENABLE_JIT=1
+ENABLE_JIT=0
 ENABLE_ARBB=0
 ENABLE_LIBM=0
 
@@ -31,7 +31,7 @@ ifneq ($(ENABLE_LIBM),0)
 	LFLAGS += -L$(AMD_LIBM_HOME)/lib/dynamic -lamdlibm
 endif
 
-SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp
+SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp runtime.cpp
 
 ifeq ($(ENABLE_JIT),1)
 	CXXFLAGS += -DENABLE_JIT

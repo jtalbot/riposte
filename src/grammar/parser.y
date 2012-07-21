@@ -47,7 +47,7 @@
 
 %include {
 	#include <iostream>
-	#include "internal.h"
+	#include "runtime.h"
 }
 
 %syntax_error {

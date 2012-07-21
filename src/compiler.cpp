@@ -1,10 +1,11 @@
 
 #include "compiler.h"
-#include "internal.h"
+#include "runtime.h"
 
 static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::add) return ByteCode::pos; 
 	if(func == Strings::sub) return ByteCode::neg; 
+#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::abs) return ByteCode::abs; 
 	if(func == Strings::sign) return ByteCode::sign; 
 	if(func == Strings::sqrt) return ByteCode::sqrt; 
@@ -23,9 +24,11 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::isnan) return ByteCode::isnan; 
 	if(func == Strings::isfinite) return ByteCode::isfinite; 
 	if(func == Strings::isinfinite) return ByteCode::isinfinite; 
+#endif
 	
 	if(func == Strings::lnot) return ByteCode::lnot; 
 	
+#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::sum) return ByteCode::sum; 
 	if(func == Strings::prod) return ByteCode::prod; 
 	if(func == Strings::mean) return ByteCode::mean; 
@@ -43,13 +46,15 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::strip) return ByteCode::strip; 
 	
 	if(func == Strings::random) return ByteCode::random; 
-	
+#endif	
 	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
 }
 
 static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::add) return ByteCode::add; 
 	if(func == Strings::sub) return ByteCode::sub; 
+
+#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::mul) return ByteCode::mul;
 	if(func == Strings::div) return ByteCode::div; 
 	if(func == Strings::idiv) return ByteCode::idiv; 
@@ -57,6 +62,7 @@ static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::pow) return ByteCode::pow; 
 	if(func == Strings::atan2) return ByteCode::atan2; 
 	if(func == Strings::hypot) return ByteCode::hypot; 
+#endif
 	if(func == Strings::lt) return ByteCode::lt; 
 	if(func == Strings::gt) return ByteCode::gt; 
 	if(func == Strings::eq) return ByteCode::eq; 
@@ -66,6 +72,7 @@ static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::lor) return ByteCode::lor; 
 	if(func == Strings::land) return ByteCode::land; 
 
+#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::pmin) return ByteCode::pmin; 
 	if(func == Strings::pmax) return ByteCode::pmax; 
 
@@ -78,17 +85,19 @@ static ByteCode::Enum op2(String const& func) {
 
 	if(func == Strings::round) return ByteCode::round; 
 	if(func == Strings::signif) return ByteCode::signif; 
-	
+#endif	
 	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a binary operator"); 
 }
 
 static ByteCode::Enum op3(String const& func) {
+#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::bracketAssign) return ByteCode::iassign;
 	if(func == Strings::bbAssign) return ByteCode::eassign;
 	if(func == Strings::split) return ByteCode::split;
 	if(func == Strings::ifelse) return ByteCode::ifelse;
 	if(func == Strings::seq) return ByteCode::seq;
 	if(func == Strings::rep) return ByteCode::rep;
+#endif
 	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a trinary operator"); 
 }
 
@@ -139,7 +148,7 @@ static int64_t isDotDot(String s) {
 
 Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code) {
 	String s = SymbolStr(symbol);
-	
+	#ifdef TRACE_DEVELOPMENT
 	int64_t dd = isDotDot(s);
 	if(dd > 0) {
 		Operand t = allocRegister();
@@ -147,8 +156,11 @@ Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code) 
 		return t;
 	}
 	else {
+	#endif
 		return Operand(MEMORY, s);
+	#ifdef TRACE_DEVELOPMENT
 	}
+	#endif
 }
 
 Compiler::Operand Compiler::placeInRegister(Operand r) {
@@ -207,6 +219,7 @@ Compiler::Operand Compiler::compileFunctionCall(List const& call, Character cons
 }
 
 Compiler::Operand Compiler::compileInternalFunctionCall(Object const& o, Prototype* code) {
+#ifdef TRACE_DEVELOPMENT
 	List const& call = (List const&)(o.base());
 	String func = SymbolStr(call[0]);
 	std::map<String, int64_t>::const_iterator itr = state.internalFunctionIndex.find(func);
@@ -233,8 +246,11 @@ Compiler::Operand Compiler::compileInternalFunctionCall(Object const& o, Prototy
 	}
 	// kill all parameters
 	kill(liveIn); 
+#endif
 	Operand result = allocRegister();
+#ifdef TRACE_DEVELOPMENT
 	emit(ByteCode::internal, function, result, result);
+#endif
 	return result;
 }
 
@@ -250,6 +266,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	String func = SymbolStr(call[0]);
 	// list is the only built in function that handles ... or named parameters
 	// we only handle the list(...) case through an op for now
+#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::list && call.length == 2 
 		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
 	{
@@ -260,7 +277,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(ByteCode::dotslist, counter, storage, result); 
 		return result;
 	}
-
+#endif
 	// These functions can't be called directly if the arguments are named or if
 	// there is a ... in the args list
 
@@ -274,6 +291,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		return compileFunctionCall(call, names, code);
 
 	// switch statement supports named args
+#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::switchSym)
 	{
 		if(call.length == 0) _error("'EXPR' is missing");
@@ -312,7 +330,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		}
 		return result;
 	}
-
+#endif
 	for(int64_t i = 0; i < length; i++) {
 		if(names.length > i && names[i] != Strings::empty) 
 			complicated = true;
@@ -329,10 +347,15 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Object const& o = (Object const&)call[1];
 		assert(isCall(o) && o.base().isList());
 		return compileInternalFunctionCall(o, code);
-	} 
+	}
+#ifdef TRACE_DEVELOPMENT 
 	else if(func == Strings::assign ||
 		func == Strings::eqassign || 
 		func == Strings::assign2)
+#else
+	else if(func == Strings::assign ||
+		func == Strings::eqassign)
+#endif
 	{
 		Value dest = call[1];
 		
@@ -376,24 +399,12 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand source = compile(value, code);
 		Operand result = Operand(MEMORY, SymbolStr(dest));
 
+#ifdef TRACE_DEVELOPMENT
 		emit(func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, result, 0, source);
+#else
+		emit(ByteCode::assign, result, 0, source);
+#endif
 		return source;
-		
-		// PHI outputs are always in registers, so merging with previous statement is generally
-		// dangerous. Can we improve this?
-
-		/*if(func == Strings::assign2) { 
-			emit(ByteCode::assign2, source, 0, result);
-			return source;
-		} else {
-			if(ir.size() > 0 && ir.back().c.loc == REGISTER) {
-				kill(ir.back().c);
-				ir.back().c  = result;
-			} else {
-				emit(ByteCode::mov, source, 0, result);
-			}
-			return result;
-		}*/
 	} 
 	else if(func == Strings::function) 
 	{
@@ -605,6 +616,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		return compile(call[1], code);
 	}
+#ifdef TRACE_DEVELOPMENT
 	else if(func == Strings::list) 
 	{
 		Operand f, r;
@@ -619,6 +631,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(ByteCode::list, f, Operand((int64_t)call.length-1), result);
 		return result;
 	}
+#endif
  
 	// Trinary operators
 	else if((func == Strings::bracketAssign ||
@@ -717,7 +730,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand result = allocRegister();
 		emit(op1(func), a, 0, result);
 		return result; 
-	} 
+	}
+#ifdef TRACE_DEVELOPMENT 
 	else if(func == Strings::missing)
 	{
 		if(call.length != 2) _error("missing requires one argument");
@@ -727,6 +741,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(ByteCode::missing, s, 0, result); 
 		return result;
 	} 
+#endif
 	else if(func == Strings::quote)
 	{
 		if(call.length != 2) _error("quote requires one argument");

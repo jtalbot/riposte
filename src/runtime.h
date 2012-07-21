@@ -1,6 +1,6 @@
 
-#ifndef _RIPOSTE_INTERNAL_H
-#define _RIPOSTE_INTERNAL_H
+#ifndef _RIPOSTE_RUNTIME_H
+#define _RIPOSTE_RUNTIME_H
 
 #include "value.h"
 #include "exceptions.h"

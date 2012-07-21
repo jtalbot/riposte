@@ -7,7 +7,7 @@
 #line 48 "parser.y"
 
 	#include <iostream>
-	#include "internal.h"
+	#include "runtime.h"
 #line 12 "parser.c"
 /* Next is all token values, in a form suitable for use by makeheaders.
 ** This section will be null unless lemon is run with the -m switch.

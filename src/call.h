@@ -126,9 +126,12 @@ inline void argAssign(Thread& thread, Environment* env, Pair const& parameter, P
 		if(w.isPromise() || w.isDefault()) {
 			assert(w.p == 0);
 			w.p = env;
-		} else if(w.isFuture()) {
+		}
+#ifdef TRACE_DEVELOPMENT 
+		else if(w.isFuture()) {
 			thread.LiveEnvironment(env, w);
 		}
+#endif
 		env->insert(parameter.n) = w;
 	}
 }
@@ -140,9 +143,11 @@ inline void dotAssign(Thread& thread, Environment* env, Pair const& argument) {
 		assert(w.p == 0);
 		w.p = env;
 	}
+#ifdef TRACE_DEVELOPMENT
 	else if(w.isFuture()) {
 		thread.LiveEnvironment(env, w);
 	}
+#endif
 	Pair p;
 	p.n = argument.n;
 	p.v = w;
@@ -343,7 +348,8 @@ Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const
 Value const& a = __builtin_expect((i) <= 0, true) ? \
 		*(thread.base+(i)) : \
 		thread.frame.environment->getRecursive((String)(i)); 
-	
+
+#ifdef ENABLE_JIT	
 #define FORCE(a, i) \
 if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
 	if(a.isDotdot()) { \
@@ -356,11 +362,26 @@ if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
 		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
 	} \
 	else return forceReg(thread, inst, &a, (String)(i)); \
-} \
+}
+#else
+#define FORCE(a, i) \
+if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
+	if(a.isDotdot()) { \
+		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
+		if(t.isConcrete()) { \
+			thread.frame.environment->insert((String)(i)) = t; \
+			return &inst; \
+		} \
+		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
+	} \
+	else return forceReg(thread, inst, &a, (String)(i)); \
+}
+#endif
 
 #define DOTDOT(a, i) \
 Value const& a = thread.frame.environment->dots[(i)].v;
 
+#ifdef ENABLE_JIT
 #define FORCE_DOTDOT(a, i) \
 if(!a.isConcrete()) { \
 	if(a.isDotdot()) { \
@@ -374,13 +395,32 @@ if(!a.isConcrete()) { \
 	} \
 	else return forceDot(thread, inst, &a, thread.frame.environment, (i)); \
 }
+#else
+#define FORCE_DOTDOT(a, i) \
+if(!a.isConcrete()) { \
+	if(a.isDotdot()) { \
+		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
+		if(t.isConcrete()) { \
+			thread.frame.environment->dots[(i)].v = t; \
+			return &inst; \
+		} \
+		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
+	} \
+	else return forceDot(thread, inst, &a, thread.frame.environment, (i)); \
+}
+#endif
 
+#ifdef ENABLE_JIT
 #define BIND(a) \
 if(__builtin_expect(a.isFuture(), false)) { \
 	thread.Bind(a); \
 	return &inst; \
 }
+#else
+#define BIND(a)
+#endif
 
+#ifdef ENABLE_JIT
 bool isTraceableType(Thread const& thread, Value const& a) {
 	Type::Enum type = thread.futureType(a);
         return type == Type::Double || type == Type::Integer || type == Type::Logical;
@@ -443,5 +483,6 @@ bool isTraceable<IfElse>(Thread const& thread, Value const& a, Value const& b, V
 		isTraceableShape(thread, a, c) &&
 		isTraceableShape(thread, b, c);
 }
+#endif
 
 #endif

@@ -7,7 +7,7 @@
 #include "ops.h"
 #include "assembler-x64.h"
 #include "register_set.h"
-#include "internal.h"
+#include "runtime.h"
 
 #ifdef USE_AMD_LIBM
 #include <amdlibm.h>

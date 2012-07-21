@@ -7,7 +7,7 @@
 #include "type.h"
 #include "bc.h"
 #include "ops.h"
-#include "internal.h"
+#include "runtime.h"
 #include "interpreter.h"
 #include "compiler.h"
 #include "sse.h"
@@ -118,7 +118,9 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
 	if(result.isClosureSafe()) {
 		thread.environments.push_back(thread.frame.environment);
+#ifdef ENABLE_JIT
 		thread.KillEnvironment(thread.frame.environment);
+#endif
 	}
 
 	REGISTER(0) = result;
@@ -128,8 +130,9 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	
 	thread.pop();
 	
+#ifdef ENABLE_JIT
 	thread.LiveEnvironment(thread.frame.environment, result);
-
+#endif
 	return returnpc;
 }
 
@@ -159,8 +162,9 @@ Instruction const* retp_op(Thread& thread, Instruction const& inst) {
 	} else {
 		thread.frame.env->dots[-thread.frame.dest].v = result;
 	}
+#ifdef ENABLE_JIT
 	thread.LiveEnvironment(thread.frame.env, result);
-	
+#endif	
 	thread.base = thread.frame.returnbase;
 	Instruction const* returnpc = thread.frame.returnpc;
 	thread.pop();
@@ -309,7 +313,9 @@ Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 	}
 	else {
 		thread.state.global->insert(s) = value;
+#ifdef ENABLE_JIT
 		thread.LiveEnvironment(thread.state.global, dest);
+#endif
 	}
 	return &inst+1;
 }
@@ -343,6 +349,7 @@ Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
 	BIND(dest);
 	BIND(index);
 	
+#ifdef ENABLE_JIT
 	if(value.isFuture() && (dest.isVector() || dest.isFuture())) {
 		if(index.isInteger() && index.length == 1) {
 			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
@@ -353,6 +360,7 @@ Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
 			return &inst+1;
 		}
 	}
+#endif
 
 	BIND(value);
 	SubsetAssign(thread, dest, true, index, value, OUT(thread,inst.c));
@@ -366,6 +374,7 @@ Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
 
 	BIND(index);
 	
+#ifdef ENABLE_JIT
 	if(value.isFuture() && (dest.isVector() || dest.isFuture())) {
 		if(index.isInteger() && index.length == 1) {
 			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
@@ -376,7 +385,7 @@ Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
 			return &inst+1;
 		}
 	}
-
+#endif
 	BIND(dest);
 	BIND(value);
 	Subset2Assign(thread, dest, true, index, value, OUT(thread,inst.c));
@@ -394,6 +403,7 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 		else if(i.isCharacter1()) { _error("Subscript out of bounds"); }
 	}
 
+#ifdef ENABLE_JIT
 	if(isTraceable(thread, a, i) 
 		&& thread.futureType(i) == Type::Logical 
 		&& thread.futureShape(a) == thread.futureShape(i)) {
@@ -401,17 +411,18 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 		thread.OptBind(OUT(thread, inst.c));
 		return &inst+1;
 	}
-
+#endif
 	FORCE(a, inst.a);
 	BIND(a);
 
+#ifdef ENABLE_JIT
 	if(isTraceable(thread, a, i) 
 		&& (thread.futureType(i) == Type::Integer || thread.futureType(i) == Type::Double)) {
 		OUT(thread, inst.c) = thread.EmitGather(thread.frame.environment, a, i);
 		thread.OptBind(OUT(thread, inst.c));
 		return &inst+1;
 	}
-
+#endif
 	if(a.isObject()) { 
 		return GenericDispatch(thread, inst, Strings::bracket, a, i, inst.c); 
 	} 
@@ -447,7 +458,7 @@ Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
 	_error("Invalid subset2 operation");
 }
 
-
+#ifdef ENABLE_JIT
 #define OP(Name, string, Group, Func) \
 Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	OPERAND(a, inst.a);	\
@@ -467,10 +478,26 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	Group##Dispatch<Name##VOp>(thread, a, c); \
 	return &inst+1; \
 }
+#else
+#define OP(Name, string, Group, Func) \
+Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
+	OPERAND(a, inst.a);	\
+	Value & c = OUT(thread, inst.c);	\
+	if(a.isDouble1())  { Name##VOp<Double>::Scalar(thread, a.d, c); return &inst+1; } \
+	if(a.isInteger1()) { Name##VOp<Integer>::Scalar(thread, a.i, c); return &inst+1; } \
+	if(a.isLogical1()) { Name##VOp<Logical>::Scalar(thread, a.c, c); return &inst+1; } \
+	FORCE(a, inst.a); \
+	BIND(a); \
+	if(a.isObject()) { return GenericDispatch(thread, inst, Strings::Name, a, inst.c); } \
+\
+	Group##Dispatch<Name##VOp>(thread, a, c); \
+	return &inst+1; \
+}
+#endif
 UNARY_FOLD_SCAN_BYTECODES(OP)
 #undef OP
 
-
+#ifdef ENABLE_JIT
 #define OP(Name, string, Group, Func) \
 Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	OPERAND(a, inst.a);	\
@@ -503,9 +530,39 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	Group##Dispatch<Name##VOp>(thread, a, b, c);	\
 	return &inst+1;	\
 }
+#else
+#define OP(Name, string, Group, Func) \
+Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
+	OPERAND(a, inst.a);	\
+	OPERAND(b, inst.b);	\
+	Value & c = OUT(thread, inst.c);	\
+        if(a.isDouble1()) {			\
+		if(b.isDouble1()) { Name##VOp<Double,Double>::Scalar(thread, a.d, b.d, c); return &inst+1; } \
+		if(b.isInteger1()) { Name##VOp<Double,Integer>::Scalar(thread, a.d, b.i, c); return &inst+1; } \
+		if(b.isLogical1()) { Name##VOp<Double,Logical>::Scalar(thread, a.d, b.c, c); return &inst+1; } \
+        }	\
+        else if(a.isInteger1()) {	\
+		if(b.isDouble1()) { Name##VOp<Integer,Double>::Scalar(thread, a.i, b.d, c); return &inst+1; } \
+		if(b.isInteger1()) { Name##VOp<Integer,Integer>::Scalar(thread, a.i, b.i, c); return &inst+1; } \
+		if(b.isLogical1()) { Name##VOp<Integer,Logical>::Scalar(thread, a.i, b.c, c); return &inst+1; } \
+        } \
+        else if(a.isLogical1()) {	\
+		if(b.isDouble1()) { Name##VOp<Logical,Double>::Scalar(thread, a.c, b.d, c); return &inst+1; } \
+		if(b.isInteger1()) { Name##VOp<Logical,Integer>::Scalar(thread, a.c, b.i, c); return &inst+1; } \
+		if(b.isLogical1()) { Name##VOp<Logical,Logical>::Scalar(thread, a.c, b.c, c); return &inst+1; } \
+        } \
+	FORCE(a, inst.a); FORCE(b, inst.b); \
+	BIND(a); BIND(b); \
+	if(a.isObject() || b.isObject()) { return GenericDispatch(thread, inst, Strings::Name, a, b, inst.c); } \
+\
+	Group##Dispatch<Name##VOp>(thread, a, b, c);	\
+	return &inst+1;	\
+}
+#endif
 BINARY_BYTECODES(OP)
 #undef OP
 
+#ifdef TRACE_DEVELOPMENT
 Instruction const* length_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	if(a.isVector())
@@ -590,6 +647,7 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 	_error("split not defined in scalar yet");
 	return &inst+1; 
 }
+#endif
 
 Instruction const* function_op(Thread& thread, Instruction const& inst) {
 	OPERAND(function, inst.a); FORCE(function, inst.a);
@@ -599,6 +657,7 @@ Instruction const* function_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
+#ifdef TRACE_DEVELOPMENT
 Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
 	OPERAND(b, inst.b); FORCE(b, inst.b); BIND(b);
@@ -758,6 +817,7 @@ Instruction const* internal_op(Thread& thread, Instruction const& inst) {
 	thread.state.internalFunctions[inst.a].ptr(thread, &REGISTER(inst.b), OUT(thread, inst.c));
 	return &inst+1;
 }
+#endif
 
 //
 //    Main interpreter loop 

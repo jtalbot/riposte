@@ -8,10 +8,6 @@
 #include <fstream>
 #include <iostream>
 
-#ifdef USE_CALLGRIND
-	#include <valgrind/callgrind.h>
-#endif
-
 #include "value.h"
 #include "parser.h"
 #include "compiler.h"
@@ -256,20 +252,19 @@ main(int argc, char** argv)
 	/* start garbage collector */
 	GC_INIT();
 	//GC_disable();
-#ifdef USE_CALLGRIND
-	CALLGRIND_START_INSTRUMENTATION
-#endif
 
 	State state(threads, argc, argv);
 	state.verbose = verbose;
 	Thread& thread = state.getMainThread();
 
 	try {
+	#ifdef TRACE_DEVELOPMENT
 		registerCoreFunctions(state);	
 		registerCoerceFunctions(state);	
 		loadLibrary(thread, "library", "core");
 		//loadLibrary(thread, "library", "base");
 		//loadLibrary(thread, "library", "stats");
+	#endif
 
 	} catch(RiposteError& error) { 
 		e_message("Error", "riposte", error.what().c_str());
