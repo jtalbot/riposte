@@ -11,6 +11,8 @@
 
 #include <pthread.h>
 
+#ifdef TRACE_DEVELOPMENT
+
 #include "Eigen/Dense"
 
 template<typename T>
@@ -1025,8 +1027,12 @@ void repeat2(Thread& thread, Value const* args, Value& result) {
 	result = Repeat(a, len);
 }
 
+#endif
+
 void registerCoreFunctions(State& state)
 {
+	#ifdef TRACE_DEVELOPMENT
+
 	//state.registerInternalFunction(state.internStr("nchar"), (nchar_fn), 1);
 	//state.registerInternalFunction(state.internStr("nzchar"), (nzchar_fn), 1);
 	
@@ -1080,5 +1086,7 @@ void registerCoreFunctions(State& state)
 	state.registerInternalFunction(state.internStr("commandArgs"), (commandArgs), 0);
 	state.registerInternalFunction(state.internStr("match"), (match), 2);
 	state.registerInternalFunction(state.internStr("repeat2"), (repeat2), 2);
+
+	#endif
 }
 
