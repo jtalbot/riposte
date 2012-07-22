@@ -3,10 +3,6 @@
 
 // code for making function calls
 
-#ifdef USE_THREADED_INTERPRETER
-static const void** glabels = 0;
-#endif
-
 static void printCode(Thread const& thread, Prototype const* prototype, Environment* env) {
 	std::cout << "Prototype: " << intToHexStr((int64_t)prototype) << "\t(executing in " << intToHexStr((int64_t)env) << ")" << std::endl;
 	std::cout << "\tRegisters: " << prototype->registers << std::endl;
@@ -19,9 +15,11 @@ static void printCode(Thread const& thread, Prototype const* prototype, Environm
 		std::cout << "\tCode: " << std::endl;
 		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++) {
 			std::cout << "\t\t" << i << ":\t" << prototype->bc[i].toString();
+#ifdef TRACE_DEVELOPMENT
 			if(prototype->bc[i].bc == ByteCode::call) {
 				std::cout << "\t\t(arguments: " << prototype->calls[prototype->bc[i].b].arguments.size() << ")";
 			}
+#endif
 			std::cout << std::endl;
 		}
 	}
@@ -43,16 +41,6 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 	if(prototype->constants.size() > 0)
 		memcpy(thread.base-(prototype->constants.size()-1), &prototype->constants[0], sizeof(Value)*prototype->constants.size());
 
-#ifdef USE_THREADED_INTERPRETER
-	// Initialize threaded bytecode if not yet done 
-	if(prototype->bc[0].ibc == 0)
-	{
-		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); ++i) {
-			Instruction const& inst = prototype->bc[i];
-			inst.ibc = glabels[inst.bc];
-		}
-	}
-#endif
 	return &(prototype->bc[0]);
 }
 

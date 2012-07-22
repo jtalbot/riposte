@@ -819,6 +819,47 @@ Instruction const* internal_op(Thread& thread, Instruction const& inst) {
 }
 #endif
 
+Instruction const* jc_record(Thread& thread, Instruction const& inst) {
+	return jc_op(thread, inst);
+}
+Instruction const* jmp_record(Thread& thread, Instruction const& inst) {
+	return jmp_op(thread, inst);
+}
+Instruction const* rets_record(Thread& thread, Instruction const& inst) {
+	return rets_op(thread, inst);
+}
+
+Instruction const* mov_record(Thread& thread, Instruction const& inst) {
+	Instruction const* r = mov_op(thread, inst);
+	JIT::IRRef a = thread.jit.read(thread, inst.a);
+	thread.jit.write(thread, a, inst.c); 
+	return r;
+}
+Instruction const* fastmov_record(Thread& thread, Instruction const& inst) {
+	Instruction const* r = fastmov_op(thread, inst);
+	JIT::IRRef a = thread.jit.read(thread, inst.a);
+	thread.jit.write(thread, a, inst.c); 
+	return r;
+}
+Instruction const* assign_record(Thread& thread, Instruction const& inst) {
+	Instruction const* r = assign_op(thread, inst);
+	JIT::IRRef c = thread.jit.read(thread, inst.c);
+	thread.jit.write(thread, c, inst.a); 
+	return r;
+}
+
+
+#define RECORD(Name, string, ...) \
+Instruction const* Name##_record(Thread& thread, Instruction const& inst) { \
+	Instruction const* r = Name##_op(thread, inst); \
+	JIT::IRRef a = thread.jit.read(thread, inst.a); \
+	JIT::IRRef b = thread.jit.read(thread, inst.b); \
+	thread.jit.emit(thread, TraceOpCode::Name, a, b, inst.c); \
+	return r; \
+}
+BINARY_BYTECODES(RECORD)
+#undef RECORD
+
 //
 //    Main interpreter loop 
 //
@@ -826,19 +867,76 @@ Instruction const* internal_op(Thread& thread, Instruction const& inst) {
 void interpret(Thread& thread, Instruction const* pc) {
 
 #ifdef USE_THREADED_INTERPRETER
-	if(pc == 0) { 
-    		#define LABELS_THREADED(name,type,...) (void*)&&name##_label,
-		static const void* labels[] = {BYTECODES(LABELS_THREADED)};
-		glabels = labels;
-		return;
-	}
+    	#define LABELS_THREADED(name,type,...) (void*)&&name##_label,
+	static const void* ops[] = {BYTECODES(LABELS_THREADED)};
+	#undef LABELS_THREADED
+    	#define RECORD_THREADED(name,type,...) (void*)&&name##_record,
+	static const void* record[] = {BYTECODES(RECORD_THREADED)};
+	#undef RECORD_THREADED
 
-	goto *(void*)(pc->ibc);
+	const void** labels = ops;
+
+	goto *(void*)(labels[pc->bc]);
 	#define LABELED_OP(name,type,...) \
 		name##_label: \
-			{ pc = name##_op(thread, *pc); goto *(void*)(pc->ibc); } 
+			{ pc = name##_op(thread, *pc); goto *(void*)labels[pc->bc]; } 
 	STANDARD_BYTECODES(LABELED_OP)
+	#undef LABELED_OP
+	#define RECORD_OP(name,type,...) \
+		name##_record: \
+			{ pc = name##_record(thread, *pc); goto *(void*)labels[pc->bc]; } 
+	STANDARD_BYTECODES(RECORD_OP)
+	#undef LABELED_OP
+	
+	jc_label: 	{ 
+		Instruction const* old_pc = pc;
+		pc = jc_op(thread, *pc); 
+		if(pc < old_pc) {
+			unsigned short& counter = 
+				thread.jit.counters[(((uintptr_t)old_pc)>>5) & (1024-1)];
+			counter++;
+			if(counter > JIT::RECORD_TRIGGER) {
+				counter = 0;
+				thread.jit.start_recording(old_pc);
+				labels = record;
+			}
+		}
+		goto *(void*)labels[pc->bc]; 
+	}
+	jmp_label: 	{ pc = jmp_op(thread, *pc); goto *(void*)labels[pc->bc]; }
+	rets_label: 	{ pc = rets_op(thread, *pc); goto *(void*)labels[pc->bc]; }
+	
+	jc_record: 	{ 
+		// did we make a loop yet??
+		Instruction const* old_pc = pc;
+		pc = jc_record(thread, *pc); 
+		if(pc-old_pc == old_pc->a)
+			thread.jit.guardT(thread);
+		else
+			thread.jit.guardF(thread);
+		
+		if(thread.jit.loop(old_pc)) {
+			if(pc < old_pc) {
+				thread.jit.end_recording();
+				thread.jit.dump();
+			}
+			else {
+				thread.jit.fail_recording();
+			}
+			labels = ops;
+		}
+		goto *(void*)labels[pc->bc]; 
+	}
+	jmp_record: 	{ pc = jmp_record(thread, *pc); goto *(void*)labels[pc->bc]; }
+	rets_record: 	{
+		pc = rets_record(thread, *pc);
+		// terminate recording
+		labels = ops;
+		goto *(void*)labels[pc->bc]; 
+	}
+	
 	done_label: {}
+	done_record: {}
 #else
 	while(pc->bc != ByteCode::done) {
 		switch(pc->bc) {
@@ -854,7 +952,6 @@ void interpret(Thread& thread, Instruction const* pc) {
 // ensure glabels is inited before we need it.
 void State::interpreter_init(Thread& thread) {
 #ifdef USE_THREADED_INTERPRETER
-	interpret(thread, 0);
 #endif
 }
 
@@ -865,6 +962,8 @@ Value Thread::eval(Prototype const* prototype) {
 Value Thread::eval(Prototype const* prototype, Environment* environment) {
 	Value* old_base = base;
 	int64_t stackSize = stack.size();
+
+	printCode(*this, prototype, environment);
 
 	// make room for the result
 	base--;	

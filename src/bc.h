@@ -9,15 +9,15 @@
 #define CONTROL_FLOW_BYTECODES(_) 	\
 	_(jc, "jc") \
 	_(jmp, "jmp") \
+	_(rets, "rets") /* return from top-level statement */ \
+
+#ifdef TRACE_DEVELOPMENT
 	_(call, "call") \
 	_(ncall, "ncall") \
 	_(ret, "ret") /* return from function */ \
-	_(rets, "rets") /* return from top-level statement */ \
 	_(retp, "retp") /* return from a promise or default */ \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
-
-#ifdef TRACE_DEVELOPMENT
 	_(branch, "branch") \
 	_(list, "list") \
 	_(dotslist, "dotslist")
@@ -38,9 +38,9 @@
 #endif
 
 #define UTILITY_BYTECODES(_)\
-	_(function, "function") \
 
 #ifdef TRACE_DEVELOPMENT
+	_(function, "function") \
 	_(internal, "internal") \
 	_(type, "type") \
 	_(missing, "missing") \
@@ -58,10 +58,10 @@
 
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double
 #define ARITH_UNARY_BYTECODES(_) \
-	_(pos, "pos", 	ArithUnary1, 	PassNA(a, a)) \
-	_(neg, "neg", 	ArithUnary1, 	PassNA(a, -a)) \
 
 #ifdef TRACE_DEVELOPMENT
+	_(pos, "pos", 	ArithUnary1, 	PassNA(a, a)) \
+	_(neg, "neg", 	ArithUnary1, 	PassNA(a, -a)) \
 	_(abs, "abs", 	ArithUnary1, 	PassNA(a, Abs(a))) \
 	_(sign, "sign",	ArithUnary2, 	((a>0)-(a<0))) \
 	_(sqrt, "sqrt",	ArithUnary2,	sqrt(a)) \
@@ -79,7 +79,10 @@
 #endif
 
 #define LOGICAL_UNARY_BYTECODES(_) \
-	_(lnot, "lnot",	LogicalUnary, PassNA(a, ~a)) \
+
+#ifdef TRACE_DEVELOPMENT
+	_(lnot, "lnot",	LogicalUnary, PassNA(a, ~a))
+#endif
 
 #define ORDINAL_UNARY_BYTECODES(_) \
 
@@ -215,7 +218,6 @@
 	UNIFY_SCAN_BYTECODES(_) \
 
 #define STANDARD_BYTECODES(_) \
-	CONTROL_FLOW_BYTECODES(_) \
 	MEMORY_ACCESS_BYTECODES(_) \
 	GENERATOR_BYTECODES(_) \
 	MAP_BYTECODES(_) \
@@ -227,6 +229,7 @@
 
 #define BYTECODES(_) \
 	STANDARD_BYTECODES(_) \
+	CONTROL_FLOW_BYTECODES(_) \
 	SPECIAL_BYTECODES(_)	
 
 #define ARITH_BYTECODES(_) \
@@ -251,10 +254,9 @@ DECLARE_ENUM(ByteCode, BYTECODES)
 struct Instruction {
 	int64_t a, b, c;
 	ByteCode::Enum bc;
-	mutable void const* ibc;
 
 	Instruction(ByteCode::Enum bc, int64_t a=0, int64_t b=0, int64_t c=0) :
-		a(a), b(b), c(c), bc(bc), ibc(0) {}
+		a(a), b(b), c(c), bc(bc) {}
 	
 	std::string regToStr(int64_t a) const {
 		//if(a <= 0) return intToStr(-a);

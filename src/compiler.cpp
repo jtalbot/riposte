@@ -3,9 +3,9 @@
 #include "runtime.h"
 
 static ByteCode::Enum op1(String const& func) {
+#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::add) return ByteCode::pos; 
 	if(func == Strings::sub) return ByteCode::neg; 
-#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::abs) return ByteCode::abs; 
 	if(func == Strings::sign) return ByteCode::sign; 
 	if(func == Strings::sqrt) return ByteCode::sqrt; 
@@ -24,11 +24,9 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::isnan) return ByteCode::isnan; 
 	if(func == Strings::isfinite) return ByteCode::isfinite; 
 	if(func == Strings::isinfinite) return ByteCode::isinfinite; 
-#endif
 	
 	if(func == Strings::lnot) return ByteCode::lnot; 
 	
-#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::sum) return ByteCode::sum; 
 	if(func == Strings::prod) return ByteCode::prod; 
 	if(func == Strings::mean) return ByteCode::mean; 
@@ -206,6 +204,7 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 
 // a standard call, not an op
 Compiler::Operand Compiler::compileFunctionCall(List const& call, Character const& names, Prototype* code) {
+#ifdef TRACE_DEVELOPMENT
 	Operand function = compile(call[0], code);
 	CompiledCall a = makeCall(call, names);
 	code->calls.push_back(a);
@@ -216,6 +215,9 @@ Compiler::Operand Compiler::compileFunctionCall(List const& call, Character cons
 	else
 		emit(ByteCode::ncall, function, code->calls.size()-1, result);
 	return result;
+#else
+	_error("Trace: No functions yet");
+#endif
 }
 
 Compiler::Operand Compiler::compileInternalFunctionCall(Object const& o, Prototype* code) {
@@ -246,12 +248,12 @@ Compiler::Operand Compiler::compileInternalFunctionCall(Object const& o, Prototy
 	}
 	// kill all parameters
 	kill(liveIn); 
-#endif
 	Operand result = allocRegister();
-#ifdef TRACE_DEVELOPMENT
 	emit(ByteCode::internal, function, result, result);
-#endif
 	return result;
+#else
+	_error("Trace: No internal functions yet");
+#endif
 }
 
 Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Prototype* code) {
@@ -405,7 +407,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(ByteCode::assign, result, 0, source);
 #endif
 		return source;
-	} 
+	}
+#ifdef TRACE_DEVELOPMENT 
 	else if(func == Strings::function) 
 	{
 		//compile the default parameters
@@ -484,6 +487,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		kill(body); kill(loop_variable); kill(loop_counter); kill(loop_vector);
 		return compileConstant(Null::Singleton(), code);
 	} 
+#endif
 	else if(func == Strings::whileSym)
 	{
 		Operand head_condition = compile(call[1], code);
@@ -828,6 +832,7 @@ Prototype* Compiler::compile(Value const& expr) {
 	code->registers = code->constants.size() + max_n;
 	
 	// insert appropriate termination statement at end of code
+#ifdef TRACE_DEVELOPMENT
 	if(scope == FUNCTION)
 		emit(ByteCode::ret, result, 0, 0);
 	else if(scope == PROMISE)
@@ -836,6 +841,10 @@ Prototype* Compiler::compile(Value const& expr) {
 		emit(ByteCode::rets, result, 0, 0);
 		emit(ByteCode::done, 0, 0, 0);
 	}
+#else
+		emit(ByteCode::rets, result, 0, 0);
+		emit(ByteCode::done, 0, 0, 0);
+#endif
 	int64_t n = code->constants.size();
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, encodeOperand(ir[i].a, n), encodeOperand(ir[i].b, n), encodeOperand(ir[i].c, n)));

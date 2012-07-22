@@ -8,6 +8,7 @@
 #include "value.h"
 #include "thread.h"
 #include "ir.h"
+#include "jit.h"
 
 #ifdef ENABLE_JIT
 #include "trace.h"
@@ -210,6 +211,8 @@ public:
 #ifdef ENABLE_JIT
 	Traces traces;
 #endif
+
+	JIT jit;
 
 	std::deque<Task> tasks;
 	Lock tasksLock;
