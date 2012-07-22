@@ -113,3 +113,7 @@ void JIT::dump() {
 	}
 	printf("\n");
 }
+
+void JIT::compile() {
+	
+}
