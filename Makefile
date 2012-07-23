@@ -2,8 +2,8 @@
 UNAME := $(shell uname -s)
  
 CXX := g++ 
-CXXFLAGS := -Wall -msse4.1
-LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g
+CXXFLAGS := -Wall -msse4.1 `llvm-config --cxxflags` -fexceptions
+LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g `llvm-config --ldflags --libs engine bitreader scalaropts`
 
 ifeq ($(UNAME),Linux)
 #for clock_gettime

@@ -876,15 +876,15 @@ void interpret(Thread& thread, Instruction const* pc) {
 
 	const void** labels = ops;
 
-	goto *(void*)(labels[pc->bc]);
+	goto *(const void*)(labels[pc->bc]);
 	#define LABELED_OP(name,type,...) \
 		name##_label: \
-			{ pc = name##_op(thread, *pc); goto *(void*)labels[pc->bc]; } 
+			{ pc = name##_op(thread, *pc); goto *(const void*)labels[pc->bc]; } 
 	STANDARD_BYTECODES(LABELED_OP)
 	#undef LABELED_OP
 	#define RECORD_OP(name,type,...) \
 		name##_record: \
-			{ pc = name##_record(thread, *pc); goto *(void*)labels[pc->bc]; } 
+			{ pc = name##_record(thread, *pc); goto *(const void*)labels[pc->bc]; } 
 	STANDARD_BYTECODES(RECORD_OP)
 	#undef LABELED_OP
 	
@@ -901,38 +901,38 @@ void interpret(Thread& thread, Instruction const* pc) {
 				labels = record;
 			}
 		}
-		goto *(void*)labels[pc->bc]; 
+		goto *(const void*)labels[pc->bc]; 
 	}
-	jmp_label: 	{ pc = jmp_op(thread, *pc); goto *(void*)labels[pc->bc]; }
-	rets_label: 	{ pc = rets_op(thread, *pc); goto *(void*)labels[pc->bc]; }
+	jmp_label: 	{ pc = jmp_op(thread, *pc); goto *(const void*)labels[pc->bc]; }
+	rets_label: 	{ pc = rets_op(thread, *pc); goto *(const void*)labels[pc->bc]; }
 	
 	jc_record: 	{ 
 		// did we make a loop yet??
 		Instruction const* old_pc = pc;
 		pc = jc_record(thread, *pc); 
 		if(pc-old_pc == old_pc->a)
-			thread.jit.guardT(thread);
+			thread.jit.guardT(thread, old_pc+old_pc->b);
 		else
-			thread.jit.guardF(thread);
+			thread.jit.guardF(thread, old_pc+old_pc->a);
 		
 		if(thread.jit.loop(old_pc)) {
 			if(pc < old_pc) {
-				thread.jit.end_recording();
-				thread.jit.dump();
+				JIT::Ptr fn = thread.jit.end_recording(thread);
+				pc = fn(thread);
 			}
 			else {
 				thread.jit.fail_recording();
 			}
 			labels = ops;
 		}
-		goto *(void*)labels[pc->bc]; 
+		goto *(const void*)labels[pc->bc]; 
 	}
-	jmp_record: 	{ pc = jmp_record(thread, *pc); goto *(void*)labels[pc->bc]; }
+	jmp_record: 	{ pc = jmp_record(thread, *pc); goto *(const void*)labels[pc->bc]; }
 	rets_record: 	{
 		pc = rets_record(thread, *pc);
 		// terminate recording
 		labels = ops;
-		goto *(void*)labels[pc->bc]; 
+		goto *(const void*)labels[pc->bc]; 
 	}
 	
 	done_label: {}
