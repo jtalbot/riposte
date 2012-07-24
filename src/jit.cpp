@@ -108,7 +108,7 @@ JIT::Ptr JIT::end_recording(Thread& thread) {
 		}
 	}
 	insert(TraceOpCode::jmp, loopStart, Type::Promise);
-	dump();
+	//dump();
 	return compile(thread);
 }
 
@@ -179,6 +179,7 @@ void JIT::dump() {
 #include "llvm/Type.h"
 #include "llvm/DerivedTypes.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Value.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -254,19 +255,26 @@ struct LLVMCompiler {
 
 	llvm::Value* values[1024];
 
+	std::vector<llvm::CallInst*> calls;
+
 	LLVMCompiler(Thread& thread, JIT& jit) 
 		: thread(thread), jit(jit), S(&llvmState), builder(*S->C) 
 	{
 	}
 
+	llvm::CallInst* Save(llvm::CallInst* ci) {
+		calls.push_back(ci);
+		return ci;
+	}
+
 #define CALL0(F) \
-	builder.CreateCall(S->M->getFunction(F), thread_var)
+	Save(builder.CreateCall(S->M->getFunction(F), thread_var))
 
 #define CALL1(F, A) \
-	builder.CreateCall2(S->M->getFunction(F), thread_var, A)
+	Save(builder.CreateCall2(S->M->getFunction(F), thread_var, A))
 
 #define CALL2(F, A, B) \
-	builder.CreateCall3(S->M->getFunction(F), thread_var, A, B)
+	Save(builder.CreateCall3(S->M->getFunction(F), thread_var, A, B))
 
 	void* Compile() {
 		thread_type = S->M->getTypeByName("class.Thread")->getPointerTo();
@@ -285,10 +293,10 @@ struct LLVMCompiler {
 
 		EntryBlock = llvm::BasicBlock::Create(
 				*S->C, "entry", function, 0);
-		EndBlock = llvm::BasicBlock::Create(
-				*S->C, "end", function, 0);
 		LoopStart = llvm::BasicBlock::Create(
 				*S->C, "loop", function, 0);
+		EndBlock = llvm::BasicBlock::Create(
+				*S->C, "end", function, 0);
 
 		llvm::Function::arg_iterator ai = function->arg_begin();
 		ai->setName("thread");
@@ -317,9 +325,17 @@ struct LLVMCompiler {
 		builder.SetInsertPoint(EndBlock);
 
 		builder.CreateRet(builder.CreateLoad(result_var));
+
+		for(size_t i = 0; i < calls.size(); i++) {
+			if (calls[i]->getCalledFunction()
+				->hasFnAttr(llvm::Attribute::AlwaysInline)) {
+					llvm::InlineFunctionInfo ifi;
+					llvm::InlineFunction(calls[i], ifi);
+			}
+		}
 	
-		function->dump();
 		S->FPM->run(*function);
+		//function->dump();
 
 		return S->EE->getPointerToFunction(function);	
 	}
@@ -430,7 +446,10 @@ struct LLVMCompiler {
 };
 
 JIT::Ptr JIT::compile(Thread& thread) {
+	timespec a = get_time();
 	LLVMCompiler compiler(thread, *this);
-	return (Ptr)compiler.Compile();
+	Ptr result = (Ptr)compiler.Compile();
+	printf("Compile time: %f\n", time_elapsed(a));
+	return result;
 }
 

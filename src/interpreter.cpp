@@ -918,7 +918,9 @@ void interpret(Thread& thread, Instruction const* pc) {
 		if(thread.jit.loop(old_pc)) {
 			if(pc < old_pc) {
 				JIT::Ptr fn = thread.jit.end_recording(thread);
+	timespec a = get_time();
 				pc = fn(thread);
+	printf("Execution time: %f\n", time_elapsed(a));
 			}
 			else {
 				thread.jit.fail_recording();

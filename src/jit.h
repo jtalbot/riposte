@@ -46,7 +46,7 @@ public:
 	
 	unsigned short counters[1024];
 
-	static const unsigned short RECORD_TRIGGER = 8;
+	static const unsigned short RECORD_TRIGGER = 4;
 
 	bool recording;
 	Instruction const* startPC;
