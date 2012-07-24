@@ -88,12 +88,12 @@ static ByteCode::Enum op2(String const& func) {
 }
 
 static ByteCode::Enum op3(String const& func) {
+	if(func == Strings::seq) return ByteCode::seq;
+	if(func == Strings::bbAssign) return ByteCode::store2;
 #ifdef TRACE_DEVELOPMENT
 	if(func == Strings::bracketAssign) return ByteCode::iassign;
-	if(func == Strings::bbAssign) return ByteCode::eassign;
 	if(func == Strings::split) return ByteCode::split;
 	if(func == Strings::ifelse) return ByteCode::ifelse;
-	if(func == Strings::seq) return ByteCode::seq;
 	if(func == Strings::rep) return ByteCode::rep;
 #endif
 	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a trinary operator"); 

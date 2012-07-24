@@ -7,25 +7,31 @@
 DEFINE_ENUM_TO_STRING(TraceOpCode, TRACE_ENUM)
 
 JIT::IRRef JIT::insert(TraceOpCode::Enum op, int64_t i, Type::Enum type) {
-	code[pc.i] = 	(IR) { op, {0}, {0}, i, type }; 
+	code[pc.i] = 	(IR) { op, {0}, {0}, {0}, i, type }; 
 	pc.i++;
 	return (IRRef) { pc.i-1 };
 }
 
 JIT::IRRef JIT::insert(TraceOpCode::Enum op, IRRef a, int64_t i, Type::Enum type) {
-	code[pc.i] = 	(IR) { op, a, {0}, i, type }; 
+	code[pc.i] = 	(IR) { op, a, {0}, {0}, i, type }; 
 	pc.i++;
 	return (IRRef) { pc.i-1 };
 }
 
 JIT::IRRef JIT::insert(TraceOpCode::Enum op, IRRef a, Type::Enum type) {
-	code[pc.i] = 	(IR) { op, a, {0}, 0, type };
+	code[pc.i] = 	(IR) { op, a, {0}, {0}, 0, type };
 	pc.i++;
 	return (IRRef) { pc.i-1 };
 }
 
 JIT::IRRef JIT::insert(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum type) {
-	code[pc.i] = 	(IR) { op, a, b, 0, type };
+	code[pc.i] = 	(IR) { op, a, b, {0}, 0, type };
+	pc.i++;
+	return (IRRef) { pc.i-1 };
+}
+
+JIT::IRRef JIT::insert(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum type) {
+	code[pc.i] = 	(IR) { op, a, b, c, 0, type };
 	pc.i++;
 	return (IRRef) { pc.i-1 };
 }
@@ -48,6 +54,12 @@ JIT::IRRef JIT::emit(Thread& thread, TraceOpCode::Enum op, IRRef a, IRRef b, int
 	Value const& v = OUT(thread, c);
 	map[c] = pc;
 	return insert(op, a, b, v.type);
+}
+
+JIT::IRRef JIT::emit(Thread& thread, TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, int64_t d) {
+	Value const& v = OUT(thread, d);
+	map[d] = pc;
+	return insert(op, a, b, c, v.type);
 }
 
 JIT::IRRef JIT::write(Thread& thread, IRRef a, int64_t c) {
@@ -78,7 +90,7 @@ JIT::Ptr JIT::end_recording(Thread& thread) {
 	size_t n = pc.i;
 	for(size_t i = 0; i < n; i++) {
 		IR& ir = code[i];
-		IRRef a, b;
+		IRRef a, b, c;
 		switch(ir.op) {
 			case TraceOpCode::read: {
 				a.i = i; b.i = n+map[ir.i].i;
@@ -101,6 +113,10 @@ JIT::Ptr JIT::end_recording(Thread& thread) {
 				exits[pc.i] = e;
 				insert(ir.op, a, code[i].type);
 			} break;
+			case TraceOpCode::store2: {
+				a.i = n+ir.a.i; b.i = n+ir.b.i; c.i = n+ir.c.i;
+				insert(ir.op, a, b, c, code[i].type);
+			} break;
 			default: {
 				a.i = n+ir.a.i; b.i = n+ir.b.i;
 				insert(ir.op, a, b, code[i].type);
@@ -108,7 +124,7 @@ JIT::Ptr JIT::end_recording(Thread& thread) {
 		}
 	}
 	insert(TraceOpCode::jmp, loopStart, Type::Promise);
-	//dump();
+	dump();
 	return compile(thread);
 }
 
@@ -138,6 +154,9 @@ void JIT::IR::dump() {
 		case TraceOpCode::guardF:
 		case TraceOpCode::guardT: {
 			std::cout << TraceOpCode::toString(op) << "\t " << a.i;
+		} break;
+		case TraceOpCode::store2: {
+			std::cout << TraceOpCode::toString(op) << "\t " << a.i << "\t " << b.i << "\t " << c.i;
 		} break;
 		default: {
 			std::cout << TraceOpCode::toString(op) << "\t " << a.i << "\t " << b.i;
@@ -276,6 +295,9 @@ struct LLVMCompiler {
 #define CALL2(F, A, B) \
 	Save(builder.CreateCall3(S->M->getFunction(F), thread_var, A, B))
 
+#define CALL3(F, A, B, C) \
+	Save(builder.CreateCall4(S->M->getFunction(F), thread_var, A, B, C))
+
 	void* Compile() {
 		thread_type = S->M->getTypeByName("class.Thread")->getPointerTo();
 		instruction_type = S->M->getTypeByName("struct.Instruction")->getPointerTo();
@@ -368,6 +390,10 @@ struct LLVMCompiler {
 		return postfix(type1) + postfix(type2);
 	}
 
+	std::string postfix(Type::Enum type1, Type::Enum type2, Type::Enum type3) {
+		return postfix(type1) + postfix(type2) + postfix(type3);
+	}
+
 	llvm::Value* Load(llvm::Value* v) {
 		if(v->getType()->isPointerTy()) {
 			return builder.CreateLoad(v);
@@ -418,6 +444,10 @@ struct LLVMCompiler {
 			       builder.CreateBr(EndBlock);
 			       builder.SetInsertPoint(next); 
 
+			} break;
+			case TraceOpCode::store2: 
+			{
+				values[i] = CALL3(std::string(TraceOpCode::toString(ir.op))+"_"+postfix(jit.code[ir.a.i].type, jit.code[ir.b.i].type, jit.code[ir.c.i].type), Load(values[ir.a.i]), Load(values[ir.b.i]), Load(values[ir.c.i])); 
 			} break;
 			default: 
 			{

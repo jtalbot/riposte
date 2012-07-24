@@ -27,12 +27,12 @@
 	_(mov, "mov") \
 	_(fastmov, "fastmov") \
 	_(assign, "assign") \
+	_(store2, "store2") \
 
 #ifdef TRACE_DEVELOPMENT
 	_(dotdot, "dotdot") \
 	_(assign2, "assign2") \
 	_(iassign, "iassign") \
-	_(eassign, "eassign") \
 	_(subset, "subset") \
 	_(subset2, "subset2")
 #endif
@@ -48,10 +48,10 @@
 #endif
 
 #define GENERATOR_BYTECODES(_) \
+	_(seq,		"seq", 		Generator) \
 
 #ifdef TRACE_DEVELOPMENT
 	_(vector,	"vector",	Generator) \
-	_(seq,		"seq", 		Generator) \
 	_(rep,		"rep", 		Generator) \
 	_(random,	"random", 	Generator)
 #endif

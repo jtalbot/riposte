@@ -44,6 +44,10 @@ void storem_l(Thread& thread, int64_t i, int8_t l) {
 }
 
 extern "C"
+void store2_ddd(Thread& thread, double* d1, double d2, double d3) {
+}
+
+extern "C"
 int8_t guard_l(Thread& thread, int8_t v) ALWAYS_INLINE;
 extern "C"
 int8_t guard_l(Thread& thread, int8_t v) {

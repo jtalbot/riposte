@@ -16,7 +16,8 @@
 		_(guardF, "guardF", ___) \
 		_(read, "read",___) \
 		_(phi, "phi", ___) \
-		_(jmp, "jmp", ___)
+		_(jmp, "jmp", ___) \
+		_(store2, "store2", ___)
 
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
 
@@ -34,7 +35,7 @@ public:
 
 	struct IR {
 		TraceOpCode::Enum op;	
-		IRRef a, b;
+		IRRef a, b, c;
 		int64_t i;
 		Type::Enum type;
 		void dump();
@@ -86,11 +87,13 @@ public:
 	IRRef insert(TraceOpCode::Enum op, IRRef a, Type::Enum type);
 	IRRef insert(TraceOpCode::Enum op, IRRef a, int64_t i, Type::Enum type);
 	IRRef insert(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum type);
+	IRRef insert(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum type);
 	IRRef insert(TraceOpCode::Enum op, int64_t i, Type::Enum type);
 
 	IRRef read(Thread& thread, int64_t a);
 	IRRef write(Thread& thread, IRRef a, int64_t c);
 	IRRef emit(Thread& thread, TraceOpCode::Enum op, IRRef a, IRRef b, int64_t c);
+	IRRef emit(Thread& thread, TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, int64_t d);
 	void guardT(Thread& thread, Instruction const* reenter);
 	void guardF(Thread& thread, Instruction const* reenter);
 

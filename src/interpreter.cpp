@@ -366,7 +366,8 @@ Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
 	SubsetAssign(thread, dest, true, index, value, OUT(thread,inst.c));
 	return &inst+1;
 }
-Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
+
+Instruction const* store2_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest
 	OPERAND(value, inst.a); FORCE(value, inst.a);
 	OPERAND(index, inst.b); FORCE(index, inst.b);
@@ -698,7 +699,7 @@ Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	} 
 	return &inst+1;
 }
-
+#endif
 Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	// c = start, b = step, a = length
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
@@ -708,7 +709,8 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	double start = As<Double>(thread, c)[0];
 	double step = As<Double>(thread, b)[0];
 	int64_t len = As<Integer>(thread, a)[0];
-	
+
+#ifdef ENABLE_JIT	
 	if(len >= TRACE_VECTOR_WIDTH) {
 		if(b.isDouble() || c.isDouble()) {
 			OUT(thread, inst.c) = thread.EmitSequence(thread.frame.environment, len, start, step);
@@ -719,7 +721,7 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 		}
 		return &inst+1;
 	}
-
+#endif
 	if(b.isDouble() || c.isDouble())	
 		OUT(thread, inst.c) = Sequence(start, step, len);
 	else
@@ -727,6 +729,7 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
+#ifdef TRACE_DEVELOPMENT
 Instruction const* rep_op(Thread& thread, Instruction const& inst) {
 	// c = n, b = each, a = length
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
@@ -847,7 +850,18 @@ Instruction const* assign_record(Thread& thread, Instruction const& inst) {
 	thread.jit.write(thread, c, inst.a); 
 	return r;
 }
-
+Instruction const* store2_record(Thread& thread, Instruction const& inst) {
+	Instruction const* r = store2_op(thread, inst);
+	JIT::IRRef a = thread.jit.read(thread, inst.a);
+	JIT::IRRef b = thread.jit.read(thread, inst.b);
+	JIT::IRRef c = thread.jit.read(thread, inst.c);
+	thread.jit.emit(thread, TraceOpCode::store2, a, b, c, inst.c); 
+	return r;
+}
+Instruction const* seq_record(Thread& thread, Instruction const& inst) {
+	Instruction const* r = seq_op(thread, inst);
+	return r;
+}
 
 #define RECORD(Name, string, ...) \
 Instruction const* Name##_record(Thread& thread, Instruction const& inst) { \
