@@ -111,11 +111,16 @@ struct TraceLLVMCompiler {
     LLVMState * L;
     Thread * thread;
     Trace * trace;
+    
+    int numBlock;
+    int numThreads;
+    
     llvm::Constant * Size;
     llvm::Function * function;
     llvm::Function *KernelFunc;
     llvm::BasicBlock * entry;
     llvm::Value * loopIndexAddr;
+    llvm::Value * nThreads;
     llvm::Type * doubleType;
     llvm::Type * intType;
     llvm::IRBuilder<> * B;
@@ -140,6 +145,8 @@ struct TraceLLVMCompiler {
         mainModule = new llvm::Module("riposte",*C);
         
         
+        numBlock = 24;
+        numThreads = 512;
         
         std::string lTargDescrStr;
         if (sizeof(void *) == 8) { // pointer size, alignment == 8
@@ -185,18 +192,39 @@ struct TraceLLVMCompiler {
     
     }
     
+    
+    
+    int isPowerOfTwo (unsigned int x)
+    {
+        return ((x != 0) && ((x & (~x + 1)) == x));
+    }
+
+    
     void GenerateIndexFunction() {
         intType = llvm::Type::getInt64Ty(*C);
         doubleType = llvm::Type::getDoubleTy(*C);
         
         
-        llvm::Constant *cons = mainModule->getOrInsertFunction("opLevelFunc", llvm::Type::getVoidTy(*C), intType, NULL);
+        llvm::Constant *cons = mainModule->getOrInsertFunction("indexFunc", llvm::Type::getVoidTy(*C), intType, NULL);
         function = llvm::cast<llvm::Function>(cons);
         function->setCallingConv(llvm::CallingConv::C);
         
         llvm::Function::arg_iterator args = function->arg_begin();
         llvm::Value* index = args++;
         index->setName("index");
+        llvm::Value* tid = args++;
+       // tid->setName("tid");
+        llvm::Value* i = args++;
+        i->dump();
+        i->setName("i");
+        llvm::Value* gridSize = args++;
+        
+        
+       
+        
+        
+        
+        
         
         entry = llvm::BasicBlock::Create(*C,"entry",function);
         B = new llvm::IRBuilder<>(*C);
@@ -204,12 +232,35 @@ struct TraceLLVMCompiler {
         
         
         Size = ConstantInt(trace->Size);
+        bool pow2 = false;
+        
+        
+        if (isPowerOfTwo(trace->Size))
+            pow2 = true;
         
         loopIndexAddr = B->CreateAlloca(intType);
         B->CreateStore(index, loopIndexAddr);
         
-        CompileBody();
+        /*
+         * We need to loop this.
+         * Loop it so that a index touches all that it needs to touch, refer to RG code how to loop.
+         */
         
+        llvm::BasicBlock * cond = createAndInsertBB("cond");
+        llvm::BasicBlock * body = createAndInsertBB("body");
+        llvm::BasicBlock * end = createAndInsertBB("end");
+        
+        B->CreateBr(cond);
+        B->SetInsertPoint(cond);
+        llvm::Value * c = B->CreateICmpULT(loopIndex(), Size);
+        B->CreateCondBr(c,body,end);
+        
+        B->SetInsertPoint(body);
+        CompileBody(pow2, tid);
+        B->CreateStore(B->CreateAdd(loopIndex(), ConstantInt(numBlock * numThreads)),loopIndexAddr);
+        B->CreateBr(cond);
+        
+        B->SetInsertPoint(end);
         B->CreateRetVoid();
         
         
@@ -229,7 +280,25 @@ struct TraceLLVMCompiler {
     }
     
     
+    template<class T>
+    struct SharedMemory
+    {
+        
+        
+        __device__ inline operator       double *()
+        {
+            extern __shared__ double __smem[];
+            return (double *)__smem;
+        }
+        
+        __device__ inline operator const double *() const
+        {
+            extern __shared__ double __smem[];
+            return (double *) __smem;
+        }
+    };
     
+      
     void GenerateKernelFunction() {
         ///IMPORTANT: TEST RUN AT MOVING KERNEL FUNCTION INTO COMPILE PART OF PROGRAM
         //WE have a function and we want a new function
@@ -239,6 +308,7 @@ struct TraceLLVMCompiler {
         
         llvm::LLVMContext &VMContext = llvm::getGlobalContext();
         llvm::Type *Int32Ty = llvm::Type::getInt32Ty(VMContext);
+        
         TidXFunc = llvm::Function::Create(llvm::FunctionType::get(Int32Ty, false),
                                           llvm::Function::ExternalLinkage,
                                           "llvm.nvvm.read.ptx.sreg.tid.x", mainModule);
@@ -277,6 +347,7 @@ struct TraceLLVMCompiler {
         Annot->addOperand(MdNode);
         
         
+        double *sdata = SharedMemory<double>();
         
         /* create the following body for the kernel function:
          {
@@ -300,12 +371,25 @@ struct TraceLLVMCompiler {
         Id = B->CreateAdd(Id, TidXRead);
         
         
+        llvm::Value *Length = Size;
+        
+        llvm::Value *Tid = TidXRead;
+        
+        llvm::Value *TempA = B->CreateMul(BlockIdxXRead, Length);
+        llvm::Value *Two = ConstantInt(2);
+        llvm::Value *TempB = B->CreateMul(TempA, Two);
+        llvm::Value *I = B->CreateAdd(TempB, Tid);
+        
+        llvm::Value *TempC = B->CreateMul(Two, BlockDimXRead);
+        llvm::Value *TempD = B->CreateMul(TempC, Length);
+        llvm::Value *GridSize = B->CreateMul(TempD, ConstantInt(sizeof(double)));
+        
+        
         
         // if (id < len)
         
         llvm::BasicBlock *EndBlock = llvm::BasicBlock::Create(VMContext, "if.end", 0, 0);
         llvm::BasicBlock *IfBlock = llvm::BasicBlock::Create(VMContext, "if.body", 0, 0);
-        llvm::Value *Length = Size;
         
         
         llvm::Value *Cond = B->CreateICmpSLT(Id, Length);
@@ -316,6 +400,9 @@ struct TraceLLVMCompiler {
         
         std::vector<llvm::Value *> IndexArgs;
         IndexArgs.push_back(Id);
+        IndexArgs.push_back(Tid);
+        IndexArgs.push_back(I);
+        IndexArgs.push_back(GridSize);
         
         //call index function
         B->CreateCall(function, IndexArgs);
@@ -331,6 +418,7 @@ struct TraceLLVMCompiler {
         B->CreateRetVoid();
         //END ATTEMPT AT KERNEL FUNCTION
         
+        
         delete B;
 
         
@@ -345,6 +433,7 @@ struct TraceLLVMCompiler {
         
         
     }
+    
     llvm::Constant * ConstantInt(int64_t i) {
         return llvm::ConstantInt::get(intType,i);
     }
@@ -375,12 +464,12 @@ struct TraceLLVMCompiler {
             }
         }
     }
-    void CompileBody() {
+    void CompileBody(bool pow2, llvm::Value *tid) {
         llvm::Value * loopIndexValue = loopIndex();
         
         std::vector<llvm::Value *> loopIndexArray;
         loopIndexArray.push_back(loopIndexValue);
-                    
+        std::cout << "Trace nodes " << trace->nodes.size() << std::endl;
         for(size_t i = 0; i < trace->nodes.size(); i++) {
             IRNode & n = trace->nodes[i];
             switch(n.op) {
@@ -488,6 +577,18 @@ struct TraceLLVMCompiler {
                             _error("unsupported type");
                     }					
                     break;
+                case IROpCode::sum:
+                    switch(n.type) {
+                        case Type::Double:
+                            values[i] = B->CreateFRem(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        case Type::Integer:
+                            values[i] = B->CreateSRem(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        default:
+                            _error("unsupported type");
+                    }					
+                    break;
 		    case IROpCode::cast:
 			{
 					_error("cast not yet implemented");
@@ -544,6 +645,14 @@ struct TraceLLVMCompiler {
             }
             
             if(n.liveOut) {
+                
+                /*
+                 *Changes need to be made here regarding the intermediate size
+                 */
+                
+                
+                
+                
 				int64_t length = n.outShape.length;
 				void * p;
                
@@ -622,7 +731,7 @@ struct TraceLLVMCompiler {
         __NVVM_SAFE_CALL(nvvmDestroyCU(&CU));
                 
 
-        
+        std::cout << "Ptx code: " << PtxBuf << std::endl;
         //Create the threads based on the size
         
         const char *ptxstr = PtxBuf;

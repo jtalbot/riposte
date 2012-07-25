@@ -25,8 +25,10 @@ __global__ void Sum(const int *vector, long *resultVector, const long vectorLeng
 	
 	// sum the values allocated for this thread
 	// (from global memory)
-	for (int i = 0; i<elementsPerThread; ++i)
+	for (int i = 0; i<elementsPerThread; ++i) {
 		sum += vector[idx + stride*i];
+		printf("%d\n",idx+stride*i);
+	}
 	
 	// copy local result to shared memory
 	blockSum[tx] = sum;
