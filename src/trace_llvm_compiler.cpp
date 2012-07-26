@@ -52,6 +52,7 @@
 #include "llvm/Support/ValueHandle.h"
 #include "llvm/Module.h"
 #include "llvm/LLVMContext.h"
+#include "llvm/GlobalVariable.h"
 
 #define checkCudaErrors(Err)  checkCudaErrors_internal (Err, __FILE__, __LINE__)
 //#define USE_TEXT_NVVM_INTERFACE 1 
@@ -213,14 +214,19 @@ struct TraceLLVMCompiler {
         llvm::Value* index = args++;
         index->setName("index");
         llvm::Value* tid = args++;
-       // tid->setName("tid");
+        //tid->setName("tid");
         llvm::Value* i = args++;
-        i->dump();
         i->setName("i");
         llvm::Value* gridSize = args++;
+       // gridSize->setName("gridSize");
+        llvm::PointerType* shared_Pointer = llvm::PointerType::get(llvm::Type::getDoubleTy(*C), 3);
         
+        int sizeOfArray = 64;
+        if (numThreads > 32)
+            sizeOfArray = numThreads;
         
-       
+        llvm::GlobalVariable *sharedMem = new llvm::GlobalVariable((*mainModule), llvm::ArrayType::get(llvm::Type::getDoubleTy(*C), sizeOfArray), false, llvm::GlobalValue::InternalLinkage, 0, "sharedMemory", 0, 0, 3);
+        
         
         
         
@@ -256,7 +262,7 @@ struct TraceLLVMCompiler {
         B->CreateCondBr(c,body,end);
         
         B->SetInsertPoint(body);
-        CompileBody(pow2, tid);
+        CompileBody(pow2, tid, sharedMem, i, gridSize);
         B->CreateStore(B->CreateAdd(loopIndex(), ConstantInt(numBlock * numThreads)),loopIndexAddr);
         B->CreateBr(cond);
         
@@ -269,7 +275,7 @@ struct TraceLLVMCompiler {
         //Gavin changes
         //end Gavin changes
         
-        if (thread->state.verbose)
+        //if (thread->state.verbose)
             mainModule->dump();
         
         
@@ -280,23 +286,8 @@ struct TraceLLVMCompiler {
     }
     
     
-    template<class T>
-    struct SharedMemory
-    {
-        
-        
-        __device__ inline operator       double *()
-        {
-            extern __shared__ double __smem[];
-            return (double *)__smem;
-        }
-        
-        __device__ inline operator const double *() const
-        {
-            extern __shared__ double __smem[];
-            return (double *) __smem;
-        }
-    };
+
+
     
       
     void GenerateKernelFunction() {
@@ -346,9 +337,7 @@ struct TraceLLVMCompiler {
         llvm::MDNode *MdNode = llvm::MDNode::get(VMContext, Vals);
         Annot->addOperand(MdNode);
         
-        
-        double *sdata = SharedMemory<double>();
-        
+     
         /* create the following body for the kernel function:
          {
          unsigned id = blockDim.x * blockIdx.x + threadIdx.x;
@@ -375,14 +364,13 @@ struct TraceLLVMCompiler {
         
         llvm::Value *Tid = TidXRead;
         
-        llvm::Value *TempA = B->CreateMul(BlockIdxXRead, Length);
+        llvm::Value *TempA = B->CreateMul(BlockIdxXRead, ConstantInt(numThreads));
         llvm::Value *Two = ConstantInt(2);
         llvm::Value *TempB = B->CreateMul(TempA, Two);
         llvm::Value *I = B->CreateAdd(TempB, Tid);
         
         llvm::Value *TempC = B->CreateMul(Two, BlockDimXRead);
-        llvm::Value *TempD = B->CreateMul(TempC, Length);
-        llvm::Value *GridSize = B->CreateMul(TempD, ConstantInt(sizeof(double)));
+        llvm::Value *GridSize = B->CreateMul(TempC, ConstantInt(numThreads));
         
         
         
@@ -464,7 +452,7 @@ struct TraceLLVMCompiler {
             }
         }
     }
-    void CompileBody(bool pow2, llvm::Value *tid) {
+    void CompileBody(bool pow2, llvm::Value *tid, llvm::GlobalVariable *shared, llvm::Value *i, llvm::Value * gridSize) {
         llvm::Value * loopIndexValue = loopIndex();
         
         std::vector<llvm::Value *> loopIndexArray;
