@@ -118,9 +118,11 @@ struct TraceLLVMCompiler {
     int outputReductionSize;
     
     bool reduction;
+    bool reductionBlocksPresent;
     
     llvm::Constant * Size;
     llvm::Function * function;
+    llvm::Function * Sync;
     llvm::Function *KernelFunc;
     llvm::BasicBlock * entry;
     llvm::Value * loopIndexAddr;
@@ -140,15 +142,27 @@ struct TraceLLVMCompiler {
     llvm::BasicBlock * body;
     llvm::BasicBlock * end;
     llvm::BasicBlock * returnBlock;
+    
     llvm::BasicBlock * cond512;
     llvm::BasicBlock * cond256;
     llvm::BasicBlock * cond128;
     llvm::BasicBlock * cond32;
+    
     llvm::BasicBlock * end512;
     llvm::BasicBlock * end256;
     llvm::BasicBlock * end128;
-
+    llvm::BasicBlock * end32;
     
+    llvm::BasicBlock * body512;
+    llvm::BasicBlock * body256;
+    llvm::BasicBlock * body128;
+    llvm::BasicBlock * body32;
+
+    llvm::BasicBlock * condFinal;
+    llvm::BasicBlock * bodyFinal;
+    llvm::BasicBlock * endFinal;    
+    
+    llvm::BasicBlock * origEnd; 
     
     
     std::vector<llvm::Value *> values;
@@ -237,18 +251,18 @@ struct TraceLLVMCompiler {
         if (numThreads > 32)
             sizeOfArray = numThreads;
         
-        llvm::GlobalVariable *sharedMem = new llvm::GlobalVariable((*mainModule), llvm::ArrayType::get(llvm::Type::getDoubleTy(*C), sizeOfArray), false, llvm::GlobalValue::ExternalLinkage, 0, "sharedMemory", 0, 0, 3);
-        
-        
         
         
         reduction = false;
+        reductionBlocksPresent = false;
         
         entry = llvm::BasicBlock::Create(*C,"entry",function);
         B = new llvm::IRBuilder<>(*C);
         B->SetInsertPoint(entry);
         
-        
+        Sync = llvm::Function::Create(llvm::FunctionType::get(llvm::Type::getVoidTy(llvm::getGlobalContext()), false),
+                                      llvm::Function::ExternalLinkage,
+                                      "llvm.nvvm.barrier0", mainModule);
         Size = ConstantInt(trace->Size);
         int vectorLength = trace->Size;
         int numOutput = vectorLength/numThreads;
@@ -273,6 +287,8 @@ struct TraceLLVMCompiler {
         cond = createAndInsertBB("cond");
         body = createAndInsertBB("body");
         end = createAndInsertBB("end");
+        origEnd = end;
+        
         
         B->CreateBr(cond);
         B->SetInsertPoint(cond);
@@ -280,7 +296,7 @@ struct TraceLLVMCompiler {
         B->CreateCondBr(c,body,end);
         
         B->SetInsertPoint(body);
-        CompileBody(blockID, tid, sharedMem);
+        CompileBody(blockID, tid, sizeOfArray);
         B->CreateStore(B->CreateAdd(loopIndex(), ConstantInt(numBlock * numThreads)),loopIndexAddr);
         B->CreateBr(cond);
         
@@ -288,48 +304,17 @@ struct TraceLLVMCompiler {
         B->CreateRetVoid();
                 
         if (reduction == true) {
-           if (numThreads >= 512) {
-                B->SetInsertPoint(end512);
-                B->CreateBr(cond256);
-            }
-            else {
-                B->SetInsertPoint(cond512);
-                B->CreateBr(cond256);
-                B->SetInsertPoint(end512);
-                B->CreateRetVoid();
-            }
-            if (numThreads >= 256) {
-                
-                B->SetInsertPoint(end256);
-                B->CreateBr(cond128);
-            }
-            else {
-                B->SetInsertPoint(cond256);
-                B->CreateBr(cond128);
-                B->SetInsertPoint(end256);
-                B->CreateRetVoid();
-            }
-            if (numThreads >= 128) {
-                B->SetInsertPoint(end128);
-                B->CreateBr(cond32);
-            }
-            else {
-                B->SetInsertPoint(cond128);
-                B->CreateBr(cond32);
-                B->SetInsertPoint(end128);
-                B->CreateRetVoid();
-            } 
+            ReductionHelper(tid);
         }
         
-        
+         mainModule->dump();
         llvm::verifyFunction(*function);
         
         //Gavin changes
         //end Gavin changes
         
         //if (thread->state.verbose)
-            mainModule->dump();
-        
+             mainModule->dump();
         
         
         
@@ -337,7 +322,76 @@ struct TraceLLVMCompiler {
         FPM->run(*function);
     }
     
-    
+    void ReductionHelper(llvm::Value * tid) {
+        B->SetInsertPoint(origEnd);
+        B->CreateBr(cond512);
+        if (numThreads >= 512) {
+            B->SetInsertPoint(end512);
+            B->CreateBr(cond256);
+            B->SetInsertPoint(cond512);
+            llvm::Value *Cond512 = B->CreateICmpSLT(tid, ConstantInt(256));
+            B->CreateCondBr(Cond512, body512, end512);
+            B->SetInsertPoint(body512);
+            B->CreateBr(end512);
+        }
+        else {
+            B->SetInsertPoint(cond512);
+            B->CreateBr(body512);
+            B->SetInsertPoint(body512);
+            B->CreateBr(end512);
+            B->SetInsertPoint(end512);
+            B->CreateBr(cond256);
+        }
+        if (numThreads >= 256) {
+            
+            B->SetInsertPoint(end256);
+            B->CreateBr(cond128);
+            B->SetInsertPoint(cond256);
+            llvm::Value *Cond256 = B->CreateICmpSLT(tid, ConstantInt(128));
+            B->CreateCondBr(Cond256, body256, end256);
+            B->SetInsertPoint(body256);
+            B->CreateBr(end256);
+        }
+        else {
+            B->SetInsertPoint(cond256);
+            B->CreateBr(body256);
+            B->SetInsertPoint(body256);
+            B->CreateBr(end256);
+            B->SetInsertPoint(end256);
+            B->CreateBr(cond128);
+        }
+        if (numThreads >= 128) {
+            B->SetInsertPoint(end128);
+            B->CreateBr(cond32);
+            B->SetInsertPoint(cond128);
+            llvm::Value *Cond128 = B->CreateICmpSLT(tid, ConstantInt(64));
+            B->CreateCondBr(Cond128, body128, end128);
+            B->SetInsertPoint(body128);
+            B->CreateBr(end128);
+        }
+        else {
+            B->SetInsertPoint(cond128);
+            B->CreateBr(body128);
+            B->SetInsertPoint(body128);
+            B->CreateBr(end128);
+            B->SetInsertPoint(end128);
+            B->CreateBr(cond32);
+        }
+        B->SetInsertPoint(cond32);
+        llvm::Value *Cond32 = B->CreateICmpSLT(tid, ConstantInt(32));
+        B->CreateCondBr(Cond32, body32, end32);
+        B->SetInsertPoint(body32);
+        B->CreateBr(end32);
+        B->SetInsertPoint(end32);
+        B->CreateBr(condFinal);
+        B->SetInsertPoint(condFinal);
+        llvm::Value *CondFinal = B->CreateICmpEQ(tid, ConstantInt(0));
+        B->CreateCondBr(CondFinal, bodyFinal, endFinal);
+        B->SetInsertPoint(endFinal);
+        B->CreateBr(returnBlock);
+        B->SetInsertPoint(bodyFinal);
+        B->CreateBr(endFinal);
+    }
 
 
     
@@ -478,22 +532,37 @@ struct TraceLLVMCompiler {
                 }
                 if (n.group == IRNode::FOLD) {
                     sizeOfResult = n.out.length;
-                    std::cout << "sizeOfResult" << sizeOfResult << std::endl;
                     if(n.type == Type::Double) {
                         double * reductionVector = new double[outputReductionSize];
                         cudaMemcpy(reductionVector, outputGPU[output], outputReductionSize * sizeof(Double::Element), cudaMemcpyDeviceToHost);
-                        double sum;
+                        std::cout << "Number of output vectors" << outputReductionSize <<std::endl;
                         switch(n.op) {
+
                             case IROpCode::sum: {
-                                sum = 0;
-                                for (int i = 0; i < sizeOfResult; i++) {
+                                double sum = 0.0;
+                                for (int i = 0; i < outputReductionSize; i++) {
                                     sum += reductionVector[i];
+                                    std::cout << "Vector" << i << " "<< reductionVector[i] <<std::endl;
                                 }
+                                n.out.d = sum;
+                                break;
                             }
                         }
-                        n.out.d = sum;
-                    } else if(n.type == Type::Integer) {
-                        cudaMemcpy(((Integer&)n.out).v(), outputGPU[output], sizeOfResult * sizeof(Integer::Element), cudaMemcpyDeviceToHost);
+                    }
+                    else if(n.type == Type::Integer) {
+                        sizeOfResult = n.out.length;
+                        int64_t * reductionVector = new int64_t[outputReductionSize];
+                        cudaMemcpy(reductionVector, outputGPU[output], outputReductionSize * sizeof(Integer::Element), cudaMemcpyDeviceToHost);
+                        switch(n.op) {
+                            case IROpCode::sum: {
+                                int64_t sum = 0;
+                                for (int i = 0; i < outputReductionSize; i++) {
+                                    sum += reductionVector[i];
+                                }
+                                n.out.i = sum;
+                                break;
+                            }
+                        }
                     } else if(n.type == Type::Logical) {
                         cudaMemcpy(((Logical&)n.out).v(), outputGPU[output], sizeOfResult * sizeof(Logical::Element), cudaMemcpyDeviceToHost);
                     } else {
@@ -505,7 +574,7 @@ struct TraceLLVMCompiler {
             }
         }
     }
-    void CompileBody(llvm::Value *blockID, llvm::Value *tid, llvm::GlobalVariable *shared) {
+    void CompileBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray) {
         llvm::Value * loopIndexValue = loopIndex();
         
         std::vector<llvm::Value *> loopIndexArray;
@@ -621,25 +690,34 @@ struct TraceLLVMCompiler {
                     reduction = true;
                     switch(n.type) {
                         case Type::Double: {
-                            //set to the top of the function
-                            returnBlock = createAndInsertBB("return");
-                            cond512 = createAndInsertBB("cond512");
-                            cond256 = createAndInsertBB("cond256");
-                            cond128 = createAndInsertBB("cond128");
-                            cond32 = createAndInsertBB("cond32");
-                            end512 = createAndInsertBB("end512");
-                            end256 = createAndInsertBB("end256");
-                            end128 = createAndInsertBB("end128");
-                            llvm::Function *Sync;
-                            Sync = llvm::Function::Create(llvm::FunctionType::get(llvm::Type::getVoidTy(llvm::getGlobalContext()), false),
-                                                          llvm::Function::ExternalLinkage,
-                                                          "llvm.nvvm.barrier0", mainModule);
-                                
-                            Synchronize(function, tid, Sync);
-
-                            InitializeShared(function, shared, tid);
                             
-                            llvm::AllocaInst *Alloca = CreateEntryBlockAlloca(function, "mySum");
+                            llvm::GlobalVariable *shared = new llvm::GlobalVariable((*mainModule), llvm::ArrayType::get(llvm::Type::getDoubleTy(*C), sizeOfArray), false, llvm::GlobalValue::ExternalLinkage, 0, "sharedMemory", 0, 0, 3);
+                            //set to the top of the function
+                            if (!reductionBlocksPresent) {
+                                returnBlock = createAndInsertBB("return");
+                                cond512 = createAndInsertBB("cond512");
+                                cond256 = createAndInsertBB("cond256");
+                                cond128 = createAndInsertBB("cond128");
+                                cond32 = createAndInsertBB("cond32");
+                                end512 = createAndInsertBB("end512");
+                                end256 = createAndInsertBB("end256");
+                                end128 = createAndInsertBB("end128");
+                                body512 = createAndInsertBB("body512");
+                                body256 = createAndInsertBB("body256");
+                                body128 = createAndInsertBB("body128");
+                                body32 = createAndInsertBB("body32");
+                                end32 = createAndInsertBB("end32");
+                                condFinal = createAndInsertBB("condFinal");
+                                bodyFinal = createAndInsertBB("bodyFinal");
+                                endFinal = createAndInsertBB("endFinal");
+                                reductionBlocksPresent = true;
+                            }
+                                
+                            Synchronize(function, tid);
+
+                            InitializeSharedDouble(function, shared, tid);
+                            
+                            llvm::AllocaInst *Alloca = CreateEntryBlockAllocaDouble(function, "mySum");
                             
                             
                             
@@ -649,7 +727,7 @@ struct TraceLLVMCompiler {
                             B->CreateStore((B->CreateFAdd(values[n.unary.a], B->CreateLoad(Alloca))), Alloca);
                             
                            
-                            B->SetInsertPoint(end);
+                            B->SetInsertPoint(origEnd);
                             std::vector<llvm::Value *> indices;
                             indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*C), 0));
                             indices.push_back(tid);
@@ -661,18 +739,11 @@ struct TraceLLVMCompiler {
                             
                             B->CreateCall(Sync);
                             
-                            
-                            
-                            
-                            B->CreateBr(cond512);
                             B->SetInsertPoint(cond512);
                             
                             if (numThreads >= 512)
                             {
-                                llvm::BasicBlock * body512 = createAndInsertBB("body512");
                                 
-                                llvm::Value *Cond512 = B->CreateICmpSLT(tid, ConstantInt(256));
-                                B->CreateCondBr(Cond512, body512, end512);
                                 
                                 B->SetInsertPoint(body512);
                                 
@@ -684,8 +755,6 @@ struct TraceLLVMCompiler {
                                 llvm::Value *sharedMemIndex512 = B->CreateGEP(shared, gepIndices512, "512");
                                 
                                 B->CreateStore(B->CreateFAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndex512)), sharedMemIndex);
-                                                                
-                                B->CreateBr(end512);
                                 
                                 B->SetInsertPoint(end512);
                                 
@@ -698,10 +767,6 @@ struct TraceLLVMCompiler {
                             B->SetInsertPoint(cond256);
                             if (numThreads >= 256)
                             {
-                                llvm::BasicBlock * body256 = createAndInsertBB("body256");
-                                
-                                llvm::Value *Cond256 = B->CreateICmpSLT(tid, ConstantInt(128));
-                                B->CreateCondBr(Cond256, body256, end256);
                                 
                                 B->SetInsertPoint(body256);
                                 
@@ -716,7 +781,6 @@ struct TraceLLVMCompiler {
                                 
                                 B->CreateStore(B->CreateFAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndex256)), sharedMemIndex);
                                 
-                                B->CreateBr(end256);
                                 B->SetInsertPoint(end256);
                                 
                                 B->CreateCall(Sync);
@@ -727,11 +791,8 @@ struct TraceLLVMCompiler {
                             B->SetInsertPoint(cond128);
                             
                             if (numThreads >= 128)
-                            {;
-                                llvm::BasicBlock * body128 = createAndInsertBB("body128");
-                                
-                                llvm::Value *Cond128 = B->CreateICmpSLT(tid, ConstantInt(64));
-                                B->CreateCondBr(Cond128, body128, end128);
+                            {
+
                                 
                                 B->SetInsertPoint(body128);
                                 
@@ -745,22 +806,11 @@ struct TraceLLVMCompiler {
                                 
                                 B->CreateStore(B->CreateFAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndex128)), sharedMemIndex);
                                 
-                                B->CreateBr(end128);
                                 B->SetInsertPoint(end128);
                                 
                                 B->CreateCall(Sync);
                             }
                             
-                            
-                            //might need to rework once sum works
-                            llvm::BasicBlock * body32 = createAndInsertBB("body32");
-                            llvm::BasicBlock * end32 = createAndInsertBB("end32");
-                            
-                            
-                            
-                            B->SetInsertPoint(cond32);
-                            llvm::Value *Cond32 = B->CreateICmpSLT(tid, ConstantInt(32));
-                            B->CreateCondBr(Cond32, body32, end32);
                             
                             B->SetInsertPoint(body32);
                             //declare something volatile
@@ -843,21 +893,12 @@ struct TraceLLVMCompiler {
                                 B->CreateCall(Sync);
                             }
                             
-                            B->CreateBr(end32);
                             
                             B->SetInsertPoint(end32);
                              
                             
                             B->CreateCall(Sync);
                             
-                            llvm::BasicBlock * condFinal = createAndInsertBB("condFinal");
-                            llvm::BasicBlock * bodyFinal = createAndInsertBB("bodyFinal");
-                            llvm::BasicBlock * endFinal = createAndInsertBB("endFinal");
-                            
-                            B->CreateBr(condFinal);
-                            B->SetInsertPoint(condFinal);
-                            llvm::Value *CondFinal = B->CreateICmpEQ(tid, ConstantInt(0));
-                            B->CreateCondBr(CondFinal, bodyFinal, endFinal);
                             
                             B->SetInsertPoint(bodyFinal);
                             
@@ -871,17 +912,239 @@ struct TraceLLVMCompiler {
                             
                             values[i] = B->CreateLoad(output); 
                             
-                            
-                            B->SetInsertPoint(endFinal);
-                            B->CreateBr(returnBlock);
                             end = returnBlock;
                             
                             B->SetInsertPoint(bodyFinal);
                             break;
                         }
-                        case Type::Integer:
-                            values[i] = B->CreateSRem(values[n.binary.a],values[n.binary.b]);
+                        case Type::Integer: {
+                            //set to the top of the function
+                            llvm::GlobalVariable *shared = new llvm::GlobalVariable((*mainModule), llvm::ArrayType::get(llvm::Type::getInt64Ty(*C), sizeOfArray), false, llvm::GlobalValue::ExternalLinkage, 0, "sharedMemory", 0, 0, 3);
+                            //set to the top of the function
+                            if (!reductionBlocksPresent) {
+                                returnBlock = createAndInsertBB("return");
+                                cond512 = createAndInsertBB("cond512");
+                                cond256 = createAndInsertBB("cond256");
+                                cond128 = createAndInsertBB("cond128");
+                                cond32 = createAndInsertBB("cond32");
+                                end512 = createAndInsertBB("end512");
+                                end256 = createAndInsertBB("end256");
+                                end128 = createAndInsertBB("end128");
+                                body512 = createAndInsertBB("body512");
+                                body256 = createAndInsertBB("body256");
+                                body128 = createAndInsertBB("body128");
+                                body32 = createAndInsertBB("body32");
+                                end32 = createAndInsertBB("end32");
+                                condFinal = createAndInsertBB("condFinal");
+                                bodyFinal = createAndInsertBB("bodyFinal");
+                                endFinal = createAndInsertBB("endFinal");
+                                reductionBlocksPresent = true;
+                            }
+                            
+                            Synchronize(function, tid);
+                            
+                            InitializeSharedInteger(function, shared, tid);
+                            
+                            llvm::AllocaInst *Alloca = CreateEntryBlockAllocaInteger(function, "mySum");
+                            
+                            
+                            
+                            B->SetInsertPoint(body);
+                            
+                            
+                            B->CreateStore((B->CreateAdd(values[n.unary.a], B->CreateLoad(Alloca))), Alloca);
+                            
+                            
+                            B->SetInsertPoint(origEnd);
+                            std::vector<llvm::Value *> indices;
+                            indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*C), 0));
+                            indices.push_back(tid);
+                            
+                            llvm::ArrayRef<llvm::Value *> gepIndices = llvm::ArrayRef<llvm::Value*>(indices);
+                            llvm::Value *sharedMemIndex = B->CreateGEP(shared, gepIndices, "index");
+                            B->CreateStore(B->CreateLoad(Alloca), sharedMemIndex);
+                            
+                            
+                            B->CreateCall(Sync);
+                            
+                            B->SetInsertPoint(cond512);
+                            
+                            if (numThreads >= 512)
+                            {
+                                
+                                
+                                B->SetInsertPoint(body512);
+                                
+                                std::vector<llvm::Value *> indices512;
+                                indices512.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*C), 0));
+                                indices512.push_back(B->CreateAdd(tid, ConstantInt(256)));
+                                
+                                llvm::ArrayRef<llvm::Value *> gepIndices512 = llvm::ArrayRef<llvm::Value*>(indices512);
+                                llvm::Value *sharedMemIndex512 = B->CreateGEP(shared, gepIndices512, "512");
+                                
+                                B->CreateStore(B->CreateAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndex512)), sharedMemIndex);
+                                
+                                B->SetInsertPoint(end512);
+                                
+                                B->CreateCall(Sync);
+                                
+                            }
+                            
+                            
+                            
+                            B->SetInsertPoint(cond256);
+                            if (numThreads >= 256)
+                            {
+                                
+                                B->SetInsertPoint(body256);
+                                
+                                std::vector<llvm::Value *> indices256;
+                                indices256.push_back(ConstantInt(0));
+                                indices256.push_back(B->CreateAdd(tid, ConstantInt(128)));
+                                
+                                
+                                llvm::ArrayRef<llvm::Value *> gepIndices256 = llvm::ArrayRef<llvm::Value*>(indices256);
+                                llvm::Value *sharedMemIndex256 = B->CreateGEP(shared, gepIndices256, "");
+                                
+                                
+                                B->CreateStore(B->CreateAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndex256)), sharedMemIndex);
+                                
+                                B->SetInsertPoint(end256);
+                                
+                                B->CreateCall(Sync);
+                                
+                            }
+                            
+                            
+                            B->SetInsertPoint(cond128);
+                            
+                            if (numThreads >= 128)
+                            {
+                                
+                                
+                                B->SetInsertPoint(body128);
+                                
+                                std::vector<llvm::Value *> indices128;
+                                indices128.push_back(ConstantInt(0));
+                                indices128.push_back(B->CreateAdd(tid, ConstantInt(64)));
+                                
+                                llvm::ArrayRef<llvm::Value *> gepIndices128 = llvm::ArrayRef<llvm::Value*>(indices128);
+                                llvm::Value *sharedMemIndex128 = B->CreateGEP(shared, gepIndices128, "");
+                                
+                                
+                                B->CreateStore(B->CreateAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndex128)), sharedMemIndex);
+                                
+                                B->SetInsertPoint(end128);
+                                
+                                B->CreateCall(Sync);
+                            }
+                            
+                            
+                            B->SetInsertPoint(body32);
+                            //declare something volatile
+                            
+                            if (numThreads >= 64) {
+                                std::vector<llvm::Value *> indices32;
+                                indices32.push_back(ConstantInt(0));
+                                indices32.push_back(B->CreateAdd(tid, ConstantInt(32)));
+                                
+                                llvm::ArrayRef<llvm::Value *> gepIndices32 = llvm::ArrayRef<llvm::Value*>(indices32);
+                                llvm::Value *sharedMemIndex32 = B->CreateGEP(shared, gepIndices32, "");
+                                
+                                
+                                B->CreateStore(B->CreateAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndex32)), sharedMemIndex, true);
+                                B->CreateCall(Sync);
+                            }
+                            
+                            if (numThreads >= 32) {
+                                std::vector<llvm::Value *> indices16;
+                                indices16.push_back(ConstantInt(0));
+                                indices16.push_back(B->CreateAdd(tid, ConstantInt(16)));
+                                
+                                llvm::ArrayRef<llvm::Value *> gepIndices16 = llvm::ArrayRef<llvm::Value*>(indices16);
+                                llvm::Value *sharedMemIndex16 = B->CreateGEP(shared, gepIndices16, "");
+                                
+                                
+                                B->CreateStore(B->CreateAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndex16)), sharedMemIndex, true);
+                                B->CreateCall(Sync);
+                            }
+                            
+                            if (numThreads >= 16) {
+                                std::vector<llvm::Value *> indices8;
+                                indices8.push_back(ConstantInt(0));
+                                indices8.push_back(B->CreateAdd(tid, ConstantInt(8)));
+                                
+                                llvm::ArrayRef<llvm::Value *> gepIndices8 = llvm::ArrayRef<llvm::Value*>(indices8);
+                                llvm::Value *sharedMemIndex8 = B->CreateGEP(shared, gepIndices8, "");
+                                
+                                
+                                B->CreateStore(B->CreateAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndex8)), sharedMemIndex, true);
+                                B->CreateCall(Sync);
+                            }
+                            
+                            if (numThreads >= 8) {
+                                std::vector<llvm::Value *> indices4;
+                                indices4.push_back(ConstantInt(0));
+                                indices4.push_back(B->CreateAdd(tid, ConstantInt(4)));
+                                
+                                llvm::ArrayRef<llvm::Value *> gepIndices4 = llvm::ArrayRef<llvm::Value*>(indices4);
+                                llvm::Value *sharedMemIndex4 = B->CreateGEP(shared, gepIndices4, "");
+                                
+                                
+                                B->CreateStore(B->CreateAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndex4)), sharedMemIndex, true);
+                                B->CreateCall(Sync);
+                            }
+                            
+                            if (numThreads >= 4) {
+                                std::vector<llvm::Value *> indices2;
+                                indices2.push_back(ConstantInt(0));
+                                indices2.push_back(B->CreateAdd(tid, ConstantInt(2)));
+                                
+                                llvm::ArrayRef<llvm::Value *> gepIndices2 = llvm::ArrayRef<llvm::Value*>(indices2);
+                                llvm::Value *sharedMemIndex2 = B->CreateGEP(shared, gepIndices2, "");
+                                
+                                
+                                B->CreateStore(B->CreateAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndex2)), sharedMemIndex, true);
+                                B->CreateCall(Sync);
+                            }
+                            if (numThreads >= 2) {
+                                std::vector<llvm::Value *> indices1;
+                                indices1.push_back(ConstantInt(0));
+                                indices1.push_back(B->CreateAdd(tid, ConstantInt(1)));
+                                
+                                llvm::ArrayRef<llvm::Value *> gepIndices1 = llvm::ArrayRef<llvm::Value*>(indices1);
+                                llvm::Value *sharedMemIndex1 = B->CreateGEP(shared, gepIndices1, "");
+                                
+                                
+                                B->CreateStore(B->CreateAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndex1)), sharedMemIndex, true);
+                                sharedMemIndex->dump();
+                                B->CreateCall(Sync);
+                            }
+                            
+                            
+                            B->SetInsertPoint(end32);
+                            
+                            
+                            B->CreateCall(Sync);
+                            
+                            
+                            B->SetInsertPoint(bodyFinal);
+                            
+                            
+                            std::vector<llvm::Value *> outputIndices;
+                            outputIndices.push_back(ConstantInt(0));
+                            outputIndices.push_back(ConstantInt(0)); //should be 0
+                            
+                            llvm::ArrayRef<llvm::Value *> outputIndixes = llvm::ArrayRef<llvm::Value*>(outputIndices);
+                            llvm::Value *output = B->CreateGEP(shared, outputIndixes, "finalOutput");
+                            
+                            values[i] = B->CreateLoad(output); 
+                            
+                            end = returnBlock;
+                            
+                            B->SetInsertPoint(bodyFinal);
                             break;
+                    }
                         default:
                             _error("unsupported type");
                     }					
@@ -1012,7 +1275,6 @@ struct TraceLLVMCompiler {
                     llvm::Value * elementAddr = B->CreateGEP(vector, blockID); 
                     B->CreateStore(values[i], elementAddr);
                     outputGPU.push_back(p);
-                    B->CreateRetVoid();
                     B->SetInsertPoint(body);
                 }
 
@@ -1021,7 +1283,7 @@ struct TraceLLVMCompiler {
     
     }
     
-    static llvm::AllocaInst * CreateEntryBlockAlloca(llvm::Function *TheFunction,
+    static llvm::AllocaInst * CreateEntryBlockAllocaDouble(llvm::Function *TheFunction,
                                               const std::string &VarName) {
         llvm::IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
                          TheFunction->getEntryBlock().begin());
@@ -1032,7 +1294,18 @@ struct TraceLLVMCompiler {
         return Alloca;
     }
     
-    void InitializeShared(llvm::Function *TheFunction, llvm::GlobalVariable *shared, llvm::Value *Tid) {
+    static llvm::AllocaInst * CreateEntryBlockAllocaInteger(llvm::Function *TheFunction,
+                                                           const std::string &VarName) {
+        llvm::IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
+                               TheFunction->getEntryBlock().begin());
+        llvm::AllocaInst * Alloca = TmpB.CreateAlloca(llvm::Type::getInt64Ty(llvm::getGlobalContext()), 0,
+                                                      VarName.c_str());
+        llvm::Value * temp = llvm::ConstantInt::get(llvm::Type::getInt64Ty(llvm::getGlobalContext()), 0);
+        TmpB.CreateStore(temp, Alloca);
+        return Alloca;
+    }
+    
+    void InitializeSharedDouble(llvm::Function *TheFunction, llvm::GlobalVariable *shared, llvm::Value *Tid) {
         llvm::IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
                                TheFunction->getEntryBlock().begin());
         std::vector<llvm::Value *> indicesZero;
@@ -1046,7 +1319,21 @@ struct TraceLLVMCompiler {
         return;
     }
     
-    void Synchronize(llvm::Function *TheFunction, llvm::Value *Tid, llvm::Function *Sync) {
+    void InitializeSharedInteger(llvm::Function *TheFunction, llvm::GlobalVariable *shared, llvm::Value *Tid) {
+        llvm::IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
+                               TheFunction->getEntryBlock().begin());
+        std::vector<llvm::Value *> indicesZero;
+        indicesZero.push_back(ConstantInt(0));
+        indicesZero.push_back(Tid);
+        
+        
+        llvm::ArrayRef<llvm::Value *> gepIndicesZero = llvm::ArrayRef<llvm::Value*>(indicesZero);
+        llvm::Value *sharedMemIndexZero = TmpB.CreateGEP(shared, gepIndicesZero, "zero");
+        TmpB.CreateStore(ConstantInt(0), sharedMemIndexZero);
+        return;
+    }
+    
+    void Synchronize(llvm::Function *TheFunction, llvm::Value *Tid) {
         llvm::IRBuilder<> TmpB(&TheFunction->getEntryBlock(),
                                TheFunction->getEntryBlock().begin());
         TmpB.CreateCall(Sync);
