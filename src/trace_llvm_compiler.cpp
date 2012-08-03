@@ -314,7 +314,7 @@ struct TraceLLVMCompiler {
         //end Gavin changes
         
         //if (thread->state.verbose)
-             mainModule->dump();
+        //     mainModule->dump();
         
         
         
@@ -645,6 +645,23 @@ struct TraceLLVMCompiler {
                         case Type::Integer:
                             values[i] = ConstantInt(n.constant.i);
                             break;
+                        default:
+                            _error("unsupported type");
+                            break;
+					}
+                    break;
+                case IROpCode::abs:
+                    switch(n.type) {
+                        case Type::Double: {
+                            llvm::Value * Result = B->CreateBitCast(values[n.unary.a], llvm::Type::getInt64Ty(*C));
+                            values[i] = B->CreateBitCast(B->CreateAnd(Result, ConstantInt(0x7fffffffffffffffULL)), llvm::Type::getDoubleTy(*C));
+                            break;
+                        }
+                        case Type::Integer: {
+                            llvm::Value * Result = B->CreateBitCast(values[n.unary.a], llvm::Type::getInt64Ty(*C));
+                            values[i] = B->CreateAnd(Result, ConstantInt(0x7fffffff));
+                            break;
+                        }
                         default:
                             _error("unsupported type");
                             break;
