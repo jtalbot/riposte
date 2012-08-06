@@ -444,14 +444,6 @@ struct TraceLLVMCompiler {
         Annot->addOperand(MdNode);
         
      
-        /* create the following body for the kernel function:
-         {
-         unsigned id = blockDim.x * blockIdx.x + threadIdx.x;
-         if (id < len) {
-                IndexFunc(id);
-            }
-         }
-         */
         llvm::BasicBlock *EntryBB = llvm::BasicBlock::Create(VMContext, "entry", KernelFunc, /*InserBefore*/0);
         
         
@@ -547,6 +539,8 @@ struct TraceLLVMCompiler {
                                 n.out.d = sum;
                                 break;
                             }
+                            default:
+                                break;
                         }
                     }
                     else if(n.type == Type::Integer) {
@@ -562,6 +556,8 @@ struct TraceLLVMCompiler {
                                 n.out.i = sum;
                                 break;
                             }
+                            default:
+                                break;
                         }
                     } else if(n.type == Type::Logical) {
                         cudaMemcpy(((Logical&)n.out).v(), outputGPU[output], sizeOfResult * sizeof(Logical::Element), cudaMemcpyDeviceToHost);
@@ -658,8 +654,29 @@ struct TraceLLVMCompiler {
                             break;
                         }
                         case Type::Integer: {
-                            llvm::Value * Result = B->CreateBitCast(values[n.unary.a], llvm::Type::getInt64Ty(*C));
-                            values[i] = B->CreateAnd(Result, ConstantInt(0x7fffffff));
+                            llvm::Function * absolute = llvm::Function::Create(llvm::FunctionType::get(llvm::Type::getVoidTy(llvm::getGlobalContext()), false),
+                                                              llvm::Function::ExternalLinkage,
+                                                              "asm \"abs.s64\", \"d, a\"  ", mainModule);
+                            
+                           
+                            
+                            llvm::Constant *cons = mainModule->getOrInsertFunction("asm \"abs.s64\", \"d, a\"  ", llvm::Type::getVoidTy(llvm::getGlobalContext()), intType, intType, NULL);
+                            absolute = llvm::cast<llvm::Function>(cons);
+                            absolute->setCallingConv(llvm::CallingConv::C);
+                            
+                            llvm::Constant *cons = mainModule->getOrInsertFunction("indexFunc", llvm::Type::getVoidTy(*C), intType, intType, intType, NULL);
+                            function = llvm::cast<llvm::Function>(cons);
+                            function->setCallingConv(llvm::CallingConv::C);
+                            
+                            std::vector<llvm::Value *> IndexArgs;
+                            llvm::Value * dest;
+                            IndexArgs.push_back(dest);
+                            IndexArgs.push_back(values[n.unary.a]);
+                            
+                            //call index function
+                            B->CreateCall(absolute, IndexArgs);
+                            
+                            values[i] = B->CreateLoad(dest);
                             break;
                         }
                         default:
@@ -1398,7 +1415,7 @@ struct TraceLLVMCompiler {
         __NVVM_SAFE_CALL(nvvmDestroyCU(&CU));
                 
 
-        //std::cout << "Ptx code: " << PtxBuf << std::endl;
+        std::cout << "Ptx code: " << PtxBuf << std::endl;
         //Create the threads based on the size
         
         const char *ptxstr = PtxBuf;
