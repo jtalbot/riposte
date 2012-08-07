@@ -28,13 +28,13 @@
 	_(fastmov, "fastmov") \
 	_(assign, "assign") \
 	_(store2, "store2") \
+	_(gather, "gather") \
 
 #ifdef TRACE_DEVELOPMENT
 	_(dotdot, "dotdot") \
 	_(assign2, "assign2") \
 	_(iassign, "iassign") \
-	_(subset, "subset") \
-	_(subset2, "subset2")
+	_(load2, "load2")
 #endif
 
 #define UTILITY_BYTECODES(_)\

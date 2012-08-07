@@ -3,6 +3,7 @@
 #define JIT_H
 
 #include <map>
+#include <vector>
 #include <assert.h>
 
 #include "enum.h"
@@ -11,13 +12,16 @@
 
 #define TRACE_ENUM(_) \
 		MAP_BYTECODES(_) \
-		_(mov, "mov", ___) \
-		_(guardT, "guardT", ___) \
-		_(guardF, "guardF", ___) \
-		_(read, "read",___) \
-		_(phi, "phi", ___) \
-		_(jmp, "jmp", ___) \
-		_(store2, "store2", ___)
+        _(loop, "LOOP", ___) \
+        _(constant, "CONS", ___) \
+		_(load, "LOAD", ___) /* loads are type guarded */ \
+        /* no store instruction since all stores are implicitly sunk in exits */ \
+		_(guardT, "GRD_T", ___) \
+		_(guardF, "GRD_F", ___) \
+		_(gather, "GATHER", ___) \
+		_(phi, "PHI", ___) \
+		_(store2, "STORE2", ___) \
+		_(nop, "NOP", ___)
 
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
 
@@ -27,51 +31,72 @@ class JIT {
 
 public:
 
+    enum State {
+        OFF,
+        RECORDING_HEADER,
+        RECORDING_BODY
+    };
+
 	typedef Instruction const* (*Ptr)(Thread& thread);
 
-	struct IRRef {
-		size_t i;
-	};
+	typedef size_t IRRef;
 
 	struct IR {
-		TraceOpCode::Enum op;	
+		TraceOpCode::Enum op;
 		IRRef a, b, c;
 		int64_t i;
 		Type::Enum type;
+		size_t width;
+		size_t group;
+        bool liveout;
 		void dump();
 	};
 
-	IR code[1024];
-	IRRef pc;
-	IRRef loopStart;
-	
 	unsigned short counters[1024];
 
 	static const unsigned short RECORD_TRIGGER = 4;
 
-	bool recording;
+    State state;
 	Instruction const* startPC;
 
 	std::map<int64_t, IRRef> map;
+    std::map<IRRef, IRRef> phi;
+    std::vector<IR> code;
 
 	struct Exit {
-		std::map<int64_t, IRRef> m;
+		std::map<int64_t, IRRef> o;
 		Instruction const* reenter;
 	};
 	std::map<size_t, Exit > exits;
 
 	JIT() 
-		: recording(false)
+		: state(OFF)
 	{
 	}
 
 	void start_recording(Instruction const* startPC) {
-		assert(!recording);
-		recording = true;
+		assert(state == OFF);
+		state = RECORDING_HEADER;
 		this->startPC = startPC;
-		pc.i = 0;
-		map.clear();
+        code.clear();
+        map.clear();
+        phi.clear();
 	}
+
+    bool record(Thread& thread, Instruction const* pc, bool branch=false) {
+        EmitIR(thread, *pc, branch);
+        if(pc != startPC) {
+            return false;
+        } else if(state == RECORDING_HEADER) {
+            phi.clear();
+            insert(TraceOpCode::loop, (int64_t)0, Type::Promise, 1);
+            state = RECORDING_BODY;
+            return false;
+        }
+        else {
+            return true;
+        }
+    }
 
 	bool loop(Instruction const* pc) {
 		return pc == startPC;
@@ -80,26 +105,34 @@ public:
 	Ptr end_recording(Thread& thread);
 	
 	void fail_recording() {
-		assert(recording);
-		recording = false;
+		assert(state != OFF);
+		state = OFF;
 	}
 
-	IRRef insert(TraceOpCode::Enum op, IRRef a, Type::Enum type);
-	IRRef insert(TraceOpCode::Enum op, IRRef a, int64_t i, Type::Enum type);
-	IRRef insert(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum type);
-	IRRef insert(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum type);
-	IRRef insert(TraceOpCode::Enum op, int64_t i, Type::Enum type);
+	IRRef insert(TraceOpCode::Enum op, IRRef a, Type::Enum type, size_t width);
+	IRRef insert(TraceOpCode::Enum op, IRRef a, int64_t i, Type::Enum type, size_t width);
+	IRRef insert(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum type, size_t width);
+	IRRef insert(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum type, size_t width);
+	IRRef insert(TraceOpCode::Enum op, int64_t i, Type::Enum type, size_t width);
 
-	IRRef read(Thread& thread, int64_t a);
-	IRRef write(Thread& thread, IRRef a, int64_t c);
+	IRRef load(Thread& thread, int64_t a, Instruction const* reenter);
+	IRRef store(Thread& thread, IRRef a, int64_t c);
 	IRRef emit(Thread& thread, TraceOpCode::Enum op, IRRef a, IRRef b, int64_t c);
 	IRRef emit(Thread& thread, TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, int64_t d);
 	void guardT(Thread& thread, Instruction const* reenter);
 	void guardF(Thread& thread, Instruction const* reenter);
 
+    void markLiveOut(Exit const& exit);
+
 	void dump();
 
 	Ptr compile(Thread& thread);
+
+	void specialize();
+	void schedule();
+
+    void EmitIR(Thread& thread, Instruction const& inst, bool branch);
+    void Replay(Thread& thread);
 };
 
 #endif

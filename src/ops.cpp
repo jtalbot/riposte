@@ -9,38 +9,85 @@
 #include "interpreter.h"
 
 extern "C"
-double loadr_d(Thread& thread, int64_t i) {
-	return (thread.base+i)->d;
+bool loadr_d(Thread& thread, int64_t i, size_t len, double* d) {
+    Value const& a = thread.base[i];
+	if(a.type != Type::Double) 
+        return false;
+	memcpy(d, ((Double const&)a).v(), len*sizeof(double));
+    return true;
 }
 
 extern "C"
-double loadm_d(Thread& thread, int64_t i) {
+bool loadm_d(Thread& thread, int64_t i, size_t len, double* d) {
 	Value const& a = thread.frame.environment->getRecursive((String)i);
-	return a.d;
+	if(a.type != Type::Double) 
+        return false;
+	memcpy(d, ((Double const&)a).v(), len*sizeof(double));
+    return true;
 }
 
 extern "C"
-void storer_d(Thread& thread, int64_t i, double d) {
-	Double::InitScalar(thread.base[i], d);
+bool loadr_i(Thread& thread, int64_t i, size_t len, int64_t* d) {
+    Value const& a = thread.base[i];
+	if(a.type != Type::Integer) 
+        return false;
+	memcpy(d, ((Integer const&)a).v(), len*sizeof(int64_t));
+    return true;
 }
 
 extern "C"
-void storer_l(Thread& thread, int64_t i, int8_t l) {
-	Logical::InitScalar(thread.base[i], l);
+bool loadm_i(Thread& thread, int64_t i, size_t len, int64_t* d) {
+	Value const& a = thread.frame.environment->getRecursive((String)i);
+	if(a.type != Type::Integer) 
+        return false;
+	memcpy(d, ((Integer const&)a).v(), len*sizeof(int64_t));
+    return true;
 }
 
 extern "C"
-void storem_d(Thread& thread, int64_t i, double d) {
-	Double::InitScalar(
-		thread.frame.environment->insert((String)i),
-		d);
+bool loadr_l(Thread& thread, int64_t i, size_t len, int8_t* d) {
+    Value const& a = thread.base[i];
+	if(a.type != Type::Logical) 
+        return false;
+	memcpy(d, ((Logical const&)a).v(), len*sizeof(int8_t));
+    return true;
 }
 
 extern "C"
-void storem_l(Thread& thread, int64_t i, int8_t l) {
-	Logical::InitScalar(
-		thread.frame.environment->insert((String)i),
-		l);
+bool loadm_l(Thread& thread, int64_t i, size_t len, int8_t* d) {
+	Value const& a = thread.frame.environment->getRecursive((String)i);
+	if(a.type != Type::Logical) 
+        return false;
+	memcpy(d, ((Logical const&)a).v(), len*sizeof(int8_t));
+    return true;
+}
+
+extern "C"
+void storer_d(Thread& thread, int64_t i, size_t len, double* d) {
+	Double a(len);
+	memcpy(a.v(), d, len*sizeof(double));
+	thread.base[i] = a;
+}
+
+extern "C"
+void storer_l(Thread& thread, int64_t i, size_t len, int8_t* l) {
+	Logical a(len);
+	memcpy(a.v(), l, len*sizeof(int8_t));
+	thread.base[i] = a;
+}
+
+extern "C"
+void storem_d(Thread& thread, int64_t i, size_t len, double* d) {
+	Double a(len);
+	memcpy(a.v(), d, len*sizeof(double));
+	thread.frame.environment->insert((String)i) = a;
+}
+
+extern "C"
+void storem_l(Thread& thread, int64_t i, size_t len, int8_t* l) {
+	Logical a(len);
+	memcpy(a.v(), l, len*sizeof(int8_t));
+	thread.frame.environment->insert((String)i) = a;
 }
 
 extern "C"

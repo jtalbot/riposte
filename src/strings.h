@@ -144,6 +144,7 @@
 	_(isfinite,	"is.finite") \
 	_(isinfinite,	"is.infinite") \
 	_(vector,	"vector") \
+	_(cc,	"c") \
 	_(Re,	"Re") \
 	_(Im,	"Im") \
 	_(Maximal, "\255")

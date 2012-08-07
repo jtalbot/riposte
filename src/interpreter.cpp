@@ -40,7 +40,7 @@ extern Instruction const* fastmov_op(Thread& thread, Instruction const& inst) AL
 extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* subset_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* gather_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* subset2_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* jc_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* lt_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -393,7 +393,7 @@ Instruction const* store2_op(Thread& thread, Instruction const& inst) {
 	return &inst+1; 
 }
 
-Instruction const* subset_op(Thread& thread, Instruction const& inst) {
+Instruction const* gather_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); 
 	OPERAND(i, inst.b);
 
@@ -822,8 +822,15 @@ Instruction const* internal_op(Thread& thread, Instruction const& inst) {
 }
 #endif
 
-Instruction const* jc_record(Thread& thread, Instruction const& inst) {
-	return jc_op(thread, inst);
+/*Instruction const* jc_record(Thread& thread, Instruction const& inst) {
+	Instruction const* r = jc_op(thread, inst);
+    JIT::IRRef a = thread.jit.load(thread, inst.c, &inst);
+	if(r-&inst == inst.a)
+		thread.jit.guardT(thread, &inst+inst.b);
+	else
+		thread.jit.guardF(thread, &inst+inst.a);
+    return r;
+		
 }
 Instruction const* jmp_record(Thread& thread, Instruction const& inst) {
 	return jmp_op(thread, inst);
@@ -834,28 +841,35 @@ Instruction const* rets_record(Thread& thread, Instruction const& inst) {
 
 Instruction const* mov_record(Thread& thread, Instruction const& inst) {
 	Instruction const* r = mov_op(thread, inst);
-	JIT::IRRef a = thread.jit.read(thread, inst.a);
-	thread.jit.write(thread, a, inst.c); 
+	JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
+	thread.jit.store(thread, a, inst.c); 
 	return r;
 }
 Instruction const* fastmov_record(Thread& thread, Instruction const& inst) {
 	Instruction const* r = fastmov_op(thread, inst);
-	JIT::IRRef a = thread.jit.read(thread, inst.a);
-	thread.jit.write(thread, a, inst.c); 
+	JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
+	thread.jit.store(thread, a, inst.c); 
 	return r;
 }
 Instruction const* assign_record(Thread& thread, Instruction const& inst) {
 	Instruction const* r = assign_op(thread, inst);
-	JIT::IRRef c = thread.jit.read(thread, inst.c);
-	thread.jit.write(thread, c, inst.a); 
+	JIT::IRRef c = thread.jit.load(thread, inst.c, &inst);
+	thread.jit.store(thread, c, inst.a); 
 	return r;
 }
 Instruction const* store2_record(Thread& thread, Instruction const& inst) {
 	Instruction const* r = store2_op(thread, inst);
-	JIT::IRRef a = thread.jit.read(thread, inst.a);
-	JIT::IRRef b = thread.jit.read(thread, inst.b);
-	JIT::IRRef c = thread.jit.read(thread, inst.c);
+	JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
+	JIT::IRRef b = thread.jit.load(thread, inst.b, &inst);
+	JIT::IRRef c = thread.jit.load(thread, inst.c, &inst);
 	thread.jit.emit(thread, TraceOpCode::store2, a, b, c, inst.c); 
+	return r;
+}
+Instruction const* gather_record(Thread& thread, Instruction const& inst) {
+	Instruction const* r = gather_op(thread, inst);
+	JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
+	JIT::IRRef b = thread.jit.load(thread, inst.b, &inst);
+	thread.jit.emit(thread, TraceOpCode::gather, a, b, inst.c); 
 	return r;
 }
 Instruction const* seq_record(Thread& thread, Instruction const& inst) {
@@ -866,13 +880,14 @@ Instruction const* seq_record(Thread& thread, Instruction const& inst) {
 #define RECORD(Name, string, ...) \
 Instruction const* Name##_record(Thread& thread, Instruction const& inst) { \
 	Instruction const* r = Name##_op(thread, inst); \
-	JIT::IRRef a = thread.jit.read(thread, inst.a); \
-	JIT::IRRef b = thread.jit.read(thread, inst.b); \
+	JIT::IRRef a = thread.jit.load(thread, inst.a, &inst); \
+	JIT::IRRef b = thread.jit.load(thread, inst.b, &inst); \
 	thread.jit.emit(thread, TraceOpCode::Name, a, b, inst.c); \
 	return r; \
 }
 BINARY_BYTECODES(RECORD)
 #undef RECORD
+*/
 
 //
 //    Main interpreter loop 
@@ -891,17 +906,13 @@ void interpret(Thread& thread, Instruction const* pc) {
 	const void** labels = ops;
 
 	goto *(const void*)(labels[pc->bc]);
-	#define LABELED_OP(name,type,...) \
+	
+    #define LABELED_OP(name,type,...) \
 		name##_label: \
 			{ pc = name##_op(thread, *pc); goto *(const void*)labels[pc->bc]; } 
 	STANDARD_BYTECODES(LABELED_OP)
 	#undef LABELED_OP
-	#define RECORD_OP(name,type,...) \
-		name##_record: \
-			{ pc = name##_record(thread, *pc); goto *(const void*)labels[pc->bc]; } 
-	STANDARD_BYTECODES(RECORD_OP)
-	#undef LABELED_OP
-	
+
 	jc_label: 	{ 
 		Instruction const* old_pc = pc;
 		pc = jc_op(thread, *pc); 
@@ -917,35 +928,50 @@ void interpret(Thread& thread, Instruction const* pc) {
 		}
 		goto *(const void*)labels[pc->bc]; 
 	}
-	jmp_label: 	{ pc = jmp_op(thread, *pc); goto *(const void*)labels[pc->bc]; }
-	rets_label: 	{ pc = rets_op(thread, *pc); goto *(const void*)labels[pc->bc]; }
+	jmp_label: 	{ 
+        pc = jmp_op(thread, *pc); 
+        goto *(const void*)labels[pc->bc]; 
+    }
+	rets_label: 	{ 
+        pc = rets_op(thread, *pc); 
+        goto *(const void*)labels[pc->bc]; 
+    }
+	
+
+	
+    #define RECORD_OP(name,...) \
+		name##_record: { \
+            Instruction const* old_pc = pc; \
+            pc = name##_op(thread, *pc); \
+            thread.jit.record(thread, old_pc); \
+            goto *(const void*)labels[pc->bc]; \
+    } 
+	STANDARD_BYTECODES(RECORD_OP)
+	#undef RECORD_OP
 	
 	jc_record: 	{ 
-		// did we make a loop yet??
+        // did we make a loop yet??
 		Instruction const* old_pc = pc;
-		pc = jc_record(thread, *pc); 
-		if(pc-old_pc == old_pc->a)
-			thread.jit.guardT(thread, old_pc+old_pc->b);
-		else
-			thread.jit.guardF(thread, old_pc+old_pc->a);
+		pc = jc_op(thread, *pc);
+ 
+        bool loop = thread.jit.record(thread, old_pc, pc==old_pc+old_pc->a);
 		
-		if(thread.jit.loop(old_pc)) {
-			if(pc < old_pc) {
-				JIT::Ptr fn = thread.jit.end_recording(thread);
-	timespec a = get_time();
-				pc = fn(thread);
-	printf("Execution time: %f\n", time_elapsed(a));
-			}
-			else {
-				thread.jit.fail_recording();
-			}
-			labels = ops;
+        if(loop) {
+			JIT::Ptr fn = thread.jit.end_recording(thread);
+	        timespec a = get_time();
+            assert(fn != 0);
+		    pc = fn(thread);
+	        printf("Execution time: %f\n", time_elapsed(a));
+		    labels = ops;
 		}
 		goto *(const void*)labels[pc->bc]; 
 	}
-	jmp_record: 	{ pc = jmp_record(thread, *pc); goto *(const void*)labels[pc->bc]; }
+	jmp_record: 	{ 
+        pc = jmp_op(thread, *pc); 
+        goto *(const void*)labels[pc->bc]; 
+    }
 	rets_record: 	{
-		pc = rets_record(thread, *pc);
+		pc = rets_op(thread, *pc);
 		// terminate recording
 		labels = ops;
 		goto *(const void*)labels[pc->bc]; 

@@ -1,6 +1,7 @@
 
 #include "compiler.h"
 #include "runtime.h"
+#include "coerce.h"
 
 static ByteCode::Enum op1(String const& func) {
 #ifdef TRACE_DEVELOPMENT
@@ -70,13 +71,13 @@ static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::lor) return ByteCode::lor; 
 	if(func == Strings::land) return ByteCode::land; 
 
+	if(func == Strings::bracket) return ByteCode::gather;
 #ifdef TRACE_DEVELOPMENT
 	if(func == Strings::pmin) return ByteCode::pmin; 
 	if(func == Strings::pmax) return ByteCode::pmax; 
 
 	if(func == Strings::cm2) return ByteCode::cm2; 
 	
-	if(func == Strings::bracket) return ByteCode::subset;
 	if(func == Strings::bb) return ByteCode::subset2;
 
 	if(func == Strings::vector) return ByteCode::vector;
@@ -752,6 +753,34 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		return compileConstant(call[1], code);
 	}
 	
+#ifndef TRACE_DEVELOPMENT
+	else if(func == Strings::cc) 
+	{
+		Type::Enum type = Type::Null;
+		for(size_t i = 1; i < call.length; i++) {
+			type = (Type::Enum)std::max((int)type, (int)call[i].type);
+		}
+		if(type == Type::Logical) {
+			Logical l(call.length-1);
+			for(size_t i = 1; i < call.length; i++) 
+				l[i-1] = As<Logical>(thread, call[i])[0];
+			return compileConstant(l, code);
+		}
+		if(type == Type::Integer) {
+			Integer l(call.length-1);
+			for(size_t i = 1; i < call.length; i++) 
+				l[i-1] = As<Integer>(thread, call[i])[0];
+			return compileConstant(l, code);
+		}
+		if(type == Type::Double) {
+			Double l(call.length-1);
+			for(size_t i = 1; i < call.length; i++) 
+				l[i-1] = As<Double>(thread, call[i])[0];
+			return compileConstant(l, code);
+		}
+	}
+#endif
+
 	return compileFunctionCall(call, names, code);
 }
 
