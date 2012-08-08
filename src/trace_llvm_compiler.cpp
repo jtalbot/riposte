@@ -32,6 +32,7 @@
 #include "llvm/DerivedTypes.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JIT.h"
+#include "llvm/InlineAsm.h"
 #include "llvm/LLVMContext.h"
 #include "llvm/Linker.h"
 #include "llvm/Module.h"
@@ -498,6 +499,9 @@ struct TraceLLVMCompiler {
     llvm::Constant * ConstantDouble(double d) {
         return llvm::ConstantFP::get(doubleType, d);
     }
+    llvm::Constant * ConstantFloat(float d) {
+        return llvm::ConstantFP::get(llvm::Type::getFloatTy(*C), d);
+    }
     llvm::Value * ConstantPointer(void * ptr, llvm::Type * typ) {
         llvm::Constant* ci = llvm::ConstantInt::get(intType, (uint64_t)ptr); 
         llvm::Value* cp = llvm::ConstantExpr::getIntToPtr(ci, llvm::PointerType::getUnqual(typ));
@@ -534,7 +538,6 @@ struct TraceLLVMCompiler {
                                 double sum = 0.0;
                                 for (int i = 0; i < outputReductionSize; i++) {
                                     sum += reductionVector[i];
-                                    std::cout << "Vector" << i << " "<< reductionVector[i] <<std::endl;
                                 }
                                 n.out.d = sum;
                                 break;
@@ -646,6 +649,111 @@ struct TraceLLVMCompiler {
                             break;
 					}
                     break;
+                case IROpCode::exp:
+                    switch(n.type) {
+                        case Type::Double: {
+                            
+                            llvm::Value * xlog2e = ConstantDouble(1.442695040888963407359924681001);
+                            llvm::Value * val = values[n.unary.a];
+                            val->setName("val");
+                            
+                            llvm::Value * expComp = B->CreateFPTrunc(B->CreateFMul(val, xlog2e, "xloge"), llvm::Type::getFloatTy(*C));
+                           
+                            
+                            std::vector<llvm::Type *> indices;
+                            indices.push_back(llvm::Type::getFloatTy(*C));
+                            llvm::ArrayRef<llvm::Type *>IndexArgs= llvm::ArrayRef<llvm::Type*>(indices);
+                            llvm::FunctionType *placeHolder = llvm::FunctionType::get(llvm::Type::getFloatTy(*C), IndexArgs, false);
+                            llvm::StringRef Constraints = llvm::StringRef("=f,f");
+                            llvm::InlineAsm * base2 = llvm::InlineAsm::get(placeHolder, "ex2.approx.f32 $0, $1;", Constraints, false, false);
+                            
+                            llvm::Value * callee = base2;
+                            
+                            std::vector<llvm::Value *> asmArgs;
+                            expComp->setName("expComp");
+                            asmArgs.push_back(expComp);
+
+                            
+                            values[i] = B->CreateFPExt(B->CreateCall(callee, asmArgs, "2^xloge"), llvm::Type::getDoubleTy(*C));
+                            break;
+                        }
+                        case Type::Integer: {
+                            _error("unsupported type");
+                            break;
+                        }
+                        default:
+                            _error("unsupported type");
+                            break;
+					}
+                    break;
+                case IROpCode::log:
+                    switch(n.type) {
+                        case Type::Double: {
+                            
+                            llvm::Value * xlog2e = ConstantFloat(0.693147180559945309417232121458176);
+                            
+                            llvm::Value * x = B->CreateFPTrunc(values[n.unary.a], llvm::Type::getFloatTy(*C));
+                            x->setName("x");
+                            
+                            std::vector<llvm::Type *> indices;
+                            indices.push_back(llvm::Type::getFloatTy(*C));
+                            llvm::ArrayRef<llvm::Type *>IndexArgs= llvm::ArrayRef<llvm::Type*>(indices);
+                            llvm::FunctionType *placeHolder = llvm::FunctionType::get(llvm::Type::getFloatTy(*C), IndexArgs, false);
+                            llvm::StringRef Constraints = llvm::StringRef("=f,f");
+                            llvm::InlineAsm * base2 = llvm::InlineAsm::get(placeHolder, "lg2.approx.f32 $0, $1;", Constraints, false, false);
+                            
+                            llvm::Value * callee = base2;
+                            
+                            std::vector<llvm::Value *> asmArgs;
+                            asmArgs.push_back(x);
+                            
+                            
+                            llvm::Value* logVal = B->CreateCall(callee, asmArgs, "");
+                            values[i] = B->CreateFPExt(B->CreateFMul(xlog2e, logVal), llvm::Type::getDoubleTy(*C));
+                            break;
+                        }
+                        case Type::Integer: {
+                            _error("unsupported type");
+                            break;
+                        }
+                        default:
+                            _error("unsupported type");
+                            break;
+					}
+                    break;
+                case IROpCode::sqrt:
+                    switch(n.type) {
+                        case Type::Double: {
+                            
+                            
+                            llvm::Value * x = values[n.unary.a];
+                            x->setName("x");
+                            
+                            std::vector<llvm::Type *> indices;
+                            indices.push_back(llvm::Type::getDoubleTy(*C));
+                            llvm::ArrayRef<llvm::Type *>IndexArgs= llvm::ArrayRef<llvm::Type*>(indices);
+                            llvm::FunctionType *placeHolder = llvm::FunctionType::get(llvm::Type::getDoubleTy(*C), IndexArgs, false);
+                            llvm::StringRef Constraints = llvm::StringRef("=d,d");
+                            llvm::InlineAsm * sqrt = llvm::InlineAsm::get(placeHolder, "sqrt.f64 $0, $1;", Constraints, false, false);
+                            
+                            llvm::Value * callee = sqrt;
+                            
+                            std::vector<llvm::Value *> asmArgs;
+                            asmArgs.push_back(x);
+                            
+                            
+                            values[i] = B->CreateCall(callee, asmArgs, "");
+                            break;
+                        }
+                        case Type::Integer: {
+                            _error("unsupported type");
+                            break;
+                        }
+                        default:
+                            _error("unsupported type");
+                            break;
+					}
+                    break;
                 case IROpCode::abs:
                     switch(n.type) {
                         case Type::Double: {
@@ -654,29 +762,24 @@ struct TraceLLVMCompiler {
                             break;
                         }
                         case Type::Integer: {
-                            llvm::Function * absolute = llvm::Function::Create(llvm::FunctionType::get(llvm::Type::getVoidTy(llvm::getGlobalContext()), false),
-                                                              llvm::Function::ExternalLinkage,
-                                                              "asm \"abs.s64\", \"d, a\"  ", mainModule);
+                            std::vector<llvm::Type *> indices;
+                            indices.push_back(llvm::Type::getInt64Ty(*C));
+                            llvm::ArrayRef<llvm::Type *>IndexArgs= llvm::ArrayRef<llvm::Type*>(indices);
+                            llvm::FunctionType *placeHolder = llvm::FunctionType::get(llvm::Type::getInt64Ty(*C), IndexArgs, false);
+                            llvm::StringRef Constraints = llvm::StringRef("=l,l");
+                            llvm::InlineAsm * absInt = llvm::InlineAsm::get(placeHolder, "abs.s64 $0, $1;", Constraints, false, false);
+
+                            llvm::InlineAsm::ConstraintInfoVector constraintInfoV = absInt->ParseConstraints();
                             
+                            llvm::Value * callee = absInt;
+                            llvm::Value * a = values[n.unary.a];
+
+                            
+                            std::vector<llvm::Value *> asmArgs;
+                            a->setName("a");
+                            asmArgs.push_back(a);
+                            values[i] = B->CreateCall(callee, asmArgs, "absInt");
                            
-                            
-                            llvm::Constant *cons = mainModule->getOrInsertFunction("asm \"abs.s64\", \"d, a\"  ", llvm::Type::getVoidTy(llvm::getGlobalContext()), intType, intType, NULL);
-                            absolute = llvm::cast<llvm::Function>(cons);
-                            absolute->setCallingConv(llvm::CallingConv::C);
-                            
-                            llvm::Constant *cons = mainModule->getOrInsertFunction("indexFunc", llvm::Type::getVoidTy(*C), intType, intType, intType, NULL);
-                            function = llvm::cast<llvm::Function>(cons);
-                            function->setCallingConv(llvm::CallingConv::C);
-                            
-                            std::vector<llvm::Value *> IndexArgs;
-                            llvm::Value * dest;
-                            IndexArgs.push_back(dest);
-                            IndexArgs.push_back(values[n.unary.a]);
-                            
-                            //call index function
-                            B->CreateCall(absolute, IndexArgs);
-                            
-                            values[i] = B->CreateLoad(dest);
                             break;
                         }
                         default:
@@ -1253,18 +1356,18 @@ struct TraceLLVMCompiler {
                     if(n.type == Type::Double) {
                         n.out = Double(length);
 
-                        int size = ((Double&)n.in).length*sizeof(Double::Element);
+                        int size = length*sizeof(Double::Element);
                         cudaMalloc((void**)&p, size);
                     
                     } else if(n.type == Type::Integer) {
                         n.out = Integer(length);
-                        int size = ((Integer&)n.in).length*sizeof(Integer::Element);
+                        int size = length*sizeof(Integer::Element);
                         cudaMalloc((void**)&p, size);
                     
                     } else if(n.type == Type::Logical) {
                         n.out = Logical(length);
 
-                        int size = ((Logical&)n.in).length*sizeof(Logical::Element);
+                        int size = length*sizeof(Logical::Element);
                         cudaMalloc((void**)&p, size);
                     
                     } else {
@@ -1441,6 +1544,7 @@ struct TraceLLVMCompiler {
 
         
         CUresult error = cuModuleLoadDataEx(&module, ptxstr, 0, 0, 0);
+        std::cout << "Module error" << error << std::endl;
         assert(error == 0);
         error = cuModuleGetFunction(&kernel, module, kname);
         assert(error == 0);
