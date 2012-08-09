@@ -869,6 +869,33 @@ struct TraceLLVMCompiler {
                             _error("unsupported type");
                     }					
                     break;
+                case IROpCode::ifelse:
+                    {
+
+                        llvm::Value * control = values[n.trinary.c];
+                        llvm::BasicBlock * condBlock = createAndInsertBB("condBlock");
+                        llvm::BasicBlock * ifBlock = createAndInsertBB("ifBlock");
+                        llvm::BasicBlock * elseBlock = createAndInsertBB("elseBlock");
+                        
+                        llvm::BasicBlock * nextBlock = createAndInsertBB("nextBlock");
+                            
+                        B->CreateBr(condBlock);
+                        B->SetInsertPoint(condBlock);
+                        B->CreateCondBr(control, ifBlock, elseBlock);
+                        B->SetInsertPoint(ifBlock);
+                        
+                        B->CreateBr(nextBlock);
+                        B->SetInsertPoint(elseBlock);
+                            
+                        B->CreateBr(nextBlock);
+                        B->SetInsertPoint(nextBlock);
+                            
+                        llvm::PHINode * result = B->CreatePHI(values[n.trinary.a]->getType(), 2);
+                        result->addIncoming(values[n.trinary.b], ifBlock);
+                        result->addIncoming(values[n.trinary.a], elseBlock);
+                        values[i] = result;
+                        break;
+                    }					
                 case IROpCode::sum:
                     reduction = true;
                     switch(n.type) {
@@ -1507,7 +1534,6 @@ void Trace::JIT(Thread & thread) {
     nvvmInit();
     c.Compile();
     c.Execute();
-  //  c.Output();
 }
 
 #endif
