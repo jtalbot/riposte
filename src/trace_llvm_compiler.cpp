@@ -303,14 +303,12 @@ struct TraceLLVMCompiler {
             ReductionHelper(tid);
         }
         
-         mainModule->dump();
         llvm::verifyFunction(*function);
         
-        //Gavin changes
-        //end Gavin changes
+
         
-        //if (thread->state.verbose)
-        //     mainModule->dump();
+        if (thread->state.verbose)
+           mainModule->dump();
         
         
         
@@ -501,7 +499,7 @@ struct TraceLLVMCompiler {
                     if(n.type == Type::Double) {
                         double * reductionVector = new double[outputReductionSize];
                         cudaMemcpy(reductionVector, outputGPU[output], outputReductionSize * sizeof(Double::Element), cudaMemcpyDeviceToHost);
-                        std::cout << "Number of output vectors" << outputReductionSize <<std::endl;
+                        
                         switch(n.op) {
 
                             case IROpCode::sum: {
@@ -894,6 +892,7 @@ struct TraceLLVMCompiler {
                         result->addIncoming(values[n.trinary.b], ifBlock);
                         result->addIncoming(values[n.trinary.a], elseBlock);
                         values[i] = result;
+                        body = nextBlock;
                         break;
                     }					
                 case IROpCode::sum:
@@ -1511,7 +1510,6 @@ struct TraceLLVMCompiler {
         __NVVM_SAFE_CALL(nvvmDestroyCU(&CU));
                 
 
-        std::cout << "Ptx code: " << PtxBuf << std::endl;
         //Create the threads based on the size
         
         const char *ptxstr = PtxBuf;
@@ -1537,7 +1535,6 @@ struct TraceLLVMCompiler {
 
         
         CUresult error = cuModuleLoadDataEx(&module, ptxstr, 0, 0, 0);
-        std::cout << "Module error" << error << std::endl;
         assert(error == 0);
         error = cuModuleGetFunction(&kernel, module, kname);
         assert(error == 0);
