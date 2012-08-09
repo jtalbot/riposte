@@ -132,6 +132,8 @@ struct TraceLLVMCompiler {
     llvm::Value * nThreads;
     llvm::Type * doubleType;
     llvm::Type * intType;
+	llvm::Type * logicalType1;
+	llvm::Type * logicalType8;
     llvm::IRBuilder<> * B;
     llvm::Module * mainModule;
     
@@ -235,7 +237,8 @@ struct TraceLLVMCompiler {
     void GenerateIndexFunction() {
         intType = llvm::Type::getInt64Ty(*C);
         doubleType = llvm::Type::getDoubleTy(*C);
-        
+		logicalType1 = llvm::Type::getInt1Ty(*C);
+		logicalType8 = llvm::Type::getInt8Ty(*C);
         
         llvm::Constant *cons = mainModule->getOrInsertFunction("indexFunc", llvm::Type::getVoidTy(*C), intType, intType, intType, NULL);
         function = llvm::cast<llvm::Function>(cons);
@@ -502,6 +505,12 @@ struct TraceLLVMCompiler {
     llvm::Constant * ConstantFloat(float d) {
         return llvm::ConstantFP::get(llvm::Type::getFloatTy(*C), d);
     }
+	llvm::Constant * ConstantLogical(char l) {
+		if (l == 0xff)		
+			return llvm::ConstantInt::get(logicalType1,true);
+		else
+			return llvm::ConstantInt::get(logicalType1,false);
+	}
     llvm::Value * ConstantPointer(void * ptr, llvm::Type * typ) {
         llvm::Constant* ci = llvm::ConstantInt::get(intType, (uint64_t)ptr); 
         llvm::Value* cp = llvm::ConstantExpr::getIntToPtr(ci, llvm::PointerType::getUnqual(typ));
@@ -514,7 +523,7 @@ struct TraceLLVMCompiler {
         for(size_t i = 0; i < trace->nodes.size(); i++) {
             IRNode & n = trace->nodes[i];
             if (n.liveOut) {
-                if (n.group == IRNode::MAP) {
+                if (n.group == IRNode::MAP || n.group == IRNode::GENERATOR) {
                     sizeOfResult = n.out.length;
                     if(n.type == Type::Double) {
                         cudaMemcpy(((Double&)n.out).v(), outputGPU[output], sizeOfResult * sizeof(Double::Element), cudaMemcpyDeviceToHost);
@@ -612,6 +621,8 @@ struct TraceLLVMCompiler {
                     inputGPUAddr.push_back(elementAddr);
                     values[i] = B->CreateLoad(elementAddr);
                 } break;
+				case IROpCode::nop:
+                    break;
                 case IROpCode::add:
                     switch(n.type) {
                         case Type::Double:
@@ -620,6 +631,22 @@ struct TraceLLVMCompiler {
                         case Type::Integer:
                             values[i] = B->CreateAdd(values[n.binary.a],values[n.binary.b]);
                             break;
+                        default:
+                            _error("unsupported type");
+                    }
+                    break;
+				case IROpCode::addc:
+                    switch(n.type) {
+                        case Type::Double:{
+							llvm::Value * temp = ConstantDouble(n.constant.d);
+                            values[i] = B->CreateFAdd(values[n.unary.a],temp);
+                            break;
+						}
+                        case Type::Integer:{
+							llvm::Value * temp = ConstantInt(n.constant.i);
+                            values[i] = B->CreateAdd(values[n.unary.a],temp);
+                            break;
+						}
                         default:
                             _error("unsupported type");
                     }
@@ -644,6 +671,9 @@ struct TraceLLVMCompiler {
                         case Type::Integer:
                             values[i] = ConstantInt(n.constant.i);
                             break;
+						case Type::Logical:
+							values[i] = ConstantLogical(n.constant.l);
+							break;
                         default:
                             _error("unsupported type");
                             break;
@@ -799,6 +829,22 @@ struct TraceLLVMCompiler {
                             _error("unsupported type");
                     }					
                     break;
+				case IROpCode::mulc:
+                    switch(n.type) {
+                        case Type::Double:{
+							llvm::Value * temp = ConstantDouble(n.constant.d);
+                            values[i] = B->CreateFMul(values[n.unary.a],temp);
+                            break;
+						}
+                        case Type::Integer:{
+							llvm::Value * temp = ConstantInt(n.constant.i);
+                            values[i] = B->CreateMul(values[n.unary.a],temp);
+                            break;
+						}
+                        default:
+                            _error("unsupported type");
+                    }
+                    break;
 				case IROpCode::div:
                     switch(n.type) {
                         case Type::Double:
@@ -811,13 +857,52 @@ struct TraceLLVMCompiler {
                             _error("unsupported type");
                     }					
                     break;
+				case IROpCode::idiv:
+                    switch(n.type) {
+                        case Type::Double: {
+							llvm::Value * temp;
+                            temp = B->CreateFDiv(values[n.binary.a],values[n.binary.b]);
+							temp = B->CreateFPToSI(temp, intType);
+							values[i] = B->CreateSIToFP(temp, doubleType);
+                            break;
+						}
+                        case Type::Integer:
+                            values[i] = B->CreateSDiv(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        default:
+                            _error("unsupported type");
+                    }					
+                    break;
+					//a%b = a - IDiv(a,b) * b
 				case IROpCode::mod:
                     switch(n.type) {
+                        case Type::Double: {
+							llvm::Value * temp;
+                            temp = B->CreateFDiv(values[n.binary.a],values[n.binary.b]);
+							temp = B->CreateFPToSI(temp, intType);
+							temp = B->CreateSIToFP(temp, doubleType);
+							temp = B->CreateFMul(temp,values[n.binary.b]);
+							values[i] = B->CreateFSub(values[n.binary.a],temp);
+                            break;
+						}
+                        case Type::Integer: {
+							llvm::Value * temp;
+                            temp = B->CreateSDiv(values[n.binary.a],values[n.binary.b]);
+                            temp = B->CreateMul(temp,values[n.binary.b]);
+                            values[i] = B->CreateSub(values[n.binary.a],temp);
+                            break;
+						}
+                        default:
+                            _error("unsupported type");
+                    }					
+                    break;
+				case IROpCode::neg:
+                    switch(n.type) {
                         case Type::Double:
-                            values[i] = B->CreateFRem(values[n.binary.a],values[n.binary.b]);
+                            values[i] = B->CreateFNeg(values[n.unary.a]);
                             break;
                         case Type::Integer:
-                            values[i] = B->CreateSRem(values[n.binary.a],values[n.binary.b]);
+                            values[i] = B->CreateNeg(values[n.unary.a]);
                             break;
                         default:
                             _error("unsupported type");
@@ -1286,56 +1371,120 @@ struct TraceLLVMCompiler {
                             _error("unsupported type");
                     }					
                     break;
-		    case IROpCode::cast:
-			{
-					_error("cast not yet implemented");
-					break;
-			/*		Type::Enum output = n.type;
+				case IROpCode::cast:
+				{
+					Type::Enum output = n.type;
 					Type::Enum input = trace->nodes[n.unary.a].type;
-
-					
-					 switch(n.type) {
-						 case Type::Double:
-							 // convert input to double
-							 break;
-						 case Type::Integer:
-							 // convert input to integer
-							 break;
-						 case Type::Logical:
-							 switch(input) {
-								 case Type::Double:
-									 // check if equal to 0
-									 B->CreateFCmpONE(values[trace->nodes[n.unary.a]], 0.0);
-									 break;
-								 case Type::Integer:
-									 // convert input to integer
-									 break;
-								 case Type::Logical:
-									 // convert input to logical (pass thru?)
-									 break;
-									 
-								 default:
-									 _error("unsupported type");
-							 }
-							 break;
-							 
-					 default:
-							 _error("unsupported type");
-					 }	
-					
-			*/		
-					/*
-                    switch(n.type) {
+					switch(output) {
+						case Type::Double:
+							switch (input) {
+								case Type::Integer:
+									values[i] = B->CreateSIToFP(values[n.unary.a],doubleType);
+									break;
+								case Type::Logical: {
+									llvm::Value * temp;
+									temp = B->CreateZExt(values[n.unary.a],intType);
+									values[i] = B->CreateSIToFP(temp,doubleType);
+									break;
+								}
+								default:
+									_error("unsupported type");
+									break;
+							}
+							break;
+						case Type::Integer:
+							switch (input) {
+								case Type::Double:
+									values[i] = B->CreateFPToSI(values[n.unary.a],intType);
+									break;
+								case Type::Logical:
+									values[i] = B->CreateZExt(values[n.unary.a],intType);
+									break;
+								default:
+									_error("unsupported type");
+									break;
+							}
+							break;
+						case Type::Logical:
+							switch(input) {
+								case Type::Double:{
+									llvm::Value * zero = ConstantDouble(0.0);
+									values[i] = B->CreateFCmpONE(values[n.unary.a], zero);
+								}
+									break;
+								case Type::Integer:{
+									llvm::Value * zero = ConstantInt(0L);
+									values[i] = B->CreateICmpNE(values[n.unary.a], zero);
+								}
+									break;
+								default:
+									_error("unsupported type");
+									break;
+							}
+							break;	
+						default:
+							_error("unsupported type");
+					}
+					break;
+				}
+				case IROpCode::lt:
+                    switch(trace->nodes[n.unary.a].type) {
                         case Type::Double:
-                            values[i] = B->CreateFRem(values[n.binary.a],values[n.binary.b]);
+                            values[i] = B->CreateFCmpOLT(values[n.binary.a],values[n.binary.b]);
                             break;
                         case Type::Integer:
-                            values[i] =  B->CreateSRem(values[n.binary.a],values[n.binary.b]);
+							values[i] = B->CreateICmpSLT(values[n.binary.a],values[n.binary.b]);
                             break;
                         default:
                             _error("unsupported type");
-                    }*/					
-                    } break;
+                    }
+                    break;
+				case IROpCode::le:
+                    switch(trace->nodes[n.unary.a].type) {
+                        case Type::Double:
+                            values[i] = B->CreateFCmpOLE(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        case Type::Integer:
+							values[i] = B->CreateICmpSLE(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        default:
+                            _error("unsupported type");
+                    }
+                    break;
+				case IROpCode::eq:
+                    switch(trace->nodes[n.unary.a].type) {
+                        case Type::Double:
+                            values[i] = B->CreateFCmpOEQ(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        case Type::Integer:
+							values[i] = B->CreateICmpEQ(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        default:
+                            _error("unsupported type");
+                    }
+                    break;
+				case IROpCode::neq:
+                    switch(trace->nodes[n.unary.a].type) {
+                        case Type::Double:
+                            values[i] = B->CreateFCmpONE(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        case Type::Integer:
+							values[i] = B->CreateICmpNE(values[n.binary.a],values[n.binary.b]);
+                            break;
+                        default:
+                            _error("unsupported type");
+                    }
+                    break;
+				case IROpCode::land:
+					values[i] = B->CreateAnd(values[n.binary.a],values[n.binary.b]);
+                    break;
+				case IROpCode::lor:
+					values[i] = B->CreateOr(values[n.binary.a],values[n.binary.b]);
+                    break;
+				case IROpCode::lnot:
+					values[i] = B->CreateNot(values[n.unary.a]);
+                    break;
+					
                 default:
                     _error("unsupported op");
                     break;
@@ -1349,7 +1498,7 @@ struct TraceLLVMCompiler {
                 
                 
                 
-                if (n.group == IRNode::MAP) {
+                if (n.group == IRNode::MAP || n.group == IRNode::GENERATOR) {
                     int64_t length = n.outShape.length;
                     void * p;
                
@@ -1358,26 +1507,39 @@ struct TraceLLVMCompiler {
 
                         int size = length*sizeof(Double::Element);
                         cudaMalloc((void**)&p, size);
-                    
+						
+						//Grab the addresses and save them because we'll access them to put the output into
+						llvm::Type * t = getType(n.type);
+						llvm::Value * vector = ConstantPointer(p,t);
+						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
+						
                     } else if(n.type == Type::Integer) {
                         n.out = Integer(length);
                         int size = length*sizeof(Integer::Element);
                         cudaMalloc((void**)&p, size);
                     
+						//Grab the addresses and save them because we'll access them to put the output into
+						llvm::Type * t = getType(n.type);
+						llvm::Value * vector = ConstantPointer(p,t);
+						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
+						
                     } else if(n.type == Type::Logical) {
                         n.out = Logical(length);
 
                         int size = length*sizeof(Logical::Element);
                         cudaMalloc((void**)&p, size);
-                    
+						// Convert to 8 bit logical
+						llvm::Value * temp8 = B->CreateSExt(values[i],logicalType8);
+						
+						//Grab the addresses and save them because we'll access them to put the output into
+						llvm::Type * t = logicalType8;
+						llvm::Value * vector = ConstantPointer(p,t);
+						B->CreateStore(temp8, B->CreateGEP(vector, loopIndexArray));
+						
                     } else {
                         _error("Unknown type in initialize outputs");
                     }
                 
-                    //Grab the addresses and save them because we'll access them to put the output into
-                    llvm::Type * t = getType(n.type);
-                    llvm::Value * vector = ConstantPointer(p,t);
-                    B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
                     outputGPU.push_back(p);
                 }
                 else if (n.group == IRNode::FOLD) {
@@ -1389,28 +1551,40 @@ struct TraceLLVMCompiler {
                         
                         int size = ((Double&)n.in).length*sizeof(Double::Element);
                         cudaMalloc((void**)&p, size);
-                        
+						
+                        //Grab the addresses and save them because we'll access them to put the output into
+						llvm::Type * t = getType(n.type);
+						llvm::Value * vector = ConstantPointer(p,t);
+						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
+						
                     } else if(n.type == Type::Integer) {
                         n.out = Integer(length);
                         int size = ((Integer&)n.in).length*sizeof(Integer::Element);
                         cudaMalloc((void**)&p, size);
+						
+						//Grab the addresses and save them because we'll access them to put the output into
+						llvm::Type * t = getType(n.type);
+						llvm::Value * vector = ConstantPointer(p,t);
+						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
                         
                     } else if(n.type == Type::Logical) {
                         n.out = Logical(length);
                         
                         int size = ((Logical&)n.in).length*sizeof(Logical::Element);
                         cudaMalloc((void**)&p, size);
-                        
+                        // Convert to 8 bit logical
+						llvm::Value * temp8 = B->CreateSExt(values[i],logicalType8);
+						
+						//Grab the addresses and save them because we'll access them to put the output into
+						llvm::Type * t = logicalType8;
+						llvm::Value * vector = ConstantPointer(p,t);
+						B->CreateStore(temp8, B->CreateGEP(vector, loopIndexArray));
+						
                     } else {
                         _error("Unknown type in initialize outputs");
                     }
                     
                     //Grab the addresses and save them because we'll access them to put the output into
-                    llvm::Type * t = getType(n.type);
-                    llvm::Value * vector = ConstantPointer(p,t);
-                    
-                    llvm::Value * elementAddr = B->CreateGEP(vector, blockID); 
-                    B->CreateStore(values[i], elementAddr);
                     outputGPU.push_back(p);
                     B->SetInsertPoint(body);
                 }
@@ -1579,6 +1753,8 @@ struct TraceLLVMCompiler {
                 return doubleType;
             case Type::Integer:
                 return intType;
+			case Type::Logical:
+				return logicalType1;
             default:
                 _error("type not understood");
                 return NULL;
