@@ -1555,7 +1555,7 @@ struct TraceLLVMCompiler {
                         //Grab the addresses and save them because we'll access them to put the output into
 						llvm::Type * t = getType(n.type);
 						llvm::Value * vector = ConstantPointer(p,t);
-						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
+						B->CreateStore(values[i], B->CreateGEP(vector, blockID));
 						
                     } else if(n.type == Type::Integer) {
                         n.out = Integer(length);
@@ -1565,7 +1565,7 @@ struct TraceLLVMCompiler {
 						//Grab the addresses and save them because we'll access them to put the output into
 						llvm::Type * t = getType(n.type);
 						llvm::Value * vector = ConstantPointer(p,t);
-						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
+						B->CreateStore(values[i], B->CreateGEP(vector, blockID));
                         
                     } else if(n.type == Type::Logical) {
                         n.out = Logical(length);
@@ -1578,7 +1578,7 @@ struct TraceLLVMCompiler {
 						//Grab the addresses and save them because we'll access them to put the output into
 						llvm::Type * t = logicalType8;
 						llvm::Value * vector = ConstantPointer(p,t);
-						B->CreateStore(temp8, B->CreateGEP(vector, loopIndexArray));
+						B->CreateStore(temp8, B->CreateGEP(vector, blockID));
 						
                     } else {
                         _error("Unknown type in initialize outputs");
