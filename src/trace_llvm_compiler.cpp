@@ -1249,25 +1249,22 @@ struct TraceLLVMCompiler {
 					values[i] = B->CreateNot(values[n.unary.a]);
                     break;
 				case IROpCode::rep:{
-					llvm::Value * idx =  B->CreateMul(ConstantInt(numThreads),blockID);
-					idx = B->CreateAdd(idx,tid);
+					//llvm::Value * idx = B->CreateMul(ConstantInt(numThreads),blockID);
+					//idx = B->CreateAdd(idx,tid);
+					llvm::Value * repIdx = ConstantInt(n.binary.a);
+					llvm::Value * each = ConstantInt(n.binary.b);
+
+					llvm::Value * prod = B->CreateMul(repIdx,each);
 					
-					llvm::Value * prod = B->CreateMul(values[n.binary.a],values[n.binary.b]);
-					
-					llvm::Value * temp = B->CreateSDiv(idx,prod);
+					llvm::Value * temp = B->CreateSDiv(loopIndexValue,prod);
 					temp = B->CreateMul(temp,prod);
-					temp = B->CreateSub(idx,temp);
+					temp = B->CreateSub(loopIndexValue,temp);
 					
-					values[i] = B->CreateSDiv(temp,values[n.binary.b]);
+					values[i] = B->CreateSDiv(temp,each);
 
                     break;
 				}
 				case IROpCode::gather:{
-					//llvm::Value * idx =  B->CreateMul(ConstantInt(numThreads),blockID);
-					//idx = B->CreateAdd(idx,tid);
-					
-					values[i] = trace->nodes[n.unary.a];
-					
 					void * p;
                     if(n.in.isLogical()) {
                         //p = ((Logical&)n.in).v();
@@ -1290,13 +1287,17 @@ struct TraceLLVMCompiler {
                     }
                     else
                         _error("unsupported type");
-                    llvm::Type * t = getType(n.type);
+					
+					std::vector<llvm::Value *> indices;
+					indices.push_back(values[n.unary.a]);
+					
+					llvm::Type * t = getType(n.type);
                     
-                    inputGPU.push_back(p);
                     llvm::Value * vector = ConstantPointer(p, t);
-                    llvm::Value * elementAddr = B->CreateGEP(vector, loopIndexArray);
-                    inputGPUAddr.push_back(elementAddr);
-                    values[i] = B->CreateLoad(elementAddr);
+					
+					
+					llvm::Value *value = B->CreateGEP(vector, indices);
+					values[i] = B->CreateLoad(value);
 					
 					
 					
