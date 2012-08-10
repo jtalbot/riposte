@@ -12,7 +12,6 @@
 #include <fstream>
 #include <sstream>
 #include <cuda.h>
-#include "common.h"
 #include <cuda_runtime_api.h>
 #include <builtin_types.h>
 
@@ -176,7 +175,7 @@ struct TraceLLVMCompiler {
         
         
         numBlock = 24;
-        numThreads = 128;
+        numThreads = 512;
         
         
         std::string lTargDescrStr;
@@ -451,8 +450,9 @@ struct TraceLLVMCompiler {
         
         GenerateIndexFunction();
         
-        
         GenerateKernelFunction();
+        
+        
     }
     
     llvm::Constant * ConstantInt(int64_t i) {
@@ -994,6 +994,7 @@ struct TraceLLVMCompiler {
                             B->SetInsertPoint(endBlocks[3]);
                              
                             
+                            B->CreateCall(Sync);
                             
                             
                             B->SetInsertPoint(bodyFinal);
@@ -1247,6 +1248,8 @@ struct TraceLLVMCompiler {
 					values[i] = B->CreateNot(values[n.unary.a]);
                     break;
 				case IROpCode::rep:{
+					//llvm::Value * idx = B->CreateMul(ConstantInt(numThreads),blockID);
+					//idx = B->CreateAdd(idx,tid);
 					llvm::Value * repIdx = ConstantInt(n.binary.a);
 					llvm::Value * each = ConstantInt(n.binary.b);
 
@@ -1266,20 +1269,20 @@ struct TraceLLVMCompiler {
                         //p = ((Logical&)n.in).v();
                         int size = ((Logical&)n.in).length*sizeof(Logical::Element);
                         cudaMalloc((void**)&p, size);
-                        //cudaMemcpy(p, ((Logical&)n.in).v(), size, cudaMemcpyHostToDevice);
+                        cudaMemcpy(p, ((Logical&)n.in).v(), size, cudaMemcpyHostToDevice);
 						
                     }
                     else if(n.in.isInteger()) {
                         //p = ((Integer&)n.in).v();
                         int size = ((Integer&)n.in).length*sizeof(Integer::Element);
                         cudaMalloc((void**)&p, size);
-                        //cudaMemcpy(p, ((Integer&)n.in).v(), size, cudaMemcpyHostToDevice);
+                        cudaMemcpy(p, ((Integer&)n.in).v(), size, cudaMemcpyHostToDevice);
                     }
                     else if(n.in.isDouble()) {
                         //p = ((Double&)n.in).v();
                         int size = ((Double&)n.in).length*sizeof(Double::Element);
                         cudaMalloc((void**)&p, size);
-                        //cudaMemcpy(p, ((Double&)n.in).v(), size, cudaMemcpyHostToDevice);
+                        cudaMemcpy(p, ((Double&)n.in).v(), size, cudaMemcpyHostToDevice);
                     }
                     else
                         _error("unsupported type");
@@ -1296,48 +1299,10 @@ struct TraceLLVMCompiler {
 					values[i] = B->CreateLoad(value);
 					
 					
-                    break;
-				}
-				case IROpCode::seq:{
-
-					llvm::Value *value;
-					switch (n.type) {
-						case Type::Integer: {
-							printf("Val 1 %li\n", n.binary.a);
-							printf("Val 2 %li\n", n.binary.b);
-							llvm::Value *from = ConstantInt(n.binary.a);
-							from->dump();
-							llvm::Value * by = ConstantInt(n.binary.b);
-							by->dump();
-							value = B->CreateMul(by, loopIndexValue);
-							value = B->CreateAdd(value, from);
-							values[i] = value;
-							break;
-						}
-						case Type::Double: {
-							printf("Val 1 %f %li\n", n.binary.a, n.binary.a);
-							printf("Val 2 %lf %li\n", (double)n.binary.b, n.binary.b);
-							//llvm::Value *from = B->CreateLoad(values[n.binary.a]);
-							llvm::Value *from = ConstantDouble(double(n.binary.a));
-							from->dump();
-							//llvm::Value *by = ConstantDouble(n.binary.b);
-							//llvm::Value *by = B->CreateLoad(values[n.binary.b]); 
-							//by = ConstantDouble(by);
-							llvm::Value * by = ConstantDouble(double(n.binary.b));
-							by->dump();
-							value = B->CreateFMul(by, B->CreateSIToFP(loopIndexValue,doubleType));
-							value = B->CreateFAdd(value, from);
-							values[i] = value;
-							break;
-						}
-						default:
-							_error("unsupported type");
-					}
 					
 					
                     break;
 				}
-					
                 default:
                     _error("unsupported op");
                     break;
@@ -1616,19 +1581,11 @@ struct TraceLLVMCompiler {
 
 void Trace::JIT(Thread & thread) {
     std::cout << toString(thread) << "\n";
-    timespec time = get_time();
-
     TraceLLVMCompiler c(&thread,this);
-   
     cuInit(0);
-    
-    
     nvvmInit();
     c.Compile();
-    std::cout << "Time elapsed is " << time_elapsed(time);
-    
     c.Execute();
-
 }
 
 #endif
