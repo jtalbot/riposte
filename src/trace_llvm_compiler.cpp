@@ -1295,9 +1295,38 @@ struct TraceLLVMCompiler {
 					
                     break;
 				}
+                case IROpCode::seq:{
+                    llvm::Value *value;
+                    switch(n.type) {
+                        case Type::Integer: {
+                            llvm::Value* from = ConstantInt(n.sequence.ia);
+                            llvm::Value* by = ConstantInt(n.sequence.ib);
+                            value = B->CreateMul(by, loopIndexValue);
+                            value = B->CreateAdd(value, from);
+                            values[i] = value;
+                            break;
+                        }
+                        case Type::Double: {
+                            llvm::Value* from = ConstantDouble(n.sequence.da);
+                            llvm::Value* by = ConstantDouble(n.sequence.db);
+                            value = B->CreateFMul(by, B->CreateSIToFP(loopIndexValue,doubleType));
+                            value = B->CreateFAdd(value, from);
+                            values[i] = value;
+                            break;
+                        }
+                        default:
+                            _error("unsupported type");
+                    }
+					
+					
+					
+					
+                    break;
+				}
                 default:
                     _error("unsupported op");
                     break;
+                
             }
             
             if(n.liveOut) {
