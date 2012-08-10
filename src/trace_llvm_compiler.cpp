@@ -1248,8 +1248,7 @@ struct TraceLLVMCompiler {
 					values[i] = B->CreateNot(values[n.unary.a]);
                     break;
 				case IROpCode::rep:{
-					//llvm::Value * idx = B->CreateMul(ConstantInt(numThreads),blockID);
-					//idx = B->CreateAdd(idx,tid);
+
 					llvm::Value * repIdx = ConstantInt(n.binary.a);
 					llvm::Value * each = ConstantInt(n.binary.b);
 
@@ -1266,23 +1265,16 @@ struct TraceLLVMCompiler {
 				case IROpCode::gather:{
 					void * p;
                     if(n.in.isLogical()) {
-                        //p = ((Logical&)n.in).v();
                         int size = ((Logical&)n.in).length*sizeof(Logical::Element);
                         cudaMalloc((void**)&p, size);
-                        cudaMemcpy(p, ((Logical&)n.in).v(), size, cudaMemcpyHostToDevice);
-						
                     }
                     else if(n.in.isInteger()) {
-                        //p = ((Integer&)n.in).v();
                         int size = ((Integer&)n.in).length*sizeof(Integer::Element);
                         cudaMalloc((void**)&p, size);
-                        cudaMemcpy(p, ((Integer&)n.in).v(), size, cudaMemcpyHostToDevice);
                     }
                     else if(n.in.isDouble()) {
-                        //p = ((Double&)n.in).v();
                         int size = ((Double&)n.in).length*sizeof(Double::Element);
                         cudaMalloc((void**)&p, size);
-                        cudaMemcpy(p, ((Double&)n.in).v(), size, cudaMemcpyHostToDevice);
                     }
                     else
                         _error("unsupported type");
