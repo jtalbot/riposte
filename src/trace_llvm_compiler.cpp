@@ -12,6 +12,7 @@
 #include <fstream>
 #include <sstream>
 #include <cuda.h>
+#include "common.h"
 #include <cuda_runtime_api.h>
 #include <builtin_types.h>
 
@@ -175,7 +176,7 @@ struct TraceLLVMCompiler {
         
         
         numBlock = 24;
-        numThreads = 512;
+        numThreads = 128;
         
         
         std::string lTargDescrStr;
@@ -450,9 +451,8 @@ struct TraceLLVMCompiler {
         
         GenerateIndexFunction();
         
+        
         GenerateKernelFunction();
-        
-        
     }
     
     llvm::Constant * ConstantInt(int64_t i) {
@@ -626,6 +626,23 @@ struct TraceLLVMCompiler {
                     switch(n.type) {
                         case Type::Double:
                             values[i] = ConstantDouble(n.constant.d);
+                            break;
+                        case Type::Integer:
+                            values[i] = ConstantInt(n.constant.i);
+                            break;
+						case Type::Logical:
+							values[i] = ConstantLogical(n.constant.l);
+							break;
+                        default:
+                            _error("unsupported type");
+                            break;
+					}
+                    break;
+                case IROpCode::seq:
+                    switch(n.type) {
+                        case Type::Double:
+                            std::cout << "YO HERE" <<std::endl;
+                            values[i] = ConstantDouble(1.0);
                             break;
                         case Type::Integer:
                             values[i] = ConstantInt(n.constant.i);
@@ -994,7 +1011,6 @@ struct TraceLLVMCompiler {
                             B->SetInsertPoint(endBlocks[3]);
                              
                             
-                            B->CreateCall(Sync);
                             
                             
                             B->SetInsertPoint(bodyFinal);
@@ -1581,11 +1597,19 @@ struct TraceLLVMCompiler {
 
 void Trace::JIT(Thread & thread) {
     std::cout << toString(thread) << "\n";
+    timespec time = get_time();
+
     TraceLLVMCompiler c(&thread,this);
+   
     cuInit(0);
+    
+    
     nvvmInit();
     c.Compile();
+    std::cout << "Time elapsed is " << time_elapsed(time);
+    
     c.Execute();
+
 }
 
 #endif

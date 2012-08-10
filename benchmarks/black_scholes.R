@@ -1,7 +1,7 @@
 #adapted from https://github.com/ispc/ispc/tree/master/examples/options
 
 N_ROUNDS <- 1
-N_OPTIONS <- 10000000
+N_OPTIONS <- 2^24#10000000
 
 invSqrt2Pi <- 0.39894228040
 log10 <- log(10)
@@ -28,10 +28,16 @@ CND <- function(X) {
 }
 
 black_scholes <- function() {
-	delta <- v * sqrt(TT)
-	d1 <- (log(S/X)/log10 + (r + v * v * .5) * TT) / delta
-	d2 <- d1 - delta
-	sum(S * CND(d1) - X * exp(-r * TT) * CND(d2))
+#	delta <- v * sqrt(TT)
+#	d1 <- (log(S/X)/log10 + (r + v * v * .5) * TT) / delta
+#	d2 <- d1 - delta
+#	sum(S * CND(d1) - X * exp(-r * TT) * CND(d2))
+a <- sum(S)
+b <- sum(S+1)
+c <- sum(S+2)
+d <- sum(S+3)
+e <- sum(S+4)
+a+b+c+d+e
 }
 
 benchmark <- function() {
