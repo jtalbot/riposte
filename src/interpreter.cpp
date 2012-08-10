@@ -650,7 +650,7 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	double step = As<Double>(thread, b)[0];
 	int64_t len = As<Integer>(thread, a)[0];
 	
-#ifndef USE_LLVM_COMPILER
+
 	if(len >= TRACE_VECTOR_WIDTH) {
 		if(b.isDouble() || c.isDouble()) {
 			OUT(thread, inst.c) = thread.EmitSequence(thread.frame.environment, len, start, step);
@@ -661,7 +661,7 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 		}
 		return &inst+1;
 	}
-#endif
+
 
 	if(b.isDouble() || c.isDouble())	
 		OUT(thread, inst.c) = Sequence(start, step, len);

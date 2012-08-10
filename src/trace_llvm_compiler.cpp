@@ -641,7 +641,6 @@ struct TraceLLVMCompiler {
                 case IROpCode::seq:
                     switch(n.type) {
                         case Type::Double:
-                            std::cout << "YO HERE" <<std::endl;
                             values[i] = ConstantDouble(1.0);
                             break;
                         case Type::Integer:
