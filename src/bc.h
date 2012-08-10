@@ -10,12 +10,12 @@
 	_(jc, "jc") \
 	_(jmp, "jmp") \
 	_(rets, "rets") /* return from top-level statement */ \
-
-#ifdef TRACE_DEVELOPMENT
 	_(call, "call") \
-	_(ncall, "ncall") \
 	_(ret, "ret") /* return from function */ \
 	_(retp, "retp") /* return from a promise or default */ \
+
+#ifdef TRACE_DEVELOPMENT
+	_(ncall, "ncall") \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
 	_(branch, "branch") \
@@ -27,8 +27,9 @@
 	_(mov, "mov") \
 	_(fastmov, "fastmov") \
 	_(assign, "assign") \
-	_(store2, "store2") \
-	_(gather, "gather") \
+	_(scatter1, "scatter1") \
+	_(gather1, "gather1") \
+	_(constant, "constant") \
 
 #ifdef TRACE_DEVELOPMENT
 	_(dotdot, "dotdot") \
@@ -38,9 +39,9 @@
 #endif
 
 #define UTILITY_BYTECODES(_)\
+	_(function, "function") \
 
 #ifdef TRACE_DEVELOPMENT
-	_(function, "function") \
 	_(internal, "internal") \
 	_(type, "type") \
 	_(missing, "missing") \

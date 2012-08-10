@@ -1,7 +1,7 @@
 # This Makefile requires GNU make.
 UNAME := $(shell uname -s)
  
-CXX := g++ 
+CXX := clang++ 
 CXXFLAGS := -Wall -msse4.1 `llvm-config --cxxflags` -fexceptions
 LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g `llvm-config --ldflags --libs engine bitreader scalaropts`
 

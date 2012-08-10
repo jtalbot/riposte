@@ -251,7 +251,7 @@ main(int argc, char** argv)
 
 	/* start garbage collector */
 	GC_INIT();
-	//GC_disable();
+	GC_disable();
 
 	State state(threads, argc, argv);
 	state.verbose = verbose;

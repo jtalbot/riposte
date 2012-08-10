@@ -13,14 +13,17 @@
 #define TRACE_ENUM(_) \
 		MAP_BYTECODES(_) \
         _(loop, "LOOP", ___) \
+        _(jmp, "JMP", ___) \
         _(constant, "CONS", ___) \
 		_(load, "LOAD", ___) /* loads are type guarded */ \
-        /* no store instruction since all stores are implicitly sunk in exits */ \
-		_(guardT, "GRD_T", ___) \
-		_(guardF, "GRD_F", ___) \
-		_(gather, "GATHER", ___) \
+        _(store, "STORE", ___) \
+        _(GTYPE, "GTYPE", ___) \
+		_(guardT, "GTRUE", ___) \
+		_(guardF, "GFALSE", ___) \
+		_(gather, "GATH", ___) \
+		_(scatter, "SCAT", ___) \
 		_(phi, "PHI", ___) \
-		_(store2, "STORE2", ___) \
+		_(cast, "CAST", ___) \
 		_(nop, "NOP", ___)
 
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
@@ -33,8 +36,7 @@ public:
 
     enum State {
         OFF,
-        RECORDING_HEADER,
-        RECORDING_BODY
+        RECORDING
     };
 
 	typedef Instruction const* (*Ptr)(Thread& thread);
@@ -44,12 +46,13 @@ public:
 	struct IR {
 		TraceOpCode::Enum op;
 		IRRef a, b, c;
-		int64_t i;
-		Type::Enum type;
-		size_t width;
+        int64_t target;
+
+        Type::Enum type;
+        size_t width;
+
 		size_t group;
-        bool liveout;
-		void dump();
+        void dump();
 	};
 
 	unsigned short counters[1024];
@@ -59,9 +62,13 @@ public:
     State state;
 	Instruction const* startPC;
 
+    std::map<int64_t, IRRef> loads;
 	std::map<int64_t, IRRef> map;
-    std::map<IRRef, IRRef> phi;
     std::vector<IR> code;
+
+    std::vector<int64_t> assignment;
+    std::vector<size_t> registers;
+    std::multimap<size_t, size_t> freeRegisters;
 
 	struct Exit {
 		std::map<int64_t, IRRef> o;
@@ -76,30 +83,27 @@ public:
 
 	void start_recording(Instruction const* startPC) {
 		assert(state == OFF);
-		state = RECORDING_HEADER;
+		state = RECORDING;
 		this->startPC = startPC;
         code.clear();
         map.clear();
-        phi.clear();
+        loads.clear();
 	}
 
-    bool record(Thread& thread, Instruction const* pc, bool branch=false) {
-        EmitIR(thread, *pc, branch);
-        if(pc != startPC) {
-            return false;
-        } else if(state == RECORDING_HEADER) {
-            phi.clear();
-            insert(TraceOpCode::loop, (int64_t)0, Type::Promise, 1);
-            state = RECORDING_BODY;
-            return false;
-        }
-        else {
-            return true;
-        }
+    void record(Thread& thread, Instruction const* pc) {
+        EmitIR(thread, *pc, false);
     }
 
-	bool loop(Instruction const* pc) {
-		return pc == startPC;
+	bool loop(Thread& thread, Instruction const* pc, bool branch=false) {
+		if(pc == startPC) {
+            insert(TraceOpCode::loop, 0, 0, 0, 0, Type::Promise, 1);
+            EmitIR(thread, *pc, branch);
+            return true;
+        }
+        else {
+            EmitIR(thread, *pc, branch);
+            return false;
+        }
 	}
 
 	Ptr end_recording(Thread& thread);
@@ -109,18 +113,19 @@ public:
 		state = OFF;
 	}
 
-	IRRef insert(TraceOpCode::Enum op, IRRef a, Type::Enum type, size_t width);
-	IRRef insert(TraceOpCode::Enum op, IRRef a, int64_t i, Type::Enum type, size_t width);
-	IRRef insert(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum type, size_t width);
-	IRRef insert(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum type, size_t width);
-	IRRef insert(TraceOpCode::Enum op, int64_t i, Type::Enum type, size_t width);
+	IRRef insert(
+        TraceOpCode::Enum op, 
+        IRRef a, 
+        IRRef b, 
+        IRRef c,
+        int64_t target, 
+        Type::Enum type, 
+        size_t width);
 
 	IRRef load(Thread& thread, int64_t a, Instruction const* reenter);
 	IRRef store(Thread& thread, IRRef a, int64_t c);
 	IRRef emit(Thread& thread, TraceOpCode::Enum op, IRRef a, IRRef b, int64_t c);
 	IRRef emit(Thread& thread, TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, int64_t d);
-	void guardT(Thread& thread, Instruction const* reenter);
-	void guardF(Thread& thread, Instruction const* reenter);
 
     void markLiveOut(Exit const& exit);
 
@@ -133,6 +138,11 @@ public:
 
     void EmitIR(Thread& thread, Instruction const& inst, bool branch);
     void Replay(Thread& thread);
+
+    void AssignRegister(size_t index);
+    void PreferRegister(size_t index, size_t share);
+    void ReleaseRegister(size_t index);
+    void RegisterAssignment();
 };
 
 #endif

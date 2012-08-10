@@ -44,4 +44,3 @@ benchmark <- function() {
 }
 
 system.time(benchmark())
-

@@ -38,9 +38,6 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 	if(thread.base-prototype->registers < thread.registers)
 		throw RiposteError("Register overflow");
 	
-	if(prototype->constants.size() > 0)
-		memcpy(thread.base-(prototype->constants.size()-1), &prototype->constants[0], sizeof(Value)*prototype->constants.size());
-
 	return &(prototype->bc[0]);
 }
 

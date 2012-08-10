@@ -7,59 +7,36 @@
 #include "type.h"
 #include "bc.h"
 #include "interpreter.h"
+#include "call.h"
 
 extern "C"
-bool loadr_d(Thread& thread, int64_t i, size_t len, double* d) {
-    Value const& a = thread.base[i];
-	if(a.type != Type::Double) 
-        return false;
-	memcpy(d, ((Double const&)a).v(), len*sizeof(double));
-    return true;
+bool Guard_Type(Thread& thread, int64_t i, Type::Enum t) {
+    OPERAND(a, i);
+    return a.type == t;
 }
 
 extern "C"
-bool loadm_d(Thread& thread, int64_t i, size_t len, double* d) {
-	Value const& a = thread.frame.environment->getRecursive((String)i);
-	if(a.type != Type::Double) 
-        return false;
-	memcpy(d, ((Double const&)a).v(), len*sizeof(double));
-    return true;
+bool Guard_TypeWidth(Thread& thread, int64_t i, Type::Enum t, size_t width) {
+    OPERAND(a, i);
+    return a.type == t && a.length == width;
 }
 
 extern "C"
-bool loadr_i(Thread& thread, int64_t i, size_t len, int64_t* d) {
-    Value const& a = thread.base[i];
-	if(a.type != Type::Integer) 
-        return false;
-	memcpy(d, ((Integer const&)a).v(), len*sizeof(int64_t));
-    return true;
+void const* Load_double(Thread& thread, int64_t i) {
+    OPERAND(a, i);
+    return ((Double const&)a).v();
 }
 
 extern "C"
-bool loadm_i(Thread& thread, int64_t i, size_t len, int64_t* d) {
-	Value const& a = thread.frame.environment->getRecursive((String)i);
-	if(a.type != Type::Integer) 
-        return false;
-	memcpy(d, ((Integer const&)a).v(), len*sizeof(int64_t));
-    return true;
+void const* Load_integer(Thread& thread, int64_t i) {
+    OPERAND(a, i);
+    return ((Integer const&)a).v();
 }
 
 extern "C"
-bool loadr_l(Thread& thread, int64_t i, size_t len, int8_t* d) {
-    Value const& a = thread.base[i];
-	if(a.type != Type::Logical) 
-        return false;
-	memcpy(d, ((Logical const&)a).v(), len*sizeof(int8_t));
-    return true;
-}
-
-extern "C"
-bool loadm_l(Thread& thread, int64_t i, size_t len, int8_t* d) {
-	Value const& a = thread.frame.environment->getRecursive((String)i);
-	if(a.type != Type::Logical) 
-        return false;
-	memcpy(d, ((Logical const&)a).v(), len*sizeof(int8_t));
-    return true;
+void const* Load_logical(Thread& thread, int64_t i) {
+    OPERAND(a, i);
+    return ((Logical const&)a).v();
 }
 
 extern "C"

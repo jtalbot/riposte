@@ -41,7 +41,7 @@ extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALW
 extern Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* gather_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* subset2_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* gather1_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* jc_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* lt_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* ret_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -170,6 +170,11 @@ Instruction const* retp_op(Thread& thread, Instruction const& inst) {
 	thread.pop();
 	
 	return returnpc;
+}
+
+Instruction const* constant_op(Thread& thread, Instruction const& inst) {
+    OUT(thread, inst.c) = thread.frame.prototype->constants[inst.a];
+    return &inst+1;
 }
 
 Instruction const* jmp_op(Thread& thread, Instruction const& inst) {
@@ -340,7 +345,7 @@ Instruction const* dotdot_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
+Instruction const* scatter_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest 
 	OPERAND(value, inst.a); FORCE(value, inst.a); 
 	OPERAND(index, inst.b); FORCE(index, inst.b); 
@@ -367,7 +372,7 @@ Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* store2_op(Thread& thread, Instruction const& inst) {
+Instruction const* scatter1_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest
 	OPERAND(value, inst.a); FORCE(value, inst.a);
 	OPERAND(index, inst.b); FORCE(index, inst.b);
@@ -439,7 +444,7 @@ Instruction const* gather_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
+Instruction const* gather1_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
 	OPERAND(i, inst.b);
 	if(a.isVector()) {
@@ -822,72 +827,50 @@ Instruction const* internal_op(Thread& thread, Instruction const& inst) {
 }
 #endif
 
-/*Instruction const* jc_record(Thread& thread, Instruction const& inst) {
-	Instruction const* r = jc_op(thread, inst);
-    JIT::IRRef a = thread.jit.load(thread, inst.c, &inst);
-	if(r-&inst == inst.a)
-		thread.jit.guardT(thread, &inst+inst.b);
-	else
-		thread.jit.guardF(thread, &inst+inst.a);
-    return r;
-		
-}
-Instruction const* jmp_record(Thread& thread, Instruction const& inst) {
-	return jmp_op(thread, inst);
-}
-Instruction const* rets_record(Thread& thread, Instruction const& inst) {
-	return rets_op(thread, inst);
-}
+/*struct _Load {
+    int64_t i;
+    _Load(int64_t i) : i(i) {}
+    Value const& eval(Thread& thread, Instruction const*& bail) {
+        OPERAND(r, i);
+        return r;
+    }
+};
 
-Instruction const* mov_record(Thread& thread, Instruction const& inst) {
-	Instruction const* r = mov_op(thread, inst);
-	JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
-	thread.jit.store(thread, a, inst.c); 
-	return r;
-}
-Instruction const* fastmov_record(Thread& thread, Instruction const& inst) {
-	Instruction const* r = fastmov_op(thread, inst);
-	JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
-	thread.jit.store(thread, a, inst.c); 
-	return r;
-}
-Instruction const* assign_record(Thread& thread, Instruction const& inst) {
-	Instruction const* r = assign_op(thread, inst);
-	JIT::IRRef c = thread.jit.load(thread, inst.c, &inst);
-	thread.jit.store(thread, c, inst.a); 
-	return r;
-}
-Instruction const* store2_record(Thread& thread, Instruction const& inst) {
-	Instruction const* r = store2_op(thread, inst);
-	JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
-	JIT::IRRef b = thread.jit.load(thread, inst.b, &inst);
-	JIT::IRRef c = thread.jit.load(thread, inst.c, &inst);
-	thread.jit.emit(thread, TraceOpCode::store2, a, b, c, inst.c); 
-	return r;
-}
-Instruction const* gather_record(Thread& thread, Instruction const& inst) {
-	Instruction const* r = gather_op(thread, inst);
-	JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
-	JIT::IRRef b = thread.jit.load(thread, inst.b, &inst);
-	thread.jit.emit(thread, TraceOpCode::gather, a, b, inst.c); 
-	return r;
-}
-Instruction const* seq_record(Thread& thread, Instruction const& inst) {
-	Instruction const* r = seq_op(thread, inst);
-	return r;
-}
+template<class T>
+struct _Force {
+    T t;
+    _Force(T t) : t(t) {}
+    Value const& eval(Thread& thread) {
+        Value const& 
+        FORCE(a, i);
+    }
+};
 
-#define RECORD(Name, string, ...) \
-Instruction const* Name##_record(Thread& thread, Instruction const& inst) { \
-	Instruction const* r = Name##_op(thread, inst); \
-	JIT::IRRef a = thread.jit.load(thread, inst.a, &inst); \
-	JIT::IRRef b = thread.jit.load(thread, inst.b, &inst); \
-	thread.jit.emit(thread, TraceOpCode::Name, a, b, inst.c); \
-	return r; \
-}
-BINARY_BYTECODES(RECORD)
-#undef RECORD
-*/
+_Load Load(int64_t i) { return _Load(i); }
+
+template<class T>
+struct _Store {
+    T t;
+    int64_t i;
+    _Store(T t, int64_t i) : t(t), i(i) {}
+    Value const& eval(Thread& thread, Instruction const*& bail) {
+        t.eval(thread, bail);
+        if(bail != 0) return;
+        t.eval(thread, r);
+        Value & out = OUT(thread, i);
+        out = t.eval(thread);
+        return out;
+    }
+};
+
+template<class T>
+_Store<T> Store(T t, int64_t i) { return _Store<T>(t, i); }
+
+Instruction const* mov_op(Thread& thread, Instruction const& inst) {
+    auto op = Store(Load(inst.a), inst.c);
+    op.eval(thread);
+    return &inst+1;
+}*/
 
 //
 //    Main interpreter loop 
@@ -932,6 +915,18 @@ void interpret(Thread& thread, Instruction const* pc) {
         pc = jmp_op(thread, *pc); 
         goto *(const void*)labels[pc->bc]; 
     }
+	call_label: 	{ 
+        pc = call_op(thread, *pc); 
+        goto *(const void*)labels[pc->bc]; 
+    }
+	ret_label: 	{ 
+        pc = ret_op(thread, *pc); 
+        goto *(const void*)labels[pc->bc]; 
+    }
+	retp_label: 	{ 
+        pc = retp_op(thread, *pc); 
+        goto *(const void*)labels[pc->bc]; 
+    }
 	rets_label: 	{ 
         pc = rets_op(thread, *pc); 
         goto *(const void*)labels[pc->bc]; 
@@ -950,24 +945,41 @@ void interpret(Thread& thread, Instruction const* pc) {
 	#undef RECORD_OP
 	
 	jc_record: 	{ 
-        // did we make a loop yet??
 		Instruction const* old_pc = pc;
 		pc = jc_op(thread, *pc);
  
-        bool loop = thread.jit.record(thread, old_pc, pc==old_pc+old_pc->a);
-		
-        if(loop) {
+        // did we make a loop yet??
+        if(thread.jit.loop(thread, old_pc, pc==old_pc+old_pc->a)) {
 			JIT::Ptr fn = thread.jit.end_recording(thread);
 	        timespec a = get_time();
             assert(fn != 0);
 		    pc = fn(thread);
 	        printf("Execution time: %f\n", time_elapsed(a));
 		    labels = ops;
-		}
+        }
+
 		goto *(const void*)labels[pc->bc]; 
 	}
 	jmp_record: 	{ 
         pc = jmp_op(thread, *pc); 
+        goto *(const void*)labels[pc->bc]; 
+    }
+	call_record: 	{ 
+        Instruction const* old_pc = pc;
+        pc = call_op(thread, *pc);
+        //thread.jit.record(thread, old_pc);
+        goto *(const void*)labels[pc->bc]; 
+    }
+	ret_record: 	{ 
+        Instruction const* old_pc = pc;
+        pc = ret_op(thread, *pc);
+        //thread.jit.record(thread, old_pc);
+        goto *(const void*)labels[pc->bc]; 
+    }
+	retp_record: 	{ 
+        Instruction const* old_pc = pc;
+        pc = retp_op(thread, *pc);
+        //thread.jit.record(thread, old_pc);
         goto *(const void*)labels[pc->bc]; 
     }
 	rets_record: 	{
@@ -1005,7 +1017,7 @@ Value Thread::eval(Prototype const* prototype, Environment* environment) {
 	Value* old_base = base;
 	int64_t stackSize = stack.size();
 
-	printCode(*this, prototype, environment);
+	//printCode(*this, prototype, environment);
 
 	// make room for the result
 	base--;	

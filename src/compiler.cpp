@@ -71,14 +71,14 @@ static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::lor) return ByteCode::lor; 
 	if(func == Strings::land) return ByteCode::land; 
 
-	if(func == Strings::bracket) return ByteCode::gather;
+	if(func == Strings::bb) return ByteCode::gather1;
 #ifdef TRACE_DEVELOPMENT
+	if(func == Strings::bracket) return ByteCode::gather;
 	if(func == Strings::pmin) return ByteCode::pmin; 
 	if(func == Strings::pmax) return ByteCode::pmax; 
 
 	if(func == Strings::cm2) return ByteCode::cm2; 
 	
-	if(func == Strings::bb) return ByteCode::subset2;
 
 	if(func == Strings::vector) return ByteCode::vector;
 
@@ -90,9 +90,9 @@ static ByteCode::Enum op2(String const& func) {
 
 static ByteCode::Enum op3(String const& func) {
 	if(func == Strings::seq) return ByteCode::seq;
-	if(func == Strings::bbAssign) return ByteCode::store2;
+	if(func == Strings::bbAssign) return ByteCode::scatter1;
 #ifdef TRACE_DEVELOPMENT
-	if(func == Strings::bracketAssign) return ByteCode::iassign;
+	if(func == Strings::bracketAssign) return ByteCode::scatter;
 	if(func == Strings::split) return ByteCode::split;
 	if(func == Strings::ifelse) return ByteCode::ifelse;
 	if(func == Strings::rep) return ByteCode::rep;
@@ -127,7 +127,9 @@ Compiler::Operand Compiler::compileConstant(Value const& expr, Prototype* code) 
 	} else {
 		index = i->second;
 	}
-	return Operand(CONSTANT, index);
+    Operand t = allocRegister();
+    emit(ByteCode::constant, index, 0, t);
+	return t;
 }
 
 static int64_t isDotDot(String s) {
@@ -205,7 +207,6 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 
 // a standard call, not an op
 Compiler::Operand Compiler::compileFunctionCall(List const& call, Character const& names, Prototype* code) {
-#ifdef TRACE_DEVELOPMENT
 	Operand function = compile(call[0], code);
 	CompiledCall a = makeCall(call, names);
 	code->calls.push_back(a);
@@ -214,11 +215,12 @@ Compiler::Operand Compiler::compileFunctionCall(List const& call, Character cons
 	if(!a.named && a.dotIndex >= (int64_t)a.arguments.size())
 		emit(ByteCode::call, function, code->calls.size()-1, result);
 	else
+#ifdef TRACE_DEVELOPMENT
 		emit(ByteCode::ncall, function, code->calls.size()-1, result);
-	return result;
 #else
-	_error("Trace: No functions yet");
+	    _error("Trace: No named functions yet");
 #endif
+	return result;
 }
 
 Compiler::Operand Compiler::compileInternalFunctionCall(Object const& o, Prototype* code) {
@@ -409,7 +411,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 #endif
 		return source;
 	}
-#ifdef TRACE_DEVELOPMENT 
 	else if(func == Strings::function) 
 	{
 		//compile the default parameters
@@ -464,6 +465,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(ByteCode::ret, result, 0, 0);
 		return result;
 	} 
+#ifdef TRACE_DEVELOPMENT 
 	else if(func == Strings::forSym) 
 	{
 		Operand loop_variable = Operand(MEMORY, SymbolStr(call[1]));
@@ -845,8 +847,8 @@ void Compiler::dumpCode() const {
 //	INVALID operands just go to 0 since they will never be used
 int64_t Compiler::encodeOperand(Operand op, int64_t n) const {
 	if(op.loc == MEMORY || op.loc == INTEGER) return op.i;
-	else if(op.loc == CONSTANT) return -(op.i);
-	else if(op.loc == REGISTER) return -(op.i + n);
+	else if(op.loc == CONSTANT) _error("Constants are no more");
+	else if(op.loc == REGISTER) return -(op.i);
 	else return 0;
 }
 
@@ -856,12 +858,10 @@ Prototype* Compiler::compile(Value const& expr) {
 
 	Operand result = compile(expr, code);
 
-	std::reverse(code->constants.begin(), code->constants.end());
 	code->expression = expr;
-	code->registers = code->constants.size() + max_n;
+	code->registers = max_n;
 	
 	// insert appropriate termination statement at end of code
-#ifdef TRACE_DEVELOPMENT
 	if(scope == FUNCTION)
 		emit(ByteCode::ret, result, 0, 0);
 	else if(scope == PROMISE)
@@ -870,10 +870,6 @@ Prototype* Compiler::compile(Value const& expr) {
 		emit(ByteCode::rets, result, 0, 0);
 		emit(ByteCode::done, 0, 0, 0);
 	}
-#else
-		emit(ByteCode::rets, result, 0, 0);
-		emit(ByteCode::done, 0, 0, 0);
-#endif
 	int64_t n = code->constants.size();
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, encodeOperand(ir[i].a, n), encodeOperand(ir[i].b, n), encodeOperand(ir[i].c, n)));
