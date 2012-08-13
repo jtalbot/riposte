@@ -1249,8 +1249,8 @@ struct TraceLLVMCompiler {
                     break;
 				case IROpCode::rep:{
 
-					llvm::Value * repIdx = ConstantInt(n.binary.a);
-					llvm::Value * each = ConstantInt(n.binary.b);
+					llvm::Value * repIdx = ConstantInt(n.sequence.ia);
+					llvm::Value * each = ConstantInt(n.sequence.ib);
 
 					llvm::Value * prod = B->CreateMul(repIdx,each);
 					
@@ -1267,14 +1267,17 @@ struct TraceLLVMCompiler {
                     if(n.in.isLogical()) {
                         int size = ((Logical&)n.in).length*sizeof(Logical::Element);
                         cudaMalloc((void**)&p, size);
+						cudaMemcpy(p, ((Logical&)n.in).v(), size, cudaMemcpyHostToDevice);
                     }
                     else if(n.in.isInteger()) {
                         int size = ((Integer&)n.in).length*sizeof(Integer::Element);
                         cudaMalloc((void**)&p, size);
+						cudaMemcpy(p, ((Integer&)n.in).v(), size, cudaMemcpyHostToDevice);
                     }
                     else if(n.in.isDouble()) {
                         int size = ((Double&)n.in).length*sizeof(Double::Element);
                         cudaMalloc((void**)&p, size);
+						cudaMemcpy(p, ((Double&)n.in).v(), size, cudaMemcpyHostToDevice);
                     }
                     else
                         _error("unsupported type");
