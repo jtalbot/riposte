@@ -1,6 +1,6 @@
 #adapted from https://github.com/ispc/ispc/tree/master/examples/options
 
-N_ROUNDS <- 1
+N_ROUNDS <- 4
 N_OPTIONS <- 10000000
 
 invSqrt2Pi <- 0.39894228040

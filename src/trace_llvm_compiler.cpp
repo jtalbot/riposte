@@ -15,6 +15,7 @@
 #include <cuda_runtime_api.h>
 #include <builtin_types.h>
 
+
 #ifdef USE_LLVM_COMPILER
 
 #if defined(_MSC_VER)
@@ -165,6 +166,8 @@ struct TraceLLVMCompiler {
     
     std::vector<void *> inputGPU;
     std::vector<llvm::Value *> inputGPUAddr;
+    
+    std::vector<void *> thingsToFree;
     
     TraceLLVMCompiler(Thread * th, Trace * tr) 
     : L(th->state.llvmState), thread(th), trace(tr), values(tr->nodes.size(),NULL) {
@@ -540,6 +543,9 @@ struct TraceLLVMCompiler {
 
             }
         }
+        for (int i = 0; i < thingsToFree.size(); i++) {
+            cudaFree(thingsToFree[i]);
+        }
     }
     void CompileBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray) {
         llvm::Value * loopIndexValue = loopIndex();
@@ -572,6 +578,8 @@ struct TraceLLVMCompiler {
                     }
                     else
                         _error("unsupported type");
+                    
+                    thingsToFree.push_back(p);
                     llvm::Type * t = getType(n.type);
                     
                     inputGPU.push_back(p);
@@ -1262,42 +1270,43 @@ struct TraceLLVMCompiler {
 
                     break;
 				}
-				case IROpCode::gather:{
-					void * p;
+                case IROpCode::gather:{
+                    void * p;
                     if(n.in.isLogical()) {
                         int size = ((Logical&)n.in).length*sizeof(Logical::Element);
                         cudaMalloc((void**)&p, size);
-						cudaMemcpy(p, ((Logical&)n.in).v(), size, cudaMemcpyHostToDevice);
+                        cudaMemcpy(p, ((Logical&)n.in).v(), size, cudaMemcpyHostToDevice);
                     }
                     else if(n.in.isInteger()) {
                         int size = ((Integer&)n.in).length*sizeof(Integer::Element);
                         cudaMalloc((void**)&p, size);
-						cudaMemcpy(p, ((Integer&)n.in).v(), size, cudaMemcpyHostToDevice);
+                        cudaMemcpy(p, ((Integer&)n.in).v(), size, cudaMemcpyHostToDevice);
                     }
                     else if(n.in.isDouble()) {
                         int size = ((Double&)n.in).length*sizeof(Double::Element);
                         cudaMalloc((void**)&p, size);
-						cudaMemcpy(p, ((Double&)n.in).v(), size, cudaMemcpyHostToDevice);
+                        cudaMemcpy(p, ((Double&)n.in).v(), size, cudaMemcpyHostToDevice);
                     }
                     else
                         _error("unsupported type");
-					
-					std::vector<llvm::Value *> indices;
-					indices.push_back(values[n.unary.a]);
-					
-					llvm::Type * t = getType(n.type);
+                    
+                    thingsToFree.push_back(p);
+                    std::vector<llvm::Value *> indices;
+                    indices.push_back(values[n.unary.a]);
+                    
+                    llvm::Type * t = getType(n.type);
                     
                     llvm::Value * vector = ConstantPointer(p, t);
-					
-					
-					llvm::Value *value = B->CreateGEP(vector, indices);
-					values[i] = B->CreateLoad(value);
-					
-					
-					
-					
+                    
+                    
+                    llvm::Value *value = B->CreateGEP(vector, indices);
+                    values[i] = B->CreateLoad(value);
+                    
+                    
+                    
+                    
                     break;
-				}
+                }                
                 case IROpCode::seq:{
                     llvm::Value *value;
                     switch(n.type) {
@@ -1381,7 +1390,7 @@ struct TraceLLVMCompiler {
                     } else {
                         _error("Unknown type in initialize outputs");
                     }
-                
+                    thingsToFree.push_back(p);
                     outputGPU.push_back(p);
                 }
                 else if (n.group == IRNode::FOLD) {
@@ -1425,7 +1434,7 @@ struct TraceLLVMCompiler {
                     } else {
                         _error("Unknown type in initialize outputs");
                     }
-                    
+                    thingsToFree.push_back(p);
                     //Grab the addresses and save them because we'll access them to put the output into
                     outputGPU.push_back(p);
                     B->SetInsertPoint(body);
@@ -1606,10 +1615,16 @@ struct TraceLLVMCompiler {
 void Trace::JIT(Thread & thread) {
     std::cout << toString(thread) << "\n";
     TraceLLVMCompiler c(&thread,this);
+    
     cuInit(0);
     nvvmInit();
+    
+    
+    timespec start = get_time();
     c.Compile();
     c.Execute();
+    double end = time_elapsed(start);
+    std::cout << "Kernel end" << std::endl;
 }
 
 #endif
