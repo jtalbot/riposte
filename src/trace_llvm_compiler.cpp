@@ -177,8 +177,8 @@ struct TraceLLVMCompiler {
         mainModule = new llvm::Module("riposte",*C);
         
         
-        numBlock = 24;
-        numThreads = 512;
+        numBlock = 180;
+        numThreads = 128;
         
         
         std::string lTargDescrStr;
@@ -305,6 +305,8 @@ struct TraceLLVMCompiler {
         if (reduction == true) {
             ReductionHelper(tid);
         }
+        
+        //mainModule->dump();
         
         llvm::verifyFunction(*function);
         
@@ -573,7 +575,7 @@ struct TraceLLVMCompiler {
                     else if(n.in.isDouble()) {
                         //p = ((Double&)n.in).v();
                         int size = ((Double&)n.in).length*sizeof(Double::Element);
-                        cudaMalloc((void**)&p, size);
+                        cudaError_t error = cudaMalloc((void**)&p, size);
                         cudaMemcpy(p, ((Double&)n.in).v(), size, cudaMemcpyHostToDevice);
                     }
                     else
@@ -1357,8 +1359,8 @@ struct TraceLLVMCompiler {
                         n.out = Double(length);
 
                         int size = length*sizeof(Double::Element);
-                        cudaMalloc((void**)&p, size);
-						
+                        cudaError_t error = cudaMalloc((void**)&p, size);
+                      //  std::cout << "Error code: " << cudaGetErrorString(error) << std::endl;
 						//Grab the addresses and save them because we'll access them to put the output into
 						llvm::Type * t = getType(n.type);
 						llvm::Value * vector = ConstantPointer(p,t);
@@ -1401,8 +1403,8 @@ struct TraceLLVMCompiler {
                         n.out = Double(length);
                         
                         int size = ((Double&)n.in).length*sizeof(Double::Element);
-                        cudaMalloc((void**)&p, size);
-						
+						cudaError_t error = cudaMalloc((void**)&p, size);
+                        std::cout << "Error code: " << cudaGetErrorString(error) << std::endl;
                         //Grab the addresses and save them because we'll access them to put the output into
 						llvm::Type * t = getType(n.type);
 						llvm::Value * vector = ConstantPointer(p,t);
@@ -1551,22 +1553,12 @@ struct TraceLLVMCompiler {
         //need to get the maxlength
         
         unsigned nthreads = numThreads;
-        unsigned nblocks;
-        if (nthreads >= len) {
-            nthreads = len;
-            nblocks = 1;
-        }
-        else {
-            nblocks = 1 + (len - 1)/nthreads;
-        }
+        unsigned nblocks = outputReductionSize;
         
         //Create the CUthings you need and make sure that none of them are zero
         
         CUmodule module;
         CUfunction kernel;
-        
-
-        
         CUresult error = cuModuleLoadDataEx(&module, ptxstr, 0, 0, 0);
         assert(error == 0);
         error = cuModuleGetFunction(&kernel, module, kname);
@@ -1620,11 +1612,12 @@ void Trace::JIT(Thread & thread) {
     nvvmInit();
     
     
-    timespec start = get_time();
+    //timespec start = get_time();
     c.Compile();
     c.Execute();
-    double end = time_elapsed(start);
-    std::cout << "Kernel end" << std::endl;
+    //double end = time_elapsed(start);
+    //std::cout << "Kernel end" << std::endl;
+    //cudaDeviceReset();
 }
 
 #endif
