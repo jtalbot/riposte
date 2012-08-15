@@ -9,6 +9,7 @@
 #include "enum.h"
 #include "bc.h"
 #include "type.h"
+#include "value.h"
 
 #define TRACE_ENUM(_) \
 		MAP_BYTECODES(_) \
@@ -24,6 +25,8 @@
 		_(scatter, "SCAT", ___) \
 		_(phi, "PHI", ___) \
 		_(cast, "CAST", ___) \
+        _(length, "LENGTH", ___) \
+        _(rep, "REP", ___) \
 		_(nop, "NOP", ___)
 
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
@@ -33,6 +36,22 @@ class Thread;
 class JIT {
 
 public:
+
+    enum Arity {
+        NULLARY,
+        UNARY,
+        BINARY,
+        TERNARY
+    };
+
+    enum Group {
+        NOP,
+        GENERATOR,
+        MAP,
+        FILTER,
+        FOLD,
+        SPLIT
+    };
 
     enum State {
         OFF,
@@ -66,9 +85,18 @@ public:
 	std::map<int64_t, IRRef> map;
     std::vector<IR> code;
 
+    struct Register {
+        Type::Enum type;
+        size_t length;
+
+        bool operator<(Register const& o) const {
+            return type < o.type ||
+                   (type == o.type && length < o.length); 
+        }
+    };
+    std::vector<Register> registers;
+    std::multimap<Register, size_t> freeRegisters;
     std::vector<int64_t> assignment;
-    std::vector<size_t> registers;
-    std::multimap<size_t, size_t> freeRegisters;
 
 	struct Exit {
 		std::map<int64_t, IRRef> o;
@@ -123,9 +151,12 @@ public:
         size_t width);
 
 	IRRef load(Thread& thread, int64_t a, Instruction const* reenter);
+	IRRef rep(IRRef a, size_t width);
+	IRRef cast(IRRef a, Type::Enum type);
 	IRRef store(Thread& thread, IRRef a, int64_t c);
-	IRRef emit(Thread& thread, TraceOpCode::Enum op, IRRef a, IRRef b, int64_t c);
-	IRRef emit(Thread& thread, TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, int64_t d);
+	IRRef EmitUnary(TraceOpCode::Enum op, IRRef a, Type::Enum rty, Type::Enum mty);
+	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty);
+	IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty);
 
     void markLiveOut(Exit const& exit);
 
@@ -143,6 +174,52 @@ public:
     void PreferRegister(size_t index, size_t share);
     void ReleaseRegister(size_t index);
     void RegisterAssignment();
+
+#define TYPES_TMP(_) \
+    _(Double) \
+    _(Integer) \
+    _(Logical) 
+
+	template< template<class X> class Group >
+	IRRef EmitUnary(TraceOpCode::Enum op, IRRef a) {
+		Type::Enum aty = code[a].type;
+
+        #define EMIT_UNARY(TA)                  \
+        if(aty == Type::TA)                     \
+            return EmitUnary(op, a,             \
+                Group<TA>::R::VectorType,    \
+                Group<TA>::MA::VectorType);
+        TYPES_TMP(EMIT_UNARY)
+        #undef EMIT_BINARY
+    }
+#undef TYPES_TMP
+
+#define TYPES_TMP(_) \
+    _(Double, Double) \
+    _(Integer, Integer) \
+    _(Logical, Logical) \
+    _(Double, Integer) \
+    _(Integer, Double) \
+    _(Double, Logical) \
+    _(Logical, Double) \
+    _(Integer, Logical) \
+    _(Logical, Integer)
+
+	template< template<class X, class Y> class Group >
+	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b) {
+		Type::Enum aty = code[a].type;
+		Type::Enum bty = code[b].type;
+
+        #define EMIT_BINARY(TA, TB)                 \
+        if(aty == Type::TA && bty == Type::TB)      \
+            return EmitBinary(op, a, b,             \
+                Group<TA,TB>::R::VectorType,        \
+                Group<TA,TB>::MA::VectorType,       \
+                Group<TA,TB>::MB::VectorType);
+        TYPES_TMP(EMIT_BINARY)
+        #undef EMIT_BINARY
+    }
+#undef TYPES_TMP
 };
 
 #endif

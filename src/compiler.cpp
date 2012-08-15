@@ -4,9 +4,11 @@
 #include "coerce.h"
 
 static ByteCode::Enum op1(String const& func) {
-#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::add) return ByteCode::pos; 
 	if(func == Strings::sub) return ByteCode::neg; 
+	
+    if(func == Strings::lnot) return ByteCode::lnot; 
+#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::abs) return ByteCode::abs; 
 	if(func == Strings::sign) return ByteCode::sign; 
 	if(func == Strings::sqrt) return ByteCode::sqrt; 
@@ -26,7 +28,6 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::isfinite) return ByteCode::isfinite; 
 	if(func == Strings::isinfinite) return ByteCode::isinfinite; 
 	
-	if(func == Strings::lnot) return ByteCode::lnot; 
 	
 	if(func == Strings::sum) return ByteCode::sum; 
 	if(func == Strings::prod) return ByteCode::prod; 
@@ -52,10 +53,10 @@ static ByteCode::Enum op1(String const& func) {
 static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::add) return ByteCode::add; 
 	if(func == Strings::sub) return ByteCode::sub; 
-
-#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::mul) return ByteCode::mul;
 	if(func == Strings::div) return ByteCode::div; 
+
+#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::idiv) return ByteCode::idiv; 
 	if(func == Strings::mod) return ByteCode::mod; 
 	if(func == Strings::pow) return ByteCode::pow; 

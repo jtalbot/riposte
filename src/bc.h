@@ -59,10 +59,10 @@
 
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double
 #define ARITH_UNARY_BYTECODES(_) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(pos, "pos", 	ArithUnary1, 	PassNA(a, a)) \
 	_(neg, "neg", 	ArithUnary1, 	PassNA(a, -a)) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(abs, "abs", 	ArithUnary1, 	PassNA(a, Abs(a))) \
 	_(sign, "sign",	ArithUnary2, 	((a>0)-(a<0))) \
 	_(sqrt, "sqrt",	ArithUnary2,	sqrt(a)) \
@@ -80,10 +80,7 @@
 #endif
 
 #define LOGICAL_UNARY_BYTECODES(_) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(lnot, "lnot",	LogicalUnary, PassNA(a, ~a))
-#endif
 
 #define ORDINAL_UNARY_BYTECODES(_) \
 
@@ -103,10 +100,10 @@
 #define ARITH_BINARY_BYTECODES(_) \
 	_(add, "add",	ArithBinary1,	PassNA(a,b,a+b)) \
 	_(sub, "sub",	ArithBinary1,	PassNA(a,b,a-b)) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(mul, "mul",	ArithBinary1,	PassNA(a,b,a*b)) \
 	_(div, "div",	ArithBinary2,	a/b) \
+
+#ifdef TRACE_DEVELOPMENT
 	_(idiv, "idiv",	ArithBinary1,	PassNA(a,b,IDiv(a,b))) \
 	_(mod, "mod",	ArithBinary1,	PassNA(a,b,Mod(a,b))) \
 	_(pow, "pow",	ArithBinary2,	pow(a,b)) \
