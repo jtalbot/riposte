@@ -362,7 +362,30 @@ struct TraceLLVMCompiler {
     }
 
 
-    
+    void reductionBlocksInitialize() {
+        if (!reductionBlocksPresent) {
+            returnBlock = createAndInsertBB("return");
+            condBlocks[0] = createAndInsertBB("cond512");
+            condBlocks[1] = createAndInsertBB("cond256");
+            condBlocks[2] = createAndInsertBB("cond128");
+            condBlocks[3] = createAndInsertBB("cond32");
+            
+            endBlocks[0] = createAndInsertBB("end512");
+            endBlocks[1] = createAndInsertBB("end256");
+            endBlocks[2] = createAndInsertBB("end128");
+            endBlocks[3] = createAndInsertBB("end32");
+            
+            bodyBlocks[0] = createAndInsertBB("body512");
+            bodyBlocks[1] = createAndInsertBB("body256");
+            bodyBlocks[2] = createAndInsertBB("body128");
+            bodyBlocks[3] = createAndInsertBB("body32");
+            
+            condFinal = createAndInsertBB("condFinal");
+            bodyFinal = createAndInsertBB("bodyFinal");
+            endFinal = createAndInsertBB("endFinal");
+            reductionBlocksPresent = true;
+        }
+    }
       
     void GenerateKernelFunction() {
         ///IMPORTANT: TEST RUN AT MOVING KERNEL FUNCTION INTO COMPILE PART OF PROGRAM
@@ -912,28 +935,7 @@ struct TraceLLVMCompiler {
                             
                             llvm::GlobalVariable *shared = new llvm::GlobalVariable((*mainModule), llvm::ArrayType::get(llvm::Type::getDoubleTy(*C), sizeOfArray), false, llvm::GlobalValue::ExternalLinkage, 0, "sharedMemory", 0, 0, 3);
                             //set to the top of the function
-                            if (!reductionBlocksPresent) {
-                                returnBlock = createAndInsertBB("return");
-                                condBlocks[0] = createAndInsertBB("cond512");
-                                condBlocks[1] = createAndInsertBB("cond256");
-                                condBlocks[2] = createAndInsertBB("cond128");
-                                condBlocks[3] = createAndInsertBB("cond32");
-                                
-                                endBlocks[0] = createAndInsertBB("end512");
-                                endBlocks[1] = createAndInsertBB("end256");
-                                endBlocks[2] = createAndInsertBB("end128");
-                                endBlocks[3] = createAndInsertBB("end32");
-                                
-                                bodyBlocks[0] = createAndInsertBB("body512");
-                                bodyBlocks[1] = createAndInsertBB("body256");
-                                bodyBlocks[2] = createAndInsertBB("body128");
-                                bodyBlocks[3] = createAndInsertBB("body32");
-                                
-                                condFinal = createAndInsertBB("condFinal");
-                                bodyFinal = createAndInsertBB("bodyFinal");
-                                endFinal = createAndInsertBB("endFinal");
-                                reductionBlocksPresent = true;
-                            }
+                            reductionBlocksInitialize();
                                 
                             Synchronize(function, tid);
 
@@ -1029,28 +1031,7 @@ struct TraceLLVMCompiler {
                             
                             llvm::GlobalVariable *shared = new llvm::GlobalVariable((*mainModule), llvm::ArrayType::get(llvm::Type::getInt64Ty(*C), sizeOfArray), false, llvm::GlobalValue::ExternalLinkage, 0, "sharedMemory", 0, 0, 3);
                             //set to the top of the function
-                             if (!reductionBlocksPresent) {
-                                returnBlock = createAndInsertBB("return");
-                                condBlocks[0] = createAndInsertBB("cond512");
-                                condBlocks[1] = createAndInsertBB("cond256");
-                                condBlocks[2] = createAndInsertBB("cond128");
-                                condBlocks[3] = createAndInsertBB("cond32");
-                             
-                                endBlocks[0] = createAndInsertBB("end512");
-                                endBlocks[1] = createAndInsertBB("end256");
-                                endBlocks[2] = createAndInsertBB("end128");
-                                endBlocks[3] = createAndInsertBB("end32");
-                             
-                                bodyBlocks[0] = createAndInsertBB("body512");
-                                bodyBlocks[1] = createAndInsertBB("body256");
-                                bodyBlocks[2] = createAndInsertBB("body128");
-                                bodyBlocks[3] = createAndInsertBB("body32");
-                             
-                                condFinal = createAndInsertBB("condFinal");
-                                bodyFinal = createAndInsertBB("bodyFinal");
-                                endFinal = createAndInsertBB("endFinal");
-                                reductionBlocksPresent = true;
-                             }
+                            reductionBlocksInitialize();
                             
                             Synchronize(function, tid);
                             
@@ -1360,7 +1341,6 @@ struct TraceLLVMCompiler {
 
                         int size = length*sizeof(Double::Element);
                         cudaError_t error = cudaMalloc((void**)&p, size);
-                      //  std::cout << "Error code: " << cudaGetErrorString(error) << std::endl;
 						//Grab the addresses and save them because we'll access them to put the output into
 						llvm::Type * t = getType(n.type);
 						llvm::Value * vector = ConstantPointer(p,t);
@@ -1404,7 +1384,6 @@ struct TraceLLVMCompiler {
                         
                         int size = ((Double&)n.in).length*sizeof(Double::Element);
 						cudaError_t error = cudaMalloc((void**)&p, size);
-                        std::cout << "Error code: " << cudaGetErrorString(error) << std::endl;
                         //Grab the addresses and save them because we'll access them to put the output into
 						llvm::Type * t = getType(n.type);
 						llvm::Value * vector = ConstantPointer(p,t);
@@ -1612,12 +1591,8 @@ void Trace::JIT(Thread & thread) {
     nvvmInit();
     
     
-    //timespec start = get_time();
     c.Compile();
     c.Execute();
-    //double end = time_elapsed(start);
-    //std::cout << "Kernel end" << std::endl;
-    //cudaDeviceReset();
 }
 
 #endif
