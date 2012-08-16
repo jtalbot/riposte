@@ -15,37 +15,47 @@ JIT::IRRef JIT::insert(
         int64_t target, 
         Type::Enum type, 
         size_t width) {
-    IR ir = (IR) { op, a, b, c, target, type, width, 0 };
+    IR ir = (IR) { op, a, b, c, target, Value::Nil(), type, width, 0 };
     code.push_back(ir);
     return (IRRef) { code.size()-1 };
 }
 
-int64_t intern(Thread& thread, int64_t a) {
+int64_t JIT::intern(Thread& thread, int64_t a) {
     if(a <= 0) {
         return (thread.base+a)-(thread.registers+DEFAULT_NUM_REGISTERS);
     }
     else {
-        return a;
+        return getVar(getEnv(thread.frame.environment), (String)a); 
     }
 }
 
 JIT::IRRef JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
-    
+
+    // registers
     std::map<int64_t, IRRef>::const_iterator i;
-    i = map.find(intern(thread,a));
+    i = map.find(intern(thread, a));
+
     if(i != map.end()) {
         return i->second;
     }
     else {
         OPERAND(operand, a);
-        
+
         Exit e = { map, reenter };
         exits[code.size()] = e;
-        insert(TraceOpCode::GTYPE, 0, 0, 0, a, operand.type, operand.length);
-        
-        loads[intern(thread,a)] = (IRRef){code.size()};
-        map[intern(thread,a)] = (IRRef){code.size()};
-        return insert(TraceOpCode::load, 0, 0, 0, a, operand.type, operand.length);
+
+        IRRef ia = intern(thread, a);
+
+        insert(TraceOpCode::GTYPE, 0, 0, 0, ia, operand.type, operand.isVector() ? operand.length : 1);
+
+        loads[ia] = (IRRef){code.size()};
+        map[ia] = (IRRef){code.size()};
+        if(a <= 0) {
+            return insert(TraceOpCode::sload, 0, 0, 0, ia, operand.type, operand.isVector() ? operand.length : 1);
+        }
+        else {
+            return insert(TraceOpCode::eload, variables[ia-1].env, 0, 0, ia, operand.type, operand.isVector() ? operand.length : 1);
+        }
     }
 }
 
@@ -103,11 +113,19 @@ JIT::IRRef JIT::EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Typ
 
 */
 JIT::IRRef JIT::store(Thread& thread, IRRef a, int64_t c) {
-    insert(TraceOpCode::store, a, 0, 0, intern(thread,c), code[a].type, code[a].width);
-    if(loads.find(intern(thread,c)) == loads.end()) {
-        loads[intern(thread,c)] = a;
+    int64_t i = intern(thread,c);
+
+    if(i <= 0) {
+        insert(TraceOpCode::sstore, a, 0, 0, i, code[a].type, code[a].width);
     }
-    map[intern(thread,c)] = a;
+    else {
+        insert(TraceOpCode::estore, a, variables[i-1].env, 0, i, code[a].type, code[a].width);
+    }
+
+    if(loads.find(i) == loads.end()) {
+       loads[i] = a;
+    }
+    map[i] = a;
     return a;
 }
 
@@ -125,10 +143,16 @@ void JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             insert(branch ? TraceOpCode::guardT : TraceOpCode::guardF, 
                 p, 0, 0, 0, Type::Promise, code[p].width );
         }   break;
+    
+        case ByteCode::call:
+        {
+            insert(TraceOpCode::PUSH, envs[(int64_t)thread.frame.environment], 0, 0, 0, Type::Promise, 1);
+        }   break;
 
         case ByteCode::constant: {
             Value const& c = thread.frame.prototype->constants[inst.a];
-            store(thread, insert(TraceOpCode::constant, 0, 0, 0, (int64_t)&c, c.type, c.length), inst.c);
+            IRRef a = store(thread, insert(TraceOpCode::constant, 0, 0, 0, 0, c.type, c.length), inst.c);
+            code[a].in = c;
         }   break;
 
         case ByteCode::mov:
@@ -169,7 +193,8 @@ void JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         case ByteCode::Name: {                              \
             IRRef a = load(thread, inst.a, &inst);          \
             IRRef b = load(thread, inst.b, &inst);          \
-            store(thread, EmitBinary<Group>(TraceOpCode::Name, a, b), inst.c);  \
+            IRRef r = EmitBinary<Group>(TraceOpCode::Name, a, b); \
+            store(thread, r, inst.c);  \
         }   break;
         BINARY_BYTECODES(BINARY_EMIT)
         #undef BINARY_EMIT
@@ -201,25 +226,43 @@ void JIT::Replay(Thread& thread) {
                 ir.b = forward[ir.a];
             } break;
 
-            case TraceOpCode::load: {
+            case TraceOpCode::LOADENV: {
+                forward[i] = i;
+            } break;
+
+            case TraceOpCode::POP:
+            case TraceOpCode::NEWENV: {
+                forward[i] = insert(ir.op, 0, 0, 0, 0, ir.type, ir.width);
+            } break;
+
+            case TraceOpCode::eload: 
+            case TraceOpCode::sload: {
                 // forwards to last store
                 forward[i] = map[ir.target];
+                // if type doesn't match, oh no!
+                if(code[map[ir.target]].type != code[i].type || 
+                    code[map[ir.target]].width != code[i].width)
+                    _error("Load types don't match"); 
             } break;
 
             case TraceOpCode::constant: {
             } break;
 
-            case TraceOpCode::store: {
+            case TraceOpCode::estore:
+            case TraceOpCode::sstore: {
                 map[ir.target] = ir.a;
             } break;
 
             case TraceOpCode::GTYPE: {
+                IR& in = code[map[ir.target]];
+                //if(in.type != ir.type || in.width != ir.width)
+                  //  _error("GTYPE types don't match in replay");
             } break;
 
+            case TraceOpCode::GEQ:
             case TraceOpCode::guardF: 
             case TraceOpCode::guardT: {
-                if(forward[ir.a] == ir.a) {
-                } else {
+                if(forward[ir.a] != ir.a) {
                     Exit e = { map, exits[i].reenter };
                     exits[code.size()] = e;
                     forward[i] = insert(ir.op, forward[ir.a], 0, 0, 0, ir.type, ir.width);
@@ -234,6 +277,7 @@ void JIT::Replay(Thread& thread) {
                 }
             } break;
 
+            case TraceOpCode::PUSH:
             case TraceOpCode::length:
             case TraceOpCode::cast: 
             UNARY_BYTECODES(CASE) {
@@ -389,6 +433,7 @@ void JIT::schedule() {
                 code[ir.a].group = std::max(code[ir.a].group, group+1);
                 code[ir.b].group = std::max(code[ir.b].group, group);
             } break;
+            case TraceOpCode::GEQ: 
             case TraceOpCode::GTYPE: 
             case TraceOpCode::guardF: 
             case TraceOpCode::guardT: {
@@ -457,7 +502,8 @@ void JIT::schedule() {
 void JIT::AssignRegister(size_t index) {
     if(assignment[index] <= 0) {
         IR const& ir = code[index];
-        if(ir.op == TraceOpCode::load) {
+        if(ir.op == TraceOpCode::sload ||
+            ir.op == TraceOpCode::eload) {
             assignment[index] = 0;
             return;
         }
@@ -541,6 +587,7 @@ void JIT::RegisterAssignment() {
                 AssignRegister(ir.b);
                 PreferRegister(ir.a, ir.b);
             } break;
+            case TraceOpCode::GEQ: 
             case TraceOpCode::GTYPE: 
             case TraceOpCode::guardF: 
             case TraceOpCode::guardT: {
@@ -574,7 +621,7 @@ void JIT::RegisterAssignment() {
     }
 }
 
-void JIT::IR::dump() {
+void JIT::IR::dump(std::vector<JIT::Variable> const& variables) {
     printf("%2d ", group);
     if(type == Type::Double)
         std::cout << "num" << width << "\t";
@@ -582,8 +629,12 @@ void JIT::IR::dump() {
         std::cout << "int" << width << "\t";
     else if(type == Type::Logical)
         std::cout << "log" << width << "\t";
+    else if(type == Type::Function)
+        std::cout << "fun" << width << "\t";
+    else if(type == Type::Environment)
+        std::cout << "env" << width << "\t";
     else
-        std::cout << "\t";
+        std::cout << "\t\t";
 
     std::cout << TraceOpCode::toString(op);
 
@@ -592,27 +643,30 @@ void JIT::IR::dump() {
         case TraceOpCode::loop: {
             std::cout << " --------------------";
         } break;
-        case TraceOpCode::GTYPE:
-        case TraceOpCode::load: {
-            if(target <= 0)
-                std::cout << "\t " << (int64_t)target;
-            else
-                std::cout << "\t " << (String)target;
+        case TraceOpCode::GTYPE: {
         } break;
-        case TraceOpCode::store: {
-            if(target <= 0)
-                std::cout << "\t " << a << "\t " << (int64_t)target;
-            else
-                std::cout << "\t " << a << "\t " << (String)target;
+        case TraceOpCode::sload: {
+            std::cout << "\t " << (int64_t)target;
+        } break;
+        case TraceOpCode::eload: {
+            std::cout << "\t " << a << ":\"" << (String)variables[target-1].name << "\"";
+        } break;
+        case TraceOpCode::sstore: {
+            std::cout << "\t " << a << "\t " << (int64_t)target;
+        } break;    
+        case TraceOpCode::estore: {
+                std::cout << "\t " << a << "\t " << b << ":\"" << (String)variables[target-1].name << "\"";
         } break;
         case TraceOpCode::phi: {
             if(target <= 0)
                 std::cout << "\t " << a << "\t " << b << "\t " << (int64_t)target;
             else
-                std::cout << "\t " << a << "\t " << b << "\t " << (String)target;
+                std::cout << "\t " << a << "\t " << b << "\t " << (String)variables[target-1].name;
         } break;
+        case TraceOpCode::PUSH:
         case TraceOpCode::length:
         case TraceOpCode::cast:
+        case TraceOpCode::GEQ:
         case TraceOpCode::guardF:
         case TraceOpCode::guardT: 
         UNARY_BYTECODES(CASE)
@@ -639,10 +693,10 @@ void JIT::IR::dump() {
 
 void JIT::dump() {
     for(size_t i = 0; i < code.size(); i++) {
-        if(code[i].op != TraceOpCode::nop && code[i].op != TraceOpCode::store) {
+        if(code[i].op != TraceOpCode::nop) {
             printf("%4d: ", i);
             printf(" (%2d) ", assignment[i]);
-            code[i].dump();
+            code[i].dump(variables);
     
             if(     code[i].op == TraceOpCode::GTYPE
                 ||  code[i].op == TraceOpCode::guardF
@@ -651,8 +705,9 @@ void JIT::dump() {
                 std::cout << "\t\t=> ";
                 Exit const& e = exits[i];
                 for(std::map<int64_t, IRRef>::const_iterator i = e.o.begin(); i != e.o.end(); ++i) {
-                    std::cout << i->second << ":";
-                    if(i->first > 0) std::cout << (char*)i->first << " ";
+                    std::cout << i->second << "->";
+                    if(i->first > 0) 
+                        std::cout << variables[i->first-1].env << ":" << (String)variables[i->first-1].name << " ";
                     else std::cout << i->first << " ";
                 }
             }
@@ -1078,7 +1133,7 @@ struct LLVMCompiler {
                 // this case will be filled in as we emit instructions
                 values.push_back(0);
             }
-        }        
+        }
 
  
         for(size_t i = 0; i < jit.code.size(); i++) {
@@ -1124,7 +1179,6 @@ struct LLVMCompiler {
             case Type::Double: t = builder.getDoubleTy(); break;
             case Type::Integer: t = builder.getInt64Ty(); break;
             case Type::Logical: t = builder.getInt1Ty(); break;
-            case Type::Promise: t = builder.getInt1Ty(); break;
             default: _error("Bad type in trace");
         }
         return t;
@@ -1145,7 +1199,6 @@ struct LLVMCompiler {
 
     void Emit(JIT::IR ir, size_t width, size_t index) {
         
-        llvm::Type* t = llvmType(ir.type, width);
 
         if(     ir.op == TraceOpCode::GTYPE
             ||  ir.op == TraceOpCode::guardT
@@ -1181,17 +1234,17 @@ struct LLVMCompiler {
             {
                 std::vector<llvm::Constant*> c;
                 if(ir.type == Type::Double) {
-                    Double* v = (Double*)ir.target;
+                    Double const& v = (Double const&)ir.in;
                     for(size_t i = 0; i < width; i++)
-                        c.push_back(llvm::ConstantFP::get(builder.getDoubleTy(), (*v)[i]));
+                        c.push_back(llvm::ConstantFP::get(builder.getDoubleTy(), v[i]));
                 } else if(ir.type == Type::Integer) {
-                    Integer* v = (Integer*)ir.target;
+                    Integer const& v = (Integer const&)ir.in;
                     for(size_t i = 0; i < width; i++)
-                        c.push_back(builder.getInt64((*v)[i]));
+                        c.push_back(builder.getInt64(v[i]));
                 } else if(ir.type == Type::Logical) {
-                    Logical* v = (Logical*)ir.target;
+                    Logical const& v = (Logical const&)ir.in;
                     for(size_t i = 0; i < width; i++)
-                        c.push_back(builder.getInt1((*v)[i] != 0));
+                        c.push_back(builder.getInt1(v[i] != 0));
                 } else {
                     _error("Unexpected constant type");
                 }
@@ -1200,7 +1253,8 @@ struct LLVMCompiler {
                 }
             } break;
 
-            case TraceOpCode::load: 
+            case TraceOpCode::sload: 
+            case TraceOpCode::eload: 
             {
                 values[index] = CALL1(std::string("Load_")+Type::toString(ir.type), builder.getInt64(ir.target));
             } break;
@@ -1209,6 +1263,16 @@ struct LLVMCompiler {
                 llvm::Value* guard = 
                     CALL2("Guard_Type", builder.getInt64(ir.target), builder.getInt32(ir.type));
                 EmitExit(guard, jit.exits[index]);
+            } break;
+
+            case TraceOpCode::GEQ: {
+                if(jit.code[ir.a].width != 1) {
+                    _error("Emitting guard on non-scalar");
+                }
+                llvm::Value* r = builder.CreateICmpEQ(
+                    builder.CreatePtrToInt(values[ir.a], builder.getInt64Ty()),
+                    builder.getInt64(ir.target));
+                EmitExit(r, jit.exits[index]);
             } break;
 
             case TraceOpCode::guardT:
@@ -1271,6 +1335,7 @@ struct LLVMCompiler {
             } break;
             case TraceOpCode::cast:
             {
+                llvm::Type* t = llvmType(ir.type, width);
                 llvm::Value* r = llvm::UndefValue::get(t);
                 switch(ir.type) {
                     case Type::Double:
@@ -1296,12 +1361,14 @@ struct LLVMCompiler {
             
             case TraceOpCode::length:
             {
+                llvm::Type* t = llvmType(ir.type, width);
                 llvm::Value* r = llvm::UndefValue::get(t);
                 r = builder.CreateInsertElement(r, builder.getInt64(jit.code[ir.a].width), builder.getInt32(0));
             } break;
             
             case TraceOpCode::jmp:
-            case TraceOpCode::store:
+            case TraceOpCode::sstore:
+            case TraceOpCode::estore:
             case TraceOpCode::nop:
             {
                 // do nothing

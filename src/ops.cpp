@@ -40,6 +40,12 @@ char const* Load_logical(Thread& thread, int64_t i) {
 }
 
 extern "C"
+Prototype* Load_function(Thread& thread, int64_t i) {
+    OPERAND(a, i);
+    return ((Function const&)a).prototype();
+}
+
+extern "C"
 void Store_double(Thread& thread, int64_t i, size_t len, double* d) {
 	Double a(len);
 	memcpy(a.v(), d, len*sizeof(double));
@@ -61,5 +67,10 @@ void Store_logical(Thread& thread, int64_t i, size_t len, int8_t* l) {
 	memcpy(a.v(), l, len*sizeof(int8_t));
     if(i <= 0) thread.base[i] = a;
     else thread.frame.environment->insertRecursive((String)(i)) = a;
+}
+
+extern "C"
+void Store_function(Thread& thread, int64_t i, size_t len, Prototype* p) {
+    printf("Store_function NYI\n");
 }
 

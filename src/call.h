@@ -118,6 +118,10 @@ inline void argAssign(Thread& thread, Environment* env, Pair const& parameter, P
 		}
 #endif
 		env->insert(parameter.n) = w;
+
+        if(thread.jit.state == JIT::RECORDING) {
+            thread.jit.storeArg(env, parameter.n, w);
+        }
 	}
 }
 

@@ -16,9 +16,12 @@
         _(loop, "LOOP", ___) \
         _(jmp, "JMP", ___) \
         _(constant, "CONS", ___) \
-		_(load, "LOAD", ___) /* loads are type guarded */ \
-        _(store, "STORE", ___) \
+		_(eload, "ELOAD", ___) /* loads are type guarded */ \
+		_(sload, "SLOAD", ___) /* loads are type guarded */ \
+        _(estore, "ESTORE", ___) \
+        _(sstore, "SSTORE", ___) \
         _(GTYPE, "GTYPE", ___) \
+        _(GEQ,   "GEQ", ___) \
 		_(guardT, "GTRUE", ___) \
 		_(guardF, "GFALSE", ___) \
 		_(gather, "GATH", ___) \
@@ -27,6 +30,10 @@
 		_(cast, "CAST", ___) \
         _(length, "LENGTH", ___) \
         _(rep, "REP", ___) \
+        _(LOADENV, "LOADENV", ___) \
+        _(NEWENV, "NEWENV", ___) \
+        _(PUSH, "PUSH", ___) \
+        _(POP, "POP", ___) \
 		_(nop, "NOP", ___)
 
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
@@ -62,16 +69,22 @@ public:
 
 	typedef size_t IRRef;
 
+    struct Variable {
+        IRRef env;
+        int64_t name;
+    };
+
 	struct IR {
 		TraceOpCode::Enum op;
 		IRRef a, b, c;
         int64_t target;
+        Value in;
 
         Type::Enum type;
         size_t width;
 
 		size_t group;
-        void dump();
+        void dump(std::vector<Variable> const&);
 	};
 
 	unsigned short counters[1024];
@@ -83,6 +96,10 @@ public:
 
     std::map<int64_t, IRRef> loads;
 	std::map<int64_t, IRRef> map;
+    std::map<int64_t, IRRef> envs;
+
+    std::vector<Variable> variables;
+
     std::vector<IR> code;
 
     struct Register {
@@ -151,12 +168,64 @@ public:
         size_t width);
 
 	IRRef load(Thread& thread, int64_t a, Instruction const* reenter);
+	int64_t intern(Thread& thread, int64_t a);
 	IRRef rep(IRRef a, size_t width);
 	IRRef cast(IRRef a, Type::Enum type);
-	IRRef store(Thread& thread, IRRef a, int64_t c);
+    IRRef store(Thread& thread, IRRef a, int64_t c);
 	IRRef EmitUnary(TraceOpCode::Enum op, IRRef a, Type::Enum rty, Type::Enum mty);
 	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty);
 	IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty);
+
+    void emitCall(Function const& func, Environment* env, Instruction const* inst) {
+        IRRef a = code.size()-1;
+
+        Exit e = { map, inst };
+        exits[code.size()] = e;
+        insert(TraceOpCode::GEQ, a, 0, 0, (int64_t)func.prototype(), Type::Function, 1);
+
+        IRRef ne = insert(TraceOpCode::NEWENV, 0, 0, 0, 0, Type::Environment, 1);
+        envs[(int64_t)env] = ne;
+    }
+
+    void emitPush(Environment* env) {
+        insert(TraceOpCode::PUSH, envs[(int64_t)env], 0, 0, 0, Type::Promise, 1);
+    }
+
+    void storeArg(Environment* env, String name, Value const& v) {
+        IRRef c = insert(TraceOpCode::constant, 0, 0, 0, 0, v.type, v.isVector() ? v.length : 1);
+        estore(c, env, name);
+    }
+
+    IRRef getEnv(Environment* env) {
+        std::map<int64_t, IRRef>::const_iterator i;
+        i = envs.find((int64_t)env);
+        if(i != envs.end())
+            return i->second;
+        else {
+            IRRef e = insert(TraceOpCode::LOADENV, 0, 0, 0, (int64_t)env, Type::Environment, 1);
+            envs[(int64_t)env] = e;
+            return e;
+        }
+    }
+
+    int64_t getVar(IRRef env, String name) {
+        Variable v = {env, (int64_t)name};
+
+        // look for a variable that matches already 
+        for(int j = 0 ; j < variables.size(); j++) {
+            if(variables[j].env == v.env && variables[j].name == v.name)
+                return j+1;
+        }
+        variables.push_back(v);
+        return variables.size();
+    }
+
+    void estore(IRRef a, Environment* env, String name) {
+        IRRef e = getEnv(env);
+        int64_t v = getVar(e, name);
+        insert(TraceOpCode::estore, a, e, 0, v, code[a].type, code[a].width);
+        map[v] = a;
+    }
 
     void markLiveOut(Exit const& exit);
 
@@ -191,6 +260,7 @@ public:
                 Group<TA>::MA::VectorType);
         TYPES_TMP(EMIT_UNARY)
         #undef EMIT_BINARY
+        _error("Unknown type in EmitUnary");
     }
 #undef TYPES_TMP
 
@@ -218,6 +288,7 @@ public:
                 Group<TA,TB>::MB::VectorType);
         TYPES_TMP(EMIT_BINARY)
         #undef EMIT_BINARY
+        _error("Unknown type pair in EmitBinary");
     }
 #undef TYPES_TMP
 };

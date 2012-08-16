@@ -63,10 +63,14 @@ Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const
 	if(a->isPromise()) {
 		Function const& f = (Function const&)(*a);
 		assert(f.environment()->DynamicScope());
-		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), f.environment(), name, &inst);
+        if(thread.jit.state == JIT::RECORDING)
+            thread.jit.emitPush(f.environment()->DynamicScope());
+        return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), f.environment(), name, &inst);
 	} else if(a->isDefault()) {
 		Function const& f = (Function const&)(*a);
 		assert(f.environment());
+        if(thread.jit.state == JIT::RECORDING)
+            thread.jit.emitPush(f.environment());
 		return buildStackFrame(thread, f.environment(), f.prototype(), f.environment(), name, &inst);
 	} else {
 		_error(std::string("Object '") + thread.externStr(name) + "' not found");
@@ -91,6 +95,9 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
 	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
+
+    if(thread.jit.state == JIT::RECORDING)
+        thread.jit.emitCall(func, fenv, &inst);
 	
 	MatchArgs(thread, thread.frame.environment, fenv, func, call);
 	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
@@ -123,11 +130,17 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 #endif
 	}
 
+    if(thread.jit.state == JIT::RECORDING) {
+        JIT::IRRef ira = thread.jit.load(thread, inst.a, &inst);
+        thread.jit.store(thread, ira, 0);
+        thread.jit.insert(TraceOpCode::POP, 0, 0, 0, 0, Type::Promise, 1);
+    }
+	
 	REGISTER(0) = result;
 	
 	thread.base = thread.frame.returnbase;
 	Instruction const* returnpc = thread.frame.returnpc;
-	
+
 	thread.pop();
 	
 #ifdef ENABLE_JIT
@@ -156,9 +169,16 @@ Instruction const* done_op(Thread& thread, Instruction const& inst) {
 Instruction const* retp_op(Thread& thread, Instruction const& inst) {
 	// we can return futures from promises, so don't BIND
 	OPERAND(result, inst.a); FORCE(result, inst.a);	
+    
+    JIT::IRRef ira;	
 	
-	if(thread.frame.dest > 0) {
+    if(thread.frame.dest > 0) {
 		thread.frame.env->insert((String)thread.frame.dest) = result;
+        if(thread.jit.state == JIT::RECORDING) {
+            ira = thread.jit.load(thread, inst.a, &inst);
+            thread.jit.estore(ira, thread.frame.env, (String)thread.frame.dest);
+            thread.jit.insert(TraceOpCode::POP, 0, 0, 0, 0, Type::Promise, 1);
+        }
 	} else {
 		thread.frame.env->dots[-thread.frame.dest].v = result;
 	}
@@ -938,7 +958,8 @@ void interpret(Thread& thread, Instruction const* pc) {
 		name##_record: { \
             Instruction const* old_pc = pc; \
             pc = name##_op(thread, *pc); \
-            thread.jit.record(thread, old_pc); \
+            if(pc == old_pc+1) \
+                thread.jit.record(thread, old_pc); \
             goto *(const void*)labels[pc->bc]; \
     } 
 	STANDARD_BYTECODES(RECORD_OP)
@@ -966,20 +987,19 @@ void interpret(Thread& thread, Instruction const* pc) {
     }
 	call_record: 	{ 
         Instruction const* old_pc = pc;
+        thread.jit.load(thread, pc->a, old_pc);
         pc = call_op(thread, *pc);
-        //thread.jit.record(thread, old_pc);
+        thread.jit.record(thread, old_pc);
         goto *(const void*)labels[pc->bc]; 
     }
 	ret_record: 	{ 
         Instruction const* old_pc = pc;
         pc = ret_op(thread, *pc);
-        //thread.jit.record(thread, old_pc);
         goto *(const void*)labels[pc->bc]; 
     }
 	retp_record: 	{ 
         Instruction const* old_pc = pc;
         pc = retp_op(thread, *pc);
-        //thread.jit.record(thread, old_pc);
         goto *(const void*)labels[pc->bc]; 
     }
 	rets_record: 	{
