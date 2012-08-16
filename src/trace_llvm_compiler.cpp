@@ -682,10 +682,7 @@ struct TraceLLVMCompiler {
                             llvm::Value * expComp = B->CreateFPTrunc(B->CreateFMul(val, xlog2e, "xloge"), llvm::Type::getFloatTy(*C));
                            
                             
-                            std::vector<llvm::Type *> indices;
-                            indices.push_back(llvm::Type::getFloatTy(*C));
-                            llvm::ArrayRef<llvm::Type *>IndexArgs= llvm::ArrayRef<llvm::Type*>(indices);
-                            llvm::FunctionType *placeHolder = llvm::FunctionType::get(llvm::Type::getFloatTy(*C), IndexArgs, false);
+                            llvm::FunctionType *placeHolder = llvm::FunctionType::get(llvm::Type::getFloatTy(*C), llvm::Type::getFloatTy(*C), false);
                             llvm::StringRef Constraints = llvm::StringRef("=f,f");
                             llvm::InlineAsm * base2 = llvm::InlineAsm::get(placeHolder, "ex2.approx.f32 $0, $1;", Constraints, false, false);
                             
@@ -717,10 +714,7 @@ struct TraceLLVMCompiler {
                             llvm::Value * x = B->CreateFPTrunc(values[n.unary.a], llvm::Type::getFloatTy(*C));
                             x->setName("x");
                             
-                            std::vector<llvm::Type *> indices;
-                            indices.push_back(llvm::Type::getFloatTy(*C));
-                            llvm::ArrayRef<llvm::Type *>IndexArgs= llvm::ArrayRef<llvm::Type*>(indices);
-                            llvm::FunctionType *placeHolder = llvm::FunctionType::get(llvm::Type::getFloatTy(*C), IndexArgs, false);
+                            llvm::FunctionType *placeHolder = llvm::FunctionType::get(llvm::Type::getFloatTy(*C), llvm::Type::getFloatTy(*C), false);
                             llvm::StringRef Constraints = llvm::StringRef("=f,f");
                             llvm::InlineAsm * base2 = llvm::InlineAsm::get(placeHolder, "lg2.approx.f32 $0, $1;", Constraints, false, false);
                             
@@ -751,10 +745,7 @@ struct TraceLLVMCompiler {
                             llvm::Value * x = values[n.unary.a];
                             x->setName("x");
                             
-                            std::vector<llvm::Type *> indices;
-                            indices.push_back(llvm::Type::getDoubleTy(*C));
-                            llvm::ArrayRef<llvm::Type *>IndexArgs= llvm::ArrayRef<llvm::Type*>(indices);
-                            llvm::FunctionType *placeHolder = llvm::FunctionType::get(llvm::Type::getDoubleTy(*C), IndexArgs, false);
+                            llvm::FunctionType *placeHolder = llvm::FunctionType::get(llvm::Type::getDoubleTy(*C), llvm::Type::getDoubleTy(*C), false);
                             llvm::StringRef Constraints = llvm::StringRef("=d,d");
                             llvm::InlineAsm * sqrt = llvm::InlineAsm::get(placeHolder, "sqrt.f64 $0, $1;", Constraints, false, false);
                             
@@ -784,10 +775,7 @@ struct TraceLLVMCompiler {
                             break;
                         }
                         case Type::Integer: {
-                            std::vector<llvm::Type *> indices;
-                            indices.push_back(llvm::Type::getInt64Ty(*C));
-                            llvm::ArrayRef<llvm::Type *>IndexArgs= llvm::ArrayRef<llvm::Type*>(indices);
-                            llvm::FunctionType *placeHolder = llvm::FunctionType::get(llvm::Type::getInt64Ty(*C), IndexArgs, false);
+                            llvm::FunctionType *placeHolder = llvm::FunctionType::get(llvm::Type::getInt64Ty(*C), llvm::Type::getInt64Ty(*C), false);
                             llvm::StringRef Constraints = llvm::StringRef("=l,l");
                             llvm::InlineAsm * absInt = llvm::InlineAsm::get(placeHolder, "abs.s64 $0, $1;", Constraints, false, false);
 
