@@ -159,7 +159,8 @@ Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code) 
 	}
 	else {
 	#endif
-		return Operand(MEMORY, s);
+		//return Operand(MEMORY, s);
+        return forceInRegister(Operand(MEMORY,s));
 	#ifdef TRACE_DEVELOPMENT
 	}
 	#endif

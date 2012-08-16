@@ -10,67 +10,98 @@
 #include "call.h"
 
 extern "C"
-bool Guard_Type(Thread& thread, int64_t i, Type::Enum t) {
-    OPERAND(a, i);
-    return a.type == t;
+double const* SLOAD_double(Thread& thread, int64_t i) {
+    Value const& a = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
+    return a.isDouble() ? ((Double const&)a).v() : 0;
 }
 
 extern "C"
-bool Guard_TypeWidth(Thread& thread, int64_t i, Type::Enum t, size_t width) {
-    OPERAND(a, i);
-    return a.type == t && a.length == width;
+int64_t const* SLOAD_integer(Thread& thread, int64_t i) {
+    Value const& a = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
+    return a.isInteger() ? ((Integer const&)a).v() : 0;
 }
 
 extern "C"
-double const* Load_double(Thread& thread, int64_t i) {
-    OPERAND(a, i);
-    return ((Double const&)a).v();
+char const* SLOAD_logical(Thread& thread, int64_t i) {
+    Value const& a = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
+    return a.isLogical() ? ((Logical const&)a).v() : 0;
 }
 
 extern "C"
-int64_t const* Load_integer(Thread& thread, int64_t i) {
-    OPERAND(a, i);
-    return ((Integer const&)a).v();
+Prototype* SLOAD_function(Thread& thread, int64_t i) {
+    Value const& a = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
+    return a.isFunction() ? ((Function const&)a).prototype() : 0;
 }
 
 extern "C"
-char const* Load_logical(Thread& thread, int64_t i) {
-    OPERAND(a, i);
-    return ((Logical const&)a).v();
+double const* ELOAD_double(Thread& thread, Environment* env, int64_t i) {
+    Value const& a = env->getRecursive((String)i);
+    return a.isDouble() ? ((Double const&)a).v() : 0;
 }
 
 extern "C"
-Prototype* Load_function(Thread& thread, int64_t i) {
-    OPERAND(a, i);
-    return ((Function const&)a).prototype();
+int64_t const* ELOAD_integer(Thread& thread, Environment* env, int64_t i) {
+    Value const& a = env->getRecursive((String)i);
+    return a.isInteger() ? ((Integer const&)a).v() : 0;
 }
 
 extern "C"
-void Store_double(Thread& thread, int64_t i, size_t len, double* d) {
+char const* ELOAD_logical(Thread& thread, Environment* env, int64_t i) {
+    Value const& a = env->getRecursive((String)i);
+    return a.isLogical() ? ((Logical const&)a).v() : 0;
+}
+
+extern "C"
+Prototype* ELOAD_function(Thread& thread, Environment* env, int64_t i) {
+    Value const& a = env->getRecursive((String)i);
+    return a.isFunction() ? ((Function const&)a).prototype() : 0;
+}
+
+extern "C"
+Environment* LOAD_environment(Thread& thread, int64_t i) {
+    return (Environment*)i;
+}
+
+extern "C"
+void SSTORE_double(Thread& thread, int64_t i, size_t len, double* d) {
 	Double a(len);
 	memcpy(a.v(), d, len*sizeof(double));
-    if(i <= 0) thread.base[i] = a;
-    else thread.frame.environment->insertRecursive((String)(i)) = a;
+    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = a;
 }
 
 extern "C"
-void Store_integer(Thread& thread, int64_t i, size_t len, int64_t* d) {
-	Integer a(len);
+void SSTORE_integer(Thread& thread, int64_t i, size_t len, int64_t* d) {
+    Integer a(len);
 	memcpy(a.v(), d, len*sizeof(int64_t));
-    if(i <= 0) thread.base[i] = a;
-    else thread.frame.environment->insertRecursive((String)(i)) = a;
+    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = a;
 }
 
 extern "C"
-void Store_logical(Thread& thread, int64_t i, size_t len, int8_t* l) {
+void SSTORE_logical(Thread& thread, int64_t i, size_t len, int8_t* d) {
 	Logical a(len);
-	memcpy(a.v(), l, len*sizeof(int8_t));
-    if(i <= 0) thread.base[i] = a;
-    else thread.frame.environment->insertRecursive((String)(i)) = a;
+	memcpy(a.v(), d, len*sizeof(int8_t));
+    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = a;
 }
 
 extern "C"
-void Store_function(Thread& thread, int64_t i, size_t len, Prototype* p) {
-    printf("Store_function NYI\n");
+void ESTORE_double(Thread& thread, Environment* env, int64_t i, size_t len, double* d) {
+	Double a(len);
+	memcpy(a.v(), d, len*sizeof(double));
+    env->insertRecursive((String)i) = a;
 }
+
+extern "C"
+void ESTORE_integer(Thread& thread, Environment* env, int64_t i, size_t len, int64_t* d) {
+    Integer a(len);
+	memcpy(a.v(), d, len*sizeof(int64_t));
+    env->insertRecursive((String)i) = a;
+}
+
+extern "C"
+void ESTORE_logical(Thread& thread, Environment* env, int64_t i, size_t len, int8_t* d) {
+	Logical a(len);
+	memcpy(a.v(), d, len*sizeof(int8_t));
+    env->insertRecursive((String)i) = a;
+}
+
 

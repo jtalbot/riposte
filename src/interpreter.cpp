@@ -96,8 +96,10 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
 	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
 
-    if(thread.jit.state == JIT::RECORDING)
-        thread.jit.emitCall(func, fenv, &inst);
+    if(thread.jit.state == JIT::RECORDING) {
+        JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
+        thread.jit.emitCall(a, func, fenv, &inst);
+    }
 	
 	MatchArgs(thread, thread.frame.environment, fenv, func, call);
 	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
@@ -987,7 +989,6 @@ void interpret(Thread& thread, Instruction const* pc) {
     }
 	call_record: 	{ 
         Instruction const* old_pc = pc;
-        thread.jit.load(thread, pc->a, old_pc);
         pc = call_op(thread, *pc);
         thread.jit.record(thread, old_pc);
         goto *(const void*)labels[pc->bc]; 

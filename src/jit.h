@@ -94,12 +94,12 @@ public:
     State state;
 	Instruction const* startPC;
 
-    std::map<int64_t, IRRef> loads;
 	std::map<int64_t, IRRef> map;
     std::map<int64_t, IRRef> envs;
 
     std::vector<Variable> variables;
 
+    std::vector<IR> trace;
     std::vector<IR> code;
 
     struct Register {
@@ -132,7 +132,7 @@ public:
 		this->startPC = startPC;
         code.clear();
         map.clear();
-        loads.clear();
+        envs.clear();
 	}
 
     void record(Thread& thread, Instruction const* pc) {
@@ -141,8 +141,8 @@ public:
 
 	bool loop(Thread& thread, Instruction const* pc, bool branch=false) {
 		if(pc == startPC) {
-            insert(TraceOpCode::loop, 0, 0, 0, 0, Type::Promise, 1);
             EmitIR(thread, *pc, branch);
+            insert(TraceOpCode::loop, 0, 0, 0, 0, Type::Promise, 1);
             return true;
         }
         else {
@@ -176,9 +176,7 @@ public:
 	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty);
 	IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty);
 
-    void emitCall(Function const& func, Environment* env, Instruction const* inst) {
-        IRRef a = code.size()-1;
-
+    void emitCall(IRRef a, Function const& func, Environment* env, Instruction const* inst) {
         Exit e = { map, inst };
         exits[code.size()] = e;
         insert(TraceOpCode::GEQ, a, 0, 0, (int64_t)func.prototype(), Type::Function, 1);
@@ -214,10 +212,10 @@ public:
         // look for a variable that matches already 
         for(int j = 0 ; j < variables.size(); j++) {
             if(variables[j].env == v.env && variables[j].name == v.name)
-                return j+1;
+                return j;
         }
         variables.push_back(v);
-        return variables.size();
+        return variables.size()-1;
     }
 
     void estore(IRRef a, Environment* env, String name) {
