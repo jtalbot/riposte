@@ -387,6 +387,15 @@ struct TraceLLVMCompiler {
         }
     }
       
+    llvm::Value * GEPGetter(llvm::GlobalVariable * mem, llvm::Value *index) {
+        std::vector<llvm::Value *> indices;
+        indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*C), 0));
+        indices.push_back(index);
+        
+        llvm::ArrayRef<llvm::Value *> gepIndices = llvm::ArrayRef<llvm::Value*>(indices);
+        return B->CreateGEP(mem, gepIndices, "T");
+    }
+    
     void GenerateKernelFunction() {
         ///IMPORTANT: TEST RUN AT MOVING KERNEL FUNCTION INTO COMPILE PART OF PROGRAM
         //WE have a function and we want a new function
@@ -940,12 +949,9 @@ struct TraceLLVMCompiler {
                             
                            
                             B->SetInsertPoint(origEnd);
-                            std::vector<llvm::Value *> indices;
-                            indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*C), 0));
-                            indices.push_back(tid);
                             
-                            llvm::ArrayRef<llvm::Value *> gepIndices = llvm::ArrayRef<llvm::Value*>(indices);
-                            llvm::Value *sharedMemIndex = B->CreateGEP(shared, gepIndices, "index");
+                            
+                            llvm::Value *sharedMemIndex = GEPGetter(shared, tid);
                             B->CreateStore(B->CreateLoad(Alloca), sharedMemIndex);
                             
                             
@@ -958,11 +964,7 @@ struct TraceLLVMCompiler {
                                 if(numThreads >= current) {
                                     B->SetInsertPoint(bodyBlocks[ind]);
                                 
-                                    std::vector<llvm::Value *> indices;
-                                    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*C), 0));
-                                    indices.push_back(B->CreateAdd(tid, ConstantInt(current/2)));
-                                
-                                    llvm::Value *sharedMemIndexT = B->CreateGEP(shared, indices, "T");
+                                    llvm::Value *sharedMemIndexT = GEPGetter(shared, B->CreateAdd(tid, ConstantInt(current/2)));
 
                                     B->CreateStore(B->CreateFAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndexT)), sharedMemIndex);
                                 
@@ -978,11 +980,8 @@ struct TraceLLVMCompiler {
                             //declare something volatile
                             for (current = 64; current > 1; current/=2) {
                                 if (numThreads >= current) {
-                                    std::vector<llvm::Value *> indices;
-                                    indices.push_back(ConstantInt(0));
-                                    indices.push_back(B->CreateAdd(tid, ConstantInt(current/2)));
                                     
-                                    llvm::Value *sharedMemIndexT = B->CreateGEP(shared, indices, "");
+                                    llvm::Value *sharedMemIndexT = GEPGetter(shared, B->CreateAdd(tid, ConstantInt(current/2)));
                                     
                                     
                                     B->CreateStore(B->CreateFAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndexT)), sharedMemIndex, true);
@@ -999,13 +998,7 @@ struct TraceLLVMCompiler {
                             
                             B->SetInsertPoint(bodyFinal);
                             
-                            
-                            std::vector<llvm::Value *> outputIndices;
-                            outputIndices.push_back(ConstantInt(0));
-                            outputIndices.push_back(ConstantInt(0)); //should be 0
-                            
-                            llvm::ArrayRef<llvm::Value *> outputIndixes = llvm::ArrayRef<llvm::Value*>(outputIndices);
-                            llvm::Value *output = B->CreateGEP(shared, outputIndixes, "finalOutput");
+                            llvm::Value *output = GEPGetter(shared, ConstantInt(0));
                             
                             values[i] = B->CreateLoad(output); 
                             
@@ -1036,12 +1029,8 @@ struct TraceLLVMCompiler {
                             
                             
                             B->SetInsertPoint(origEnd);
-                            std::vector<llvm::Value *> indices;
-                            indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*C), 0));
-                            indices.push_back(tid);
-                            
-                            llvm::ArrayRef<llvm::Value *> gepIndices = llvm::ArrayRef<llvm::Value*>(indices);
-                            llvm::Value *sharedMemIndex = B->CreateGEP(shared, gepIndices, "index");
+
+                            llvm::Value *sharedMemIndex = GEPGetter(shared, tid);
                             B->CreateStore(B->CreateLoad(Alloca), sharedMemIndex);
                             
                             
@@ -1051,12 +1040,8 @@ struct TraceLLVMCompiler {
                             for(int ind = 0 ; ind < 3; ind++) {
                                 if(numThreads >= current) {
                                     B->SetInsertPoint(bodyBlocks[ind]);
-                                    
-                                    std::vector<llvm::Value *> indices;
-                                    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*C), 0));
-                                    indices.push_back(B->CreateAdd(tid, ConstantInt(current/2)));
-                                    
-                                    llvm::Value *sharedMemIndexT = B->CreateGEP(shared, indices, "T");
+
+                                    llvm::Value *sharedMemIndexT = GEPGetter(shared, B->CreateAdd(tid, ConstantInt(current/2)));
                                     
                                     B->CreateStore(B->CreateAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndexT)), sharedMemIndex);
                                     
@@ -1072,11 +1057,8 @@ struct TraceLLVMCompiler {
                             //declare something volatile
                             for (current = 64; current > 1; current/=2) {
                                 if (numThreads >= current) {
-                                    std::vector<llvm::Value *> indices;
-                                    indices.push_back(ConstantInt(0));
-                                    indices.push_back(B->CreateAdd(tid, ConstantInt(current/2)));
                                     
-                                    llvm::Value *sharedMemIndexT = B->CreateGEP(shared, indices, "");
+                                    llvm::Value *sharedMemIndexT = GEPGetter(shared,B->CreateAdd(tid, ConstantInt(current/2)));
                                     
                                     
                                     B->CreateStore(B->CreateAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndexT)), sharedMemIndex, true);
@@ -1095,12 +1077,7 @@ struct TraceLLVMCompiler {
                             B->SetInsertPoint(bodyFinal);
                             
                             
-                            std::vector<llvm::Value *> outputIndices;
-                            outputIndices.push_back(ConstantInt(0));
-                            outputIndices.push_back(ConstantInt(0)); //should be 0
-                            
-                            llvm::ArrayRef<llvm::Value *> outputIndixes = llvm::ArrayRef<llvm::Value*>(outputIndices);
-                            llvm::Value *output = B->CreateGEP(shared, outputIndixes, "finalOutput");
+                            llvm::Value *output = GEPGetter(shared, ConstantInt(0));
                             
                             values[i] = B->CreateLoad(output); 
                             
