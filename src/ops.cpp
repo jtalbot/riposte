@@ -84,6 +84,13 @@ void SSTORE_logical(Thread& thread, int64_t i, size_t len, int8_t* d) {
 }
 
 extern "C"
+void SSTORE_function(Thread& thread, int64_t i, size_t len, Prototype* p) {
+    Function a;
+    Function::Init(a, p, 0);
+    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = a;
+}
+
+extern "C"
 void ESTORE_double(Thread& thread, Environment* env, int64_t i, size_t len, double* d) {
 	Double a(len);
 	memcpy(a.v(), d, len*sizeof(double));

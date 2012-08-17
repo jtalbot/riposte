@@ -67,24 +67,27 @@ public:
 
 	typedef Instruction const* (*Ptr)(Thread& thread);
 
-	typedef size_t IRRef;
+	typedef uint64_t IRRef;
 
     struct Variable {
         IRRef env;
-        int64_t name;
+        int64_t i;
+
+        bool operator<(Variable const& o) const {
+            return env < o.env || (env == o.env && i < o.i);
+        }
     };
 
 	struct IR {
 		TraceOpCode::Enum op;
 		IRRef a, b, c;
-        int64_t target;
-        Value in;
 
         Type::Enum type;
         size_t width;
 
 		size_t group;
-        void dump(std::vector<Variable> const&);
+        Instruction const* reenter;
+        void dump() const;
 	};
 
 	unsigned short counters[1024];
@@ -94,10 +97,9 @@ public:
     State state;
 	Instruction const* startPC;
 
-	std::map<int64_t, IRRef> map;
-    std::map<int64_t, IRRef> envs;
-
-    std::vector<Variable> variables;
+    std::map<Environment*, IRRef> envs;
+    std::vector<Value> constants;
+    std::map<Value, IRRef> constantsMap;
 
     std::vector<IR> trace;
     std::vector<IR> code;
@@ -111,12 +113,13 @@ public:
                    (type == o.type && length < o.length); 
         }
     };
+
     std::vector<Register> registers;
     std::multimap<Register, size_t> freeRegisters;
     std::vector<int64_t> assignment;
 
 	struct Exit {
-		std::map<int64_t, IRRef> o;
+		std::map<Variable, IRRef> o;
 		Instruction const* reenter;
 	};
 	std::map<size_t, Exit > exits;
@@ -130,9 +133,11 @@ public:
 		assert(state == OFF);
 		state = RECORDING;
 		this->startPC = startPC;
-        code.clear();
-        map.clear();
+        trace.clear();
         envs.clear();
+        exits.clear();
+        constants.clear();
+        constantsMap.clear();
 	}
 
     void record(Thread& thread, Instruction const* pc) {
@@ -142,7 +147,6 @@ public:
 	bool loop(Thread& thread, Instruction const* pc, bool branch=false) {
 		if(pc == startPC) {
             EmitIR(thread, *pc, branch);
-            insert(TraceOpCode::loop, 0, 0, 0, 0, Type::Promise, 1);
             return true;
         }
         else {
@@ -159,16 +163,18 @@ public:
 	}
 
 	IRRef insert(
+        std::vector<IR>& t,
         TraceOpCode::Enum op, 
         IRRef a, 
         IRRef b, 
         IRRef c,
-        int64_t target, 
         Type::Enum type, 
         size_t width);
-
+    
+    IRRef duplicate(IR const& ir, std::vector<IRRef> const& forward);
 	IRRef load(Thread& thread, int64_t a, Instruction const* reenter);
-	int64_t intern(Thread& thread, int64_t a);
+    IRRef constant(Value const& v);
+	Variable intern(Thread& thread, int64_t a);
 	IRRef rep(IRRef a, size_t width);
 	IRRef cast(IRRef a, Type::Enum type);
     IRRef store(Thread& thread, IRRef a, int64_t c);
@@ -177,57 +183,47 @@ public:
 	IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty);
 
     void emitCall(IRRef a, Function const& func, Environment* env, Instruction const* inst) {
-        Exit e = { map, inst };
-        exits[code.size()] = e;
-        insert(TraceOpCode::GEQ, a, 0, 0, (int64_t)func.prototype(), Type::Function, 1);
-
-        IRRef ne = insert(TraceOpCode::NEWENV, 0, 0, 0, 0, Type::Environment, 1);
-        envs[(int64_t)env] = ne;
+        IRRef guard = insert(trace, TraceOpCode::GEQ, a, (IRRef)func.prototype(), 0, Type::Function, 1);
+        trace[guard].reenter = inst;
+        IRRef ne = insert(trace, TraceOpCode::NEWENV, 0, 0, 0, Type::Environment, 1);
+        envs[env] = ne;
     }
 
     void emitPush(Environment* env) {
-        insert(TraceOpCode::PUSH, envs[(int64_t)env], 0, 0, 0, Type::Promise, 1);
+        insert(trace, TraceOpCode::PUSH, envs[env], 0, 0, Type::Promise, 1);
     }
 
     void storeArg(Environment* env, String name, Value const& v) {
-        IRRef c = insert(TraceOpCode::constant, 0, 0, 0, 0, v.type, v.isVector() ? v.length : 1);
+        IRRef c = insert(trace, TraceOpCode::constant, 0, 0, 0, v.type, v.isVector() ? v.length : 1);
         estore(c, env, name);
     }
 
     IRRef getEnv(Environment* env) {
-        std::map<int64_t, IRRef>::const_iterator i;
-        i = envs.find((int64_t)env);
+        std::map<Environment*, IRRef>::const_iterator i;
+        i = envs.find(env);
         if(i != envs.end())
             return i->second;
         else {
-            IRRef e = insert(TraceOpCode::LOADENV, 0, 0, 0, (int64_t)env, Type::Environment, 1);
-            envs[(int64_t)env] = e;
+            IRRef e = insert(trace, TraceOpCode::LOADENV, (IRRef)env, 0, 0, Type::Environment, 1);
+            envs[env] = e;
             return e;
         }
     }
 
-    int64_t getVar(IRRef env, String name) {
+    Variable getVar(IRRef env, String name) {
         Variable v = {env, (int64_t)name};
-
-        // look for a variable that matches already 
-        for(int j = 0 ; j < variables.size(); j++) {
-            if(variables[j].env == v.env && variables[j].name == v.name)
-                return j;
-        }
-        variables.push_back(v);
-        return variables.size()-1;
+        return v;
     }
-
+    
     void estore(IRRef a, Environment* env, String name) {
         IRRef e = getEnv(env);
-        int64_t v = getVar(e, name);
-        insert(TraceOpCode::estore, a, e, 0, v, code[a].type, code[a].width);
-        map[v] = a;
+        Variable v = getVar(e, name);
+        insert(trace, TraceOpCode::estore, a, v.env, v.i, trace[a].type, trace[a].width);
     }
 
     void markLiveOut(Exit const& exit);
 
-	void dump();
+	void dump(Thread& thread, std::vector<IR> const&);
 
 	Ptr compile(Thread& thread);
 
@@ -235,6 +231,7 @@ public:
 	void schedule();
 
     void EmitIR(Thread& thread, Instruction const& inst, bool branch);
+    void EmitOptIR(IRRef i, std::vector<IRRef>& forward, std::map<Variable, IRRef>& map, std::map<Variable, IRRef>& stores, bool LICM);
     void Replay(Thread& thread);
 
     void AssignRegister(size_t index);
@@ -249,7 +246,7 @@ public:
 
 	template< template<class X> class Group >
 	IRRef EmitUnary(TraceOpCode::Enum op, IRRef a) {
-		Type::Enum aty = code[a].type;
+		Type::Enum aty = trace[a].type;
 
         #define EMIT_UNARY(TA)                  \
         if(aty == Type::TA)                     \
@@ -275,8 +272,8 @@ public:
 
 	template< template<class X, class Y> class Group >
 	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b) {
-		Type::Enum aty = code[a].type;
-		Type::Enum bty = code[b].type;
+		Type::Enum aty = trace[a].type;
+		Type::Enum bty = trace[b].type;
 
         #define EMIT_BINARY(TA, TB)                 \
         if(aty == Type::TA && bty == Type::TB)      \

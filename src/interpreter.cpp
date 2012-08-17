@@ -135,7 +135,7 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
     if(thread.jit.state == JIT::RECORDING) {
         JIT::IRRef ira = thread.jit.load(thread, inst.a, &inst);
         thread.jit.store(thread, ira, 0);
-        thread.jit.insert(TraceOpCode::POP, 0, 0, 0, 0, Type::Promise, 1);
+        thread.jit.insert(thread.jit.trace, TraceOpCode::POP, 0, 0, 0, Type::Promise, 1);
     }
 	
 	REGISTER(0) = result;
@@ -179,7 +179,7 @@ Instruction const* retp_op(Thread& thread, Instruction const& inst) {
         if(thread.jit.state == JIT::RECORDING) {
             ira = thread.jit.load(thread, inst.a, &inst);
             thread.jit.estore(ira, thread.frame.env, (String)thread.frame.dest);
-            thread.jit.insert(TraceOpCode::POP, 0, 0, 0, 0, Type::Promise, 1);
+            thread.jit.insert(thread.jit.trace, TraceOpCode::POP, 0, 0, 0, Type::Promise, 1);
         }
 	} else {
 		thread.frame.env->dots[-thread.frame.dest].v = result;
@@ -959,9 +959,8 @@ void interpret(Thread& thread, Instruction const* pc) {
     #define RECORD_OP(name,...) \
 		name##_record: { \
             Instruction const* old_pc = pc; \
+            thread.jit.record(thread, old_pc); \
             pc = name##_op(thread, *pc); \
-            if(pc == old_pc+1) \
-                thread.jit.record(thread, old_pc); \
             goto *(const void*)labels[pc->bc]; \
     } 
 	STANDARD_BYTECODES(RECORD_OP)
