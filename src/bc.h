@@ -13,6 +13,7 @@
 	_(call, "call") \
 	_(ret, "ret") /* return from function */ \
 	_(retp, "retp") /* return from a promise or default */ \
+    _(loop, "loop")
 
 #ifdef TRACE_DEVELOPMENT
 	_(ncall, "ncall") \

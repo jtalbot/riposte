@@ -34,6 +34,18 @@ Prototype* SLOAD_function(Thread& thread, int64_t i) {
 }
 
 extern "C"
+Prototype* SLOAD_promise(Thread& thread, int64_t i) {
+    Value const& a = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
+    return a.isFunction() ? ((Function const&)a).prototype() : 0;
+}
+
+extern "C"
+Prototype* SLOAD_default(Thread& thread, int64_t i) {
+    Value const& a = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
+    return a.isFunction() ? ((Function const&)a).prototype() : 0;
+}
+
+extern "C"
 double const* ELOAD_double(Thread& thread, Environment* env, int64_t i) {
     Value const& a = env->getRecursive((String)i);
     return a.isDouble() ? ((Double const&)a).v() : 0;
@@ -53,6 +65,18 @@ char const* ELOAD_logical(Thread& thread, Environment* env, int64_t i) {
 
 extern "C"
 Prototype* ELOAD_function(Thread& thread, Environment* env, int64_t i) {
+    Value const& a = env->getRecursive((String)i);
+    return a.isFunction() ? ((Function const&)a).prototype() : 0;
+}
+
+extern "C"
+Prototype* ELOAD_promise(Thread& thread, Environment* env, int64_t i) {
+    Value const& a = env->getRecursive((String)i);
+    return a.isFunction() ? ((Function const&)a).prototype() : 0;
+}
+
+extern "C"
+Prototype* ELOAD_default(Thread& thread, Environment* env, int64_t i) {
     Value const& a = env->getRecursive((String)i);
     return a.isFunction() ? ((Function const&)a).prototype() : 0;
 }
@@ -91,6 +115,25 @@ void SSTORE_function(Thread& thread, int64_t i, size_t len, Prototype* p) {
 }
 
 extern "C"
+void SSTORE_promise(Thread& thread, int64_t i, size_t len, Prototype* p) {
+    Promise a;
+    Promise::Init(a, p, 0);
+    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = a;
+}
+
+extern "C"
+void SSTORE_default(Thread& thread, int64_t i, size_t len, Prototype* p) {
+    Default a;
+    Default::Init(a, p, 0);
+    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = a;
+}
+
+extern "C"
+void SSTORE_NULL(Thread& thread, int64_t i, size_t len, void* p) {
+    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = Null::Singleton();
+}
+
+extern "C"
 void ESTORE_double(Thread& thread, Environment* env, int64_t i, size_t len, double* d) {
 	Double a(len);
 	memcpy(a.v(), d, len*sizeof(double));
@@ -111,4 +154,29 @@ void ESTORE_logical(Thread& thread, Environment* env, int64_t i, size_t len, int
     env->insertRecursive((String)i) = a;
 }
 
+extern "C"
+void ESTORE_function(Thread& thread, Environment* env, int64_t i, size_t len, Prototype* p) {
+    Function a;
+    Function::Init(a, p, 0);
+    env->insertRecursive((String)i) = a;
+}
+
+extern "C"
+void ESTORE_promise(Thread& thread, Environment* env, int64_t i, size_t len, Prototype* p) {
+    Promise a;
+    Promise::Init(a, p, 0);
+    env->insertRecursive((String)i) = a;
+}
+
+extern "C"
+void ESTORE_default(Thread& thread, Environment* env, int64_t i, size_t len, Prototype* p) {
+    Default a;
+    Default::Init(a, p, 0);
+    env->insertRecursive((String)i) = a;
+}
+
+extern "C"
+void ESTORE_NULL(Thread& thread, Environment* env, int64_t i, size_t len, void* p) {
+    env->insertRecursive((String)i) = Null::Singleton();
+}
 

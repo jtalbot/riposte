@@ -35,6 +35,7 @@ Thread::Thread(State& state, uint64_t index) : state(state), index(index), steal
 	}
 }
 
+extern Instruction const* loop_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* fastmov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -201,6 +202,10 @@ Instruction const* constant_op(Thread& thread, Instruction const& inst) {
 
 Instruction const* jmp_op(Thread& thread, Instruction const& inst) {
 	return &inst+inst.a;
+}
+
+Instruction const* loop_op(Thread& thread, Instruction const& inst) {
+    return &inst+1;
 }
 
 Instruction const* jc_op(Thread& thread, Instruction const& inst) {
@@ -918,21 +923,30 @@ void interpret(Thread& thread, Instruction const* pc) {
 	STANDARD_BYTECODES(LABELED_OP)
 	#undef LABELED_OP
 
-	jc_label: 	{ 
-		Instruction const* old_pc = pc;
-		pc = jc_op(thread, *pc); 
-		if(pc < old_pc) {
-			unsigned short& counter = 
-				thread.jit.counters[(((uintptr_t)old_pc)>>5) & (1024-1)];
-			counter++;
-			if(counter > JIT::RECORD_TRIGGER) {
-				counter = 0;
-				thread.jit.start_recording(old_pc);
-				labels = record;
-			}
-		}
+	loop_label: 	{
+        if(pc->a != 0) {
+	        timespec a = get_time();
+            pc = ((JIT::Ptr)pc->a)(thread);
+	        printf("Execution time: %f\n", time_elapsed(a));
+        }
+        else { 
+    	    unsigned short& counter = 
+	    		thread.jit.counters[(((uintptr_t)pc)>>5) & (1024-1)];
+    		counter++;
+	    	if(counter > JIT::RECORD_TRIGGER) {
+                printf("Starting to record at %li (counter: %li is %d)\n", pc, &counter, counter);
+    			counter = 0;
+	    		thread.jit.start_recording(pc);
+		    	labels = record;
+    		}
+            pc++;
+        }
 		goto *(const void*)labels[pc->bc]; 
 	}
+    jc_label: {
+        pc = jc_op(thread, *pc);
+        goto *(const void*)labels[pc->bc]; 
+    }
 	jmp_label: 	{ 
         pc = jmp_op(thread, *pc); 
         goto *(const void*)labels[pc->bc]; 
@@ -966,22 +980,28 @@ void interpret(Thread& thread, Instruction const* pc) {
 	STANDARD_BYTECODES(RECORD_OP)
 	#undef RECORD_OP
 	
-	jc_record: 	{ 
-		Instruction const* old_pc = pc;
-		pc = jc_op(thread, *pc);
- 
+	loop_record: 	{ 
         // did we make a loop yet??
-        if(thread.jit.loop(thread, old_pc, pc==old_pc+old_pc->a)) {
-			JIT::Ptr fn = thread.jit.end_recording(thread);
-	        timespec a = get_time();
-            assert(fn != 0);
-		    pc = fn(thread);
-	        printf("Execution time: %f\n", time_elapsed(a));
+        if(pc->a != 0) {
+            thread.jit.fail_recording();
 		    labels = ops;
         }
-
+        else if(thread.jit.loop(thread, pc)) {
+            printf("Made loop at %li\n", pc);
+		    ((Instruction*)pc)->a = (int64_t)thread.jit.end_recording(thread);
+		    labels = ops;
+        }
+        else {
+            pc++;
+        }
 		goto *(const void*)labels[pc->bc]; 
 	}
+    jc_record:  {
+        Instruction const* old_pc = pc;
+        pc = jc_op(thread, *pc); 
+        thread.jit.record(thread, old_pc, pc==(old_pc+old_pc->a));
+        goto *(const void*)labels[pc->bc]; 
+    }
 	jmp_record: 	{ 
         pc = jmp_op(thread, *pc); 
         goto *(const void*)labels[pc->bc]; 

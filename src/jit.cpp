@@ -15,7 +15,7 @@ JIT::IRRef JIT::insert(
         IRRef c,
         Type::Enum type, 
         size_t width) {
-    IR ir = (IR) { op, a, b, c, type, width, 0 , 0};
+    IR ir = (IR) { op, a, b, c, type, width, 0 };
     t.push_back(ir);
     return (IRRef) { t.size()-1 };
 }
@@ -107,7 +107,7 @@ JIT::IRRef JIT::constant(Value const& value) {
     else {
         size_t ci = constants.size();
         constants.push_back(value);
-        a = insert(trace, TraceOpCode::constant, ci, 0, 0, value.type, value.length);
+        a = insert(trace, TraceOpCode::constant, ci, 0, 0, value.type, value.isVector() ? value.length : 1);
         constantsMap[value] = a;
     }
     return a;
@@ -117,6 +117,8 @@ JIT::IRRef JIT::constant(Value const& value) {
 void JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
     switch(inst.bc) {
 
+        case ByteCode::loop: {
+        } break;
         case ByteCode::jc: {
             IRRef p = load(thread, inst.c, &inst);
             
@@ -440,24 +442,25 @@ void JIT::specialize() {
 
 */
 
-
 void JIT::schedule() {
     // do a backwards pass, assigning instructions to a fusion group.
     // this happens after all optimization and specialization decisions
     //  have been made.
-    size_t group = 1;
+    size_t g = 1;
+    group = std::vector<size_t>(code.size(), 0);
+
     for(size_t i = code.size()-1; i < code.size(); --i) {
         IR& ir = code[i];
         switch(ir.op) {
             #define CASE(Name, ...) case TraceOpCode::Name:
             
             case TraceOpCode::loop: {
-                ir.group = ++group;
+                group[i] = ++g;
             } break;
             case TraceOpCode::phi: {
-                ir.group = group;
-                code[ir.a].group = std::max(code[ir.a].group, group+1);
-                code[ir.b].group = std::max(code[ir.b].group, group);
+                group[i] = g;
+                group[ir.a] = std::max(group[ir.a], g+1);
+                group[ir.b] = std::max(group[ir.b], g);
             } break;
             case TraceOpCode::GEQ: 
             //case TraceOpCode::GTYPE: 
@@ -465,57 +468,59 @@ void JIT::schedule() {
             case TraceOpCode::guardT: {
                 // Do I also need to update any values that
                 // are live out at this exit? Yes.
-                ir.group = ++group;
-                code[ir.a].group = group+1;
+                group[i] = ++g;
+                group[ir.a] = g+1;
                 std::map<Variable, IRRef>::const_iterator j;
                 for(j = exits[i].o.begin(); j != exits[i].o.end(); ++j) {
-                    code[j->second].group = group+1;
+                    group[j->second] = g+1;
                 }
             } break;
             case TraceOpCode::scatter: {
-                code[ir.a].group = 
-                    std::max(code[ir.a].group,
-                        ir.group);
-                code[ir.b].group = 
-                    std::max(code[ir.b].group,
-                        ir.group);
-                code[ir.c].group = 
-                    std::max(code[ir.c].group,
-                        ir.group+1);
+                group[ir.a] = 
+                    std::max(group[ir.a],
+                        group[i]);
+                group[ir.b] = 
+                    std::max(group[ir.b],
+                        group[i]);
+                group[ir.c] = 
+                    std::max(group[ir.c],
+                        group[i]+1);
             } break;
             case TraceOpCode::gather: {
-                code[ir.a].group = 
-                    std::max(code[ir.a].group,
-                        ir.group+1);
-                code[ir.b].group = 
-                    std::max(code[ir.b].group,
-                        ir.group);
+                group[ir.a] = 
+                    std::max(group[ir.a],
+                        group[i]+1);
+                group[ir.b] = 
+                    std::max(group[ir.b],
+                        group[i]);
             } break;
             BINARY_BYTECODES(CASE)
             {
-                code[ir.a].group = 
-                    std::max(code[ir.a].group,
-                        ir.group);
-                code[ir.b].group = 
-                    std::max(code[ir.b].group,
-                        ir.group);
+                group[ir.a] = 
+                    std::max(group[ir.a],
+                        group[i]);
+                group[ir.b] = 
+                    std::max(group[ir.b],
+                        group[i]);
             } break;
             case TraceOpCode::cast: 
             UNARY_BYTECODES(CASE) 
             {
-                code[ir.a].group = 
-                    std::max(code[ir.a].group,
-                        ir.group);
+                group[ir.a] = 
+                    std::max(group[ir.a],
+                        group[i]);
             } break;
             case TraceOpCode::rep: {
-                code[ir.a].group =
-                    std::max(code[ir.a].group, ir.group+1); 
-                code[ir.b].group =
-                    std::max(code[ir.b].group, ir.group+1); 
+                group[ir.a] = 
+                    std::max(group[ir.a],
+                        group[i]+1);
+                group[ir.b] = 
+                    std::max(group[ir.b],
+                        group[i]+1);
             } break;
             case TraceOpCode::length: {
-                code[ir.a].group =
-                    std::max(code[ir.a].group, ir.group+1); 
+                group[i] =
+                    std::max(group[ir.a], group[i]+1); 
             } break;
             default: {
             } break;
@@ -600,7 +605,6 @@ void JIT::RegisterAssignment() {
     
     freeRegisters.clear();
 
-    size_t group = 1;
     for(size_t i = code.size()-1; i < code.size(); --i) {
         IR& ir = code[i];
 
@@ -651,7 +655,6 @@ void JIT::RegisterAssignment() {
 }
 
 void JIT::IR::dump() const {
-    printf("%2d ", group);
     if(type == Type::Double)
         std::cout << "num" << width << "\t";
     else if(type == Type::Integer)
@@ -730,12 +733,15 @@ void JIT::dump(Thread& thread, std::vector<IR> const& t) {
         if(ir.op != TraceOpCode::nop) {
             printf("%4d: ", i);
             if(assignment.size() == t.size()) printf(" (%2d) ", assignment[i]);
+            if(group.size() == t.size()) printf("%2d ", group[i]);
             ir.dump();
     
             if( exits.size() > 0 && (
                     ir.op == TraceOpCode::GEQ
                 ||  ir.op == TraceOpCode::guardF
-                ||  ir.op == TraceOpCode::guardT ) ) {
+                ||  ir.op == TraceOpCode::guardT
+                ||  ir.op == TraceOpCode::sload
+                ||  ir.op == TraceOpCode::eload ) ) {
     
                 std::cout << "\t\t=> ";
                 Exit const& e = exits[i];
@@ -1092,6 +1098,7 @@ struct LLVMCompiler {
 
     llvm::Type* thread_type;
     llvm::Type* instruction_type;
+    llvm::Type* function_type;
 
     llvm::Value* thread_var;
     llvm::Value* result_var;
@@ -1130,6 +1137,7 @@ struct LLVMCompiler {
     void* Compile() {
         thread_type = S->M->getTypeByName("class.Thread")->getPointerTo();
         instruction_type = S->M->getTypeByName("struct.Instruction")->getPointerTo();
+        function_type = S->M->getTypeByName("struct.Prototype")->getPointerTo();
 
         std::vector<llvm::Type*> argTys;
         argTys.push_back(thread_type);
@@ -1205,6 +1213,8 @@ struct LLVMCompiler {
             case Type::Double: t = builder.getDoubleTy(); break;
             case Type::Integer: t = builder.getInt64Ty(); break;
             case Type::Logical: t = builder.getInt8Ty(); break;
+            case Type::Function: t = function_type; break;
+            case Type::Promise: t = function_type; break;
             default: _error("Bad type in trace");
         }
         return t;
@@ -1220,6 +1230,8 @@ struct LLVMCompiler {
             case Type::Double: t = builder.getDoubleTy(); break;
             case Type::Integer: t = builder.getInt64Ty(); break;
             case Type::Logical: t = builder.getInt1Ty(); break;
+            case Type::Function: t = function_type; break;
+            case Type::Promise: t = function_type; break;
             default: _error("Bad type in trace");
         }
         return t;
@@ -1246,7 +1258,7 @@ struct LLVMCompiler {
             ||  ir.op == TraceOpCode::guardF
             ||  ir.op == TraceOpCode::jmp
             ||  ir.op == TraceOpCode::loop) {
-            for(int i = 99; i > ir.group; i--) {
+            for(int i = 99; i > jit.group[index]; i--) {
                 std::map<size_t, Fusion*>::iterator j;
                 for(j = fusions[i].begin(); j != fusions[i].end(); ++j) {
                     Fusion* f = j->second;
@@ -1274,24 +1286,31 @@ struct LLVMCompiler {
             case TraceOpCode::constant:
             {
                 std::vector<llvm::Constant*> c;
-                if(ir.type == Type::Double) {
-                    Double const& v = (Double const&)jit.constants[ir.a];
-                    for(size_t i = 0; i < width; i++)
-                        c.push_back(llvm::ConstantFP::get(builder.getDoubleTy(), v[i]));
-                } else if(ir.type == Type::Integer) {
-                    Integer const& v = (Integer const&)jit.constants[ir.a];
-                    for(size_t i = 0; i < width; i++)
-                        c.push_back(builder.getInt64(v[i]));
-                } else if(ir.type == Type::Logical) {
-                    Logical const& v = (Logical const&)jit.constants[ir.a];
-                    for(size_t i = 0; i < width; i++)
-                        c.push_back(builder.getInt1(v[i] != 0));
-                } else {
-                    _error("Unexpected constant type");
+                if(ir.type == Type::Double || ir.type == Type::Integer || ir.type == Type::Logical) {
+                    if(ir.type == Type::Double) {
+                        Double const& v = (Double const&)jit.constants[ir.a];
+                        for(size_t i = 0; i < width; i++)
+                            c.push_back(llvm::ConstantFP::get(builder.getDoubleTy(), v[i]));
+                    } else if(ir.type == Type::Integer) {
+                        Integer const& v = (Integer const&)jit.constants[ir.a];
+                        for(size_t i = 0; i < width; i++)
+                            c.push_back(builder.getInt64(v[i]));
+                    } else if(ir.type == Type::Logical) {
+                        Logical const& v = (Logical const&)jit.constants[ir.a];
+                        for(size_t i = 0; i < width; i++)
+                            c.push_back(builder.getInt1(v[i] != 0));
+                    }
+                    values[index] = CreateEntryBlockAlloca(llvmMemoryType(ir.type), builder.getInt64(ir.width));
+                    for(size_t i = 0; i < width; i++) {
+                        builder.CreateStore(c[i], builder.CreateConstGEP1_64(values[index], i));
+                    }
                 }
-                values[index] = CreateEntryBlockAlloca(llvmMemoryType(ir.type), builder.getInt64(ir.width));
-                for(size_t i = 0; i < width; i++) {
-                    builder.CreateStore(c[i], builder.CreateConstGEP1_64(values[index], i));
+                else if(ir.type == Type::Function || ir.type == Type::Promise || ir.type == Type::Default) {
+                        Function const& v = (Function const&)jit.constants[ir.a];
+                        values[index] = builder.CreateIntToPtr(builder.getInt64((int64_t)v.prototype()), function_type);
+                }
+                else if(ir.type == Type::Null) {
+                    values[index] = builder.CreateIntToPtr(builder.getInt64(0), builder.getInt8Ty()->getPointerTo());
                 }
             } break;
 
@@ -1338,12 +1357,12 @@ struct LLVMCompiler {
             BINARY_BYTECODES(CASE)
             UNARY_BYTECODES(CASE)
             {
-                if(fusions[ir.group].find(width) == fusions[ir.group].end()) {
+                if(fusions[jit.group[index]].find(width) == fusions[jit.group[index]].end()) {
                     Fusion* f = new Fusion(jit, S, function, values, builder.getInt64(width), 4);
                     f->Open(InnerBlock);
-                    fusions[ir.group][width] = f;
+                    fusions[jit.group[index]][width] = f;
                 }
-                Fusion* f = fusions[ir.group][width];
+                Fusion* f = fusions[jit.group[index]][width];
 
                 f->Emit(index);
             } break;
@@ -1441,13 +1460,14 @@ struct LLVMCompiler {
             
             JIT::Variable v = i->first;
             JIT::IR const& ir = jit.code[i->second];
+            llvm::Value* r = values[i->second];
             if(v.i >= 0) {
                 if(jit.code[v.env].op == TraceOpCode::LOADENV) {
                     CALL4(std::string("ESTORE_")+Type::toString(ir.type),
                         values[v.env], 
                         builder.getInt64(v.i), 
                         builder.getInt64(ir.width), 
-                        values[i->second]);
+                        r);
                 }
                 else {
                     // TODO: allocate escaping environment and assign to that.
@@ -1457,7 +1477,7 @@ struct LLVMCompiler {
                 CALL3(std::string("SSTORE_")+Type::toString(ir.type),
                         builder.getInt64(v.i), 
                         builder.getInt64(ir.width), 
-                        values[i->second]);
+                        r);
             }
         }
 

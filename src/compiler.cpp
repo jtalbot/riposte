@@ -500,6 +500,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		loopDepth++;
 		
 		int64_t beginbody = ir.size();
+        emit(ByteCode::loop, 0, 0, 0);
 		Operand body = compile(call[2], code);
 		kill(body);
 		int64_t tail = ir.size();

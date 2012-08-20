@@ -85,7 +85,6 @@ public:
         Type::Enum type;
         size_t width;
 
-		size_t group;
         Instruction const* reenter;
         void dump() const;
 	};
@@ -117,6 +116,7 @@ public:
     std::vector<Register> registers;
     std::multimap<Register, size_t> freeRegisters;
     std::vector<int64_t> assignment;
+    std::vector<size_t> group;
 
 	struct Exit {
 		std::map<Variable, IRRef> o;
@@ -140,17 +140,17 @@ public:
         constantsMap.clear();
 	}
 
-    void record(Thread& thread, Instruction const* pc) {
-        EmitIR(thread, *pc, false);
+    void record(Thread& thread, Instruction const* pc, bool branch=false) {
+        EmitIR(thread, *pc, branch);
     }
 
-	bool loop(Thread& thread, Instruction const* pc, bool branch=false) {
+	bool loop(Thread& thread, Instruction const* pc) {
 		if(pc == startPC) {
-            EmitIR(thread, *pc, branch);
+            EmitIR(thread, *pc, false);
             return true;
         }
         else {
-            EmitIR(thread, *pc, branch);
+            EmitIR(thread, *pc, false);
             return false;
         }
 	}
@@ -182,6 +182,7 @@ public:
 	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty);
 	IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty);
 
+
     void emitCall(IRRef a, Function const& func, Environment* env, Instruction const* inst) {
         IRRef guard = insert(trace, TraceOpCode::GEQ, a, (IRRef)func.prototype(), 0, Type::Function, 1);
         trace[guard].reenter = inst;
@@ -194,8 +195,7 @@ public:
     }
 
     void storeArg(Environment* env, String name, Value const& v) {
-        IRRef c = insert(trace, TraceOpCode::constant, 0, 0, 0, v.type, v.isVector() ? v.length : 1);
-        estore(c, env, name);
+        estore(constant(v), env, name);
     }
 
     IRRef getEnv(Environment* env) {
