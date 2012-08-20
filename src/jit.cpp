@@ -15,7 +15,7 @@ JIT::IRRef JIT::insert(
         IRRef c,
         Type::Enum type, 
         size_t width) {
-    IR ir = (IR) { op, a, b, c, type, width, 0 };
+    IR ir = (IR) { op, a, b, c, type, width };
     t.push_back(ir);
     return (IRRef) { t.size()-1 };
 }
@@ -43,7 +43,7 @@ JIT::IRRef JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
     else {
         r = insert(trace, TraceOpCode::eload, v.env, v.i, 0, operand.type, operand.isVector() ? operand.length : 1);
     }
-    trace[r].reenter = reenter;
+    reenters[r] = reenter;
     return r;
 }
 
@@ -124,7 +124,7 @@ void JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             
             IRRef r = insert(trace, branch ? TraceOpCode::guardT : TraceOpCode::guardF, 
                 p, 0, 0, Type::Promise, trace[p].width );
-            trace[r].reenter = &inst;
+            reenters[r] = &inst;
         }   break;
     
         case ByteCode::call:
@@ -187,53 +187,133 @@ JIT::IRRef JIT::duplicate(IR const& ir, std::vector<IRRef> const& forward) {
     return insert(code, ir.op, forward[ir.a], forward[ir.b], forward[ir.c], ir.type, ir.width);
 }
 
+template<class T>
+void Swap(T& a, T& b) {
+    T t = a;
+    a = b;
+    b = t;
+}
+
+JIT::IR JIT::Normalize(IR ir) {
+    switch(ir.op) {
+        case TraceOpCode::add:
+        case TraceOpCode::mul:
+        case TraceOpCode::eq:
+        case TraceOpCode::neq:
+            if(ir.a > ir.b)
+                Swap(ir.a, ir.b);
+            break;
+        case TraceOpCode::lt:
+            if(ir.a > ir.b) {
+                Swap(ir.a, ir.b);
+                ir.op = TraceOpCode::gt;
+            }
+            break;
+        case TraceOpCode::le:
+            if(ir.a > ir.b) {
+                Swap(ir.a, ir.b);
+                ir.op = TraceOpCode::ge;
+            }
+            break;
+        case TraceOpCode::gt:
+            if(ir.a > ir.b) {
+                Swap(ir.a, ir.b);
+                ir.op = TraceOpCode::lt;
+            }
+            break;
+        case TraceOpCode::ge:
+            if(ir.a > ir.b) {
+                Swap(ir.a, ir.b);
+                ir.op = TraceOpCode::le;
+            }
+            break;
+        default:
+            // nothing
+            break;
+    }
+    return ir;
+}
+
+JIT::IRRef JIT::Insert(std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, IR ir) {
+    ir = Normalize(ir);
+    if(cse.find(ir) != cse.end()) {
+        return cse.find(ir)->second;
+    }
+    else {
+
+        // (1) some type of guard strengthening and guard lifting to permit fusion
+        // (2) determine fuseable sequences and uses between sequences.
+        // (3) from the back to the front, replace uses in the loop with uses outside of the loop,
+        //          IF PROFITABLE
+        // (4) DCE
+
+        // Do LICM as DCE rather than CSE.
+
+        // want to do selective, cost driven cse...
+        // replacing instruction with instruction outside the loop results in potentially high cost.
+        // at each point I can choose to use CSE or recompute the instruction we are on.
+        
+        // But if the entire thing can be CSE'd that's great e.g. seq of maps followed by sum.
+        // So want to do a backwards pass?
+        // For a given instruction we know all uses. If dead, no need to compute.
+        // If we're going to materialize it in the loop anyway, we should lift it out.
+        // If we're not going to materialize it in the loop, we should selectively lift it out.
+
+        // Decision has to be made while/after fusion decisions.
+        // What would make us materialize in the loop?
+        //      Gather from the vector
+        //      
+        code.push_back(ir);
+        cse[ir] = code.size()-1;
+        return code.size()-1;
+    }
+}
+
 void JIT::EmitOptIR(
             IRRef i, 
             std::vector<IRRef>& forward, 
             std::map<Variable, IRRef>& map,
             std::map<Variable, IRRef>& stores,
-            bool LICM) {
+            std::tr1::unordered_map<IR, IRRef>& cse) {
         IR ir = trace[i];
         switch(ir.op) {
             #define CASE(Name, ...) case TraceOpCode::Name:
             
             case TraceOpCode::LOADENV: 
             {
-                if(!LICM) {
-                    forward[i] = insert(code, ir.op, ir.a, 0, 0, ir.type, ir.width);
-                }
+                forward[i] = Insert(code, cse, IR(ir.op, ir.a, ir.type, ir.width));
             } break;
 
             case TraceOpCode::NEWENV: {
-                forward[i] = duplicate(ir, forward);
+                forward[i] = Insert(code, cse, IR(ir.op, ir.type, ir.width));
             } break;
 
             case TraceOpCode::eload: {
-                Variable v = { forward[ir.a], ir.b }; 
+                Variable v = { forward[ir.a], (int64_t)ir.b }; 
                 if(map.find(v) == map.end()) {
-                    Exit e = { stores, ir.reenter };
+                    Exit e = { stores, reenters[i] };
                     exits[code.size()] = e;
-                    map[v] = insert(code, ir.op, v.env, v.i, 0, ir.type, ir.width);
+                    map[v] = Insert(code, cse, IR(ir.op, v.env, v.i, ir.type, ir.width));
                 }
                 // does load-load and load-store forwarding
                 forward[i] = map[v];
             } break; 
             case TraceOpCode::sload: {
-                Variable v = { 0, ir.b }; 
+                Variable v = { 0, (int64_t)ir.b }; 
                 if(map.find(v) == map.end()) {
-                    Exit e = { stores, ir.reenter };
+                    Exit e = { stores, reenters[i] };
                     exits[code.size()] = e;
-                    map[v] = insert(code, ir.op, 0, v.i, 0, ir.type, ir.width);
+                    map[v] = Insert(code, cse, IR(ir.op, 0, v.i, ir.type, ir.width));
                 }
                 forward[i] = map[v];
             } break;
 
             case TraceOpCode::estore: {
-                Variable v = { forward[ir.b], ir.c };
+                Variable v = { forward[ir.b], (int64_t)ir.c };
                 stores[v] = map[v] = forward[i] = forward[ir.a];
             } break;
             case TraceOpCode::sstore: {
-                Variable v = { 0, ir.c };
+                Variable v = { 0, (int64_t)ir.c };
                 stores[v] = map[v] = forward[i] = forward[ir.a];
 
                 // compiler approach guarantees that an sstore kills all higher indexed registers.
@@ -258,43 +338,29 @@ void JIT::EmitOptIR(
             case TraceOpCode::GEQ:
             case TraceOpCode::guardF: 
             case TraceOpCode::guardT: {
-                if(forward[ir.a] != ir.a) {
-                    Exit e = { stores, ir.reenter };
-                    exits[code.size()] = e;
-                    forward[i] = insert(code, ir.op, forward[ir.a], ir.b, ir.c, ir.type, ir.width);
-                }
+                Exit e = { stores, reenters[i] };
+                exits[code.size()] = e;
+                forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], ir.b, ir.c, ir.type, ir.width));
             } break;
             case TraceOpCode::scatter: {
-                if(forward[ir.a] == ir.a &&
-                    forward[ir.b] == ir.b &&
-                    forward[ir.c] == ir.c) {
-                } else {
-                    forward[i] = insert(code, ir.op, forward[ir.a], forward[ir.b], forward[ir.c], ir.type, ir.width);
-                }
+                forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], forward[ir.b], forward[ir.c], ir.type, ir.width));
             } break;
 
             case TraceOpCode::length:
             case TraceOpCode::cast: 
             UNARY_BYTECODES(CASE) {
-                if(forward[ir.a] != ir.a) {
-                    forward[i] = insert(code, ir.op, forward[ir.a], 0, 0, ir.type, ir.width);
-                }
+                forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], ir.type, ir.width));
             } break;
 
             case TraceOpCode::rep:
             BINARY_BYTECODES(CASE)
             {
-                if(forward[ir.a] != ir.a || forward[ir.b] != ir.b) {
-                    forward[i] = insert(code, ir.op, forward[ir.a], forward[ir.b], 0, ir.type, ir.width);
-                }
+                forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], forward[ir.b], ir.type, ir.width));
             } break;
 
             CASE(constant)
             {
-                if(!LICM) {
-                    forward[i] = insert(code, ir.op, ir.a, 0, 0, ir.type, ir.width);
-                }
-                // Do nothing
+                forward[i] = Insert(code, cse, IR(ir.op, ir.a, ir.type, ir.width));
             } break;
 
             default:
@@ -309,36 +375,38 @@ void JIT::EmitOptIR(
 void JIT::Replay(Thread& thread) {
    
     code.clear();
+    exits.clear();
  
     size_t n = trace.size();
     
     std::vector<IRRef> forward(n, 0);
     std::map<Variable, IRRef> map;
     std::map<Variable, IRRef> stores;
+    std::tr1::unordered_map<IR, IRRef> cse;
 
     // Emit loop header...
     for(size_t i = 0; i < n; i++) {
-        EmitOptIR(i, forward, map, stores, false);
+        EmitOptIR(i, forward, map, stores, cse);
     }
 
     std::vector<IRRef> old_forward = forward;
 
-    insert(code, TraceOpCode::loop, 0, 0, 0, Type::Promise, 1);
+    Insert(code, cse, IR(TraceOpCode::loop, Type::Promise, 1));
     
     // Emit loop
     for(size_t i = 0; i < n; i++) {
-        EmitOptIR(i, forward, map, stores, true);
+        EmitOptIR(i, forward, map, stores, cse);
     }
    
     // Emit PHIs 
     for(size_t i = 0; i < n; i++) {
         if(trace[i].op == TraceOpCode::estore && forward[i] != old_forward[i]) {
-            insert(code, TraceOpCode::phi, old_forward[i], forward[i], 0, trace[i].type, trace[i].width);
+            Insert(code, cse, IR(TraceOpCode::phi, old_forward[i], forward[i], trace[i].type, trace[i].width));
         } 
     } 
 
     // Emit the JMP
-    insert(code, TraceOpCode::jmp, 0, 0, 0, Type::Promise, 1);
+    Insert(code, cse, IR(TraceOpCode::jmp, Type::Promise, 1));
 }
 
 void JIT::markLiveOut(Exit const& exit) {
@@ -638,8 +706,8 @@ void JIT::RegisterAssignment() {
             case TraceOpCode::gather:
             BINARY_BYTECODES(CASE)
             {
-                AssignRegister(ir.a);
-                AssignRegister(ir.b);
+                AssignRegister(std::max(ir.a, ir.b));
+                AssignRegister(std::min(ir.a, ir.b));
             } break;
             case TraceOpCode::length:
             case TraceOpCode::cast: 
@@ -849,6 +917,7 @@ struct Fusion {
     LLVMState* S;
     llvm::Function* function;
     std::vector<llvm::Value*> const& values;
+    std::vector<llvm::Value*> const& registers;
     
     llvm::BasicBlock* header;
     llvm::BasicBlock* condition;
@@ -860,16 +929,15 @@ struct Fusion {
     size_t width;
     llvm::IRBuilder<> builder;
 
-    std::map<llvm::Value*, llvm::Value*> outs;
-    std::map<llvm::Value*, size_t> outs_ir;
+    std::map<size_t, llvm::Value*> outs;
 
-
-    Fusion(JIT& jit, LLVMState* S, llvm::Function* function, std::vector<llvm::Value*> const& values, llvm::Value* length, size_t width)
+    Fusion(JIT& jit, LLVMState* S, llvm::Function* function, std::vector<llvm::Value*> const& values, std::vector<llvm::Value*> const& registers, llvm::Value* length, size_t width)
         : jit(jit)
           , S(S)
           , length(length)
           , function(function)
           , values(values)
+          , registers(registers)
           , width(width)
           , builder(*S->C) {
         
@@ -921,30 +989,30 @@ struct Fusion {
     }
 
     llvm::Value* Load(size_t ir) {
-        llvm::Value* a = RawLoad(ir);
 
-        if(outs.find(a) != outs.end())
-            return outs[a];
+        if(outs.find(jit.assignment[ir]) != outs.end())
+            return outs[jit.assignment[ir]];
 
+        llvm::Value* a = (jit.assignment[ir] == 0) ? values[ir] : registers[jit.assignment[ir]];
         llvm::Type* t = llvm::VectorType::get(
-            ((llvm::SequentialType*)a->getType())->getElementType(),
-            width)->getPointerTo();
+                ((llvm::SequentialType*)a->getType())->getElementType(),
+                width)->getPointerTo();
         a = builder.CreateInBoundsGEP(a, iterator);
         a = builder.CreatePointerCast(a, t);
         a = builder.CreateLoad(a);
 
         if(jit.code[ir].type == Type::Logical)
             a = builder.CreateTrunc(a, llvm::VectorType::get(builder.getInt1Ty(), width));
-    
+
         return a;
     }
 
-    void Store(llvm::Value* a, size_t ir, llvm::Value* out) {
+    void Store(llvm::Value* a, size_t reg) {
 
-        if(jit.code[ir].type == Type::Logical)
+        if(jit.registers[reg].type == Type::Logical)
             a = builder.CreateSExt(a, llvm::VectorType::get(builder.getInt8Ty(), width));
 
-        out = builder.CreateInBoundsGEP(out, iterator);
+        llvm::Value* out = builder.CreateInBoundsGEP(registers[reg], iterator);
         
         llvm::Type* t = llvm::VectorType::get(
             ((llvm::SequentialType*)a->getType())->getElementType(),
@@ -957,69 +1025,60 @@ struct Fusion {
 
     void Emit(size_t index) {
         JIT::IR ir = jit.code[index];
+        size_t reg = jit.assignment[index];
         llvm::Type* t = llvmType(ir.type, width);
 
-        llvm::Value* out = RawLoad(index);
-        // Create an output vector...
-        // 
+#define CASE_UNARY(Op, FName, IName) \
+    case TraceOpCode::Op: { \
+        outs[reg] = (ir.type == Type::Double)   \
+        ? builder.Create##FName(Load(ir.a)) \
+        : builder.Create##IName(Load(ir.a));\
+    } break
+
+#define CASE_BINARY(Op, FName, IName) \
+    case TraceOpCode::Op: { \
+        outs[reg] = (ir.type == Type::Double)   \
+        ? builder.Create##FName(Load(ir.a), Load(ir.b)) \
+        : builder.Create##IName(Load(ir.a), Load(ir.b));\
+    } break
+
+#define CASE_UNARY_LOGICAL(Op, Name) \
+    case TraceOpCode::Op: { \
+        outs[reg] = builder.Create##Name(Load(ir.a)); \
+    } break
+
+#define CASE_BINARY_LOGICAL(Op, Name) \
+    case TraceOpCode::Op: { \
+        outs[reg] = builder.Create##Name(Load(ir.a), Load(ir.b)); \
+    } break
+
         switch(ir.op) {
             case TraceOpCode::pos: 
-                {
-                    outs[out] = Load(ir.a);
-                    outs_ir[out] = index;
-                }   break;
-            case TraceOpCode::neg: 
-                {
-                    outs[out] = builder.CreateFNeg(Load(ir.a));
-                    outs_ir[out] = index;
-                }   break;
-            case TraceOpCode::add: 
-                {
-                    outs[out] = builder.CreateFAdd(Load(ir.a), Load(ir.b));
-                    outs_ir[out] = index;
-                }   break;
-            case TraceOpCode::sub: 
-                {
-                    outs[out] = builder.CreateFSub(Load(ir.a), Load(ir.b));
-                    outs_ir[out] = index;
-                }   break;
-            case TraceOpCode::mul: 
-                {
-                    outs[out] = builder.CreateFMul(Load(ir.a), Load(ir.b));
-                    outs_ir[out] = index;
-                }   break;
-            case TraceOpCode::div: 
-                {
-                    outs[out] = builder.CreateFDiv(Load(ir.a), Load(ir.b));
-                    outs_ir[out] = index;
-                }   break;
-            case TraceOpCode::lt: 
-                {
-                    outs[out] = builder.CreateFCmpOLT(Load(ir.a), Load(ir.b));
-                    outs_ir[out] = index;
-                } break;
-            case TraceOpCode::lor: 
-                {
-                    outs[out] = builder.CreateOr(Load(ir.a), Load(ir.b));
-                    outs_ir[out] = index;
-                } break;
-            case TraceOpCode::land: 
-                {
-                    outs[out] = builder.CreateAnd(Load(ir.a), Load(ir.b));
-                    outs_ir[out] = index;
-                } break;
-            case TraceOpCode::lnot: 
-                {
-                    outs[out] = builder.CreateNot(Load(ir.a));
-                    outs_ir[out] = index;
-                } break;
+                outs[reg] = Load(ir.a);
+                break;
+
+            CASE_UNARY(neg, FNeg, Neg);
+            
+            CASE_BINARY(add, FAdd, Add);
+            CASE_BINARY(sub, FSub, Sub);
+            CASE_BINARY(mul, FMul, Mul);
+            CASE_BINARY(div, FDiv, SDiv);
+          
+            CASE_BINARY(eq, FCmpOEQ, ICmpEQ);  
+            CASE_BINARY(neq, FCmpONE, ICmpNE);  
+            CASE_BINARY(lt, FCmpOLT, ICmpSLT);  
+            CASE_BINARY(le, FCmpOLE, ICmpSLE);  
+            CASE_BINARY(gt, FCmpOGT, ICmpSGT);  
+            CASE_BINARY(ge, FCmpOGE, ICmpSGE);  
+           
+            CASE_UNARY_LOGICAL(lnot, Not); 
+            CASE_BINARY_LOGICAL(lor, Or); 
+            CASE_BINARY_LOGICAL(land, And); 
+            
             case TraceOpCode::phi: 
-                {
-                    if(jit.assignment[ir.a] != jit.assignment[ir.b]) {
-                        outs[RawLoad(ir.a)] = Load(ir.b);
-                        outs_ir[out] = index;
-                    }
-                } break;
+                outs[jit.assignment[ir.a]] = Load(ir.b);
+                break;
+            
             case TraceOpCode::rep: 
             {
                 // there's all sorts of fast variants if lengths are known.
@@ -1027,7 +1086,7 @@ struct Fusion {
                 std::vector<llvm::Constant*> c;
                 for(size_t i = 0; i < width; i++)
                     c.push_back(builder.getInt64(0));
-                outs[RawLoad(ir.a)] = llvm::ConstantVector::get(c);
+                outs[jit.assignment[ir.a]] = llvm::ConstantVector::get(c);
                 //}
                 //else {
                 //    _error("Unsupported rep");
@@ -1048,15 +1107,23 @@ struct Fusion {
                     j = builder.CreateGEP(v, j);
                     r = builder.CreateInsertElement(r, j, ii);
                 }
-                outs[RawLoad(ir.a)] = r;
+                outs[jit.assignment[ir.a]] = r;
             };
+            default:
+                _error("Unsupported op");
+                break;
         }
+
+#undef CASE_UNARY
+#undef CASE_BINARY
+#undef CASE_UNARY_LOGICAL
+#undef CASE_BINARY_LOGICAL
     }
 
     llvm::BasicBlock* Close() {
-        std::map<llvm::Value*, llvm::Value*>::const_iterator i;
+        std::map<size_t, llvm::Value*>::const_iterator i;
         for(i = outs.begin(); i != outs.end(); i++) {
-            Store(i->second, outs_ir[i->first], i->first);
+            Store(i->second, i->first);
         }
         llvm::BasicBlock* after = llvm::BasicBlock::Create(*S->C, "fusedAfter", function, 0);
 
@@ -1104,6 +1171,7 @@ struct LLVMCompiler {
     llvm::Value* result_var;
 
     std::vector<llvm::Value*> values;
+    std::vector<llvm::Value*> registers;
     std::vector<llvm::CallInst*> calls;
     std::map<size_t, Fusion*> fusions[100];
     
@@ -1166,7 +1234,7 @@ struct LLVMCompiler {
         builder.SetInsertPoint(EntryBlock);
 
         // create registers...
-        std::vector<llvm::Value*> registers;
+        registers.clear();
         registers.push_back(0);
         for(size_t i = 1; i < jit.registers.size(); i++) {
             registers.push_back(
@@ -1195,8 +1263,8 @@ struct LLVMCompiler {
         builder.SetInsertPoint(EndBlock);
         builder.CreateRet(builder.CreateLoad(result_var));
 
-        S->FPM->run(*function);
         function->dump();
+        S->FPM->run(*function);
 
         return S->EE->getPointerToFunction(function);   
     }
@@ -1358,7 +1426,7 @@ struct LLVMCompiler {
             UNARY_BYTECODES(CASE)
             {
                 if(fusions[jit.group[index]].find(width) == fusions[jit.group[index]].end()) {
-                    Fusion* f = new Fusion(jit, S, function, values, builder.getInt64(width), 4);
+                    Fusion* f = new Fusion(jit, S, function, values, registers, builder.getInt64(width), 4);
                     f->Open(InnerBlock);
                     fusions[jit.group[index]][width] = f;
                 }

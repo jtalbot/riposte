@@ -4,6 +4,7 @@
 
 #include <map>
 #include <vector>
+#include <tr1/unordered_map>
 #include <assert.h>
 
 #include "enum.h"
@@ -85,8 +86,28 @@ public:
         Type::Enum type;
         size_t width;
 
-        Instruction const* reenter;
         void dump() const;
+
+        bool operator==(IR const& o) const {
+            return  op == o.op &&
+                    a == o.a &&
+                    b == o.b &&
+                    c == o.c &&
+                    type == o.type &&
+                    width == o.width;
+        }
+
+        IR(TraceOpCode::Enum op, Type::Enum type, size_t width)
+            : op(op), a(0), b(0), c(0), type(type), width(width) {}
+        
+        IR(TraceOpCode::Enum op, IRRef a, Type::Enum type, size_t width)
+            : op(op), a(a), b(0), c(0), type(type), width(width) {}
+        
+        IR(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum type, size_t width)
+            : op(op), a(a), b(b), c(0), type(type), width(width) {}
+        
+        IR(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum type, size_t width)
+            : op(op), a(a), b(b), c(c), type(type), width(width) {}
 	};
 
 	unsigned short counters[1024];
@@ -101,6 +122,7 @@ public:
     std::map<Value, IRRef> constantsMap;
 
     std::vector<IR> trace;
+    std::map<IRRef, Instruction const*> reenters;
     std::vector<IR> code;
 
     struct Register {
@@ -135,9 +157,9 @@ public:
 		this->startPC = startPC;
         trace.clear();
         envs.clear();
-        exits.clear();
         constants.clear();
         constantsMap.clear();
+        reenters.clear();
 	}
 
     void record(Thread& thread, Instruction const* pc, bool branch=false) {
@@ -185,7 +207,7 @@ public:
 
     void emitCall(IRRef a, Function const& func, Environment* env, Instruction const* inst) {
         IRRef guard = insert(trace, TraceOpCode::GEQ, a, (IRRef)func.prototype(), 0, Type::Function, 1);
-        trace[guard].reenter = inst;
+        reenters[guard] = inst;
         IRRef ne = insert(trace, TraceOpCode::NEWENV, 0, 0, 0, Type::Environment, 1);
         envs[env] = ne;
     }
@@ -231,13 +253,16 @@ public:
 	void schedule();
 
     void EmitIR(Thread& thread, Instruction const& inst, bool branch);
-    void EmitOptIR(IRRef i, std::vector<IRRef>& forward, std::map<Variable, IRRef>& map, std::map<Variable, IRRef>& stores, bool LICM);
+    void EmitOptIR(IRRef i, std::vector<IRRef>& forward, std::map<Variable, IRRef>& map, std::map<Variable, IRRef>& stores, std::tr1::unordered_map<IR, IRRef>& cse);
     void Replay(Thread& thread);
 
     void AssignRegister(size_t index);
     void PreferRegister(size_t index, size_t share);
     void ReleaseRegister(size_t index);
     void RegisterAssignment();
+
+    IRRef Insert(std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, IR ir);
+    IR Normalize(IR ir);
 
 #define TYPES_TMP(_) \
     _(Double) \
@@ -287,5 +312,16 @@ public:
     }
 #undef TYPES_TMP
 };
+
+namespace std {
+    namespace tr1 {
+    template<>
+        struct hash<JIT::IR> {
+            size_t operator()(JIT::IR const& key) const {
+                return key.op ^ key.a ^ key.b ^ key.c ^ key.width ^ key.type;
+            }
+        };
+    }
+}
 
 #endif

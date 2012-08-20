@@ -2,7 +2,7 @@
 UNAME := $(shell uname -s)
  
 CXX := clang++ 
-CXXFLAGS := -Wall -msse4.1 `llvm-config --cxxflags` -fexceptions
+CXXFLAGS := -Wall -msse4.1 `llvm-config --cxxflags` -fexceptions -std=c++11
 LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g `llvm-config --ldflags --libs engine bitreader scalaropts`
 
 ifeq ($(UNAME),Linux)
