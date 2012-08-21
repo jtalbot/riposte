@@ -62,11 +62,11 @@
 #define ARITH_UNARY_BYTECODES(_) \
 	_(pos, "pos", 	ArithUnary1, 	PassNA(a, a)) \
 	_(neg, "neg", 	ArithUnary1, 	PassNA(a, -a)) \
+	_(sqrt, "sqrt",	ArithUnary2,	sqrt(a)) \
 
 #ifdef TRACE_DEVELOPMENT
 	_(abs, "abs", 	ArithUnary1, 	PassNA(a, Abs(a))) \
 	_(sign, "sign",	ArithUnary2, 	((a>0)-(a<0))) \
-	_(sqrt, "sqrt",	ArithUnary2,	sqrt(a)) \
 	_(floor, "floor",	ArithUnary2,	floor(a)) \
 	_(ceiling, "ceiling",	ArithUnary2,	ceil(a)) \
 	_(trunc, "trunc",	ArithUnary2,	trunc(a)) \

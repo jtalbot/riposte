@@ -7,11 +7,12 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::add) return ByteCode::pos; 
 	if(func == Strings::sub) return ByteCode::neg; 
 	
+	if(func == Strings::sqrt) return ByteCode::sqrt; 
+    
     if(func == Strings::lnot) return ByteCode::lnot; 
 #ifdef TRACE_DEVELOPMENT
 	if(func == Strings::abs) return ByteCode::abs; 
 	if(func == Strings::sign) return ByteCode::sign; 
-	if(func == Strings::sqrt) return ByteCode::sqrt; 
 	if(func == Strings::floor) return ByteCode::floor; 
 	if(func == Strings::ceiling) return ByteCode::ceiling; 
 	if(func == Strings::trunc) return ByteCode::trunc; 

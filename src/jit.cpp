@@ -49,7 +49,12 @@ JIT::IRRef JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
 
 JIT::IRRef JIT::cast(IRRef a, Type::Enum type) {
     if(trace[a].type != type) {
-        return insert(trace, TraceOpCode::cast, a, 0, 0, type, trace[a].width);
+        if(trace[a].type == Type::Double)
+            return insert(trace, TraceOpCode::castd, a, 0, 0, type, trace[a].width);
+        else if(trace[a].type == Type::Integer)
+            return insert(trace, TraceOpCode::casti, a, 0, 0, type, trace[a].width);
+        else
+            return insert(trace, TraceOpCode::castl, a, 0, 0, type, trace[a].width);
     }
     else {
         return a;
@@ -156,6 +161,7 @@ void JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             IRRef a = load(thread, inst.a, &inst);
             IRRef b = load(thread, inst.b, &inst);
             IRRef c = load(thread, inst.c, &inst);
+            c = insert(trace, TraceOpCode::dup, c, 0, 0, trace[c].type, trace[c].width);
             store(thread, insert(trace, TraceOpCode::scatter, a, cast(b, Type::Integer), c, trace[c].type, trace[c].width), inst.c);
         }   break;
 
@@ -347,7 +353,9 @@ void JIT::EmitOptIR(
             } break;
 
             case TraceOpCode::length:
-            case TraceOpCode::cast: 
+            case TraceOpCode::castd: 
+            case TraceOpCode::casti: 
+            case TraceOpCode::castl: 
             UNARY_BYTECODES(CASE) {
                 forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], ir.type, ir.width));
             } break;
@@ -361,6 +369,11 @@ void JIT::EmitOptIR(
             CASE(constant)
             {
                 forward[i] = Insert(code, cse, IR(ir.op, ir.a, ir.type, ir.width));
+            } break;
+
+            case TraceOpCode::gather:
+            {
+                forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], forward[ir.b], ir.type, ir.width));
             } break;
 
             default:
@@ -571,7 +584,10 @@ void JIT::schedule() {
                     std::max(group[ir.b],
                         group[i]);
             } break;
-            case TraceOpCode::cast: 
+            case TraceOpCode::castd: 
+            case TraceOpCode::casti: 
+            case TraceOpCode::castl: 
+            case TraceOpCode::dup:
             UNARY_BYTECODES(CASE) 
             {
                 group[ir.a] = 
@@ -710,7 +726,10 @@ void JIT::RegisterAssignment() {
                 AssignRegister(std::min(ir.a, ir.b));
             } break;
             case TraceOpCode::length:
-            case TraceOpCode::cast: 
+            case TraceOpCode::castd: 
+            case TraceOpCode::casti: 
+            case TraceOpCode::castl: 
+            case TraceOpCode::dup: 
             UNARY_BYTECODES(CASE)
             {
                 AssignRegister(ir.a);
@@ -762,7 +781,10 @@ void JIT::IR::dump() const {
         } break;
         case TraceOpCode::PUSH:
         case TraceOpCode::length:
-        case TraceOpCode::cast:
+        case TraceOpCode::castd:
+        case TraceOpCode::casti:
+        case TraceOpCode::castl:
+        case TraceOpCode::dup:
         case TraceOpCode::guardF:
         case TraceOpCode::guardT: 
         UNARY_BYTECODES(CASE)
@@ -862,6 +884,7 @@ void JIT::dump(Thread& thread, std::vector<IR> const& t) {
 #include "llvm/Module.h"
 #include "llvm/LLVMContext.h"
 #include "llvm/Support/system_error.h"
+#include "llvm/Intrinsics.h"
 
 struct LLVMState {
     llvm::Module * M;
@@ -1002,7 +1025,8 @@ struct Fusion {
         a = builder.CreateLoad(a);
 
         if(jit.code[ir].type == Type::Logical)
-            a = builder.CreateTrunc(a, llvm::VectorType::get(builder.getInt1Ty(), width));
+            a = builder.CreateICmpEQ(a, builder.getInt8(255));
+//Trunc(a, llvm::VectorType::get(builder.getInt1Ty(), width));
 
         return a;
     }
@@ -1023,21 +1047,49 @@ struct Fusion {
         builder.CreateStore(a, out);
     }
 
+    llvm::Value* SSEIntrinsic(llvm::Intrinsic::ID Op1, llvm::Intrinsic::ID Op2, JIT::IR const& ir) {
+        llvm::Value* in = Load(ir.a);
+        llvm::Value* out = llvm::UndefValue::get(llvmType(ir.type, width)); 
+        uint32_t i = 0;                                                                 
+        for(; i < (width-1); i+=2) {                                                    
+            llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, Op2);
+            llvm::Value* v2 = llvm::UndefValue::get(llvmType(ir.type, 2)); 
+            llvm::Value* j0 = builder.CreateExtractElement(in, builder.getInt32(i));    
+            llvm::Value* j1 = builder.CreateExtractElement(in, builder.getInt32(i+1));  
+            v2 = builder.CreateInsertElement(v2, j0, builder.getInt32(i));              
+            v2 = builder.CreateInsertElement(v2, j1, builder.getInt32(i+1));            
+            v2 = builder.CreateCall(f, v2);                                     
+            out = builder.CreateInsertElement(out, 
+                builder.CreateExtractElement(v2, builder.getInt32(0)), builder.getInt32(i));
+            out = builder.CreateInsertElement(out, 
+                builder.CreateExtractElement(v2, builder.getInt32(1)), builder.getInt32(i+1));
+        }
+        for(; i < width; i++) {
+            llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, Op1);
+            llvm::Value* v1 = llvm::UndefValue::get(llvmType(ir.type, 2)); 
+            llvm::Value* j0 = builder.CreateExtractElement(in, builder.getInt32(i));
+            v1 = builder.CreateInsertElement(v1, j0, builder.getInt32(i)); 
+            v1 = builder.CreateCall(f, v1);
+            out = builder.CreateInsertElement(out, 
+                builder.CreateExtractElement(v1, builder.getInt32(0)), builder.getInt32(i));
+        }
+        return out;
+    }
+
     void Emit(size_t index) {
         JIT::IR ir = jit.code[index];
         size_t reg = jit.assignment[index];
-        llvm::Type* t = llvmType(ir.type, width);
 
 #define CASE_UNARY(Op, FName, IName) \
     case TraceOpCode::Op: { \
-        outs[reg] = (ir.type == Type::Double)   \
+        outs[reg] = (jit.code[ir.a].type == Type::Double)   \
         ? builder.Create##FName(Load(ir.a)) \
         : builder.Create##IName(Load(ir.a));\
     } break
 
 #define CASE_BINARY(Op, FName, IName) \
     case TraceOpCode::Op: { \
-        outs[reg] = (ir.type == Type::Double)   \
+        outs[reg] = (jit.code[ir.a].type == Type::Double)   \
         ? builder.Create##FName(Load(ir.a), Load(ir.b)) \
         : builder.Create##IName(Load(ir.a), Load(ir.b));\
     } break
@@ -1052,13 +1104,29 @@ struct Fusion {
         outs[reg] = builder.Create##Name(Load(ir.a), Load(ir.b)); \
     } break
 
+#define IDENTITY \
+    outs[reg] = Load(ir.a);
+
+#define SCALARIZE1(Name, A) { \
+    llvm::Value* in = Load(ir.a);                        \
+    outs[reg] = llvm::UndefValue::get(llvmType(ir.type, width)); \
+    for(uint32_t i = 0; i < width; i++) {                                       \
+        llvm::Value* ii = builder.getInt32(i);                                  \
+        llvm::Value* j = builder.CreateExtractElement(in, ii);  \
+        j = builder.Create##Name(j, A);                                         \
+        outs[reg] = builder.CreateInsertElement(outs[reg], j, ii);              \
+    } \
+}
+
         switch(ir.op) {
-            case TraceOpCode::pos: 
-                outs[reg] = Load(ir.a);
-                break;
+            case TraceOpCode::dup: IDENTITY; break;
+            case TraceOpCode::pos: IDENTITY; break;
 
             CASE_UNARY(neg, FNeg, Neg);
             
+            case TraceOpCode::sqrt: 
+                outs[reg] = SSEIntrinsic(llvm::Intrinsic::x86_sse2_sqrt_sd, llvm::Intrinsic::x86_sse2_sqrt_pd, ir); 
+                break;           
             CASE_BINARY(add, FAdd, Add);
             CASE_BINARY(sub, FSub, Sub);
             CASE_BINARY(mul, FMul, Mul);
@@ -1075,6 +1143,30 @@ struct Fusion {
             CASE_BINARY_LOGICAL(lor, Or); 
             CASE_BINARY_LOGICAL(land, And); 
             
+            case TraceOpCode::castd:
+                switch(ir.type) {
+                    case Type::Integer: SCALARIZE1(FPToSI, builder.getInt64Ty()); break;
+                    case Type::Logical: SCALARIZE1(FCmpOEQ, llvm::ConstantFP::get(builder.getDoubleTy(), 0)); break;
+                    default: _error("Unexpected cast"); break;
+                }
+                break;
+            
+            case TraceOpCode::casti:
+                switch(ir.type) {
+                    case Type::Double: SCALARIZE1(SIToFP, builder.getDoubleTy()); break;
+                    case Type::Logical: SCALARIZE1(ICmpEQ, builder.getInt64(0)); break;
+                    default: _error("Unexpected cast"); break;
+                }
+                break;
+            
+            case TraceOpCode::castl:
+                switch(ir.type) {
+                    case Type::Double: SCALARIZE1(SIToFP, builder.getDoubleTy()); break;
+                    case Type::Integer: SCALARIZE1(ZExt, builder.getInt64Ty()); break;
+                    default: _error("Unexpected cast"); break;
+                }
+                break;
+            
             case TraceOpCode::phi: 
                 outs[jit.assignment[ir.a]] = Load(ir.b);
                 break;
@@ -1086,7 +1178,7 @@ struct Fusion {
                 std::vector<llvm::Constant*> c;
                 for(size_t i = 0; i < width; i++)
                     c.push_back(builder.getInt64(0));
-                outs[jit.assignment[ir.a]] = llvm::ConstantVector::get(c);
+                outs[jit.assignment[index]] = llvm::ConstantVector::get(c);
                 //}
                 //else {
                 //    _error("Unsupported rep");
@@ -1096,24 +1188,26 @@ struct Fusion {
             {
                 llvm::Value* v = RawLoad(ir.a);
                 llvm::Value* idx = Load(ir.b);
-                llvm::Type* trunc = llvm::VectorType::get(builder.getInt32Ty(), width);
-                idx = builder.CreateTrunc(idx, trunc);  
                 // scalarize the gather...
-                llvm::Value* r = llvm::UndefValue::get(t);
+                llvm::Value* r = llvm::UndefValue::get(llvmType(ir.type, width));
 
-                for(size_t i = 0; i < width; i++) {
-                    llvm::Value* ii = builder.getInt32((uint32_t)i);
+                for(uint32_t i = 0; i < width; i++) {
+                    llvm::Value* ii = builder.getInt32(i);
                     llvm::Value* j = builder.CreateExtractElement(idx, ii);
-                    j = builder.CreateGEP(v, j);
+                    j = builder.CreateLoad(builder.CreateGEP(v, j));
+                    if(ir.type == Type::Logical)
+                        j = builder.CreateICmpEQ(j, builder.getInt8(255));
                     r = builder.CreateInsertElement(r, j, ii);
                 }
-                outs[jit.assignment[ir.a]] = r;
-            };
+                outs[jit.assignment[index]] = r;
+            } break;
             default:
-                _error("Unsupported op");
+                _error("Unsupported op in Emit");
                 break;
         }
-
+#undef SCALARIZE_SSE
+#undef SCALARIZE1
+#undef IDENTITY
 #undef CASE_UNARY
 #undef CASE_BINARY
 #undef CASE_UNARY_LOGICAL
@@ -1263,8 +1357,8 @@ struct LLVMCompiler {
         builder.SetInsertPoint(EndBlock);
         builder.CreateRet(builder.CreateLoad(result_var));
 
-        function->dump();
         S->FPM->run(*function);
+        function->dump();
 
         return S->EE->getPointerToFunction(function);   
     }
@@ -1366,7 +1460,7 @@ struct LLVMCompiler {
                     } else if(ir.type == Type::Logical) {
                         Logical const& v = (Logical const&)jit.constants[ir.a];
                         for(size_t i = 0; i < width; i++)
-                            c.push_back(builder.getInt1(v[i] != 0));
+                            c.push_back(builder.getInt8(v[i] != 0 ? 255 : 0));
                     }
                     values[index] = CreateEntryBlockAlloca(llvmMemoryType(ir.type), builder.getInt64(ir.width));
                     for(size_t i = 0; i < width; i++) {
@@ -1419,6 +1513,10 @@ struct LLVMCompiler {
                 EmitExit(r, jit.exits[index]);
             } break;
 
+            case TraceOpCode::castd:
+            case TraceOpCode::casti:
+            case TraceOpCode::castl:
+            case TraceOpCode::dup:
             case TraceOpCode::rep:
             case TraceOpCode::gather:
             case TraceOpCode::phi: 
@@ -1464,31 +1562,6 @@ struct LLVMCompiler {
                             builder.CreateGEP(x, ii));
                     }
                 } 
-            } break;
-            case TraceOpCode::cast:
-            {
-                llvm::Type* t = llvmType(ir.type, width);
-                llvm::Value* r = llvm::UndefValue::get(t);
-                switch(ir.type) {
-                    case Type::Double:
-                    break;
-                    case Type::Integer: {
-                        switch(jit.code[ir.a].type) {
-                            case Type::Double: {
-                                for(size_t i = 0; i < width; i++) {
-                                    llvm::Value* ii = builder.getInt32((uint32_t)i);
-                                    llvm::Value* j = builder.CreateExtractElement(Load(values[ir.a]), ii);
-                                    j = builder.CreateFPToSI(j, builder.getInt64Ty());
-                                    r = builder.CreateInsertElement(r, j, ii);
-                                }
-                            } break;
-                        }
-                    } break;
-                    case Type::Logical: {
-                    } break;
-                    default: {
-                    } break;
-                }
             } break;
             
             case TraceOpCode::length:

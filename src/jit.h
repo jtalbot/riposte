@@ -28,13 +28,16 @@
 		_(gather, "GATH", ___) \
 		_(scatter, "SCAT", ___) \
 		_(phi, "PHI", ___) \
-		_(cast, "CAST", ___) \
+		_(castd, "CASTD", ___) \
+		_(casti, "CASTI", ___) \
+		_(castl, "CASTL", ___) \
         _(length, "LENGTH", ___) \
         _(rep, "REP", ___) \
         _(LOADENV, "LOADENV", ___) \
         _(NEWENV, "NEWENV", ___) \
         _(PUSH, "PUSH", ___) \
         _(POP, "POP", ___) \
+        _(dup, "DUP", ___) \
 		_(nop, "NOP", ___)
 
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
