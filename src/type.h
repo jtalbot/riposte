@@ -71,4 +71,69 @@ DECLARE_ENUM(Type, TYPES)
 	_(Double, Character, Character) \
 	_(Character, Character, Character) \
 
+#define ORDINAL_TYPE_MEET(_) \
+	_(Logical, Logical, Integer) \
+	_(Integer, Logical, Integer) \
+	_(Logical, Integer, Integer) \
+	_(Integer, Integer, Integer) \
+	_(Double,  Logical, Double) \
+	_(Logical, Double,  Double) \
+	_(Double,  Integer, Double) \
+	_(Integer, Double,  Double) \
+	_(Double,  Double,  Double) \
+	_(Character, Logical, Character) \
+	_(Logical, Character, Character) \
+	_(Character, Integer, Character) \
+	_(Integer, Character, Character) \
+	_(Character, Double, Character) \
+	_(Double, Character, Character) \
+	_(Character, Character, Character) \
+
+
+#define UNARY_TYPES(_) \
+    _(Double) \
+    _(Integer) \
+    _(Logical) 
+
+#define BINARY_TYPES(_) \
+    _(Double, Double) \
+    _(Integer, Integer) \
+    _(Logical, Logical) \
+    _(Double, Integer) \
+    _(Integer, Double) \
+    _(Double, Logical) \
+    _(Logical, Double) \
+    _(Integer, Logical) \
+    _(Logical, Integer)
+
+#define TERNARY_TYPES(_) \
+    _(Double, Double, Double) \
+    _(Integer, Integer, Double) \
+    _(Logical, Logical, Double) \
+    _(Double, Integer, Double) \
+    _(Integer, Double, Double) \
+    _(Double, Logical, Double) \
+    _(Logical, Double, Double) \
+    _(Integer, Logical, Double) \
+    _(Logical, Integer, Double) \
+    _(Double, Double, Integer) \
+    _(Integer, Integer, Integer) \
+    _(Logical, Logical, Integer) \
+    _(Double, Integer, Integer) \
+    _(Integer, Double, Integer) \
+    _(Double, Logical, Integer) \
+    _(Logical, Double, Integer) \
+    _(Integer, Logical, Integer) \
+    _(Logical, Integer, Integer) \
+    _(Double, Double, Logical) \
+    _(Integer, Integer, Logical) \
+    _(Logical, Logical, Logical) \
+    _(Double, Integer, Logical) \
+    _(Integer, Double, Logical) \
+    _(Double, Logical, Logical) \
+    _(Logical, Double, Logical) \
+    _(Integer, Logical, Logical) \
+    _(Logical, Integer, Logical)
+
+
 #endif

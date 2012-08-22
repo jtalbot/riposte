@@ -7,15 +7,10 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::add) return ByteCode::pos; 
 	if(func == Strings::sub) return ByteCode::neg; 
 	
-	if(func == Strings::sqrt) return ByteCode::sqrt; 
-    
-    if(func == Strings::lnot) return ByteCode::lnot; 
-#ifdef TRACE_DEVELOPMENT
-	if(func == Strings::abs) return ByteCode::abs; 
-	if(func == Strings::sign) return ByteCode::sign; 
 	if(func == Strings::floor) return ByteCode::floor; 
 	if(func == Strings::ceiling) return ByteCode::ceiling; 
 	if(func == Strings::trunc) return ByteCode::trunc; 
+	if(func == Strings::sqrt) return ByteCode::sqrt; 
 	if(func == Strings::exp) return ByteCode::exp; 
 	if(func == Strings::log) return ByteCode::log; 
 	if(func == Strings::cos) return ByteCode::cos; 
@@ -24,6 +19,11 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::acos) return ByteCode::acos; 
 	if(func == Strings::asin) return ByteCode::asin; 
 	if(func == Strings::atan) return ByteCode::atan; 
+    
+    if(func == Strings::lnot) return ByteCode::lnot; 
+#ifdef TRACE_DEVELOPMENT
+	if(func == Strings::abs) return ByteCode::abs; 
+	if(func == Strings::sign) return ByteCode::sign; 
 	if(func == Strings::isna) return ByteCode::isna; 
 	if(func == Strings::isnan) return ByteCode::isnan; 
 	if(func == Strings::isfinite) return ByteCode::isfinite; 
@@ -56,14 +56,12 @@ static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::sub) return ByteCode::sub; 
 	if(func == Strings::mul) return ByteCode::mul;
 	if(func == Strings::div) return ByteCode::div; 
-
-#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::idiv) return ByteCode::idiv; 
 	if(func == Strings::mod) return ByteCode::mod; 
 	if(func == Strings::pow) return ByteCode::pow; 
 	if(func == Strings::atan2) return ByteCode::atan2; 
 	if(func == Strings::hypot) return ByteCode::hypot; 
-#endif
+
 	if(func == Strings::lt) return ByteCode::lt; 
 	if(func == Strings::gt) return ByteCode::gt; 
 	if(func == Strings::eq) return ByteCode::eq; 
@@ -73,11 +71,12 @@ static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::lor) return ByteCode::lor; 
 	if(func == Strings::land) return ByteCode::land; 
 
-	if(func == Strings::bb) return ByteCode::gather1;
-#ifdef TRACE_DEVELOPMENT
-	if(func == Strings::bracket) return ByteCode::gather;
 	if(func == Strings::pmin) return ByteCode::pmin; 
 	if(func == Strings::pmax) return ByteCode::pmax; 
+	
+    if(func == Strings::bb) return ByteCode::gather1;
+#ifdef TRACE_DEVELOPMENT
+	if(func == Strings::bracket) return ByteCode::gather;
 
 	if(func == Strings::cm2) return ByteCode::cm2; 
 	
@@ -93,10 +92,10 @@ static ByteCode::Enum op2(String const& func) {
 static ByteCode::Enum op3(String const& func) {
 	if(func == Strings::seq) return ByteCode::seq;
 	if(func == Strings::bbAssign) return ByteCode::scatter1;
+	if(func == Strings::ifelse) return ByteCode::ifelse;
 #ifdef TRACE_DEVELOPMENT
 	if(func == Strings::bracketAssign) return ByteCode::scatter;
 	if(func == Strings::split) return ByteCode::split;
-	if(func == Strings::ifelse) return ByteCode::ifelse;
 	if(func == Strings::rep) return ByteCode::rep;
 #endif
 	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a trinary operator"); 

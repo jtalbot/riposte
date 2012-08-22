@@ -24,7 +24,6 @@
 		_(filter, "filter", ___) \
 		_(split, "split", ___) \
 		_(nop, "nop", ___) \
-		_(ifelse, "ifelse", ___) \
 		_(sload, "sload", ___) \
 		_(sstore, "sstore", ___) \
 

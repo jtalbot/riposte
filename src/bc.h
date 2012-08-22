@@ -62,14 +62,10 @@
 #define ARITH_UNARY_BYTECODES(_) \
 	_(pos, "pos", 	ArithUnary1, 	PassNA(a, a)) \
 	_(neg, "neg", 	ArithUnary1, 	PassNA(a, -a)) \
-	_(sqrt, "sqrt",	ArithUnary2,	sqrt(a)) \
-
-#ifdef TRACE_DEVELOPMENT
-	_(abs, "abs", 	ArithUnary1, 	PassNA(a, Abs(a))) \
-	_(sign, "sign",	ArithUnary2, 	((a>0)-(a<0))) \
 	_(floor, "floor",	ArithUnary2,	floor(a)) \
 	_(ceiling, "ceiling",	ArithUnary2,	ceil(a)) \
 	_(trunc, "trunc",	ArithUnary2,	trunc(a)) \
+	_(sqrt, "sqrt",	ArithUnary2,	sqrt(a)) \
 	_(exp, "exp",	ArithUnary2,	exp(a)) \
 	_(log, "log",	ArithUnary2,	log(a)) \
 	_(cos, "cos",	ArithUnary2,	cos(a)) \
@@ -78,6 +74,10 @@
 	_(acos, "acos",	ArithUnary2,	acos(a)) \
 	_(asin, "asin",	ArithUnary2,	asin(a)) \
 	_(atan, "atan",	ArithUnary2,	atan(a))
+
+#ifdef TRACE_DEVELOPMENT
+	_(abs, "abs", 	ArithUnary1, 	PassNA(a, Abs(a))) \
+	_(sign, "sign",	ArithUnary2, 	((a>0)-(a<0)))
 #endif
 
 #define LOGICAL_UNARY_BYTECODES(_) \
@@ -103,25 +103,19 @@
 	_(sub, "sub",	ArithBinary1,	PassNA(a,b,a-b)) \
 	_(mul, "mul",	ArithBinary1,	PassNA(a,b,a*b)) \
 	_(div, "div",	ArithBinary2,	a/b) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(idiv, "idiv",	ArithBinary1,	PassNA(a,b,IDiv(a,b))) \
 	_(mod, "mod",	ArithBinary1,	PassNA(a,b,Mod(a,b))) \
 	_(pow, "pow",	ArithBinary2,	pow(a,b)) \
 	_(atan2, "atan2",	ArithBinary2,	atan2(a,b)) \
 	_(hypot, "hypot",	ArithBinary2,	hypot(a,b))
-#endif
 
 #define LOGICAL_BINARY_BYTECODES(_) \
 	_(lor, "lor",	LogicalBinary,	a|b) \
 	_(land, "land",	LogicalBinary,	a&b) \
 
 #define UNIFY_BINARY_BYTECODES(_) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(pmin, "pmin",	UnifyBinary,	PassNA(a,b,riposte_min(thread,a,b))) \
 	_(pmax, "pmax",	UnifyBinary,	PassNA(a,b,riposte_max(thread,a,b)))
-#endif 
 
 #define ROUND_BINARY_BYTECODES(_) \
 
@@ -138,10 +132,10 @@
 	_(lt, "lt",	OrdinalBinary,	PassNA(a,b,lt(thread,a,b)?-1:0)) \
 	_(le, "le",	OrdinalBinary,	PassNA(a,b,le(thread,a,b)?-1:0)) \
 
-#define SPECIAL_MAP_BYTECODES(_) \
+#define TERNARY_BYTECODES(_) \
+	_(ifelse, "ifelse", IfElse) \
 
 #ifdef TRACE_DEVELOPMENT
-	_(ifelse, "ifelse", IfElse) \
 	_(split, "split", Split)
 #endif
 
@@ -206,6 +200,7 @@
 #define MAP_BYTECODES(_) \
 	UNARY_BYTECODES(_) \
 	BINARY_BYTECODES(_) \
+	TERNARY_BYTECODES(_) \
 
 #define FOLD_BYTECODES(_) \
 	ARITH_FOLD_BYTECODES(_) \
@@ -220,7 +215,6 @@
 	MEMORY_ACCESS_BYTECODES(_) \
 	GENERATOR_BYTECODES(_) \
 	MAP_BYTECODES(_) \
-	SPECIAL_MAP_BYTECODES(_) \
 	FOLD_BYTECODES(_) \
 	SCAN_BYTECODES(_) \
 	UTILITY_BYTECODES(_) \

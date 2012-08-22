@@ -165,6 +165,13 @@ void JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             store(thread, insert(trace, TraceOpCode::scatter, a, cast(b, Type::Integer), c, trace[c].type, trace[c].width), inst.c);
         }   break;
 
+        case ByteCode::ifelse: {
+            IRRef a = load(thread, inst.a, &inst);
+            IRRef b = load(thread, inst.b, &inst);
+            IRRef c = load(thread, inst.c, &inst);
+            store(thread, EmitTernary<IfElse>(TraceOpCode::ifelse, c, b, a), inst.c);
+        }   break;
+
         #define UNARY_EMIT(Name, string, Group, ...)                      \
         case ByteCode::Name: {                              \
             IRRef a = load(thread, inst.a, &inst);          \
@@ -239,6 +246,15 @@ JIT::IR JIT::Normalize(IR ir) {
     }
     return ir;
 }
+
+/*
+
+    Instruction scheduling
+    Careful CSE to forwarding to minimize cost
+
+    Lift filters and gathers above other instructions.
+
+*/
 
 JIT::IRRef JIT::Insert(std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, IR ir) {
     ir = Normalize(ir);
@@ -366,6 +382,11 @@ void JIT::EmitOptIR(
                 forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], forward[ir.b], ir.type, ir.width));
             } break;
 
+            TERNARY_BYTECODES(CASE)
+            {
+                forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], forward[ir.b], forward[ir.c], ir.type, ir.width));
+            } break;
+
             CASE(constant)
             {
                 forward[i] = Insert(code, cse, IR(ir.op, ir.a, ir.type, ir.width));
@@ -378,7 +399,7 @@ void JIT::EmitOptIR(
 
             default:
             {
-                _error("Unknown op");
+                _error("Unknown op in EmitOptIR");
             }
 
             #undef CASE
@@ -575,6 +596,18 @@ void JIT::schedule() {
                     std::max(group[ir.b],
                         group[i]);
             } break;
+            TERNARY_BYTECODES(CASE)
+            {
+                group[ir.a] = 
+                    std::max(group[ir.a],
+                        group[i]);
+                group[ir.b] = 
+                    std::max(group[ir.b],
+                        group[i]);
+                group[ir.c] = 
+                    std::max(group[ir.c],
+                        group[i]);
+            } break;
             BINARY_BYTECODES(CASE)
             {
                 group[ir.a] = 
@@ -718,6 +751,12 @@ void JIT::RegisterAssignment() {
                 AssignRegister(ir.a);
                 AssignRegister(ir.b);
             } break;
+            TERNARY_BYTECODES(CASE)
+            {
+                AssignRegister(ir.c);
+                AssignRegister(ir.b);
+                AssignRegister(ir.a);
+            } break;
             case TraceOpCode::rep:
             case TraceOpCode::gather:
             BINARY_BYTECODES(CASE)
@@ -807,6 +846,10 @@ void JIT::IR::dump() const {
         BINARY_BYTECODES(CASE)
         {
             std::cout << "\t " << a << "\t " << b;
+        } break;
+        TERNARY_BYTECODES(CASE)
+        {
+            std::cout << "\t " << a << "\t " << b << "\t " << c;
         } break;
         default: {} break;
 
@@ -1025,7 +1068,7 @@ struct Fusion {
         a = builder.CreateLoad(a);
 
         if(jit.code[ir].type == Type::Logical)
-            a = builder.CreateICmpEQ(a, builder.getInt8(255));
+            a = builder.CreateICmpEQ(a, llvm::ConstantVector::get(builder.getInt8(255)));
 //Trunc(a, llvm::VectorType::get(builder.getInt1Ty(), width));
 
         return a;
@@ -1053,7 +1096,7 @@ struct Fusion {
         uint32_t i = 0;                                                                 
         for(; i < (width-1); i+=2) {                                                    
             llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, Op2);
-            llvm::Value* v2 = llvm::UndefValue::get(llvmType(ir.type, 2)); 
+            llvm::Value* v2 = llvm::UndefValue::get(llvmType(jit.code[ir.a].type, 2)); 
             llvm::Value* j0 = builder.CreateExtractElement(in, builder.getInt32(i));    
             llvm::Value* j1 = builder.CreateExtractElement(in, builder.getInt32(i+1));  
             v2 = builder.CreateInsertElement(v2, j0, builder.getInt32(i));              
@@ -1066,12 +1109,116 @@ struct Fusion {
         }
         for(; i < width; i++) {
             llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, Op1);
-            llvm::Value* v1 = llvm::UndefValue::get(llvmType(ir.type, 2)); 
+            llvm::Value* v1 = llvm::UndefValue::get(llvmType(jit.code[ir.a].type, 2)); 
             llvm::Value* j0 = builder.CreateExtractElement(in, builder.getInt32(i));
             v1 = builder.CreateInsertElement(v1, j0, builder.getInt32(i)); 
             v1 = builder.CreateCall(f, v1);
             out = builder.CreateInsertElement(out, 
                 builder.CreateExtractElement(v1, builder.getInt32(0)), builder.getInt32(i));
+        }
+        return out;
+    }
+
+    llvm::Value* SSEIntrinsic2(llvm::Intrinsic::ID Op1, llvm::Intrinsic::ID Op2, JIT::IR const& ir) {
+        llvm::Value* ina = Load(ir.a);
+        llvm::Value* inb = Load(ir.b);
+        llvm::Value* out = llvm::UndefValue::get(llvmType(ir.type, width)); 
+        uint32_t i = 0;                                                                 
+        for(; i < (width-1); i+=2) {                                                    
+            llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, Op2);
+            llvm::Value* v2 = llvm::UndefValue::get(llvmType(jit.code[ir.a].type, 2)); 
+            llvm::Value* w2 = llvm::UndefValue::get(llvmType(jit.code[ir.b].type, 2)); 
+            llvm::Value* j0 = builder.CreateExtractElement(ina, builder.getInt32(i));    
+            llvm::Value* j1 = builder.CreateExtractElement(ina, builder.getInt32(i+1));  
+            llvm::Value* k0 = builder.CreateExtractElement(inb, builder.getInt32(i));    
+            llvm::Value* k1 = builder.CreateExtractElement(inb, builder.getInt32(i+1));  
+            v2 = builder.CreateInsertElement(v2, j0, builder.getInt32(i));              
+            v2 = builder.CreateInsertElement(v2, j1, builder.getInt32(i+1));            
+            w2 = builder.CreateInsertElement(v2, k0, builder.getInt32(i));              
+            w2 = builder.CreateInsertElement(v2, k1, builder.getInt32(i+1));            
+            v2 = builder.CreateCall2(f, v2, w2);                                     
+            out = builder.CreateInsertElement(out, 
+                builder.CreateExtractElement(v2, builder.getInt32(0)), builder.getInt32(i));
+            out = builder.CreateInsertElement(out, 
+                builder.CreateExtractElement(v2, builder.getInt32(1)), builder.getInt32(i+1));
+        }
+        for(; i < width; i++) {
+            llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, Op1);
+            llvm::Value* v1 = llvm::UndefValue::get(llvmType(jit.code[ir.a].type, 2)); 
+            llvm::Value* w1 = llvm::UndefValue::get(llvmType(jit.code[ir.b].type, 2)); 
+            llvm::Value* j0 = builder.CreateExtractElement(ina, builder.getInt32(i));
+            llvm::Value* k0 = builder.CreateExtractElement(inb, builder.getInt32(i));
+            v1 = builder.CreateInsertElement(v1, j0, builder.getInt32(i)); 
+            w1 = builder.CreateInsertElement(w1, k0, builder.getInt32(i)); 
+            v1 = builder.CreateCall2(f, v1, w1);
+            out = builder.CreateInsertElement(out, 
+                builder.CreateExtractElement(v1, builder.getInt32(0)), builder.getInt32(i));
+        }
+        return out;
+    }
+
+    llvm::Value* SSERound(llvm::Value* in, uint32_t k) {
+        llvm::Value* out = llvm::UndefValue::get(llvmType(Type::Double, width)); 
+        uint32_t i = 0;
+        // Why does llvm think that round takes two vector arguments?                  
+        for(; i < (width-1); i+=2) {                                                    
+            llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, llvm::Intrinsic::x86_sse41_round_pd);
+            llvm::Value* v2 = llvm::UndefValue::get(llvmType(Type::Double, 2)); 
+            llvm::Value* j0 = builder.CreateExtractElement(in, builder.getInt32(i));    
+            llvm::Value* j1 = builder.CreateExtractElement(in, builder.getInt32(i+1));  
+            v2 = builder.CreateInsertElement(v2, j0, builder.getInt32(i));              
+            v2 = builder.CreateInsertElement(v2, j1, builder.getInt32(i+1));            
+            v2 = builder.CreateCall3(f, v2, v2, builder.getInt32(k));                                     
+            out = builder.CreateInsertElement(out, 
+                builder.CreateExtractElement(v2, builder.getInt32(0)), builder.getInt32(i));
+            out = builder.CreateInsertElement(out, 
+                builder.CreateExtractElement(v2, builder.getInt32(1)), builder.getInt32(i+1));
+        }
+        for(; i < width; i++) {
+            llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, llvm::Intrinsic::x86_sse41_round_sd);
+            llvm::Value* v1 = llvm::UndefValue::get(llvmType(Type::Double, 2)); 
+            llvm::Value* j0 = builder.CreateExtractElement(in, builder.getInt32(i));
+            v1 = builder.CreateInsertElement(v1, j0, builder.getInt32(i)); 
+            v1 = builder.CreateCall3(f, v1, v1, builder.getInt32(k));
+            out = builder.CreateInsertElement(out, 
+                builder.CreateExtractElement(v1, builder.getInt32(0)), builder.getInt32(i));
+        }
+        return out;
+    }
+
+    llvm::Value* UnaryCall(std::string func, JIT::IR const& ir) {
+        std::vector<llvm::Type*> args;
+        args.push_back(llvmType(jit.code[ir.a].type));
+        llvm::Type* outTy = llvmType(ir.type);
+        llvm::FunctionType* ft = llvm::FunctionType::get(outTy, args, false);
+        llvm::Function* f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, func, S->M);
+
+        llvm::Value* in = Load(ir.a);
+        llvm::Value* out = llvm::UndefValue::get(llvmType(ir.type, width));
+        for(uint32_t i = 0; i < width; i++) {
+            llvm::Value* v = builder.CreateExtractElement(in, builder.getInt32(i));
+            v = builder.CreateCall(f, v);
+            out = builder.CreateInsertElement(out, v, builder.getInt32(i));
+        }
+        return out;
+    }
+
+    llvm::Value* BinaryCall(std::string func, JIT::IR const& ir) {
+        std::vector<llvm::Type*> args;
+        args.push_back(llvmType(jit.code[ir.a].type));
+        args.push_back(llvmType(jit.code[ir.b].type));
+        llvm::Type* outTy = llvmType(ir.type);
+        llvm::FunctionType* ft = llvm::FunctionType::get(outTy, args, false);
+        llvm::Function* f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, func, S->M);
+
+        llvm::Value* ina = Load(ir.a);
+        llvm::Value* inb = Load(ir.b);
+        llvm::Value* out = llvm::UndefValue::get(llvmType(ir.type, width));
+        for(uint32_t i = 0; i < width; i++) {
+            llvm::Value* v = builder.CreateExtractElement(ina, builder.getInt32(i));
+            llvm::Value* w = builder.CreateExtractElement(inb, builder.getInt32(i));
+            v = builder.CreateCall2(f, v, w);
+            out = builder.CreateInsertElement(out, v, builder.getInt32(i));
         }
         return out;
     }
@@ -1142,11 +1289,79 @@ struct Fusion {
             CASE_UNARY_LOGICAL(lnot, Not); 
             CASE_BINARY_LOGICAL(lor, Or); 
             CASE_BINARY_LOGICAL(land, And); 
-            
+           
+            case TraceOpCode::floor: 
+                outs[reg] = SSERound(Load(ir.a), 0x1 /* round down */); 
+                break;
+            case TraceOpCode::ceiling: 
+                outs[reg] = SSERound(Load(ir.a), 0x2 /* round up */); 
+                break;
+            case TraceOpCode::trunc: 
+                outs[reg] = SSERound(Load(ir.a), 0x3 /* round to zero */); 
+                break;
+
+            case TraceOpCode::exp: outs[reg] = UnaryCall("exp", ir); break;
+            case TraceOpCode::log: outs[reg] = UnaryCall("log", ir); break;
+            case TraceOpCode::cos: outs[reg] = UnaryCall("cos", ir); break;
+            case TraceOpCode::sin: outs[reg] = UnaryCall("sin", ir); break;
+            case TraceOpCode::tan: outs[reg] = UnaryCall("tan", ir); break;
+            case TraceOpCode::acos: outs[reg] = UnaryCall("acos", ir); break;
+            case TraceOpCode::asin: outs[reg] = UnaryCall("asin", ir); break;
+            case TraceOpCode::atan: outs[reg] = UnaryCall("atan", ir); break;
+
+            case TraceOpCode::pow: outs[reg] = BinaryCall("pow", ir); break;
+            case TraceOpCode::atan2: outs[reg] = BinaryCall("atan2", ir); break;
+            case TraceOpCode::hypot: outs[reg] = BinaryCall("hypot", ir); break;
+
+            case TraceOpCode::idiv:
+                if(ir.type == Type::Double) {
+                    outs[reg] = SSERound(builder.CreateFDiv(Load(ir.a), Load(ir.b)), 0x1); 
+                }
+                else {
+                    outs[reg] = builder.CreateSDiv(Load(ir.a), Load(ir.b));
+                }
+            break;
+
+            case TraceOpCode::mod:
+                if(ir.type == Type::Double) {
+                    outs[reg] = SSERound(builder.CreateFDiv(Load(ir.a), Load(ir.b)), 0x1);
+                    outs[reg] = builder.CreateFSub(Load(ir.a), builder.CreateFMul(outs[reg], Load(ir.b)));
+                } else {
+                    outs[reg] = builder.CreateSDiv(Load(ir.a), Load(ir.b));
+                    outs[reg] = builder.CreateSub(Load(ir.a), builder.CreateMul(outs[reg], Load(ir.b)));
+                }
+            break;
+
+            case TraceOpCode::pmin:
+                if(ir.type == Type::Double) {
+                    outs[reg] = SSEIntrinsic2(llvm::Intrinsic::x86_sse2_min_sd,
+                                                llvm::Intrinsic::x86_sse2_min_pd, ir);
+                }
+                else {
+                    outs[reg] = builder.CreateSelect(
+                        builder.CreateICmpSLT(Load(ir.a), Load(ir.b)), Load(ir.a), Load(ir.b));
+                }
+            break;
+
+            case TraceOpCode::pmax:
+                if(ir.type == Type::Double) {
+                    outs[reg] = SSEIntrinsic2(llvm::Intrinsic::x86_sse2_max_sd,
+                                                llvm::Intrinsic::x86_sse2_max_pd, ir);
+                }
+                else {
+                    outs[reg] = builder.CreateSelect(
+                        builder.CreateICmpSGT(Load(ir.a), Load(ir.b)), Load(ir.a), Load(ir.b));
+                }
+            break;
+
+            case TraceOpCode::ifelse:
+                outs[reg] = builder.CreateSelect(Load(ir.a), Load(ir.b), Load(ir.c));
+            break;
+
             case TraceOpCode::castd:
                 switch(ir.type) {
                     case Type::Integer: SCALARIZE1(FPToSI, builder.getInt64Ty()); break;
-                    case Type::Logical: SCALARIZE1(FCmpOEQ, llvm::ConstantFP::get(builder.getDoubleTy(), 0)); break;
+                    case Type::Logical: SCALARIZE1(FCmpONE, llvm::ConstantFP::get(builder.getDoubleTy(), 0)); break;
                     default: _error("Unexpected cast"); break;
                 }
                 break;
@@ -1520,6 +1735,7 @@ struct LLVMCompiler {
             case TraceOpCode::rep:
             case TraceOpCode::gather:
             case TraceOpCode::phi: 
+            TERNARY_BYTECODES(CASE)
             BINARY_BYTECODES(CASE)
             UNARY_BYTECODES(CASE)
             {
@@ -1584,7 +1800,7 @@ struct LLVMCompiler {
             
             default: 
             {
-                _error("Unknown op");
+                _error("Unknown op in LLVMCompiler::Emit");
             } break;
         };
     }

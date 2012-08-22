@@ -267,53 +267,55 @@ public:
     IRRef Insert(std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, IR ir);
     IR Normalize(IR ir);
 
-#define TYPES_TMP(_) \
-    _(Double) \
-    _(Integer) \
-    _(Logical) 
-
 	template< template<class X> class Group >
 	IRRef EmitUnary(TraceOpCode::Enum op, IRRef a) {
 		Type::Enum aty = trace[a].type;
 
-        #define EMIT_UNARY(TA)                  \
+        #define EMIT(TA)                  \
         if(aty == Type::TA)                     \
             return EmitUnary(op, a,             \
                 Group<TA>::R::VectorType,    \
                 Group<TA>::MA::VectorType);
-        TYPES_TMP(EMIT_UNARY)
-        #undef EMIT_BINARY
+        UNARY_TYPES(EMIT)
+        #undef EMIT
         _error("Unknown type in EmitUnary");
     }
-#undef TYPES_TMP
-
-#define TYPES_TMP(_) \
-    _(Double, Double) \
-    _(Integer, Integer) \
-    _(Logical, Logical) \
-    _(Double, Integer) \
-    _(Integer, Double) \
-    _(Double, Logical) \
-    _(Logical, Double) \
-    _(Integer, Logical) \
-    _(Logical, Integer)
 
 	template< template<class X, class Y> class Group >
 	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b) {
 		Type::Enum aty = trace[a].type;
 		Type::Enum bty = trace[b].type;
 
-        #define EMIT_BINARY(TA, TB)                 \
+        #define EMIT(TA, TB)                 \
         if(aty == Type::TA && bty == Type::TB)      \
             return EmitBinary(op, a, b,             \
                 Group<TA,TB>::R::VectorType,        \
                 Group<TA,TB>::MA::VectorType,       \
                 Group<TA,TB>::MB::VectorType);
-        TYPES_TMP(EMIT_BINARY)
-        #undef EMIT_BINARY
+        BINARY_TYPES(EMIT)
+        #undef EMIT
         _error("Unknown type pair in EmitBinary");
     }
+    
+    template< template<class X, class Y, class Z> class Group >
+    IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c) {
+		Type::Enum aty = trace[a].type;
+		Type::Enum bty = trace[b].type;
+		Type::Enum cty = trace[c].type;
+
+        #define EMIT(TA, TB, TC)                            \
+        if(aty == Type::TA && bty == Type::TB && cty == Type::TC)   \
+            return EmitTernary(op, a, b, c,                         \
+                Group<TA,TB,TC>::R::VectorType,                     \
+                Group<TA,TB,TC>::MA::VectorType,                    \
+                Group<TA,TB,TC>::MB::VectorType,                    \
+                Group<TA,TB,TC>::MC::VectorType);
+        TERNARY_TYPES(EMIT)
+        #undef EMIT
+        _error("Unknown type pair in EmitTernary");
+    }
 #undef TYPES_TMP
+
 };
 
 namespace std {

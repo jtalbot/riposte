@@ -638,33 +638,6 @@ Instruction const* cm2_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a);
-	OPERAND(b, inst.b); FORCE(b, inst.b);
-	OPERAND(c, inst.c); FORCE(c, inst.c);
-	if(c.isLogical1()) {
-		OUT(thread, inst.c) = Logical::isTrue(c.c) ? b : a;
-		return &inst+1; 
-	}
-	else if(c.isInteger1()) {
-		OUT(thread, inst.c) = c.i ? b : a;
-		return &inst+1; 
-	}
-	else if(c.isDouble1()) {
-		OUT(thread, inst.c) = c.d ? b : a;
-		return &inst+1; 
-	}
-	if(isTraceable<IfElse>(thread,a,b,c)) {
-		OUT(thread, inst.c) = thread.EmitIfElse(thread.frame.environment, a, b, c);
-		thread.OptBind(OUT(thread,inst.c));
-		return &inst+1;
-	}
-	BIND(a); BIND(b); BIND(c);
-
-	_error("ifelse not defined in scalar yet");
-	return &inst+1; 
-}
-
 Instruction const* split_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
 	int64_t levels = As<Integer>(thread, a)[0];
@@ -681,6 +654,36 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 	return &inst+1; 
 }
 #endif
+
+Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
+	OPERAND(a, inst.a); FORCE(a, inst.a);
+	OPERAND(b, inst.b); FORCE(b, inst.b);
+	OPERAND(c, inst.c); FORCE(c, inst.c);
+	if(c.isLogical1()) {
+		OUT(thread, inst.c) = Logical::isTrue(c.c) ? b : a;
+		return &inst+1; 
+	}
+	else if(c.isInteger1()) {
+		OUT(thread, inst.c) = c.i ? b : a;
+		return &inst+1; 
+	}
+	else if(c.isDouble1()) {
+		OUT(thread, inst.c) = c.d ? b : a;
+		return &inst+1; 
+	}
+#ifdef ENABLE_JIT	
+	if(isTraceable<IfElse>(thread,a,b,c)) {
+		OUT(thread, inst.c) = thread.EmitIfElse(thread.frame.environment, a, b, c);
+		thread.OptBind(OUT(thread,inst.c));
+		return &inst+1;
+	}
+#endif
+	BIND(a); BIND(b); BIND(c);
+
+	_error("ifelse not defined in scalar yet");
+
+	return &inst+1; 
+}
 
 Instruction const* function_op(Thread& thread, Instruction const& inst) {
 	OPERAND(function, inst.a); FORCE(function, inst.a);

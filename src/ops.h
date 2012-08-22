@@ -81,14 +81,14 @@ template<class X, class Y> struct OrdinalBinary {};
 #define ORDINAL_BINARY(X, Y, Z) \
 	template<> struct OrdinalBinary<X, Y> \
 	{ typedef X A; typedef Y B; typedef Z MA; typedef Z MB; typedef Logical R; };
-DEFAULT_TYPE_MEET(ORDINAL_BINARY)
+ORDINAL_TYPE_MEET(ORDINAL_BINARY)
 #undef ORDINAL_BINARY
 
 template<class X, class Y> struct UnifyBinary {};
 #define UNIFY_BINARY(X, Y, Z) \
 	template<> struct UnifyBinary<X, Y> \
 	{ typedef X A; typedef Y B; typedef Z MA; typedef Z MB; typedef Z R; };
-DEFAULT_TYPE_MEET(UNIFY_BINARY)
+ORDINAL_TYPE_MEET(UNIFY_BINARY)
 #undef UNIFY_BINARY
 
 
