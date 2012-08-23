@@ -7,22 +7,19 @@
 #include "strings.h"
 
 #define CONTROL_FLOW_BYTECODES(_) 	\
-	_(jc, "jc") \
-	_(jmp, "jmp") \
-	_(rets, "rets") /* return from top-level statement */ \
 	_(call, "call") \
+	_(ncall, "ncall") \
 	_(ret, "ret") /* return from function */ \
 	_(retp, "retp") /* return from a promise or default */ \
-    _(loop, "loop")
-
-#ifdef TRACE_DEVELOPMENT
-	_(ncall, "ncall") \
+	_(rets, "rets") /* return from top-level statement */ \
+    _(loop, "loop") \
+	_(jc, "jc") \
+	_(jmp, "jmp") \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
 	_(branch, "branch") \
 	_(list, "list") \
 	_(dotslist, "dotslist")
-#endif
 
 #define MEMORY_ACCESS_BYTECODES(_) \
 	_(mov, "mov") \
@@ -30,24 +27,18 @@
 	_(assign, "assign") \
 	_(scatter1, "scatter1") \
 	_(gather1, "gather1") \
+	_(scatter, "scatter") \
+	_(gather, "gather") \
 	_(constant, "constant") \
-
-#ifdef TRACE_DEVELOPMENT
 	_(dotdot, "dotdot") \
-	_(assign2, "assign2") \
-	_(iassign, "iassign") \
-	_(load2, "load2")
-#endif
+	_(assign2, "assign2")
 
 #define UTILITY_BYTECODES(_)\
 	_(function, "function") \
-
-#ifdef TRACE_DEVELOPMENT
 	_(internal, "internal") \
 	_(type, "type") \
 	_(missing, "missing") \
 	_(strip, "strip")
-#endif
 
 #define GENERATOR_BYTECODES(_) \
 	_(seq,		"seq", 		Generator) \
@@ -62,6 +53,8 @@
 #define ARITH_UNARY_BYTECODES(_) \
 	_(pos, "pos", 	ArithUnary1, 	PassNA(a, a)) \
 	_(neg, "neg", 	ArithUnary1, 	PassNA(a, -a)) \
+	_(abs, "abs", 	ArithUnary1, 	PassNA(a, Abs(a))) \
+	_(sign, "sign",	ArithUnary2, 	((a>0)-(a<0))) \
 	_(floor, "floor",	ArithUnary2,	floor(a)) \
 	_(ceiling, "ceiling",	ArithUnary2,	ceil(a)) \
 	_(trunc, "trunc",	ArithUnary2,	trunc(a)) \
@@ -74,11 +67,6 @@
 	_(acos, "acos",	ArithUnary2,	acos(a)) \
 	_(asin, "asin",	ArithUnary2,	asin(a)) \
 	_(atan, "atan",	ArithUnary2,	atan(a))
-
-#ifdef TRACE_DEVELOPMENT
-	_(abs, "abs", 	ArithUnary1, 	PassNA(a, Abs(a))) \
-	_(sign, "sign",	ArithUnary2, 	((a>0)-(a<0)))
-#endif
 
 #define LOGICAL_UNARY_BYTECODES(_) \
 	_(lnot, "lnot",	LogicalUnary, PassNA(a, ~a))
@@ -140,9 +128,9 @@
 #endif
 
 #define ARITH_FOLD_BYTECODES(_) \
+	_(sum, "sum",	ArithFold, 	add) \
 
 #ifdef TRACE_DEVELOPMENT
-	_(sum, "sum",	ArithFold, 	add) \
 	_(prod, "prod",	ArithFold, 	mul)
 #endif
 
@@ -161,9 +149,9 @@
 #endif
 
 #define SPECIAL_FOLD_BYTECODES(_) \
+	_(length, "length", CountFold) \
 
 #ifdef TRACE_DEVELOPMENT
-	_(length, "length", CountFold) \
 	_(mean, "mean", MomentFold) \
 	_(cm2, "cm2", Moment2Fold)
 #endif

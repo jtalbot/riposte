@@ -136,7 +136,7 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
     if(thread.jit.state == JIT::RECORDING) {
         JIT::IRRef ira = thread.jit.load(thread, inst.a, &inst);
         thread.jit.store(thread, ira, 0);
-        thread.jit.insert(thread.jit.trace, TraceOpCode::POP, 0, 0, 0, Type::Promise, 1);
+        thread.jit.insert(thread.jit.trace, TraceOpCode::POP, 0, 0, 0, Type::Promise, JIT::Shape::Empty, JIT::Shape::Empty);
     }
 	
 	REGISTER(0) = result;
@@ -180,7 +180,7 @@ Instruction const* retp_op(Thread& thread, Instruction const& inst) {
         if(thread.jit.state == JIT::RECORDING) {
             ira = thread.jit.load(thread, inst.a, &inst);
             thread.jit.estore(ira, thread.frame.env, (String)thread.frame.dest);
-            thread.jit.insert(thread.jit.trace, TraceOpCode::POP, 0, 0, 0, Type::Promise, 1);
+            thread.jit.insert(thread.jit.trace, TraceOpCode::POP, 0, 0, 0, Type::Promise, JIT::Shape::Empty, JIT::Shape::Empty);
         }
 	} else {
 		thread.frame.env->dots[-thread.frame.dest].v = result;
@@ -595,11 +595,11 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 BINARY_BYTECODES(OP)
 #undef OP
 
-#ifdef TRACE_DEVELOPMENT
 Instruction const* length_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	if(a.isVector())
 		Integer::InitScalar(OUT(thread, inst.c), a.length);
+#ifdef ENABLE_JIT 
 	else if(a.isFuture()) {
 		IRNode::Shape shape = thread.futureShape(a);
 		if(shape.split < 0 && shape.filter < 0) {
@@ -609,6 +609,7 @@ Instruction const* length_op(Thread& thread, Instruction const& inst) {
 			thread.OptBind(OUT(thread,inst.c));
 		}
 	}
+#endif
 	else if(a.isObject()) { 
 		return GenericDispatch(thread, inst, Strings::length, a, inst.c); 
 	} else {
@@ -617,6 +618,7 @@ Instruction const* length_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
+#ifdef TRACE_DEVELOPMENT
 Instruction const* mean_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	if(isTraceable<MomentFold>(thread,a)) {
@@ -799,15 +801,27 @@ Instruction const* random_op(Thread& thread, Instruction const& inst) {
 	OUT(thread, inst.c) = Random(thread, len);
 	return &inst+1;
 }
+#endif
 
 Instruction const* type_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
-	switch(thread.futureType(a)) {
+	
+#ifdef TRACE_DEVELOPMENT
+    switch(thread.futureType(a)) {
                 #define CASE(name, str) case Type::name: OUT(thread, inst.c) = Character::c(Strings::name); break;
                 TYPES(CASE)
                 #undef CASE
                 default: _error("Unknown type in type to string, that's bad!"); break;
         }
+#else
+    switch(a.type) {
+                #define CASE(name, str) case Type::name: OUT(thread, inst.c) = Character::c(Strings::name); break;
+                TYPES(CASE)
+                #undef CASE
+                default: _error("Unknown type in type to string, that's bad!"); break;
+        }
+#endif
+    
 	return &inst+1;
 }
 
@@ -855,7 +869,6 @@ Instruction const* internal_op(Thread& thread, Instruction const& inst) {
 	thread.state.internalFunctions[inst.a].ptr(thread, &REGISTER(inst.b), OUT(thread, inst.c));
 	return &inst+1;
 }
-#endif
 
 /*struct _Load {
     int64_t i;
@@ -920,10 +933,16 @@ void interpret(Thread& thread, Instruction const* pc) {
 
 	goto *(const void*)(labels[pc->bc]);
 	
-    #define LABELED_OP(name,type,...) \
+    #define LABELED_OP(name,...) \
 		name##_label: \
 			{ pc = name##_op(thread, *pc); goto *(const void*)labels[pc->bc]; } 
 	STANDARD_BYTECODES(LABELED_OP)
+    LABELED_OP(ncall)
+    LABELED_OP(forbegin)
+    LABELED_OP(forend)
+    LABELED_OP(branch)
+    LABELED_OP(list)
+    LABELED_OP(dotslist)
 	#undef LABELED_OP
 
 	loop_label: 	{
@@ -975,12 +994,20 @@ void interpret(Thread& thread, Instruction const* pc) {
 	
     #define RECORD_OP(name,...) \
 		name##_record: { \
-            Instruction const* old_pc = pc; \
-            thread.jit.record(thread, old_pc); \
+            if(!thread.jit.record(thread, pc)) { \
+                thread.jit.fail_recording(); \
+		        labels = ops; \
+            } \
             pc = name##_op(thread, *pc); \
             goto *(const void*)labels[pc->bc]; \
     } 
 	STANDARD_BYTECODES(RECORD_OP)
+    RECORD_OP(ncall)
+    RECORD_OP(forbegin)
+    RECORD_OP(forend)
+    RECORD_OP(branch)
+    RECORD_OP(list)
+    RECORD_OP(dotslist)
 	#undef RECORD_OP
 	
 	loop_record: 	{ 
@@ -1029,6 +1056,7 @@ void interpret(Thread& thread, Instruction const* pc) {
 		pc = rets_op(thread, *pc);
 		// terminate recording
 		labels = ops;
+        thread.jit.fail_recording();
 		goto *(const void*)labels[pc->bc]; 
 	}
 	

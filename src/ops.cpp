@@ -48,6 +48,7 @@ Prototype* SLOAD_default(Thread& thread, int64_t i) {
 extern "C"
 double const* ELOAD_double(Thread& thread, Environment* env, int64_t i) {
     Value const& a = env->getRecursive((String)i);
+    printf("Loading double: %d %f (%li)\n", a.length, ((Double const&)a).v()[0], ((Double const&)a).v());
     return a.isDouble() ? ((Double const&)a).v() : 0;
 }
 
@@ -135,6 +136,7 @@ void SSTORE_NULL(Thread& thread, int64_t i, size_t len, void* p) {
 
 extern "C"
 void ESTORE_double(Thread& thread, Environment* env, int64_t i, size_t len, double* d) {
+    printf("Storing out double: %d %f (%li)\n", len, d[0], d);
 	Double a(len);
 	memcpy(a.v(), d, len*sizeof(double));
     env->insertRecursive((String)i) = a;

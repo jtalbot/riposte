@@ -14,6 +14,7 @@
 
 #define TRACE_ENUM(_) \
 		MAP_BYTECODES(_) \
+		FOLD_BYTECODES(_) \
         _(loop, "LOOP", ___) \
         _(jmp, "JMP", ___) \
         _(constant, "CONS", ___) \
@@ -37,7 +38,7 @@
         _(NEWENV, "NEWENV", ___) \
         _(PUSH, "PUSH", ___) \
         _(POP, "POP", ___) \
-        _(dup, "DUP", ___) \
+        _(mov, "MOV", ___) \
 		_(nop, "NOP", ___)
 
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
@@ -82,12 +83,24 @@ public:
         }
     };
 
+    struct Shape {
+        size_t length;
+        bool operator==(Shape const& o) const {
+            return length == o.length;
+        }
+        bool operator<(Shape const& o) const {
+            return length < o.length;
+        }
+        static const Shape Empty;
+        static const Shape Scalar;
+    };
+
 	struct IR {
 		TraceOpCode::Enum op;
 		IRRef a, b, c;
 
         Type::Enum type;
-        size_t width;
+        Shape in, out;
 
         void dump() const;
 
@@ -97,20 +110,21 @@ public:
                     b == o.b &&
                     c == o.c &&
                     type == o.type &&
-                    width == o.width;
+                    in == o.in &&
+                    out == o.out;
         }
 
-        IR(TraceOpCode::Enum op, Type::Enum type, size_t width)
-            : op(op), a(0), b(0), c(0), type(type), width(width) {}
+        IR(TraceOpCode::Enum op, Type::Enum type, Shape in, Shape out)
+            : op(op), a(0), b(0), c(0), type(type), in(in), out(out) {}
         
-        IR(TraceOpCode::Enum op, IRRef a, Type::Enum type, size_t width)
-            : op(op), a(a), b(0), c(0), type(type), width(width) {}
+        IR(TraceOpCode::Enum op, IRRef a, Type::Enum type, Shape in, Shape out)
+            : op(op), a(a), b(0), c(0), type(type), in(in), out(out) {}
         
-        IR(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum type, size_t width)
-            : op(op), a(a), b(b), c(0), type(type), width(width) {}
+        IR(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum type, Shape in, Shape out)
+            : op(op), a(a), b(b), c(0), type(type), in(in), out(out) {}
         
-        IR(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum type, size_t width)
-            : op(op), a(a), b(b), c(c), type(type), width(width) {}
+        IR(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum type, Shape in, Shape out)
+            : op(op), a(a), b(b), c(c), type(type), in(in), out(out) {}
 	};
 
 	unsigned short counters[1024];
@@ -130,11 +144,11 @@ public:
 
     struct Register {
         Type::Enum type;
-        size_t length;
+        Shape shape;
 
         bool operator<(Register const& o) const {
             return type < o.type ||
-                   (type == o.type && length < o.length); 
+                   (type == o.type && shape < o.shape); 
         }
     };
 
@@ -165,8 +179,8 @@ public:
         reenters.clear();
 	}
 
-    void record(Thread& thread, Instruction const* pc, bool branch=false) {
-        EmitIR(thread, *pc, branch);
+    bool record(Thread& thread, Instruction const* pc, bool branch=false) {
+        return EmitIR(thread, *pc, branch);
     }
 
 	bool loop(Thread& thread, Instruction const* pc) {
@@ -194,7 +208,8 @@ public:
         IRRef b, 
         IRRef c,
         Type::Enum type, 
-        size_t width);
+        Shape in,
+        Shape out);
     
     IRRef duplicate(IR const& ir, std::vector<IRRef> const& forward);
 	IRRef load(Thread& thread, int64_t a, Instruction const* reenter);
@@ -204,19 +219,20 @@ public:
 	IRRef cast(IRRef a, Type::Enum type);
     IRRef store(Thread& thread, IRRef a, int64_t c);
 	IRRef EmitUnary(TraceOpCode::Enum op, IRRef a, Type::Enum rty, Type::Enum mty);
+	IRRef EmitFold(TraceOpCode::Enum op, IRRef a, Type::Enum rty, Type::Enum mty);
 	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty);
 	IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty);
 
 
     void emitCall(IRRef a, Function const& func, Environment* env, Instruction const* inst) {
-        IRRef guard = insert(trace, TraceOpCode::GEQ, a, (IRRef)func.prototype(), 0, Type::Function, 1);
+        IRRef guard = insert(trace, TraceOpCode::GEQ, a, (IRRef)func.prototype(), 0, Type::Function, trace[a].out, Shape::Empty);
         reenters[guard] = inst;
-        IRRef ne = insert(trace, TraceOpCode::NEWENV, 0, 0, 0, Type::Environment, 1);
+        IRRef ne = insert(trace, TraceOpCode::NEWENV, 0, 0, 0, Type::Environment, Shape::Scalar, Shape::Scalar);
         envs[env] = ne;
     }
 
     void emitPush(Environment* env) {
-        insert(trace, TraceOpCode::PUSH, envs[env], 0, 0, Type::Promise, 1);
+        insert(trace, TraceOpCode::PUSH, envs[env], 0, 0, Type::Promise, Shape::Empty, Shape::Empty);
     }
 
     void storeArg(Environment* env, String name, Value const& v) {
@@ -229,7 +245,7 @@ public:
         if(i != envs.end())
             return i->second;
         else {
-            IRRef e = insert(trace, TraceOpCode::LOADENV, (IRRef)env, 0, 0, Type::Environment, 1);
+            IRRef e = insert(trace, TraceOpCode::LOADENV, (IRRef)env, 0, 0, Type::Environment, Shape::Scalar, Shape::Scalar);
             envs[env] = e;
             return e;
         }
@@ -243,7 +259,7 @@ public:
     void estore(IRRef a, Environment* env, String name) {
         IRRef e = getEnv(env);
         Variable v = getVar(e, name);
-        insert(trace, TraceOpCode::estore, a, v.env, v.i, trace[a].type, trace[a].width);
+        trace.push_back(IR(TraceOpCode::estore, a, v.env, v.i, trace[a].type, trace[a].out, Shape::Empty));
     }
 
     void markLiveOut(Exit const& exit);
@@ -255,7 +271,7 @@ public:
 	void specialize();
 	void schedule();
 
-    void EmitIR(Thread& thread, Instruction const& inst, bool branch);
+    bool EmitIR(Thread& thread, Instruction const& inst, bool branch);
     void EmitOptIR(IRRef i, std::vector<IRRef>& forward, std::map<Variable, IRRef>& map, std::map<Variable, IRRef>& stores, std::tr1::unordered_map<IR, IRRef>& cse);
     void Replay(Thread& thread);
 
@@ -279,6 +295,20 @@ public:
         UNARY_TYPES(EMIT)
         #undef EMIT
         _error("Unknown type in EmitUnary");
+    }
+
+	template< template<class X> class Group >
+	IRRef EmitFold(TraceOpCode::Enum op, IRRef a) {
+		Type::Enum aty = trace[a].type;
+
+        #define EMIT(TA)                  \
+        if(aty == Type::TA)                     \
+            return EmitFold(op, a,             \
+                Group<TA>::R::VectorType,    \
+                Group<TA>::MA::VectorType);
+        UNARY_TYPES(EMIT)
+        #undef EMIT
+        _error("Unknown type in EmitFold");
     }
 
 	template< template<class X, class Y> class Group >
@@ -321,9 +351,16 @@ public:
 namespace std {
     namespace tr1 {
     template<>
+        struct hash<JIT::Shape> {
+            size_t operator()(JIT::Shape const& key) const {
+                return key.length;
+            }
+        };
+    template<>
         struct hash<JIT::IR> {
+            hash<JIT::Shape> sh;
             size_t operator()(JIT::IR const& key) const {
-                return key.op ^ key.a ^ key.b ^ key.c ^ key.width ^ key.type;
+                return key.op ^ key.a ^ key.b ^ key.c ^ key.type ^ sh(key.in) ^ sh(key.out);
             }
         };
     }

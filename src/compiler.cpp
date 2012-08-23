@@ -6,6 +6,8 @@
 static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::add) return ByteCode::pos; 
 	if(func == Strings::sub) return ByteCode::neg; 
+	if(func == Strings::abs) return ByteCode::abs; 
+	if(func == Strings::sign) return ByteCode::sign; 
 	
 	if(func == Strings::floor) return ByteCode::floor; 
 	if(func == Strings::ceiling) return ByteCode::ceiling; 
@@ -21,16 +23,17 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::atan) return ByteCode::atan; 
     
     if(func == Strings::lnot) return ByteCode::lnot; 
+	
+    if(func == Strings::sum) return ByteCode::sum; 
+	
+    if(func == Strings::length) return ByteCode::length; 
 #ifdef TRACE_DEVELOPMENT
-	if(func == Strings::abs) return ByteCode::abs; 
-	if(func == Strings::sign) return ByteCode::sign; 
 	if(func == Strings::isna) return ByteCode::isna; 
 	if(func == Strings::isnan) return ByteCode::isnan; 
 	if(func == Strings::isfinite) return ByteCode::isfinite; 
 	if(func == Strings::isinfinite) return ByteCode::isinfinite; 
 	
 	
-	if(func == Strings::sum) return ByteCode::sum; 
 	if(func == Strings::prod) return ByteCode::prod; 
 	if(func == Strings::mean) return ByteCode::mean; 
 	if(func == Strings::min) return ByteCode::min; 
@@ -43,7 +46,6 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::cummax) return ByteCode::cummax; 
 	
 	if(func == Strings::type) return ByteCode::type; 
-	if(func == Strings::length) return ByteCode::length; 
 	if(func == Strings::strip) return ByteCode::strip; 
 	
 	if(func == Strings::random) return ByteCode::random; 
@@ -75,8 +77,8 @@ static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::pmax) return ByteCode::pmax; 
 	
     if(func == Strings::bb) return ByteCode::gather1;
-#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::bracket) return ByteCode::gather;
+#ifdef TRACE_DEVELOPMENT
 
 	if(func == Strings::cm2) return ByteCode::cm2; 
 	
@@ -92,9 +94,9 @@ static ByteCode::Enum op2(String const& func) {
 static ByteCode::Enum op3(String const& func) {
 	if(func == Strings::seq) return ByteCode::seq;
 	if(func == Strings::bbAssign) return ByteCode::scatter1;
+	if(func == Strings::bracketAssign) return ByteCode::scatter;
 	if(func == Strings::ifelse) return ByteCode::ifelse;
 #ifdef TRACE_DEVELOPMENT
-	if(func == Strings::bracketAssign) return ByteCode::scatter;
 	if(func == Strings::split) return ByteCode::split;
 	if(func == Strings::rep) return ByteCode::rep;
 #endif
