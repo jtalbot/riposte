@@ -417,13 +417,13 @@ template< template<class X> class Group>
 bool isTraceable(Thread const& thread, Value const& a) { 
 	return 	isTraceable(thread, a);
 }
-
+/*
 template<>
 bool isTraceable<ArithScan>(Thread const& thread, Value const& a) { return false; }
 
 template<>
 bool isTraceable<UnifyScan>(Thread const& thread, Value const& a) { return false; }
-
+*/
 template< template<class X, class Y> class Group>
 bool isTraceable(Thread const& thread, Value const& a, Value const& b) {
 	return  isTraceable(thread, a, b);

@@ -553,11 +553,11 @@ struct TraceLLVMCompiler {
                     }
                     else if(n.type == Type::Integer) {
                         sizeOfResult = n.out.length;
-                        int64_t * reductionVector = new int64_t[outputReductionSize];
+                        long long * reductionVector = new long long[outputReductionSize];
                         cudaMemcpy(reductionVector, outputGPU[output], outputReductionSize * sizeof(Integer::Element), cudaMemcpyDeviceToHost);
                         switch(n.op) {
                             case IROpCode::sum: {
-                                int64_t sum = 0;
+                                long long sum = 0;
                                 for (int i = 0; i < outputReductionSize; i++) {
                                     sum += reductionVector[i];
                                 }
@@ -1029,18 +1029,21 @@ struct TraceLLVMCompiler {
                             
                             
                             B->SetInsertPoint(origEnd);
-
+                            
+                            
                             llvm::Value *sharedMemIndex = GEPGetter(shared, tid);
                             B->CreateStore(B->CreateLoad(Alloca), sharedMemIndex);
                             
                             
                             B->CreateCall(Sync);
                             
+                            
+                            
                             int current = 512;
                             for(int ind = 0 ; ind < 3; ind++) {
                                 if(numThreads >= current) {
                                     B->SetInsertPoint(bodyBlocks[ind]);
-
+                                    
                                     llvm::Value *sharedMemIndexT = GEPGetter(shared, B->CreateAdd(tid, ConstantInt(current/2)));
                                     
                                     B->CreateStore(B->CreateAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndexT)), sharedMemIndex);
@@ -1058,7 +1061,7 @@ struct TraceLLVMCompiler {
                             for (current = 64; current > 1; current/=2) {
                                 if (numThreads >= current) {
                                     
-                                    llvm::Value *sharedMemIndexT = GEPGetter(shared,B->CreateAdd(tid, ConstantInt(current/2)));
+                                    llvm::Value *sharedMemIndexT = GEPGetter(shared, B->CreateAdd(tid, ConstantInt(current/2)));
                                     
                                     
                                     B->CreateStore(B->CreateAdd(B->CreateLoad(sharedMemIndex), B->CreateLoad(sharedMemIndexT)), sharedMemIndex, true);
@@ -1066,7 +1069,6 @@ struct TraceLLVMCompiler {
                                 }
                                 
                             }
-
                             
                             B->SetInsertPoint(endBlocks[3]);
                             
@@ -1075,7 +1077,6 @@ struct TraceLLVMCompiler {
                             
                             
                             B->SetInsertPoint(bodyFinal);
-                            
                             
                             llvm::Value *output = GEPGetter(shared, ConstantInt(0));
                             
