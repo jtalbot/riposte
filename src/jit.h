@@ -142,6 +142,7 @@ public:
     std::vector<IR> trace;
     std::map<IRRef, Instruction const*> reenters;
     std::vector<IR> code;
+    std::vector<bool> fusable;
 
     struct Register {
         Type::Enum type;
@@ -155,11 +156,11 @@ public:
 
     std::vector<Register> registers;
     std::multimap<Register, size_t> freeRegisters;
-    std::vector<int64_t> assignment;
-    std::vector<size_t> group;
+    IRRef Loop;
 
 	struct Exit {
 		std::map<Variable, IRRef> o;
+        std::vector<int64_t> assignment;
 		Instruction const* reenter;
 	};
 	std::map<size_t, Exit > exits;
@@ -246,7 +247,7 @@ public:
         if(i != envs.end())
             return i->second;
         else {
-            IRRef e = insert(trace, TraceOpCode::LOADENV, (IRRef)env, 0, 0, Type::Environment, Shape::Scalar, Shape::Scalar);
+            IRRef e = insert(trace, TraceOpCode::LOADENV, (IRRef)env, 0, 0, Type::Environment, Shape::Empty, Shape::Scalar);
             envs[env] = e;
             return e;
         }
@@ -271,19 +272,21 @@ public:
 
 	void specialize();
 	void schedule();
+	void Schedule();
 
     bool EmitIR(Thread& thread, Instruction const& inst, bool branch);
-    void EmitOptIR(IRRef i, std::vector<IRRef>& forward, std::map<Variable, IRRef>& map, std::map<Variable, IRRef>& stores, std::tr1::unordered_map<IR, IRRef>& cse);
+    void EmitOptIR(IRRef i, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::map<Variable, IRRef>& map, std::map<Variable, IRRef>& stores, std::tr1::unordered_map<IR, IRRef>& cse);
     void Replay(Thread& thread);
 
-    void AssignRegister(size_t index);
-    void PreferRegister(size_t index, size_t share);
-    void ReleaseRegister(size_t index);
-    void RegisterAssignment();
+    void AssignRegister(std::vector<int64_t>& assignment, size_t index);
+    void PreferRegister(std::vector<int64_t>& assignment, size_t index, size_t share);
+    void ReleaseRegister(std::vector<int64_t>& assignment, size_t index);
+    void RegisterAssignment(Exit& e);
 
     IRRef Insert(std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, IR ir);
     IR Normalize(IR ir);
-
+    bool Ready(IR ir, std::vector<bool>& done);
+    
 	template< template<class X> class Group >
 	IRRef EmitUnary(TraceOpCode::Enum op, IRRef a) {
 		Type::Enum aty = trace[a].type;

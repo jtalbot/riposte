@@ -623,27 +623,27 @@ Instruction const* length_op(Thread& thread, Instruction const& inst) {
 Instruction const* mean_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 #ifdef ENABLE_JIT
-    if(isTraceable<MomentFold>(thread,a)) {
+	if(isTraceable<MomentFold>(thread,a)) {
 		OUT(thread, inst.c) = thread.EmitUnary<MomentFold>(thread.frame.environment, IROpCode::mean, a, 0);
 		thread.OptBind(OUT(thread,inst.c));
  		return &inst+1;
 	}
 #endif
-    _error("Mean NYI for scalar");
+    _error("No scalar implementation of mean");
 	return &inst+1;
 }
 
 Instruction const* cm2_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
-	OPERAND(b, inst.b); FORCE(b, inst.b); 
-#ifdef ENABLE_JIT
+	OPERAND(b, inst.b); FORCE(b, inst.b);
+#ifdef ENABLE_JIT 
 	if(isTraceable<Moment2Fold>(thread,a,b)) {
 		OUT(thread, inst.c) = thread.EmitBinary<Moment2Fold>(thread.frame.environment, IROpCode::cm2, a, b, 0);
 		thread.OptBind(OUT(thread,inst.c));
  		return &inst+1;
 	}
 #endif
-    _error("cm2 NYI for scalar");
+    _error("No scalar implementation of cm2");
 	return &inst+1;
 }
 
@@ -708,8 +708,8 @@ Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	OPERAND(b, inst.b); FORCE(b, inst.b); BIND(b);
 	Type::Enum type = string2Type( As<Character>(thread, a)[0] );
 	int64_t l = As<Integer>(thread, b)[0];
-
-#ifdef ENABLE_JIT	
+	
+#ifdef ENABLE_JIT
 	// TODO: replace with isTraceable...
 	if(thread.state.jitEnabled 
 		&& (type == Type::Double || type == Type::Integer || type == Type::Logical)

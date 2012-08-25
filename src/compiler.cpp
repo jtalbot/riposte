@@ -72,12 +72,11 @@ static ByteCode::Enum op2(String const& func) {
 
 	if(func == Strings::pmin) return ByteCode::pmin; 
 	if(func == Strings::pmax) return ByteCode::pmax; 
+	if(func == Strings::cm2) return ByteCode::cm2; 
 	
     if(func == Strings::bb) return ByteCode::gather1;
 	if(func == Strings::bracket) return ByteCode::gather;
 
-	if(func == Strings::cm2) return ByteCode::cm2; 
-	
 	if(func == Strings::vector) return ByteCode::vector;
 
 	if(func == Strings::round) return ByteCode::round; 
