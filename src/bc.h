@@ -42,12 +42,9 @@
 
 #define GENERATOR_BYTECODES(_) \
 	_(seq,		"seq", 		Generator) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(vector,	"vector",	Generator) \
 	_(rep,		"rep", 		Generator) \
 	_(random,	"random", 	Generator)
-#endif
 
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double
 #define ARITH_UNARY_BYTECODES(_) \
@@ -72,13 +69,10 @@
 	_(lnot, "lnot",	LogicalUnary, PassNA(a, ~a))
 
 #define ORDINAL_UNARY_BYTECODES(_) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(isna,	"isna",	OrdinalUnary,	MA::isNA(a)?-1:0) \
 	_(isnan,	"isnan",	OrdinalUnary,	MA::isNaN(a)?-1:0) \
 	_(isfinite,	"isfinite",	OrdinalUnary,	MA::isFinite(a)?-1:0) \
 	_(isinfinite,	"isinfinite",	OrdinalUnary,	MA::isInfinite(a)?-1:0)
-#endif
 
 /*
 #define STRING_UNARY_BYTECODES(_) \
@@ -106,11 +100,8 @@
 	_(pmax, "pmax",	UnifyBinary,	PassNA(a,b,riposte_max(thread,a,b)))
 
 #define ROUND_BINARY_BYTECODES(_) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(round, "round", 	RoundBinary,	PassNA(a,b,riposte_round(thread,a,b))) \
 	_(signif, "signif",	RoundBinary,	PassNA(a,b,riposte_signif(thread,a,b)))
-#endif
 
 #define ORDINAL_BINARY_BYTECODES(_) \
 	_(eq, "eq",	OrdinalBinary,	PassNA(a,b,a==b?-1:0)) \
@@ -122,53 +113,32 @@
 
 #define TERNARY_BYTECODES(_) \
 	_(ifelse, "ifelse", IfElse) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(split, "split", Split)
-#endif
 
 #define ARITH_FOLD_BYTECODES(_) \
 	_(sum, "sum",	ArithFold, 	add) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(prod, "prod",	ArithFold, 	mul)
-#endif
 
 #define LOGICAL_FOLD_BYTECODES(_) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(any, "any",	LogicalFold, 	lor) \
 	_(all, "all",	LogicalFold, 	land)
-#endif
 
 #define UNIFY_FOLD_BYTECODES(_) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(min, "min",	UnifyFold, 	pmin) \
 	_(max, "max",	UnifyFold, 	pmax)
-#endif
 
 #define SPECIAL_FOLD_BYTECODES(_) \
 	_(length, "length", CountFold) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(mean, "mean", MomentFold) \
 	_(cm2, "cm2", Moment2Fold)
-#endif
 
 #define ARITH_SCAN_BYTECODES(_) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(cumsum, "cumsum",	ArithScan,	add) \
 	_(cumprod, "cumprod",	ArithScan,	mul)
-#endif
 
 #define UNIFY_SCAN_BYTECODES(_) \
-
-#ifdef TRACE_DEVELOPMENT
 	_(cummin, "cummin",	UnifyScan,	pmin) \
 	_(cummax, "cummax",	UnifyScan,	pmax)
-#endif
 
 #define SPECIAL_BYTECODES(_) 	\
 	_(done, "done") 

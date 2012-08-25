@@ -231,6 +231,19 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             store(thread, insert(trace, TraceOpCode::length, a, 0, 0, Type::Integer, trace[a].out, Shape::Scalar), inst.c);
         }   break;
 
+        case ByteCode::forend:
+        {
+            IRRef counter = load(thread, inst.c, &inst);
+            IRRef vec = load(thread, inst.b, &inst);
+
+            IRRef a = insert(trace, TraceOpCode::length, vec, 0, 0, Type::Integer, trace[vec].out, Shape::Scalar);
+            IRRef b = insert(trace, TraceOpCode::lt, counter, a, 0, Type::Logical, Shape::Scalar, Shape::Scalar);
+            IRRef c = insert(trace, TraceOpCode::guardT, b, 0, 0, Type::Promise, Shape::Scalar, Shape::Empty);
+            reenters[c] = &inst+2;
+            store(thread, insert(trace, TraceOpCode::gather, vec, counter, 0, trace[vec].type, Shape::Scalar, Shape::Scalar), inst.a);
+            store(thread, insert(trace, TraceOpCode::add, counter, constant(Integer::c(1)), 0, Type::Integer, Shape::Scalar, Shape::Scalar), inst.c); 
+        }   break;
+
         default: {
             printf("Trace halted by %s\n", ByteCode::toString(inst.bc));
             return false;
@@ -467,7 +480,7 @@ void JIT::Replay(Thread& thread) {
     // Emit PHIs 
     std::map<Variable, IRRef>::iterator s,l;
     for(s = stores.begin(); s != stores.end(); ++s) {
-        if(s->first.env != (IRRef)-1) {
+        //if(s->first.env != (IRRef)-1) {
             l = loads.find(s->first);
             if(l != loads.end() && l->second < s->second) {
                 IR const& ir = code[s->second];
@@ -475,7 +488,7 @@ void JIT::Replay(Thread& thread) {
                         IR(TraceOpCode::phi, s->second, ir.type, ir.out, ir.out));
                 s->second = a;
             }
-        }
+        //}
     }
     loads.clear();
  
@@ -488,7 +501,7 @@ void JIT::Replay(Thread& thread) {
 
     // Emit MOVs
     for(s = stores.begin(); s != stores.end(); ++s) {
-        if(s->first.env != (IRRef)-1) {
+        //if(s->first.env != (IRRef)-1) {
             l = loads.find(s->first);
             if(l != loads.end() && l->second < s->second) {
                 IR const& ir = code[s->second];
@@ -496,7 +509,7 @@ void JIT::Replay(Thread& thread) {
                         IR(TraceOpCode::mov, l->second, s->second, ir.type, ir.out, ir.out));
                 s->second = a;
             }
-        }
+        //}
     }
     
    
@@ -526,13 +539,11 @@ JIT::Ptr JIT::end_recording(Thread& thread) {
     assert(state == RECORDING);
     state = OFF;
 
-    dump(thread, trace);
-
     Replay(thread);
     schedule();
     RegisterAssignment();
-
     dump(thread, code);
+
     
     return compile(thread);
 }
@@ -644,7 +655,10 @@ void JIT::schedule() {
         IR& ir = code[i];
         switch(ir.op) {
             #define CASE(Name, ...) case TraceOpCode::Name:
-            
+            case TraceOpCode::estore:
+            case TraceOpCode::eload: {
+                group[ir.a] = std::max(group[ir.a], group[i]);
+            } break; 
             case TraceOpCode::loop: {
                 group[i] = ++g;
             } break;
@@ -719,6 +733,7 @@ void JIT::schedule() {
                     std::max(group[ir.a],
                         group[i]);
             } break;
+            case TraceOpCode::length:
             FOLD_BYTECODES(CASE) 
             {
                 group[i]++;
@@ -733,10 +748,6 @@ void JIT::schedule() {
                 group[ir.b] = 
                     std::max(group[ir.b],
                         group[i]+1);
-            } break;
-            case TraceOpCode::length: {
-                group[i] =
-                    std::max(group[ir.a], group[i]+1); 
             } break;
             default: {
             } break;
@@ -798,6 +809,7 @@ void JIT::ReleaseRegister(size_t index) {
         freeRegisters.insert( std::make_pair(registers[assignment[index]], assignment[index]) );
     }
     else if(assignment[index] < 0) {
+        printf("Missing index is %d %d\n", index, assignment[index]);
         _error("Preferred register never assigned");
     }
 }
@@ -844,6 +856,7 @@ void JIT::RegisterAssignment() {
             //case TraceOpCode::GTYPE: 
             case TraceOpCode::guardF: 
             case TraceOpCode::guardT: {
+                AssignRegister(ir.a);
                 std::map<Variable, IRRef>::const_iterator j;
                 for(j = exits[i].o.begin(); j != exits[i].o.end(); ++j) {
                     AssignRegister(j->second);
@@ -1205,20 +1218,22 @@ struct Fusion {
 
     void Store(llvm::Value* a, size_t reg) {
 
-        size_t width = ((llvm::VectorType*)a->getType())->getNumElements();
+        if(reg != 0) {
+            size_t width = ((llvm::VectorType*)a->getType())->getNumElements();
 
-        if(jit.registers[reg].type == Type::Logical)
-            a = builder.CreateSExt(a, llvm::VectorType::get(builder.getInt8Ty(), width));
+            if(jit.registers[reg].type == Type::Logical)
+                a = builder.CreateSExt(a, llvm::VectorType::get(builder.getInt8Ty(), width));
 
-        llvm::Value* out = builder.CreateInBoundsGEP(registers[reg], iterator);
-        
-        llvm::Type* t = llvm::VectorType::get(
-            ((llvm::SequentialType*)a->getType())->getElementType(),
-            width)->getPointerTo();
-        
-        out = builder.CreatePointerCast(out, t);
+            llvm::Value* out = builder.CreateInBoundsGEP(registers[reg], iterator);
 
-        builder.CreateStore(a, out);
+            llvm::Type* t = llvm::VectorType::get(
+                    ((llvm::SequentialType*)a->getType())->getElementType(),
+                    width)->getPointerTo();
+
+            out = builder.CreatePointerCast(out, t);
+
+            builder.CreateStore(a, out);
+        }
     }
 
     llvm::Value* SSEIntrinsic(llvm::Intrinsic::ID Op1, llvm::Intrinsic::ID Op2, JIT::IR const& ir) {

@@ -1,8 +1,6 @@
 
 #include "coerce.h"
 
-#ifdef TRACE_DEVELOPMENT
-
 void asnull(Thread& thread, Value const* args, Value& result) {
 	result = As<Null>(thread, args[0]);
 }
@@ -66,12 +64,9 @@ void islist(Thread& thread, Value const* args, Value& result) {
 }
 */
 
-#endif
-
 void registerCoerceFunctions(State& state)
 {
 
-#ifdef TRACE_DEVELOPMENT
 	state.registerInternalFunction(state.internStr("as.null"), (asnull), 1);
 	state.registerInternalFunction(state.internStr("as.logical"), (aslogical), 1);
 	state.registerInternalFunction(state.internStr("as.integer"), (asinteger), 1);
@@ -90,5 +85,4 @@ void registerCoerceFunctions(State& state)
 	state.registerInternalFunction(state.internStr("is.character"), (ischaracter));
 	state.registerInternalFunction(state.internStr("is.list"), (islist));
 */
-#endif
 }

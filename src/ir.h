@@ -22,7 +22,6 @@
 		_(load,"load", ___) \
 		_(gather,"gather", ___) \
 		_(filter, "filter", ___) \
-		_(split, "split", ___) \
 		_(nop, "nop", ___) \
 		_(sload, "sload", ___) \
 		_(sstore, "sstore", ___) \

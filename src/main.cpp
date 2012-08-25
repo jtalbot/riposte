@@ -258,13 +258,11 @@ main(int argc, char** argv)
 	Thread& thread = state.getMainThread();
 
 	try {
-	#ifdef TRACE_DEVELOPMENT
 		registerCoreFunctions(state);	
 		registerCoerceFunctions(state);	
 		loadLibrary(thread, "library", "core");
 		//loadLibrary(thread, "library", "base");
 		//loadLibrary(thread, "library", "stats");
-	#endif
 
 	} catch(RiposteError& error) { 
 		e_message("Error", "riposte", error.what().c_str());

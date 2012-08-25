@@ -75,11 +75,11 @@ inline Value As(Thread& thread, Type::Enum type, Value const& src) {
 //gcc >= 4.3 requires template specialization to have the same storage class (e.g. 'static') as the orignal template
 //specifying static is an error
 //gcc < 4.3 treats the declarations as distinct. Not specifying a storage class makes the specialization external >_<
-#if __GNUC__ >= 4 && __GNUC_MINOR__ >= 3
+//#if __GNUC__ >= 4 && __GNUC_MINOR__ >= 3
 #define SPECIALIZED_STATIC
-#else
-#define SPECIALIZED_STATIC static
-#endif
+//#else
+//#define SPECIALIZED_STATIC static
+//#endif
 
 
 

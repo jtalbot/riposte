@@ -15,11 +15,9 @@ static void printCode(Thread const& thread, Prototype const* prototype, Environm
 		std::cout << "\tCode: " << std::endl;
 		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++) {
 			std::cout << "\t\t" << i << ":\t" << prototype->bc[i].toString();
-#ifdef TRACE_DEVELOPMENT
 			if(prototype->bc[i].bc == ByteCode::call) {
 				std::cout << "\t\t(arguments: " << prototype->calls[prototype->bc[i].b].arguments.size() << ")";
 			}
-#endif
 			std::cout << std::endl;
 		}
 	}

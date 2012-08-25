@@ -15,6 +15,7 @@
 #define TRACE_ENUM(_) \
 		MAP_BYTECODES(_) \
 		FOLD_BYTECODES(_) \
+		SCAN_BYTECODES(_) \
         _(loop, "LOOP", ___) \
         _(jmp, "JMP", ___) \
         _(constant, "CONS", ___) \

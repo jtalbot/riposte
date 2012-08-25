@@ -24,16 +24,13 @@ static ByteCode::Enum op1(String const& func) {
     
     if(func == Strings::lnot) return ByteCode::lnot; 
 	
-    if(func == Strings::sum) return ByteCode::sum; 
-	
-    if(func == Strings::length) return ByteCode::length; 
-#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::isna) return ByteCode::isna; 
 	if(func == Strings::isnan) return ByteCode::isnan; 
 	if(func == Strings::isfinite) return ByteCode::isfinite; 
 	if(func == Strings::isinfinite) return ByteCode::isinfinite; 
-	
-	
+    
+    if(func == Strings::sum) return ByteCode::sum; 
+    if(func == Strings::length) return ByteCode::length; 
 	if(func == Strings::prod) return ByteCode::prod; 
 	if(func == Strings::mean) return ByteCode::mean; 
 	if(func == Strings::min) return ByteCode::min; 
@@ -49,8 +46,8 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::strip) return ByteCode::strip; 
 	
 	if(func == Strings::random) return ByteCode::random; 
-#endif	
-	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
+	
+    throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
 }
 
 static ByteCode::Enum op2(String const& func) {
@@ -78,17 +75,15 @@ static ByteCode::Enum op2(String const& func) {
 	
     if(func == Strings::bb) return ByteCode::gather1;
 	if(func == Strings::bracket) return ByteCode::gather;
-#ifdef TRACE_DEVELOPMENT
 
 	if(func == Strings::cm2) return ByteCode::cm2; 
 	
-
 	if(func == Strings::vector) return ByteCode::vector;
 
 	if(func == Strings::round) return ByteCode::round; 
 	if(func == Strings::signif) return ByteCode::signif; 
-#endif	
-	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a binary operator"); 
+	
+    throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a binary operator"); 
 }
 
 static ByteCode::Enum op3(String const& func) {
@@ -96,11 +91,10 @@ static ByteCode::Enum op3(String const& func) {
 	if(func == Strings::bbAssign) return ByteCode::scatter1;
 	if(func == Strings::bracketAssign) return ByteCode::scatter;
 	if(func == Strings::ifelse) return ByteCode::ifelse;
-#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::split) return ByteCode::split;
 	if(func == Strings::rep) return ByteCode::rep;
-#endif
-	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a trinary operator"); 
+	
+    throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a trinary operator"); 
 }
 
 int64_t Compiler::emit(ByteCode::Enum bc, Operand a, Operand b, Operand c) {
@@ -219,16 +213,11 @@ Compiler::Operand Compiler::compileFunctionCall(List const& call, Character cons
 	if(!a.named && a.dotIndex >= (int64_t)a.arguments.size())
 		emit(ByteCode::call, function, code->calls.size()-1, result);
 	else
-#ifdef TRACE_DEVELOPMENT
 		emit(ByteCode::ncall, function, code->calls.size()-1, result);
-#else
-	    _error("Trace: No named functions yet");
-#endif
 	return result;
 }
 
 Compiler::Operand Compiler::compileInternalFunctionCall(Object const& o, Prototype* code) {
-#ifdef TRACE_DEVELOPMENT
 	List const& call = (List const&)(o.base());
 	String func = SymbolStr(call[0]);
 	std::map<String, int64_t>::const_iterator itr = state.internalFunctionIndex.find(func);
@@ -258,9 +247,6 @@ Compiler::Operand Compiler::compileInternalFunctionCall(Object const& o, Prototy
 	Operand result = allocRegister();
 	emit(ByteCode::internal, function, result, result);
 	return result;
-#else
-	_error("Trace: No internal functions yet");
-#endif
 }
 
 Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Prototype* code) {
@@ -275,7 +261,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	String func = SymbolStr(call[0]);
 	// list is the only built in function that handles ... or named parameters
 	// we only handle the list(...) case through an op for now
-#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::list && call.length == 2 
 		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
 	{
@@ -286,7 +271,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(ByteCode::dotslist, counter, storage, result); 
 		return result;
 	}
-#endif
 	// These functions can't be called directly if the arguments are named or if
 	// there is a ... in the args list
 
@@ -300,7 +284,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		return compileFunctionCall(call, names, code);
 
 	// switch statement supports named args
-#ifdef TRACE_DEVELOPMENT
 	if(func == Strings::switchSym)
 	{
 		if(call.length == 0) _error("'EXPR' is missing");
@@ -339,8 +322,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		}
 		return result;
 	}
-#endif
-	for(int64_t i = 0; i < length; i++) {
+	
+    for(int64_t i = 0; i < length; i++) {
 		if(names.length > i && names[i] != Strings::empty) 
 			complicated = true;
 	}
@@ -357,14 +340,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		assert(isCall(o) && o.base().isList());
 		return compileInternalFunctionCall(o, code);
 	}
-#ifdef TRACE_DEVELOPMENT 
 	else if(func == Strings::assign ||
 		func == Strings::eqassign || 
 		func == Strings::assign2)
-#else
-	else if(func == Strings::assign ||
-		func == Strings::eqassign)
-#endif
 	{
 		Value dest = call[1];
 		
@@ -408,11 +386,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand source = compile(value, code);
 		Operand result = Operand(MEMORY, SymbolStr(dest));
 
-#ifdef TRACE_DEVELOPMENT
 		emit(func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, result, 0, source);
-#else
-		emit(ByteCode::assign, result, 0, source);
-#endif
 		return source;
 	}
 	else if(func == Strings::function) 
@@ -469,18 +443,19 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(ByteCode::ret, result, 0, 0);
 		return result;
 	} 
-#ifdef TRACE_DEVELOPMENT 
 	else if(func == Strings::forSym) 
 	{
 		Operand loop_variable = Operand(MEMORY, SymbolStr(call[1]));
 		Operand loop_vector = compile(call[2], code);
 		Operand loop_counter = allocRegister();	// save space for loop counter
+		Operand loop_length = allocRegister();	// save space for loop counter
 
 		emit(ByteCode::forbegin, loop_variable, loop_vector, loop_counter);
 		emit(ByteCode::jmp, 0, 0, 0);
 		
 		loopDepth++;
 		int64_t beginbody = ir.size();
+        emit(ByteCode::loop, 0, 0, 0);
 		Operand body = compile(call[3], code);
 		int64_t endbody = ir.size();
 		resolveLoopExits(beginbody, endbody, endbody, endbody+2);
@@ -494,7 +469,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		kill(body); kill(loop_variable); kill(loop_counter); kill(loop_vector);
 		return compileConstant(Null::Singleton(), code);
 	} 
-#endif
 	else if(func == Strings::whileSym)
 	{
 		Operand head_condition = compile(call[1], code);
@@ -520,6 +494,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		loopDepth++;
 		int64_t beginbody = ir.size();
+        emit(ByteCode::loop, 0, 0, 0);
 		Operand body = compile(call[1], code);
 		int64_t endbody = ir.size();
 		resolveLoopExits(beginbody, endbody, endbody, endbody+1);
@@ -628,7 +603,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		return compile(call[1], code);
 	}
-#ifdef TRACE_DEVELOPMENT
 	else if(func == Strings::list) 
 	{
 		Operand f, r;
@@ -643,7 +617,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(ByteCode::list, f, Operand((int64_t)call.length-1), result);
 		return result;
 	}
-#endif
  
 	// Trinary operators
 	else if((func == Strings::bracketAssign ||
@@ -743,7 +716,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(op1(func), a, 0, result);
 		return result; 
 	}
-#ifdef TRACE_DEVELOPMENT 
 	else if(func == Strings::missing)
 	{
 		if(call.length != 2) _error("missing requires one argument");
@@ -753,15 +725,12 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(ByteCode::missing, s, 0, result); 
 		return result;
 	} 
-#endif
 	else if(func == Strings::quote)
 	{
 		if(call.length != 2) _error("quote requires one argument");
 		return compileConstant(call[1], code);
 	}
-	
-#ifndef TRACE_DEVELOPMENT
-	else if(func == Strings::cc) 
+	/*else if(func == Strings::cc) 
 	{
 		Type::Enum type = Type::Null;
 		for(size_t i = 1; i < call.length; i++) {
@@ -785,8 +754,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 				l[i-1] = As<Double>(thread, call[i])[0];
 			return compileConstant(l, code);
 		}
-	}
-#endif
+	}*/
 
 	return compileFunctionCall(call, names, code);
 }

@@ -260,14 +260,16 @@ Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
 	} else {
 		Element2(vec, 0, thread.frame.environment->insert((String)inst.a));
 		Value& counter = REGISTER(inst.c);
-		counter.header = vec.length;	// warning: not a valid object, but saves a shift
-		counter.i = 1;
+        Value& length = REGISTER(inst.c-1);
+        length = Integer::c(vec.length);
+        counter = Integer::c(1);
 		return &inst+2;			// skip over following JMP
 	}
 }
 Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 	Value& counter = REGISTER(inst.c);
-	if(__builtin_expect((counter.i) < counter.header, true)) {
+	Value& length = REGISTER(inst.c-1);
+	if(__builtin_expect((counter.i) < length.i, true)) {
 		OPERAND(vec, inst.b); //FORCE(vec, inst.b); BIND(vec); // this must have necessarily been forced by the forbegin.
 		Element2(vec, counter.i, thread.frame.environment->insert((String)inst.a));
 		counter.i++;
@@ -618,25 +620,30 @@ Instruction const* length_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-#ifdef TRACE_DEVELOPMENT
 Instruction const* mean_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
-	if(isTraceable<MomentFold>(thread,a)) {
+#ifdef ENABLE_JIT
+    if(isTraceable<MomentFold>(thread,a)) {
 		OUT(thread, inst.c) = thread.EmitUnary<MomentFold>(thread.frame.environment, IROpCode::mean, a, 0);
 		thread.OptBind(OUT(thread,inst.c));
  		return &inst+1;
 	}
+#endif
+    _error("Mean NYI for scalar");
 	return &inst+1;
 }
 
 Instruction const* cm2_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	OPERAND(b, inst.b); FORCE(b, inst.b); 
+#ifdef ENABLE_JIT
 	if(isTraceable<Moment2Fold>(thread,a,b)) {
 		OUT(thread, inst.c) = thread.EmitBinary<Moment2Fold>(thread.frame.environment, IROpCode::cm2, a, b, 0);
 		thread.OptBind(OUT(thread,inst.c));
  		return &inst+1;
 	}
+#endif
+    _error("cm2 NYI for scalar");
 	return &inst+1;
 }
 
@@ -645,17 +652,18 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 	int64_t levels = As<Integer>(thread, a)[0];
 	OPERAND(b, inst.b); FORCE(b, inst.b);
 	OPERAND(c, inst.c); FORCE(c, inst.c);
+#ifdef ENABLE_JIT
 	if(isTraceable<Split>(thread,b,c)) {
 		OUT(thread, inst.c) = thread.EmitSplit(thread.frame.environment, c, b, levels);
 		thread.OptBind(OUT(thread,inst.c));
 		return &inst+1;
 	}
+#endif
 	BIND(a); BIND(b); BIND(c);
 
 	_error("split not defined in scalar yet");
 	return &inst+1; 
 }
-#endif
 
 Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
@@ -695,13 +703,13 @@ Instruction const* function_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-#ifdef TRACE_DEVELOPMENT
 Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
 	OPERAND(b, inst.b); FORCE(b, inst.b); BIND(b);
 	Type::Enum type = string2Type( As<Character>(thread, a)[0] );
 	int64_t l = As<Integer>(thread, b)[0];
-	
+
+#ifdef ENABLE_JIT	
 	// TODO: replace with isTraceable...
 	if(thread.state.jitEnabled 
 		&& (type == Type::Double || type == Type::Integer || type == Type::Logical)
@@ -710,6 +718,7 @@ Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 		thread.OptBind(OUT(thread,inst.c));
 		return &inst+1;
 	}
+#endif
 
 	if(type == Type::Logical) {
 		Logical v(l);
@@ -736,7 +745,7 @@ Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	} 
 	return &inst+1;
 }
-#endif
+
 Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	// c = start, b = step, a = length
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
@@ -766,7 +775,6 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-#ifdef TRACE_DEVELOPMENT
 Instruction const* rep_op(Thread& thread, Instruction const& inst) {
 	// c = n, b = each, a = length
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
@@ -776,12 +784,14 @@ Instruction const* rep_op(Thread& thread, Instruction const& inst) {
 	int64_t n = As<Integer>(thread, c)[0];
 	int64_t each = As<Integer>(thread, b)[0];
 	int64_t len = As<Integer>(thread, a)[0];
-	
+
+#ifdef ENABLE_JIT	
 	if(len >= TRACE_VECTOR_WIDTH) {
 		OUT(thread, inst.c) = thread.EmitRepeat(thread.frame.environment, len, (int64_t)n, (int64_t)each);
 		thread.OptBind(OUT(thread,inst.c));
 		return &inst+1;
 	}
+#endif
 
 	OUT(thread, inst.c) = Repeat((int64_t)n, (int64_t)each, len);
 	return &inst+1;
@@ -801,12 +811,11 @@ Instruction const* random_op(Thread& thread, Instruction const& inst) {
 	OUT(thread, inst.c) = Random(thread, len);
 	return &inst+1;
 }
-#endif
 
 Instruction const* type_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	
-#ifdef TRACE_DEVELOPMENT
+#ifdef ENABLE_JIT
     switch(thread.futureType(a)) {
                 #define CASE(name, str) case Type::name: OUT(thread, inst.c) = Character::c(Strings::name); break;
                 TYPES(CASE)
