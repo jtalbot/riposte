@@ -16,6 +16,7 @@
 		MAP_BYTECODES(_) \
 		FOLD_BYTECODES(_) \
 		SCAN_BYTECODES(_) \
+		GENERATOR_BYTECODES(_) \
         _(loop, "LOOP", ___) \
         _(jmp, "JMP", ___) \
         _(constant, "CONS", ___) \
@@ -24,22 +25,22 @@
         _(estore, "ESTORE", ___) \
         _(sstore, "SSTORE", ___) \
         _(GTYPE, "GTYPE", ___) \
-        _(GEQ,   "GEQ", ___) \
+        _(GPROTO,   "GPROTO", ___) \
 		_(guardT, "GTRUE", ___) \
 		_(guardF, "GFALSE", ___) \
 		_(gather, "GATH", ___) \
 		_(scatter, "SCAT", ___) \
 		_(phi, "PHI", ___) \
-		_(castd, "CASTD", ___) \
-		_(casti, "CASTI", ___) \
-		_(castl, "CASTL", ___) \
         _(length, "LENGTH", ___) \
-        _(rep, "REP", ___) \
         _(LOADENV, "LOADENV", ___) \
         _(NEWENV, "NEWENV", ___) \
+        _(FREEENV, "FREEENV", ___) \
         _(PUSH, "PUSH", ___) \
         _(POP, "POP", ___) \
         _(mov, "MOV", ___) \
+        _(strip, "STRIP", ___) \
+        _(attrget, "attrget", ___) \
+        _(attrset, "attrset", ___) \
 		_(nop, "NOP", ___)
 
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
@@ -94,6 +95,7 @@ public:
         }
         static const Shape Empty;
         static const Shape Scalar;
+        Shape(size_t length) : length(length) {}
     };
 
 	struct IR {
@@ -135,14 +137,25 @@ public:
     State state;
 	Instruction const* startPC;
 
-    std::map<Environment*, IRRef> envs;
+    std::map<Environment const*, IRRef> envs;
     std::vector<Value> constants;
     std::map<Value, IRRef> constantsMap;
+
+    struct StackFrame {
+        IRRef environment;
+        Prototype const* prototype;
+        Instruction const* returnpc;
+        Value* returnbase;
+        int64_t dest;
+        IRRef env;
+    };
 
     std::vector<IR> trace;
     std::map<IRRef, Instruction const*> reenters;
     std::vector<IR> code;
     std::vector<bool> fusable;
+    std::map<IRRef, StackFrame> frames;
+
 
     struct Register {
         Type::Enum type;
@@ -159,6 +172,8 @@ public:
     IRRef Loop;
 
 	struct Exit {
+        std::vector<IRRef> environments;
+        std::vector<StackFrame> frames;
 		std::map<Variable, IRRef> o;
         std::vector<int64_t> assignment;
 		Instruction const* reenter;
@@ -170,7 +185,7 @@ public:
 	{
 	}
 
-	void start_recording(Instruction const* startPC) {
+	void start_recording(Instruction const* startPC, Environment const* env) {
 		assert(state == OFF);
 		state = RECORDING;
 		this->startPC = startPC;
@@ -179,6 +194,10 @@ public:
         constants.clear();
         constantsMap.clear();
         reenters.clear();
+
+        IRRef e = insert(trace, TraceOpCode::LOADENV, (IRRef)env, 0, 0, Type::Environment, Shape::Empty, Shape::Scalar);
+
+        envs[env] = e;
 	}
 
     bool record(Thread& thread, Instruction const* pc, bool branch=false) {
@@ -216,7 +235,6 @@ public:
     IRRef duplicate(IR const& ir, std::vector<IRRef> const& forward);
 	IRRef load(Thread& thread, int64_t a, Instruction const* reenter);
     IRRef constant(Value const& v);
-	Variable intern(Thread& thread, int64_t a);
 	IRRef rep(IRRef a, size_t width);
 	IRRef cast(IRRef a, Type::Enum type);
     IRRef store(Thread& thread, IRRef a, int64_t c);
@@ -226,23 +244,21 @@ public:
 	IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty);
 
 
-    void emitCall(IRRef a, Function const& func, Environment* env, Instruction const* inst) {
-        IRRef guard = insert(trace, TraceOpCode::GEQ, a, (IRRef)func.prototype(), 0, Type::Function, trace[a].out, Shape::Empty);
+    void emitCall(IRRef a, Function const& func, Environment* env, Environment* l, Environment* d, Value const& call, Instruction const* inst) {
+        IRRef guard = insert(trace, TraceOpCode::GPROTO, a, (IRRef)func.prototype(), 0, Type::Function, trace[a].out, Shape::Empty);
         reenters[guard] = inst;
-        IRRef ne = insert(trace, TraceOpCode::NEWENV, 0, 0, 0, Type::Environment, Shape::Scalar, Shape::Scalar);
+        IRRef ne = insert(trace, TraceOpCode::NEWENV, getEnv(l), getEnv(d), constant(call), Type::Environment, Shape::Scalar, Shape::Scalar);
         envs[env] = ne;
     }
 
-    void emitPush(Environment* env) {
-        insert(trace, TraceOpCode::PUSH, envs[env], 0, 0, Type::Promise, Shape::Empty, Shape::Empty);
-    }
+    void emitPush(Thread const& thread);
 
     void storeArg(Environment* env, String name, Value const& v) {
         estore(constant(v), env, name);
     }
 
-    IRRef getEnv(Environment* env) {
-        std::map<Environment*, IRRef>::const_iterator i;
+    IRRef getEnv(Environment const* env) {
+        std::map<Environment const*, IRRef>::const_iterator i;
         i = envs.find(env);
         if(i != envs.end())
             return i->second;
@@ -275,7 +291,7 @@ public:
 	void Schedule();
 
     bool EmitIR(Thread& thread, Instruction const& inst, bool branch);
-    void EmitOptIR(IRRef i, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::map<Variable, IRRef>& map, std::map<Variable, IRRef>& stores, std::tr1::unordered_map<IR, IRRef>& cse);
+    void EmitOptIR(IRRef i, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::map<Variable, IRRef>& map, std::map<Variable, IRRef>& stores, std::tr1::unordered_map<IR, IRRef>& cse, std::vector<IRRef>& environments, std::vector<StackFrame>& frames);
     void Replay(Thread& thread);
 
     void AssignRegister(std::vector<int64_t>& assignment, size_t index);

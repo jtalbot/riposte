@@ -31,20 +31,30 @@
 	_(gather, "gather") \
 	_(constant, "constant") \
 	_(dotdot, "dotdot") \
-	_(assign2, "assign2")
+	_(assign2, "assign2") \
+    _(attrget, "attrget") \
+    _(attrset, "attrset")
 
 #define UTILITY_BYTECODES(_)\
 	_(function, "function") \
 	_(internal, "internal") \
 	_(type, "type") \
 	_(missing, "missing") \
-	_(strip, "strip")
+	_(strip, "strip") \
+	_(nargs, "nargs")
 
 #define GENERATOR_BYTECODES(_) \
 	_(seq,		"seq", 		Generator) \
 	_(vector,	"vector",	Generator) \
 	_(rep,		"rep", 		Generator) \
 	_(random,	"random", 	Generator)
+
+#define CAST_UNARY_BYTECODES(_) \
+    _(aslogical, "as.logical", CastLogical, PassNA(a, a)) \
+    _(asinteger, "as.integer", CastInteger, PassNA(a, a)) \
+    _(asdouble, "as.double", CastDouble, PassNA(a, a)) \
+    _(ascharacter, "as.character", CastCharacter, PassNA(a, a)) \
+    _(aslist, "as.list", CastList, PassNA(a, a))
 
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double
 #define ARITH_UNARY_BYTECODES(_) \
@@ -147,6 +157,7 @@
 	ARITH_UNARY_BYTECODES(_) \
 	LOGICAL_UNARY_BYTECODES(_) \
 	ORDINAL_UNARY_BYTECODES(_) \
+	CAST_UNARY_BYTECODES(_) \
 
 #define BINARY_BYTECODES(_) \
 	ARITH_BINARY_BYTECODES(_) \

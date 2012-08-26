@@ -1,4 +1,4 @@
 
-attr <- function(x, which, exact=FALSE) .Internal(attr(x, which, exact))
-`attr<-` <- function(x, which, value) .Internal(`attr<-`(x, which, value))
+attr <- function(x, which, exact=FALSE) attr(x, which)
+`attr<-` <- function(x, which, value) `attr<-`(x, which, value)
 

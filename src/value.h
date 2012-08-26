@@ -24,8 +24,8 @@ struct Value {
 		int64_t header;
 	};
 	union {
-		void* p;
 		int64_t i;
+		void* p;
 		double d;
 		char c;
 		String s;
@@ -549,6 +549,17 @@ public:
 		return insertRecursive(name);
 	}
 
+	Environment const* findRecursive(String name) const ALWAYS_INLINE {
+		bool success;
+		Environment const* env = this;
+		Pair* p = env->find(name, success);
+		while(!success && env->LexicalScope()) {
+			env = env->LexicalScope();
+			p = env->find(name, success);
+		}
+		return env;
+	}
+	
 	struct Pointer {
 		Environment* env;
 		String name;

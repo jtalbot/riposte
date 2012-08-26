@@ -8,6 +8,12 @@
 #include <cmath>
 #include <stdlib.h>
 
+template<class X> struct CastLogical { typedef X A; typedef Logical MA; typedef Logical R; };
+template<class X> struct CastInteger { typedef X A; typedef Integer MA; typedef Integer R; };
+template<class X> struct CastDouble { typedef X A; typedef Double MA; typedef Double R; };
+template<class X> struct CastCharacter { typedef X A; typedef Character MA; typedef Character R; };
+template<class X> struct CastList { typedef X A; typedef List MA; typedef List R; };
+
 template<class X> struct ArithUnary1   { typedef X A; typedef Double MA; typedef Double R; };
 template<> struct ArithUnary1<Logical> { typedef Logical A; typedef Integer MA; typedef Integer R; };
 template<> struct ArithUnary1<Integer> { typedef Integer A; typedef Integer MA; typedef Integer R; };
@@ -40,6 +46,7 @@ struct Name##VOp {\
 inline double Abs(double a) { return fabs(a); }
 inline int64_t Abs(int64_t a) { return llabs(a); }
 
+CAST_UNARY_BYTECODES(UNARY_OP)
 ARITH_UNARY_BYTECODES(UNARY_OP)
 LOGICAL_UNARY_BYTECODES(UNARY_OP)
 ORDINAL_UNARY_BYTECODES(UNARY_OP)
@@ -409,6 +416,31 @@ void UnifyScanDispatch(Thread& thread, Value const& a, Value& c) {
 	else if(a.isLogical())	ScanLeft< Op<Logical> >::eval(thread, (Logical const&)a, c);
 	else if(a.isNull())	Op<Double>::Scalar(thread, Op<Double>::base(), c);
 	else _error("non-numeric argument to numeric scan operator");
+}
+
+template< template<typename T> class Op >
+void CastLogicalDispatch(Thread& thread, Value const& a, Value& c) {
+    c = As<Logical>(thread, a);
+}
+
+template< template<typename T> class Op >
+void CastIntegerDispatch(Thread& thread, Value const& a, Value& c) {
+    c = As<Integer>(thread, a);
+}
+
+template< template<typename T> class Op >
+void CastDoubleDispatch(Thread& thread, Value const& a, Value& c) {
+    c = As<Double>(thread, a);
+}
+
+template< template<typename T> class Op >
+void CastCharacterDispatch(Thread& thread, Value const& a, Value& c) {
+    c = As<Character>(thread, a);
+}
+
+template< template<typename T> class Op >
+void CastListDispatch(Thread& thread, Value const& a, Value& c) {
+    c = As<List>(thread, a);
 }
 
 #endif

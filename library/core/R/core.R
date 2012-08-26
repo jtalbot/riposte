@@ -1,6 +1,6 @@
 pi <- 3.1415926535897932384626433832795
 
-nargs <- function() { length(.Internal(sys.call(1L)))-1L }
+#nargs <- function() { length(.Internal(sys.call(1L)))-1L }
 
 options <- function(...) {}
 

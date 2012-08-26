@@ -54,7 +54,10 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 	if(a->isPromise()) {
 		Function const& f = (Function const&)(*a);
 		assert(f.environment()->DynamicScope());
-		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), env, index, &inst);
+		Instruction const* r = buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), env, index, &inst);
+        if(thread.jit.state == JIT::RECORDING)
+            thread.jit.emitPush(thread);
+        return r;
 	} else {
 		_error(std::string("Object '..") + intToStr(index+1) + "' not found, missing argument?");
 	}
@@ -64,15 +67,17 @@ Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const
 	if(a->isPromise()) {
 		Function const& f = (Function const&)(*a);
 		assert(f.environment()->DynamicScope());
+        Instruction const* r = buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), f.environment(), name, &inst);
         if(thread.jit.state == JIT::RECORDING)
-            thread.jit.emitPush(f.environment()->DynamicScope());
-        return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), f.environment(), name, &inst);
+            thread.jit.emitPush(thread);
+        return r;
 	} else if(a->isDefault()) {
 		Function const& f = (Function const&)(*a);
 		assert(f.environment());
+		Instruction const* r = buildStackFrame(thread, f.environment(), f.prototype(), f.environment(), name, &inst);
         if(thread.jit.state == JIT::RECORDING)
-            thread.jit.emitPush(f.environment());
-		return buildStackFrame(thread, f.environment(), f.prototype(), f.environment(), name, &inst);
+            thread.jit.emitPush(thread);
+        return r;
 	} else {
 		_error(std::string("Object '") + thread.externStr(name) + "' not found");
 	}
@@ -99,7 +104,7 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 
     if(thread.jit.state == JIT::RECORDING) {
         JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
-        thread.jit.emitCall(a, func, fenv, &inst);
+        thread.jit.emitCall(a, func, fenv, func.environment(), thread.frame.environment, call.call, &inst);
     }
 	
 	MatchArgs(thread, thread.frame.environment, fenv, func, call);
@@ -114,6 +119,11 @@ Instruction const* ncall_op(Thread& thread, Instruction const& inst) {
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
 	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
+	
+    if(thread.jit.state == JIT::RECORDING) {
+        JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
+        thread.jit.emitCall(a, func, fenv, func.environment(), thread.frame.environment, call.call, &inst);
+    }
 	
 	MatchNamedArgs(thread, thread.frame.environment, fenv, func, call);
 	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
@@ -879,6 +889,40 @@ Instruction const* internal_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
+Instruction const* nargs_op(Thread& thread, Instruction const& inst) {
+    OUT(thread, inst.c) = Integer::c(thread.frame.environment->call.length-1);
+    return &inst+1;
+}
+
+Instruction const* attrget_op(Thread& thread, Instruction const& inst) {
+    OPERAND(object, inst.a);
+    OPERAND(whichTmp, inst.b);
+    if(object.isObject()) {
+        Character which = As<Character>(thread, whichTmp);
+        OUT(thread, inst.c) = ((Object const&)object).get(which[0]);
+    }
+    else {
+        OUT(thread, inst.c) = Null::Singleton();
+    }
+    return &inst+1;
+}
+
+Instruction const* attrset_op(Thread& thread, Instruction const& inst) {
+    OPERAND(object, inst.c);
+    OPERAND(whichTmp, inst.b);
+    OPERAND(value, inst.a);
+
+    Character which = As<Character>(thread, whichTmp);
+    if(!object.isObject()) {
+        Value v;
+        Object::Init((Object&)v, object);
+        ((Object&)v).insertMutable(which[0], value);
+        OUT(thread, inst.c) = v;
+    } else {
+        OUT(thread, inst.c) = ((Object&)object).insert(which[0], value);
+    }
+    return &inst+1;
+}
 /*struct _Load {
     int64_t i;
     _Load(int64_t i) : i(i) {}
@@ -967,7 +1011,7 @@ void interpret(Thread& thread, Instruction const* pc) {
 	    	if(counter > JIT::RECORD_TRIGGER) {
                 printf("Starting to record at %li (counter: %li is %d)\n", pc, &counter, counter);
     			counter = 0;
-	    		thread.jit.start_recording(pc);
+	    		thread.jit.start_recording(pc, thread.frame.environment);
 		    	labels = record;
     		}
             pc++;

@@ -10,76 +10,78 @@
 #include "call.h"
 
 extern "C"
-double const* SLOAD_double(Thread& thread, int64_t i) {
-    Value const& a = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
-    return a.isDouble() ? ((Double const&)a).v() : 0;
+Value SLOAD(Thread& thread, int64_t i) {
+    return (thread.registers+DEFAULT_NUM_REGISTERS)[i];
 }
 
 extern "C"
-int64_t const* SLOAD_integer(Thread& thread, int64_t i) {
-    Value const& a = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
-    return a.isInteger() ? ((Integer const&)a).v() : 0;
+Value ELOAD(Thread& thread, Environment* env, int64_t i) {
+    return env->getRecursive((String)i);
 }
 
 extern "C"
-char const* SLOAD_logical(Thread& thread, int64_t i) {
-    Value const& a = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
-    return a.isLogical() ? ((Logical const&)a).v() : 0;
+void SSTORE(Thread& thread, int64_t i, Value v) {
+    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = v;
 }
 
 extern "C"
-Prototype* SLOAD_function(Thread& thread, int64_t i) {
-    Value const& a = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
-    return a.isFunction() ? ((Function const&)a).prototype() : 0;
+void ESTORE(Thread& thread, Environment* env, int64_t i, Value v) {
+    env->insertRecursive((String)i) = v;
+}
+
+// Inline this!
+extern "C"
+bool GTYPE(Thread& thread, Value value, int64_t type) {
+    return (value.type == type);
 }
 
 extern "C"
-Prototype* SLOAD_promise(Thread& thread, int64_t i) {
-    Value const& a = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
-    return a.isFunction() ? ((Function const&)a).prototype() : 0;
+double const* UNBOX_double(Thread& thread, Value& a) {
+    return ((Double const&)a).v();
 }
 
 extern "C"
-Prototype* SLOAD_default(Thread& thread, int64_t i) {
-    Value const& a = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
-    return a.isFunction() ? ((Function const&)a).prototype() : 0;
+int64_t const* UNBOX_integer(Thread& thread, Value& a) {
+    return ((Integer const&)a).v();
 }
 
 extern "C"
-double const* ELOAD_double(Thread& thread, Environment* env, int64_t i) {
-    Value const& a = env->getRecursive((String)i);
-    printf("Loading double: %d %f (%li)\n", a.length, ((Double const&)a).v()[0], ((Double const&)a).v());
-    return a.isDouble() ? ((Double const&)a).v() : 0;
+int8_t const* UNBOX_logical(Thread& thread, Value& a) {
+    return (int8_t const*)((Logical const&)a).v();
 }
 
 extern "C"
-int64_t const* ELOAD_integer(Thread& thread, Environment* env, int64_t i) {
-    Value const& a = env->getRecursive((String)i);
-    return a.isInteger() ? ((Integer const&)a).v() : 0;
+int8_t const** UNBOX_character(Thread& thread, Value& a) {
+    return (int8_t const**)((Character const&)a).v();
+}
+
+// remove these copies when possible
+extern "C"
+Value BOX_double(Thread& thread, double* d, int64_t len) {
+	Double a(len);
+	memcpy(a.v(), d, len*sizeof(double));
+    return a;
 }
 
 extern "C"
-char const* ELOAD_logical(Thread& thread, Environment* env, int64_t i) {
-    Value const& a = env->getRecursive((String)i);
-    return a.isLogical() ? ((Logical const&)a).v() : 0;
+Value BOX_integer(Thread& thread, int64_t* d, int64_t len) {
+    Integer a(len);
+    memcpy(a.v(), d, len*sizeof(int64_t));
+    return a;
 }
 
 extern "C"
-Prototype* ELOAD_function(Thread& thread, Environment* env, int64_t i) {
-    Value const& a = env->getRecursive((String)i);
-    return a.isFunction() ? ((Function const&)a).prototype() : 0;
+Value BOX_logical(Thread& thread, int8_t* d, int64_t len) {
+	Logical a(len);
+	memcpy(a.v(), d, len*sizeof(int8_t));
+    return a;
 }
 
 extern "C"
-Prototype* ELOAD_promise(Thread& thread, Environment* env, int64_t i) {
-    Value const& a = env->getRecursive((String)i);
-    return a.isFunction() ? ((Function const&)a).prototype() : 0;
-}
-
-extern "C"
-Prototype* ELOAD_default(Thread& thread, Environment* env, int64_t i) {
-    Value const& a = env->getRecursive((String)i);
-    return a.isFunction() ? ((Function const&)a).prototype() : 0;
+Value BOX_character(Thread& thread, int8_t** d, int64_t len) {
+	Character a(len);
+	memcpy(a.v(), d, len*sizeof(int8_t*));
+    return a;
 }
 
 extern "C"
@@ -88,97 +90,38 @@ Environment* LOAD_environment(Thread& thread, int64_t i) {
 }
 
 extern "C"
-void SSTORE_double(Thread& thread, int64_t i, size_t len, double* d) {
-	Double a(len);
-	memcpy(a.v(), d, len*sizeof(double));
-    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = a;
+Environment* NEW_environment(Thread& thread, Environment* l, Environment* d, Value v) {
+    Environment* env = new Environment();
+    env->init(l, d, v);
+    return env;
 }
 
 extern "C"
-void SSTORE_integer(Thread& thread, int64_t i, size_t len, int64_t* d) {
-    Integer a(len);
-	memcpy(a.v(), d, len*sizeof(int64_t));
-    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = a;
+void NEW_frame(Thread& thread, Environment* environment, int64_t prototype, int64_t returnpc, int64_t returnbase, int64_t dest, Environment* env) {
+    StackFrame& frame = thread.push();
+    frame.environment = environment;
+    frame.prototype = (Prototype const*) prototype;
+    frame.returnpc = (Instruction const*) returnpc;
+    frame.returnbase = (Value*) returnbase;
+    frame.dest = dest;
+    frame.env = env;
 }
 
 extern "C"
-void SSTORE_logical(Thread& thread, int64_t i, size_t len, int8_t* d) {
-	Logical a(len);
-	memcpy(a.v(), d, len*sizeof(int8_t));
-    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = a;
+Prototype const* GET_prototype(Thread& thread, Value v) {
+    return ((Function const&)v).prototype();
 }
 
 extern "C"
-void SSTORE_function(Thread& thread, int64_t i, size_t len, Prototype* p) {
-    Function a;
-    Function::Init(a, p, 0);
-    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = a;
+Value GET_attr(Thread& thread, Value a, int8_t** name) {
+    // Should inline this check so we can avoid a guard when we know the result type.
+    if(a.isObject())
+        return ((Object const&)a).get((String)name[0]);
+    else
+        return Null::Singleton();
 }
 
 extern "C"
-void SSTORE_promise(Thread& thread, int64_t i, size_t len, Prototype* p) {
-    Promise a;
-    Promise::Init(a, p, 0);
-    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = a;
+Value GET_strip(Thread& thread, Value a) {
+    return ((Object const&)a).base();
 }
-
-extern "C"
-void SSTORE_default(Thread& thread, int64_t i, size_t len, Prototype* p) {
-    Default a;
-    Default::Init(a, p, 0);
-    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = a;
-}
-
-extern "C"
-void SSTORE_NULL(Thread& thread, int64_t i, size_t len, void* p) {
-    (thread.registers+DEFAULT_NUM_REGISTERS)[i] = Null::Singleton();
-}
-
-extern "C"
-void ESTORE_double(Thread& thread, Environment* env, int64_t i, size_t len, double* d) {
-    printf("Storing out double: %d %f (%li)\n", len, d[0], d);
-	Double a(len);
-	memcpy(a.v(), d, len*sizeof(double));
-    env->insertRecursive((String)i) = a;
-}
-
-extern "C"
-void ESTORE_integer(Thread& thread, Environment* env, int64_t i, size_t len, int64_t* d) {
-    Integer a(len);
-	memcpy(a.v(), d, len*sizeof(int64_t));
-    env->insertRecursive((String)i) = a;
-}
-
-extern "C"
-void ESTORE_logical(Thread& thread, Environment* env, int64_t i, size_t len, int8_t* d) {
-	Logical a(len);
-	memcpy(a.v(), d, len*sizeof(int8_t));
-    env->insertRecursive((String)i) = a;
-}
-
-extern "C"
-void ESTORE_function(Thread& thread, Environment* env, int64_t i, size_t len, Prototype* p) {
-    Function a;
-    Function::Init(a, p, 0);
-    env->insertRecursive((String)i) = a;
-}
-
-extern "C"
-void ESTORE_promise(Thread& thread, Environment* env, int64_t i, size_t len, Prototype* p) {
-    Promise a;
-    Promise::Init(a, p, 0);
-    env->insertRecursive((String)i) = a;
-}
-
-extern "C"
-void ESTORE_default(Thread& thread, Environment* env, int64_t i, size_t len, Prototype* p) {
-    Default a;
-    Default::Init(a, p, 0);
-    env->insertRecursive((String)i) = a;
-}
-
-extern "C"
-void ESTORE_NULL(Thread& thread, Environment* env, int64_t i, size_t len, void* p) {
-    env->insertRecursive((String)i) = Null::Singleton();
-}
-

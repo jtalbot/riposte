@@ -147,7 +147,15 @@
 	_(cc,	"c") \
 	_(Re,	"Re") \
 	_(Im,	"Im") \
-	_(Maximal, "\255")
+	_(nargs,	"nargs") \
+	_(attrget,	"attr") \
+	_(attrset,	"attr<-") \
+	_(aslogical, "as.logical") \
+    _(asinteger, "as.integer") \
+    _(asdouble, "as.double") \
+    _(ascharacter, "as.character") \
+    _(aslist, "as.list") \
+    _(Maximal, "\255")
 
 typedef const char* String;
 

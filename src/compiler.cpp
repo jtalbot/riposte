@@ -46,6 +46,12 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::strip) return ByteCode::strip; 
 	
 	if(func == Strings::random) return ByteCode::random; 
+
+    if(func == Strings::aslogical) return ByteCode::aslogical;
+    if(func == Strings::asinteger) return ByteCode::asinteger;
+    if(func == Strings::asdouble) return ByteCode::asdouble;
+    if(func == Strings::ascharacter) return ByteCode::ascharacter;
+    if(func == Strings::aslist) return ByteCode::aslist;
 	
     throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
 }
@@ -82,6 +88,8 @@ static ByteCode::Enum op2(String const& func) {
 	if(func == Strings::round) return ByteCode::round; 
 	if(func == Strings::signif) return ByteCode::signif; 
 	
+    if(func == Strings::attrget) return ByteCode::attrget; 
+	
     throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a binary operator"); 
 }
 
@@ -93,6 +101,8 @@ static ByteCode::Enum op3(String const& func) {
 	if(func == Strings::split) return ByteCode::split;
 	if(func == Strings::rep) return ByteCode::rep;
 	
+    if(func == Strings::attrset) return ByteCode::attrset; 
+
     throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a trinary operator"); 
 }
 
@@ -623,7 +633,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::split ||
 		func == Strings::ifelse ||
 		func == Strings::seq ||
-		func == Strings::rep) &&
+		func == Strings::rep ||
+        func == Strings::attrset) &&
 		call.length == 4) {
 		Operand c = placeInRegister(compile(call[1], code));
 		Operand b = compile(call[2], code);
@@ -659,7 +670,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::bb ||
 		func == Strings::vector ||
 		func == Strings::round ||
-		func == Strings::signif) &&
+		func == Strings::signif ||
+        func == Strings::attrget) &&
 		call.length == 3) 
 	{
 		Operand a = compile(call[1], code);
@@ -705,6 +717,11 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::type ||
 		func == Strings::length ||
 		func == Strings::strip ||
+		func == Strings::aslogical ||
+		func == Strings::asinteger ||
+		func == Strings::asdouble ||
+		func == Strings::ascharacter ||
+		func == Strings::aslist ||
 		func == Strings::random) &&
 		call.length == 2)
 	{
@@ -729,6 +746,12 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		if(call.length != 2) _error("quote requires one argument");
 		return compileConstant(call[1], code);
 	}
+    else if(func == Strings::nargs)
+    {
+        Operand result = allocRegister();
+        emit(ByteCode::nargs, 0, 0, result);
+        return result;
+    }
 	/*else if(func == Strings::cc) 
 	{
 		Type::Enum type = Type::Null;
