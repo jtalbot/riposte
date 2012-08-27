@@ -48,7 +48,8 @@ struct IRNode {
 		FILTER,
 		FOLD,
 		SPLIT,
-		SCALAR
+		SCALAR,
+        SCAN
 	};
 
 	struct Shape {

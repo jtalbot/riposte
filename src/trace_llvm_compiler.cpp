@@ -122,6 +122,9 @@ struct TraceLLVMCompiler {
     bool reduction;
     bool reductionBlocksPresent;
     
+    bool scan;
+    bool scanBlocksPresent;
+    
     llvm::Constant * Size;
     llvm::Function * function;
     llvm::Function * Sync;
@@ -147,19 +150,32 @@ struct TraceLLVMCompiler {
     llvm::BasicBlock * end;
     llvm::BasicBlock * returnBlock;
     
+    
+    llvm::BasicBlock * laneInitializer;
+    llvm::BasicBlock * laneCondBlocks[5];
+  	llvm::BasicBlock * laneBodyBlocks[5];
+  	llvm::BasicBlock * laneEndBlocks[5];
+    
+    llvm::BasicBlock * scanBlockLevelBody;
+    
+  //	llvm::BasicBlock * condLane31;
+  //	llvm::BasicBlock * bodyLane31;
+  //  llvm::BasicBlock * endLane31;
+    
+    
+    //reductionBlocks
     llvm::BasicBlock * condBlocks[4];
     
     llvm::BasicBlock * bodyBlocks[4];
     
     llvm::BasicBlock * endBlocks[4];
-    
 
     llvm::BasicBlock * condFinal;
     llvm::BasicBlock * bodyFinal;
     llvm::BasicBlock * endFinal;    
     
     llvm::BasicBlock * origEnd; 
-    
+    llvm::BasicBlock * origBody;
     
     std::vector<llvm::Value *> values;
     std::vector<void *> outputGPU;
@@ -255,6 +271,9 @@ struct TraceLLVMCompiler {
         reduction = false;
         reductionBlocksPresent = false;
         
+        scan = false;
+        scanBlocksPresent = false;
+        
         entry = llvm::BasicBlock::Create(*C,"entry",function);
         B = new llvm::IRBuilder<>(*C);
         B->SetInsertPoint(entry);
@@ -287,7 +306,7 @@ struct TraceLLVMCompiler {
         body = createAndInsertBB("body");
         end = createAndInsertBB("end");
         origEnd = end;
-        
+        origBody = body;
         
         B->CreateBr(cond);
         B->SetInsertPoint(cond);
@@ -296,6 +315,9 @@ struct TraceLLVMCompiler {
         
         B->SetInsertPoint(body);
         CompileBody(blockID, tid, sizeOfArray);
+        if (scan == true) {
+            ScanBlocksHelper(tid, loopIndex());
+        }
         B->CreateStore(B->CreateAdd(loopIndex(), ConstantInt(numBlock * numThreads)),loopIndexAddr);
         B->CreateBr(cond);
         
@@ -306,7 +328,7 @@ struct TraceLLVMCompiler {
             ReductionHelper(tid);
         }
         
-        //mainModule->dump();
+        mainModule->dump();
         
         llvm::verifyFunction(*function);
         
@@ -320,6 +342,34 @@ struct TraceLLVMCompiler {
         
         FPM->run(*function);
     }
+    void ScanBlocksHelper(llvm::Value *tid, llvm::Value * loopIndexValue) {
+        B->SetInsertPoint(laneInitializer);
+        int lane = 1;
+        llvm::Value * laneNum = B->CreateAnd(loopIndex(), ConstantInt(31));
+       
+        B->CreateBr(laneCondBlocks[0]);
+        for (int i = 0; i < 5; i++) {
+            B->SetInsertPoint(laneCondBlocks[i]);
+            llvm::Value * c = B->CreateICmpUGE(laneNum, ConstantInt(lane));
+            B->CreateCondBr(c,laneBodyBlocks[i], laneEndBlocks[i]);
+            B->SetInsertPoint(laneBodyBlocks[i]);
+            B->CreateBr(laneEndBlocks[i]);
+            B->SetInsertPoint(laneEndBlocks[i]);
+            if (i == 4) {
+                B->CreateBr(scanBlockLevelBody);
+            }
+            else {
+                B->CreateBr(laneCondBlocks[i+1]);
+            }
+            lane *= 2;
+        }
+        B->SetInsertPoint(origBody);
+        B->CreateBr(laneInitializer);
+        B->SetInsertPoint(scanBlockLevelBody);
+        
+    }
+    
+    
     
     void ReductionHelper(llvm::Value * tid) {
         B->SetInsertPoint(origEnd);
@@ -361,7 +411,37 @@ struct TraceLLVMCompiler {
         B->CreateBr(endFinal);
     }
 
-
+    void initializeScanBlocks() {
+        if (!scanBlocksPresent) {
+            
+            laneInitializer = createAndInsertBB("laneInitializer");
+            
+            laneCondBlocks[0] = createAndInsertBB("condLane1");
+            laneCondBlocks[1] = createAndInsertBB("condLane2");
+            laneCondBlocks[2] = createAndInsertBB("condLane4");
+            laneCondBlocks[3] = createAndInsertBB("condLane8");
+            laneCondBlocks[4] = createAndInsertBB("condLane16");
+            
+            
+            laneBodyBlocks[0] = createAndInsertBB("bodyLane1");
+            laneBodyBlocks[1] = createAndInsertBB("bodyLane2");
+            laneBodyBlocks[2] = createAndInsertBB("bodyLane4");
+            laneBodyBlocks[3] = createAndInsertBB("bodyLane8");
+            laneBodyBlocks[4] = createAndInsertBB("bodyLane16");
+            
+            
+            laneEndBlocks[0] = createAndInsertBB("endLane1");
+            laneEndBlocks[1] = createAndInsertBB("endLane2");
+            laneEndBlocks[2] = createAndInsertBB("endLane4");
+            laneEndBlocks[3] = createAndInsertBB("endLane8");
+            laneEndBlocks[4] = createAndInsertBB("endLane16");
+            
+            scanBlockLevelBody = createAndInsertBB("scanBlockLevelBody");
+            
+            scanBlocksPresent = true;
+        }
+    }
+    
     void reductionBlocksInitialize() {
         if (!reductionBlocksPresent) {
             returnBlock = createAndInsertBB("return");
@@ -492,6 +572,74 @@ struct TraceLLVMCompiler {
         
     }
     
+    llvm::Value *scanWarp(llvm::Value * loopIndexValue, llvm::Value * vector) {
+        B->SetInsertPoint(laneInitializer);
+        //warp scan
+        int laneNum = 1;
+        std::vector<llvm::Value *> indices;
+        indices.push_back(loopIndexValue);
+        
+        llvm::Value *value = B->CreateGEP(vector, indices);
+        for (int i = 0; i < 5; i++) {
+            B->SetInsertPoint(laneBodyBlocks[i]);
+            std::vector<llvm::Value *> indices;
+            indices.push_back(B->CreateSub(loopIndexValue, ConstantInt(laneNum)));
+            
+            llvm::Value *Back = B->CreateGEP(vector, indices);
+            
+            B->CreateStore(B->CreateFAdd(B->CreateLoad(Back), B->CreateLoad(value)), value);
+            
+            B->SetInsertPoint(laneEndBlocks[i]);
+            B->CreateCall(Sync);
+            laneNum *= 2;
+        }
+        B->SetInsertPoint(scanBlockLevelBody);
+        return B->CreateLoad(value);
+    }
+    
+    /*
+    llvm::Value *scanBlock(llvm::GlobalVariable *global, llvm::Value *loopIndexValue, llvm::Value * globalMemoryIndex, llvm::Value * tid) {
+        llvm::Value *lane = B->CreateAnd(tid, ConstantInt(31));
+        llvm::Value *warpID = B->CreateAShr(loopIndexValue, 5);
+        
+        
+        llvm::Value *val = scanWarp(global, loopIndexValue, globalMemoryIndex);
+        B->SetInsertPoint(scanBlockLevelBody);
+        B->CreateCall(Sync);
+        B->SetInsertPoint(bodyLane31);
+        llvm::Value *loopPoint = GEPGetter(global, loopIndexValue);
+        llvm::Value *warpIDPoint = GEPGetter(global, warpID);
+        B->CreateStore(B->CreateLoad(loopPoint), warpIDPoint);
+        B->SetInsertPoint(endLane31);
+        B->CreateCall(Sync);
+        B->SetInsertPoint(bodyWarp0);
+        scanWarp(global, loopIndexValue, globalMemoryIndex);
+        B->SetInsertPoint(endWarp0);
+        B->CreateCall(Sync);
+        
+        B->SetInsertPoint(bodyWarpNot0);
+        llvm::Value* backWarpIDPoint = GEPGetter(global, B->CreateSub(warpID, ConstantInt(1)));
+        val = B->CreateLoad(backWarpIDPoint);
+        B->SetInsertPoint(endWarpNot0);
+        B->CreateCall(Sync);
+        
+        B->CreateStore(val, loopPoint);
+        B->CreateCall(Sync);
+        
+        return val;
+        
+    }*/
+    /*
+    void scanBlocksFunc(llvm::GlobalVariable *blockResults, llvm::Value * loopIndexValue) {
+        B->SetInsertPoint(scanBlockLoopBody);
+        for (int i = 1; i < numBlock; i++) {
+            llvm::Value * gep1 = GEPGetter(blockResults, ConstantInt(i));
+            llvm::Value * gep2 = GEPGetter(blockResults, ConstantInt(i-1));
+            B->CreateStore(B->CreateFAdd(B->CreateLoad(gep1), B->CreateLoad(gep2)),gep1);
+        }
+        B->SetInsertPoint(scanBlockLoopEnd);
+    }*/
+    
     llvm::Constant * ConstantInt(int64_t i) {
         return llvm::ConstantInt::get(intType,i);
     }
@@ -519,7 +667,7 @@ struct TraceLLVMCompiler {
         for(size_t i = 0; i < trace->nodes.size(); i++) {
             IRNode & n = trace->nodes[i];
             if (n.liveOut) {
-                if (n.group == IRNode::MAP || n.group == IRNode::GENERATOR) {
+                if (n.group == IRNode::MAP || n.group == IRNode::GENERATOR || n.group == IRNode::SCAN) {
                     sizeOfResult = n.out.length;
                     if(n.type == Type::Double) {
                         cudaMemcpy(((Double&)n.out).v(), outputGPU[output], sizeOfResult * sizeof(Double::Element), cudaMemcpyDeviceToHost);
@@ -577,7 +725,7 @@ struct TraceLLVMCompiler {
 
             }
         }
-        for (int i = 0; i < thingsToFree.size(); i++) {
+        for (unsigned int i = 0; i < thingsToFree.size(); i++) {
             cudaFree(thingsToFree[i]);
         }
     }
@@ -627,6 +775,7 @@ struct TraceLLVMCompiler {
                 case IROpCode::add:
                     switch(n.type) {
                         case Type::Double:
+                            
                             values[i] = B->CreateFAdd(values[n.binary.a],values[n.binary.b]);
                             break;
                         case Type::Integer:
@@ -679,6 +828,72 @@ struct TraceLLVMCompiler {
                             _error("unsupported type");
                             break;
 					}
+                    break;
+                case IROpCode::cumsum:
+                    scan = true;
+                    void *global;
+                    switch (n.type) {
+                        case Type::Double: {
+                            initializeScanBlocks();
+                            cudaMalloc((void**)&global, trace->Size);
+                            cudaMemcpy(global, ((Double&)n.in).v(), trace->Size, cudaMemcpyHostToDevice);
+                            
+                            thingsToFree.push_back(global);
+                            std::vector<llvm::Value *> indices;
+                            indices.push_back(loopIndexValue);
+                            
+                            llvm::Type * t = getType(n.type);
+                            
+                            llvm::Value * vector = ConstantPointer(global, t);
+                            
+                            
+                            llvm::Value *value = B->CreateGEP(vector, indices);
+                            B->CreateStore(values[n.unary.a], value);
+                            
+                            B->CreateCall(Sync);
+                            values[i] = scanWarp(loopIndexValue, vector);
+                            
+                            //warpscan
+                            
+                            //blockScan
+                            /*
+                            llvm::Value *val = scanBlock(global, loopIndexValue, globalMemoryIndex, tid);
+                            B->CreateCall(Sync);
+                            
+                            
+                            B->SetInsertPoint(bodyBlockResult);
+                            llvm::Value *blockNum = B->CreateUDiv(loopIndexValue, ConstantInt(numThreads));
+                            llvm::Value *blockResultsIndex = GEPGetter(blockResults, blockNum);
+                            llvm::Value *partialResult = GEPGetter(global, loopIndexValue);
+                            B->CreateStore(B->CreateLoad(partialResult), blockResultsIndex);
+                            B->CreateCall(Sync);
+                            
+                            
+                            B->SetInsertPoint(origEnd);
+                            
+                            B->SetInsertPoint(scanBlockBody);
+                            scanBlocksFunc(blockResults, loopIndexValue);
+                            B->SetInsertPoint(scanBlockEnd);
+                            B->CreateCall(Sync);
+                            
+                            B->SetInsertPoint(scanBlockApplyBody);
+                            llvm::Value * blockPartial = GEPGetter(blockResults, B->CreateSub(blockNum, ConstantInt(1)));
+                            val = B->CreateFAdd(blockPartial, val);
+                            B->SetInsertPoint(scanBlockApplyEnd);
+                            B->CreateCall(Sync);
+                            values[i] = B->CreateLoad(val);
+                            
+                            body = scanBodyReplacement;
+                            B->SetInsertPoint(scanBodyReplacement);
+                            */
+                            break;
+                        }
+                        case Type::Integer: {
+                            
+                        }
+                        default:
+                            break;
+                    }
                     break;
                 case IROpCode::exp:
                     switch(n.type) {
