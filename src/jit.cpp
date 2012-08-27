@@ -110,9 +110,9 @@ JIT::IRRef JIT::cast(IRRef a, Type::Enum type) {
 JIT::IRRef JIT::rep(IRRef a, size_t length) {
     if(trace[a].out.length != length) {
         Shape s = (Shape) { length };
-        IRRef l = insert(trace, TraceOpCode::length, a, 0, 0, Type::Integer, Shape::Scalar, Shape::Scalar);
+        IRRef l = constant(Integer::c(trace[a].out.length));
         IRRef e = constant(Integer::c(1));
-        IRRef r = insert(trace, TraceOpCode::rep, l, e, 0, trace[a].type, s, s);
+        IRRef r = insert(trace, TraceOpCode::rep, l, e, 0, trace[e].type, s, s);
         return insert(trace, TraceOpCode::gather, a, r, 0, trace[a].type, s, s);
     }
     else {
@@ -171,6 +171,8 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             IRRef r = insert(trace, branch ? TraceOpCode::guardT : TraceOpCode::guardF, 
                 p, 0, 0, Type::Promise, trace[p].out, Shape::Empty );
             reenters[r] = &inst;
+            if(inst.a <= 0)
+                insert(trace, TraceOpCode::kill, trace[p].a, 0, 0, Type::Promise, Shape::Empty, Shape::Empty); 
         }   break;
     
         case ByteCode::call:
@@ -316,22 +318,29 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
 
         case ByteCode::rep:
         {
+            OPERAND(len, inst.a);
+            Shape s(As<Integer>(thread, len)[0]);
             // requires a dependent type
             store(thread, insert(trace, TraceOpCode::rep,
-                load(thread, inst.a, &inst), load(thread, inst.b, &inst), 0,
-                Type::Integer, Shape::Scalar, Shape(1)), inst.c);
+                cast(load(thread, inst.a, &inst), Type::Integer), 
+                cast(load(thread, inst.b, &inst), Type::Integer), 0,
+                Type::Integer, s, s), inst.c);
         }   break;
         case ByteCode::seq:
         {
             OPERAND(len, inst.a);
             // requires a dependent type
+            IRRef c = load(thread, inst.c, &inst);
+            IRRef b = load(thread, inst.b, &inst);
+            Type::Enum type = trace[c].type == Type::Double || trace[b].type == Type::Double
+                ? Type::Double : Type::Integer; 
             store(thread, insert(trace, TraceOpCode::seq,
-                load(thread, inst.c, &inst), load(thread, inst.b, &inst), 0,
-                Type::Integer, Shape(As<Integer>(thread, len)[0]), Shape(As<Integer>(thread, len)[0])), inst.c);
+                cast(c, type), cast(b, type), 0,
+                type, Shape(As<Integer>(thread, len)[0]), Shape(As<Integer>(thread, len)[0])), inst.c);
         }   break;
 
         default: {
-            dump(thread,trace);
+            //dump(thread,trace);
             printf("Trace halted by %s\n", ByteCode::toString(inst.bc));
             return false;
         }   break;
@@ -513,6 +522,17 @@ void JIT::EmitOptIR(
                 }
             } break;
 
+            case TraceOpCode::kill: {
+                // an explicit register kill for certain instructions that don't store
+                for(std::map<Variable, IRRef>::iterator k = stores.begin(); k != stores.end(); ) {
+                    if(k->first.i <= (int64_t)ir.a) {
+                        stores.erase(k++);
+                    } else {
+                        ++k;
+                    }
+                }
+            } break;
+
             case TraceOpCode::PUSH: {
                 frames.push_back(this->frames[i]);
                 frames.back().environment = forward[frames.back().environment];
@@ -541,6 +561,7 @@ void JIT::EmitOptIR(
                 forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], forward[ir.b], forward[ir.c], ir.type, ir.in, ir.out));
             } break;
 
+            case TraceOpCode::repscalar:
             case TraceOpCode::phi:
             case TraceOpCode::length:
             UNARY_FOLD_SCAN_BYTECODES(CASE) {
@@ -658,9 +679,9 @@ JIT::Ptr JIT::end_recording(Thread& thread) {
     assert(state == RECORDING);
     state = OFF;
 
-    dump(thread, trace);
+    //dump(thread, trace);
     Replay(thread);
-    dump(thread, code);
+    //dump(thread, code);
     //Schedule();
     schedule();
     RegisterAssignment(exits[code.size()-1]);
@@ -1157,6 +1178,7 @@ void JIT::ReleaseRegister(std::vector<int64_t>& assignment, size_t index) {
         freeRegisters.insert( std::make_pair(registers[assignment[index]], assignment[index]) );
     }
     else if(assignment[index] < 0) {
+        printf("Preferred at %d\n", index);
         _error("Preferred register never assigned");
     }
 }
@@ -1218,19 +1240,23 @@ void JIT::RegisterAssignment(Exit& e) {
                 AssignRegister(a, ir.a);
                 AssignRegister(a, ir.b);
             } break;
+            case TraceOpCode::attrset:
             TERNARY_BYTECODES(CASE)
             {
                 AssignRegister(a, ir.c);
                 AssignRegister(a, ir.b);
                 AssignRegister(a, ir.a);
             } break;
+            case TraceOpCode::attrget:
             case TraceOpCode::rep:
+            case TraceOpCode::seq:
             case TraceOpCode::gather:
             BINARY_BYTECODES(CASE)
             {
                 AssignRegister(a, std::max(ir.a, ir.b));
                 AssignRegister(a, std::min(ir.a, ir.b));
             } break;
+            case TraceOpCode::repscalar:
             case TraceOpCode::length:
             UNARY_FOLD_SCAN_BYTECODES(CASE)
             {
@@ -1276,6 +1302,10 @@ void JIT::IR::dump() const {
         {
             std::cout << "\t [" << a << "]";
         } break;
+        case TraceOpCode::kill:
+            std::cout << "\t " << (int64_t)a;
+            break;
+        case TraceOpCode::repscalar:
         case TraceOpCode::strip:
         case TraceOpCode::phi: 
         case TraceOpCode::PUSH:
@@ -1410,7 +1440,10 @@ struct LLVMState {
         //TODO: add optimization passes here, these are just from llvm tutorial and are probably not good
         //look here: http://lists.cs.uiuc.edu/pipermail/llvmdev/2011-December/045867.html
         FPM->add(new llvm::TargetData(*EE->getTargetData()));
+        // do this first so the verifier doesn't freak out about our empty blocks
         FPM->add(llvm::createCFGSimplificationPass());
+        
+        FPM->add(llvm::createVerifierPass());
         // Provide basic AliasAnalysis support for GVN.
         FPM->add(llvm::createBasicAliasAnalysisPass());
         // Promote allocas to registers.
@@ -1418,17 +1451,21 @@ struct LLVMState {
         // Also promote aggregates like structs....
         FPM->add(llvm::createScalarReplAggregatesPass());
         // Do simple "peephole" optimizations and bit-twiddling optzns.
-        FPM->add(llvm::createInstructionCombiningPass());
+        // TODO: This causes an invalid optimization somewhere that results in LLVM eliminating all
+        // my code and replacing it with a trap. ????
+        //FPM->add(llvm::createInstructionCombiningPass());
+        
         // Reassociate expressions.
         FPM->add(llvm::createReassociatePass());
         // Eliminate Common SubExpressions.
-        FPM->add(llvm::createGVNPass());
+        //FPM->add(llvm::createGVNPass());
         // Simplify the control flow graph (deleting unreachable blocks, etc).
         FPM->add(llvm::createCFGSimplificationPass());
         // Promote allocas to registers.
         FPM->add(llvm::createPromoteMemoryToRegisterPass());
         // Simplify the control flow graph (deleting unreachable blocks, etc).
         FPM->add(llvm::createAggressiveDCEPass());
+        
         FPM->doInitialization();
     }
 };
@@ -1451,7 +1488,7 @@ struct Fusion {
     llvm::Value* iterator;
     llvm::Value* length;
 
-    llvm::Constant *zerosD, *onesD, *seqD, *seqI;
+    llvm::Constant *zerosD, *zerosI, *onesD, *onesI, *seqD, *seqI;
 
     size_t width;
     llvm::IRBuilder<> builder;
@@ -1483,12 +1520,22 @@ struct Fusion {
             for(size_t i = 0; i < this->width; i++) 
                 zeros.push_back(llvm::ConstantFP::get(builder.getDoubleTy(), 0));
             zerosD = llvm::ConstantVector::get(zeros);
-        
+       
+            zeros.clear(); 
+            for(size_t i = 0; i < this->width; i++) 
+                zeros.push_back(builder.getInt64(0));
+            zerosI = llvm::ConstantVector::get(zeros);
+
             std::vector<llvm::Constant*> ones;
             for(size_t i = 0; i < this->width; i++) 
                 ones.push_back(llvm::ConstantFP::get(builder.getDoubleTy(), 1));
             onesD = llvm::ConstantVector::get(ones);
             
+            ones.clear(); 
+            for(size_t i = 0; i < this->width; i++) 
+                ones.push_back(builder.getInt64(1));
+            onesI = llvm::ConstantVector::get(ones);
+
             std::vector<llvm::Constant*> sD;
             for(size_t i = 0; i < this->width; i++) 
                 sD.push_back(llvm::ConstantFP::get(builder.getDoubleTy(), i));
@@ -1704,13 +1751,15 @@ struct Fusion {
     }
 
     llvm::Value* BinaryCall(std::string func, JIT::IR const& ir) {
-        std::vector<llvm::Type*> args;
-        args.push_back(llvmType(jit.code[ir.a].type));
-        args.push_back(llvmType(jit.code[ir.b].type));
-        llvm::Type* outTy = llvmType(ir.type);
-        llvm::FunctionType* ft = llvm::FunctionType::get(outTy, args, false);
-        llvm::Function* f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, func, S->M);
-
+        llvm::Function* f = S->M->getFunction(func);
+        if(f == 0) {
+            std::vector<llvm::Type*> args;
+            args.push_back(llvmType(jit.code[ir.a].type));
+            args.push_back(llvmType(jit.code[ir.b].type));
+            llvm::Type* outTy = llvmType(ir.type);
+            llvm::FunctionType* ft = llvm::FunctionType::get(outTy, args, false);
+            f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, func, S->M);
+        }
         llvm::Value* ina = Load(ir.a);
         llvm::Value* inb = Load(ir.b);
         llvm::Value* out = llvm::UndefValue::get(llvmType(ir.type, width));
@@ -1924,10 +1973,7 @@ struct Fusion {
             {
                 // there's all sorts of fast variants if lengths are known.
                 //if(llvm::isa<llvm::Constant>(a) && llvm::isa<llvm::Constant>(b)) {
-                std::vector<llvm::Constant*> c;
-                for(size_t i = 0; i < width; i++)
-                    c.push_back(builder.getInt64(0));
-                outs[assignment[index]] = llvm::ConstantVector::get(c);
+                outs[assignment[index]] = zerosI;
                 //}
                 //else {
                 //    _error("Unsupported rep");
@@ -1989,11 +2035,22 @@ struct Fusion {
                 //} 
             } break;
 
+            case TraceOpCode::repscalar:
+            {
+                llvm::Value* r = llvm::UndefValue::get(llvmType(ir.type, width));
+                llvm::Value* v = builder.CreateLoad(RawLoad(ir.a));
+                for(size_t i = 0; i < this->width; i++) {
+                    r = builder.CreateInsertElement(r, v, builder.getInt32(i));
+                }
+                outs[reg] = r;
+                
+            } break;
+
             // Generators
             case TraceOpCode::seq:
             {
                 llvm::IRBuilder<> TmpB(&function->getEntryBlock(),
-                    function->getEntryBlock().begin());
+                    function->getEntryBlock().end());
                 llvm::AllocaInst* r = TmpB.CreateAlloca(llvmType(ir.type, width));
                 r->setAlignment(16);
             
@@ -2007,12 +2064,25 @@ struct Fusion {
                 for(size_t i = 0; i < this->width; i++) {
                     starts = TmpB.CreateInsertElement(starts, start, builder.getInt32(i));
                     steps = TmpB.CreateInsertElement(steps, step, builder.getInt32(i));
-                    bigstep = TmpB.CreateInsertElement(bigstep, TmpB.CreateMul(step,builder.getInt64(width)), builder.getInt32(i));
+                    if(ir.type == Type::Integer)
+                        bigstep = TmpB.CreateInsertElement(bigstep, TmpB.CreateMul(step,builder.getInt64(width)), builder.getInt32(i));
+                    else if(ir.type == Type::Double)
+                        bigstep = TmpB.CreateInsertElement(bigstep, TmpB.CreateFMul(step,llvm::ConstantFP::get(builder.getDoubleTy(), width)), builder.getInt32(i));
+                    else
+                        _error("Unexpected seq type");
                 } 
-                
-                TmpB.CreateStore(TmpB.CreateSub(TmpB.CreateAdd(TmpB.CreateMul(seqI, steps), starts), bigstep), r);
-
-                llvm::Value* added = builder.CreateAdd(builder.CreateLoad(r), bigstep);
+               
+                llvm::Value* added;
+                if(ir.type == Type::Integer) { 
+                    TmpB.CreateStore(TmpB.CreateSub(TmpB.CreateAdd(TmpB.CreateMul(seqI, steps), starts), bigstep), r);
+                    added = builder.CreateAdd(builder.CreateLoad(r), bigstep);
+                }
+                else if(ir.type == Type::Double) {
+                    TmpB.CreateStore(TmpB.CreateFSub(TmpB.CreateFAdd(TmpB.CreateFMul(seqD, steps), starts), bigstep), r);
+                    added = builder.CreateFAdd(builder.CreateLoad(r), bigstep);
+                }
+                else
+                    _error("Unexpected seq type");
                 builder.CreateStore(added, r);
                 outs[reg] = added;
             } break;
@@ -2079,7 +2149,7 @@ struct Fusion {
     llvm::BasicBlock* Close() {
        
         if(instructions == 0) {
-            header = after; 
+            header = after;
             return after;
         }
 
@@ -2124,6 +2194,7 @@ struct LLVMCompiler {
     LLVMState* S;
     llvm::Function * function;
     llvm::BasicBlock * EntryBlock;
+    llvm::BasicBlock * HeaderBlock;
     llvm::BasicBlock * PhiBlock;
     llvm::BasicBlock * LoopStart;
     llvm::BasicBlock * InnerBlock;
@@ -2192,6 +2263,8 @@ struct LLVMCompiler {
 
         EntryBlock = llvm::BasicBlock::Create(
                 *S->C, "entry", function, 0);
+        HeaderBlock = llvm::BasicBlock::Create(
+                *S->C, "header", function, 0);
         InnerBlock = llvm::BasicBlock::Create(
                 *S->C, "inner", function, 0);
         EndBlock = llvm::BasicBlock::Create(
@@ -2201,9 +2274,9 @@ struct LLVMCompiler {
         ai->setName("thread");
         thread_var = ai++;
 
-        result_var = CreateEntryBlockAlloca(instruction_type, builder.getInt64(1));
-
         builder.SetInsertPoint(EntryBlock);
+
+        result_var = CreateEntryBlockAlloca(instruction_type, builder.getInt64(1));
 
         // create registers...
         registers.clear();
@@ -2225,26 +2298,37 @@ struct LLVMCompiler {
             }
         }
 
- 
+        builder.SetInsertPoint(HeaderBlock);
+
         for(size_t i = 0; i < jit.code.size(); i++) {
             if(jit.code[i].op != TraceOpCode::nop)
                 Emit(jit.code[i], i);
         }
+            if(fusion) {
+                llvm::BasicBlock* after = fusion->Close();
+                builder.CreateBr(fusion->header);
+                builder.SetInsertPoint(after);
+            }
         builder.CreateBr(PhiBlock);
+
         builder.SetInsertPoint(PhiBlock);
         builder.CreateBr(LoopStart);
+
+        builder.SetInsertPoint(EntryBlock);
+        builder.CreateBr(HeaderBlock);
+
         builder.SetInsertPoint(EndBlock);
         builder.CreateRet(builder.CreateLoad(result_var));
 
         S->FPM->run(*function);
-        function->dump();
+        //function->dump();
 
         return S->EE->getPointerToFunction(function);   
     }
 
     llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type, llvm::Value* size) {
         llvm::IRBuilder<> TmpB(&function->getEntryBlock(),
-                function->getEntryBlock().begin());
+                function->getEntryBlock().end());
         llvm::AllocaInst* r = TmpB.CreateAlloca(type, size);
         r->setAlignment(16);
         return r;
@@ -2345,7 +2429,7 @@ struct LLVMCompiler {
                 builder.CreateBr(fusion->header);
                 builder.SetInsertPoint(after);
             }
-            fusion = new Fusion(jit, S, function, values, registers, assignment, builder.getInt64(ir.in.length), 4);
+            fusion = new Fusion(jit, S, function, values, registers, assignment, builder.getInt64(ir.in.length), 2);
             fusion->Open(InnerBlock);
             
         //}
@@ -2464,6 +2548,7 @@ struct LLVMCompiler {
                 EmitExit(r, jit.exits[index]);
             } break;
 
+            case TraceOpCode::repscalar:
             case TraceOpCode::gather:
             case TraceOpCode::scatter:
             case TraceOpCode::mov: 
@@ -2477,6 +2562,9 @@ struct LLVMCompiler {
                     fusion->Emit(index);
             } break;
             case TraceOpCode::phi:
+            {
+                values[index] = values[ir.a];
+            } break;
             case TraceOpCode::NEWENV:
             case TraceOpCode::PUSH:
             case TraceOpCode::POP:

@@ -24,7 +24,6 @@
 		_(sload, "SLOAD", ___) /* loads are type guarded */ \
         _(estore, "ESTORE", ___) \
         _(sstore, "SSTORE", ___) \
-        _(GTYPE, "GTYPE", ___) \
         _(GPROTO,   "GPROTO", ___) \
 		_(guardT, "GTRUE", ___) \
 		_(guardF, "GFALSE", ___) \
@@ -41,6 +40,8 @@
         _(strip, "STRIP", ___) \
         _(attrget, "attrget", ___) \
         _(attrset, "attrset", ___) \
+        _(kill, "kill", ___) \
+        _(repscalar, "repscalar", ___) \
 		_(nop, "NOP", ___)
 
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
