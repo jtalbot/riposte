@@ -14,6 +14,7 @@ static void printCode(Thread const& thread, Prototype const* prototype, Environm
 	if(prototype->bc.size() > 0) {
 		std::cout << "\tCode: " << std::endl;
 		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++) {
+			std::cout << &(prototype->bc[i]);
 			std::cout << "\t\t" << i << ":\t" << prototype->bc[i].toString();
 			if(prototype->bc[i].bc == ByteCode::call) {
 				std::cout << "\t\t(arguments: " << prototype->calls[prototype->bc[i].b].arguments.size() << ")";
@@ -428,13 +429,13 @@ bool isTraceableShape(Thread const& thread, Value const& a, Value const& b) {
 }
 
 bool isTraceable(Thread const& thread, Value const& a) {
-	return 	thread.state.jitEnabled && 
+	return 	thread.state.deferredEnabled && 
 		isTraceableType(thread, a) &&
 		isTraceableShape(thread, a);
 }
 
 bool isTraceable(Thread const& thread, Value const& a, Value const& b) {
-	return  thread.state.jitEnabled &&
+	return  thread.state.deferredEnabled &&
 		isTraceableType(thread, a) && 
 		isTraceableType(thread, b) && 
 		isTraceableShape(thread, a, b);
@@ -463,7 +464,7 @@ bool isTraceable(Thread const& thread, Value const& a, Value const& b, Value con
 
 template<>
 bool isTraceable<IfElse>(Thread const& thread, Value const& a, Value const& b, Value const& c) { 
-	return	thread.state.jitEnabled &&
+	return	thread.state.deferredEnabled &&
 		isTraceableType(thread, a) &&
 		isTraceableType(thread, b) &&
 		isTraceableType(thread, c) &&

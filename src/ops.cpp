@@ -10,6 +10,11 @@
 #include "call.h"
 
 extern "C"
+void MARKER(char* a) {
+    marker(a);
+}
+
+extern "C"
 Value SLOAD(Thread& thread, int64_t i) {
     return (thread.registers+DEFAULT_NUM_REGISTERS)[i];
 }
@@ -115,8 +120,11 @@ Prototype const* GET_prototype(Thread& thread, Value v) {
 extern "C"
 Value GET_attr(Thread& thread, Value a, int8_t** name) {
     // Should inline this check so we can avoid a guard when we know the result type.
-    if(a.isObject())
+    if(a.isObject()) {
+        //printf("Getting attribute: %s: ", (String)name[0]);
+        //std::cout << thread.state.stringify(((Object const&)a).get((String)name[0]));
         return ((Object const&)a).get((String)name[0]);
+    }
     else
         return Null::Singleton();
 }

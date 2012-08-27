@@ -15,6 +15,10 @@
 
 #include "primes.h"
 
+void marker(char* a) {
+    //printf("%s\n", a);
+}
+
 Thread::RandomSeed Thread::seed[100];
 
 Thread::Thread(State& state, uint64_t index) : state(state), index(index), steals(1) {
@@ -721,7 +725,7 @@ Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	
 #ifdef ENABLE_JIT
 	// TODO: replace with isTraceable...
-	if(thread.state.jitEnabled 
+	if(thread.state.deferredEnabled 
 		&& (type == Type::Double || type == Type::Integer || type == Type::Logical)
 		&& l >= TRACE_VECTOR_WIDTH) {
 		OUT(thread, inst.c) = thread.EmitConstant(thread.frame.environment, type, l, 0);
@@ -1004,7 +1008,7 @@ void interpret(Thread& thread, Instruction const* pc) {
             pc = ((JIT::Ptr)pc->a)(thread);
 	        printf("Execution time: %f\n", time_elapsed(a));
         }
-        else { 
+        else if(thread.state.jitEnabled) { 
     	    unsigned short& counter = 
 	    		thread.jit.counters[(((uintptr_t)pc)>>5) & (1024-1)];
     		counter++;
@@ -1014,6 +1018,9 @@ void interpret(Thread& thread, Instruction const* pc) {
 	    		thread.jit.start_recording(pc, thread.frame.environment);
 		    	labels = record;
     		}
+            pc++;
+        }
+        else {
             pc++;
         }
 		goto *(const void*)labels[pc->bc]; 

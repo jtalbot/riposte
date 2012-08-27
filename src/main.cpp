@@ -198,6 +198,7 @@ main(int argc, char** argv)
 	char * filename = NULL;
 	bool echo = true;
 	int threads = 1; 
+    bool jit = true;
 
 	static struct option longopts[] = {
 		{ "debug",     0,     NULL,           'd' },
@@ -210,7 +211,7 @@ main(int argc, char** argv)
 
 	/*  Parse commandline options  */
 	opterr = 0;
-	while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
+	while ((ch = getopt_long(argc, argv, "df:hj:vqi", longopts, NULL)) != -1)
 		switch (ch) {
 			case 'd':
 				debug++;
@@ -238,6 +239,9 @@ main(int argc, char** argv)
 					threads = atoi(optarg);
 				}
 				break;
+            case 'i':
+                jit = false;
+                break;
 			default:
 				//usage();
 				//exit (-1);
@@ -255,6 +259,7 @@ main(int argc, char** argv)
 
 	State state(threads, argc, argv);
 	state.verbose = verbose;
+    state.jitEnabled = jit;
 	Thread& thread = state.getMainThread();
 
 	try {

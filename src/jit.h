@@ -295,7 +295,7 @@ public:
     void EmitOptIR(IRRef i, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::map<Variable, IRRef>& map, std::map<Variable, IRRef>& stores, std::tr1::unordered_map<IR, IRRef>& cse, std::vector<IRRef>& environments, std::vector<StackFrame>& frames);
     void Replay(Thread& thread);
 
-    void AssignRegister(std::vector<int64_t>& assignment, size_t index);
+    void AssignRegister(size_t src, std::vector<int64_t>& assignment, size_t index);
     void PreferRegister(std::vector<int64_t>& assignment, size_t index, size_t share);
     void ReleaseRegister(std::vector<int64_t>& assignment, size_t index);
     void RegisterAssignment(Exit& e);

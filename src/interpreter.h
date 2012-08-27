@@ -16,6 +16,8 @@
 
 class Thread;
 
+void marker(char* a);
+
 ////////////////////////////////////////////////////////////////////
 // VM ops 
 ///////////////////////////////////////////////////////////////////
@@ -130,6 +132,7 @@ public:
 
 	bool verbose;
 	bool jitEnabled;
+	bool deferredEnabled;
 
 	int64_t done;
 
@@ -366,7 +369,7 @@ private:
 };
 
 inline State::State(uint64_t threads, int64_t argc, char** argv) 
-	: nThreads(threads), verbose(false), jitEnabled(true), done(0) {
+	: nThreads(threads), verbose(false), jitEnabled(true), deferredEnabled(false), done(0) {
 	Environment* base = new (GC) Environment(0);
 	this->global = new (GC) Environment(base);
 	path.push_back(base);

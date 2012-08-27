@@ -685,7 +685,7 @@ JIT::Ptr JIT::end_recording(Thread& thread) {
     //Schedule();
     schedule();
     RegisterAssignment(exits[code.size()-1]);
-    //dump(thread, code);
+    dump(thread, code);
 
     
     return compile(thread);
@@ -1126,7 +1126,7 @@ void JIT::schedule() {
 */
 }
 
-void JIT::AssignRegister(std::vector<int64_t>& assignment, size_t index) {
+void JIT::AssignRegister(size_t src, std::vector<int64_t>& assignment, size_t index) {
     if(assignment[index] <= 0) {
         IR const& ir = code[index];
         if(ir.op == TraceOpCode::sload ||
@@ -1138,6 +1138,13 @@ void JIT::AssignRegister(std::vector<int64_t>& assignment, size_t index) {
         }
  
         Register r = { ir.type, ir.out }; 
+
+        // if usage crosses loop boundary, it requires a unique live register
+        if(src > Loop && index < Loop && code[src].op != TraceOpCode::phi) {
+            assignment[index] = registers.size();
+            registers.push_back(r);
+            return;
+        }
 
         // if there's a preferred register look for that first.
         if(assignment[index] < 0) {
@@ -1206,7 +1213,7 @@ void JIT::RegisterAssignment(Exit& e) {
  
     // first mark all outputs as live...
     for(std::map<Variable, IRRef>::const_iterator i = e.o.begin(); i != e.o.end(); ++i) {
-        AssignRegister(a, i->second);
+        AssignRegister(code.size(), a, i->second);
     }
 
     for(size_t i = code.size()-1; i < code.size(); --i) {
@@ -1219,33 +1226,33 @@ void JIT::RegisterAssignment(Exit& e) {
             } break;
             case TraceOpCode::phi: {
                 PreferRegister(a, ir.a, i);
-                AssignRegister(a, ir.a);
+                AssignRegister(i, a, ir.a);
             } break;
             case TraceOpCode::mov: {
                 PreferRegister(a, ir.b, i);
-                AssignRegister(a, ir.b);
+                AssignRegister(i, a, ir.b);
                 PreferRegister(a, ir.a, ir.b);
             } break;
             case TraceOpCode::GPROTO: 
             case TraceOpCode::guardF: 
             case TraceOpCode::guardT: {
-                AssignRegister(a, ir.a);
+                AssignRegister(i, a, ir.a);
                 std::map<Variable, IRRef>::const_iterator j;
                 for(j = exits[i].o.begin(); j != exits[i].o.end(); ++j) {
-                    AssignRegister(a, j->second);
+                    AssignRegister(i, a, j->second);
                 }
             } break;
             case TraceOpCode::scatter: {
-                AssignRegister(a, ir.c);
-                AssignRegister(a, ir.a);
-                AssignRegister(a, ir.b);
+                AssignRegister(i, a, ir.c);
+                AssignRegister(i, a, ir.a);
+                AssignRegister(i, a, ir.b);
             } break;
             case TraceOpCode::attrset:
             TERNARY_BYTECODES(CASE)
             {
-                AssignRegister(a, ir.c);
-                AssignRegister(a, ir.b);
-                AssignRegister(a, ir.a);
+                AssignRegister(i, a, ir.c);
+                AssignRegister(i, a, ir.b);
+                AssignRegister(i, a, ir.a);
             } break;
             case TraceOpCode::attrget:
             case TraceOpCode::rep:
@@ -1253,14 +1260,14 @@ void JIT::RegisterAssignment(Exit& e) {
             case TraceOpCode::gather:
             BINARY_BYTECODES(CASE)
             {
-                AssignRegister(a, std::max(ir.a, ir.b));
-                AssignRegister(a, std::min(ir.a, ir.b));
+                AssignRegister(i, a, std::max(ir.a, ir.b));
+                AssignRegister(i, a, std::min(ir.a, ir.b));
             } break;
             case TraceOpCode::repscalar:
             case TraceOpCode::length:
             UNARY_FOLD_SCAN_BYTECODES(CASE)
             {
-                AssignRegister(a, ir.a);
+                AssignRegister(i, a, ir.a);
             } break;
             default: {
             } break;
@@ -1342,6 +1349,9 @@ void JIT::IR::dump() const {
 }
 
 void JIT::dump(Thread& thread, std::vector<IR> const& t) {
+
+    std::map<size_t, Exit>::const_iterator e = exits.find(t.size()-1);
+
     for(size_t i = 0; i < t.size(); i++) {
         IR const& ir = t[i];
         if(ir.op != TraceOpCode::nop) {
@@ -1350,7 +1360,8 @@ void JIT::dump(Thread& thread, std::vector<IR> const& t) {
                 printf("-");
             else
                 printf(" ");
-            //if(assignment.size() == t.size()) printf(" (%2d) ", assignment[i]);
+            if(e != exits.end()
+                && e->second.assignment.size() == t.size()) printf(" (%2d) ", e->second.assignment[i]);
             ir.dump();
     
             if( exits.size() > 0 && (
@@ -1362,7 +1373,7 @@ void JIT::dump(Thread& thread, std::vector<IR> const& t) {
     
                 std::cout << "\n\t\t=> ";
                 Exit const& e = exits[i];
-                std::cout << "[" << e.frames.size() << " frames, " << e.environments.size() << " envs] ";
+                std::cout << "[" << e.frames.size() << " frames, " << e.environments.size() << " envs, " << e.reenter << "] ";
                 for(std::map<Variable, IRRef>::const_iterator i = e.o.begin(); i != e.o.end(); ++i) {
                     std::cout << i->second << "->";
                     if(i->first.i >= 0) 
@@ -1566,13 +1577,11 @@ struct Fusion {
         return llvm::VectorType::get(llvmType(type), width);
     }
 
-    llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type, llvm::Value* init) {
+    llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type) {
         llvm::IRBuilder<> TmpB(&function->getEntryBlock(),
                 function->getEntryBlock().begin());
         llvm::AllocaInst* r = TmpB.CreateAlloca(type);
         r->setAlignment(16);
-        if(init != 0)
-            TmpB.CreateStore(init, r);
         return r;
     }
 
@@ -1772,6 +1781,9 @@ struct Fusion {
         return out;
     }
 
+#define MARKER(str) \
+    builder.CreateCall(S->M->getFunction("MARKER"), builder.CreateConstGEP2_64(builder.CreateGlobalString(str), 0, 0))
+
     void Emit(size_t index) {
 
         // DCE
@@ -1941,7 +1953,7 @@ struct Fusion {
                 switch(jit.code[ir.a].type) {
                     case Type::Integer: SCALARIZE1(SIToFP, builder.getDoubleTy()); break;
                     case Type::Logical: SCALARIZE1(SIToFP, builder.getDoubleTy()); break;
-                    case Type::Double: /* Do nothing */ break;
+                    case Type::Double: IDENTITY; break;
                     default: _error("Unexpected cast"); break;
                 }
                 break;
@@ -1950,7 +1962,7 @@ struct Fusion {
                 switch(jit.code[ir.a].type) {
                     case Type::Double: SCALARIZE1(FPToSI, builder.getInt64Ty()); break;
                     case Type::Logical: SCALARIZE1(ZExt, builder.getInt64Ty()); break;
-                    case Type::Integer: /* Do nothing */ break;
+                    case Type::Integer: IDENTITY; break;
                     default: _error("Unexpected cast"); break;
                 }
                 break;
@@ -1959,7 +1971,7 @@ struct Fusion {
                 switch(jit.code[ir.a].type) {
                     case Type::Double: SCALARIZE1(FCmpONE, llvm::ConstantFP::get(builder.getDoubleTy(), 0)); break;
                     case Type::Integer: SCALARIZE1(ICmpEQ, builder.getInt64(0)); break;
-                    case Type::Logical: /* Do nothing */ break;
+                    case Type::Logical: IDENTITY; break;
                     default: _error("Unexpected cast"); break;
                 }
                 break;
@@ -1973,7 +1985,7 @@ struct Fusion {
             {
                 // there's all sorts of fast variants if lengths are known.
                 //if(llvm::isa<llvm::Constant>(a) && llvm::isa<llvm::Constant>(b)) {
-                outs[assignment[index]] = zerosI;
+                outs[reg] = zerosI;
                 //}
                 //else {
                 //    _error("Unsupported rep");
@@ -2049,11 +2061,11 @@ struct Fusion {
             // Generators
             case TraceOpCode::seq:
             {
-                llvm::IRBuilder<> TmpB(&function->getEntryBlock(),
-                    function->getEntryBlock().end());
-                llvm::AllocaInst* r = TmpB.CreateAlloca(llvmType(ir.type, width));
-                r->setAlignment(16);
+                MARKER("seq");
+                llvm::AllocaInst* r = CreateEntryBlockAlloca(llvmType(ir.type, width));
             
+                llvm::IRBuilder<> TmpB(header, header->end());
+
                 // now initialize
                 llvm::Value* start = TmpB.CreateLoad(RawLoad(ir.a));
                 llvm::Value* step = TmpB.CreateLoad(RawLoad(ir.b));
@@ -2090,12 +2102,20 @@ struct Fusion {
             // Reductions
             case TraceOpCode::sum:
             {
-                llvm::Value* agg = CreateEntryBlockAlloca(llvmType(ir.type, width), zerosD);
-                if(ir.type == Type::Double)
+                MARKER("sum");
+                llvm::Value* agg;
+                if(ir.type == Type::Double) {
+                    agg = CreateEntryBlockAlloca(llvmType(ir.type, width));
+                    llvm::IRBuilder<> TmpB(header, header->end());
+                    TmpB.CreateStore(zerosD, agg);
                     builder.CreateStore(builder.CreateFAdd(builder.CreateLoad(agg), Load(ir.a)), agg);
-                else
+                }
+                else {
+                    agg = CreateEntryBlockAlloca(llvmType(ir.type, width));
+                    llvm::IRBuilder<> TmpB(header, header->end());
+                    TmpB.CreateStore(zerosI, agg);
                     builder.CreateStore(builder.CreateAdd(builder.CreateLoad(agg), Load(ir.a)), agg);
-                
+                } 
                 reductions[index] = agg;
             } break;
             case TraceOpCode::length:
