@@ -1,7 +1,7 @@
 #adapted from https://github.com/ispc/ispc/tree/master/examples/options
 
-N_ROUNDS <- 100
-N_OPTIONS <- 10000000
+N_ROUNDS <- 1
+N_OPTIONS <- 30000000
 
 invSqrt2Pi <- 0.39894228040
 log10 <- log(10)

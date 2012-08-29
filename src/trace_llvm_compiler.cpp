@@ -342,8 +342,6 @@ struct TraceLLVMCompiler {
             ReductionHelper(tid);
         }
         
-        mainModule->dump();
-        
         llvm::verifyFunction(*function);
         
 
@@ -1958,8 +1956,9 @@ void Trace::JIT(Thread & thread) {
     cuInit(0);
     nvvmInit();
     
-    
+    timespec time = get_time();
     c.Compile();
+    std::cout << "Time elapsed is " << time_elapsed(time);
     c.Execute();
 }
 
