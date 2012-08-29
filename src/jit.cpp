@@ -24,11 +24,12 @@ JIT::IRRef JIT::insert(
     return (IRRef) { t.size()-1 };
 }
 
-JIT::Shape JIT::SpecializeLength(size_t length, IRRef irlength) {
+JIT::Shape JIT::SpecializeLength(size_t length, IRRef irlength, Instruction const* inst) {
     // if short enough, guard length and insert a constant length instead
     if(length <= SPECIALIZE_LENGTH) {
         IRRef s = constant(Integer::c(length));
-        insert(trace, TraceOpCode::glenEQ, std::min(irlength,s), std::max(irlength,s), 0, Type::Promise, Shape::Scalar, Shape::Empty);
+        IRRef g =insert(trace, TraceOpCode::glenEQ, std::min(irlength,s), std::max(irlength,s), 0, Type::Promise, Shape::Scalar, Shape::Empty);
+        reenters[g] = inst;
         return Shape(s, length);
     }
     else {
@@ -36,12 +37,12 @@ JIT::Shape JIT::SpecializeLength(size_t length, IRRef irlength) {
     }
 }
 
-JIT::Shape JIT::SpecializeValue(Value const& v, IR ir) {
+JIT::Shape JIT::SpecializeValue(Value const& v, IR ir, Instruction const* inst) {
     if(v.isNull())
         return Shape::Empty;
     else if(v.isVector()) {
         trace.push_back(ir);
-        return SpecializeLength((size_t)v.length, trace.size()-1);
+        return SpecializeLength((size_t)v.length, trace.size()-1, inst);
     }
     else
         return Shape::Scalar;
@@ -70,12 +71,12 @@ JIT::IRRef JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
     if(a <= 0) {
         Variable v = { -1, (thread.base+a)-(thread.registers+DEFAULT_NUM_REGISTERS)};
     
-        Shape s = SpecializeValue(operand, IR(TraceOpCode::slength, (IRRef)-1, v.i, Type::Integer, Shape::Empty, Shape::Scalar));
+        Shape s = SpecializeValue(operand, IR(TraceOpCode::slength, (IRRef)-1, v.i, Type::Integer, Shape::Empty, Shape::Scalar), reenter);
         r = insert(trace, TraceOpCode::sload, (IRRef)-1, v.i, 0, operand.type, Shape::Empty, s);
     }
     else {
         Variable v = { getEnv(thread.frame.environment->findRecursive((String)a)), a };
-        Shape s = SpecializeValue(operand, IR(TraceOpCode::elength, v.env, v.i, Type::Integer, Shape::Empty, Shape::Scalar));
+        Shape s = SpecializeValue(operand, IR(TraceOpCode::elength, v.env, v.i, Type::Integer, Shape::Empty, Shape::Scalar), reenter);
         r = insert(trace, TraceOpCode::eload, v.env, v.i, 0, operand.type, Shape::Empty, s);
     }
     reenters[r] = reenter;
@@ -145,7 +146,7 @@ JIT::IRRef JIT::EmitFold(TraceOpCode::Enum op, IRRef a, Type::Enum rty, Type::En
    return insert(trace, op, cast(a, mty), 0, 0, rty, trace[a].out, Shape::Scalar);
 }
 
-JIT::Shape JIT::MergeShapes(Shape a, Shape b) {
+JIT::Shape JIT::MergeShapes(Shape a, Shape b, Instruction const* inst) {
     Shape shape = Shape::Empty;
     if(a == b) {
         shape = a;
@@ -154,35 +155,38 @@ JIT::Shape JIT::MergeShapes(Shape a, Shape b) {
         shape = Shape::Empty;
     }
     else if(a.traceLength == b.traceLength) {
-        insert(trace, TraceOpCode::glenEQ, std::min(a.length, b.length), std::max(a.length,b.length), 0,
+        IRRef g = insert(trace, TraceOpCode::glenEQ, std::min(a.length, b.length), std::max(a.length,b.length), 0,
                 Type::Promise, Shape::Scalar, Shape::Empty);
+        reenters[g] = inst;
         shape = a.length < b.length ? a : b;
     }
     else if(a.traceLength < b.traceLength) {
-        insert(trace, TraceOpCode::glenLT, a.length, b.length, 0,
+        IRRef g = insert(trace, TraceOpCode::glenLT, a.length, b.length, 0,
                 Type::Promise, Shape::Scalar, Shape::Empty);
+        reenters[g] = inst;
         shape = b;
     }
     else if(a.traceLength > b.traceLength) {
-        insert(trace, TraceOpCode::glenLT, b.length, a.length, 0,
+        IRRef g = insert(trace, TraceOpCode::glenLT, b.length, a.length, 0,
                 Type::Promise, Shape::Scalar, Shape::Empty);
+        reenters[g] = inst;
         shape = a;
     }
     return shape;
 }
 
-JIT::IRRef JIT::EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty) {
+JIT::IRRef JIT::EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Instruction const* inst) {
     // specialization depends on observed lengths. 
     //  If depedent length is the same, no need for a guard. We've already proved the lengths are equal
     //  If one of the lengths is zero, result length is also known, no need for guard.
     //  If equal, guard equality and continue.
     //  If unequal, guard less than
-    Shape shape = MergeShapes(trace[a].out,trace[b].out);
+    Shape shape = MergeShapes(trace[a].out,trace[b].out, inst);
     return insert(trace, op, rep(cast(a,maty),shape), rep(cast(b,mbty),shape), 0, rty, shape, shape);
 }
 
-JIT::IRRef JIT::EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty) {
-    Shape s = MergeShapes(trace[a].out, MergeShapes(trace[b].out, trace[c].out));
+JIT::IRRef JIT::EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty, Instruction const* inst) {
+    Shape s = MergeShapes(trace[a].out, MergeShapes(trace[b].out, trace[c].out, inst), inst);
     return insert(trace, op, rep(cast(a,maty),s), rep(cast(b,mbty),s), rep(cast(c,mcty),s), rty, s, s);
 }
 
@@ -250,7 +254,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             IRRef b = cast(load(thread, inst.b, &inst), Type::Integer);
             b = insert(trace, TraceOpCode::sub, b, rep(constant(Integer::c(1)), trace[b].out), 0, trace[b].type, trace[b].out, trace[b].out);
             IRRef c = load(thread, inst.c, &inst);
-            Shape s = MergeShapes(trace[a].out, trace[b].out);
+            Shape s = MergeShapes(trace[a].out, trace[b].out, &inst);
             store(thread, insert(trace, TraceOpCode::scatter, rep(a, s), rep(b, s), c, trace[c].type, s, trace[c].out), inst.c);
         }   break;
 
@@ -258,8 +262,8 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             IRRef a = load(thread, inst.a, &inst);
             IRRef b = load(thread, inst.b, &inst);
             IRRef c = load(thread, inst.c, &inst);
-            Shape s = MergeShapes(trace[a].out, MergeShapes(trace[b].out, trace[c].out));
-            store(thread, EmitTernary<IfElse>(TraceOpCode::ifelse, rep(c,s), rep(b,s), rep(a,s)), inst.c);
+            Shape s = MergeShapes(trace[a].out, MergeShapes(trace[b].out, trace[c].out, &inst), &inst);
+            store(thread, EmitTernary<IfElse>(TraceOpCode::ifelse, rep(c,s), rep(b,s), rep(a,s), &inst), inst.c);
         }   break;
 
         #define EMIT(Name, string, Group, ...)                      \
@@ -274,7 +278,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         case ByteCode::Name: {                              \
             IRRef a = load(thread, inst.a, &inst);          \
             IRRef b = load(thread, inst.b, &inst);          \
-            IRRef r = EmitBinary<Group>(TraceOpCode::Name, a, b); \
+            IRRef r = EmitBinary<Group>(TraceOpCode::Name, a, b, &inst); \
             store(thread, r, inst.c);  \
         }   break;
         BINARY_BYTECODES(EMIT)
@@ -311,8 +315,10 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         {
             OPERAND(a, inst.a);
             if(a.isObject()) {
-                Shape s = SpecializeValue(((Object const&)a).base(), IR(TraceOpCode::olength, load(thread, inst.a, &inst), Type::Integer, Shape::Empty, Shape::Scalar));
-                store(thread, insert(trace, TraceOpCode::strip, load(thread, inst.a, &inst), 0, 0, ((Object const&)a).base().type, Shape::Scalar, s), inst.c);
+                Shape s = SpecializeValue(((Object const&)a).base(), IR(TraceOpCode::olength, load(thread, inst.a, &inst), Type::Integer, Shape::Empty, Shape::Scalar), &inst);
+                IRRef g= insert(trace, TraceOpCode::strip, load(thread, inst.a, &inst), 0, 0, ((Object const&)a).base().type, Shape::Scalar, s);
+                reenters[g] = &inst;
+                store(thread, g, inst.c);
             }
             else {
                 store(thread, load(thread, inst.a, &inst), inst.c);
@@ -337,8 +343,10 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
                 r = Null::Singleton();
             }
             IRRef name = cast(load(thread, inst.b, &inst), Type::Character);
-            Shape s = SpecializeValue(r, IR(TraceOpCode::alength, load(thread, inst.a, &inst), name, Type::Integer, Shape::Empty, Shape::Scalar));
-            store(thread, insert(trace, TraceOpCode::attrget, load(thread, inst.a, &inst), name, 0, r.type, Shape::Empty, s), inst.c);
+            Shape s = SpecializeValue(r, IR(TraceOpCode::alength, load(thread, inst.a, &inst), name, Type::Integer, Shape::Empty, Shape::Scalar), &inst);
+            IRRef g = insert(trace, TraceOpCode::attrget, load(thread, inst.a, &inst), name, 0, r.type, Shape::Empty, s);
+            reenters[g] = &inst;
+            store(thread, g, inst.c);
         }   break;
 
         case ByteCode::attrset:
@@ -362,7 +370,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         {
             OPERAND(len, inst.a);
             IRRef l = load(thread, inst.a, &inst);
-            Shape s = SpecializeLength(As<Integer>(thread, len)[0], l);
+            Shape s = SpecializeLength(As<Integer>(thread, len)[0], l, &inst);
             // requires a dependent type
             store(thread, insert(trace, TraceOpCode::rep,
                 cast(load(thread, inst.a, &inst), Type::Integer), 
@@ -372,8 +380,8 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         case ByteCode::seq:
         {
             OPERAND(len, inst.a);
-            IRRef l = load(thread, inst.a, &inst);
-            Shape s = SpecializeLength(As<Integer>(thread, len)[0], l);
+            IRRef l = cast(load(thread, inst.a, &inst), Type::Integer);
+            Shape s = SpecializeLength(As<Integer>(thread, len)[0], l, &inst);
             // requires a dependent type
             IRRef c = load(thread, inst.c, &inst);
             IRRef b = load(thread, inst.b, &inst);
@@ -472,7 +480,7 @@ JIT::IRRef JIT::Insert(std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>
     ir.cost = std::min(csecost, nocsecost);
 
     if(csecost <= nocsecost && cse.find(ir) != cse.end()) {
-        printf("For %s => %f <= %f\n", TraceOpCode::toString(ir.op), csecost, nocsecost);
+        //printf("For %s => %f <= %f\n", TraceOpCode::toString(ir.op), csecost, nocsecost);
         // for mutating operations, have to check if there is a possible intervening mutation...
         if(ir.op == TraceOpCode::attrget) {
             for(IRRef i = code.size()-1; i != cse.find(ir)->second; i--) {
@@ -659,9 +667,10 @@ void JIT::EmitOptIR(
                 environments.push_back(forward[i]);
             } break;
 
-            case TraceOpCode::sload:
-            case TraceOpCode::eload: {
-                Variable v = { ir.op == TraceOpCode::sload ? -1 : forward[ir.a], (int64_t)ir.b };
+            case TraceOpCode::eload:
+                ir.a = forward[ir.a];
+            case TraceOpCode::sload: {
+                Variable v = { ir.a, (int64_t)ir.b };
                 // forward to previous store, if there is one. 
                 if(stores.find(v) != stores.end()) {
                     forward[i] = stores[v];
@@ -677,15 +686,16 @@ void JIT::EmitOptIR(
                         exits[code.size()-1] = BuildExit( environments, frames, stores, reenters[i] );
                 }
             } break; 
-            case TraceOpCode::slength:
-            case TraceOpCode::elength: {
-                Variable v = { ir.op == TraceOpCode::slength ? -1 : forward[ir.a], (int64_t)ir.b };
+            case TraceOpCode::elength:
+                ir.a = forward[ir.a];
+            case TraceOpCode::slength: {
+                Variable v = { ir.a, (int64_t)ir.b };
                 // forward to previous store, if there is one. 
                 if(stores.find(v) != stores.end()) {
                     forward[i] = code[stores[v]].out.length;
                 }
                 else if(loads.find(v) != loads.end()) {
-                    forward[i] = loads[v]-2;
+                    forward[i] = code[loads[v]].out.length;
                 }
                 else {
                     forward[i] = Insert(code, cse, ir);
@@ -792,7 +802,7 @@ void JIT::EmitOptIR(
 
             case TraceOpCode::length:
             {
-                forward[i] = forward[ir.out.length];
+                forward[i] = code[forward[ir.a]].out.length;
             } break;
 
             default:
@@ -1502,6 +1512,8 @@ void JIT::RegisterAssignment(Exit& e) {
             } break;
             #undef CASE
         }
+        AssignRegister(i, a, ir.in.length);
+        AssignRegister(i, a, ir.out.length);
     }
 }
 
@@ -1750,12 +1762,6 @@ struct Fusion {
           , width(width)
           , builder(*S->C) {
        
-        if(llvm::isa<llvm::ConstantInt>(length) && ((llvm::ConstantInt*)length)->getSExtValue() <= SPECIALIZE_LENGTH) {
-            // short vector, don't emit while loop
-            this->width = (size_t)((llvm::ConstantInt*)length)->getZExtValue();
-            this->length = 0;
-        }
-
         if(this->width > 0) {
             std::vector<llvm::Constant*> zeros;
             for(size_t i = 0; i < this->width; i++) 
@@ -2014,6 +2020,9 @@ struct Fusion {
 #define MARKER(str) \
     builder.CreateCall(S->M->getFunction("MARKER"), builder.CreateConstGEP2_64(builder.CreateGlobalString(str), 0, 0))
 
+#define DUMP(str, i) \
+    builder.CreateCall2(S->M->getFunction("DUMP"), builder.CreateConstGEP2_64(builder.CreateGlobalString(str), 0, 0), i)
+
     void Emit(size_t index) {
 
         // DCE
@@ -2242,16 +2251,18 @@ struct Fusion {
             {
                 llvm::Value* v = Load(ir.a);
                 llvm::Value* idx = Load(ir.b);
-                
+              
+                //DUMP("scatter to ", builder.CreateExtractElement(idx, builder.getInt32(0)));
+ 
                 if(assignment[ir.c] != assignment[index]) {
                     // must duplicate (copy from the in register to the out). 
                     // Do this in the fusion header.
                     llvm::IRBuilder<> TmpB(header,
                         header->begin());
                     TmpB.CreateMemCpy(RawLoad(index), RawLoad(ir.c),
-                        builder.CreateMul(
-                            builder.CreateLoad(RawLoad(ir.out.length)),
-                            builder.getInt64(ir.type == Type::Logical ? 1 : 8)), 
+                        TmpB.CreateMul(
+                            TmpB.CreateLoad(RawLoad(ir.out.length)),
+                            TmpB.getInt64(ir.type == Type::Logical ? 1 : 8)), 
                         16);
                 }
                 /*if(jit.assignment[ir.c] != jit.assignment[index]) {
@@ -2490,6 +2501,9 @@ struct LLVMCompiler {
     Save(builder.CreateCall(S->M->getFunction(F), args))
 
     void* Compile() {
+        registers = std::vector<llvm::Value*>(jit.registers.size(), 0);
+        values = std::vector<llvm::Value*>(jit.code.size(), 0);
+
         thread_type = S->M->getTypeByName("class.Thread")->getPointerTo();
         instruction_type = S->M->getTypeByName("struct.Instruction")->getPointerTo();
         value_type = llvm::StructType::get(builder.getInt64Ty(), builder.getInt64Ty(), NULL);
@@ -2523,39 +2537,17 @@ struct LLVMCompiler {
 
         result_var = CreateEntryBlockAlloca(instruction_type, builder.getInt64(1));
 
-        // create registers...
-        registers.clear();
-        registers.push_back(0);
-        for(size_t i = 1; i < jit.registers.size(); i++) {
-            registers.push_back(
-                jit.registers[i].shape.length <= SPECIALIZE_LENGTH 
-                  ?  CreateEntryBlockAlloca(
-                        llvmMemoryType(jit.registers[i].type), builder.getInt64(jit.registers[i].shape.length))
-                  : Malloc(jit.registers[i].type, jit.registers[i].shape.length));
-        }
-       
-        // create values for each ssa node
-        std::vector<int64_t> const& assignment = jit.exits[jit.code.size()-1].assignment; 
-        for(size_t i = 0; i < jit.code.size(); i++) {
-            if(assignment[i] != 0)
-                values.push_back(registers[assignment[i]]);
-            else {
-                // this case will be filled in as we emit instructions
-                values.push_back(0);
-            }
-        }
-
         builder.SetInsertPoint(HeaderBlock);
 
         for(size_t i = 0; i < jit.code.size(); i++) {
             if(jit.code[i].op != TraceOpCode::nop)
                 Emit(jit.code[i], i);
         }
-            if(fusion) {
-                llvm::BasicBlock* after = fusion->Close();
-                builder.CreateBr(fusion->header);
-                builder.SetInsertPoint(after);
-            }
+        if(fusion) {
+            llvm::BasicBlock* after = fusion->Close();
+            builder.CreateBr(fusion->header);
+            builder.SetInsertPoint(after);
+        }
         builder.CreateBr(PhiBlock);
 
         builder.SetInsertPoint(PhiBlock);
@@ -2580,38 +2572,6 @@ struct LLVMCompiler {
         r->setAlignment(16);
         return r;
     }
-
-    llvm::Value* Malloc(Type::Enum type, size_t size) {
-        void* v;
-        switch(type) {
-            case Type::Double:
-            {
-                Double d(size);
-                v = d.v();
-            } break;
-            case Type::Integer:
-            {
-                Integer d(size);
-                v = d.v();
-            } break;
-            case Type::Logical:
-            {
-                Logical d(size);
-                v = d.v();
-            } break;
-            case Type::Character:
-            {
-                Character d(size);
-                v = d.v();
-            } break;
-            default: _error("Unknown alloc");
-        }
-        llvm::IRBuilder<> TmpB(&function->getEntryBlock(),
-                function->getEntryBlock().end());
-        return builder.CreateIntToPtr(
-            builder.getInt64((int64_t)v),
-            llvmMemoryType(type)->getPointerTo());
-    } 
 
     llvm::Type* llvmMemoryType(Type::Enum type) {
         llvm::Type* t;
@@ -2672,7 +2632,7 @@ struct LLVMCompiler {
             if(jit.exits.find(index) == jit.exits.end())
                 _error("Missing exit on unboxing operation");
 
-            EmitExit(guard, jit.exits[index]);
+            EmitExit(guard, jit.exits[index], index);
             
             llvm::Value* tmp = CreateEntryBlockAlloca(value_type, builder.getInt64(0));
             builder.CreateStore(v, tmp);
@@ -2687,6 +2647,23 @@ struct LLVMCompiler {
     void Emit(JIT::IR ir, size_t index) { 
 
         std::vector<int64_t> const& assignment = jit.exits[jit.code.size()-1].assignment; 
+       
+        if(assignment[index] != 0 && registers[assignment[index]] == 0) {
+            size_t i = assignment[index];
+            JIT::IRRef len = jit.registers[i].shape.length;
+            llvm::Value* length = builder.CreateLoad(values[len]);
+            if(jit.code[len].op == TraceOpCode::constant) {
+                Integer const& v = (Integer const&)jit.constants[jit.code[len].a];
+                registers[i] =
+                    CreateEntryBlockAlloca(llvmMemoryType(jit.registers[i].type), builder.getInt64(v[0]));
+            }
+            else {
+                registers[i] =
+                    CALL1(std::string("MALLOC_")+Type::toString(jit.registers[i].type), length);
+            }
+        }
+        values[index] = registers[assignment[index]]; 
+
         /*if(     ir.op == TraceOpCode::GTYPE
             ||  ir.op == TraceOpCode::guardT
             ||  ir.op == TraceOpCode::guardF
@@ -2703,14 +2680,30 @@ struct LLVMCompiler {
             }
         }*/
         //if(!jit.fusable[index]) {
+        if( ir.op != TraceOpCode::constant &&
+            ir.op != TraceOpCode::eload &&
+            ir.op != TraceOpCode::sload &&
+            ir.op != TraceOpCode::LOADENV) {
             if(fusion) {
                 llvm::BasicBlock* after = fusion->Close();
                 builder.CreateBr(fusion->header);
                 builder.SetInsertPoint(after);
             }
-            fusion = new Fusion(jit, S, function, values, registers, assignment, builder.CreateLoad(values[ir.out.length]), 2);
-            fusion->Open(InnerBlock);
+           
+            llvm::Value* length = 0;
+            size_t width = 2; 
             
+            JIT::IRRef len = ir.in.length; 
+            if(jit.code[len].op == TraceOpCode::constant) {
+                Integer const& v = (Integer const&)jit.constants[jit.code[len].a];
+                width = v[0];
+            } 
+            else {
+                length = builder.CreateLoad(values[ir.in.length]);
+            }
+            fusion = new Fusion(jit, S, function, values, registers, assignment, length, width);
+            fusion->Open(InnerBlock);
+        }
         //}
 
         if(ir.op == TraceOpCode::mov &&
@@ -2780,6 +2773,32 @@ struct LLVMCompiler {
             {
                 values[index] = Unbox(index, CALL2("ELOAD", values[ir.a], builder.getInt64(ir.b)));
             } break;
+            case TraceOpCode::slength: 
+            {
+                if(assignment[index] > 0)
+                    builder.CreateStore(CALL1("SLENGTH", builder.getInt64(ir.b)), values[index]);
+            } break;
+            case TraceOpCode::elength: 
+            {
+                if(assignment[index] > 0)
+                    builder.CreateStore(CALL2("ELENGTH", values[ir.a], builder.getInt64(ir.b)), values[index]);
+            } break;
+            case TraceOpCode::alength: 
+            {
+                if(assignment[index] > 0)
+                    builder.CreateStore(CALL3("ALENGTH", 
+                            builder.CreateExtractValue(values[ir.a], 0), 
+                            builder.CreateExtractValue(values[ir.a], 1),
+                            values[ir.b]), values[index]);
+            } break;
+            case TraceOpCode::olength: 
+            {
+                if(assignment[index] > 0)
+                    builder.CreateStore(CALL2("OLENGTH", 
+                            builder.CreateExtractValue(values[ir.a], 0), 
+                            builder.CreateExtractValue(values[ir.a], 1)), 
+                                values[index]);
+            } break;
             
             case TraceOpCode::GPROTO: {
                 if(ir.in != JIT::Shape::Scalar) {
@@ -2791,9 +2810,23 @@ struct LLVMCompiler {
                             builder.CreateExtractValue(values[ir.a], 1))
                         , builder.getInt64Ty()),
                     builder.getInt64(ir.b));
-                EmitExit(r, jit.exits[index]);
+                EmitExit(r, jit.exits[index], index);
             } break;
 
+            case TraceOpCode::glenEQ: {
+                llvm::Value* g = builder.CreateICmpEQ(
+                    builder.CreateLoad(values[ir.a]),
+                    builder.CreateLoad(values[ir.b]));
+                EmitExit(g, jit.exits[index], index);
+            } break;
+
+            case TraceOpCode::glenLT: {
+                llvm::Value* g = builder.CreateICmpSLT(
+                    builder.CreateLoad(values[ir.a]),
+                    builder.CreateLoad(values[ir.b]));
+                EmitExit(g, jit.exits[index], index);
+            } break;
+            
             case TraceOpCode::strip: {
                 if(jit.code[ir.a].type == Type::Object) {
                     values[index] = Unbox(index, CALL2("GET_strip", 
@@ -2824,7 +2857,7 @@ struct LLVMCompiler {
                 llvm::Value* r = builder.CreateTrunc(Load(values[ir.a]), builder.getInt1Ty());
                 if(ir.op == TraceOpCode::guardF)
                     r = builder.CreateNot(r);
-                EmitExit(r, jit.exits[index]);
+                EmitExit(r, jit.exits[index], index);
             } break;
 
             case TraceOpCode::repscalar:
@@ -2862,12 +2895,14 @@ struct LLVMCompiler {
         };
     }
 
-    void EmitExit(llvm::Value* cond, JIT::Exit const& e) 
+    void EmitExit(llvm::Value* cond, JIT::Exit const& e, size_t index) 
     {
         llvm::BasicBlock* next = llvm::BasicBlock::Create(*S->C, "next", function, InnerBlock);
         llvm::BasicBlock* exit = llvm::BasicBlock::Create(*S->C, "exit", function, EndBlock);
         builder.CreateCondBr(cond, next, exit);
         builder.SetInsertPoint(exit);
+
+        //MARKER(std::string("Taking exit at ") + intToStr(index));
 
         // First create all live new environments
         for(size_t i = 0; i < e.environments.size(); i++) {
@@ -2918,6 +2953,9 @@ struct LLVMCompiler {
                 builder.getInt64(frame.dest),
                 values[frame.env]);
         } 
+
+        if(e.reenter == 0)
+            _error("Null reenter");
 
         builder.CreateStore(
             builder.CreateIntToPtr(builder.getInt64((int64_t)e.reenter), instruction_type), 

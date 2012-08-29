@@ -15,6 +15,11 @@ void MARKER(char* a) {
 }
 
 extern "C"
+void DUMP(char* a, int64_t i) {
+    printf("%s : %d\n", a, i);
+}
+
+extern "C"
 int64_t SLENGTH(Thread& thread, int64_t i) {
     Value const& v = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
     return v.isVector() ? v.length : 1;
@@ -193,3 +198,37 @@ int64_t OLENGTH(Thread& thread, Value a) {
     Value const& v = ((Object const&)a).base();
     return v.isVector() ? v.length : 1;
 }
+
+void* MALLOC(int64_t length, size_t elementsize) {
+    int64_t l = length;
+    // round l up to nearest even number so SSE can work on tail region
+    l += (int64_t)((uint64_t)l & 1);
+    int64_t length_aligned = (l < 128) ? (l + 1) : l;
+    void* p = GC_malloc_atomic(elementsize*length_aligned);
+    assert(l < 128 || (0xF & (int64_t)p) == 0);
+    if( (0xF & (int64_t)p) != 0)
+        p =  (char*)p + 0x8;
+    return p;
+}
+
+extern "C"
+double* MALLOC_double(Thread& thread, int64_t length) {
+    return (double*)MALLOC(length, sizeof(Double::Element));
+}
+
+extern "C"
+int64_t* MALLOC_integer(Thread& thread, int64_t length) {
+    return (int64_t*)MALLOC(length, sizeof(Integer::Element));
+}
+
+extern "C"
+int8_t* MALLOC_logical(Thread& thread, int64_t length) {
+    return (int8_t*)MALLOC(length, sizeof(Logical::Element));
+}
+
+extern "C"
+int8_t** MALLOC_character(Thread& thread, int64_t length) {
+    return (int8_t**)MALLOC(length, sizeof(Character::Element));
+}
+
+

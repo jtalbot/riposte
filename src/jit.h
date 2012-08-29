@@ -270,12 +270,12 @@ public:
     IRRef store(Thread& thread, IRRef a, int64_t c);
 	IRRef EmitUnary(TraceOpCode::Enum op, IRRef a, Type::Enum rty, Type::Enum mty);
 	IRRef EmitFold(TraceOpCode::Enum op, IRRef a, Type::Enum rty, Type::Enum mty);
-	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty);
-	IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty);
+	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Instruction const* inst);
+	IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty, Instruction const* inst);
 
-    Shape SpecializeLength(size_t length, IRRef irlength);
-    Shape SpecializeValue(Value const& v, IR ir);
-    Shape MergeShapes(Shape a, Shape b);
+    Shape SpecializeLength(size_t length, IRRef irlength, Instruction const* inst);
+    Shape SpecializeValue(Value const& v, IR ir, Instruction const* inst);
+    Shape MergeShapes(Shape a, Shape b, Instruction const* inst);
 
 
     void emitCall(IRRef a, Function const& func, Environment* env, Environment* l, Environment* d, Value const& call, Instruction const* inst) {
@@ -368,7 +368,7 @@ public:
     }
 
 	template< template<class X, class Y> class Group >
-	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b) {
+	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Instruction const* inst) {
 		Type::Enum aty = trace[a].type;
 		Type::Enum bty = trace[b].type;
 
@@ -377,14 +377,15 @@ public:
             return EmitBinary(op, a, b,             \
                 Group<TA,TB>::R::VectorType,        \
                 Group<TA,TB>::MA::VectorType,       \
-                Group<TA,TB>::MB::VectorType);
+                Group<TA,TB>::MB::VectorType,       \
+                inst);
         BINARY_TYPES(EMIT)
         #undef EMIT
         _error("Unknown type pair in EmitBinary");
     }
     
     template< template<class X, class Y, class Z> class Group >
-    IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c) {
+    IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Instruction const* inst) {
 		Type::Enum aty = trace[a].type;
 		Type::Enum bty = trace[b].type;
 		Type::Enum cty = trace[c].type;
@@ -395,7 +396,8 @@ public:
                 Group<TA,TB,TC>::R::VectorType,                     \
                 Group<TA,TB,TC>::MA::VectorType,                    \
                 Group<TA,TB,TC>::MB::VectorType,                    \
-                Group<TA,TB,TC>::MC::VectorType);
+                Group<TA,TB,TC>::MC::VectorType,                    \
+                inst);
         TERNARY_TYPES(EMIT)
         #undef EMIT
         _error("Unknown type pair in EmitTernary");
