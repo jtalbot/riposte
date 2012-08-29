@@ -20,11 +20,15 @@
         _(loop, "LOOP", ___) \
         _(jmp, "JMP", ___) \
         _(constant, "CONS", ___) \
-		_(eload, "ELOAD", ___) /* loads are type guarded */ \
 		_(sload, "SLOAD", ___) /* loads are type guarded */ \
+		_(eload, "ELOAD", ___) /* loads are type guarded */ \
+		_(elength, "ELENGTH", ___) /* loads are type guarded */ \
+		_(slength, "SLENGTH", ___) /* loads are type guarded */ \
         _(estore, "ESTORE", ___) \
         _(sstore, "SSTORE", ___) \
         _(GPROTO,   "GPROTO", ___) \
+        _(glenEQ,   "glenEQ", ___) \
+        _(glenLT,   "glenLT", ___) \
 		_(guardT, "GTRUE", ___) \
 		_(guardF, "GFALSE", ___) \
 		_(gather, "GATH", ___) \
@@ -38,6 +42,8 @@
         _(POP, "POP", ___) \
         _(mov, "MOV", ___) \
         _(strip, "STRIP", ___) \
+        _(olength, "olength", ___) \
+        _(alength, "alength", ___) \
         _(attrget, "attrget", ___) \
         _(attrset, "attrset", ___) \
         _(kill, "kill", ___) \
@@ -47,6 +53,8 @@
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
 
 class Thread;
+
+#define SPECIALIZE_LENGTH 16
 
 class JIT {
 
@@ -87,16 +95,21 @@ public:
     };
 
     struct Shape {
-        size_t length;
+        IRRef length;
+        size_t traceLength;
+
         bool operator==(Shape const& o) const {
             return length == o.length;
+        }
+        bool operator!=(Shape const& o) const {
+            return length != o.length;
         }
         bool operator<(Shape const& o) const {
             return length < o.length;
         }
         static const Shape Empty;
         static const Shape Scalar;
-        Shape(size_t length) : length(length) {}
+        Shape(IRRef length, size_t traceLength) : length(length), traceLength(traceLength) {}
     };
 
 	struct IR {
@@ -105,6 +118,8 @@ public:
 
         Type::Enum type;
         Shape in, out;
+
+        double cost;
 
         void dump() const;
 
@@ -180,6 +195,9 @@ public:
 		Instruction const* reenter;
 	};
 	std::map<size_t, Exit > exits;
+    Exit BuildExit( std::vector<IRRef>& environments, std::vector<StackFrame>& frames,
+            std::map<Variable, IRRef>& stores, Instruction const* reenter); 
+
 
 	JIT() 
 		: state(OFF)
@@ -195,6 +213,17 @@ public:
         constants.clear();
         constantsMap.clear();
         reenters.clear();
+
+        // insert empty and scalar shapes.
+        Value zero = Integer::c(0);
+        constants.push_back(zero);
+        IRRef empty = insert(trace, TraceOpCode::constant, 0, 0, 0, Type::Integer, Shape::Empty, Shape::Scalar);
+        constantsMap[zero] = empty;
+
+        Value one = Integer::c(1);
+        constants.push_back(one);
+        IRRef scalar = insert(trace, TraceOpCode::constant, 1, 0, 0, Type::Integer, Shape::Empty, Shape::Scalar);
+        constantsMap[one] = scalar;
 
         IRRef e = insert(trace, TraceOpCode::LOADENV, (IRRef)env, 0, 0, Type::Environment, Shape::Empty, Shape::Scalar);
 
@@ -236,13 +265,17 @@ public:
     IRRef duplicate(IR const& ir, std::vector<IRRef> const& forward);
 	IRRef load(Thread& thread, int64_t a, Instruction const* reenter);
     IRRef constant(Value const& v);
-	IRRef rep(IRRef a, size_t width);
+	IRRef rep(IRRef a, Shape target);
 	IRRef cast(IRRef a, Type::Enum type);
     IRRef store(Thread& thread, IRRef a, int64_t c);
 	IRRef EmitUnary(TraceOpCode::Enum op, IRRef a, Type::Enum rty, Type::Enum mty);
 	IRRef EmitFold(TraceOpCode::Enum op, IRRef a, Type::Enum rty, Type::Enum mty);
 	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty);
 	IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty);
+
+    Shape SpecializeLength(size_t length, IRRef irlength);
+    Shape SpecializeValue(Value const& v, IR ir);
+    Shape MergeShapes(Shape a, Shape b);
 
 
     void emitCall(IRRef a, Function const& func, Environment* env, Environment* l, Environment* d, Value const& call, Instruction const* inst) {
@@ -303,7 +336,9 @@ public:
     IRRef Insert(std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, IR ir);
     IR Normalize(IR ir);
     bool Ready(IR ir, std::vector<bool>& done);
-    
+   
+    double Opcost(std::vector<IR>& code, IR ir);
+ 
 	template< template<class X> class Group >
 	IRRef EmitUnary(TraceOpCode::Enum op, IRRef a) {
 		Type::Enum aty = trace[a].type;

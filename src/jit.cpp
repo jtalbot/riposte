@@ -7,8 +7,8 @@
 
 DEFINE_ENUM_TO_STRING(TraceOpCode, TRACE_ENUM)
 
-const JIT::Shape JIT::Shape::Empty = { 0 };
-const JIT::Shape JIT::Shape::Scalar = { 1 };
+const JIT::Shape JIT::Shape::Empty = { 0, 0 };
+const JIT::Shape JIT::Shape::Scalar = { 1, 1 };
 
 JIT::IRRef JIT::insert(
         std::vector<IR>& t,
@@ -24,11 +24,27 @@ JIT::IRRef JIT::insert(
     return (IRRef) { t.size()-1 };
 }
 
-JIT::Shape shape(Value const& a) {
-    if(a.isVector())
-        return (JIT::Shape) { (size_t)a.length };
+JIT::Shape JIT::SpecializeLength(size_t length, IRRef irlength) {
+    // if short enough, guard length and insert a constant length instead
+    if(length <= SPECIALIZE_LENGTH) {
+        IRRef s = constant(Integer::c(length));
+        insert(trace, TraceOpCode::glenEQ, std::min(irlength,s), std::max(irlength,s), 0, Type::Promise, Shape::Scalar, Shape::Empty);
+        return Shape(s, length);
+    }
+    else {
+        return Shape(irlength, length);
+    }
+}
+
+JIT::Shape JIT::SpecializeValue(Value const& v, IR ir) {
+    if(v.isNull())
+        return Shape::Empty;
+    else if(v.isVector()) {
+        trace.push_back(ir);
+        return SpecializeLength((size_t)v.length, trace.size()-1);
+    }
     else
-        return JIT::Shape::Scalar;
+        return Shape::Scalar;
 }
 
 /*
@@ -49,15 +65,17 @@ JIT::IRRef JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
     // registers
     OPERAND(operand, a);
 
-    Shape s = shape(operand);
-    
     IRRef r;
+    
     if(a <= 0) {
         Variable v = { -1, (thread.base+a)-(thread.registers+DEFAULT_NUM_REGISTERS)};
+    
+        Shape s = SpecializeValue(operand, IR(TraceOpCode::slength, (IRRef)-1, v.i, Type::Integer, Shape::Empty, Shape::Scalar));
         r = insert(trace, TraceOpCode::sload, (IRRef)-1, v.i, 0, operand.type, Shape::Empty, s);
     }
     else {
         Variable v = { getEnv(thread.frame.environment->findRecursive((String)a)), a };
+        Shape s = SpecializeValue(operand, IR(TraceOpCode::elength, v.env, v.i, Type::Integer, Shape::Empty, Shape::Scalar));
         r = insert(trace, TraceOpCode::eload, v.env, v.i, 0, operand.type, Shape::Empty, s);
     }
     reenters[r] = reenter;
@@ -107,13 +125,12 @@ JIT::IRRef JIT::cast(IRRef a, Type::Enum type) {
     }
 }
 
-JIT::IRRef JIT::rep(IRRef a, size_t length) {
-    if(trace[a].out.length != length) {
-        Shape s = (Shape) { length };
-        IRRef l = constant(Integer::c(trace[a].out.length));
+JIT::IRRef JIT::rep(IRRef a, Shape target) {
+    if(trace[a].out != target) {
+        IRRef l = trace[a].out.length;
         IRRef e = constant(Integer::c(1));
-        IRRef r = insert(trace, TraceOpCode::rep, l, e, 0, trace[e].type, s, s);
-        return insert(trace, TraceOpCode::gather, a, r, 0, trace[a].type, s, s);
+        IRRef r = insert(trace, TraceOpCode::rep, l, e, 0, trace[e].type, target, target);
+        return insert(trace, TraceOpCode::gather, a, r, 0, trace[a].type, target, target);
     }
     else {
         return a;
@@ -128,22 +145,45 @@ JIT::IRRef JIT::EmitFold(TraceOpCode::Enum op, IRRef a, Type::Enum rty, Type::En
    return insert(trace, op, cast(a, mty), 0, 0, rty, trace[a].out, Shape::Scalar);
 }
 
-JIT::IRRef JIT::EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty) {
-    size_t len = 0;
-    if(trace[a].out.length > 0 && trace[b].out.length > 0)
-        len = std::max(trace[a].out.length, trace[b].out.length);
-    Shape s = (Shape) { len };
+JIT::Shape JIT::MergeShapes(Shape a, Shape b) {
+    Shape shape = Shape::Empty;
+    if(a == b) {
+        shape = a;
+    }
+    else if(a == Shape::Empty || b == Shape::Empty) {
+        shape = Shape::Empty;
+    }
+    else if(a.traceLength == b.traceLength) {
+        insert(trace, TraceOpCode::glenEQ, std::min(a.length, b.length), std::max(a.length,b.length), 0,
+                Type::Promise, Shape::Scalar, Shape::Empty);
+        shape = a.length < b.length ? a : b;
+    }
+    else if(a.traceLength < b.traceLength) {
+        insert(trace, TraceOpCode::glenLT, a.length, b.length, 0,
+                Type::Promise, Shape::Scalar, Shape::Empty);
+        shape = b;
+    }
+    else if(a.traceLength > b.traceLength) {
+        insert(trace, TraceOpCode::glenLT, b.length, a.length, 0,
+                Type::Promise, Shape::Scalar, Shape::Empty);
+        shape = a;
+    }
+    return shape;
+}
 
-    return insert(trace, op, rep(cast(a,maty),len), rep(cast(b,mbty),len), 0, rty, s, s);
+JIT::IRRef JIT::EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty) {
+    // specialization depends on observed lengths. 
+    //  If depedent length is the same, no need for a guard. We've already proved the lengths are equal
+    //  If one of the lengths is zero, result length is also known, no need for guard.
+    //  If equal, guard equality and continue.
+    //  If unequal, guard less than
+    Shape shape = MergeShapes(trace[a].out,trace[b].out);
+    return insert(trace, op, rep(cast(a,maty),shape), rep(cast(b,mbty),shape), 0, rty, shape, shape);
 }
 
 JIT::IRRef JIT::EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty) {
-    size_t len = 0;
-    if(trace[a].out.length > 0 && trace[b].out.length > 0 && trace[c].out.length > 0)
-        len = std::max(trace[a].out.length, std::max(trace[b].out.length, trace[c].out.length));
-    Shape s = (Shape) { len };
-
-    return insert(trace, op, rep(cast(a,maty),len), rep(cast(b,mbty),len), rep(cast(c,mcty),len), rty, s, s);
+    Shape s = MergeShapes(trace[a].out, MergeShapes(trace[b].out, trace[c].out));
+    return insert(trace, op, rep(cast(a,maty),s), rep(cast(b,mbty),s), rep(cast(c,mcty),s), rty, s, s);
 }
 
 JIT::IRRef JIT::constant(Value const& value) {
@@ -153,8 +193,9 @@ JIT::IRRef JIT::constant(Value const& value) {
     else {
         size_t ci = constants.size();
         constants.push_back(value);
-        Shape s = shape(value);
-        a = insert(trace, TraceOpCode::constant, ci, 0, 0, value.type, s, s);
+        size_t len = value.isVector() ? value.length : 1;
+        IRRef s = constant(Integer::c(len));
+        a = insert(trace, TraceOpCode::constant, ci, 0, 0, value.type, Shape::Empty, Shape(s, len));
         constantsMap[value] = a;
     }
     return a;
@@ -199,7 +240,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         case ByteCode::gather:
             IRRef a = load(thread, inst.a, &inst);
             IRRef b = cast(load(thread, inst.b, &inst), Type::Integer);
-            b = insert(trace, TraceOpCode::sub, b, rep(constant(Integer::c(1)), trace[b].out.length), 0, trace[b].type, trace[b].out, trace[b].out);
+            b = insert(trace, TraceOpCode::sub, b, rep(constant(Integer::c(1)), trace[b].out), 0, trace[b].type, trace[b].out, trace[b].out);
             store(thread, insert(trace, TraceOpCode::gather, a, b, 0, trace[a].type, trace[b].out, trace[b].out), inst.c);
         }   break;
 
@@ -207,19 +248,18 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         case ByteCode::scatter:
             IRRef a = load(thread, inst.a, &inst);
             IRRef b = cast(load(thread, inst.b, &inst), Type::Integer);
-            b = insert(trace, TraceOpCode::sub, b, rep(constant(Integer::c(1)), trace[b].out.length), 0, trace[b].type, trace[b].out, trace[b].out);
+            b = insert(trace, TraceOpCode::sub, b, rep(constant(Integer::c(1)), trace[b].out), 0, trace[b].type, trace[b].out, trace[b].out);
             IRRef c = load(thread, inst.c, &inst);
-            size_t len = std::max(trace[a].out.length, trace[b].out.length);
-            Shape s = { len };
-            //c = insert(trace, TraceOpCode::dup, c, 0, 0, trace[c].type, trace[c].out, trace[c].out);
-            store(thread, insert(trace, TraceOpCode::scatter, rep(a, len), rep(b, len), c, trace[c].type, s, trace[c].out), inst.c);
+            Shape s = MergeShapes(trace[a].out, trace[b].out);
+            store(thread, insert(trace, TraceOpCode::scatter, rep(a, s), rep(b, s), c, trace[c].type, s, trace[c].out), inst.c);
         }   break;
 
         case ByteCode::ifelse: {
             IRRef a = load(thread, inst.a, &inst);
             IRRef b = load(thread, inst.b, &inst);
             IRRef c = load(thread, inst.c, &inst);
-            store(thread, EmitTernary<IfElse>(TraceOpCode::ifelse, c, b, a), inst.c);
+            Shape s = MergeShapes(trace[a].out, MergeShapes(trace[b].out, trace[c].out));
+            store(thread, EmitTernary<IfElse>(TraceOpCode::ifelse, rep(c,s), rep(b,s), rep(a,s)), inst.c);
         }   break;
 
         #define EMIT(Name, string, Group, ...)                      \
@@ -271,7 +311,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         {
             OPERAND(a, inst.a);
             if(a.isObject()) {
-                Shape s = { ((Object const&)a).base().isVector() ? (size_t)((Object const&)a).base().length : 1 };
+                Shape s = SpecializeValue(((Object const&)a).base(), IR(TraceOpCode::olength, load(thread, inst.a, &inst), Type::Integer, Shape::Empty, Shape::Scalar));
                 store(thread, insert(trace, TraceOpCode::strip, load(thread, inst.a, &inst), 0, 0, ((Object const&)a).base().type, Shape::Scalar, s), inst.c);
             }
             else {
@@ -296,7 +336,9 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             else {
                 r = Null::Singleton();
             }
-            store(thread, insert(trace, TraceOpCode::attrget, load(thread, inst.a, &inst), cast(load(thread, inst.b, &inst), Type::Character), 0, r.type, Shape::Empty, Shape(r.isVector() ? r.length : 1)), inst.c);
+            IRRef name = cast(load(thread, inst.b, &inst), Type::Character);
+            Shape s = SpecializeValue(r, IR(TraceOpCode::alength, load(thread, inst.a, &inst), name, Type::Integer, Shape::Empty, Shape::Scalar));
+            store(thread, insert(trace, TraceOpCode::attrget, load(thread, inst.a, &inst), name, 0, r.type, Shape::Empty, s), inst.c);
         }   break;
 
         case ByteCode::attrset:
@@ -319,7 +361,8 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         case ByteCode::rep:
         {
             OPERAND(len, inst.a);
-            Shape s(As<Integer>(thread, len)[0]);
+            IRRef l = load(thread, inst.a, &inst);
+            Shape s = SpecializeLength(As<Integer>(thread, len)[0], l);
             // requires a dependent type
             store(thread, insert(trace, TraceOpCode::rep,
                 cast(load(thread, inst.a, &inst), Type::Integer), 
@@ -329,6 +372,8 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         case ByteCode::seq:
         {
             OPERAND(len, inst.a);
+            IRRef l = load(thread, inst.a, &inst);
+            Shape s = SpecializeLength(As<Integer>(thread, len)[0], l);
             // requires a dependent type
             IRRef c = load(thread, inst.c, &inst);
             IRRef b = load(thread, inst.b, &inst);
@@ -336,12 +381,13 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
                 ? Type::Double : Type::Integer; 
             store(thread, insert(trace, TraceOpCode::seq,
                 cast(c, type), cast(b, type), 0,
-                type, Shape(As<Integer>(thread, len)[0]), Shape(As<Integer>(thread, len)[0])), inst.c);
+                type, s, s), inst.c);
         }   break;
 
         default: {
             //dump(thread,trace);
-            printf("Trace halted by %s\n", ByteCode::toString(inst.bc));
+            if(thread.state.verbose)
+                printf("Trace halted by %s\n", ByteCode::toString(inst.bc));
             return false;
         }   break;
     }
@@ -399,6 +445,10 @@ JIT::IR JIT::Normalize(IR ir) {
     return ir;
 }
 
+double memcost(size_t size) {
+    return (size <= (2<<10) ? 0.075 : (size <= (2<<20) ? 0.3 : 1));
+}
+
 /*
 
     Instruction scheduling
@@ -410,7 +460,19 @@ JIT::IR JIT::Normalize(IR ir) {
 
 JIT::IRRef JIT::Insert(std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, IR ir) {
     ir = Normalize(ir);
-    if(cse.find(ir) != cse.end()) {
+
+    // CSE cost:
+    //  length * load cost
+    // No CSE cost:
+    //  length * op cost + cost of inputs (if CSEd)
+    size_t mysize = ir.out.traceLength * (ir.type == Type::Logical ? 1 : 8);
+    double csecost = mysize * memcost(mysize);
+    double nocsecost = Opcost(code, ir);
+
+    ir.cost = std::min(csecost, nocsecost);
+
+    if(csecost <= nocsecost && cse.find(ir) != cse.end()) {
+        printf("For %s => %f <= %f\n", TraceOpCode::toString(ir.op), csecost, nocsecost);
         // for mutating operations, have to check if there is a possible intervening mutation...
         if(ir.op == TraceOpCode::attrget) {
             for(IRRef i = code.size()-1; i != cse.find(ir)->second; i--) {
@@ -461,6 +523,112 @@ JIT::IRRef JIT::Insert(std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>
     }
 }
 
+double JIT::Opcost(std::vector<IR>& code, IR ir) {
+        switch(ir.op) {
+            case TraceOpCode::LOADENV: 
+            case TraceOpCode::NEWENV:
+            case TraceOpCode::sload:
+            case TraceOpCode::eload:
+            case TraceOpCode::estore:
+            case TraceOpCode::sstore:
+            case TraceOpCode::kill:
+            case TraceOpCode::PUSH:
+            case TraceOpCode::POP:
+            case TraceOpCode::strip:
+            case TraceOpCode::GPROTO:
+            case TraceOpCode::guardF: 
+            case TraceOpCode::guardT:
+            case TraceOpCode::attrget:
+            case TraceOpCode::scatter:
+            case TraceOpCode::jmp:
+            case TraceOpCode::loop:
+            case TraceOpCode::mov:
+            case TraceOpCode::repscalar:
+            case TraceOpCode::phi:
+            case TraceOpCode::length:
+            case TraceOpCode::constant:
+            case TraceOpCode::rep:
+            case TraceOpCode::elength:
+            case TraceOpCode::slength:
+            case TraceOpCode::olength:
+            case TraceOpCode::alength:
+            case TraceOpCode::glenEQ:
+            case TraceOpCode::glenLT:
+                return 10000000000000;
+                break;
+            
+            #define CASE1(Name, str, group, func, Cost) \
+                case TraceOpCode::Name: \
+                    return (ir.in.traceLength * Cost) + code[ir.a].cost; break;
+            UNARY_FOLD_SCAN_BYTECODES(CASE1)
+
+            #define CASE2(Name, str, group, func, Cost) \
+                case TraceOpCode::Name: \
+                    return (ir.in.traceLength * Cost) + code[ir.a].cost + code[ir.b].cost; break;
+            BINARY_BYTECODES(CASE2)
+
+            #define CASE3(Name, str, group, func, Cost) \
+                case TraceOpCode::Name: \
+                    return (ir.in.traceLength * Cost) + code[ir.a].cost + code[ir.b].cost + code[ir.c].cost; break;
+            TERNARY_BYTECODES(CASE3)
+
+            case TraceOpCode::seq:
+                return ir.out.traceLength * 1 + code[ir.a].cost + code[ir.b].cost;
+                break;
+
+            case TraceOpCode::gather:
+                return ir.out.traceLength * memcost(code[ir.a].out.traceLength) + code[ir.b].cost;
+                break;
+
+            default:
+            {
+                printf("Unknown op: %s\n", TraceOpCode::toString(ir.op));
+                _error("Unknown op in Opcost");
+            }
+    }
+            #undef CASE1
+            #undef CASE2
+            #undef CASE3
+}
+
+JIT::Exit JIT::BuildExit( std::vector<IRRef>& environments, std::vector<StackFrame>& frames,
+        std::map<Variable, IRRef>& stores, Instruction const* reenter) {
+
+    // OK, attempt to do tracing something here...
+    
+    // get live environments
+    std::vector<IRRef> live;
+    for(size_t i = 0; i < frames.size(); i++) {
+        live.push_back(frames[i].environment);
+        live.push_back(frames[i].env);
+    }
+    //for(size_t i = 0; i < environments.size(); i++) {
+    //    if(code[environments[i]].op == TraceOpCode::LOADENV)
+    //        live.push_back(environments[i]);
+    //}
+    
+    // get live stores (those that are into a live environment)
+    // this is very inefficient, replace
+    std::map<Variable, IRRef> livestores;
+    for(std::map<Variable, IRRef>::const_iterator i = stores.begin(); i != stores.end(); ++i) {
+        if(i->first.env == -1 || code[i->first.env].op == TraceOpCode::LOADENV)
+            livestores.insert(*i);
+        else {
+            for(size_t j = 0; j < live.size(); j++) {
+                if(live[j] == i->first.env) {
+                    livestores.insert(*i);
+                    break;
+                }
+            }
+        }
+    }
+
+    std::vector<int64_t> tmp;
+    Exit e = { live, frames, livestores, tmp, reenter };
+    return e;
+}
+
+
 void JIT::EmitOptIR(
             IRRef i,
             IR ir,
@@ -471,17 +639,23 @@ void JIT::EmitOptIR(
             std::tr1::unordered_map<IR, IRRef>& cse,
             std::vector<IRRef>& environments,
             std::vector<StackFrame>& frames) {
+
+    if(i >= 2) {
+        ir.in.length = forward[ir.in.length];
+        ir.out.length = forward[ir.out.length];
+    }
         switch(ir.op) {
             #define CASE(Name, ...) case TraceOpCode::Name:
             
             case TraceOpCode::LOADENV: 
             {
-                forward[i] = Insert(code, cse, IR(ir.op, ir.a, ir.type, ir.in, ir.out));
+                forward[i] = Insert(code, cse, ir);
             } break;
 
             case TraceOpCode::NEWENV: {
                 std::tr1::unordered_map<IR, IRRef> tcse;
-                forward[i] = Insert(code, tcse, IR(ir.op, forward[ir.a], forward[ir.b], forward[ir.c], ir.type, ir.in, ir.out));
+                ir.a = forward[ir.a]; ir.b = forward[ir.b]; ir.c = forward[ir.c];
+                forward[i] = Insert(code, tcse, ir);
                 environments.push_back(forward[i]);
             } break;
 
@@ -497,11 +671,24 @@ void JIT::EmitOptIR(
                 else if(loads.find(v) != loads.end())
                     forward[i] = loads[v];
                 else {
-                    std::vector<int64_t> tmp;
-                    Exit e = { environments, frames, stores, tmp, reenters[i] };
-                    exits[code.size()] = e;
                     forward[i] = loads[v] = 
-                        Insert(code, cse, IR(ir.op, v.env, v.i, ir.type, ir.in, ir.out));
+                        Insert(code, cse, ir);
+                    if(forward[i] == code.size()-1)
+                        exits[code.size()-1] = BuildExit( environments, frames, stores, reenters[i] );
+                }
+            } break; 
+            case TraceOpCode::slength:
+            case TraceOpCode::elength: {
+                Variable v = { ir.op == TraceOpCode::slength ? -1 : forward[ir.a], (int64_t)ir.b };
+                // forward to previous store, if there is one. 
+                if(stores.find(v) != stores.end()) {
+                    forward[i] = code[stores[v]].out.length;
+                }
+                else if(loads.find(v) != loads.end()) {
+                    forward[i] = loads[v]-2;
+                }
+                else {
+                    forward[i] = Insert(code, cse, ir);
                 }
             } break; 
             case TraceOpCode::estore: {
@@ -546,47 +733,66 @@ void JIT::EmitOptIR(
             case TraceOpCode::GPROTO:
             case TraceOpCode::guardF: 
             case TraceOpCode::guardT: {
-                std::vector<int64_t> tmp;
-                Exit e = { environments, frames, stores, tmp, reenters[i] };
-                exits[code.size()] = e;
-                forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], ir.b, ir.c, ir.type, ir.in, ir.out));
+                ir.a = forward[ir.a];
+                forward[i] = Insert(code, cse, ir);
+                if(forward[i] == code.size()-1)
+                    exits[code.size()-1] = BuildExit( environments, frames, stores, reenters[i] );
             } break;
+            case TraceOpCode::glenEQ: {
+                ir.a = forward[ir.a]; ir.b = forward[ir.b];
+                if(ir.a != ir.b) {
+                    forward[i] = Insert(code, cse, ir);
+                    if(forward[i] == code.size()-1)
+                        exits[code.size()-1] = BuildExit( environments, frames, stores, reenters[i] );
+                }
+            } break;
+            case TraceOpCode::glenLT:
             case TraceOpCode::attrget: {
-                std::vector<int64_t> tmp;
-                Exit e = { environments, frames, stores, tmp, reenters[i] };
-                exits[code.size()] = e;
-                forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], forward[ir.b], ir.type, ir.in, ir.out));
+                ir.a = forward[ir.a]; ir.b = forward[ir.b];
+                forward[i] = Insert(code, cse, ir);
+                if(forward[i] == code.size()-1)
+                    exits[code.size()-1] = BuildExit( environments, frames, stores, reenters[i] );
             } break;
             case TraceOpCode::scatter: {
-                forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], forward[ir.b], forward[ir.c], ir.type, ir.in, ir.out));
+                ir.a = forward[ir.a]; ir.b = forward[ir.b]; ir.c = forward[ir.c];
+                forward[i] = Insert(code, cse, ir);
             } break;
 
             case TraceOpCode::repscalar:
+            case TraceOpCode::olength:
             case TraceOpCode::phi:
-            case TraceOpCode::length:
             UNARY_FOLD_SCAN_BYTECODES(CASE) {
-                forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], ir.type, ir.in, ir.out));
+                ir.a = forward[ir.a];
+                forward[i] = Insert(code, cse, ir);
             } break;
 
             case TraceOpCode::gather:
             case TraceOpCode::mov:
             case TraceOpCode::rep:
+            case TraceOpCode::alength:
             BINARY_BYTECODES(CASE)
             {
-                forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], forward[ir.b], ir.type, ir.in, ir.out));
+                ir.a = forward[ir.a]; ir.b = forward[ir.b];
+                forward[i] = Insert(code, cse, ir);
             } break;
 
             case TraceOpCode::seq:
             TERNARY_BYTECODES(CASE)
             {
-                forward[i] = Insert(code, cse, IR(ir.op, forward[ir.a], forward[ir.b], forward[ir.c], ir.type, ir.in, ir.out));
+                ir.a = forward[ir.a]; ir.b = forward[ir.b]; ir.c = forward[ir.c];
+                forward[i] = Insert(code, cse, ir);
             } break;
 
             case TraceOpCode::jmp:
             case TraceOpCode::loop:
             CASE(constant)
             {
-                forward[i] = Insert(code, cse, IR(ir.op, ir.a, ir.type, ir.in, ir.out));
+                forward[i] = Insert(code, cse, ir);
+            } break;
+
+            case TraceOpCode::length:
+            {
+                forward[i] = forward[ir.out.length];
             } break;
 
             default:
@@ -685,7 +891,8 @@ JIT::Ptr JIT::end_recording(Thread& thread) {
     //Schedule();
     schedule();
     RegisterAssignment(exits[code.size()-1]);
-    dump(thread, code);
+    if(thread.state.verbose)
+        dump(thread, code);
 
     
     return compile(thread);
@@ -831,8 +1038,7 @@ bool JIT::Ready(JIT::IR ir, std::vector<bool>& done) {
             case TraceOpCode::GPROTO: 
             case TraceOpCode::guardF: 
             case TraceOpCode::guardT:
-            case TraceOpCode::eload:
-            case TraceOpCode::length: {
+            case TraceOpCode::eload: {
                 return done[ir.a];
             } break; 
             BINARY_BYTECODES(CASE)
@@ -958,13 +1164,13 @@ void JIT::Schedule() {
 void JIT::schedule() {
 
     // do a forwards pass identifying fusion groups.
-    size_t gSize = -1;
+    Shape gSize(-1, -1);
     std::set<IRRef> gMembers;
 
     fusable = std::vector<bool>(code.size(), true);
 
     for(IRRef i = 0; i < code.size(); i++) {
-         if( code[i].in.length != gSize
+         if( code[i].in != gSize
           || (code[i].op == TraceOpCode::scatter && gMembers.find(code[i].c) != gMembers.end())
           || (code[i].op == TraceOpCode::gather  && gMembers.find(code[i].c) != gMembers.end())
           || code[i].op == TraceOpCode::guardT 
@@ -972,7 +1178,7 @@ void JIT::schedule() {
           || code[i].op == TraceOpCode::eload 
           || code[i].op == TraceOpCode::sload ) {
             fusable[i] = false;
-            gSize = code[i].in.length;
+            gSize = code[i].in;
             gMembers.clear();
         }
         gMembers.insert(i);
@@ -1233,10 +1439,20 @@ void JIT::RegisterAssignment(Exit& e) {
                 AssignRegister(i, a, ir.b);
                 PreferRegister(a, ir.a, ir.b);
             } break;
+            case TraceOpCode::strip: 
             case TraceOpCode::GPROTO: 
             case TraceOpCode::guardF: 
             case TraceOpCode::guardT: {
                 AssignRegister(i, a, ir.a);
+                std::map<Variable, IRRef>::const_iterator j;
+                for(j = exits[i].o.begin(); j != exits[i].o.end(); ++j) {
+                    AssignRegister(i, a, j->second);
+                }
+            } break;
+            case TraceOpCode::glenEQ: 
+            case TraceOpCode::glenLT: {
+                AssignRegister(i, a, ir.a);
+                AssignRegister(i, a, ir.b);
                 std::map<Variable, IRRef>::const_iterator j;
                 for(j = exits[i].o.begin(); j != exits[i].o.end(); ++j) {
                     AssignRegister(i, a, j->second);
@@ -1255,6 +1471,7 @@ void JIT::RegisterAssignment(Exit& e) {
                 AssignRegister(i, a, ir.a);
             } break;
             case TraceOpCode::attrget:
+            case TraceOpCode::alength:
             case TraceOpCode::rep:
             case TraceOpCode::seq:
             case TraceOpCode::gather:
@@ -1264,12 +1481,24 @@ void JIT::RegisterAssignment(Exit& e) {
                 AssignRegister(i, a, std::min(ir.a, ir.b));
             } break;
             case TraceOpCode::repscalar:
-            case TraceOpCode::length:
+            case TraceOpCode::olength:
             UNARY_FOLD_SCAN_BYTECODES(CASE)
             {
                 AssignRegister(i, a, ir.a);
             } break;
+            case TraceOpCode::jmp:
+            case TraceOpCode::sload:
+            case TraceOpCode::slength:
+            case TraceOpCode::eload:
+            case TraceOpCode::elength:
+            case TraceOpCode::constant:
+            case TraceOpCode::NEWENV:
+            case TraceOpCode::LOADENV:
+                // do nothing
+                break;
             default: {
+                printf("Unknown op is %s\n", TraceOpCode::toString(ir.op));
+                _error("Unknown op in RegisterAssignment");
             } break;
             #undef CASE
         }
@@ -1287,12 +1516,12 @@ void JIT::IR::dump() const {
         case TraceOpCode::loop: {
             std::cout << " --------------------";
         } break;
-        //case TraceOpCode::GTYPE: {
-        //} break;
-        case TraceOpCode::sload: {
+        case TraceOpCode::sload:
+        case TraceOpCode::slength: {
             std::cout << "\t " << (int64_t)b;
         } break;
-        case TraceOpCode::eload: {
+        case TraceOpCode::eload:
+        case TraceOpCode::elength: {
             std::cout << "\t " << a << "\t\"" << (String)b << "\"";
         } break;
         case TraceOpCode::sstore: {
@@ -1319,6 +1548,7 @@ void JIT::IR::dump() const {
         case TraceOpCode::length:
         case TraceOpCode::guardF:
         case TraceOpCode::guardT: 
+        case TraceOpCode::olength: 
         UNARY_FOLD_SCAN_BYTECODES(CASE)
         {
             std::cout << "\t " << a;
@@ -1328,6 +1558,9 @@ void JIT::IR::dump() const {
         case TraceOpCode::seq:
         case TraceOpCode::gather:
         case TraceOpCode::attrget:
+        case TraceOpCode::alength:
+        case TraceOpCode::glenEQ:
+        case TraceOpCode::glenLT:
         BINARY_BYTECODES(CASE)
         {
             std::cout << "\t " << a << "\t " << b;
@@ -1350,6 +1583,8 @@ void JIT::IR::dump() const {
 
 void JIT::dump(Thread& thread, std::vector<IR> const& t) {
 
+    printf("There at %d exits\n", exits.size());
+
     std::map<size_t, Exit>::const_iterator e = exits.find(t.size()-1);
 
     for(size_t i = 0; i < t.size(); i++) {
@@ -1364,13 +1599,8 @@ void JIT::dump(Thread& thread, std::vector<IR> const& t) {
                 && e->second.assignment.size() == t.size()) printf(" (%2d) ", e->second.assignment[i]);
             ir.dump();
     
-            if( exits.size() > 0 && (
-                    ir.op == TraceOpCode::GPROTO
-                ||  ir.op == TraceOpCode::guardF
-                ||  ir.op == TraceOpCode::guardT
-                ||  ir.op == TraceOpCode::sload
-                ||  ir.op == TraceOpCode::eload ) ) {
-    
+   
+            if(exits.find(i) != exits.end()) { 
                 std::cout << "\n\t\t=> ";
                 Exit const& e = exits[i];
                 std::cout << "[" << e.frames.size() << " frames, " << e.environments.size() << " envs, " << e.reenter << "] ";
@@ -1519,8 +1749,8 @@ struct Fusion {
           , length(length)
           , width(width)
           , builder(*S->C) {
-        
-        if(llvm::isa<llvm::ConstantInt>(length) && ((llvm::ConstantInt*)length)->getSExtValue() < 16) {
+       
+        if(llvm::isa<llvm::ConstantInt>(length) && ((llvm::ConstantInt*)length)->getSExtValue() <= SPECIALIZE_LENGTH) {
             // short vector, don't emit while loop
             this->width = (size_t)((llvm::ConstantInt*)length)->getZExtValue();
             this->length = 0;
@@ -2018,8 +2248,11 @@ struct Fusion {
                     // Do this in the fusion header.
                     llvm::IRBuilder<> TmpB(header,
                         header->begin());
-                    TmpB.CreateMemCpy(RawLoad(index), RawLoad(ir.c), 
-                        builder.getInt64(ir.out.length*(ir.type == Type::Logical ? 1 : 8)), 16);
+                    TmpB.CreateMemCpy(RawLoad(index), RawLoad(ir.c),
+                        builder.CreateMul(
+                            builder.CreateLoad(RawLoad(ir.out.length)),
+                            builder.getInt64(ir.type == Type::Logical ? 1 : 8)), 
+                        16);
                 }
                 /*if(jit.assignment[ir.c] != jit.assignment[index]) {
                     r = Load(values[ir.c]);
@@ -2061,7 +2294,6 @@ struct Fusion {
             // Generators
             case TraceOpCode::seq:
             {
-                MARKER("seq");
                 llvm::AllocaInst* r = CreateEntryBlockAlloca(llvmType(ir.type, width));
             
                 llvm::IRBuilder<> TmpB(header, header->end());
@@ -2102,7 +2334,6 @@ struct Fusion {
             // Reductions
             case TraceOpCode::sum:
             {
-                MARKER("sum");
                 llvm::Value* agg;
                 if(ir.type == Type::Double) {
                     agg = CreateEntryBlockAlloca(llvmType(ir.type, width));
@@ -2118,9 +2349,6 @@ struct Fusion {
                 } 
                 reductions[index] = agg;
             } break;
-            case TraceOpCode::length:
-                reductions[index] = 0;
-            break;
             default:
                 printf("Unsupported op is %s\n", TraceOpCode::toString(ir.op));
                 _error("Unsupported op in Fusion::Emit");
@@ -2154,9 +2382,6 @@ struct Fusion {
                         t = builder.CreateAdd(r, builder.CreateExtractElement(a, builder.getInt32(i)));
                     }
                 }
-                break;
-            case TraceOpCode::length:
-                t = builder.getInt64(jit.code[ir.a].out.length); 
                 break;
             default:
                 _error("Unsupported reduction");
@@ -2303,8 +2528,10 @@ struct LLVMCompiler {
         registers.push_back(0);
         for(size_t i = 1; i < jit.registers.size(); i++) {
             registers.push_back(
-                CreateEntryBlockAlloca(
-                    llvmMemoryType(jit.registers[i].type), builder.getInt64(jit.registers[i].shape.length)));
+                jit.registers[i].shape.length <= SPECIALIZE_LENGTH 
+                  ?  CreateEntryBlockAlloca(
+                        llvmMemoryType(jit.registers[i].type), builder.getInt64(jit.registers[i].shape.length))
+                  : Malloc(jit.registers[i].type, jit.registers[i].shape.length));
         }
        
         // create values for each ssa node
@@ -2353,6 +2580,38 @@ struct LLVMCompiler {
         r->setAlignment(16);
         return r;
     }
+
+    llvm::Value* Malloc(Type::Enum type, size_t size) {
+        void* v;
+        switch(type) {
+            case Type::Double:
+            {
+                Double d(size);
+                v = d.v();
+            } break;
+            case Type::Integer:
+            {
+                Integer d(size);
+                v = d.v();
+            } break;
+            case Type::Logical:
+            {
+                Logical d(size);
+                v = d.v();
+            } break;
+            case Type::Character:
+            {
+                Character d(size);
+                v = d.v();
+            } break;
+            default: _error("Unknown alloc");
+        }
+        llvm::IRBuilder<> TmpB(&function->getEntryBlock(),
+                function->getEntryBlock().end());
+        return builder.CreateIntToPtr(
+            builder.getInt64((int64_t)v),
+            llvmMemoryType(type)->getPointerTo());
+    } 
 
     llvm::Type* llvmMemoryType(Type::Enum type) {
         llvm::Type* t;
@@ -2449,7 +2708,7 @@ struct LLVMCompiler {
                 builder.CreateBr(fusion->header);
                 builder.SetInsertPoint(after);
             }
-            fusion = new Fusion(jit, S, function, values, registers, assignment, builder.getInt64(ir.in.length), 2);
+            fusion = new Fusion(jit, S, function, values, registers, assignment, builder.CreateLoad(values[ir.out.length]), 2);
             fusion->Open(InnerBlock);
             
         //}
@@ -2480,23 +2739,23 @@ struct LLVMCompiler {
                     // types that are unboxed in the JITed code
                     if(ir.type == Type::Double) {
                         Double const& v = (Double const&)jit.constants[ir.a];
-                        for(size_t i = 0; i < ir.in.length; i++)
+                        for(size_t i = 0; i < ir.out.traceLength; i++)
                             c.push_back(llvm::ConstantFP::get(builder.getDoubleTy(), v[i]));
                     } else if(ir.type == Type::Integer) {
                         Integer const& v = (Integer const&)jit.constants[ir.a];
-                        for(size_t i = 0; i < ir.in.length; i++)
+                        for(size_t i = 0; i < ir.out.traceLength; i++)
                             c.push_back(builder.getInt64(v[i]));
                     } else if(ir.type == Type::Logical) {
                         Logical const& v = (Logical const&)jit.constants[ir.a];
-                        for(size_t i = 0; i < ir.in.length; i++)
+                        for(size_t i = 0; i < ir.out.traceLength; i++)
                             c.push_back(builder.getInt8(v[i] != 0 ? 255 : 0));
                     } else if(ir.type == Type::Character) {
                         Character const& v = (Character const&)jit.constants[ir.a];
-                        for(size_t i = 0; i < ir.in.length; i++)
+                        for(size_t i = 0; i < ir.out.traceLength; i++)
                             c.push_back((llvm::Constant*)builder.CreateIntToPtr(builder.getInt64((int64_t)v[i]), builder.getInt8Ty()->getPointerTo()));
                     }
-                    values[index] = CreateEntryBlockAlloca(llvmMemoryType(ir.type), builder.getInt64(ir.out.length));
-                    for(size_t i = 0; i < ir.in.length; i++) {
+                    values[index] = CreateEntryBlockAlloca(llvmMemoryType(ir.type), builder.getInt64(ir.out.traceLength));
+                    for(size_t i = 0; i < ir.out.traceLength; i++) {
                         builder.CreateStore(c[i], builder.CreateConstGEP1_64(values[index], i));
                     }
                 }
@@ -2523,7 +2782,7 @@ struct LLVMCompiler {
             } break;
             
             case TraceOpCode::GPROTO: {
-                if(ir.in.length != 1) {
+                if(ir.in != JIT::Shape::Scalar) {
                     _error("Emitting guard on non-scalar");
                 }
                 llvm::Value* r = builder.CreateICmpEQ(
@@ -2548,7 +2807,7 @@ struct LLVMCompiler {
             } break;
 
             case TraceOpCode::attrget: {
-                if(jit.code[ir.b].out.length != 1)
+                if(jit.code[ir.b].out != JIT::Shape::Scalar)
                     _error("Emitting attrget with non-scalar attribute name");
                 values[index] = Unbox(index, CALL3("GET_attr", 
                             builder.CreateExtractValue(values[ir.a], 0), 
@@ -2558,7 +2817,7 @@ struct LLVMCompiler {
 
             case TraceOpCode::guardT:
             case TraceOpCode::guardF: {
-                if(ir.in.length != 1) {
+                if(ir.in != JIT::Shape::Scalar) {
                     _error("Emitting guard on non-scalar");
                 }
                 // TODO: check the NA mask
@@ -2572,7 +2831,6 @@ struct LLVMCompiler {
             case TraceOpCode::gather:
             case TraceOpCode::scatter:
             case TraceOpCode::mov: 
-            case TraceOpCode::length: 
             TERNARY_BYTECODES(CASE)
             BINARY_BYTECODES(CASE)
             UNARY_FOLD_SCAN_BYTECODES(CASE)
@@ -2634,7 +2892,7 @@ struct LLVMCompiler {
             // if unboxed type, box
             if(Unboxed(ir.type))
                 r = CALL2(std::string("BOX_")+Type::toString(ir.type),
-                    r, builder.getInt64(ir.out.length));
+                    r, builder.CreateLoad(values[ir.out.length]));
 
             // Silly LLVM means I have to manually pass Values
             if(v.i >= 0) {

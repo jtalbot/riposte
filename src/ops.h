@@ -25,7 +25,7 @@ template<class X> struct LogicalUnary  { typedef X A; typedef Logical MA; typede
 template<class X> struct OrdinalUnary  { typedef X A; typedef X MA; typedef Logical R; };
 
 // Unary operators
-#define UNARY_OP(Name, String, Group, Func) \
+#define UNARY_OP(Name, String, Group, Func, Cost) \
 template<typename T> \
 struct Name##VOp {\
 	typedef typename Group<T>::A A; \
@@ -99,7 +99,7 @@ ORDINAL_TYPE_MEET(UNIFY_BINARY)
 #undef UNIFY_BINARY
 
 
-#define BINARY_OP(Name, String, Group, Func) \
+#define BINARY_OP(Name, String, Group, Func, Cost) \
 template<typename S, typename T> \
 struct Name##VOp {\
 	typedef typename Group<S,T>::A A; \
@@ -210,7 +210,7 @@ template<> struct pmaxBase<Logical> { static Logical::Element base() { return Lo
 template<> struct pmaxBase<Character> { static Character::Element base() { return Strings::empty; } };
 
 // Fold and scan ops
-#define FOLD_OP(Name, String, Group, Func) \
+#define FOLD_OP(Name, String, Group, Func, Cost) \
 template<typename T> \
 struct Name##VOp : public Func##VOp<typename Func##VOp<T, T>::R, T> {\
 	static typename Name##VOp::A::Element base() { return Func##Base<T>::base(); } \

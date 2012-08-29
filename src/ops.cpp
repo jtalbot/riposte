@@ -15,6 +15,18 @@ void MARKER(char* a) {
 }
 
 extern "C"
+int64_t SLENGTH(Thread& thread, int64_t i) {
+    Value const& v = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
+    return v.isVector() ? v.length : 1;
+}
+
+extern "C"
+int64_t ELENGTH(Thread& thread, Environment* env, int64_t i) {
+    Value const& v = env->getRecursive((String)i);
+    return v.isVector() ? v.length : 1;
+}
+
+extern "C"
 Value SLOAD(Thread& thread, int64_t i) {
     return (thread.registers+DEFAULT_NUM_REGISTERS)[i];
 }
@@ -60,33 +72,64 @@ int8_t const** UNBOX_character(Thread& thread, Value& a) {
     return (int8_t const**)((Character const&)a).v();
 }
 
-// remove these copies when possible
 extern "C"
 Value BOX_double(Thread& thread, double* d, int64_t len) {
-	Double a(len);
-	memcpy(a.v(), d, len*sizeof(double));
-    return a;
+    if(len <= 16) {
+    	Double a(len);
+    	memcpy(a.v(), d, len*sizeof(double));
+        return a;
+    }
+    else {
+        Value a;
+        Value::Init(a, Type::Double, len);
+        a.p = d;
+        return a;
+    }
 }
 
 extern "C"
 Value BOX_integer(Thread& thread, int64_t* d, int64_t len) {
-    Integer a(len);
-    memcpy(a.v(), d, len*sizeof(int64_t));
-    return a;
+    if(len <= 16) {
+        Integer a(len);
+        memcpy(a.v(), d, len*sizeof(int64_t));
+        return a;
+    }
+    else {
+        Value a;
+        Value::Init(a, Type::Integer, len);
+        a.p = d;
+        return a;
+    }
 }
 
 extern "C"
 Value BOX_logical(Thread& thread, int8_t* d, int64_t len) {
-	Logical a(len);
-	memcpy(a.v(), d, len*sizeof(int8_t));
-    return a;
+	if(len <= 16) {
+        Logical a(len);
+	    memcpy(a.v(), d, len*sizeof(int8_t));
+        return a;
+    }
+    else {
+        Value a;
+        Value::Init(a, Type::Logical, len);
+        a.p = d;
+        return a;
+    }
 }
 
 extern "C"
 Value BOX_character(Thread& thread, int8_t** d, int64_t len) {
-	Character a(len);
-	memcpy(a.v(), d, len*sizeof(int8_t*));
-    return a;
+    if(len <= 16) {
+        Character a(len);
+        memcpy(a.v(), d, len*sizeof(int8_t*));
+        return a;
+    }
+    else {
+        Value a;
+        Value::Init(a, Type::Character, len);
+        a.p = d;
+        return a;
+    }
 }
 
 extern "C"
@@ -130,6 +173,23 @@ Value GET_attr(Thread& thread, Value a, int8_t** name) {
 }
 
 extern "C"
+int64_t ALENGTH(Thread& thread, Value a, int8_t** name) {
+    // Should inline this check so we can avoid a guard when we know the result type.
+    if(a.isObject()) {
+        Value const& v = ((Object const&)a).get((String)name[0]);
+        return v.isVector() ? v.length : 1;
+    }
+    else
+        return 0;
+}
+
+extern "C"
 Value GET_strip(Thread& thread, Value a) {
     return ((Object const&)a).base();
+}
+
+extern "C"
+int64_t OLENGTH(Thread& thread, Value a) {
+    Value const& v = ((Object const&)a).base();
+    return v.isVector() ? v.length : 1;
 }

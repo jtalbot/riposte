@@ -16,7 +16,7 @@
 #include "primes.h"
 
 void marker(char* a) {
-    //printf("%s\n", a);
+    printf("%s\n", a);
 }
 
 Thread::RandomSeed Thread::seed[100];
@@ -508,7 +508,7 @@ Instruction const* gather1_op(Thread& thread, Instruction const& inst) {
 }
 
 #ifdef ENABLE_JIT
-#define OP(Name, string, Group, Func) \
+#define OP(Name, string, Group, Func, Cost) \
 Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	OPERAND(a, inst.a);	\
 	Value & c = OUT(thread, inst.c);	\
@@ -528,7 +528,7 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	return &inst+1; \
 }
 #else
-#define OP(Name, string, Group, Func) \
+#define OP(Name, string, Group, Func, Cost) \
 Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	OPERAND(a, inst.a);	\
 	Value & c = OUT(thread, inst.c);	\
@@ -547,7 +547,7 @@ UNARY_FOLD_SCAN_BYTECODES(OP)
 #undef OP
 
 #ifdef ENABLE_JIT
-#define OP(Name, string, Group, Func) \
+#define OP(Name, string, Group, Func, Cost) \
 Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	OPERAND(a, inst.a);	\
 	OPERAND(b, inst.b);	\
@@ -580,7 +580,7 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	return &inst+1;	\
 }
 #else
-#define OP(Name, string, Group, Func) \
+#define OP(Name, string, Group, Func, Cost) \
 Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	OPERAND(a, inst.a);	\
 	OPERAND(b, inst.b);	\
@@ -1005,15 +1005,19 @@ void interpret(Thread& thread, Instruction const* pc) {
 	loop_label: 	{
         if(pc->a != 0) {
 	        timespec a = get_time();
+	        GC_disable();
             pc = ((JIT::Ptr)pc->a)(thread);
-	        printf("Execution time: %f\n", time_elapsed(a));
+            GC_enable();
+            if(thread.state.verbose)
+                printf("Execution time: %f\n", time_elapsed(a));
         }
         else if(thread.state.jitEnabled) { 
     	    unsigned short& counter = 
 	    		thread.jit.counters[(((uintptr_t)pc)>>5) & (1024-1)];
     		counter++;
 	    	if(counter > JIT::RECORD_TRIGGER) {
-                printf("Starting to record at %li (counter: %li is %d)\n", pc, &counter, counter);
+                if(thread.state.verbose)
+                    printf("Starting to record at %li (counter: %li is %d)\n", pc, &counter, counter);
     			counter = 0;
 	    		thread.jit.start_recording(pc, thread.frame.environment);
 		    	labels = record;
@@ -1077,7 +1081,8 @@ void interpret(Thread& thread, Instruction const* pc) {
 		    labels = ops;
         }
         else if(thread.jit.loop(thread, pc)) {
-            printf("Made loop at %li\n", pc);
+            if(thread.state.verbose)
+                printf("Made loop at %li\n", pc);
 		    ((Instruction*)pc)->a = (int64_t)thread.jit.end_recording(thread);
 		    labels = ops;
         }
