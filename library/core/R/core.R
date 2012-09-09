@@ -48,7 +48,8 @@ dispatch2 <- function(op, x, y, default) {
 	if(missing(y)) {
 		dispatch1('+', x, function(x) x)
 	} else {
-		dispatch2('+', x, y, function(x,y) strip(x)+strip(y))
+		#dispatch2('+', x, y, function(x,y) strip(x)+strip(y))
+		strip(x)+strip(y)
 	}
 }
 

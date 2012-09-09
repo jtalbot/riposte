@@ -20,14 +20,26 @@ void DUMP(char* a, int64_t i) {
 }
 
 extern "C"
+Value curenv(Thread& thread) {
+    Value v;
+    return REnvironment::Init(v, thread.frame.environment);
+}
+
+extern "C"
+Value has(Thread& thread, REnvironment e, int8_t** name) {
+    return Logical::c(e.environment()->has((String)*name) 
+            ? Logical::TrueElement : Logical::FalseElement);
+}
+
+extern "C"
 int64_t SLENGTH(Thread& thread, int64_t i) {
     Value const& v = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
     return v.isVector() ? v.length : 1;
 }
 
 extern "C"
-int64_t ELENGTH(Thread& thread, Environment* env, int64_t i) {
-    Value const& v = env->getRecursive((String)i);
+int64_t ELENGTH(Thread& thread, REnvironment env, int8_t** i) {
+    Value const& v = env.environment()->getRecursive((String)*i);
     return v.isVector() ? v.length : 1;
 }
 
@@ -37,8 +49,8 @@ Value SLOAD(Thread& thread, int64_t i) {
 }
 
 extern "C"
-Value ELOAD(Thread& thread, Environment* env, int64_t i) {
-    return env->getRecursive((String)i);
+Value ELOAD(Thread& thread, REnvironment env, int8_t** i) {
+    return env.environment()->get((String)*i);
 }
 
 extern "C"
@@ -47,8 +59,8 @@ void SSTORE(Thread& thread, int64_t i, Value v) {
 }
 
 extern "C"
-void ESTORE(Thread& thread, Environment* env, int64_t i, Value v) {
-    env->insertRecursive((String)i) = v;
+void ESTORE(Thread& thread, REnvironment env, int8_t** i, Value v) {
+    env.environment()->insertRecursive((String)*i) = v;
 }
 
 // Inline this!
@@ -138,43 +150,48 @@ Value BOX_character(Thread& thread, int8_t** d, int64_t len) {
 }
 
 extern "C"
-Environment* LOAD_environment(Thread& thread, int64_t i) {
-    return (Environment*)i;
-}
-
-extern "C"
-Environment* NEW_environment(Thread& thread, Environment* l, Environment* d, Value v) {
+Value NEW_environment(Thread& thread) {
     Environment* env = new Environment();
-    env->init(l, d, v);
-    return env;
+    Value v;
+    return REnvironment::Init(v, env);
 }
 
 extern "C"
-void NEW_frame(Thread& thread, Environment* environment, int64_t prototype, int64_t returnpc, int64_t returnbase, int64_t dest, Environment* env) {
+void NEW_frame(Thread& thread, REnvironment environment, int64_t prototype, int64_t returnpc, int64_t returnbase, int64_t env1, int64_t env2, int64_t dest) {
     StackFrame& frame = thread.push();
-    frame.environment = environment;
+    frame.environment = environment.environment();
     frame.prototype = (Prototype const*) prototype;
     frame.returnpc = (Instruction const*) returnpc;
     frame.returnbase = (Value*) returnbase;
     frame.dest = dest;
-    frame.env = env;
+    REnvironment env;
+    env.header = env1;
+    env.i = env2;
+    frame.env = env.environment();
 }
 
 extern "C"
-Prototype const* GET_prototype(Thread& thread, Value v) {
-    return ((Function const&)v).prototype();
+Prototype const* GET_prototype(Thread& thread, Function f) {
+    return f.prototype();
+}
+
+extern "C"
+Value GET_environment(Thread& thread, Function f) {
+    Value v;
+    return REnvironment::Init(v, f.environment());
 }
 
 extern "C"
 Value GET_attr(Thread& thread, Value a, int8_t** name) {
     // Should inline this check so we can avoid a guard when we know the result type.
-    if(a.isObject()) {
-        //printf("Getting attribute: %s: ", (String)name[0]);
-        //std::cout << thread.state.stringify(((Object const&)a).get((String)name[0]));
-        return ((Object const&)a).get((String)name[0]);
-    }
-    else
-        return Null::Singleton();
+    //printf("Getting attribute: %s: ", (String)name[0]);
+    //std::cout << thread.state.stringify(((Object const&)a).get((String)name[0]));
+    return ((Object const&)a).get((String)name[0]);
+}
+
+extern "C"
+void SET_attr(Thread& thread, Value a, int8_t** name, Value v) {
+    ((Object&)a).insertMutable((String)name[0], v);
 }
 
 extern "C"
@@ -191,6 +208,11 @@ int64_t ALENGTH(Thread& thread, Value a, int8_t** name) {
 extern "C"
 Value GET_strip(Thread& thread, Value a) {
     return ((Object const&)a).base();
+}
+
+extern "C"
+Value SET_strip(Thread& thread, Value a) {
+    _error("Can't set object base yet");
 }
 
 extern "C"
@@ -231,4 +253,35 @@ int8_t** MALLOC_character(Thread& thread, int64_t length) {
     return (int8_t**)MALLOC(length, sizeof(Character::Element));
 }
 
+extern "C"
+Value GET_lenv(Thread& thread, REnvironment env) {
+    Value v;
+    return REnvironment::Init(v, env.environment()->lexical);
+}
+
+extern "C"
+Value GET_denv(Thread& thread, REnvironment env) {
+    Value v;
+    return REnvironment::Init(v, env.environment()->dynamic);
+}
+
+extern "C"
+Value GET_call(Thread& thread, REnvironment env) {
+    return env.environment()->call;
+}
+
+extern "C"
+void SET_lenv(Thread& thread, REnvironment env, REnvironment lenv) {
+    env.environment()->lexical = lenv.environment();
+}
+
+extern "C"
+void SET_denv(Thread& thread, REnvironment env, REnvironment denv) {
+    env.environment()->dynamic = denv.environment();
+}
+
+extern "C"
+void SET_call(Thread& thread, REnvironment env, Value call) {
+    env.environment()->call = call;
+}
 

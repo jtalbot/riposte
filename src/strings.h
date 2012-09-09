@@ -155,6 +155,8 @@
     _(asdouble, "as.double") \
     _(ascharacter, "as.character") \
     _(aslist, "as.list") \
+    _(newenv, "newenv") \
+    _(parentframe, "parent.frame") \
     _(Maximal, "\255")
 
 typedef const char* String;

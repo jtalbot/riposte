@@ -36,6 +36,10 @@ static Instruction const* buildStackFrame(Thread& thread, Environment* environme
 	
 	if(thread.base-prototype->registers < thread.registers)
 		throw RiposteError("Register overflow");
+
+    if(thread.jit.state == JIT::RECORDING) {
+        thread.jit.emitPush(thread);
+    }
 	
 	return &(prototype->bc[0]);
 }
@@ -289,25 +293,40 @@ static Environment* CreateEnvironment(Thread& thread, Environment* l, Environmen
 
 static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out) {
 	Value const& f = thread.frame.environment->getRecursive(op);
-	if(f.isFunction()) {
-		Environment* fenv = CreateEnvironment(thread, ((Function const&)f).environment(), thread.frame.environment, Null::Singleton());
-		List call(0);
-		Pair p;
-		p.n = Strings::empty;
-		p.v = a;
-		PairList args;
-		args.push_back(p);
-		CompiledCall cc(call, args, 1, false);
-		MatchArgs(thread, thread.frame.environment, fenv, ((Function const&)f), cc);
-		return buildStackFrame(thread, fenv, ((Function const&)f).prototype(), out, &inst+1);
-	}
+    if(f.isFunction()) {
+        Function const& func = (Function const&)f;
+        Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
+        List call(0);
+        Pair p;
+        p.n = Strings::empty;
+        p.v = a;
+        PairList args;
+        args.push_back(p);
+        CompiledCall cc(call, args, 1, false);
+
+        if(thread.jit.state == JIT::RECORDING) {
+            JIT::IRRef a = thread.jit.load(thread, (int64_t)op, &inst);
+            thread.jit.emitCall(a, func, fenv, call, &inst);
+        }
+
+        MatchArgs(thread, thread.frame.environment, fenv, ((Function const&)f), cc);
+        
+        Instruction const* r =  buildStackFrame(thread, fenv, ((Function const&)f).prototype(), out, &inst+1);
+        
+        if(thread.jit.state == JIT::RECORDING) {
+            thread.jit.store(thread, thread.jit.load(thread, inst.a, &inst), (int64_t)func.prototype()->parameters[0].n);
+        }
+
+        return r;
+    }
 	_error("Failed to find generic for builtin op");
 }
 
 static Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out) {
 	Value const& f = thread.frame.environment->getRecursive(op);
-	if(f.isFunction()) { 
-		Environment* fenv = CreateEnvironment(thread, ((Function const&)f).environment(), thread.frame.environment, Null::Singleton());
+	if(f.isFunction()) {
+        Function const& func = (Function const&)f; 
+		Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, Null::Singleton());
 		List call(0);
 		PairList args;
 		Pair p;
@@ -317,8 +336,22 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
 		p.v = b;
 		args.push_back(p);
 		CompiledCall cc(call, args, 2, false);
+        
+        if(thread.jit.state == JIT::RECORDING) {
+            JIT::IRRef a = thread.jit.load(thread, (int64_t)op, &inst);
+            thread.jit.emitCall(a, func, fenv, call, &inst);
+        }
+
 		MatchArgs(thread, thread.frame.environment, fenv, ((Function const&)f), cc);
-		return buildStackFrame(thread, fenv, ((Function const&)f).prototype(), out, &inst+1);
+        
+		Instruction const* r = buildStackFrame(thread, fenv, ((Function const&)f).prototype(), out, &inst+1);
+        
+        if(thread.jit.state == JIT::RECORDING) {
+            thread.jit.store(thread, thread.jit.load(thread, inst.a, &inst), (int64_t)func.prototype()->parameters[0].n);
+            thread.jit.store(thread, thread.jit.load(thread, inst.b, &inst), (int64_t)func.prototype()->parameters[1].n);
+        }
+        
+        return r;
 	}
 	_error("Failed to find generic for builtin op");
 }

@@ -37,6 +37,8 @@
 
 #define UTILITY_BYTECODES(_)\
 	_(function, "function") \
+    _(newenv, "newenv") \
+    _(parentframe, "parentframe") \
 	_(internal, "internal") \
 	_(type, "type") \
 	_(missing, "missing") \

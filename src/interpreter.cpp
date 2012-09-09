@@ -58,10 +58,7 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 	if(a->isPromise()) {
 		Function const& f = (Function const&)(*a);
 		assert(f.environment()->DynamicScope());
-		Instruction const* r = buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), env, index, &inst);
-        if(thread.jit.state == JIT::RECORDING)
-            thread.jit.emitPush(thread);
-        return r;
+		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), env, index, &inst);
 	} else {
 		_error(std::string("Object '..") + intToStr(index+1) + "' not found, missing argument?");
 	}
@@ -71,17 +68,11 @@ Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const
 	if(a->isPromise()) {
 		Function const& f = (Function const&)(*a);
 		assert(f.environment()->DynamicScope());
-        Instruction const* r = buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), f.environment(), name, &inst);
-        if(thread.jit.state == JIT::RECORDING)
-            thread.jit.emitPush(thread);
-        return r;
+        return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), f.environment(), name, &inst);
 	} else if(a->isDefault()) {
 		Function const& f = (Function const&)(*a);
 		assert(f.environment());
-		Instruction const* r = buildStackFrame(thread, f.environment(), f.prototype(), f.environment(), name, &inst);
-        if(thread.jit.state == JIT::RECORDING)
-            thread.jit.emitPush(thread);
-        return r;
+		return buildStackFrame(thread, f.environment(), f.prototype(), f.environment(), name, &inst);
 	} else {
 		_error(std::string("Object '") + thread.externStr(name) + "' not found");
 	}
@@ -108,7 +99,7 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 
     if(thread.jit.state == JIT::RECORDING) {
         JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
-        thread.jit.emitCall(a, func, fenv, func.environment(), thread.frame.environment, call.call, &inst);
+        thread.jit.emitCall(a, func, fenv, call.call, &inst);
     }
 	
 	MatchArgs(thread, thread.frame.environment, fenv, func, call);
@@ -126,7 +117,7 @@ Instruction const* ncall_op(Thread& thread, Instruction const& inst) {
 	
     if(thread.jit.state == JIT::RECORDING) {
         JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
-        thread.jit.emitCall(a, func, fenv, func.environment(), thread.frame.environment, call.call, &inst);
+        thread.jit.emitCall(a, func, fenv, call.call, &inst);
     }
 	
 	MatchNamedArgs(thread, thread.frame.environment, fenv, func, call);
@@ -927,6 +918,21 @@ Instruction const* attrset_op(Thread& thread, Instruction const& inst) {
     }
     return &inst+1;
 }
+
+Instruction const* newenv_op(Thread& thread, Instruction const& inst) {
+    OPERAND(parent, inst.a);
+   
+    Environment* p = ((REnvironment const&)parent).environment();
+    Environment* e = new Environment(p,p);
+    REnvironment::Init( OUT(thread, inst.c), e );
+    return &inst+1; 
+}
+
+Instruction const* parentframe_op(Thread& thread, Instruction const& inst) {
+    Environment* e = thread.frame.environment->DynamicScope();
+    REnvironment::Init( OUT(thread, inst.c), e ); 
+    return &inst+1;
+}
 /*struct _Load {
     int64_t i;
     _Load(int64_t i) : i(i) {}
@@ -1003,26 +1009,44 @@ void interpret(Thread& thread, Instruction const* pc) {
 	#undef LABELED_OP
 
 	loop_label: 	{
-        if(pc->a != 0) {
-	        timespec a = get_time();
-	        GC_disable();
-            pc = ((JIT::Ptr)pc->a)(thread);
-            GC_enable();
-            if(thread.state.verbose)
-                printf("Execution time: %f\n", time_elapsed(a));
-        }
-        else if(thread.state.jitEnabled) { 
-    	    unsigned short& counter = 
-	    		thread.jit.counters[(((uintptr_t)pc)>>5) & (1024-1)];
-    		counter++;
-	    	if(counter > JIT::RECORD_TRIGGER) {
+        if(thread.state.jitEnabled) { 
+            Instruction const* loop_pc = pc;
+            JIT::Trace* rootTrace = (JIT::Trace*)pc->a;
+            if(rootTrace != 0) {
+                timespec a = get_time();
+                GC_disable();
+                JIT::Trace* exit = (JIT::Trace*)(rootTrace->ptr)(thread);
+                GC_enable();
+
                 if(thread.state.verbose)
-                    printf("Starting to record at %li (counter: %li is %d)\n", pc, &counter, counter);
-    			counter = 0;
-	    		thread.jit.start_recording(pc, thread.frame.environment);
-		    	labels = record;
-    		}
-            pc++;
+                    printf("Execution time: %f\n", time_elapsed(a));
+
+                if(exit->InScope && ++exit->counter > JIT::RECORD_TRIGGER) {
+                    if(thread.state.verbose)
+                        printf("Starting to record side exit at %li\n", pc);
+                    exit->counter = 0;
+                    thread.jit.start_recording(loop_pc, thread.frame.environment, rootTrace, exit);
+                    labels = record;
+                }
+                pc = exit->Reenter;
+            }
+            else { 
+                unsigned short& counter = 
+                    thread.jit.counters[(((uintptr_t)pc)>>5) & (1024-1)];
+                counter++;
+                if(counter > JIT::RECORD_TRIGGER) {
+                    if(thread.state.verbose)
+                        printf("Starting to record at %li (counter: %li is %d)\n", pc, &counter, counter);
+                    counter = 0;
+                    JIT::Trace* trace = new JIT::Trace();
+                    trace->function = 0;
+                    trace->ptr = 0;
+                    thread.jit.start_recording(loop_pc, thread.frame.environment, 0, trace);
+                    ((Instruction*)pc)->a = (int64_t)trace;
+                    labels = record;
+                }
+                pc++;
+            }
         }
         else {
             pc++;
@@ -1076,14 +1100,10 @@ void interpret(Thread& thread, Instruction const* pc) {
 	
 	loop_record: 	{ 
         // did we make a loop yet??
-        if(pc->a != 0) {
-            thread.jit.fail_recording();
-		    labels = ops;
-        }
-        else if(thread.jit.loop(thread, pc)) {
+        if(thread.jit.loop(thread, pc)) {
             if(thread.state.verbose)
                 printf("Made loop at %li\n", pc);
-		    ((Instruction*)pc)->a = (int64_t)thread.jit.end_recording(thread);
+		    thread.jit.end_recording(thread);
 		    labels = ops;
         }
         else {

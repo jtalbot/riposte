@@ -46,9 +46,9 @@ void cat(Thread& thread, Value const* args, Value& result) {
 
 void remove(Thread& thread, Value const* args, Value& result) {
 	Character const& a = Cast<Character>(args[0]);
-	REnvironment e(args[-1]);
+	REnvironment const& e = Cast<REnvironment>(args[-1]);
 	for(int64_t i = 0; i < a.length; i++) {
-		e.ptr()->remove(a[i]);
+		e.environment()->remove(a[i]);
 	}
 	result = Null::Singleton();
 }
@@ -310,7 +310,7 @@ void length(Thread& thread, Value const* args, Value& result) {
 }
 
 void eval_fn(Thread& thread, Value const* args, Value& result) {
-	result = thread.eval(Compiler::compilePromise(thread, args[0]), REnvironment(args[-1]).ptr());
+	result = thread.eval(Compiler::compilePromise(thread, args[0]), Cast<REnvironment>(args[-1]).environment());
 }
 
 struct mapplyargs {
@@ -441,14 +441,14 @@ void source(Thread& thread, Value const* args, Value& result) {
 void environment(Thread& thread, Value const* args, Value& result) {
 	Value e = args[0];
 	if(e.isFunction()) {
-		result = REnvironment(((Function const&)e).environment());
+        REnvironment::Init(result, ((Function const&)e).environment());
 		return;
 	}
 	result = Null::Singleton();
 }
 
 void newenv(Thread& thread, Value const* args, Value& result) {
-	result = REnvironment(new Environment());
+	REnvironment::Init(result, new Environment());
 }
 
 // TODO: parent.frame and sys.call need to ignore frames for promises, etc. We may need
@@ -460,7 +460,7 @@ void parentframe(Thread& thread, Value const* args, Value& result) {
 		env = env->DynamicScope();
 		i--;
 	}
-	result = REnvironment(env);
+	REnvironment::Init(result, env);
 }
 
 void syscall(Thread& thread, Value const* args, Value& result) {
@@ -529,10 +529,10 @@ void type_of(Thread& thread, Value const* args, Value& result) {
 
 void exists(Thread& thread, Value const* args, Value& result) {
 	Character c = As<Character>(thread, args[0]);
-	REnvironment e(args[-1]);
+	REnvironment const& e = Cast<REnvironment>(args[-1]);
 	Logical l = As<Logical>(thread, args[-2]);
 
-	Value const& v = l[0] ? e.ptr()->getRecursive(c[0]) : e.ptr()->get(c[0]);
+	Value const& v = l[0] ? e.environment()->getRecursive(c[0]) : e.environment()->get(c[0]);
 	if(v.isNil())
 		result = Logical::False();
 	else
@@ -541,10 +541,10 @@ void exists(Thread& thread, Value const* args, Value& result) {
 
 void get(Thread& thread, Value const* args, Value& result) {
 	Character c = As<Character>(thread, args[0]);
-	REnvironment e(args[-1]);
+	REnvironment const& e = Cast<REnvironment>(args[-1]);
 	Logical l = As<Logical>(thread, args[-2]);
 
-	result = l[0] ? e.ptr()->getRecursive(c[0]) : e.ptr()->get(c[0]);
+	result = l[0] ? e.environment()->getRecursive(c[0]) : e.environment()->get(c[0]);
 }
 
 #include <sys/time.h>

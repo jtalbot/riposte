@@ -33,7 +33,7 @@ source <- function(x) .Internal(source(x))
 
 parent.frame <- function(n=1) .Internal(parent.frame(n+1))
 environment <- function(x=NULL) if(is.null(x)) parent.frame() else .Internal(environment(x))
-new.env <- function() .Internal(new.env())
+new.env <- function(parent=parent.frame(1)) newenv(parent)#.Internal(new.env())
 sys.call <- function(which=0) .Internal(sys.call(which+1))
 alist <- function(...) as.list(sys.call())[-1L]
 rm <- function(...) .Internal(remove(as.character(sys.call())[-1L], parent.frame()))

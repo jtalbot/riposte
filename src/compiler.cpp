@@ -52,6 +52,9 @@ static ByteCode::Enum op1(String const& func) {
     if(func == Strings::asdouble) return ByteCode::asdouble;
     if(func == Strings::ascharacter) return ByteCode::ascharacter;
     if(func == Strings::aslist) return ByteCode::aslist;
+    
+    if(func == Strings::newenv) return ByteCode::newenv;
+    if(func == Strings::parentframe) return ByteCode::parentframe;
 	
     throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
 }
@@ -155,7 +158,6 @@ static int64_t isDotDot(String s) {
 
 Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code) {
 	String s = SymbolStr(symbol);
-	#ifdef TRACE_DEVELOPMENT
 	int64_t dd = isDotDot(s);
 	if(dd > 0) {
 		Operand t = allocRegister();
@@ -163,12 +165,9 @@ Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code) 
 		return t;
 	}
 	else {
-	#endif
 		//return Operand(MEMORY, s);
         return forceInRegister(Operand(MEMORY,s));
-	#ifdef TRACE_DEVELOPMENT
 	}
-	#endif
 }
 
 Compiler::Operand Compiler::placeInRegister(Operand r) {
@@ -722,7 +721,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::asdouble ||
 		func == Strings::ascharacter ||
 		func == Strings::aslist ||
-		func == Strings::random) &&
+		func == Strings::random ||
+        func == Strings::newenv ||
+        func == Strings::parentframe) &&
 		call.length == 2)
 	{
 		// if there isn't exactly one parameter, we should call the library version...

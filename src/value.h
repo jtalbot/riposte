@@ -64,7 +64,7 @@ struct Value {
 	bool isCharacter() const { return type == Type::Character; }
 	bool isCharacter1() const { return header == (1<<4) + Type::Character; }
 	bool isList() const { return type == Type::List; }
-	bool isPromise() const { return type == Type::Promise && !isNil(); }
+	bool isPromise() const { return type == Type::Promise; }
 	bool isDefault() const { return type == Type::Default; }
 	bool isDotdot() const { return type == Type::Dotdot; }
 	bool isFuture() const { return type == Type::Future; }
@@ -81,7 +81,7 @@ struct Value {
 	template<class T> T& scalar() { throw "not allowed"; }
 	template<class T> T const& scalar() const { throw "not allowed"; }
 
-	static Value const& Nil() { static const Value v = { {{Type::Promise, 0}}, {0} }; return v; }
+	static Value const& Nil() { static const Value v = { {{Type::Nil, 0}}, {0} }; return v; }
 
 };
 
@@ -253,6 +253,7 @@ VECTOR_IMPL(List, Value, true)
 
 
 struct Future : public Value {
+	static const Type::Enum VectorType = Type::Future;
 	static Future& Init(Value& f, Type::Enum typ,int64_t length,IRef ref) {
 		Value::Init(f,Type::Future,length);
 		f.future.ref = ref;
@@ -262,6 +263,7 @@ struct Future : public Value {
 };
 
 struct Function : public Value {
+	static const Type::Enum VectorType = Type::Function;
 	static Function& Init(Value& v, Prototype* proto, Environment* env) {
 		v.header = (int64_t)proto + Type::Function;
 		v.p = env;
@@ -273,6 +275,7 @@ struct Function : public Value {
 };
 
 struct Promise : public Value {
+	static const Type::Enum VectorType = Type::Promise;
 	static Promise& Init(Value& v, Prototype* proto, Environment* env) {
 		v.header = (int64_t)proto + Type::Promise;
 		v.p = env;
@@ -284,6 +287,7 @@ struct Promise : public Value {
 };
 
 struct Default : public Value {
+	static const Type::Enum VectorType = Type::Default;
 	static Default& Init(Value& v, Prototype* proto, Environment* env) {
 		v.header = (int64_t)proto + Type::Default;
 		v.p = env;
@@ -508,10 +512,8 @@ public:
 };
 
 class Environment : public Dictionary {
-private:
-	Environment* lexical, *dynamic;
-	
 public:
+	Environment* lexical, *dynamic;
 	Value call;
 	PairList dots;
 	bool named;	// true if any of the dots have names	
@@ -578,26 +580,15 @@ public:
 	}
 };
 
-class REnvironment {
-private:
-	Environment* env;
-public:
-	explicit REnvironment(Environment* env) : env(env) {
+struct REnvironment : public Value {
+	static const Type::Enum VectorType = Type::Environment;
+	static REnvironment& Init(Value& v, Environment* env) {
+		v.header = Type::Environment;
+		v.p = env;
+		return (REnvironment&)v;
 	}
-	explicit REnvironment(Value const& v) {
-		assert(v.type == Type::Environment);
-		env = (Environment*)v.p;
-	}
-	
-	operator Value() const {
-		Value v;
-		Value::Init(v, Type::Environment, 0);
-		v.p = (void*)env;
-		return v;
-	}
-	Environment* ptr() const {
-		return env;
-	}
+
+	Environment* environment() const { return (Environment*)p; }
 };
 
 #endif

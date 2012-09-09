@@ -6,6 +6,7 @@
 
 #define TYPES(_) 			\
 	/* First the internal types. */ \
+	_(Nil, 	    "nil") 	\
 	_(Promise, 	"promise") 	\
 	_(Default,	"default")	\
 	_(Dotdot,	"dotdot")	\
