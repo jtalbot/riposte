@@ -70,23 +70,35 @@ bool GTYPE(Thread& thread, Value value, int64_t type) {
 }
 
 extern "C"
-double const* UNBOX_double(Thread& thread, Value& a) {
-    return ((Double const&)a).v();
+double const* UNBOX_double(Thread& thread, Value& a, int64_t length) {
+    if(!a.isDouble() || a.length != length)
+        return 0;
+    else
+        return ((Double const&)a).v();
 }
 
 extern "C"
-int64_t const* UNBOX_integer(Thread& thread, Value& a) {
-    return ((Integer const&)a).v();
+int64_t const* UNBOX_integer(Thread& thread, Value& a, int64_t length) {
+    if(!a.isInteger() || a.length != length)
+        return 0;
+    else
+        return ((Integer const&)a).v();
 }
 
 extern "C"
-int8_t const* UNBOX_logical(Thread& thread, Value& a) {
-    return (int8_t const*)((Logical const&)a).v();
+int8_t const* UNBOX_logical(Thread& thread, Value& a, int64_t length) {
+    if(!a.isLogical() || a.length != length)
+        return 0;
+    else
+        return (int8_t const*)((Logical const&)a).v();
 }
 
 extern "C"
-int8_t const** UNBOX_character(Thread& thread, Value& a) {
-    return (int8_t const**)((Character const&)a).v();
+int8_t const** UNBOX_character(Thread& thread, Value& a, int64_t length) {
+    if(!a.isCharacter() || a.length != length)
+        return 0;
+    else
+        return (int8_t const**)((Character const&)a).v();
 }
 
 extern "C"
@@ -157,7 +169,7 @@ Value NEW_environment(Thread& thread) {
 }
 
 extern "C"
-void NEW_frame(Thread& thread, REnvironment environment, int64_t prototype, int64_t returnpc, int64_t returnbase, int64_t env1, int64_t env2, int64_t dest) {
+void PUSH(Thread& thread, REnvironment environment, int64_t prototype, int64_t returnpc, int64_t returnbase, int64_t env1, int64_t env2, int64_t dest) {
     StackFrame& frame = thread.push();
     frame.environment = environment.environment();
     frame.prototype = (Prototype const*) prototype;
@@ -168,6 +180,11 @@ void NEW_frame(Thread& thread, REnvironment environment, int64_t prototype, int6
     env.header = env1;
     env.i = env2;
     frame.env = env.environment();
+}
+
+extern "C"
+void POP(Thread& thread) {
+    thread.pop();
 }
 
 extern "C"

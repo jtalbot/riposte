@@ -26,6 +26,13 @@
 #define USE_THREADED_INTERPRETER
 #define TIMING
 
+template<class T>
+void swap(T& a, T& b) {
+    T t = a;
+    a = b;
+    b = t;
+}
+
 static inline std::string rawToStr( unsigned char n )
 {
 	std::ostringstream result;

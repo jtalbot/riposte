@@ -1,9 +1,12 @@
 # This Makefile requires GNU make.
 UNAME := $(shell uname -s)
- 
+
 CXX := clang++ 
-CXXFLAGS := -Wall -msse4.1 `llvm-config --cxxflags` -fexceptions -std=c++11
-LFLAGS := -L/usr/local/lib -L/opt/local/lib -L. -fpic -lgc -g `llvm-config --ldflags --libs engine bitreader scalaropts`
+IDIRS := -I/opt/local/include
+LDIRS := -L/usr/local/lib -L/opt/local/lib
+
+CXXFLAGS := $(IDIRS) -Wall -msse4.1 `llvm-config --cxxflags` -fexceptions -std=c++11
+LFLAGS := $(LDIRS) -L. -fpic -lgc -g `llvm-config --ldflags --libs engine bitreader scalaropts`
 
 ifeq ($(UNAME),Linux)
 #for clock_gettime
@@ -14,33 +17,34 @@ ENABLE_JIT=0
 ENABLE_ARBB=0
 ENABLE_LIBM=0
 
-ARBB_HOME=/opt/intel/arbb/1.0.0.018
-ARBB_EXISTS=$(shell test -d $(ARBB_HOME); echo $$?)
+SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp runtime.cpp jit.cpp jit_compile.cpp jit_opt.cpp jit_reg.cpp
 
-AMD_LIBM_HOME=/opt/amdlibm-3-0-1-lin64
+BC := ops.cpp
 
-ifeq ($(ENABLE_ARBB),0)
-	CXXFLAGS += -I/opt/local/include
-else
-	LFLAGS += -L$(ARBB_HOME)/lib/intel64 -larbb
-	CXXFLAGS += -I$(ARBB_HOME)/include
-endif
-
-ifneq ($(ENABLE_LIBM),0)
-	CXXFLAGS += -I$(AMD_LIBM_HOME)/include -DUSE_AMD_LIBM
-	LFLAGS += -L$(AMD_LIBM_HOME)/lib/dynamic -lamdlibm
-endif
-
-SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp runtime.cpp jit.cpp
+EXECUTABLE := bin/riposte
 
 ifeq ($(ENABLE_JIT),1)
 	CXXFLAGS += -DENABLE_JIT
 	SRC += ir.cpp trace.cpp trace_compile.cpp assembler-x64.cpp
 endif
 
-EXECUTABLE := bin/riposte
+ifneq ($(ENABLE_ARBB),0)
+    ARBB_HOME=/opt/intel/arbb/1.0.0.018
+    ARBB_EXISTS=$(shell test -d $(ARBB_HOME); echo $$?)
+
+	CXXFLAGS += -I$(ARBB_HOME)/include
+	LFLAGS += -L$(ARBB_HOME)/lib/intel64 -larbb
+endif
+
+ifneq ($(ENABLE_LIBM),0)
+    AMD_LIBM_HOME=/opt/amdlibm-3-0-1-lin64
+	
+    CXXFLAGS += -I$(AMD_LIBM_HOME)/include -DUSE_AMD_LIBM
+	LFLAGS += -L$(AMD_LIBM_HOME)/lib/dynamic -lamdlibm
+endif
 
 OBJECTS := $(patsubst %.cpp,bin/%.o,$(SRC))
+BYTECODE := $(patsubst %.cpp,bin/%.bc,$(BC)) 
 DEPENDENCIES := $(patsubst %.cpp,bin/%.d,$(SRC))
 
 ASM := $(patsubst %.cpp,bin/%.s,$(SRC))
@@ -48,17 +52,19 @@ ASM := $(patsubst %.cpp,bin/%.s,$(SRC))
 default: debug 
 
 debug: CXXFLAGS += -DDEBUG -O0 -g
-debug: $(EXECUTABLE)
+debug: ALL
 
 release: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize 
-release: $(EXECUTABLE)
+release: ALL
 
 irelease: CXXFLAGS += -DNDEBUG -O3 -g
 irelease: CXX := icc
-irelease: $(EXECUTABLE)
+irelease: ALL
           
 asm: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize 
 asm: $(ASM)
+
+ALL: $(EXECUTABLE) $(BYTECODE)
 
 $(EXECUTABLE): $(OBJECTS)
 	$(CXX) $(LFLAGS) -o $@ $^ $(LIBS)
@@ -66,11 +72,14 @@ $(EXECUTABLE): $(OBJECTS)
 bin/%.o: src/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@ 
 
+bin/%.bc: src/%.cpp
+	clang++ $(IDIRS) -O3 -emit-llvm -c $< -o $@
+
 bin/%.s: src/%.cpp
 	$(CXX) $(CXXFLAGS) -S -c $< -o $@ 
 
 clean:
-	rm -rf $(EXECUTABLE) $(OBJECTS) $(DEPENDENCIES)
+	rm -rf $(EXECUTABLE) $(OBJECTS) $(DEPENDENCIES) $(BYTECODE)
 
 coverage: CXXFLAGS += -fprofile-arcs -ftest-coverage
 coverage: LFLAGS += -fprofile-arcs -ftest-coverage

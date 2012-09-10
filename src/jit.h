@@ -20,26 +20,25 @@
         _(loop, "LOOP", ___) \
         _(jmp, "JMP", ___) \
         _(exit, "exit", ___) \
+        _(nest, "nest", ___) \
         _(constant, "constant", ___) \
 		_(sload, "sload", ___) /* loads are type guarded */ \
         _(curenv, "curenv", ___) \
         _(newenv, "newenv", ___) \
 		_(load, "load", ___) /* loads are type guarded */ \
-		_(elength, "ELENGTH", ___) /* loads are type guarded */ \
-		_(slength, "SLENGTH", ___) /* loads are type guarded */ \
+		_(elength, "elength", ___) /* loads are type guarded */ \
+		_(slength, "slength", ___) /* loads are type guarded */ \
         _(store, "store", ___) \
         _(sstore, "sstore", ___) \
-        _(GPROTO,   "GPROTO", ___) \
-        _(glenEQ,   "glenEQ", ___) \
-        _(glenLT,   "glenLT", ___) \
+        _(gproto,   "gproto", ___) \
 		_(gtrue, "gtrue", ___) \
 		_(gfalse, "gfalse", ___) \
 		_(gather, "GATH", ___) \
 		_(scatter, "SCAT", ___) \
 		_(phi, "phi", ___) \
         _(length, "LENGTH", ___) \
-        _(PUSH, "PUSH", ___) \
-        _(POP, "POP", ___) \
+        _(push, "PUSH", ___) \
+        _(pop, "POP", ___) \
         _(strip, "STRIP", ___) \
         _(olength, "olength", ___) \
         _(alength, "alength", ___) \
@@ -112,6 +111,8 @@ public:
         Shape(IRRef length, size_t traceLength) : length(length), traceLength(traceLength) {}
     };
 
+    std::map<IRRef, IRRef> shapeForward;
+
 	struct IR {
 		TraceOpCode::Enum op;
 		IRRef a, b, c;
@@ -120,6 +121,8 @@ public:
         Shape in, out;
 
         double cost;
+        short reg;
+        bool live;
 
         void dump() const;
 
@@ -153,9 +156,8 @@ public:
     State state;
 	Instruction const* startPC;
 
-    std::map<Environment const*, IRRef> envs;
     std::vector<Value> constants;
-    std::map<Value, IRRef> constantsMap;
+    std::map<Value, size_t> constantsMap;
 
     struct StackFrame {
         IRRef environment;
@@ -198,7 +200,6 @@ public:
     Trace* dest;
 
     std::map<Variable, IRRef> slots;
-    std::vector<int64_t> assignment;
 
 	struct Exit {
         std::vector<IRRef> environments;
@@ -268,6 +269,7 @@ public:
 
     struct Trace : public gc
     {
+        Trace* root;
         Ptr ptr;
         void* function;
         std::vector<Trace, traceable_allocator<Trace> > exits;
@@ -294,6 +296,8 @@ public:
         Shape in,
         Shape out);
     
+    IR makeConstant(Value const& v);
+    
     IRRef duplicate(IR const& ir, std::vector<IRRef> const& forward);
 	IRRef load(Thread& thread, int64_t a, Instruction const* reenter);
     IRRef constant(Value const& v);
@@ -311,7 +315,7 @@ public:
 
 
     void emitCall(IRRef a, Function const& func, Environment* env, Value const& call, Instruction const* inst) {
-        IRRef guard = insert(trace, TraceOpCode::GPROTO, a, (IRRef)func.prototype(), 0, Type::Function, trace[a].out, Shape::Empty);
+        IRRef guard = insert(trace, TraceOpCode::gproto, a, (IRRef)func.prototype(), 0, Type::Function, trace[a].out, Shape::Empty);
         reenters[guard] = (Reenter) { inst, true };
         IRRef lenv = insert(trace, TraceOpCode::load, a, 0, 0, Type::Environment, trace[a].out, Shape::Scalar);
         IRRef denv = insert(trace, TraceOpCode::curenv, 0, 0, 0, Type::Environment, Shape::Empty, Shape::Scalar);
@@ -324,6 +328,8 @@ public:
     void storeArg(Environment* env, String name, Value const& v) {
         estore(constant(v), env, name);
     }
+
+    std::map<Environment const*, IRRef> envs;
 
     IRRef getEnv(Environment* env) {
         std::map<Environment const*, IRRef>::const_iterator i;
@@ -339,10 +345,8 @@ public:
 
     void estore(IRRef a, Environment* env, String name) {
         Variable v = { getEnv(env), (int64_t)constant(Character::c(name)) };
-        trace.push_back(IR(TraceOpCode::store, v.env, v.i, a, trace[a].type, trace[a].out, Shape::Empty));
+        trace.push_back(IR(TraceOpCode::store, v.env, v.i, a, Type::Nil, trace[a].out, Shape::Empty));
     }
-
-    void markLiveOut(Exit const& exit);
 
 	void dump(Thread& thread, std::vector<IR> const&);
 
@@ -357,16 +361,18 @@ public:
     };
 
     bool EmitIR(Thread& thread, Instruction const& inst, bool branch);
-    void EmitOptIR(IRRef i, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::map<Variable, IRRef>& map, std::map<Variable, IRRef>& stores, std::tr1::unordered_map<IR, IRRef>& cse, std::vector<IRRef>& environments, std::vector<StackFrame>& frames, std::map<Variable, Phi>& phis);
+    bool EmitNest(Thread& thread, Trace* trace);
+
+    void EmitOptIR(Thread& thread, IRRef i, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::map<Variable, IRRef>& map, std::map<Variable, IRRef>& stores, std::tr1::unordered_map<IR, IRRef>& cse, std::vector<IRRef>& environments, std::vector<StackFrame>& frames, std::map<Variable, Phi>& phis);
     void Replay(Thread& thread);
 
-    void AssignRegister(size_t src, std::vector<int64_t>& assignment, size_t index);
-    void PreferRegister(std::vector<int64_t>& assignment, size_t index, size_t share);
-    void ReleaseRegister(std::vector<int64_t>& assignment, size_t index);
+    void AssignRegister(size_t src, size_t index);
+    void PreferRegister(size_t index, size_t share);
+    void ReleaseRegister(size_t index);
     void RegisterAssignment(Exit& e);
 
-    IRRef Insert(std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, IR ir);
-    IR ConstantFold(IR ir);
+    IRRef Insert(Thread& thread, std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, IR ir);
+    IR ConstantFold(Thread& thread, IR ir);
     IR StrengthReduce(IR ir);
     IR Normalize(IR ir);
     enum Aliasing {

@@ -473,6 +473,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(ByteCode::jmp, beginbody-endbody, 0, 0);
 
 		ir[beginbody-1].a.i = endbody-beginbody+4;
+        ir[beginbody].a.i = endbody-beginbody+2;
 
 		kill(body); kill(loop_variable); kill(loop_counter); kill(loop_vector);
 		return compileConstant(Null::Singleton(), code);
@@ -493,8 +494,11 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		
 		emit(ByteCode::jc, beginbody-endbody, 1, kill(tail_condition));
 		resolveLoopExits(beginbody, endbody, tail, endbody+1);
-		ir[beginbody-1].b = endbody-beginbody+2;
-		loopDepth--;
+		
+        ir[beginbody-1].b = endbody-beginbody+2;
+        ir[beginbody].a.i = endbody-beginbody+1;
+		
+        loopDepth--;
 		
 		return compileConstant(Null::Singleton(), code);
 	} 
@@ -509,7 +513,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		loopDepth--;
 		emit(ByteCode::jmp, beginbody-endbody, 0, 0);
 		
-		kill(body);
+        ir[beginbody].a.i = endbody-beginbody+1;
+		
+        kill(body);
 		return compileConstant(Null::Singleton(), code);
 	}
 	else if(func == Strings::nextSym)
