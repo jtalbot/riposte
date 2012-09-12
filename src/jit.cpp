@@ -10,6 +10,8 @@ DEFINE_ENUM_TO_STRING(TraceOpCode, TRACE_ENUM)
 const JIT::Shape JIT::Shape::Empty = { 0, 0 };
 const JIT::Shape JIT::Shape::Scalar = { 1, 1 };
 
+size_t JIT::Trace::traceCount = 0;
+
 JIT::IRRef JIT::insert(
         std::vector<IR>& t,
         TraceOpCode::Enum op, 
@@ -24,7 +26,7 @@ JIT::IRRef JIT::insert(
     return (IRRef) { t.size()-1 };
 }
 
-JIT::Shape JIT::SpecializeLength(size_t length, IRRef irlength, Instruction const* inst) {
+JIT::Shape JIT::SpecializeLength(size_t length, IRRef irlength) {
     // if short enough, guard length and insert a constant length instead
     if(length <= SPECIALIZE_LENGTH) {
         IRRef s = constant(Integer::c(length));
@@ -35,15 +37,24 @@ JIT::Shape JIT::SpecializeLength(size_t length, IRRef irlength, Instruction cons
     }
 }
 
-JIT::Shape JIT::SpecializeValue(Value const& v, IR ir, Instruction const* inst) {
-    if(v.isNull())
+JIT::Shape JIT::SpecializeValue(Value const& v, IR ir) {
+    if(v.isNull()) {
         return Shape::Empty;
-    else if(v.isVector()) {
-        trace.push_back(ir);
-        return SpecializeLength((size_t)v.length, trace.size()-1, inst);
     }
-    else
+    else if(v.isVector()) {
+        size_t len = (size_t)v.length;
+        if(shapes.find(len) != shapes.end())
+            return shapes.find(len)->second;
+        else {
+            trace.push_back(ir);
+            Shape r = { trace.size()-1, len <= SPECIALIZE_LENGTH ? constant(Integer::c(len)) : len };
+            shapes.insert(std::make_pair(len, r));
+            return r;
+        }
+    }
+    else {
         return Shape::Scalar;
+    }
 }
 
 JIT::IRRef JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
@@ -60,7 +71,7 @@ JIT::IRRef JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
         if(slots.find(v) != slots.end())
             r = slots[v];
         else {
-            Shape s = SpecializeValue(operand, IR(TraceOpCode::slength, (IRRef)-1, v.i, Type::Integer, Shape::Empty, Shape::Scalar), reenter);
+            Shape s = SpecializeValue(operand, IR(TraceOpCode::slength, (IRRef)-1, v.i, Type::Integer, Shape::Empty, Shape::Scalar));
             r = insert(trace, TraceOpCode::sload, (IRRef)-1, v.i, 0, operand.type, Shape::Empty, s);
             slots[v] = r;
         }
@@ -79,7 +90,7 @@ JIT::IRRef JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
         
         Value const& operand = env->get((String)a);
         Variable v = { r, (int64_t)aa }; 
-        Shape s = SpecializeValue(operand, IR(TraceOpCode::elength, v.env, v.i, Type::Integer, Shape::Empty, Shape::Scalar), reenter);
+        Shape s = SpecializeValue(operand, IR(TraceOpCode::elength, v.env, v.i, Type::Integer, Shape::Empty, Shape::Scalar));
         r = insert(trace, TraceOpCode::load, v.env, v.i, 0, operand.type, Shape::Empty, s);
     }
     reenters[r] = (Reenter) { reenter, true };
@@ -103,14 +114,15 @@ JIT::IRRef JIT::store(Thread& thread, IRRef a, int64_t c) {
 
 void JIT::emitPush(Thread const& thread) {
     StackFrame frame;
-    frame.environment = getEnv(thread.frame.environment);
+   
     frame.prototype = thread.frame.prototype;
     frame.returnpc = thread.frame.returnpc;
     frame.returnbase = thread.frame.returnbase;
     frame.dest = thread.frame.dest;
-    frame.env = getEnv(thread.frame.env);
-    IRRef a = insert(trace, TraceOpCode::push, getEnv(thread.frame.environment), 0, 0, Type::Nil, Shape::Scalar, Shape::Empty);
-    frames[a] = frame;
+    
+    insert(trace, TraceOpCode::push, getEnv(thread.frame.environment), getEnv(thread.frame.env), frames.size(), Type::Nil, Shape::Scalar, Shape::Empty);
+    
+    frames.push_back(frame);
 }
 
 JIT::IRRef JIT::cast(IRRef a, Type::Enum type) {
@@ -132,12 +144,23 @@ JIT::IRRef JIT::cast(IRRef a, Type::Enum type) {
     }
 }
 
-JIT::IRRef JIT::rep(IRRef a, Shape target) {
+JIT::IRRef JIT::rep(IRRef l, IRRef e, Shape target) {
+    IRRef li = cast(l, Type::Integer);
+    IRRef ei = cast(e, Type::Integer);
+    IRRef m = insert(trace, TraceOpCode::mul, li, ei, 0, Type::Integer, Shape::Scalar, Shape::Scalar);
+    
+    IRRef mb = insert(trace, TraceOpCode::brcast, m, 0, 0, Type::Integer, target, target);
+    IRRef eb = insert(trace, TraceOpCode::brcast, ei, 0, 0, Type::Integer, target, target);
+
+    IRRef s = insert(trace, TraceOpCode::seq, 0, 1, 0, Type::Integer, target, target);
+          s = insert(trace, TraceOpCode::mod, s, mb, 0, Type::Integer, target, target); 
+          s = insert(trace, TraceOpCode::idiv, s, eb, 0, Type::Integer, target, target); 
+    return s;
+}
+
+JIT::IRRef JIT::recycle(IRRef a, Shape target) {
     if(trace[a].out != target) {
-        IRRef l = trace[a].out.length;
-        IRRef e = constant(Integer::c(1));
-        IRRef r = insert(trace, TraceOpCode::rep, l, e, 0, trace[e].type, target, target);
-        return insert(trace, TraceOpCode::gather, a, r, 0, trace[a].type, target, target);
+        return insert(trace, TraceOpCode::brcast, a, 0, 0, trace[a].type, target, target);
     }
     else {
         return a;
@@ -160,17 +183,14 @@ JIT::Shape JIT::MergeShapes(Shape a, Shape b, Instruction const* inst) {
     else if(a == Shape::Empty || b == Shape::Empty) {
         shape = Shape::Empty;
     }
-    else if(a.traceLength == b.traceLength) {
-        shape = a.length < b.length ? a : b;
-        // forward shapes, TODO: make this more efficient
-        IRRef n = std::min(a.length, b.length);
-        IRRef o = std::max(a.length, b.length);
-        for(size_t i = 0; i < trace.size(); ++i) {
-            if(trace[i].in.length == o) trace[i].in.length = n;
-            if(trace[i].out.length == o) trace[i].out.length = n;
-        }
+    else if(a == Shape::Scalar) {
+        shape = b;
+    }
+    else if(b == Shape::Scalar) {
+        shape = a;
     }
     else if(a.traceLength < b.traceLength) {
+        printf("Merging unequal lengths: %d %d %d %d\n", a.length, a.traceLength, b.length, b.traceLength);
         IRRef x = insert(trace, TraceOpCode::le, a.length, b.length, 0,
                 Type::Logical, Shape::Scalar, Shape::Scalar);
         IRRef y = insert(trace, TraceOpCode::gt, a.length, 0, 0,
@@ -183,6 +203,7 @@ JIT::Shape JIT::MergeShapes(Shape a, Shape b, Instruction const* inst) {
         shape = b;
     }
     else if(a.traceLength > b.traceLength) {
+        printf("Merging unequal lengths: %d %d %d %d\n", a.length, a.traceLength, b.length, b.traceLength);
         IRRef x = insert(trace, TraceOpCode::le, b.length, a.length, 0,
                 Type::Logical, Shape::Scalar, Shape::Scalar);
         IRRef y = insert(trace, TraceOpCode::gt, b.length, 0, 0,
@@ -204,17 +225,23 @@ JIT::IRRef JIT::EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rt
     //  If equal, guard equality and continue.
     //  If unequal, guard less than
     Shape shape = MergeShapes(trace[a].out,trace[b].out, inst);
-    return insert(trace, op, rep(cast(a,maty),shape), rep(cast(b,mbty),shape), 0, rty, shape, shape);
+    return insert(trace, op, recycle(cast(a,maty),shape), recycle(cast(b,mbty),shape), 0, rty, shape, shape);
 }
 
 JIT::IRRef JIT::EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty, Instruction const* inst) {
     Shape s = MergeShapes(trace[a].out, MergeShapes(trace[b].out, trace[c].out, inst), inst);
-    return insert(trace, op, rep(cast(a,maty),s), rep(cast(b,mbty),s), rep(cast(c,mcty),s), rty, s, s);
+    return insert(trace, op, recycle(cast(a,maty),s), recycle(cast(b,mbty),s), recycle(cast(c,mcty),s), rty, s, s);
 }
 
 JIT::IRRef JIT::constant(Value const& value) {
-    trace.push_back(makeConstant(value));
-    return trace.size()-1;
+    IR a = makeConstant(value);
+    if(uniqueConstants.find(a.a) != uniqueConstants.end())
+        return uniqueConstants[a.a];
+    else {
+        trace.push_back(a);
+        uniqueConstants[a.a] = trace.size()-1;
+        return trace.size()-1;
+    }
 }
 
 bool JIT::EmitNest(Thread& thread, Trace* t) {
@@ -256,18 +283,21 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         case ByteCode::gather:
             IRRef a = load(thread, inst.a, &inst);
             IRRef b = cast(load(thread, inst.b, &inst), Type::Integer);
-            b = insert(trace, TraceOpCode::sub, b, rep(constant(Integer::c(1)), trace[b].out), 0, trace[b].type, trace[b].out, trace[b].out);
-            store(thread, insert(trace, TraceOpCode::gather, a, b, 0, trace[a].type, trace[b].out, trace[b].out), inst.c);
+            b = insert(trace, TraceOpCode::sub, 
+                b, recycle(1, trace[b].out), 0, trace[b].type, trace[b].out, trace[b].out);
+            store(thread, 
+                insert(trace, TraceOpCode::gather, a, b, 0, trace[a].type, trace[b].out, trace[b].out), inst.c);
         }   break;
 
         case ByteCode::scatter1: {
         case ByteCode::scatter:
             IRRef a = load(thread, inst.a, &inst);
             IRRef b = cast(load(thread, inst.b, &inst), Type::Integer);
-            b = insert(trace, TraceOpCode::sub, b, rep(constant(Integer::c(1)), trace[b].out), 0, trace[b].type, trace[b].out, trace[b].out);
+            b = insert(trace, TraceOpCode::sub, 
+                b, recycle(1, trace[b].out), 0, trace[b].type, trace[b].out, trace[b].out);
             IRRef c = load(thread, inst.c, &inst);
             Shape s = MergeShapes(trace[a].out, trace[b].out, &inst);
-            store(thread, insert(trace, TraceOpCode::scatter, rep(a, s), rep(b, s), c, trace[c].type, s, trace[c].out), inst.c);
+            store(thread, insert(trace, TraceOpCode::scatter, c, recycle(b, s), recycle(a, s), trace[c].type, s, trace[c].out), inst.c);
         }   break;
 
         case ByteCode::ifelse: {
@@ -275,7 +305,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             IRRef b = load(thread, inst.b, &inst);
             IRRef c = load(thread, inst.c, &inst);
             Shape s = MergeShapes(trace[a].out, MergeShapes(trace[b].out, trace[c].out, &inst), &inst);
-            store(thread, EmitTernary<IfElse>(TraceOpCode::ifelse, rep(c,s), rep(b,s), rep(a,s), &inst), inst.c);
+            store(thread, EmitTernary<IfElse>(TraceOpCode::ifelse, recycle(c,s), recycle(b,s), recycle(a,s), &inst), inst.c);
         }   break;
 
         #define EMIT(Name, string, Group, ...)                      \
@@ -312,6 +342,19 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             store(thread, insert(trace, TraceOpCode::length, a, 0, 0, Type::Integer, Shape::Scalar, Shape::Scalar), inst.c);
         }   break;
 
+        case ByteCode::forbegin:
+        {
+            IRRef counter = 0;
+            IRRef vec = load(thread, inst.b, &inst);
+
+            IRRef a = insert(trace, TraceOpCode::length, vec, 0, 0, Type::Integer, Shape::Scalar, Shape::Scalar);
+            IRRef b = insert(trace, TraceOpCode::lt, counter, a, 0, Type::Logical, Shape::Scalar, Shape::Scalar);
+            IRRef c = insert(trace, TraceOpCode::gtrue, b, 0, 0, Type::Nil, Shape::Scalar, Shape::Empty);
+            reenters[c] = (Reenter) { &inst+(&inst+1)->a, false };
+            store(thread, insert(trace, TraceOpCode::gather, vec, counter, 0, trace[vec].type, Shape::Scalar, Shape::Scalar), inst.a);
+            store(thread, 1, inst.c); 
+        }   break;
+
         case ByteCode::forend:
         {
             IRRef counter = load(thread, inst.c, &inst);
@@ -329,7 +372,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         {
             OPERAND(a, inst.a);
             if(a.isObject()) {
-                Shape s = SpecializeValue(((Object const&)a).base(), IR(TraceOpCode::olength, load(thread, inst.a, &inst), Type::Integer, Shape::Empty, Shape::Scalar), &inst);
+                Shape s = SpecializeValue(((Object const&)a).base(), IR(TraceOpCode::olength, load(thread, inst.a, &inst), Type::Integer, Shape::Empty, Shape::Scalar));
                 IRRef g = insert(trace, TraceOpCode::load, load(thread, inst.a, &inst), 0, 0, ((Object const&)a).base().type, Shape::Scalar, s);
                 reenters[g] = (Reenter) { &inst, true };
                 store(thread, g, inst.c);
@@ -356,7 +399,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             
                 IRRef name = cast(load(thread, inst.b, &inst), Type::Character);
 
-                Shape s = SpecializeValue(r, IR(TraceOpCode::alength, load(thread, inst.a, &inst), name, Type::Integer, Shape::Empty, Shape::Scalar), &inst);
+                Shape s = SpecializeValue(r, IR(TraceOpCode::alength, load(thread, inst.a, &inst), name, Type::Integer, Shape::Empty, Shape::Scalar));
                 
                 IRRef g = insert(trace, TraceOpCode::load, load(thread, inst.a, &inst), name, 0, r.type, Shape::Empty, s);
                 reenters[g] = (Reenter) { &inst, true };
@@ -388,19 +431,19 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         case ByteCode::rep:
         {
             OPERAND(len, inst.a);
-            IRRef l = load(thread, inst.a, &inst);
-            Shape s = SpecializeLength(As<Integer>(thread, len)[0], l, &inst);
-            // requires a dependent type
-            store(thread, insert(trace, TraceOpCode::rep,
-                cast(load(thread, inst.a, &inst), Type::Integer), 
-                cast(load(thread, inst.b, &inst), Type::Integer), 0,
-                Type::Integer, s, s), inst.c);
+            IRRef l = cast(load(thread, inst.a, &inst), Type::Integer);
+            Shape s = SpecializeLength(As<Integer>(thread, len)[0], l);
+           
+            IRRef b = load(thread, inst.a, &inst); 
+            IRRef c = load(thread, inst.c, &inst); 
+ 
+            store(thread, rep(load(thread, inst.c, &inst), load(thread, inst.b, &inst), s), inst.c);
         }   break;
         case ByteCode::seq:
         {
             OPERAND(len, inst.a);
             IRRef l = cast(load(thread, inst.a, &inst), Type::Integer);
-            Shape s = SpecializeLength(As<Integer>(thread, len)[0], l, &inst);
+            Shape s = SpecializeLength(As<Integer>(thread, len)[0], l);
             // requires a dependent type
             IRRef c = load(thread, inst.c, &inst);
             IRRef b = load(thread, inst.b, &inst);
@@ -441,11 +484,11 @@ JIT::IRRef JIT::duplicate(IR const& ir, std::vector<IRRef> const& forward) {
     return insert(code, ir.op, forward[ir.a], forward[ir.b], forward[ir.c], ir.type, ir.in, ir.out);
 }
 
-JIT::Exit JIT::BuildExit( std::vector<IRRef>& environments, std::vector<StackFrame>& frames,
-        std::map<Variable, IRRef>& stores, Reenter const& reenter, size_t index) {
+JIT::Exit JIT::BuildExit( std::vector<IRRef>& stack, Reenter const& reenter, size_t index) {
 
     // OK, attempt to do tracing something here...
-    
+
+/*    
     // get live environments
     std::vector<IRRef> live;
     for(size_t i = 0; i < frames.size(); i++) {
@@ -472,8 +515,8 @@ JIT::Exit JIT::BuildExit( std::vector<IRRef>& environments, std::vector<StackFra
             }
         }
     }
-
-    Exit e = { live, frames, livestores, reenter, index };
+*/
+    Exit e = { stack, reenter, index };
     return e;
 }
 
@@ -485,11 +528,8 @@ void JIT::Replay(Thread& thread) {
     size_t n = trace.size();
     
     std::vector<IRRef> forward(n, 0);
-    std::map<Variable, IRRef> loads;
-    std::map<Variable, IRRef> stores, stores_old;
     std::tr1::unordered_map<IR, IRRef> cse;
-    std::vector<IRRef> environments;
-    std::vector<StackFrame> frames;
+    std::vector<IRRef> stack;
     std::map<Variable, Phi> phis;
 
     // after each guard reemit the entire body of the code
@@ -588,23 +628,21 @@ void JIT::Replay(Thread& thread) {
     // Emit constants
     for(size_t i = 0; i < n; i++) {
         if(trace[i].op == TraceOpCode::constant)
-            EmitOptIR(thread, i, trace[i], code, forward, loads, stores, cse, environments, frames, phis);
+            EmitOptIR(thread, i, trace[i], code, forward, cse, stack, phis);
     }
  
     // Emit loop header...
     for(size_t i = 0; i < n; i++) {
-        EmitOptIR(thread, i, trace[i], code, forward, loads, stores, cse, environments, frames, phis);
+        EmitOptIR(thread, i, trace[i], code, forward, cse, stack, phis);
     }
 
     if(rootTrace == 0) 
     {
         Loop = Insert(thread, code, cse, IR(TraceOpCode::loop, Type::Nil, Shape::Empty, Shape::Empty));
 
-        loads.clear();
-
         // Emit loop
         for(size_t i = 0; i < n; i++) {
-            EmitOptIR(thread, i, trace[i], code, forward, loads, stores, cse, environments, frames, phis);
+            EmitOptIR(thread, i, trace[i], code, forward, cse, stack, phis);
         }
 
         // Emit PHIs
@@ -619,7 +657,7 @@ void JIT::Replay(Thread& thread) {
     else {
         IRRef e = Insert(thread, code, cse, IR(TraceOpCode::exit, Type::Nil, Shape::Empty, Shape::Empty));
         Reenter r = { startPC, true };
-        exits[code.size()-1] = BuildExit( environments, frames, stores, r, exits.size()-1 );
+        exits[code.size()-1] = BuildExit( stack, r, exits.size()-1 );
     }
 }
 
@@ -628,6 +666,12 @@ void JIT::end_recording(Thread& thread) {
     assert(state == RECORDING);
     state = OFF;
 
+    // mark trace live so it'll print out
+    for(size_t i = 0; i < trace.size(); i++) {
+        trace[i].live = true;
+        trace[i].reg = 0;
+    }
+
     //dump(thread, trace);
     Replay(thread);
     //dump(thread, code);
@@ -635,11 +679,10 @@ void JIT::end_recording(Thread& thread) {
     schedule();
     Exit tmp;
     RegisterAssignment(tmp);
-    if(thread.state.verbose)
-        dump(thread, code);
 
     for(std::map<size_t, Exit>::const_iterator i = exits.begin(); i != exits.end(); ++i) {
         Trace tr;
+        tr.traceIndex = Trace::traceCount++;
         tr.Reenter = i->second.reenter.reenter;
         tr.InScope = i->second.reenter.inScope;
         tr.counter = 0;
@@ -654,6 +697,10 @@ void JIT::end_recording(Thread& thread) {
     if(rootTrace) {
         dest->exits.back().function = rootTrace->function;
     }
+
+    printf("---------------- Trace %d ------------------\n", dest->traceIndex);
+    if(thread.state.verbose)
+        dump(thread, code);
 
     compile(thread);
 }
@@ -949,7 +996,7 @@ void JIT::IR::dump() const {
         } break;
         case TraceOpCode::sload:
         case TraceOpCode::slength: {
-            std::cout << "\t " << (int64_t)b;
+            std::cout << "\t " << (int64_t)b << "\t \t";
         } break;
         case TraceOpCode::sstore: {
             std::cout << "\t " << (int64_t)b << "\t " << c;
@@ -959,10 +1006,9 @@ void JIT::IR::dump() const {
             std::cout << "\t " << a << "\t [" << b << "]";
         } break;
         case TraceOpCode::kill:
-            std::cout << "\t " << (int64_t)a;
+            std::cout << "\t " << (int64_t)a << "\t \t";
             break;
-        case TraceOpCode::repscalar:
-        case TraceOpCode::push:
+        case TraceOpCode::brcast:
         case TraceOpCode::length:
         case TraceOpCode::gtrue:
         case TraceOpCode::gfalse: 
@@ -972,18 +1018,19 @@ void JIT::IR::dump() const {
         case TraceOpCode::cenv: 
         UNARY_FOLD_SCAN_BYTECODES(CASE)
         {
-            std::cout << "\t " << a;
+            std::cout << "\t " << a << "\t \t";
         } break;
         case TraceOpCode::phi: 
         case TraceOpCode::load:
         case TraceOpCode::elength:
+        case TraceOpCode::push:
         case TraceOpCode::rep:
         case TraceOpCode::seq:
         case TraceOpCode::gather:
         case TraceOpCode::alength:
         BINARY_BYTECODES(CASE)
         {
-            std::cout << "\t " << a << "\t " << b;
+            std::cout << "\t " << a << "\t " << b << "\t";
         } break;
         case TraceOpCode::newenv:
         case TraceOpCode::store:
@@ -1021,6 +1068,14 @@ void JIT::dump(Thread& thread, std::vector<IR> const& t) {
             if(ir.op == TraceOpCode::constant) {
                 std::cout <<  "    " << thread.deparse(constants[ir.a]);
             }
+            if(exits.find(i) != exits.end()) {
+                std::cout << "\t\t-> " << dest->exits[exits[i].index].traceIndex;
+            }
+
+            if(ir.op == TraceOpCode::nest) {
+                std::cout << "\t\t\t\t\t-> " << ((Trace*)ir.a)->traceIndex;
+            }
+            
             std::cout << std::endl;
         }
     }

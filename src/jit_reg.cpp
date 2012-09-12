@@ -102,8 +102,9 @@ void JIT::RegisterAssignment(Exit& e) {
                 AssignRegister(i, ir.a);
             } break;
             case TraceOpCode::scatter: {
-                AssignRegister(i, ir.c);
+                PreferRegister(ir.a, i); 
                 AssignRegister(i, ir.a);
+                AssignRegister(i, ir.c);
                 AssignRegister(i, ir.b);
             } break;
             case TraceOpCode::store:
@@ -120,6 +121,8 @@ void JIT::RegisterAssignment(Exit& e) {
                 ir.live = true;
                 AssignRegister(i, ir.c);
             } break;
+            case TraceOpCode::push:
+                ir.live = true;
             case TraceOpCode::load:
             case TraceOpCode::elength:
             case TraceOpCode::alength:
@@ -131,7 +134,7 @@ void JIT::RegisterAssignment(Exit& e) {
                 AssignRegister(i, std::max(ir.a, ir.b));
                 AssignRegister(i, std::min(ir.a, ir.b));
             } break;
-            case TraceOpCode::repscalar:
+            case TraceOpCode::brcast:
             case TraceOpCode::olength:
             case TraceOpCode::lenv:
             case TraceOpCode::denv:
@@ -144,6 +147,7 @@ void JIT::RegisterAssignment(Exit& e) {
             case TraceOpCode::jmp:
             case TraceOpCode::exit:
             case TraceOpCode::nest:
+            case TraceOpCode::pop:
                 ir.live = true;
             case TraceOpCode::curenv:
             case TraceOpCode::nop:

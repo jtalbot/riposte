@@ -21,7 +21,7 @@
         _(jmp, "JMP", ___) \
         _(exit, "exit", ___) \
         _(nest, "nest", ___) \
-        _(constant, "constant", ___) \
+        _(constant, "const", ___) \
 		_(sload, "sload", ___) /* loads are type guarded */ \
         _(curenv, "curenv", ___) \
         _(newenv, "newenv", ___) \
@@ -33,8 +33,8 @@
         _(gproto,   "gproto", ___) \
 		_(gtrue, "gtrue", ___) \
 		_(gfalse, "gfalse", ___) \
-		_(gather, "GATH", ___) \
-		_(scatter, "SCAT", ___) \
+		_(gather, "gather", ___) \
+		_(scatter, "scatter", ___) \
 		_(phi, "phi", ___) \
         _(length, "LENGTH", ___) \
         _(push, "PUSH", ___) \
@@ -43,10 +43,10 @@
         _(olength, "olength", ___) \
         _(alength, "alength", ___) \
         _(kill, "kill", ___) \
-        _(repscalar, "repscalar", ___) \
         _(lenv, "lenv", ___) \
         _(denv, "denv", ___) \
         _(cenv, "cenv", ___) \
+        _(brcast, "brcast", ___) \
 		_(nop, "NOP", ___)
 
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
@@ -111,7 +111,7 @@ public:
         Shape(IRRef length, size_t traceLength) : length(length), traceLength(traceLength) {}
     };
 
-    std::map<IRRef, IRRef> shapeForward;
+    std::map<size_t, Shape> shapes;
 
 	struct IR {
 		TraceOpCode::Enum op;
@@ -158,14 +158,13 @@ public:
 
     std::vector<Value> constants;
     std::map<Value, size_t> constantsMap;
+    std::map<size_t, IRRef> uniqueConstants;
 
     struct StackFrame {
-        IRRef environment;
         Prototype const* prototype;
         Instruction const* returnpc;
         Value* returnbase;
         int64_t dest;
-        IRRef env;
     };
 
     struct Reenter {
@@ -177,7 +176,7 @@ public:
     std::map<IRRef, Reenter> reenters;
     std::vector<IR> code;
     std::vector<bool> fusable;
-    std::map<IRRef, StackFrame> frames;
+    std::vector<StackFrame> frames;
 
 
     struct Register {
@@ -202,15 +201,12 @@ public:
     std::map<Variable, IRRef> slots;
 
 	struct Exit {
-        std::vector<IRRef> environments;
-        std::vector<StackFrame> frames;
-		std::map<Variable, IRRef> o;
+        std::vector<IRRef> stack;
 		Reenter reenter;
         size_t index;
 	};
-	std::map<size_t, Exit > exits;
-    Exit BuildExit( std::vector<IRRef>& environments, std::vector<StackFrame>& frames,
-            std::map<Variable, IRRef>& stores, Reenter const& reenter, size_t index); 
+	std::map<size_t, Exit> exits;
+    Exit BuildExit(std::vector<IRRef>& stack, Reenter const& reenter, size_t index); 
 
 
 	JIT() 
@@ -226,27 +222,20 @@ public:
         envs.clear();
         constants.clear();
         constantsMap.clear();
+        uniqueConstants.clear();
         reenters.clear();
         exits.clear();
         slots.clear();
+        shapes.clear();
         rootTrace = root;
         this->dest = dest;
 
         // insert empty and scalar shapes.
-        Value zero = Integer::c(0);
-        constants.push_back(zero);
-        IRRef empty = insert(trace, TraceOpCode::constant, 0, 0, 0, Type::Integer, Shape::Empty, Shape::Scalar);
-        constantsMap[zero] = empty;
+        constant(Integer::c(0));
+        constant(Integer::c(1));
 
-        Value one = Integer::c(1);
-        constants.push_back(one);
-        IRRef scalar = insert(trace, TraceOpCode::constant, 1, 0, 0, Type::Integer, Shape::Empty, Shape::Scalar);
-        constantsMap[one] = scalar;
-
-        Value two = Integer::c(2);
-        constants.push_back(two);
-        IRRef pair = insert(trace, TraceOpCode::constant, 2, 0, 0, Type::Integer, Shape::Empty, Shape::Scalar);
-        constantsMap[two] = pair;
+        shapes.insert( std::make_pair( 0, Shape::Empty ) );
+        shapes.insert( std::make_pair( 1, Shape::Scalar ) );
 
         TopLevelEnvironment = insert(trace, TraceOpCode::curenv, 0, 0, 0, Type::Environment, Shape::Empty, Shape::Scalar);
 	    envs[env] = TopLevelEnvironment;
@@ -269,6 +258,8 @@ public:
 
     struct Trace : public gc
     {
+        size_t traceIndex;
+        static size_t traceCount;
         Trace* root;
         Ptr ptr;
         void* function;
@@ -301,7 +292,8 @@ public:
     IRRef duplicate(IR const& ir, std::vector<IRRef> const& forward);
 	IRRef load(Thread& thread, int64_t a, Instruction const* reenter);
     IRRef constant(Value const& v);
-	IRRef rep(IRRef a, Shape target);
+	IRRef rep(IRRef l, IRRef e, Shape target);
+	IRRef recycle(IRRef a, Shape target);
 	IRRef cast(IRRef a, Type::Enum type);
     IRRef store(Thread& thread, IRRef a, int64_t c);
 	IRRef EmitUnary(TraceOpCode::Enum op, IRRef a, Type::Enum rty, Type::Enum mty);
@@ -309,8 +301,8 @@ public:
 	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Instruction const* inst);
 	IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty, Instruction const* inst);
 
-    Shape SpecializeLength(size_t length, IRRef irlength, Instruction const* inst);
-    Shape SpecializeValue(Value const& v, IR ir, Instruction const* inst);
+    Shape SpecializeLength(size_t length, IRRef irlength);
+    Shape SpecializeValue(Value const& v, IR ir);
     Shape MergeShapes(Shape a, Shape b, Instruction const* inst);
 
 
@@ -363,7 +355,7 @@ public:
     bool EmitIR(Thread& thread, Instruction const& inst, bool branch);
     bool EmitNest(Thread& thread, Trace* trace);
 
-    void EmitOptIR(Thread& thread, IRRef i, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::map<Variable, IRRef>& map, std::map<Variable, IRRef>& stores, std::tr1::unordered_map<IR, IRRef>& cse, std::vector<IRRef>& environments, std::vector<StackFrame>& frames, std::map<Variable, Phi>& phis);
+    void EmitOptIR(Thread& thread, IRRef i, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::tr1::unordered_map<IR, IRRef>& cse, std::vector<IRRef>& stack, std::map<Variable, Phi>& phis);
     void Replay(Thread& thread);
 
     void AssignRegister(size_t src, size_t index);
@@ -383,6 +375,7 @@ public:
     Aliasing Alias(std::vector<IR> const& code, IRRef i, IRRef j);
     IRRef FWD(std::vector<IR> const& code, IRRef i, bool& loopCarried);
     IRRef DSE(std::vector<IR> const& code, IRRef i);
+    IRRef DPE(std::vector<IR> const& code, IRRef i);
     bool Ready(IR ir, std::vector<bool>& done);
    
     double Opcost(std::vector<IR>& code, IR ir);

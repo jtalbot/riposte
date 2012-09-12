@@ -1004,28 +1004,34 @@ void interpret(Thread& thread, Instruction const* pc) {
         if(thread.state.jitEnabled) { 
             if(pc->c != 0) {
                 JIT::Trace* rootTrace = (JIT::Trace*)pc->c;
-                timespec a = get_time();
-                GC_disable();
-                JIT::Trace* exit = (JIT::Trace*)(rootTrace->ptr)(thread);
-                GC_enable();
-
-                //if(thread.state.verbose)
-                //    printf("Execution time: %f\n", time_elapsed(a));
-
-                // if exit==0, then the trace tree ended the loop along the normal exit, 
-                // jump to the default exit, no need to attempt to start another trace.
-                if(exit == 0) {
-                    pc = pc+pc->a;
+                if(rootTrace->ptr == 0) {
+                    // we started a trace here before, but it failed. Clear the trace.
+                    ((Instruction*)pc)->c = 0;
                 }
                 else {
-                    if(++exit->counter > JIT::RECORD_TRIGGER) {
-                        if(thread.state.verbose)
-                            printf("Starting to record side exit at %li\n", pc);
-                        exit->counter = 0;
-                        thread.jit.start_recording(pc, thread.frame.environment, exit->root, exit);
-                        labels = record;
+                    timespec a = get_time();
+                    GC_disable();
+                    JIT::Trace* exit = (JIT::Trace*)(rootTrace->ptr)(thread);
+                    GC_enable();
+
+                    //if(thread.state.verbose)
+                    //    printf("Execution time: %f\n", time_elapsed(a));
+
+                    // if exit==0, then the trace tree ended the loop along the normal exit, 
+                    // jump to the default exit, no need to attempt to start another trace.
+                    if(exit == 0) {
+                        pc = pc+pc->a;
                     }
-                    pc = exit->Reenter;
+                    else {
+                        if(++exit->counter > JIT::RECORD_TRIGGER) {
+                            if(thread.state.verbose)
+                                printf("Starting to record side exit at %li\n", pc);
+                            exit->counter = 0;
+                            thread.jit.start_recording(pc, thread.frame.environment, exit->root, exit);
+                            labels = record;
+                        }
+                        pc = exit->Reenter;
+                    }
                 }
             }
             else { 
@@ -1037,6 +1043,7 @@ void interpret(Thread& thread, Instruction const* pc) {
                         printf("Starting to record at %li (counter: %li is %d)\n", pc, &counter, counter);
                     counter = 0;
                     JIT::Trace* trace = new JIT::Trace();
+                    trace->traceIndex = JIT::Trace::traceCount++;
                     trace->function = 0;
                     trace->ptr = 0;
                     trace->root = trace;
@@ -1111,31 +1118,37 @@ void interpret(Thread& thread, Instruction const* pc) {
         else {
             if(pc->c != 0) {
                 JIT::Trace* rootTrace = (JIT::Trace*)pc->c;
-                timespec a = get_time();
-                GC_disable();
-                JIT::Trace* exit = (JIT::Trace*)(rootTrace->ptr)(thread);
-                GC_enable();
-
-                if(exit == 0) {
-                    // we exited from the nested loop normally,
-                    // record nest and continue from the normal exit point
-                    thread.jit.EmitNest(thread, rootTrace);
-                    pc = pc+pc->a;
+                if(rootTrace->ptr == 0) {
+                    // we started a trace here before, but it failed. Clear the trace.
+                    ((Instruction*)pc)->c = 0;
                 }
                 else {
-                    // we bailed prematurely, bail on recording outer loop and attempt to start
-                    // recording side trace.
-                    thread.jit.fail_recording();
-                    labels = ops;
+                    timespec a = get_time();
+                    GC_disable();
+                    JIT::Trace* exit = (JIT::Trace*)(rootTrace->ptr)(thread);
+                    GC_enable();
 
-                    if(++exit->counter > JIT::RECORD_TRIGGER) {
-                        if(thread.state.verbose)
-                            printf("Starting to record side exit at %li\n", pc);
-                        exit->counter = 0;
-                        thread.jit.start_recording(pc, thread.frame.environment, rootTrace, exit);
-                        labels = record;
+                    if(exit == 0) {
+                        // we exited from the nested loop normally,
+                        // record nest and continue from the normal exit point
+                        thread.jit.EmitNest(thread, rootTrace);
+                        pc = pc+pc->a;
                     }
-                    pc = exit->Reenter;
+                    else {
+                        // we bailed prematurely, bail on recording outer loop and attempt to start
+                        // recording side trace.
+                        thread.jit.fail_recording();
+                        labels = ops;
+
+                        if(++exit->counter > JIT::RECORD_TRIGGER) {
+                            if(thread.state.verbose)
+                                printf("Starting to record side exit at %li\n", pc);
+                            exit->counter = 0;
+                            thread.jit.start_recording(pc, thread.frame.environment, rootTrace, exit);
+                            labels = record;
+                        }
+                        pc = exit->Reenter;
+                    }
                 }
             }
             else {
