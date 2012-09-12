@@ -1134,6 +1134,7 @@ struct TraceCompiler {
 
             case TraceOpCode::phi:
             {
+                // TODO: this isn't right!
                 reg = values[ir.a];
             } break;
 
