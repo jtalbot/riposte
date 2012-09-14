@@ -271,6 +271,66 @@ int8_t** MALLOC_character(Thread& thread, int64_t length) {
 }
 
 extern "C"
+double* REALLOC_double(Thread& thread, double* v, int64_t& alloclen, int64_t length) {
+    if(length > alloclen) {
+        alloclen = nextPow2(length);
+        double* w = (double*)MALLOC(alloclen, sizeof(Double::Element));
+        memcpy(w, v, length*sizeof(Double::Element));
+        // fill remainder with NAs
+        for(size_t i = length; i < alloclen; i++) w[i] = Double::NAelement;
+        return w;
+    }
+    else {
+        return v;
+    }
+}
+
+extern "C"
+int64_t* REALLOC_integer(Thread& thread, int64_t* v, int64_t& alloclen, int64_t length) {
+    if(length > alloclen) {
+        alloclen = nextPow2(length);
+        int64_t* w = (int64_t*)MALLOC(length, sizeof(Integer::Element));
+        memcpy(w, v, length*sizeof(Integer::Element));
+        // fill remainder with NAs
+        for(size_t i = length; i < alloclen; i++) w[i] = Integer::NAelement;
+        return w;
+    }
+    else {
+        return v;
+    }
+}
+
+extern "C"
+int8_t* REALLOC_logical(Thread& thread, int8_t* v, int64_t& alloclen, int64_t length) {
+    if(length > alloclen) {
+        alloclen = nextPow2(length);
+        int8_t* w = (int8_t*)MALLOC(length, sizeof(Logical::Element));
+        memcpy(w, v, length*sizeof(Logical::Element));
+        // fill remainder with NAs
+        for(size_t i = length; i < alloclen; i++) w[i] = Logical::NAelement;
+        return w;
+    }
+    else {
+        return v;
+    }
+}
+
+extern "C"
+int8_t** REALLOC_character(Thread& thread, int8_t** v, int64_t& alloclen, int64_t length) {
+    if(length > alloclen) {
+        alloclen = nextPow2(length);
+        int8_t** w = (int8_t**)MALLOC(length, sizeof(Character::Element));
+        memcpy(w, v, length*sizeof(Character::Element));
+        // fill remainder with NAs
+        for(size_t i = length; i < alloclen; i++) w[i] = (int8_t*)Character::NAelement;
+        return w;
+    }
+    else {
+        return v;
+    }
+}
+
+extern "C"
 Value GET_lenv(Thread& thread, REnvironment env) {
     Value v;
     return REnvironment::Init(v, env.environment()->lexical);

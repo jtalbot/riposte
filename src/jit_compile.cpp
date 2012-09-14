@@ -97,8 +97,10 @@ struct Fusion {
     JIT& jit;
     LLVMState* S;
     llvm::Function* function;
-    std::vector<llvm::Value*> const& values;
-    std::vector<llvm::Value*> const& registers;
+    llvm::Value* thread_var;
+    std::vector<llvm::Value*>& values;
+    std::vector<llvm::Value*>& registers;
+    std::vector<llvm::Value*>& registerLengths;
     
     llvm::BasicBlock* header;
     llvm::BasicBlock* condition;
@@ -120,12 +122,14 @@ struct Fusion {
 
     size_t instructions;
 
-    Fusion(JIT& jit, LLVMState* S, llvm::Function* function, std::vector<llvm::Value*> const& values, std::vector<llvm::Value*> const& registers, llvm::Value* length, size_t width)
+    Fusion(JIT& jit, LLVMState* S, llvm::Function* function, llvm::Value* thread_var, std::vector<llvm::Value*>& values, std::vector<llvm::Value*>& registers, std::vector<llvm::Value*>& registerLengths, llvm::Value* length, size_t width)
         : jit(jit)
           , S(S)
           , function(function)
+          , thread_var(thread_var)
           , values(values)
           , registers(registers)
+          , registerLengths(registerLengths)
           , length(length)
           , width(width)
           , builder(*S->C) {
@@ -234,7 +238,8 @@ struct Fusion {
     }
 
     llvm::Value* RawLoad(size_t ir) {
-        return values[ir];
+        size_t reg = jit.code[ir].reg;
+        return (reg == 0) ? values[ir] : registers[reg];
     }
 
     llvm::Value* Load(size_t ir) {
@@ -632,8 +637,8 @@ struct Fusion {
                 llvm::Value* v = Load(ir.c);
                 llvm::Value* idx = Load(ir.b);
               
-                //DUMP("scatter to ", builder.CreateExtractElement(idx, builder.getInt32(0)));
- 
+                DUMP("scatter to ", builder.CreateExtractElement(idx, builder.getInt32(0)));
+                
                 if(jit.code[ir.a].reg != reg) {
                     // must duplicate (copy from the in register to the out). 
                     // Do this in the fusion header.
@@ -644,6 +649,23 @@ struct Fusion {
                             TmpB.CreateLoad(RawLoad(ir.out.length)),
                             TmpB.getInt64(ir.type == Type::Logical ? 1 : 8)), 
                         16);
+                }
+ 
+                // we've computed the new shape, realloc
+                llvm::Value* newlen = builder.CreateLoad(RawLoad(ir.out.length));
+                values[index] = registers[ir.reg] = 
+                    Call(std::string("REALLOC_")+Type::toString(jit.registers[ir.reg].type), 
+                        registers[ir.reg], registerLengths[ir.reg], newlen);
+                
+                llvm::Type* mt = llvmType(ir.type)->getPointerTo();
+                llvm::Value* x = builder.CreatePointerCast(RawLoad(index), mt);
+                for(uint32_t i = 0; i < width; i++) {
+                    llvm::Value* ii = builder.getInt32(i);
+                    llvm::Value* j = builder.CreateExtractElement(v, ii);
+                    ii = builder.CreateExtractElement(idx, ii);
+                    DUMP("scattering to ", builder.CreatePtrToInt(builder.CreateGEP(x, ii), builder.getInt64Ty()));
+                    builder.CreateStore(j,
+                            builder.CreateGEP(x, ii));
                 }
                 /*if(jit.assignment[ir.c] != jit.assignment[index]) {
                     r = Load(values[ir.c]);
@@ -658,18 +680,28 @@ struct Fusion {
                     }
                 }
                 else {*/
-                    // reusing register, just assign in place.
-                    llvm::Type* mt = llvmType(ir.type)->getPointerTo();
-                    llvm::Value* x = builder.CreatePointerCast(RawLoad(index), mt);
-                    for(uint32_t i = 0; i < width; i++) {
-                        llvm::Value* ii = builder.getInt32(i);
-                        llvm::Value* j = builder.CreateExtractElement(v, ii);
-                        ii = builder.CreateExtractElement(idx, ii);
-                        builder.CreateStore(j,
-                            builder.CreateGEP(x, ii));
-                    }
                 //} 
             } break;
+
+            case TraceOpCode::reshape:
+            {
+                // Keep current length & running allocated length in alloca
+                llvm::IRBuilder<> TmpB(header, header->end());
+                llvm::Value* len = CreateEntryBlockAlloca(builder.getInt64Ty());
+                TmpB.CreateStore(TmpB.CreateLoad(RawLoad(ir.b)), len);
+
+                // compute max of indices
+                llvm::Value* v = Load(ir.a);
+                llvm::Value* nlen = builder.CreateLoad(len);
+                for(uint32_t i = 0; i < width; i++) {
+                    llvm::Value* q = builder.CreateExtractElement(v, builder.getInt32(i));
+                    q = builder.CreateAdd(q, builder.getInt64(1));
+                    nlen = builder.CreateSelect(builder.CreateICmpSGT(q, nlen), q, nlen);
+                }
+                builder.CreateStore(nlen, len);
+                reductions[index] = len;
+            } break;
+
             case TraceOpCode::brcast:
             {
                 if(jit.code[ir.a].out.length == 1) {
@@ -789,6 +821,9 @@ struct Fusion {
                     }
                 }
                 break;
+            case TraceOpCode::reshape:
+                t = builder.CreateLoad(a);
+                break;
             default:
                 _error("Unsupported reduction");
                 break;
@@ -841,6 +876,10 @@ struct Fusion {
 
         return after;
     }
+
+    llvm::Value* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C) {
+        return builder.CreateCall4(S->M->getFunction(F), thread_var, A, B, C);
+    }
 };
 
 #define BOXED_ARG(val) \
@@ -870,12 +909,14 @@ struct TraceCompiler {
 
     std::vector<llvm::Value*> values;
     std::vector<llvm::Value*> registers;
+    std::vector<llvm::Value*> registerLengths;
     std::vector<llvm::CallInst*> calls;
  
     TraceCompiler(Thread& thread, JIT& jit) 
         : thread(thread), jit(jit), S(&llvmState), builder(*S->C) 
     {
         registers = std::vector<llvm::Value*>(jit.registers.size(), 0);
+        registerLengths = std::vector<llvm::Value*>(jit.registers.size(), 0);
         values = std::vector<llvm::Value*>(jit.code.size(), 0);
 
         thread_type = S->M->getTypeByName("class.Thread")->getPointerTo();
@@ -936,7 +977,7 @@ struct TraceCompiler {
         }*/
         
         S->FPM->run(*function);
-        //function->dump();
+        function->dump();
 
         return function;
     }
@@ -956,7 +997,7 @@ struct TraceCompiler {
             length = builder.CreateLoad(values[ir.in.length]);
             width = 2;
         }
-        Fusion* fusion = new Fusion(jit, S, function, values, registers, length, width);
+        Fusion* fusion = new Fusion(jit, S, function, thread_var, values, registers, registerLengths, length, width);
         fusion->Open(InnerBlock);
         return fusion;
     }
@@ -1062,6 +1103,9 @@ struct TraceCompiler {
                 registers[ir.reg] =
                     Call(std::string("MALLOC_")+Type::toString(jit.registers[ir.reg].type), length);
             }
+            registerLengths[ir.reg] =
+                    CreateEntryBlockAlloca(llvmMemoryType(Type::Integer), builder.getInt64(1));
+            builder.CreateStore(length, registerLengths[ir.reg]);
         }
         return registers[ir.reg]; 
     }
@@ -1135,7 +1179,10 @@ struct TraceCompiler {
             case TraceOpCode::phi:
             {
                 // TODO: this isn't right!
-                reg = values[ir.a];
+                //reg = values[ir.a];
+                // what should this do??
+                // copy from one register to another.
+                // what if register sizes change?
             } break;
 
             // Load/Store op codes
@@ -1286,6 +1333,7 @@ struct TraceCompiler {
                 EmitExit(r, jit.exits[index], index);
             } break;
 
+            case TraceOpCode::reshape:
             case TraceOpCode::brcast:
             case TraceOpCode::gather:
             case TraceOpCode::scatter:

@@ -14,6 +14,7 @@ void JIT::AssignRegister(size_t src, size_t index) {
 
             // if there's a preferred register look for that first.
             if(ir.reg < 0) {
+                printf("Looking for a preferred register at %d, %d\n", index, src);
                 std::pair<std::multimap<Register, size_t>::iterator,std::multimap<Register, size_t>::iterator> ret;
                 ret = freeRegisters.equal_range(r);
                 for (std::multimap<Register, size_t>::iterator it = ret.first; it != ret.second; ++it) {
@@ -87,7 +88,14 @@ void JIT::RegisterAssignment(Exit& e) {
     for(size_t i = code.size()-1; i < code.size(); --i) {
         IR& ir = code[i];
 
+        if(ir.op == TraceOpCode::scatter) {
+            // scatter is special since it can resize its register.
+            // so resize the register here and then attempt to reuse...
+            registers[ir.reg].shape = code[ir.a].out;
+        }
+
         ReleaseRegister(i);
+
         switch(ir.op) {
             #define CASE(Name, ...) case TraceOpCode::Name:
             case TraceOpCode::phi: {
@@ -120,6 +128,11 @@ void JIT::RegisterAssignment(Exit& e) {
             {
                 ir.live = true;
                 AssignRegister(i, ir.c);
+            } break;
+            case TraceOpCode::reshape:
+            {
+                AssignRegister(i, ir.b);
+                AssignRegister(i, ir.a);
             } break;
             case TraceOpCode::push:
                 ir.live = true;

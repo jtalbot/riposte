@@ -47,6 +47,7 @@
         _(denv, "denv", ___) \
         _(cenv, "cenv", ___) \
         _(brcast, "brcast", ___) \
+        _(reshape, "reshape", ___) \
 		_(nop, "NOP", ___)
 
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
@@ -355,7 +356,7 @@ public:
     bool EmitIR(Thread& thread, Instruction const& inst, bool branch);
     bool EmitNest(Thread& thread, Trace* trace);
 
-    void EmitOptIR(Thread& thread, IRRef i, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::tr1::unordered_map<IR, IRRef>& cse, std::vector<IRRef>& stack, std::map<Variable, Phi>& phis);
+    void EmitOptIR(Thread& thread, IRRef i, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::tr1::unordered_map<IR, IRRef>& cse, std::vector<IRRef>& stack, std::map<Variable, Phi>& phis, std::map<Variable, Phi>& lphis);
     void Replay(Thread& thread);
 
     void AssignRegister(size_t src, size_t index);

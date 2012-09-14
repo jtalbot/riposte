@@ -275,6 +275,7 @@ double JIT::Opcost(std::vector<IR>& code, IR ir) {
             case TraceOpCode::lenv:
             case TraceOpCode::denv:
             case TraceOpCode::cenv:
+            case TraceOpCode::reshape:
             case TraceOpCode::constant:
             case TraceOpCode::nop:
                 return 10000000000000;
@@ -515,7 +516,8 @@ void JIT::EmitOptIR(
             std::vector<IRRef>& forward, 
             std::tr1::unordered_map<IR, IRRef>& cse,
             std::vector<IRRef>& stack,
-            std::map<Variable, Phi>& phis) {
+            std::map<Variable, Phi>& phis,
+            std::map<Variable, Phi>& lphis) {
 
     if(i >= 2) {
         ir.in.length = forward[ir.in.length];
@@ -569,16 +571,17 @@ void JIT::EmitOptIR(
                 code.push_back(ir);
                 bool loopCarried;
                 forward[i] = FWD(code, code.size()-1, loopCarried);
+                printf("elength at %d is %d\n", i, loopCarried);
                 if(forward[i] != code.size()-1) {
                     code.pop_back();
                     if(loopCarried)
-                        phis[v] = (Phi) {forward[i], forward[i]};
+                        lphis[v] = (Phi) {forward[i], forward[i]};
                 }
                 else {
                     exits[code.size()-1] = BuildExit( stack, reenters[i], exits.size()-1 );
                 }
-                if(phis.find(v) != phis.end()) {
-                    phis[v].b = forward[i];
+                if(lphis.find(v) != lphis.end()) {
+                    lphis[v].b = forward[i];
                 }
             } break;
             
@@ -616,9 +619,15 @@ void JIT::EmitOptIR(
             case TraceOpCode::slength: {
                 Variable v = { ir.a, (int64_t)ir.b };
                 forward[i] = code.size();
+                bool loopCarried = false;
                 for(IRRef j = code.size()-1; j < code.size(); j--) {
+                    if(code[j].op == TraceOpCode::loop) loopCarried = true;
                     if(code[j].op == TraceOpCode::slength && code[j].b == ir.b) {
-                        forward[i] = code[j].c;
+                        forward[i] = j;
+                        break;
+                    }
+                    if(code[j].op == TraceOpCode::sstore && code[j].b == ir.b) {
+                        forward[i] = code[j].in.length;
                         break;
                     }
                 }
@@ -626,6 +635,13 @@ void JIT::EmitOptIR(
                     std::tr1::unordered_map<IR, IRRef> tcse;
                     Insert(thread, code, tcse, ir); 
                     exits[code.size()-1] = BuildExit( stack, reenters[i], exits.size()-1 );
+                }
+                else {
+                    if(loopCarried)
+                        lphis[v] = (Phi) {forward[i], forward[i]};
+                }
+                if(lphis.find(v) != lphis.end()) {
+                    lphis[v].b = forward[i];
                 }
             } break;
             
@@ -640,6 +656,9 @@ void JIT::EmitOptIR(
                 if(phis.find(v) != phis.end()) {
                     phis[v].b = forward[i];
                 }
+                if(lphis.find(v) != lphis.end()) {
+                    lphis[v].b = code[forward[i]].out.length;
+                }
                 IRRef j = DSE(code, code.size()-1);    
                 if(j != code.size()-1)
                     code[j].op = TraceOpCode::nop;
@@ -651,6 +670,9 @@ void JIT::EmitOptIR(
                 Insert(thread, code, tcse, ir);
                 if(phis.find(v) != phis.end()) {
                     phis[v].b = forward[i];
+                }
+                if(lphis.find(v) != lphis.end()) {
+                    lphis[v].b = code[forward[i]].out.length;
                 }
                 // do DSE
                 for(IRRef j = code.size()-2; j < code.size(); j--) {
@@ -748,6 +770,7 @@ void JIT::EmitOptIR(
                 forward[i] = Insert(thread, code, cse, ir);
             } break;
 
+            case TraceOpCode::reshape:
             case TraceOpCode::gather:
             case TraceOpCode::rep:
             case TraceOpCode::alength:

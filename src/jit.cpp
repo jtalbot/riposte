@@ -296,8 +296,16 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             b = insert(trace, TraceOpCode::sub, 
                 b, recycle(1, trace[b].out), 0, trace[b].type, trace[b].out, trace[b].out);
             IRRef c = load(thread, inst.c, &inst);
+            
+            IRRef len = insert(trace, TraceOpCode::reshape, b, trace[c].out.length, 0, Type::Integer, trace[b].out, Shape::Scalar);
+
+            // TODO: needs to know the recorded reshaped length for matching with other same 
+            // sized shapes
+            Shape reshaped = { len, 0 };
+            //shapes[0] = reshaped;
+            
             Shape s = MergeShapes(trace[a].out, trace[b].out, &inst);
-            store(thread, insert(trace, TraceOpCode::scatter, c, recycle(b, s), recycle(a, s), trace[c].type, s, trace[c].out), inst.c);
+            store(thread, insert(trace, TraceOpCode::scatter, c, recycle(b, s), recycle(a, s), trace[c].type, s, reshaped), inst.c);
         }   break;
 
         case ByteCode::ifelse: {
@@ -530,7 +538,7 @@ void JIT::Replay(Thread& thread) {
     std::vector<IRRef> forward(n, 0);
     std::tr1::unordered_map<IR, IRRef> cse;
     std::vector<IRRef> stack;
-    std::map<Variable, Phi> phis;
+    std::map<Variable, Phi> phis, lphis;
 
     // after each guard reemit the entire body of the code
     // up to that point, omitting all guards.
@@ -628,12 +636,12 @@ void JIT::Replay(Thread& thread) {
     // Emit constants
     for(size_t i = 0; i < n; i++) {
         if(trace[i].op == TraceOpCode::constant)
-            EmitOptIR(thread, i, trace[i], code, forward, cse, stack, phis);
+            EmitOptIR(thread, i, trace[i], code, forward, cse, stack, phis, lphis);
     }
  
     // Emit loop header...
     for(size_t i = 0; i < n; i++) {
-        EmitOptIR(thread, i, trace[i], code, forward, cse, stack, phis);
+        EmitOptIR(thread, i, trace[i], code, forward, cse, stack, phis, lphis);
     }
 
     if(rootTrace == 0) 
@@ -642,12 +650,18 @@ void JIT::Replay(Thread& thread) {
 
         // Emit loop
         for(size_t i = 0; i < n; i++) {
-            EmitOptIR(thread, i, trace[i], code, forward, cse, stack, phis);
+            EmitOptIR(thread, i, trace[i], code, forward, cse, stack, phis, lphis);
         }
 
         // Emit PHIs
         for(std::map<Variable, Phi>::const_iterator i = phis.begin(); i != phis.end(); ++i) {
-            IR const& ir = code[i->second.a];
+            IR const& ir = code[i->second.b];
+            Insert(thread, code, cse, IR(TraceOpCode::phi, i->second.a, i->second.b, ir.type, ir.out, Shape::Empty));
+        }
+
+        // Emit length PHIs
+        for(std::map<Variable, Phi>::const_iterator i = lphis.begin(); i != lphis.end(); ++i) {
+            IR const& ir = code[i->second.b];
             Insert(thread, code, cse, IR(TraceOpCode::phi, i->second.a, i->second.b, ir.type, ir.out, ir.out));
         }
 
@@ -672,7 +686,7 @@ void JIT::end_recording(Thread& thread) {
         trace[i].reg = 0;
     }
 
-    //dump(thread, trace);
+    dump(thread, trace);
     Replay(thread);
     //dump(thread, code);
     //Schedule();
@@ -1020,6 +1034,7 @@ void JIT::IR::dump() const {
         {
             std::cout << "\t " << a << "\t \t";
         } break;
+        case TraceOpCode::reshape:
         case TraceOpCode::phi: 
         case TraceOpCode::load:
         case TraceOpCode::elength:
