@@ -382,7 +382,7 @@ struct TraceLLVMCompiler {
         logicalType1 = llvm::Type::getInt1Ty(*C);
         logicalType8 = llvm::Type::getInt8Ty(*C);
         
-        maxLengthOfArrays = trace->nodes.size();
+        int maxLengthOfArrays = trace->nodes.size();
         for(size_t i = 0; i < trace->nodes.size(); i++) {
             IRNode & n = trace->nodes[i];
         }
