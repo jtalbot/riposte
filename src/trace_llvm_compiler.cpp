@@ -2095,8 +2095,8 @@ void Trace::JIT(Thread & thread) {
     nvvmInit();
     
     PTXCompile(thread,this);
-    c.Compile();
-    c.Execute();
+    //c.Compile();
+    //c.Execute();
 }
 
 #endif
