@@ -79,7 +79,7 @@ struct CompiledTrace {
 	void * tempData;
 	void * reductionSpace;
 	void * gpuData;
-}
+};
 
 void TraceLLVMCompiler_init(State & state) {
     LLVMState * L = state.llvmState = new (GC) LLVMState;
