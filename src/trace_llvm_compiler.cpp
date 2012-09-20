@@ -122,7 +122,7 @@ void TraceLLVMCompiler_init(State & state) {
 
 struct TraceLLVMCompiler {
     LLVMState * L;
-    CompiledTrace * cT;
+    CompiledTrace cT;
     Thread * thread;
     Trace * trace;
     
