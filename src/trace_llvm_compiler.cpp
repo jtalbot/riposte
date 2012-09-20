@@ -77,7 +77,6 @@ struct LLVMState {
 struct CompiledTrace {
 	llvm::Function *F;
     int parameters;
-    std::vector<int> paramSize;
     std::vector<int> inputSizes;
     std::vector<int> outputSizes;
 	std::vector<void *> outputAddresses;
@@ -2083,7 +2082,7 @@ struct TraceLLVMCompiler {
 
 CompiledTrace PTXCompile(Thread & thread, Trace * tr) {
         TraceLLVMCompiler c(&thread, tr);
-        c.cT.paramSize = 0;
+        c.cT.parameters = 0;
         c.GeneratePTXIndexFunction(); 
         c.cT.F = c.function; 
         return c.cT;
