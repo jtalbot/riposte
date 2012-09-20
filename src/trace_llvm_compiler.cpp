@@ -85,14 +85,6 @@ struct CompiledTrace {
     std::vector<void *> inputAddresses;
 };
 
-CompiledTrace PTXCompile(Thread & thread, Trace * tr) {
-        TraceLLVMCompiler c(&thread, tr);
-        c.cT.paramSize = 0;
-        c.GeneratePTXIndexFunction(); 
-        c.cT.F = c.function; 
-        return c.cT;
-}
-
 void TraceLLVMCompiler_init(State & state) {
     LLVMState * L = state.llvmState = new (GC) LLVMState;
     llvm::InitializeNativeTarget();
@@ -2088,6 +2080,14 @@ struct TraceLLVMCompiler {
     }
     
 };
+
+CompiledTrace PTXCompile(Thread & thread, Trace * tr) {
+        TraceLLVMCompiler c(&thread, tr);
+        c.cT.paramSize = 0;
+        c.GeneratePTXIndexFunction(); 
+        c.cT.F = c.function; 
+        return c.cT;
+}
 
 void Trace::JIT(Thread & thread) {
     std::cout << toString(thread) << "\n";
