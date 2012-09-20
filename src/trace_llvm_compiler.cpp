@@ -85,13 +85,12 @@ struct CompiledTrace {
     std::vector<void *> inputAddresses;
 };
 
-CompiledTrace PTXCompile(Thread * th, Trace * tr) {
+CompiledTrace PTXCompile(Thread & thread, Trace * tr) {
         TraceLLVMCompiler c(&thread, tr);
         c.cT.paramSize = 0;
         c.GeneratePTXIndexFunction(); 
         c.cT.F = c.function; 
         return c.cT;
-        
 }
 
 void TraceLLVMCompiler_init(State & state) {
