@@ -76,10 +76,23 @@ struct LLVMState {
 
 struct CompiledTrace {
 	llvm::Function *F;
-	void * tempData;
-	void * reductionSpace;
-	void * gpuData;
+    int parameters;
+    std::vector<int> paramSize;
+    std::vector<int> inputSizes;
+    std::vector<int> outputSizes;
+	std::vector<void *> outputAddresses;
+    std::vector<void *> reductionSpace;
+    std::vector<void *> inputAddresses;
 };
+
+CompiledTrace PTXCompile(Thread * th, Trace * tr) {
+        TraceLLVMCompiler c(&thread, tr);
+        c.cT.paramSize = 0;
+        c.GeneratePTXIndexFunction(); 
+        c.cT.F = c.function; 
+        return c.cT;
+        
+}
 
 void TraceLLVMCompiler_init(State & state) {
     LLVMState * L = state.llvmState = new (GC) LLVMState;
@@ -118,6 +131,7 @@ void TraceLLVMCompiler_init(State & state) {
 
 struct TraceLLVMCompiler {
     LLVMState * L;
+    CompiledTrace * cT;
     Thread * thread;
     Trace * trace;
     
@@ -138,7 +152,7 @@ struct TraceLLVMCompiler {
     llvm::BasicBlock * entry;
     llvm::Value * loopIndexAddr;
     llvm::Instruction *firstEntry;
-    
+
     llvm::Value * nThreads;
     llvm::Type * doubleType;
     llvm::Type * intType;
@@ -360,6 +374,122 @@ struct TraceLLVMCompiler {
         
         FPM->run(*function);
     }
+
+    void GeneratePTXIndexFunction() {
+
+        intType = llvm::Type::getInt64Ty(*C);
+        doubleType = llvm::Type::getDoubleTy(*C);
+        logicalType1 = llvm::Type::getInt1Ty(*C);
+        logicalType8 = llvm::Type::getInt8Ty(*C);
+        
+        maxLengthOfArrays = trace->nodes.size();
+        for(size_t i = 0; i < trace->nodes.size(); i++) {
+            IRNode & n = trace->nodes[i];
+        }
+        arrayInt = llvm::ArrayType::get(llvm::PointerType::getUnqual(intType), maxLengthOfArrays);
+        arrayDouble = llvm::ArrayType::get(llvm::PointerType::getUnqual(doubleType), maxLengthOfArrays);
+        arrayLogical = llvm::ArrayType::get(llvm::PointerType::getUnqual(logicalType8), maxLengthOfArrays);
+
+        llvm::Constant *cons = mainModule->getOrInsertFunction("indexFunc", llvm::Type::getVoidTy(*C), intType, intType, intType, 
+            intType /*paramSize*/, intType /*inputSize*/, intType /*outputSize*/, arrayInt, arrayDouble, arrayLogical, arrayInt, arrayDouble, 
+            arrayLogical, arrayInt, arrayDouble, arrayLogical, NULL);
+
+        function = llvm::cast<llvm::Function>(cons);
+        function->setCallingConv(llvm::CallingConv::C);
+        
+        llvm::Function::arg_iterator args = function->arg_begin();
+        llvm::Value* index = args++;
+        llvm::Value* tid = args++;
+        tid->setName("ThreadID");
+        llvm::Value* blockID = args++;
+        blockID->setName("blockID");
+        llvm::Value * paramsSize = args++;
+        blockID->setName("paramSize");
+        llvm::Value * inputSize = args++;
+        blockID->setName("inputSize");
+        llvm::Value * outputSize = args++;
+        blockID->setName("outputSize");
+
+        
+        int sizeOfArray = 64;
+        if (numThreads > 32)
+            sizeOfArray = numThreads;
+        
+        
+        
+        reduction = false;
+        reductionBlocksPresent = false;
+        
+        scan = false;
+        scanBlocksPresent = false;
+        
+        entry = llvm::BasicBlock::Create(*C,"entry",function);
+        B = new llvm::IRBuilder<>(*C);
+        B->SetInsertPoint(entry);
+        
+        Sync = llvm::Function::Create(llvm::FunctionType::get(llvm::Type::getVoidTy(llvm::getGlobalContext()), false),
+                                      llvm::Function::ExternalLinkage,
+                                      "llvm.nvvm.barrier0", mainModule);
+        Size = ConstantInt(trace->Size);
+        int vectorLength = trace->Size;
+        int numOutput = vectorLength/numThreads;
+        
+        if (numOutput < numBlock) {
+            if (vectorLength%numThreads == 0)
+                outputReductionSize = numOutput;
+            else
+                outputReductionSize = numOutput + 1;
+        }
+        else {
+            outputReductionSize = numBlock;
+        }
+        loopIndexAddr = B->CreateAlloca(intType);
+        B->CreateStore(index, loopIndexAddr);
+        
+        /*
+         * We need to loop this.
+         * Loop it so that a index touches all that it needs to touch, refer to RG code how to loop.
+         */
+        
+        cond = createAndInsertBB("cond");
+        body = createAndInsertBB("body");
+        end = createAndInsertBB("end");
+        origEnd = end;
+        origBody = body;
+        
+        B->CreateBr(cond);
+        B->SetInsertPoint(cond);
+        llvm::Value * c = B->CreateICmpULT(loopIndex(), Size);
+        B->CreateCondBr(c,body,end);
+        
+        B->SetInsertPoint(body);
+        CompileBody(blockID, tid, sizeOfArray);
+        if (scan == true) {
+            ScanBlocksHelper(tid, loopIndex());
+        }
+        B->CreateStore(B->CreateAdd(loopIndex(), ConstantInt(numBlock * numThreads)),loopIndexAddr);
+        B->CreateBr(cond);
+        
+        B->SetInsertPoint(end);
+        B->CreateRetVoid();
+                
+        if (reduction == true) {
+            ReductionHelper(tid);
+        }
+        
+        mainModule->dump();
+        
+        llvm::verifyFunction(*function);
+        
+        if (thread->state.verbose)
+           mainModule->dump();
+        
+        
+        
+        
+        FPM->run(*function);
+    }
+
     void ScanBlocksHelper(llvm::Value *tid, llvm::Value * loopIndexValue) {
         B->SetInsertPoint(origEnd);
         B->CreateBr(laneInitializer);
@@ -688,14 +818,11 @@ struct TraceLLVMCompiler {
         
     }
     
+
     void Compile() {
-        
-        
         GenerateIndexFunction();
         
         GenerateKernelFunction();
-        
-        
     }
     
     llvm::Value *scanWarp(llvm::GlobalVariable * shared, llvm::Value *tid) {
@@ -1965,10 +2092,10 @@ struct TraceLLVMCompiler {
 
 void Trace::JIT(Thread & thread) {
     std::cout << toString(thread) << "\n";
-    TraceLLVMCompiler c(&thread,this);
     cuInit(0);
     nvvmInit();
     
+    PTXCompile(&thread,this);
     c.Compile();
     c.Execute();
 }
