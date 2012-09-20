@@ -74,6 +74,12 @@ struct LLVMState {
 };
 //inside pieces of the compiler
 
+struct CompiledTrace {
+	llvm::Function *F;
+	void * tempData;
+	void * reductionSpace;
+	void * gpuData;
+}
 
 void TraceLLVMCompiler_init(State & state) {
     LLVMState * L = state.llvmState = new (GC) LLVMState;
@@ -342,9 +348,9 @@ struct TraceLLVMCompiler {
             ReductionHelper(tid);
         }
         
-        llvm::verifyFunction(*function);
+        mainModule->dump();
         
-
+        llvm::verifyFunction(*function);
         
         if (thread->state.verbose)
            mainModule->dump();
@@ -355,6 +361,8 @@ struct TraceLLVMCompiler {
         FPM->run(*function);
     }
     void ScanBlocksHelper(llvm::Value *tid, llvm::Value * loopIndexValue) {
+        B->SetInsertPoint(origEnd);
+        B->CreateBr(laneInitializer);
         B->SetInsertPoint(laneInitializer);
         int lane = 1;
         llvm::Value * laneNum = B->CreateAnd(tid, ConstantInt(31));
@@ -428,7 +436,9 @@ struct TraceLLVMCompiler {
         B->CreateBr(endWarpNot0);
         B->SetInsertPoint(endWarpNot0);
         B->CreateBr(condBlockResult);
-        llvm::Value * lastBlock;
+        B->SetInsertPoint(condBlockResult);
+        llvm::Value * lastBlock = B->CreateICmpEQ(B->CreateSub(ConstantInt(numThreads), ConstantInt(1)), tid);
+        B->CreateCondBr(lastBlock, bodyBlockResult, endBlockResult);
         
         
         B->SetInsertPoint(bodyBlockResult);
@@ -977,7 +987,9 @@ struct TraceLLVMCompiler {
                             
                             thingsToFree.push_back(global);
                             std::vector<llvm::Value *> indices;
-                            indices.push_back(loopIndexValue);
+                            llvm::AllocaInst * alloca = B->CreateAlloca(intType);
+                            B->CreateStore(loopIndex(), alloca);
+                            indices.push_back(B->CreateLoad(alloca));
                             
                             llvm::Type * t = getType(n.type);
                             
@@ -999,6 +1011,7 @@ struct TraceLLVMCompiler {
                             B->CreateCall(Sync);
                             
                             //store the partial result from each block i to block_results[i]
+                            
                             
                             values[i] = B->CreateLoad(returnVal);
                             /*
@@ -1851,7 +1864,7 @@ struct TraceLLVMCompiler {
     
     
     void Execute() {
-        
+
 
       //Get the bitcode from the module
         
@@ -1912,7 +1925,7 @@ struct TraceLLVMCompiler {
         assert(error == 0);
         
 
-        
+
         error = cuLaunchKernel(kernel,
                        nblocks, 1, 1,
                        nthreads, 1, 1,
@@ -1920,9 +1933,10 @@ struct TraceLLVMCompiler {
                        0,
                        0);
         assert(error == 0);
+        cudaThreadSynchronize();
         //Print out the output
-        Output();
 
+        Output();
         
     }
     llvm::BasicBlock * createAndInsertBB(const char * name) {
@@ -1952,13 +1966,10 @@ struct TraceLLVMCompiler {
 void Trace::JIT(Thread & thread) {
     std::cout << toString(thread) << "\n";
     TraceLLVMCompiler c(&thread,this);
-    
     cuInit(0);
     nvvmInit();
     
-    timespec time = get_time();
     c.Compile();
-    std::cout << "Time elapsed is " << time_elapsed(time);
     c.Execute();
 }
 
