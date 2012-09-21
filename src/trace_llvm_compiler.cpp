@@ -276,9 +276,9 @@ struct TraceLLVMCompiler {
         for(size_t i = 0; i < trace->nodes.size(); i++) {
             IRNode & n = trace->nodes[i];
         }
-        llvm::VectorType * arrayInt = llvm::VectorType::get(llvm::Type::getDoubleTy(*C), maxLengthOfArrays);
-        llvm::VectorType * arrayDouble = llvm::VectorType::get(llvm::Type::getDoubleTy(*C), maxLengthOfArrays);
-        llvm::VectorType * arrayLogical = llvm::VectorType::get(llvm::Type::getDoubleTy(*C), maxLengthOfArrays);
+        llvm::ArrayType * arrayInt = llvm::ArrayType::get(llvm::Type::getDoubleTy(*C), maxLengthOfArrays);
+        llvm::ArrayType * arrayDouble = llvm::ArrayType::get(llvm::Type::getDoubleTy(*C), maxLengthOfArrays);
+        llvm::ArrayType * arrayLogical = llvm::ArrayType::get(llvm::Type::getDoubleTy(*C), maxLengthOfArrays);
 
         llvm::Constant *cons = mainModule->getOrInsertFunction("indexFunc", llvm::Type::getVoidTy(*C), intType, intType, intType, 
             intType /*paramSize*/, arrayInt /*inputSize*/, arrayInt /*outputSize*/, arrayInt, arrayDouble, arrayLogical, arrayInt, arrayDouble, 
@@ -297,30 +297,30 @@ struct TraceLLVMCompiler {
         llvm::Value * paramsSize = args++;
         blockID->setName("paramSize");
 
-        llvm::VectorType * inputSize = args++;
+        llvm::ilist_iterator<llvm::Argument> inputSize = args++;
         blockID->setName("inputSize");
-        llvm::VectorType * outputSize = args++;
+        llvm::ilist_iterator<llvm::Argument> outputSize = args++;
         blockID->setName("outputSize");
 
-        llvm::VectorType * outputAddrInt = args++;
+        llvm::ilist_iterator<llvm::Argument> outputAddrInt = args++;
         blockID->setName("outputAddrInt");
-        llvm::VectorType * outputAddrDouble = args++;
+        llvm::ilist_iterator<llvm::Argument> outputAddrDouble = args++;
         blockID->setName("outputAddrDouble");
-        llvm::VectorType * outputAddrLogical = args++;
+        llvm::ilist_iterator<llvm::Argument> outputAddrLogical = args++;
         blockID->setName("outputAddrLogical");
 
-        llvm::VectorType * reductionSpaceInt = args++;
+        llvm::ilist_iterator<llvm::Argument> reductionSpaceInt = args++;
         blockID->setName("reductionSpaceInt");
-        llvm::VectorType * reductionSpaceDouble = args++;
+        llvm::ilist_iterator<llvm::Argument> reductionSpaceDouble = args++;
         blockID->setName("reductionSpaceDouble");
-        llvm::VectorType * reductionSpaceLogical = args++;
+        llvm::ilist_iterator<llvm::Argument> reductionSpaceLogical = args++;
         blockID->setName("reductionSpaceLogical");
 
-        llvm::VectorType * inputAddrInt = args++;
+        llvm::ilist_iterator<llvm::Argument> inputAddrInt = args++;
         blockID->setName("inputAddrInt");
-        llvm::VectorType * inputAddrDouble = args++;
+        llvm::ilist_iterator<llvm::Argument> inputAddrDouble = args++;
         blockID->setName("inputAddrDouble");
-        llvm::VectorType * inputAddrLogical = args++;
+        llvm::ilist_iterator<llvm::Argument> inputAddrLogical = args++;
         blockID->setName("inputAddrLogical");
 
         int sizeOfArray = 64;
