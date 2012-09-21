@@ -294,7 +294,7 @@ struct TraceLLVMCompiler {
         llvm::Value* blockID = args++;
         blockID->setName("blockID");
         
-        int paramsSize = args++;
+        llvm::Value* paramsSize = args++;
 
         llvm::ilist_iterator<llvm::Argument> inputSize = args++;
         blockID->setName("inputSize");
@@ -905,7 +905,7 @@ struct TraceLLVMCompiler {
             cudaFree(thingsToFree[i]);
         }
     }
-    void CompilePTXBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray, int paramsSize, llvm::ilist_iterator<llvm::Argument> & inputSize, 
+    void CompilePTXBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray, llvm::Value * paramsSize, llvm::ilist_iterator<llvm::Argument> & inputSize, 
             llvm::ilist_iterator<llvm::Argument> & outputSize, llvm::ilist_iterator<llvm::Argument> & outputAddrInt, 
             llvm::ilist_iterator<llvm::Argument> & outputAddrDouble, llvm::ilist_iterator<llvm::Argument> & outputAddrLogical, 
             llvm::ilist_iterator<llvm::Argument> & reductionSpaceInt, llvm::ilist_iterator<llvm::Argument> & reductionSpaceDouble, 
