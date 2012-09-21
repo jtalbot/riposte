@@ -294,8 +294,7 @@ struct TraceLLVMCompiler {
         llvm::Value* blockID = args++;
         blockID->setName("blockID");
         
-        llvm::Value * paramsSize = args++;
-        blockID->setName("paramSize");
+        int paramsSize = args++;
 
         llvm::ilist_iterator<llvm::Argument> inputSize = args++;
         blockID->setName("inputSize");
