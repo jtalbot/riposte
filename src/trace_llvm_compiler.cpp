@@ -1254,7 +1254,7 @@ struct TraceLLVMCompiler {
                     }
                     break;
 				case IROpCode::div:
-                    c.cT.parameters++;
+                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double:
                             values[i] = B->CreateFDiv(values[n.binary.a],values[n.binary.b]);
