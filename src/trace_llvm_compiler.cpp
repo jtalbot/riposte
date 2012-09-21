@@ -732,13 +732,6 @@ struct TraceLLVMCompiler {
         
     }
     
-
-    void Compile() {
-        GenerateIndexFunction();
-        
-        GenerateKernelFunction();
-    }
-    
     llvm::Value *scanWarp(llvm::GlobalVariable * shared, llvm::Value *tid) {
         B->SetInsertPoint(laneInitializer);
         //warp scan
