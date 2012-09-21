@@ -276,9 +276,9 @@ struct TraceLLVMCompiler {
         for(size_t i = 0; i < trace->nodes.size(); i++) {
             IRNode & n = trace->nodes[i];
         }
-        llvm::ArrayType * arrayInt = llvm::ArrayType::get(llvm::PointerType::getUnqual(intType), maxLengthOfArrays);
-        llvm::ArrayType * arrayDouble = llvm::ArrayType::get(llvm::PointerType::getUnqual(doubleType), maxLengthOfArrays);
-        llvm::ArrayType * arrayLogical = llvm::ArrayType::get(llvm::PointerType::getUnqual(logicalType8), maxLengthOfArrays);
+        llvm::ArrayType * arrayInt = llvm::ArrayType::get(llvm::Type::getDoubleTy(*C), maxLengthOfArrays);
+        llvm::ArrayType * arrayDouble = llvm::ArrayType::get(llvm::Type::getDoubleTy(*C), maxLengthOfArrays);
+        llvm::ArrayType * arrayLogical = llvm::ArrayType::get(llvm::Type::getDoubleTy(*C), maxLengthOfArrays);
 
         llvm::Constant *cons = mainModule->getOrInsertFunction("indexFunc", llvm::Type::getVoidTy(*C), intType, intType, intType, 
             intType /*paramSize*/, arrayInt /*inputSize*/, arrayInt /*outputSize*/, arrayInt, arrayDouble, arrayLogical, arrayInt, arrayDouble, 
