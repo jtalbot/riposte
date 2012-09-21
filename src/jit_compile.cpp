@@ -93,15 +93,316 @@ struct LLVMState {
 
 static LLVMState llvmState;
 
+class BuilderBase : public llvm::IRBuilder<>
+{
+public:
+    BuilderBase(llvm::LLVMContext* C) : llvm::IRBuilder<>(*C) {}
+
+    BuilderBase(llvm::BasicBlock* bb, llvm::BasicBlock::iterator i)
+        : llvm::IRBuilder<>(bb, i) {}
+    
+    llvm::Constant* getConstantVector(llvm::Constant* k, size_t width) const {
+        if(width > 0) {
+            std::vector<llvm::Constant*> v(width, k);
+            return llvm::ConstantVector::get(v);
+        }
+        else {
+            return 0;
+        }
+    }
+
+    llvm::Constant* getDouble( double d ) {
+        return llvm::ConstantFP::get( getDoubleTy(), d );
+    }
+    
+    llvm::Constant* getFloat( float f ) {
+        return llvm::ConstantFP::get( getFloatTy(), f );
+    }
+
+    static llvm::FunctionType* getFunctionTy( llvm::Type* Result, llvm::Type* Param1 ) {
+        llvm::Type* args[] = { Param1 };
+        return llvm::FunctionType::get( Result, args, false );
+    }
+};
+
+class ModuleBuilder : public BuilderBase 
+{
+public:
+    ModuleBuilder(llvm::Module* module) 
+        : BuilderBase( &module->getContext() )
+        , Module( module ) {}
+
+    ModuleBuilder(llvm::BasicBlock* bb, llvm::BasicBlock::iterator i)
+        : BuilderBase(bb, i) 
+        , Module( bb->getParent()->getParent() ) {}
+   
+    llvm::Function* getFunction( std::string const& function ) {
+        return Module->getFunction(function);
+    }
+
+    llvm::Function* getFunction( std::string const& function,
+        llvm::Type* arg1, llvm::Type* out ) { 
+        
+        llvm::Type* args[] = { arg1 };
+        llvm::FunctionType* ft = llvm::FunctionType::get( out, args, false );
+        return llvm::Function::Create( ft, llvm::Function::ExternalLinkage, function, Module );
+    }
+
+    llvm::Function* getFunction( std::string const& function,
+        llvm::Type* arg1, llvm::Type* arg2, llvm::Type* out ) { 
+        
+        llvm::Type* args[] = { arg1, arg2 };
+        llvm::FunctionType* ft = llvm::FunctionType::get( out, args, false );
+        return llvm::Function::Create( ft, llvm::Function::ExternalLinkage, function, Module );
+    }
+
+    llvm::Function* getIntrinsic( llvm::Intrinsic::ID id ) {
+        return llvm::Intrinsic::getDeclaration(Module, id);
+    }
+
+protected:
+    llvm::Module* Module;
+
+};
+
+class FunctionBuilder : public ModuleBuilder
+{
+public:
+
+    FunctionBuilder( llvm::Function* function )
+        : ModuleBuilder( function->getParent() )
+        , m_function( function )
+        , m_state( function->arg_begin() )
+    {
+    }
+
+    FunctionBuilder(
+        llvm::BasicBlock* bb,
+        llvm::BasicBlock::iterator i)
+        : ModuleBuilder( bb, i )
+        , m_function( bb->getParent() )
+        , m_state( m_function->arg_begin() )
+    {
+    }
+
+    llvm::Function* function() {
+        return m_function;
+    } 
+ 
+    static FunctionBuilder Appender(llvm::BasicBlock* bb) {    
+        return FunctionBuilder( bb, bb->end() );
+    }
+
+    FunctionBuilder EntryBlock() {
+        return Appender( &m_function->getEntryBlock() );
+    }
+    
+    llvm::AllocaInst* CreateUninitializedAlloca( llvm::Type* type, llvm::Value* length = 0 ) {
+        llvm::AllocaInst* r = EntryBlock().CreateAlloca( type, length );
+        r->setAlignment(16);
+        return r;
+    }
+
+    llvm::AllocaInst* CreateInitializedAlloca( llvm::Value* init ) {
+        llvm::AllocaInst* r = EntryBlock().CreateAlloca( init->getType() );
+        r->setAlignment(16);
+        CreateStore(init, r);
+        return r;
+    }
+
+    llvm::BasicBlock* CreateBlock( char const* name, llvm::BasicBlock* before = 0 ) {
+        return llvm::BasicBlock::Create(Context, name, m_function, before);
+    }
+
+    llvm::Value* Call(std::string const& F, llvm::Value* A) {
+        return CreateCall2(getFunction(F), m_state, A);
+    }
+
+    llvm::Value* Call(std::string const& F, llvm::Value* A, llvm::Value* B) {
+        return CreateCall3(getFunction(F), m_state, A, B);
+    }
+
+    llvm::Value* Call(std::string const& F, llvm::Value* A, llvm::Value* B, llvm::Value* C) {
+        return CreateCall4(getFunction(F), m_state, A, B, C);
+    }
+
+private:
+    
+    llvm::Function* m_function;
+    llvm::Value* m_state;
+    
+};
+
+#define MARKER(str) \
+    builder.CreateCall(builder.getFunction("MARKER"), builder.CreateConstGEP2_64(builder.CreateGlobalString(str), 0, 0))
+
+#define DUMP(str, i) \
+    builder.CreateCall2(builder.getFunction("DUMP"), builder.CreateConstGEP2_64(builder.CreateGlobalString(str), 0, 0), i)
+
+#define DUMPD(str, i) \
+    builder.CreateCall2(builder.getFunction("DUMPD"), builder.CreateConstGEP2_64(builder.CreateGlobalString(str), 0, 0), i)
+
+/*
+
+    Not all registers are mutable...
+    ...Constants are not mutable
+    ...Loads are not mutable
+
+    ...Don't want to make copies in.
+
+    Registers used as loop-carried values, but change their contents
+
+*/
+
+
+class Register {
+
+private:
+    Type::Enum type;
+    llvm::Value* v;
+    llvm::Value* l;
+    bool initialized;
+
+
+    llvm::Type* getType(FunctionBuilder& builder, Type::Enum type) {
+        llvm::Type* t;
+        switch(type) {
+            case Type::Double: t = builder.getDoubleTy()->getPointerTo(); break;
+            case Type::Integer: t = builder.getInt64Ty()->getPointerTo(); break;
+            case Type::Logical: t = builder.getInt8Ty()->getPointerTo(); break;
+            case Type::Character: t = builder.getInt8Ty()->getPointerTo()->getPointerTo(); break;
+            default: 
+                t = llvm::StructType::get( builder.getInt64Ty(), builder.getInt64Ty(), NULL );
+                break;
+        }
+        return t;
+    }
+
+    llvm::Type* getAllocType(FunctionBuilder& builder, Type::Enum type) {
+        llvm::Type* t;
+        switch(type) {
+            case Type::Double: t = builder.getDoubleTy(); break;
+            case Type::Integer: t = builder.getInt64Ty(); break;
+            case Type::Logical: t = builder.getInt8Ty(); break;
+            case Type::Character: t = builder.getInt8Ty()->getPointerTo(); break;
+            default: 
+                _error("Invalid alloc type");
+                break;
+        }
+        return t;
+    }
+
+public:
+
+    Register( FunctionBuilder& builder, Type::Enum type, JIT::Shape shape ) 
+        : type(type)
+        , initialized(false)
+    {
+        v = builder.CreateInitializedAlloca( llvm::UndefValue::get( getType(builder, type) ) );
+        l = 0; 
+    }
+
+    bool Initialized() const {
+        return initialized;
+    }
+
+    void Initialize(FunctionBuilder& builder, size_t l) {
+        if(!Initialized()) {
+            llvm::AllocaInst* a = builder.CreateUninitializedAlloca(
+                                        getAllocType(builder, type), builder.getInt64(l));
+            builder.CreateStore(a, v);
+            this->l = builder.EntryBlock().CreateInitializedAlloca(builder.getInt64(l));
+            this->initialized = true;
+        }
+    }
+
+    void Initialize(FunctionBuilder& builder, Register& len) {
+        if(!Initialized()) {
+            llvm::Value* l = builder.CreateLoad(len.value(builder));
+            builder.CreateStore(
+                builder.Call(std::string("MALLOC_")+Type::toString(type), l), v);
+            this->l = builder.EntryBlock().CreateAlloca(l->getType());
+            builder.CreateStore(l, this->l);   
+            this->initialized = true;
+        }
+    }
+
+    void Duplicate(FunctionBuilder& builder, Register& val, Register& len) {
+        if(!Initialized()) {
+            Initialize(builder, len);
+            
+            llvm::Value* l = builder.CreateLoad(len.value(builder));
+            llvm::Value* bytes = builder.CreateMul(l, builder.getInt64(type == Type::Logical ? 1 : 8)); 
+            builder.CreateMemCpy(
+                value(builder),
+                val.value(builder),
+                bytes, 16); 
+        }
+    }
+
+    llvm::Value* value(FunctionBuilder& builder) const {
+        return builder.CreateLoad(v);
+    }
+    
+    void Store(FunctionBuilder& builder, llvm::Value* a) {
+        builder.CreateStore(a, v);
+    }
+
+    void Set(FunctionBuilder& builder, llvm::Value* a) {
+        builder.CreateStore(a, builder.CreateLoad(v));
+    }
+
+    void Resize(FunctionBuilder& builder, llvm::Value* newlen) {
+        if(l == 0) 
+            _error("Resizing constant length register");
+        
+        llvm::Value* newv = 
+            builder.Call(std::string("REALLOC_")+Type::toString(type), value(builder), l, newlen);
+        
+        builder.CreateStore(newv, v); 
+    }
+    
+    llvm::Value* ExtractAlignedVector(FunctionBuilder& builder, llvm::Value* index, size_t width) {
+        llvm::Value* a = value(builder);
+        a = builder.CreateInBoundsGEP(a, index);
+
+        llvm::Type* t = llvm::VectorType::get(
+                ((llvm::SequentialType*)a->getType())->getElementType(),
+                width)->getPointerTo();
+    
+        a = builder.CreatePointerCast(a, t);
+        a = builder.CreateLoad(a);
+
+        if(type == Type::Logical) {
+            a = builder.CreateTrunc(a, llvm::VectorType::get(builder.getInt1Ty(), width));
+        }
+        return a;
+    }
+
+    void InsertAlignedVector(FunctionBuilder& builder, llvm::Value* a, llvm::Value* index, size_t width) {
+        llvm::Value* out = value(builder);
+        out = builder.CreateInBoundsGEP(out, index);
+
+        if(type == Type::Logical) {
+            a = builder.CreateSExt(a, llvm::VectorType::get(builder.getInt8Ty(), width));
+        }
+
+        llvm::Type* t = llvm::VectorType::get(
+                ((llvm::SequentialType*)a->getType())->getElementType(),
+                width)->getPointerTo();
+
+        out = builder.CreatePointerCast(out, t);
+
+        builder.CreateStore(a, out);
+    }
+};
+
+
 struct Fusion {
     JIT& jit;
-    LLVMState* S;
-    llvm::Function* function;
-    llvm::Value* thread_var;
-    std::vector<llvm::Value*>& values;
-    std::vector<llvm::Value*>& registers;
-    std::vector<llvm::Value*>& registerLengths;
-    
+    FunctionBuilder builder;
+    std::vector<Register>& registers;
+
     llvm::BasicBlock* header;
     llvm::BasicBlock* condition;
     llvm::BasicBlock* body;
@@ -115,46 +416,32 @@ struct Fusion {
     llvm::Constant *zerosD, *zerosI, *onesD, *onesI, *seqD, *seqI, *widthD, *widthI, *trueL, *falseL;
 
     size_t width;
-    llvm::IRBuilder<> builder;
 
     std::map<size_t, llvm::Value*> outs;
     std::map<size_t, llvm::Value*> reductions;
 
     size_t instructions;
 
-    Fusion(JIT& jit, LLVMState* S, llvm::Function* function, llvm::Value* thread_var, std::vector<llvm::Value*>& values, std::vector<llvm::Value*>& registers, std::vector<llvm::Value*>& registerLengths, llvm::Value* length, size_t width)
+    Fusion(JIT& jit, FunctionBuilder builder, std::vector<Register>& registers, llvm::Value* length, size_t width)
         : jit(jit)
-          , S(S)
-          , function(function)
-          , thread_var(thread_var)
-          , values(values)
+          , builder(builder)
           , registers(registers)
-          , registerLengths(registerLengths)
           , length(length)
-          , width(width)
-          , builder(*S->C) {
-       
-        if(this->width > 0) {
-            std::vector<llvm::Constant*> zeros;
-            for(size_t i = 0; i < this->width; i++) 
-                zeros.push_back(llvm::ConstantFP::get(builder.getDoubleTy(), 0));
-            zerosD = llvm::ConstantVector::get(zeros);
-       
-            zeros.clear(); 
-            for(size_t i = 0; i < this->width; i++) 
-                zeros.push_back(builder.getInt64(0));
-            zerosI = llvm::ConstantVector::get(zeros);
+          , width(width) {
 
-            std::vector<llvm::Constant*> ones;
-            for(size_t i = 0; i < this->width; i++) 
-                ones.push_back(llvm::ConstantFP::get(builder.getDoubleTy(), 1));
-            onesD = llvm::ConstantVector::get(ones);
-            
-            ones.clear(); 
-            for(size_t i = 0; i < this->width; i++) 
-                ones.push_back(builder.getInt64(1));
-            onesI = llvm::ConstantVector::get(ones);
+        zerosD = builder.getConstantVector( builder.getDouble(0), width );       
+        zerosI = builder.getConstantVector( builder.getInt64(0), width );       
+        
+        onesD  = builder.getConstantVector( builder.getDouble(1), width );       
+        onesI  = builder.getConstantVector( builder.getInt64(1), width );       
+         
+        widthD = builder.getConstantVector( builder.getDouble(width), width );       
+        widthI = builder.getConstantVector( builder.getInt64(width), width );       
 
+        trueL  = builder.getConstantVector( builder.getInt8(255), width);
+        falseL = builder.getConstantVector( builder.getInt8(0), width);
+
+        if(width > 0) {        
             std::vector<llvm::Constant*> sD;
             for(size_t i = 0; i < this->width; i++) 
                 sD.push_back(llvm::ConstantFP::get(builder.getDoubleTy(), i));
@@ -164,26 +451,6 @@ struct Fusion {
             for(size_t i = 0; i < this->width; i++) 
                 sI.push_back(builder.getInt64(i));
             seqI = llvm::ConstantVector::get(sI);
-            
-            std::vector<llvm::Constant*> wD;
-            for(size_t i = 0; i < this->width; i++) 
-                wD.push_back(llvm::ConstantFP::get(builder.getDoubleTy(), this->width));
-            widthD = llvm::ConstantVector::get(wD);
-            
-            std::vector<llvm::Constant*> wI;
-            for(size_t i = 0; i < this->width; i++) 
-                wI.push_back(builder.getInt64(this->width));
-            widthI = llvm::ConstantVector::get(wI);
-            
-            std::vector<llvm::Constant*> tL;
-            for(size_t i = 0; i < this->width; i++) 
-                tL.push_back(builder.getInt8(255));
-            trueL = llvm::ConstantVector::get(tL);
-            
-            std::vector<llvm::Constant*> fL;
-            for(size_t i = 0; i < this->width; i++) 
-                fL.push_back(builder.getInt8(0));
-            falseL = llvm::ConstantVector::get(fL);
         }
 
         instructions = 0;
@@ -204,19 +471,11 @@ struct Fusion {
         return llvm::VectorType::get(llvmType(type), width);
     }
 
-    llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type) {
-        llvm::IRBuilder<> TmpB(&function->getEntryBlock(),
-                function->getEntryBlock().begin());
-        llvm::AllocaInst* r = TmpB.CreateAlloca(type);
-        r->setAlignment(16);
-        return r;
-    }
-
     void Open(llvm::BasicBlock* before) {
-        header = llvm::BasicBlock::Create(*S->C, "fusedHeader", function, before);
-        condition = llvm::BasicBlock::Create(*S->C, "fusedCondition", function, before);
-        body = llvm::BasicBlock::Create(*S->C, "fusedBody", function, before);
-        after = llvm::BasicBlock::Create(*S->C, "fusedAfter", function, before);
+        header      = builder.CreateBlock( "fusedHeader", before);
+        condition   = builder.CreateBlock( "fusedCondition", before);
+        body        = builder.CreateBlock( "fusedBody", before);
+        after       = builder.CreateBlock( "fusedAfter", before);
 
         builder.SetInsertPoint(header);
         llvm::Value* initial = builder.getInt64(0);
@@ -237,58 +496,40 @@ struct Fusion {
         builder.SetInsertPoint(body);
     }
 
-    llvm::Value* RawLoad(size_t ir) {
+    llvm::Value* RawLoad(FunctionBuilder& builder, size_t ir) 
+    {
         size_t reg = jit.code[ir].reg;
-        return (reg == 0) ? values[ir] : registers[reg];
+        return registers[reg].value(builder);
     }
 
-    llvm::Value* Load(size_t ir) {
+    llvm::Value* Load(FunctionBuilder& builder, size_t ir) 
+    {
         size_t reg = jit.code[ir].reg;
         if(outs.find(reg) != outs.end())
             return outs[reg];
 
-        llvm::Value* a = (reg == 0) ? values[ir] : registers[reg];
-        llvm::Type* t = llvm::VectorType::get(
-                ((llvm::SequentialType*)a->getType())->getElementType(),
-                width)->getPointerTo();
-        a = builder.CreateInBoundsGEP(a, iterator);
-        a = builder.CreatePointerCast(a, t);
-        a = builder.CreateLoad(a);
-
-        if(jit.code[ir].type == Type::Logical) {
-            a = builder.CreateICmpEQ(a, trueL);
-        }
+        llvm::Value* a = registers[reg].ExtractAlignedVector(builder, iterator, width);
+        outs[reg] = a;
         return a;
     }
 
-    void Store(llvm::Value* a, size_t reg, llvm::Value* iterator) {
-        size_t width = ((llvm::VectorType*)a->getType())->getNumElements();
-
-        if(jit.registers[reg].type == Type::Logical)
-            a = builder.CreateSExt(a, llvm::VectorType::get(builder.getInt8Ty(), width));
-
-        llvm::Value* out = builder.CreateInBoundsGEP(registers[reg], iterator);
-
-        llvm::Type* t = llvm::VectorType::get(
-                ((llvm::SequentialType*)a->getType())->getElementType(),
-                width)->getPointerTo();
-
-        out = builder.CreatePointerCast(out, t);
-
-        builder.CreateStore(a, out);
+    void Store(FunctionBuilder& builder, llvm::Value* a, size_t reg, llvm::Value* iterator) 
+    {
+        registers[reg].InsertAlignedVector(builder, a, iterator, width);
+        outs[reg] = a;
     }
 
     llvm::Value* SSEIntrinsic(llvm::Intrinsic::ID Op1, llvm::Intrinsic::ID Op2, JIT::IR const& ir) {
-        llvm::Value* in = Load(ir.a);
+        llvm::Value* in = Load(builder, ir.a);
         llvm::Value* out = llvm::UndefValue::get(llvmType(ir.type, width)); 
         uint32_t i = 0;                                                                 
         for(; i < (width-1); i+=2) {                                                    
-            llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, Op2);
+            llvm::Function* f = builder.getIntrinsic(Op2);
             llvm::Value* v2 = llvm::UndefValue::get(llvmType(jit.code[ir.a].type, 2)); 
             llvm::Value* j0 = builder.CreateExtractElement(in, builder.getInt32(i));    
             llvm::Value* j1 = builder.CreateExtractElement(in, builder.getInt32(i+1));  
-            v2 = builder.CreateInsertElement(v2, j0, builder.getInt32(i));              
-            v2 = builder.CreateInsertElement(v2, j1, builder.getInt32(i+1));            
+            v2 = builder.CreateInsertElement(v2, j0, builder.getInt32(0));              
+            v2 = builder.CreateInsertElement(v2, j1, builder.getInt32(1));            
             v2 = builder.CreateCall(f, v2);                                     
             out = builder.CreateInsertElement(out, 
                 builder.CreateExtractElement(v2, builder.getInt32(0)), builder.getInt32(i));
@@ -296,10 +537,10 @@ struct Fusion {
                 builder.CreateExtractElement(v2, builder.getInt32(1)), builder.getInt32(i+1));
         }
         for(; i < width; i++) {
-            llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, Op1);
+            llvm::Function* f = builder.getIntrinsic(Op1);
             llvm::Value* v1 = llvm::UndefValue::get(llvmType(jit.code[ir.a].type, 2)); 
             llvm::Value* j0 = builder.CreateExtractElement(in, builder.getInt32(i));
-            v1 = builder.CreateInsertElement(v1, j0, builder.getInt32(i)); 
+            v1 = builder.CreateInsertElement(v1, j0, builder.getInt32(0)); 
             v1 = builder.CreateCall(f, v1);
             out = builder.CreateInsertElement(out, 
                 builder.CreateExtractElement(v1, builder.getInt32(0)), builder.getInt32(i));
@@ -308,22 +549,22 @@ struct Fusion {
     }
 
     llvm::Value* SSEIntrinsic2(llvm::Intrinsic::ID Op1, llvm::Intrinsic::ID Op2, JIT::IR const& ir) {
-        llvm::Value* ina = Load(ir.a);
-        llvm::Value* inb = Load(ir.b);
+        llvm::Value* ina = Load(builder, ir.a);
+        llvm::Value* inb = Load(builder, ir.b);
         llvm::Value* out = llvm::UndefValue::get(llvmType(ir.type, width)); 
         uint32_t i = 0;                                                                 
         for(; i < (width-1); i+=2) {                                                    
-            llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, Op2);
+            llvm::Function* f = builder.getIntrinsic(Op2);
             llvm::Value* v2 = llvm::UndefValue::get(llvmType(jit.code[ir.a].type, 2)); 
             llvm::Value* w2 = llvm::UndefValue::get(llvmType(jit.code[ir.b].type, 2)); 
             llvm::Value* j0 = builder.CreateExtractElement(ina, builder.getInt32(i));    
             llvm::Value* j1 = builder.CreateExtractElement(ina, builder.getInt32(i+1));  
             llvm::Value* k0 = builder.CreateExtractElement(inb, builder.getInt32(i));    
             llvm::Value* k1 = builder.CreateExtractElement(inb, builder.getInt32(i+1));  
-            v2 = builder.CreateInsertElement(v2, j0, builder.getInt32(i));              
-            v2 = builder.CreateInsertElement(v2, j1, builder.getInt32(i+1));            
-            w2 = builder.CreateInsertElement(v2, k0, builder.getInt32(i));              
-            w2 = builder.CreateInsertElement(v2, k1, builder.getInt32(i+1));            
+            v2 = builder.CreateInsertElement(v2, j0, builder.getInt32(0));              
+            v2 = builder.CreateInsertElement(v2, j1, builder.getInt32(1));            
+            w2 = builder.CreateInsertElement(v2, k0, builder.getInt32(0));              
+            w2 = builder.CreateInsertElement(v2, k1, builder.getInt32(1));            
             v2 = builder.CreateCall2(f, v2, w2);                                     
             out = builder.CreateInsertElement(out, 
                 builder.CreateExtractElement(v2, builder.getInt32(0)), builder.getInt32(i));
@@ -331,13 +572,13 @@ struct Fusion {
                 builder.CreateExtractElement(v2, builder.getInt32(1)), builder.getInt32(i+1));
         }
         for(; i < width; i++) {
-            llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, Op1);
+            llvm::Function* f = builder.getIntrinsic(Op1);
             llvm::Value* v1 = llvm::UndefValue::get(llvmType(jit.code[ir.a].type, 2)); 
             llvm::Value* w1 = llvm::UndefValue::get(llvmType(jit.code[ir.b].type, 2)); 
             llvm::Value* j0 = builder.CreateExtractElement(ina, builder.getInt32(i));
             llvm::Value* k0 = builder.CreateExtractElement(inb, builder.getInt32(i));
-            v1 = builder.CreateInsertElement(v1, j0, builder.getInt32(i)); 
-            w1 = builder.CreateInsertElement(w1, k0, builder.getInt32(i)); 
+            v1 = builder.CreateInsertElement(v1, j0, builder.getInt32(0)); 
+            w1 = builder.CreateInsertElement(w1, k0, builder.getInt32(0)); 
             v1 = builder.CreateCall2(f, v1, w1);
             out = builder.CreateInsertElement(out, 
                 builder.CreateExtractElement(v1, builder.getInt32(0)), builder.getInt32(i));
@@ -350,12 +591,12 @@ struct Fusion {
         uint32_t i = 0;
         // Why does llvm think that round takes two vector arguments?                  
         for(; i < (width-1); i+=2) {                                                    
-            llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, llvm::Intrinsic::x86_sse41_round_pd);
+            llvm::Function* f = builder.getIntrinsic(llvm::Intrinsic::x86_sse41_round_pd);
             llvm::Value* v2 = llvm::UndefValue::get(llvmType(Type::Double, 2)); 
             llvm::Value* j0 = builder.CreateExtractElement(in, builder.getInt32(i));    
             llvm::Value* j1 = builder.CreateExtractElement(in, builder.getInt32(i+1));  
-            v2 = builder.CreateInsertElement(v2, j0, builder.getInt32(i));              
-            v2 = builder.CreateInsertElement(v2, j1, builder.getInt32(i+1));            
+            v2 = builder.CreateInsertElement(v2, j0, builder.getInt32(0));              
+            v2 = builder.CreateInsertElement(v2, j1, builder.getInt32(1));            
             v2 = builder.CreateCall2(f, v2, builder.getInt32(k)); 
             out = builder.CreateInsertElement(out, 
                 builder.CreateExtractElement(v2, builder.getInt32(0)), builder.getInt32(i));
@@ -363,10 +604,10 @@ struct Fusion {
                 builder.CreateExtractElement(v2, builder.getInt32(1)), builder.getInt32(i+1));
         }
         for(; i < width; i++) {
-            llvm::Function* f = llvm::Intrinsic::getDeclaration(S->M, llvm::Intrinsic::x86_sse41_round_sd);
+            llvm::Function* f = builder.getIntrinsic(llvm::Intrinsic::x86_sse41_round_sd);
             llvm::Value* v1 = llvm::UndefValue::get(llvmType(Type::Double, 2)); 
             llvm::Value* j0 = builder.CreateExtractElement(in, builder.getInt32(i));
-            v1 = builder.CreateInsertElement(v1, j0, builder.getInt32(i)); 
+            v1 = builder.CreateInsertElement(v1, j0, builder.getInt32(0)); 
             v1 = builder.CreateCall2(f, v1, builder.getInt32(k));
             out = builder.CreateInsertElement(out, 
                 builder.CreateExtractElement(v1, builder.getInt32(0)), builder.getInt32(i));
@@ -375,13 +616,11 @@ struct Fusion {
     }
 
     llvm::Value* UnaryCall(std::string func, JIT::IR const& ir) {
-        std::vector<llvm::Type*> args;
-        args.push_back(llvmType(jit.code[ir.a].type));
-        llvm::Type* outTy = llvmType(ir.type);
-        llvm::FunctionType* ft = llvm::FunctionType::get(outTy, args, false);
-        llvm::Function* f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, func, S->M);
-
-        llvm::Value* in = Load(ir.a);
+        llvm::Function* f = builder.getFunction(func);
+        if(f == 0) {
+            f = builder.getFunction(func, llvmType(jit.code[ir.a].type), llvmType(ir.type));
+        }
+        llvm::Value* in = Load(builder, ir.a);
         llvm::Value* out = llvm::UndefValue::get(llvmType(ir.type, width));
         for(uint32_t i = 0; i < width; i++) {
             llvm::Value* v = builder.CreateExtractElement(in, builder.getInt32(i));
@@ -392,17 +631,12 @@ struct Fusion {
     }
 
     llvm::Value* BinaryCall(std::string func, JIT::IR const& ir) {
-        llvm::Function* f = S->M->getFunction(func);
+        llvm::Function* f = builder.getFunction(func);
         if(f == 0) {
-            std::vector<llvm::Type*> args;
-            args.push_back(llvmType(jit.code[ir.a].type));
-            args.push_back(llvmType(jit.code[ir.b].type));
-            llvm::Type* outTy = llvmType(ir.type);
-            llvm::FunctionType* ft = llvm::FunctionType::get(outTy, args, false);
-            f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, func, S->M);
+            f = builder.getFunction(func, llvmType(jit.code[ir.a].type), llvmType(jit.code[ir.a].type), llvmType(ir.type));
         }
-        llvm::Value* ina = Load(ir.a);
-        llvm::Value* inb = Load(ir.b);
+        llvm::Value* ina = Load(builder, ir.a);
+        llvm::Value* inb = Load(builder, ir.b);
         llvm::Value* out = llvm::UndefValue::get(llvmType(ir.type, width));
         for(uint32_t i = 0; i < width; i++) {
             llvm::Value* v = builder.CreateExtractElement(ina, builder.getInt32(i));
@@ -413,12 +647,6 @@ struct Fusion {
         return out;
     }
 
-#define MARKER(str) \
-    builder.CreateCall(S->M->getFunction("MARKER"), builder.CreateConstGEP2_64(builder.CreateGlobalString(str), 0, 0))
-
-#define DUMP(str, i) \
-    builder.CreateCall2(S->M->getFunction("DUMP"), builder.CreateConstGEP2_64(builder.CreateGlobalString(str), 0, 0), i)
-
     void Emit(size_t index) {
 
         instructions++;
@@ -428,32 +656,32 @@ struct Fusion {
 #define CASE_UNARY(Op, FName, IName) \
     case TraceOpCode::Op: { \
         outs[reg] = (jit.code[ir.a].type == Type::Double)   \
-        ? builder.Create##FName(Load(ir.a)) \
-        : builder.Create##IName(Load(ir.a));\
+        ? builder.Create##FName(Load(builder, ir.a)) \
+        : builder.Create##IName(Load(builder, ir.a));\
     } break
 
 #define CASE_BINARY(Op, FName, IName) \
     case TraceOpCode::Op: { \
         outs[reg] = (jit.code[ir.a].type == Type::Double)   \
-        ? builder.Create##FName(Load(ir.a), Load(ir.b)) \
-        : builder.Create##IName(Load(ir.a), Load(ir.b));\
+        ? builder.Create##FName(Load(builder, ir.a), Load(builder, ir.b)) \
+        : builder.Create##IName(Load(builder, ir.a), Load(builder, ir.b));\
     } break
 
 #define CASE_UNARY_LOGICAL(Op, Name) \
     case TraceOpCode::Op: { \
-        outs[reg] = builder.Create##Name(Load(ir.a)); \
+        outs[reg] = builder.Create##Name(Load(builder, ir.a)); \
     } break
 
 #define CASE_BINARY_LOGICAL(Op, Name) \
     case TraceOpCode::Op: { \
-        outs[reg] = builder.Create##Name(Load(ir.a), Load(ir.b)); \
+        outs[reg] = builder.Create##Name(Load(builder, ir.a), Load(builder, ir.b)); \
     } break
 
 #define IDENTITY \
-    outs[reg] = Load(ir.a);
+    outs[reg] = Load(builder, ir.a);
 
 #define SCALARIZE1(Name, A) { \
-    llvm::Value* in = Load(ir.a);                        \
+    llvm::Value* in = Load(builder, ir.a);                        \
     outs[reg] = llvm::UndefValue::get(llvmType(ir.type, width)); \
     for(uint32_t i = 0; i < width; i++) {                                       \
         llvm::Value* ii = builder.getInt32(i);                                  \
@@ -488,36 +716,36 @@ struct Fusion {
             CASE_BINARY_LOGICAL(land, And); 
            
             case TraceOpCode::floor: 
-                outs[reg] = SSERound(Load(ir.a), 0x1 /* round down */); 
+                outs[reg] = SSERound(Load(builder, ir.a), 0x1 /* round down */); 
                 break;
             case TraceOpCode::ceiling: 
-                outs[reg] = SSERound(Load(ir.a), 0x2 /* round up */); 
+                outs[reg] = SSERound(Load(builder, ir.a), 0x2 /* round up */); 
                 break;
             case TraceOpCode::trunc: 
-                outs[reg] = SSERound(Load(ir.a), 0x3 /* round to zero */); 
+                outs[reg] = SSERound(Load(builder, ir.a), 0x3 /* round to zero */); 
                 break;
             case TraceOpCode::abs:
                 // TODO: this could be faster with some bit twidling
                 if(ir.type == Type::Double) {
-                    llvm::Value* o = builder.CreateFNeg(Load(ir.a));
+                    llvm::Value* o = builder.CreateFNeg(Load(builder, ir.a));
                     outs[reg] = builder.CreateSelect(
-                        builder.CreateFCmpOLT(Load(ir.a), o),
-                        o, Load(ir.a));
+                        builder.CreateFCmpOLT(Load(builder, ir.a), o),
+                        o, Load(builder, ir.a));
                 }
                 else {
-                    llvm::Value* o = builder.CreateNeg(Load(ir.a));
+                    llvm::Value* o = builder.CreateNeg(Load(builder, ir.a));
                     outs[reg] = builder.CreateSelect(
-                        builder.CreateICmpSLT(Load(ir.a), o),
-                        o, Load(ir.a));
+                        builder.CreateICmpSLT(Load(builder, ir.a), o),
+                        o, Load(builder, ir.a));
                 } 
             break;
             case TraceOpCode::sign:
                 // TODO: make this faster
                 outs[reg] = builder.CreateSelect(
-                    builder.CreateFCmpOLT(Load(ir.a), zerosD),
+                    builder.CreateFCmpOLT(Load(builder, ir.a), zerosD),
                         builder.CreateFNeg(onesD),
                         builder.CreateSelect(
-                            builder.CreateFCmpOGT(Load(ir.a), zerosD),
+                            builder.CreateFCmpOGT(Load(builder, ir.a), zerosD),
                             onesD,
                             zerosD));
             break;
@@ -537,17 +765,17 @@ struct Fusion {
 
             case TraceOpCode::idiv:
                 if(ir.type == Type::Double) {
-                    outs[reg] = SSERound(builder.CreateFDiv(Load(ir.a), Load(ir.b)), 0x1); 
+                    outs[reg] = SSERound(builder.CreateFDiv(Load(builder, ir.a), Load(builder, ir.b)), 0x1); 
                 }
                 else {
-                    outs[reg] = builder.CreateSDiv(Load(ir.a), Load(ir.b));
+                    outs[reg] = builder.CreateSDiv(Load(builder, ir.a), Load(builder, ir.b));
                 }
             break;
 
             case TraceOpCode::mod:
             {
-                llvm::Value* a = Load(ir.a);
-                llvm::Value* b = Load(ir.b);
+                llvm::Value* a = Load(builder, ir.a);
+                llvm::Value* b = Load(builder, ir.b);
                 if(ir.type == Type::Double) {
                     outs[reg] = SSERound(builder.CreateFDiv(a, b), 0x1);
                     outs[reg] = builder.CreateFSub(a, builder.CreateFMul(outs[reg], b));
@@ -564,7 +792,7 @@ struct Fusion {
                 }
                 else {
                     outs[reg] = builder.CreateSelect(
-                        builder.CreateICmpSLT(Load(ir.a), Load(ir.b)), Load(ir.a), Load(ir.b));
+                        builder.CreateICmpSLT(Load(builder, ir.a), Load(builder, ir.b)), Load(builder, ir.a), Load(builder, ir.b));
                 }
             break;
 
@@ -575,12 +803,12 @@ struct Fusion {
                 }
                 else {
                     outs[reg] = builder.CreateSelect(
-                        builder.CreateICmpSGT(Load(ir.a), Load(ir.b)), Load(ir.a), Load(ir.b));
+                        builder.CreateICmpSGT(Load(builder, ir.a), Load(builder, ir.b)), Load(builder, ir.a), Load(builder, ir.b));
                 }
             break;
 
             case TraceOpCode::ifelse:
-                outs[reg] = builder.CreateSelect(Load(ir.a), Load(ir.b), Load(ir.c));
+                outs[reg] = builder.CreateSelect(Load(builder, ir.a), Load(builder, ir.b), Load(builder, ir.c));
             break;
 
             case TraceOpCode::asdouble:
@@ -612,13 +840,13 @@ struct Fusion {
             
             case TraceOpCode::phi:
                 if(jit.code[ir.a].reg != jit.code[ir.b].reg) 
-                    outs[jit.code[ir.a].reg] = Load(ir.b);
+                    outs[jit.code[ir.a].reg] = Load(builder, ir.b);
                 break;
             
             case TraceOpCode::gather: 
             {
-                llvm::Value* v = RawLoad(ir.a);
-                llvm::Value* idx = Load(ir.b);
+                llvm::Value* v = RawLoad(builder, ir.a);
+                llvm::Value* idx = Load(builder, ir.b);
                 // scalarize the gather...
                 llvm::Value* r = llvm::UndefValue::get(llvmType(ir.type, width));
 
@@ -634,36 +862,19 @@ struct Fusion {
             } break;
             case TraceOpCode::scatter:
             {
-                llvm::Value* v = Load(ir.c);
-                llvm::Value* idx = Load(ir.b);
+                llvm::Value* v = Load(builder, ir.c);
+                llvm::Value* idx = Load(builder, ir.b);
               
-                DUMP("scatter to ", builder.CreateExtractElement(idx, builder.getInt32(0)));
-                
-                if(jit.code[ir.a].reg != reg) {
-                    // must duplicate (copy from the in register to the out). 
-                    // Do this in the fusion header.
-                    llvm::IRBuilder<> TmpB(header,
-                        header->begin());
-                    TmpB.CreateMemCpy(RawLoad(index), RawLoad(ir.a),
-                        TmpB.CreateMul(
-                            TmpB.CreateLoad(RawLoad(ir.out.length)),
-                            TmpB.getInt64(ir.type == Type::Logical ? 1 : 8)), 
-                        16);
-                }
- 
                 // we've computed the new shape, realloc
-                llvm::Value* newlen = builder.CreateLoad(RawLoad(ir.out.length));
-                values[index] = registers[ir.reg] = 
-                    Call(std::string("REALLOC_")+Type::toString(jit.registers[ir.reg].type), 
-                        registers[ir.reg], registerLengths[ir.reg], newlen);
+                llvm::Value* newlen = builder.CreateLoad(RawLoad(builder, ir.out.length));
+                registers[ir.reg].Resize(builder, newlen);
                 
                 llvm::Type* mt = llvmType(ir.type)->getPointerTo();
-                llvm::Value* x = builder.CreatePointerCast(RawLoad(index), mt);
+                llvm::Value* x = builder.CreatePointerCast(RawLoad(builder, index), mt);
                 for(uint32_t i = 0; i < width; i++) {
                     llvm::Value* ii = builder.getInt32(i);
                     llvm::Value* j = builder.CreateExtractElement(v, ii);
                     ii = builder.CreateExtractElement(idx, ii);
-                    DUMP("scattering to ", builder.CreatePtrToInt(builder.CreateGEP(x, ii), builder.getInt64Ty()));
                     builder.CreateStore(j,
                             builder.CreateGEP(x, ii));
                 }
@@ -679,19 +890,17 @@ struct Fusion {
                         r = builder.CreateInsertElement(r, j, ii);
                     }
                 }
-                else {*/
-                //} 
+                */
             } break;
 
             case TraceOpCode::reshape:
             {
-                // Keep current length & running allocated length in alloca
-                llvm::IRBuilder<> TmpB(header, header->end());
-                llvm::Value* len = CreateEntryBlockAlloca(builder.getInt64Ty());
-                TmpB.CreateStore(TmpB.CreateLoad(RawLoad(ir.b)), len);
-
+                // Keep current length
+                FunctionBuilder b = builder.Appender(header);
+                llvm::Value* len = b.CreateInitializedAlloca( b.CreateLoad( RawLoad(b, ir.b) ) );
+                
                 // compute max of indices
-                llvm::Value* v = Load(ir.a);
+                llvm::Value* v = Load(builder, ir.a);
                 llvm::Value* nlen = builder.CreateLoad(len);
                 for(uint32_t i = 0; i < width; i++) {
                     llvm::Value* q = builder.CreateExtractElement(v, builder.getInt32(i));
@@ -700,12 +909,13 @@ struct Fusion {
                 }
                 builder.CreateStore(nlen, len);
                 reductions[index] = len;
+                registers[reg].Set(builder, nlen);
             } break;
 
             case TraceOpCode::brcast:
             {
                 if(jit.code[ir.a].out.length == 1) {
-                    llvm::Value* e = builder.CreateLoad( RawLoad(ir.a) );
+                    llvm::Value* e = builder.CreateLoad( RawLoad(builder, ir.a) );
                     llvm::Value* r = llvm::UndefValue::get(llvmType(ir.type, width));
                     for(int32_t i = 0; i < width; i++) {
                         r = builder.CreateInsertElement(r, e, builder.getInt32(i)); 
@@ -713,13 +923,12 @@ struct Fusion {
                     outs[reg] = r;
                 }
                 else {
-                    llvm::Value* v = RawLoad(ir.a);
+                    llvm::Value* v = RawLoad(builder, ir.a);
                     // scalarize the broadcast...
                     llvm::Value* r = llvm::UndefValue::get(llvmType(ir.type, width));
                     for(uint32_t i = 0; i < width; i++) {
                         llvm::Value* ii = builder.getInt32(i);
                         llvm::Value* j = builder.CreateExtractElement(sequenceI, ii);
-                        llvm::Value* idx = builder.CreateSDiv(j, Load(jit.code[ir.a].out.length));
                         j = builder.CreateLoad(builder.CreateGEP(v, j));
                         if(ir.type == Type::Logical)
                             j = builder.CreateICmpEQ(j, builder.getInt8(255));
@@ -732,35 +941,33 @@ struct Fusion {
             // Generators
             case TraceOpCode::seq:
             {
-                llvm::AllocaInst* r = CreateEntryBlockAlloca(llvmType(ir.type, width));
-            
-                llvm::IRBuilder<> TmpB(header, header->end());
+                FunctionBuilder b = builder.Appender(header);
 
                 // now initialize
-                llvm::Value* start = TmpB.CreateLoad(RawLoad(ir.a));
-                llvm::Value* step = TmpB.CreateLoad(RawLoad(ir.b));
+                llvm::Value* start = b.CreateLoad(RawLoad(b, ir.a));
+                llvm::Value* step = b.CreateLoad(RawLoad(b, ir.b));
 
                 llvm::Value* starts = llvm::UndefValue::get(llvmType(ir.type, width)); 
                 llvm::Value* steps = llvm::UndefValue::get(llvmType(ir.type, width)); 
                 llvm::Value* bigstep = llvm::UndefValue::get(llvmType(ir.type, width));
                 for(size_t i = 0; i < this->width; i++) {
-                    starts = TmpB.CreateInsertElement(starts, start, builder.getInt32(i));
-                    steps = TmpB.CreateInsertElement(steps, step, builder.getInt32(i));
+                    starts = b.CreateInsertElement(starts, start, builder.getInt32(i));
+                    steps = b.CreateInsertElement(steps, step, builder.getInt32(i));
                     if(ir.type == Type::Integer)
-                        bigstep = TmpB.CreateInsertElement(bigstep, TmpB.CreateMul(step,builder.getInt64(width)), builder.getInt32(i));
+                        bigstep = b.CreateInsertElement(bigstep, b.CreateMul(step,builder.getInt64(width)), builder.getInt32(i));
                     else if(ir.type == Type::Double)
-                        bigstep = TmpB.CreateInsertElement(bigstep, TmpB.CreateFMul(step,llvm::ConstantFP::get(builder.getDoubleTy(), width)), builder.getInt32(i));
+                        bigstep = b.CreateInsertElement(bigstep, b.CreateFMul(step,llvm::ConstantFP::get(builder.getDoubleTy(), width)), builder.getInt32(i));
                     else
                         _error("Unexpected seq type");
                 } 
                
-                llvm::Value* added;
+                llvm::Value* r, *added;
                 if(ir.type == Type::Integer) { 
-                    TmpB.CreateStore(TmpB.CreateSub(TmpB.CreateAdd(TmpB.CreateMul(seqI, steps), starts), bigstep), r);
+                    r = b.CreateInitializedAlloca(b.CreateSub(b.CreateAdd(b.CreateMul(seqI, steps), starts), bigstep));
                     added = builder.CreateAdd(builder.CreateLoad(r), bigstep);
                 }
                 else if(ir.type == Type::Double) {
-                    TmpB.CreateStore(TmpB.CreateFSub(TmpB.CreateFAdd(TmpB.CreateFMul(seqD, steps), starts), bigstep), r);
+                    r = b.CreateInitializedAlloca(b.CreateFSub(b.CreateFAdd(b.CreateFMul(seqD, steps), starts), bigstep));
                     added = builder.CreateFAdd(builder.CreateLoad(r), bigstep);
                 }
                 else
@@ -774,16 +981,12 @@ struct Fusion {
             {
                 llvm::Value* agg;
                 if(ir.type == Type::Double) {
-                    agg = CreateEntryBlockAlloca(llvmType(ir.type, width));
-                    llvm::IRBuilder<> TmpB(header, header->end());
-                    TmpB.CreateStore(zerosD, agg);
-                    builder.CreateStore(builder.CreateFAdd(builder.CreateLoad(agg), Load(ir.a)), agg);
+                    agg = builder.CreateInitializedAlloca(zerosD);
+                    builder.CreateStore(builder.CreateFAdd(builder.CreateLoad(agg), Load(builder, ir.a)), agg);
                 }
                 else {
-                    agg = CreateEntryBlockAlloca(llvmType(ir.type, width));
-                    llvm::IRBuilder<> TmpB(header, header->end());
-                    TmpB.CreateStore(zerosI, agg);
-                    builder.CreateStore(builder.CreateAdd(builder.CreateLoad(agg), Load(ir.a)), agg);
+                    agg = builder.CreateInitializedAlloca(zerosI);
+                    builder.CreateStore(builder.CreateAdd(builder.CreateLoad(agg), Load(builder, ir.a)), agg);
                 } 
                 reductions[index] = agg;
             } break;
@@ -829,7 +1032,7 @@ struct Fusion {
                 break;
         }
         r = builder.CreateInsertElement(r, t, builder.getInt32(0));
-        Store(r, ir.reg, builder.getInt64(0)); 
+        Store(builder, r, ir.reg, builder.getInt64(0)); 
     }
 
     llvm::BasicBlock* Close() {
@@ -841,7 +1044,7 @@ struct Fusion {
 
         std::map<size_t, llvm::Value*>::const_iterator i;
         for(i = outs.begin(); i != outs.end(); i++) {
-            Store(i->second, i->first, iterator);
+            Store(builder, i->second, i->first, iterator);
         }
 
         builder.SetInsertPoint(header);
@@ -876,10 +1079,6 @@ struct Fusion {
 
         return after;
     }
-
-    llvm::Value* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C) {
-        return builder.CreateCall4(S->M->getFunction(F), thread_var, A, B, C);
-    }
 };
 
 #define BOXED_ARG(val) \
@@ -897,46 +1096,38 @@ struct TraceCompiler {
     llvm::BasicBlock * LoopStart;
     llvm::BasicBlock * InnerBlock;
     llvm::BasicBlock * EndBlock;
-    llvm::IRBuilder<> builder;
 
-    llvm::FunctionType* functionTy;
-    llvm::Type* thread_type;
     llvm::Type* value_type;
     llvm::Type* actual_value_type;
+    llvm::Type* thread_type;
+    llvm::FunctionType* function_type;
 
     llvm::Value* thread_var;
     llvm::Value* result_var;
 
-    std::vector<llvm::Value*> values;
-    std::vector<llvm::Value*> registers;
-    std::vector<llvm::Value*> registerLengths;
+    FunctionBuilder builder;
+    std::vector<Register> registers;
     std::vector<llvm::CallInst*> calls;
  
-    TraceCompiler(Thread& thread, JIT& jit) 
-        : thread(thread), jit(jit), S(&llvmState), builder(*S->C) 
+    TraceCompiler(Thread& thread, JIT& jit, llvm::Function* func) 
+        : thread(thread)
+        , jit(jit)
+        , S(&llvmState)
+
+        , value_type( 
+            llvm::StructType::get( 
+                llvm::Type::getInt64Ty(*S->C), llvm::Type::getInt64Ty(*S->C) ,NULL ) )
+        , actual_value_type( S->M->getTypeByName("struct.Value") )
+        , thread_type( S->M->getTypeByName("class.Thread")->getPointerTo() )
+        , function_type( BuilderBase::getFunctionTy( llvm::Type::getInt64Ty(*S->C), thread_type ) )
+
+        , builder( 
+            func != 0 
+                ? func
+                : llvm::Function::Create( function_type, llvm::Function::PrivateLinkage, "trace", S->M)
+            )
     {
-        registers = std::vector<llvm::Value*>(jit.registers.size(), 0);
-        registerLengths = std::vector<llvm::Value*>(jit.registers.size(), 0);
-        values = std::vector<llvm::Value*>(jit.code.size(), 0);
-
-        thread_type = S->M->getTypeByName("class.Thread")->getPointerTo();
-        value_type = llvm::StructType::get(builder.getInt64Ty(), builder.getInt64Ty(), NULL);
-        actual_value_type = S->M->getTypeByName("struct.Value");
-
-        std::vector<llvm::Type*> argTys;
-        argTys.push_back(thread_type);
-
-        functionTy = llvm::FunctionType::get(
-                builder.getInt64Ty(),
-                argTys, /*isVarArg=*/false);
-
-    }
-
-    llvm::Function* Compile(llvm::Function* func) {
-        
-        function = func == 0 ? llvm::Function::Create(functionTy,
-                                    llvm::Function::PrivateLinkage,
-                                    "trace", S->M) : func;
+        function = builder.function();
 
         function->deleteBody();
         function->setLinkage(llvm::Function::PrivateLinkage);
@@ -945,22 +1136,28 @@ struct TraceCompiler {
         llvm::Function::arg_iterator ai = function->arg_begin();
         ai->setName("thread");
         thread_var = ai++;
+    }
 
-        EntryBlock  = llvm::BasicBlock::Create(*S->C, "entry", function, 0);
-        HeaderBlock = llvm::BasicBlock::Create(*S->C, "header", function, 0);
-        InnerBlock  = llvm::BasicBlock::Create(*S->C, "inner", function, 0);
-        EndBlock    = llvm::BasicBlock::Create(*S->C, "end", function, 0);
+    llvm::Function* Compile() {
+        
+        EntryBlock   = builder.CreateBlock("entry");
+        HeaderBlock  = builder.CreateBlock("header");
+        InnerBlock   = builder.CreateBlock("inner");
+        EndBlock     = builder.CreateBlock("end");
 
         builder.SetInsertPoint(EntryBlock);
 
         result_var = CreateEntryBlockAlloca(builder.getInt64Ty(), builder.getInt64(1));
 
+        for(size_t i = 0; i < jit.registers.size(); i++) {
+            registers.push_back( Register( builder, jit.registers[i].type, jit.registers[i].shape ) );
+        }
+
         builder.SetInsertPoint(HeaderBlock);
 
         for(size_t i = 0; i < jit.code.size(); i++) {
             if(jit.code[i].live) {
-                values[i] = CreateRegister(jit.code[i]);
-                Emit(jit.code[i], i, values[i]);
+                Emit(jit.code[i], i, InitializeRegister(jit.code[i]) );
             }
         }
         
@@ -977,9 +1174,14 @@ struct TraceCompiler {
         }*/
         
         S->FPM->run(*function);
-        function->dump();
+        //function->dump();
 
         return function;
+    }
+
+    llvm::Value* value( JIT::IRRef a ) {
+        
+        return registers[ jit.code[a].reg ].value( builder );
     }
 
     Fusion* StartFusion(JIT::IR ir) {
@@ -994,10 +1196,10 @@ struct TraceCompiler {
             width = v[0];
         } 
         else {
-            length = builder.CreateLoad(values[ir.in.length]);
+            length = builder.CreateLoad(value(ir.in.length));
             width = 2;
         }
-        Fusion* fusion = new Fusion(jit, S, function, thread_var, values, registers, registerLengths, length, width);
+        Fusion* fusion = new Fusion(jit, FunctionBuilder( function ), registers, length, width);
         fusion->Open(InnerBlock);
         return fusion;
     }
@@ -1051,7 +1253,7 @@ struct TraceCompiler {
             builder.CreateStore(v, tmp);
             
             llvm::Value* length =
-                builder.CreateLoad(values[jit.code[index].out.length]);
+                builder.CreateLoad(value(jit.code[index].out.length));
 
             llvm::Value* r = Call(std::string("UNBOX_")+Type::toString(type),
                 builder.CreatePointerCast(tmp, actual_value_type->getPointerTo()),
@@ -1066,10 +1268,7 @@ struct TraceCompiler {
 
             EmitExit(guard, jit.exits[index], index);
 
-            builder.CreateMemCpy(values[index], r, 
-                builder.CreateMul(length,  builder.getInt64(type == Type::Logical ? 1 : 8)), 8);
-
-            return values[index];
+            return r;
         }
         else {
             return v;
@@ -1077,40 +1276,45 @@ struct TraceCompiler {
     }
 
     llvm::Value* Box(JIT::IRRef index) {
-        llvm::Value* r = values[index];
+        llvm::Value* r = value(index);
         
         // if unboxed type, box
         Type::Enum type = jit.code[index].type;
         if(Unboxed(type)) {
             r = Call(std::string("BOX_")+Type::toString(type),
-                    r, builder.CreateLoad(values[jit.code[index].out.length]));
+                    r, builder.CreateLoad(value(jit.code[index].out.length)));
         }
 
         return r;
     }
 
-    llvm::Value* CreateRegister(JIT::IR const& ir) {
-        if(ir.reg != 0 && registers[ir.reg] == 0) {
-            JIT::IRRef len = jit.registers[ir.reg].shape.length;
-            llvm::Value* length = builder.CreateLoad(values[len]);
-            if(jit.code[len].op == TraceOpCode::constant &&
-                    ((Integer const&)jit.constants[jit.code[len].a])[0] <= SPECIALIZE_LENGTH) {
-                Integer const& v = (Integer const&)jit.constants[jit.code[len].a];
-                registers[ir.reg] =
-                    CreateEntryBlockAlloca(llvmMemoryType(jit.registers[ir.reg].type), builder.getInt64(v[0]));
+    Register& InitializeRegister(JIT::IR const& ir) {
+        JIT::Register r = jit.registers[ir.reg];
+
+        // scatter is special. It initially needs a register that duplicates its input.
+        if( ir.op == TraceOpCode::scatter )
+        {
+            registers[ir.reg].Duplicate(
+                builder,
+                registers[jit.code[ir.a].reg],
+                registers[jit.code[jit.code[ir.a].out.length].reg]);
+        }
+        else if(!(ir.op == TraceOpCode::constant
+            || ir.op == TraceOpCode::load
+            || ir.op == TraceOpCode::sload)
+          && Unboxed(r.type) ) 
+        {
+            if( r.shape.constant ) {
+                registers[ir.reg].Initialize( builder, r.shape.traceLength );
             }
             else {
-                registers[ir.reg] =
-                    Call(std::string("MALLOC_")+Type::toString(jit.registers[ir.reg].type), length);
+                registers[ir.reg].Initialize( builder, registers[jit.code[r.shape.length].reg] ); 
             }
-            registerLengths[ir.reg] =
-                    CreateEntryBlockAlloca(llvmMemoryType(Type::Integer), builder.getInt64(1));
-            builder.CreateStore(length, registerLengths[ir.reg]);
         }
-        return registers[ir.reg]; 
+        return registers[ir.reg];
     }
 
-    void Emit(JIT::IR ir, size_t index, llvm::Value*& reg) { 
+    void Emit(JIT::IR ir, size_t index, Register& reg) { 
 
         switch(ir.op) {
 
@@ -1162,27 +1366,20 @@ struct TraceCompiler {
             case TraceOpCode::push:
             {
                 JIT::StackFrame frame = jit.frames[ir.c];
+                llvm::Value* a = value(ir.a);
+                llvm::Value* b = value(ir.b);
                 Call("PUSH",
-                        BOXED_ARG(values[ir.a]), 
+                        BOXED_ARG(a), 
                         builder.getInt64((int64_t)frame.prototype),
                         builder.getInt64((int64_t)frame.returnpc),
                         builder.getInt64((int64_t)frame.returnbase),
-                        BOXED_ARG(values[ir.b]),
+                        BOXED_ARG(b),
                         builder.getInt64(frame.dest));
             } break;
 
             case TraceOpCode::pop:
             {
                 Call("POP");
-            } break;
-
-            case TraceOpCode::phi:
-            {
-                // TODO: this isn't right!
-                //reg = values[ir.a];
-                // what should this do??
-                // copy from one register to another.
-                // what if register sizes change?
             } break;
 
             // Load/Store op codes
@@ -1209,43 +1406,46 @@ struct TraceCompiler {
                         for(size_t i = 0; i < ir.out.traceLength; i++)
                             c.push_back((llvm::Constant*)builder.CreateIntToPtr(builder.getInt64((int64_t)v[i]), builder.getInt8Ty()->getPointerTo()));
                     }
-                    reg = CreateEntryBlockAlloca(llvmMemoryType(ir.type), builder.getInt64(ir.out.traceLength));
+                    llvm::Value* r = CreateEntryBlockAlloca(
+                        llvmMemoryType(ir.type), builder.getInt64(ir.out.traceLength));
                     for(size_t i = 0; i < ir.out.traceLength; i++) {
-                        builder.CreateStore(c[i], builder.CreateConstGEP1_64(reg, i));
+                        builder.CreateStore(c[i], builder.CreateConstGEP1_64(r, i));
                     }
+                    reg.Store( builder, r );
                 }
                 else {
                     // a boxed type
-                    reg = CreateEntryBlockAlloca(value_type, builder.getInt64(0));
-                    llvm::Value* p = builder.CreatePointerCast(reg, builder.getInt64Ty()->getPointerTo());
+                    llvm::Value* r = CreateEntryBlockAlloca(value_type, builder.getInt64(0));
+                    llvm::Value* p = builder.CreatePointerCast(r, builder.getInt64Ty()->getPointerTo());
                     builder.CreateStore(builder.getInt64(jit.constants[ir.a].header), builder.CreateConstGEP1_64(p, 0));
                     builder.CreateStore(builder.getInt64(jit.constants[ir.a].i), builder.CreateConstGEP1_64(p, 1));
-                    reg = builder.CreateLoad(reg);
+                    reg.Store( builder, r );
                 }
             } break;
 
             case TraceOpCode::sload: 
             {
-                reg = Unbox(index, Call("SLOAD", builder.getInt64(ir.b)));
+                reg.Store( builder, Unbox(index, Call("SLOAD", builder.getInt64(ir.b))) );
             } break;
 
             case TraceOpCode::load: 
             {
+                llvm::Value* a = value(ir.a);
                 if(jit.code[ir.a].type == Type::Environment) {
-                    reg = Unbox(index, Call("ELOAD",
-                                BOXED_ARG(values[ir.a]), values[ir.b]));
+                    reg.Store( builder, Unbox(index, Call("ELOAD",
+                                BOXED_ARG(a), value(ir.b))) );
                 }
                 else if(jit.code[ir.a].type == Type::Object) {
                     if(ir.b == 0) {         // strip
-                        reg = Unbox(index, Call("GET_strip", BOXED_ARG(values[ir.a]))); 
+                        reg.Store( builder, Unbox(index, Call("GET_strip", BOXED_ARG(a))) ); 
                     }
                     else {                  // attribute
-                        reg = Unbox(index, Call("GET_attr",
-                            BOXED_ARG(values[ir.a]), values[ir.b]));
+                        reg.Store( builder, Unbox(index, Call("GET_attr",
+                            BOXED_ARG(a), value(ir.b))) );
                     }
                 }
                 else if(jit.code[ir.a].type == Type::Function) {
-                    reg = Call("GET_environment", BOXED_ARG(values[ir.a]));
+                    reg.Store( builder, Call("GET_environment", BOXED_ARG(a)) );
                 }
                 else {
                     _error("Unknown load target");
@@ -1254,63 +1454,70 @@ struct TraceCompiler {
            
             case TraceOpCode::store:
             {
-                Call("ESTORE", BOXED_ARG(values[ir.a]), values[ir.b], BOXED_ARG(Box(ir.c))); 
+                llvm::Value* a = value(ir.a);
+                llvm::Value* c = Box(ir.c);
+                Call("ESTORE", BOXED_ARG(a), value(ir.b), BOXED_ARG(c)); 
             } break;
 
             case TraceOpCode::sstore:
             {
-                Call("SSTORE", builder.getInt64(ir.b), BOXED_ARG(Box(ir.c)));
+                llvm::Value* c = Box(ir.c);
+                Call("SSTORE", builder.getInt64(ir.b), BOXED_ARG(c));
             } break;
             
 
             // Environment op codes
              
             case TraceOpCode::curenv: {
-                reg = Call(std::string("curenv"));
+                reg.Store( builder, Call(std::string("curenv")) );
             } break;
 
             case TraceOpCode::newenv:
             {
-                reg = Call("NEW_environment");
+                reg.Store( builder, Call("NEW_environment") );
             } break;
 
             case TraceOpCode::lenv:
             {
-                reg = Call("GET_lenv", BOXED_ARG(values[ir.a])); 
+                llvm::Value* a = value(ir.a);
+                reg.Store( builder, Call("GET_lenv", BOXED_ARG(a)) ); 
             } break;
  
             case TraceOpCode::denv:
             {
-                reg = Call("GET_denv", BOXED_ARG(values[ir.a])); 
+                llvm::Value* a = value(ir.a);
+                reg.Store( builder, Call("GET_denv", BOXED_ARG(a)) ); 
             } break;
 
             case TraceOpCode::cenv:
             {
-                reg = Call("GET_call", BOXED_ARG(values[ir.a])); 
+                llvm::Value* a = value(ir.a);
+                reg.Store( builder, Call("GET_call", BOXED_ARG(a)) ); 
             } break;
 
             // Length op codes
 
             case TraceOpCode::slength: 
             {
-                builder.CreateStore(Call("SLENGTH", builder.getInt64(ir.b)), reg);
+                reg.Set( builder, Call("SLENGTH", builder.getInt64(ir.b)) );
             } break;
 
             case TraceOpCode::elength: 
             {
-                builder.CreateStore(Call("ELENGTH",
-                        BOXED_ARG(values[ir.a]), values[ir.b]), reg);
+                llvm::Value* a = value(ir.a);
+                reg.Set( builder, Call("ELENGTH", BOXED_ARG(a), value(ir.b)) );
             } break;
 
             case TraceOpCode::alength: 
             {
-                builder.CreateStore(Call("ALENGTH", 
-                            BOXED_ARG(values[ir.a]), values[ir.b]), reg);
+                llvm::Value* a = value(ir.a);
+                reg.Set( builder, Call("ALENGTH", BOXED_ARG(a), value(ir.b)) );
             } break;
 
             case TraceOpCode::olength: 
             {
-                builder.CreateStore(Call("OLENGTH", BOXED_ARG(values[ir.a])), reg);
+                llvm::Value* a = value(ir.a);
+                reg.Set( builder, Call("OLENGTH", BOXED_ARG(a)) ); 
             } break;
            
             // Guards
@@ -1318,21 +1525,23 @@ struct TraceCompiler {
             case TraceOpCode::gtrue:
             case TraceOpCode::gfalse: {
                 // TODO: check the NA mask
-                llvm::Value* r = builder.CreateTrunc(builder.CreateLoad(values[ir.a]), builder.getInt1Ty());
+                llvm::Value* r = builder.CreateTrunc(builder.CreateLoad(value(ir.a)), builder.getInt1Ty());
                 if(ir.op == TraceOpCode::gfalse)
                     r = builder.CreateNot(r);
                 EmitExit(r, jit.exits[index], index);
             } break;
 
             case TraceOpCode::gproto: {
+                llvm::Value* a = value(ir.a);
                 llvm::Value* r = builder.CreateICmpEQ(
                     builder.CreatePtrToInt(
-                        Call("GET_prototype", BOXED_ARG(values[ir.a])) 
+                        Call("GET_prototype", BOXED_ARG(a)) 
                         , builder.getInt64Ty())
                     , builder.getInt64(ir.b));
                 EmitExit(r, jit.exits[index], index);
             } break;
 
+            case TraceOpCode::phi:
             case TraceOpCode::reshape:
             case TraceOpCode::brcast:
             case TraceOpCode::gather:
@@ -1407,7 +1616,7 @@ struct TraceCompiler {
             if(jit.dest->exits[e.index].function == 0) {
                 // create exit stub.
                 llvm::Function* stubfn = 
-                    llvm::Function::Create(functionTy,
+                    llvm::Function::Create(function_type,
                             llvm::Function::PrivateLinkage,
                             "side", S->M);
                 stubfn->setCallingConv(llvm::CallingConv::Fast);
@@ -1472,9 +1681,8 @@ struct TraceCompiler {
 };
 
 void JIT::compile(Thread& thread) {
-    timespec a = get_time();
-    TraceCompiler compiler(thread, *this);
-    dest->function = compiler.Compile((llvm::Function*)dest->function);
+    TraceCompiler compiler(thread, *this, (llvm::Function*)dest->function);
+    dest->function = compiler.Compile();
     dest->ptr = (Ptr)llvmState.EE->recompileAndRelinkFunction((llvm::Function*)dest->function);
 }
 

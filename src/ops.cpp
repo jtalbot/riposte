@@ -20,6 +20,11 @@ void DUMP(char* a, int64_t i) {
 }
 
 extern "C"
+void DUMPD(char* a, double d) {
+    printf("%s : %f\n", a, d);
+}
+
+extern "C"
 Value curenv(Thread& thread) {
     Value v;
     return REnvironment::Init(v, thread.frame.environment);
@@ -73,8 +78,9 @@ extern "C"
 double const* UNBOX_double(Thread& thread, Value& a, int64_t length) {
     if(!a.isDouble() || a.length != length)
         return 0;
-    else
+    else {
         return ((Double const&)a).v();
+    }
 }
 
 extern "C"

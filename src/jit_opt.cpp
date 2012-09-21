@@ -508,21 +508,16 @@ JIT::IRRef JIT::DPE(std::vector<IR> const& code, IRRef i) {
 }
 
 
-void JIT::EmitOptIR(
+JIT::IRRef JIT::EmitOptIR(
             Thread& thread,
-            IRRef i,
             IR ir,
             std::vector<IR>& code, 
             std::vector<IRRef>& forward, 
             std::tr1::unordered_map<IR, IRRef>& cse,
-            std::vector<IRRef>& stack,
-            std::map<Variable, Phi>& phis,
-            std::map<Variable, Phi>& lphis) {
+            std::vector<IRRef>& stack) {
 
-    if(i >= 2) {
-        ir.in.length = forward[ir.in.length];
-        ir.out.length = forward[ir.out.length];
-    }
+    ir.in.length = forward[ir.in.length];
+    ir.out.length = forward[ir.out.length];
 
     switch(ir.op) {
             #define CASE(Name, ...) case TraceOpCode::Name:
@@ -530,17 +525,17 @@ void JIT::EmitOptIR(
             case TraceOpCode::curenv: 
             {
                 if(stack.size() == 0) {
-                    forward[i] = Insert(thread, code, cse, ir);
+                    return Insert(thread, code, cse, ir);
                 }
                 else {
-                    forward[i] = code[stack.back()].a;
+                    return code[stack.back()].a;
                 }
             } break;
 
             case TraceOpCode::newenv: {
                 std::tr1::unordered_map<IR, IRRef> tcse;
                 ir.a = forward[ir.a]; ir.b = forward[ir.b]; ir.c = forward[ir.c];
-                forward[i] = Insert(thread, code, tcse, ir);
+                return Insert(thread, code, tcse, ir);
             } break;
 
             case TraceOpCode::load: { 
@@ -549,18 +544,14 @@ void JIT::EmitOptIR(
                 Variable v = { ir.a, (int64_t)ir.b };
                 code.push_back(ir);
                 bool loopCarried;
-                forward[i] = FWD(code, code.size()-1, loopCarried);
-                if(forward[i] != code.size()-1) {
+                IRRef f = FWD(code, code.size()-1, loopCarried);
+                if(f != code.size()-1) {
                     code.pop_back();
-                    if(loopCarried)
-                        phis[v] = (Phi) {forward[i], forward[i]};
                 }
                 else {
-                    exits[code.size()-1] = BuildExit( stack, reenters[i], exits.size()-1 );
+                    exits[code.size()-1] = BuildExit( stack, ir.reenter, exits.size()-1 );
                 }
-                if(phis.find(v) != phis.end()) {
-                    phis[v].b = forward[i];
-                }
+                return f;
             } break;
             
             case TraceOpCode::elength:
@@ -570,79 +561,62 @@ void JIT::EmitOptIR(
                 Variable v = { ir.a, (int64_t)ir.b };
                 code.push_back(ir);
                 bool loopCarried;
-                forward[i] = FWD(code, code.size()-1, loopCarried);
-                printf("elength at %d is %d\n", i, loopCarried);
-                if(forward[i] != code.size()-1) {
+                IRRef f = FWD(code, code.size()-1, loopCarried);
+                if(f != code.size()-1) {
                     code.pop_back();
-                    if(loopCarried)
-                        lphis[v] = (Phi) {forward[i], forward[i]};
                 }
                 else {
-                    exits[code.size()-1] = BuildExit( stack, reenters[i], exits.size()-1 );
+                    exits[code.size()-1] = BuildExit( stack, ir.reenter, exits.size()-1 );
                 }
-                if(lphis.find(v) != lphis.end()) {
-                    lphis[v].b = forward[i];
-                }
+                return f;
             } break;
             
             // slot store alias analysis is trivial. Index is identical, or it doesn't alias.
             case TraceOpCode::sload: {
                 Variable v = { -1, (int64_t)ir.b };
                 // scan back for a previous sstore to forward to.
-                forward[i] = code.size();
+                IRRef f = code.size();
                 bool loopCarried = false;
                 for(IRRef j = code.size()-1; j < code.size(); j--) {
                     if(code[j].op == TraceOpCode::loop) loopCarried = true;
                     if(code[j].op == TraceOpCode::sload && code[j].b == ir.b) {
-                        forward[i] = j;
+                        f = j;
                         break;
                     }
                     if(code[j].op == TraceOpCode::sstore && code[j].b == ir.b) {
-                        forward[i] = code[j].c;
+                        f = code[j].c;
                         break;
                     }
                 }
-                if(forward[i] == code.size()) {
+                if(f == code.size()) {
                     std::tr1::unordered_map<IR, IRRef> tcse;
                     Insert(thread, code, tcse, ir); 
-                    exits[code.size()-1] = BuildExit( stack, reenters[i], exits.size()-1 );
+                    exits[code.size()-1] = BuildExit( stack, ir.reenter, exits.size()-1 );
                 }
-                else {
-                    if(loopCarried)
-                        phis[v] = (Phi) {forward[i], forward[i]};
-                }
-                if(phis.find(v) != phis.end()) {
-                    phis[v].b = forward[i];
-                }
+                return f;
             } break;
 
             case TraceOpCode::slength: {
                 Variable v = { ir.a, (int64_t)ir.b };
-                forward[i] = code.size();
+                IRRef f = code.size();
                 bool loopCarried = false;
                 for(IRRef j = code.size()-1; j < code.size(); j--) {
                     if(code[j].op == TraceOpCode::loop) loopCarried = true;
                     if(code[j].op == TraceOpCode::slength && code[j].b == ir.b) {
-                        forward[i] = j;
+                        f = j;
                         break;
                     }
                     if(code[j].op == TraceOpCode::sstore && code[j].b == ir.b) {
-                        forward[i] = code[j].in.length;
+                        f = code[j].in.length;
                         break;
                     }
                 }
-                if(forward[i] == code.size()) {
+                if(f == code.size()) {
                     std::tr1::unordered_map<IR, IRRef> tcse;
                     Insert(thread, code, tcse, ir); 
-                    exits[code.size()-1] = BuildExit( stack, reenters[i], exits.size()-1 );
+                    exits[code.size()-1] = BuildExit( stack, ir.reenter, exits.size()-1 );
                 }
-                else {
-                    if(loopCarried)
-                        lphis[v] = (Phi) {forward[i], forward[i]};
-                }
-                if(lphis.find(v) != lphis.end()) {
-                    lphis[v].b = forward[i];
-                }
+                return f;
             } break;
             
             case TraceOpCode::store: {
@@ -650,30 +624,19 @@ void JIT::EmitOptIR(
                 ir.b = forward[ir.b];
                 ir.c = forward[ir.c];
                 Variable v = { ir.a, (int64_t)ir.b };
-                forward[i] = ir.c;
+                IRRef f = ir.c;
                 std::tr1::unordered_map<IR, IRRef> tcse;
                 Insert(thread, code, tcse, ir);
-                if(phis.find(v) != phis.end()) {
-                    phis[v].b = forward[i];
-                }
-                if(lphis.find(v) != lphis.end()) {
-                    lphis[v].b = code[forward[i]].out.length;
-                }
                 IRRef j = DSE(code, code.size()-1);    
                 if(j != code.size()-1)
                     code[j].op = TraceOpCode::nop;
+                return f;
             } break;
             case TraceOpCode::sstore: {
                 Variable v = { (IRRef)-1, (int64_t)ir.b };
-                forward[i] = ir.c = forward[ir.c];
+                IRRef f = ir.c = forward[ir.c];
                 std::tr1::unordered_map<IR, IRRef> tcse;
                 Insert(thread, code, tcse, ir);
-                if(phis.find(v) != phis.end()) {
-                    phis[v].b = forward[i];
-                }
-                if(lphis.find(v) != lphis.end()) {
-                    lphis[v].b = code[forward[i]].out.length;
-                }
                 // do DSE
                 for(IRRef j = code.size()-2; j < code.size(); j--) {
                     // don't cross guards or loop
@@ -688,30 +651,31 @@ void JIT::EmitOptIR(
                         code[j].op = TraceOpCode::nop;
                     }
                 }
+                return f;
             } break;
 
             case TraceOpCode::lenv: {
                 ir.a = forward[ir.a];
                 if(code[ir.a].op == TraceOpCode::newenv)
-                    forward[i] = code[ir.a].a;
+                    return code[ir.a].a;
                 else
-                    forward[i] = Insert(thread, code, cse, ir); 
+                    return Insert(thread, code, cse, ir); 
             } break;
 
             case TraceOpCode::denv: {
                 ir.a = forward[ir.a];
                 if(code[ir.a].op == TraceOpCode::newenv)
-                    forward[i] = code[ir.a].b;
+                    return code[ir.a].b;
                 else
-                    forward[i] = Insert(thread, code, cse, ir); 
+                    return Insert(thread, code, cse, ir); 
             } break;
 
             case TraceOpCode::cenv: {
                 ir.a = forward[ir.a];
                 if(code[ir.a].op == TraceOpCode::newenv)
-                    forward[i] = code[ir.a].c;
+                    return code[ir.a].c;
                 else
-                    forward[i] = Insert(thread, code, cse, ir); 
+                    return Insert(thread, code, cse, ir); 
             } break;
 
             case TraceOpCode::kill: {
@@ -729,6 +693,7 @@ void JIT::EmitOptIR(
                         code[j].op = TraceOpCode::nop;
                     }
                 }
+                return 0;
             } break;
 
             case TraceOpCode::push: {
@@ -737,6 +702,7 @@ void JIT::EmitOptIR(
                 std::tr1::unordered_map<IR, IRRef> tcse;
                 IRRef p = Insert(thread, code, tcse, ir);
                 stack.push_back(p);
+                return 0;
             } break;
             case TraceOpCode::pop: {
                 std::tr1::unordered_map<IR, IRRef> tcse;
@@ -748,26 +714,28 @@ void JIT::EmitOptIR(
                     code[j].op = TraceOpCode::nop;
                     code.pop_back();
                 }
+                return 0;
             } break;
 
             case TraceOpCode::gproto:
             case TraceOpCode::gfalse: 
             case TraceOpCode::gtrue: {
                 ir.a = forward[ir.a];
-                forward[i] = Insert(thread, code, cse, ir);
-                if(forward[i] == code.size()-1)
-                    exits[code.size()-1] = BuildExit( stack, reenters[i], exits.size()-1 );
+                IRRef f = Insert(thread, code, cse, ir);
+                if(f == code.size()-1)
+                    exits[code.size()-1] = BuildExit( stack, ir.reenter, exits.size()-1 );
+                return 0;
             } break;
             case TraceOpCode::scatter: {
                 ir.a = forward[ir.a]; ir.b = forward[ir.b]; ir.c = forward[ir.c];
-                forward[i] = Insert(thread, code, cse, ir);
+                return Insert(thread, code, cse, ir);
             } break;
 
             case TraceOpCode::brcast:
             case TraceOpCode::olength:
             UNARY_FOLD_SCAN_BYTECODES(CASE) {
                 ir.a = forward[ir.a];
-                forward[i] = Insert(thread, code, cse, ir);
+                return Insert(thread, code, cse, ir);
             } break;
 
             case TraceOpCode::reshape:
@@ -777,14 +745,14 @@ void JIT::EmitOptIR(
             BINARY_BYTECODES(CASE)
             {
                 ir.a = forward[ir.a]; ir.b = forward[ir.b];
-                forward[i] = Insert(thread, code, cse, ir);
+                return Insert(thread, code, cse, ir);
             } break;
 
             case TraceOpCode::seq:
             TERNARY_BYTECODES(CASE)
             {
                 ir.a = forward[ir.a]; ir.b = forward[ir.b]; ir.c = forward[ir.c];
-                forward[i] = Insert(thread, code, cse, ir);
+                return Insert(thread, code, cse, ir);
             } break;
 
             case TraceOpCode::nest:
@@ -792,17 +760,17 @@ void JIT::EmitOptIR(
             case TraceOpCode::loop:
             {
                 std::tr1::unordered_map<IR, IRRef> tcse;
-                forward[i] = Insert(thread, code, tcse, ir);
+                return Insert(thread, code, tcse, ir);
             } break;
             
             CASE(constant)
             {
-                forward[i] = Insert(thread, code, cse, ir);
+                return Insert(thread, code, cse, ir);
             } break;
 
             case TraceOpCode::length:
             {
-                forward[i] = code[forward[ir.a]].out.length;
+                return code[forward[ir.a]].out.length;
             } break;
 
             default:

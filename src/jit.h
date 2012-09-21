@@ -96,6 +96,7 @@ public:
 
     struct Shape {
         IRRef length;
+        bool constant;
         size_t traceLength;
 
         bool operator==(Shape const& o) const {
@@ -109,10 +110,18 @@ public:
         }
         static const Shape Empty;
         static const Shape Scalar;
-        Shape(IRRef length, size_t traceLength) : length(length), traceLength(traceLength) {}
+        Shape(IRRef length, bool constant, size_t traceLength) 
+            : length(length)
+            , constant(constant)
+            , traceLength(traceLength) {}
     };
 
     std::map<size_t, Shape> shapes;
+
+    struct Reenter {
+        Instruction const* reenter;
+        bool inScope;
+    };
 
 	struct IR {
 		TraceOpCode::Enum op;
@@ -124,6 +133,8 @@ public:
         double cost;
         short reg;
         bool live;
+
+        Reenter reenter;
 
         void dump() const;
 
@@ -150,6 +161,10 @@ public:
             : op(op), a(a), b(b), c(c), type(type), in(in), out(out) {}
 	};
 
+    struct Phi {
+        IRRef a, b;
+    };
+
 	unsigned short counters[1024];
 
 	static const unsigned short RECORD_TRIGGER = 4;
@@ -168,13 +183,7 @@ public:
         int64_t dest;
     };
 
-    struct Reenter {
-        Instruction const* reenter;
-        bool inScope;
-    };
-
     std::vector<IR> trace;
-    std::map<IRRef, Reenter> reenters;
     std::vector<IR> code;
     std::vector<bool> fusable;
     std::vector<StackFrame> frames;
@@ -224,7 +233,6 @@ public:
         constants.clear();
         constantsMap.clear();
         uniqueConstants.clear();
-        reenters.clear();
         exits.clear();
         slots.clear();
         shapes.clear();
@@ -309,7 +317,7 @@ public:
 
     void emitCall(IRRef a, Function const& func, Environment* env, Value const& call, Instruction const* inst) {
         IRRef guard = insert(trace, TraceOpCode::gproto, a, (IRRef)func.prototype(), 0, Type::Function, trace[a].out, Shape::Empty);
-        reenters[guard] = (Reenter) { inst, true };
+        trace[guard].reenter = (Reenter) { inst, true };
         IRRef lenv = insert(trace, TraceOpCode::load, a, 0, 0, Type::Environment, trace[a].out, Shape::Scalar);
         IRRef denv = insert(trace, TraceOpCode::curenv, 0, 0, 0, Type::Environment, Shape::Empty, Shape::Scalar);
         IRRef ne = insert(trace, TraceOpCode::newenv, lenv, denv, constant(call), Type::Environment, Shape::Scalar, Shape::Scalar);
@@ -349,20 +357,17 @@ public:
 	void schedule();
 	void Schedule();
 
-    struct Phi {
-        IRRef a, b;
-    };
-
     bool EmitIR(Thread& thread, Instruction const& inst, bool branch);
     bool EmitNest(Thread& thread, Trace* trace);
 
-    void EmitOptIR(Thread& thread, IRRef i, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::tr1::unordered_map<IR, IRRef>& cse, std::vector<IRRef>& stack, std::map<Variable, Phi>& phis, std::map<Variable, Phi>& lphis);
+    IRRef EmitOptIR(Thread& thread, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::tr1::unordered_map<IR, IRRef>& cse, std::vector<IRRef>& stack);
     void Replay(Thread& thread);
 
-    void AssignRegister(size_t src, size_t index);
+    void AssignRegister(size_t index);
     void PreferRegister(size_t index, size_t share);
     void ReleaseRegister(size_t index);
-    void RegisterAssignment(Exit& e);
+    void RegisterAssignment();
+    void RegisterAssign(IRRef i, IR ir);
 
     IRRef Insert(Thread& thread, std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, IR ir);
     IR ConstantFold(Thread& thread, IR ir);
