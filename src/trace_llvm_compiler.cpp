@@ -263,107 +263,7 @@ struct TraceLLVMCompiler {
         
         FPM->doInitialization();
     
-    }
-    
-    
-
-
-    
-    void GenerateIndexFunction() {
-        intType = llvm::Type::getInt64Ty(*C);
-        doubleType = llvm::Type::getDoubleTy(*C);
-		logicalType1 = llvm::Type::getInt1Ty(*C);
-		logicalType8 = llvm::Type::getInt8Ty(*C);
-        
-        llvm::Constant *cons = mainModule->getOrInsertFunction("indexFunc", llvm::Type::getVoidTy(*C), intType, intType, intType, NULL);
-        function = llvm::cast<llvm::Function>(cons);
-        function->setCallingConv(llvm::CallingConv::C);
-        
-        llvm::Function::arg_iterator args = function->arg_begin();
-        llvm::Value* index = args++;
-        llvm::Value* tid = args++;
-        tid->setName("ThreadID");
-        llvm::Value* blockID = args++;
-        blockID->setName("blockID");
-        
-        int sizeOfArray = 64;
-        if (numThreads > 32)
-            sizeOfArray = numThreads;
-        
-        
-        
-        reduction = false;
-        reductionBlocksPresent = false;
-        
-        scan = false;
-        scanBlocksPresent = false;
-        
-        entry = llvm::BasicBlock::Create(*C,"entry",function);
-        B = new llvm::IRBuilder<>(*C);
-        B->SetInsertPoint(entry);
-        
-        Sync = llvm::Function::Create(llvm::FunctionType::get(llvm::Type::getVoidTy(llvm::getGlobalContext()), false),
-                                      llvm::Function::ExternalLinkage,
-                                      "llvm.nvvm.barrier0", mainModule);
-        Size = ConstantInt(trace->Size);
-        int vectorLength = trace->Size;
-        int numOutput = vectorLength/numThreads;
-        
-        if (numOutput < numBlock) {
-            if (vectorLength%numThreads == 0)
-                outputReductionSize = numOutput;
-            else
-                outputReductionSize = numOutput + 1;
-        }
-        else {
-            outputReductionSize = numBlock;
-        }
-        loopIndexAddr = B->CreateAlloca(intType);
-        B->CreateStore(index, loopIndexAddr);
-        
-        /*
-         * We need to loop this.
-         * Loop it so that a index touches all that it needs to touch, refer to RG code how to loop.
-         */
-        
-        cond = createAndInsertBB("cond");
-        body = createAndInsertBB("body");
-        end = createAndInsertBB("end");
-        origEnd = end;
-        origBody = body;
-        
-        B->CreateBr(cond);
-        B->SetInsertPoint(cond);
-        llvm::Value * c = B->CreateICmpULT(loopIndex(), Size);
-        B->CreateCondBr(c,body,end);
-        
-        B->SetInsertPoint(body);
-        CompileBody(blockID, tid, sizeOfArray);
-        if (scan == true) {
-            ScanBlocksHelper(tid, loopIndex());
-        }
-        B->CreateStore(B->CreateAdd(loopIndex(), ConstantInt(numBlock * numThreads)),loopIndexAddr);
-        B->CreateBr(cond);
-        
-        B->SetInsertPoint(end);
-        B->CreateRetVoid();
-                
-        if (reduction == true) {
-            ReductionHelper(tid);
-        }
-        
-        mainModule->dump();
-        
-        llvm::verifyFunction(*function);
-        
-        if (thread->state.verbose)
-           mainModule->dump();
-        
-        
-        
-        
-        FPM->run(*function);
-    }
+    }    
 
     void GeneratePTXIndexFunction() {
 
@@ -381,7 +281,7 @@ struct TraceLLVMCompiler {
         llvm::ArrayType * arrayLogical = llvm::ArrayType::get(llvm::PointerType::getUnqual(logicalType8), maxLengthOfArrays);
 
         llvm::Constant *cons = mainModule->getOrInsertFunction("indexFunc", llvm::Type::getVoidTy(*C), intType, intType, intType, 
-            intType /*paramSize*/, intType /*inputSize*/, intType /*outputSize*/, arrayInt, arrayDouble, arrayLogical, arrayInt, arrayDouble, 
+            intType /*paramSize*/, arrayInt /*inputSize*/, arrayInt /*outputSize*/, arrayInt, arrayDouble, arrayLogical, arrayInt, arrayDouble, 
             arrayLogical, arrayInt, arrayDouble, arrayLogical, NULL);
 
         function = llvm::cast<llvm::Function>(cons);
@@ -393,14 +293,36 @@ struct TraceLLVMCompiler {
         tid->setName("ThreadID");
         llvm::Value* blockID = args++;
         blockID->setName("blockID");
+        
         llvm::Value * paramsSize = args++;
         blockID->setName("paramSize");
-        llvm::Value * inputSize = args++;
+
+        llvm::ArrayType inputSize = args++;
         blockID->setName("inputSize");
-        llvm::Value * outputSize = args++;
+        llvm::ArrayType outputSize = args++;
         blockID->setName("outputSize");
 
-        
+        llvm::ArrayType outputAddrInt = args++;
+        blockID->setName("outputAddrInt");
+        llvm::ArrayType outputAddrDouble = args++;
+        blockID->setName("outputAddrDouble");
+        llvm::ArrayType outputAddrLogical = args++;
+        blockID->setName("outputAddrLogical");
+
+        llvm::ArrayType reductionSpaceInt = args++;
+        blockID->setName("reductionSpaceInt");
+        llvm::ArrayType reductionSpaceDouble = args++;
+        blockID->setName("reductionSpaceDouble");
+        llvm::ArrayType reductionSpaceLogical = args++;
+        blockID->setName("reductionSpaceLogical");
+
+        llvm::ArrayType inputAddrInt = args++;
+        blockID->setName("inputAddrInt");
+        llvm::ArrayType inputAddrDouble = args++;
+        blockID->setName("inputAddrDouble");
+        llvm::ArrayType inputAddrLogical = args++;
+        blockID->setName("inputAddrLogical");
+
         int sizeOfArray = 64;
         if (numThreads > 32)
             sizeOfArray = numThreads;
@@ -453,7 +375,9 @@ struct TraceLLVMCompiler {
         B->CreateCondBr(c,body,end);
         
         B->SetInsertPoint(body);
-        CompileBody(blockID, tid, sizeOfArray);
+
+        CompilePTXBody(blockID, tid, sizeOfArray, paramsSize, inputSize, outputSize, outputAddrInt, outputAddrDouble, outputAddrLogical, reductionSpaceInt, reductionSpaceDouble,
+             reductionSpaceLogical, inputAddrInt, inputAddrDouble, inputAddrLogical);
         if (scan == true) {
             ScanBlocksHelper(tid, loopIndex());
         }
@@ -989,7 +913,9 @@ struct TraceLLVMCompiler {
             cudaFree(thingsToFree[i]);
         }
     }
-    void CompileBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray) {
+    void CompilePTXBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray, int paramsSize, llvm::ArrayType inputSize, llvm::ArrayType outputSize, 
+            llvm::ArrayType outputAddrInt, llvm::ArrayType outputAddrDouble, llvm::ArrayType outputAddrLogical, llvm::ArrayType reductionSpaceInt, 
+            llvm::ArrayType reductionSpaceDouble, llvm::ArrayType reductionSpaceLogical, inputAddrInt, inputAddrDouble, inputAddrLogical) {
         llvm::Value * loopIndexValue = loopIndex();
         
         std::vector<llvm::Value *> loopIndexArray;
