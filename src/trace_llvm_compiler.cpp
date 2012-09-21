@@ -913,10 +913,12 @@ struct TraceLLVMCompiler {
             cudaFree(thingsToFree[i]);
         }
     }
-    void CompilePTXBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray, int paramsSize, llvm::ArrayType * inputSize, llvm::ArrayType * outputSize, 
-            llvm::ArrayType * outputAddrInt, llvm::ArrayType * outputAddrDouble, llvm::ArrayType * outputAddrLogical, llvm::ArrayType * reductionSpaceInt, 
-            llvm::ArrayType * reductionSpaceDouble, llvm::ArrayType * reductionSpaceLogical, llvm::ArrayType * inputAddrInt, llvm::ArrayType * inputAddrDouble, 
-            llvm::ArrayType * inputAddrLogical) {
+    void CompilePTXBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray, int paramsSize, llvm::ilist_iterator<llvm::Argument> & inputSize, 
+            llvm::ilist_iterator<llvm::Argument> & outputSize, llvm::ilist_iterator<llvm::Argument> & outputAddrInt, 
+            llvm::ilist_iterator<llvm::Argument> & outputAddrDouble, llvm::ilist_iterator<llvm::Argument> & outputAddrLogical, 
+            llvm::ilist_iterator<llvm::Argument> & reductionSpaceInt, llvm::ilist_iterator<llvm::Argument> & reductionSpaceDouble, 
+            llvm::ilist_iterator<llvm::Argument> & reductionSpaceLogical, llvm::ilist_iterator<llvm::Argument> & inputAddrInt, 
+            llvm::ilist_iterator<llvm::Argument> & inputAddrDouble, llvm::ilist_iterator<llvm::Argument> & inputAddrLogical) {
         llvm::Value * loopIndexValue = loopIndex();
         
         std::vector<llvm::Value *> loopIndexArray;
