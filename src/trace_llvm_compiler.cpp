@@ -905,12 +905,12 @@ struct TraceLLVMCompiler {
             cudaFree(thingsToFree[i]);
         }
     }
-    void CompilePTXBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray, llvm::Value * paramsSize, llvm::PointerType * inputSize, 
-            llvm::PointerType * outputSize, llvm::PointerType * outputAddrInt, 
-            llvm::PointerType * outputAddrDouble, llvm::PointerType * outputAddrLogical, 
-            llvm::PointerType *reductionSpaceInt, llvm::PointerType * reductionSpaceDouble, 
-            llvm::PointerType * reductionSpaceLogical, llvm::PointerType * inputAddrInt, 
-            llvm::PointerType * inputAddrDouble, llvm::PointerType * inputAddrLogical) {
+    void CompilePTXBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray, llvm::Value * paramsSize, lvm::Value * inputSize, 
+            llvm::Value * outputSize, lvm::Value * outputAddrInt, 
+            lvm::Value * outputAddrDouble, lvm::Value * outputAddrLogical, 
+            lvm::Value * reductionSpaceInt, lvm::Value * reductionSpaceDouble, 
+            lvm::Value * reductionSpaceLogical, llvm::Value *inputAddrInt, 
+            lvm::Value * inputAddrDouble, lvm::Value *inputAddrLogical) {
         llvm::Value * loopIndexValue = loopIndex();
         
         std::vector<llvm::Value *> loopIndexArray;
