@@ -276,9 +276,9 @@ struct TraceLLVMCompiler {
         for(size_t i = 0; i < trace->nodes.size(); i++) {
             IRNode & n = trace->nodes[i];
         }
-        llvm::PointerType * ptrInt = llvm::PointerType::getUnqual(intType);
-        llvm::PointerType * ptrDouble = llvm::PointerType::getUnqual(doubleType);
-        llvm::PointerType * ptrLogical = llvm::PointerType::getUnqual(logicalType8);
+        llvm::PointerType * ptrInt = llvm::PointerType::get(llvm::Type::getInt64PtrTy(*C));
+        llvm::PointerType * ptrDouble = llvm::PointerType::get(llvm::Type::getDoublePtrTy(*C));
+        llvm::PointerType * ptrLogical = llvm::PointerType::get(llvm::Type::getInt1PtrTy(*C));
 
         llvm::Constant *cons = mainModule->getOrInsertFunction("indexFunc", llvm::Type::getVoidTy(*C), intType, intType, intType, 
             intType /*paramSize*/, ptrInt /*inputSize*/, ptrInt /*outputSize*/, ptrInt, ptrDouble, ptrLogical, ptrInt, ptrDouble, 
@@ -298,7 +298,7 @@ struct TraceLLVMCompiler {
 
         llvm::PointerType * inputSize = args++;
         blockID->setName("inputSize");
-        llvm::PointerType *outputSize = args++;
+        llvm::PointerType * outputSize = args++;
         blockID->setName("outputSize");
 
         llvm::PointerType * outputAddrInt = args++;
@@ -908,7 +908,7 @@ struct TraceLLVMCompiler {
     void CompilePTXBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray, llvm::Value * paramsSize, llvm::PointerType * inputSize, 
             llvm::PointerType * outputSize, llvm::PointerType * outputAddrInt, 
             llvm::PointerType * outputAddrDouble, llvm::PointerType * outputAddrLogical, 
-            llvm::PointerType * reductionSpaceInt, llvm::PointerType * reductionSpaceDouble, 
+            llvm::PointerType *reductionSpaceInt, llvm::PointerType * reductionSpaceDouble, 
             llvm::PointerType * reductionSpaceLogical, llvm::PointerType * inputAddrInt, 
             llvm::PointerType * inputAddrDouble, llvm::PointerType * inputAddrLogical) {
         llvm::Value * loopIndexValue = loopIndex();
@@ -1254,7 +1254,7 @@ struct TraceLLVMCompiler {
                     }
                     break;
 				case IROpCode::div:
-                    cT.parameters++;
+                    c.cT.parameters++;
                     switch(n.type) {
                         case Type::Double:
                             values[i] = B->CreateFDiv(values[n.binary.a],values[n.binary.b]);
@@ -1267,7 +1267,7 @@ struct TraceLLVMCompiler {
                     }					
                     break;
 				case IROpCode::idiv:
-                    cT.parameters++;
+                    c.cT.parameters++;
                     switch(n.type) {
                         case Type::Double: {
 							llvm::Value * temp;
@@ -1285,7 +1285,7 @@ struct TraceLLVMCompiler {
                     break;
 					
 				case IROpCode::mod:
-                    cT.parameters++;
+                    c.cT.parameters++;
                     switch(n.type) {
                         case Type::Double: {
 							llvm::Value * temp;
@@ -1308,7 +1308,7 @@ struct TraceLLVMCompiler {
                     }					
                     break;
 				case IROpCode::neg:
-                    cT.parameters++;
+                    c.cT.parameters++;
                     switch(n.type) {
                         case Type::Double:
                             values[i] = B->CreateFNeg(values[n.unary.a]);
@@ -1322,7 +1322,7 @@ struct TraceLLVMCompiler {
                     break;
                 case IROpCode::ifelse:
                     {
-                        cT.parameters++;
+                        c.cT.parameters++;
                         llvm::Value * control = values[n.trinary.c];
                         llvm::BasicBlock * condBlock = createAndInsertBB("condBlock");
                         llvm::BasicBlock * ifBlock = createAndInsertBB("ifBlock");
@@ -1349,7 +1349,7 @@ struct TraceLLVMCompiler {
                         break;
                     }					
                 case IROpCode::sum:
-                    cT.parameters++;
+                    c.cT.parameters++;
                     reduction = true;
                     switch(n.type) {
                         case Type::Double: {
@@ -1517,7 +1517,7 @@ struct TraceLLVMCompiler {
                     break;
 				case IROpCode::cast:
 				{
-                    cT.parameters++;
+                    c.cT.parameters++;
 					Type::Enum output = n.type;
 					Type::Enum input = trace->nodes[n.unary.a].type;
 					switch(output) {
@@ -1573,7 +1573,7 @@ struct TraceLLVMCompiler {
 					break;
 				}
 				case IROpCode::lt:
-                    cT.parameters++;
+                    c.cT.parameters++;
                     switch(trace->nodes[n.unary.a].type) {
                         case Type::Double:
                             values[i] = B->CreateFCmpOLT(values[n.binary.a],values[n.binary.b]);
@@ -1586,7 +1586,7 @@ struct TraceLLVMCompiler {
                     }
                     break;
 				case IROpCode::le:
-                    cT.parameters++;
+                    c.cT.parameters++;
                     switch(trace->nodes[n.unary.a].type) {
                         case Type::Double:
                             values[i] = B->CreateFCmpOLE(values[n.binary.a],values[n.binary.b]);
@@ -1599,7 +1599,7 @@ struct TraceLLVMCompiler {
                     }
                     break;
 				case IROpCode::eq:
-                    cT.parameters++;
+                    c.cT.parameters++;
                     switch(trace->nodes[n.unary.a].type) {
                         case Type::Double:
                             values[i] = B->CreateFCmpOEQ(values[n.binary.a],values[n.binary.b]);
@@ -1612,7 +1612,7 @@ struct TraceLLVMCompiler {
                     }
                     break;
 				case IROpCode::neq:
-                    cT.parameters++;
+                    c.cT.parameters++;
                     switch(trace->nodes[n.unary.a].type) {
                         case Type::Double:
                             values[i] = B->CreateFCmpONE(values[n.binary.a],values[n.binary.b]);
@@ -1625,19 +1625,19 @@ struct TraceLLVMCompiler {
                     }
                     break;
 				case IROpCode::land:
-                    cT.parameters++;
+                    c.cT.parameters++;
 					values[i] = B->CreateAnd(values[n.binary.a],values[n.binary.b]);
                     break;
 				case IROpCode::lor:
-                    cT.parameters++;
+                    c.cT.parameters++;
 					values[i] = B->CreateOr(values[n.binary.a],values[n.binary.b]);
                     break;
 				case IROpCode::lnot:
-                    cT.parameters++;
+                    c.cT.parameters++;
 					values[i] = B->CreateNot(values[n.unary.a]);
                     break;
 				case IROpCode::rep:{
-                    cT.parameters++;
+                    c.cT.parameters++;
 					llvm::Value * repIdx = ConstantInt(n.sequence.ia);
 					llvm::Value * each = ConstantInt(n.sequence.ib);
 
@@ -1652,7 +1652,7 @@ struct TraceLLVMCompiler {
                     break;
 				}
                 case IROpCode::gather:{
-                    cT.parameters++;
+                    c.cT.parameters++;
                     void * p;
                     if(n.in.isLogical()) {
                         int size = ((Logical&)n.in).length*sizeof(Logical::Element);
@@ -1690,7 +1690,7 @@ struct TraceLLVMCompiler {
                     break;
                 }                
                 case IROpCode::seq:{
-                    cT.parameters++;
+                    c.cT.parameters++;
                     llvm::Value *value;
                     switch(n.type) {
                         case Type::Integer: {
