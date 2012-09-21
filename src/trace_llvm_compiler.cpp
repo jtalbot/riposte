@@ -297,30 +297,30 @@ struct TraceLLVMCompiler {
         llvm::Value * paramsSize = args++;
         blockID->setName("paramSize");
 
-        llvm::ArrayType inputSize = args++;
+        llvm::ArrayType * inputSize = args++;
         blockID->setName("inputSize");
-        llvm::ArrayType outputSize = args++;
+        llvm::ArrayType * outputSize = args++;
         blockID->setName("outputSize");
 
-        llvm::ArrayType outputAddrInt = args++;
+        llvm::ArrayType * outputAddrInt = args++;
         blockID->setName("outputAddrInt");
-        llvm::ArrayType outputAddrDouble = args++;
+        llvm::ArrayType * outputAddrDouble = args++;
         blockID->setName("outputAddrDouble");
-        llvm::ArrayType outputAddrLogical = args++;
+        llvm::ArrayType * outputAddrLogical = args++;
         blockID->setName("outputAddrLogical");
 
-        llvm::ArrayType reductionSpaceInt = args++;
+        llvm::ArrayType * reductionSpaceInt = args++;
         blockID->setName("reductionSpaceInt");
-        llvm::ArrayType reductionSpaceDouble = args++;
+        llvm::ArrayType * reductionSpaceDouble = args++;
         blockID->setName("reductionSpaceDouble");
-        llvm::ArrayType reductionSpaceLogical = args++;
+        llvm::ArrayType * reductionSpaceLogical = args++;
         blockID->setName("reductionSpaceLogical");
 
-        llvm::ArrayType inputAddrInt = args++;
+        llvm::ArrayType * inputAddrInt = args++;
         blockID->setName("inputAddrInt");
-        llvm::ArrayType inputAddrDouble = args++;
+        llvm::ArrayType * inputAddrDouble = args++;
         blockID->setName("inputAddrDouble");
-        llvm::ArrayType inputAddrLogical = args++;
+        llvm::ArrayType * inputAddrLogical = args++;
         blockID->setName("inputAddrLogical");
 
         int sizeOfArray = 64;
@@ -913,10 +913,10 @@ struct TraceLLVMCompiler {
             cudaFree(thingsToFree[i]);
         }
     }
-    void CompilePTXBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray, int paramsSize, llvm::ArrayType inputSize, llvm::ArrayType outputSize, 
-            llvm::ArrayType outputAddrInt, llvm::ArrayType outputAddrDouble, llvm::ArrayType outputAddrLogical, llvm::ArrayType reductionSpaceInt, 
-            llvm::ArrayType reductionSpaceDouble, llvm::ArrayType reductionSpaceLogical, llvm::ArrayType inputAddrInt, llvm::ArrayType inputAddrDouble, 
-            llvm::ArrayType inputAddrLogical) {
+    void CompilePTXBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray, int paramsSize, llvm::ArrayType * inputSize, llvm::ArrayType * outputSize, 
+            llvm::ArrayType * outputAddrInt, llvm::ArrayType * outputAddrDouble, llvm::ArrayType * outputAddrLogical, llvm::ArrayType * reductionSpaceInt, 
+            llvm::ArrayType * reductionSpaceDouble, llvm::ArrayType * reductionSpaceLogical, llvm::ArrayType * inputAddrInt, llvm::ArrayType * inputAddrDouble, 
+            llvm::ArrayType * inputAddrLogical) {
         llvm::Value * loopIndexValue = loopIndex();
         
         std::vector<llvm::Value *> loopIndexArray;
