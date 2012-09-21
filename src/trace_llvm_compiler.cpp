@@ -915,7 +915,8 @@ struct TraceLLVMCompiler {
     }
     void CompilePTXBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray, int paramsSize, llvm::ArrayType inputSize, llvm::ArrayType outputSize, 
             llvm::ArrayType outputAddrInt, llvm::ArrayType outputAddrDouble, llvm::ArrayType outputAddrLogical, llvm::ArrayType reductionSpaceInt, 
-            llvm::ArrayType reductionSpaceDouble, llvm::ArrayType reductionSpaceLogical, inputAddrInt, inputAddrDouble, inputAddrLogical) {
+            llvm::ArrayType reductionSpaceDouble, llvm::ArrayType reductionSpaceLogical, llvm::ArrayType inputAddrInt, llvm::ArrayType inputAddrDouble, 
+            llvm::ArrayType inputAddrLogical) {
         llvm::Value * loopIndexValue = loopIndex();
         
         std::vector<llvm::Value *> loopIndexArray;
