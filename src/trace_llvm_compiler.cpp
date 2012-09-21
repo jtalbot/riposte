@@ -296,30 +296,30 @@ struct TraceLLVMCompiler {
         
         llvm::Value* paramsSize = args++;
 
-        llvm::PointerType * inputSize = args++;
+        llvm::Value* inputSize = args++;
         blockID->setName("inputSize");
-        llvm::PointerType * outputSize = args++;
+        llvm::Value * outputSize = args++;
         blockID->setName("outputSize");
 
-        llvm::PointerType * outputAddrInt = args++;
+        llvm::Value * outputAddrInt = args++;
         blockID->setName("outputAddrInt");
-        llvm::PointerType * outputAddrDouble = args++;
+        llvm::Value * outputAddrDouble = args++;
         blockID->setName("outputAddrDouble");
-        llvm::PointerType * outputAddrLogical = args++;
+        llvm::Value * outputAddrLogical = args++;
         blockID->setName("outputAddrLogical");
 
-        llvm::PointerType * reductionSpaceInt = args++;
+        llvm::Value * reductionSpaceInt = args++;
         blockID->setName("reductionSpaceInt");
-        llvm::PointerType * reductionSpaceDouble = args++;
+        llvm::Value * reductionSpaceDouble = args++;
         blockID->setName("reductionSpaceDouble");
-        llvm::PointerType * reductionSpaceLogical = args++;
+        llvm::Value * reductionSpaceLogical = args++;
         blockID->setName("reductionSpaceLogical");
 
-        llvm::PointerType * inputAddrInt = args++;
+        llvm::Value * inputAddrInt = args++;
         blockID->setName("inputAddrInt");
-        llvm::PointerType * inputAddrDouble = args++;
+        llvm::Value * inputAddrDouble = args++;
         blockID->setName("inputAddrDouble");
-        llvm::PointerType * inputAddrLogical = args++;
+        llvm::Value * inputAddrLogical = args++;
         blockID->setName("inputAddrLogical");
 
         int sizeOfArray = 64;
