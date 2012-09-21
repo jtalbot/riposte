@@ -276,9 +276,9 @@ struct TraceLLVMCompiler {
         for(size_t i = 0; i < trace->nodes.size(); i++) {
             IRNode & n = trace->nodes[i];
         }
-        llvm::PointerType * ptrInt = llvm::PointerType::getUnqual(llvm::PointerType::getUnqual(intType));
-        llvm::PointerType * ptrDouble = llvm::PointerType::getUnqual(llvm::PointerType::getUnqual(doubleType));
-        llvm::PointerType * ptrLogical = llvm::PointerType::getUnqual(llvm::PointerType::getUnqual(logicalType8));
+        llvm::PointerType * ptrInt = llvm::PointerType::getUnqual(intType);
+        llvm::PointerType * ptrDouble = llvm::PointerType::getUnqual(doubleType);
+        llvm::PointerType * ptrLogical = llvm::PointerType::getUnqual(logicalType8);
 
         llvm::Constant *cons = mainModule->getOrInsertFunction("indexFunc", llvm::Type::getVoidTy(*C), intType, intType, intType, 
             intType /*paramSize*/, ptrInt /*inputSize*/, ptrInt /*outputSize*/, ptrInt, ptrDouble, ptrLogical, ptrInt, ptrDouble, 
