@@ -40,6 +40,7 @@ struct LLVMState {
     llvm::LLVMContext * C;
     llvm::ExecutionEngine * EE;
     llvm::FunctionPassManager * FPM;
+    //llvm::PassManager * PM;
 
     LLVMState() {
         llvm::InitializeNativeTarget();
@@ -65,21 +66,18 @@ struct LLVMState {
         FPM->add(llvm::createCFGSimplificationPass());
         
         FPM->add(llvm::createVerifierPass());
-        // Provide basic AliasAnalysis support for GVN.
-        FPM->add(llvm::createBasicAliasAnalysisPass());
         // Promote newenvas to registers.
         FPM->add(llvm::createPromoteMemoryToRegisterPass());
         // Also promote aggregates like structs....
         FPM->add(llvm::createScalarReplAggregatesPass());
-        // Do simple "peephole" optimizations and bit-twiddling optzns.
-        // TODO: This causes an invalid optimization somewhere that results in LLVM eliminating all
-        // my code and replacing it with a trap. ????
-        //FPM->add(llvm::createInstructionCombiningPass());
         
         // Reassociate expressions.
         FPM->add(llvm::createReassociatePass());
+        // Provide basic AliasAnalysis support for GVN.
+        FPM->add(llvm::createBasicAliasAnalysisPass());
+        FPM->add(llvm::createScalarEvolutionAliasAnalysisPass());
         // Eliminate Common SubExpressions.
-        //FPM->add(llvm::createGVNPass());
+        FPM->add(llvm::createGVNPass());
         // Simplify the control flow graph (deleting unreachable blocks, etc).
         FPM->add(llvm::createCFGSimplificationPass());
         // Promote newenvas to registers.
@@ -87,7 +85,18 @@ struct LLVMState {
         // Simplify the control flow graph (deleting unreachable blocks, etc).
         FPM->add(llvm::createAggressiveDCEPass());
         
+        // Do simple "peephole" optimizations and bit-twiddling optzns.
+        FPM->add(llvm::createInstructionCombiningPass());
+        
         FPM->doInitialization();
+
+        /*
+        PM = new llvm::PassManager();
+       
+        PM->add(llvm::createLoopIdiomPass()); 
+        PM->add(llvm::createLoopInstSimplifyPass()); 
+        PM->add(llvm::createLoopDeletionPass());
+        */
     }
 };
 
@@ -422,12 +431,15 @@ struct Fusion {
 
     size_t instructions;
 
-    Fusion(JIT& jit, FunctionBuilder builder, std::vector<Register>& registers, llvm::Value* length, size_t width)
+    JIT::IRRef lengthIR;
+
+    Fusion(JIT& jit, FunctionBuilder builder, std::vector<Register>& registers, llvm::Value* length, size_t width, JIT::IRRef lengthIR)
         : jit(jit)
           , builder(builder)
           , registers(registers)
           , length(length)
-          , width(width) {
+          , width(width)
+          , lengthIR(lengthIR) {
 
         zerosD = builder.getConstantVector( builder.getDouble(0), width );       
         zerosI = builder.getConstantVector( builder.getInt64(0), width );       
@@ -509,7 +521,6 @@ struct Fusion {
             return outs[reg];
 
         llvm::Value* a = registers[reg].ExtractAlignedVector(builder, iterator, width);
-        outs[reg] = a;
         return a;
     }
 
@@ -841,6 +852,8 @@ struct Fusion {
             case TraceOpCode::phi:
                 if(jit.code[ir.a].reg != jit.code[ir.b].reg) 
                     outs[jit.code[ir.a].reg] = Load(builder, ir.b);
+                else
+                    instructions--;
                 break;
             
             case TraceOpCode::gather: 
@@ -1155,9 +1168,22 @@ struct TraceCompiler {
 
         builder.SetInsertPoint(HeaderBlock);
 
+        Fusion* fusion = 0;
         for(size_t i = 0; i < jit.code.size(); i++) {
-            if(jit.code[i].live) {
-                Emit(jit.code[i], i, InitializeRegister(jit.code[i]) );
+            JIT::IR const& ir = jit.code[i];
+            InitializeRegister(ir);
+            if(ir.live) {
+                if(Fuseable(ir)) {
+                    if(!CanFuse(fusion, ir)) {
+                        EndFusion(fusion);
+                        fusion = StartFusion(ir);
+                    }
+                    fusion->Emit(i);
+                }
+                else {
+                    EndFusion(fusion);
+                    Emit(ir, i, registers[ir.reg] );
+                }
             }
         }
         
@@ -1167,16 +1193,40 @@ struct TraceCompiler {
         builder.SetInsertPoint(EndBlock);
         builder.CreateRet(builder.CreateLoad(result_var));
 
+        //function->dump();
+        S->FPM->run(*function);
+        //S->PM->run(*S->M); 
         // inline functions
         /*for(size_t i = 0; i < calls.size(); ++i) {
             llvm::InlineFunctionInfo ifi;
             llvm::InlineFunction(calls[i], ifi, true);
-        }*/
-        
+        }
         S->FPM->run(*function);
+        */
         //function->dump();
 
         return function;
+    }
+
+    bool Fuseable(JIT::IR ir) {
+        switch(ir.op) {
+            case TraceOpCode::phi:
+            case TraceOpCode::reshape:
+            case TraceOpCode::brcast:
+            case TraceOpCode::gather:
+            case TraceOpCode::scatter:
+            #define CASE(_,...) case TraceOpCode::_:
+            TERNARY_BYTECODES(CASE)
+            BINARY_BYTECODES(CASE)
+            UNARY_FOLD_SCAN_BYTECODES(CASE)
+            GENERATOR_BYTECODES(CASE)
+                return true; 
+                break;
+            #undef CASE
+            default:
+                return false;
+                break;
+        }
     }
 
     llvm::Value* value( JIT::IRRef a ) {
@@ -1199,20 +1249,26 @@ struct TraceCompiler {
             length = builder.CreateLoad(value(ir.in.length));
             width = 2;
         }
-        Fusion* fusion = new Fusion(jit, FunctionBuilder( function ), registers, length, width);
+        Fusion* fusion = new Fusion(jit, FunctionBuilder( function ), registers, length, width, len);
         fusion->Open(InnerBlock);
         return fusion;
     }
 
-    void EndFusion(Fusion* fusion) {
+    void EndFusion(Fusion*& fusion) {
         if(fusion) {
             llvm::BasicBlock* after = fusion->Close();
             builder.CreateBr(fusion->header);
             builder.SetInsertPoint(after);
+            delete fusion;
+            fusion = 0;
         }
     }
 
-    llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type, llvm::Value* size) {
+    bool CanFuse(Fusion*& fusion, JIT::IR ir) {
+        return fusion != 0 && fusion->lengthIR == ir.in.length;
+    }
+
+    llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type, llvm::Value* size = 0) {
         llvm::IRBuilder<> TmpB(&function->getEntryBlock(),
                 function->getEntryBlock().end());
         llvm::AllocaInst* r = TmpB.CreateAlloca(type, size);
@@ -1249,7 +1305,7 @@ struct TraceCompiler {
 
         if(Unboxed(type)) {
             
-            llvm::Value* tmp = CreateEntryBlockAlloca(value_type, builder.getInt64(0));
+            llvm::Value* tmp = CreateEntryBlockAlloca(value_type);
             builder.CreateStore(v, tmp);
             
             llvm::Value* length =
@@ -1260,8 +1316,8 @@ struct TraceCompiler {
                 length);
                      
             llvm::Value* guard = builder.CreateICmpNE(
-                builder.CreatePtrToInt(r, builder.getInt64Ty()),
-                builder.getInt64(0));
+                r,
+                llvm::ConstantPointerNull::get((llvm::PointerType*)r->getType()));
 
             if(jit.exits.find(index) == jit.exits.end())
                 _error("Missing exit on unboxing operation");
@@ -1541,23 +1597,6 @@ struct TraceCompiler {
                 EmitExit(r, jit.exits[index], index);
             } break;
 
-            case TraceOpCode::phi:
-            case TraceOpCode::reshape:
-            case TraceOpCode::brcast:
-            case TraceOpCode::gather:
-            case TraceOpCode::scatter:
-            #define CASE(_,...) case TraceOpCode::_:
-            TERNARY_BYTECODES(CASE)
-            BINARY_BYTECODES(CASE)
-            UNARY_FOLD_SCAN_BYTECODES(CASE)
-            GENERATOR_BYTECODES(CASE)
-            {
-                Fusion* fusion = StartFusion(ir);
-                fusion->Emit(index);
-                EndFusion(fusion);
-            } break;
-            #undef CASE
-
             case TraceOpCode::nop:
             {
                 // do nothing
@@ -1634,6 +1673,7 @@ struct TraceCompiler {
 
             llvm::CallInst* r = builder.CreateCall((llvm::Function*)jit.dest->exits[e.index].function, thread_var);
             r->setTailCall(true);
+            r->setCallingConv(llvm::CallingConv::Fast);
             builder.CreateStore(r, result_var);
         }
         else {

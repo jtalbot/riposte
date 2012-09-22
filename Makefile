@@ -54,14 +54,14 @@ default: debug
 debug: CXXFLAGS += -DDEBUG -O0 -g
 debug: ALL
 
-release: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize 
+release: CXXFLAGS += -DNDEBUG -O3 -g
 release: ALL
 
 irelease: CXXFLAGS += -DNDEBUG -O3 -g
 irelease: CXX := icc
 irelease: ALL
           
-asm: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize 
+asm: CXXFLAGS += -DNDEBUG -O3 -g
 asm: $(ASM)
 
 ALL: $(EXECUTABLE) $(BYTECODE)

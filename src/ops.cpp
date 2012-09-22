@@ -110,7 +110,7 @@ int8_t const** UNBOX_character(Thread& thread, Value& a, int64_t length) {
 extern "C"
 Value BOX_double(Thread& thread, double* d, int64_t len) {
     if(len <= 16) {
-    	Double a(len);
+        Double a(len);
     	memcpy(a.v(), d, len*sizeof(double));
         return a;
     }
