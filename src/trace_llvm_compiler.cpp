@@ -644,6 +644,15 @@ struct TraceLLVMCompiler {
         llvm::ArrayRef<llvm::Value *> gepIndices = llvm::ArrayRef<llvm::Value*>(indices);
         return B->CreateGEP(mem, gepIndices, "T");
     }
+
+    llvm::Value * Loader(llvm::Value * mem, int index) {
+        std::vector<llvm::Value *> indices;
+        indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*C), 0));
+        indices.push_back(ConstantInt(index));
+        
+        llvm::ArrayRef<llvm::Value *> gepIndices = llvm::ArrayRef<llvm::Value*>(indices);
+        return B->CreateGEP(mem, gepIndices, "T");
+    }
     
     void GenerateKernelFunction() {
         ///IMPORTANT: TEST RUN AT MOVING KERNEL FUNCTION INTO COMPILE PART OF PROGRAM
@@ -919,25 +928,38 @@ struct TraceLLVMCompiler {
             IRNode & n = trace->nodes[i];
             switch(n.op) {
                 case IROpCode::load: {
-                    cT.parameters++;
-                    void * p;
+                    llvm::Value * p;
                     if(n.in.isLogical()) {
+                        /*
                         int size = ((Logical&)n.in).length*sizeof(Logical::Element);
                         cudaMalloc((void**)&p, size);
                         cudaMemcpy(p, ((Logical&)n.in).v(), size, cudaMemcpyHostToDevice);
+                        */
+                        std::vector<llvm::Value *> indices;
+                        indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*C), 0));
+                        indices.push_back(index);
+                        
+                        p = Loader(inputAddrLogical, cT.parameters);
+                        B->CreateStore(((Logical&)n.in).v(), p);
 
                     }
                     else if(n.in.isInteger()) {
                         //p = ((Integer&)n.in).v();
+                        /*
                         int size = ((Integer&)n.in).length*sizeof(Integer::Element);
                         cudaMalloc((void**)&p, size);
                         cudaMemcpy(p, ((Integer&)n.in).v(), size, cudaMemcpyHostToDevice);
+                        */
+                        p = B->CreateLoad(inputAddrInt);
                     }
                     else if(n.in.isDouble()) {
                         //p = ((Double&)n.in).v();
+                        /*
                         int size = ((Double&)n.in).length*sizeof(Double::Element);
                         cudaError_t error = cudaMalloc((void**)&p, size);
                         cudaMemcpy(p, ((Double&)n.in).v(), size, cudaMemcpyHostToDevice);
+                        */
+                        p = B->CreateLoad(inputAddrDouble);
                     }
                     else
                         _error("unsupported type");
@@ -950,14 +972,13 @@ struct TraceLLVMCompiler {
                     llvm::Value * elementAddr = B->CreateGEP(vector, loopIndexArray);
                     inputGPUAddr.push_back(elementAddr);
                     values[i] = B->CreateLoad(elementAddr);
+                    cT.parameters++;
                 } break;
 				case IROpCode::nop:
-                    cT.parameters++;
                     break;
                 case IROpCode::add:
                     switch(n.type) {
                         case Type::Double:
-                            
                             values[i] = B->CreateFAdd(values[n.binary.a],values[n.binary.b]);
                             break;
                         case Type::Integer:
@@ -968,7 +989,6 @@ struct TraceLLVMCompiler {
                     }
                     break;
 				case IROpCode::addc:
-                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double:{
 							llvm::Value * temp = ConstantDouble(n.constant.d);
@@ -985,7 +1005,6 @@ struct TraceLLVMCompiler {
                     }
                     break;
                 case IROpCode::sub:
-                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double:
                             values[i] = B->CreateFSub(values[n.binary.a],values[n.binary.b]);
@@ -998,7 +1017,6 @@ struct TraceLLVMCompiler {
                     }
                     break;
                 case IROpCode::constant:
-                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double:
                             values[i] = ConstantDouble(n.constant.d);
@@ -1094,7 +1112,6 @@ struct TraceLLVMCompiler {
                     }
                     break;
                 case IROpCode::exp:
-                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double: {
                             
@@ -1129,7 +1146,6 @@ struct TraceLLVMCompiler {
 					}
                     break;
                 case IROpCode::log:
-                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double: {
                             
@@ -1162,7 +1178,6 @@ struct TraceLLVMCompiler {
 					}
                     break;
                 case IROpCode::sqrt:
-                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double: {
                             
@@ -1193,7 +1208,6 @@ struct TraceLLVMCompiler {
 					}
                     break;
                 case IROpCode::abs:
-                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double: {
                             llvm::Value * Result = B->CreateBitCast(values[n.unary.a], llvm::Type::getInt64Ty(*C));
@@ -1224,7 +1238,6 @@ struct TraceLLVMCompiler {
 					}
                     break;
                 case IROpCode::mul:
-                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double:
                             values[i] = B->CreateFMul(values[n.binary.a],values[n.binary.b]);
@@ -1237,7 +1250,6 @@ struct TraceLLVMCompiler {
                     }					
                     break;
 				case IROpCode::mulc:
-                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double:{
 							llvm::Value * temp = ConstantDouble(n.constant.d);
@@ -1254,7 +1266,6 @@ struct TraceLLVMCompiler {
                     }
                     break;
 				case IROpCode::div:
-                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double:
                             values[i] = B->CreateFDiv(values[n.binary.a],values[n.binary.b]);
@@ -1267,7 +1278,6 @@ struct TraceLLVMCompiler {
                     }					
                     break;
 				case IROpCode::idiv:
-                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double: {
 							llvm::Value * temp;
@@ -1285,7 +1295,6 @@ struct TraceLLVMCompiler {
                     break;
 					
 				case IROpCode::mod:
-                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double: {
 							llvm::Value * temp;
@@ -1308,7 +1317,6 @@ struct TraceLLVMCompiler {
                     }					
                     break;
 				case IROpCode::neg:
-                    cT.parameters++;
                     switch(n.type) {
                         case Type::Double:
                             values[i] = B->CreateFNeg(values[n.unary.a]);
@@ -1322,7 +1330,6 @@ struct TraceLLVMCompiler {
                     break;
                 case IROpCode::ifelse:
                     {
-                        cT.parameters++;
                         llvm::Value * control = values[n.trinary.c];
                         llvm::BasicBlock * condBlock = createAndInsertBB("condBlock");
                         llvm::BasicBlock * ifBlock = createAndInsertBB("ifBlock");
@@ -1349,7 +1356,6 @@ struct TraceLLVMCompiler {
                         break;
                     }					
                 case IROpCode::sum:
-                    cT.parameters++;
                     reduction = true;
                     switch(n.type) {
                         case Type::Double: {
@@ -1517,7 +1523,6 @@ struct TraceLLVMCompiler {
                     break;
 				case IROpCode::cast:
 				{
-                    cT.parameters++;
 					Type::Enum output = n.type;
 					Type::Enum input = trace->nodes[n.unary.a].type;
 					switch(output) {
@@ -1573,7 +1578,6 @@ struct TraceLLVMCompiler {
 					break;
 				}
 				case IROpCode::lt:
-                    cT.parameters++;
                     switch(trace->nodes[n.unary.a].type) {
                         case Type::Double:
                             values[i] = B->CreateFCmpOLT(values[n.binary.a],values[n.binary.b]);
@@ -1586,7 +1590,6 @@ struct TraceLLVMCompiler {
                     }
                     break;
 				case IROpCode::le:
-                    cT.parameters++;
                     switch(trace->nodes[n.unary.a].type) {
                         case Type::Double:
                             values[i] = B->CreateFCmpOLE(values[n.binary.a],values[n.binary.b]);
@@ -1599,7 +1602,6 @@ struct TraceLLVMCompiler {
                     }
                     break;
 				case IROpCode::eq:
-                    cT.parameters++;
                     switch(trace->nodes[n.unary.a].type) {
                         case Type::Double:
                             values[i] = B->CreateFCmpOEQ(values[n.binary.a],values[n.binary.b]);
@@ -1612,7 +1614,6 @@ struct TraceLLVMCompiler {
                     }
                     break;
 				case IROpCode::neq:
-                    cT.parameters++;
                     switch(trace->nodes[n.unary.a].type) {
                         case Type::Double:
                             values[i] = B->CreateFCmpONE(values[n.binary.a],values[n.binary.b]);
@@ -1625,19 +1626,15 @@ struct TraceLLVMCompiler {
                     }
                     break;
 				case IROpCode::land:
-                    cT.parameters++;
 					values[i] = B->CreateAnd(values[n.binary.a],values[n.binary.b]);
                     break;
 				case IROpCode::lor:
-                    cT.parameters++;
 					values[i] = B->CreateOr(values[n.binary.a],values[n.binary.b]);
                     break;
 				case IROpCode::lnot:
-                    cT.parameters++;
 					values[i] = B->CreateNot(values[n.unary.a]);
                     break;
 				case IROpCode::rep:{
-                    cT.parameters++;
 					llvm::Value * repIdx = ConstantInt(n.sequence.ia);
 					llvm::Value * each = ConstantInt(n.sequence.ib);
 
@@ -1689,8 +1686,7 @@ struct TraceLLVMCompiler {
                     
                     break;
                 }                
-                case IROpCode::seq:{
-                    cT.parameters++;
+                case IROpCode::seq:{2
                     llvm::Value *value;
                     switch(n.type) {
                         case Type::Integer: {
@@ -1863,7 +1859,7 @@ struct TraceLLVMCompiler {
                     thingsToFree.push_back(p);
                     outputGPU.push_back(p);
                 }
-
+                cT.parameters++;
             }
         }
     
