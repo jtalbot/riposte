@@ -1675,7 +1675,7 @@ struct TraceLLVMCompiler {
                     
                     break;
                 }                
-                case IROpCode::seq:{2
+                case IROpCode::seq:{
                     llvm::Value *value;
                     switch(n.type) {
                         case Type::Integer: {
