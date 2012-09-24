@@ -25,6 +25,8 @@
 	_(mov, "mov") \
 	_(fastmov, "fastmov") \
 	_(assign, "assign") \
+	_(get, "get") \
+	_(gassign, "gassign") \
 	_(scatter1, "scatter1") \
 	_(gather1, "gather1") \
 	_(scatter, "scatter") \

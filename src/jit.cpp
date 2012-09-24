@@ -68,14 +68,8 @@ JIT::IRRef JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
     if(a <= 0) {
         Variable v = { -1, (thread.base+a)-(thread.registers+DEFAULT_NUM_REGISTERS)};
 
-        // check if we can forward
-        if(slots.find(v) != slots.end())
-            r = slots[v];
-        else {
-            Shape s = SpecializeValue(operand, IR(TraceOpCode::slength, (IRRef)-1, v.i, Type::Integer, Shape::Empty, Shape::Scalar));
-            r = insert(trace, TraceOpCode::sload, (IRRef)-1, v.i, 0, operand.type, Shape::Empty, s);
-            slots[v] = r;
-        }
+        Shape s = SpecializeValue(operand, IR(TraceOpCode::slength, (IRRef)-1, v.i, Type::Integer, Shape::Empty, Shape::Scalar));
+        r = insert(trace, TraceOpCode::sload, (IRRef)-1, v.i, 0, operand.type, Shape::Empty, s);
     }
     else {
         IRRef aa = constant(Character::c((String)a));
@@ -102,7 +96,6 @@ JIT::IRRef JIT::store(Thread& thread, IRRef a, int64_t c) {
     if(c <= 0) {
         Variable v = { -1, (thread.base+c)-(thread.registers+DEFAULT_NUM_REGISTERS)};
         IRRef r = insert(trace, TraceOpCode::sstore, -1, v.i, a, trace[a].type, trace[a].out, Shape::Empty);
-        slots[v] = a;
     }
     else {
         IRRef cc = constant(Character::c((String)c));
@@ -256,7 +249,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         case ByteCode::loop: {
         } break;
         case ByteCode::jc: {
-            IRRef p = load(thread, inst.c, &inst);
+            IRRef p = cast( load(thread, inst.c, &inst), Type::Logical );
             if(inst.c <= 0) {
                 Variable v = { -1, (thread.base+inst.c)-(thread.registers+DEFAULT_NUM_REGISTERS)};
                 insert(trace, TraceOpCode::kill, v.i, 0, 0, Type::Nil, Shape::Empty, Shape::Empty);
@@ -278,6 +271,27 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
 
         case ByteCode::assign: {
             store(thread, load(thread, inst.c, &inst), inst.a);
+        }   break;
+
+        case ByteCode::get: {
+            IRRef cc = constant(Character::c((String)inst.a));
+            IRRef e = load(thread, inst.b, &inst);
+   
+            OPERAND(env, inst.b);     
+            Value const& operand = ((REnvironment&)env).environment()->get((String)inst.a);
+            Shape s = SpecializeValue(operand, 
+                IR(TraceOpCode::elength, e, cc, Type::Integer, Shape::Empty, Shape::Scalar));
+            
+            IRRef r = insert(trace, TraceOpCode::load, e, cc, 0, operand.type, Shape::Empty, s);
+            trace[r].reenter = (Reenter) { &inst, true };
+            store(thread, r, inst.c);
+        }   break;
+
+        case ByteCode::gassign: {
+            IRRef cc = constant(Character::c((String)inst.a));
+            IRRef e = load(thread, inst.b, &inst);
+            IRRef v = load(thread, inst.c, &inst);
+            insert(trace, TraceOpCode::store, e, cc, v, Type::Nil, trace[v].out, Shape::Empty);
         }   break;
 
         case ByteCode::gather1: {
@@ -493,42 +507,6 @@ JIT::IRRef JIT::duplicate(IR const& ir, std::vector<IRRef> const& forward) {
     return insert(code, ir.op, forward[ir.a], forward[ir.b], forward[ir.c], ir.type, ir.in, ir.out);
 }
 
-JIT::Exit JIT::BuildExit( std::vector<IRRef>& stack, Reenter const& reenter, size_t index) {
-
-    // OK, attempt to do tracing something here...
-
-/*    
-    // get live environments
-    std::vector<IRRef> live;
-    for(size_t i = 0; i < frames.size(); i++) {
-        live.push_back(frames[i].environment);
-        live.push_back(frames[i].env);
-    }
-    //for(size_t i = 0; i < environments.size(); i++) {
-    //    if(code[environments[i]].op == TraceOpCode::LOADENV)
-    //        live.push_back(environments[i]);
-    //}
-    
-    // get live stores (those that are into a live environment)
-    // this is very inefficient, replace
-    std::map<Variable, IRRef> livestores;
-    for(std::map<Variable, IRRef>::const_iterator i = stores.begin(); i != stores.end(); ++i) {
-        if(i->first.env == -1 || code[i->first.env].op == TraceOpCode::curenv)
-            livestores.insert(*i);
-        else {
-            for(size_t j = 0; j < live.size(); j++) {
-                if(live[j] == i->first.env) {
-                    livestores.insert(*i);
-                    break;
-                }
-            }
-        }
-    }
-*/
-    Exit e = { stack, reenter, index };
-    return e;
-}
-
 void JIT::Replay(Thread& thread) {
    
     code.clear();
@@ -538,7 +516,7 @@ void JIT::Replay(Thread& thread) {
     
     std::vector<IRRef> forward(n, 0);
     std::tr1::unordered_map<IR, IRRef> cse;
-    std::vector<IRRef> stack;
+    Snapshot snapshot;
 
     // after each guard reemit the entire body of the code
     // up to that point, omitting all guards.
@@ -641,13 +619,13 @@ void JIT::Replay(Thread& thread) {
     // Emit constants
     for(size_t i = 0; i < n; i++) {
         if(trace[i].op == TraceOpCode::constant) {
-            forward[i] = EmitOptIR(thread, trace[i], code, forward, cse, stack);
+            forward[i] = EmitOptIR(thread, trace[i], code, forward, cse, snapshot);
         }
     }
  
     // Emit loop header...
     for(size_t i = 0; i < n; i++) {
-        forward[i] = EmitOptIR(thread, trace[i], code, forward, cse, stack);
+        forward[i] = EmitOptIR(thread, trace[i], code, forward, cse, snapshot);
     }
 
     if(rootTrace == 0) 
@@ -658,7 +636,7 @@ void JIT::Replay(Thread& thread) {
 
         // Emit loop
         for(size_t i = 0; i < n; i++) {
-            IRRef fwd = EmitOptIR(thread, trace[i], code, forward, cse, stack);
+            IRRef fwd = EmitOptIR(thread, trace[i], code, forward, cse, snapshot);
            
             if(code[fwd].op != TraceOpCode::constant) {
                 if(fwd < Loop && phis.find(fwd) == phis.end())
@@ -669,6 +647,10 @@ void JIT::Replay(Thread& thread) {
             }
             forward[i] = fwd;
         }
+
+        size_t actualSize = code.size();
+
+        code.resize(actualSize);
 
         for(std::map<IRRef, IRRef>::const_iterator i = phis.begin(); i != phis.end(); ++i) {
             IR const& ir = code[i->first];
@@ -681,7 +663,7 @@ void JIT::Replay(Thread& thread) {
     else {
         IRRef e = Insert(thread, code, cse, IR(TraceOpCode::exit, Type::Nil, Shape::Empty, Shape::Empty));
         Reenter r = { startPC, true };
-        exits[code.size()-1] = BuildExit( stack, r, exits.size()-1 );
+        exits[code.size()-1] = BuildExit( snapshot, r, exits.size()-1 );
     }
 }
 
@@ -696,7 +678,7 @@ void JIT::end_recording(Thread& thread) {
         trace[i].reg = 0;
     }
 
-    //dump(thread, trace);
+    dump(thread, trace);
     Replay(thread);
     //dump(thread, code);
     //Schedule();
@@ -1075,6 +1057,10 @@ void JIT::dump(Thread& thread, std::vector<IR> const& t) {
         IR const& ir = t[i];
         if(ir.live) {
             printf("%4li ", i);
+            if(ir.sunk)
+                printf("}");
+            else
+                printf(" ");
             if(exits.find(i) != exits.end())
                 printf(">");
             else if(fusable.size() == t.size() && !fusable[i]) 

@@ -233,7 +233,8 @@ void JIT::RegisterAssignment() {
             ||  ir.op == TraceOpCode::pop 
             ||  ir.op == TraceOpCode::jmp
             ||  ir.op == TraceOpCode::loop
-            ||  ir.op == TraceOpCode::exit)
+            ||  ir.op == TraceOpCode::exit
+            ||  ir.op == TraceOpCode::nest )
             ir.live = true;
 
         if(     ir.op == TraceOpCode::phi &&

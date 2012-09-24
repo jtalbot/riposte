@@ -215,7 +215,9 @@ public:
     llvm::AllocaInst* CreateInitializedAlloca( llvm::Value* init ) {
         llvm::AllocaInst* r = EntryBlock().CreateAlloca( init->getType() );
         r->setAlignment(16);
-        CreateStore(init, r);
+        if( !llvm::isa<llvm::UndefValue>(init) ) {
+            CreateStore(init, r);
+        }
         return r;
     }
 
@@ -524,7 +526,7 @@ struct Fusion {
         return a;
     }
 
-    void Store(FunctionBuilder& builder, llvm::Value* a, size_t reg, llvm::Value* iterator) 
+    void Store(FunctionBuilder& builder, llvm::Value* a, size_t reg, llvm::Value* iterator, size_t width) 
     {
         registers[reg].InsertAlignedVector(builder, a, iterator, width);
         outs[reg] = a;
@@ -994,11 +996,11 @@ struct Fusion {
             {
                 llvm::Value* agg;
                 if(ir.type == Type::Double) {
-                    agg = builder.CreateInitializedAlloca(zerosD);
+                    agg = builder.Appender(header).CreateInitializedAlloca(zerosD);
                     builder.CreateStore(builder.CreateFAdd(builder.CreateLoad(agg), Load(builder, ir.a)), agg);
                 }
                 else {
-                    agg = builder.CreateInitializedAlloca(zerosI);
+                    agg = builder.Appender(header).CreateInitializedAlloca(zerosI);
                     builder.CreateStore(builder.CreateAdd(builder.CreateLoad(agg), Load(builder, ir.a)), agg);
                 } 
                 reductions[index] = agg;
@@ -1045,7 +1047,7 @@ struct Fusion {
                 break;
         }
         r = builder.CreateInsertElement(r, t, builder.getInt32(0));
-        Store(builder, r, ir.reg, builder.getInt64(0)); 
+        Store(builder, r, ir.reg, builder.getInt64(0), 1); 
     }
 
     llvm::BasicBlock* Close() {
@@ -1057,7 +1059,7 @@ struct Fusion {
 
         std::map<size_t, llvm::Value*>::const_iterator i;
         for(i = outs.begin(); i != outs.end(); i++) {
-            Store(builder, i->second, i->first, iterator);
+            Store(builder, i->second, i->first, iterator, width);
         }
 
         builder.SetInsertPoint(header);
@@ -1110,7 +1112,7 @@ struct TraceCompiler {
     llvm::BasicBlock * InnerBlock;
     llvm::BasicBlock * EndBlock;
 
-    llvm::Type* value_type;
+    llvm::StructType* value_type;
     llvm::Type* actual_value_type;
     llvm::Type* thread_type;
     llvm::FunctionType* function_type;
@@ -1471,11 +1473,12 @@ struct TraceCompiler {
                 }
                 else {
                     // a boxed type
-                    llvm::Value* r = CreateEntryBlockAlloca(value_type, builder.getInt64(0));
-                    llvm::Value* p = builder.CreatePointerCast(r, builder.getInt64Ty()->getPointerTo());
-                    builder.CreateStore(builder.getInt64(jit.constants[ir.a].header), builder.CreateConstGEP1_64(p, 0));
-                    builder.CreateStore(builder.getInt64(jit.constants[ir.a].i), builder.CreateConstGEP1_64(p, 1));
-                    reg.Store( builder, r );
+                    llvm::Constant* c = llvm::ConstantStruct::get(
+                        value_type, 
+                        builder.getInt64(jit.constants[ir.a].header),
+                        builder.getInt64(jit.constants[ir.a].i),
+                        NULL);
+                    reg.Store( builder, c );
                 }
             } break;
 

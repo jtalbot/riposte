@@ -157,6 +157,8 @@
     _(aslist, "as.list") \
     _(newenv, "newenv") \
     _(parentframe, "parent.frame") \
+    _(gassign, "assign") \
+    _(get, "get") \
     _(Maximal, "\255")
 
 typedef const char* String;

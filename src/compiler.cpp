@@ -97,7 +97,7 @@ static ByteCode::Enum op2(String const& func) {
 }
 
 static ByteCode::Enum op3(String const& func) {
-	if(func == Strings::seq) return ByteCode::seq;
+    if(func == Strings::seq) return ByteCode::seq;
 	if(func == Strings::bbAssign) return ByteCode::scatter1;
 	if(func == Strings::bracketAssign) return ByteCode::scatter;
 	if(func == Strings::ifelse) return ByteCode::ifelse;
@@ -631,7 +631,24 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(ByteCode::list, f, Operand((int64_t)call.length-1), result);
 		return result;
 	}
- 
+    else if(func == Strings::get) {
+		Operand b = compile(call[2], code);
+		Operand a = Operand(MEMORY, SymbolStr(call[1]));
+		kill(a); kill(b);
+		Operand result = allocRegister();
+		emit(ByteCode::get, a, b, result);
+		return result;
+    }
+    else if(func == Strings::gassign) {
+		Operand c = placeInRegister(compile(call[2], code));
+		Operand b = compile(call[3], code);
+		Operand a = Operand(MEMORY, SymbolStr(call[1]));
+		kill(a); kill(b); kill(c);
+		Operand result = allocRegister();
+		assert(c == result);
+		emit(ByteCode::gassign, a, b, result);
+		return result;
+    } 
 	// Trinary operators
 	else if((func == Strings::bracketAssign ||
 		func == Strings::bbAssign ||

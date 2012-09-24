@@ -69,6 +69,7 @@ struct Value {
 	bool isDotdot() const { return type == Type::Dotdot; }
 	bool isFuture() const { return type == Type::Future; }
 	bool isFunction() const { return type == Type::Function; }
+	bool isEnvironment() const { return type == Type::Environment; }
 	bool isObject() const { return type == Type::Object; }
 	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical(); }
 	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }

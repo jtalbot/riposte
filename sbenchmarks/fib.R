@@ -9,4 +9,4 @@ fib <- function(n) {
     b
 }
 
-system.time(fib(1000000))
+system.time(fib(10000000))

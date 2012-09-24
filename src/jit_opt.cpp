@@ -462,19 +462,23 @@ JIT::IRRef JIT::FWD(std::vector<IR> const& code, IRRef i, bool& loopCarried) {
     return i;
 }
 
-JIT::IRRef JIT::DSE(std::vector<IR> const& code, IRRef i) {
+JIT::IRRef JIT::DSE(std::vector<IR> const& code, IRRef i, bool& crossedExit) {
     // search backwards for a store to kill
+    crossedExit = false;
 
     // do DSE
     for(IRRef j = i-1; j < code.size(); j--) {
-        // don't cross guards or loop
+        // don't cross nests 
+        if( code[j].op == TraceOpCode::nest ) 
+            break;
+
+        // flag if we cross an exit
         if( code[j].op == TraceOpCode::loop || 
-                code[j].op == TraceOpCode::nest || 
-                code[j].op == TraceOpCode::load || /* because loads have guards in them */
+                code[j].op == TraceOpCode::load ||
                 code[j].op == TraceOpCode::gtrue ||
                 code[j].op == TraceOpCode::gfalse ||
                 code[j].op == TraceOpCode::gproto) 
-            break;
+            crossedExit = true;
 
         if(code[j].op == TraceOpCode::load) {
             Aliasing a1 = Alias(code, code[j].a, code[i].a);
@@ -507,6 +511,11 @@ JIT::IRRef JIT::DPE(std::vector<IR> const& code, IRRef i) {
     return i;
 }
 
+JIT::Exit JIT::BuildExit( Snapshot const& snapshot, Reenter const& reenter, size_t index) {
+    Exit e = { snapshot, reenter, index };
+    return e;
+}
+
 
 JIT::IRRef JIT::EmitOptIR(
             Thread& thread,
@@ -514,8 +523,9 @@ JIT::IRRef JIT::EmitOptIR(
             std::vector<IR>& code, 
             std::vector<IRRef>& forward, 
             std::tr1::unordered_map<IR, IRRef>& cse,
-            std::vector<IRRef>& stack) {
+            Snapshot& snapshot) {
 
+    ir.sunk = false;
     ir.in.length = forward[ir.in.length];
     ir.out.length = forward[ir.out.length];
 
@@ -524,11 +534,11 @@ JIT::IRRef JIT::EmitOptIR(
             
             case TraceOpCode::curenv: 
             {
-                if(stack.size() == 0) {
+                if(snapshot.stack.size() == 0) {
                     return Insert(thread, code, cse, ir);
                 }
                 else {
-                    return code[stack.back()].a;
+                    return snapshot.stack.back().environment;
                 }
             } break;
 
@@ -549,7 +559,7 @@ JIT::IRRef JIT::EmitOptIR(
                     code.pop_back();
                 }
                 else {
-                    exits[code.size()-1] = BuildExit( stack, ir.reenter, exits.size()-1 );
+                    exits[code.size()-1] = BuildExit( snapshot, ir.reenter, exits.size()-1 );
                 }
                 return f;
             } break;
@@ -566,55 +576,7 @@ JIT::IRRef JIT::EmitOptIR(
                     code.pop_back();
                 }
                 else {
-                    exits[code.size()-1] = BuildExit( stack, ir.reenter, exits.size()-1 );
-                }
-                return f;
-            } break;
-            
-            // slot store alias analysis is trivial. Index is identical, or it doesn't alias.
-            case TraceOpCode::sload: {
-                Variable v = { -1, (int64_t)ir.b };
-                // scan back for a previous sstore to forward to.
-                IRRef f = code.size();
-                bool loopCarried = false;
-                for(IRRef j = code.size()-1; j < code.size(); j--) {
-                    if(code[j].op == TraceOpCode::loop) loopCarried = true;
-                    if(code[j].op == TraceOpCode::sload && code[j].b == ir.b) {
-                        f = j;
-                        break;
-                    }
-                    if(code[j].op == TraceOpCode::sstore && code[j].b == ir.b) {
-                        f = code[j].c;
-                        break;
-                    }
-                }
-                if(f == code.size()) {
-                    std::tr1::unordered_map<IR, IRRef> tcse;
-                    Insert(thread, code, tcse, ir); 
-                    exits[code.size()-1] = BuildExit( stack, ir.reenter, exits.size()-1 );
-                }
-                return f;
-            } break;
-
-            case TraceOpCode::slength: {
-                Variable v = { ir.a, (int64_t)ir.b };
-                IRRef f = code.size();
-                bool loopCarried = false;
-                for(IRRef j = code.size()-1; j < code.size(); j--) {
-                    if(code[j].op == TraceOpCode::loop) loopCarried = true;
-                    if(code[j].op == TraceOpCode::slength && code[j].b == ir.b) {
-                        f = j;
-                        break;
-                    }
-                    if(code[j].op == TraceOpCode::sstore && code[j].b == ir.b) {
-                        f = code[j].in.length;
-                        break;
-                    }
-                }
-                if(f == code.size()) {
-                    std::tr1::unordered_map<IR, IRRef> tcse;
-                    Insert(thread, code, tcse, ir); 
-                    exits[code.size()-1] = BuildExit( stack, ir.reenter, exits.size()-1 );
+                    exits[code.size()-1] = BuildExit( snapshot, ir.reenter, exits.size()-1 );
                 }
                 return f;
             } break;
@@ -627,31 +589,53 @@ JIT::IRRef JIT::EmitOptIR(
                 IRRef f = ir.c;
                 std::tr1::unordered_map<IR, IRRef> tcse;
                 Insert(thread, code, tcse, ir);
-                IRRef j = DSE(code, code.size()-1);    
-                if(j != code.size()-1)
-                    code[j].op = TraceOpCode::nop;
-                return f;
-            } break;
-            case TraceOpCode::sstore: {
-                Variable v = { (IRRef)-1, (int64_t)ir.b };
-                IRRef f = ir.c = forward[ir.c];
-                std::tr1::unordered_map<IR, IRRef> tcse;
-                Insert(thread, code, tcse, ir);
-                // do DSE
-                for(IRRef j = code.size()-2; j < code.size(); j--) {
-                    // don't cross guards or loop
-                    if( code[j].op == TraceOpCode::loop || 
-                        code[j].op == TraceOpCode::gtrue ||
-                        code[j].op == TraceOpCode::gfalse ||
-                        code[j].op == TraceOpCode::load ||
-                        code[j].op == TraceOpCode::gproto) 
-                        break;
-
-                    if( code[j].op == TraceOpCode::sstore && ir.b >= code[j].b ) {
+                bool crossedExit;
+                IRRef j = DSE(code, code.size()-1, crossedExit);    
+                if(j != code.size()-1) {
+                    if( !crossedExit )
                         code[j].op = TraceOpCode::nop;
-                    }
+                    else
+                        code[j].sunk = true;
                 }
                 return f;
+            } break;
+            
+            // slot store alias analysis is trivial. Index is identical, or it doesn't alias.
+            case TraceOpCode::sload: {
+                std::map< int64_t, IRRef >::const_iterator i
+                    = snapshot.slotValues.find( (int64_t)ir.b );
+                if(i != snapshot.slotValues.end()) {
+                    return i->second;
+                }
+                else {
+                    std::tr1::unordered_map<IR, IRRef> tcse;
+                    IRRef s = Insert(thread, code, tcse, ir); 
+                    snapshot.slotValues[ (int64_t)ir.b ] = s; 
+                    exits[code.size()-1] = BuildExit( snapshot, ir.reenter, exits.size()-1 );
+                    return s;
+                }
+            } break;
+
+            case TraceOpCode::slength: {
+                std::map< int64_t, IRRef >::const_iterator i
+                    = snapshot.slotValues.find( (int64_t)ir.b );
+                if(i != snapshot.slotLengths.end()) {
+                    return i->second;
+                }
+                else {
+                    std::tr1::unordered_map<IR, IRRef> tcse;
+                    IRRef s = Insert(thread, code, tcse, ir); 
+                    snapshot.slotLengths[ (int64_t)ir.b ] = s; 
+                    exits[code.size()-1] = BuildExit( snapshot, ir.reenter, exits.size()-1 );
+                    return s;
+                }
+            } break;
+            
+            case TraceOpCode::sstore: {
+                ir.c = forward[ir.c];
+                snapshot.slotValues[ (int64_t)ir.b ] = ir.c;
+                snapshot.slotLengths[ (int64_t)ir.b ] = ir.out.length;
+                return ir.c;
             } break;
 
             case TraceOpCode::lenv: {
@@ -679,19 +663,15 @@ JIT::IRRef JIT::EmitOptIR(
             } break;
 
             case TraceOpCode::kill: {
-                // do DSE
-                for(IRRef j = code.size()-1; j < code.size(); j--) {
-                    // don't cross guards or loop
-                    if( code[j].op == TraceOpCode::loop || 
-                        code[j].op == TraceOpCode::gtrue ||
-                        code[j].op == TraceOpCode::gfalse ||
-                        code[j].op == TraceOpCode::load ||
-                        code[j].op == TraceOpCode::gproto) 
-                        break;
-
-                    if( code[j].op == TraceOpCode::sstore && ir.a >= code[j].b ) {
-                        code[j].op = TraceOpCode::nop;
-                    }
+                std::map<int64_t, IRRef>::iterator i = snapshot.slotValues.begin();
+                while(i != snapshot.slotValues.end()) {
+                    if(i->first >= ir.a) snapshot.slotValues.erase(i++);
+                    else ++i;
+                }
+                i = snapshot.slotLengths.begin();
+                while(i != snapshot.slotLengths.end()) {
+                    if(i->first >= ir.a) snapshot.slotLengths.erase(i++);
+                    else ++i;
                 }
                 return 0;
             } break;
@@ -699,21 +679,14 @@ JIT::IRRef JIT::EmitOptIR(
             case TraceOpCode::push: {
                 ir.a = forward[ir.a];
                 ir.b = forward[ir.b];
-                std::tr1::unordered_map<IR, IRRef> tcse;
-                IRRef p = Insert(thread, code, tcse, ir);
-                stack.push_back(p);
+                StackFrame frame = frames[ir.c];
+                frame.environment = ir.a;
+                frame.env = ir.b;
+                snapshot.stack.push_back(frame);
                 return 0;
             } break;
             case TraceOpCode::pop: {
-                std::tr1::unordered_map<IR, IRRef> tcse;
-                Insert(thread, code, tcse, ir);
-                stack.pop_back();
-                
-                IRRef j = DPE(code, code.size()-1);    
-                if(j != code.size()-1) {
-                    code[j].op = TraceOpCode::nop;
-                    code.pop_back();
-                }
+                snapshot.stack.pop_back();
                 return 0;
             } break;
 
@@ -723,7 +696,7 @@ JIT::IRRef JIT::EmitOptIR(
                 ir.a = forward[ir.a];
                 IRRef f = Insert(thread, code, cse, ir);
                 if(f == code.size()-1)
-                    exits[code.size()-1] = BuildExit( stack, ir.reenter, exits.size()-1 );
+                    exits[code.size()-1] = BuildExit( snapshot, ir.reenter, exits.size()-1 );
                 return 0;
             } break;
             case TraceOpCode::scatter: {

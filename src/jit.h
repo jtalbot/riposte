@@ -134,6 +134,8 @@ public:
         short reg;
         bool live;
 
+        bool sunk;
+
         Reenter reenter;
 
         void dump() const;
@@ -148,17 +150,20 @@ public:
                     out == o.out;
         }
 
+        IR()
+            : op(TraceOpCode::nop), a(0), b(0), c(0), type(Type::Nil), in(Shape::Empty), out(Shape::Empty), sunk(false) {}
+        
         IR(TraceOpCode::Enum op, Type::Enum type, Shape in, Shape out)
-            : op(op), a(0), b(0), c(0), type(type), in(in), out(out) {}
+            : op(op), a(0), b(0), c(0), type(type), in(in), out(out), sunk(false) {}
         
         IR(TraceOpCode::Enum op, IRRef a, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(0), c(0), type(type), in(in), out(out) {}
+            : op(op), a(a), b(0), c(0), type(type), in(in), out(out), sunk(false) {}
         
         IR(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(b), c(0), type(type), in(in), out(out) {}
+            : op(op), a(a), b(b), c(0), type(type), in(in), out(out), sunk(false) {}
         
         IR(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(b), c(c), type(type), in(in), out(out) {}
+            : op(op), a(a), b(b), c(c), type(type), in(in), out(out), sunk(false) {}
 	};
 
     struct Phi {
@@ -177,9 +182,11 @@ public:
     std::map<size_t, IRRef> uniqueConstants;
 
     struct StackFrame {
+        IRRef environment;
         Prototype const* prototype;
         Instruction const* returnpc;
         Value* returnbase;
+        IRRef env;
         int64_t dest;
     };
 
@@ -208,15 +215,19 @@ public:
     Trace* rootTrace;
     Trace* dest;
 
-    std::map<Variable, IRRef> slots;
+    struct Snapshot {
+        std::vector<StackFrame> stack;
+        std::map< int64_t, IRRef > slotValues;
+        std::map< int64_t, IRRef > slotLengths;
+    }; 
 
 	struct Exit {
-        std::vector<IRRef> stack;
+        Snapshot snapshot;
 		Reenter reenter;
         size_t index;
 	};
 	std::map<size_t, Exit> exits;
-    Exit BuildExit(std::vector<IRRef>& stack, Reenter const& reenter, size_t index); 
+    Exit BuildExit(Snapshot const& snapshot, Reenter const& reenter, size_t index); 
 
 
 	JIT() 
@@ -234,7 +245,6 @@ public:
         constantsMap.clear();
         uniqueConstants.clear();
         exits.clear();
-        slots.clear();
         shapes.clear();
         rootTrace = root;
         this->dest = dest;
@@ -360,7 +370,7 @@ public:
     bool EmitIR(Thread& thread, Instruction const& inst, bool branch);
     bool EmitNest(Thread& thread, Trace* trace);
 
-    IRRef EmitOptIR(Thread& thread, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::tr1::unordered_map<IR, IRRef>& cse, std::vector<IRRef>& stack);
+    IRRef EmitOptIR(Thread& thread, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::tr1::unordered_map<IR, IRRef>& cse, Snapshot& snapshot);
     void Replay(Thread& thread);
 
     void AssignRegister(size_t index);
@@ -380,7 +390,7 @@ public:
     };
     Aliasing Alias(std::vector<IR> const& code, IRRef i, IRRef j);
     IRRef FWD(std::vector<IR> const& code, IRRef i, bool& loopCarried);
-    IRRef DSE(std::vector<IR> const& code, IRRef i);
+    IRRef DSE(std::vector<IR> const& code, IRRef i, bool& crossedExit);
     IRRef DPE(std::vector<IR> const& code, IRRef i);
     bool Ready(IR ir, std::vector<bool>& done);
    

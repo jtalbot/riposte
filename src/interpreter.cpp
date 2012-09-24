@@ -328,6 +328,17 @@ Instruction const* assign_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
+Instruction const* gassign_op(Thread& thread, Instruction const& inst) {
+    OPERAND(env, inst.b); FORCE(env, inst.b); /* BIND(env); */
+	OPERAND(value, inst.c); FORCE(value, inst.c); // don't BIND 
+	
+    if(!env.isEnvironment())
+        _error("Assigning to a non-environment is not supported");
+
+    ((REnvironment&)env).environment()->insert((String)inst.a) = value;
+	return &inst+1;
+}
+
 Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 	// assign2 is always used to assign up at least one scope level...
 	// so start off looking up one level...
@@ -354,6 +365,20 @@ Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 Instruction const* mov_op(Thread& thread, Instruction const& inst) {
 	OPERAND(value, inst.a); FORCE(value, inst.a); BIND(value);
 	OUT(thread, inst.c) = value;
+	return &inst+1;
+}
+
+Instruction const* get_op(Thread& thread, Instruction const& inst) {
+	OPERAND(env, inst.b); FORCE(env, inst.a); BIND(env);
+    
+    if(!env.isEnvironment())
+        _error("Assigning to a non-environment is not supported");
+
+    if( ((REnvironment&)env).environment()->has((String)inst.a) )
+        OUT(thread, inst.c) = ((REnvironment&)env).environment()->get((String)inst.a);
+	else
+        OUT(thread, inst.c) = Null::Singleton();
+
 	return &inst+1;
 }
 

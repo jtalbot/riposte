@@ -65,7 +65,7 @@ void SSTORE(Thread& thread, int64_t i, Value v) {
 
 extern "C"
 void ESTORE(Thread& thread, REnvironment env, int8_t** i, Value v) {
-    env.environment()->insertRecursive((String)*i) = v;
+    env.environment()->insert((String)*i) = v;
 }
 
 // Inline this!
