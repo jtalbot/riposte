@@ -2236,7 +2236,7 @@ void PTXRun(Thread & thread, Trace * tr, CompiledTrace result) {
         c.function = result.F;
         c.cT = result;
         c.GeneratePTXKernelFunction(); 
-        return;
+        c.PTXExecute();
 }
 
 void Trace::JIT(Thread & thread) {
