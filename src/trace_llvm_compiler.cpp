@@ -2233,7 +2233,7 @@ CompiledTrace PTXCompile(Thread & thread, Trace * tr) {
 
 void PTXRun(Thread & thread, Trace * tr, CompiledTrace result) {
         TraceLLVMCompiler c(&thread, tr);
-        c.function = result.function;
+        c.function = result.F;
         c.cT = result;
         c.GeneratePTXKernelFunction(); 
         return;
