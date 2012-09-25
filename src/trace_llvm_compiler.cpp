@@ -198,7 +198,7 @@ struct TraceLLVMCompiler {
     llvm::BasicBlock * origBody;
     
     std::vector<llvm::Value *> values;
-    std::vector<llvm::Value *> outputGPU;
+    std::vector<void *> outputGPU;
     
     std::vector<void *> inputGPU;
     std::vector<llvm::Value *> inputGPUAddr;
