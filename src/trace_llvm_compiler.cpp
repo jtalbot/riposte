@@ -802,7 +802,7 @@ struct TraceLLVMCompiler {
                 else if (n.group == IRNode::SCAN) {
                     int64_t length = n.outShape.length;
                     void * p;
-                    llvm::Value * vecotr;
+                    llvm::Value * vector;
                     if(n.type == Type::Double) {
                         n.out = Double(length);
                         
