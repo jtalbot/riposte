@@ -640,22 +640,22 @@ struct TraceLLVMCompiler {
         int inSize = cT.parameters*sizeof(llvm::Value *);
         int outSize = cT.outputCount*sizeof(llvm::Value *);
 
-        void * inputAddrInt;
-        void * inputAddrDouble;
-        void * inputAddrLogical;
+        void ** inputAddrInt;
+        void ** inputAddrDouble;
+        void ** inputAddrLogical;
 
-        cudaMalloc((void**)&inputAddrLogical, inSize);
-        cudaMalloc((void**)&inputAddrInt, inSize);
-        cudaMalloc((void**)&inputAddrDouble, inSize);
+        cudaMalloc((void**)inputAddrLogical, inSize);
+        cudaMalloc((void**)inputAddrInt, inSize);
+        cudaMalloc((void**)inputAddrDouble, inSize);
 
         
-        void * outputAddrInt;
-        void * outputAddrDouble;
-        void * outputAddrLogical;
+        void ** outputAddrInt;
+        void ** outputAddrDouble;
+        void ** outputAddrLogical;
 
-        cudaMalloc((void**)&outputAddrLogical, outSize);
-        cudaMalloc((void**)&outputAddrInt, outSize);
-        cudaMalloc((void**)&outputAddrDouble, outSize);
+        cudaMalloc((void**)outputAddrLogical, outSize);
+        cudaMalloc((void**)outputAddrInt, outSize);
+        cudaMalloc((void**)outputAddrDouble, outSize);
 
         int inPos = 0;
         for(size_t i = 0; i < trace->nodes.size(); i++) {
@@ -683,7 +683,6 @@ struct TraceLLVMCompiler {
                     }
                     else
                         _error("unsupported type");
-                    thingsToFree.push_back(p);
                     llvm::Type * t = getType(n.type);
                     
                     inputGPU.push_back(p);
@@ -695,6 +694,8 @@ struct TraceLLVMCompiler {
                     //inputGPUAddr.push_back(elementAddr);
 
                 } break;
+                default:
+                    break;
             }
             inPos++;
         }
