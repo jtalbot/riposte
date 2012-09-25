@@ -838,7 +838,7 @@ struct TraceLLVMCompiler {
                     outputGPU.push_back(p);
 
                     outputAddrDouble[outPos] = vector;
-                    outputAddrInt[outPos] = vector);
+                    outputAddrInt[outPos] = vector;
                     outputAddrLogical[outPos] = vector;
                 }
             }
@@ -903,19 +903,30 @@ struct TraceLLVMCompiler {
         llvm::Value *Id = B->CreateMul(BlockDimXRead, BlockIdxXRead);
         Id = B->CreateAdd(Id, TidXRead);
         
-        
+        llvm::PointerType * ptrInt = llvm::PointerType::getUnqual(llvm::Type::getInt64PtrTy(*C));
+        llvm::PointerType * ptrDouble = llvm::PointerType::getUnqual(llvm::Type::getDoublePtrTy(*C));
+        llvm::PointerType * ptrLogical = llvm::PointerType::getUnqual(llvm::Type::getInt1PtrTy(*C));
+
+        llvm::Value * outputAddr1 = ConstantPointer((void *)outputAddrInt, ptrInt);
+        llvm::Value * outputAddr2 = ConstantPointer((void *)outputAddrDouble, ptrDouble);
+        llvm::Value * outputAddr3 = ConstantPointer((void *)outputAddrLogical, ptrLogical);
+
+        llvm::Value * inputAddr1 = ConstantPointer((void *)inputAddrInt, ptrInt);
+        llvm::Value * inputAddr2 = ConstantPointer((void *)inputAddrDouble, ptrDouble);
+        llvm::Value * inputAddr3 = ConstantPointer((void *)inputAddrLogical, ptrLogical);
+
         std::vector<llvm::Value *> IndexArgs;
         Id->setName("index");
         IndexArgs.push_back(Id);
         TidXRead->setName("tid");
         IndexArgs.push_back(TidXRead);
         IndexArgs.push_back(BlockIdxXRead);
-        IndexArgs.push_back(outputAddrInt);
-        IndexArgs.push_back(outputAddrDouble);
-        IndexArgs.push_back(outputAddrLogical);
-        IndexArgs.push_back(inputAddrInt);
-        IndexArgs.push_back(inputAddrDouble);
-        IndexArgs.push_back(inputAddrLogical);
+        IndexArgs.push_back(outputAddr1);
+        IndexArgs.push_back(outputAddr2);
+        IndexArgs.push_back(outputAddr3);
+        IndexArgs.push_back(inputAddr1);
+        IndexArgs.push_back(inputAddr2);
+        IndexArgs.push_back(inputAddr3);
         
         
         //call index function
