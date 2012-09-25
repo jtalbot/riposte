@@ -1973,7 +1973,7 @@ struct TraceLLVMCompiler {
                     }
                     
                     outputGPU.push_back(vector);
-                    outputCount++;
+                    cT.outputCount++;
                 }
                 else if (n.group == IRNode::FOLD) {
                     int64_t length = 1;
