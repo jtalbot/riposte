@@ -749,9 +749,9 @@ struct TraceLLVMCompiler {
                     }
                     
                     outputGPU.push_back(vector);
-                    outputAddrDouble.push_back(vector);
-                    outputAddrInt.push_back(vector);
-                    outputAddrLogical.push_back(vector);
+                    outputAddrDouble[outPos] = vector;
+                    outputAddrInt[outPos] = vector;
+                    outputAddrLogical[outPos] = vector;
 
                 }
                 else if (n.group == IRNode::FOLD) {
@@ -797,9 +797,9 @@ struct TraceLLVMCompiler {
                     
                     //Grab the addresses and save them because we'll access them to put the output into
                     outputGPU.push_back(vector);
-                    outputAddrDouble.push_back(vector);
-                    outputAddrInt.push_back(vector);
-                    outputAddrLogical.push_back(vector);
+                    outputAddrDouble[outPos] = vector;
+                    outputAddrInt[outPos] = vector;
+                    outputAddrLogical[outPos] = vector;
                     B->SetInsertPoint(body);
                 }
                 else if (n.group == IRNode::SCAN) {
@@ -842,14 +842,14 @@ struct TraceLLVMCompiler {
                     } else {
                         _error("Unknown type in initialize outputs");
                     }
-                    thingsToFree.push_back(p);
                     outputGPU.push_back(p);
 
-                    outputAddrDouble.push_back(vector);
-                    outputAddrInt.push_back(vector);
-                    outputAddrLogical.push_back(vector);
+                    outputAddrDouble[outPos] = vector;
+                    outputAddrInt[outPos] = vector);
+                    outputAddrLogical[outPos] = vector;
                 }
             }
+            outPos++;
         }
 
         llvm::Function *TidXFunc, *BlockDimXFunc, *BlockIdxXFunc;
