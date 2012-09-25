@@ -77,11 +77,7 @@ struct LLVMState {
 struct CompiledTrace {
 	llvm::Function *F;
     int parameters;
-    std::vector<int> inputSizes;
-    std::vector<int> outputSizes;
-	std::vector<void *> outputAddresses;
-    std::vector<void *> reductionSpace;
-    std::vector<void *> inputAddresses;
+    int outputCount;
 };
 
 void TraceLLVMCompiler_init(State & state) {
@@ -202,7 +198,7 @@ struct TraceLLVMCompiler {
     llvm::BasicBlock * origBody;
     
     std::vector<llvm::Value *> values;
-    std::vector<void *> outputGPU;
+    std::vector<llvm::Value *> outputGPU;
     
     std::vector<void *> inputGPU;
     std::vector<llvm::Value *> inputGPUAddr;
@@ -280,8 +276,7 @@ struct TraceLLVMCompiler {
         llvm::PointerType * ptrLogical = llvm::PointerType::getUnqual(llvm::Type::getInt1PtrTy(*C));
 
         llvm::Constant *cons = mainModule->getOrInsertFunction("indexFunc", llvm::Type::getVoidTy(*C), intType, intType, intType, 
-            intType /*paramSize*/, ptrInt /*inputSize*/, ptrInt /*outputSize*/, ptrInt, ptrDouble, ptrLogical, ptrInt, ptrDouble, 
-            ptrLogical, ptrInt, ptrDouble, ptrLogical, NULL);
+            ptrInt, ptrDouble, ptrLogical, ptrInt, ptrDouble, ptrLogical, NULL);
 
         function = llvm::cast<llvm::Function>(cons);
         function->setCallingConv(llvm::CallingConv::C);
@@ -292,13 +287,6 @@ struct TraceLLVMCompiler {
         tid->setName("ThreadID");
         llvm::Value* blockID = args++;
         blockID->setName("blockID");
-        
-        llvm::Value* paramsSize = args++;
-
-        llvm::Value* inputSize = args++;
-        blockID->setName("inputSize");
-        llvm::Value * outputSize = args++;
-        blockID->setName("outputSize");
 
         llvm::Value * outputAddrInt = args++;
         blockID->setName("outputAddrInt");
@@ -306,13 +294,6 @@ struct TraceLLVMCompiler {
         blockID->setName("outputAddrDouble");
         llvm::Value * outputAddrLogical = args++;
         blockID->setName("outputAddrLogical");
-
-        llvm::Value * reductionSpaceInt = args++;
-        blockID->setName("reductionSpaceInt");
-        llvm::Value * reductionSpaceDouble = args++;
-        blockID->setName("reductionSpaceDouble");
-        llvm::Value * reductionSpaceLogical = args++;
-        blockID->setName("reductionSpaceLogical");
 
         llvm::Value * inputAddrInt = args++;
         blockID->setName("inputAddrInt");
@@ -374,8 +355,7 @@ struct TraceLLVMCompiler {
         
         B->SetInsertPoint(body);
 
-        CompilePTXBody(blockID, tid, sizeOfArray, paramsSize, inputSize, outputSize, outputAddrInt, outputAddrDouble, outputAddrLogical, reductionSpaceInt, reductionSpaceDouble,
-             reductionSpaceLogical, inputAddrInt, inputAddrDouble, inputAddrLogical);
+        CompilePTXBody(blockID, tid, sizeOfArray, outputAddrInt, outputAddrDouble, outputAddrLogical, inputAddrInt, inputAddrDouble, inputAddrLogical);
         if (scan == true) {
             ScanBlocksHelper(tid, loopIndex());
         }
@@ -653,11 +633,224 @@ struct TraceLLVMCompiler {
         return B->CreateGEP(mem, gepIndices, "T");
     }
     
-    void GenerateKernelFunction() {
+    void GeneratePTXKernelFunction() {
         ///IMPORTANT: TEST RUN AT MOVING KERNEL FUNCTION INTO COMPILE PART OF PROGRAM
         //WE have a function and we want a new function
         
+        int inSize = cT.parameters*sizeof(llvm::Value *);
+        int outSize = cT.outputCount*sizeof(llvm::Value *);
+
+        void * inputAddrInt;
+        void * inputAddrDouble;
+        void * inputAddrLogical;
+
+        cudaMalloc((void**)&inputAddrLogical, inSize);
+        cudaMalloc((void**)&inputAddrInt, inSize);
+        cudaMalloc((void**)&inputAddrDouble, inSize);
+
         
+        void * outputAddrInt;
+        void * outputAddrDouble;
+        void * outputAddrLogical;
+
+        cudaMalloc((void**)&outputAddrLogical, outSize);
+        cudaMalloc((void**)&outputAddrInt, outSize);
+        cudaMalloc((void**)&outputAddrDouble, outSize);
+
+        int inPos = 0;
+        for(size_t i = 0; i < trace->nodes.size(); i++) {
+            IRNode & n = trace->nodes[i];
+            switch(n.op) {
+                case IROpCode::load: {
+                    void * p;
+                    if(n.in.isLogical()) {
+                        
+                        int size = ((Logical&)n.in).length*sizeof(Logical::Element);
+                        cudaMalloc((void**)&p, size);
+                        cudaMemcpy(p, ((Logical&)n.in).v(), size, cudaMemcpyHostToDevice);
+                        
+
+                    }
+                    else if(n.in.isInteger()) {
+                        int size = ((Integer&)n.in).length*sizeof(Integer::Element);
+                        cudaMalloc((void**)&p, size);
+                        cudaMemcpy(p, ((Integer&)n.in).v(), size, cudaMemcpyHostToDevice);
+                    }
+                    else if(n.in.isDouble()) {
+                        int size = ((Double&)n.in).length*sizeof(Double::Element);
+                        cudaError_t error = cudaMalloc((void**)&p, size);
+                        cudaMemcpy(p, ((Double&)n.in).v(), size, cudaMemcpyHostToDevice);
+                    }
+                    else
+                        _error("unsupported type");
+                    thingsToFree.push_back(p);
+                    llvm::Type * t = getType(n.type);
+                    
+                    inputGPU.push_back(p);
+                    llvm::Value * vector = ConstantPointer(p, t);
+                    inputAddrInt[inPos] = vector;
+                    inputAddrDouble[inPos] = vector;
+                    inputAddrLogical[inPos] = vector;
+
+                    //inputGPUAddr.push_back(elementAddr);
+
+                } break;
+            }
+            inPos++;
+        }
+        int outPos = 0;
+        for(size_t i = 0; i < trace->nodes.size(); i++) {
+            IRNode & n = trace->nodes[i];
+            if(n.liveOut) {
+                
+                /*
+                 *Changes need to be made here regarding the intermediate size
+                 */
+                
+                
+                void *p;
+                if (n.group == IRNode::MAP || n.group == IRNode::GENERATOR) {
+                    int64_t length = n.outShape.length;
+                    llvm::Value * vector;
+               
+                    if(n.type == Type::Double) {
+                        n.out = Double(length);
+
+                        int size = length*sizeof(Double::Element);
+                        cudaError_t error = cudaMalloc((void**)&p, size);
+                        //Grab the addresses and save them because we'll access them to put the output into
+                        llvm::Type * t = getType(n.type);
+                        llvm::Value * vector = ConstantPointer(p,t);
+                        
+                    } else if(n.type == Type::Integer) {
+                        n.out = Integer(length);
+                        int size = length*sizeof(Integer::Element);
+                        cudaMalloc((void**)&p, size);
+                    
+                        //Grab the addresses and save them because we'll access them to put the output into
+                        llvm::Type * t = getType(n.type);
+                        llvm::Value * vector = ConstantPointer(p,t);
+                        
+                    } else if(n.type == Type::Logical) {
+                        n.out = Logical(length);
+
+                        int size = length*sizeof(Logical::Element);
+                        cudaMalloc((void**)&p, size);
+                        // Convert to 8 bit logical
+                        llvm::Value * temp8 = B->CreateSExt(values[i],logicalType8);
+                        
+                        //Grab the addresses and save them because we'll access them to put the output into
+                        llvm::Type * t = logicalType8;
+                        llvm::Value * vector = ConstantPointer(p,t);
+                        
+                    } else {
+                        _error("Unknown type in initialize outputs");
+                    }
+                    
+                    outputGPU.push_back(vector);
+                    outputAddrDouble.push_back(vector);
+                    outputAddrInt.push_back(vector);
+                    outputAddrLogical.push_back(vector);
+
+                }
+                else if (n.group == IRNode::FOLD) {
+                    int64_t length = 1;
+                    void * p;
+                    
+                    if(n.type == Type::Double) {
+                        n.out = Double(length);
+                        
+                        int size = ((Double&)n.in).length*sizeof(Double::Element);
+                        cudaError_t error = cudaMalloc((void**)&p, size);
+                        //Grab the addresses and save them because we'll access them to put the output into
+                        llvm::Type * t = getType(n.type);
+                        llvm::Value * vector = ConstantPointer(p,t);
+                        B->CreateStore(values[i], B->CreateGEP(vector, blockID));
+
+                    } else if(n.type == Type::Integer) {
+                        n.out = Integer(length);
+                        int size = ((Integer&)n.in).length*sizeof(Integer::Element);
+                        cudaMalloc((void**)&p, size);
+
+                        //Grab the addresses and save them because we'll access them to put the output into
+                        llvm::Type * t = getType(n.type);
+                        llvm::Value * vector = ConstantPointer(p,t);
+                        B->CreateStore(values[i], B->CreateGEP(vector, blockID));
+                        
+                    } else if(n.type == Type::Logical) {
+                        n.out = Logical(length);
+                        
+                        int size = ((Logical&)n.in).length*sizeof(Logical::Element);
+                        cudaMalloc((void**)&p, size);
+                        // Convert to 8 bit logical
+                        llvm::Value * temp8 = B->CreateSExt(values[i],logicalType8);
+
+                        //Grab the addresses and save them because we'll access them to put the output into
+                        llvm::Type * t = logicalType8;
+                        llvm::Value * vector = ConstantPointer(p,t);
+                        B->CreateStore(temp8, B->CreateGEP(vector, blockID));
+
+                    } else {
+                        _error("Unknown type in initialize outputs");
+                    }
+                    
+                    //Grab the addresses and save them because we'll access them to put the output into
+                    outputGPU.push_back(vector);
+                    outputAddrDouble.push_back(vector);
+                    outputAddrInt.push_back(vector);
+                    outputAddrLogical.push_back(vector);
+                    B->SetInsertPoint(body);
+                }
+                else if (n.group == IRNode::SCAN) {
+                    int64_t length = n.outShape.length;
+                    void * p;
+                    
+                    if(n.type == Type::Double) {
+                        n.out = Double(length);
+                        
+                        int size = length*sizeof(Double::Element);
+                        cudaError_t error = cudaMalloc((void**)&p, size);
+                        //Grab the addresses and save them because we'll access them to put the output into
+                        llvm::Type * t = getType(n.type);
+                        llvm::Value * vector = ConstantPointer(p,t);
+                        B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
+
+                    } else if(n.type == Type::Integer) {
+                        n.out = Integer(length);
+                        int size = length*sizeof(Integer::Element);
+                        cudaMalloc((void**)&p, size);
+                        
+                        //Grab the addresses and save them because we'll access them to put the output into
+                        llvm::Type * t = getType(n.type);
+                        llvm::Value * vector = ConstantPointer(p,t);
+                        B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
+
+                    } else if(n.type == Type::Logical) {
+                        n.out = Logical(length);
+                        
+                        int size = length*sizeof(Logical::Element);
+                        cudaMalloc((void**)&p, size);
+                        // Convert to 8 bit logical
+                        llvm::Value * temp8 = B->CreateSExt(values[i],logicalType8);
+
+                        //Grab the addresses and save them because we'll access them to put the output into
+                        llvm::Type * t = logicalType8;
+                        llvm::Value * vector = ConstantPointer(p,t);
+                        B->CreateStore(temp8, B->CreateGEP(vector, loopIndexArray));
+
+                    } else {
+                        _error("Unknown type in initialize outputs");
+                    }
+                    thingsToFree.push_back(p);
+                    outputGPU.push_back(p);
+
+                    outputAddrDouble.push_back(vector);
+                    outputAddrInt.push_back(vector);
+                    outputAddrLogical.push_back(vector);
+                }
+            }
+        }
+
         llvm::Function *TidXFunc, *BlockDimXFunc, *BlockIdxXFunc;
         
         llvm::LLVMContext &VMContext = llvm::getGlobalContext();
@@ -669,6 +862,7 @@ struct TraceLLVMCompiler {
         BlockDimXFunc = llvm::Function::Create(llvm::FunctionType::get(Int32Ty, false),
                                                llvm::Function::ExternalLinkage,
                                                "llvm.nvvm.read.ptx.sreg.ntid.x", mainModule);
+
         BlockIdxXFunc = llvm::Function::Create(llvm::FunctionType::get(Int32Ty, false),
                                                llvm::Function::ExternalLinkage,
                                                "llvm.nvvm.read.ptx.sreg.ctaid.x", mainModule);
@@ -689,6 +883,7 @@ struct TraceLLVMCompiler {
         /*
          *This code is used to annotate which function we will use as an entry point
          */
+
         
         std::vector<llvm::Value *> Vals;
         Int32Ty = llvm::Type::getInt32Ty(VMContext); 
@@ -721,6 +916,13 @@ struct TraceLLVMCompiler {
         TidXRead->setName("tid");
         IndexArgs.push_back(TidXRead);
         IndexArgs.push_back(BlockIdxXRead);
+        IndexArgs.push_back(outputAddrInt);
+        IndexArgs.push_back(outputAddrDouble);
+        IndexArgs.push_back(outputAddrLogical);
+        IndexArgs.push_back(inputAddrInt);
+        IndexArgs.push_back(inputAddrDouble);
+        IndexArgs.push_back(inputAddrLogical);
+        
         
         //call index function
         B->CreateCall(function, IndexArgs);
@@ -910,12 +1112,9 @@ struct TraceLLVMCompiler {
             }
         }
     }
-    void CompilePTXBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray, llvm::Value * paramsSize, llvm::Value * inputSize, 
-            llvm::Value * outputSize, llvm::Value * outputAddrInt, 
+    void CompilePTXBody(llvm::Value *blockID, llvm::Value *tid, int sizeOfArray, llvm::Value * outputAddrInt, 
             llvm::Value * outputAddrDouble, llvm::Value * outputAddrLogical, 
-            llvm::Value * reductionSpaceInt, llvm::Value * reductionSpaceDouble, 
-            llvm::Value * reductionSpaceLogical, llvm::Value *inputAddrInt, 
-            llvm::Value * inputAddrDouble, llvm::Value *inputAddrLogical) {
+            llvm::Value *inputAddrInt, llvm::Value * inputAddrDouble, llvm::Value *inputAddrLogical) {
         llvm::Value * loopIndexValue = loopIndex();
         
         std::vector<llvm::Value *> loopIndexArray;
@@ -1638,22 +1837,30 @@ struct TraceLLVMCompiler {
                     break;
 				}
                 case IROpCode::gather:{
-                    cT.parameters++;
                     void * p;
                     if(n.in.isLogical()) {
+                        /*
                         int size = ((Logical&)n.in).length*sizeof(Logical::Element);
                         cudaMalloc((void**)&p, size);
                         cudaMemcpy(p, ((Logical&)n.in).v(), size, cudaMemcpyHostToDevice);
+                        */
+                        p = Loader(inputAddrLogical, cT.parameters);
                     }
                     else if(n.in.isInteger()) {
+                        /*
                         int size = ((Integer&)n.in).length*sizeof(Integer::Element);
                         cudaMalloc((void**)&p, size);
                         cudaMemcpy(p, ((Integer&)n.in).v(), size, cudaMemcpyHostToDevice);
+                        */
+                        p = Loader(inputAddrInt, cT.parameters);
                     }
                     else if(n.in.isDouble()) {
+                        /*
                         int size = ((Double&)n.in).length*sizeof(Double::Element);
                         cudaMalloc((void**)&p, size);
                         cudaMemcpy(p, ((Double&)n.in).v(), size, cudaMemcpyHostToDevice);
+                        */
+                        p = Loader(inputAddrDouble, cT.parameters);
                     }
                     else
                         _error("unsupported type");
@@ -1664,15 +1871,13 @@ struct TraceLLVMCompiler {
                     
                     llvm::Type * t = getType(n.type);
                     
-                    llvm::Value * vector = ConstantPointer(p, t);
+                   // llvm::Value * vector = ConstantPointer(p, t);
                     
                     
-                    llvm::Value *value = B->CreateGEP(vector, indices);
+                    llvm::Value *value = B->CreateGEP(p, indices);
                     values[i] = B->CreateLoad(value);
                     
-                    
-                    
-                    
+                    cT.parameters++;
                     break;
                 }                
                 case IROpCode::seq:{
@@ -1719,136 +1924,137 @@ struct TraceLLVMCompiler {
                 
                 if (n.group == IRNode::MAP || n.group == IRNode::GENERATOR) {
                     int64_t length = n.outShape.length;
-                    void * p;
+                    llvm::Value * vector;
                
                     if(n.type == Type::Double) {
                         n.out = Double(length);
 
-                        int size = length*sizeof(Double::Element);
-                        cudaError_t error = cudaMalloc((void**)&p, size);
+                        //int size = length*sizeof(Double::Element);
+                        //cudaError_t error = cudaMalloc((void**)&p, size);
 						//Grab the addresses and save them because we'll access them to put the output into
-						llvm::Type * t = getType(n.type);
-						llvm::Value * vector = ConstantPointer(p,t);
+						//llvm::Type * t = getType(n.type);
+						//llvm::Value * vector = ConstantPointer(p,t);
+                        vector = Loader(outputAddrLogical, ct.outputCount);
+
 						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
 						
                     } else if(n.type == Type::Integer) {
                         n.out = Integer(length);
-                        int size = length*sizeof(Integer::Element);
-                        cudaMalloc((void**)&p, size);
+                        //int size = length*sizeof(Integer::Element);
+                        //cudaMalloc((void**)&p, size);
                     
 						//Grab the addresses and save them because we'll access them to put the output into
-						llvm::Type * t = getType(n.type);
-						llvm::Value * vector = ConstantPointer(p,t);
+						//llvm::Type * t = getType(n.type);
+						//llvm::Value * vector = ConstantPointer(p,t);
+                        vector = Loader(outputAddrInt, ct.outputCount);
 						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
 						
                     } else if(n.type == Type::Logical) {
                         n.out = Logical(length);
 
                         int size = length*sizeof(Logical::Element);
-                        cudaMalloc((void**)&p, size);
+                        //cudaMalloc((void**)&p, size);
 						// Convert to 8 bit logical
 						llvm::Value * temp8 = B->CreateSExt(values[i],logicalType8);
 						
 						//Grab the addresses and save them because we'll access them to put the output into
-						llvm::Type * t = logicalType8;
-						llvm::Value * vector = ConstantPointer(p,t);
-						B->CreateStore(temp8, B->CreateGEP(vector, loopIndexArray));
+						//llvm::Type * t = logicalType8;
+						//llvm::Value * vector = ConstantPointer(p,t);
+						vector = Loader(outputAddrLogical, ct.outputCount);
+                        B->CreateStore(temp8, B->CreateGEP(vector, loopIndexArray));
 						
                     } else {
                         _error("Unknown type in initialize outputs");
                     }
                     
-                    outputGPU.push_back(p);
+                    outputGPU.push_back(vector);
+                    ct.outputCount++;
                 }
                 else if (n.group == IRNode::FOLD) {
                     int64_t length = 1;
-                    void * p;
+                    llvm::Value * vector;
                     
                     if(n.type == Type::Double) {
                         n.out = Double(length);
                         
                         int size = ((Double&)n.in).length*sizeof(Double::Element);
-						cudaError_t error = cudaMalloc((void**)&p, size);
-                        //Grab the addresses and save them because we'll access them to put the output into
-						llvm::Type * t = getType(n.type);
-						llvm::Value * vector = ConstantPointer(p,t);
-						B->CreateStore(values[i], B->CreateGEP(vector, blockID));
+
+                        vector = Loader(outputAddrDouble, ct.outputCount);
+
+                        B->CreateStore(values[i], B->CreateGEP(vector, blockID));
 						
                     } else if(n.type == Type::Integer) {
                         n.out = Integer(length);
                         int size = ((Integer&)n.in).length*sizeof(Integer::Element);
-                        cudaMalloc((void**)&p, size);
 						
 						//Grab the addresses and save them because we'll access them to put the output into
-						llvm::Type * t = getType(n.type);
-						llvm::Value * vector = ConstantPointer(p,t);
-						B->CreateStore(values[i], B->CreateGEP(vector, blockID));
+						vector = Loader(outputAddrInt, ct.outputCount);
+
+                        B->CreateStore(values[i], B->CreateGEP(vector, blockID));
                         
                     } else if(n.type == Type::Logical) {
                         n.out = Logical(length);
                         
                         int size = ((Logical&)n.in).length*sizeof(Logical::Element);
-                        cudaMalloc((void**)&p, size);
                         // Convert to 8 bit logical
 						llvm::Value * temp8 = B->CreateSExt(values[i],logicalType8);
 						
 						//Grab the addresses and save them because we'll access them to put the output into
-						llvm::Type * t = logicalType8;
-						llvm::Value * vector = ConstantPointer(p,t);
-						B->CreateStore(temp8, B->CreateGEP(vector, blockID));
-						
+						vector = Loader(outputAddrInt, ct.outputCount);
+
+                        B->CreateStore(temp8, B->CreateGEP(vector, blockID));
                     } else {
                         _error("Unknown type in initialize outputs");
                     }
                     
                     //Grab the addresses and save them because we'll access them to put the output into
-                    outputGPU.push_back(p);
+                    ct.outputCount++;
+                    outputGPU.push_back(vector);
                     B->SetInsertPoint(body);
                 }
                 else if (n.group == IRNode::SCAN) {
                     int64_t length = n.outShape.length;
-                    void * p;
+                    llvm::Value * vector;
                     
                     if(n.type == Type::Double) {
                         n.out = Double(length);
                         
                         int size = length*sizeof(Double::Element);
+                        /*
                         cudaError_t error = cudaMalloc((void**)&p, size);
 						//Grab the addresses and save them because we'll access them to put the output into
 						llvm::Type * t = getType(n.type);
 						llvm::Value * vector = ConstantPointer(p,t);
 						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
-						
+                        */
+						vector = Loader(outputAddrDouble, ct.outputCount);
+
+                        B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
                     } else if(n.type == Type::Integer) {
                         n.out = Integer(length);
                         int size = length*sizeof(Integer::Element);
-                        cudaMalloc((void**)&p, size);
-                        
-						//Grab the addresses and save them because we'll access them to put the output into
-						llvm::Type * t = getType(n.type);
-						llvm::Value * vector = ConstantPointer(p,t);
-						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
 						
+                        vector = Loader(outputAddrInt, ct.outputCount);
+
+                        B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
                     } else if(n.type == Type::Logical) {
                         n.out = Logical(length);
                         
                         int size = length*sizeof(Logical::Element);
-                        cudaMalloc((void**)&p, size);
 						// Convert to 8 bit logical
 						llvm::Value * temp8 = B->CreateSExt(values[i],logicalType8);
-						
-						//Grab the addresses and save them because we'll access them to put the output into
-						llvm::Type * t = logicalType8;
-						llvm::Value * vector = ConstantPointer(p,t);
-						B->CreateStore(temp8, B->CreateGEP(vector, loopIndexArray));
+
+
+                        vector = Loader(outputAddrLogical, ct.outputCount);
+
+                        B->CreateStore(temp8, B->CreateGEP(vector, loopIndexArray));
 						
                     } else {
                         _error("Unknown type in initialize outputs");
                     }
-                    
-                    outputGPU.push_back(p);
+                    ct.outputCount++;
+                    outputGPU.push_back(vector);
                 }
-                cT.parameters++;
             }
         }
     
@@ -1912,8 +2118,7 @@ struct TraceLLVMCompiler {
     }
     
     
-    void Execute() {
-
+    void PTXExecute() {
 
       //Get the bitcode from the module
         
@@ -2015,9 +2220,18 @@ struct TraceLLVMCompiler {
 CompiledTrace PTXCompile(Thread & thread, Trace * tr) {
         TraceLLVMCompiler c(&thread, tr);
         c.cT.parameters = 0;
+        c.cT.outputCount = 0;
         c.GeneratePTXIndexFunction(); 
         c.cT.F = c.function; 
         return c.cT;
+}
+
+void PTXRun(Thread & thread, Trace * tr, CompiledTrace result) {
+        TraceLLVMCompiler c(&thread, tr);
+        c.function = result.function;
+        c.cT = result;
+        c.GeneratePTXKernelFunction(); 
+        return;
 }
 
 void Trace::JIT(Thread & thread) {
@@ -2025,7 +2239,8 @@ void Trace::JIT(Thread & thread) {
     cuInit(0);
     nvvmInit();
     
-    PTXCompile(thread,this);
+    CompiledTrace result = PTXCompile(thread,this);
+    PTXRun(thread, this, result);
     //c.Compile();
     //c.Execute();
 }
