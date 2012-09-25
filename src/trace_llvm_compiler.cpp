@@ -1879,12 +1879,12 @@ struct TraceLLVMCompiler {
                    // llvm::Value * vector = ConstantPointer(p, t);
                     
                     
-                    llvm::Value *value = B->CreateGEP(p, indices);
-                    values[i] = B->CreateLoad(value);
-                    
+                  //  llvm::Value *value = B->CreateGEP(p, indices);
+                  //  values[i] = B->CreateLoad(value);
+                
                     cT.parameters++;
                     break;
-                }                
+                }              
                 case IROpCode::seq:{
                     llvm::Value *value;
                     switch(n.type) {
