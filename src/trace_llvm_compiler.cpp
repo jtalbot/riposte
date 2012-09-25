@@ -802,7 +802,7 @@ struct TraceLLVMCompiler {
                 else if (n.group == IRNode::SCAN) {
                     int64_t length = n.outShape.length;
                     void * p;
-                    
+                    llvm::Value * vecotr;
                     if(n.type == Type::Double) {
                         n.out = Double(length);
                         
@@ -810,8 +810,7 @@ struct TraceLLVMCompiler {
                         cudaError_t error = cudaMalloc((void**)&p, size);
                         //Grab the addresses and save them because we'll access them to put the output into
                         llvm::Type * t = getType(n.type);
-                        llvm::Value * vector = ConstantPointer(p,t);
-                        B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
+                        vector = ConstantPointer(p,t);
 
                     } else if(n.type == Type::Integer) {
                         n.out = Integer(length);
@@ -820,9 +819,7 @@ struct TraceLLVMCompiler {
                         
                         //Grab the addresses and save them because we'll access them to put the output into
                         llvm::Type * t = getType(n.type);
-                        llvm::Value * vector = ConstantPointer(p,t);
-                        B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
-
+                        vector = ConstantPointer(p,t);
                     } else if(n.type == Type::Logical) {
                         n.out = Logical(length);
                         
@@ -833,8 +830,7 @@ struct TraceLLVMCompiler {
 
                         //Grab the addresses and save them because we'll access them to put the output into
                         llvm::Type * t = logicalType8;
-                        llvm::Value * vector = ConstantPointer(p,t);
-                        B->CreateStore(temp8, B->CreateGEP(vector, loopIndexArray));
+                        vector = ConstantPointer(p,t);
 
                     } else {
                         _error("Unknown type in initialize outputs");
