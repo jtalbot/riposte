@@ -2013,7 +2013,7 @@ struct TraceLLVMCompiler {
                     }
                     
                     //Grab the addresses and save them because we'll access them to put the output into
-                    outputCount++;
+                    cT.outputCount++;
                     outputGPU.push_back(vector);
                     B->SetInsertPoint(body);
                 }
