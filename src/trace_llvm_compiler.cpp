@@ -1939,7 +1939,7 @@ struct TraceLLVMCompiler {
 						//Grab the addresses and save them because we'll access them to put the output into
 						//llvm::Type * t = getType(n.type);
 						//llvm::Value * vector = ConstantPointer(p,t);
-                        vector = Loader(outputAddrLogical, ct.outputCount);
+                        vector = Loader(outputAddrLogical, outputCount);
 
 						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
 						
@@ -1951,7 +1951,7 @@ struct TraceLLVMCompiler {
 						//Grab the addresses and save them because we'll access them to put the output into
 						//llvm::Type * t = getType(n.type);
 						//llvm::Value * vector = ConstantPointer(p,t);
-                        vector = Loader(outputAddrInt, ct.outputCount);
+                        vector = Loader(outputAddrInt, outputCount);
 						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
 						
                     } else if(n.type == Type::Logical) {
@@ -1965,7 +1965,7 @@ struct TraceLLVMCompiler {
 						//Grab the addresses and save them because we'll access them to put the output into
 						//llvm::Type * t = logicalType8;
 						//llvm::Value * vector = ConstantPointer(p,t);
-						vector = Loader(outputAddrLogical, ct.outputCount);
+						vector = Loader(outputAddrLogical, outputCount);
                         B->CreateStore(temp8, B->CreateGEP(vector, loopIndexArray));
 						
                     } else {
@@ -1973,7 +1973,7 @@ struct TraceLLVMCompiler {
                     }
                     
                     outputGPU.push_back(vector);
-                    ct.outputCount++;
+                    outputCount++;
                 }
                 else if (n.group == IRNode::FOLD) {
                     int64_t length = 1;
@@ -1984,7 +1984,7 @@ struct TraceLLVMCompiler {
                         
                         int size = ((Double&)n.in).length*sizeof(Double::Element);
 
-                        vector = Loader(outputAddrDouble, ct.outputCount);
+                        vector = Loader(outputAddrDouble, outputCount);
 
                         B->CreateStore(values[i], B->CreateGEP(vector, blockID));
 						
@@ -1993,7 +1993,7 @@ struct TraceLLVMCompiler {
                         int size = ((Integer&)n.in).length*sizeof(Integer::Element);
 						
 						//Grab the addresses and save them because we'll access them to put the output into
-						vector = Loader(outputAddrInt, ct.outputCount);
+						vector = Loader(outputAddrInt, outputCount);
 
                         B->CreateStore(values[i], B->CreateGEP(vector, blockID));
                         
@@ -2005,7 +2005,7 @@ struct TraceLLVMCompiler {
 						llvm::Value * temp8 = B->CreateSExt(values[i],logicalType8);
 						
 						//Grab the addresses and save them because we'll access them to put the output into
-						vector = Loader(outputAddrInt, ct.outputCount);
+						vector = Loader(outputAddrInt, outputCount);
 
                         B->CreateStore(temp8, B->CreateGEP(vector, blockID));
                     } else {
@@ -2013,7 +2013,7 @@ struct TraceLLVMCompiler {
                     }
                     
                     //Grab the addresses and save them because we'll access them to put the output into
-                    ct.outputCount++;
+                    outputCount++;
                     outputGPU.push_back(vector);
                     B->SetInsertPoint(body);
                 }
@@ -2032,14 +2032,14 @@ struct TraceLLVMCompiler {
 						llvm::Value * vector = ConstantPointer(p,t);
 						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
                         */
-						vector = Loader(outputAddrDouble, ct.outputCount);
+						vector = Loader(outputAddrDouble, outputCount);
 
                         B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
                     } else if(n.type == Type::Integer) {
                         n.out = Integer(length);
                         int size = length*sizeof(Integer::Element);
 						
-                        vector = Loader(outputAddrInt, ct.outputCount);
+                        vector = Loader(outputAddrInt, outputCount);
 
                         B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
                     } else if(n.type == Type::Logical) {
@@ -2050,14 +2050,14 @@ struct TraceLLVMCompiler {
 						llvm::Value * temp8 = B->CreateSExt(values[i],logicalType8);
 
 
-                        vector = Loader(outputAddrLogical, ct.outputCount);
+                        vector = Loader(outputAddrLogical, outputCount);
 
                         B->CreateStore(temp8, B->CreateGEP(vector, loopIndexArray));
 						
                     } else {
                         _error("Unknown type in initialize outputs");
                     }
-                    ct.outputCount++;
+                    outputCount++;
                     outputGPU.push_back(vector);
                 }
             }
