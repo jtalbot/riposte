@@ -1941,7 +1941,7 @@ struct TraceLLVMCompiler {
                         vector = Loader(outputAddrDouble, cT.outputCount);
                         vector->setName("output loader");
 
-						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
+						B->CreateStore(values[i], B->CreateLoad(B->CreateGEP(vector, loopIndexArray));
 						
                     } else if(n.type == Type::Integer) {
                         n.out = Integer(length);
