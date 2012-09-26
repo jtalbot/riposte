@@ -1953,7 +1953,9 @@ struct TraceLLVMCompiler {
 						//llvm::Type * t = getType(n.type);
 						//llvm::Value * vector = ConstantPointer(p,t);
                         vector = Loader(outputAddrInt, cT.outputCount);
-						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
+                        llvm::Value * dummy = B->CreateLoad(B->CreateGEP(vector, loopIndexArray));
+                        dummy->setName("trigger error");
+						B->CreateStore(values[i], dummy);
 						
                     } else if(n.type == Type::Logical) {
                         n.out = Logical(length);
@@ -1967,7 +1969,9 @@ struct TraceLLVMCompiler {
 						//llvm::Type * t = logicalType8;
 						//llvm::Value * vector = ConstantPointer(p,t);
 						vector = Loader(outputAddrLogical, cT.outputCount);
-                        B->CreateStore(temp8, B->CreateGEP(vector, loopIndexArray));
+                        llvm::Value * dummy = B->CreateLoad(B->CreateGEP(vector, loopIndexArray));
+                        dummy->setName("trigger error");
+                        B->CreateStore(temp8, dummy);
 						
                     } else {
                         _error("Unknown type in initialize outputs");
@@ -1986,8 +1990,9 @@ struct TraceLLVMCompiler {
                         int size = ((Double&)n.in).length*sizeof(Double::Element);
 
                         vector = Loader(outputAddrDouble, cT.outputCount);
-
-                        B->CreateStore(values[i], B->CreateGEP(vector, blockID));
+                        llvm::Value * dummy = B->CreateLoad(B->CreateGEP(vector, blockID));
+                        dummy->setName("trigger error");
+                        B->CreateStore(values[i], dummy);
 						
                     } else if(n.type == Type::Integer) {
                         n.out = Integer(length);
@@ -1996,7 +2001,9 @@ struct TraceLLVMCompiler {
 						//Grab the addresses and save them because we'll access them to put the output into
 						vector = Loader(outputAddrInt, cT.outputCount);
 
-                        B->CreateStore(values[i], B->CreateGEP(vector, blockID));
+                        llvm::Value * dummy = B->CreateLoad(B->CreateGEP(vector, blockID));
+                        dummy->setName("trigger error");
+                        B->CreateStore(values[i], dummy);
                         
                     } else if(n.type == Type::Logical) {
                         n.out = Logical(length);
@@ -2008,7 +2015,9 @@ struct TraceLLVMCompiler {
 						//Grab the addresses and save them because we'll access them to put the output into
 						vector = Loader(outputAddrInt, cT.outputCount);
 
-                        B->CreateStore(temp8, B->CreateGEP(vector, blockID));
+                        llvm::Value * dummy = B->CreateLoad(B->CreateGEP(vector, blockID));
+                        dummy->setName("trigger error");
+                        B->CreateStore(temp8, dummy);
                     } else {
                         _error("Unknown type in initialize outputs");
                     }
@@ -2035,14 +2044,18 @@ struct TraceLLVMCompiler {
                         */
 						vector = Loader(outputAddrDouble, cT.outputCount);
 
-                        B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
+                        llvm::Value * dummy = B->CreateLoad(B->CreateGEP(vector, loopIndexArray));
+                        dummy->setName("trigger error");
+                        B->CreateStore(values[i], dummy);
                     } else if(n.type == Type::Integer) {
                         n.out = Integer(length);
                         int size = length*sizeof(Integer::Element);
 						
                         vector = Loader(outputAddrInt, cT.outputCount);
 
-                        B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
+                        llvm::Value * dummy = B->CreateLoad(B->CreateGEP(vector, loopIndexArray));
+                        dummy->setName("trigger error");
+                        B->CreateStore(values[i], dummy);
                     } else if(n.type == Type::Logical) {
                         n.out = Logical(length);
                         
@@ -2053,7 +2066,9 @@ struct TraceLLVMCompiler {
 
                         vector = Loader(outputAddrLogical, cT.outputCount);
 
-                        B->CreateStore(temp8, B->CreateGEP(vector, loopIndexArray));
+                        llvm::Value * dummy = B->CreateLoad(B->CreateGEP(vector, loopIndexArray));
+                        dummy->setName("trigger error");
+                        B->CreateStore(temp8, dummy);
 						
                     } else {
                         _error("Unknown type in initialize outputs");
