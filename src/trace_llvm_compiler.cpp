@@ -1939,7 +1939,7 @@ struct TraceLLVMCompiler {
 						//Grab the addresses and save them because we'll access them to put the output into
 						//llvm::Type * t = getType(n.type);
 						//llvm::Value * vector = ConstantPointer(p,t);
-                        vector = Loader(outputAddrLogical, cT.outputCount);
+                        vector = Loader(outputAddrDouble, cT.outputCount);
 
 						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
 						
