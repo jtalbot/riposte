@@ -1940,7 +1940,7 @@ struct TraceLLVMCompiler {
 						//llvm::Value * vector = ConstantPointer(p,t);
                         vector = Loader(outputAddrDouble, cT.outputCount);
                         vector->setName("output loader");
-                        llvm::Value * dummy = B->CreateLoad(B->CreateGEP(vector, loopIndexArray);
+                        llvm::Value * dummy = B->CreateLoad(B->CreateGEP(vector, loopIndexArray));
                         dummy->setName("trigger error");
 						B->CreateStore(values[i], dummy);
 						
