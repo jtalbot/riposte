@@ -630,7 +630,7 @@ struct TraceLLVMCompiler {
         indices.push_back(ConstantInt(index));
         
         llvm::ArrayRef<llvm::Value *> gepIndices = llvm::ArrayRef<llvm::Value*>(indices); */
-        return B->CreateGEP(mem, ConstantInt(index), "T");
+        return B->CreateGEP(mem, ConstantInt(index), "gep into double pointer");
     }
     
     void GeneratePTXKernelFunction() {
@@ -1136,7 +1136,7 @@ struct TraceLLVMCompiler {
                         cudaMemcpy(p, ((Logical&)n.in).v(), size, cudaMemcpyHostToDevice);
                         */
                         
-                        p = B->CreateLoad(Loader(inputAddrLogical, cT.parameters));
+                        p = Loader(inputAddrLogical, cT.parameters);
 
                     }
                     else if(n.in.isInteger()) {
@@ -1146,7 +1146,7 @@ struct TraceLLVMCompiler {
                         cudaMalloc((void**)&p, size);
                         cudaMemcpy(p, ((Integer&)n.in).v(), size, cudaMemcpyHostToDevice);
                         */
-                        p = B->CreateLoad(Loader(inputAddrInt, cT.parameters));
+                        p = Loader(inputAddrInt, cT.parameters);
                     }
                     else if(n.in.isDouble()) {
                         //p = ((Double&)n.in).v();
@@ -1155,7 +1155,7 @@ struct TraceLLVMCompiler {
                         cudaError_t error = cudaMalloc((void**)&p, size);
                         cudaMemcpy(p, ((Double&)n.in).v(), size, cudaMemcpyHostToDevice);
                         */
-                        p = B->CreateLoad(Loader(inputAddrDouble, cT.parameters));
+                        p = Loader(inputAddrDouble, cT.parameters);
                     }
                     else
                         _error("unsupported type");
