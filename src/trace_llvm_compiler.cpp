@@ -1159,7 +1159,7 @@ struct TraceLLVMCompiler {
                     }
                     else
                         _error("unsupported type");
-                    
+                    p->setName("pointer into double star");
                     llvm::Type * t = getType(n.type);
                     
                     llvm::Value * elementAddr = B->CreateGEP(p, loopIndexArray);
