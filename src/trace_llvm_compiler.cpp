@@ -1930,7 +1930,6 @@ struct TraceLLVMCompiler {
                 if (n.group == IRNode::MAP || n.group == IRNode::GENERATOR) {
                     int64_t length = n.outShape.length;
                     llvm::Value * vector;
-                    vector->setName("output loader");
                     if(n.type == Type::Double) {
                         n.out = Double(length);
 
@@ -1940,6 +1939,7 @@ struct TraceLLVMCompiler {
 						//llvm::Type * t = getType(n.type);
 						//llvm::Value * vector = ConstantPointer(p,t);
                         vector = Loader(outputAddrDouble, cT.outputCount);
+                        vector->setName("output loader");
 
 						B->CreateStore(values[i], B->CreateGEP(vector, loopIndexArray));
 						
