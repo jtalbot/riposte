@@ -2244,8 +2244,11 @@ void Trace::JIT(Thread & thread) {
     cuInit(0);
     nvvmInit();
     
+    std::cout << "Begin";
     CompiledTrace result = PTXCompile(thread,this);
+    std::cout << "Compiled";
     PTXRun(thread, this, result);
+    std::cout << "End";
     //c.Compile();
     //c.Execute();
 }
