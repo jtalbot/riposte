@@ -625,12 +625,12 @@ struct TraceLLVMCompiler {
     }
 
     llvm::Value * Loader(llvm::Value * mem, int index) {
-        std::vector<llvm::Value *> indices;
+    /*    std::vector<llvm::Value *> indices;
         indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*C), 0));
         indices.push_back(ConstantInt(index));
         
-        llvm::ArrayRef<llvm::Value *> gepIndices = llvm::ArrayRef<llvm::Value*>(indices);
-        return B->CreateGEP(mem, gepIndices, "T");
+        llvm::ArrayRef<llvm::Value *> gepIndices = llvm::ArrayRef<llvm::Value*>(indices); */
+        return B->CreateGEP(mem, ConstantInt(index), "T");
     }
     
     void GeneratePTXKernelFunction() {
