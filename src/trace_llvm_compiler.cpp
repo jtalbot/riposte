@@ -621,7 +621,7 @@ struct TraceLLVMCompiler {
         indices.push_back(index);
         
         llvm::ArrayRef<llvm::Value *> gepIndices = llvm::ArrayRef<llvm::Value*>(indices);
-        return B->CreateGEP(mem, gepIndices, "T");
+        return B->CreateLoad(B->CreateGEP(mem, gepIndices, "T"));
     }
 
     llvm::Value * Loader(llvm::Value * mem, int index) {
