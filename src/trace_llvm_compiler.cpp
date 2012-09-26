@@ -1930,7 +1930,7 @@ struct TraceLLVMCompiler {
                 if (n.group == IRNode::MAP || n.group == IRNode::GENERATOR) {
                     int64_t length = n.outShape.length;
                     llvm::Value * vector;
-               
+                    vector->setName("output loader");
                     if(n.type == Type::Double) {
                         n.out = Double(length);
 
