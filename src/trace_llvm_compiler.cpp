@@ -1940,8 +1940,9 @@ struct TraceLLVMCompiler {
 						//llvm::Value * vector = ConstantPointer(p,t);
                         vector = Loader(outputAddrDouble, cT.outputCount);
                         vector->setName("output loader");
-
-						B->CreateStore(values[i], B->CreateLoad(B->CreateGEP(vector, loopIndexArray));
+                        llvm::Value * dummy = B->CreateLoad(B->CreateGEP(vector, loopIndexArray);
+                        dummy->setName("trigger error");
+						B->CreateStore(values[i], dummy);
 						
                     } else if(n.type == Type::Integer) {
                         n.out = Integer(length);
