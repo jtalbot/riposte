@@ -2267,6 +2267,9 @@ void Trace::JIT(Thread & thread) {
     c.cT.parameters = 0;
     c.cT.outputCount = 0;
     c.GeneratePTXIndexFunction(); 
+    std::cout<< "parameters" << c.cT.parameters <<std::endl;
+    std::cout<< "outputCount" << c.cT.outputCount <<std::endl;
+
     c.cT.F = c.function; 
     CompiledTrace result =  c.cT;
    
