@@ -662,7 +662,8 @@ struct TraceLLVMCompiler {
             cudaError_t error = cudaMalloc((void**)outputAddrLogical, outSize);
             std::cout << "Error" << error << std::endl;
             
-            cudaMalloc((void**)outputAddrDouble, outSize);
+            cudaError_t error = cudaMalloc((void**)outputAddrDouble, outSize);
+            std::cout << "Error" << error << std::endl;
         }
         int inPos = 0;
         for(size_t i = 0; i < trace->nodes.size(); i++) {
