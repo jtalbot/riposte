@@ -644,20 +644,21 @@ struct TraceLLVMCompiler {
         void ** inputAddrInt;
         void ** inputAddrDouble;
         void ** inputAddrLogical;
-
-        cudaMalloc((void**)inputAddrLogical, inSize);
-        cudaMalloc((void**)inputAddrInt, inSize);
-        cudaMalloc((void**)inputAddrDouble, inSize);
-
+        if (inSize > 0) {
+            cudaMalloc((void**)inputAddrLogical, inSize);
+            cudaMalloc((void**)inputAddrInt, inSize);
+            cudaMalloc((void**)inputAddrDouble, inSize);
+        }
         
         void ** outputAddrInt;
         void ** outputAddrDouble;
         void ** outputAddrLogical;
 
-        cudaMalloc((void**)outputAddrLogical, outSize);
-        cudaMalloc((void**)outputAddrInt, outSize);
-        cudaMalloc((void**)outputAddrDouble, outSize);
-
+        if (outSize > 0) {
+            cudaMalloc((void**)outputAddrLogical, outSize);
+            cudaMalloc((void**)outputAddrInt, outSize);
+            cudaMalloc((void**)outputAddrDouble, outSize);
+        }
         int inPos = 0;
         for(size_t i = 0; i < trace->nodes.size(); i++) {
             IRNode & n = trace->nodes[i];
