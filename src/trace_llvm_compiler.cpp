@@ -2152,7 +2152,7 @@ struct TraceLLVMCompiler {
         std::vector<unsigned char> BitCodeBuf;
         llvm::BitstreamWriter Stream(BitCodeBuf);
         BitCodeBuf.reserve(256*1024);
-        //llvm::WriteBitcodeToStream(mainModule, Stream);
+        llvm::WriteBitcodeToStream(mainModule, Stream);
 #endif /* USE_TEXT_NVVM_INTERFACE */
         
         // generate PTX
@@ -2260,9 +2260,21 @@ void Trace::JIT(Thread & thread) {
     nvvmInit();
     
     std::cout << "Begin";
-    CompiledTrace result = PTXCompile(thread,this);
+    // CompiledTrace result = PTXCompile(thread,this);
+    TraceLLVMCompiler c(&thread, this);
+    c.cT.parameters = 0;
+    c.cT.outputCount = 0;
+    c.GeneratePTXIndexFunction(); 
+    c.cT.F = c.function; 
+    CompiledTrace result =  c.cT;
+   
     std::cout << "Compiled";
-    PTXRun(thread, this, result);
+    //PTXRun(thread, this, result);
+    TraceLLVMCompiler d(&thread, this);
+    d.function = result.F;
+    d.cT = result;
+    d.GeneratePTXKernelFunction(); 
+    d.PTXExecute();
     std::cout << "End";
     //c.Compile();
     //c.Execute();
