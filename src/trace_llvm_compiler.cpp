@@ -2147,7 +2147,7 @@ struct TraceLLVMCompiler {
         std::string BitCodeBuf;
         raw_string_ostream BitCodeBufStream(BitCodeBuf);
         llvm::Module * test = new llvm::Module("test",*C);
-        BitCodeBufStream << *mainModule;
+        BitCodeBufStream << *test;
         BitCodeBufStream.str();
 #else /* USE_TEXT_NVVM_INTERFACE */
         std::vector<unsigned char> BitCodeBuf;
