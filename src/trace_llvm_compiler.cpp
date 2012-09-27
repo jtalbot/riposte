@@ -645,8 +645,10 @@ struct TraceLLVMCompiler {
         void ** inputAddrDouble;
         void ** inputAddrLogical;
         if (inSize > 0) {
-            cudaMalloc((void**)inputAddrLogical, inSize);
             cudaMalloc((void**)inputAddrInt, inSize);
+
+            cudaMalloc((void**)inputAddrLogical, inSize);
+            
             cudaMalloc((void**)inputAddrDouble, inSize);
         }
         
@@ -655,8 +657,10 @@ struct TraceLLVMCompiler {
         void ** outputAddrLogical;
 
         if (outSize > 0) {
-            cudaMalloc((void**)outputAddrLogical, outSize);
             cudaMalloc((void**)outputAddrInt, outSize);
+
+            cudaMalloc((void**)outputAddrLogical, outSize);
+            
             cudaMalloc((void**)outputAddrDouble, outSize);
         }
         int inPos = 0;
