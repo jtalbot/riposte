@@ -639,7 +639,8 @@ struct TraceLLVMCompiler {
         
         int inSize = cT.parameters*sizeof(llvm::Value *);
         int outSize = cT.outputCount*sizeof(llvm::Value *);
-
+        std::cout << "inSize " << inSize << std::endl;
+        std::cout << "outSize " << outSize << std::endl;
         void ** inputAddrInt;
         void ** inputAddrDouble;
         void ** inputAddrLogical;
