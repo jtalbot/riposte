@@ -2151,7 +2151,7 @@ struct TraceLLVMCompiler {
 #else /* USE_TEXT_NVVM_INTERFACE */
         std::vector<unsigned char> BitCodeBuf;
         llvm::BitstreamWriter Stream(BitCodeBuf);
-        BitCodeBuf.reserve(500*1024);
+        BitCodeBuf.reserve(10000*1024);
         llvm::WriteBitcodeToStream(mainModule, Stream);
 #endif /* USE_TEXT_NVVM_INTERFACE */
         
