@@ -657,9 +657,9 @@ struct TraceLLVMCompiler {
         void ** outputAddrLogical;
 
         if (outSize > 0) {
-            cudaMalloc((void**)outputAddrInt, outSize);
+           // cudaMalloc((void**)outputAddrInt, outSize);
 
-            cudaError_t error = cudaMalloc((void**)outputAddrLogical, outSize);
+          //  cudaError_t error = cudaMalloc((void**)outputAddrLogical, outSize);
             std::cout << "Error" << error << std::endl;
             
             error = cudaMalloc((void**)outputAddrDouble, outSize);
