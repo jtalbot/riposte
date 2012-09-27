@@ -2154,7 +2154,7 @@ struct TraceLLVMCompiler {
         llvm::BitstreamWriter Stream(BitCodeBuf);
         
         BitCodeBuf.reserve(256*1024);
-        //llvm::WriteBitcodeToStream(mainModule, Stream);
+        llvm::WriteBitcodeToStream(mainModule, Stream);
 #endif /* USE_TEXT_NVVM_INTERFACE */
         
         // generate PTX
