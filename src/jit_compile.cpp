@@ -40,6 +40,7 @@ struct LLVMState {
     llvm::LLVMContext * C;
     llvm::ExecutionEngine * EE;
     llvm::FunctionPassManager * FPM;
+    llvm::FunctionPassManager * verifierFPM;
     //llvm::PassManager * PM;
 
     LLVMState() {
@@ -62,10 +63,12 @@ struct LLVMState {
         //TODO: add optimization passes here, these are just from llvm tutorial and are probably not good
         //look here: http://lists.cs.uiuc.edu/pipermail/llvmdev/2011-December/045867.html
         FPM->add(new llvm::TargetData(*EE->getTargetData()));
+        
+        FPM->add(llvm::createVerifierPass());
+    
         // do this first so the verifier doesn't freak out about our empty blocks
         FPM->add(llvm::createCFGSimplificationPass());
         
-        FPM->add(llvm::createVerifierPass());
         // Promote newenvas to registers.
         FPM->add(llvm::createPromoteMemoryToRegisterPass());
         // Also promote aggregates like structs....
@@ -87,8 +90,18 @@ struct LLVMState {
         
         // Do simple "peephole" optimizations and bit-twiddling optzns.
         FPM->add(llvm::createInstructionCombiningPass());
+        // Simplify the control flow graph (deleting unreachable blocks, etc).
+        FPM->add(llvm::createCFGSimplificationPass());
         
         FPM->doInitialization();
+
+        verifierFPM = new llvm::FunctionPassManager(M);
+        
+        verifierFPM->add(new llvm::TargetData(*EE->getTargetData()));
+        // do this first so the verifier doesn't freak out about our empty blocks
+        verifierFPM->add(llvm::createCFGSimplificationPass());
+        
+        verifierFPM->doInitialization();
 
         /*
         PM = new llvm::PassManager();
@@ -1174,7 +1187,7 @@ struct TraceCompiler {
         for(size_t i = 0; i < jit.code.size(); i++) {
             JIT::IR const& ir = jit.code[i];
             InitializeRegister(ir);
-            if(ir.live) {
+            if(ir.live && !ir.sunk) {
                 if(Fuseable(ir)) {
                     if(!CanFuse(fusion, ir)) {
                         EndFusion(fusion);
@@ -1196,15 +1209,17 @@ struct TraceCompiler {
         builder.CreateRet(builder.CreateLoad(result_var));
 
         //function->dump();
+        S->verifierFPM->run(*function);
+        //function->dump();
         S->FPM->run(*function);
-        //S->PM->run(*S->M); 
         // inline functions
         /*for(size_t i = 0; i < calls.size(); ++i) {
             llvm::InlineFunctionInfo ifi;
-            llvm::InlineFunction(calls[i], ifi, true);
-        }
+            if( calls[i]->getParent() )
+                llvm::InlineFunction(calls[i], ifi, true);
+        }*/
         S->FPM->run(*function);
-        */
+        //S->PM->run(*S->M); 
         //function->dump();
 
         return function;
@@ -1339,8 +1354,8 @@ struct TraceCompiler {
         // if unboxed type, box
         Type::Enum type = jit.code[index].type;
         if(Unboxed(type)) {
-            r = Call(std::string("BOX_")+Type::toString(type),
-                    r, builder.CreateLoad(value(jit.code[index].out.length)));
+            r = Save( Call(std::string("BOX_")+Type::toString(type),
+                    r, builder.CreateLoad(value(jit.code[index].out.length))) );
         }
 
         return r;
@@ -1620,6 +1635,32 @@ struct TraceCompiler {
         builder.CreateCondBr(cond, next, exit);
         builder.SetInsertPoint(exit);
 
+        // emit sunk code
+        Fusion* fusion = 0;
+        for(size_t i = 0; i < index; i++) {
+            JIT::IR const& ir = jit.code[i];
+            InitializeRegister(ir);
+            if(ir.live && ir.sunk) {
+                if(Fuseable(ir)) {
+                    if(!CanFuse(fusion, ir)) {
+                        EndFusion(fusion);
+                        fusion = StartFusion(ir);
+                    }
+                    fusion->Emit(i);
+                }
+                else {
+                    EndFusion(fusion);
+                    Emit(ir, i, registers[ir.reg] );
+                }
+            }
+        }
+
+        // emit sstores
+        for(std::map< int64_t, JIT::IRRef >::const_iterator i = e.snapshot.slots.begin();
+            i != e.snapshot.slots.end(); ++i) {
+            llvm::Value* c = Box(i->second);
+            Call("SSTORE", builder.getInt64(i->first), BOXED_ARG(c));
+        }
         //MARKER(std::string("Taking exit at ") + intToStr(index));
         /*
             else if(jit.code[var.env].type == Type::Object) {
@@ -1691,41 +1732,43 @@ struct TraceCompiler {
         return ci;
     }
 
-    llvm::Value* Call(std::string F) {
-        return Save(builder.CreateCall(S->M->getFunction(F), thread_var));
+    llvm::CallInst* Call(std::string F) {
+        return builder.CreateCall(S->M->getFunction(F), thread_var);
     }
 
-    llvm::Value* Call(std::string F, llvm::Value* A) {
-        return Save(builder.CreateCall2(S->M->getFunction(F), thread_var, A));
+    llvm::CallInst* Call(std::string F, llvm::Value* A) {
+        return builder.CreateCall2(S->M->getFunction(F), thread_var, A);
     }
 
-    llvm::Value* Call(std::string F, llvm::Value* A, llvm::Value* B) {
-        return Save(builder.CreateCall3(S->M->getFunction(F), thread_var, A, B));
+    llvm::CallInst* Call(std::string F, llvm::Value* A, llvm::Value* B) {
+        return builder.CreateCall3(S->M->getFunction(F), thread_var, A, B);
     }
 
-    llvm::Value* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C) {
-        return Save(builder.CreateCall4(S->M->getFunction(F), thread_var, A, B, C));
+    llvm::CallInst* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C) {
+        return builder.CreateCall4(S->M->getFunction(F), thread_var, A, B, C);
     }
 
-    llvm::Value* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C, llvm::Value* D) {
-        return Save(builder.CreateCall5(S->M->getFunction(F), thread_var, A, B, C, D));
+    llvm::CallInst* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C, llvm::Value* D) {
+        return builder.CreateCall5(S->M->getFunction(F), thread_var, A, B, C, D);
     }
 
-    llvm::Value* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C, llvm::Value* D, llvm::Value* E) {
+    llvm::CallInst* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C, llvm::Value* D, llvm::Value* E) {
         llvm::Value* args[] = { thread_var, A, B, C, D, E };
-        return Save(builder.CreateCall(S->M->getFunction(F), args));
+        return builder.CreateCall(S->M->getFunction(F), args);
     }
 
-    llvm::Value* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C, llvm::Value* D, llvm::Value* E, llvm::Value* G, llvm::Value* H, llvm::Value* I) {
+    llvm::CallInst* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C, llvm::Value* D, llvm::Value* E, llvm::Value* G, llvm::Value* H, llvm::Value* I) {
         llvm::Value* args[] = { thread_var, A, B, C, D, E, G, H, I };
-        return Save(builder.CreateCall(S->M->getFunction(F), args));
+        return builder.CreateCall(S->M->getFunction(F), args);
     }
 
 };
 
 void JIT::compile(Thread& thread) {
+    timespec ts = get_time();
     TraceCompiler compiler(thread, *this, (llvm::Function*)dest->function);
     dest->function = compiler.Compile();
     dest->ptr = (Ptr)llvmState.EE->recompileAndRelinkFunction((llvm::Function*)dest->function);
+    print_time_elapsed("Compile time", ts);
 }
 

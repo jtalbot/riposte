@@ -4,6 +4,7 @@
 
 #include <map>
 #include <vector>
+#include <set>
 #include <tr1/unordered_map>
 #include <assert.h>
 
@@ -219,6 +220,8 @@ public:
         std::vector<StackFrame> stack;
         std::map< int64_t, IRRef > slotValues;
         std::map< int64_t, IRRef > slotLengths;
+        std::map< int64_t, IRRef > slots;
+        std::set<IRRef> memory;
     }; 
 
 	struct Exit {
@@ -376,6 +379,7 @@ public:
     void AssignRegister(size_t index);
     void PreferRegister(size_t index, size_t share);
     void ReleaseRegister(size_t index);
+    void AssignSnapshot(Snapshot const& snapshot);
     void RegisterAssignment();
     void RegisterAssign(IRRef i, IR ir);
 
@@ -393,7 +397,8 @@ public:
     IRRef DSE(std::vector<IR> const& code, IRRef i, bool& crossedExit);
     IRRef DPE(std::vector<IR> const& code, IRRef i);
     bool Ready(IR ir, std::vector<bool>& done);
-   
+    void sink(std::vector<bool>& marks, IRRef i);
+    void SINK(void); 
     double Opcost(std::vector<IR>& code, IR ir);
  
 	template< template<class X> class Group >

@@ -336,6 +336,9 @@ Instruction const* gassign_op(Thread& thread, Instruction const& inst) {
         _error("Assigning to a non-environment is not supported");
 
     ((REnvironment&)env).environment()->insert((String)inst.a) = value;
+
+    OUT(thread, inst.c) = env;
+
 	return &inst+1;
 }
 

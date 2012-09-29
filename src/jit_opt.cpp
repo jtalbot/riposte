@@ -341,8 +341,7 @@ JIT::Aliasing JIT::Alias(std::vector<IR> const& code, IRRef i, IRRef j) {
     if(code[j].op == TraceOpCode::newenv)
         return NO_ALIAS;
 
-    
-
+    return MAY_ALIAS;
     //   load-load alias if both access the same location in memory
     //   store-load alias if both access the same location in memory
     // AND there are no intervening stores that MAY_ALIAS
@@ -366,8 +365,6 @@ JIT::Aliasing JIT::Alias(std::vector<IR> const& code, IRRef i, IRRef j) {
         return Alias(code, code[i].c, code[j].c);
     }
 */
-    return MAY_ALIAS; 
-    
     // Alias analysis of stores:
         // ALIAS iff:
             // Objs alias AND keys alias
@@ -545,7 +542,9 @@ JIT::IRRef JIT::EmitOptIR(
             case TraceOpCode::newenv: {
                 std::tr1::unordered_map<IR, IRRef> tcse;
                 ir.a = forward[ir.a]; ir.b = forward[ir.b]; ir.c = forward[ir.c];
-                return Insert(thread, code, tcse, ir);
+                IRRef f = Insert(thread, code, tcse, ir);
+                snapshot.memory.insert(f);
+                return f;
             } break;
 
             case TraceOpCode::load: { 
@@ -575,9 +574,6 @@ JIT::IRRef JIT::EmitOptIR(
                 if(f != code.size()-1) {
                     code.pop_back();
                 }
-                else {
-                    exits[code.size()-1] = BuildExit( snapshot, ir.reenter, exits.size()-1 );
-                }
                 return f;
             } break;
             
@@ -588,10 +584,15 @@ JIT::IRRef JIT::EmitOptIR(
                 Variable v = { ir.a, (int64_t)ir.b };
                 IRRef f = ir.c;
                 std::tr1::unordered_map<IR, IRRef> tcse;
-                Insert(thread, code, tcse, ir);
+                IRRef s = Insert(thread, code, tcse, ir);
+                snapshot.memory.insert(s);
+                if(ir.b < Loop) {
+                    code[s].sunk = true;
+                }
                 bool crossedExit;
                 IRRef j = DSE(code, code.size()-1, crossedExit);    
                 if(j != code.size()-1) {
+                    snapshot.memory.erase(j);
                     if( !crossedExit )
                         code[j].op = TraceOpCode::nop;
                     else
@@ -618,7 +619,7 @@ JIT::IRRef JIT::EmitOptIR(
 
             case TraceOpCode::slength: {
                 std::map< int64_t, IRRef >::const_iterator i
-                    = snapshot.slotValues.find( (int64_t)ir.b );
+                    = snapshot.slotLengths.find( (int64_t)ir.b );
                 if(i != snapshot.slotLengths.end()) {
                     return i->second;
                 }
@@ -626,13 +627,13 @@ JIT::IRRef JIT::EmitOptIR(
                     std::tr1::unordered_map<IR, IRRef> tcse;
                     IRRef s = Insert(thread, code, tcse, ir); 
                     snapshot.slotLengths[ (int64_t)ir.b ] = s; 
-                    exits[code.size()-1] = BuildExit( snapshot, ir.reenter, exits.size()-1 );
                     return s;
                 }
             } break;
             
             case TraceOpCode::sstore: {
                 ir.c = forward[ir.c];
+                snapshot.slots[ (int64_t)ir.b ] = ir.c;
                 snapshot.slotValues[ (int64_t)ir.b ] = ir.c;
                 snapshot.slotLengths[ (int64_t)ir.b ] = ir.out.length;
                 return ir.c;
@@ -665,12 +666,12 @@ JIT::IRRef JIT::EmitOptIR(
             case TraceOpCode::kill: {
                 std::map<int64_t, IRRef>::iterator i = snapshot.slotValues.begin();
                 while(i != snapshot.slotValues.end()) {
-                    if(i->first >= ir.a) snapshot.slotValues.erase(i++);
+                    if(i->first <= ir.a) snapshot.slotValues.erase(i++);
                     else ++i;
                 }
                 i = snapshot.slotLengths.begin();
                 while(i != snapshot.slotLengths.end()) {
-                    if(i->first >= ir.a) snapshot.slotLengths.erase(i++);
+                    if(i->first <= ir.a) snapshot.slotLengths.erase(i++);
                     else ++i;
                 }
                 return 0;
@@ -754,4 +755,155 @@ JIT::IRRef JIT::EmitOptIR(
 
             #undef CASE
         }
+}
+
+void JIT::sink(std::vector<bool>& marks, IRRef i) 
+{
+    #define MARK(k) if(marks[i]) { marks[k] = true; }
+    #define ROOT { marks[i] = true; }
+
+    IR const& ir = code[i];
+
+        MARK(ir.out.length);
+        MARK(ir.in.length);
+
+        switch(ir.op) {
+            #define CASE(Name, ...) case TraceOpCode::Name:
+
+            // Roots
+            case TraceOpCode::gproto:
+            case TraceOpCode::gfalse: 
+            case TraceOpCode::gtrue: {
+                ROOT;
+                MARK(ir.a);
+            }   break; 
+            
+            case TraceOpCode::load: {
+                ROOT;
+                MARK(ir.a); MARK(ir.b);
+            }   break;
+
+            case TraceOpCode::sload:
+            case TraceOpCode::nest:
+            case TraceOpCode::jmp:
+            case TraceOpCode::exit:
+            case TraceOpCode::loop:
+            case TraceOpCode::curenv: {
+                ROOT;
+            }   break;
+            
+            case TraceOpCode::phi: {
+                // these are the most complicated. Basically, if it's a true
+                // loop carried dependence, we can't sink it.
+                // If it's constant in the loop, we can sink it.
+                // If an appropriate loop rotation would eliminate the loop dependence
+                //  we could also sink it, but we don't handle that now.
+                //  LuaJIT looks for allocations on the right since they, by definition
+                //  don't depend on earlier iterations, so a loop rotation would eliminate
+                //  their LCD.
+                if(ir.a != ir.b) {
+                    ROOT;
+                    MARK(ir.a); MARK(ir.b);
+                }
+            }   break;
+           
+            case TraceOpCode::store: {
+                // should this ever be a root?
+                MARK(ir.a); MARK(ir.b); MARK(ir.c);
+            }   break; 
+            
+            CASE(constant)
+            case TraceOpCode::nop:
+            case TraceOpCode::slength:
+                break;
+
+            case TraceOpCode::seq:
+            case TraceOpCode::scatter: 
+            case TraceOpCode::newenv:
+            TERNARY_BYTECODES(CASE) {
+                MARK(ir.a); MARK(ir.b); MARK(ir.c);
+            } break;
+
+            case TraceOpCode::reshape:
+            case TraceOpCode::gather:
+            case TraceOpCode::rep:
+            case TraceOpCode::alength:
+            case TraceOpCode::elength:
+            BINARY_BYTECODES(CASE) {
+                MARK(ir.a); MARK(ir.b);
+            } break;
+            
+            case TraceOpCode::sstore: {
+                MARK(ir.c);
+            } break;
+
+            case TraceOpCode::brcast:
+            case TraceOpCode::olength:
+            case TraceOpCode::cenv:
+            case TraceOpCode::denv:
+            case TraceOpCode::lenv:
+            UNARY_FOLD_SCAN_BYTECODES(CASE) {
+                MARK(ir.a);
+            } break;
+
+            case TraceOpCode::length:
+            case TraceOpCode::kill:
+            case TraceOpCode::push:
+            case TraceOpCode::pop: {
+                printf("Unknown op: %s\n", TraceOpCode::toString(ir.op));
+                _error("Should not be reached in SINK");
+            } break;
+
+            default:
+            {
+                printf("Unknown op: %s\n", TraceOpCode::toString(ir.op));
+                _error("Unknown op in sink");
+            }
+
+            #undef CASE
+        }
+}
+
+void JIT::SINK(void) {
+    /*
+        Goal is to identify allocations that can be sunk.
+        Do this by marking things that can't be sunk first...
+    */
+
+    std::vector<bool> marks(code.size(), false);
+
+    bool phiChanged = true;
+
+    // What are the roots?
+    // -Guards must be computed.
+
+    // Mark phase
+    //  This could be much more efficient with a work queue.
+    while(phiChanged) {
+    
+        // upsweep
+        for(IRRef i = code.size()-1; i < code.size(); --i) {
+            sink(marks, i);
+        }
+
+        // downsweep, mark stores of marked allocations??
+        // what about global scope assignments?
+
+        phiChanged = false;
+        for(IRRef i = code.size()-2; code[i].op == TraceOpCode::phi; --i) {
+            if(marks[code[i].a] || marks[code[i].b]) {
+                marks[i] = true;
+            }
+            if(marks[code[i].a] != marks[code[i].b]) {
+                phiChanged = true;
+                marks[code[i].a] = true;
+                marks[code[i].b] = true;
+            }
+        }
+    }
+
+    // Sweep phase
+    for(IRRef i = code.size()-1; i < code.size(); --i) {
+        code[i].sunk = !marks[i];
+    } 
 }

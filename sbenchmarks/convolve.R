@@ -8,7 +8,7 @@ convolve <- function(a, b) # from the extending R manual
     ab <- double(na + nb)
     for(i in 1 : na) {
         for(j in 1 : nb) {
-            ab[1] <- b[j] #ab[j] <- 1 #ab[i + j] + a[i] * b[j]
+            ab[1] <- ab[i + j] + a[i] * b[j]
         }
     }
     ab

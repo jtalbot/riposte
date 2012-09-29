@@ -63,6 +63,30 @@ void JIT::ReleaseRegister(size_t index) {
     }
 }
 
+void JIT::AssignSnapshot(Snapshot const& snapshot) {
+    for(size_t i = 0; i < snapshot.stack.size(); i++) {
+        AssignRegister(snapshot.stack[i].environment);
+        AssignRegister(snapshot.stack[i].env);
+    }
+
+    for(std::map< int64_t, IRRef >::const_iterator i = snapshot.slotValues.begin();
+            i != snapshot.slotValues.end(); ++i) {
+        AssignRegister(i->second);
+    }
+    
+    for(std::map< int64_t, IRRef >::const_iterator i = snapshot.slotLengths.begin();
+            i != snapshot.slotLengths.end(); ++i) {
+        AssignRegister(i->second);
+    }
+
+    for(std::set< IRRef >::const_iterator i = snapshot.memory.begin();
+            i != snapshot.memory.end(); ++i) {
+        if(code[*i].sunk) {
+            AssignRegister(*i);
+        }
+    }
+}
+
 void JIT::RegisterAssign(IRRef i, IR ir) {
 
     if(ir.op == TraceOpCode::scatter) {
@@ -89,6 +113,7 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
         case TraceOpCode::gfalse: 
             {
                 AssignRegister(ir.a);
+                AssignSnapshot(exits[i].snapshot);
             } break;
         case TraceOpCode::scatter: 
             {
@@ -117,8 +142,12 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
                 AssignRegister(ir.b);
                 AssignRegister(ir.a);
             } break;
-        case TraceOpCode::push:
         case TraceOpCode::load:
+            {
+                AssignRegister(std::max(ir.a, ir.b));
+                AssignRegister(std::min(ir.a, ir.b));
+                AssignSnapshot(exits[i].snapshot);
+            } break;
         case TraceOpCode::elength:
         case TraceOpCode::alength:
         case TraceOpCode::rep:
@@ -241,7 +270,31 @@ void JIT::RegisterAssignment() {
                 code[ir.a].live )
             ir.live = true;
 
-        if(ir.live)
+        if(ir.live && ir.sunk)
+            RegisterAssign(i, ir);
+    }
+
+    for(size_t i = code.size()-1; i < code.size(); --i) {
+        IR& ir = code[i];
+
+        if(     ir.op == TraceOpCode::sstore
+            ||  ir.op == TraceOpCode::store
+            ||  ir.op == TraceOpCode::gtrue
+            ||  ir.op == TraceOpCode::gfalse
+            ||  ir.op == TraceOpCode::gproto
+            ||  ir.op == TraceOpCode::push
+            ||  ir.op == TraceOpCode::pop 
+            ||  ir.op == TraceOpCode::jmp
+            ||  ir.op == TraceOpCode::loop
+            ||  ir.op == TraceOpCode::exit
+            ||  ir.op == TraceOpCode::nest )
+            ir.live = true;
+
+        if(     ir.op == TraceOpCode::phi &&
+                code[ir.a].live )
+            ir.live = true;
+
+        if(ir.live && !ir.sunk)
             RegisterAssign(i, ir);
     }
 

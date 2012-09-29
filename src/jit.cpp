@@ -291,7 +291,8 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             IRRef cc = constant(Character::c((String)inst.a));
             IRRef e = load(thread, inst.b, &inst);
             IRRef v = load(thread, inst.c, &inst);
-            insert(trace, TraceOpCode::store, e, cc, v, Type::Nil, trace[v].out, Shape::Empty);
+            IRRef r = insert(trace, TraceOpCode::store, e, cc, v, Type::Nil, trace[v].out, Shape::Empty);
+            store(thread, e, inst.c);
         }   break;
 
         case ByteCode::gather1: {
@@ -678,8 +679,9 @@ void JIT::end_recording(Thread& thread) {
         trace[i].reg = 0;
     }
 
-    dump(thread, trace);
+    //dump(thread, trace);
     Replay(thread);
+    SINK();
     //dump(thread, code);
     //Schedule();
     schedule();
@@ -703,9 +705,10 @@ void JIT::end_recording(Thread& thread) {
         dest->exits.back().function = rootTrace->function;
     }
 
-    printf("---------------- Trace %d ------------------\n", dest->traceIndex);
-    if(thread.state.verbose)
+    if(thread.state.verbose) {
+        printf("---------------- Trace %d ------------------\n", dest->traceIndex);
         dump(thread, code);
+    } 
 
     compile(thread);
 }

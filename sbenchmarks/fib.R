@@ -1,7 +1,7 @@
-fib <- function(n) {
+fib <- function(V) {
     a <- 0
     b <- 1
-    for(i in 1:n) {
+    for(i in V) {
         t <- b
         b <- b+a
         a <- t
@@ -9,4 +9,5 @@ fib <- function(n) {
     b
 }
 
-system.time(fib(10000000))
+V <- 1:10000000
+system.time(fib(V))
