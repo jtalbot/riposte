@@ -37,14 +37,7 @@ Value has(Thread& thread, REnvironment e, int8_t** name) {
 }
 
 extern "C"
-int64_t SLENGTH(Thread& thread, int64_t i) {
-    Value const& v = (thread.registers+DEFAULT_NUM_REGISTERS)[i];
-    return v.isVector() ? v.length : 1;
-}
-
-extern "C"
-int64_t ELENGTH(Thread& thread, REnvironment env, int8_t** i) {
-    Value const& v = env.environment()->getRecursive((String)*i);
+int64_t LENGTH(Thread& thread, Value v) {
     return v.isVector() ? v.length : 1;
 }
 
@@ -109,47 +102,23 @@ int8_t const** UNBOX_character(Thread& thread, Value& a, int64_t length) {
 
 extern "C"
 Value BOX_double(Thread& thread, double* d, int64_t len) {
-    if(len <= 16) {
-        Double a(len);
-    	memcpy(a.v(), d, len*sizeof(double));
-        return a;
-    }
-    else {
-        Value a;
-        Value::Init(a, Type::Double, len);
-        a.p = d;
-        return a;
-    }
+    Double a(len);
+    memcpy(a.v(), d, len*sizeof(double));
+    return a;
 }
 
 extern "C"
 Value BOX_integer(Thread& thread, int64_t* d, int64_t len) {
-    if(len <= 16) {
-        Integer a(len);
-        memcpy(a.v(), d, len*sizeof(int64_t));
-        return a;
-    }
-    else {
-        Value a;
-        Value::Init(a, Type::Integer, len);
-        a.p = d;
-        return a;
-    }
+    Integer a(len);
+    memcpy(a.v(), d, len*sizeof(int64_t));
+    return a;
 }
 
 extern "C"
 Value BOX_logical(Thread& thread, int8_t* d, int64_t len) {
-	if(len <= 16) {
-        Logical a(len);
-	    memcpy(a.v(), d, len*sizeof(int8_t));
-        return a;
-    }
-    else {
-        Value a;
-        Value::Init(a, Type::Logical, len);
-        a.p = d;
-        return a;
-    }
+    Logical a(len);
+    memcpy(a.v(), d, len*sizeof(int8_t));
+    return a;
 }
 
 extern "C"

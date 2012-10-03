@@ -1,11 +1,11 @@
-f <- function(x,y) x+y
+add <- function(x,y) x+y
 
 fc <- function(V) {
-    j <- 0
-    for(i in V) j <- f(j,1)
-    j 
+    j <- 1.1
+    i <- 0L
+    while(i < N) { i = i+1L; j=add(j,1) }
+    j
 }
 
-V <- 1:10000000
-system.time(fc(V))
-#fc(10000000)
+N <- 100000000L
+system.time(fc(N))

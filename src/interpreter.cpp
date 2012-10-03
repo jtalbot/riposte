@@ -90,7 +90,7 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
 
     if(thread.jit.state == JIT::RECORDING) {
-        JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
+        JIT::Var a = thread.jit.load(thread, inst.a, &inst);
         thread.jit.emitCall(a, func, fenv, call.call, &inst);
     }
 	
@@ -108,7 +108,7 @@ Instruction const* ncall_op(Thread& thread, Instruction const& inst) {
 	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
 	
     if(thread.jit.state == JIT::RECORDING) {
-        JIT::IRRef a = thread.jit.load(thread, inst.a, &inst);
+        JIT::Var a = thread.jit.load(thread, inst.a, &inst);
         thread.jit.emitCall(a, func, fenv, call.call, &inst);
     }
 	
@@ -131,9 +131,9 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	}
 
     if(thread.jit.state == JIT::RECORDING) {
-        JIT::IRRef ira = thread.jit.load(thread, inst.a, &inst);
+        JIT::Var ira = thread.jit.load(thread, inst.a, &inst);
         thread.jit.store(thread, ira, 0);
-        thread.jit.insert(thread.jit.trace, TraceOpCode::pop, 0, 0, 0, Type::Promise, JIT::Shape::Empty, JIT::Shape::Empty);
+        thread.jit.Emit( JIT::IR(TraceOpCode::pop, Type::Nil, JIT::Shape::Empty, JIT::Shape::Empty) );
     }
 	
 	REGISTER(0) = result;
@@ -170,14 +170,12 @@ Instruction const* retp_op(Thread& thread, Instruction const& inst) {
 	// we can return futures from promises, so don't BIND
 	OPERAND(result, inst.a); FORCE(result, inst.a);	
     
-    JIT::IRRef ira;	
-	
     if(thread.frame.dest > 0) {
 		thread.frame.env->insert((String)thread.frame.dest) = result;
         if(thread.jit.state == JIT::RECORDING) {
-            ira = thread.jit.load(thread, inst.a, &inst);
+            JIT::Var ira = thread.jit.load(thread, inst.a, &inst);
             thread.jit.estore(ira, thread.frame.env, (String)thread.frame.dest);
-            thread.jit.insert(thread.jit.trace, TraceOpCode::pop, 0, 0, 0, Type::Promise, JIT::Shape::Empty, JIT::Shape::Empty);
+            thread.jit.Emit( JIT::IR( TraceOpCode::pop, Type::Nil, JIT::Shape::Empty, JIT::Shape::Empty) );
         }
 	} else {
 		thread.frame.env->dots[-thread.frame.dest].v = result;

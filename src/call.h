@@ -305,7 +305,7 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
         CompiledCall cc(call, args, 1, false);
 
         if(thread.jit.state == JIT::RECORDING) {
-            JIT::IRRef a = thread.jit.load(thread, (int64_t)op, &inst);
+            JIT::Var a = thread.jit.load(thread, (int64_t)op, &inst);
             thread.jit.emitCall(a, func, fenv, call, &inst);
         }
 
@@ -338,7 +338,7 @@ static Instruction const* GenericDispatch(Thread& thread, Instruction const& ins
 		CompiledCall cc(call, args, 2, false);
         
         if(thread.jit.state == JIT::RECORDING) {
-            JIT::IRRef a = thread.jit.load(thread, (int64_t)op, &inst);
+            JIT::Var a = thread.jit.load(thread, (int64_t)op, &inst);
             thread.jit.emitCall(a, func, fenv, call, &inst);
         }
 

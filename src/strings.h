@@ -19,6 +19,7 @@
 	_(Function,	"function")	\
 	_(BuiltIn,	"builtin")	\
 	_(Environment,	"environment")	\
+	_(Any,	"Any")	\
 	_(Object,	"object")	\
 	_(Promise, 	"promise") 	\
 	_(Default, 	"default") 	\

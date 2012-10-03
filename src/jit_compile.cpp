@@ -849,7 +849,7 @@ struct Fusion {
             case TraceOpCode::asinteger:
                 switch(jit.code[ir.a].type) {
                     case Type::Double: SCALARIZE1(FPToSI, builder.getInt64Ty()); break;
-                    case Type::Logical: SCALARIZE1(ZExt, builder.getInt64Ty()); break;
+                    case Type::Logical: builder.CreateZExt(Load(builder, ir.a), builder.getInt64Ty());
                     case Type::Integer: IDENTITY; break;
                     default: _error("Unexpected cast"); break;
                 }
@@ -857,8 +857,8 @@ struct Fusion {
             
             case TraceOpCode::aslogical:
                 switch(jit.code[ir.a].type) {
-                    case Type::Double: SCALARIZE1(FCmpONE, llvm::ConstantFP::get(builder.getDoubleTy(), 0)); break;
-                    case Type::Integer: SCALARIZE1(ICmpEQ, builder.getInt64(0)); break;
+                    case Type::Double: builder.CreateFCmpONE(Load(builder, ir.a), zerosD); break;
+                    case Type::Integer: builder.CreateICmpNE(Load(builder, ir.a), zerosI); break;
                     case Type::Logical: IDENTITY; break;
                     default: _error("Unexpected cast"); break;
                 }
@@ -944,6 +944,8 @@ struct Fusion {
             {
                 if(jit.code[ir.a].out.length == 1) {
                     llvm::Value* e = builder.CreateLoad( RawLoad(builder, ir.a) );
+                    if(ir.type == Type::Logical)
+                        e = builder.CreateICmpEQ(e, builder.getInt8(Logical::TrueElement));
                     llvm::Value* r = llvm::UndefValue::get(llvmType(ir.type, width));
                     for(int32_t i = 0; i < width; i++) {
                         r = builder.CreateInsertElement(r, e, builder.getInt32(i)); 
@@ -964,6 +966,54 @@ struct Fusion {
                     }
                     outs[reg] = r;
                 }
+            } break;
+
+            case TraceOpCode::decodena:
+            {
+                llvm::Value* c = Load(builder, ir.a);
+                llvm::Value* na;
+     
+                switch(jit.code[ir.a].type) {
+                    case Type::Double:
+                        c = builder.CreateBitCast(Load(builder, ir.a), llvm::VectorType::get(builder.getInt64Ty(), width));
+                        na = builder.getConstantVector( builder.getInt64(Double::NAelementInt), width );
+                        break; 
+                    case Type::Integer: 
+                        na = builder.getConstantVector( builder.getInt64(Integer::NAelement), width );
+                        break; 
+                    case Type::Logical:
+                        na = builder.getConstantVector( builder.getInt8(Logical::NAelement), width );
+                        break;
+                    default: _error("Unexpected decodena type"); break;
+                }
+                outs[reg] = builder.CreateICmpEQ(c, na);
+            } break;
+
+            case TraceOpCode::decodevl:
+            {
+                outs[reg] = Load(builder, ir.a);
+            } break;
+
+            case TraceOpCode::encode:
+            {
+                llvm::Value* isna = Load(builder, ir.b);
+                llvm::Value* c = Load(builder, ir.a);
+                llvm::Value* na;
+     
+                switch(jit.code[ir.a].type) {
+                    case Type::Double:
+                        na = builder.getConstantVector( builder.getDouble(Double::NAelement), width );
+                        break; 
+                    case Type::Integer: 
+                        na = builder.getConstantVector( builder.getInt64(Integer::NAelement), width );
+                        break; 
+                    case Type::Logical:
+                        na = builder.getConstantVector( builder.getInt8(Logical::NAelement), width );
+                        break;
+                    default: _error("Unexpected decodena type"); break;
+                }
+                outs[reg] = builder.CreateSelect(isna, na, c);
+                
             } break;
 
             // Generators
@@ -1232,6 +1282,9 @@ struct TraceCompiler {
             case TraceOpCode::brcast:
             case TraceOpCode::gather:
             case TraceOpCode::scatter:
+            case TraceOpCode::decodena:
+            case TraceOpCode::decodevl:
+            case TraceOpCode::encode:
             #define CASE(_,...) case TraceOpCode::_:
             TERNARY_BYTECODES(CASE)
             BINARY_BYTECODES(CASE)
@@ -1499,15 +1552,14 @@ struct TraceCompiler {
 
             case TraceOpCode::sload: 
             {
-                reg.Store( builder, Unbox(index, Call("SLOAD", builder.getInt64(ir.b))) );
+                reg.Store( builder, Call("SLOAD", builder.getInt64(ir.b)) );
             } break;
 
             case TraceOpCode::load: 
             {
                 llvm::Value* a = value(ir.a);
                 if(jit.code[ir.a].type == Type::Environment) {
-                    reg.Store( builder, Unbox(index, Call("ELOAD",
-                                BOXED_ARG(a), value(ir.b))) );
+                    reg.Store( builder, Call("ELOAD", BOXED_ARG(a), value(ir.b)) );
                 }
                 else if(jit.code[ir.a].type == Type::Object) {
                     if(ir.b == 0) {         // strip
@@ -1525,17 +1577,27 @@ struct TraceCompiler {
                     _error("Unknown load target");
                 }
             } break;
+
+            case TraceOpCode::unbox:
+            {
+               reg.Store( builder, Unbox( index, value(ir.a) ) ); 
+            } break;
+
+            case TraceOpCode::box:
+            {
+                reg.Store( builder, Box( ir.a ) );
+            } break;
            
             case TraceOpCode::store:
             {
                 llvm::Value* a = value(ir.a);
-                llvm::Value* c = Box(ir.c);
+                llvm::Value* c = value(ir.c);
                 Call("ESTORE", BOXED_ARG(a), value(ir.b), BOXED_ARG(c)); 
             } break;
 
             case TraceOpCode::sstore:
             {
-                llvm::Value* c = Box(ir.c);
+                llvm::Value* c = value(ir.c);
                 Call("SSTORE", builder.getInt64(ir.b), BOXED_ARG(c));
             } break;
             
@@ -1571,15 +1633,10 @@ struct TraceCompiler {
 
             // Length op codes
 
-            case TraceOpCode::slength: 
-            {
-                reg.Set( builder, Call("SLENGTH", builder.getInt64(ir.b)) );
-            } break;
-
-            case TraceOpCode::elength: 
+            case TraceOpCode::length: 
             {
                 llvm::Value* a = value(ir.a);
-                reg.Set( builder, Call("ELENGTH", BOXED_ARG(a), value(ir.b)) );
+                reg.Set( builder, Call("LENGTH", BOXED_ARG(a)) );
             } break;
 
             case TraceOpCode::alength: 

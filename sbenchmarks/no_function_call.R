@@ -1,9 +1,9 @@
 fc <- function(V) {
-    j <- 0
-    for(i in V) j <- j+1
+    j <- 1.1
+    i <- 0L
+    while(i < N) { i = i+1L; j=j+1 }
     j
 }
 
-V <- 1:10000000
-#fc(10000000)
-system.time(fc(V))
+N <- 100000000L
+system.time(fc(N))

@@ -27,17 +27,20 @@
         _(curenv, "curenv", ___) \
         _(newenv, "newenv", ___) \
 		_(load, "load", ___) /* loads are type guarded */ \
-		_(elength, "elength", ___) /* loads are type guarded */ \
-		_(slength, "slength", ___) /* loads are type guarded */ \
+        _(length, "length", ___) \
+        _(encode, "encode", ___) \
+        _(decodevl, "decodevl", ___) \
+        _(decodena, "decodena", ___) \
         _(store, "store", ___) \
         _(sstore, "sstore", ___) \
+        _(box, "box", ___) \
+        _(unbox, "unbox", ___) \
         _(gproto,   "gproto", ___) \
 		_(gtrue, "gtrue", ___) \
 		_(gfalse, "gfalse", ___) \
 		_(gather, "gather", ___) \
 		_(scatter, "scatter", ___) \
 		_(phi, "phi", ___) \
-        _(length, "LENGTH", ___) \
         _(push, "PUSH", ___) \
         _(pop, "POP", ___) \
         _(strip, "STRIP", ___) \
@@ -49,6 +52,7 @@
         _(cenv, "cenv", ___) \
         _(brcast, "brcast", ___) \
         _(reshape, "reshape", ___) \
+        _(loadna, "loadna", ___) \
 		_(nop, "NOP", ___)
 
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
@@ -122,6 +126,9 @@ public:
     struct Reenter {
         Instruction const* reenter;
         bool inScope;
+        Reenter() : reenter (0), inScope(false) {}
+        Reenter( Instruction const* reenter, bool inScope )
+            : reenter( reenter ), inScope( inScope ) {}
     };
 
 	struct IR {
@@ -219,7 +226,6 @@ public:
     struct Snapshot {
         std::vector<StackFrame> stack;
         std::map< int64_t, IRRef > slotValues;
-        std::map< int64_t, IRRef > slotLengths;
         std::map< int64_t, IRRef > slots;
         std::set<IRRef> memory;
     }; 
@@ -232,6 +238,7 @@ public:
 	std::map<size_t, Exit> exits;
     Exit BuildExit(Snapshot const& snapshot, Reenter const& reenter, size_t index); 
 
+    static const IRRef FalseRef;
 
 	JIT() 
 		: state(OFF)
@@ -253,13 +260,14 @@ public:
         this->dest = dest;
 
         // insert empty and scalar shapes.
-        constant(Integer::c(0));
-        constant(Integer::c(1));
+        Emit( makeConstant(Integer::c(0)) );
+        Emit( makeConstant(Integer::c(1)) );
+        Emit( makeConstant(Logical::c(Logical::FalseElement)) );
 
         shapes.insert( std::make_pair( 0, Shape::Empty ) );
         shapes.insert( std::make_pair( 1, Shape::Scalar ) );
 
-        TopLevelEnvironment = insert(trace, TraceOpCode::curenv, 0, 0, 0, Type::Environment, Shape::Empty, Shape::Scalar);
+        TopLevelEnvironment = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar) );
 	    envs[env] = TopLevelEnvironment;
     }
 
@@ -299,48 +307,60 @@ public:
 		state = OFF;
 	}
 
-	IRRef insert(
-        std::vector<IR>& t,
-        TraceOpCode::Enum op, 
-        IRRef a, 
-        IRRef b, 
-        IRRef c,
-        Type::Enum type, 
-        Shape in,
-        Shape out);
+    IRRef Emit(IR const& ir);
+    IRRef Emit(IR const& ir, Instruction const* reenter, bool inScope);
     
     IR makeConstant(Value const& v);
+
+    struct Var {
+        std::vector<IR>& trace;
+        IRRef v;
+        IRRef na;
+        Type::Enum type;
+        Shape s;
+        Var(std::vector<IR>& trace, IRRef v, IRRef na) 
+            : trace(trace), v(v), na(na), type(trace[v].type), s(trace[v].out) {}
+        
+        Var(Var const& o)
+            : trace(o.trace), v(o.v), na(o.na), type(o.type), s(o.s) {}
     
-    IRRef duplicate(IR const& ir, std::vector<IRRef> const& forward);
-	IRRef load(Thread& thread, int64_t a, Instruction const* reenter);
-    IRRef constant(Value const& v);
-	IRRef rep(IRRef l, IRRef e, Shape target);
-	IRRef recycle(IRRef a, Shape target);
-	IRRef cast(IRRef a, Type::Enum type);
-    IRRef store(Thread& thread, IRRef a, int64_t c);
-	IRRef EmitUnary(TraceOpCode::Enum op, IRRef a, Type::Enum rty, Type::Enum mty);
-	IRRef EmitFold(TraceOpCode::Enum op, IRRef a, Type::Enum rty, Type::Enum mty);
-	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Instruction const* inst);
-	IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum rty, Type::Enum maty, Type::Enum mbty, Type::Enum mcty, Instruction const* inst);
+        void operator=(Var const& o) {
+            v = o.v;
+            na = o.na;
+            type = o.type;
+            s = o.s;
+        }
+    };
+    
+	Var load(Thread& thread, int64_t a, Instruction const* reenter);
+    void store(Thread& thread, Var a, int64_t c);
+    Var EmitConstant(Value const& v);
+	Var EmitUnary(TraceOpCode::Enum op, Var a, Type::Enum rty);
+	Var EmitFold(TraceOpCode::Enum op, Var a, Type::Enum rty);
+	Var EmitBinary(TraceOpCode::Enum op, Var a, Var b, Type::Enum rty, Instruction const* inst);
+	Var EmitTernary(TraceOpCode::Enum op, Var a, Var b, Var c, Type::Enum rty, Instruction const* inst);
+	Var EmitRep(Var l, Var e, Shape target);
+	Var EmitBroadcast(Var a, Shape target);
+	Var EmitCast(Var a, Type::Enum type);
 
     Shape SpecializeLength(size_t length, IRRef irlength);
-    Shape SpecializeValue(Value const& v, IR ir);
+    Shape SpecializeValue(Value const& v, IRRef r);
+    IRRef SpecializeNA(Value const& v, IRRef r);
     Shape MergeShapes(Shape a, Shape b, Instruction const* inst);
 
 
-    void emitCall(IRRef a, Function const& func, Environment* env, Value const& call, Instruction const* inst) {
-        IRRef guard = insert(trace, TraceOpCode::gproto, a, (IRRef)func.prototype(), 0, Type::Function, trace[a].out, Shape::Empty);
-        trace[guard].reenter = (Reenter) { inst, true };
-        IRRef lenv = insert(trace, TraceOpCode::load, a, 0, 0, Type::Environment, trace[a].out, Shape::Scalar);
-        IRRef denv = insert(trace, TraceOpCode::curenv, 0, 0, 0, Type::Environment, Shape::Empty, Shape::Scalar);
-        IRRef ne = insert(trace, TraceOpCode::newenv, lenv, denv, constant(call), Type::Environment, Shape::Scalar, Shape::Scalar);
+    void emitCall(Var a, Function const& func, Environment* env, Value const& call, Instruction const* inst) {
+        Emit( IR( TraceOpCode::gproto, a.v, (IRRef)func.prototype(), Type::Function, a.s, Shape::Empty ), inst, true );
+        IRRef lenv = Emit( IR( TraceOpCode::load, a.v, Type::Environment, a.s, Shape::Scalar ) );
+        IRRef denv = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
+        IRRef ne = Emit( IR( TraceOpCode::newenv, lenv, denv, EmitConstant(call).v, Type::Environment, Shape::Scalar, Shape::Scalar ) );
         envs[env] = ne;
     }
 
     void emitPush(Thread const& thread);
 
     void storeArg(Environment* env, String name, Value const& v) {
-        estore(constant(v), env, name);
+        estore(EmitConstant(v), env, name);
     }
 
     std::map<Environment const*, IRRef> envs;
@@ -352,14 +372,18 @@ public:
             return i->second;
         else {
             Value v;
-            return constant(REnvironment::Init(v, env));
+            return EmitConstant(REnvironment::Init(v, env)).v;
             //_error("Looking up nonexistant environment");
         }
     }
 
-    void estore(IRRef a, Environment* env, String name) {
-        Variable v = { getEnv(env), (int64_t)constant(Character::c(name)) };
-        trace.push_back(IR(TraceOpCode::store, v.env, v.i, a, Type::Nil, trace[a].out, Shape::Empty));
+    void estore(Var a, Environment* env, String name) {
+        Variable v = { getEnv(env), (int64_t)EmitConstant(Character::c(name)).v };
+
+        IRRef r = Emit( IR( TraceOpCode::encode, a.v, a.na, a.type, a.s, a.s ) );
+              r = Emit( IR( TraceOpCode::box, r, Type::Any, a.s, Shape::Scalar ) );	
+
+        trace.push_back(IR(TraceOpCode::store, v.env, v.i, r, Type::Nil, a.s, Shape::Empty));
     }
 
 	void dump(Thread& thread, std::vector<IR> const&);
@@ -383,7 +407,7 @@ public:
     void RegisterAssignment();
     void RegisterAssign(IRRef i, IR ir);
 
-    IRRef Insert(Thread& thread, std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, IR ir);
+    IRRef Insert(Thread& thread, std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, Snapshot& snapshot, IR ir);
     IR ConstantFold(Thread& thread, IR ir);
     IR StrengthReduce(IR ir);
     IR Normalize(IR ir);
@@ -400,74 +424,61 @@ public:
     void sink(std::vector<bool>& marks, IRRef i);
     void SINK(void); 
     double Opcost(std::vector<IR>& code, IR ir);
+    void Liveness();
+    bool AlwaysLive(IR const& ir);
+    void MarkSnapshot(Snapshot const& snapshot);
+    void MarkLiveness(IRRef i, IR ir);
  
 	template< template<class X> class Group >
-	IRRef EmitUnary(TraceOpCode::Enum op, IRRef a) {
-		Type::Enum aty = trace[a].type;
-
+	Var EmitUnary(TraceOpCode::Enum op, Var a) {
         #define EMIT(TA)                  \
-        if(aty == Type::TA)                     \
-            return EmitUnary(op, a,             \
-                Group<TA>::R::VectorType,    \
-                Group<TA>::MA::VectorType);
+        if(a.type == Type::TA)                     \
+            return EmitUnary(op,                        \
+                EmitCast(a, Group<TA>::MA::VectorType), \
+                Group<TA>::R::VectorType); 
         UNARY_TYPES(EMIT)
         #undef EMIT
         _error("Unknown type in EmitUnary");
     }
 
 	template< template<class X> class Group >
-	IRRef EmitFold(TraceOpCode::Enum op, IRRef a) {
-		Type::Enum aty = trace[a].type;
-
+	Var EmitFold(TraceOpCode::Enum op, Var a) {
         #define EMIT(TA)                  \
-        if(aty == Type::TA)                     \
-            return EmitFold(op, a,             \
-                Group<TA>::R::VectorType,    \
-                Group<TA>::MA::VectorType);
+        if(a.type == Type::TA)                     \
+            return EmitFold(op,                         \
+                EmitCast(a, Group<TA>::MA::VectorType), \
+                Group<TA>::R::VectorType); 
         UNARY_TYPES(EMIT)
         #undef EMIT
-        if(aty == Type::Object)
-            return 0;
         _error("Unknown type in EmitFold");
     }
 
 	template< template<class X, class Y> class Group >
-	IRRef EmitBinary(TraceOpCode::Enum op, IRRef a, IRRef b, Instruction const* inst) {
-		Type::Enum aty = trace[a].type;
-		Type::Enum bty = trace[b].type;
-
+	Var EmitBinary(TraceOpCode::Enum op, Var a, Var b, Instruction const* inst) {
         #define EMIT(TA, TB)                 \
-        if(aty == Type::TA && bty == Type::TB)      \
-            return EmitBinary(op, a, b,             \
-                Group<TA,TB>::R::VectorType,        \
-                Group<TA,TB>::MA::VectorType,       \
-                Group<TA,TB>::MB::VectorType,       \
+        if(a.type == Type::TA && b.type == Type::TB)              \
+            return EmitBinary(op,                           \
+                EmitCast(a, Group<TA,TB>::MA::VectorType),  \
+                EmitCast(b, Group<TA,TB>::MB::VectorType),  \
+                Group<TA,TB>::R::VectorType,                \
                 inst);
         BINARY_TYPES(EMIT)
         #undef EMIT
-        if(aty == Type::Object || bty == Type::Object)
-            return 0;
         _error("Unknown type pair in EmitBinary");
     }
     
     template< template<class X, class Y, class Z> class Group >
-    IRRef EmitTernary(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Instruction const* inst) {
-		Type::Enum aty = trace[a].type;
-		Type::Enum bty = trace[b].type;
-		Type::Enum cty = trace[c].type;
-
+    Var EmitTernary(TraceOpCode::Enum op, Var a, Var b, Var c, Instruction const* inst) {
         #define EMIT(TA, TB, TC)                            \
-        if(aty == Type::TA && bty == Type::TB && cty == Type::TC)   \
-            return EmitTernary(op, a, b, c,                         \
+        if(a.type == Type::TA && b.type == Type::TB && c.type == Type::TC)   \
+            return EmitTernary(op,                                  \
+                EmitCast(a, Group<TA,TB,TC>::MA::VectorType),       \
+                EmitCast(b, Group<TA,TB,TC>::MB::VectorType),       \
+                EmitCast(c, Group<TA,TB,TC>::MC::VectorType),       \
                 Group<TA,TB,TC>::R::VectorType,                     \
-                Group<TA,TB,TC>::MA::VectorType,                    \
-                Group<TA,TB,TC>::MB::VectorType,                    \
-                Group<TA,TB,TC>::MC::VectorType,                    \
                 inst);
         TERNARY_TYPES(EMIT)
         #undef EMIT
-        if(aty == Type::Object || bty == Type::Object || cty == Type::Object)
-            return 0;
         _error("Unknown type pair in EmitTernary");
     }
 #undef TYPES_TMP

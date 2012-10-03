@@ -4,6 +4,12 @@
 
 #include "value.h"
 
+// TODO: if mayHaveNA is true, we want to check for NAs while doing these ops
+//       (since we have to anyway) and set mayHaveNA to false if we don't encounter
+//       any NAs
+
+// In ops that may produce NA, set appropriately (e.g. integer overflow)
+
 template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
 struct Map1 {
 	static void eval(Thread& thread, typename Op::A::Element const* a, typename Op::R::Element* r) {
@@ -63,6 +69,7 @@ struct Zip1 {
 			int64_t i = 0;
 			for(; i < length-3; i+=4) Map1<Op,4>::eval(thread, ae+i, re+i);
 			for(; i < length; i++) Map1<Op,1>::eval(thread, ae+i, re+i);
+            r.setMayHaveNA( a.getMayHaveNA() );
 			out = (Value&)r;
 		}
 	}
@@ -72,6 +79,7 @@ template< class Op >
 struct Zip2 {
 	static void eval(Thread& thread, typename Op::A const& a, typename Op::B const& b, Value& out)
 	{
+        bool mayHaveNA = a.getMayHaveNA() || b.getMayHaveNA();
 		if(a.isScalar() && b.isScalar()) {
 			Op::Scalar(thread, a[0], b[0], out);
 		}
@@ -84,6 +92,7 @@ struct Zip2 {
 			int64_t i = 0;
 			for(; i < length-3; i+=4) Map2VS<Op,4>::eval(thread, ae+i, be, re+i);
 			for(; i < length; i++) Map2VS<Op,1>::eval(thread, ae+i, be, re+i);
+            r.setMayHaveNA(mayHaveNA);
 			out = (Value&)r;
 		}
 		else if(a.isScalar()) {
@@ -95,6 +104,7 @@ struct Zip2 {
 			int64_t i = 0;
 			for(; i < length-3; i+=4) Map2SV<Op,4>::eval(thread, ae, be+i, re+i);
 			for(; i < length; i++) Map2SV<Op,1>::eval(thread, ae, be+i, re+i);
+            r.setMayHaveNA(mayHaveNA);
 			out = (Value&)r;
 		}
 		else if(a.length == b.length) {
@@ -106,10 +116,11 @@ struct Zip2 {
 			int64_t i = 0;
 			for(; i < length-3; i+=4) Map2VV<Op,4>::eval(thread, ae+i, be+i, re+i);
 			for(; i < length; i++) Map2VV<Op,1>::eval(thread, ae+i, be+i, re+i);
+            r.setMayHaveNA(mayHaveNA);
 			out = (Value&)r;
 		}
 		else if(a.length == 0 || b.length == 0) {
-			Op::R::Init(out, 0);
+			Op::R::Init(out, 0, Op::R::UpperBound, Op::R::LowerBound, false);
 		}
 		else if(a.length > b.length) {
 			typename Op::R r(a.length);
@@ -124,6 +135,7 @@ struct Zip2 {
 				++j;
 				if(j >= blength) j = 0;
 			}
+            r.setMayHaveNA(mayHaveNA);
 			out = (Value&)r;
 		}
 		else {
@@ -139,6 +151,7 @@ struct Zip2 {
 				++j;
 				if(j >= alength) j = 0;
 			}
+            r.setMayHaveNA(mayHaveNA);
 			out = (Value&)r;
 		}
 	}
@@ -188,6 +201,7 @@ struct ScanLeft {
 		for(int64_t i = 0; i < length; ++i) {
 			re[i] = a = Op::eval(thread, a, be[i]);
 		}
+        r.setMayHaveNA(b.getMayHaveNA());
 		out = (Value&)r;
 	}
 };

@@ -2,13 +2,11 @@
 
 void JIT::AssignRegister(size_t index) {
     IR& ir = code[index];
-    ir.live = true;
     if(ir.reg <= 0) {
         Register r = { ir.type, ir.out }; 
 
         if( ir.op == TraceOpCode::constant 
-                || ir.op == TraceOpCode::load
-                || ir.op == TraceOpCode::sload ) {
+                || ir.op == TraceOpCode::unbox ) {
             ir.reg = registers.size();
             registers.push_back(r);
             return;
@@ -45,7 +43,6 @@ void JIT::AssignRegister(size_t index) {
 void JIT::PreferRegister(size_t index, size_t share) {
     IR& ir = code[index];
     IR const& sir = code[share];
-    ir.live = true;
     if(ir.reg == 0) {
         ir.reg = sir.reg > 0 ? -sir.reg : sir.reg;
     }
@@ -74,11 +71,6 @@ void JIT::AssignSnapshot(Snapshot const& snapshot) {
         AssignRegister(i->second);
     }
     
-    for(std::map< int64_t, IRRef >::const_iterator i = snapshot.slotLengths.begin();
-            i != snapshot.slotLengths.end(); ++i) {
-        AssignRegister(i->second);
-    }
-
     for(std::set< IRRef >::const_iterator i = snapshot.memory.begin();
             i != snapshot.memory.end(); ++i) {
         if(code[*i].sunk) {
@@ -95,7 +87,8 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
         registers[ir.reg].shape = code[ir.a].out;
     }
 
-    if(ir.op != TraceOpCode::load && ir.op != TraceOpCode::constant)
+    if( ir.op != TraceOpCode::unbox &&
+        ir.op != TraceOpCode::constant)
     {
         ReleaseRegister(i);
     }
@@ -113,7 +106,6 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
         case TraceOpCode::gfalse: 
             {
                 AssignRegister(ir.a);
-                AssignSnapshot(exits[i].snapshot);
             } break;
         case TraceOpCode::scatter: 
             {
@@ -146,9 +138,8 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
             {
                 AssignRegister(std::max(ir.a, ir.b));
                 AssignRegister(std::min(ir.a, ir.b));
-                AssignSnapshot(exits[i].snapshot);
             } break;
-        case TraceOpCode::elength:
+        case TraceOpCode::encode:
         case TraceOpCode::alength:
         case TraceOpCode::rep:
         case TraceOpCode::seq:
@@ -158,6 +149,11 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
                 AssignRegister(std::max(ir.a, ir.b));
                 AssignRegister(std::min(ir.a, ir.b));
             } break;
+        case TraceOpCode::box:
+        case TraceOpCode::unbox:
+        case TraceOpCode::decodevl:
+        case TraceOpCode::decodena:
+        case TraceOpCode::length:
         case TraceOpCode::brcast:
         case TraceOpCode::olength:
         case TraceOpCode::lenv:
@@ -175,7 +171,6 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
         case TraceOpCode::curenv:
         case TraceOpCode::nop:
         case TraceOpCode::sload:
-        case TraceOpCode::slength:
         case TraceOpCode::constant:
             // do nothing
             break;
@@ -185,6 +180,7 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
                  } break;
 #undef CASE
     }
+
     AssignRegister(ir.in.length);
     AssignRegister(ir.out.length);
 }
@@ -199,100 +195,30 @@ void JIT::RegisterAssignment() {
     registers.push_back(invalid);
     freeRegisters.clear();
 
-
-    // This should work:
-    //  Backwards pass over loop body
-    //  Mark stores as live and propogate.
-    //  At loop header, traverse phis and mark (a) live
-    //  Traverse loop header
-
- 
     // add all register to the freeRegisters list
     for(size_t i = 0; i < registers.size(); i++) {
         freeRegisters.insert( std::make_pair(registers[i], i) );
     }
 
-    // clear all liveness flags
-    for(size_t i = 0; i < code.size(); i++) {
-        code[i].live = false;
-        code[i].reg = 0;
-    } 
-
-    // traverse loop body
-    for(size_t i = code.size()-1; i > Loop; --i) {
-        IR& ir = code[i];
-
-        if(     ir.op == TraceOpCode::sstore
-            ||  ir.op == TraceOpCode::store
-            ||  ir.op == TraceOpCode::gtrue
-            ||  ir.op == TraceOpCode::gfalse
-            ||  ir.op == TraceOpCode::gproto
-            ||  ir.op == TraceOpCode::push
-            ||  ir.op == TraceOpCode::pop )
-            ir.live = true;
-
-        if(ir.live)
-            RegisterAssign(i, ir);
-    }
-
-    // retraverse to pick up phis
-    registers.clear();
-    registers.push_back(invalid);
-    freeRegisters.clear();
-
-    // add all register to the freeRegisters list
-    for(size_t i = 0; i < registers.size(); i++) {
-        freeRegisters.insert( std::make_pair(registers[i], i) );
-    }
-
-    // clear all liveness flags
+    // clear all register assignments 
     for(size_t i = 0; i < code.size(); i++) {
         code[i].reg = 0;
     } 
 
+    // assign sunk registers first, including any thing captured in a snapshot
     for(size_t i = code.size()-1; i < code.size(); --i) {
         IR& ir = code[i];
-
-        if(     ir.op == TraceOpCode::sstore
-            ||  ir.op == TraceOpCode::store
-            ||  ir.op == TraceOpCode::gtrue
-            ||  ir.op == TraceOpCode::gfalse
-            ||  ir.op == TraceOpCode::gproto
-            ||  ir.op == TraceOpCode::push
-            ||  ir.op == TraceOpCode::pop 
-            ||  ir.op == TraceOpCode::jmp
-            ||  ir.op == TraceOpCode::loop
-            ||  ir.op == TraceOpCode::exit
-            ||  ir.op == TraceOpCode::nest )
-            ir.live = true;
-
-        if(     ir.op == TraceOpCode::phi &&
-                code[ir.a].live )
-            ir.live = true;
 
         if(ir.live && ir.sunk)
             RegisterAssign(i, ir);
+    
+        if(ir.live && exits.find(i) != exits.end())
+            AssignSnapshot(exits[i].snapshot);
     }
 
+    // now the not sunk ones
     for(size_t i = code.size()-1; i < code.size(); --i) {
         IR& ir = code[i];
-
-        if(     ir.op == TraceOpCode::sstore
-            ||  ir.op == TraceOpCode::store
-            ||  ir.op == TraceOpCode::gtrue
-            ||  ir.op == TraceOpCode::gfalse
-            ||  ir.op == TraceOpCode::gproto
-            ||  ir.op == TraceOpCode::push
-            ||  ir.op == TraceOpCode::pop 
-            ||  ir.op == TraceOpCode::jmp
-            ||  ir.op == TraceOpCode::loop
-            ||  ir.op == TraceOpCode::exit
-            ||  ir.op == TraceOpCode::nest )
-            ir.live = true;
-
-        if(     ir.op == TraceOpCode::phi &&
-                code[ir.a].live )
-            ir.live = true;
 
         if(ir.live && !ir.sunk)
             RegisterAssign(i, ir);
@@ -300,3 +226,135 @@ void JIT::RegisterAssignment() {
 
 }
 
+void JIT::MarkLiveness(IRRef i, IR ir) {
+    switch(ir.op) 
+    {
+#define CASE(Name, ...) case TraceOpCode::Name:
+        case TraceOpCode::encode:
+        case TraceOpCode::alength:
+        case TraceOpCode::rep:
+        case TraceOpCode::seq:
+        case TraceOpCode::gather:
+        case TraceOpCode::load:
+        case TraceOpCode::reshape:
+        case TraceOpCode::phi: 
+        BINARY_BYTECODES(CASE)
+            {
+                code[ir.a].live = true;
+                code[ir.b].live = true;
+            } break;
+        case TraceOpCode::box:
+        case TraceOpCode::unbox:
+        case TraceOpCode::decodevl:
+        case TraceOpCode::decodena:
+        case TraceOpCode::length:
+        case TraceOpCode::brcast:
+        case TraceOpCode::olength:
+        case TraceOpCode::lenv:
+        case TraceOpCode::denv:
+        case TraceOpCode::cenv:
+        case TraceOpCode::gproto: 
+        case TraceOpCode::gtrue: 
+        case TraceOpCode::gfalse: 
+            UNARY_FOLD_SCAN_BYTECODES(CASE)
+            {
+                code[ir.a].live = true;
+            } break;
+        case TraceOpCode::store:
+        case TraceOpCode::newenv:
+        case TraceOpCode::scatter: 
+        TERNARY_BYTECODES(CASE)
+            {
+                code[ir.a].live = true;
+                code[ir.b].live = true;
+                code[ir.c].live = true;
+            } break;
+        case TraceOpCode::sstore:
+            {
+                code[ir.c].live = true;
+            } break;
+        case TraceOpCode::loop:
+        case TraceOpCode::jmp:
+        case TraceOpCode::exit:
+        case TraceOpCode::nest:
+        case TraceOpCode::pop:
+        case TraceOpCode::curenv:
+        case TraceOpCode::nop:
+        case TraceOpCode::sload:
+        case TraceOpCode::constant:
+            // do nothing
+            break;
+        default: {
+                     _error("Unknown op in MarkLiveness");
+                 } break;
+#undef CASE
+    }
+
+    code[ir.in.length].live = true;
+    code[ir.out.length].live = true;
+    if(exits.find(i) != exits.end())
+        MarkSnapshot(exits[i].snapshot);
+}
+
+void JIT::MarkSnapshot(Snapshot const& snapshot) {
+    for(size_t i = 0; i < snapshot.stack.size(); i++) {
+        code[snapshot.stack[i].environment].live = true;
+        code[snapshot.stack[i].env].live = true;
+    }
+
+    for(std::map< int64_t, IRRef >::const_iterator i = snapshot.slotValues.begin();
+            i != snapshot.slotValues.end(); ++i) {
+        code[i->second].live = true;
+    }
+    
+    for(std::set< IRRef >::const_iterator i = snapshot.memory.begin();
+            i != snapshot.memory.end(); ++i) {
+        code[*i].live = true;
+    }
+}
+
+bool JIT::AlwaysLive(IR const& ir) {
+    return(     ir.op == TraceOpCode::sstore
+            ||  ir.op == TraceOpCode::store
+            ||  ir.op == TraceOpCode::gtrue
+            ||  ir.op == TraceOpCode::gfalse
+            ||  ir.op == TraceOpCode::gproto
+            ||  ir.op == TraceOpCode::push
+            ||  ir.op == TraceOpCode::pop 
+            ||  ir.op == TraceOpCode::jmp
+            ||  ir.op == TraceOpCode::loop
+            ||  ir.op == TraceOpCode::exit
+            ||  ir.op == TraceOpCode::nest );
+}
+
+void JIT::Liveness() {
+    // clear all liveness 
+    for(size_t i = 0; i < code.size(); i++) {
+        code[i].live = false;
+    } 
+
+    // traverse loop body
+    for(size_t i = code.size()-1; i > Loop; --i) {
+        IR& ir = code[i];
+
+        if(AlwaysLive(ir))
+            ir.live = true;
+
+        if(ir.live)
+            MarkLiveness(i, ir);
+    }
+
+    // traverse entire trace & pick up phis
+    for(size_t i = code.size()-1; i < code.size(); --i) {
+        IR& ir = code[i];
+
+        if(AlwaysLive(ir))
+            ir.live = true;
+
+        if(ir.op == TraceOpCode::phi && code[ir.a].live )
+            ir.live = true;
+
+        if(ir.live)
+            MarkLiveness(i, ir);
+    }
+}

@@ -115,6 +115,33 @@ JIT::IR JIT::StrengthReduce(IR ir) {
         // integer reassociation to recover constants, (a+1)-1 -> a+(1-1) 
    
         // should arrange this to fall through successive attempts at lowering...
+        case TraceOpCode::pow:
+            if(ir.type == Type::Double) {
+                if(code[ir.b].op == TraceOpCode::constant && 
+                        ((Double const&)constants[code[ir.b].a])[0] == 1) {
+                    return IR(TraceOpCode::pos, ir.a, Type::Double, ir.in, ir.out);
+                }
+                else if(code[ir.b].op == TraceOpCode::constant && 
+                        ((Double const&)constants[code[ir.b].a])[0] == 2) {
+                    return IR(TraceOpCode::mul, ir.a, ir.a, Type::Double, ir.in, ir.out);
+                }
+                else if(code[ir.b].op == TraceOpCode::brcast
+                        && code[code[ir.b].a].op == TraceOpCode::constant
+                        && ((Double const&)constants[code[code[ir.b].a].a])[0] == 2) {
+                    return IR(TraceOpCode::mul, ir.a, ir.a, Type::Double, ir.in, ir.out);
+                }
+            }
+        break;
+
+        case TraceOpCode::lor:
+            if(ir.a == ir.b)
+                return IR(TraceOpCode::pos, ir.a, Type::Integer, ir.in, ir.out); 
+        break;
+
+        case TraceOpCode::land:
+            if(ir.a == ir.b)
+                return IR(TraceOpCode::pos, ir.a, Type::Integer, ir.in, ir.out); 
+        break;
  
         case TraceOpCode::mod:
             if(ir.type == Type::Integer) {
@@ -174,7 +201,7 @@ double memcost(size_t size) {
 
 */
 
-JIT::IRRef JIT::Insert(Thread& thread, std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, IR ir) {
+JIT::IRRef JIT::Insert(Thread& thread, std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, Snapshot& snapshot, IR ir) {
     ir = StrengthReduce(ConstantFold(thread, Normalize(ir)));
 
     if(ir.op == TraceOpCode::pos) {
@@ -191,56 +218,19 @@ JIT::IRRef JIT::Insert(Thread& thread, std::vector<IR>& code, std::tr1::unordere
 
     ir.cost = std::min(csecost, nocsecost);
 
-    if(csecost <= nocsecost && cse.find(ir) != cse.end()) {
+    std::tr1::unordered_map<IR, IRRef>::const_iterator i = cse.find(ir);
+    if(csecost <= nocsecost && i != cse.end()) {
+        //printf("%d: Found a CSE for %s\n", code.size(), TraceOpCode::toString(ir.op));
         //printf("For %s => %f <= %f\n", TraceOpCode::toString(ir.op), csecost, nocsecost);
-        // for mutating operations, have to check if there is a possible intervening mutation...
-        /*if(ir.op == TraceOpCode::load) {
-            for(IRRef i = code.size()-1; i != cse.find(ir)->second; i--) {
-                if(code[i].op == TraceOpCode::store && ir.a == code[i].a && code[code[i].b].op != TraceOpCode::constant) {
-                    code.push_back(ir);
-                    cse[ir] = code.size()-1;
-                    return code.size()-1;
-                }
-            }
-        }
-        if(ir.op == TraceOpCode::store) {
-            for(IRRef i = code.size()-1; i != cse.find(ir)->second; i--) {
-                if(code[i].op == TraceOpCode::store && ir.a == code[i].a && code[code[i].b].op != TraceOpCode::constant) {
-                    code.push_back(ir);
-                    cse[ir] = code.size()-1;
-                    return code.size()-1;
-                }
-            }
-        }*/
-
-        return cse.find(ir)->second;
+        return i->second;
     }
     else {
-
-        // (1) some type of guard strengthening and guard lifting to permit fusion
-        // (2) determine fuseable sequences and uses between sequences.
-        // (3) from the back to the front, replace uses in the loop with uses outside of the loop,
-        //          IF PROFITABLE
-        // (4) DCE
-
-        // Do LICM as DCE rather than CSE.
-
-        // want to do selective, cost driven cse...
-        // replacing instruction with instruction outside the loop results in potentially high cost.
-        // at each point I can choose to use CSE or recompute the instruction we are on.
-        
-        // But if the entire thing can be CSE'd that's great e.g. seq of maps followed by sum.
-        // So want to do a backwards pass?
-        // For a given instruction we know all uses. If dead, no need to compute.
-        // If we're going to materialize it in the loop anyway, we should lift it out.
-        // If we're not going to materialize it in the loop, we should selectively lift it out.
-
-        // Decision has to be made while/after fusion decisions.
-        // What would make us materialize in the loop?
-        //      Gather from the vector
-        //      
         code.push_back(ir);
         cse[ir] = code.size()-1;
+
+        if(ir.reenter.reenter != 0) {
+            exits[code.size()-1] = BuildExit( snapshot, ir.reenter, exits.size()-1 );
+        }
         return code.size()-1;
     }
 }
@@ -266,10 +256,11 @@ double JIT::Opcost(std::vector<IR>& code, IR ir) {
             case TraceOpCode::loop:
             case TraceOpCode::brcast:
             case TraceOpCode::phi:
-            case TraceOpCode::length:
             case TraceOpCode::rep:
-            case TraceOpCode::elength:
-            case TraceOpCode::slength:
+            case TraceOpCode::length:
+            case TraceOpCode::encode:
+            case TraceOpCode::decodena:
+            case TraceOpCode::decodevl:
             case TraceOpCode::olength:
             case TraceOpCode::alength:
             case TraceOpCode::lenv:
@@ -277,6 +268,8 @@ double JIT::Opcost(std::vector<IR>& code, IR ir) {
             case TraceOpCode::cenv:
             case TraceOpCode::reshape:
             case TraceOpCode::constant:
+            case TraceOpCode::box:
+            case TraceOpCode::unbox:
             case TraceOpCode::nop:
                 return 10000000000000;
                 break;
@@ -433,7 +426,7 @@ JIT::IRRef JIT::FWD(std::vector<IR> const& code, IRRef i, bool& loopCarried) {
             crossedLoop = true;
         }
 
-        if(code[j].op == load.op) {         // handles both load and elength
+        if(code[j].op == load.op) {         // handles load, elength, & ena
             Aliasing a1 = Alias(code, code[j].a, code[i].a);
             Aliasing a2 = Alias(code, code[j].b, code[i].b);
             if(a1 == MUST_ALIAS && a2 == MUST_ALIAS) {
@@ -446,12 +439,7 @@ JIT::IRRef JIT::FWD(std::vector<IR> const& code, IRRef i, bool& loopCarried) {
             Aliasing a2 = Alias(code, code[j].b, code[i].b);
             if(a1 == MUST_ALIAS && a2 == MUST_ALIAS) {
                 loopCarried = crossedLoop; 
-                if(load.op == TraceOpCode::load)
-                    return code[j].c;
-                else if(load.op == TraceOpCode::elength)
-                    return code[j].in.length;
-                else
-                    _error("Unexpected length");
+                return code[j].c;
             }
             else if(!(a1 == NO_ALIAS || a2 == NO_ALIAS)) return i;
         }
@@ -471,7 +459,7 @@ JIT::IRRef JIT::DSE(std::vector<IR> const& code, IRRef i, bool& crossedExit) {
 
         // flag if we cross an exit
         if( code[j].op == TraceOpCode::loop || 
-                code[j].op == TraceOpCode::load ||
+                code[j].op == TraceOpCode::unbox ||
                 code[j].op == TraceOpCode::gtrue ||
                 code[j].op == TraceOpCode::gfalse ||
                 code[j].op == TraceOpCode::gproto) 
@@ -496,7 +484,7 @@ JIT::IRRef JIT::DPE(std::vector<IR> const& code, IRRef i) {
         // don't cross guards or loop
         if( code[j].op == TraceOpCode::loop || 
                 code[j].op == TraceOpCode::nest || 
-                code[j].op == TraceOpCode::load || /* because loads have guards in them */
+                code[j].op == TraceOpCode::unbox ||
                 code[j].op == TraceOpCode::gtrue ||
                 code[j].op == TraceOpCode::gfalse ||
                 code[j].op == TraceOpCode::gproto) 
@@ -532,7 +520,7 @@ JIT::IRRef JIT::EmitOptIR(
             case TraceOpCode::curenv: 
             {
                 if(snapshot.stack.size() == 0) {
-                    return Insert(thread, code, cse, ir);
+                    return Insert(thread, code, cse, snapshot, ir);
                 }
                 else {
                     return snapshot.stack.back().environment;
@@ -542,7 +530,7 @@ JIT::IRRef JIT::EmitOptIR(
             case TraceOpCode::newenv: {
                 std::tr1::unordered_map<IR, IRRef> tcse;
                 ir.a = forward[ir.a]; ir.b = forward[ir.b]; ir.c = forward[ir.c];
-                IRRef f = Insert(thread, code, tcse, ir);
+                IRRef f = Insert(thread, code, tcse, snapshot, ir);
                 snapshot.memory.insert(f);
                 return f;
             } break;
@@ -550,24 +538,6 @@ JIT::IRRef JIT::EmitOptIR(
             case TraceOpCode::load: { 
                 ir.a = forward[ir.a];
                 ir.b = forward[ir.b];
-                Variable v = { ir.a, (int64_t)ir.b };
-                code.push_back(ir);
-                bool loopCarried;
-                IRRef f = FWD(code, code.size()-1, loopCarried);
-                if(f != code.size()-1) {
-                    code.pop_back();
-                }
-                else {
-                    exits[code.size()-1] = BuildExit( snapshot, ir.reenter, exits.size()-1 );
-                }
-                return f;
-            } break;
-            
-            case TraceOpCode::elength:
-            {
-                ir.a = forward[ir.a];
-                ir.b = forward[ir.b];
-                Variable v = { ir.a, (int64_t)ir.b };
                 code.push_back(ir);
                 bool loopCarried;
                 IRRef f = FWD(code, code.size()-1, loopCarried);
@@ -581,16 +551,15 @@ JIT::IRRef JIT::EmitOptIR(
                 ir.a = forward[ir.a];
                 ir.b = forward[ir.b];
                 ir.c = forward[ir.c];
-                Variable v = { ir.a, (int64_t)ir.b };
                 IRRef f = ir.c;
                 std::tr1::unordered_map<IR, IRRef> tcse;
-                IRRef s = Insert(thread, code, tcse, ir);
+                IRRef s = Insert(thread, code, tcse, snapshot, ir);
                 snapshot.memory.insert(s);
                 if(ir.b < Loop) {
                     code[s].sunk = true;
                 }
                 bool crossedExit;
-                IRRef j = DSE(code, code.size()-1, crossedExit);    
+               IRRef j = DSE(code, code.size()-1, crossedExit);    
                 if(j != code.size()-1) {
                     snapshot.memory.erase(j);
                     if( !crossedExit )
@@ -610,32 +579,16 @@ JIT::IRRef JIT::EmitOptIR(
                 }
                 else {
                     std::tr1::unordered_map<IR, IRRef> tcse;
-                    IRRef s = Insert(thread, code, tcse, ir); 
+                    IRRef s = Insert(thread, code, tcse, snapshot, ir); 
                     snapshot.slotValues[ (int64_t)ir.b ] = s; 
-                    exits[code.size()-1] = BuildExit( snapshot, ir.reenter, exits.size()-1 );
                     return s;
                 }
             } break;
 
-            case TraceOpCode::slength: {
-                std::map< int64_t, IRRef >::const_iterator i
-                    = snapshot.slotLengths.find( (int64_t)ir.b );
-                if(i != snapshot.slotLengths.end()) {
-                    return i->second;
-                }
-                else {
-                    std::tr1::unordered_map<IR, IRRef> tcse;
-                    IRRef s = Insert(thread, code, tcse, ir); 
-                    snapshot.slotLengths[ (int64_t)ir.b ] = s; 
-                    return s;
-                }
-            } break;
-            
             case TraceOpCode::sstore: {
                 ir.c = forward[ir.c];
                 snapshot.slots[ (int64_t)ir.b ] = ir.c;
                 snapshot.slotValues[ (int64_t)ir.b ] = ir.c;
-                snapshot.slotLengths[ (int64_t)ir.b ] = ir.out.length;
                 return ir.c;
             } break;
 
@@ -644,7 +597,7 @@ JIT::IRRef JIT::EmitOptIR(
                 if(code[ir.a].op == TraceOpCode::newenv)
                     return code[ir.a].a;
                 else
-                    return Insert(thread, code, cse, ir); 
+                    return Insert(thread, code, cse, snapshot, ir); 
             } break;
 
             case TraceOpCode::denv: {
@@ -652,7 +605,7 @@ JIT::IRRef JIT::EmitOptIR(
                 if(code[ir.a].op == TraceOpCode::newenv)
                     return code[ir.a].b;
                 else
-                    return Insert(thread, code, cse, ir); 
+                    return Insert(thread, code, cse, snapshot, ir); 
             } break;
 
             case TraceOpCode::cenv: {
@@ -660,18 +613,13 @@ JIT::IRRef JIT::EmitOptIR(
                 if(code[ir.a].op == TraceOpCode::newenv)
                     return code[ir.a].c;
                 else
-                    return Insert(thread, code, cse, ir); 
+                    return Insert(thread, code, cse, snapshot, ir); 
             } break;
 
             case TraceOpCode::kill: {
                 std::map<int64_t, IRRef>::iterator i = snapshot.slotValues.begin();
                 while(i != snapshot.slotValues.end()) {
                     if(i->first <= ir.a) snapshot.slotValues.erase(i++);
-                    else ++i;
-                }
-                i = snapshot.slotLengths.begin();
-                while(i != snapshot.slotLengths.end()) {
-                    if(i->first <= ir.a) snapshot.slotLengths.erase(i++);
                     else ++i;
                 }
                 return 0;
@@ -695,21 +643,80 @@ JIT::IRRef JIT::EmitOptIR(
             case TraceOpCode::gfalse: 
             case TraceOpCode::gtrue: {
                 ir.a = forward[ir.a];
-                IRRef f = Insert(thread, code, cse, ir);
-                if(f == code.size()-1)
-                    exits[code.size()-1] = BuildExit( snapshot, ir.reenter, exits.size()-1 );
-                return 0;
+                return Insert(thread, code, cse, snapshot, ir);
             } break;
             case TraceOpCode::scatter: {
                 ir.a = forward[ir.a]; ir.b = forward[ir.b]; ir.c = forward[ir.c];
-                return Insert(thread, code, cse, ir);
+                return Insert(thread, code, cse, snapshot, ir);
+            } break;
+
+            case TraceOpCode::box: {
+                ir.a = forward[ir.a];
+                if(code[ir.a].op == TraceOpCode::unbox)
+                    return code[ir.a].a;
+                else
+                    return Insert(thread, code, cse, snapshot, ir);
+            } break;
+
+            case TraceOpCode::unbox: {
+                ir.a = forward[ir.a];
+                if(code[ir.a].op == TraceOpCode::box)
+                    return code[ir.a].a;
+                else {
+                    return Insert(thread, code, cse, snapshot, ir);
+                }
+            } break;
+
+            case TraceOpCode::length: {
+                ir.a = forward[ir.a];
+                if(code[ir.a].op == TraceOpCode::box)
+                    return code[code[ir.a].a].out.length;
+                else {
+                    return Insert(thread, code, cse, snapshot, ir);
+                }
+            } break;
+
+            case TraceOpCode::decodevl: {
+                ir.a = forward[ir.a];
+                if(code[ir.a].op == TraceOpCode::encode)
+                    return code[ir.a].a;
+                else {
+                    return ir.a;
+                    //return Insert(thread, code, cse, snapshot, ir);
+                }
+            } break;
+
+            case TraceOpCode::decodena: {
+                ir.a = forward[ir.a];
+                if(code[ir.a].op == TraceOpCode::encode)
+                    return code[ir.a].b;
+                else {
+                    return Insert(thread, code, cse, snapshot, ir);
+                }
+            } break;
+
+            case TraceOpCode::encode: {
+                ir.a = forward[ir.a];
+                ir.b = forward[ir.b];
+                if(ir.b == FalseRef)
+                    return ir.a;
+                else if(code[ir.a].op == TraceOpCode::decodevl
+                    &&  code[ir.b].op == TraceOpCode::decodena
+                    &&  code[ir.a].a == code[ir.b].a)
+                    return code[ir.a].a;
+                else if(code[ir.b].op == TraceOpCode::decodena
+                    &&  ir.a == code[ir.b].a)
+                    return ir.a;
+                else {
+                    return Insert(thread, code, cse, snapshot, ir);
+                }
             } break;
 
             case TraceOpCode::brcast:
             case TraceOpCode::olength:
             UNARY_FOLD_SCAN_BYTECODES(CASE) {
                 ir.a = forward[ir.a];
-                return Insert(thread, code, cse, ir);
+                return Insert(thread, code, cse, snapshot, ir);
             } break;
 
             case TraceOpCode::reshape:
@@ -719,14 +726,14 @@ JIT::IRRef JIT::EmitOptIR(
             BINARY_BYTECODES(CASE)
             {
                 ir.a = forward[ir.a]; ir.b = forward[ir.b];
-                return Insert(thread, code, cse, ir);
+                return Insert(thread, code, cse, snapshot, ir);
             } break;
 
             case TraceOpCode::seq:
             TERNARY_BYTECODES(CASE)
             {
                 ir.a = forward[ir.a]; ir.b = forward[ir.b]; ir.c = forward[ir.c];
-                return Insert(thread, code, cse, ir);
+                return Insert(thread, code, cse, snapshot, ir);
             } break;
 
             case TraceOpCode::nest:
@@ -734,17 +741,12 @@ JIT::IRRef JIT::EmitOptIR(
             case TraceOpCode::loop:
             {
                 std::tr1::unordered_map<IR, IRRef> tcse;
-                return Insert(thread, code, tcse, ir);
+                return Insert(thread, code, tcse, snapshot, ir);
             } break;
             
             CASE(constant)
             {
-                return Insert(thread, code, cse, ir);
-            } break;
-
-            case TraceOpCode::length:
-            {
-                return code[forward[ir.a]].out.length;
+                return Insert(thread, code, cse, snapshot, ir);
             } break;
 
             default:
@@ -801,7 +803,10 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
                 //  LuaJIT looks for allocations on the right since they, by definition
                 //  don't depend on earlier iterations, so a loop rotation would eliminate
                 //  their LCD.
-                if(ir.a != ir.b) {
+                if(code[ir.a].op == TraceOpCode::box && code[ir.b].op == TraceOpCode::box) {
+                    // nothing
+                }
+                else if(ir.a != ir.b) {
                     ROOT;
                     MARK(ir.a); MARK(ir.b);
                 }
@@ -814,7 +819,6 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
             
             CASE(constant)
             case TraceOpCode::nop:
-            case TraceOpCode::slength:
                 break;
 
             case TraceOpCode::seq:
@@ -824,11 +828,11 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
                 MARK(ir.a); MARK(ir.b); MARK(ir.c);
             } break;
 
+            case TraceOpCode::encode:
             case TraceOpCode::reshape:
             case TraceOpCode::gather:
             case TraceOpCode::rep:
             case TraceOpCode::alength:
-            case TraceOpCode::elength:
             BINARY_BYTECODES(CASE) {
                 MARK(ir.a); MARK(ir.b);
             } break;
@@ -837,6 +841,11 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
                 MARK(ir.c);
             } break;
 
+            case TraceOpCode::box:
+            case TraceOpCode::unbox:
+            case TraceOpCode::length:
+            case TraceOpCode::decodevl:
+            case TraceOpCode::decodena:
             case TraceOpCode::brcast:
             case TraceOpCode::olength:
             case TraceOpCode::cenv:
@@ -846,7 +855,6 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
                 MARK(ir.a);
             } break;
 
-            case TraceOpCode::length:
             case TraceOpCode::kill:
             case TraceOpCode::push:
             case TraceOpCode::pop: {
@@ -883,7 +891,8 @@ void JIT::SINK(void) {
     
         // upsweep
         for(IRRef i = code.size()-1; i < code.size(); --i) {
-            sink(marks, i);
+            if(code[i].live)
+                sink(marks, i);
         }
 
         // downsweep, mark stores of marked allocations??
@@ -891,13 +900,15 @@ void JIT::SINK(void) {
 
         phiChanged = false;
         for(IRRef i = code.size()-2; code[i].op == TraceOpCode::phi; --i) {
-            if(marks[code[i].a] || marks[code[i].b]) {
-                marks[i] = true;
-            }
-            if(marks[code[i].a] != marks[code[i].b]) {
-                phiChanged = true;
-                marks[code[i].a] = true;
-                marks[code[i].b] = true;
+            if(code[i].live) {
+                if(marks[code[i].a] || marks[code[i].b]) {
+                    marks[i] = true;
+                }
+                if(marks[code[i].a] != marks[code[i].b]) {
+                    phiChanged = true;
+                    marks[code[i].a] = true;
+                    marks[code[i].b] = true;
+                }
             }
         }
     }

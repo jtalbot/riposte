@@ -1,13 +1,14 @@
-fib <- function(V) {
-    a <- 0
+fib <- function(N) {
+    a <- 1
     b <- 1
-    for(i in V) {
+    i <- 0
+    while(i < N) {
+        i <- i+1
         t <- b
         b <- b+a
         a <- t
     }
-    b
+    b 
 }
 
-V <- 1:10000000
-system.time(fib(V))
+system.time(fib(100000000))

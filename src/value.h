@@ -37,6 +37,7 @@ struct Value {
 
 	static void Init(Value& v, Type::Enum type, int64_t length) {
 		v.header =  type + (length<<4);
+        v.i = 0;
 	}
 
 	// Warning: shallow equality!
@@ -111,16 +112,22 @@ class Thread;
 struct Prototype;
 class Environment;
 
-template<Type::Enum VType, typename ElementType, bool Recursive>
+template<typename Impl, Type::Enum VType, typename ElementType, bool Recursive>
 struct Vector : public Value {
 
 	typedef ElementType Element;
 	static const Type::Enum VectorType = VType;
 	static const bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive;
 
+    static const uint64_t MAY_HAVE_NA = (1<<0);
+
 	struct Inner : public gc {
+        uint64_t flags;
+        uint64_t padding;
+        ElementType interval[2];
 		ElementType data[];
 	};
+
 
 	ElementType const* v() const { 
 		return (canPack && isScalar()) ? 
@@ -134,23 +141,27 @@ struct Vector : public Value {
 	ElementType& operator[](int64_t index) { return v()[index]; }
 	ElementType const& operator[](int64_t index) const { return v()[index]; }
 
-	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
+	static Impl& Init(Value& v, int64_t length, 
+            ElementType const& lowerBound, ElementType const& upperBound, bool mayHaveNA) {
 		Value::Init(v, VectorType, length);
 		if((canPack && length > 1) || (!canPack && length > 0)) {
 			int64_t l = length;
 			// round l up to nearest even number so SSE can work on tail region
 			l += (int64_t)((uint64_t)l & 1);
 			int64_t length_aligned = (l < 128) ? (l + 1) : l;
-			//v.p = Recursive ? new (GC, sizeof(Element)*length_aligned) Inner() :
-			//	new (PointerFreeGC, sizeof(Element)*length_aligned) Inner();
+            // necessary on linux...
 			v. p = Recursive ?
-					GC_malloc(sizeof(Element)*length_aligned) :
-					GC_malloc_atomic(sizeof(Element)*length_aligned);
-			assert(l < 128 || (0xF & (int64_t)v.p) == 0);
+					GC_malloc(sizeof(Inner) + sizeof(Element)*length_aligned) :
+					GC_malloc_atomic(sizeof(Inner) + sizeof(Element)*length_aligned);
+            assert(l < 128 || (0xF & (int64_t)v.p) == 0);
 			if( (0xF & (int64_t)v.p) != 0)
 				v.p =  (char*)v.p + 0x8;
+
+            Impl& i = (Impl&)v;
+            i.setMayHaveNA(mayHaveNA);
+            i.setInterval(lowerBound, upperBound);
 		}
-		return (Vector<VType, ElementType, Recursive>&)v;
+		return (Impl&)v;
 	}
 
 	static void InitScalar(Value& v, ElementType const& d) {
@@ -159,11 +170,89 @@ struct Vector : public Value {
 			v.scalar<ElementType>() = d;
 		else {
 			v.p = Recursive ?
-					GC_malloc(sizeof(Element)*4) :
-					GC_malloc_atomic(sizeof(Element)*4);
+					GC_malloc(sizeof(Inner) + sizeof(Element)*4) :
+					GC_malloc_atomic(sizeof(Inner) + sizeof(Element)*4);
 			*(Element*)v.p = d;
 		}
 	}
+
+	static Impl c() { 
+        Impl c(0); 
+        return c; 
+    }
+	
+    static Impl c(Element v0) { 
+        Impl c(1); 
+        c[0] = v0; 
+        return c; 
+    }
+
+	static Impl c(Element v0, Element v1) { 
+        Impl c(2); 
+        c[0] = v0; c[1] = v1; 
+        return c; 
+    }
+
+	static Impl c(Element v0, Element v1, Element v2) { 
+        Impl c(3); 
+        c[0] = v0; c[1] = v1; c[2] = v2; 
+        return c; 
+    }
+	
+    static Impl c(Element v0, Element v1, Element v2, Element v3) { 
+        Impl c(4); 
+        c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; 
+        return c; 
+    }
+
+	static Impl NA() { static Impl na = Impl::c(Impl::NAelement); return na; }
+
+    bool getMayHaveNA() const {
+        if(isScalar())
+            return Impl::isNA(v()[0]);
+        else
+            return ( ((Inner*)p)->flags & MAY_HAVE_NA ) != 0; 
+    }
+
+    void setMayHaveNA(bool f) { 
+        if(isScalar())
+            return;
+
+        if(f) 
+            ((Inner*)p)->flags |= MAY_HAVE_NA;
+        else
+            ((Inner*)p)->flags &= ~MAY_HAVE_NA; 
+    }
+
+    Element getLowerBound() const { 
+        if(isScalar())
+            return v()[0];
+        else
+            return ((Inner*)p)->interval[0]; 
+    }
+    Element getUpperBound() const { 
+        if(isScalar())
+            return v()[0];
+        else
+            return ((Inner*)p)->interval[1]; 
+    }
+
+    void    setLowerBound(Element e) {
+        if(!isScalar())
+            ((Inner*)p)->interval[0] = e; 
+    }
+
+    void    setUpperBound(Element e) {  
+        if(!isScalar())
+            ((Inner*)p)->interval[1] = e; 
+    }
+
+    void    setInterval(Element l, Element u) {
+        if(!isScalar()) { 
+            ((Inner*)p)->interval[0] = l; 
+            ((Inner*)p)->interval[1] = u;
+        }
+    } 
 };
 
 union _doublena {
@@ -173,22 +262,14 @@ union _doublena {
 
 
 #define VECTOR_IMPL(Name, Element, Recursive) 				\
-struct Name : public Vector<Type::Name, Element, Recursive> { 			\
-	explicit Name(int64_t length=0) { Init(*this, length); } 	\
-	static Name c() { Name c(0); return c; } \
-	static Name c(Element v0) { Name c(1); c[0] = v0; return c; } \
-	static Name c(Element v0, Element v1) { Name c(2); c[0] = v0; c[1] = v1; return c; } \
-	static Name c(Element v0, Element v1, Element v2) { Name c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } \
-	static Name c(Element v0, Element v1, Element v2, Element v3) { Name c(4); c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; return c; } \
-	const static Element NAelement; \
-	static Name NA() { static Name na = Name::c(NAelement); return na; }  \
-	static Name& Init(Value& v, int64_t length) { return (Name&)Vector<Type::Name, Element, Recursive>::Init(v, length); } \
-	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); }\
+struct Name : public Vector<Name, Type::Name, Element, Recursive> { 			\
+	explicit Name(int64_t length=0) { Init(*this, length, LowerBound, UpperBound, true); } 	\
+	const static Element NAelement, LowerBound, UpperBound; \
 /* note missing }; */
 
 VECTOR_IMPL(Null, unsigned char, false)  
-	static Null Singleton() { static Null s = Null::c(); return s; } 
-	static bool isNA() { return false; }
+	static Null Singleton() { static Null s(0); return s; } 
+	static bool isNA(unsigned char c) { return false; }
 	static bool isCheckedNA() { return false; }
 };
 
@@ -217,6 +298,7 @@ VECTOR_IMPL(Integer, int64_t, false)
 }; 
 
 VECTOR_IMPL(Double, double, false)
+	const static int64_t NAelementInt;
 	static Double Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
 	static Double NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
 	static Double NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } 

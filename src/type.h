@@ -22,6 +22,7 @@
 	_(List,		"list")		\
 	_(Function,	"function")	\
 	_(Environment,	"environment")	\
+	_(Any,	    "any")	\
 
 DECLARE_ENUM(Type, TYPES)
 
