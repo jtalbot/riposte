@@ -1,3 +1,9 @@
+/*
+    Riposte, Copyright (C) 2010-2012 Stanford University.
+    
+    main.cpp - the REPL loop
+*/
+
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -129,21 +135,16 @@ static void usage()
 {
 	l_message(0,"usage: riposte [options]... [script [args]...]");
 	l_message(0,"Available options are:");
+    l_message(0,"    -f, --file         execute R script");
+    l_message(0,"    -j N               launch Riposte with N threads");
+    l_message(0,"    -v, --verbose      enable verbose output");
+    l_message(0,"    -i                 run interpreter ONLY, disable JIT");
 }
 
 int
 main(int argc, char** argv)
 {
-    int rc;
-
     /*  getopt parsing  */
-
-    int ch;
-    int fd = -1;
-    char * filename = NULL;
-    bool echo = true;
-    int threads = 1; 
-    bool jit = true;
 
     static struct option longopts[] = {
         { "debug",     0,     NULL,           'd' },
@@ -155,18 +156,21 @@ main(int argc, char** argv)
     };
 
     /*  Parse commandline options  */
+    char * filename = NULL;
+    bool echo = true;
+    int threads = 1; 
+    bool jit = true;
+
+    int ch;
     opterr = 0;
     while ((ch = getopt_long(argc, argv, "df:hj:vqi", longopts, NULL)) != -1)
+    {
         switch (ch) {
             case 'd':
                 debug++;
                 break;
             case 'f':
                 filename = optarg;
-                break;
-            case 'h':
-                usage();
-                exit (-1);
                 break;
             case 'v':
                 verbose++;
@@ -182,41 +186,40 @@ main(int argc, char** argv)
             case 'i':
                 jit = false;
                 break;
+            case 'h':
             default:
-                //usage();
-                //exit (-1);
+                usage();
+                exit(-1);
                 break;
         }
-
-    //argc -= optind;
-    //argv += optind;
+    }
 
     d_message(1,NULL,"Command option processing complete");
 
-    /* start garbage collector */
+    /* Start garbage collector */
     GC_INIT();
 
+    /* Initialize execution state */
     State state(threads, argc, argv);
     state.verbose = verbose;
     state.jitEnabled = jit;
     Thread& thread = state.getMainThread();
 
+    /* Load built in & base functions */
     try {
         registerCoreFunctions(state);	
         registerCoerceFunctions(state);	
         loadLibrary(thread, "library", "core");
-        //loadLibrary(thread, "library", "base");
-        //loadLibrary(thread, "library", "stats");
 
     } 
     catch(RiposteException& e) { 
         e_message("Error", e.kind().c_str(), e.what().c_str());
     } 
     dumpWarnings(thread, std::cout);
-    
+   
+ 
     /* Either execute the specified file or read interactively from stdin  */
-
-    /* Load the file containing the script we are going to run */
+    int rc;
     if(filename != NULL) {
         std::ifstream in(filename);
         rc = run(state, in, std::cout, false);
@@ -226,6 +229,7 @@ main(int argc, char** argv)
         rc = run(state, std::cin, std::cout, true);
     }
 
+
     /* Session over */
 
     fflush(stdout);
@@ -233,5 +237,4 @@ main(int argc, char** argv)
 
     return rc;
 }
-
 

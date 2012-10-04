@@ -2,10 +2,10 @@
 UNAME := $(shell uname -s)
 
 CXX := clang++ 
-IDIRS := -I/opt/local/include
+IDIRS := -I/opt/local/include -Idependencies
 LDIRS := -L/usr/local/lib -L/opt/local/lib
 
-CXXFLAGS := $(IDIRS) -Wall -msse4.1 `llvm-config --cxxflags` -fexceptions -std=c++11
+CXXFLAGS := $(IDIRS) -Wall -msse4.1 `llvm-config --cxxflags` -fexceptions
 LFLAGS := $(LDIRS) -L. -fpic -lgc -g `llvm-config --ldflags --libs engine bitreader scalaropts`
 
 ifeq ($(UNAME),Linux)

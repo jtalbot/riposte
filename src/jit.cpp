@@ -7,8 +7,8 @@
 
 DEFINE_ENUM_TO_STRING(TraceOpCode, TRACE_ENUM)
 
-const JIT::Shape JIT::Shape::Empty = { 0, true, 0 };
-const JIT::Shape JIT::Shape::Scalar = { 1, true, 1 };
+const JIT::Shape JIT::Shape::Empty( 0, true, 0 );
+const JIT::Shape JIT::Shape::Scalar( 1, true, 1 );
 
 const JIT::IRRef JIT::FalseRef = 2;
 
@@ -380,7 +380,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
 
             // TODO: needs to know the recorded reshaped length for matching with other same 
             // sized shapes
-            Shape reshaped = { len, false, 0 };
+            Shape reshaped( len, false, 0 );
             
             Shape s = MergeShapes(a.s, b.s, &inst);
 
@@ -744,7 +744,7 @@ void JIT::Replay(Thread& thread) {
     }
     else {
         IR exit( TraceOpCode::exit, Type::Nil, Shape::Empty, Shape::Empty);
-        exit.reenter = (Reenter) { startPC, true };
+        exit.reenter = Reenter( startPC, true );
         Insert(thread, code, cse, snapshot, exit);
     }
 }
