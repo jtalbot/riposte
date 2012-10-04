@@ -15,4 +15,4 @@
 3L%/%2L
 
 #complex
-#not implemented
+#Not supported by R

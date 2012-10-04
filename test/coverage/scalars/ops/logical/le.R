@@ -19,7 +19,7 @@
 
 #characters
 "" <= "a"
-"a" < "a"
+"a" <= "a"
 "a" <= "bat"
 "bat" <= "cries"
 "cries" <= "\n"

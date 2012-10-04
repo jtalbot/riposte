@@ -5,30 +5,22 @@
 */
 
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <err.h>
-#include <fcntl.h>
-#include <string>
-#include <getopt.h>
 #include <fstream>
-#include <iostream>
+#include <getopt.h>
 
-#include "value.h"
 #include "parser.h"
 #include "compiler.h"
 #include "library.h"
-
-void registerCoreFunctions(State& state);
-void registerCoerceFunctions(State& state);
-
-extern int opterr;
 
 /*  Globals  */
 static int debug = 0;
 static int verbose = 0;
 
-static void info(State& state, std::ostream& out) {
+void registerCoreFunctions(State& state);
+void registerCoerceFunctions(State& state);
+
+static void info(State& state, std::ostream& out) 
+{
 	out << "Riposte (" << state.nThreads << " threads) "
         << "-- Copyright (C) 2010-2012 Stanford University" << std::endl;
     out << "http://jtalbot.github.com/riposte/" << std::endl;
@@ -63,7 +55,8 @@ static void l_message(const int level, const char *msg)
 	fflush(stderr);
 }
  
-static Value parse(State& state, std::istream & in, std::ostream & out, bool interactive) {
+static Value parse(State& state, std::istream & in, std::ostream & out, bool interactive) 
+{
     std::string input;
 	Value ppr = Value::Nil();
 	
@@ -94,7 +87,8 @@ static Value parse(State& state, std::istream & in, std::ostream & out, bool int
 	return ppr;
 }
 
-static void dumpWarnings(Thread& thread, std::ostream& out) {
+static void dumpWarnings(Thread& thread, std::ostream& out) 
+{
     if(thread.warnings.size() > 0) {
         out << "There were " << intToStr(thread.warnings.size()) << " warnings." << std::endl;
         for(int64_t i = 0; i < (int64_t)thread.warnings.size(); i++) {
@@ -104,8 +98,8 @@ static void dumpWarnings(Thread& thread, std::ostream& out) {
     thread.warnings.clear();
 } 
 
-static int run(State& state, std::istream& in, std::ostream& out, bool interactive) {
-	
+static int run(State& state, std::istream& in, std::ostream& out, bool interactive) 
+{
     Thread& thread = state.getMainThread();
 
     int rc = 0;
@@ -134,15 +128,16 @@ static int run(State& state, std::istream& in, std::ostream& out, bool interacti
 static void usage()
 {
 	l_message(0,"usage: riposte [options]... [script [args]...]");
-	l_message(0,"Available options are:");
+	l_message(0,"options:");
     l_message(0,"    -f, --file         execute R script");
     l_message(0,"    -j N               launch Riposte with N threads");
     l_message(0,"    -v, --verbose      enable verbose output");
     l_message(0,"    -i                 run interpreter ONLY, disable JIT");
 }
 
-int
-main(int argc, char** argv)
+extern int opterr;
+
+int main(int argc, char** argv)
 {
     /*  getopt parsing  */
 
