@@ -110,10 +110,10 @@
 	'!=' {token( TOKEN_NE, CreateSymbol(Strings::neq) );};
 	'&&' {token( TOKEN_AND2, CreateSymbol(Strings::land2) );};
 	'||' {token( TOKEN_OR2, CreateSymbol(Strings::lor2) );};
-	'<-' {token( TOKEN_LEFT_ASSIGN, CreateSymbol(Strings::assign) );};
-	'->' {token( TOKEN_RIGHT_ASSIGN, CreateSymbol(Strings::assign) );};
-	'->>' {token( TOKEN_RIGHT_ASSIGN, CreateSymbol(Strings::assign2) );};
-	'<<-' {token( TOKEN_LEFT_ASSIGN, CreateSymbol(Strings::assign2) );};
+	'<-' {token( TOKEN_LEFT_ASSIGN, CreateSymbol(Strings::assignOp) );};
+	'->' {token( TOKEN_RIGHT_ASSIGN, CreateSymbol(Strings::assignOp) );};
+	'->>' {token( TOKEN_RIGHT_ASSIGN, CreateSymbol(Strings::assign2Op) );};
+	'<<-' {token( TOKEN_LEFT_ASSIGN, CreateSymbol(Strings::assign2Op) );};
 	'?' {token( TOKEN_QUESTION, CreateSymbol(Strings::question) );};
 	
 	# Special Operators.

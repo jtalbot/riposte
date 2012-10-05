@@ -35,6 +35,10 @@
 #include "llvm/Support/system_error.h"
 #include "llvm/Intrinsics.h"
 
+void DebugMarker(char* string) {
+    printf("%s\n", string);
+}
+
 struct LLVMState {
     llvm::Module * M;
     llvm::LLVMContext * C;
@@ -318,6 +322,8 @@ private:
 
 public:
 
+    size_t index;
+
     Register( FunctionBuilder& builder, Type::Enum type, JIT::Shape shape ) 
         : type(type)
         , initialized(false)
@@ -342,11 +348,8 @@ public:
 
     void Initialize(FunctionBuilder& builder, Register& len) {
         if(!Initialized()) {
-            llvm::Value* l = builder.CreateLoad(len.value(builder));
-            builder.CreateStore(
-                builder.Call(std::string("MALLOC_")+Type::toString(type), l), v);
-            this->l = builder.EntryBlock().CreateAlloca(l->getType());
-            builder.CreateStore(l, this->l);   
+            l = builder.EntryBlock().CreateInitializedAlloca(builder.getInt64(0)); 
+            Resize(builder, builder.CreateLoad(len.value(builder)));
             this->initialized = true;
         }
     }
@@ -377,9 +380,6 @@ public:
     }
 
     void Resize(FunctionBuilder& builder, llvm::Value* newlen) {
-        if(l == 0) 
-            _error("Resizing constant length register");
-        
         llvm::Value* newv = 
             builder.Call(std::string("REALLOC_")+Type::toString(type), value(builder), l, newlen);
         
@@ -387,37 +387,51 @@ public:
     }
     
     llvm::Value* ExtractAlignedVector(FunctionBuilder& builder, llvm::Value* index, size_t width) {
+
         llvm::Value* a = value(builder);
-        a = builder.CreateInBoundsGEP(a, index);
+        if( type == Type::Double 
+         || type == Type::Integer 
+         || type == Type::Logical 
+         || type == Type::Character) {   
+            a = builder.CreateInBoundsGEP(a, index);
 
-        llvm::Type* t = llvm::VectorType::get(
-                ((llvm::SequentialType*)a->getType())->getElementType(),
-                width)->getPointerTo();
-    
-        a = builder.CreatePointerCast(a, t);
-        a = builder.CreateLoad(a);
+            llvm::Type* t = llvm::VectorType::get(
+                    ((llvm::SequentialType*)a->getType())->getElementType(),
+                    width)->getPointerTo();
 
-        if(type == Type::Logical) {
-            a = builder.CreateTrunc(a, llvm::VectorType::get(builder.getInt1Ty(), width));
+            a = builder.CreatePointerCast(a, t);
+            a = builder.CreateLoad(a);
+
+            if(type == Type::Logical) {
+                a = builder.CreateTrunc(a, llvm::VectorType::get(builder.getInt1Ty(), width));
+            }
         }
         return a;
     }
 
     void InsertAlignedVector(FunctionBuilder& builder, llvm::Value* a, llvm::Value* index, size_t width) {
-        llvm::Value* out = value(builder);
-        out = builder.CreateInBoundsGEP(out, index);
+        if( type == Type::Double 
+         || type == Type::Integer 
+         || type == Type::Logical 
+         || type == Type::Character) {      
+            llvm::Value* out = value(builder);
+            out = builder.CreateInBoundsGEP(out, index);
 
-        if(type == Type::Logical) {
-            a = builder.CreateSExt(a, llvm::VectorType::get(builder.getInt8Ty(), width));
+            if(type == Type::Logical) {
+                a = builder.CreateSExt(a, llvm::VectorType::get(builder.getInt8Ty(), width));
+            }
+
+            llvm::Type* t = llvm::VectorType::get(
+                    ((llvm::SequentialType*)a->getType())->getElementType(),
+                    width)->getPointerTo();
+
+            out = builder.CreatePointerCast(out, t);
+
+            builder.CreateStore(a, out);
         }
-
-        llvm::Type* t = llvm::VectorType::get(
-                ((llvm::SequentialType*)a->getType())->getElementType(),
-                width)->getPointerTo();
-
-        out = builder.CreatePointerCast(out, t);
-
-        builder.CreateStore(a, out);
+        else {
+            builder.CreateStore(a, v);
+        }
     }
 };
 
@@ -865,10 +879,20 @@ struct Fusion {
                 break;
             
             case TraceOpCode::phi:
-                if(jit.code[ir.a].reg != jit.code[ir.b].reg) 
+                if(jit.code[ir.a].reg != jit.code[ir.b].reg) { 
+                    // if size has changed, resize the destination register
+                    if(ir.in.length != ir.out.length) {
+                        FunctionBuilder b = builder.Appender(header);
+                        llvm::Value* newlen = b.CreateLoad(RawLoad(builder, ir.in.length));
+                        registers[jit.code[ir.a].reg].Resize(b, newlen);
+                    }
                     outs[jit.code[ir.a].reg] = Load(builder, ir.b);
-                else
+                }
+                else {
+                    // register is the same, do nothing.
+                    // if the size changed, another instruction already resized this register
                     instructions--;
+                }
                 break;
             
             case TraceOpCode::gather: 
@@ -1236,17 +1260,18 @@ struct TraceCompiler {
         Fusion* fusion = 0;
         for(size_t i = 0; i < jit.code.size(); i++) {
             JIT::IR const& ir = jit.code[i];
-            InitializeRegister(ir);
             if(ir.live && !ir.sunk) {
                 if(Fuseable(ir)) {
                     if(!CanFuse(fusion, ir)) {
                         EndFusion(fusion);
                         fusion = StartFusion(ir);
                     }
+                    InitializeRegister(ir);
                     fusion->Emit(i);
                 }
                 else {
                     EndFusion(fusion);
+                    InitializeRegister(ir);
                     Emit(ir, i, registers[ir.reg] );
                 }
             }
@@ -1306,18 +1331,18 @@ struct TraceCompiler {
 
     Fusion* StartFusion(JIT::IR ir) {
         llvm::Value* length = 0;
-        size_t width = 2; 
+        size_t width = 1; 
 
         JIT::IRRef len = ir.in.length; 
         if(jit.code[len].op == TraceOpCode::constant &&
-                ((Integer const&)jit.constants[jit.code[len].a])[0] <= SPECIALIZE_LENGTH) {
+                ((Integer const&)jit.constants[jit.code[len].a])[0] <= 16) {
             length = 0;
             Integer const& v = (Integer const&)jit.constants[jit.code[len].a];
             width = v[0];
         } 
         else {
             length = builder.CreateLoad(value(ir.in.length));
-            width = 2;
+            width = 1;
         }
         Fusion* fusion = new Fusion(jit, FunctionBuilder( function ), registers, length, width, len);
         fusion->Open(InnerBlock);
@@ -1389,10 +1414,8 @@ struct TraceCompiler {
                 r,
                 llvm::ConstantPointerNull::get((llvm::PointerType*)r->getType()));
 
-            if(jit.exits.find(index) == jit.exits.end())
-                _error("Missing exit on unboxing operation");
-
-            EmitExit(guard, jit.exits[index], index);
+            if(jit.exits.find(index) != jit.exits.end())
+                EmitExit(guard, jit.exits[index], index);
 
             return r;
         }
@@ -1415,29 +1438,31 @@ struct TraceCompiler {
     }
 
     Register& InitializeRegister(JIT::IR const& ir) {
-        JIT::Register r = jit.registers[ir.reg];
+        Type::Enum type = jit.registers[ir.reg].type;
+        JIT::Shape shape = jit.registers[ir.reg].shape;
+
+        Register& r = registers[ir.reg];
+        r.index = ir.reg;
 
         // scatter is special. It initially needs a register that duplicates its input.
         if( ir.op == TraceOpCode::scatter )
         {
-            registers[ir.reg].Duplicate(
+            r.Duplicate(
                 builder,
                 registers[jit.code[ir.a].reg],
                 registers[jit.code[jit.code[ir.a].out.length].reg]);
         }
-        else if(!(ir.op == TraceOpCode::constant
-            || ir.op == TraceOpCode::load
-            || ir.op == TraceOpCode::sload)
-          && Unboxed(r.type) ) 
+        else if(Unboxed(type) &&
+            !(ir.op == TraceOpCode::constant || ir.op == TraceOpCode::unbox)) 
         {
-            if( r.shape.constant ) {
-                registers[ir.reg].Initialize( builder, r.shape.traceLength );
+            if( shape.constant ) {
+                r.Initialize( builder, shape.traceLength );
             }
             else {
-                registers[ir.reg].Initialize( builder, registers[jit.code[r.shape.length].reg] ); 
+                r.Initialize( builder, registers[jit.code[shape.length].reg] ); 
             }
         }
-        return registers[ir.reg];
+        return r;
     }
 
     void Emit(JIT::IR ir, size_t index, Register& reg) { 
@@ -1471,8 +1496,9 @@ struct TraceCompiler {
 
             case TraceOpCode::nest:
             {
-                llvm::Value* r = 
+                llvm::CallInst* r = 
                     builder.CreateCall((llvm::Function*)((JIT::Trace*)ir.a)->function, thread_var);
+                r->setCallingConv(llvm::CallingConv::Fast);
 
                 llvm::Value* cond = 
                     builder.CreateICmpEQ(r, builder.getInt64(0));
@@ -1692,6 +1718,8 @@ struct TraceCompiler {
         builder.CreateCondBr(cond, next, exit);
         builder.SetInsertPoint(exit);
 
+        //MARKER(std::string("Taking exit ") + intToStr(index));
+        
         // emit sunk code
         Fusion* fusion = 0;
         for(size_t i = 0; i < index; i++) {
@@ -1713,12 +1741,7 @@ struct TraceCompiler {
         }
 
         // emit sstores
-        for(std::map< int64_t, JIT::IRRef >::const_iterator i = e.snapshot.slots.begin();
-            i != e.snapshot.slots.end(); ++i) {
-            llvm::Value* c = Box(i->second);
-            Call("SSTORE", builder.getInt64(i->first), BOXED_ARG(c));
-        }
-        //MARKER(std::string("Taking exit at ") + intToStr(index));
+        //MARKER(std::string("Done with exit ") + intToStr(index));
         /*
             else if(jit.code[var.env].type == Type::Object) {
                 // dim(x)

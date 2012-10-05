@@ -142,7 +142,7 @@ struct Vector : public Value {
 	ElementType const& operator[](int64_t index) const { return v()[index]; }
 
 	static Impl& Init(Value& v, int64_t length, 
-            ElementType const& lowerBound, ElementType const& upperBound, bool mayHaveNA) {
+            ElementType lowerBound, ElementType upperBound, bool mayHaveNA) {
 		Value::Init(v, VectorType, length);
 		if((canPack && length > 1) || (!canPack && length > 0)) {
 			int64_t l = length;
@@ -164,7 +164,7 @@ struct Vector : public Value {
 		return (Impl&)v;
 	}
 
-	static void InitScalar(Value& v, ElementType const& d) {
+	static void InitScalar(Value& v, ElementType d) {
 		Value::Init(v, VectorType, 1);
 		if(canPack)
 			v.scalar<ElementType>() = d;
@@ -208,14 +208,16 @@ struct Vector : public Value {
 	static Impl NA() { static Impl na = Impl::c(Impl::NAelement); return na; }
 
     bool getMayHaveNA() const {
-        if(isScalar())
+        if(length == 0)
+            return false;
+        else if(isScalar())
             return Impl::isNA(v()[0]);
         else
             return ( ((Inner*)p)->flags & MAY_HAVE_NA ) != 0; 
     }
 
     void setMayHaveNA(bool f) { 
-        if(isScalar())
+        if(length == 0 || isScalar())
             return;
 
         if(f) 

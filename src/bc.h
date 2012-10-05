@@ -21,20 +21,19 @@
 	_(list, "list") \
 	_(dotslist, "dotslist")
 
-#define MEMORY_ACCESS_BYTECODES(_) \
-	_(mov, "mov") \
-	_(fastmov, "fastmov") \
-	_(assign, "assign") \
-	_(get, "get") \
-	_(gassign, "gassign") \
-	_(scatter1, "scatter1") \
-	_(gather1, "gather1") \
-	_(scatter, "scatter") \
-	_(gather, "gather") \
-	_(constant, "constant") \
-	_(dotdot, "dotdot") \
-	_(assign2, "assign2") \
-    _(attrget, "attrget") \
+#define MEMORY_ACCESS_BYTECODES(_)              \
+	_(get, "get")             /* get()       */ \
+	_(assign, "assign")       /* assign()    */ \
+    _(lget, "lget")           /* `x`, etc.   */ \
+    _(lassign, "lassign")     /* <-          */ \
+	_(lassign2, "lassign2")   /* <<-         */ \
+	_(scatter1, "scatter1")                     \
+	_(gather1, "gather1")                       \
+	_(scatter, "scatter")                       \
+	_(gather, "gather")                         \
+	_(constant, "constant")                     \
+	_(dotdot, "dotdot")                         \
+    _(attrget, "attrget")                       \
     _(attrset, "attrset")
 
 #define UTILITY_BYTECODES(_)\

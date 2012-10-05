@@ -15,10 +15,6 @@
 
 #include "primes.h"
 
-void marker(char* a) {
-    printf("%s\n", a);
-}
-
 Thread::RandomSeed Thread::seed[100];
 
 Thread::Thread(State& state, uint64_t index) : state(state), index(index), steals(1) {
@@ -40,9 +36,8 @@ Thread::Thread(State& state, uint64_t index) : state(state), index(index), steal
 }
 
 extern Instruction const* loop_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* fastmov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* lget_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* lassign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* gather_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -81,7 +76,7 @@ Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const
 // Control flow instructions
 
 Instruction const* call_op(Thread& thread, Instruction const& inst) {
-	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
+	Value const& f = IN(inst.a);
 	if(!f.isFunction())
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
 	Function const& func = (Function const&)f;
@@ -99,7 +94,7 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* ncall_op(Thread& thread, Instruction const& inst) {
-	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
+	Value const& f = IN(inst.a);
 	if(!f.isFunction())
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
 	Function const& func = (Function const&)f;
@@ -117,17 +112,13 @@ Instruction const* ncall_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* ret_op(Thread& thread, Instruction const& inst) {
-	// we can return futures from functions, so don't BIND
-	OPERAND(result, inst.a); FORCE(result, inst.a);	
-	
 	// We can free this environment for reuse
 	// as long as we don't return a closure...
 	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
-	if(result.isClosureSafe()) {
+	Value const& result = IN(inst.a);
+
+    if(result.isClosureSafe()) {
 		thread.environments.push_back(thread.frame.environment);
-#ifdef ENABLE_JIT
-		thread.KillEnvironment(thread.frame.environment);
-#endif
 	}
 
     if(thread.jit.state == JIT::RECORDING) {
@@ -136,24 +127,19 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
         thread.jit.Emit( JIT::IR(TraceOpCode::pop, Type::Nil, JIT::Shape::Empty, JIT::Shape::Empty) );
     }
 	
-	REGISTER(0) = result;
+	OUT(0) = result;
 	
 	thread.base = thread.frame.returnbase;
 	Instruction const* returnpc = thread.frame.returnpc;
 
 	thread.pop();
 	
-#ifdef ENABLE_JIT
-	thread.LiveEnvironment(thread.frame.environment, result);
-#endif
 	return returnpc;
 }
 
 Instruction const* rets_op(Thread& thread, Instruction const& inst) {
-	// top-level statements can't return futures, so bind 
-	OPERAND(result, inst.a); FORCE(result, inst.a); BIND(result);	
 	
-	REGISTER(0) = result;
+	OUT(0) = IN(inst.a);
 	
 	thread.base = thread.frame.returnbase;
 	thread.pop();
@@ -167,22 +153,16 @@ Instruction const* done_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* retp_op(Thread& thread, Instruction const& inst) {
-	// we can return futures from promises, so don't BIND
-	OPERAND(result, inst.a); FORCE(result, inst.a);	
-    
     if(thread.frame.dest > 0) {
-		thread.frame.env->insert((String)thread.frame.dest) = result;
+		thread.frame.env->insert((String)thread.frame.dest) = IN(inst.a);
         if(thread.jit.state == JIT::RECORDING) {
             JIT::Var ira = thread.jit.load(thread, inst.a, &inst);
             thread.jit.estore(ira, thread.frame.env, (String)thread.frame.dest);
             thread.jit.Emit( JIT::IR( TraceOpCode::pop, Type::Nil, JIT::Shape::Empty, JIT::Shape::Empty) );
         }
 	} else {
-		thread.frame.env->dots[-thread.frame.dest].v = result;
+		thread.frame.env->dots[-thread.frame.dest].v = IN(inst.a);
 	}
-#ifdef ENABLE_JIT
-	thread.LiveEnvironment(thread.frame.env, result);
-#endif	
 	thread.base = thread.frame.returnbase;
 	Instruction const* returnpc = thread.frame.returnpc;
 	thread.pop();
@@ -191,7 +171,7 @@ Instruction const* retp_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* constant_op(Thread& thread, Instruction const& inst) {
-    OUT(thread, inst.c) = thread.frame.prototype->constants[inst.a];
+    OUT(inst.c) = thread.frame.prototype->constants[inst.a];
     return &inst+1;
 }
 
@@ -204,7 +184,7 @@ Instruction const* loop_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* jc_op(Thread& thread, Instruction const& inst) {
-	OPERAND(c, inst.c);
+	Value const& c = IN(inst.c);
 	if(c.isLogical1()) {
 		if(Logical::isTrue(c.c)) return &inst+inst.a;
 		else if(Logical::isFalse(c.c)) return &inst+inst.b;
@@ -218,12 +198,11 @@ Instruction const* jc_op(Thread& thread, Instruction const& inst) {
 		else if(c.d != 0) return &inst + inst.a;
 		else return & inst+inst.b;
 	}
-	FORCE(c, inst.c); BIND(c);
 	_error("Need single element logical in conditional jump");
 }
 
 Instruction const* branch_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a);
+	Value const& a = IN(inst.a);
 	int64_t index = -1;
 	if(a.isDouble1()) index = (int64_t)a.d;
 	else if(a.isInteger1()) index = a.i;
@@ -242,31 +221,28 @@ Instruction const* branch_op(Thread& thread, Instruction const& inst) {
 	if(index >= 1 && index <= inst.b) {
 		return &inst + ((&inst+index)->c);
 	} 
-	FORCE(a, inst.a); BIND(a);
 	return &inst+1+inst.b;
 }
 
 Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
 	// a = loop variable (e.g. i), b = loop vector(e.g. 1:100), c = counter register
 	// following instruction is a jmp that contains offset
-	OPERAND(vec, inst.b); FORCE(vec, inst.b); BIND(vec);
+	Value const& vec = IN(inst.b);
 	if((int64_t)vec.length <= 0) {
 		return &inst+(&inst+1)->a;	// offset is in following JMP, dispatch together
 	} else {
 		Element2(vec, 0, thread.frame.environment->insert((String)inst.a));
-		Value& counter = REGISTER(inst.c);
-        Value& length = REGISTER(inst.c-1);
-        length = Integer::c(vec.length);
-        counter = Integer::c(1);
+        OUT(inst.c-1) = Integer::c(vec.length);     // length register
+        OUT(inst.c)   = Integer::c(1);              // iterator register
 		return &inst+2;			// skip over following JMP
 	}
 }
+
 Instruction const* forend_op(Thread& thread, Instruction const& inst) {
-	Value& counter = REGISTER(inst.c);
-	Value& length = REGISTER(inst.c-1);
+	Value const& length = IN(inst.c-1);
+	Value& counter = OUT(inst.c);
 	if(__builtin_expect((counter.i) < length.i, true)) {
-		OPERAND(vec, inst.b); //FORCE(vec, inst.b); BIND(vec); // this must have necessarily been forced by the forbegin.
-		Element2(vec, counter.i, thread.frame.environment->insert((String)inst.a));
+		Element2(IN(inst.b), counter.i, thread.frame.environment->insert((String)inst.a));
 		counter.i++;
 		return &inst+(&inst+1)->a;
 	} else {
@@ -277,8 +253,8 @@ Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 	PairList const& dots = thread.frame.environment->dots;
 	
-	Value& iter = REGISTER(inst.a);
-	Value& out = OUT(thread, inst.c);
+	Value& iter = OUT(inst.a);
+	Value& out = OUT(inst.c);
 	
 	// First time through, make a result vector...
 	if(iter.i == 0) {
@@ -286,8 +262,8 @@ Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 	}
 	
 	if(iter.i < (int64_t)dots.size()) {
-		DOTDOT(a, iter.i); FORCE_DOTDOT(a, iter.i); 
-		BIND(a); // BIND since we don't yet support futures in lists
+		Value const& a = DOT(iter.i); 
+        FORCE_DOTDOT(a, iter.i); 
 		((List&)out)[iter.i] = a;
 		iter.i++;
 	}
@@ -311,458 +287,305 @@ Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 Instruction const* list_op(Thread& thread, Instruction const& inst) {
 	List out(inst.b);
 	for(int64_t i = 0; i < inst.b; i++) {
-		Value& r = REGISTER(inst.a-i);
+		Value const& r = IN(inst.a-i);
 		out[i] = r;
 	}
-	OUT(thread, inst.c) = out;
+	OUT(inst.c) = out;
 	return &inst+1;
 }
 
 // Memory access ops
 
-Instruction const* assign_op(Thread& thread, Instruction const& inst) {
-	OPERAND(value, inst.c); FORCE(value, inst.c); // don't BIND 
-	thread.frame.environment->insert((String)inst.a) = value;
+Instruction const* get_op(Thread& thread, Instruction const& inst) {
+	Value const& env = IN(inst.b);
+    
+    if(!env.isEnvironment())
+        _error("Getting from a non-environment is not supported");
+
+    // TODO: force unevaluated promises
+
+    if( ((REnvironment&)env).environment()->has((String)inst.a) )
+        OUT(inst.c) = ((REnvironment&)env).environment()->get((String)inst.a);
+	else
+        OUT(inst.c) = Null::Singleton();
+
 	return &inst+1;
 }
 
-Instruction const* gassign_op(Thread& thread, Instruction const& inst) {
-    OPERAND(env, inst.b); FORCE(env, inst.b); /* BIND(env); */
-	OPERAND(value, inst.c); FORCE(value, inst.c); // don't BIND 
+Instruction const* assign_op(Thread& thread, Instruction const& inst) {
+    Value const& env = IN(inst.b);
 	
     if(!env.isEnvironment())
         _error("Assigning to a non-environment is not supported");
 
-    ((REnvironment&)env).environment()->insert((String)inst.a) = value;
+    ((REnvironment&)env).environment()->insert((String)inst.a) = IN(inst.c);
 
-    OUT(thread, inst.c) = env;
+    // Implicitly: OUT(inst.c) = IN(inst.c);
 
 	return &inst+1;
 }
 
-Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
+Instruction const* lget_op(Thread& thread, Instruction const& inst) {
+
+    Value const& a = thread.frame.environment->getRecursive((String)inst.a);
+    
+    // If unevaluated promise, force.
+    if(!a.isConcrete()) {
+        if(a.isDotdot()) {
+            Value const& t = ((Environment*)a.p)->dots[a.length].v;
+            if(!t.isConcrete()) {
+                return forceDot(thread, inst, &t, (Environment*)a.p, a.length);
+            }
+            thread.frame.environment->insert((String)inst.a) = t;
+        }
+        else {
+            return forceReg(thread, inst, &a, (String)inst.a);
+        }
+    }
+
+	OUT(inst.c) = a;
+	return &inst+1;
+}
+
+Instruction const* lassign_op(Thread& thread, Instruction const& inst) {
+	thread.frame.environment->insert((String)inst.a) = IN(inst.c);
+	return &inst+1;
+}
+
+Instruction const* lassign2_op(Thread& thread, Instruction const& inst) {
 	// assign2 is always used to assign up at least one scope level...
 	// so start off looking up one level...
 	assert(thread.frame.environment->LexicalScope() != 0);
-	
-	OPERAND(value, inst.c); FORCE(value, inst.c); /*BIND(value);*/
 	
 	String s = (String)inst.a;
 	Value& dest = thread.frame.environment->LexicalScope()->insertRecursive(s);
 
 	if(!dest.isNil()) {
-		dest = value;
+		dest = IN(inst.c);
 		// TODO: should add dest's environment to the liveEnvironments list
 	}
 	else {
-		thread.state.global->insert(s) = value;
-#ifdef ENABLE_JIT
-		thread.LiveEnvironment(thread.state.global, dest);
-#endif
+		thread.state.global->insert(s) = IN(inst.c);
 	}
-	return &inst+1;
-}
-
-Instruction const* mov_op(Thread& thread, Instruction const& inst) {
-	OPERAND(value, inst.a); FORCE(value, inst.a); BIND(value);
-	OUT(thread, inst.c) = value;
-	return &inst+1;
-}
-
-Instruction const* get_op(Thread& thread, Instruction const& inst) {
-	OPERAND(env, inst.b); FORCE(env, inst.a); BIND(env);
-    
-    if(!env.isEnvironment())
-        _error("Assigning to a non-environment is not supported");
-
-    if( ((REnvironment&)env).environment()->has((String)inst.a) )
-        OUT(thread, inst.c) = ((REnvironment&)env).environment()->get((String)inst.a);
-	else
-        OUT(thread, inst.c) = Null::Singleton();
-
-	return &inst+1;
-}
-
-Instruction const* fastmov_op(Thread& thread, Instruction const& inst) {
-	OPERAND(value, inst.a); FORCE(value, inst.a); // fastmov assumes we don't need to bind. So next op better be able to handle a future 
-	OUT(thread, inst.c) = value;
 	return &inst+1;
 }
 
 Instruction const* dotdot_op(Thread& thread, Instruction const& inst) {
 	if(inst.a >= (int64_t)thread.frame.environment->dots.size())
         	_error(std::string("The '...' list does not contain ") + intToStr(inst.a+1) + " elements");
-	DOTDOT(a, inst.a); FORCE_DOTDOT(a, inst.a); // no need to bind since value is in a register
-	OUT(thread, inst.c) = a;
+	Value const& a = DOT(inst.a);
+    FORCE_DOTDOT(a, inst.a); // no need to bind since value is in a register
+	OUT(inst.c) = a;
 	return &inst+1;
 }
 
 Instruction const* scatter_op(Thread& thread, Instruction const& inst) {
-	// a = value, b = index, c = dest 
-	OPERAND(value, inst.a); FORCE(value, inst.a); 
-	OPERAND(index, inst.b); FORCE(index, inst.b); 
-	OPERAND(dest, inst.c); FORCE(dest, inst.c); 
-
-	BIND(dest);
-	BIND(index);
-	
-#ifdef ENABLE_JIT
-	if(value.isFuture() && (dest.isVector() || dest.isFuture())) {
-		if(index.isInteger() && index.length == 1) {
-			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
-			return &inst+1;
-		}
-		else if(index.isDouble() && index.length == 1) {
-			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Double&)index)[0], value);
-			return &inst+1;
-		}
-	}
-#endif
-
-	BIND(value);
-	SubsetAssign(thread, dest, true, index, value, OUT(thread,inst.c));
+	// a = value, b = index, c = dest
+	SubsetAssign(thread, IN(inst.c), true, IN(inst.b), IN(inst.a), OUT(inst.c));
 	return &inst+1;
 }
 
 Instruction const* scatter1_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest
-	OPERAND(value, inst.a); FORCE(value, inst.a);
-	OPERAND(index, inst.b); FORCE(index, inst.b);
-	OPERAND(dest, inst.c); FORCE(dest, inst.c);
-
-	BIND(index);
-	
-#ifdef ENABLE_JIT
-	if(value.isFuture() && (dest.isVector() || dest.isFuture())) {
-		if(index.isInteger() && index.length == 1) {
-			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
-			return &inst+1;
-		}
-		else if(index.isDouble() && index.length == 1) {
-			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Double&)index)[0], value);
-			return &inst+1;
-		}
-	}
-#endif
-	BIND(dest);
-	BIND(value);
-	Subset2Assign(thread, dest, true, index, value, OUT(thread,inst.c));
+	Subset2Assign(thread, IN(inst.c), true, IN(inst.b), IN(inst.a), OUT(inst.c));
 	return &inst+1; 
 }
 
 Instruction const* gather_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); 
-	OPERAND(i, inst.b);
+	Value const& a = IN(inst.a);
+	Value const& i = IN(inst.b);
 
 	if(a.isVector()) {
-		if(i.isDouble1()) { Element(a, i.d-1, OUT(thread, inst.c)); return &inst+1; }
-		else if(i.isInteger1()) { Element(a, i.i-1, OUT(thread, inst.c)); return &inst+1; }
-		else if(i.isLogical1()) { Element(a, Logical::isTrue(i.c) ? 0 : -1, OUT(thread, inst.c)); return &inst+1; }
-		else if(i.isCharacter1()) { _error("Subscript out of bounds"); }
+		if(i.isDouble1()) { 
+            Element(a, i.d-1, OUT(inst.c)); return &inst+1; 
+        }
+		else if(i.isInteger1()) { 
+            Element(a, i.i-1, OUT(inst.c)); return &inst+1; 
+        }
+		else if(i.isLogical1()) { 
+            Element(a, Logical::isTrue(i.c) ? 0 : -1, OUT(inst.c)); return &inst+1; 
+        }
+		else if(i.isCharacter1()) { 
+            _error("Subscript out of bounds"); 
+        }
 	}
 
-#ifdef ENABLE_JIT
-	if(isTraceable(thread, a, i) 
-		&& thread.futureType(i) == Type::Logical 
-		&& thread.futureShape(a) == thread.futureShape(i)) {
-		OUT(thread, inst.c) = thread.EmitFilter(thread.frame.environment, a, i);
-		thread.OptBind(OUT(thread, inst.c));
-		return &inst+1;
-	}
-#endif
-	FORCE(a, inst.a);
-	BIND(a);
-
-#ifdef ENABLE_JIT
-	if(isTraceable(thread, a, i) 
-		&& (thread.futureType(i) == Type::Integer || thread.futureType(i) == Type::Double)) {
-		OUT(thread, inst.c) = thread.EmitGather(thread.frame.environment, a, i);
-		thread.OptBind(OUT(thread, inst.c));
-		return &inst+1;
-	}
-#endif
 	if(a.isObject()) { 
 		return GenericDispatch(thread, inst, Strings::bracket, a, i, inst.c); 
 	} 
 	
-	FORCE(i, inst.b); 
-	BIND(i);
-
-	if(i.isObject()) { 
+    if(i.isObject()) { 
 		return GenericDispatch(thread, inst, Strings::bracket, a, i, inst.c); 
 	} 
 	
-	SubsetSlow(thread, a, i, OUT(thread, inst.c)); 
+	SubsetSlow(thread, a, i, OUT(inst.c)); 
 	return &inst+1;
 }
 
 Instruction const* gather1_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
-	OPERAND(i, inst.b);
+    Value const& a = IN(inst.a);
+    Value const& i = IN(inst.b);
+
 	if(a.isVector()) {
 		int64_t index = 0;
-		if(i.isDouble1()) { index = i.d-1; }
-		else if(i.isInteger1()) { index = i.i-1; }
-		else if(i.isLogical1() && Logical::isTrue(i.c)) { index = 1-1; }
+		if(i.isDouble1()) { 
+            index = i.d-1; 
+        }
+		else if(i.isInteger1()) { 
+            index = i.i-1; 
+        }
+		else if(i.isLogical1() && Logical::isTrue(i.c)) { 
+            index = 1-1; 
+        }
 		else if(i.isVector() && (i.length == 0 || i.length > 1)) { 
 			_error("Attempt to select less or more than 1 element in subset2"); 
 		}
-		else { _error("Subscript out of bounds"); }
-		Element2(a, index, OUT(thread, inst.c));
+		else { 
+            _error("Subscript out of bounds"); 
+        }
+		Element2(a, index, OUT(inst.c));
 		return &inst+1;
 	}
- 	FORCE(i, inst.b); BIND(i);
-	if(a.isObject() || i.isObject()) { return GenericDispatch(thread, inst, Strings::bb, a, i, inst.c); } 
+
+	if(a.isObject() || i.isObject()) { 
+        return GenericDispatch(thread, inst, Strings::bb, a, i, inst.c); 
+    }
+
 	_error("Invalid subset2 operation");
 }
 
-#ifdef ENABLE_JIT
 #define OP(Name, string, Group, Func, Cost) \
 Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
-	OPERAND(a, inst.a);	\
-	Value & c = OUT(thread, inst.c);	\
+	Value const& a = IN(inst.a); \
+	Value & c = OUT(inst.c);	 \
 	if(a.isDouble1())  { Name##VOp<Double>::Scalar(thread, a.d, c); return &inst+1; } \
 	if(a.isInteger1()) { Name##VOp<Integer>::Scalar(thread, a.i, c); return &inst+1; } \
 	if(a.isLogical1()) { Name##VOp<Logical>::Scalar(thread, a.c, c); return &inst+1; } \
-	FORCE(a, inst.a); \
-	if(isTraceable<Group>(thread,a)) { \
-		c = thread.EmitUnary<Group>(thread.frame.environment, IROpCode::Name, a, 0); \
-		thread.OptBind(c); \
- 		return &inst+1; \
-	} \
-	BIND(a); \
-	if(a.isObject()) { return GenericDispatch(thread, inst, Strings::Name, a, inst.c); } \
+	if(a.isObject())   { return GenericDispatch(thread, inst, Strings::Name, a, inst.c); } \
 \
 	Group##Dispatch<Name##VOp>(thread, a, c); \
 	return &inst+1; \
 }
-#else
-#define OP(Name, string, Group, Func, Cost) \
-Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
-	OPERAND(a, inst.a);	\
-	Value & c = OUT(thread, inst.c);	\
-	if(a.isDouble1())  { Name##VOp<Double>::Scalar(thread, a.d, c); return &inst+1; } \
-	if(a.isInteger1()) { Name##VOp<Integer>::Scalar(thread, a.i, c); return &inst+1; } \
-	if(a.isLogical1()) { Name##VOp<Logical>::Scalar(thread, a.c, c); return &inst+1; } \
-	FORCE(a, inst.a); \
-	BIND(a); \
-	if(a.isObject()) { return GenericDispatch(thread, inst, Strings::Name, a, inst.c); } \
-\
-	Group##Dispatch<Name##VOp>(thread, a, c); \
-	return &inst+1; \
-}
-#endif
 UNARY_FOLD_SCAN_BYTECODES(OP)
 #undef OP
 
-#ifdef ENABLE_JIT
 #define OP(Name, string, Group, Func, Cost) \
 Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
-	OPERAND(a, inst.a);	\
-	OPERAND(b, inst.b);	\
-	Value & c = OUT(thread, inst.c);	\
-        if(a.isDouble1()) {			\
+	Value const& a = IN(inst.a); \
+	Value const& b = IN(inst.b); \
+	Value & c = OUT(inst.c);	\
+    if(a.isDouble1()) {			\
 		if(b.isDouble1()) { Name##VOp<Double,Double>::Scalar(thread, a.d, b.d, c); return &inst+1; } \
 		if(b.isInteger1()) { Name##VOp<Double,Integer>::Scalar(thread, a.d, b.i, c); return &inst+1; } \
 		if(b.isLogical1()) { Name##VOp<Double,Logical>::Scalar(thread, a.d, b.c, c); return &inst+1; } \
-        }	\
-        else if(a.isInteger1()) {	\
+    }	\
+    else if(a.isInteger1()) {	\
 		if(b.isDouble1()) { Name##VOp<Integer,Double>::Scalar(thread, a.i, b.d, c); return &inst+1; } \
 		if(b.isInteger1()) { Name##VOp<Integer,Integer>::Scalar(thread, a.i, b.i, c); return &inst+1; } \
 		if(b.isLogical1()) { Name##VOp<Integer,Logical>::Scalar(thread, a.i, b.c, c); return &inst+1; } \
-        } \
-        else if(a.isLogical1()) {	\
+    } \
+    else if(a.isLogical1()) {	\
 		if(b.isDouble1()) { Name##VOp<Logical,Double>::Scalar(thread, a.c, b.d, c); return &inst+1; } \
 		if(b.isInteger1()) { Name##VOp<Logical,Integer>::Scalar(thread, a.c, b.i, c); return &inst+1; } \
 		if(b.isLogical1()) { Name##VOp<Logical,Logical>::Scalar(thread, a.c, b.c, c); return &inst+1; } \
-        } \
-	FORCE(a, inst.a); FORCE(b, inst.b); \
-	if(isTraceable<Group>(thread,a,b)) { \
-		c = thread.EmitBinary<Group>(thread.frame.environment, IROpCode::Name, a, b, 0); \
-		thread.OptBind(c); \
-		return &inst+1; \
-	} \
-	BIND(a); BIND(b); \
+    } \
 	if(a.isObject() || b.isObject()) { return GenericDispatch(thread, inst, Strings::Name, a, b, inst.c); } \
 \
 	Group##Dispatch<Name##VOp>(thread, a, b, c);	\
 	return &inst+1;	\
 }
-#else
-#define OP(Name, string, Group, Func, Cost) \
-Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
-	OPERAND(a, inst.a);	\
-	OPERAND(b, inst.b);	\
-	Value & c = OUT(thread, inst.c);	\
-        if(a.isDouble1()) {			\
-		if(b.isDouble1()) { Name##VOp<Double,Double>::Scalar(thread, a.d, b.d, c); return &inst+1; } \
-		if(b.isInteger1()) { Name##VOp<Double,Integer>::Scalar(thread, a.d, b.i, c); return &inst+1; } \
-		if(b.isLogical1()) { Name##VOp<Double,Logical>::Scalar(thread, a.d, b.c, c); return &inst+1; } \
-        }	\
-        else if(a.isInteger1()) {	\
-		if(b.isDouble1()) { Name##VOp<Integer,Double>::Scalar(thread, a.i, b.d, c); return &inst+1; } \
-		if(b.isInteger1()) { Name##VOp<Integer,Integer>::Scalar(thread, a.i, b.i, c); return &inst+1; } \
-		if(b.isLogical1()) { Name##VOp<Integer,Logical>::Scalar(thread, a.i, b.c, c); return &inst+1; } \
-        } \
-        else if(a.isLogical1()) {	\
-		if(b.isDouble1()) { Name##VOp<Logical,Double>::Scalar(thread, a.c, b.d, c); return &inst+1; } \
-		if(b.isInteger1()) { Name##VOp<Logical,Integer>::Scalar(thread, a.c, b.i, c); return &inst+1; } \
-		if(b.isLogical1()) { Name##VOp<Logical,Logical>::Scalar(thread, a.c, b.c, c); return &inst+1; } \
-        } \
-	FORCE(a, inst.a); FORCE(b, inst.b); \
-	BIND(a); BIND(b); \
-	if(a.isObject() || b.isObject()) { return GenericDispatch(thread, inst, Strings::Name, a, b, inst.c); } \
-\
-	Group##Dispatch<Name##VOp>(thread, a, b, c);	\
-	return &inst+1;	\
-}
-#endif
 BINARY_BYTECODES(OP)
 #undef OP
 
 Instruction const* length_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); 
+	Value const& a = IN(inst.a);
 	if(a.isVector())
-		Integer::InitScalar(OUT(thread, inst.c), a.length);
-#ifdef ENABLE_JIT 
-	else if(a.isFuture()) {
-		IRNode::Shape shape = thread.futureShape(a);
-		if(shape.split < 0 && shape.filter < 0) {
-			Integer::InitScalar(OUT(thread, inst.c), shape.length);
-		} else {
-			OUT(thread, inst.c) = thread.EmitUnary<CountFold>(thread.frame.environment, IROpCode::length, a, 0);
-			thread.OptBind(OUT(thread,inst.c));
-		}
-	}
-#endif
+		Integer::InitScalar(OUT(inst.c), a.length);
 	else if(a.isObject()) { 
 		return GenericDispatch(thread, inst, Strings::length, a, inst.c); 
 	} else {
-		Integer::InitScalar(OUT(thread, inst.c), 1);
+		Integer::InitScalar(OUT(inst.c), 1);
 	}
 	return &inst+1;
 }
 
 Instruction const* mean_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); 
-#ifdef ENABLE_JIT
-	if(isTraceable<MomentFold>(thread,a)) {
-		OUT(thread, inst.c) = thread.EmitUnary<MomentFold>(thread.frame.environment, IROpCode::mean, a, 0);
-		thread.OptBind(OUT(thread,inst.c));
- 		return &inst+1;
-	}
-#endif
+	//Value const& a = IN(inst.a);
     _error("No scalar implementation of mean");
 	return &inst+1;
 }
 
 Instruction const* cm2_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); 
-	OPERAND(b, inst.b); FORCE(b, inst.b);
-#ifdef ENABLE_JIT 
-	if(isTraceable<Moment2Fold>(thread,a,b)) {
-		OUT(thread, inst.c) = thread.EmitBinary<Moment2Fold>(thread.frame.environment, IROpCode::cm2, a, b, 0);
-		thread.OptBind(OUT(thread,inst.c));
- 		return &inst+1;
-	}
-#endif
+	//Value const& a = IN(inst.a);
+	//Value const& b = IN(inst.b);
     _error("No scalar implementation of cm2");
 	return &inst+1;
 }
 
 Instruction const* split_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
-	int64_t levels = As<Integer>(thread, a)[0];
-	OPERAND(b, inst.b); FORCE(b, inst.b);
-	OPERAND(c, inst.c); FORCE(c, inst.c);
-#ifdef ENABLE_JIT
-	if(isTraceable<Split>(thread,b,c)) {
-		OUT(thread, inst.c) = thread.EmitSplit(thread.frame.environment, c, b, levels);
-		thread.OptBind(OUT(thread,inst.c));
-		return &inst+1;
-	}
-#endif
-	BIND(a); BIND(b); BIND(c);
-
+	//Value const& a = IN(inst.a);
+	//int64_t levels = As<Integer>(thread, a)[0];
+	//Value const& b = IN(inst.b);
+	//Value const& c = IN(inst.c);
 	_error("split not defined in scalar yet");
 	return &inst+1; 
 }
 
 Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a);
-	OPERAND(b, inst.b); FORCE(b, inst.b);
-	OPERAND(c, inst.c); FORCE(c, inst.c);
+	Value const& a = IN(inst.a);
+	Value const& b = IN(inst.b);
+	Value const& c = IN(inst.c);
 	if(c.isLogical1()) {
-		OUT(thread, inst.c) = Logical::isTrue(c.c) ? b : a;
+		OUT(inst.c) = Logical::isTrue(c.c) ? b : a;
 		return &inst+1; 
 	}
 	else if(c.isInteger1()) {
-		OUT(thread, inst.c) = c.i ? b : a;
+		OUT(inst.c) = c.i ? b : a;
 		return &inst+1; 
 	}
 	else if(c.isDouble1()) {
-		OUT(thread, inst.c) = c.d ? b : a;
+		OUT(inst.c) = c.d ? b : a;
 		return &inst+1; 
 	}
-#ifdef ENABLE_JIT	
-	if(isTraceable<IfElse>(thread,a,b,c)) {
-		OUT(thread, inst.c) = thread.EmitIfElse(thread.frame.environment, a, b, c);
-		thread.OptBind(OUT(thread,inst.c));
-		return &inst+1;
-	}
-#endif
-	BIND(a); BIND(b); BIND(c);
-
 	_error("ifelse not defined in scalar yet");
-
 	return &inst+1; 
 }
 
 Instruction const* function_op(Thread& thread, Instruction const& inst) {
-	OPERAND(function, inst.a); FORCE(function, inst.a);
-	Value& out = OUT(thread, inst.c);
+	Value const& function = IN(inst.a);
+	Value& out = OUT(inst.c);
 	out.header = function.header;
 	out.p = (void*)thread.frame.environment;
 	return &inst+1;
 }
 
 Instruction const* vector_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
-	OPERAND(b, inst.b); FORCE(b, inst.b); BIND(b);
-	Type::Enum type = string2Type( As<Character>(thread, a)[0] );
+	Value const& a = IN(inst.a);
+    Value const& b = IN(inst.b);
+	
+    Type::Enum type = string2Type( As<Character>(thread, a)[0] );
 	int64_t l = As<Integer>(thread, b)[0];
 	
-#ifdef ENABLE_JIT
-	// TODO: replace with isTraceable...
-	if(thread.state.deferredEnabled 
-		&& (type == Type::Double || type == Type::Integer || type == Type::Logical)
-		&& l >= TRACE_VECTOR_WIDTH) {
-		OUT(thread, inst.c) = thread.EmitConstant(thread.frame.environment, type, l, 0);
-		thread.OptBind(OUT(thread,inst.c));
-		return &inst+1;
-	}
-#endif
-
 	if(type == Type::Logical) {
 		Logical v(l);
 		for(int64_t i = 0; i < v.length; i++) v[i] = Logical::FalseElement;
-		OUT(thread, inst.c) = v;
+		OUT(inst.c) = v;
 	} else if(type == Type::Integer) {
 		Integer v(l);
 		for(int64_t i = 0; i < v.length; i++) v[i] = 0;
-		OUT(thread, inst.c) = v;
+		OUT(inst.c) = v;
 	} else if(type == Type::Double) {
 		Double v(l);
 		for(int64_t i = 0; i < v.length; i++) v[i] = 0;
-		OUT(thread, inst.c) = v;
+		OUT(inst.c) = v;
 	} else if(type == Type::Character) {
 		Character v(l);
 		for(int64_t i = 0; i < v.length; i++) v[i] = Strings::empty;
-		OUT(thread, inst.c) = v;
+		OUT(inst.c) = v;
 	} else if(type == Type::Raw) {
 		Raw v(l);
 		for(int64_t i = 0; i < v.length; i++) v[i] = 0;
-		OUT(thread, inst.c) = v;
+		OUT(inst.c) = v;
 	} else {
 		_error("Invalid type in vector");
 	} 
@@ -771,88 +594,54 @@ Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 
 Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	// c = start, b = step, a = length
-	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
-	OPERAND(b, inst.b); FORCE(b, inst.b); BIND(b);
-	OPERAND(c, inst.c); FORCE(c, inst.c); BIND(c);
+	Value const& a = IN(inst.a);
+    Value const& b = IN(inst.b);
+    Value const& c = IN(inst.c);
 
 	double start = As<Double>(thread, c)[0];
 	double step = As<Double>(thread, b)[0];
 	int64_t len = As<Integer>(thread, a)[0];
 
-#ifdef ENABLE_JIT	
-	if(len >= TRACE_VECTOR_WIDTH) {
-		if(b.isDouble() || c.isDouble()) {
-			OUT(thread, inst.c) = thread.EmitSequence(thread.frame.environment, len, start, step);
-			thread.OptBind(OUT(thread,inst.c));
-		} else {
-			OUT(thread, inst.c) = thread.EmitSequence(thread.frame.environment, len, (int64_t)start, (int64_t)step);
-			thread.OptBind(OUT(thread,inst.c));
-		}
-		return &inst+1;
-	}
-#endif
 	if(b.isDouble() || c.isDouble())	
-		OUT(thread, inst.c) = Sequence(start, step, len);
+		OUT(inst.c) = Sequence(start, step, len);
 	else
-		OUT(thread, inst.c) = Sequence((int64_t)start, (int64_t)step, len);
+		OUT(inst.c) = Sequence((int64_t)start, (int64_t)step, len);
 	return &inst+1;
 }
 
 Instruction const* rep_op(Thread& thread, Instruction const& inst) {
 	// c = n, b = each, a = length
-	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
-	OPERAND(b, inst.b); FORCE(b, inst.b); BIND(b);
-	OPERAND(c, inst.c); FORCE(c, inst.c); BIND(c);
+	Value const& a = IN(inst.a);
+    Value const& b = IN(inst.b);
+    Value const& c = IN(inst.c);
 
 	int64_t n = As<Integer>(thread, c)[0];
 	int64_t each = As<Integer>(thread, b)[0];
 	int64_t len = As<Integer>(thread, a)[0];
 
-#ifdef ENABLE_JIT	
-	if(len >= TRACE_VECTOR_WIDTH) {
-		OUT(thread, inst.c) = thread.EmitRepeat(thread.frame.environment, len, (int64_t)n, (int64_t)each);
-		thread.OptBind(OUT(thread,inst.c));
-		return &inst+1;
-	}
-#endif
-
-	OUT(thread, inst.c) = Repeat((int64_t)n, (int64_t)each, len);
+	OUT(inst.c) = Repeat((int64_t)n, (int64_t)each, len);
 	return &inst+1;
 }
 
 Instruction const* random_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
+	Value const& a = IN(inst.a);
 
 	int64_t len = As<Integer>(thread, a)[0];
 	
-	/*if(len >= TRACE_VECTOR_WIDTH) {
-		OUT(thread, inst.c) = thread.EmitRandom(thread.frame.environment, len);
-		thread.OptBind(OUT(thread,inst.c));
-		return &inst+1;
-	}*/
-
-	OUT(thread, inst.c) = Random(thread, len);
+	OUT(inst.c) = Random(thread, len);
 	return &inst+1;
 }
 
 Instruction const* type_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a);
+	Value const& a = IN(inst.a);
 	
-#ifdef ENABLE_JIT
-    switch(thread.futureType(a)) {
-                #define CASE(name, str) case Type::name: OUT(thread, inst.c) = Character::c(Strings::name); break;
-                TYPES(CASE)
-                #undef CASE
-                default: _error("Unknown type in type to string, that's bad!"); break;
-        }
-#else
     switch(a.type) {
-                #define CASE(name, str) case Type::name: OUT(thread, inst.c) = Character::c(Strings::name); break;
-                TYPES(CASE)
-                #undef CASE
-                default: _error("Unknown type in type to string, that's bad!"); break;
-        }
-#endif
+        #define CASE(name, str) \
+            case Type::name: OUT(inst.c) = Character::c(Strings::name); break;
+        TYPES(CASE)
+        #undef CASE
+        default: _error("Unknown type in type to string, that's bad!"); break;
+    }
     
 	return &inst+1;
 }
@@ -875,15 +664,18 @@ Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 	// For now I'll keep the simpler non-recursive semantics. Missing solely means
 	// whether or not this scope was passed a value, irregardless of whether that
 	// value is missing at a higher level.
+    // 
+    // This is further exacerbated by the fact that defaults are not evaluated on
+    // recursively missing arguments. Bad design choice R!
 	String s = (String)inst.a;
 	Value const& v = thread.frame.environment->get(s);
 	bool missing = v.isNil() || v.isDefault();
-	Logical::InitScalar(OUT(thread, inst.c), missing ? Logical::TrueElement : Logical::FalseElement);
+	Logical::InitScalar(OUT(inst.c), missing ? Logical::TrueElement : Logical::FalseElement);
 	return &inst+1;
 }
 Instruction const* strip_op(Thread& thread, Instruction const& inst) {
-	OPERAND(a, inst.a); FORCE(a, inst.a);
-	Value& c = OUT(thread, inst.c);
+	Value const& a = IN(inst.a);
+	Value& c = OUT(inst.c);
 	if(a.isObject())
 		c = ((Object const&)a).base();
 	else
@@ -894,112 +686,64 @@ Instruction const* strip_op(Thread& thread, Instruction const& inst) {
 Instruction const* internal_op(Thread& thread, Instruction const& inst) {
 	if(inst.a < 0)
 		_error("Attempting to use undefined internal function");
-	int64_t nargs = thread.state.internalFunctions[inst.a].params;
-	for(int64_t i = 0; i < nargs; i++) {
-		BIND(REGISTER(inst.b-i));
-	}
-	thread.state.internalFunctions[inst.a].ptr(thread, &REGISTER(inst.b), OUT(thread, inst.c));
+	thread.state.internalFunctions[inst.a].ptr(thread, &IN(inst.b), OUT(inst.c));
 	return &inst+1;
 }
 
 Instruction const* nargs_op(Thread& thread, Instruction const& inst) {
-    OUT(thread, inst.c) = Integer::c(thread.frame.environment->call.length-1);
+    OUT(inst.c) = Integer::c(thread.frame.environment->call.length-1);
     return &inst+1;
 }
 
 Instruction const* attrget_op(Thread& thread, Instruction const& inst) {
-    OPERAND(object, inst.a);
-    OPERAND(whichTmp, inst.b);
+	Value const& object = IN(inst.a);
+	Value const& whichTmp = IN(inst.b);
+    
     if(object.isObject()) {
         Character which = As<Character>(thread, whichTmp);
-        OUT(thread, inst.c) = ((Object const&)object).get(which[0]);
+        OUT(inst.c) = ((Object const&)object).get(which[0]);
     }
     else {
-        OUT(thread, inst.c) = Null::Singleton();
+        OUT(inst.c) = Null::Singleton();
     }
     return &inst+1;
 }
 
 Instruction const* attrset_op(Thread& thread, Instruction const& inst) {
-    OPERAND(object, inst.c);
-    OPERAND(whichTmp, inst.b);
-    OPERAND(value, inst.a);
+	Value const& object = IN(inst.a);
+	Value const& whichTmp = IN(inst.b);
+	Value const& value = IN(inst.c);
 
     Character which = As<Character>(thread, whichTmp);
     if(!object.isObject()) {
         Value v;
         Object::Init((Object&)v, object);
         ((Object&)v).insertMutable(which[0], value);
-        OUT(thread, inst.c) = v;
+        OUT(inst.c) = v;
     } else {
-        OUT(thread, inst.c) = ((Object&)object).insert(which[0], value);
+        OUT(inst.c) = ((Object&)object).insert(which[0], value);
     }
     return &inst+1;
 }
 
 Instruction const* newenv_op(Thread& thread, Instruction const& inst) {
-    OPERAND(parent, inst.a);
+	Value const& parent = IN(inst.a);
    
     Environment* p = ((REnvironment const&)parent).environment();
     Environment* e = new Environment(p,p);
-    REnvironment::Init( OUT(thread, inst.c), e );
+    REnvironment::Init( OUT(inst.c), e );
     return &inst+1; 
 }
 
 Instruction const* parentframe_op(Thread& thread, Instruction const& inst) {
     Environment* e = thread.frame.environment->DynamicScope();
-    REnvironment::Init( OUT(thread, inst.c), e ); 
+    REnvironment::Init( OUT(inst.c), e ); 
     return &inst+1;
 }
-/*struct _Load {
-    int64_t i;
-    _Load(int64_t i) : i(i) {}
-    Value const& eval(Thread& thread, Instruction const*& bail) {
-        OPERAND(r, i);
-        return r;
-    }
-};
-
-template<class T>
-struct _Force {
-    T t;
-    _Force(T t) : t(t) {}
-    Value const& eval(Thread& thread) {
-        Value const& 
-        FORCE(a, i);
-    }
-};
-
-_Load Load(int64_t i) { return _Load(i); }
-
-template<class T>
-struct _Store {
-    T t;
-    int64_t i;
-    _Store(T t, int64_t i) : t(t), i(i) {}
-    Value const& eval(Thread& thread, Instruction const*& bail) {
-        t.eval(thread, bail);
-        if(bail != 0) return;
-        t.eval(thread, r);
-        Value & out = OUT(thread, i);
-        out = t.eval(thread);
-        return out;
-    }
-};
-
-template<class T>
-_Store<T> Store(T t, int64_t i) { return _Store<T>(t, i); }
-
-Instruction const* mov_op(Thread& thread, Instruction const& inst) {
-    auto op = Store(Load(inst.a), inst.c);
-    op.eval(thread);
-    return &inst+1;
-}*/
 
 //
 //    Main interpreter loop 
 //
-//__attribute__((__noinline__,__noclone__)) 
 void interpret(Thread& thread, Instruction const* pc) {
 
 #ifdef USE_THREADED_INTERPRETER
@@ -1051,7 +795,7 @@ void interpret(Thread& thread, Instruction const* pc) {
                     else {
                         if(++exit->counter > JIT::RECORD_TRIGGER) {
                             if(thread.state.verbose)
-                                printf("Starting to record side exit at %li\n", pc);
+                                printf("Starting to record side exit at %li\n", (uint64_t)pc);
                             exit->counter = 0;
                             thread.jit.start_recording(pc, thread.frame.environment, exit->root, exit);
                             labels = record;
@@ -1066,7 +810,7 @@ void interpret(Thread& thread, Instruction const* pc) {
                 counter++;
                 if(counter > JIT::RECORD_TRIGGER) {
                     if(thread.state.verbose)
-                        printf("Starting to record at %li (counter: %li is %d)\n", pc, &counter, counter);
+                        printf("Starting to record at %li (counter: %li is %d)\n", (uint64_t)pc, &counter, counter);
                     counter = 0;
                     JIT::Trace* trace = new JIT::Trace();
                     trace->traceIndex = JIT::Trace::traceCount++;
@@ -1149,7 +893,6 @@ void interpret(Thread& thread, Instruction const* pc) {
                     ((Instruction*)pc)->c = 0;
                 }
                 else {
-                    timespec a = get_time();
                     GC_disable();
                     JIT::Trace* exit = (JIT::Trace*)(rootTrace->ptr)(thread);
                     GC_enable();
@@ -1201,12 +944,12 @@ void interpret(Thread& thread, Instruction const* pc) {
         goto *(const void*)labels[pc->bc]; 
     }
 	ret_record: 	{ 
-        Instruction const* old_pc = pc;
+        //Instruction const* old_pc = pc;
         pc = ret_op(thread, *pc);
         goto *(const void*)labels[pc->bc]; 
     }
 	retp_record: 	{ 
-        Instruction const* old_pc = pc;
+        //Instruction const* old_pc = pc;
         pc = retp_op(thread, *pc);
         goto *(const void*)labels[pc->bc]; 
     }

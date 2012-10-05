@@ -226,7 +226,6 @@ public:
     struct Snapshot {
         std::vector<StackFrame> stack;
         std::map< int64_t, IRRef > slotValues;
-        std::map< int64_t, IRRef > slots;
         std::set<IRRef> memory;
     }; 
 
@@ -342,6 +341,8 @@ public:
 	Var EmitRep(Var l, Var e, Shape target);
 	Var EmitBroadcast(Var a, Shape target);
 	Var EmitCast(Var a, Type::Enum type);
+
+    void Kill(Snapshot& snapshot, int64_t a);
 
     Shape SpecializeLength(size_t length, IRRef irlength);
     Shape SpecializeValue(Value const& v, IRRef r);

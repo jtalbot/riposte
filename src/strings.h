@@ -38,8 +38,8 @@
 	_(Call,		"call")		\
 	_(Expression,	"expression")	\
 	_(internal, 	".Internal") \
-	_(assign, 	"<-") \
-	_(assign2, 	"<<-") \
+	_(assignOp, 	"<-") \
+	_(assign2Op, 	"<<-") \
 	_(eqassign, 	"=") \
 	_(function, 	"function") \
 	_(returnSym, 	"return") \
@@ -158,7 +158,7 @@
     _(aslist, "as.list") \
     _(newenv, "newenv") \
     _(parentframe, "parent.frame") \
-    _(gassign, "assign") \
+    _(assign, "assign") \
     _(get, "get") \
     _(Maximal, "\255")
 

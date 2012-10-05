@@ -747,15 +747,15 @@ _eof_trans:
 	break;
 	case 50:
 #line 113 "lexer.rl"
-	{te = p+1;{token( TOKEN_LEFT_ASSIGN, CreateSymbol(Strings::assign) );}}
+	{te = p+1;{token( TOKEN_LEFT_ASSIGN, CreateSymbol(Strings::assignOp) );}}
 	break;
 	case 51:
 #line 115 "lexer.rl"
-	{te = p+1;{token( TOKEN_RIGHT_ASSIGN, CreateSymbol(Strings::assign2) );}}
+	{te = p+1;{token( TOKEN_RIGHT_ASSIGN, CreateSymbol(Strings::assign2Op) );}}
 	break;
 	case 52:
 #line 116 "lexer.rl"
-	{te = p+1;{token( TOKEN_LEFT_ASSIGN, CreateSymbol(Strings::assign2) );}}
+	{te = p+1;{token( TOKEN_LEFT_ASSIGN, CreateSymbol(Strings::assign2Op) );}}
 	break;
 	case 53:
 #line 117 "lexer.rl"
@@ -835,7 +835,7 @@ _eof_trans:
 	break;
 	case 72:
 #line 114 "lexer.rl"
-	{te = p;p--;{token( TOKEN_RIGHT_ASSIGN, CreateSymbol(Strings::assign) );}}
+	{te = p;p--;{token( TOKEN_RIGHT_ASSIGN, CreateSymbol(Strings::assignOp) );}}
 	break;
 	case 73:
 #line 126 "lexer.rl"

@@ -233,6 +233,8 @@ f <- function(x,y) x+y
 	f <- function(x, y) {z <- 0; rm(z); x+z}
 	PassIfTrue(f(4,5) == 14)
 	PassIfTrue(is.null(c()))
+
+    "done"
 }
 
 

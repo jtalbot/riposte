@@ -1,7 +1,7 @@
 #adapted from https://github.com/ispc/ispc/tree/master/examples/options
 
-N_ROUNDS <- 1
-N_OPTIONS <- 10000000
+N_ROUNDS <- 100
+N_OPTIONS <- 100000
 
 invSqrt2Pi <- 0.39894228040
 log10 <- log(10)
@@ -11,12 +11,6 @@ X <- rep(98,each=N_OPTIONS)
 TT <- rep(2,each=N_OPTIONS)
 r <- rep(.02,each=N_OPTIONS)
 v <- rep(5,each=N_OPTIONS)
-
-force(S)
-force(X)
-force(TT)
-force(r)
-force(v)
 
 CND <- function(X) {
     k <- 1.0 / (1.0 + 0.2316419 * abs(X))

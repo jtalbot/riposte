@@ -360,63 +360,11 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 
 Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, String name);
 
-#define REGISTER(i) (*(thread.base+(i)))
+#define IN(i) (*(Value const*)(thread.base+(i)))
+#define OUT(i) (*(thread.base+(i)))
 
-// Out register is currently always a register, not memory
-#define OUT(thread, i) (*(thread.base+(i)))
+#define DOT(i) ((Value const&)thread.frame.environment->dots[(i)].v);
 
-#define OPERAND(a, i) \
-Value const& a = __builtin_expect((i) <= 0, true) ? \
-		*(thread.base+(i)) : \
-		thread.frame.environment->getRecursive((String)(i)); 
-
-#ifdef ENABLE_JIT	
-#define FORCE(a, i) \
-if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
-	if(a.isDotdot()) { \
-		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
-		if(t.isConcrete()) { \
-			thread.frame.environment->insert((String)(i)) = t; \
-			thread.LiveEnvironment(thread.frame.environment, t); \
-			return &inst; \
-		} \
-		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
-	} \
-	else return forceReg(thread, inst, &a, (String)(i)); \
-}
-#else
-#define FORCE(a, i) \
-if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
-	if(a.isDotdot()) { \
-		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
-		if(t.isConcrete()) { \
-			thread.frame.environment->insert((String)(i)) = t; \
-			return &inst; \
-		} \
-		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
-	} \
-	else return forceReg(thread, inst, &a, (String)(i)); \
-}
-#endif
-
-#define DOTDOT(a, i) \
-Value const& a = thread.frame.environment->dots[(i)].v;
-
-#ifdef ENABLE_JIT
-#define FORCE_DOTDOT(a, i) \
-if(!a.isConcrete()) { \
-	if(a.isDotdot()) { \
-		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
-		if(t.isConcrete()) { \
-			thread.frame.environment->dots[(i)].v = t; \
-			thread.LiveEnvironment(thread.frame.environment, t); \
-			return &inst; \
-		} \
-		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
-	} \
-	else return forceDot(thread, inst, &a, thread.frame.environment, (i)); \
-}
-#else
 #define FORCE_DOTDOT(a, i) \
 if(!a.isConcrete()) { \
 	if(a.isDotdot()) { \
@@ -429,17 +377,6 @@ if(!a.isConcrete()) { \
 	} \
 	else return forceDot(thread, inst, &a, thread.frame.environment, (i)); \
 }
-#endif
-
-#ifdef ENABLE_JIT
-#define BIND(a) \
-if(__builtin_expect(a.isFuture(), false)) { \
-	thread.Bind(a); \
-	return &inst; \
-}
-#else
-#define BIND(a)
-#endif
 
 #ifdef ENABLE_JIT
 bool isTraceableType(Thread const& thread, Value const& a) {

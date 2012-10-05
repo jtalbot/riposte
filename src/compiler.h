@@ -33,7 +33,7 @@ private:
 	enum Loc {
 		INVALID,
 		REGISTER,
-		MEMORY,
+		VARIABLE,
 		CONSTANT,
 		INTEGER
 	};
@@ -57,7 +57,7 @@ private:
 			if(loc == INVALID) return "I";
 			else if(loc == REGISTER) return intToStr(i) + "R";
 			else if(loc == CONSTANT) return intToStr(i) + "C";
-			else if(loc == MEMORY) return std::string(s);
+			else if(loc == VARIABLE) return std::string(s);
 			else return intToStr(i) + "L";
 		}
 	};

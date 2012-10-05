@@ -147,6 +147,7 @@ int main(int argc, char** argv)
         { "help",      0,     NULL,           'h' },
         { "verbose",   0,     NULL,           'v' },
         { "quiet",     0,     NULL,           'q' },
+        { "args",      0,     NULL,           'a'  },
         { NULL,        0,     NULL,            0 }
     };
 
@@ -158,8 +159,12 @@ int main(int argc, char** argv)
 
     int ch;
     opterr = 0;
-    while ((ch = getopt_long(argc, argv, "df:hj:vqi", longopts, NULL)) != -1)
+    while ((ch = getopt_long(argc, argv, "df:hj:vqia", longopts, NULL)) != -1)
     {
+        // don't parse args past '--args'
+        if(ch == 'a')
+            break;
+
         switch (ch) {
             case 'd':
                 debug++;

@@ -501,6 +501,14 @@ JIT::Exit JIT::BuildExit( Snapshot const& snapshot, Reenter const& reenter, size
     return e;
 }
 
+void JIT::Kill(Snapshot& snapshot, int64_t a) {
+    std::map<int64_t, IRRef>::iterator i = snapshot.slotValues.begin();
+    while(i != snapshot.slotValues.end()) {
+        if(i->first <= a) snapshot.slotValues.erase(i++);
+        else ++i;
+    }
+}
+
 
 JIT::IRRef JIT::EmitOptIR(
             Thread& thread,
@@ -587,8 +595,17 @@ JIT::IRRef JIT::EmitOptIR(
 
             case TraceOpCode::sstore: {
                 ir.c = forward[ir.c];
-                snapshot.slots[ (int64_t)ir.b ] = ir.c;
+                
+                Kill(snapshot, (int64_t)ir.b);
                 snapshot.slotValues[ (int64_t)ir.b ] = ir.c;
+                    
+                // if we're storing to the same slot we just loaded from, this is a no op.
+                if(code[ir.c].op != TraceOpCode::sload ||
+                    code[ir.c].a != ir.b) {
+                    std::tr1::unordered_map<IR, IRRef> tcse;
+                    IRRef s = Insert(thread, code, tcse, snapshot, ir);
+                    snapshot.memory.insert(s);
+                }
                 return ir.c;
             } break;
 
@@ -617,11 +634,7 @@ JIT::IRRef JIT::EmitOptIR(
             } break;
 
             case TraceOpCode::kill: {
-                std::map<int64_t, IRRef>::iterator i = snapshot.slotValues.begin();
-                while(i != snapshot.slotValues.end()) {
-                    if(i->first <= ir.a) snapshot.slotValues.erase(i++);
-                    else ++i;
-                }
+                Kill(snapshot, ir.a);
                 return 0;
             } break;
 
@@ -915,6 +928,6 @@ void JIT::SINK(void) {
 
     // Sweep phase
     for(IRRef i = code.size()-1; i < code.size(); --i) {
-        code[i].sunk = !marks[i];
+        code[i].sunk = false;//!marks[i];
     } 
 }
