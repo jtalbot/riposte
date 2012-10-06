@@ -401,10 +401,6 @@ public:
 
             a = builder.CreatePointerCast(a, t);
             a = builder.CreateLoad(a);
-
-            if(type == Type::Logical) {
-                a = builder.CreateTrunc(a, llvm::VectorType::get(builder.getInt1Ty(), width));
-            }
         }
         return a;
     }
@@ -416,10 +412,6 @@ public:
          || type == Type::Character) {      
             llvm::Value* out = value(builder);
             out = builder.CreateInBoundsGEP(out, index);
-
-            if(type == Type::Logical) {
-                a = builder.CreateSExt(a, llvm::VectorType::get(builder.getInt8Ty(), width));
-            }
 
             llvm::Type* t = llvm::VectorType::get(
                     ((llvm::SequentialType*)a->getType())->getElementType(),
@@ -502,7 +494,7 @@ struct Fusion {
         switch(type) {
             case Type::Double: t = builder.getDoubleTy(); break;
             case Type::Integer: t = builder.getInt64Ty(); break;
-            case Type::Logical: t = builder.getInt1Ty(); break;
+            case Type::Logical: t = builder.getInt8Ty(); break;
             default: _error("Bad type in trace");
         }
         return t;
@@ -687,6 +679,14 @@ struct Fusion {
         return out;
     }
 
+    llvm::Value* ToInt1(llvm::Value* v) {
+        return builder.CreateTrunc(v, llvm::VectorType::get(builder.getInt1Ty(), width));
+    }
+
+    llvm::Value* ToInt8(llvm::Value* v) {
+        return builder.CreateSExt(v, llvm::VectorType::get(builder.getInt8Ty(), width));
+    }
+
     void Emit(size_t index) {
 
         instructions++;
@@ -707,6 +707,13 @@ struct Fusion {
         : builder.Create##IName(Load(builder, ir.a), Load(builder, ir.b));\
     } break
 
+#define CASE_BINARY_ORDINAL(Op, FName, IName) \
+    case TraceOpCode::Op: { \
+        outs[reg] = ToInt8((jit.code[ir.a].type == Type::Double)   \
+        ? builder.Create##FName(Load(builder, ir.a), Load(builder, ir.b)) \
+        : builder.Create##IName(Load(builder, ir.a), Load(builder, ir.b)));\
+    } break
+
 #define CASE_UNARY_LOGICAL(Op, Name) \
     case TraceOpCode::Op: { \
         outs[reg] = builder.Create##Name(Load(builder, ir.a)); \
@@ -720,8 +727,7 @@ struct Fusion {
 #define IDENTITY \
     outs[reg] = Load(builder, ir.a);
 
-#define SCALARIZE1(Name, A) { \
-    llvm::Value* in = Load(builder, ir.a);                        \
+#define SCALARIZE1(in, Name, A) { \
     outs[reg] = llvm::UndefValue::get(llvmType(ir.type, width)); \
     for(uint32_t i = 0; i < width; i++) {                                       \
         llvm::Value* ii = builder.getInt32(i);                                  \
@@ -744,12 +750,12 @@ struct Fusion {
             CASE_BINARY(mul, FMul, Mul);
             CASE_BINARY(div, FDiv, SDiv);
           
-            CASE_BINARY(eq, FCmpOEQ, ICmpEQ);  
-            CASE_BINARY(neq, FCmpONE, ICmpNE);  
-            CASE_BINARY(lt, FCmpOLT, ICmpSLT);  
-            CASE_BINARY(le, FCmpOLE, ICmpSLE);  
-            CASE_BINARY(gt, FCmpOGT, ICmpSGT);  
-            CASE_BINARY(ge, FCmpOGE, ICmpSGE);  
+            CASE_BINARY_ORDINAL(eq, FCmpOEQ, ICmpEQ);  
+            CASE_BINARY_ORDINAL(neq, FCmpONE, ICmpNE);  
+            CASE_BINARY_ORDINAL(lt, FCmpOLT, ICmpSLT);  
+            CASE_BINARY_ORDINAL(le, FCmpOLE, ICmpSLE);  
+            CASE_BINARY_ORDINAL(gt, FCmpOGT, ICmpSGT);  
+            CASE_BINARY_ORDINAL(ge, FCmpOGE, ICmpSGE);  
            
             CASE_UNARY_LOGICAL(lnot, Not); 
             CASE_BINARY_LOGICAL(lor, Or); 
@@ -853,8 +859,14 @@ struct Fusion {
 
             case TraceOpCode::asdouble:
                 switch(jit.code[ir.a].type) {
-                    case Type::Integer: SCALARIZE1(SIToFP, builder.getDoubleTy()); break;
-                    case Type::Logical: SCALARIZE1(SIToFP, builder.getDoubleTy()); break;
+                    case Type::Integer: {
+                        llvm::Value* in = Load(builder, ir.a);
+                        SCALARIZE1(in, SIToFP, builder.getDoubleTy()); 
+                    } break;
+                    case Type::Logical: {
+                        llvm::Value* in = ToInt1(Load(builder, ir.a));
+                        SCALARIZE1(in, SIToFP, builder.getDoubleTy()); 
+                    } break;
                     case Type::Double: IDENTITY; break;
                     default: _error("Unexpected cast"); break;
                 }
@@ -862,8 +874,11 @@ struct Fusion {
             
             case TraceOpCode::asinteger:
                 switch(jit.code[ir.a].type) {
-                    case Type::Double: SCALARIZE1(FPToSI, builder.getInt64Ty()); break;
-                    case Type::Logical: builder.CreateZExt(Load(builder, ir.a), builder.getInt64Ty());
+                    case Type::Double: {
+                        llvm::Value* in = Load(builder, ir.a);
+                        SCALARIZE1(in, FPToSI, builder.getInt64Ty());
+                    } break;
+                    case Type::Logical: ToInt1(Load(builder, ir.a));
                     case Type::Integer: IDENTITY; break;
                     default: _error("Unexpected cast"); break;
                 }
@@ -871,8 +886,8 @@ struct Fusion {
             
             case TraceOpCode::aslogical:
                 switch(jit.code[ir.a].type) {
-                    case Type::Double: builder.CreateFCmpONE(Load(builder, ir.a), zerosD); break;
-                    case Type::Integer: builder.CreateICmpNE(Load(builder, ir.a), zerosI); break;
+                    case Type::Double: ToInt8(builder.CreateFCmpONE(Load(builder, ir.a), zerosD)); break;
+                    case Type::Integer: ToInt8(builder.CreateICmpNE(Load(builder, ir.a), zerosI)); break;
                     case Type::Logical: IDENTITY; break;
                     default: _error("Unexpected cast"); break;
                 }
@@ -906,8 +921,6 @@ struct Fusion {
                     llvm::Value* ii = builder.getInt32(i);
                     llvm::Value* j = builder.CreateExtractElement(idx, ii);
                     j = builder.CreateLoad(builder.CreateGEP(v, j));
-                    if(ir.type == Type::Logical)
-                        j = builder.CreateICmpEQ(j, builder.getInt8(255));
                     r = builder.CreateInsertElement(r, j, ii);
                 }
                 outs[reg] = r;
@@ -968,8 +981,6 @@ struct Fusion {
             {
                 if(jit.code[ir.a].out.length == 1) {
                     llvm::Value* e = builder.CreateLoad( RawLoad(builder, ir.a) );
-                    if(ir.type == Type::Logical)
-                        e = builder.CreateICmpEQ(e, builder.getInt8(Logical::TrueElement));
                     llvm::Value* r = llvm::UndefValue::get(llvmType(ir.type, width));
                     for(int32_t i = 0; i < width; i++) {
                         r = builder.CreateInsertElement(r, e, builder.getInt32(i)); 
@@ -984,8 +995,6 @@ struct Fusion {
                         llvm::Value* ii = builder.getInt32(i);
                         llvm::Value* j = builder.CreateExtractElement(sequenceI, ii);
                         j = builder.CreateLoad(builder.CreateGEP(v, j));
-                        if(ir.type == Type::Logical)
-                            j = builder.CreateICmpEQ(j, builder.getInt8(255));
                         r = builder.CreateInsertElement(r, j, ii);
                     }
                     outs[reg] = r;
@@ -1010,7 +1019,7 @@ struct Fusion {
                         break;
                     default: _error("Unexpected decodena type"); break;
                 }
-                outs[reg] = builder.CreateICmpEQ(c, na);
+                outs[reg] = ToInt8(builder.CreateICmpEQ(c, na));
             } break;
 
             case TraceOpCode::decodevl:
@@ -1036,7 +1045,7 @@ struct Fusion {
                         break;
                     default: _error("Unexpected decodena type"); break;
                 }
-                outs[reg] = builder.CreateSelect(isna, na, c);
+                outs[reg] = builder.CreateSelect(ToInt1(isna), na, c);
                 
             } break;
 
@@ -1552,7 +1561,7 @@ struct TraceCompiler {
                     } else if(ir.type == Type::Logical) {
                         Logical const& v = (Logical const&)jit.constants[ir.a];
                         for(size_t i = 0; i < ir.out.traceLength; i++)
-                            c.push_back(builder.getInt8(v[i] != 0 ? 255 : 0));
+                            c.push_back(builder.getInt8(v[i]));
                     } else if(ir.type == Type::Character) {
                         Character const& v = (Character const&)jit.constants[ir.a];
                         for(size_t i = 0; i < ir.out.traceLength; i++)
