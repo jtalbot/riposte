@@ -1116,6 +1116,6 @@ void JIT::SINK(void) {
 
     // Sweep phase
     for(IRRef i = code.size()-1; i < code.size(); --i) {
-        code[i].sunk = !marks[i];
+        code[i].sunk = false;//!marks[i];
     } 
 }
