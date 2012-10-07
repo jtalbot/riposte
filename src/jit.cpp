@@ -44,7 +44,7 @@ JIT::Shape JIT::SpecializeValue(Value const& v, IRRef r) {
     }
 }
 
-JIT::IRRef JIT::SpecializeNA(Value const& v, IRRef r) {
+bool JIT::MayHaveNA(Value const& v) {
     bool mayHaveNA = false;
     switch(v.type) {
         #define CASE(Name) case Type::Name: mayHaveNA = ((Name const&)v).getMayHaveNA(); break;
@@ -52,12 +52,7 @@ JIT::IRRef JIT::SpecializeNA(Value const& v, IRRef r) {
         #undef CASE
         default: break;
     }
-    if(!mayHaveNA) {
-        return FalseRef;
-    }
-    else { 
-        return Emit( IR(TraceOpCode::decodena, r, Type::Logical, trace[r].out, trace[r].out) );
-    }
+    return mayHaveNA;
 }
 
 JIT::Var JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
@@ -68,16 +63,13 @@ JIT::Var JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
     IRRef r = Emit( IR( TraceOpCode::sload, -1, v.i, Type::Any, Shape::Empty, Shape::Scalar ) );
 
     Shape s = SpecializeValue(operand, r); 
-    IRRef b = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), reenter, true );
-          r = Emit( IR( TraceOpCode::decodevl, b, operand.type, s, s ) );
-    IRRef na = SpecializeNA(operand, b);
-    return Var(trace, r, na);
+          r = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), reenter, true );
+    return Var(trace, r, MayHaveNA(operand));
 }
 
 void JIT::store(Thread& thread, Var a, int64_t c) {
     if(c > 0) _error("c is too big");
-    a.v = Emit( IR( TraceOpCode::encode, a.v, a.na, trace[a.v].type, trace[a.v].out, trace[a.v].out ) );
-    IRRef r = Emit( IR( TraceOpCode::box, a.v, Type::Any, trace[a.v].out, Shape::Scalar ) );
+    IRRef r = Box( a.v );
     int64_t slot = (thread.base+c)-(thread.registers+DEFAULT_NUM_REGISTERS);
     Emit( IR( TraceOpCode::sstore, -1, slot, r, Type::Nil, Shape::Scalar, Shape::Empty ) );
 }
@@ -96,8 +88,47 @@ void JIT::emitPush(Thread const& thread) {
     frames.push_back(frame);
 }
 
+JIT::IRRef JIT::DecodeVL(Var a) {
+    if(a.mayHaveNA)
+        return Emit( IR(TraceOpCode::decodevl, a.v, a.type, a.s, a.s) );
+    else
+        return a.v;
+}
+
+JIT::IRRef JIT::DecodeNA(Var a) {
+    if(a.mayHaveNA)
+        return Emit( IR(TraceOpCode::decodena, a.v, a.type, a.s, a.s) );
+    else
+        return Emit( IR(TraceOpCode::brcast, FalseRef, Type::Logical, a.s, a.s) );
+}
+
+JIT::Var JIT::Encode(IRRef v, IRRef na, bool mayHaveNA) {
+    if(mayHaveNA) {
+        return Var(trace, 
+            Emit( IR(TraceOpCode::encode, v, na, trace[v].type, trace[v].out, trace[v].out) ),
+            true );
+    }
+    else {
+        return Var(trace, v, false);
+    }
+}
+
+JIT::IRRef JIT::Box(IRRef a) {
+    if(trace[a].type != Type::Any) {
+        return Emit( IR( TraceOpCode::box, a, Type::Any, trace[a].out, Shape::Scalar ) );
+    }
+    else {
+        return a;
+    }
+}
+
 JIT::Var JIT::EmitUnary(TraceOpCode::Enum op, Var a, Type::Enum rty) {
-    return Var(trace, Emit( IR(op, a.v, rty, a.s, a.s ) ), a.na); 
+    IRRef r;
+
+    return Encode(
+        Emit( IR( op, DecodeVL(a), rty, a.s, a.s ) ),
+        DecodeNA(a),
+        a.mayHaveNA);
 }
 
 JIT::Var JIT::EmitCast(Var a, Type::Enum type) {
@@ -118,9 +149,7 @@ JIT::Var JIT::EmitBroadcast( Var a, Shape target ) {
     if( a.s == target )
         return a;
 
-    return Var(trace, 
-        Emit( IR( TraceOpCode::brcast, a.v, a.type, target, target ) ),
-        Emit( IR( TraceOpCode::brcast, a.na, Type::Logical, target, target ) ) );
+    return Var(trace, Emit( IR( TraceOpCode::brcast, a.v, a.type, target, target ) ), a.mayHaveNA );
 }
 
 JIT::Var JIT::EmitRep( Var l, Var e, Shape target ) {
@@ -132,16 +161,17 @@ JIT::Var JIT::EmitRep( Var l, Var e, Shape target ) {
     Var mb = EmitBroadcast( m, target );
     Var eb = EmitBroadcast( ei, target );
 
-    Var s( trace, Emit( IR( TraceOpCode::seq, 0, 1, Type::Integer, target, target ) ), FalseRef );
+    Var s( trace, Emit( IR( TraceOpCode::seq, 0, 1, Type::Integer, target, target ) ), false );
     s = EmitBinary( TraceOpCode::mod, s, mb, Type::Integer, 0 );
     s = EmitBinary( TraceOpCode::idiv, s, eb, Type::Integer, 0 );
     return s;
 }
 
 JIT::Var JIT::EmitFold(TraceOpCode::Enum op, Var a, Type::Enum rty) {
-    return Var(trace, 
-        Emit( IR(op, a.v, rty, a.s, Shape::Scalar) ),
-        Emit( IR(TraceOpCode::any, a.na, Type::Logical, a.s, Shape::Scalar ) ) );
+    return Encode(
+        Emit( IR( op, DecodeVL(a), rty, a.s, Shape::Scalar ) ),
+        Emit( IR( TraceOpCode::any, DecodeNA(a), Type::Logical, a.s, Shape::Scalar ) ),
+        a.mayHaveNA );
 }
 
 JIT::Shape JIT::MergeShapes(Shape a, Shape b, Instruction const* inst) {
@@ -159,15 +189,15 @@ JIT::Shape JIT::MergeShapes(Shape a, Shape b, Instruction const* inst) {
         shape = a;
     }
     else if(a.traceLength == b.traceLength) {
-        Var al( trace, a.length, FalseRef );
-        Var bl( trace, b.length, FalseRef );
+        Var al( trace, a.length, false );
+        Var bl( trace, b.length, false );
         Var x = EmitBinary( TraceOpCode::eq, al, bl, Type::Logical, 0 );
         Emit( IR( TraceOpCode::gtrue, x.v, Type::Nil, Shape::Scalar, Shape::Empty), inst, true );
         shape = a.length < b.length ? a : b;
     }
     else if(a.traceLength < b.traceLength) {
-        Var al( trace, a.length, FalseRef );
-        Var bl( trace, b.length, FalseRef );
+        Var al( trace, a.length, false );
+        Var bl( trace, b.length, false );
         Var x = EmitBinary( TraceOpCode::le, al, bl, Type::Logical, 0 );
         Var y = EmitBinary( TraceOpCode::gt, al, Var(trace,0,FalseRef), Type::Logical, 0 );
         Var z = EmitBinary( TraceOpCode::land, x, y, Type::Logical, 0 );
@@ -175,8 +205,8 @@ JIT::Shape JIT::MergeShapes(Shape a, Shape b, Instruction const* inst) {
         shape = b;
     }
     else if(a.traceLength > b.traceLength) {
-        Var al( trace, a.length, FalseRef );
-        Var bl( trace, b.length, FalseRef );
+        Var al( trace, a.length, false );
+        Var bl( trace, b.length, false );
         Var x = EmitBinary( TraceOpCode::le, bl, al, Type::Logical, 0 );
         Var y = EmitBinary( TraceOpCode::gt, bl, Var(trace,0,FalseRef), Type::Logical, 0 );
         Var z = EmitBinary( TraceOpCode::land, x, y, Type::Logical, 0 );
@@ -186,71 +216,79 @@ JIT::Shape JIT::MergeShapes(Shape a, Shape b, Instruction const* inst) {
     return shape;
 }
 
-JIT::Var JIT::EmitBinary(TraceOpCode::Enum op, Var a, Var b, Type::Enum rty, Instruction const* inst) {
-    Shape shape = MergeShapes(a.s, b.s, inst);
+JIT::Var JIT::EmitBinary(TraceOpCode::Enum op, Var a, Var b, Type::Enum rty, Instruction const* inst) 
+{
+    Shape s = MergeShapes(a.s, b.s, inst);
    
-    a = EmitBroadcast(a, shape);
-    b = EmitBroadcast(b, shape);
+    a = EmitBroadcast(a, s);
+    b = EmitBroadcast(b, s);
  
     if(op == TraceOpCode::lor) {
-        IRRef r = Emit( IR( op, a.v, b.v, rty, shape, shape ) ); 
-        IRRef x = Emit( IR( TraceOpCode::land, a.na, b.na, Type::Logical, shape, shape ) );
-        IRRef y = Emit( IR( TraceOpCode::lnot, b.v, Type::Logical, shape, shape ) );
-              y = Emit( IR( TraceOpCode::land, a.na, y, Type::Logical, shape, shape ) );
-        IRRef z = Emit( IR( TraceOpCode::lnot, a.v, Type::Logical, shape, shape ) );
-              z = Emit( IR( TraceOpCode::land, b.na, y, Type::Logical, shape, shape ) );
-        IRRef n = Emit( IR( TraceOpCode::lor, x, y, Type::Logical, shape, shape ) );
-              n = Emit( IR( TraceOpCode::lor, n, z, Type::Logical, shape, shape ) );
-        return Var( trace, r, n );
+        IRRef r = Emit( IR( op, DecodeVL(a), DecodeVL(b), rty, s, s ) ); 
+        IRRef x = Emit( IR( TraceOpCode::land, DecodeNA(a), DecodeNA(b), Type::Logical, s, s ) );
+        IRRef y = Emit( IR( TraceOpCode::lnot, DecodeVL(b), Type::Logical, s, s ) );
+              y = Emit( IR( TraceOpCode::land, DecodeNA(a), y, Type::Logical, s, s ) );
+        IRRef z = Emit( IR( TraceOpCode::lnot, DecodeVL(a), Type::Logical, s, s ) );
+              z = Emit( IR( TraceOpCode::land, DecodeNA(b), y, Type::Logical, s, s ) );
+        IRRef n = Emit( IR( TraceOpCode::lor, x, y, Type::Logical, s, s ) );
+              n = Emit( IR( TraceOpCode::lor, n, z, Type::Logical, s, s ) );
+        
+        // TODO: could tighten up mayHaveNA in scalar case with constants
+        return Encode( r, n, a.mayHaveNA || b.mayHaveNA );
     }
     else if(op == TraceOpCode::land) {
-        IRRef r = Emit( IR( op, a.v, b.v, rty, shape, shape ) ); 
-        IRRef x = Emit( IR( TraceOpCode::land, a.na, b.na, Type::Logical, shape, shape ) );
-        IRRef y = Emit( IR( TraceOpCode::land, a.na, b.v, Type::Logical, shape, shape ) );
-        IRRef z = Emit( IR( TraceOpCode::land, b.na, a.v, Type::Logical, shape, shape ) );
-        IRRef n = Emit( IR( TraceOpCode::lor, x, y, Type::Logical, shape, shape ) );
-              n = Emit( IR( TraceOpCode::lor, n, z, Type::Logical, shape, shape ) );
-        return Var( trace, r, n );
+        IRRef r = Emit( IR( op, DecodeVL(a), DecodeVL(b), rty, s, s ) ); 
+        IRRef x = Emit( IR( TraceOpCode::land, DecodeNA(a), DecodeNA(b), Type::Logical, s, s ) );
+        IRRef y = Emit( IR( TraceOpCode::land, DecodeNA(a), DecodeNA(b), Type::Logical, s, s ) );
+        IRRef z = Emit( IR( TraceOpCode::land, DecodeNA(b), DecodeVL(a), Type::Logical, s, s ) );
+        IRRef n = Emit( IR( TraceOpCode::lor, x, y, Type::Logical, s, s ) );
+              n = Emit( IR( TraceOpCode::lor, n, z, Type::Logical, s, s ) );
+    
+        // TODO: could tighten up mayHaveNA in scalar case with constants
+        return Encode( r, n, a.mayHaveNA || b.mayHaveNA );    
     }
     else {
-        return Var( trace,
-            Emit( IR( op, a.v, b.v, rty, shape, shape ) ), 
-            Emit( IR( TraceOpCode::lor, a.na, b.na, Type::Logical, shape, shape ) ) );
+        return Encode(
+            Emit( IR( op, DecodeVL(a), DecodeVL(b), rty, s, s ) ),
+            Emit( IR( TraceOpCode::lor, DecodeNA(a), DecodeNA(b), Type::Logical, s, s ) ),
+            a.mayHaveNA || b.mayHaveNA );
     }
 }
 
 JIT::Var JIT::EmitTernary(TraceOpCode::Enum op, Var a, Var b, Var c, Type::Enum rty, Instruction const* inst) {
-    Shape shape = MergeShapes(a.s, MergeShapes(b.s, c.s, inst), inst);
+    Shape s = MergeShapes(a.s, MergeShapes(b.s, c.s, inst), inst);
     
-    a = EmitBroadcast(a, shape);
-    b = EmitBroadcast(b, shape);
-    c = EmitBroadcast(c, shape);
+    a = EmitBroadcast(a, s);
+    b = EmitBroadcast(b, s);
+    c = EmitBroadcast(c, s);
 
     if(op == TraceOpCode::ifelse) {
-        IRRef n = Emit( IR( TraceOpCode::ifelse, a.v, b.na, c.na, Type::Logical, shape, shape ) );
-              n = Emit( IR( TraceOpCode::lor, a.na, n, Type::Logical, shape, shape ) );
-        return Var( trace, Emit( IR( op, a.v, b.v, c.v, rty, shape, shape ) ), n);
+        IRRef v = Emit( IR( op, DecodeVL(a), DecodeVL(b), DecodeVL(c), rty, s, s ) );
+        IRRef n = Emit( IR( TraceOpCode::ifelse, DecodeVL(a), DecodeNA(b), DecodeNA(c), Type::Logical, s, s ) ); 
+              n = Emit( IR( TraceOpCode::lor, DecodeNA(a), n, Type::Logical, s, s ) );
+    
+        return Encode( v, n, a.mayHaveNA || b.mayHaveNA || c.mayHaveNA ); 
     }
-    else { 
-        IRRef n = Emit( IR( TraceOpCode::lor, a.na, b.na, Type::Logical, shape, shape ) );
-              n = Emit( IR( TraceOpCode::lor, n, c.na, Type::Logical, shape, shape ) );
-        return Var( trace, Emit( IR( op, a.v, b.v, c.v, rty, shape, shape ) ), n);
+    else {
+        IRRef v = Emit( IR( op, DecodeVL(a), DecodeVL(b), DecodeVL(c), rty, s, s ) );
+        IRRef n = Emit( IR( TraceOpCode::lor, DecodeNA(a), DecodeNA(b), Type::Logical, s, s ) );
+              n = Emit( IR( TraceOpCode::lor, n, DecodeNA(c), Type::Logical, s, s ) );
+
+        return Encode( v, n, a.mayHaveNA || b.mayHaveNA || c.mayHaveNA );
     }
 }
 
 JIT::Var JIT::EmitConstant(Value const& value) {
-    IRRef r;
     IR a = makeConstant(value);
-    if(uniqueConstants.find(a.a) != uniqueConstants.end())
-        r = uniqueConstants[a.a];
-    else {
-        r = Emit(a);
-        uniqueConstants[a.a] = r;
-    }
+    // TODO: check if constant has an NA!
+    return Var( trace, Emit(a), false );    
+}
 
-          r = Emit( IR( TraceOpCode::decodevl, r, trace[r].type, trace[r].out, trace[r].out ) );
-    IRRef n = Emit( IR( TraceOpCode::decodena, r, Type::Logical, trace[r].out, trace[r].out ) );    
-    return Var( trace, r, n );    
+JIT::Var JIT::EmitConstantValue(Value const& value) {
+    IR a = makeConstant(value);
+    a.type = Type::Any;
+    // TODO: check if constant has an NA!
+    return Var( trace, Emit(a), false );    
 }
 
 bool JIT::EmitNest(Thread& thread, Trace* t) {
@@ -304,11 +342,9 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             Value const& operand = env->get((String)inst.a);
 
             Shape s = SpecializeValue(operand, r); 
-            IRRef v = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), &inst, true );
-                  r = Emit( IR( TraceOpCode::decodevl, v, operand.type, s, s ) );
-            IRRef na = SpecializeNA(operand, v);
+            r = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), &inst, true );
             
-            store(thread, Var(trace, r, na), inst.c);
+            store(thread, Var(trace, r, MayHaveNA(operand)), inst.c);
         }   break;
 
         case ByteCode::lassign: {
@@ -316,8 +352,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
             Var v = load(thread, inst.c, &inst);
 
-            IRRef r = Emit( IR( TraceOpCode::encode, v.v, v.na, v.type, v.s, v.s ) );
-                  r = Emit( IR( TraceOpCode::box, r, Type::Any, v.s, Shape::Scalar ) );
+            IRRef r = Box(v.v);
 
             Emit( IR( TraceOpCode::store, e, cc.v, r, Type::Nil, v.s, Shape::Empty ) );
             // Implicitly: store(thread, v, inst.c);
@@ -334,9 +369,8 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             
             IRRef r = Emit( IR( TraceOpCode::load, e.v, cc.v, operand.type, Shape::Empty, Shape::Scalar ) );
             Shape s = SpecializeValue(operand, r); 
-            IRRef v = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), &inst, true );
-            IRRef na = SpecializeNA(operand, v);
-            store(thread, Var(trace, r, na), inst.c);
+            r = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), &inst, true );
+            store(thread, Var(trace, r, MayHaveNA(operand)), inst.c);
         }   break;
 
         case ByteCode::assign: {
@@ -344,8 +378,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             Var e = load(thread, inst.b, &inst);
             Var v = load(thread, inst.c, &inst);
 
-            IRRef r = Emit( IR( TraceOpCode::encode, v.v, v.na, v.type, v.s, v.s ) );
-                  r = Emit( IR( TraceOpCode::box, r, Type::Any, v.s, Shape::Scalar ) );
+            IRRef r = Box( v.v );
 
             Emit( IR( TraceOpCode::store, e.v, cc.v, r, Type::Nil, v.s, Shape::Empty ) );
             store(thread, e, inst.c);
@@ -356,12 +389,13 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             // TODO: need to check for negative numbers, out of range accesses, logical gather vectors, etc.
             Var a = load(thread, inst.a, &inst);
             Var b = EmitCast(load(thread, inst.b, &inst), Type::Integer);
-            b = EmitBinary( TraceOpCode::sub, b, Var(trace, 1, FalseRef), Type::Integer, 0 );
+            b = EmitBinary( TraceOpCode::sub, b, Var(trace, 1, false), Type::Integer, 0 );
 
-            IRRef n = Emit( IR( TraceOpCode::gather, a.na, b.v, Type::Logical, b.s, b.s ) );
-                  n = Emit( IR( TraceOpCode::lor, b.na, n, Type::Logical, b.s, b.s ) );
-            IRRef r = Emit( IR( TraceOpCode::gather, a.v, b.v, a.type, b.s, b.s ) ); 
-            store(thread, Var( trace, r, n ), inst.c); 
+            IRRef r = Emit( IR( TraceOpCode::gather, a.v, DecodeVL(b), a.type, b.s, b.s ) );
+            Var q( trace, r, a.mayHaveNA );
+
+            IRRef n = Emit( IR( TraceOpCode::lor, DecodeNA(q), DecodeNA(b), Type::Logical, b.s, b.s ) );
+            store(thread, Encode(r, n, b.mayHaveNA || q.mayHaveNA), inst.c); 
         }   break;
 
         case ByteCode::scatter1: {
@@ -369,10 +403,10 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             // TODO: Need to check for NAs in the index vector
             Var a = load(thread, inst.a, &inst);
             Var b = EmitCast(load(thread, inst.b, &inst), Type::Integer);
-            b = EmitBinary( TraceOpCode::sub, b, Var(trace, 1, FalseRef), Type::Integer, 0 );
+            b = EmitBinary( TraceOpCode::sub, b, Var(trace, 1, false), Type::Integer, 0 );
             Var c = load(thread, inst.c, &inst);
             
-            IRRef len = Emit( IR( TraceOpCode::reshape, b.v, c.s.length, Type::Integer, b.s, Shape::Scalar ) );
+            IRRef len = Emit( IR( TraceOpCode::reshape, DecodeVL(b), c.s.length, Type::Integer, b.s, Shape::Scalar ) );
 
             // TODO: needs to know the recorded reshaped length for matching with other same 
             // sized shapes
@@ -383,9 +417,8 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             a = EmitBroadcast( a, s );
             b = EmitBroadcast( b, s );
 
-            IRRef n = Emit( IR( TraceOpCode::scatter, c.na, b.v, a.na, Type::Logical, s, reshaped ) );
-            IRRef r = Emit( IR( TraceOpCode::scatter, c.v, b.v, a.v, c.type, s, reshaped ) );
-            store(thread, Var( trace, r, n ), inst.c);
+            IRRef r = Emit( IR( TraceOpCode::scatter, c.v, DecodeVL(b), a.v, c.type, s, reshaped ) );
+            store(thread, Var( trace, r, a.mayHaveNA || c.mayHaveNA ), inst.c);
         }   break;
 
         case ByteCode::ifelse: {
@@ -426,7 +459,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         case ByteCode::length:
         {
             Var a = load(thread, inst.a, &inst);
-            store(thread, Var( trace, a.s.length, FalseRef ), inst.c);
+            store(thread, Var( trace, a.s.length, false ), inst.c);
         }   break;
 
         case ByteCode::forbegin:
@@ -439,17 +472,13 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             Emit( IR( TraceOpCode::gtrue, b, Type::Nil, Shape::Scalar, Shape::Empty), &inst+(&inst+1)->a, false );
 
             IRRef r = Emit( IR( TraceOpCode::gather, vec.v, counter, vec.type, Shape::Scalar, Shape::Scalar ) );
-            IRRef n = Emit( IR( TraceOpCode::decodena, r, Type::Logical, Shape::Scalar, Shape::Scalar) );
-            //IRRef n = Emit( IR( TraceOpCode::gather, vec.na, counter, Type::Logical, Shape::Scalar, Shape::Scalar ) );
-
-                  r = Emit( IR( TraceOpCode::encode, r, n, vec.type, Shape::Scalar, Shape::Scalar ) );
-                  r = Emit( IR( TraceOpCode::box, r, Type::Any, Shape::Scalar, Shape::Scalar ) );
+                  r = Box(r);
 
             Var cc = EmitConstant(Character::c((String)inst.a));
             IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
             Emit( IR( TraceOpCode::store, e, cc.v, r, Type::Nil, Shape::Scalar, Shape::Empty ) );
 
-            store(thread, Var( trace, 1, FalseRef ), inst.c); 
+            store(thread, Var( trace, 1, false ), inst.c); 
         }   break;
 
         case ByteCode::forend:
@@ -466,11 +495,8 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             Emit( IR( TraceOpCode::gtrue, b, Type::Nil, Shape::Scalar, Shape::Empty), &inst+2, false );
             
             IRRef r = Emit( IR( TraceOpCode::gather, vec.v, counter, vec.type, Shape::Scalar, Shape::Scalar ) );
-            IRRef n = Emit( IR( TraceOpCode::decodena, r, Type::Logical, Shape::Scalar, Shape::Scalar) );
-            //IRRef n = Emit( IR( TraceOpCode::gather, vec.na, counter, Type::Logical, Shape::Scalar, Shape::Scalar ) );
 
-                  r = Emit( IR( TraceOpCode::encode, r, n, vec.type, Shape::Scalar, Shape::Scalar ) );
-                  r = Emit( IR( TraceOpCode::box, r, Type::Any, Shape::Scalar, Shape::Scalar ) );
+                  r = Box(r);
 
             Var cc = EmitConstant(Character::c((String)inst.a));
             IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
@@ -480,7 +506,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             Variable k = { -1, (thread.base+inst.c)-(thread.registers+DEFAULT_NUM_REGISTERS)};
             Emit( IR( TraceOpCode::kill, k.i, Type::Nil, Shape::Empty, Shape::Empty ) );
             
-            store(thread, Var( trace, counter, FalseRef ), inst.c); 
+            store(thread, Var( trace, counter, false ), inst.c); 
         }   break;
 
         case ByteCode::strip:
@@ -572,7 +598,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
                 ? Type::Double : Type::Integer; 
                 
             IRRef r = Emit( IR( TraceOpCode::seq, EmitCast(c, type).v, EmitCast(b, type).v, type, s, s) );
-            store(thread, Var( trace, r, FalseRef ), inst.c); 
+            store(thread, Var( trace, r, false ), inst.c); 
         }   break;
 
         case ByteCode::call:
@@ -586,13 +612,13 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
                     load(thread, inst.a, &inst).v,
                     load(thread, inst.a, &inst).v,
                     EmitConstant(Null::Singleton()).v, Type::Environment, Shape::Scalar, Shape::Scalar) );
-            store(thread, Var( trace, r, FalseRef ), inst.c);
+            store(thread, Var( trace, r, false ), inst.c);
             } break;
         case ByteCode::parentframe:
             {
                 IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
                 IRRef r = Emit( IR( TraceOpCode::denv, e, Type::Environment, Shape::Scalar, Shape::Scalar ) );
-                store(thread, Var(trace, r, FalseRef ), inst.c);
+                store(thread, Var(trace, r, false ), inst.c);
             } break;
 
         default: {
@@ -747,11 +773,7 @@ void JIT::Replay(Thread& thread) {
             }
             forward[i] = fwd;
         }
-
-        size_t actualSize = code.size();
-
-        code.resize(actualSize);
-
+        
         for(std::map<IRRef, IRRef>::const_iterator i = phis.begin(); i != phis.end(); ++i) {
             IR const& ir = code[i->first];
             Insert(thread, code, cse, snapshot, IR(TraceOpCode::phi, i->first, i->second, ir.type, code[i->second].out, ir.out));

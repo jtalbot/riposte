@@ -62,6 +62,7 @@ class Thread;
 
 #define SPECIALIZE_LENGTH 16
 
+
 class JIT {
 
 public:
@@ -175,7 +176,7 @@ public:
 
     std::vector<Value> constants;
     std::map<Value, size_t> constantsMap;
-    std::map<size_t, IRRef> uniqueConstants;
+    //std::tr1::unordered_map<IR, IRRef> uniqueConstants;
 
     struct StackFrame {
         IRRef environment;
@@ -255,7 +256,7 @@ public:
         envs.clear();
         constants.clear();
         constantsMap.clear();
-        uniqueConstants.clear();
+        //uniqueConstants.clear();
         uniqueExits.clear();
         exitStubs.clear();
         shapes.clear();
@@ -308,18 +309,26 @@ public:
     struct Var {
         std::vector<IR>& trace;
         IRRef v;
-        IRRef na;
+        bool mayHaveNA;
         Type::Enum type;
         Shape s;
-        Var(std::vector<IR>& trace, IRRef v, IRRef na) 
-            : trace(trace), v(v), na(na), type(trace[v].type), s(trace[v].out) {}
+        Var(std::vector<IR>& trace, IRRef v, bool mayHaveNA) 
+            : trace(trace)
+            , v(v)
+            , mayHaveNA(mayHaveNA)
+            , type(trace[v].type)
+            , s(trace[v].out) {}
         
         Var(Var const& o)
-            : trace(o.trace), v(o.v), na(o.na), type(o.type), s(o.s) {}
+            : trace(o.trace)
+            , v(o.v)
+            , mayHaveNA(o.mayHaveNA)
+            , type(o.type)
+            , s(o.s) {}
     
         void operator=(Var const& o) {
             v = o.v;
-            na = o.na;
+            mayHaveNA = o.mayHaveNA;
             type = o.type;
             s = o.s;
         }
@@ -328,6 +337,7 @@ public:
 	Var load(Thread& thread, int64_t a, Instruction const* reenter);
     void store(Thread& thread, Var a, int64_t c);
     Var EmitConstant(Value const& v);
+    Var EmitConstantValue(Value const& v);
 	Var EmitUnary(TraceOpCode::Enum op, Var a, Type::Enum rty);
 	Var EmitFold(TraceOpCode::Enum op, Var a, Type::Enum rty);
 	Var EmitBinary(TraceOpCode::Enum op, Var a, Var b, Type::Enum rty, Instruction const* inst);
@@ -338,8 +348,12 @@ public:
 
     void Kill(Snapshot& snapshot, int64_t a);
 
+    bool  MayHaveNA(Value const& v);
+    IRRef DecodeVL(Var a);
+    IRRef DecodeNA(Var a);
+    Var Encode(IRRef v, IRRef na, bool mayHaveNA);
+    IRRef Box(IRRef a);
     Shape SpecializeValue(Value const& v, IRRef r);
-    IRRef SpecializeNA(Value const& v, IRRef r);
     Shape MergeShapes(Shape a, Shape b, Instruction const* inst);
 
     IRRef Optimize(Thread& thread, IRRef i);
@@ -356,7 +370,7 @@ public:
     void emitPush(Thread const& thread);
 
     void storeArg(Environment* env, String name, Value const& v) {
-        estore(EmitConstant(v), env, name);
+        estore(EmitConstantValue(v), env, name);
     }
 
     std::map<Environment const*, IRRef> envs;
@@ -375,10 +389,7 @@ public:
 
     void estore(Var a, Environment* env, String name) {
         Variable v = { getEnv(env), (int64_t)EmitConstant(Character::c(name)).v };
-
-        IRRef r = Emit( IR( TraceOpCode::encode, a.v, a.na, a.type, a.s, a.s ) );
-              r = Emit( IR( TraceOpCode::box, r, Type::Any, a.s, Shape::Scalar ) );	
-
+        IRRef r = Box(a.v);
         trace.push_back(IR(TraceOpCode::store, v.env, v.i, r, Type::Nil, a.s, Shape::Empty));
     }
 
@@ -502,5 +513,6 @@ namespace std {
         };
     }
 }
+
 
 #endif

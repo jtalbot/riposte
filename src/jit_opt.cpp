@@ -160,6 +160,11 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                     ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
                 break;
 
+            case TraceOpCode::ifelse:
+                if(ir.b == ir.c)
+                    ir = IR(TraceOpCode::pos, ir.b, ir.type, ir.in, ir.out);
+                break;
+
             case TraceOpCode::mod:
                 if(ir.type == Type::Integer) {
                     // if mod is a power of 2, can replace with a mask.
@@ -209,6 +214,9 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                     ir = IR(TraceOpCode::brcast, ir.a, ir.type, ir.in, ir.out);
                     retry = true;
                 }
+                if(ir.b == 0 && code[ir.a].op == TraceOpCode::seq) {
+                    ir = IR(TraceOpCode::pos, code[ir.a].a, ir.type, ir.in, ir.out);
+                }
                 break;
 
             case TraceOpCode::brcast:
@@ -234,6 +242,15 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                     (code[ir.b].op == TraceOpCode::brcast && code[ir.b].a == FalseRef)) {
                     ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
                 }
+                if(code[ir.a].op == TraceOpCode::decodevl
+                    &&  code[ir.b].op == TraceOpCode::decodena
+                    &&  code[ir.a].a == code[ir.b].a) {
+                    ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
+                }
+                else if(code[ir.b].op == TraceOpCode::decodena
+                    &&  ir.a == code[ir.b].a) {
+                    ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
+                }
                 break;
 
             case TraceOpCode::phi:
@@ -242,6 +259,18 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                     ir = IR(TraceOpCode::nop, Type::Nil, Shape::Empty, Shape::Empty);
                 }
                 break;
+
+            case TraceOpCode::box:
+                if(code[ir.a].op == TraceOpCode::constant) {
+                    ir = IR( TraceOpCode::constant, code[ir.a].a, Type::Any, Shape::Empty, Shape::Scalar);
+                }
+                break;
+
+            case TraceOpCode::unbox:
+                if(code[ir.a].op == TraceOpCode::constant) {
+                    Value const& v = constants[code[ir.a].a];
+                    ir = IR( TraceOpCode::constant, code[ir.a].a, v.type, Shape::Empty, Shape::Scalar);
+                }
 
             default:
                 break;
@@ -315,31 +344,41 @@ JIT::IRRef JIT::Optimize(Thread& thread, IRRef i) {
 
 void JIT::RunOptimize(Thread& thread) {
     std::tr1::unordered_map<IR, IRRef> cse;
-    
+
     std::vector<IRRef> forward(code.size(), 0);
     forward[0] = 0;
     forward[1] = 1;
     forward[2] = 2;
     forward[3] = 3;
 
+    std::map<IRRef, IRRef> phis;
+
     for(IRRef i = 0; i < code.size(); ++i) {
         IR& ir = code[i];
         ir = Forward(ir, forward);
-        forward[i] = Optimize(thread, i);
-   
-        if(forward[i] == i) { 
+        IRRef fwd = Optimize(thread, i);
+
+        if(fwd == i) {
+
+            size_t mysize = ir.out.traceLength * (ir.type == Type::Logical ? 1 : 8);
+            double csecost = mysize * memcost(mysize);
+            double nocsecost = Opcost(code, ir);
+
+            ir.cost = std::min(csecost, nocsecost);
+
             std::tr1::unordered_map<IR, IRRef>::const_iterator j = cse.find(ir);
-            if(j != cse.end()) {
+            if(j != cse.end() &&
+                (ir.op == TraceOpCode::constant ||
+                    i < Loop || j->second > Loop)) {
                 ir.op = TraceOpCode::nop;
-                forward[i] = j->second;
+                fwd = j->second;
             }
             else {
                 cse[ir] = i;
             }
         }
 
-        if(ir.op == TraceOpCode::loop)
-            cse.clear();
+        forward[i] = fwd;
     }
 }
 
@@ -805,8 +844,8 @@ JIT::IRRef JIT::EmitOptIR(
                 ir.a = forward[ir.a];
                 if(code[ir.a].op == TraceOpCode::unbox)
                     return code[ir.a].a;
-                else
-                    return Insert(thread, code, cse, snapshot, ir);
+
+                return Insert(thread, code, cse, snapshot, ir);
             } break;
 
             case TraceOpCode::unbox: {
