@@ -739,17 +739,12 @@ JIT::IRRef JIT::EmitOptIR(
                 std::tr1::unordered_map<IR, IRRef> tcse;
                 IRRef s = Insert(thread, code, tcse, snapshot, ir);
                 snapshot.memory.insert(s);
-                if(ir.b < Loop) {
-                    code[s].sunk = true;
-                }
                 bool crossedExit;
-               IRRef j = DSE(code, code.size()-1, crossedExit);    
+                IRRef j = DSE(code, code.size()-1, crossedExit);    
                 if(j != code.size()-1) {
                     snapshot.memory.erase(j);
                     if( !crossedExit )
                         code[j].op = TraceOpCode::nop;
-                    else
-                        code[j].sunk = true;
                 }
                 return f;
             } break;

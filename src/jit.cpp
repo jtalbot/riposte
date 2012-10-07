@@ -333,7 +333,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             IRRef r = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
             while(!env->has((String)inst.a)) {
                 env = env->LexicalScope();
-                Emit( IR( TraceOpCode::load, r, aa, Type::Any, Shape::Scalar, Shape::Scalar ) );
+                //Emit( IR( TraceOpCode::load, r, aa, Type::Any, Shape::Scalar, Shape::Scalar ) );
                 r = Emit( IR( TraceOpCode::lenv, r, Type::Environment, Shape::Scalar, Shape::Scalar ) );
             }
 
