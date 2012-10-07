@@ -17,7 +17,7 @@ ENABLE_JIT=0
 ENABLE_ARBB=0
 ENABLE_LIBM=0
 
-SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp runtime.cpp jit.cpp jit_compile.cpp jit_opt.cpp jit_reg.cpp
+SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp runtime.cpp jit.cpp jit_compile.cpp jit_opt.cpp jit_reg.cpp jit_guards.cpp jit_forward.cpp
 
 BC := ops.cpp
 

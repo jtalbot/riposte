@@ -11,7 +11,7 @@ convolve <- function(a, b) # from the extending R manual
     ab
 }
 
-x <- as.double(1:500)
+x <- as.double(1:10)
 
-#convolve(x,x)
-system.time(convolve(x,x))
+convolve(x,x)
+#system.time(convolve(x,x))

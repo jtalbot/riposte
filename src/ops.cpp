@@ -255,7 +255,7 @@ double* REALLOC_double(Thread& thread, double* v, int64_t& alloclen, int64_t len
         memcpy(w, v, alloclen*sizeof(Double::Element));
         // fill remainder with NAs
         for(size_t i = alloclen; i < length; i++) w[i] = Double::NAelement;
-        //printf("REALLOC_double: %d->%d   (%li)\n", alloclen, length, w);
+        printf("REALLOC_double: %d->%d   (%li)\n", alloclen, length, w);
         alloclen = length;
         return w;
     }
@@ -272,7 +272,7 @@ int64_t* REALLOC_integer(Thread& thread, int64_t* v, int64_t& alloclen, int64_t 
         memcpy(w, v, alloclen*sizeof(Integer::Element));
         // fill remainder with NAs
         for(size_t i = alloclen; i < length; i++) w[i] = Integer::NAelement;
-        //printf("REALLOC_integer: %d->%d   (%li)\n", alloclen, length, w);
+        printf("REALLOC_integer: %d->%d   (%li)\n", alloclen, length, w);
         alloclen = length;
         return w;
     }
@@ -289,7 +289,7 @@ int8_t* REALLOC_logical(Thread& thread, int8_t* v, int64_t& alloclen, int64_t le
         memcpy(w, v, alloclen*sizeof(Logical::Element));
         // fill remainder with NAs
         for(size_t i = alloclen; i < length; i++) w[i] = Logical::NAelement;
-        //printf("REALLOC_logical: %d->%d   (%li)\n", alloclen, length, w);
+        printf("REALLOC_logical: %d->%d   (%li)\n", alloclen, length, w);
         alloclen = length;
         return w;
     }

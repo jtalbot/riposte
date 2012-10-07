@@ -106,84 +106,146 @@ JIT::IR JIT::ConstantFold(Thread& thread, IR ir) {
 }
 
 JIT::IR JIT::StrengthReduce(IR ir) {
-    switch(ir.op) {
-        // numeric+0, numeric*1
-        // lower pow -> ^0=>1, ^1=>identity, ^2=>mul, ^0.5=>sqrt, ^-1=>1/x
-        // logical & FALSE, logical | TRUE
-        // eliminate unnecessary casts
-        // simplify expressions !!logical, --numeric, +numeric
-        // integer reassociation to recover constants, (a+1)-1 -> a+(1-1) 
-   
-        // should arrange this to fall through successive attempts at lowering...
-        case TraceOpCode::pow:
-            if(ir.type == Type::Double) {
-                if(code[ir.b].op == TraceOpCode::constant && 
-                        ((Double const&)constants[code[ir.b].a])[0] == 1) {
-                    return IR(TraceOpCode::pos, ir.a, Type::Double, ir.in, ir.out);
+    bool retry = true;
+    while(retry) {
+        retry = false;
+        switch(ir.op) {
+            // numeric+0, numeric*1
+            // lower pow -> ^0=>1, ^1=>identity, ^2=>mul, ^0.5=>sqrt, ^-1=>1/x
+            // logical & FALSE, logical | TRUE
+            // eliminate unnecessary casts
+            // simplify expressions !!logical, --numeric, +numeric
+            // integer reassociation to recover constants, (a+1)-1 -> a+(1-1) 
+
+            // should arrange this to fall through successive attempts at lowering...
+            case TraceOpCode::pow:
+                if(ir.type == Type::Double) {
+                    if(code[ir.b].op == TraceOpCode::constant && 
+                            ((Double const&)constants[code[ir.b].a])[0] == 1) {
+                        ir = IR(TraceOpCode::pos, ir.a, Type::Double, ir.in, ir.out);
+                    }
+                    else if(code[ir.b].op == TraceOpCode::constant && 
+                            ((Double const&)constants[code[ir.b].a])[0] == 2) {
+                        ir = IR(TraceOpCode::mul, ir.a, ir.a, Type::Double, ir.in, ir.out);
+                        retry = true;
+                    }
+                    else if(code[ir.b].op == TraceOpCode::brcast
+                            && code[code[ir.b].a].op == TraceOpCode::constant
+                            && ((Double const&)constants[code[code[ir.b].a].a])[0] == 2) {
+                        ir = IR(TraceOpCode::mul, ir.a, ir.a, Type::Double, ir.in, ir.out);
+                        retry = true;
+                    }
                 }
-                else if(code[ir.b].op == TraceOpCode::constant && 
-                        ((Double const&)constants[code[ir.b].a])[0] == 2) {
-                    return IR(TraceOpCode::mul, ir.a, ir.a, Type::Double, ir.in, ir.out);
+                break;
+
+            case TraceOpCode::lor:
+                if(ir.a == ir.b || ir.b == FalseRef)
+                    ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
+                else if(ir.a == TrueRef || ir.b == TrueRef)
+                    ir = IR(TraceOpCode::pos, TrueRef, ir.type, ir.in, ir.out);
+                else if(ir.a == FalseRef)
+                    ir = IR(TraceOpCode::pos, ir.b, ir.type, ir.in, ir.out);
+                else if(ir.b == FalseRef)
+                    ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
+                break;
+
+            case TraceOpCode::land:
+                if(ir.a == ir.b)
+                    ir = IR(TraceOpCode::pos, ir.a, Type::Integer, ir.in, ir.out); 
+                else if(ir.a == FalseRef || ir.b == FalseRef)
+                    ir = IR(TraceOpCode::pos, FalseRef, ir.type, ir.in, ir.out);
+                else if(ir.a == TrueRef)
+                    ir = IR(TraceOpCode::pos, ir.b, ir.type, ir.in, ir.out);
+                else if(ir.b == TrueRef)
+                    ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
+                break;
+
+            case TraceOpCode::mod:
+                if(ir.type == Type::Integer) {
+                    // if mod is a power of 2, can replace with a mask.
+                    if(code[ir.b].op == TraceOpCode::constant && 
+                            abs(((Integer const&)constants[code[ir.b].a])[0]) == 1)
+                        ir = IR(TraceOpCode::constant, 0, Type::Integer, Shape::Empty, Shape::Scalar);
+                    if(code[ir.b].op == TraceOpCode::brcast
+                            && code[code[ir.b].a].op == TraceOpCode::constant
+                            && abs(((Integer const&)constants[code[code[ir.b].a].a])[0]) == 1)
+                        ir = IR(TraceOpCode::brcast, 0, Type::Integer, ir.in, ir.out);
                 }
-                else if(code[ir.b].op == TraceOpCode::brcast
-                        && code[code[ir.b].a].op == TraceOpCode::constant
-                        && ((Double const&)constants[code[code[ir.b].a].a])[0] == 2) {
-                    return IR(TraceOpCode::mul, ir.a, ir.a, Type::Double, ir.in, ir.out);
+                break;
+
+            case TraceOpCode::idiv:
+                if(ir.type == Type::Integer) {
+                    // if power of 2, can replace with a shift.
+                    if(code[ir.b].op == TraceOpCode::constant && 
+                            abs(((Integer const&)constants[code[ir.b].a])[0]) == 1)
+                        ir = IR(TraceOpCode::pos, ir.a, Type::Integer, Shape::Empty, Shape::Scalar);
+                    if(code[ir.b].op == TraceOpCode::brcast
+                            && code[code[ir.b].a].op == TraceOpCode::constant
+                            && abs(((Integer const&)constants[code[code[ir.b].a].a])[0]) == 1)
+                        ir = IR(TraceOpCode::pos, ir.a, Type::Integer, ir.in, ir.out);
+
                 }
-            }
-        break;
+                break;
 
-        case TraceOpCode::lor:
-            if(ir.a == ir.b)
-                return IR(TraceOpCode::pos, ir.a, Type::Integer, ir.in, ir.out); 
-        break;
+            case TraceOpCode::eq:
+                if(ir.a == ir.b) {
+                    ir = IR(TraceOpCode::brcast, TrueRef, Type::Integer, ir.in, ir.out);
+                    retry = true;
+                }
+                break;
 
-        case TraceOpCode::land:
-            if(ir.a == ir.b)
-                return IR(TraceOpCode::pos, ir.a, Type::Integer, ir.in, ir.out); 
-        break;
- 
-        case TraceOpCode::mod:
-            if(ir.type == Type::Integer) {
-                // if mod is a power of 2, can replace with a mask.
-                if(code[ir.b].op == TraceOpCode::constant && 
-                        abs(((Integer const&)constants[code[ir.b].a])[0]) == 1)
-                    return IR(TraceOpCode::constant, 0, Type::Integer, Shape::Empty, Shape::Scalar);
-                if(code[ir.b].op == TraceOpCode::brcast
-                        && code[code[ir.b].a].op == TraceOpCode::constant
-                        && abs(((Integer const&)constants[code[code[ir.b].a].a])[0]) == 1)
-                    return IR(TraceOpCode::brcast, 0, Type::Integer, ir.in, ir.out);
-            }
-        break;
+            case TraceOpCode::neq:
+                if(ir.a == ir.b) {
+                    ir = IR(TraceOpCode::brcast, FalseRef, Type::Integer, ir.in, ir.out);
+                    retry = true;
+                }
+                break;
 
-        case TraceOpCode::idiv:
-            if(ir.type == Type::Integer) {
-                // if power of 2, can replace with a shift.
-                if(code[ir.b].op == TraceOpCode::constant && 
-                        abs(((Integer const&)constants[code[ir.b].a])[0]) == 1)
-                    return IR(TraceOpCode::pos, ir.a, Type::Integer, Shape::Empty, Shape::Scalar);
-                if(code[ir.b].op == TraceOpCode::brcast
-                        && code[code[ir.b].a].op == TraceOpCode::constant
-                        && abs(((Integer const&)constants[code[code[ir.b].a].a])[0]) == 1)
-                    return IR(TraceOpCode::pos, ir.a, Type::Integer, ir.in, ir.out);
-                
-            }
-        break;
+            case TraceOpCode::gather:
+                // lower a gather from a scalar to a brcast
+                if(code[ir.a].out.length == 1
+                        && code[ir.b].op == TraceOpCode::brcast
+                        && code[ir.b].a == 0) {
+                    ir = IR(TraceOpCode::brcast, ir.a, ir.type, ir.in, ir.out);
+                    retry = true;
+                }
+                break;
 
-        case TraceOpCode::gather:
-            // lower a gather from a scalar to a brcast
-            if(code[ir.a].out.length == 1
-                && code[ir.b].op == TraceOpCode::brcast
-                && code[ir.b].a == 0)
-                return IR(TraceOpCode::brcast, ir.a, ir.type, ir.in, ir.out);
-         break;
+            case TraceOpCode::brcast:
+                if(ir.out.length == 1) {
+                    ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
+                }
+                break;
 
-        case TraceOpCode::brcast:
-            if(ir.out.length == 1)
-                return IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
-         break;
-        default:
-        break;
+            case TraceOpCode::gtrue:
+                if(ir.a == TrueRef) {
+                    ir = IR(TraceOpCode::nop, Type::Nil, Shape::Empty, Shape::Empty);
+                }
+                break;
+
+            case TraceOpCode::gfalse:
+                if(ir.a == FalseRef) {
+                    ir = IR(TraceOpCode::nop, Type::Nil, Shape::Empty, Shape::Empty);
+                }
+                break;
+
+            case TraceOpCode::encode:
+                if(ir.b == FalseRef ||
+                    (code[ir.b].op == TraceOpCode::brcast && code[ir.b].a == FalseRef)) {
+                    ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
+                }
+                break;
+
+            case TraceOpCode::phi:
+                if(ir.a == ir.b &&
+                    code[ir.a].op == TraceOpCode::constant) {
+                    ir = IR(TraceOpCode::nop, Type::Nil, Shape::Empty, Shape::Empty);
+                }
+                break;
+
+            default:
+                break;
+        }
     }
     return ir;
 }
@@ -201,7 +263,13 @@ double memcost(size_t size) {
 
 */
 
-JIT::IRRef JIT::Insert(Thread& thread, std::vector<IR>& code, std::tr1::unordered_map<IR, IRRef>& cse, Snapshot& snapshot, IR ir) {
+JIT::IRRef JIT::Insert(
+    Thread& thread, 
+    std::vector<IR>& code, 
+    std::tr1::unordered_map<IR, IRRef>& cse, 
+    Snapshot& snapshot, 
+    IR ir) 
+{
     ir = StrengthReduce(ConstantFold(thread, Normalize(ir)));
 
     if(ir.op == TraceOpCode::pos) {
@@ -225,13 +293,53 @@ JIT::IRRef JIT::Insert(Thread& thread, std::vector<IR>& code, std::tr1::unordere
         return i->second;
     }
     else {
+        ir.exit = BuildExit( ir.exit, snapshot );
+        
         code.push_back(ir);
         cse[ir] = code.size()-1;
 
-        if(ir.reenter.reenter != 0) {
-            exits[code.size()-1] = BuildExit( snapshot, ir.reenter, exits.size()-1 );
-        }
         return code.size()-1;
+    }
+}
+
+JIT::IRRef JIT::Optimize(Thread& thread, IRRef i) {
+    IR& ir = code[i];
+
+    ir = StrengthReduce(ConstantFold(thread, Normalize(ir)));
+
+    if(ir.op == TraceOpCode::pos) {
+        return ir.a;
+    }
+    return i;
+}
+
+void JIT::RunOptimize(Thread& thread) {
+    std::tr1::unordered_map<IR, IRRef> cse;
+    
+    std::vector<IRRef> forward(code.size(), 0);
+    forward[0] = 0;
+    forward[1] = 1;
+    forward[2] = 2;
+    forward[3] = 3;
+
+    for(IRRef i = 0; i < code.size(); ++i) {
+        IR& ir = code[i];
+        ir = Forward(ir, forward);
+        forward[i] = Optimize(thread, i);
+   
+        if(forward[i] == i) { 
+            std::tr1::unordered_map<IR, IRRef>::const_iterator j = cse.find(ir);
+            if(j != cse.end()) {
+                ir.op = TraceOpCode::nop;
+                forward[i] = j->second;
+            }
+            else {
+                cse[ir] = i;
+            }
+        }
+
+        if(ir.op == TraceOpCode::loop)
+            cse.clear();
     }
 }
 
@@ -249,6 +357,7 @@ double JIT::Opcost(std::vector<IR>& code, IR ir) {
             case TraceOpCode::gproto:
             case TraceOpCode::gtrue: 
             case TraceOpCode::gfalse:
+            case TraceOpCode::glength:
             case TraceOpCode::scatter:
             case TraceOpCode::jmp:
             case TraceOpCode::exit:
@@ -496,15 +605,43 @@ JIT::IRRef JIT::DPE(std::vector<IR> const& code, IRRef i) {
     return i;
 }
 
-JIT::Exit JIT::BuildExit( Snapshot const& snapshot, Reenter const& reenter, size_t index) {
-    Exit e = { snapshot, reenter, index };
-    return e;
+int64_t JIT::BuildExit( int64_t stub, Snapshot const& snapshot ) {
+    if(stub < 0)
+        return stub;
+
+    ExitStub const& es = exitStubs[stub];
+
+    // Check if we already have an exit for this instruction.
+    std::map<Instruction const*, size_t>::const_iterator i = uniqueExits.find(es.reenter);
+    if(i != uniqueExits.end()) {
+        return i->second;
+    }
+
+    // If not, make a new exit
+    Trace tr;
+    tr.traceIndex = Trace::traceCount++;
+    tr.Reenter = es.reenter;
+    tr.InScope = es.inscope;
+    tr.counter = 0;
+    tr.ptr = 0;
+    tr.function = 0;
+    tr.root = dest->root;
+    tr.snapshot = snapshot;
+    dest->exits.push_back(tr);
+
+    return dest->exits.size()-1;
 }
 
 void JIT::Kill(Snapshot& snapshot, int64_t a) {
     std::map<int64_t, IRRef>::iterator i = snapshot.slotValues.begin();
     while(i != snapshot.slotValues.end()) {
         if(i->first <= a) snapshot.slotValues.erase(i++);
+        else ++i;
+    }
+    
+    i = snapshot.slots.begin();
+    while(i != snapshot.slots.end()) {
+        if(i->first <= a) snapshot.slots.erase(i++);
         else ++i;
     }
 }
@@ -598,14 +735,15 @@ JIT::IRRef JIT::EmitOptIR(
                 
                 Kill(snapshot, (int64_t)ir.b);
                 snapshot.slotValues[ (int64_t)ir.b ] = ir.c;
+                snapshot.slots[ (int64_t)ir.b ] = ir.c;
                     
                 // if we're storing to the same slot we just loaded from, this is a no op.
-                if(code[ir.c].op != TraceOpCode::sload ||
+                /*if(code[ir.c].op != TraceOpCode::sload ||
                     code[ir.c].a != ir.b) {
                     std::tr1::unordered_map<IR, IRRef> tcse;
                     IRRef s = Insert(thread, code, tcse, snapshot, ir);
                     snapshot.memory.insert(s);
-                }
+                }*/
                 return ir.c;
             } break;
 
@@ -682,6 +820,16 @@ JIT::IRRef JIT::EmitOptIR(
 
             case TraceOpCode::length: {
                 ir.a = forward[ir.a];
+                if(code[ir.a].op == TraceOpCode::box)
+                    return code[code[ir.a].a].out.length;
+                else {
+                    return Insert(thread, code, cse, snapshot, ir);
+                }
+            } break;
+
+            case TraceOpCode::glength: {
+                ir.a = forward[ir.a];
+                ir.b = forward[ir.b];
                 if(code[ir.a].op == TraceOpCode::box)
                     return code[code[ir.a].a].out.length;
                 else {
@@ -792,7 +940,8 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
                 ROOT;
                 MARK(ir.a);
             }   break; 
-            
+          
+            case TraceOpCode::glength:  
             case TraceOpCode::load: {
                 ROOT;
                 MARK(ir.a); MARK(ir.b);
@@ -912,8 +1061,8 @@ void JIT::SINK(void) {
         // what about global scope assignments?
 
         phiChanged = false;
-        for(IRRef i = code.size()-2; code[i].op == TraceOpCode::phi; --i) {
-            if(code[i].live) {
+        for(IRRef i = code.size()-2; i > Loop; --i) {
+            if(code[i].op == TraceOpCode::phi && code[i].live) {
                 if(marks[code[i].a] || marks[code[i].b]) {
                     marks[i] = true;
                 }
@@ -928,6 +1077,6 @@ void JIT::SINK(void) {
 
     // Sweep phase
     for(IRRef i = code.size()-1; i < code.size(); --i) {
-        code[i].sunk = false;//!marks[i];
+        code[i].sunk = !marks[i];
     } 
 }

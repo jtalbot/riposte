@@ -139,6 +139,7 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
                 AssignRegister(std::max(ir.a, ir.b));
                 AssignRegister(std::min(ir.a, ir.b));
             } break;
+        case TraceOpCode::glength:
         case TraceOpCode::encode:
         case TraceOpCode::alength:
         case TraceOpCode::rep:
@@ -212,8 +213,8 @@ void JIT::RegisterAssignment() {
         if(ir.live && ir.sunk)
             RegisterAssign(i, ir);
     
-        if(ir.live && exits.find(i) != exits.end())
-            AssignSnapshot(exits[i].snapshot);
+        if(ir.live && ir.exit >= 0)
+            AssignSnapshot(dest->exits[ir.exit].snapshot);
     }
 
     // now the not sunk ones
@@ -232,6 +233,7 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
 #define CASE(Name, ...) case TraceOpCode::Name:
         case TraceOpCode::encode:
         case TraceOpCode::alength:
+        case TraceOpCode::glength:
         case TraceOpCode::rep:
         case TraceOpCode::seq:
         case TraceOpCode::gather:
@@ -292,8 +294,8 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
 
     code[ir.in.length].live = true;
     code[ir.out.length].live = true;
-    if(exits.find(i) != exits.end())
-        MarkSnapshot(exits[i].snapshot);
+    if(ir.exit >= 0)
+        MarkSnapshot(dest->exits[ir.exit].snapshot);
 }
 
 void JIT::MarkSnapshot(Snapshot const& snapshot) {
@@ -319,6 +321,7 @@ bool JIT::AlwaysLive(IR const& ir) {
             ||  ir.op == TraceOpCode::gtrue
             ||  ir.op == TraceOpCode::gfalse
             ||  ir.op == TraceOpCode::gproto
+            ||  ir.op == TraceOpCode::glength
             ||  ir.op == TraceOpCode::push
             ||  ir.op == TraceOpCode::pop 
             ||  ir.op == TraceOpCode::jmp

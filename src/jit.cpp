@@ -7,10 +7,11 @@
 
 DEFINE_ENUM_TO_STRING(TraceOpCode, TRACE_ENUM)
 
-const JIT::Shape JIT::Shape::Empty( 0, true, 0 );
-const JIT::Shape JIT::Shape::Scalar( 1, true, 1 );
+const JIT::Shape JIT::Shape::Empty( 0, 0 );
+const JIT::Shape JIT::Shape::Scalar( 1, 1 );
 
 const JIT::IRRef JIT::FalseRef = 2;
+const JIT::IRRef JIT::TrueRef = 3;
 
 size_t JIT::Trace::traceCount = 0;
 
@@ -21,20 +22,12 @@ JIT::IRRef JIT::Emit(IR const& ir) {
 
 JIT::IRRef JIT::Emit(IR const& ir, Instruction const* reenter, bool inScope) {
     IRRef i = Emit(ir);
-    trace[ trace.size()-1 ].reenter.reenter = reenter;
-    trace[ trace.size()-1 ].reenter.inScope = inScope;
-    return i;
-}
 
-JIT::Shape JIT::SpecializeLength(size_t length, IRRef irlength) {
-    // if short enough, guard length and insert a EmitConstant length instead
-    if(length <= 16) {
-        IRRef s = EmitConstant(Integer::c(length)).v;
-        return Shape(s, true, length);
-    }
-    else {
-        return Shape(irlength, false, length);
-    }
+    ExitStub es = { reenter, inScope };
+    trace[i].exit = exitStubs.size();
+    exitStubs.push_back(es);
+    
+    return i;
 }
 
 JIT::Shape JIT::SpecializeValue(Value const& v, IRRef r) {
@@ -42,9 +35,9 @@ JIT::Shape JIT::SpecializeValue(Value const& v, IRRef r) {
         return Shape::Empty;
     }
     else if(v.isVector()) {
-        IR l = IR(TraceOpCode::length, r, Type::Integer, Shape::Empty, Shape::Scalar);
-        Shape r( Emit(l), false, v.length );
-        return r;
+        IRRef c = EmitConstant(Integer::c(v.length)).v;
+        IRRef l = Emit( IR(TraceOpCode::glength, r, c, Type::Integer, Shape::Scalar, Shape::Scalar) );
+        return Shape(l, v.length);
     }
     else {
         return Shape::Scalar;
@@ -261,7 +254,7 @@ JIT::Var JIT::EmitConstant(Value const& value) {
 }
 
 bool JIT::EmitNest(Thread& thread, Trace* t) {
-    Emit( IR( TraceOpCode::nest, (IRRef)t, Type::Nil, Shape::Empty, Shape::Empty ) );
+    Emit( IR( TraceOpCode::nest, (IRRef)t, Type::Nil, Shape::Empty, Shape::Empty ), (Instruction const*)1, true );
     return true;
 }
 
@@ -383,7 +376,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
 
             // TODO: needs to know the recorded reshaped length for matching with other same 
             // sized shapes
-            Shape reshaped( len, false, 0 );
+            Shape reshaped( len, 0 );
             
             Shape s = MergeShapes(a.s, b.s, &inst);
 
@@ -560,7 +553,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         {
             Value const& len = IN(inst.a);
             Var l = EmitCast(load(thread, inst.a, &inst), Type::Integer);
-            Shape s = SpecializeLength(As<Integer>(thread, len)[0], l.v);
+            Shape s( l.v, As<Integer>(thread, len)[0] );
            
             Var b = load(thread, inst.b, &inst); 
             Var c = load(thread, inst.c, &inst); 
@@ -571,7 +564,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         {
             Value const& len = IN(inst.a);
             Var l = EmitCast(load(thread, inst.a, &inst), Type::Integer);
-            Shape s = SpecializeLength(As<Integer>(thread, len)[0], l.v);
+            Shape s( l.v, As<Integer>(thread, len)[0] );        
             // requires a dependent type
             Var c = load(thread, inst.c, &inst);
             Var b = load(thread, inst.b, &inst);
@@ -614,7 +607,6 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
 void JIT::Replay(Thread& thread) {
    
     code.clear();
-    exits.clear();
  
     size_t n = trace.size();
     
@@ -720,6 +712,7 @@ void JIT::Replay(Thread& thread) {
     forward[0] = 0;
     forward[1] = 1;
     forward[2] = 2;
+    forward[3] = 3;
  
     // Emit constants
     for(size_t i = 0; i < n; i++) {
@@ -732,6 +725,8 @@ void JIT::Replay(Thread& thread) {
     for(size_t i = 0; i < n; i++) {
         forward[i] = EmitOptIR(thread, trace[i], code, forward, cse, snapshot);
     }
+
+    uniqueExits.clear();
 
     if(rootTrace == 0) 
     {
@@ -767,7 +762,9 @@ void JIT::Replay(Thread& thread) {
     }
     else {
         IR exit( TraceOpCode::exit, Type::Nil, Shape::Empty, Shape::Empty);
-        exit.reenter = Reenter( startPC, true );
+        ExitStub es = { startPC, true };
+        exitStubs.push_back( es );
+        exit.exit = exitStubs.size()-1;
         Insert(thread, code, cse, snapshot, exit);
     }
 }
@@ -785,20 +782,9 @@ void JIT::end_recording(Thread& thread) {
 
     //dump(thread, trace);
     Replay(thread);
-    
-    for(std::map<size_t, Exit>::const_iterator i = exits.begin(); i != exits.end(); ++i) {
-        Trace tr;
-        tr.traceIndex = Trace::traceCount++;
-        tr.Reenter = i->second.reenter.reenter;
-        tr.InScope = i->second.reenter.inScope;
-        tr.counter = 0;
-        tr.ptr = 0;
-        tr.function = 0;
-        tr.root = dest->root;
-        assert(i->second.index == dest->exits.size());
-        dest->exits.push_back(tr);
-    }
-
+    StrengthenGuards();
+    RunOptimize(thread);
+ 
     Liveness();
     SINK();
     //Schedule();
@@ -1035,7 +1021,7 @@ void JIT::Schedule() {
 void JIT::schedule() {
 
     // do a forwards pass identifying fusion groups.
-    Shape gSize(-1, false, -1);
+    Shape gSize(-1, -1);
     std::set<IRRef> gMembers;
 
     fusable = std::vector<bool>(code.size(), true);
@@ -1136,6 +1122,7 @@ void JIT::IR::dump() const {
         {
             std::cout << "\t " << a << "\t \t";
         } break;
+        case TraceOpCode::glength:
         case TraceOpCode::encode:
         case TraceOpCode::reshape:
         case TraceOpCode::phi: 
@@ -1172,36 +1159,40 @@ void JIT::dump(Thread& thread, std::vector<IR> const& t) {
                 printf("}");
             else
                 printf(" ");
-            if(exits.find(i) != exits.end())
-                printf(">");
-            else if(fusable.size() == t.size() && !fusable[i]) 
+            
+            if(fusable.size() == t.size() && !fusable[i]) 
                 printf("-");
             else
                 printf(" ");
+            
             if(ir.reg > 0) 
                 printf(" %2d ", ir.reg);
             else if(ir.reg < 0)
                 printf(" !! ");
             else
                 printf("    ");
+            
             ir.dump();
     
             if(ir.op == TraceOpCode::constant) {
                 std::cout <<  "    " << thread.deparse(constants[ir.a]);
             }
-            if(exits.find(i) != exits.end()) {
-                std::cout << "\t\t-> " << dest->exits[exits[i].index].traceIndex;
-                /*std::cout << "  [ ";
-                for(std::map<int64_t, IRRef>::const_iterator j = exits[i].snapshot.slots.begin(); j != exits[i].snapshot.slots.end(); ++j) {
-                    std::cout << j->second << ">" << j->first << " ";
-                }
-                std::cout << "]";*/
-            }
-
+            
             if(ir.op == TraceOpCode::nest) {
-                std::cout << "\t\t\t\t\t-> " << ((Trace*)ir.a)->traceIndex;
+                std::cout << "\t(" << ((Trace*)ir.a)->traceIndex << ")\t\t";
             }
             
+            if(ir.exit >= 0) {
+                Trace const& t = dest->exits[ir.exit];
+                std::cout << "\t-> " << t.traceIndex;
+                std::cout << "  [ ";
+                for(std::map<int64_t, IRRef>::const_iterator j = t.snapshot.slots.begin(); 
+                        j != t.snapshot.slots.end(); ++j) {
+                    std::cout << j->second << ">" << j->first << " ";
+                }
+                std::cout << "]";
+            }
+
             std::cout << std::endl;
         }
     }

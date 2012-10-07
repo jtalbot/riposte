@@ -1423,8 +1423,9 @@ struct TraceCompiler {
                 r,
                 llvm::ConstantPointerNull::get((llvm::PointerType*)r->getType()));
 
-            if(jit.exits.find(index) != jit.exits.end())
-                EmitExit(guard, jit.exits[index], index);
+            if(jit.code[index].exit >= 0) {
+                EmitExit(guard, index);
+            }
 
             return r;
         }
@@ -1464,8 +1465,8 @@ struct TraceCompiler {
         else if(Unboxed(type) &&
             !(ir.op == TraceOpCode::constant || ir.op == TraceOpCode::unbox)) 
         {
-            if( shape.constant ) {
-                r.Initialize( builder, shape.traceLength );
+            if( jit.code[shape.length].op == TraceOpCode::constant ) {
+                r.Initialize( builder, ((Integer const&)jit.constants[jit.code[shape.length].a])[0] );
             }
             else {
                 r.Initialize( builder, registers[jit.code[shape.length].reg] ); 
@@ -1500,11 +1501,12 @@ struct TraceCompiler {
 
             case TraceOpCode::exit:
             {
-                EmitExit(builder.getInt1(0), jit.exits[index], index);
+                EmitExit(builder.getInt1(0), index);
             } break;
 
             case TraceOpCode::nest:
             {
+                ReconstructExit(jit.dest->exits[ir.exit].snapshot, index);
                 llvm::CallInst* r = 
                     builder.CreateCall((llvm::Function*)((JIT::Trace*)ir.a)->function, thread_var);
                 r->setCallingConv(llvm::CallingConv::Fast);
@@ -1694,7 +1696,7 @@ struct TraceCompiler {
                 llvm::Value* r = builder.CreateTrunc(builder.CreateLoad(value(ir.a)), builder.getInt1Ty());
                 if(ir.op == TraceOpCode::gfalse)
                     r = builder.CreateNot(r);
-                EmitExit(r, jit.exits[index], index);
+                EmitExit(r, index);
             } break;
 
             case TraceOpCode::gproto: {
@@ -1704,7 +1706,7 @@ struct TraceCompiler {
                         Call("GET_prototype", BOXED_ARG(a)) 
                         , builder.getInt64Ty())
                     , builder.getInt64(ir.b));
-                EmitExit(r, jit.exits[index], index);
+                EmitExit(r, index);
             } break;
 
             case TraceOpCode::nop:
@@ -1720,15 +1722,8 @@ struct TraceCompiler {
         };
     }
 
-    void EmitExit(llvm::Value* cond, JIT::Exit const& e, size_t index) 
-    {
-        llvm::BasicBlock* next = llvm::BasicBlock::Create(*S->C, "next", function, InnerBlock);
-        llvm::BasicBlock* exit = llvm::BasicBlock::Create(*S->C, "exit", function, EndBlock);
-        builder.CreateCondBr(cond, next, exit);
-        builder.SetInsertPoint(exit);
-
-        //MARKER(std::string("Taking exit ") + intToStr(index));
-        
+    void ReconstructExit(JIT::Snapshot const& snapshot, size_t index) {
+    
         // emit sunk code
         Fusion* fusion = 0;
         for(size_t i = 0; i < index; i++) {
@@ -1750,7 +1745,12 @@ struct TraceCompiler {
         }
 
         // emit sstores
-        //MARKER(std::string("Done with exit ") + intToStr(index));
+        for(std::map<int64_t, JIT::IRRef>::const_iterator i = snapshot.slots.begin();
+                i != snapshot.slots.end(); ++i) {
+            llvm::Value* c = value(i->second);
+            Call("SSTORE", builder.getInt64(i->first), BOXED_ARG(c));
+        } 
+
         /*
             else if(jit.code[var.env].type == Type::Object) {
                 // dim(x)
@@ -1780,40 +1780,72 @@ struct TraceCompiler {
             } 
         }
         */
-        if(e.reenter.reenter == 0)
-            _error("Null reenter");
-       
-        if(jit.dest->exits[e.index].InScope) {
+    }
 
-            if(jit.dest->exits[e.index].function == 0) {
-                // create exit stub.
-                llvm::Function* stubfn = 
-                    llvm::Function::Create(function_type,
-                            llvm::Function::PrivateLinkage,
-                            "side", S->M);
-                stubfn->setCallingConv(llvm::CallingConv::Fast);
+    std::map<int64_t, llvm::BasicBlock*> exits;
 
-                llvm::BasicBlock* stub = 
-                    llvm::BasicBlock::Create(*S->C, "stub", stubfn, 0);
+    void EmitExit(llvm::Value* cond, size_t index) 
+    {
+        JIT::Trace& exit = jit.dest->exits[jit.code[index].exit];
+   
+        llvm::BasicBlock* nextBB = llvm::BasicBlock::Create(*S->C, "next", function, InnerBlock);
+        llvm::BasicBlock* exitBB = 0;
 
-                llvm::IRBuilder<> TmpB(&stubfn->getEntryBlock(),
-                        stubfn->getEntryBlock().end());
-                TmpB.SetInsertPoint(stub);
-
-                TmpB.CreateRet(TmpB.getInt64((int64_t)&(jit.dest->exits[e.index])));
-                jit.dest->exits[e.index].function = stubfn;
-            }
-
-            llvm::CallInst* r = builder.CreateCall((llvm::Function*)jit.dest->exits[e.index].function, thread_var);
-            r->setTailCall(true);
-            r->setCallingConv(llvm::CallingConv::Fast);
-            builder.CreateStore(r, result_var);
+        std::map<int64_t, llvm::BasicBlock*>::const_iterator e = exits.find(jit.code[index].exit);
+        if(e != exits.end()) {
+            exitBB = e->second;
         }
         else {
-            builder.CreateStore(builder.getInt64(0), result_var);
-        }        
-        builder.CreateBr(EndBlock);
-        builder.SetInsertPoint(next); 
+            llvm::BasicBlock* currentBB = builder.GetInsertBlock();
+ 
+            exitBB = llvm::BasicBlock::Create(*S->C, "exit", function, EndBlock);
+            builder.SetInsertPoint(exitBB);
+
+            //MARKER(std::string("Taking exit ") + intToStr(index));
+
+            ReconstructExit(exit.snapshot, index);
+
+            //MARKER(std::string("Done with exit ") + intToStr(index));
+
+            if(exit.Reenter == 0)
+                _error("Null reenter");
+
+            if(exit.InScope) {
+
+                if(exit.function == 0) {
+                    // create exit stub.
+                    llvm::Function* stubfn = 
+                        llvm::Function::Create(function_type,
+                                llvm::Function::PrivateLinkage,
+                                "side", S->M);
+                    stubfn->setCallingConv(llvm::CallingConv::Fast);
+
+                    llvm::BasicBlock* stub = 
+                        llvm::BasicBlock::Create(*S->C, "stub", stubfn, 0);
+
+                    llvm::IRBuilder<> TmpB(&stubfn->getEntryBlock(),
+                            stubfn->getEntryBlock().end());
+                    TmpB.SetInsertPoint(stub);
+
+                    TmpB.CreateRet(TmpB.getInt64((int64_t)&exit));
+                    exit.function = stubfn;
+                }
+
+                llvm::CallInst* r = builder.CreateCall((llvm::Function*)exit.function, thread_var);
+                r->setTailCall(true);
+                r->setCallingConv(llvm::CallingConv::Fast);
+                builder.CreateStore(r, result_var);
+            }
+            else {
+                builder.CreateStore(builder.getInt64(0), result_var);
+            }
+            builder.CreateBr(EndBlock);
+            builder.SetInsertPoint(currentBB);
+        }
+
+        builder.CreateCondBr(cond, nextBB, exitBB);
+
+        builder.SetInsertPoint(nextBB); 
     }
 
     llvm::CallInst* Save(llvm::CallInst* ci) {

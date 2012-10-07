@@ -27,6 +27,7 @@
         _(curenv, "curenv", ___) \
         _(newenv, "newenv", ___) \
 		_(load, "load", ___) /* loads are type guarded */ \
+        _(glength, "glength", ___) \
         _(length, "length", ___) \
         _(encode, "encode", ___) \
         _(decodevl, "decodevl", ___) \
@@ -101,7 +102,6 @@ public:
 
     struct Shape {
         IRRef length;
-        bool constant;
         size_t traceLength;
 
         bool operator==(Shape const& o) const {
@@ -115,21 +115,11 @@ public:
         }
         static const Shape Empty;
         static const Shape Scalar;
-        Shape(IRRef length, bool constant, size_t traceLength) 
-            : length(length)
-            , constant(constant)
-            , traceLength(traceLength) {}
+        Shape(IRRef length, size_t traceLength) 
+            : length(length), traceLength(traceLength) {}
     };
 
     std::map<size_t, Shape> shapes;
-
-    struct Reenter {
-        Instruction const* reenter;
-        bool inScope;
-        Reenter() : reenter (0), inScope(false) {}
-        Reenter( Instruction const* reenter, bool inScope )
-            : reenter( reenter ), inScope( inScope ) {}
-    };
 
 	struct IR {
 		TraceOpCode::Enum op;
@@ -137,14 +127,12 @@ public:
 
         Type::Enum type;
         Shape in, out;
+        int64_t exit;
 
-        double cost;
         short reg;
+        double cost;
         bool live;
-
         bool sunk;
-
-        Reenter reenter;
 
         void dump() const;
 
@@ -155,23 +143,23 @@ public:
                     c == o.c &&
                     type == o.type &&
                     in == o.in &&
-                    out == o.out;
+                    out == o.out; 
         }
 
         IR()
-            : op(TraceOpCode::nop), a(0), b(0), c(0), type(Type::Nil), in(Shape::Empty), out(Shape::Empty), sunk(false) {}
+            : op(TraceOpCode::nop), a(0), b(0), c(0), type(Type::Nil), in(Shape::Empty), out(Shape::Empty), exit(-1), sunk(false) {}
         
         IR(TraceOpCode::Enum op, Type::Enum type, Shape in, Shape out)
-            : op(op), a(0), b(0), c(0), type(type), in(in), out(out), sunk(false) {}
+            : op(op), a(0), b(0), c(0), type(type), in(in), out(out), exit(-1), sunk(false) {}
         
         IR(TraceOpCode::Enum op, IRRef a, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(0), c(0), type(type), in(in), out(out), sunk(false) {}
+            : op(op), a(a), b(0), c(0), type(type), in(in), out(out), exit(-1), sunk(false) {}
         
         IR(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(b), c(0), type(type), in(in), out(out), sunk(false) {}
+            : op(op), a(a), b(b), c(0), type(type), in(in), out(out), exit(-1), sunk(false) {}
         
         IR(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(b), c(c), type(type), in(in), out(out), sunk(false) {}
+            : op(op), a(a), b(b), c(c), type(type), in(in), out(out), exit(-1), sunk(false) {}
 	};
 
     struct Phi {
@@ -199,6 +187,14 @@ public:
     };
 
     std::vector<IR> trace;
+
+	struct ExitStub {
+		Instruction const* reenter;
+        bool inscope;
+	};
+
+    std::vector<ExitStub> exitStubs;
+
     std::vector<IR> code;
     std::vector<bool> fusable;
     std::vector<StackFrame> frames;
@@ -219,25 +215,32 @@ public:
     IRRef Loop;
     IRRef TopLevelEnvironment;
     
-    struct Trace;
-    Trace* rootTrace;
-    Trace* dest;
-
     struct Snapshot {
         std::vector<StackFrame> stack;
         std::map< int64_t, IRRef > slotValues;
+        std::map< int64_t, IRRef > slots;
         std::set<IRRef> memory;
     }; 
 
-	struct Exit {
+    struct Trace : public gc
+    {
+        size_t traceIndex;
+        static size_t traceCount;
+        Trace* root;
+        Ptr ptr;
+        void* function;
+        std::vector<Trace, traceable_allocator<Trace> > exits;
+        
         Snapshot snapshot;
-		Reenter reenter;
-        size_t index;
-	};
-	std::map<size_t, Exit> exits;
-    Exit BuildExit(Snapshot const& snapshot, Reenter const& reenter, size_t index); 
+        bool InScope;
+        Instruction const* Reenter;
+        size_t counter;
+    };
 
-    static const IRRef FalseRef;
+    Trace* rootTrace;
+    Trace* dest;
+
+    static const IRRef FalseRef, TrueRef;
 
 	JIT() 
 		: state(OFF)
@@ -253,7 +256,8 @@ public:
         constants.clear();
         constantsMap.clear();
         uniqueConstants.clear();
-        exits.clear();
+        uniqueExits.clear();
+        exitStubs.clear();
         shapes.clear();
         rootTrace = root;
         this->dest = dest;
@@ -262,6 +266,7 @@ public:
         Emit( makeConstant(Integer::c(0)) );
         Emit( makeConstant(Integer::c(1)) );
         Emit( makeConstant(Logical::c(Logical::FalseElement)) );
+        Emit( makeConstant(Logical::c(Logical::TrueElement)) );
 
         shapes.insert( std::make_pair( 0, Shape::Empty ) );
         shapes.insert( std::make_pair( 1, Shape::Scalar ) );
@@ -285,19 +290,8 @@ public:
         }
 	}
 
-    struct Trace : public gc
-    {
-        size_t traceIndex;
-        static size_t traceCount;
-        Trace* root;
-        Ptr ptr;
-        void* function;
-        std::vector<Trace, traceable_allocator<Trace> > exits;
-        
-        bool InScope;
-        Instruction const* Reenter;
-        size_t counter;
-    };
+    std::map<Instruction const*, size_t> uniqueExits;
+    int64_t BuildExit( int64_t stub, Snapshot const& snapshot );
 
 	void end_recording(Thread& thread);
 	
@@ -344,11 +338,12 @@ public:
 
     void Kill(Snapshot& snapshot, int64_t a);
 
-    Shape SpecializeLength(size_t length, IRRef irlength);
     Shape SpecializeValue(Value const& v, IRRef r);
     IRRef SpecializeNA(Value const& v, IRRef r);
     Shape MergeShapes(Shape a, Shape b, Instruction const* inst);
 
+    IRRef Optimize(Thread& thread, IRRef i);
+    void RunOptimize(Thread& thread);
 
     void emitCall(Var a, Function const& func, Environment* env, Value const& call, Instruction const* inst) {
         Emit( IR( TraceOpCode::gproto, a.v, (IRRef)func.prototype(), Type::Function, a.s, Shape::Empty ), inst, true );
@@ -429,6 +424,10 @@ public:
     bool AlwaysLive(IR const& ir);
     void MarkSnapshot(Snapshot const& snapshot);
     void MarkLiveness(IRRef i, IR ir);
+
+    void StrengthenGuards(void);
+
+    static IR Forward(IR ir, std::vector<IRRef> const& forward);
  
 	template< template<class X> class Group >
 	Var EmitUnary(TraceOpCode::Enum op, Var a) {
