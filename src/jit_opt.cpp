@@ -563,10 +563,10 @@ JIT::IRRef JIT::FWD(std::vector<IR> const& code, IRRef i, bool& loopCarried) {
     loopCarried = false;
     bool crossedLoop = false;
 
-    //printf("\nForwarding %d: ", i);
+    printf("\nForwarding %d: ", i);
 
     for(IRRef j = i-1; j > std::max(load.a, load.b); j--) {
-        //printf("%d ", j);
+        printf("%d ", j);
         if(code[j].op == TraceOpCode::nest)
             return i;
 
@@ -1109,8 +1109,13 @@ void JIT::SINK(void) {
         }
     }
 
+    bool hasNest = false;
+    for(IRRef i = code.size()-1; i < code.size(); --i) {
+        hasNest = hasNest || code[i].op == TraceOpCode::nest;
+    }
+
     // Sweep phase
     for(IRRef i = code.size()-1; i < code.size(); --i) {
-        code[i].sunk = false;//!marks[i];
+        code[i].sunk = !hasNest && !marks[i];
     } 
 }

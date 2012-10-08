@@ -3,15 +3,16 @@ convolve <- function(a, b) # from the extending R manual
 {
     ab <- double(length(a) + length(a))
 
-    for(i in 1:length(a)) {
-        for(j in 1:length(b)) {
+    js <- 1L:length(a)
+    for(i in 1L:length(a)) {
+        for(j in js) {
             ab[j+i] <- ab[j+i] + a[i]*b[j]
         }
     }
     ab
 }
 
-x <- as.double(1:10)
+x <- as.double(1:20000)
 
-convolve(x,x)
-#system.time(convolve(x,x))
+#convolve(x,x)
+system.time(convolve(x,x))

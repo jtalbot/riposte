@@ -96,6 +96,7 @@ struct LLVMState {
         FPM->add(llvm::createInstructionCombiningPass());
         // Simplify the control flow graph (deleting unreachable blocks, etc).
         FPM->add(llvm::createCFGSimplificationPass());
+        FPM->add(llvm::createPromoteMemoryToRegisterPass());
         
         FPM->doInitialization();
 
@@ -184,6 +185,10 @@ public:
 
     llvm::Function* getIntrinsic( llvm::Intrinsic::ID id ) {
         return llvm::Intrinsic::getDeclaration(Module, id);
+    }
+
+    llvm::Function* getIntrinsic( llvm::Intrinsic::ID id, llvm::Type*& types ) {
+        return llvm::Intrinsic::getDeclaration(Module, id, types);
     }
 
 protected:
@@ -323,6 +328,7 @@ private:
 public:
 
     size_t index;
+    bool onheap;
 
     Register( FunctionBuilder& builder, Type::Enum type, JIT::Shape shape ) 
         : type(type)
@@ -343,14 +349,20 @@ public:
             builder.CreateStore(a, v);
             this->l = builder.EntryBlock().CreateInitializedAlloca(builder.getInt64(l));
             this->initialized = true;
+            onheap = false;
         }
     }
 
     void Initialize(FunctionBuilder& builder, Register& len) {
         if(!Initialized()) {
-            l = builder.EntryBlock().CreateInitializedAlloca(builder.getInt64(0)); 
-            Resize(builder, builder.CreateLoad(len.value(builder)));
+            l = builder.EntryBlock().CreateInitializedAlloca(builder.getInt64(0));
+            llvm::Value* newlen = builder.CreateLoad(len.value(builder)); 
+            llvm::Value* newv = 
+                builder.Call(std::string("REALLOC_")+Type::toString(type), value(builder), l, newlen);
+            builder.CreateStore(newv, v);
+
             this->initialized = true;
+            onheap = true;
         }
     }
 
@@ -370,6 +382,10 @@ public:
     llvm::Value* value(FunctionBuilder& builder) const {
         return builder.CreateLoad(v);
     }
+
+    llvm::Value* length(FunctionBuilder& builder) const {
+        return builder.CreateLoad(l);
+    }
     
     void Store(FunctionBuilder& builder, llvm::Value* a) {
         builder.CreateStore(a, v);
@@ -380,10 +396,20 @@ public:
     }
 
     void Resize(FunctionBuilder& builder, llvm::Value* newlen) {
-        llvm::Value* newv = 
-            builder.Call(std::string("REALLOC_")+Type::toString(type), value(builder), l, newlen);
+        llvm::BasicBlock* ifbb = builder.CreateBlock("resize");
+        llvm::BasicBlock* elsebb = builder.CreateBlock("afterResize");
+       
+        llvm::Value* cond = builder.CreateICmpSGT(newlen, length(builder));
+        builder.CreateCondBr(cond, ifbb, elsebb);
         
-        builder.CreateStore(newv, v); 
+        builder.SetInsertPoint(ifbb);
+        llvm::CallInst* newv = 
+            (llvm::CallInst*)
+                builder.Call(std::string("REALLOC_")+Type::toString(type), value(builder), l, newlen);
+        builder.CreateStore(newv, v);
+
+        builder.CreateBr(elsebb);
+        builder.SetInsertPoint(elsebb);
     }
     
     llvm::Value* ExtractAlignedVector(FunctionBuilder& builder, llvm::Value* index, size_t width) {
@@ -430,12 +456,12 @@ public:
 
 struct Fusion {
     JIT& jit;
-    FunctionBuilder builder;
+    FunctionBuilder builder, headerBuilder;
     std::vector<Register>& registers;
 
     llvm::BasicBlock* header;
-    llvm::BasicBlock* condition;
     llvm::BasicBlock* body;
+    llvm::BasicBlock* condition;
     llvm::BasicBlock* after;
 
     llvm::Value* iterator;
@@ -457,6 +483,7 @@ struct Fusion {
     Fusion(JIT& jit, FunctionBuilder builder, std::vector<Register>& registers, llvm::Value* length, size_t width, JIT::IRRef lengthIR)
         : jit(jit)
           , builder(builder)
+          , headerBuilder(builder)
           , registers(registers)
           , length(length)
           , width(width)
@@ -511,6 +538,7 @@ struct Fusion {
         after       = builder.CreateBlock( "fusedAfter", before);
 
         builder.SetInsertPoint(header);
+        headerBuilder.SetInsertPoint(header);
         llvm::Value* initial = builder.getInt64(0);
 
         if(length != 0) {
@@ -897,8 +925,8 @@ struct Fusion {
                 if(jit.code[ir.a].reg != jit.code[ir.b].reg) { 
                     // if size has changed, resize the destination register
                     if(ir.in.length != ir.out.length) {
-                        FunctionBuilder b = builder.Appender(header);
-                        llvm::Value* newlen = b.CreateLoad(RawLoad(builder, ir.in.length));
+                        FunctionBuilder& b = headerBuilder;
+                        llvm::Value* newlen = b.CreateLoad(RawLoad(b, ir.in.length));
                         registers[jit.code[ir.a].reg].Resize(b, newlen);
                     }
                     outs[jit.code[ir.a].reg] = Load(builder, ir.b);
@@ -960,8 +988,8 @@ struct Fusion {
 
             case TraceOpCode::reshape:
             {
-                // Keep current length
-                FunctionBuilder b = builder.Appender(header);
+                // Initialize to current length from input
+                FunctionBuilder& b = headerBuilder;
                 llvm::Value* len = b.CreateInitializedAlloca( b.CreateLoad( RawLoad(b, ir.b) ) );
                 
                 // compute max of indices
@@ -1052,7 +1080,7 @@ struct Fusion {
             // Generators
             case TraceOpCode::seq:
             {
-                FunctionBuilder b = builder.Appender(header);
+                FunctionBuilder& b = headerBuilder;
 
                 // now initialize
                 llvm::Value* start = b.CreateLoad(RawLoad(b, ir.a));
@@ -1092,11 +1120,11 @@ struct Fusion {
             {
                 llvm::Value* agg;
                 if(ir.type == Type::Double) {
-                    agg = builder.Appender(header).CreateInitializedAlloca(zerosD);
+                    agg = headerBuilder.CreateInitializedAlloca(zerosD);
                     builder.CreateStore(builder.CreateFAdd(builder.CreateLoad(agg), Load(builder, ir.a)), agg);
                 }
                 else {
-                    agg = builder.Appender(header).CreateInitializedAlloca(zerosI);
+                    agg = headerBuilder.CreateInitializedAlloca(zerosI);
                     builder.CreateStore(builder.CreateAdd(builder.CreateLoad(agg), Load(builder, ir.a)), agg);
                 } 
                 reductions[index] = agg;
@@ -1158,30 +1186,28 @@ struct Fusion {
             Store(builder, i->second, i->first, iterator, width);
         }
 
-        builder.SetInsertPoint(header);
-        builder.CreateBr(condition);
-
         if(length == 0) {
-            builder.SetInsertPoint(body);
             builder.CreateBr(after);
 
             builder.SetInsertPoint(condition);
             builder.CreateBr(body);
         }
         else {
-            builder.SetInsertPoint(body);
+            llvm::BasicBlock* bottom = builder.GetInsertBlock();
             llvm::Value* increment = builder.CreateAdd(iterator, builder.getInt64(width));
-            ((llvm::PHINode*)iterator)->addIncoming(increment, body);
+            ((llvm::PHINode*)iterator)->addIncoming(increment, bottom);
             llvm::Value* sI = builder.CreateAdd(sequenceI, widthI);
-            ((llvm::PHINode*)sequenceI)->addIncoming(sI, body);
+            ((llvm::PHINode*)sequenceI)->addIncoming(sI, bottom);
             llvm::Value* sD = builder.CreateFAdd(sequenceD, widthD);
-            ((llvm::PHINode*)sequenceD)->addIncoming(sD, body);
+            ((llvm::PHINode*)sequenceD)->addIncoming(sD, bottom);
             builder.CreateBr(condition);
 
             builder.SetInsertPoint(condition);
             llvm::Value* endCond = builder.CreateICmpULT(iterator, length);
             builder.CreateCondBr(endCond, body, after);
         }
+
+        headerBuilder.CreateBr(condition);
 
         builder.SetInsertPoint(after);
         for(i = reductions.begin(); i != reductions.end(); i++) {
@@ -1434,14 +1460,16 @@ struct TraceCompiler {
         }
     }
 
-    llvm::Value* Box(JIT::IRRef index) {
+    llvm::Value* Box(JIT::IRRef index, bool isSunk) {
         llvm::Value* r = value(index);
         
         // if unboxed type, box
         Type::Enum type = jit.code[index].type;
         if(Unboxed(type)) {
             r = Save( Call(std::string("BOX_")+Type::toString(type),
-                    r, builder.CreateLoad(value(jit.code[index].out.length))) );
+                    r, builder.CreateLoad(value(jit.code[index].out.length)), 
+                    builder.getInt1(isSunk 
+                    && registers[jit.code[index].reg].onheap)) );
         }
 
         return r;
@@ -1455,14 +1483,14 @@ struct TraceCompiler {
         r.index = ir.reg;
 
         // scatter is special. It initially needs a register that duplicates its input.
-        if( ir.op == TraceOpCode::scatter )
+        /*if( ir.op == TraceOpCode::scatter )
         {
             r.Duplicate(
                 builder,
                 registers[jit.code[ir.a].reg],
                 registers[jit.code[jit.code[ir.a].out.length].reg]);
         }
-        else if(Unboxed(type) &&
+        else*/ if(Unboxed(type) &&
             !(ir.op == TraceOpCode::constant || ir.op == TraceOpCode::unbox)) 
         {
             if( jit.code[shape.length].op == TraceOpCode::constant ) {
@@ -1622,7 +1650,7 @@ struct TraceCompiler {
 
             case TraceOpCode::box:
             {
-                reg.Store( builder, Box( ir.a ) );
+                reg.Store( builder, Box( ir.a, ir.sunk ) );
             } break;
            
             case TraceOpCode::store:

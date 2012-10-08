@@ -23,17 +23,17 @@
         _(exit, "exit", ___) \
         _(nest, "nest", ___) \
         _(constant, "const", ___) \
-		_(sload, "sload", ___) /* loads are type guarded */ \
         _(curenv, "curenv", ___) \
         _(newenv, "newenv", ___) \
+		_(sload, "sload", ___) /* loads are type guarded */ \
+        _(sstore, "sstore", ___) \
 		_(load, "load", ___) /* loads are type guarded */ \
+        _(store, "store", ___) \
         _(glength, "glength", ___) \
         _(length, "length", ___) \
         _(encode, "encode", ___) \
         _(decodevl, "decodevl", ___) \
         _(decodena, "decodena", ___) \
-        _(store, "store", ___) \
-        _(sstore, "sstore", ___) \
         _(box, "box", ___) \
         _(unbox, "unbox", ___) \
         _(gproto,   "gproto", ___) \

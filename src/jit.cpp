@@ -1213,6 +1213,12 @@ void JIT::dump(Thread& thread, std::vector<IR> const& t) {
                     std::cout << j->second << ">" << j->first << " ";
                 }
                 std::cout << "]";
+                std::cout << "  [ ";
+                for(std::set<IRRef>::const_iterator k = t.snapshot.memory.begin(); 
+                        k != t.snapshot.memory.end(); ++k) {
+                    std::cout << *k << " ";
+                }
+                std::cout << "]";
             }
 
             std::cout << std::endl;

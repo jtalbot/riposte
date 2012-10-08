@@ -2,6 +2,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <algorithm>
 
 #include "value.h"
 #include "type.h"
@@ -103,28 +104,42 @@ int8_t const** UNBOX_character(Thread& thread, Value& a, int64_t length) {
 }
 
 extern "C"
-Value BOX_double(Thread& thread, double* d, int64_t len) {
-    Double a(len);
-    memcpy(a.v(), d, len*sizeof(double));
-    return a;
+Value BOX_double(Thread& thread, double* d, int64_t len, bool takeOwnership) {
+    if(len == 1) {
+        Double a(1);
+        a[0] = *d;
+        return a;
+    }
+
+    if(takeOwnership) {
+        Double a;
+        Value::Init(a, Type::Double, len);
+        a.p = d;
+        return a;
+    }
+    else {
+        Double a(len);
+        memcpy(a.v(), d, len*sizeof(double));
+        return a;
+    }
 }
 
 extern "C"
-Value BOX_integer(Thread& thread, int64_t* d, int64_t len) {
+Value BOX_integer(Thread& thread, int64_t* d, int64_t len, bool takeOwnership) {
     Integer a(len);
     memcpy(a.v(), d, len*sizeof(int64_t));
     return a;
 }
 
 extern "C"
-Value BOX_logical(Thread& thread, int8_t* d, int64_t len) {
+Value BOX_logical(Thread& thread, int8_t* d, int64_t len, bool takeOwnership) {
     Logical a(len);
     memcpy(a.v(), d, len*sizeof(int8_t));
     return a;
 }
 
 extern "C"
-Value BOX_character(Thread& thread, int8_t** d, int64_t len) {
+Value BOX_character(Thread& thread, int8_t** d, int64_t len, bool takeOwnership) {
     if(len <= 16) {
         Character a(len);
         memcpy(a.v(), d, len*sizeof(int8_t*));
@@ -250,14 +265,20 @@ int8_t** MALLOC_character(Thread& thread, int64_t length) {
 extern "C"
 double* REALLOC_double(Thread& thread, double* v, int64_t& alloclen, int64_t length) {
     if(length > alloclen) {
-        length = alloclen > 0 ? nextPow2(length) : length;
-        double* w = (double*)MALLOC(length, sizeof(Double::Element));
-        memcpy(w, v, alloclen*sizeof(Double::Element));
-        // fill remainder with NAs
-        for(size_t i = alloclen; i < length; i++) w[i] = Double::NAelement;
-        printf("REALLOC_double: %d->%d   (%li)\n", alloclen, length, w);
-        alloclen = length;
-        return w;
+        if(alloclen == 0) {
+            alloclen = length;
+            return (double*)MALLOC(length, sizeof(Double::Element) );
+        }
+        else {
+            length = nextPow2(length);
+            double* w = (double*)MALLOC(length, sizeof(Double::Element));
+            memcpy(w, v, alloclen*sizeof(Double::Element));
+            // fill remainder with NAs
+            for(size_t i = alloclen; i < length; i++) w[i] = Double::NAelement;
+            //printf("REALLOC_double: %d->%d\n", alloclen, length);
+            alloclen = length;
+            return w;
+        }
     }
     else {
         return v;
@@ -267,14 +288,20 @@ double* REALLOC_double(Thread& thread, double* v, int64_t& alloclen, int64_t len
 extern "C"
 int64_t* REALLOC_integer(Thread& thread, int64_t* v, int64_t& alloclen, int64_t length) {
     if(length > alloclen) {
-        length = alloclen > 0 ? nextPow2(length) : length;
-        int64_t* w = (int64_t*)MALLOC(length, sizeof(Integer::Element));
-        memcpy(w, v, alloclen*sizeof(Integer::Element));
-        // fill remainder with NAs
-        for(size_t i = alloclen; i < length; i++) w[i] = Integer::NAelement;
-        printf("REALLOC_integer: %d->%d   (%li)\n", alloclen, length, w);
-        alloclen = length;
-        return w;
+        if(alloclen == 0) {
+            alloclen = length;
+            return (int64_t*)MALLOC(length, sizeof(Integer::Element));
+        }
+        else {
+            length = nextPow2(length);
+            int64_t* w = (int64_t*)MALLOC(length, sizeof(Integer::Element));
+            memcpy(w, v, alloclen*sizeof(Integer::Element));
+            // fill remainder with NAs
+            for(size_t i = alloclen; i < length; i++) w[i] = Integer::NAelement;
+            //printf("REALLOC_integer: %d->%d   (%li)\n", alloclen, length, w);
+            alloclen = length;
+            return w;
+        }
     }
     else {
         return v;
@@ -284,14 +311,20 @@ int64_t* REALLOC_integer(Thread& thread, int64_t* v, int64_t& alloclen, int64_t 
 extern "C"
 int8_t* REALLOC_logical(Thread& thread, int8_t* v, int64_t& alloclen, int64_t length) {
     if(length > alloclen) {
-        length = alloclen > 0 ? nextPow2(length) : length;
-        int8_t* w = (int8_t*)MALLOC(length, sizeof(Logical::Element));
-        memcpy(w, v, alloclen*sizeof(Logical::Element));
-        // fill remainder with NAs
-        for(size_t i = alloclen; i < length; i++) w[i] = Logical::NAelement;
-        printf("REALLOC_logical: %d->%d   (%li)\n", alloclen, length, w);
-        alloclen = length;
-        return w;
+        if(alloclen == 0) {
+            alloclen = length;
+            return (int8_t*)MALLOC(length, sizeof(Logical::Element));
+        }
+        else {
+            length = nextPow2(length);
+            int8_t* w = (int8_t*)MALLOC(length, sizeof(Logical::Element));
+            memcpy(w, v, alloclen*sizeof(Logical::Element));
+            // fill remainder with NAs
+            for(size_t i = alloclen; i < length; i++) w[i] = Logical::NAelement;
+            //printf("REALLOC_logical: %d->%d   (%li)\n", alloclen, length, w);
+            alloclen = length;
+            return w;
+        }
     }
     else {
         return v;
@@ -301,13 +334,19 @@ int8_t* REALLOC_logical(Thread& thread, int8_t* v, int64_t& alloclen, int64_t le
 extern "C"
 int8_t** REALLOC_character(Thread& thread, int8_t** v, int64_t& alloclen, int64_t length) {
     if(length > alloclen) {
-        length = alloclen > 0 ? nextPow2(length) : length;
-        int8_t** w = (int8_t**)MALLOC(length, sizeof(Character::Element));
-        memcpy(w, v, alloclen*sizeof(Character::Element));
-        // fill remainder with NAs
-        for(size_t i = alloclen; i < length; i++) w[i] = (int8_t*)Character::NAelement;
-        alloclen = length;
-        return w;
+        if(alloclen == 0) {
+            alloclen = length;
+            return (int8_t**)MALLOC(length, sizeof(Character::Element));
+        }
+        else {
+            length = nextPow2(length);
+            int8_t** w = (int8_t**)MALLOC(length, sizeof(Character::Element));
+            memcpy(w, v, alloclen*sizeof(Character::Element));
+            // fill remainder with NAs
+            for(size_t i = alloclen; i < length; i++) w[i] = (int8_t*)Character::NAelement;
+            alloclen = length;
+            return w;
+        }
     }
     else {
         return v;

@@ -3,7 +3,14 @@
 void JIT::AssignRegister(size_t index) {
     IR& ir = code[index];
     if(ir.reg <= 0) {
+
+        if(ir.sunk) {
+            RegisterAssign(index, ir);
+        }
+
         Register r = { ir.type, ir.out }; 
+
+        if( ir.type == Type::Nil ) return;
 
         if( ir.op == TraceOpCode::constant 
                 || ir.op == TraceOpCode::unbox ) {
@@ -51,7 +58,7 @@ void JIT::PreferRegister(size_t index, size_t share) {
 void JIT::ReleaseRegister(size_t index) {
     IR const& ir = code[index];
     if(ir.reg > 0) {
-        //printf("Releasing register %d at %d\n", assignment[index], index);
+        //printf("Releasing register %d at %d\n", ir.reg, index);
         freeRegisters.insert( std::make_pair(registers[ir.reg], ir.reg) );
     }
     else if(ir.reg < 0) {
@@ -81,18 +88,6 @@ void JIT::AssignSnapshot(Snapshot const& snapshot) {
 
 void JIT::RegisterAssign(IRRef i, IR ir) {
 
-    if(ir.op == TraceOpCode::scatter) {
-        // scatter is special since it can resize its register.
-        // so resize the register here and then attempt to reuse...
-        registers[ir.reg].shape = code[ir.a].out;
-    }
-
-    if( ir.op != TraceOpCode::unbox &&
-        ir.op != TraceOpCode::constant)
-    {
-        ReleaseRegister(i);
-    }
-
     switch(ir.op) 
     {
 #define CASE(Name, ...) case TraceOpCode::Name:
@@ -109,7 +104,7 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
             } break;
         case TraceOpCode::scatter: 
             {
-                PreferRegister(ir.a, i); 
+                PreferRegister(ir.a, i);
                 AssignRegister(ir.a);
                 AssignRegister(ir.c);
                 AssignRegister(ir.b);
@@ -207,22 +202,46 @@ void JIT::RegisterAssignment() {
     } 
 
     // assign sunk registers first, including any thing captured in a snapshot
-    for(size_t i = code.size()-1; i < code.size(); --i) {
+    /*for(size_t i = code.size()-1; i < code.size(); --i) {
         IR& ir = code[i];
 
-        if(ir.live && ir.sunk)
+        if( ir.sunk && ir.op != TraceOpCode::unbox &&
+            ir.op != TraceOpCode::constant)
+        {
+            ReleaseRegister(i);
+        }
+
+        if(ir.live && (ir.sunk || ir.op == TraceOpCode::phi))
             RegisterAssign(i, ir);
-    
+
         if(ir.live && ir.exit >= 0)
             AssignSnapshot(dest->exits[ir.exit].snapshot);
-    }
+    }*/
 
-    // now the not sunk ones
+    // Assign non-sunk registers. Sunk registers 
+
     for(size_t i = code.size()-1; i < code.size(); --i) {
         IR& ir = code[i];
+
+        if(ir.op == TraceOpCode::scatter) {
+            // scatter is special since it can resize its register.
+            // so resize the register here and then attempt to reuse...
+            registers[ir.reg].shape = code[ir.a].out;
+        }
+
+        if( !ir.sunk && ir.op != TraceOpCode::unbox &&
+            ir.op != TraceOpCode::constant)
+        {
+            ReleaseRegister(i);
+        }
 
         if(ir.live && !ir.sunk)
             RegisterAssign(i, ir);
+       
+        // AssignSnapshot traverses the sunk registers
+        // Never release registers used in sunk instructions 
+        if(ir.live && ir.exit >= 0)
+            AssignSnapshot(dest->exits[ir.exit].snapshot);
     }
 
 }
