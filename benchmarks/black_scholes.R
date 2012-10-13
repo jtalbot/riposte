@@ -1,7 +1,7 @@
 #adapted from https://github.com/ispc/ispc/tree/master/examples/options
 
-N_ROUNDS <- 100
-N_OPTIONS <- 100000
+N_OPTIONS <- as.integer(commandArgs(TRUE)[[1]])
+N_ROUNDS <- 100000/N_OPTIONS
 
 invSqrt2Pi <- 0.39894228040
 log10 <- log(10)

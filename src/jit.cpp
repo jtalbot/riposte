@@ -299,8 +299,6 @@ bool JIT::EmitNest(Thread& thread, Trace* t) {
 bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
     switch(inst.bc) {
 
-        case ByteCode::loop: {
-        } break;
         case ByteCode::jc: {
             Var p = EmitCast( load(thread, inst.c, &inst), Type::Logical );
            
@@ -318,7 +316,26 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
 
             Emit( IR ( branch ? TraceOpCode::gtrue : TraceOpCode::gfalse, 
                     p.v, Type::Nil, p.s, Shape::Empty ),
-                &inst + (branch ? inst.b : inst.a), (inst.a>=0&&inst.b>0) );
+                &inst + (branch ? inst.b : inst.a), true );
+        }   break;
+    
+        case ByteCode::whileend: {
+            Var p = EmitCast( load(thread, inst.c, &inst), Type::Logical );
+           
+            // TODO: guard length==1 and that condition is not an NA
+            /*IRRef len = Emit( IR( TraceOpCode::eq, p.s.length, 1, Type::Logical, Shape::Scalar, Shape::Scalar) );
+            Emit( IR( TraceOpCode::gtrue, len, Type::Nil, trace[len].out, Shape::Empty ) ); 
+            
+            IRRef notna = Emit( IR( TraceOpCode::eq, trace[p].na, Type::Logical, Shape::Scalar, Shape::Scalar) );
+            Emit( IR( TraceOpCode::gtrue, notna, Type::Nil, trace[notna].out, Shape::Empty ) ); 
+            */
+            if(inst.c <= 0) {
+                Variable v = { -1, (thread.base+inst.c)-(thread.registers+DEFAULT_NUM_REGISTERS)};
+                Emit( IR( TraceOpCode::kill, v.i, Type::Nil, Shape::Empty, Shape::Empty ) );
+            }
+
+            Emit( IR ( TraceOpCode::gtrue, p.v, Type::Nil, p.s, Shape::Empty ),
+                &inst + (branch ? inst.b : inst.a), false );
         }   break;
     
         case ByteCode::constant: {
@@ -591,13 +608,21 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             Value const& len = IN(inst.a);
             Var l = EmitCast(load(thread, inst.a, &inst), Type::Integer);
             Shape s( l.v, As<Integer>(thread, len)[0] );        
-            // requires a dependent type
             Var c = load(thread, inst.c, &inst);
             Var b = load(thread, inst.b, &inst);
             Type::Enum type = c.type == Type::Double || b.type == Type::Double
                 ? Type::Double : Type::Integer; 
                 
             IRRef r = Emit( IR( TraceOpCode::seq, EmitCast(c, type).v, EmitCast(b, type).v, type, s, s) );
+            store(thread, Var( trace, r, false ), inst.c); 
+        }   break;
+        case ByteCode::random:
+        {
+            Value const& len = IN(inst.a);
+            Var l = EmitCast(load(thread, inst.a, &inst), Type::Integer);
+            Shape s( l.v, As<Integer>(thread, len)[0] );        
+                
+            IRRef r = Emit( IR( TraceOpCode::random, Type::Double, s, s) );
             store(thread, Var( trace, r, false ), inst.c); 
         }   break;
 
@@ -639,6 +664,8 @@ void JIT::Replay(Thread& thread) {
     std::vector<IRRef> forward(n, 0);
     std::tr1::unordered_map<IR, IRRef> cse;
     Snapshot snapshot;
+
+    static int count = 0;
 
     // after each guard reemit the entire body of the code
     // up to that point, omitting all guards.
@@ -787,7 +814,7 @@ void JIT::Replay(Thread& thread) {
         ExitStub es = { startPC, true };
         exitStubs.push_back( es );
         exit.exit = exitStubs.size()-1;
-        Insert(thread, code, cse, snapshot, exit);
+        Loop = Insert(thread, code, cse, snapshot, exit);
     }
 }
 
@@ -802,13 +829,15 @@ void JIT::end_recording(Thread& thread) {
         trace[i].reg = 0;
     }
 
-    //dump(thread, trace);
+    //dump(thread, trace, false);
     Replay(thread);
     StrengthenGuards();
     RunOptimize(thread);
  
     Liveness();
-    SINK();
+
+    //SINK();
+
     //Schedule();
     schedule();
     RegisterAssignment();
@@ -820,7 +849,7 @@ void JIT::end_recording(Thread& thread) {
 
     if(thread.state.verbose) {
         printf("---------------- Trace %li ------------------\n", dest->traceIndex);
-        dump(thread, code);
+        dump(thread, code, true);
     } 
 
     compile(thread);
@@ -1171,7 +1200,7 @@ void JIT::IR::dump() const {
     };
 }
 
-void JIT::dump(Thread& thread, std::vector<IR> const& t) {
+void JIT::dump(Thread& thread, std::vector<IR> const& t, bool exits) {
 
     for(size_t i = 0; i < t.size(); i++) {
         IR const& ir = t[i];
@@ -1204,9 +1233,12 @@ void JIT::dump(Thread& thread, std::vector<IR> const& t) {
                 std::cout << "\t(" << ((Trace*)ir.a)->traceIndex << ")\t\t";
             }
             
-            if(ir.exit >= 0) {
+            if(exits && ir.exit >= 0) {
                 Trace const& t = dest->exits[ir.exit];
-                std::cout << "\t-> " << t.traceIndex;
+                if(t.InScope)
+                    std::cout << "\t-> " << t.traceIndex;
+                else
+                    std::cout << "\t->>" << t.traceIndex;
                 std::cout << "  [ ";
                 for(std::map<int64_t, IRRef>::const_iterator j = t.snapshot.slots.begin(); 
                         j != t.snapshot.slots.end(); ++j) {

@@ -113,8 +113,9 @@ static int run(State& state, std::istream& in, std::ostream& out, bool interacti
 
             Prototype* proto = Compiler::compileTopLevel(thread, code);
             Value result = thread.eval(proto, state.global);
-
-            out << state.stringify(result) << std::endl;
+            
+            if(interactive)
+                out << state.stringify(result) << std::endl;
         } 
         catch(RiposteException& e) { 
             e_message("Error", e.kind().c_str(), e.what().c_str());
@@ -198,6 +199,7 @@ int main(int argc, char** argv)
 
     /* Start garbage collector */
     GC_INIT();
+    GC_disable();
 
     /* Initialize execution state */
     State state(threads, argc, argv);

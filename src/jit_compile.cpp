@@ -97,7 +97,7 @@ struct LLVMState {
         // Simplify the control flow graph (deleting unreachable blocks, etc).
         FPM->add(llvm::createCFGSimplificationPass());
         FPM->add(llvm::createPromoteMemoryToRegisterPass());
-        
+      
         FPM->doInitialization();
 
         verifierFPM = new llvm::FunctionPassManager(M);
@@ -247,6 +247,10 @@ public:
         return llvm::BasicBlock::Create(Context, name, m_function, before);
     }
 
+    llvm::Value* Call(std::string const& F) {
+        return CreateCall(getFunction(F), m_state);
+    }
+
     llvm::Value* Call(std::string const& F, llvm::Value* A) {
         return CreateCall2(getFunction(F), m_state, A);
     }
@@ -295,7 +299,7 @@ private:
     llvm::Value* v;
     llvm::Value* l;
     bool initialized;
-
+    std::string name;
 
     llvm::Type* getType(FunctionBuilder& builder, Type::Enum type) {
         llvm::Type* t;
@@ -330,9 +334,10 @@ public:
     size_t index;
     bool onheap;
 
-    Register( FunctionBuilder& builder, Type::Enum type, JIT::Shape shape ) 
+    Register( FunctionBuilder& builder, Type::Enum type, JIT::Shape shape, std::string const& name ) 
         : type(type)
         , initialized(false)
+        , name(name)
     {
         v = builder.CreateInitializedAlloca( llvm::UndefValue::get( getType(builder, type) ) );
         l = 0; 
@@ -340,6 +345,10 @@ public:
 
     bool Initialized() const {
         return initialized;
+    }
+
+    void Deinitialize() {
+        initialized = false;
     }
 
     void Initialize(FunctionBuilder& builder, size_t l) {
@@ -1115,6 +1124,16 @@ struct Fusion {
                 outs[reg] = added;
             } break;
 
+            case TraceOpCode::random:
+            {
+                llvm::Value* out = llvm::UndefValue::get(llvmType(ir.type, width));
+                for(uint32_t i = 0; i < width; i++) {
+                    llvm::Value* v = builder.Call("Riposte_random");
+                    out = builder.CreateInsertElement(out, v, builder.getInt32(i));
+                }
+                outs[reg] = out;
+            } break;
+
             // Reductions
             case TraceOpCode::sum:
             {
@@ -1287,11 +1306,13 @@ struct TraceCompiler {
         result_var = CreateEntryBlockAlloca(builder.getInt64Ty(), builder.getInt64(1));
 
         for(size_t i = 0; i < jit.registers.size(); i++) {
-            registers.push_back( Register( builder, jit.registers[i].type, jit.registers[i].shape ) );
+            std::string name = std::string("r") + intToStr(i);
+            registers.push_back( Register( builder, jit.registers[i].type, jit.registers[i].shape, name ) );
         }
 
         builder.SetInsertPoint(HeaderBlock);
 
+        //MARKER(std::string("Entering trace ") + intToStr(jit.dest->traceIndex));
         Fusion* fusion = 0;
         for(size_t i = 0; i < jit.code.size(); i++) {
             JIT::IR const& ir = jit.code[i];
@@ -1444,12 +1465,13 @@ struct TraceCompiler {
             llvm::Value* r = Call(std::string("UNBOX_")+Type::toString(type),
                 builder.CreatePointerCast(tmp, actual_value_type->getPointerTo()),
                 length);
-                     
-            llvm::Value* guard = builder.CreateICmpNE(
-                r,
-                llvm::ConstantPointerNull::get((llvm::PointerType*)r->getType()));
-
+            
+            // If exit is missing, no need to check guard         
             if(jit.code[index].exit >= 0) {
+                llvm::Value* guard = builder.CreateICmpNE(
+                    r,
+                    llvm::ConstantPointerNull::get((llvm::PointerType*)r->getType()));
+
                 EmitExit(guard, index);
             }
 
@@ -1483,14 +1505,14 @@ struct TraceCompiler {
         r.index = ir.reg;
 
         // scatter is special. It initially needs a register that duplicates its input.
-        /*if( ir.op == TraceOpCode::scatter )
+        if( ir.op == TraceOpCode::scatter )
         {
             r.Duplicate(
                 builder,
                 registers[jit.code[ir.a].reg],
                 registers[jit.code[jit.code[ir.a].out.length].reg]);
         }
-        else*/ if(Unboxed(type) &&
+        else if(Unboxed(type) &&
             !(ir.op == TraceOpCode::constant || ir.op == TraceOpCode::unbox)) 
         {
             if( jit.code[shape.length].op == TraceOpCode::constant ) {
@@ -1529,7 +1551,8 @@ struct TraceCompiler {
 
             case TraceOpCode::exit:
             {
-                EmitExit(builder.getInt1(0), index);
+                EmitExit(0, index);
+                //builder.CreateUnreachable();
             } break;
 
             case TraceOpCode::nest:
@@ -1756,6 +1779,8 @@ struct TraceCompiler {
         Fusion* fusion = 0;
         for(size_t i = 0; i < index; i++) {
             JIT::IR const& ir = jit.code[i];
+            registers[ir.reg].Deinitialize(); // something of a hack to get each exit its own
+                                              // initialized register
             InitializeRegister(ir);
             if(ir.live && ir.sunk) {
                 if(Fuseable(ir)) {
@@ -1777,6 +1802,20 @@ struct TraceCompiler {
                 i != snapshot.slots.end(); ++i) {
             llvm::Value* c = value(i->second);
             Call("SSTORE", builder.getInt64(i->first), BOXED_ARG(c));
+        }
+
+        // emit stack reconstruction code
+        for( size_t i = 0; i < snapshot.stack.size(); ++i) {
+                JIT::StackFrame const& frame = snapshot.stack[i];
+                llvm::Value* environment = value(frame.environment);
+                llvm::Value* env = value(frame.env);
+                Call("PUSH",
+                        BOXED_ARG(environment), 
+                        builder.getInt64((int64_t)frame.prototype),
+                        builder.getInt64((int64_t)frame.returnpc),
+                        builder.getInt64((int64_t)frame.returnbase),
+                        BOXED_ARG(env),
+                        builder.getInt64(frame.dest));
         } 
 
         /*
@@ -1816,7 +1855,6 @@ struct TraceCompiler {
     {
         JIT::Trace& exit = jit.dest->exits[jit.code[index].exit];
    
-        llvm::BasicBlock* nextBB = llvm::BasicBlock::Create(*S->C, "next", function, InnerBlock);
         llvm::BasicBlock* exitBB = 0;
 
         std::map<int64_t, llvm::BasicBlock*>::const_iterator e = exits.find(jit.code[index].exit);
@@ -1825,11 +1863,11 @@ struct TraceCompiler {
         }
         else {
             llvm::BasicBlock* currentBB = builder.GetInsertBlock();
- 
-            exitBB = llvm::BasicBlock::Create(*S->C, "exit", function, EndBlock);
+            std::string exitStr = std::string("exit") + intToStr(exit.traceIndex) + "_";
+            exitBB = llvm::BasicBlock::Create(*S->C, exitStr.c_str(), function, EndBlock);
             builder.SetInsertPoint(exitBB);
 
-            //MARKER(std::string("Taking exit ") + intToStr(index));
+            //MARKER(std::string("Taking exit ") + intToStr(exit.traceIndex));
 
             ReconstructExit(exit.snapshot, index);
 
@@ -1870,10 +1908,16 @@ struct TraceCompiler {
             builder.CreateBr(EndBlock);
             builder.SetInsertPoint(currentBB);
         }
-
-        builder.CreateCondBr(cond, nextBB, exitBB);
-
-        builder.SetInsertPoint(nextBB); 
+   
+        if(cond) {
+            llvm::BasicBlock* nextBB = llvm::BasicBlock::Create(*S->C, "next", function, InnerBlock);
+            builder.CreateCondBr(cond, nextBB, exitBB);
+            builder.SetInsertPoint(nextBB); 
+        }
+        else {
+            builder.CreateBr(exitBB);
+            builder.SetInsertPoint(exitBB);
+        }
     }
 
     llvm::CallInst* Save(llvm::CallInst* ci) {
@@ -1918,6 +1962,6 @@ void JIT::compile(Thread& thread) {
     TraceCompiler compiler(thread, *this, (llvm::Function*)dest->function);
     dest->function = compiler.Compile();
     dest->ptr = (Ptr)llvmState.EE->recompileAndRelinkFunction((llvm::Function*)dest->function);
-    print_time_elapsed("Compile time", ts);
+    //print_time_elapsed("Compile time", ts);
 }
 

@@ -235,7 +235,7 @@ public:
         Snapshot snapshot;
         bool InScope;
         Instruction const* Reenter;
-        size_t counter;
+        unsigned short counter;
     };
 
     Trace* rootTrace;
@@ -282,11 +282,9 @@ public:
 
 	bool loop(Thread& thread, Instruction const* pc) {
 		if(pc == startPC) {
-            EmitIR(thread, *pc, false);
             return true;
         }
         else {
-            EmitIR(thread, *pc, false);
             return false;
         }
 	}
@@ -393,7 +391,7 @@ public:
         trace.push_back(IR(TraceOpCode::store, v.env, v.i, r, Type::Nil, a.s, Shape::Empty));
     }
 
-	void dump(Thread& thread, std::vector<IR> const&);
+	void dump(Thread& thread, std::vector<IR> const&, bool exits);
 
 	void compile(Thread& thread);
 
@@ -493,6 +491,12 @@ public:
         _error("Unknown type pair in EmitTernary");
     }
 #undef TYPES_TMP
+
+
+
+    // Trace cache
+    std::map<Instruction const*, Trace*> cache;
+
 
 };
 

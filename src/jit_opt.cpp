@@ -316,7 +316,7 @@ JIT::IRRef JIT::Insert(
     ir.cost = std::min(csecost, nocsecost);
 
     std::tr1::unordered_map<IR, IRRef>::const_iterator i = cse.find(ir);
-    if(csecost <= nocsecost && i != cse.end()) {
+    if(csecost < nocsecost && i != cse.end()) {
         //printf("%d: Found a CSE for %s\n", code.size(), TraceOpCode::toString(ir.op));
         //printf("For %s => %f <= %f\n", TraceOpCode::toString(ir.op), csecost, nocsecost);
         return i->second;
@@ -368,6 +368,7 @@ void JIT::RunOptimize(Thread& thread) {
 
             std::tr1::unordered_map<IR, IRRef>::const_iterator j = cse.find(ir);
             if(j != cse.end() &&
+                csecost < nocsecost &&
                 (ir.op == TraceOpCode::constant ||
                     i < Loop || j->second > Loop)) {
                 ir.op = TraceOpCode::nop;
@@ -384,27 +385,33 @@ void JIT::RunOptimize(Thread& thread) {
 
 double JIT::Opcost(std::vector<IR>& code, IR ir) {
         switch(ir.op) {
-            case TraceOpCode::curenv: 
+            // Things that we can't CSE, we give a cost of zero to.
+            case TraceOpCode::random:
             case TraceOpCode::newenv:
+            case TraceOpCode::kill:
+            case TraceOpCode::push:
+            case TraceOpCode::pop:
+            case TraceOpCode::jmp:
+            case TraceOpCode::exit:
+            case TraceOpCode::nest:
+            case TraceOpCode::loop:
+                return 0;
+                break;
+
+            // Things that we should absolutely CSE
+            case TraceOpCode::rep:
+            case TraceOpCode::curenv: 
             case TraceOpCode::sload:
             case TraceOpCode::load:
             case TraceOpCode::store:
             case TraceOpCode::sstore:
-            case TraceOpCode::kill:
-            case TraceOpCode::push:
-            case TraceOpCode::pop:
             case TraceOpCode::gproto:
             case TraceOpCode::gtrue: 
             case TraceOpCode::gfalse:
             case TraceOpCode::glength:
             case TraceOpCode::scatter:
-            case TraceOpCode::jmp:
-            case TraceOpCode::exit:
-            case TraceOpCode::nest:
-            case TraceOpCode::loop:
             case TraceOpCode::brcast:
             case TraceOpCode::phi:
-            case TraceOpCode::rep:
             case TraceOpCode::length:
             case TraceOpCode::encode:
             case TraceOpCode::decodena:
@@ -563,10 +570,10 @@ JIT::IRRef JIT::FWD(std::vector<IR> const& code, IRRef i, bool& loopCarried) {
     loopCarried = false;
     bool crossedLoop = false;
 
-    printf("\nForwarding %d: ", i);
+    //printf("\nForwarding %d: ", i);
 
     for(IRRef j = i-1; j > std::max(load.a, load.b); j--) {
-        printf("%d ", j);
+        //printf("%d ", j);
         if(code[j].op == TraceOpCode::nest)
             return i;
 
@@ -820,6 +827,8 @@ JIT::IRRef JIT::EmitOptIR(
                 return 0;
             } break;
             case TraceOpCode::pop: {
+                if(snapshot.stack.size() == 0)
+                    _error("Push and pop don't match in trace");
                 snapshot.stack.pop_back();
                 return 0;
             } break;
@@ -931,6 +940,7 @@ JIT::IRRef JIT::EmitOptIR(
                 return Insert(thread, code, cse, snapshot, ir);
             } break;
 
+            case TraceOpCode::random: 
             case TraceOpCode::nest:
             case TraceOpCode::jmp:
             case TraceOpCode::loop:
@@ -938,7 +948,7 @@ JIT::IRRef JIT::EmitOptIR(
                 std::tr1::unordered_map<IR, IRRef> tcse;
                 return Insert(thread, code, tcse, snapshot, ir);
             } break;
-            
+           
             CASE(constant)
             {
                 return Insert(thread, code, cse, snapshot, ir);
@@ -968,6 +978,12 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
             #define CASE(Name, ...) case TraceOpCode::Name:
 
             // Roots
+            case TraceOpCode::unbox: {
+                if(ir.exit >= 0) {
+                    ROOT;
+                }
+                MARK(ir.a);
+            }   break;
             case TraceOpCode::gproto:
             case TraceOpCode::gfalse: 
             case TraceOpCode::gtrue: {
@@ -1012,7 +1028,8 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
                 // should this ever be a root?
                 MARK(ir.a); MARK(ir.b); MARK(ir.c);
             }   break; 
-            
+           
+            case TraceOpCode::random: 
             CASE(constant)
             case TraceOpCode::nop:
                 break;
@@ -1038,7 +1055,6 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
             } break;
 
             case TraceOpCode::box:
-            case TraceOpCode::unbox:
             case TraceOpCode::length:
             case TraceOpCode::decodevl:
             case TraceOpCode::decodena:
@@ -1086,7 +1102,7 @@ void JIT::SINK(void) {
     while(phiChanged) {
     
         // upsweep
-        for(IRRef i = code.size()-1; i < code.size(); --i) {
+        for(IRRef i = code.size()-1; i > 0; --i) {
             if(code[i].live)
                 sink(marks, i);
         }
@@ -1110,12 +1126,12 @@ void JIT::SINK(void) {
     }
 
     bool hasNest = false;
-    for(IRRef i = code.size()-1; i < code.size(); --i) {
+    for(IRRef i = code.size()-1; i > 0; --i) {
         hasNest = hasNest || code[i].op == TraceOpCode::nest;
     }
 
     // Sweep phase
-    for(IRRef i = code.size()-1; i < code.size(); --i) {
+    for(IRRef i = code.size()-1; i > 0; --i) {
         code[i].sunk = !hasNest && !marks[i];
     } 
 }

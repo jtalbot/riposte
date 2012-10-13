@@ -83,8 +83,9 @@ extern "C"
 int64_t const* UNBOX_integer(Thread& thread, Value& a, int64_t length) {
     if(!a.isInteger() || a.length != length)
         return 0;
-    else
+    else {
         return ((Integer const&)a).v();
+    }
 }
 
 extern "C"
@@ -111,7 +112,7 @@ Value BOX_double(Thread& thread, double* d, int64_t len, bool takeOwnership) {
         return a;
     }
 
-    if(takeOwnership) {
+    if(false/*takeOwnership*/) {
         Double a;
         Value::Init(a, Type::Double, len);
         a.p = d;
@@ -385,3 +386,7 @@ void SET_call(Thread& thread, REnvironment env, Value call) {
     env.environment()->call = call;
 }
 
+extern "C"
+double Riposte_random(Thread& thread) {
+    return rand() / (double)RAND_MAX;
+}

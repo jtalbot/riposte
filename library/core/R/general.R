@@ -6,7 +6,8 @@ list <- function(...) list(...)
 system.time <- function(expr) {
 	start <- .Internal(proc.time())
 	.Internal(force(expr))
-	.Internal(proc.time())-start
+	time <- .Internal(proc.time())-start
+    c(time, time, time)
 }
 
 paste <- function(..., sep = " ", collapse = NULL) {

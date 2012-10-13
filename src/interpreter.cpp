@@ -39,6 +39,7 @@ extern Instruction const* loop_op(Thread& thread, Instruction const& inst) ALWAY
 extern Instruction const* lget_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* lassign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+extern Instruction const* whileend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* gather_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 extern Instruction const* gather1_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -248,6 +249,24 @@ Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 	} else {
 		return &inst+2;			// skip over following JMP
 	}
+}
+
+Instruction const* whileend_op(Thread& thread, Instruction const& inst) {
+	Value const& c = IN(inst.c);
+	if(c.isLogical1()) {
+		if(Logical::isTrue(c.c)) return &inst+inst.a;
+		else if(Logical::isFalse(c.c)) return &inst+1;
+		else _error("NA where TRUE/FALSE needed"); 
+	} else if(c.isInteger1()) {
+		if(Integer::isNA(c.i)) _error("NA where TRUE/FALSE needed");
+		else if(c.i != 0) return &inst + inst.a;
+		else return & inst+1;
+	} else if(c.isDouble1()) {
+		if(Double::isNA(c.d)) _error("NA where TRUE/FALSE needed");
+		else if(c.d != 0) return &inst + inst.a;
+		else return & inst+1;
+	}
+	_error("Need single element logical in while condition");
 }
 
 Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
@@ -741,6 +760,126 @@ Instruction const* parentframe_op(Thread& thread, Instruction const& inst) {
     return &inst+1;
 }
 
+bool traceLoop(Thread& thread, Instruction const* pc, JIT::Trace* trace) 
+{
+    unsigned short& counter = 
+        trace == 0 ? thread.jit.counters[(((uintptr_t)pc)>>5) & (1024-1)] : trace->counter;
+    counter++;
+    if(counter >= JIT::RECORD_TRIGGER && counter == nextPow2(counter)) {
+        JIT::Trace* trace = new JIT::Trace();
+        trace->traceIndex = JIT::Trace::traceCount++;
+        trace->function = 0;
+        trace->ptr = 0;
+        trace->root = trace;
+        trace->Reenter = pc;
+        trace->counter = 0;
+
+        if(thread.state.verbose)
+            printf("Starting to record trace %d at %li (counter: %li is %d)\n", trace->traceIndex, (uint64_t)pc, &counter, counter);
+
+        thread.jit.start_recording(pc, thread.frame.environment, 0, trace);
+        thread.jit.cache[pc] = trace;
+        return true;
+    }
+    return false;
+}
+
+bool traceSideExit(Thread& thread, Instruction const* pc, JIT::Trace* exit)
+{
+    if(++exit->counter > JIT::RECORD_TRIGGER) {
+        if(thread.state.verbose)
+            printf("Starting to record side exit %d at %li\n", exit->traceIndex, (uint64_t)pc);
+        thread.jit.start_recording(pc, thread.frame.environment, exit->root, exit);
+        return true;
+    }
+    return false;
+}
+
+// returns true if we should begin tracing
+bool trace(Thread& thread, Instruction const* loopPC, Instruction const* loopExitPC, Instruction const*& pc) {
+    std::map<Instruction const*, JIT::Trace*>::const_iterator t = thread.jit.cache.find(loopPC);
+    if(t != thread.jit.cache.end() && t->second->ptr != 0) {
+        JIT::Trace* rootTrace = t->second;
+    
+        GC_disable();
+        JIT::Trace* exit = (JIT::Trace*)(rootTrace->ptr)(thread);
+        GC_enable();
+
+        // if exit==0, then the trace tree ended the loop along the normal exit, 
+        // jump to the default exit, no need to attempt to start another trace.
+        if(exit == 0) {
+            pc = loopExitPC;
+            return false;
+        }
+        // we exited on a side exit, jump to reentry instructon and check if we
+        // want to trace the side exit
+        else {
+            pc = exit->Reenter;
+            return traceSideExit(thread, exit->root->Reenter, exit); 
+        }
+    }
+    // not traced yet, check if we want to start 
+    else {
+        return traceLoop(thread, loopPC, t != thread.jit.cache.end() ? t->second : 0); 
+    }
+}
+
+void stopTrace(Thread& thread, char const* reason) {
+    if(thread.state.verbose)
+        printf("Stopped trace %d due to %s\n", thread.jit.dest->traceIndex, reason);
+    thread.jit.fail_recording();
+} 
+
+// returns true if we should continue tracing
+bool continueTrace(Thread& thread, Instruction const* loopPC, Instruction const* loopExitPC, Instruction const*& pc) {
+    // did we make a loop yet??
+    if(thread.jit.loop(thread, loopPC)) {
+        if(thread.state.verbose)
+            printf("Made loop at %li\n", loopPC);
+        thread.jit.end_recording(thread);
+        return false;
+    }
+
+    // otherwise, we've hit a nested loop.
+    // if it's already traced, emit a nested call
+    // otherwise bail tracing, and attempt to record the nested loop
+    std::map<Instruction const*, JIT::Trace*>::const_iterator t = thread.jit.cache.find(loopPC);
+    if(t != thread.jit.cache.end()) {
+        JIT::Trace* rootTrace = t->second;
+        if(rootTrace->ptr == 0) {
+            stopTrace(thread, "blacklisted inner loop");
+            return false;
+        }
+        else {
+            // there is a good inner trace, execute it.
+            GC_disable();
+            JIT::Trace* exit = (JIT::Trace*)(rootTrace->ptr)(thread);
+            GC_enable();
+
+            if(exit == 0) {
+                // we exited from the nested loop normally,
+                // record nest and continue from the normal exit point
+                thread.jit.EmitNest(thread, rootTrace);
+                pc = loopExitPC;
+                return true;
+            }
+            else {
+                // we bailed prematurely due to an untraced side exit in the inner loop.
+                // Stop recording the outer loop to give the inner loop time to pick up the
+                //  the side exit
+                stopTrace(thread, "untraced side exit in inner loop");
+                pc = exit->Reenter;
+                return false;
+            }
+        }
+    }
+    else {
+        stopTrace(thread, "untraced inner loop");
+        return false;
+    }
+}
+
+
 //
 //    Main interpreter loop 
 //
@@ -764,71 +903,32 @@ void interpret(Thread& thread, Instruction const* pc) {
 	STANDARD_BYTECODES(LABELED_OP)
     LABELED_OP(ncall)
     LABELED_OP(forbegin)
-    LABELED_OP(forend)
     LABELED_OP(branch)
     LABELED_OP(list)
     LABELED_OP(dotslist)
 	#undef LABELED_OP
 
-	loop_label: 	{
-        if(thread.state.jitEnabled) { 
-            if(pc->c != 0) {
-                JIT::Trace* rootTrace = (JIT::Trace*)pc->c;
-                if(rootTrace->ptr == 0) {
-                    // we started a trace here before, but it failed. Clear the trace.
-                    ((Instruction*)pc)->c = 0;
-                }
-                else {
-                    timespec a = get_time();
-                    GC_disable();
-                    JIT::Trace* exit = (JIT::Trace*)(rootTrace->ptr)(thread);
-                    GC_enable();
+    forend_label: {
+        Instruction const* this_pc = pc;
+        pc = forend_op(thread, *pc);
+        bool startTrace = thread.state.jitEnabled
+                            && pc < this_pc
+                            && trace(thread, this_pc, this_pc+2, pc);
+        if(startTrace)
+            labels = record;
+        goto *(const void*)labels[pc->bc]; 
+    }
 
-                    //if(thread.state.verbose)
-                    //    printf("Execution time: %f\n", time_elapsed(a));
-
-                    // if exit==0, then the trace tree ended the loop along the normal exit, 
-                    // jump to the default exit, no need to attempt to start another trace.
-                    if(exit == 0) {
-                        pc = pc+pc->a;
-                    }
-                    else {
-                        if(++exit->counter > JIT::RECORD_TRIGGER) {
-                            if(thread.state.verbose)
-                                printf("Starting to record side exit at %li\n", (uint64_t)pc);
-                            exit->counter = 0;
-                            thread.jit.start_recording(pc, thread.frame.environment, exit->root, exit);
-                            labels = record;
-                        }
-                        pc = exit->Reenter;
-                    }
-                }
-            }
-            else { 
-                unsigned short& counter = 
-                    thread.jit.counters[(((uintptr_t)pc)>>5) & (1024-1)];
-                counter++;
-                if(counter > JIT::RECORD_TRIGGER) {
-                    if(thread.state.verbose)
-                        printf("Starting to record at %li (counter: %li is %d)\n", (uint64_t)pc, &counter, counter);
-                    counter = 0;
-                    JIT::Trace* trace = new JIT::Trace();
-                    trace->traceIndex = JIT::Trace::traceCount++;
-                    trace->function = 0;
-                    trace->ptr = 0;
-                    trace->root = trace;
-                    thread.jit.start_recording(pc, thread.frame.environment, 0, trace);
-                    ((Instruction*)pc)->c = (int64_t)trace;
-                    labels = record;
-                }
-                pc++;
-            }
-        }
-        else {
-            pc++;
-        }
-		goto *(const void*)labels[pc->bc]; 
-	}
+    whileend_label: {
+        Instruction const* this_pc = pc;
+        pc = whileend_op(thread, *pc);
+        bool startTrace = thread.state.jitEnabled
+                            && pc < this_pc
+                            && trace(thread, this_pc, this_pc+1, pc);
+        if(startTrace)
+            labels = record;
+        goto *(const void*)labels[pc->bc]; 
+    }
     jc_label: {
         pc = jc_op(thread, *pc);
         goto *(const void*)labels[pc->bc]; 
@@ -868,65 +968,27 @@ void interpret(Thread& thread, Instruction const* pc) {
 	STANDARD_BYTECODES(RECORD_OP)
     RECORD_OP(ncall)
     RECORD_OP(forbegin)
-    RECORD_OP(forend)
     RECORD_OP(branch)
     RECORD_OP(list)
     RECORD_OP(dotslist)
 	#undef RECORD_OP
 	
-	loop_record: 	{ 
-        // did we make a loop yet??
-        if(thread.jit.loop(thread, pc)) {
-            if(thread.state.verbose)
-                printf("Made loop at %li\n", pc);
-		    thread.jit.end_recording(thread);
-		    labels = ops;
-        }
-        // otherwise, we've hit a nested loop.
-        // if it's already traced, emit a nested call
-        // otherwise bail tracing, and attempt to record the nested loop
-        else {
-            if(pc->c != 0) {
-                JIT::Trace* rootTrace = (JIT::Trace*)pc->c;
-                if(rootTrace->ptr == 0) {
-                    // we started a trace here before, but it failed. Clear the trace.
-                    ((Instruction*)pc)->c = 0;
-                }
-                else {
-                    GC_disable();
-                    JIT::Trace* exit = (JIT::Trace*)(rootTrace->ptr)(thread);
-                    GC_enable();
-
-                    if(exit == 0) {
-                        // we exited from the nested loop normally,
-                        // record nest and continue from the normal exit point
-                        thread.jit.EmitNest(thread, rootTrace);
-                        pc = pc+pc->a;
-                    }
-                    else {
-                        // we bailed prematurely, bail on recording outer loop and attempt to start
-                        // recording side trace.
-                        thread.jit.fail_recording();
-                        labels = ops;
-
-                        if(++exit->counter > JIT::RECORD_TRIGGER) {
-                            if(thread.state.verbose)
-                                printf("Starting to record side exit at %li\n", pc);
-                            exit->counter = 0;
-                            thread.jit.start_recording(pc, thread.frame.environment, rootTrace, exit);
-                            labels = record;
-                        }
-                        pc = exit->Reenter;
-                    }
-                }
-            }
-            else {
-                thread.jit.fail_recording();
-                labels = ops;
-            }
-        }
-		goto *(const void*)labels[pc->bc]; 
+	forend_record: 	{
+        thread.jit.record(thread, pc);
+        bool contTrace = continueTrace(thread, pc, pc+2, pc);
+        if(!contTrace)
+            labels = ops;
+        goto *(const void*)labels[pc->bc]; 
 	}
+	
+    whileend_record: 	{
+        thread.jit.record(thread, pc);
+        bool contTrace = continueTrace(thread, pc, pc+1, pc);
+        if(!contTrace)
+            labels = ops;
+        goto *(const void*)labels[pc->bc]; 
+	}
+    
     jc_record:  {
         Instruction const* old_pc = pc;
         pc = jc_op(thread, *pc); 

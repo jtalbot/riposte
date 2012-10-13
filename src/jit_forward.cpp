@@ -10,7 +10,8 @@ JIT::IR JIT::Forward(
 
     switch(ir.op) {
             #define CASE(Name, ...) case TraceOpCode::Name:
-            
+
+            case TraceOpCode::random:            
             case TraceOpCode::nop:
             case TraceOpCode::nest:
             case TraceOpCode::jmp:
@@ -19,6 +20,7 @@ JIT::IR JIT::Forward(
             case TraceOpCode::curenv: 
             case TraceOpCode::pop:
             case TraceOpCode::sload:
+            case TraceOpCode::exit:
             CASE(constant)
                 break;
 

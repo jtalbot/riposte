@@ -12,11 +12,11 @@
 	_(ret, "ret") /* return from function */ \
 	_(retp, "retp") /* return from a promise or default */ \
 	_(rets, "rets") /* return from top-level statement */ \
-    _(loop, "loop") \
 	_(jc, "jc") \
 	_(jmp, "jmp") \
 	_(forbegin, "forbegin") \
 	_(forend, "forend") \
+	_(whileend, "whileend") \
 	_(branch, "branch") \
 	_(list, "list") \
 	_(dotslist, "dotslist")

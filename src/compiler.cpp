@@ -443,7 +443,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		
 		loopDepth++;
 		int64_t beginbody = ir.size();
-        emit(ByteCode::loop, 0, 0, 0);
 		Operand body = compile(call[3], code);
 		int64_t endbody = ir.size();
 		resolveLoopExits(beginbody, endbody, endbody, endbody+2);
@@ -452,8 +451,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(ByteCode::forend, loop_variable, loop_vector, loop_counter);
 		emit(ByteCode::jmp, beginbody-endbody, 0, 0);
 
-		ir[beginbody-1].a.i = endbody-beginbody+4;
-        ir[beginbody].a.i = endbody-beginbody+2;
+		ir[beginbody-1].a.i = endbody-beginbody+3;
 
 		kill(body); kill(loop_variable); kill(loop_counter); kill(loop_vector);
 		return compileConstant(Null::Singleton(), code);
@@ -465,18 +463,16 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		loopDepth++;
 		
 		int64_t beginbody = ir.size();
-        emit(ByteCode::loop, 0, 0, 0);
 		Operand body = compile(call[2], code);
 		kill(body);
 		int64_t tail = ir.size();
 		Operand tail_condition = compile(call[1], code);
 		int64_t endbody = ir.size();
 		
-		emit(ByteCode::jc, beginbody-endbody, 1, kill(tail_condition));
+		emit(ByteCode::whileend, beginbody-endbody, 1, kill(tail_condition));
 		resolveLoopExits(beginbody, endbody, tail, endbody+1);
 		
-        ir[beginbody-1].b = endbody-beginbody+2;
-        ir[beginbody].a.i = endbody-beginbody+1;
+        ir[beginbody-1].b = endbody-beginbody+1;
 		
         loopDepth--;
 		
@@ -486,14 +482,11 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		loopDepth++;
 		int64_t beginbody = ir.size();
-        emit(ByteCode::loop, 0, 0, 0);
 		Operand body = compile(call[1], code);
 		int64_t endbody = ir.size();
 		resolveLoopExits(beginbody, endbody, endbody, endbody+1);
 		loopDepth--;
 		emit(ByteCode::jmp, beginbody-endbody, 0, 0);
-		
-        ir[beginbody].a.i = endbody-beginbody+1;
 		
         kill(body);
 		return compileConstant(Null::Singleton(), code);

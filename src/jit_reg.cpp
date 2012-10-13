@@ -159,6 +159,7 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
             {
                 AssignRegister(ir.a);
             } break;
+        case TraceOpCode::random:
         case TraceOpCode::loop:
         case TraceOpCode::jmp:
         case TraceOpCode::exit:
@@ -294,6 +295,7 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
             {
                 code[ir.c].live = true;
             } break;
+        case TraceOpCode::random:
         case TraceOpCode::loop:
         case TraceOpCode::jmp:
         case TraceOpCode::exit:

@@ -9,8 +9,7 @@ filter <- function(v, f) {
 	r
 }
 
-a <- runif(10000000)
+a <- runif(M)
 force(a)
 
-#filter(a, c(0.1,0.15,0.2,0.3,0.2,0.15,0.1))
 system.time(filter(a, c(0.1,0.15,0.2,0.3,0.2,0.15,0.1)))

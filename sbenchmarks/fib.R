@@ -1,12 +1,11 @@
-M <- as.integer(commandArgs(TRUE)[[1]])
-N <- 100000000 / M
+N <- as.integer(commandArgs(TRUE)[[1]])
 
 fib <- function(N) {
-    a <- runif(M)
-    b <- runif(M)
-    i <- 0
+    a <- 0
+    b <- 1
+    i <- 0L
     while(i < N) {
-        i <- i+1
+        i <- i+1L
         t <- b
         b <- b+a
         a <- t
@@ -14,4 +13,4 @@ fib <- function(N) {
     b 
 }
 
-system.time(fib(N))
+cat(system.time(fib(N))[[3]])
