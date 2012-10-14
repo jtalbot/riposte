@@ -262,6 +262,9 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                     // TODO: actually check for NA in the constant
                     ir = IR(TraceOpCode::pos, FalseRef, Type::Logical, Shape::Scalar, Shape::Scalar);
                 }
+                else if(code[ir.a].op == TraceOpCode::encode) {
+                    ir = IR(TraceOpCode::pos, code[ir.a].b, Type::Logical, Shape::Scalar, Shape::Scalar);
+                }
                 break;
 
             case TraceOpCode::phi:
