@@ -279,6 +279,9 @@ private:
 #define DUMPD(str, i) \
     builder.CreateCall2(builder.getFunction("DUMPD"), builder.CreateConstGEP2_64(builder.CreateGlobalString(str), 0, 0), i)
 
+#define DUMPL(str, i) \
+    builder.CreateCall2(builder.getFunction("DUMPL"), builder.CreateConstGEP2_64(builder.CreateGlobalString(str), 0, 0), i)
+
 /*
 
     Not all registers are mutable...
@@ -561,6 +564,8 @@ struct Fusion {
         }
         else {
             iterator = initial;
+            sequenceI = seqI;
+            sequenceD = seqD;
         }
 
         builder.SetInsertPoint(body);
@@ -666,7 +671,7 @@ struct Fusion {
             llvm::Value* j1 = builder.CreateExtractElement(in, builder.getInt32(i+1));  
             v2 = builder.CreateInsertElement(v2, j0, builder.getInt32(0));              
             v2 = builder.CreateInsertElement(v2, j1, builder.getInt32(1));            
-            v2 = builder.CreateCall2(f, v2, builder.getInt32(k)); 
+            v2 = builder.CreateCall3(f, v2, v2, builder.getInt32(k)); 
             out = builder.CreateInsertElement(out, 
                 builder.CreateExtractElement(v2, builder.getInt32(0)), builder.getInt32(i));
             out = builder.CreateInsertElement(out, 
@@ -677,7 +682,7 @@ struct Fusion {
             llvm::Value* v1 = llvm::UndefValue::get(llvmType(Type::Double, 2)); 
             llvm::Value* j0 = builder.CreateExtractElement(in, builder.getInt32(i));
             v1 = builder.CreateInsertElement(v1, j0, builder.getInt32(0)); 
-            v1 = builder.CreateCall2(f, v1, builder.getInt32(k));
+            v1 = builder.CreateCall3(f, v1, v1, builder.getInt32(k));
             out = builder.CreateInsertElement(out, 
                 builder.CreateExtractElement(v1, builder.getInt32(0)), builder.getInt32(i));
         }
@@ -915,7 +920,7 @@ struct Fusion {
                         llvm::Value* in = Load(builder, ir.a);
                         SCALARIZE1(in, FPToSI, builder.getInt64Ty());
                     } break;
-                    case Type::Logical: ToInt1(Load(builder, ir.a));
+                    case Type::Logical: outs[reg] = ToInt1(Load(builder, ir.a));
                     case Type::Integer: IDENTITY; break;
                     default: _error("Unexpected cast"); break;
                 }
@@ -923,8 +928,8 @@ struct Fusion {
             
             case TraceOpCode::aslogical:
                 switch(jit.code[ir.a].type) {
-                    case Type::Double: ToInt8(builder.CreateFCmpONE(Load(builder, ir.a), zerosD)); break;
-                    case Type::Integer: ToInt8(builder.CreateICmpNE(Load(builder, ir.a), zerosI)); break;
+                    case Type::Double: outs[reg] = ToInt8(builder.CreateFCmpONE(Load(builder, ir.a), zerosD)); break;
+                    case Type::Integer: outs[reg] = ToInt8(builder.CreateICmpNE(Load(builder, ir.a), zerosI)); break;
                     case Type::Logical: IDENTITY; break;
                     default: _error("Unexpected cast"); break;
                 }
@@ -1148,6 +1153,13 @@ struct Fusion {
                 } 
                 reductions[index] = agg;
             } break;
+            case TraceOpCode::any:
+            {
+                llvm::Value* agg;
+                agg = headerBuilder.CreateInitializedAlloca(falseL);
+                builder.CreateStore(builder.CreateOr(builder.CreateLoad(agg), Load(builder, ir.a)), agg);
+                reductions[index] = agg;
+            } break;
             default:
                 printf("Unsupported op is %s\n", TraceOpCode::toString(ir.op));
                 _error("Unsupported op in Fusion::Emit");
@@ -1178,8 +1190,15 @@ struct Fusion {
                 else {
                     t = builder.getInt64(0);
                     for(size_t i = 0; i < width; i++) {
-                        t = builder.CreateAdd(r, builder.CreateExtractElement(a, builder.getInt32(i)));
+                        t = builder.CreateAdd(t, builder.CreateExtractElement(a, builder.getInt32(i)));
                     }
+                }
+                break;
+            case TraceOpCode::any:
+                a = builder.CreateLoad(a);
+                t = builder.getInt8(0);
+                for(size_t i = 0; i < width; i++) {
+                    t = builder.CreateOr(t, builder.CreateExtractElement(a, builder.getInt32(i)));
                 }
                 break;
             case TraceOpCode::reshape:
@@ -1280,7 +1299,7 @@ struct TraceCompiler {
         , builder( 
             func != 0 
                 ? func
-                : llvm::Function::Create( function_type, llvm::Function::PrivateLinkage, "trace", S->M)
+                : llvm::Function::Create( function_type, llvm::Function::PrivateLinkage, (std::string("trace_")+intToStr(jit.dest->traceIndex)).c_str(), S->M)
             )
     {
         function = builder.function();
@@ -1561,7 +1580,7 @@ struct TraceCompiler {
                 llvm::CallInst* r = 
                     builder.CreateCall((llvm::Function*)((JIT::Trace*)ir.a)->function, thread_var);
                 r->setCallingConv(llvm::CallingConv::Fast);
-
+                DeconstructExit(jit.dest->exits[ir.exit].snapshot, index);
                 llvm::Value* cond = 
                     builder.CreateICmpEQ(r, builder.getInt64(0));
 
@@ -1771,6 +1790,14 @@ struct TraceCompiler {
                 _error("Unknown op in TraceCompiler::Emit");
             } break;
         };
+    }
+
+    void DeconstructExit(JIT::Snapshot const& snapshot, size_t index) {
+    
+        // emit stack deconstruction code
+        for( size_t i = 0; i < snapshot.stack.size(); ++i) {
+                Call("POP");
+        } 
     }
 
     void ReconstructExit(JIT::Snapshot const& snapshot, size_t index) {

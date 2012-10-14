@@ -15,6 +15,48 @@ const JIT::IRRef JIT::TrueRef = 3;
 
 size_t JIT::Trace::traceCount = 0;
 
+
+void JIT::start_recording(Thread& thread, Instruction const* startPC, Environment const* env, Trace* root, Trace* dest) {
+    assert(state == OFF);
+    state = RECORDING;
+    this->startPC = startPC;
+    this->startStackDepth = thread.stack.size();
+    trace.clear();
+    envs.clear();
+    constants.clear();
+    constantsMap.clear();
+    //uniqueConstants.clear();
+    uniqueExits.clear();
+    exitStubs.clear();
+    shapes.clear();
+    rootTrace = root;
+    this->dest = dest;
+
+    // insert empty and scalar shapes.
+    Emit( makeConstant(Integer::c(0)) );
+    Emit( makeConstant(Integer::c(1)) );
+    Emit( makeConstant(Logical::c(Logical::FalseElement)) );
+    Emit( makeConstant(Logical::c(Logical::TrueElement)) );
+
+    shapes.insert( std::make_pair( 0, Shape::Empty ) );
+    shapes.insert( std::make_pair( 1, Shape::Scalar ) );
+
+    TopLevelEnvironment = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar) );
+    envs[env] = TopLevelEnvironment;
+}
+	
+JIT::LoopResult JIT::loop(Thread& thread, Instruction const* pc) {
+    if(pc == startPC) {
+        return thread.stack.size() == startStackDepth ? LOOP : RECURSIVE;
+    }
+    else {
+        return NESTED;
+    }
+}
+
+
+
+
 JIT::IRRef JIT::Emit(IR const& ir) {
     trace.push_back(ir);
     return (IRRef) trace.size()-1;
@@ -97,7 +139,7 @@ JIT::IRRef JIT::DecodeVL(Var a) {
 
 JIT::IRRef JIT::DecodeNA(Var a) {
     if(a.mayHaveNA)
-        return Emit( IR(TraceOpCode::decodena, a.v, a.type, a.s, a.s) );
+        return Emit( IR(TraceOpCode::decodena, a.v, Type::Logical, a.s, a.s) );
     else
         return Emit( IR(TraceOpCode::brcast, FalseRef, Type::Logical, a.s, a.s) );
 }
@@ -367,6 +409,24 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         case ByteCode::lassign: {
             Var cc = EmitConstant(Character::c((String)inst.a));
             IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
+            Var v = load(thread, inst.c, &inst);
+
+            IRRef r = Box(v.v);
+
+            Emit( IR( TraceOpCode::store, e, cc.v, r, Type::Nil, v.s, Shape::Empty ) );
+            // Implicitly: store(thread, v, inst.c);
+        }   break;
+
+        case ByteCode::lassign2: {
+            Var cc = EmitConstant(Character::c((String)inst.a));
+            Environment const* env = thread.frame.environment;
+            IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
+            while(!env->has((String)inst.a)) {
+                env = env->LexicalScope();
+                //Emit( IR( TraceOpCode::load, r, aa, Type::Any, Shape::Scalar, Shape::Scalar ) );
+                e = Emit( IR( TraceOpCode::lenv, e, Type::Environment, Shape::Scalar, Shape::Scalar ) );
+            }
+
             Var v = load(thread, inst.c, &inst);
 
             IRRef r = Box(v.v);

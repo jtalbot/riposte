@@ -766,18 +766,20 @@ bool traceLoop(Thread& thread, Instruction const* pc, JIT::Trace* trace)
         trace == 0 ? thread.jit.counters[(((uintptr_t)pc)>>5) & (1024-1)] : trace->counter;
     counter++;
     if(counter >= JIT::RECORD_TRIGGER && counter == nextPow2(counter)) {
-        JIT::Trace* trace = new JIT::Trace();
-        trace->traceIndex = JIT::Trace::traceCount++;
-        trace->function = 0;
-        trace->ptr = 0;
-        trace->root = trace;
-        trace->Reenter = pc;
-        trace->counter = 0;
+        if(trace == 0) {
+            trace = new JIT::Trace();
+            trace->traceIndex = JIT::Trace::traceCount++;
+            trace->function = 0;
+            trace->ptr = 0;
+            trace->root = trace;
+            trace->Reenter = pc;
+            trace->counter = 0;
+        }
 
         if(thread.state.verbose)
             printf("Starting to record trace %d at %li (counter: %li is %d)\n", trace->traceIndex, (uint64_t)pc, &counter, counter);
 
-        thread.jit.start_recording(pc, thread.frame.environment, 0, trace);
+        thread.jit.start_recording(thread, pc, thread.frame.environment, 0, trace);
         thread.jit.cache[pc] = trace;
         return true;
     }
@@ -786,10 +788,10 @@ bool traceLoop(Thread& thread, Instruction const* pc, JIT::Trace* trace)
 
 bool traceSideExit(Thread& thread, Instruction const* pc, JIT::Trace* exit)
 {
-    if(++exit->counter > JIT::RECORD_TRIGGER) {
+    if(++exit->counter >= JIT::RECORD_TRIGGER && exit->counter == nextPow2(exit->counter)) {
         if(thread.state.verbose)
-            printf("Starting to record side exit %d at %li\n", exit->traceIndex, (uint64_t)pc);
-        thread.jit.start_recording(pc, thread.frame.environment, exit->root, exit);
+            printf("Starting to record side exit %d at %li (counter: %d)\n", exit->traceIndex, (uint64_t)pc, exit->counter);
+        thread.jit.start_recording(thread, pc, thread.frame.environment, exit->root, exit);
         return true;
     }
     return false;
@@ -833,10 +835,17 @@ void stopTrace(Thread& thread, char const* reason) {
 // returns true if we should continue tracing
 bool continueTrace(Thread& thread, Instruction const* loopPC, Instruction const* loopExitPC, Instruction const*& pc) {
     // did we make a loop yet??
-    if(thread.jit.loop(thread, loopPC)) {
+    JIT::LoopResult loopResult = thread.jit.loop(thread, loopPC);
+    
+    if(loopResult == JIT::LOOP) {
         if(thread.state.verbose)
             printf("Made loop at %li\n", loopPC);
         thread.jit.end_recording(thread);
+        return false;
+    }
+
+    if(loopResult == JIT::RECURSIVE) {
+        stopTrace(thread, "recursive self loop");
         return false;
     }
 

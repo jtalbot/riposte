@@ -143,9 +143,11 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                     ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
                 else if(ir.a == TrueRef || ir.b == TrueRef)
                     ir = IR(TraceOpCode::pos, TrueRef, ir.type, ir.in, ir.out);
-                else if(ir.a == FalseRef)
+                else if(ir.a == FalseRef || 
+                        (code[ir.a].op == TraceOpCode::brcast && code[ir.a].a == FalseRef))
                     ir = IR(TraceOpCode::pos, ir.b, ir.type, ir.in, ir.out);
-                else if(ir.b == FalseRef)
+                else if(ir.b == FalseRef ||
+                        (code[ir.b].op == TraceOpCode::brcast && code[ir.b].a == FalseRef))
                     ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
                 break;
 
@@ -154,9 +156,11 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                     ir = IR(TraceOpCode::pos, ir.a, Type::Integer, ir.in, ir.out); 
                 else if(ir.a == FalseRef || ir.b == FalseRef)
                     ir = IR(TraceOpCode::pos, FalseRef, ir.type, ir.in, ir.out);
-                else if(ir.a == TrueRef)
+                else if(ir.a == TrueRef || 
+                        (code[ir.a].op == TraceOpCode::brcast && code[ir.a].a == TrueRef))
                     ir = IR(TraceOpCode::pos, ir.b, ir.type, ir.in, ir.out);
-                else if(ir.b == TrueRef)
+                else if(ir.b == TrueRef ||
+                        (code[ir.b].op == TraceOpCode::brcast && code[ir.b].a == TrueRef))
                     ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
                 break;
 
@@ -220,7 +224,7 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                 break;
 
             case TraceOpCode::brcast:
-                if(ir.out.length == 1) {
+                if(ir.out.length == code[ir.a].out.length) {
                     ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
                 }
                 break;
@@ -253,6 +257,13 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                 }
                 break;
 
+            case TraceOpCode::decodena:
+                if(code[ir.a].op == TraceOpCode::constant) {
+                    // TODO: actually check for NA in the constant
+                    ir = IR(TraceOpCode::pos, FalseRef, Type::Logical, Shape::Scalar, Shape::Scalar);
+                }
+                break;
+
             case TraceOpCode::phi:
                 if(ir.a == ir.b &&
                     code[ir.a].op == TraceOpCode::constant) {
@@ -272,6 +283,23 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                     ir = IR( TraceOpCode::constant, code[ir.a].a, v.type, Shape::Empty, Shape::Scalar);
                 }
 
+            case TraceOpCode::aslogical:
+                if(code[ir.a].type == Type::Logical) {
+                    ir = IR( TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out );
+                }
+                break;
+
+            case TraceOpCode::asdouble:
+                if(code[ir.a].type == Type::Double) {
+                    ir = IR( TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out );
+                }
+                break;
+            
+            case TraceOpCode::asinteger:
+                if(code[ir.a].type == Type::Integer) {
+                    ir = IR( TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out );
+                }
+                break;
             default:
                 break;
         }
@@ -395,16 +423,16 @@ double JIT::Opcost(std::vector<IR>& code, IR ir) {
             case TraceOpCode::exit:
             case TraceOpCode::nest:
             case TraceOpCode::loop:
+            case TraceOpCode::store:
+            case TraceOpCode::sstore:
+            case TraceOpCode::sload:
+            case TraceOpCode::load:
                 return 0;
                 break;
 
             // Things that we should absolutely CSE
             case TraceOpCode::rep:
             case TraceOpCode::curenv: 
-            case TraceOpCode::sload:
-            case TraceOpCode::load:
-            case TraceOpCode::store:
-            case TraceOpCode::sstore:
             case TraceOpCode::gproto:
             case TraceOpCode::gtrue: 
             case TraceOpCode::gfalse:

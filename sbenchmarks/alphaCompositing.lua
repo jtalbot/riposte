@@ -15,15 +15,15 @@ function alphaCompositing(color1, color2)
 end
 
 function run(n)
-    local color1 = {0.1,0.1,0.1,0.5}
-    local color2 = {0.5,0.05,0.05,0.1}
+    local color1 = {0.5,0.05,0.05,0.1}
+    local color2 = {0.1,0.1,0.1,0.5}
 
     local a = 0
     while(a < n) do
         a = a+1
-        color1 = alphaCompositing(color2, color1)
+        color2 = alphaCompositing(color1, color2)
     end
-    return color1
+    return color2
 end
 
 local x = os.clock()

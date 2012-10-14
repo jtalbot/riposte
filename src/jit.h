@@ -173,6 +173,7 @@ public:
 
     State state;
 	Instruction const* startPC;
+    size_t startStackDepth;
 
     std::vector<Value> constants;
     std::map<Value, size_t> constantsMap;
@@ -248,46 +249,19 @@ public:
 	{
 	}
 
-	void start_recording(Instruction const* startPC, Environment const* env, Trace* root, Trace* dest) {
-		assert(state == OFF);
-		state = RECORDING;
-		this->startPC = startPC;
-        trace.clear();
-        envs.clear();
-        constants.clear();
-        constantsMap.clear();
-        //uniqueConstants.clear();
-        uniqueExits.clear();
-        exitStubs.clear();
-        shapes.clear();
-        rootTrace = root;
-        this->dest = dest;
-
-        // insert empty and scalar shapes.
-        Emit( makeConstant(Integer::c(0)) );
-        Emit( makeConstant(Integer::c(1)) );
-        Emit( makeConstant(Logical::c(Logical::FalseElement)) );
-        Emit( makeConstant(Logical::c(Logical::TrueElement)) );
-
-        shapes.insert( std::make_pair( 0, Shape::Empty ) );
-        shapes.insert( std::make_pair( 1, Shape::Scalar ) );
-
-        TopLevelEnvironment = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar) );
-	    envs[env] = TopLevelEnvironment;
-    }
-
+	void start_recording(Thread& thread, Instruction const* startPC, Environment const* env, Trace* root, Trace* dest);
+    
     bool record(Thread& thread, Instruction const* pc, bool branch=false) {
         return EmitIR(thread, *pc, branch);
     }
 
-	bool loop(Thread& thread, Instruction const* pc) {
-		if(pc == startPC) {
-            return true;
-        }
-        else {
-            return false;
-        }
-	}
+    enum LoopResult {
+        LOOP,
+        NESTED,
+        RECURSIVE
+    };
+
+	LoopResult loop(Thread& thread, Instruction const* pc);
 
     std::map<Instruction const*, size_t> uniqueExits;
     int64_t BuildExit( int64_t stub, Snapshot const& snapshot );

@@ -28,6 +28,11 @@ void DUMPD(char* a, double d) {
 }
 
 extern "C"
+void DUMPL(char* a, char d) {
+    printf("%s : %d\n", a, d);
+}
+
+extern "C"
 Value curenv(Thread& thread) {
     Value v;
     return REnvironment::Init(v, thread.frame.environment);
