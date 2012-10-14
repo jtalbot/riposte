@@ -896,7 +896,7 @@ struct Fusion {
             break;
 
             case TraceOpCode::ifelse:
-                outs[reg] = builder.CreateSelect(Load(builder, ir.a), Load(builder, ir.b), Load(builder, ir.c));
+                outs[reg] = builder.CreateSelect(ToInt1(Load(builder, ir.a)), Load(builder, ir.b), Load(builder, ir.c));
             break;
 
             case TraceOpCode::asdouble:

@@ -1,5 +1,4 @@
-# A simple random walk, since we don't have a random number generator yet, use a constant
-# this should really be testing side exits
+
 rw <- function(n) {
     a <- 0
     for(i in 1:n) {

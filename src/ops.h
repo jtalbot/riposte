@@ -238,6 +238,14 @@ template<class X, class Y, class Z> struct IfElse  {
 	typedef X A; typedef Y B; typedef Z C; 
 	typedef Logical MA; typedef typename UnifyBinary<Y, Z>::MA MB; typedef typename UnifyBinary<Y, Z>::MB MC;
 	typedef typename UnifyBinary<Y, Z>::R R; 
+	
+    static typename R::Element eval(Thread& thread, 
+        typename A::Element const ia, typename B::Element const ib, typename C::Element const ic) {
+		typename MA::Element a = Cast<A, MA>(thread, ia); 
+		typename MB::Element b = Cast<B, MB>(thread, ib); 
+		typename MC::Element c = Cast<C, MC>(thread, ic);
+		return a ? b : c;
+	}
 };
 
 template<class X, class Y> struct Split
@@ -441,6 +449,19 @@ void CastCharacterDispatch(Thread& thread, Value const& a, Value& c) {
 template< template<typename T> class Op >
 void CastListDispatch(Thread& thread, Value const& a, Value& c) {
     c = As<List>(thread, a);
+}
+
+template< template<typename S, typename T, typename U> class Op > 
+void IfElseDispatch(Thread& thread, Value const& a, Value const& b, Value const& c, Value& d) {
+    if(b.isCharacter() || c.isCharacter())
+        Zip3< Op<Logical, Character, Character> >::eval(thread, As<Logical>(thread, a), As<Character>(thread, b), As<Character>(thread, c), d);
+    else if(b.isDouble() || c.isDouble())
+        Zip3< Op<Logical, Double, Double> >::eval(thread, As<Logical>(thread, a), As<Double>(thread, b), As<Double>(thread, c), d);
+    else if(b.isInteger() || c.isInteger())	
+        Zip3< Op<Logical, Integer, Integer> >::eval(thread, As<Logical>(thread, a), As<Integer>(thread, b), As<Integer>(thread, c), d);
+    else if(b.isLogical() || c.isLogical())	
+        Zip3< Op<Logical, Logical, Logical> >::eval(thread, As<Logical>(thread, a), As<Logical>(thread, b), As<Logical>(thread, c), d);
+    else	_error("unsupported ifelse");
 }
 
 #endif

@@ -566,7 +566,7 @@ Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 		OUT(inst.c) = c.d ? b : a;
 		return &inst+1; 
 	}
-	_error("ifelse not defined in scalar yet");
+    IfElseDispatch<IfElse>(thread, c, b, a, OUT(inst.c));
 	return &inst+1; 
 }
 

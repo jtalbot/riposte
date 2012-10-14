@@ -38,6 +38,13 @@ struct Map2VS {
 	}
 };
 
+template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
+struct Map3VVV {
+	static void eval(Thread& thread, typename Op::A::Element const* a, typename Op::B::Element const* b, typename Op::C::Element const* c, typename Op::R::Element* r) {
+		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(thread, a[i], b[i], c[i]);
+	}
+};
+
 template< class Op, int64_t N >
 struct FoldLeftT {
 	static typename Op::R eval(Thread& thread, typename Op::A::Element const* a, typename Op::R::Element r) {
@@ -173,6 +180,30 @@ struct Zip2N {
 		}
 		out = (Value&)r;
 	}
+};
+
+template< class Op >
+struct Zip3 {
+    static void eval(Thread& thread, 
+        typename Op::A const& a, typename Op::B const& b, typename Op::C const& c, Value& out) {
+        int64_t length = std::max(a.length, std::max(b.length, c.length));
+        typename Op::R r(length);
+        typename Op::R::Element* re = r.v();
+        typename Op::A::Element const* ae = a.v();
+        typename Op::B::Element const* be = b.v();
+        typename Op::C::Element const* ce = c.v();
+        
+        int64_t j=0, k=0, l=0;
+        for(int64_t i = 0; i < length; ++i) 
+        {
+            Map3VVV<Op,1>::eval(thread, ae+j, be+k, ce+l, re+i);
+            if(++j >= a.length) j = 0;
+            if(++k >= b.length) k = 0;
+            if(++l >= c.length) l = 0;
+        }
+        r.setMayHaveNA( a.getMayHaveNA() || b.getMayHaveNA() || c.getMayHaveNA() );
+        out = (Value&)r;
+    }
 };
 
 template< class Op >

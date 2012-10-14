@@ -125,7 +125,7 @@
 	_(le, "le",	OrdinalBinary,	PassNA(a,b,le(thread,a,b)?-1:0), 1) \
 
 #define TERNARY_BYTECODES(_) \
-	_(ifelse, "ifelse", IfElse, , 3) \
+	_(ifelse, "ifelse", IfElse, a ? b : c, 3) \
 	_(split, "split", Split, , 10)
 
 #define ARITH_FOLD_BYTECODES(_) \
