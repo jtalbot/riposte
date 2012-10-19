@@ -1,4 +1,9 @@
 
+{
+
+library("compiler")
+enableJIT(3)
+
 # simulating multiple traces at the same time
 
 rw <- function(n,m) {
@@ -12,3 +17,5 @@ N <- as.integer(commandArgs(TRUE)[[1]])
 M <- as.integer(commandArgs(TRUE)[[2]])
 
 cat(system.time(rw(N/M, M))[[3]])
+
+}
