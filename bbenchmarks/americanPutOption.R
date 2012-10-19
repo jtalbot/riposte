@@ -4,7 +4,7 @@ library("compiler")
 enableJIT(3)
 
 M <- as.integer(commandArgs(TRUE)[[2]])
-N <- sqrt(as.integer(commandArgs(TRUE)[[1]])/M)
+N <- as.integer(sqrt(as.integer(commandArgs(TRUE)[[1]])/M))
 
 americanPut <- function(T, S, K, r, sigma, q, n) {
 	deltaT <- T/n

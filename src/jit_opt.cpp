@@ -441,6 +441,7 @@ double JIT::Opcost(std::vector<IR>& code, IR ir) {
                 break;
 
             // Things that we should absolutely CSE
+            case TraceOpCode::gather1:
             case TraceOpCode::strip:
             case TraceOpCode::attrget:
             case TraceOpCode::rep:
@@ -966,6 +967,7 @@ JIT::IRRef JIT::EmitOptIR(
 
             case TraceOpCode::attrget:
             case TraceOpCode::reshape:
+            case TraceOpCode::gather1:
             case TraceOpCode::gather:
             case TraceOpCode::rep:
             case TraceOpCode::alength:
@@ -1086,6 +1088,7 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
 
             case TraceOpCode::encode:
             case TraceOpCode::reshape:
+            case TraceOpCode::gather1:
             case TraceOpCode::gather:
             case TraceOpCode::rep:
             case TraceOpCode::alength:

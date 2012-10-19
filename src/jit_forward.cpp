@@ -47,6 +47,7 @@ JIT::IR JIT::Forward(
             case TraceOpCode::phi:
             case TraceOpCode::glength:
             case TraceOpCode::reshape:
+            case TraceOpCode::gather1:
             case TraceOpCode::gather:
             case TraceOpCode::rep:
             case TraceOpCode::alength:

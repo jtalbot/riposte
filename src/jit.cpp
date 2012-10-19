@@ -462,7 +462,22 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         }   break;
 
         case ByteCode::gather1: {
-        case ByteCode::gather:
+            // TODO: need to check for negative numbers, out of range accesses, etc.
+            Var a = load(thread, inst.a, &inst);
+            Var b = EmitCast(load(thread, inst.b, &inst), Type::Integer);
+            Emit( IR(TraceOpCode::glength, b.v, 1, Type::Integer, Shape::Scalar, Shape::Scalar), &inst, true );
+            b = EmitBinary( TraceOpCode::sub, b, Var(trace, 1, false), Type::Integer, 0 );
+
+            
+            Type::Enum rtype = a.type == Type::List ? Type::Any : a.type;
+            IRRef r = Emit( IR( TraceOpCode::gather1, a.v, DecodeVL(b), rtype, Shape::Scalar, Shape::Scalar ) );
+            Var q( trace, r, a.mayHaveNA );
+
+            IRRef n = Emit( IR( TraceOpCode::lor, DecodeNA(q), DecodeNA(b), Type::Logical, Shape::Scalar, Shape::Scalar ) );
+            store(thread, Encode(r, n, b.mayHaveNA || q.mayHaveNA), inst.c); 
+        }   break;
+
+        case ByteCode::gather: {
             // TODO: need to check for negative numbers, out of range accesses, logical gather vectors, etc.
             Var a = load(thread, inst.a, &inst);
             Var b = EmitCast(load(thread, inst.b, &inst), Type::Integer);
@@ -567,7 +582,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             IRRef b = Emit( IR( TraceOpCode::lt, counter, a, Type::Logical, Shape::Scalar, Shape::Scalar ) );
             Emit( IR( TraceOpCode::gtrue, b, Type::Nil, Shape::Scalar, Shape::Empty), &inst+(&inst+1)->a, false );
 
-            IRRef r = Emit( IR( TraceOpCode::gather, vec.v, counter, vec.type, Shape::Scalar, Shape::Scalar ) );
+            IRRef r = Emit( IR( TraceOpCode::gather1, vec.v, counter, vec.type, Shape::Scalar, Shape::Scalar ) );
                   r = Box(r);
 
             Var cc = EmitConstant(Character::c((String)inst.a));
@@ -590,7 +605,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             IRRef b = Emit( IR( TraceOpCode::lt, counter, a, Type::Logical, Shape::Scalar, Shape::Scalar ) );
             Emit( IR( TraceOpCode::gtrue, b, Type::Nil, Shape::Scalar, Shape::Empty), &inst+2, false );
             
-            IRRef r = Emit( IR( TraceOpCode::gather, vec.v, counter, vec.type, Shape::Scalar, Shape::Scalar ) );
+            IRRef r = Emit( IR( TraceOpCode::gather1, vec.v, counter, vec.type, Shape::Scalar, Shape::Scalar ) );
 
                   r = Box(r);
 
@@ -1259,6 +1274,7 @@ void JIT::IR::dump() const {
         case TraceOpCode::push:
         case TraceOpCode::rep:
         case TraceOpCode::seq:
+        case TraceOpCode::gather1:
         case TraceOpCode::gather:
         case TraceOpCode::alength:
         BINARY_BYTECODES(CASE)

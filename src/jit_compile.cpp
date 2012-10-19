@@ -670,8 +670,8 @@ struct Fusion {
             llvm::Value* k1 = builder.CreateExtractElement(inb, builder.getInt32(i+1));  
             v2 = builder.CreateInsertElement(v2, j0, builder.getInt32(0));              
             v2 = builder.CreateInsertElement(v2, j1, builder.getInt32(1));            
-            w2 = builder.CreateInsertElement(v2, k0, builder.getInt32(0));              
-            w2 = builder.CreateInsertElement(v2, k1, builder.getInt32(1));            
+            w2 = builder.CreateInsertElement(w2, k0, builder.getInt32(0));              
+            w2 = builder.CreateInsertElement(w2, k1, builder.getInt32(1));            
             v2 = builder.CreateCall2(f, v2, w2);                                     
             out = builder.CreateInsertElement(out, 
                 builder.CreateExtractElement(v2, builder.getInt32(0)), builder.getInt32(i));
@@ -985,6 +985,22 @@ struct Fusion {
                 }
                 break;
             
+            case TraceOpCode::gather1: 
+            {
+                llvm::Value* v = RawLoad(builder, ir.a);
+                llvm::Value* idx = Load(builder, ir.b);
+
+                llvm::Value* j = builder.CreateExtractElement(idx, builder.getInt32(0));
+                v = builder.CreateLoad(builder.CreateGEP(v, j));
+                
+                if(jit.code[ir.a].type == Type::List) {
+                    outs[reg] = v;
+                }
+                else {
+                    llvm::Value* r = llvm::UndefValue::get(llvmType(ir.type, width));
+                    outs[reg] = builder.CreateInsertElement(r,v,builder.getInt32(0));
+                }
+            } break;
             case TraceOpCode::gather: 
             {
                 llvm::Value* v = RawLoad(builder, ir.a);
@@ -1423,6 +1439,7 @@ struct TraceCompiler {
             case TraceOpCode::reshape:
             case TraceOpCode::brcast:
             case TraceOpCode::gather:
+            case TraceOpCode::gather1:
             case TraceOpCode::scatter:
             case TraceOpCode::scatter1:
             case TraceOpCode::decodena:

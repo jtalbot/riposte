@@ -141,6 +141,7 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
         case TraceOpCode::alength:
         case TraceOpCode::rep:
         case TraceOpCode::seq:
+        case TraceOpCode::gather1:
         case TraceOpCode::gather:
             BINARY_BYTECODES(CASE)
             {
@@ -260,6 +261,7 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
         case TraceOpCode::glength:
         case TraceOpCode::rep:
         case TraceOpCode::seq:
+        case TraceOpCode::gather1:
         case TraceOpCode::gather:
         case TraceOpCode::load:
         case TraceOpCode::reshape:

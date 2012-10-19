@@ -39,6 +39,7 @@
         _(gproto,   "gproto", ___) \
 		_(gtrue, "gtrue", ___) \
 		_(gfalse, "gfalse", ___) \
+		_(gather1, "gather1", ___) \
 		_(gather, "gather", ___) \
 		_(scatter1, "scatter1", ___) \
 		_(scatter, "scatter", ___) \
