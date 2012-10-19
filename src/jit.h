@@ -40,11 +40,13 @@
 		_(gtrue, "gtrue", ___) \
 		_(gfalse, "gfalse", ___) \
 		_(gather, "gather", ___) \
+		_(scatter1, "scatter1", ___) \
 		_(scatter, "scatter", ___) \
 		_(phi, "phi", ___) \
         _(push, "PUSH", ___) \
         _(pop, "POP", ___) \
-        _(strip, "STRIP", ___) \
+        _(strip, "strip", ___) \
+        _(attrget, "attrget", ___) \
         _(olength, "olength", ___) \
         _(alength, "alength", ___) \
         _(kill, "kill", ___) \

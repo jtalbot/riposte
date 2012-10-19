@@ -1,3 +1,9 @@
+
+{
+
+library("compiler")
+enableJIT(3)
+
 N <- as.integer(commandArgs(TRUE)[[1]])
 
 fib <- function(N) {
@@ -14,3 +20,5 @@ fib <- function(N) {
 }
 
 cat(system.time(fib(N))[[3]])
+
+}

@@ -1,4 +1,6 @@
 
+{
+
 Posdef <- function (n, ev = runif(n, 0, 10))
 {
 Z <- matrix(ncol=n, rnorm(n^2))
@@ -16,3 +18,5 @@ N <- as.integer(commandArgs(TRUE)[[1]])
 a <- Posdef(as.integer(sqrt(N)))
 
 write.table(as.vector(a), "data/cholesky.txt", col.names=FALSE, row.names=FALSE)
+
+}

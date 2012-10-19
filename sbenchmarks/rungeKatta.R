@@ -1,4 +1,9 @@
 
+{
+
+library("compiler")
+enableJIT(3)
+
 N <- as.integer(commandArgs(TRUE)[[1]])
 
 initial <- function(val) {
@@ -22,3 +27,5 @@ rungeKatta <-function(t, h, N) {
 }
 
 cat(system.time(rungeKatta(2,1,N))[[3]])
+
+}

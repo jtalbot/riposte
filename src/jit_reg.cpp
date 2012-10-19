@@ -102,6 +102,7 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
             {
                 AssignRegister(ir.a);
             } break;
+        case TraceOpCode::scatter1: 
         case TraceOpCode::scatter: 
             {
                 PreferRegister(ir.a, i);
@@ -134,6 +135,7 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
                 AssignRegister(std::max(ir.a, ir.b));
                 AssignRegister(std::min(ir.a, ir.b));
             } break;
+        case TraceOpCode::attrget:
         case TraceOpCode::glength:
         case TraceOpCode::encode:
         case TraceOpCode::alength:
@@ -145,6 +147,7 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
                 AssignRegister(std::max(ir.a, ir.b));
                 AssignRegister(std::min(ir.a, ir.b));
             } break;
+        case TraceOpCode::strip:
         case TraceOpCode::box:
         case TraceOpCode::unbox:
         case TraceOpCode::decodevl:
@@ -224,7 +227,7 @@ void JIT::RegisterAssignment() {
     for(size_t i = code.size()-1; i < code.size(); --i) {
         IR& ir = code[i];
 
-        if(ir.op == TraceOpCode::scatter) {
+        if(ir.op == TraceOpCode::scatter || ir.op == TraceOpCode::scatter1) {
             // scatter is special since it can resize its register.
             // so resize the register here and then attempt to reuse...
             registers[ir.reg].shape = code[ir.a].out;
@@ -251,6 +254,7 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
     switch(ir.op) 
     {
 #define CASE(Name, ...) case TraceOpCode::Name:
+        case TraceOpCode::attrget:
         case TraceOpCode::encode:
         case TraceOpCode::alength:
         case TraceOpCode::glength:
@@ -265,6 +269,7 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
                 code[ir.a].live = true;
                 code[ir.b].live = true;
             } break;
+        case TraceOpCode::strip:
         case TraceOpCode::box:
         case TraceOpCode::unbox:
         case TraceOpCode::decodevl:
@@ -285,6 +290,7 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
         case TraceOpCode::store:
         case TraceOpCode::newenv:
         case TraceOpCode::scatter: 
+        case TraceOpCode::scatter1: 
         TERNARY_BYTECODES(CASE)
             {
                 code[ir.a].live = true;

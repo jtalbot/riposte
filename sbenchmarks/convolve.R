@@ -1,3 +1,9 @@
+
+{
+
+library("compiler")
+enableJIT(3)
+
 ## R version of convolution example from extensions manual
 convolve <- function(a, b) # from the extending R manual
 {
@@ -16,3 +22,5 @@ x <- as.double(1:N)
 
 #cat(convolve(x,x))
 cat(system.time(convolve(x,x))[[3]])
+
+}

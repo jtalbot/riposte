@@ -24,6 +24,7 @@ JIT::IR JIT::Forward(
             CASE(constant)
                 break;
 
+            case TraceOpCode::strip:
             case TraceOpCode::box:
             case TraceOpCode::unbox:
             case TraceOpCode::brcast:
@@ -41,6 +42,7 @@ JIT::IR JIT::Forward(
                 ir.a = forward[ir.a];
                 break;
 
+            case TraceOpCode::attrget:
             case TraceOpCode::load: 
             case TraceOpCode::phi:
             case TraceOpCode::glength:
@@ -59,6 +61,7 @@ JIT::IR JIT::Forward(
             case TraceOpCode::seq:
             case TraceOpCode::newenv:
             case TraceOpCode::scatter:
+            case TraceOpCode::scatter1:
             TERNARY_BYTECODES(CASE)
                 ir.a = forward[ir.a];
                 ir.b = forward[ir.b];

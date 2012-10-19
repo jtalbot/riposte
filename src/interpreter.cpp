@@ -729,9 +729,9 @@ Instruction const* attrget_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* attrset_op(Thread& thread, Instruction const& inst) {
-	Value const& object = IN(inst.a);
+	Value const& object = IN(inst.c);
 	Value const& whichTmp = IN(inst.b);
-	Value const& value = IN(inst.c);
+	Value const& value = IN(inst.a);
 
     Character which = As<Character>(thread, whichTmp);
     if(!object.isObject()) {

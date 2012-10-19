@@ -1,4 +1,9 @@
 
+{
+
+library("compiler")
+enableJIT(3)
+
 # from Julia's benchmarks
 
 N <- as.integer(commandArgs(TRUE)[[1]])
@@ -35,3 +40,5 @@ sortperf = function(n) {
 }
 
 cat(system.time(sortperf(N))[[3]])
+
+}

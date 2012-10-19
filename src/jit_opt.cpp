@@ -265,6 +265,13 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                 else if(code[ir.a].op == TraceOpCode::encode) {
                     ir = IR(TraceOpCode::pos, code[ir.a].b, Type::Logical, Shape::Scalar, Shape::Scalar);
                 }
+                // our sequence generators can't produce NAs
+                else if(code[ir.a].op == TraceOpCode::seq ||
+                        code[ir.a].op == TraceOpCode::random ||
+                        code[ir.a].op == TraceOpCode::rep) {
+                    ir = IR(TraceOpCode::brcast, FalseRef, Type::Logical, ir.in, ir.out);
+                    retry = true;
+                }
                 break;
 
             case TraceOpCode::phi:
@@ -330,7 +337,7 @@ JIT::IRRef JIT::Insert(
     Snapshot& snapshot, 
     IR ir) 
 {
-    ir = StrengthReduce(ConstantFold(thread, Normalize(ir)));
+    //ir = StrengthReduce(ConstantFold(thread, Normalize(ir)));
 
     if(ir.op == TraceOpCode::pos) {
         return ir.a;
@@ -434,6 +441,8 @@ double JIT::Opcost(std::vector<IR>& code, IR ir) {
                 break;
 
             // Things that we should absolutely CSE
+            case TraceOpCode::strip:
+            case TraceOpCode::attrget:
             case TraceOpCode::rep:
             case TraceOpCode::curenv: 
             case TraceOpCode::gproto:
@@ -441,6 +450,7 @@ double JIT::Opcost(std::vector<IR>& code, IR ir) {
             case TraceOpCode::gfalse:
             case TraceOpCode::glength:
             case TraceOpCode::scatter:
+            case TraceOpCode::scatter1:
             case TraceOpCode::brcast:
             case TraceOpCode::phi:
             case TraceOpCode::length:
@@ -870,6 +880,7 @@ JIT::IRRef JIT::EmitOptIR(
                 ir.a = forward[ir.a];
                 return Insert(thread, code, cse, snapshot, ir);
             } break;
+            case TraceOpCode::scatter1:
             case TraceOpCode::scatter: {
                 ir.a = forward[ir.a]; ir.b = forward[ir.b]; ir.c = forward[ir.c];
                 return Insert(thread, code, cse, snapshot, ir);
@@ -933,20 +944,19 @@ JIT::IRRef JIT::EmitOptIR(
             case TraceOpCode::encode: {
                 ir.a = forward[ir.a];
                 ir.b = forward[ir.b];
-                if(ir.b == FalseRef)
-                    return ir.a;
-                else if(code[ir.a].op == TraceOpCode::decodevl
+                /*if(code[ir.a].op == TraceOpCode::decodevl
                     &&  code[ir.b].op == TraceOpCode::decodena
                     &&  code[ir.a].a == code[ir.b].a)
                     return code[ir.a].a;
                 else if(code[ir.b].op == TraceOpCode::decodena
                     &&  ir.a == code[ir.b].a)
                     return ir.a;
-                else {
+                else {*/
                     return Insert(thread, code, cse, snapshot, ir);
-                }
+                //}
             } break;
 
+            case TraceOpCode::strip:
             case TraceOpCode::brcast:
             case TraceOpCode::olength:
             UNARY_FOLD_SCAN_BYTECODES(CASE) {
@@ -954,6 +964,7 @@ JIT::IRRef JIT::EmitOptIR(
                 return Insert(thread, code, cse, snapshot, ir);
             } break;
 
+            case TraceOpCode::attrget:
             case TraceOpCode::reshape:
             case TraceOpCode::gather:
             case TraceOpCode::rep:
@@ -1067,6 +1078,7 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
 
             case TraceOpCode::seq:
             case TraceOpCode::scatter: 
+            case TraceOpCode::scatter1: 
             case TraceOpCode::newenv:
             TERNARY_BYTECODES(CASE) {
                 MARK(ir.a); MARK(ir.b); MARK(ir.c);

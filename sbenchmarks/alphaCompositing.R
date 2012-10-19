@@ -1,4 +1,9 @@
 
+{
+
+library("compiler")
+enableJIT(3)
+
 
 alphaCompositing <- function(color1, color2) {
 	return(color1 + color2 * (1-color1[[4]]))
@@ -21,3 +26,5 @@ run <- function(N) {
 N <- as.integer(commandArgs(TRUE)[[1]])
 
 cat(system.time(run(N))[[3]])
+
+}

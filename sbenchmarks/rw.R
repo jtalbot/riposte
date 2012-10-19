@@ -1,4 +1,9 @@
 
+{
+
+library("compiler")
+enableJIT(3)
+
 rw <- function(n) {
     a <- 0
     for(i in 1:n) {
@@ -10,3 +15,5 @@ rw <- function(n) {
 N <- as.integer(commandArgs(TRUE)[[1]])
 
 cat(system.time(rw(N))[[3]])
+
+}

@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <string>
 #include <algorithm>
+#include <math.h>
 
 #include "value.h"
 #include "type.h"
@@ -110,6 +111,14 @@ int8_t const** UNBOX_character(Thread& thread, Value& a, int64_t length) {
 }
 
 extern "C"
+Value const* UNBOX_list(Thread& thread, Value& a, int64_t length) {
+    if(!a.isList() || a.length != length)
+        return 0;
+    else
+        return (Value const*)((List const&)a).v();
+}
+
+extern "C"
 Value BOX_double(Thread& thread, double* d, int64_t len, bool takeOwnership) {
     if(len == 1) {
         Double a(1);
@@ -157,6 +166,13 @@ Value BOX_character(Thread& thread, int8_t** d, int64_t len, bool takeOwnership)
         a.p = d;
         return a;
     }
+}
+
+extern "C"
+Value BOX_list(Thread& thread, Value* d, int64_t len, bool takeOwnership) {
+    List a(len);
+    memcpy(a.v(), d, len*sizeof(List::Element));
+    return a;
 }
 
 extern "C"
@@ -269,6 +285,11 @@ int8_t** MALLOC_character(Thread& thread, int64_t length) {
 }
 
 extern "C"
+Value* MALLOC_list(Thread& thread, int64_t length) {
+    return (Value*)MALLOC(length, sizeof(List::Element));
+}
+
+extern "C"
 double* REALLOC_double(Thread& thread, double* v, int64_t& alloclen, int64_t length) {
     if(length > alloclen) {
         if(alloclen == 0) {
@@ -359,6 +380,32 @@ int8_t** REALLOC_character(Thread& thread, int8_t** v, int64_t& alloclen, int64_
     }
 }
 
+struct ValueStub {
+    int64_t a, b;
+};
+
+extern "C"
+Value* REALLOC_list(Thread& thread, Value* v, int64_t& alloclen, int64_t length) {
+    if(length > alloclen) {
+        if(alloclen == 0) {
+            alloclen = length;
+            return (Value*)MALLOC(length, sizeof(List::Element));
+        }
+        else {
+            length = nextPow2(length);
+            Value* w = (Value*)MALLOC(length, sizeof(List::Element));
+            memcpy(w, v, alloclen*sizeof(List::Element));
+            // fill remainder with NAs
+            for(size_t i = alloclen; i < length; i++) w[i] = Null::Singleton();
+            alloclen = length;
+            return w;
+        }
+    }
+    else {
+        return v;
+    }
+}
+
 extern "C"
 Value GET_lenv(Thread& thread, REnvironment env) {
     Value v;
@@ -394,4 +441,24 @@ void SET_call(Thread& thread, REnvironment env, Value call) {
 extern "C"
 double Riposte_random(Thread& thread) {
     return rand() / (double)RAND_MAX;
+}
+
+extern "C"
+double sin(double d) {
+    return ::sin(d);
+}
+
+extern "C"
+double pow(double d, double e) {
+    return ::pow(d, e);
+}
+
+extern "C"
+double log(double d) {
+    return ::log(d);
+}
+
+extern "C"
+double exp(double d) {
+    return ::exp(d);
 }

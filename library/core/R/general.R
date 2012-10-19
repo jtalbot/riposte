@@ -58,3 +58,6 @@ rep.int <- function(x, times) {
 	else
 		x[rep(length(x), 1, times*length(x))]
 }
+
+enableJIT <- function(level) {
+}

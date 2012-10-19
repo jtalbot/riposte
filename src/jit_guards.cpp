@@ -28,7 +28,7 @@ class GuardPass {
             int64_t len = ((Integer const&)constants[code[ir.b].a])[0];
 
             // if too long, despecialize
-            if(len >= 16 || mustDespecialize) {
+            if(len > 16 || mustDespecialize) {
                 ir.op = TraceOpCode::length;
             }
             // otherwise, propogate length down

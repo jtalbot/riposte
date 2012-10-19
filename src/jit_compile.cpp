@@ -45,6 +45,12 @@ struct LLVMState {
     llvm::ExecutionEngine * EE;
     llvm::FunctionPassManager * FPM;
     llvm::FunctionPassManager * verifierFPM;
+
+
+    llvm::StructType* value_type;
+    llvm::StructType* actual_value_type;
+    llvm::Type* thread_type;
+
     //llvm::PassManager * PM;
 
     LLVMState() {
@@ -115,6 +121,10 @@ struct LLVMState {
         PM->add(llvm::createLoopInstSimplifyPass()); 
         PM->add(llvm::createLoopDeletionPass());
         */
+        value_type = llvm::StructType::get( 
+            llvm::Type::getInt64Ty(*C), llvm::Type::getInt64Ty(*C), NULL );
+        actual_value_type = M->getTypeByName("struct.Value");
+        thread_type = M->getTypeByName("class.Thread")->getPointerTo();
     }
 };
 
@@ -164,7 +174,10 @@ public:
         , Module( bb->getParent()->getParent() ) {}
    
     llvm::Function* getFunction( std::string const& function ) {
-        return Module->getFunction(function);
+        llvm::Function* f = Module->getFunction(function);
+        if(f == 0)
+            _error(std::string("Function not found: ") + function);
+        return f;
     }
 
     llvm::Function* getFunction( std::string const& function,
@@ -298,6 +311,7 @@ private:
 class Register {
 
 private:
+    LLVMState* S;
     Type::Enum type;
     llvm::Value* v;
     llvm::Value* l;
@@ -311,8 +325,9 @@ private:
             case Type::Integer: t = builder.getInt64Ty()->getPointerTo(); break;
             case Type::Logical: t = builder.getInt8Ty()->getPointerTo(); break;
             case Type::Character: t = builder.getInt8Ty()->getPointerTo()->getPointerTo(); break;
+            case Type::List: t = S->actual_value_type->getPointerTo(); break;
             default: 
-                t = llvm::StructType::get( builder.getInt64Ty(), builder.getInt64Ty(), NULL );
+                t = S->actual_value_type;
                 break;
         }
         return t;
@@ -325,6 +340,7 @@ private:
             case Type::Integer: t = builder.getInt64Ty(); break;
             case Type::Logical: t = builder.getInt8Ty(); break;
             case Type::Character: t = builder.getInt8Ty()->getPointerTo(); break;
+            case Type::List: t = S->actual_value_type; break;
             default: 
                 _error("Invalid alloc type");
                 break;
@@ -337,8 +353,9 @@ public:
     size_t index;
     bool onheap;
 
-    Register( FunctionBuilder& builder, Type::Enum type, JIT::Shape shape, std::string const& name ) 
-        : type(type)
+    Register( LLVMState* S, FunctionBuilder& builder, Type::Enum type, JIT::Shape shape, std::string const& name ) 
+        : S(S)
+        , type(type)
         , initialized(false)
         , name(name)
     {
@@ -381,9 +398,16 @@ public:
     void Duplicate(FunctionBuilder& builder, Register& val, Register& len) {
         if(!Initialized()) {
             Initialize(builder, len);
-            
+
+            int64_t size = 8;
+            if(type == Type::Logical)            
+                size = 1;
+            else if(type == Type::List)
+                size = 16;
+
             llvm::Value* l = builder.CreateLoad(len.value(builder));
-            llvm::Value* bytes = builder.CreateMul(l, builder.getInt64(type == Type::Logical ? 1 : 8)); 
+            llvm::Value* bytes = builder.CreateMul(l, 
+                builder.getInt64(size)); 
             builder.CreateMemCpy(
                 value(builder),
                 val.value(builder),
@@ -430,7 +454,8 @@ public:
         if( type == Type::Double 
          || type == Type::Integer 
          || type == Type::Logical 
-         || type == Type::Character) {   
+         || type == Type::Character
+         || type == Type::List) {   
             a = builder.CreateInBoundsGEP(a, index);
 
             llvm::Type* t = llvm::VectorType::get(
@@ -447,7 +472,8 @@ public:
         if( type == Type::Double 
          || type == Type::Integer 
          || type == Type::Logical 
-         || type == Type::Character) {      
+         || type == Type::Character
+         || type == Type::List ) {      
             llvm::Value* out = value(builder);
             out = builder.CreateInBoundsGEP(out, index);
 
@@ -467,6 +493,7 @@ public:
 
 
 struct Fusion {
+    LLVMState* S;
     JIT& jit;
     FunctionBuilder builder, headerBuilder;
     std::vector<Register>& registers;
@@ -481,7 +508,9 @@ struct Fusion {
     llvm::Value* sequenceI;
     llvm::Value* sequenceD;
 
-    llvm::Constant *zerosD, *zerosI, *onesD, *onesI, *seqD, *seqI, *widthD, *widthI, *trueL, *falseL;
+    llvm::Constant *zerosD, *zerosI, *onesD, *onesI, 
+                   *seqD, *seqI, *widthD, *widthI, 
+                   *trueL, *falseL;
 
     size_t width;
 
@@ -492,8 +521,11 @@ struct Fusion {
 
     JIT::IRRef lengthIR;
 
-    Fusion(JIT& jit, FunctionBuilder builder, std::vector<Register>& registers, llvm::Value* length, size_t width, JIT::IRRef lengthIR)
-        : jit(jit)
+    Fusion(LLVMState* S, JIT& jit, FunctionBuilder builder, 
+            std::vector<Register>& registers, llvm::Value* length, 
+            size_t width, JIT::IRRef lengthIR)
+        : S(S)
+          , jit(jit)
           , builder(builder)
           , headerBuilder(builder)
           , registers(registers)
@@ -534,6 +566,7 @@ struct Fusion {
             case Type::Double: t = builder.getDoubleTy(); break;
             case Type::Integer: t = builder.getInt64Ty(); break;
             case Type::Logical: t = builder.getInt8Ty(); break;
+            case Type::List: t = S->actual_value_type; break;
             default: _error("Bad type in trace");
         }
         return t;
@@ -967,6 +1000,24 @@ struct Fusion {
                 }
                 outs[reg] = r;
             } break;
+            case TraceOpCode::scatter1:
+            {
+                llvm::Value* v = Load(builder, ir.c);
+                llvm::Value* idx = Load(builder, ir.b);
+              
+                // we've computed the new shape, realloc
+                llvm::Value* newlen = builder.CreateLoad(RawLoad(builder, ir.out.length));
+                registers[ir.reg].Resize(builder, newlen);
+                
+                llvm::Type* mt = llvmType(ir.type)->getPointerTo();
+                llvm::Value* x = builder.CreatePointerCast(RawLoad(builder, index), mt);
+                llvm::Value* ii = builder.CreateExtractElement(idx, builder.getInt32(0));
+                
+                if(ir.type != Type::List)
+                    v = builder.CreateExtractElement(v, builder.getInt32(0));
+
+                builder.CreateStore(v, builder.CreateGEP(x, ii));
+            } break;
             case TraceOpCode::scatter:
             {
                 llvm::Value* v = Load(builder, ir.c);
@@ -1257,8 +1308,8 @@ struct Fusion {
 };
 
 #define BOXED_ARG(val) \
-    builder.CreateExtractValue(val, 0), \
-    builder.CreateExtractValue(val, 1)
+    builder.CreateExtractValue( builder.CreateExtractValue(val, 0), 0 ), \
+    builder.CreateExtractValue( builder.CreateExtractValue(val, 1), 0 )
 
 struct TraceCompiler {
     Thread& thread;
@@ -1272,9 +1323,6 @@ struct TraceCompiler {
     llvm::BasicBlock * InnerBlock;
     llvm::BasicBlock * EndBlock;
 
-    llvm::StructType* value_type;
-    llvm::Type* actual_value_type;
-    llvm::Type* thread_type;
     llvm::FunctionType* function_type;
 
     llvm::Value* thread_var;
@@ -1288,14 +1336,8 @@ struct TraceCompiler {
         : thread(thread)
         , jit(jit)
         , S(&llvmState)
-
-        , value_type( 
-            llvm::StructType::get( 
-                llvm::Type::getInt64Ty(*S->C), llvm::Type::getInt64Ty(*S->C) ,NULL ) )
-        , actual_value_type( S->M->getTypeByName("struct.Value") )
-        , thread_type( S->M->getTypeByName("class.Thread")->getPointerTo() )
-        , function_type( BuilderBase::getFunctionTy( llvm::Type::getInt64Ty(*S->C), thread_type ) )
-
+        , function_type( 
+            BuilderBase::getFunctionTy( llvm::Type::getInt64Ty(*S->C), S->thread_type ) )
         , builder( 
             func != 0 
                 ? func
@@ -1326,7 +1368,7 @@ struct TraceCompiler {
 
         for(size_t i = 0; i < jit.registers.size(); i++) {
             std::string name = std::string("r") + intToStr(i);
-            registers.push_back( Register( builder, jit.registers[i].type, jit.registers[i].shape, name ) );
+            registers.push_back( Register( S, builder, jit.registers[i].type, jit.registers[i].shape, name ) );
         }
 
         builder.SetInsertPoint(HeaderBlock);
@@ -1382,6 +1424,7 @@ struct TraceCompiler {
             case TraceOpCode::brcast:
             case TraceOpCode::gather:
             case TraceOpCode::scatter:
+            case TraceOpCode::scatter1:
             case TraceOpCode::decodena:
             case TraceOpCode::decodevl:
             case TraceOpCode::encode:
@@ -1419,7 +1462,7 @@ struct TraceCompiler {
             length = builder.CreateLoad(value(ir.in.length));
             width = 1;
         }
-        Fusion* fusion = new Fusion(jit, FunctionBuilder( function ), registers, length, width, len);
+        Fusion* fusion = new Fusion(S, jit, FunctionBuilder( function ), registers, length, width, len);
         fusion->Open(InnerBlock);
         return fusion;
     }
@@ -1453,7 +1496,8 @@ struct TraceCompiler {
             case Type::Integer: t = builder.getInt64Ty(); break;
             case Type::Logical: t = builder.getInt8Ty(); break;
             case Type::Character: t = builder.getInt8Ty()->getPointerTo(); break;
-            default: t = value_type; break;
+            case Type::List: t = S->actual_value_type; break;
+            default: t = S->actual_value_type; break;
         }
         return t;
     }
@@ -1466,7 +1510,8 @@ struct TraceCompiler {
         return type == Type::Double 
             || type == Type::Integer
             || type == Type::Logical
-            || type == Type::Character;
+            || type == Type::Character
+            || type == Type::List;
     }
 
     llvm::Value* Unbox(JIT::IRRef index, llvm::Value* v) {
@@ -1475,15 +1520,17 @@ struct TraceCompiler {
 
         if(Unboxed(type)) {
             
-            llvm::Value* tmp = CreateEntryBlockAlloca(value_type);
+            llvm::Value* tmp = CreateEntryBlockAlloca(S->actual_value_type);
             builder.CreateStore(v, tmp);
             
             llvm::Value* length =
                 builder.CreateLoad(value(jit.code[index].out.length));
 
-            llvm::Value* r = Call(std::string("UNBOX_")+Type::toString(type),
-                builder.CreatePointerCast(tmp, actual_value_type->getPointerTo()),
-                length);
+            llvm::Value* r = Call(std::string("UNBOX_")+Type::toString(type), tmp, length);
+
+            //if(type == Type::List) {
+                //r = builder.CreatePointerCast(r, S->value_type->getPointerTo());
+            //}
             
             // If exit is missing, no need to check guard         
             if(jit.code[index].exit >= 0) {
@@ -1507,10 +1554,11 @@ struct TraceCompiler {
         // if unboxed type, box
         Type::Enum type = jit.code[index].type;
         if(Unboxed(type)) {
-            r = Save( Call(std::string("BOX_")+Type::toString(type),
-                    r, builder.CreateLoad(value(jit.code[index].out.length)), 
-                    builder.getInt1(isSunk 
-                    && registers[jit.code[index].reg].onheap)) );
+            r = ValueCoerce( 
+                    Save( Call(std::string("BOX_")+Type::toString(type),
+                        r, builder.CreateLoad(value(jit.code[index].out.length)), 
+                        builder.getInt1(isSunk 
+                        && registers[jit.code[index].reg].onheap)) ) );
         }
 
         return r;
@@ -1524,7 +1572,7 @@ struct TraceCompiler {
         r.index = ir.reg;
 
         // scatter is special. It initially needs a register that duplicates its input.
-        if( ir.op == TraceOpCode::scatter )
+        if( ir.op == TraceOpCode::scatter || ir.op == TraceOpCode::scatter1 )
         {
             r.Duplicate(
                 builder,
@@ -1541,6 +1589,24 @@ struct TraceCompiler {
                 r.Initialize( builder, registers[jit.code[shape.length].reg] ); 
             }
         }
+        return r;
+    }
+
+    llvm::Value* ValueCoerce( llvm::Value* a ) {
+        llvm::Value* a0 = builder.CreateExtractValue( a, 0 );
+        llvm::Value* a1 = builder.CreateExtractValue( a, 1 );
+
+        llvm::Value* r = llvm::UndefValue::get( S->actual_value_type );
+      
+        llvm::Type* t0 = S->actual_value_type->getElementType(0);
+        llvm::Type* t1 = S->actual_value_type->getElementType(1);
+
+        unsigned int i0[] = { 0, 0 };
+        unsigned int i1[] = { 1, 0 };
+ 
+        r = builder.CreateInsertValue( r, a0, i0 ); 
+        r = builder.CreateInsertValue( r, a1, i1 ); 
+
         return r;
     }
 
@@ -1619,70 +1685,92 @@ struct TraceCompiler {
 
             case TraceOpCode::constant:
             {
-                std::vector<llvm::Constant*> c;
                 if(Unboxed(ir.type)) {
+                    llvm::Value* r = CreateEntryBlockAlloca(
+                        llvmMemoryType(ir.type), builder.getInt64(ir.out.traceLength));
+                    llvm::Value* t;
                     // types that are unboxed in the JITed code
                     if(ir.type == Type::Double) {
                         Double const& v = (Double const&)jit.constants[ir.a];
-                        for(size_t i = 0; i < ir.out.traceLength; i++)
-                            c.push_back(llvm::ConstantFP::get(builder.getDoubleTy(), v[i]));
+                        for(size_t i = 0; i < ir.out.traceLength; i++) {
+                            t = llvm::ConstantFP::get(builder.getDoubleTy(), v[i]);
+                            builder.CreateStore(t, builder.CreateConstGEP1_64(r, i));
+                        }
                     } else if(ir.type == Type::Integer) {
                         Integer const& v = (Integer const&)jit.constants[ir.a];
-                        for(size_t i = 0; i < ir.out.traceLength; i++)
-                            c.push_back(builder.getInt64(v[i]));
+                        for(size_t i = 0; i < ir.out.traceLength; i++) {
+                            t = builder.getInt64(v[i]);
+                            builder.CreateStore(t, builder.CreateConstGEP1_64(r, i));
+                        }
                     } else if(ir.type == Type::Logical) {
                         Logical const& v = (Logical const&)jit.constants[ir.a];
-                        for(size_t i = 0; i < ir.out.traceLength; i++)
-                            c.push_back(builder.getInt8(v[i]));
+                        for(size_t i = 0; i < ir.out.traceLength; i++) {
+                            t = builder.getInt8(v[i]);
+                            builder.CreateStore(t, builder.CreateConstGEP1_64(r, i));
+                        }
                     } else if(ir.type == Type::Character) {
                         Character const& v = (Character const&)jit.constants[ir.a];
-                        for(size_t i = 0; i < ir.out.traceLength; i++)
-                            c.push_back((llvm::Constant*)builder.CreateIntToPtr(builder.getInt64((int64_t)v[i]), builder.getInt8Ty()->getPointerTo()));
-                    }
-                    llvm::Value* r = CreateEntryBlockAlloca(
-                        llvmMemoryType(ir.type), builder.getInt64(ir.out.traceLength));
-                    for(size_t i = 0; i < ir.out.traceLength; i++) {
-                        builder.CreateStore(c[i], builder.CreateConstGEP1_64(r, i));
+                        for(size_t i = 0; i < ir.out.traceLength; i++) {
+                            t = builder.CreateIntToPtr(builder.getInt64((int64_t)v[i]), builder.getInt8Ty()->getPointerTo());
+                            builder.CreateStore(t, builder.CreateConstGEP1_64(r, i));
+                        }
+                    } else if(ir.type == Type::List) {
+                        List const& v = (List const&)jit.constants[ir.a];
+                        for(size_t i = 0; i < ir.out.traceLength; i++) {
+                            llvm::Value* t = llvm::ConstantStruct::get(
+                                S->value_type, 
+                                builder.getInt64(v[i].header),
+                                builder.getInt64(v[i].i),
+                                NULL);
+                            t = ValueCoerce(t);
+                            builder.CreateStore(t, builder.CreateConstGEP1_64(r, i));
+                        }
                     }
                     reg.Store( builder, r );
                 }
                 else {
                     // a boxed type
-                    llvm::Constant* c = llvm::ConstantStruct::get(
-                        value_type, 
+                    
+                    llvm::Value* c = llvm::ConstantStruct::get(
+                        S->value_type, 
                         builder.getInt64(jit.constants[ir.a].header),
                         builder.getInt64(jit.constants[ir.a].i),
                         NULL);
+                    c = ValueCoerce(c);
                     reg.Store( builder, c );
                 }
             } break;
 
             case TraceOpCode::sload: 
             {
-                reg.Store( builder, Call("SLOAD", builder.getInt64(ir.b)) );
+                reg.Store( builder, ValueCoerce( Call("SLOAD", builder.getInt64(ir.b)) ) );
             } break;
 
             case TraceOpCode::load: 
             {
                 llvm::Value* a = value(ir.a);
                 if(jit.code[ir.a].type == Type::Environment) {
-                    reg.Store( builder, Call("ELOAD", BOXED_ARG(a), value(ir.b)) );
-                }
-                else if(jit.code[ir.a].type == Type::Object) {
-                    if(ir.b == 0) {         // strip
-                        reg.Store( builder, Unbox(index, Call("GET_strip", BOXED_ARG(a))) ); 
-                    }
-                    else {                  // attribute
-                        reg.Store( builder, Unbox(index, Call("GET_attr",
-                            BOXED_ARG(a), value(ir.b))) );
-                    }
+                    reg.Store( builder, ValueCoerce( Call("ELOAD", BOXED_ARG(a), value(ir.b)) ) );
                 }
                 else if(jit.code[ir.a].type == Type::Function) {
-                    reg.Store( builder, Call("GET_environment", BOXED_ARG(a)) );
+                    reg.Store( builder, ValueCoerce( Call("GET_environment", BOXED_ARG(a)) ) );
                 }
                 else {
                     _error("Unknown load target");
                 }
+            } break;
+
+            case TraceOpCode::strip:
+            {
+                llvm::Value* a = value(ir.a);
+                reg.Store( builder, ValueCoerce( Call("GET_strip", BOXED_ARG(a)) ) );
+            } break;
+
+            case TraceOpCode::attrget:
+            {
+                llvm::Value* a = value(ir.a);
+                llvm::Value* b = value(ir.b);
+                reg.Store( builder, ValueCoerce( Call("GET_attr", BOXED_ARG(a), b) ) );
             } break;
 
             case TraceOpCode::unbox:
@@ -1712,30 +1800,30 @@ struct TraceCompiler {
             // Environment op codes
              
             case TraceOpCode::curenv: {
-                reg.Store( builder, Call(std::string("curenv")) );
+                reg.Store( builder, ValueCoerce( Call(std::string("curenv")) ) );
             } break;
 
             case TraceOpCode::newenv:
             {
-                reg.Store( builder, Call("NEW_environment") );
+                reg.Store( builder, ValueCoerce( Call("NEW_environment") ) );
             } break;
 
             case TraceOpCode::lenv:
             {
                 llvm::Value* a = value(ir.a);
-                reg.Store( builder, Call("GET_lenv", BOXED_ARG(a)) ); 
+                reg.Store( builder, ValueCoerce( Call("GET_lenv", BOXED_ARG(a)) ) ); 
             } break;
  
             case TraceOpCode::denv:
             {
                 llvm::Value* a = value(ir.a);
-                reg.Store( builder, Call("GET_denv", BOXED_ARG(a)) ); 
+                reg.Store( builder, ValueCoerce( Call("GET_denv", BOXED_ARG(a)) ) ); 
             } break;
 
             case TraceOpCode::cenv:
             {
                 llvm::Value* a = value(ir.a);
-                reg.Store( builder, Call("GET_call", BOXED_ARG(a)) ); 
+                reg.Store( builder, ValueCoerce( Call("GET_call", BOXED_ARG(a)) ) ); 
             } break;
 
             // Length op codes
@@ -1806,10 +1894,10 @@ struct TraceCompiler {
         Fusion* fusion = 0;
         for(size_t i = 0; i < index; i++) {
             JIT::IR const& ir = jit.code[i];
-            registers[ir.reg].Deinitialize(); // something of a hack to get each exit its own
-                                              // initialized register
-            InitializeRegister(ir);
             if(ir.live && ir.sunk) {
+                registers[ir.reg].Deinitialize(); // something of a hack to get each exit its own
+                                              // initialized register
+                InitializeRegister(ir);
                 if(Fuseable(ir)) {
                     if(!CanFuse(fusion, ir)) {
                         EndFusion(fusion);

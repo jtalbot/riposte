@@ -1,4 +1,9 @@
 
+{
+
+library("compiler")
+enableJIT(3)
+
 M <- as.integer(commandArgs(TRUE)[[1]])
 N <- 10000000L
 
@@ -25,3 +30,5 @@ run <- function() {
 }
 
 cat(system.time(run())[[3]])
+
+}

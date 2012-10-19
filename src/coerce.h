@@ -125,7 +125,7 @@ template<>
 SPECIALIZED_STATIC Integer::Element Cast<Double, Integer>(Thread& thread, Double::Element const& i) { return Double::isNA(i) || i > std::numeric_limits<Integer::Element>::max() || i < std::numeric_limits<Integer::Element>::min() ? Integer::NAelement : i;  }
 
 template<>
-SPECIALIZED_STATIC Character::Element Cast<Double, Character>(Thread& thread, Double::Element const& i) { return Integer::isNA(i) ? Character::NAelement : thread.internStr(doubleToStr(i)); }
+SPECIALIZED_STATIC Character::Element Cast<Double, Character>(Thread& thread, Double::Element const& i) { return Double::isNA(i) ? Character::NAelement : thread.internStr(doubleToStr(i)); }
 
 template<>
 SPECIALIZED_STATIC List::Element Cast<Double, List>(Thread& thread, Double::Element const& i) { return Double::c(i); }

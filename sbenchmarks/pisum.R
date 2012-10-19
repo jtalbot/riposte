@@ -1,7 +1,12 @@
 
+{
+
+library("compiler")
+enableJIT(3)
+
 N <- as.integer(commandArgs(TRUE)[[1]])
 
-pisum <- function(N) {
+zeta <- function(N) {
     t = 0.0
     for (j in 1:N) {
         t = 0.0
@@ -12,4 +17,6 @@ pisum <- function(N) {
     return(t)
 }
 
-cat(system.time(pisum(N))[[3]])
+cat(system.time(zeta(N))[[3]])
+
+}

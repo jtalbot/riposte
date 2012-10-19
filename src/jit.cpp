@@ -131,28 +131,28 @@ void JIT::emitPush(Thread const& thread) {
 }
 
 JIT::IRRef JIT::DecodeVL(Var a) {
-    if(a.mayHaveNA)
-        return Emit( IR(TraceOpCode::decodevl, a.v, a.type, a.s, a.s) );
-    else
+    //if(a.mayHaveNA)
+    //    return Emit( IR(TraceOpCode::decodevl, a.v, a.type, a.s, a.s) );
+    //else
         return a.v;
 }
 
 JIT::IRRef JIT::DecodeNA(Var a) {
-    if(a.mayHaveNA)
-        return Emit( IR(TraceOpCode::decodena, a.v, Type::Logical, a.s, a.s) );
-    else
+    //if(a.mayHaveNA)
+    //    return Emit( IR(TraceOpCode::decodena, a.v, Type::Logical, a.s, a.s) );
+    //else
         return Emit( IR(TraceOpCode::brcast, FalseRef, Type::Logical, a.s, a.s) );
 }
 
 JIT::Var JIT::Encode(IRRef v, IRRef na, bool mayHaveNA) {
-    if(mayHaveNA) {
+    /*if(mayHaveNA) {
         return Var(trace, 
             Emit( IR(TraceOpCode::encode, v, na, trace[v].type, trace[v].out, trace[v].out) ),
             true );
     }
-    else {
+    else {*/
         return Var(trace, v, false);
-    }
+    //}
 }
 
 JIT::IRRef JIT::Box(IRRef a) {
@@ -476,7 +476,26 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         }   break;
 
         case ByteCode::scatter1: {
-        case ByteCode::scatter:
+            // TODO: Need to check for NAs in the index vector
+            Var a = load(thread, inst.a, &inst);
+            Var b = EmitCast(load(thread, inst.b, &inst), Type::Integer);
+            Emit( IR(TraceOpCode::glength, b.v, 1, Type::Integer, Shape::Scalar, Shape::Scalar), &inst, true );
+
+            b = EmitBinary( TraceOpCode::sub, b, Var(trace, 1, false), Type::Integer, 0 );
+            Var c = load(thread, inst.c, &inst);
+            
+            IRRef len = Emit( IR( TraceOpCode::reshape, DecodeVL(b), c.s.length, Type::Integer, b.s, Shape::Scalar ) );
+
+            Shape reshaped( len, 0 );
+           
+            if(c.type == Type::List)
+                a.v = Box(a.v);
+ 
+            IRRef r = Emit( IR( TraceOpCode::scatter1, c.v, DecodeVL(b), a.v, c.type, Shape::Scalar, reshaped ) );
+            store(thread, Var( trace, r, a.mayHaveNA || c.mayHaveNA ), inst.c);
+        }   break;
+
+        case ByteCode::scatter: {
             // TODO: Need to check for NAs in the index vector
             Var a = load(thread, inst.a, &inst);
             Var b = EmitCast(load(thread, inst.b, &inst), Type::Integer);
@@ -588,19 +607,20 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
 
         case ByteCode::strip:
         {
-            /*OPERAND(val, inst.a);
+            Value const& val = IN(inst.a);
             if(val.isObject()) {
-                IRRef a = load(thread, inst.a, &inst);
+                Var in = load(thread, inst.a, &inst);
+                IRRef r = Emit( IR( TraceOpCode::strip, in.v, Type::Any, Shape::Scalar, Shape::Scalar) );
 
-                Shape s = SpecializeValue(((Object const&)val).base(), 
-                    IR(TraceOpCode::olength, a, Type::Integer, Shape::Empty, Shape::Scalar));
-                IRRef g = Emit( IR( TraceOpCode::load, a, ((Object const&)val).base().type, Shape::Scalar, s ), &inst, true );
-                store(thread, g, inst.c);
+                Value const& v = ((Object const&)val).base();
+                Shape s = SpecializeValue( v, r );
+                r = Emit( IR( TraceOpCode::unbox, r, v.type, Shape::Scalar, s ), &inst, true );
+                store(thread, Var( trace, r, MayHaveNA(v) ), inst.c);
             }
             else {
                 store(thread, load(thread, inst.a, &inst), inst.c);
-            }*/
-            _error("strip NYI in trace");
+            }
+            
         }   break;
 
         case ByteCode::nargs:
@@ -610,26 +630,20 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
 
         case ByteCode::attrget:
         {
-            _error("attrget NYI in trace");
-            /*OPERAND(object, inst.a);
-            OPERAND(whichTmp, inst.b);
-            
-            if(object.isObject()) {
-                Value r;
-                Character which = As<Character>(thread, whichTmp);
-                r = ((Object const&)object).get(which[0]);
-            
-                IRRef name = EmitCast(load(thread, inst.b, &inst), Type::Character);
-
-                Shape s = SpecializeValue(r, IR(TraceOpCode::alength, load(thread, inst.a, &inst), name, Type::Integer, Shape::Empty, Shape::Scalar));
-                
-                IRRef g = insert(trace, TraceOpCode::load, load(thread, inst.a, &inst), name, 0, r.type, Shape::Empty, s);
-                trace[g].reenter = (Reenter) { &inst, true };
-                store(thread, g, inst.c);
+            Value const& val = IN(inst.a);
+            if(val.isObject()) {
+                Var in = load(thread, inst.a, &inst);
+                Var which = load(thread, inst.b, &inst);
+                IRRef r = Emit( IR( TraceOpCode::attrget, in.v, which.v, Type::Any, Shape::Scalar, Shape::Scalar) );
+                Value const& str = IN(inst.b);
+                Value const& a = ((Object const&)val).get( ((Character const&)str)[0] );
+                Shape s = SpecializeValue( a, r );
+                r = Emit( IR( TraceOpCode::unbox, r, a.type, Shape::Scalar, s ), &inst, true );
+                store(thread, Var( trace, r, MayHaveNA(a) ), inst.c);
             }
             else {
                 store(thread, EmitConstant(Null::Singleton()), inst.c);
-            }*/
+            }
         }   break;
 
         case ByteCode::attrset:
@@ -683,6 +697,8 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             Shape s( l.v, As<Integer>(thread, len)[0] );        
                 
             IRRef r = Emit( IR( TraceOpCode::random, Type::Double, s, s) );
+            IRRef q = Emit( IR( TraceOpCode::brcast, FalseRef, Type::Logical, s, s) );
+                  r = Emit( IR( TraceOpCode::encode, r, q, Type::Double, s, s) );
             store(thread, Var( trace, r, false ), inst.c); 
         }   break;
 
@@ -1217,6 +1233,7 @@ void JIT::IR::dump() const {
         case TraceOpCode::kill:
             std::cout << "\t " << (int64_t)a << "\t \t";
             break;
+        case TraceOpCode::strip:
         case TraceOpCode::box:
         case TraceOpCode::unbox:
         case TraceOpCode::brcast:
@@ -1233,6 +1250,7 @@ void JIT::IR::dump() const {
         {
             std::cout << "\t " << a << "\t \t";
         } break;
+        case TraceOpCode::attrget:
         case TraceOpCode::glength:
         case TraceOpCode::encode:
         case TraceOpCode::reshape:
@@ -1250,6 +1268,7 @@ void JIT::IR::dump() const {
         case TraceOpCode::newenv:
         case TraceOpCode::store:
         case TraceOpCode::scatter:
+        case TraceOpCode::scatter1:
         TERNARY_BYTECODES(CASE)
         {
             std::cout << "\t " << a << "\t " << b << "\t " << c;
