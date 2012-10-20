@@ -854,6 +854,12 @@ bool continueTrace(Thread& thread, Instruction const* loopPC, Instruction const*
     // otherwise bail tracing, and attempt to record the nested loop
     std::map<Instruction const*, JIT::Trace*>::const_iterator t = thread.jit.cache.find(loopPC);
     if(t != thread.jit.cache.end()) {
+
+        // TODO: figure out nested loops
+        stopTrace(thread, "inner loops busted on americanPut");
+        return false;
+
+
         JIT::Trace* rootTrace = t->second;
         if(rootTrace->ptr == 0) {
             stopTrace(thread, "blacklisted inner loop");

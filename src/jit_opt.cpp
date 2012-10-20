@@ -1086,6 +1086,7 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
                 MARK(ir.a); MARK(ir.b); MARK(ir.c);
             } break;
 
+            case TraceOpCode::attrget:
             case TraceOpCode::encode:
             case TraceOpCode::reshape:
             case TraceOpCode::gather1:
@@ -1100,6 +1101,7 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
                 MARK(ir.c);
             } break;
 
+            case TraceOpCode::strip:
             case TraceOpCode::box:
             case TraceOpCode::length:
             case TraceOpCode::decodevl:

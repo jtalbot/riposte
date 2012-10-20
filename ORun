@@ -1,0 +1,25 @@
+if [ $# -lt 1 ]; then
+    SCALE=1
+else
+    SCALE=$1
+fi
+
+function bench {
+    Rscript bbenchmarks/gen_$1.R $3
+    echo -n $2,
+    Rscript bbenchmarks/$1.R $3 1
+    echo -n ,
+    bin/riposte -i -f bbenchmarks/$1.R --args $3 1
+    echo -n ,
+    bin/riposte -f bbenchmarks/$1.R --args $3 1
+    #echo -n ,
+    #luajit bbenchmarks/$1.lua $3 1
+    echo ""
+}
+
+echo "benchmark,M,R,Riposte interpreter,Riposte trace"
+bench cholesky "Cholesky Decomposition" $((SCALE*200000)) 
+bench lr "Logistic Regression" $((SCALE*10000)) 
+bench kmeans "K-means" $((SCALE*10000)) 
+bench pca "PCA" $((SCALE*10000)) 
+

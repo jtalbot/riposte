@@ -927,7 +927,7 @@ void JIT::end_recording(Thread& thread) {
  
     Liveness();
 
-    //SINK();
+    SINK();
 
     //Schedule();
     schedule();

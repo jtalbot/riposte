@@ -1425,8 +1425,8 @@ struct TraceCompiler {
             llvm::InlineFunctionInfo ifi;
             if( calls[i]->getParent() )
                 llvm::InlineFunction(calls[i], ifi, true);
-        }*/
-        S->FPM->run(*function);
+        }
+        S->FPM->run(*function);*/
         //S->PM->run(*S->M); 
         //function->dump();
 
@@ -1466,7 +1466,7 @@ struct TraceCompiler {
 
     Fusion* StartFusion(JIT::IR ir) {
         llvm::Value* length = 0;
-        size_t width = 1; 
+        size_t width = 4; 
 
         JIT::IRRef len = ir.in.length; 
         if(jit.code[len].op == TraceOpCode::constant &&
@@ -1477,7 +1477,7 @@ struct TraceCompiler {
         } 
         else {
             length = builder.CreateLoad(value(ir.in.length));
-            width = 1;
+            width = 4;
         }
         Fusion* fusion = new Fusion(S, jit, FunctionBuilder( function ), registers, length, width, len);
         fusion->Open(InnerBlock);

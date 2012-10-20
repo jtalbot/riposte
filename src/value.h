@@ -12,6 +12,11 @@
 #include "strings.h"
 #include "exceptions.h"
 
+//#define GC_DEBUG
+#define GC_THREADS
+#include <gc/gc_cpp.h>
+#include <gc/gc_allocator.h>
+
 typedef int64_t IRef;
 
 struct Value {

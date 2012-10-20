@@ -170,6 +170,7 @@ Value BOX_character(Thread& thread, int8_t** d, int64_t len, bool takeOwnership)
 
 extern "C"
 Value BOX_list(Thread& thread, Value* d, int64_t len, bool takeOwnership) {
+    static int count = 0;
     List a(len);
     memcpy(a.v(), d, len*sizeof(List::Element));
     return a;
@@ -253,6 +254,7 @@ int64_t OLENGTH(Thread& thread, Value a) {
 }
 
 void* MALLOC(int64_t length, size_t elementsize) {
+    static int count = 0;
     int64_t l = length;
     // round l up to nearest even number so SSE can work on tail region
     int64_t length_aligned = (l < 128) ? (l + 1) : l;

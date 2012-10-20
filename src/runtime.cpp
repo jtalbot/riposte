@@ -26,6 +26,7 @@ Double Random(Thread& thread, int64_t const length) {
 template<class D>
 void Resize(Thread& thread, bool clone, D& src, int64_t newLength, typename D::Element fill = D::NAelement) {
 	if(clone || newLength > src.length) {
+        static int clones = 0;
 		D r(newLength);
 		Insert(thread, src, 0, r, 0, std::min(src.length, newLength));
 		for(int64_t i = src.length; i < newLength; i++) r[i] = fill;	

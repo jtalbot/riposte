@@ -1,0 +1,36 @@
+if [ $# -lt 1 ]; then
+    SCALE=1
+else
+    SCALE=$1
+fi
+
+function bench {
+    echo -n $2,
+    Rscript sbenchmarks/$1.R $3
+    echo -n ,
+    bin/riposte -i -f sbenchmarks/$1.R --args $3
+    echo -n ,
+    bin/riposte -f sbenchmarks/$1.R --args $3
+    echo -n ,
+    luajit sbenchmarks/$1.lua $3
+}
+
+function genbench {
+    Rscript sbenchmarks/gen_$1.R $2
+    echo -n $1,
+    Rscript sbenchmarks/$1.R $2
+    echo -n ,
+    luajit sbenchmarks/$1.lua $2
+}
+
+
+echo "benchmark,R,Riposte interpreter,Riposte trace,LuaJIT"
+bench phongReflection "Phong model" $((SCALE*50000))
+bench alphaCompositing "Image compositing" $((SCALE*200000))
+bench rungeKatta "Runge-Katta" $((SCALE*50000))
+bench rw "Random Walk" $((SCALE*200000))
+bench binarysearch "Binary Search" $((SCALE*10000))
+bench pisum "Pi sum" $((SCALE*50))
+bench fib "Fibonacci" $((SCALE*500000))
+#bench qsort "Quick sort" $((SCALE*20000))
+bench convolve "1-D convolution" $((SCALE*100000))

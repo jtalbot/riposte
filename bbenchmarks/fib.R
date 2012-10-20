@@ -4,8 +4,8 @@
 library("compiler")
 enableJIT(3)
 
-N <- as.integer(commandArgs(TRUE)[[1]])
 M <- as.integer(commandArgs(TRUE)[[2]])
+N <- as.integer(as.integer(commandArgs(TRUE)[[1]]) / M)
 
 fib <- function(N, M) {
     a <- rep(0,M)
@@ -20,6 +20,6 @@ fib <- function(N, M) {
     b 
 }
 
-cat(system.time(fib(N/M, M))[[3]])
+cat(system.time(fib(N, M))[[3]])
 
 }

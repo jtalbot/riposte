@@ -7,7 +7,7 @@ enableJIT(3)
 # computes Riemann zeta function for different real-valued values of s
 
 M <- as.integer(commandArgs(TRUE)[[2]])
-N <- as.integer(commandArgs(TRUE)[[1]]) / M
+N <- as.integer(as.integer(commandArgs(TRUE)[[1]]) / M)
 
 colsum <- function(m) {
     cols <- dim(m)[[2]]

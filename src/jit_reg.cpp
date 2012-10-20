@@ -350,7 +350,6 @@ bool JIT::AlwaysLive(IR const& ir) {
             ||  ir.op == TraceOpCode::gtrue
             ||  ir.op == TraceOpCode::gfalse
             ||  ir.op == TraceOpCode::gproto
-            ||  ir.op == TraceOpCode::glength
             ||  ir.op == TraceOpCode::push
             ||  ir.op == TraceOpCode::pop 
             ||  ir.op == TraceOpCode::jmp
