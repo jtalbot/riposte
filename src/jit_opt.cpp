@@ -53,7 +53,7 @@ JIT::IR JIT::makeConstant(Value const& v) {
         constants.push_back(v);
         constantsMap[v] = ci;
     }
-    return IR(TraceOpCode::constant, ci, v.type, Shape::Empty, Shape::Scalar);
+    return IR(TraceOpCode::constant, ci, v.type, Shape::Scalar, Shape::Scalar);
 }
 
 JIT::IR JIT::ConstantFold(Thread& thread, IR ir) {

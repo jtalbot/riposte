@@ -41,7 +41,7 @@ void JIT::start_recording(Thread& thread, Instruction const* startPC, Environmen
     shapes.insert( std::make_pair( 0, Shape::Empty ) );
     shapes.insert( std::make_pair( 1, Shape::Scalar ) );
 
-    TopLevelEnvironment = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar) );
+    TopLevelEnvironment = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Scalar, Shape::Scalar) );
     envs[env] = TopLevelEnvironment;
 }
 	
@@ -114,7 +114,7 @@ JIT::Var JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
     Value const& operand = IN(a);
 
     Variable v = { -1, (thread.base+a)-(thread.registers+DEFAULT_NUM_REGISTERS)};
-    IRRef r = Emit( IR( TraceOpCode::sload, -1, v.i, Type::Any, Shape::Empty, Shape::Scalar ) );
+    IRRef r = Emit( IR( TraceOpCode::sload, -1, v.i, Type::Any, Shape::Scalar, Shape::Scalar ) );
 
     Shape s = SpecializeLength(operand, r); 
           r = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), reenter, true );
@@ -402,14 +402,14 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             IRRef aa = EmitConstant(Character::c((String)inst.a)).v;
 
             Environment const* env = thread.frame.environment;
-            IRRef r = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
+            IRRef r = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Scalar, Shape::Scalar ) );
             while(!env->has((String)inst.a)) {
                 env = env->LexicalScope();
                 //Emit( IR( TraceOpCode::load, r, aa, Type::Any, Shape::Scalar, Shape::Scalar ) );
                 r = Emit( IR( TraceOpCode::lenv, r, Type::Environment, Shape::Scalar, Shape::Scalar ) );
             }
 
-            r = Emit( IR( TraceOpCode::load, r, aa, Type::Any, Shape::Empty, Shape::Scalar ) );
+            r = Emit( IR( TraceOpCode::load, r, aa, Type::Any, Shape::Scalar, Shape::Scalar ) );
 
             Value const& operand = env->get((String)inst.a);
 
@@ -421,7 +421,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
 
         case ByteCode::lassign: {
             Var cc = EmitConstant(Character::c((String)inst.a));
-            IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
+            IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Scalar, Shape::Scalar ) );
             Var v = load(thread, inst.c, &inst);
 
             IRRef r = Box(v.v);
@@ -433,7 +433,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         case ByteCode::lassign2: {
             Var cc = EmitConstant(Character::c((String)inst.a));
             Environment const* env = thread.frame.environment;
-            IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
+            IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Scalar, Shape::Scalar ) );
             while(!env->has((String)inst.a)) {
                 env = env->LexicalScope();
                 //Emit( IR( TraceOpCode::load, r, aa, Type::Any, Shape::Scalar, Shape::Scalar ) );
@@ -457,7 +457,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             Value const& env = IN(inst.b);     
             Value const& operand = ((REnvironment&)env).environment()->get((String)inst.a);
             
-            IRRef r = Emit( IR( TraceOpCode::load, e.v, cc.v, operand.type, Shape::Empty, Shape::Scalar ) );
+            IRRef r = Emit( IR( TraceOpCode::load, e.v, cc.v, operand.type, Shape::Scalar, Shape::Scalar ) );
             Shape s = SpecializeLength(operand, r); 
             r = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), &inst, true );
             store(thread, Var(trace, r, MayHaveNA(operand)), inst.c);
@@ -599,7 +599,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
                   r = Box(r);
 
             Var cc = EmitConstant(Character::c((String)inst.a));
-            IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
+            IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Scalar, Shape::Scalar ) );
             Emit( IR( TraceOpCode::store, e, cc.v, r, Type::Nil, Shape::Scalar, Shape::Empty ) );
 
             store(thread, Var( trace, 1, false ), inst.c); 
@@ -623,7 +623,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
                   r = Box(r);
 
             Var cc = EmitConstant(Character::c((String)inst.a));
-            IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
+            IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Scalar, Shape::Scalar ) );
             Emit( IR( TraceOpCode::store, e, cc.v, r, Type::Nil, Shape::Scalar, Shape::Empty ) );
 
             counter = Emit( IR( TraceOpCode::add, counter, 1, Type::Integer, Shape::Scalar, Shape::Scalar ) );
@@ -745,7 +745,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             } break;
         case ByteCode::parentframe:
             {
-                IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Empty, Shape::Scalar ) );
+                IRRef e = Emit( IR( TraceOpCode::curenv, Type::Environment, Shape::Scalar, Shape::Scalar ) );
                 IRRef r = Emit( IR( TraceOpCode::denv, e, Type::Environment, Shape::Scalar, Shape::Scalar ) );
                 store(thread, Var(trace, r, false ), inst.c);
             } break;
@@ -933,7 +933,7 @@ void JIT::end_recording(Thread& thread) {
         trace[i].reg = 0;
     }
 
-    dump(thread, trace, false);
+    //dump(thread, trace, false);
     Replay(thread);
     StrengthenGuards(thread.state.specializationLength);
     RunOptimize(thread);
@@ -1234,94 +1234,145 @@ void JIT::schedule() {
     
 }
 
-void JIT::IR::dump() const {
-    if(type != Type::Nil)
-        printf("  %.3s  ", Type::toString(type));
-    else
-        printf("       ");
-   
-    printf("%2li->%2li", in.length, out.length); 
-    std::cout << "\t" << TraceOpCode::toString(op);
+class IRWriter {
+    Thread& thread;
+    std::vector<JIT::IR> const& code;
+    std::vector<Value> const& constants;
 
-    switch(op) {
-        #define CASE(Name, ...) case TraceOpCode::Name:
-        case TraceOpCode::loop: {
-            std::cout << " --------------------------------";
-        } break;
-        case TraceOpCode::sload: {
-            std::cout << "\t " << (int64_t)b << "\t \t";
-        } break;
-        case TraceOpCode::sstore: {
-            std::cout << "\t " << (int64_t)b << "\t " << c;
-        } break;    
-        case TraceOpCode::gproto:
-        {
-            std::cout << "\t " << a << "\t [" << b << "]";
-        } break;
-        case TraceOpCode::kill:
-            std::cout << "\t " << (int64_t)a << "\t \t";
-            break;
-        case TraceOpCode::strip:
-        case TraceOpCode::box:
-        case TraceOpCode::unbox:
-        case TraceOpCode::brcast:
-        case TraceOpCode::length:
-        case TraceOpCode::gtrue:
-        case TraceOpCode::gfalse: 
-        case TraceOpCode::olength: 
-        case TraceOpCode::lenv: 
-        case TraceOpCode::denv: 
-        case TraceOpCode::cenv: 
-        case TraceOpCode::decodena:
-        case TraceOpCode::decodevl:
-        UNARY_FOLD_SCAN_BYTECODES(CASE)
-        {
-            std::cout << "\t " << a << "\t \t";
-        } break;
-        case TraceOpCode::attrget:
-        case TraceOpCode::glength:
-        case TraceOpCode::gvalue:
-        case TraceOpCode::encode:
-        case TraceOpCode::reshape:
-        case TraceOpCode::phi: 
-        case TraceOpCode::load:
-        case TraceOpCode::push:
-        case TraceOpCode::rep:
-        case TraceOpCode::seq:
-        case TraceOpCode::gather1:
-        case TraceOpCode::gather:
-        case TraceOpCode::alength:
-        BINARY_BYTECODES(CASE)
-        {
-            std::cout << "\t " << a << "\t " << b << "\t";
-        } break;
-        case TraceOpCode::newenv:
-        case TraceOpCode::store:
-        case TraceOpCode::scatter:
-        case TraceOpCode::scatter1:
-        TERNARY_BYTECODES(CASE)
-        {
-            std::cout << "\t " << a << "\t " << b << "\t " << c;
-        } break;
-        default: {} break;
+    std::string In(JIT::IRRef i) const {
+        JIT::IR const& ir = code[i];
+        if(ir.op == TraceOpCode::constant) {
+            if(ir.type == Type::Double && ir.out.length == 1)
+                return doubleToStr(((Double const&)constants[ir.a])[0]);
+            else if(ir.type == Type::Integer && ir.out.length == 1)
+                return intToStr(((Integer const&)constants[ir.a])[0]) + "L";
+            else if(ir.type == Type::Character && ir.out.length == 1)
+                return std::string("`") + thread.externStr(((Character const&)constants[ir.a])[0]) + "'";
+        }
+        return std::string("v") + intToStr(i);
+    }
 
-        #undef CASE
-    };
-}
+public:
+
+    IRWriter(Thread& thread, std::vector<JIT::IR> const& code, std::vector<Value> const& constants)
+        : thread(thread)
+        , code(code)
+        , constants(constants)
+        {}
+
+    void write(JIT::IRRef i) const {
+        JIT::IR const& ir = code[i];
+
+        if(ir.type != Type::Nil) {
+            if(ir.type == Type::Double ||
+               ir.type == Type::Integer ||
+               ir.type == Type::Logical ||
+               ir.type == Type::Character ||
+               ir.type == Type::List)
+                printf(" :=  %.2s -> [%.3s x %.2s]", 
+                    In(ir.in.length).c_str(), Type::toString(ir.type), In(ir.out.length).c_str());
+            else
+                printf(" :=  %.2s ->  %.3s      ", In(ir.in.length).c_str(), Type::toString(ir.type));
+
+        }
+        else
+            printf("                     ");
+
+        std::cout << "   " << TraceOpCode::toString(ir.op);
+
+        switch(ir.op) {
+#define CASE(Name, ...) case TraceOpCode::Name:
+            case TraceOpCode::loop: 
+                {
+                    std::cout << " --------------------------------";
+                } break;
+            case TraceOpCode::sload: 
+                {
+                    std::cout << "\t " << (int64_t)ir.b << "\t \t";
+                } break;
+            case TraceOpCode::sstore: 
+                {
+                    std::cout << "\t " << (int64_t)ir.b << "\t " << In(ir.c);
+                } break;    
+            case TraceOpCode::gproto:
+                {
+                    std::cout << "\t " << In(ir.a) << "\t [" << ir.b << "]";
+                } break;
+            case TraceOpCode::kill:
+                std::cout << "\t " << (int64_t)ir.a << "\t \t";
+                break;
+            case TraceOpCode::load:
+                {
+                    if(code[ir.a].op == TraceOpCode::curenv)
+                        std::cout << "\t " << In(ir.b) << "\t \t";
+                    else
+                        std::cout << "\t " << In(ir.a) << "\t " << In(ir.b) << "\t";
+                } break;
+            case TraceOpCode::store:
+                {
+                    if(code[ir.a].op == TraceOpCode::curenv)
+                        std::cout << "\t " << In(ir.b) << "\t " << In(ir.c) << "\t";
+                    else
+                        std::cout << "\t " << In(ir.a) << "\t " << In(ir.b) << "\t " << In(ir.c);
+                } break;
+            case TraceOpCode::strip:
+            case TraceOpCode::box:
+            case TraceOpCode::unbox:
+            case TraceOpCode::brcast:
+            case TraceOpCode::length:
+            case TraceOpCode::gtrue:
+            case TraceOpCode::gfalse: 
+            case TraceOpCode::olength: 
+            case TraceOpCode::lenv: 
+            case TraceOpCode::denv: 
+            case TraceOpCode::cenv: 
+            case TraceOpCode::decodena:
+            case TraceOpCode::decodevl:
+                UNARY_FOLD_SCAN_BYTECODES(CASE)
+                {
+                    std::cout << "\t " << In(ir.a) << "\t \t";
+                } break;
+            case TraceOpCode::attrget:
+            case TraceOpCode::glength:
+            case TraceOpCode::gvalue:
+            case TraceOpCode::encode:
+            case TraceOpCode::reshape:
+            case TraceOpCode::phi: 
+            case TraceOpCode::push:
+            case TraceOpCode::rep:
+            case TraceOpCode::seq:
+            case TraceOpCode::gather1:
+            case TraceOpCode::gather:
+            case TraceOpCode::alength:
+                BINARY_BYTECODES(CASE)
+                {
+                    std::cout << "\t " << In(ir.a) << "\t " << In(ir.b) << "\t";
+                } break;
+            case TraceOpCode::newenv:
+            case TraceOpCode::scatter:
+            case TraceOpCode::scatter1:
+                TERNARY_BYTECODES(CASE)
+                {
+                    std::cout << "\t " << In(ir.a) << "\t " << In(ir.b) << "\t " << In(ir.c);
+                } break;
+            default: {} break;
+
+#undef CASE
+        };
+    }
+
+};
 
 void JIT::dump(Thread& thread, std::vector<IR> const& t, bool exits) {
 
+    IRWriter writer(thread, t, constants);
+    
     for(size_t i = 0; i < t.size(); i++) {
         IR const& ir = t[i];
         if(ir.live) {
-            printf("%4li ", i);
+            printf("%4s ", (std::string("v") + intToStr(i)).c_str());
             if(ir.sunk)
                 printf("}");
-            else
-                printf(" ");
-            
-            if(fusable.size() == t.size() && !fusable[i]) 
-                printf("-");
             else
                 printf(" ");
             
@@ -1331,8 +1382,8 @@ void JIT::dump(Thread& thread, std::vector<IR> const& t, bool exits) {
                 printf(" !! ");
             else
                 printf("    ");
-            
-            ir.dump();
+          
+            writer.write(i); 
     
             if(ir.op == TraceOpCode::constant) {
                 std::cout <<  "    " << thread.deparse(constants[ir.a]);

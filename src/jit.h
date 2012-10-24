@@ -140,8 +140,6 @@ public:
         bool sunk;
         IRRef use;
 
-        void dump() const;
-
         bool operator==(IR const& o) const {
             return  op == o.op &&
                     a == o.a &&
