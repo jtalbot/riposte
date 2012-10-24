@@ -45,13 +45,15 @@ mandel <- function(maxIterations) {
 	z_re <- c_re
 	z_im <- c_im
 	cnt <- 0
-	for(i in 1:maxIterations) {
+    i <- 1L
+    while( i <= maxIterations ) {
 		#cnt <- cnt + ifelse(z_re * z_re + z_im * z_im <= 4, 1, 0)
 		cnt <- cnt + (z_re*z_re + z_im*z_im <= 4)
 		z_re2 <- c_re + (z_re*z_re - z_im*z_im)
 		z_im2 <- c_im + (2. * z_re * z_im)
 		z_re <- z_re2
 		z_im <- z_im2
+        i <- i+1L
 	}
 	cnt
 }

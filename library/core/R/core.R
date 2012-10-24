@@ -100,9 +100,9 @@ dispatch2 <- function(op, x, y, default) {
 		if(missing(i) && missing(j))
 			x
 		else if(missing(i))
-			strip(x)[(1L:d[[1L]])+(d[[1L]]*(as.integer(strip(j))-1L))]
+			strip(x)[(d[[1L]]*(as.integer(strip(j))-1L))+(1L:d[[1L]])]
 		else if(missing(j))
-			strip(x)[(0L:(d[[2L]]-1L))*(d[[1L]])+as.integer(strip(i))]
+			strip(x)[as.integer(strip(i))+d[[1L]]*(0L:(d[[2L]]-1L))]
 		else
 			strip(x)[(as.integer(strip(i))-1L)*d[[1L]]+as.integer(strip(j))]	
 	}

@@ -182,6 +182,14 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                 }
                 break;
 
+            case TraceOpCode::mul:
+                if(ir.type == Type::Integer) {
+                    if(ir.a == 1) {
+                        ir =  IR(TraceOpCode::pos, ir.b, ir.type, ir.in, ir.out);
+                    }
+                }
+                break;
+
             case TraceOpCode::idiv:
                 if(ir.type == Type::Integer) {
                     // if power of 2, can replace with a shift.
@@ -206,6 +214,13 @@ JIT::IR JIT::StrengthReduce(IR ir) {
             case TraceOpCode::neq:
                 if(ir.a == ir.b) {
                     ir = IR(TraceOpCode::brcast, FalseRef, Type::Integer, ir.in, ir.out);
+                    retry = true;
+                }
+                break;
+
+            case TraceOpCode::seq:
+                if(ir.out.length == 1) {
+                    ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
                     retry = true;
                 }
                 break;
@@ -310,6 +325,14 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                     ir = IR( TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out );
                 }
                 break;
+
+            case TraceOpCode::glength:
+            case TraceOpCode::length:
+                if(code[ir.a].op == TraceOpCode::box) {
+                    ir = IR( TraceOpCode::pos, code[ir.a].in.length, ir.type, ir.in, ir.out );
+                }
+                break;
+
             default:
                 break;
         }
@@ -450,6 +473,7 @@ double JIT::Opcost(std::vector<IR>& code, IR ir) {
             case TraceOpCode::gtrue: 
             case TraceOpCode::gfalse:
             case TraceOpCode::glength:
+            case TraceOpCode::gvalue:
             case TraceOpCode::scatter:
             case TraceOpCode::scatter1:
             case TraceOpCode::brcast:
@@ -908,9 +932,8 @@ JIT::IRRef JIT::EmitOptIR(
                 ir.a = forward[ir.a];
                 if(code[ir.a].op == TraceOpCode::box)
                     return code[code[ir.a].a].out.length;
-                else {
+                else
                     return Insert(thread, code, cse, snapshot, ir);
-                }
             } break;
 
             case TraceOpCode::glength: {
@@ -918,9 +941,14 @@ JIT::IRRef JIT::EmitOptIR(
                 ir.b = forward[ir.b];
                 if(code[ir.a].op == TraceOpCode::box)
                     return code[code[ir.a].a].out.length;
-                else {
+                else
                     return Insert(thread, code, cse, snapshot, ir);
-                }
+            } break;
+
+            case TraceOpCode::gvalue: {
+                ir.a = forward[ir.a];
+                ir.b = forward[ir.b];
+                return Insert(thread, code, cse, snapshot, ir);
             } break;
 
             case TraceOpCode::decodevl: {
@@ -1035,6 +1063,7 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
                 MARK(ir.a);
             }   break; 
           
+            case TraceOpCode::gvalue:  
             case TraceOpCode::glength:  
             case TraceOpCode::load: {
                 ROOT;

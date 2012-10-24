@@ -515,7 +515,9 @@ struct Fusion {
     size_t width;
 
     std::map<size_t, llvm::Value*> outs;
+    std::map<size_t, JIT::IRRef> outIRs;
     std::map<size_t, llvm::Value*> reductions;
+
 
     size_t instructions;
 
@@ -767,6 +769,8 @@ struct Fusion {
         instructions++;
         JIT::IR ir = jit.code[index];
         size_t reg = ir.reg;
+
+        outIRs[reg] = index;
 
 #define CASE_UNARY(Op, FName, IName) \
     case TraceOpCode::Op: { \
@@ -1279,7 +1283,7 @@ struct Fusion {
         Store(builder, r, ir.reg, builder.getInt64(0), 1); 
     }
 
-    llvm::BasicBlock* Close() {
+    llvm::BasicBlock* Close(JIT::IRRef postIR) {
        
         if(instructions == 0) {
             header = after;
@@ -1288,7 +1292,9 @@ struct Fusion {
 
         std::map<size_t, llvm::Value*>::const_iterator i;
         for(i = outs.begin(); i != outs.end(); i++) {
-            Store(builder, i->second, i->first, iterator, width);
+            JIT::IRRef ir = outIRs[i->first];
+            if(jit.code[ir].use >= postIR)
+                Store(builder, i->second, i->first, iterator, width);
         }
 
         if(length == 0) {
@@ -1396,14 +1402,14 @@ struct TraceCompiler {
             if(ir.live && !ir.sunk) {
                 if(Fuseable(ir)) {
                     if(!CanFuse(fusion, ir)) {
-                        EndFusion(fusion);
+                        EndFusion(fusion, i);
                         fusion = StartFusion(ir);
                     }
                     InitializeRegister(ir);
                     fusion->Emit(i);
                 }
                 else {
-                    EndFusion(fusion);
+                    EndFusion(fusion, i);
                     InitializeRegister(ir);
                     Emit(ir, i, registers[ir.reg] );
                 }
@@ -1484,9 +1490,9 @@ struct TraceCompiler {
         return fusion;
     }
 
-    void EndFusion(Fusion*& fusion) {
+    void EndFusion(Fusion*& fusion, JIT::IRRef postIR) {
         if(fusion) {
-            llvm::BasicBlock* after = fusion->Close();
+            llvm::BasicBlock* after = fusion->Close(postIR);
             builder.CreateBr(fusion->header);
             builder.SetInsertPoint(after);
             delete fusion;
@@ -1543,7 +1549,7 @@ struct TraceCompiler {
             llvm::Value* length =
                 builder.CreateLoad(value(jit.code[index].out.length));
 
-            llvm::Value* r = Call(std::string("UNBOX_")+Type::toString(type), tmp, length);
+            llvm::Value* r = Save( Call(std::string("UNBOX_")+Type::toString(type), tmp, length) );
 
             //if(type == Type::List) {
                 //r = builder.CreatePointerCast(r, S->value_type->getPointerTo());
@@ -1917,13 +1923,13 @@ struct TraceCompiler {
                 InitializeRegister(ir);
                 if(Fuseable(ir)) {
                     if(!CanFuse(fusion, ir)) {
-                        EndFusion(fusion);
+                        EndFusion(fusion, i);
                         fusion = StartFusion(ir);
                     }
                     fusion->Emit(i);
                 }
                 else {
-                    EndFusion(fusion);
+                    EndFusion(fusion, i);
                     Emit(ir, i, registers[ir.reg] );
                 }
             }

@@ -30,6 +30,7 @@
 		_(load, "load", ___) /* loads are type guarded */ \
         _(store, "store", ___) \
         _(glength, "glength", ___) \
+        _(gvalue, "gvalue", ___) \
         _(length, "length", ___) \
         _(encode, "encode", ___) \
         _(decodevl, "decodevl", ___) \
@@ -137,6 +138,7 @@ public:
         double cost;
         bool live;
         bool sunk;
+        IRRef use;
 
         void dump() const;
 
@@ -151,26 +153,26 @@ public:
         }
 
         IR()
-            : op(TraceOpCode::nop), a(0), b(0), c(0), type(Type::Nil), in(Shape::Empty), out(Shape::Empty), exit(-1), sunk(false) {}
+            : op(TraceOpCode::nop), a(0), b(0), c(0), type(Type::Nil), in(Shape::Empty), out(Shape::Empty), exit(-1), sunk(false), use(0) {}
         
         IR(TraceOpCode::Enum op, Type::Enum type, Shape in, Shape out)
-            : op(op), a(0), b(0), c(0), type(type), in(in), out(out), exit(-1), sunk(false) {}
+            : op(op), a(0), b(0), c(0), type(type), in(in), out(out), exit(-1), sunk(false), use(0) {}
         
         IR(TraceOpCode::Enum op, IRRef a, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(0), c(0), type(type), in(in), out(out), exit(-1), sunk(false) {}
+            : op(op), a(a), b(0), c(0), type(type), in(in), out(out), exit(-1), sunk(false), use(0) {}
         
         IR(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(b), c(0), type(type), in(in), out(out), exit(-1), sunk(false) {}
+            : op(op), a(a), b(b), c(0), type(type), in(in), out(out), exit(-1), sunk(false), use(0) {}
         
         IR(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(b), c(c), type(type), in(in), out(out), exit(-1), sunk(false) {}
+            : op(op), a(a), b(b), c(c), type(type), in(in), out(out), exit(-1), sunk(false), use(0) {}
 	};
 
     struct Phi {
         IRRef a, b;
     };
 
-	unsigned short counters[1024];
+	unsigned int counters[1024];
 
 	static const unsigned short RECORD_TRIGGER = 4;
 
@@ -239,7 +241,7 @@ public:
         Snapshot snapshot;
         bool InScope;
         Instruction const* Reenter;
-        unsigned short counter;
+        unsigned int counter;
     };
 
     Trace* rootTrace;
@@ -328,6 +330,7 @@ public:
     IRRef DecodeNA(Var a);
     Var Encode(IRRef v, IRRef na, bool mayHaveNA);
     IRRef Box(IRRef a);
+    Shape SpecializeLength(Value const& v, IRRef r);
     Shape SpecializeValue(Value const& v, IRRef r);
     Shape MergeShapes(Shape a, Shape b, Instruction const* inst);
 
@@ -408,10 +411,11 @@ public:
     double Opcost(std::vector<IR>& code, IR ir);
     void Liveness();
     bool AlwaysLive(IR const& ir);
-    void MarkSnapshot(Snapshot const& snapshot);
+    void Mark(IRRef i, IRRef use);
+    void MarkSnapshot(IRRef i, Snapshot const& snapshot);
     void MarkLiveness(IRRef i, IR ir);
 
-    void StrengthenGuards(void);
+    void StrengthenGuards(size_t specializationLength);
 
     static IR Forward(IR ir, std::vector<IRRef> const& forward);
  

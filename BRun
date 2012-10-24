@@ -13,10 +13,12 @@ function bench {
         echo -n ,
         #bin/riposte -i -f bbenchmarks/$1.R --args $3 $M
         #echo -n ,
-        bin/riposte -f bbenchmarks/$1.R --args $3 $M
+        #bin/riposte -s $M -f bbenchmarks/$1.R --args $3 $M
         #echo -n ,
-        #clang++ -O3 bbenchmarks/$1.cpp -o bbenchmarks/$1 -D N=$3 -D M=$M
-        #bbenchmarks/$1
+        bin/riposte -s 8 -f bbenchmarks/$1.R --args $3 $M
+        echo -n ,
+        clang++ -O3 bbenchmarks/$1.cpp -o bbenchmarks/$1 -mllvm -vectorize -mllvm -bb-vectorize-aligned-only
+        bbenchmarks/$1 $3 $M
         #echo -n ,
         #luajit bbenchmarks/$1.lua $3 $M
         echo ""
@@ -32,17 +34,17 @@ function genbench {
 }
 
 
-echo "benchmark,M,R,Riposte interpreter,Riposte trace"
+echo "benchmark,M,R,Riposte,C"
+bench americanPutOption "American Put" $((SCALE*100000))
+bench binarysearch "Binary Search" $((SCALE*5000))
+bench black_scholes "Black-Scholes Put" $((SCALE*50000))
+bench colsum "Column Sum" $((SCALE*1000000))
 bench fib "Fibonacci" $((SCALE*5000000))
 bench mandelbrot "Mandelbrot" $((SCALE*1000000))
-bench black_scholes "Black-Scholes Put" $((SCALE*100000))
-bench colsum "Column Sum" $((SCALE*2000000))
-bench americanPutOption "American Put" $((SCALE*100000))
-bench zeta "Riemann zeta" $((SCALE*1000000))
-bench binarysearch "Binary Search" $((SCALE*10000))
 bench meanShift "Mean Shift" $((SCALE*200000))
+bench rw "Random Walk" $((SCALE*250000))
+bench zeta "Riemann zeta" $((SCALE*200000))
 bench rungeKutta "Runge-Kutta" $((SCALE*250000))
-bench rw "Random Walk" $((SCALE*100000))
 
 #bench phongReflection "Phong model" $((SCALE*50000))
 #bench alphaCompositing "Image compositing" $((SCALE*200000))

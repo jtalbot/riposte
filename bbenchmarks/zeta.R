@@ -11,8 +11,10 @@ N <- as.integer(commandArgs(TRUE)[[1]]) / M
 
 zeta <- function(p, N) {
     t <- rep(0, length(p))
-    for (k in 1:N) {
+    k <- 1L
+    while(k <= N) {
         t <- t + 1.0/(k^p)
+        k <- k+1L
     }
     return(t)
 }

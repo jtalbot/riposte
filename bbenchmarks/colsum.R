@@ -13,9 +13,10 @@ colsum <- function(m) {
     cols <- dim(m)[[2]]
 
     s <- 0
-    for(i in 1:cols) 
-    {
+    i <- 1L
+    while( i <= cols ) {
         s <- s + m[,i]
+        i <- i+1L
     }
     return(s)
 }

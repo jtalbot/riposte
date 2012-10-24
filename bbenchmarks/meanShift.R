@@ -21,8 +21,10 @@ X <- runif(M)
 
 run <- function() {
     x <- 0
-    for(i in 1:N) {
+    i <- 1L
+    while(i < N) {
         x <- meanshift(x, X)
+        i <- i+1L
     }
     x 
 }

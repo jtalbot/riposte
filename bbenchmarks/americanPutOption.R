@@ -14,16 +14,22 @@ americanPut <- function(T, S, K, r, sigma, q, n) {
 
     p <- list()
 
-	for (i in 1:n) {
+    i <- 1
+    while(i <= n) {
         p[[i]] <- pmax(0, K - S * up^(2*i-n))
-	}
+	    i <- i+1
+    }
 
-	for (j in (n-1):1) {
-		for (i in 1:j) {
+    j <- n-1L
+    while(j >= 1L) {
+        i <- 1L
+        while(i <= j) {
             p[[i]] <- pmax( K - S * up^(2*i-j),
-                         p0 * p[[i]] + p1 * p[[i+1]] )
-		}
-	}
+                             p0 * p[[i]] + p1 * p[[i+1]] )
+		    i <- i+1L
+        }
+        j <- j-1L
+    }
     p[[1]]
 }
 

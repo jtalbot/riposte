@@ -6,10 +6,10 @@ fi
 
 function bench {
     echo -n $2,
-    Rscript sbenchmarks/$1.R $3
-    echo -n ,
-    bin/riposte -i -f sbenchmarks/$1.R --args $3
-    echo -n ,
+    #Rscript sbenchmarks/$1.R $3
+    #echo -n ,
+    #bin/riposte -i -f sbenchmarks/$1.R --args $3
+    #echo -n ,
     bin/riposte -f sbenchmarks/$1.R --args $3
     echo -n ,
     luajit sbenchmarks/$1.lua $3
@@ -24,7 +24,7 @@ function genbench {
 }
 
 
-echo "benchmark,R,Riposte interpreter,Riposte trace,LuaJIT"
+echo "benchmark,R,Riposte trace,LuaJIT"
 bench phongReflection "Phong model" $((SCALE*50000))
 bench alphaCompositing "Image compositing" $((SCALE*200000))
 bench rungeKatta "Runge-Katta" $((SCALE*50000))

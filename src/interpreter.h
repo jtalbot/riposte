@@ -132,6 +132,7 @@ public:
 
 	bool verbose;
 	bool jitEnabled;
+    size_t specializationLength;
 	bool deferredEnabled;
 
 	int64_t done;

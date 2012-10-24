@@ -8,10 +8,13 @@ class GuardPass {
     std::map<JIT::IRRef, JIT::IRRef> eq;
     std::vector<JIT::IRRef> forward;
 
+    size_t specializationLength;
+
     JIT::IRRef substitute(JIT::IRRef i) {
         JIT::IR& ir = code[i];
 
-        if( ir.op == TraceOpCode::glength ) {
+        if( (ir.op == TraceOpCode::glength ||
+             ir.op == TraceOpCode::gvalue)  && specializationLength > 1 ) {
             JIT::IRRef f = dofind(i);
             if(f != i) {
                 ir.b = f;
@@ -28,7 +31,7 @@ class GuardPass {
             int64_t len = ((Integer const&)constants[code[ir.b].a])[0];
 
             // if too long, despecialize
-            if(len > 16 || mustDespecialize) {
+            if(len > specializationLength || mustDespecialize) {
                 ir.op = TraceOpCode::length;
             }
             // otherwise, propogate length down
@@ -37,16 +40,31 @@ class GuardPass {
                 return ir.b;
             }
         }
+        
+        else if( ir.op == TraceOpCode::gvalue && code[ir.b].op == TraceOpCode::constant  ) {
+            int64_t len = ((Integer const&)constants[code[ir.b].a])[0];
+
+            ir.op = TraceOpCode::nop;
+
+            // if too long, despecialize
+            if(len > specializationLength || mustDespecialize) {
+                return ir.a;
+            }
+            // otherwise, propogate length down
+            else {
+                return ir.b;
+            }
+        }
         return i;
     }
 
     void eval(JIT::IRRef i) {
         JIT::IR const& ir = code[i];
-        
-        // Union euqal lengths
+       
+        // Union equal lengths
         if( ir.op == TraceOpCode::eq
-         && code[ir.a].op == TraceOpCode::glength
-         && code[ir.b].op == TraceOpCode::glength ) 
+         && (code[ir.a].op == TraceOpCode::glength || code[ir.a].op == TraceOpCode::gvalue )
+         && (code[ir.b].op == TraceOpCode::glength || code[ir.b].op == TraceOpCode::gvalue) ) 
         {
             dounion(ir.a, ir.b);
         }
@@ -78,8 +96,8 @@ class GuardPass {
 
 
 public:
-    GuardPass(std::vector<JIT::IR>& code, std::vector<Value> const& constants )
-        : code(code), constants(constants) {}
+    GuardPass(std::vector<JIT::IR>& code, std::vector<Value> const& constants, size_t specializationLength)
+        : code(code), constants(constants), specializationLength(specializationLength) {}
 
     void run() {
         // find lengths that are equal
@@ -105,9 +123,9 @@ public:
         
             // mark all reshaped lengths as not specializable.
             if(ir.op == TraceOpCode::reshape) {
-                if(code[ir.a].op == TraceOpCode::glength)
+                if(code[ir.a].op == TraceOpCode::glength || code[ir.a].op == TraceOpCode::gvalue)
                     reshaped.insert(ir.a);
-                if(code[ir.b].op == TraceOpCode::glength)
+                if(code[ir.b].op == TraceOpCode::glength || code[ir.b].op == TraceOpCode::gvalue)
                     reshaped.insert(ir.b);
             }
         }
@@ -121,7 +139,7 @@ public:
     }
 };
 
-void JIT::StrengthenGuards(void) {
-    GuardPass pass(code, constants);
+void JIT::StrengthenGuards(size_t specializationLength) {
+    GuardPass pass(code, constants, specializationLength);
     pass.run();
 }

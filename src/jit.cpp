@@ -72,7 +72,7 @@ JIT::IRRef JIT::Emit(IR const& ir, Instruction const* reenter, bool inScope) {
     return i;
 }
 
-JIT::Shape JIT::SpecializeValue(Value const& v, IRRef r) {
+JIT::Shape JIT::SpecializeLength(Value const& v, IRRef r) {
     if(v.isNull()) {
         return Shape::Empty;
     }
@@ -83,6 +83,18 @@ JIT::Shape JIT::SpecializeValue(Value const& v, IRRef r) {
     }
     else {
         return Shape::Scalar;
+    }
+}
+
+JIT::Shape JIT::SpecializeValue(Value const& v, IRRef r) {
+    if(v.isInteger() && v.length == 1) {
+        int64_t len = ((Integer const&)v)[0];
+        IRRef c = EmitConstant(Integer::c(len)).v;
+        IRRef l = Emit( IR(TraceOpCode::gvalue, r, c, Type::Integer, Shape::Scalar, Shape::Scalar) );
+        return Shape(l, len);
+    }
+    else {
+        _error("Invalid SpecializeValue");
     }
 }
 
@@ -104,7 +116,7 @@ JIT::Var JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
     Variable v = { -1, (thread.base+a)-(thread.registers+DEFAULT_NUM_REGISTERS)};
     IRRef r = Emit( IR( TraceOpCode::sload, -1, v.i, Type::Any, Shape::Empty, Shape::Scalar ) );
 
-    Shape s = SpecializeValue(operand, r); 
+    Shape s = SpecializeLength(operand, r); 
           r = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), reenter, true );
     return Var(trace, r, MayHaveNA(operand));
 }
@@ -298,6 +310,7 @@ JIT::Var JIT::EmitBinary(TraceOpCode::Enum op, Var a, Var b, Type::Enum rty, Ins
 }
 
 JIT::Var JIT::EmitTernary(TraceOpCode::Enum op, Var a, Var b, Var c, Type::Enum rty, Instruction const* inst) {
+
     Shape s = MergeShapes(a.s, MergeShapes(b.s, c.s, inst), inst);
     
     a = EmitBroadcast(a, s);
@@ -400,7 +413,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
 
             Value const& operand = env->get((String)inst.a);
 
-            Shape s = SpecializeValue(operand, r); 
+            Shape s = SpecializeLength(operand, r); 
             r = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), &inst, true );
             
             store(thread, Var(trace, r, MayHaveNA(operand)), inst.c);
@@ -445,7 +458,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             Value const& operand = ((REnvironment&)env).environment()->get((String)inst.a);
             
             IRRef r = Emit( IR( TraceOpCode::load, e.v, cc.v, operand.type, Shape::Empty, Shape::Scalar ) );
-            Shape s = SpecializeValue(operand, r); 
+            Shape s = SpecializeLength(operand, r); 
             r = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), &inst, true );
             store(thread, Var(trace, r, MayHaveNA(operand)), inst.c);
         }   break;
@@ -628,7 +641,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
                 IRRef r = Emit( IR( TraceOpCode::strip, in.v, Type::Any, Shape::Scalar, Shape::Scalar) );
 
                 Value const& v = ((Object const&)val).base();
-                Shape s = SpecializeValue( v, r );
+                Shape s = SpecializeLength( v, r );
                 r = Emit( IR( TraceOpCode::unbox, r, v.type, Shape::Scalar, s ), &inst, true );
                 store(thread, Var( trace, r, MayHaveNA(v) ), inst.c);
             }
@@ -652,7 +665,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
                 IRRef r = Emit( IR( TraceOpCode::attrget, in.v, which.v, Type::Any, Shape::Scalar, Shape::Scalar) );
                 Value const& str = IN(inst.b);
                 Value const& a = ((Object const&)val).get( ((Character const&)str)[0] );
-                Shape s = SpecializeValue( a, r );
+                Shape s = SpecializeLength( a, r );
                 r = Emit( IR( TraceOpCode::unbox, r, a.type, Shape::Scalar, s ), &inst, true );
                 store(thread, Var( trace, r, MayHaveNA(a) ), inst.c);
             }
@@ -683,9 +696,9 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
 
         case ByteCode::rep:
         {
-            Value const& len = IN(inst.a);
+            Value len = As<Integer>(thread, IN(inst.a));
             Var l = EmitCast(load(thread, inst.a, &inst), Type::Integer);
-            Shape s( l.v, As<Integer>(thread, len)[0] );
+            Shape s = SpecializeValue(len, l.v);
            
             Var b = load(thread, inst.b, &inst); 
             Var c = load(thread, inst.c, &inst); 
@@ -694,9 +707,9 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         }   break;
         case ByteCode::seq:
         {
-            Value const& len = IN(inst.a);
+            Value len = As<Integer>(thread, IN(inst.a));
             Var l = EmitCast(load(thread, inst.a, &inst), Type::Integer);
-            Shape s( l.v, As<Integer>(thread, len)[0] );        
+            Shape s = SpecializeValue(len, l.v);
             Var c = load(thread, inst.c, &inst);
             Var b = load(thread, inst.b, &inst);
             Type::Enum type = c.type == Type::Double || b.type == Type::Double
@@ -707,9 +720,9 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         }   break;
         case ByteCode::random:
         {
-            Value const& len = IN(inst.a);
+            Value len = As<Integer>(thread, IN(inst.a));
             Var l = EmitCast(load(thread, inst.a, &inst), Type::Integer);
-            Shape s( l.v, As<Integer>(thread, len)[0] );        
+            Shape s = SpecializeValue(len, l.v);
                 
             IRRef r = Emit( IR( TraceOpCode::random, Type::Double, s, s) );
             IRRef q = Emit( IR( TraceOpCode::brcast, FalseRef, Type::Logical, s, s) );
@@ -920,9 +933,9 @@ void JIT::end_recording(Thread& thread) {
         trace[i].reg = 0;
     }
 
-    //dump(thread, trace, false);
+    dump(thread, trace, false);
     Replay(thread);
-    StrengthenGuards();
+    StrengthenGuards(thread.state.specializationLength);
     RunOptimize(thread);
  
     Liveness();
@@ -1267,6 +1280,7 @@ void JIT::IR::dump() const {
         } break;
         case TraceOpCode::attrget:
         case TraceOpCode::glength:
+        case TraceOpCode::gvalue:
         case TraceOpCode::encode:
         case TraceOpCode::reshape:
         case TraceOpCode::phi: 

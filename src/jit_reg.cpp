@@ -86,6 +86,33 @@ void JIT::AssignSnapshot(Snapshot const& snapshot) {
     }
 }
 
+void Assign(JIT* jit, JIT::IRRef a) {
+    jit->AssignRegister(a); 
+}
+
+void Assign(JIT* jit, JIT::IRRef a, JIT::IRRef b) {
+    if(jit->code[a].reg < 0)
+        jit->AssignRegister(a);
+    if(jit->code[b].reg < 0)
+        jit->AssignRegister(b);
+
+    jit->AssignRegister(a); 
+    jit->AssignRegister(b); 
+}
+
+void Assign(JIT* jit, JIT::IRRef a, JIT::IRRef b, JIT::IRRef c) {
+    if(jit->code[a].reg < 0)
+        jit->AssignRegister(a);
+    if(jit->code[b].reg < 0)
+        jit->AssignRegister(b);
+    if(jit->code[c].reg < 0)
+        jit->AssignRegister(c);
+
+    jit->AssignRegister(a); 
+    jit->AssignRegister(b); 
+    jit->AssignRegister(c); 
+}
+
 void JIT::RegisterAssign(IRRef i, IR ir) {
 
     switch(ir.op) 
@@ -106,9 +133,7 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
         case TraceOpCode::scatter: 
             {
                 PreferRegister(ir.a, i);
-                AssignRegister(ir.a);
-                AssignRegister(ir.c);
-                AssignRegister(ir.b);
+                Assign(this, ir.a, ir.b, ir.c);
                 // necessary to size input
                 AssignRegister(code[ir.a].out.length);
             } break;
@@ -116,9 +141,7 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
         case TraceOpCode::newenv:
             TERNARY_BYTECODES(CASE)
             {
-                AssignRegister(ir.c);
-                AssignRegister(ir.b);
-                AssignRegister(ir.a);
+                Assign(this, ir.a, ir.b, ir.c);
             } break;
         case TraceOpCode::sstore:
             {
@@ -132,11 +155,11 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
             } break;
         case TraceOpCode::load:
             {
-                AssignRegister(std::max(ir.a, ir.b));
-                AssignRegister(std::min(ir.a, ir.b));
+                Assign(this, ir.a, ir.b);
             } break;
         case TraceOpCode::attrget:
         case TraceOpCode::glength:
+        case TraceOpCode::gvalue:
         case TraceOpCode::encode:
         case TraceOpCode::alength:
         case TraceOpCode::rep:
@@ -145,8 +168,7 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
         case TraceOpCode::gather:
             BINARY_BYTECODES(CASE)
             {
-                AssignRegister(std::max(ir.a, ir.b));
-                AssignRegister(std::min(ir.a, ir.b));
+                Assign(this, ir.a, ir.b);
             } break;
         case TraceOpCode::strip:
         case TraceOpCode::box:
@@ -251,6 +273,11 @@ void JIT::RegisterAssignment() {
 
 }
 
+void JIT::Mark(IRRef i, IRRef use) {
+    code[i].live = true;
+    code[i].use = std::max(code[i].use, use);
+}
+
 void JIT::MarkLiveness(IRRef i, IR ir) {
     switch(ir.op) 
     {
@@ -259,6 +286,7 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
         case TraceOpCode::encode:
         case TraceOpCode::alength:
         case TraceOpCode::glength:
+        case TraceOpCode::gvalue:
         case TraceOpCode::rep:
         case TraceOpCode::seq:
         case TraceOpCode::gather1:
@@ -268,8 +296,8 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
         case TraceOpCode::phi: 
         BINARY_BYTECODES(CASE)
             {
-                code[ir.a].live = true;
-                code[ir.b].live = true;
+                Mark(ir.a, i);
+                Mark(ir.b, i);
             } break;
         case TraceOpCode::strip:
         case TraceOpCode::box:
@@ -287,7 +315,7 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
         case TraceOpCode::gfalse: 
             UNARY_FOLD_SCAN_BYTECODES(CASE)
             {
-                code[ir.a].live = true;
+                Mark(ir.a, i);
             } break;
         case TraceOpCode::store:
         case TraceOpCode::newenv:
@@ -295,13 +323,13 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
         case TraceOpCode::scatter1: 
         TERNARY_BYTECODES(CASE)
             {
-                code[ir.a].live = true;
-                code[ir.b].live = true;
-                code[ir.c].live = true;
+                Mark(ir.a, i);
+                Mark(ir.b, i);
+                Mark(ir.c, i);
             } break;
         case TraceOpCode::sstore:
             {
-                code[ir.c].live = true;
+                Mark(ir.c, i);
             } break;
         case TraceOpCode::random:
         case TraceOpCode::loop:
@@ -321,26 +349,27 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
 #undef CASE
     }
 
-    code[ir.in.length].live = true;
-    code[ir.out.length].live = true;
+    Mark(ir.in.length, i);
+    Mark(ir.out.length, i);
+    
     if(ir.exit >= 0)
-        MarkSnapshot(dest->exits[ir.exit].snapshot);
+        MarkSnapshot(i, dest->exits[ir.exit].snapshot);
 }
 
-void JIT::MarkSnapshot(Snapshot const& snapshot) {
+void JIT::MarkSnapshot(IRRef ir, Snapshot const& snapshot) {
     for(size_t i = 0; i < snapshot.stack.size(); i++) {
-        code[snapshot.stack[i].environment].live = true;
-        code[snapshot.stack[i].env].live = true;
+        Mark(snapshot.stack[i].environment, ir);
+        Mark(snapshot.stack[i].env, ir);
     }
 
     for(std::map< int64_t, IRRef >::const_iterator i = snapshot.slotValues.begin();
             i != snapshot.slotValues.end(); ++i) {
-        code[i->second].live = true;
+        Mark(i->second, ir);
     }
     
     for(std::set< IRRef >::const_iterator i = snapshot.memory.begin();
             i != snapshot.memory.end(); ++i) {
-        code[*i].live = true;
+        Mark(*i, ir);
     }
 }
 

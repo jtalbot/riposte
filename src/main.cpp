@@ -157,10 +157,11 @@ int main(int argc, char** argv)
     bool echo = true;
     int threads = 1; 
     bool jit = true;
+    size_t specializationLength = 16;
 
     int ch;
     opterr = 0;
-    while ((ch = getopt_long(argc, argv, "df:hj:vqia", longopts, NULL)) != -1)
+    while ((ch = getopt_long(argc, argv, "df:hj:vqias:", longopts, NULL)) != -1)
     {
         // don't parse args past '--args'
         if(ch == 'a')
@@ -187,6 +188,9 @@ int main(int argc, char** argv)
             case 'i':
                 jit = false;
                 break;
+            case 's':
+                specializationLength = atoi(optarg);
+                break;
             case 'h':
             default:
                 usage();
@@ -205,6 +209,7 @@ int main(int argc, char** argv)
     State state(threads, argc, argv);
     state.verbose = verbose;
     state.jitEnabled = jit;
+    state.specializationLength = specializationLength;
     Thread& thread = state.getMainThread();
 
     /* Load built in & base functions */

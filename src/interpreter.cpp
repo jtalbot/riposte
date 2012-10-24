@@ -762,7 +762,7 @@ Instruction const* parentframe_op(Thread& thread, Instruction const& inst) {
 
 bool traceLoop(Thread& thread, Instruction const* pc, JIT::Trace* trace) 
 {
-    unsigned short& counter = 
+    unsigned int& counter = 
         trace == 0 ? thread.jit.counters[(((uintptr_t)pc)>>5) & (1024-1)] : trace->counter;
     counter++;
     if(counter >= JIT::RECORD_TRIGGER && counter == nextPow2(counter)) {

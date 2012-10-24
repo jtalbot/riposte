@@ -4,10 +4,8 @@
 library("compiler")
 enableJIT(3)
 
-# demonstrate lowering ifelse to if
-
 M <- as.integer(commandArgs(TRUE)[[2]])
-N <- as.integer(commandArgs(TRUE)[[1]]) / M
+N <- as.integer(as.integer(commandArgs(TRUE)[[1]]) / M)
 
 K <- 10000000L
 a <- 1:K
@@ -17,17 +15,20 @@ binary.search <- function(v, key) {
     b <- K 
 
     while(any(a < b)) {
-        i <- (a+b) %/% 2L
-        a <- ifelse(v[i] < key, i+1L, a)
-        b <- ifelse(v[i] < key, b, i)
+        t <- (a+b) %/% 2L
+        a <- ifelse(v[t] < key, t+1L, a)
+        b <- ifelse(v[t] < key, b, t)
     }
     return(a)
 }
 
 run <- function() {
-    for(i in 1L:N) {
-        s <- i*(K/N)
-        j <- binary.search(a, s:(s+M-1))
+    i <- 1L
+    s <- 1:M
+    while(i <= N) {
+        s <- s + (K%/%N)
+        j <- binary.search(a, s)
+        i <- i+1L
     }
 }
 

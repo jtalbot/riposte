@@ -8,8 +8,10 @@ enableJIT(3)
 
 rw <- function(n,m) {
     a <- double(m)
-    for(i in 1:n) {
-        a <- a + ifelse( runif(m), 1, -1 )
+    i <- 1L
+    while(i <= n) {
+        a <- a + ifelse( runif(m) < 0.5, 1, -1 )
+        i <- i+1L
     }
 }
 
