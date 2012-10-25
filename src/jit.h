@@ -49,8 +49,6 @@
         _(pop, "POP", ___) \
         _(strip, "strip", ___) \
         _(attrget, "attrget", ___) \
-        _(olength, "olength", ___) \
-        _(alength, "alength", ___) \
         _(kill, "kill", ___) \
         _(lenv, "lenv", ___) \
         _(denv, "denv", ___) \
@@ -177,6 +175,7 @@ public:
     State state;
 	Instruction const* startPC;
     size_t startStackDepth;
+    bool noRegisterAllocation;
 
     std::vector<Value> constants;
     std::map<Value, size_t> constantsMap;
@@ -406,7 +405,7 @@ public:
     bool Ready(IR ir, std::vector<bool>& done);
     void sink(std::vector<bool>& marks, IRRef i);
     void SINK(void); 
-    double Opcost(std::vector<IR>& code, IR ir);
+    double Opcost(std::vector<IR>& code, IR ir, bool aggressive);
     void Liveness();
     bool AlwaysLive(IR const& ir);
     void Mark(IRRef i, IRRef use);
@@ -416,6 +415,7 @@ public:
     void StrengthenGuards(size_t specializationLength);
 
     static IR Forward(IR ir, std::vector<IRRef> const& forward);
+    void ForwardSnapshot(Snapshot& s, std::vector<IRRef> const& forward);
  
 	template< template<class X> class Group >
 	Var EmitUnary(TraceOpCode::Enum op, Var a) {

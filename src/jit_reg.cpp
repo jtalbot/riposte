@@ -12,7 +12,8 @@ void JIT::AssignRegister(size_t index) {
 
         if( ir.type == Type::Nil ) return;
 
-        if( ir.op == TraceOpCode::constant 
+        if( noRegisterAllocation
+                || ir.op == TraceOpCode::constant 
                 || ir.op == TraceOpCode::unbox ) {
             ir.reg = registers.size();
             registers.push_back(r);
@@ -161,11 +162,11 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
         case TraceOpCode::glength:
         case TraceOpCode::gvalue:
         case TraceOpCode::encode:
-        case TraceOpCode::alength:
         case TraceOpCode::rep:
         case TraceOpCode::seq:
         case TraceOpCode::gather1:
         case TraceOpCode::gather:
+        case TraceOpCode::brcast:
             BINARY_BYTECODES(CASE)
             {
                 Assign(this, ir.a, ir.b);
@@ -176,8 +177,6 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
         case TraceOpCode::decodevl:
         case TraceOpCode::decodena:
         case TraceOpCode::length:
-        case TraceOpCode::brcast:
-        case TraceOpCode::olength:
         case TraceOpCode::lenv:
         case TraceOpCode::denv:
         case TraceOpCode::cenv:
@@ -284,7 +283,6 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
 #define CASE(Name, ...) case TraceOpCode::Name:
         case TraceOpCode::attrget:
         case TraceOpCode::encode:
-        case TraceOpCode::alength:
         case TraceOpCode::glength:
         case TraceOpCode::gvalue:
         case TraceOpCode::rep:
@@ -294,6 +292,7 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
         case TraceOpCode::load:
         case TraceOpCode::reshape:
         case TraceOpCode::phi: 
+        case TraceOpCode::brcast:
         BINARY_BYTECODES(CASE)
             {
                 Mark(ir.a, i);
@@ -305,8 +304,6 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
         case TraceOpCode::decodevl:
         case TraceOpCode::decodena:
         case TraceOpCode::length:
-        case TraceOpCode::brcast:
-        case TraceOpCode::olength:
         case TraceOpCode::lenv:
         case TraceOpCode::denv:
         case TraceOpCode::cenv:

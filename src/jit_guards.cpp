@@ -14,7 +14,7 @@ class GuardPass {
         JIT::IR& ir = code[i];
 
         if( (ir.op == TraceOpCode::glength ||
-             ir.op == TraceOpCode::gvalue)  && specializationLength > 1 ) {
+             ir.op == TraceOpCode::gvalue)) {
             JIT::IRRef f = dofind(i);
             if(f != i) {
                 ir.b = f;
@@ -63,8 +63,8 @@ class GuardPass {
        
         // Union equal lengths
         if( ir.op == TraceOpCode::eq
-         && (code[ir.a].op == TraceOpCode::glength || code[ir.a].op == TraceOpCode::gvalue )
-         && (code[ir.b].op == TraceOpCode::glength || code[ir.b].op == TraceOpCode::gvalue) ) 
+         && (code[ir.a].op == TraceOpCode::glength || code[ir.a].op == TraceOpCode::gvalue || code[ir.a].op == TraceOpCode::length )
+         && (code[ir.b].op == TraceOpCode::glength || code[ir.b].op == TraceOpCode::gvalue || code[ir.a].op == TraceOpCode::length ) ) 
         {
             dounion(ir.a, ir.b);
         }

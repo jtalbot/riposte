@@ -3,7 +3,7 @@
 /* static */
 JIT::IR JIT::Forward(
             JIT::IR ir,
-            std::vector<JIT::IRRef> const& forward) 
+            std::vector<JIT::IRRef> const& forward)
 {
     ir.in.length = forward[ir.in.length];
     ir.out.length = forward[ir.out.length];
@@ -27,8 +27,6 @@ JIT::IR JIT::Forward(
             case TraceOpCode::strip:
             case TraceOpCode::box:
             case TraceOpCode::unbox:
-            case TraceOpCode::brcast:
-            case TraceOpCode::olength:
             case TraceOpCode::decodena:
             case TraceOpCode::decodevl:
             case TraceOpCode::length:
@@ -42,6 +40,7 @@ JIT::IR JIT::Forward(
                 ir.a = forward[ir.a];
                 break;
 
+            case TraceOpCode::brcast:
             case TraceOpCode::attrget:
             case TraceOpCode::load: 
             case TraceOpCode::phi:
@@ -51,7 +50,6 @@ JIT::IR JIT::Forward(
             case TraceOpCode::gather1:
             case TraceOpCode::gather:
             case TraceOpCode::rep:
-            case TraceOpCode::alength:
             case TraceOpCode::encode:
             case TraceOpCode::push:
             BINARY_BYTECODES(CASE)
@@ -76,8 +74,33 @@ JIT::IR JIT::Forward(
                 break;
 
             #undef CASE
-        }
-
+    }
     return ir;
+}
+
+void JIT::ForwardSnapshot(Snapshot& s, 
+        std::vector<JIT::IRRef> const& forward) {
+    // forward exit
+    for(size_t i = 0; i < s.stack.size(); i++) {
+        s.stack[i].environment = forward[s.stack[i].environment];
+        s.stack[i].env = forward[s.stack[i].env];
+    }
+
+    for(std::map<int64_t, IRRef>::iterator i = s.slotValues.begin(); i != s.slotValues.end(); ++i)
+    {
+        i->second = forward[i->second];
+    }
+
+    for(std::map<int64_t, IRRef>::iterator i = s.slots.begin(); i != s.slots.end(); ++i)
+    {
+        i->second = forward[i->second];
+    }
+
+    std::set<IRRef> n;
+    for(std::set<IRRef>::iterator i = s.memory.begin(); i != s.memory.end(); ++i)
+    {
+        n.insert(forward[*i]);
+    }
+    s.memory.swap(n);
 }
 

@@ -10,7 +10,7 @@ rw <- function(n,m) {
     a <- double(m)
     i <- 1L
     while(i <= n) {
-        a <- a + ifelse( runif(m) < 0.5, 1, -1 )
+        a <- a + ifelse( random(m) < 0.5, 1, -1 )
         i <- i+1L
     }
 }

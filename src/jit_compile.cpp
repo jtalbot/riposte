@@ -1,4 +1,5 @@
 #include "jit.h"
+#include "interpreter.h"
 
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseMap.h"
@@ -44,14 +45,13 @@ struct LLVMState {
     llvm::LLVMContext * C;
     llvm::ExecutionEngine * EE;
     llvm::FunctionPassManager * FPM;
-    llvm::FunctionPassManager * verifierFPM;
 
 
     llvm::StructType* value_type;
     llvm::StructType* actual_value_type;
     llvm::Type* thread_type;
 
-    //llvm::PassManager * PM;
+    llvm::PassManager * PM;
 
     LLVMState() {
         llvm::InitializeNativeTarget();
@@ -74,13 +74,13 @@ struct LLVMState {
         //look here: http://lists.cs.uiuc.edu/pipermail/llvmdev/2011-December/045867.html
         FPM->add(new llvm::TargetData(*EE->getTargetData()));
         
-        FPM->add(llvm::createVerifierPass());
-    
         // do this first so the verifier doesn't freak out about our empty blocks
         FPM->add(llvm::createCFGSimplificationPass());
         
+        FPM->add(llvm::createVerifierPass());
+        
         // Promote newenvas to registers.
-        FPM->add(llvm::createPromoteMemoryToRegisterPass());
+        /*FPM->add(llvm::createPromoteMemoryToRegisterPass());
         // Also promote aggregates like structs....
         FPM->add(llvm::createScalarReplAggregatesPass());
         
@@ -103,26 +103,17 @@ struct LLVMState {
         // Simplify the control flow graph (deleting unreachable blocks, etc).
         FPM->add(llvm::createCFGSimplificationPass());
         FPM->add(llvm::createPromoteMemoryToRegisterPass());
-      
+      */
         FPM->doInitialization();
 
-        verifierFPM = new llvm::FunctionPassManager(M);
-        
-        verifierFPM->add(new llvm::TargetData(*EE->getTargetData()));
-        // do this first so the verifier doesn't freak out about our empty blocks
-        verifierFPM->add(llvm::createCFGSimplificationPass());
-        
-        verifierFPM->doInitialization();
-
-        /*
         PM = new llvm::PassManager();
        
         PM->add(llvm::createLoopIdiomPass()); 
         PM->add(llvm::createLoopInstSimplifyPass()); 
         PM->add(llvm::createLoopDeletionPass());
-        */
+       
         value_type = llvm::StructType::get( 
-            llvm::Type::getInt64Ty(*C), llvm::Type::getInt64Ty(*C), NULL );
+            llvm::Type::getInt64Ty(*C), llvm::Type::getInt64Ty(*C), NULL ); 
         actual_value_type = M->getTypeByName("struct.Value");
         thread_type = M->getTypeByName("class.Thread")->getPointerTo();
     }
@@ -142,6 +133,19 @@ public:
         if(width > 0) {
             std::vector<llvm::Constant*> v(width, k);
             return llvm::ConstantVector::get(v);
+        }
+        else {
+            return 0;
+        }
+    }
+
+    llvm::Value* getVector(llvm::Value* k, size_t width) {
+        if(width > 0) {
+            llvm::VectorType* vt = llvm::VectorType::get(k->getType(), width);
+            llvm::Value* out = llvm::UndefValue::get(vt);
+            for(size_t i = 0; i < width; i++)
+                out = CreateInsertElement(out, k, getInt32(i)); 
+            return out;
         }
         else {
             return 0;
@@ -260,24 +264,57 @@ public:
         return llvm::BasicBlock::Create(Context, name, m_function, before);
     }
 
-    llvm::Value* Call(std::string const& F) {
-        return CreateCall(getFunction(F), m_state);
+    llvm::CallInst* Call(std::string const& F) {
+        return Save(CreateCall(getFunction(F), m_state));
     }
 
-    llvm::Value* Call(std::string const& F, llvm::Value* A) {
-        return CreateCall2(getFunction(F), m_state, A);
+    llvm::CallInst* Call(std::string const& F, llvm::Value* A) {
+        return Save(CreateCall2(getFunction(F), m_state, A));
     }
 
-    llvm::Value* Call(std::string const& F, llvm::Value* A, llvm::Value* B) {
-        return CreateCall3(getFunction(F), m_state, A, B);
+    llvm::CallInst* Call(std::string const& F, llvm::Value* A, llvm::Value* B) {
+        return Save(CreateCall3(getFunction(F), m_state, A, B));
     }
 
-    llvm::Value* Call(std::string const& F, llvm::Value* A, llvm::Value* B, llvm::Value* C) {
-        return CreateCall4(getFunction(F), m_state, A, B, C);
+    llvm::CallInst* Call(std::string const& F, llvm::Value* A, llvm::Value* B, llvm::Value* C) {
+        return Save(CreateCall4(getFunction(F), m_state, A, B, C));
     }
+
+    llvm::CallInst* Call(std::string const& F, llvm::Value* A, llvm::Value* B, llvm::Value* C, llvm::Value* D) {
+        return Save(CreateCall5(getFunction(F), m_state, A, B, C, D));
+    }
+
+    llvm::CallInst* Call(std::string const& F, llvm::Value* A, llvm::Value* B, llvm::Value* C, llvm::Value* D, llvm::Value* E) {
+        llvm::Value* args[] = { m_state, A, B, C, D, E };
+        return Save(CreateCall(getFunction(F), args));
+    }
+
+    llvm::CallInst* Call(std::string const& F, llvm::Value* A, llvm::Value* B, llvm::Value* C, llvm::Value* D, llvm::Value* E, llvm::Value* G, llvm::Value* H, llvm::Value* I) {
+        llvm::Value* args[] = { m_state, A, B, C, D, E, G, H, I };
+        return Save(CreateCall(getFunction(F), args));
+    }
+
+    void InlineCalls() {
+        // inline functions
+        for(size_t i = 0; i < calls.size(); ++i) {
+            llvm::InlineFunctionInfo ifi;
+            if( calls[i]->getParent() ) {
+                llvm::Function* f = calls[i]->getCalledFunction();
+                if(f->hasFnAttr(llvm::Attribute::AlwaysInline))
+                    llvm::InlineFunction(calls[i], ifi, true);
+            }
+        }
+    }
+
+    std::vector<llvm::CallInst*> calls;
 
 private:
     
+    llvm::CallInst* Save(llvm::CallInst* call) {
+        calls.push_back(call);
+        return call;
+    }
+
     llvm::Function* m_function;
     llvm::Value* m_state;
     
@@ -448,14 +485,13 @@ public:
         builder.SetInsertPoint(elsebb);
     }
     
-    llvm::Value* ExtractAlignedVector(FunctionBuilder& builder, llvm::Value* index, size_t width) {
-
+    llvm::Value* ExtractAlignedVector(FunctionBuilder& builder, llvm::Value* index, size_t width) 
+    {
         llvm::Value* a = value(builder);
         if( type == Type::Double 
          || type == Type::Integer 
          || type == Type::Logical 
-         || type == Type::Character
-         || type == Type::List) {   
+         || type == Type::Character) {   
             a = builder.CreateInBoundsGEP(a, index);
 
             llvm::Type* t = llvm::VectorType::get(
@@ -465,15 +501,18 @@ public:
             a = builder.CreatePointerCast(a, t);
             a = builder.CreateLoad(a);
         }
+        else if( type == Type::List ) {
+            a = builder.CreateInBoundsGEP(a, index);
+        }
         return a;
     }
 
-    void InsertAlignedVector(FunctionBuilder& builder, llvm::Value* a, llvm::Value* index, size_t width) {
+    void InsertAlignedVector(FunctionBuilder& builder, llvm::Value* a, llvm::Value* index, size_t width) 
+    {
         if( type == Type::Double 
          || type == Type::Integer 
          || type == Type::Logical 
-         || type == Type::Character
-         || type == Type::List ) {      
+         || type == Type::Character ) {      
             llvm::Value* out = value(builder);
             out = builder.CreateInBoundsGEP(out, index);
 
@@ -484,6 +523,11 @@ public:
             out = builder.CreatePointerCast(out, t);
 
             builder.CreateStore(a, out);
+        }
+        else if( type == Type::List ) {
+            llvm::Value* out = value(builder);
+            out = builder.CreateInBoundsGEP(out, index);
+            builder.CreateMemCpy(out, a, width*sizeof(List::Element), 16);
         }
         else {
             builder.CreateStore(a, v);
@@ -591,11 +635,8 @@ struct Fusion {
         if(length != 0) {
             builder.SetInsertPoint(condition);
             iterator = builder.CreatePHI(builder.getInt64Ty(), 2);
-            ((llvm::PHINode*)iterator)->addIncoming(initial, header);
             sequenceI = builder.CreatePHI(llvmType(Type::Integer, width), 2);
-            ((llvm::PHINode*)sequenceI)->addIncoming(seqI, header);
             sequenceD = builder.CreatePHI(llvmType(Type::Double, width), 2);
-            ((llvm::PHINode*)sequenceD)->addIncoming(seqD, header);
         }
         else {
             iterator = initial;
@@ -1090,23 +1131,31 @@ struct Fusion {
                 registers[reg].Set(builder, nlen);
             } break;
 
+            case TraceOpCode::rep:
+            {
+                _error("rep NYI");
+            } break;
+
             case TraceOpCode::brcast:
             {
+                FunctionBuilder& b = headerBuilder;
                 if(jit.code[ir.a].out.length == 1) {
-                    llvm::Value* e = builder.CreateLoad( RawLoad(builder, ir.a) );
+                    llvm::Value* e = b.CreateLoad( RawLoad(b, ir.a) );
                     llvm::Value* r = llvm::UndefValue::get(llvmType(ir.type, width));
                     for(int32_t i = 0; i < width; i++) {
-                        r = builder.CreateInsertElement(r, e, builder.getInt32(i)); 
+                        r = b.CreateInsertElement(r, e, b.getInt32(i)); 
                     }
                     outs[reg] = r;
                 }
                 else {
-                    llvm::Value* v = RawLoad(builder, ir.a);
+                    llvm::Value* v = RawLoad(b, ir.a);
+                    llvm::Value* len = b.CreateLoad(RawLoad(b, ir.b));
+                    llvm::Value* idx = builder.CreateURem(sequenceI, b.getVector(len, width));
                     // scalarize the broadcast...
                     llvm::Value* r = llvm::UndefValue::get(llvmType(ir.type, width));
                     for(uint32_t i = 0; i < width; i++) {
                         llvm::Value* ii = builder.getInt32(i);
-                        llvm::Value* j = builder.CreateExtractElement(sequenceI, ii);
+                        llvm::Value* j = builder.CreateExtractElement(idx, ii);
                         j = builder.CreateLoad(builder.CreateGEP(v, j));
                         r = builder.CreateInsertElement(r, j, ii);
                     }
@@ -1304,12 +1353,18 @@ struct Fusion {
             builder.CreateBr(body);
         }
         else {
+            llvm::Value* initial = builder.getInt64(0);
+            
             llvm::BasicBlock* bottom = builder.GetInsertBlock();
             llvm::Value* increment = builder.CreateAdd(iterator, builder.getInt64(width));
+            
+            ((llvm::PHINode*)iterator)->addIncoming(initial, headerBuilder.GetInsertBlock());
             ((llvm::PHINode*)iterator)->addIncoming(increment, bottom);
             llvm::Value* sI = builder.CreateAdd(sequenceI, widthI);
+            ((llvm::PHINode*)sequenceI)->addIncoming(seqI, headerBuilder.GetInsertBlock());
             ((llvm::PHINode*)sequenceI)->addIncoming(sI, bottom);
             llvm::Value* sD = builder.CreateFAdd(sequenceD, widthD);
+            ((llvm::PHINode*)sequenceD)->addIncoming(seqD, headerBuilder.GetInsertBlock());
             ((llvm::PHINode*)sequenceD)->addIncoming(sD, bottom);
             builder.CreateBr(condition);
 
@@ -1419,21 +1474,13 @@ struct TraceCompiler {
         builder.SetInsertPoint(EntryBlock);
         builder.CreateBr(HeaderBlock);
 
+        InnerBlock->eraseFromParent();
+
         builder.SetInsertPoint(EndBlock);
         builder.CreateRet(builder.CreateLoad(result_var));
 
         //function->dump();
-        S->verifierFPM->run(*function);
-        //function->dump();
         S->FPM->run(*function);
-        // inline functions
-        /*for(size_t i = 0; i < calls.size(); ++i) {
-            llvm::InlineFunctionInfo ifi;
-            if( calls[i]->getParent() )
-                llvm::InlineFunction(calls[i], ifi, true);
-        }
-        S->FPM->run(*function);*/
-        //S->PM->run(*S->M); 
         //function->dump();
 
         return function;
@@ -1472,18 +1519,17 @@ struct TraceCompiler {
 
     Fusion* StartFusion(JIT::IR ir) {
         llvm::Value* length = 0;
-        size_t width = 4; 
+        size_t width = std::min((size_t)4, std::max((size_t)1, (size_t)thread.state.specializationLength)); 
 
         JIT::IRRef len = ir.in.length; 
         if(jit.code[len].op == TraceOpCode::constant &&
-                ((Integer const&)jit.constants[jit.code[len].a])[0] <= 16) {
+                ((Integer const&)jit.constants[jit.code[len].a])[0] <= thread.state.specializationLength) {
             length = 0;
             Integer const& v = (Integer const&)jit.constants[jit.code[len].a];
             width = v[0];
         } 
         else {
             length = builder.CreateLoad(value(ir.in.length));
-            width = 4;
         }
         Fusion* fusion = new Fusion(S, jit, FunctionBuilder( function ), registers, length, width, len);
         fusion->Open(InnerBlock);
@@ -1549,7 +1595,7 @@ struct TraceCompiler {
             llvm::Value* length =
                 builder.CreateLoad(value(jit.code[index].out.length));
 
-            llvm::Value* r = Save( Call(std::string("UNBOX_")+Type::toString(type), tmp, length) );
+            llvm::Value* r = builder.Call(std::string("UNBOX_")+Type::toString(type), tmp, length);
 
             //if(type == Type::List) {
                 //r = builder.CreatePointerCast(r, S->value_type->getPointerTo());
@@ -1578,10 +1624,10 @@ struct TraceCompiler {
         Type::Enum type = jit.code[index].type;
         if(Unboxed(type)) {
             r = ValueCoerce( 
-                    Save( Call(std::string("BOX_")+Type::toString(type),
+                    builder.Call(std::string("BOX_")+Type::toString(type),
                         r, builder.CreateLoad(value(jit.code[index].out.length)), 
                         builder.getInt1(isSunk 
-                        && registers[jit.code[index].reg].onheap)) ) );
+                        && registers[jit.code[index].reg].onheap)) ) ;
         }
 
         return r;
@@ -1690,7 +1736,7 @@ struct TraceCompiler {
                 JIT::StackFrame frame = jit.frames[ir.c];
                 llvm::Value* a = value(ir.a);
                 llvm::Value* b = value(ir.b);
-                Call("PUSH",
+                builder.Call("PUSH",
                         BOXED_ARG(a), 
                         builder.getInt64((int64_t)frame.prototype),
                         builder.getInt64((int64_t)frame.returnpc),
@@ -1701,7 +1747,7 @@ struct TraceCompiler {
 
             case TraceOpCode::pop:
             {
-                Call("POP");
+                builder.Call("POP");
             } break;
 
             // Load/Store op codes
@@ -1766,17 +1812,17 @@ struct TraceCompiler {
 
             case TraceOpCode::sload: 
             {
-                reg.Store( builder, ValueCoerce( Call("SLOAD", builder.getInt64(ir.b)) ) );
+                reg.Store( builder, ValueCoerce( builder.Call("SLOAD", builder.getInt64(ir.b)) ) );
             } break;
 
             case TraceOpCode::load: 
             {
                 llvm::Value* a = value(ir.a);
                 if(jit.code[ir.a].type == Type::Environment) {
-                    reg.Store( builder, ValueCoerce( Call("ELOAD", BOXED_ARG(a), value(ir.b)) ) );
+                    reg.Store( builder, ValueCoerce( builder.Call("ELOAD", BOXED_ARG(a), value(ir.b)) ) );
                 }
                 else if(jit.code[ir.a].type == Type::Function) {
-                    reg.Store( builder, ValueCoerce( Call("GET_environment", BOXED_ARG(a)) ) );
+                    reg.Store( builder, ValueCoerce( builder.Call("GET_environment", BOXED_ARG(a)) ) );
                 }
                 else {
                     _error("Unknown load target");
@@ -1786,14 +1832,14 @@ struct TraceCompiler {
             case TraceOpCode::strip:
             {
                 llvm::Value* a = value(ir.a);
-                reg.Store( builder, ValueCoerce( Call("GET_strip", BOXED_ARG(a)) ) );
+                reg.Store( builder, ValueCoerce( builder.Call("GET_strip", BOXED_ARG(a)) ) );
             } break;
 
             case TraceOpCode::attrget:
             {
                 llvm::Value* a = value(ir.a);
                 llvm::Value* b = value(ir.b);
-                reg.Store( builder, ValueCoerce( Call("GET_attr", BOXED_ARG(a), b) ) );
+                reg.Store( builder, ValueCoerce( builder.Call("GET_attr", BOXED_ARG(a), b) ) );
             } break;
 
             case TraceOpCode::unbox:
@@ -1810,43 +1856,43 @@ struct TraceCompiler {
             {
                 llvm::Value* a = value(ir.a);
                 llvm::Value* c = value(ir.c);
-                Call("ESTORE", BOXED_ARG(a), value(ir.b), BOXED_ARG(c)); 
+                builder.Call("ESTORE", BOXED_ARG(a), value(ir.b), BOXED_ARG(c)); 
             } break;
 
             case TraceOpCode::sstore:
             {
                 llvm::Value* c = value(ir.c);
-                Call("SSTORE", builder.getInt64(ir.b), BOXED_ARG(c));
+                builder.Call("SSTORE", builder.getInt64(ir.b), BOXED_ARG(c));
             } break;
             
 
             // Environment op codes
              
             case TraceOpCode::curenv: {
-                reg.Store( builder, ValueCoerce( Call(std::string("curenv")) ) );
+                reg.Store( builder, ValueCoerce( builder.Call(std::string("curenv")) ) );
             } break;
 
             case TraceOpCode::newenv:
             {
-                reg.Store( builder, ValueCoerce( Call("NEW_environment") ) );
+                reg.Store( builder, ValueCoerce( builder.Call("NEW_environment") ) );
             } break;
 
             case TraceOpCode::lenv:
             {
                 llvm::Value* a = value(ir.a);
-                reg.Store( builder, ValueCoerce( Call("GET_lenv", BOXED_ARG(a)) ) ); 
+                reg.Store( builder, ValueCoerce( builder.Call("GET_lenv", BOXED_ARG(a)) ) ); 
             } break;
  
             case TraceOpCode::denv:
             {
                 llvm::Value* a = value(ir.a);
-                reg.Store( builder, ValueCoerce( Call("GET_denv", BOXED_ARG(a)) ) ); 
+                reg.Store( builder, ValueCoerce( builder.Call("GET_denv", BOXED_ARG(a)) ) ); 
             } break;
 
             case TraceOpCode::cenv:
             {
                 llvm::Value* a = value(ir.a);
-                reg.Store( builder, ValueCoerce( Call("GET_call", BOXED_ARG(a)) ) ); 
+                reg.Store( builder, ValueCoerce( builder.Call("GET_call", BOXED_ARG(a)) ) ); 
             } break;
 
             // Length op codes
@@ -1854,21 +1900,9 @@ struct TraceCompiler {
             case TraceOpCode::length: 
             {
                 llvm::Value* a = value(ir.a);
-                reg.Set( builder, Call("LENGTH", BOXED_ARG(a)) );
+                reg.Set( builder, builder.Call("LENGTH", BOXED_ARG(a)) );
             } break;
 
-            case TraceOpCode::alength: 
-            {
-                llvm::Value* a = value(ir.a);
-                reg.Set( builder, Call("ALENGTH", BOXED_ARG(a), value(ir.b)) );
-            } break;
-
-            case TraceOpCode::olength: 
-            {
-                llvm::Value* a = value(ir.a);
-                reg.Set( builder, Call("OLENGTH", BOXED_ARG(a)) ); 
-            } break;
-           
             // Guards
              
             case TraceOpCode::gtrue:
@@ -1884,7 +1918,7 @@ struct TraceCompiler {
                 llvm::Value* a = value(ir.a);
                 llvm::Value* r = builder.CreateICmpEQ(
                     builder.CreatePtrToInt(
-                        Call("GET_prototype", BOXED_ARG(a)) 
+                        builder.Call("GET_prototype", BOXED_ARG(a)) 
                         , builder.getInt64Ty())
                     , builder.getInt64(ir.b));
                 EmitExit(r, index);
@@ -1907,7 +1941,7 @@ struct TraceCompiler {
     
         // emit stack deconstruction code
         for( size_t i = 0; i < snapshot.stack.size(); ++i) {
-                Call("POP");
+                builder.Call("POP");
         } 
     }
 
@@ -1939,7 +1973,7 @@ struct TraceCompiler {
         for(std::map<int64_t, JIT::IRRef>::const_iterator i = snapshot.slots.begin();
                 i != snapshot.slots.end(); ++i) {
             llvm::Value* c = value(i->second);
-            Call("SSTORE", builder.getInt64(i->first), BOXED_ARG(c));
+            builder.Call("SSTORE", builder.getInt64(i->first), BOXED_ARG(c));
         }
 
         // emit stack reconstruction code
@@ -1947,7 +1981,7 @@ struct TraceCompiler {
                 JIT::StackFrame const& frame = snapshot.stack[i];
                 llvm::Value* environment = value(frame.environment);
                 llvm::Value* env = value(frame.env);
-                Call("PUSH",
+                builder.Call("PUSH",
                         BOXED_ARG(environment), 
                         builder.getInt64((int64_t)frame.prototype),
                         builder.getInt64((int64_t)frame.returnpc),
@@ -2056,41 +2090,6 @@ struct TraceCompiler {
             builder.CreateBr(exitBB);
             builder.SetInsertPoint(exitBB);
         }
-    }
-
-    llvm::CallInst* Save(llvm::CallInst* ci) {
-        calls.push_back(ci);
-        return ci;
-    }
-
-    llvm::CallInst* Call(std::string F) {
-        return builder.CreateCall(S->M->getFunction(F), thread_var);
-    }
-
-    llvm::CallInst* Call(std::string F, llvm::Value* A) {
-        return builder.CreateCall2(S->M->getFunction(F), thread_var, A);
-    }
-
-    llvm::CallInst* Call(std::string F, llvm::Value* A, llvm::Value* B) {
-        return builder.CreateCall3(S->M->getFunction(F), thread_var, A, B);
-    }
-
-    llvm::CallInst* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C) {
-        return builder.CreateCall4(S->M->getFunction(F), thread_var, A, B, C);
-    }
-
-    llvm::CallInst* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C, llvm::Value* D) {
-        return builder.CreateCall5(S->M->getFunction(F), thread_var, A, B, C, D);
-    }
-
-    llvm::CallInst* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C, llvm::Value* D, llvm::Value* E) {
-        llvm::Value* args[] = { thread_var, A, B, C, D, E };
-        return builder.CreateCall(S->M->getFunction(F), args);
-    }
-
-    llvm::CallInst* Call(std::string F, llvm::Value* A, llvm::Value* B, llvm::Value* C, llvm::Value* D, llvm::Value* E, llvm::Value* G, llvm::Value* H, llvm::Value* I) {
-        llvm::Value* args[] = { thread_var, A, B, C, D, E, G, H, I };
-        return builder.CreateCall(S->M->getFunction(F), args);
     }
 
 };

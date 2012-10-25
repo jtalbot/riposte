@@ -32,6 +32,8 @@ void JIT::start_recording(Thread& thread, Instruction const* startPC, Environmen
     rootTrace = root;
     this->dest = dest;
 
+    noRegisterAllocation = !thread.state.registerAllocate;
+
     // insert empty and scalar shapes.
     Emit( makeConstant(Integer::c(0)) );
     Emit( makeConstant(Integer::c(1)) );
@@ -153,7 +155,7 @@ JIT::IRRef JIT::DecodeNA(Var a) {
     //if(a.mayHaveNA)
     //    return Emit( IR(TraceOpCode::decodena, a.v, Type::Logical, a.s, a.s) );
     //else
-        return Emit( IR(TraceOpCode::brcast, FalseRef, Type::Logical, a.s, a.s) );
+        return Emit( IR(TraceOpCode::brcast, FalseRef, 1, Type::Logical, a.s, a.s) );
 }
 
 JIT::Var JIT::Encode(IRRef v, IRRef na, bool mayHaveNA) {
@@ -203,7 +205,7 @@ JIT::Var JIT::EmitBroadcast( Var a, Shape target ) {
     if( a.s == target )
         return a;
 
-    return Var(trace, Emit( IR( TraceOpCode::brcast, a.v, a.type, target, target ) ), a.mayHaveNA );
+    return Var(trace, Emit( IR( TraceOpCode::brcast, a.v, a.s.length, a.type, target, target ) ), a.mayHaveNA );
 }
 
 JIT::Var JIT::EmitRep( Var l, Var e, Shape target ) {
@@ -725,7 +727,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             Shape s = SpecializeValue(len, l.v);
                 
             IRRef r = Emit( IR( TraceOpCode::random, Type::Double, s, s) );
-            IRRef q = Emit( IR( TraceOpCode::brcast, FalseRef, Type::Logical, s, s) );
+            IRRef q = Emit( IR( TraceOpCode::brcast, FalseRef, 1, Type::Logical, s, s) );
                   r = Emit( IR( TraceOpCode::encode, r, q, Type::Double, s, s) );
             store(thread, Var( trace, r, false ), inst.c); 
         }   break;
@@ -1269,10 +1271,10 @@ public:
                ir.type == Type::Logical ||
                ir.type == Type::Character ||
                ir.type == Type::List)
-                printf(" :=  %.2s -> [%.3s x %.2s]", 
+                printf(" :=  %s -> [%.3s x %s]", 
                     In(ir.in.length).c_str(), Type::toString(ir.type), In(ir.out.length).c_str());
             else
-                printf(" :=  %.2s ->  %.3s      ", In(ir.in.length).c_str(), Type::toString(ir.type));
+                printf(" :=  %s ->  %.3s      ", In(ir.in.length).c_str(), Type::toString(ir.type));
 
         }
         else
@@ -1318,11 +1320,9 @@ public:
             case TraceOpCode::strip:
             case TraceOpCode::box:
             case TraceOpCode::unbox:
-            case TraceOpCode::brcast:
             case TraceOpCode::length:
             case TraceOpCode::gtrue:
             case TraceOpCode::gfalse: 
-            case TraceOpCode::olength: 
             case TraceOpCode::lenv: 
             case TraceOpCode::denv: 
             case TraceOpCode::cenv: 
@@ -1332,6 +1332,7 @@ public:
                 {
                     std::cout << "\t " << In(ir.a) << "\t \t";
                 } break;
+            case TraceOpCode::brcast:
             case TraceOpCode::attrget:
             case TraceOpCode::glength:
             case TraceOpCode::gvalue:
@@ -1343,7 +1344,6 @@ public:
             case TraceOpCode::seq:
             case TraceOpCode::gather1:
             case TraceOpCode::gather:
-            case TraceOpCode::alength:
                 BINARY_BYTECODES(CASE)
                 {
                     std::cout << "\t " << In(ir.a) << "\t " << In(ir.b) << "\t";

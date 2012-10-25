@@ -178,7 +178,7 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                     if(code[ir.b].op == TraceOpCode::brcast
                             && code[code[ir.b].a].op == TraceOpCode::constant
                             && abs(((Integer const&)constants[code[code[ir.b].a].a])[0]) == 1)
-                        ir = IR(TraceOpCode::brcast, 0, Type::Integer, ir.in, ir.out);
+                        ir = IR(TraceOpCode::brcast, 0, 1, Type::Integer, ir.in, ir.out);
                 }
                 break;
 
@@ -206,14 +206,14 @@ JIT::IR JIT::StrengthReduce(IR ir) {
 
             case TraceOpCode::eq:
                 if(ir.a == ir.b) {
-                    ir = IR(TraceOpCode::brcast, TrueRef, Type::Integer, ir.in, ir.out);
+                    ir = IR(TraceOpCode::brcast, TrueRef, 1, Type::Integer, ir.in, ir.out);
                     retry = true;
                 }
                 break;
 
             case TraceOpCode::neq:
                 if(ir.a == ir.b) {
-                    ir = IR(TraceOpCode::brcast, FalseRef, Type::Integer, ir.in, ir.out);
+                    ir = IR(TraceOpCode::brcast, FalseRef, 1, Type::Integer, ir.in, ir.out);
                     retry = true;
                 }
                 break;
@@ -230,7 +230,7 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                 if(code[ir.a].out.length == 1
                         && code[ir.b].op == TraceOpCode::brcast
                         && code[ir.b].a == 0) {
-                    ir = IR(TraceOpCode::brcast, ir.a, ir.type, ir.in, ir.out);
+                    ir = IR(TraceOpCode::brcast, ir.a, 1, ir.type, ir.in, ir.out);
                     retry = true;
                 }
                 if(ir.b == 0 && code[ir.a].op == TraceOpCode::seq) {
@@ -284,7 +284,7 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                 else if(code[ir.a].op == TraceOpCode::seq ||
                         code[ir.a].op == TraceOpCode::random ||
                         code[ir.a].op == TraceOpCode::rep) {
-                    ir = IR(TraceOpCode::brcast, FalseRef, Type::Logical, ir.in, ir.out);
+                    ir = IR(TraceOpCode::brcast, FalseRef, 1, Type::Logical, ir.in, ir.out);
                     retry = true;
                 }
                 break;
@@ -372,12 +372,16 @@ JIT::IRRef JIT::Insert(
     //  length * op cost + cost of inputs (if CSEd)
     size_t mysize = ir.out.traceLength * (ir.type == Type::Logical ? 1 : 8);
     double csecost = mysize * memcost(mysize);
-    double nocsecost = Opcost(code, ir);
+    double nocsecost = Opcost(code, ir, false);
 
     ir.cost = std::min(csecost, nocsecost);
 
     std::tr1::unordered_map<IR, IRRef>::const_iterator i = cse.find(ir);
-    if(csecost < nocsecost && i != cse.end()) {
+
+    //if(i != cse.end() && csecost >= nocsecost)
+    //    printf("%s: %f %f\n", TraceOpCode::toString(ir.op), csecost, nocsecost);
+
+    if(i != cse.end() && ((csecost < nocsecost && thread.state.cseLevel == 2) || (nocsecost > 0 && thread.state.cseLevel == 1))) {
         //printf("%d: Found a CSE for %s\n", code.size(), TraceOpCode::toString(ir.op));
         //printf("For %s => %f <= %f\n", TraceOpCode::toString(ir.op), csecost, nocsecost);
         return i->second;
@@ -407,6 +411,7 @@ void JIT::RunOptimize(Thread& thread) {
     std::tr1::unordered_map<IR, IRRef> cse;
 
     std::vector<IRRef> forward(code.size(), 0);
+    std::vector<IRRef> tforward(code.size(), 0);
     forward[0] = 0;
     forward[1] = 1;
     forward[2] = 2;
@@ -418,22 +423,35 @@ void JIT::RunOptimize(Thread& thread) {
         IR& ir = code[i];
         ir = Forward(ir, forward);
         IRRef fwd = Optimize(thread, i);
+        IRRef tfwd = fwd;
 
         if(fwd == i) {
 
             size_t mysize = ir.out.traceLength * (ir.type == Type::Logical ? 1 : 8);
             double csecost = mysize * memcost(mysize);
-            double nocsecost = Opcost(code, ir);
+            double nocsecost = Opcost(code, ir, true);
 
             ir.cost = std::min(csecost, nocsecost);
 
             std::tr1::unordered_map<IR, IRRef>::const_iterator j = cse.find(ir);
-            if(j != cse.end() &&
-                csecost < nocsecost &&
-                (ir.op == TraceOpCode::constant ||
-                    i < Loop || j->second > Loop)) {
-                ir.op = TraceOpCode::nop;
-                fwd = j->second;
+
+            if(j == cse.end()) {
+                IR tir = Forward(ir, tforward);
+                j = cse.find(tir);
+            }
+
+            if(j != cse.end())
+            { 
+                if((csecost < nocsecost && thread.state.cseLevel == 2) || (nocsecost > 0 && thread.state.cseLevel == 1)
+/*&&
+                    (ir.op == TraceOpCode::constant ||
+                        i < Loop || j->second > Loop)*/) {
+
+                    ir.op = TraceOpCode::nop;
+                    fwd = j->second;
+                }
+                if(nocsecost > 0)
+                    tfwd = j->second;
             }
             else {
                 cse[ir] = i;
@@ -441,10 +459,17 @@ void JIT::RunOptimize(Thread& thread) {
         }
 
         forward[i] = fwd;
+        tforward[i] = tfwd;
     }
+
+    // forward the snapshots
+    for(size_t i = 0; i < dest->exits.size(); ++i) {
+        ForwardSnapshot(dest->exits[i].snapshot, forward);
+    }
+
 }
 
-double JIT::Opcost(std::vector<IR>& code, IR ir) {
+double JIT::Opcost(std::vector<IR>& code, IR ir, bool aggressive) {
         switch(ir.op) {
             // Things that we can't CSE, we give a cost of zero to.
             case TraceOpCode::random:
@@ -476,14 +501,11 @@ double JIT::Opcost(std::vector<IR>& code, IR ir) {
             case TraceOpCode::gvalue:
             case TraceOpCode::scatter:
             case TraceOpCode::scatter1:
-            case TraceOpCode::brcast:
             case TraceOpCode::phi:
             case TraceOpCode::length:
             case TraceOpCode::encode:
             case TraceOpCode::decodena:
             case TraceOpCode::decodevl:
-            case TraceOpCode::olength:
-            case TraceOpCode::alength:
             case TraceOpCode::lenv:
             case TraceOpCode::denv:
             case TraceOpCode::cenv:
@@ -516,6 +538,13 @@ double JIT::Opcost(std::vector<IR>& code, IR ir) {
 
             case TraceOpCode::gather:
                 return ir.out.traceLength * memcost(code[ir.a].out.traceLength) + code[ir.b].cost;
+                break;
+
+            case TraceOpCode::brcast:
+                if(ir.b == 1)
+                    return 0.1 + code[ir.a].cost;
+                else
+                    return aggressive ? 20000000000000000 : 0;
                 break;
 
             default:
@@ -986,19 +1015,17 @@ JIT::IRRef JIT::EmitOptIR(
             } break;
 
             case TraceOpCode::strip:
-            case TraceOpCode::brcast:
-            case TraceOpCode::olength:
             UNARY_FOLD_SCAN_BYTECODES(CASE) {
                 ir.a = forward[ir.a];
                 return Insert(thread, code, cse, snapshot, ir);
             } break;
 
+            case TraceOpCode::brcast:
             case TraceOpCode::attrget:
             case TraceOpCode::reshape:
             case TraceOpCode::gather1:
             case TraceOpCode::gather:
             case TraceOpCode::rep:
-            case TraceOpCode::alength:
             BINARY_BYTECODES(CASE)
             {
                 ir.a = forward[ir.a]; ir.b = forward[ir.b];
@@ -1115,13 +1142,13 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
                 MARK(ir.a); MARK(ir.b); MARK(ir.c);
             } break;
 
+            case TraceOpCode::brcast:
             case TraceOpCode::attrget:
             case TraceOpCode::encode:
             case TraceOpCode::reshape:
             case TraceOpCode::gather1:
             case TraceOpCode::gather:
             case TraceOpCode::rep:
-            case TraceOpCode::alength:
             BINARY_BYTECODES(CASE) {
                 MARK(ir.a); MARK(ir.b);
             } break;
@@ -1135,8 +1162,6 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
             case TraceOpCode::length:
             case TraceOpCode::decodevl:
             case TraceOpCode::decodena:
-            case TraceOpCode::brcast:
-            case TraceOpCode::olength:
             case TraceOpCode::cenv:
             case TraceOpCode::denv:
             case TraceOpCode::lenv:

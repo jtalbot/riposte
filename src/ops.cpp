@@ -51,6 +51,7 @@ int64_t LENGTH(Thread& thread, Value v) {
 }
 
 extern "C"
+__attribute__((always_inline))
 Value SLOAD(Thread& thread, int64_t i) {
     return (thread.registers+DEFAULT_NUM_REGISTERS)[i];
 }
@@ -61,6 +62,7 @@ Value ELOAD(Thread& thread, REnvironment env, int8_t** i) {
 }
 
 extern "C"
+__attribute__((always_inline))
 void SSTORE(Thread& thread, int64_t i, Value v) {
     (thread.registers+DEFAULT_NUM_REGISTERS)[i] = v;
 }
@@ -78,8 +80,9 @@ bool GTYPE(Thread& thread, Value value, int64_t type) {
 
 extern "C"
 double const* UNBOX_double(Thread& thread, Value& a, int64_t length) {
-    if(!a.isDouble() || a.length != length)
+    if(!a.isDouble() || a.length != length) {
         return 0;
+    }
     else {
         return ((Double const&)a).v();
     }
@@ -227,17 +230,7 @@ void SET_attr(Thread& thread, Value a, int8_t** name, Value v) {
 }
 
 extern "C"
-int64_t ALENGTH(Thread& thread, Value a, int8_t** name) {
-    // Should inline this check so we can avoid a guard when we know the result type.
-    if(a.isObject()) {
-        Value const& v = ((Object const&)a).get((String)name[0]);
-        return v.isVector() ? v.length : 1;
-    }
-    else
-        return 0;
-}
-
-extern "C"
+__attribute__((always_inline))
 Value GET_strip(Thread& thread, Value a) {
     return ((Object const&)a).base();
 }
@@ -245,12 +238,6 @@ Value GET_strip(Thread& thread, Value a) {
 extern "C"
 Value SET_strip(Thread& thread, Value a) {
     _error("Can't set object base yet");
-}
-
-extern "C"
-int64_t OLENGTH(Thread& thread, Value a) {
-    Value const& v = ((Object const&)a).base();
-    return v.isVector() ? v.length : 1;
 }
 
 void* MALLOC(int64_t length, size_t elementsize) {
@@ -441,26 +428,31 @@ void SET_call(Thread& thread, REnvironment env, Value call) {
 }
 
 extern "C"
+__attribute__((always_inline))
 double Riposte_random(Thread& thread) {
     return rand() / (double)RAND_MAX;
 }
 
 extern "C"
+__attribute__((always_inline))
 double sin(double d) {
     return ::sin(d);
 }
 
 extern "C"
+__attribute__((always_inline))
 double pow(double d, double e) {
     return ::pow(d, e);
 }
 
 extern "C"
+__attribute__((always_inline))
 double log(double d) {
     return ::log(d);
 }
 
 extern "C"
+__attribute__((always_inline))
 double exp(double d) {
     return ::exp(d);
 }

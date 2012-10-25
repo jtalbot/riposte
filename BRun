@@ -9,7 +9,7 @@ function bench {
     do
         echo -n $2,
         echo -n $M,
-        Rscript bbenchmarks/$1.R $3 $M
+        #Rscript bbenchmarks/$1.R $3 $M
         echo -n ,
         #bin/riposte -i -f bbenchmarks/$1.R --args $3 $M
         #echo -n ,
@@ -35,10 +35,10 @@ function genbench {
 
 
 echo "benchmark,M,R,Riposte,C"
+bench colsum "Column Sum" $((SCALE*1000000))
 bench americanPutOption "American Put" $((SCALE*100000))
 bench binarysearch "Binary Search" $((SCALE*5000))
 bench black_scholes "Black-Scholes Put" $((SCALE*50000))
-bench colsum "Column Sum" $((SCALE*1000000))
 bench fib "Fibonacci" $((SCALE*5000000))
 bench mandelbrot "Mandelbrot" $((SCALE*1000000))
 bench meanShift "Mean Shift" $((SCALE*200000))
