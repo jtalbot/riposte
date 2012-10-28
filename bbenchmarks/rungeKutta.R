@@ -23,11 +23,11 @@ rungeKatta <-function(i, h, N) {
 		k3 <- h*secondary(t + 0.5*h, y + 0.5*k2)
 		k4 <- h*secondary(t + 0.5*h, y + k3)
 		y <- y + (1.0/6.0)*(k1+k2+k3+k4)
-		t <- t + h
+		t <- t + 1
 	}
 	return(y)
 }
 
-cat(system.time(rungeKatta(1:M,1,N/M))[[3]])
+cat(system.time(rungeKatta(1:M,4,N/M))[[3]])
 
 }

@@ -63,7 +63,10 @@ struct LLVMState {
         M = ParseBitcodeFile(buffer.get(), *C);
 
         std::string err;
-        EE = llvm::EngineBuilder(M).setErrorStr(&err).setEngineKind(llvm::EngineKind::JIT).create();
+        EE = llvm::EngineBuilder(M)
+            .setErrorStr(&err)
+            .setEngineKind(llvm::EngineKind::JIT)
+            .create();
         if (!EE) {
             _error(err);
         }
@@ -80,7 +83,7 @@ struct LLVMState {
         FPM->add(llvm::createVerifierPass());
         
         // Promote newenvas to registers.
-        /*FPM->add(llvm::createPromoteMemoryToRegisterPass());
+        FPM->add(llvm::createPromoteMemoryToRegisterPass());
         // Also promote aggregates like structs....
         FPM->add(llvm::createScalarReplAggregatesPass());
         
@@ -103,7 +106,7 @@ struct LLVMState {
         // Simplify the control flow graph (deleting unreachable blocks, etc).
         FPM->add(llvm::createCFGSimplificationPass());
         FPM->add(llvm::createPromoteMemoryToRegisterPass());
-      */
+      
         FPM->doInitialization();
 
         PM = new llvm::PassManager();
@@ -985,7 +988,8 @@ struct Fusion {
                     } break;
                     case Type::Logical: {
                         llvm::Value* in = ToInt1(Load(builder, ir.a));
-                        SCALARIZE1(in, SIToFP, builder.getDoubleTy()); 
+                        outs[reg] = builder.CreateSelect(in, onesD, zerosD);
+                        //SCALARIZE1(in, SIToFP, builder.getDoubleTy()); 
                     } break;
                     case Type::Double: IDENTITY; break;
                     default: _error("Unexpected cast"); break;
@@ -1481,6 +1485,8 @@ struct TraceCompiler {
 
         //function->dump();
         S->FPM->run(*function);
+        //builder.InlineCalls();
+        //S->FPM->run(*function);
         //function->dump();
 
         return function;
@@ -1625,9 +1631,7 @@ struct TraceCompiler {
         if(Unboxed(type)) {
             r = ValueCoerce( 
                     builder.Call(std::string("BOX_")+Type::toString(type),
-                        r, builder.CreateLoad(value(jit.code[index].out.length)), 
-                        builder.getInt1(isSunk 
-                        && registers[jit.code[index].reg].onheap)) ) ;
+                        r, builder.CreateLoad(value(jit.code[index].out.length))) );
         }
 
         return r;

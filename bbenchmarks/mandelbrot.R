@@ -5,7 +5,7 @@ library("compiler")
 enableJIT(3)
 
 M <- as.integer(commandArgs(TRUE)[[2]])
-N <- as.integer(commandArgs(TRUE)[[1]])/M
+N <- as.integer(as.integer(commandArgs(TRUE)[[1]])/M)
 
 #adapted from https://github.com/ispc/ispc/tree/master/examples/mandelbrot
 width <- as.integer(sqrt(M))

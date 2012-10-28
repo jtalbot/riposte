@@ -122,58 +122,35 @@ Value const* UNBOX_list(Thread& thread, Value& a, int64_t length) {
 }
 
 extern "C"
-Value BOX_double(Thread& thread, double* d, int64_t len, bool takeOwnership) {
-    if(len == 1) {
-        Double a(1);
-        a[0] = *d;
-        return a;
-    }
-
-    if(false/*takeOwnership*/) {
-        Double a;
-        Value::Init(a, Type::Double, len);
-        a.p = d;
-        return a;
-    }
-    else {
-        Double a(len);
-        memcpy(a.v(), d, len*sizeof(double));
-        return a;
-    }
+Value BOX_double(Thread& thread, double* d, int64_t len) {
+    Double a(len);
+    memcpy(a.v(), d, len*sizeof(double));
+    return a;
 }
 
 extern "C"
-Value BOX_integer(Thread& thread, int64_t* d, int64_t len, bool takeOwnership) {
+Value BOX_integer(Thread& thread, int64_t* d, int64_t len) {
     Integer a(len);
     memcpy(a.v(), d, len*sizeof(int64_t));
     return a;
 }
 
 extern "C"
-Value BOX_logical(Thread& thread, int8_t* d, int64_t len, bool takeOwnership) {
+Value BOX_logical(Thread& thread, int8_t* d, int64_t len) {
     Logical a(len);
     memcpy(a.v(), d, len*sizeof(int8_t));
     return a;
 }
 
 extern "C"
-Value BOX_character(Thread& thread, int8_t** d, int64_t len, bool takeOwnership) {
-    if(len <= 16) {
-        Character a(len);
-        memcpy(a.v(), d, len*sizeof(int8_t*));
-        return a;
-    }
-    else {
-        Value a;
-        Value::Init(a, Type::Character, len);
-        a.p = d;
-        return a;
-    }
+Value BOX_character(Thread& thread, int8_t** d, int64_t len) {
+    Character a(len);
+    memcpy(a.v(), d, len*sizeof(int8_t*));
+    return a;
 }
 
 extern "C"
-Value BOX_list(Thread& thread, Value* d, int64_t len, bool takeOwnership) {
-    static int count = 0;
+Value BOX_list(Thread& thread, Value* d, int64_t len) {
     List a(len);
     memcpy(a.v(), d, len*sizeof(List::Element));
     return a;

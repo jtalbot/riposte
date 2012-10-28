@@ -30,6 +30,7 @@
 		_(load, "load", ___) /* loads are type guarded */ \
         _(store, "store", ___) \
         _(glength, "glength", ___) \
+        _(recycle, "recycle", ___) \
         _(gvalue, "gvalue", ___) \
         _(length, "length", ___) \
         _(encode, "encode", ___) \

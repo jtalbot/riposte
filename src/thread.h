@@ -10,7 +10,7 @@ static inline int fetch_and_add(int64_t * variable, int64_t value) {
 			"lock; xaddq %%rax, %2\n"
 			:"=a" (value)                   //Output
 			: "a" (value), "m" (*variable)  //Input
-			:"memory" );
+            :"memory" );
 	return value;
 }
 
