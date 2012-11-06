@@ -413,7 +413,7 @@ public:
     void MarkSnapshot(IRRef i, Snapshot const& snapshot);
     void MarkLiveness(IRRef i, IR ir);
 
-    void StrengthenGuards(size_t specializationLength);
+    void StrengthenGuards(int64_t specializationLength);
 
     static IR Forward(IR ir, std::vector<IRRef> const& forward);
     void ForwardSnapshot(Snapshot& s, std::vector<IRRef> const& forward);

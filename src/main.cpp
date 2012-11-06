@@ -157,7 +157,7 @@ int main(int argc, char** argv)
     bool echo = true;
     int threads = 1; 
     bool jit = true;
-    size_t specializationLength = 4;
+    int64_t specializationLength = 4;
     size_t cseLevel = 2;
     bool registerAllocate = true;
 

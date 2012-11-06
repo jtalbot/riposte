@@ -381,7 +381,9 @@ JIT::IRRef JIT::Insert(
     //if(i != cse.end() && csecost >= nocsecost)
     //    printf("%s: %f %f\n", TraceOpCode::toString(ir.op), csecost, nocsecost);
 
-    if(i != cse.end() && ((csecost < nocsecost && thread.state.cseLevel == 2) || (nocsecost > 0 && thread.state.cseLevel == 1))) {
+    if(i != cse.end() && ((csecost < nocsecost && thread.state.cseLevel == 2) || (nocsecost > 0 && thread.state.cseLevel == 1)
+                || (nocsecost >= 10000000000000 && thread.state.cseLevel == 0))
+        ) {
         //printf("%d: Found a CSE for %s\n", code.size(), TraceOpCode::toString(ir.op));
         //printf("For %s => %f <= %f\n", TraceOpCode::toString(ir.op), csecost, nocsecost);
         return i->second;
@@ -443,6 +445,7 @@ void JIT::RunOptimize(Thread& thread) {
             if(j != cse.end())
             { 
                 if((csecost < nocsecost && thread.state.cseLevel == 2) || (nocsecost > 0 && thread.state.cseLevel == 1)
+                || (nocsecost >= 10000000000000 && thread.state.cseLevel == 0)
 /*&&
                     (ir.op == TraceOpCode::constant ||
                         i < Loop || j->second > Loop)*/) {

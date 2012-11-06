@@ -132,7 +132,7 @@ public:
 
 	bool verbose;
 	bool jitEnabled;
-    size_t specializationLength;
+    int64_t specializationLength;
     size_t cseLevel;  // 0 = no CSE, 1 = always CSE, 2 = cost-driven CSE (default)
 	bool registerAllocate;
     bool deferredEnabled;

@@ -8,7 +8,7 @@ class GuardPass {
     std::map<JIT::IRRef, JIT::IRRef> eq;
     std::vector<JIT::IRRef> forward;
 
-    size_t specializationLength;
+    int64_t specializationLength;
 
     JIT::IRRef substitute(JIT::IRRef i) {
         JIT::IR& ir = code[i];
@@ -96,50 +96,70 @@ class GuardPass {
 
 
 public:
-    GuardPass(std::vector<JIT::IR>& code, std::vector<Value> const& constants, size_t specializationLength)
+    GuardPass(std::vector<JIT::IR>& code, std::vector<Value> const& constants, int64_t specializationLength)
         : code(code), constants(constants), specializationLength(specializationLength) {}
 
     void run() {
-        // find lengths that are equal
-        for(JIT::IRRef j = 0; j < code.size(); ++j) {
-            eval(j);
-        }
 
-        // substitute equal lengths and despecialize 
-        std::vector<JIT::IRRef> forward(code.size(),0);
-        forward[0] = 0;
-        forward[1] = 1;
-        forward[2] = 2;
-        forward[3] = 3;
+        if(specializationLength >= 0) {
+            // find lengths that are equal
+            for(JIT::IRRef j = 0; j < code.size(); ++j) {
+                eval(j);
+            }
 
-        std::set<JIT::IRRef> reshaped;
+            // substitute equal lengths and despecialize 
+            std::vector<JIT::IRRef> forward(code.size(),0);
+            forward[0] = 0;
+            forward[1] = 1;
+            forward[2] = 2;
+            forward[3] = 3;
 
-        for(JIT::IRRef j = 0; j < code.size(); ++j) {
-            
-            JIT::IR& ir = code[j];
-            ir = JIT::Forward(ir, forward);
+            std::set<JIT::IRRef> reshaped;
 
-            forward[j] = substitute(j);
-        
-            // mark all reshaped lengths as not specializable.
-            if(ir.op == TraceOpCode::reshape) {
-                if(code[ir.a].op == TraceOpCode::glength || code[ir.a].op == TraceOpCode::gvalue)
-                    reshaped.insert(ir.a);
-                if(code[ir.b].op == TraceOpCode::glength || code[ir.b].op == TraceOpCode::gvalue)
-                    reshaped.insert(ir.b);
+            for(JIT::IRRef j = 0; j < code.size(); ++j) {
+
+                JIT::IR& ir = code[j];
+                ir = JIT::Forward(ir, forward);
+
+                forward[j] = substitute(j);
+
+                // mark all reshaped lengths as not specializable.
+                if(ir.op == TraceOpCode::reshape) {
+                    if(code[ir.a].op == TraceOpCode::glength || code[ir.a].op == TraceOpCode::gvalue)
+                        reshaped.insert(ir.a);
+                    if(code[ir.b].op == TraceOpCode::glength || code[ir.b].op == TraceOpCode::gvalue)
+                        reshaped.insert(ir.b);
+                }
+            }
+
+            // despecialize
+            for(JIT::IRRef j = 0; j < code.size(); ++j) {
+                JIT::IR& ir = code[j];
+                ir = JIT::Forward(ir, forward);
+                forward[j] = despecialize(j, reshaped.find(j) != reshaped.end());
             }
         }
+        else {
+            /*std::vector<JIT::IRRef> forward(code.size(),0);
+            forward[0] = 0;
+            forward[1] = 1;
+            forward[2] = 2;
+            forward[3] = 3;
 
-        // despecialize
-        for(JIT::IRRef j = 0; j < code.size(); ++j) {
-            JIT::IR& ir = code[j];
-            ir = JIT::Forward(ir, forward);
-            forward[j] = despecialize(j, reshaped.find(j) != reshaped.end());
+            for(JIT::IRRef j = 0; j < code.size(); ++j) {
+                JIT::IR& ir = code[j];
+                ir = JIT::Forward(ir, forward);
+                forward[j] = j;
+                if(ir.op == TraceOpCode::glength)
+                    ir.op = TraceOpCode::length;
+                if(ir.op == TraceOpCode::gvalue)
+                    forward[j] = ir.a;
+            }*/
         }
     }
 };
 
-void JIT::StrengthenGuards(size_t specializationLength) {
+void JIT::StrengthenGuards(int64_t specializationLength) {
     GuardPass pass(code, constants, specializationLength);
     pass.run();
 }

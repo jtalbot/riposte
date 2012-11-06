@@ -27,7 +27,7 @@ void JIT::AssignRegister(size_t index) {
             for (std::multimap<Register, size_t>::iterator it = ret.first; it != ret.second; ++it) {
                 if(it->second == -ir.reg) {
                     ir.reg = it->second;
-                    freeRegisters.erase(it); 
+                    freeRegisters.erase(it);
                     return;
                 }
             }

@@ -1525,14 +1525,20 @@ struct TraceCompiler {
 
     Fusion* StartFusion(JIT::IR ir) {
         llvm::Value* length = 0;
-        size_t width = std::min((size_t)4, std::max((size_t)1, (size_t)thread.state.specializationLength)); 
+        int64_t width = std::min((int64_t)4, std::max((int64_t)1, (int64_t)thread.state.specializationLength)); 
 
         JIT::IRRef len = ir.in.length; 
         if(jit.code[len].op == TraceOpCode::constant &&
-                ((Integer const&)jit.constants[jit.code[len].a])[0] <= thread.state.specializationLength) {
-            length = 0;
+            ((Integer const&)jit.constants[jit.code[len].a])[0] <= thread.state.specializationLength) {
             Integer const& v = (Integer const&)jit.constants[jit.code[len].a];
-            width = v[0];
+            //if(v[0] <= 4) {
+                length = 0;
+                width = v[0];
+            /*}
+            else {
+                length = builder.CreateLoad(value(ir.in.length));
+                width = 4;
+            }*/
         } 
         else {
             length = builder.CreateLoad(value(ir.in.length));

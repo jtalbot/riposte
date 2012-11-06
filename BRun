@@ -5,7 +5,7 @@ else
 fi
 
 function bench {
-    for M in 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768 65536 131072 262144
+    for M in 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768 65536
     do
         echo -n $2,
         echo -n $M,
@@ -37,15 +37,15 @@ function genbench {
 
 echo "benchmark,M,R,Riposte,C"
 bench americanPutOption "American Put" $((SCALE*100000))
-bench binarysearch "Binary Search" $((SCALE*12500))
-bench black_scholes "Black-Scholes Put" $((SCALE*20000))
-bench colsum "Column Sum" $((SCALE*1500000))
-bench fib "Fibonacci" $((SCALE*1250000))
-bench mandelbrot "Mandelbrot" $((SCALE*550000))
-bench meanShift "Mean Shift" $((SCALE*200000))
-bench rw "Random Walk" $((SCALE*150000))
-bench zeta "Riemann zeta" $((SCALE*50000))
-bench rungeKutta "Runge-Kutta" $((SCALE*200000))
+bench binarysearch "Binary Search" $((SCALE*4000))
+bench black_scholes "Black-Scholes Put" $((SCALE*15000))
+bench colsum "Column Sum" $((SCALE*500000))
+bench fib "Fibonacci" $((SCALE*750000))
+bench mandelbrot "Mandelbrot" $((SCALE*400000))
+bench meanShift "Mean Shift" $((SCALE*165000))
+bench rw "Random Walk" $((SCALE*100000))
+bench zeta "Riemann zeta" $((SCALE*20000))
+bench rungeKutta "Runge-Kutta" $((SCALE*180000))
 
 #bench phongReflection "Phong model" $((SCALE*50000))
 #bench alphaCompositing "Image compositing" $((SCALE*200000))
