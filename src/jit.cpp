@@ -74,13 +74,13 @@ JIT::IRRef JIT::Emit(IR const& ir, Instruction const* reenter, bool inScope) {
     return i;
 }
 
-JIT::Shape JIT::SpecializeLength(Value const& v, IRRef r) {
+JIT::Shape JIT::SpecializeLength(Value const& v, IRRef r, Instruction const* inst) {
     if(v.isNull()) {
         return Shape::Empty;
     }
     else if(v.isVector()) {
         IRRef c = EmitConstant(Integer::c(v.length)).v;
-        IRRef l = Emit( IR(TraceOpCode::glength, r, c, Type::Integer, Shape::Scalar, Shape::Scalar) );
+        IRRef l = Emit( IR(TraceOpCode::length, r, 0, c, Type::Integer, Shape::Scalar, Shape::Scalar), inst, true );
         return Shape(l, v.length);
     }
     else {
@@ -88,11 +88,11 @@ JIT::Shape JIT::SpecializeLength(Value const& v, IRRef r) {
     }
 }
 
-JIT::Shape JIT::SpecializeValue(Value const& v, IRRef r) {
+JIT::Shape JIT::SpecializeValue(Value const& v, IRRef r, Instruction const* inst) {
     if(v.isInteger() && v.length == 1) {
         int64_t len = ((Integer const&)v)[0];
         IRRef c = EmitConstant(Integer::c(len)).v;
-        IRRef l = Emit( IR(TraceOpCode::gvalue, r, c, Type::Integer, Shape::Scalar, Shape::Scalar) );
+        IRRef l = Emit( IR(TraceOpCode::length, r, 0, c, Type::Integer, Shape::Scalar, Shape::Scalar), inst, true );
         return Shape(l, len);
     }
     else {
@@ -118,7 +118,7 @@ JIT::Var JIT::load(Thread& thread, int64_t a, Instruction const* reenter) {
     Variable v = { -1, (thread.base+a)-(thread.registers+DEFAULT_NUM_REGISTERS)};
     IRRef r = Emit( IR( TraceOpCode::sload, -1, v.i, Type::Any, Shape::Scalar, Shape::Scalar ) );
 
-    Shape s = SpecializeLength(operand, r); 
+    Shape s = SpecializeLength(operand, r, reenter); 
           r = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), reenter, true );
     return Var(trace, r, MayHaveNA(operand));
 }
@@ -155,7 +155,7 @@ JIT::IRRef JIT::DecodeNA(Var a) {
     //if(a.mayHaveNA)
     //    return Emit( IR(TraceOpCode::decodena, a.v, Type::Logical, a.s, a.s) );
     //else
-        return Emit( IR(TraceOpCode::brcast, FalseRef, 1, Type::Logical, a.s, a.s) );
+        return Emit( IR(TraceOpCode::recycle, FalseRef, 1, Type::Logical, a.s, a.s) );
 }
 
 JIT::Var JIT::Encode(IRRef v, IRRef na, bool mayHaveNA) {
@@ -201,11 +201,11 @@ JIT::Var JIT::EmitCast(Var a, Type::Enum type) {
     return EmitUnary(op, a, type);
 }
 
-JIT::Var JIT::EmitBroadcast( Var a, Shape target ) {
+JIT::Var JIT::EmitRecycle( Var a, Shape target ) {
     if( a.s == target )
         return a;
 
-    return Var(trace, Emit( IR( TraceOpCode::brcast, a.v, a.s.length, a.type, target, target ) ), a.mayHaveNA );
+    return Var(trace, Emit( IR( TraceOpCode::recycle, a.v, a.s.length, a.type, target, target ) ), a.mayHaveNA );
 }
 
 JIT::Var JIT::EmitRep( Var l, Var e, Shape target ) {
@@ -214,8 +214,8 @@ JIT::Var JIT::EmitRep( Var l, Var e, Shape target ) {
     Var ei = EmitCast(e, Type::Integer);
     Var m =  EmitBinary( TraceOpCode::mul, li, ei, Type::Integer, 0 );
      
-    Var mb = EmitBroadcast( m, target );
-    Var eb = EmitBroadcast( ei, target );
+    Var mb = EmitRecycle( m, target );
+    Var eb = EmitRecycle( ei, target );
 
     Var s( trace, Emit( IR( TraceOpCode::seq, 0, 1, Type::Integer, target, target ) ), false );
     s = EmitBinary( TraceOpCode::mod, s, mb, Type::Integer, 0 );
@@ -244,7 +244,15 @@ JIT::Shape JIT::MergeShapes(Shape a, Shape b, Instruction const* inst) {
     else if(b == Shape::Scalar) {
         shape = a;
     }
-    else if(a.traceLength == b.traceLength) {
+    else {
+        int64_t len = (a.traceLength == 0 || b.traceLength == 0)
+            ? 0
+            : std::max(a.traceLength, b.traceLength);
+        IRRef c = EmitConstant(Integer::c(len)).v;
+        IRRef l = Emit( IR( TraceOpCode::rlength, a.length, b.length, c, Type::Integer, Shape::Scalar, Shape::Scalar), inst, true );
+        shape = Shape(l, len);
+    }
+    /*else if(a.traceLength == b.traceLength) {
         Var al( trace, a.length, false );
         Var bl( trace, b.length, false );
         Var x = EmitBinary( TraceOpCode::eq, al, bl, Type::Logical, 0 );
@@ -268,7 +276,7 @@ JIT::Shape JIT::MergeShapes(Shape a, Shape b, Instruction const* inst) {
         Var z = EmitBinary( TraceOpCode::land, x, y, Type::Logical, 0 );
         Emit( IR( TraceOpCode::gtrue, z.v, Type::Nil, Shape::Scalar, Shape::Empty), inst, true );
         shape = a;
-    }
+    }*/
     return shape;
 }
 
@@ -276,8 +284,8 @@ JIT::Var JIT::EmitBinary(TraceOpCode::Enum op, Var a, Var b, Type::Enum rty, Ins
 {
     Shape s = MergeShapes(a.s, b.s, inst);
    
-    a = EmitBroadcast(a, s);
-    b = EmitBroadcast(b, s);
+    a = EmitRecycle(a, s);
+    b = EmitRecycle(b, s);
  
     if(op == TraceOpCode::lor) {
         IRRef r = Emit( IR( op, DecodeVL(a), DecodeVL(b), rty, s, s ) ); 
@@ -315,9 +323,9 @@ JIT::Var JIT::EmitTernary(TraceOpCode::Enum op, Var a, Var b, Var c, Type::Enum 
 
     Shape s = MergeShapes(a.s, MergeShapes(b.s, c.s, inst), inst);
     
-    a = EmitBroadcast(a, s);
-    b = EmitBroadcast(b, s);
-    c = EmitBroadcast(c, s);
+    a = EmitRecycle(a, s);
+    b = EmitRecycle(b, s);
+    c = EmitRecycle(c, s);
 
     if(op == TraceOpCode::ifelse) {
         IRRef v = Emit( IR( op, DecodeVL(a), DecodeVL(b), DecodeVL(c), rty, s, s ) );
@@ -371,8 +379,8 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
                 Emit( IR( TraceOpCode::kill, v.i, Type::Nil, Shape::Empty, Shape::Empty ) );
             }
 
-            Emit( IR ( branch ? TraceOpCode::gtrue : TraceOpCode::gfalse, 
-                    p.v, Type::Nil, p.s, Shape::Empty ),
+            Emit( IR ( TraceOpCode::geq, p.v, branch ? TrueRef : FalseRef,
+                    Type::Nil, Shape::Scalar, Shape::Empty ),
                 &inst + (branch ? inst.b : inst.a), true );
         }   break;
     
@@ -391,7 +399,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
                 Emit( IR( TraceOpCode::kill, v.i, Type::Nil, Shape::Empty, Shape::Empty ) );
             }
 
-            Emit( IR ( TraceOpCode::gtrue, p.v, Type::Nil, p.s, Shape::Empty ),
+            Emit( IR ( TraceOpCode::geq, p.v, TrueRef, Type::Nil, Shape::Scalar, Shape::Empty ),
                 &inst + (branch ? inst.b : inst.a), false );
         }   break;
     
@@ -415,7 +423,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
 
             Value const& operand = env->get((String)inst.a);
 
-            Shape s = SpecializeLength(operand, r); 
+            Shape s = SpecializeLength(operand, r, &inst); 
             r = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), &inst, true );
             
             store(thread, Var(trace, r, MayHaveNA(operand)), inst.c);
@@ -460,7 +468,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             Value const& operand = ((REnvironment&)env).environment()->get((String)inst.a);
             
             IRRef r = Emit( IR( TraceOpCode::load, e.v, cc.v, operand.type, Shape::Scalar, Shape::Scalar ) );
-            Shape s = SpecializeLength(operand, r); 
+            Shape s = SpecializeLength(operand, r, &inst); 
             r = Emit( IR( TraceOpCode::unbox, r, operand.type, Shape::Scalar, s ), &inst, true );
             store(thread, Var(trace, r, MayHaveNA(operand)), inst.c);
         }   break;
@@ -480,7 +488,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             // TODO: need to check for negative numbers, out of range accesses, etc.
             Var a = load(thread, inst.a, &inst);
             Var b = EmitCast(load(thread, inst.b, &inst), Type::Integer);
-            Emit( IR(TraceOpCode::glength, b.v, 1, Type::Integer, Shape::Scalar, Shape::Scalar), &inst, true );
+            Emit( IR(TraceOpCode::geq, b.s.length, 1, Type::Nil, Shape::Scalar, Shape::Empty), &inst, true );
             b = EmitBinary( TraceOpCode::sub, b, Var(trace, 1, false), Type::Integer, 0 );
 
             
@@ -509,19 +517,19 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             // TODO: Need to check for NAs in the index vector
             Var a = load(thread, inst.a, &inst);
             Var b = EmitCast(load(thread, inst.b, &inst), Type::Integer);
-            Emit( IR(TraceOpCode::glength, b.v, 1, Type::Integer, Shape::Scalar, Shape::Scalar), &inst, true );
+            Emit( IR(TraceOpCode::geq, b.s.length, 1, Type::Nil, Shape::Scalar, Shape::Empty), &inst, true );
 
             b = EmitBinary( TraceOpCode::sub, b, Var(trace, 1, false), Type::Integer, 0 );
             Var c = load(thread, inst.c, &inst);
-            
-            IRRef len = Emit( IR( TraceOpCode::reshape, DecodeVL(b), c.s.length, Type::Integer, b.s, Shape::Scalar ) );
+           
+            IRRef len = Emit( IR( TraceOpCode::resize, c.s.length, DecodeVL(b), trace.size(), Type::Integer, b.s, Shape::Scalar ), &inst, true );
 
-            Shape reshaped( len, 0 );
+            Shape resized( len, 0 );
            
             if(c.type == Type::List)
                 a.v = Box(a.v);
  
-            IRRef r = Emit( IR( TraceOpCode::scatter1, c.v, DecodeVL(b), a.v, c.type, Shape::Scalar, reshaped ) );
+            IRRef r = Emit( IR( TraceOpCode::scatter1, c.v, DecodeVL(b), a.v, c.type, Shape::Scalar, resized ) );
             store(thread, Var( trace, r, a.mayHaveNA || c.mayHaveNA ), inst.c);
         }   break;
 
@@ -532,18 +540,18 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             b = EmitBinary( TraceOpCode::sub, b, Var(trace, 1, false), Type::Integer, 0 );
             Var c = load(thread, inst.c, &inst);
             
-            IRRef len = Emit( IR( TraceOpCode::reshape, DecodeVL(b), c.s.length, Type::Integer, b.s, Shape::Scalar ) );
+            IRRef len = Emit( IR( TraceOpCode::resize, c.s.length, DecodeVL(b), trace.size(), Type::Integer, b.s, Shape::Scalar ), &inst, true );
 
-            // TODO: needs to know the recorded reshaped length for matching with other same 
+            // TODO: needs to know the recorded resized length for matching with other same 
             // sized shapes
-            Shape reshaped( len, 0 );
+            Shape resized( len, 0 );
             
             Shape s = MergeShapes(a.s, b.s, &inst);
 
-            a = EmitBroadcast( a, s );
-            b = EmitBroadcast( b, s );
+            a = EmitRecycle( a, s );
+            b = EmitRecycle( b, s );
 
-            IRRef r = Emit( IR( TraceOpCode::scatter, c.v, DecodeVL(b), a.v, c.type, s, reshaped ) );
+            IRRef r = Emit( IR( TraceOpCode::scatter, c.v, DecodeVL(b), a.v, c.type, s, resized ) );
             store(thread, Var( trace, r, a.mayHaveNA || c.mayHaveNA ), inst.c);
         }   break;
 
@@ -595,7 +603,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             IRRef a = vec.s.length;
             
             IRRef b = Emit( IR( TraceOpCode::lt, counter, a, Type::Logical, Shape::Scalar, Shape::Scalar ) );
-            Emit( IR( TraceOpCode::gtrue, b, Type::Nil, Shape::Scalar, Shape::Empty), &inst+(&inst+1)->a, false );
+            Emit( IR( TraceOpCode::geq, b, TrueRef, Type::Nil, Shape::Scalar, Shape::Empty), &inst+(&inst+1)->a, false );
 
             IRRef r = Emit( IR( TraceOpCode::gather1, vec.v, counter, vec.type, Shape::Scalar, Shape::Scalar ) );
                   r = Box(r);
@@ -618,7 +626,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
             IRRef a = vec.s.length;
 
             IRRef b = Emit( IR( TraceOpCode::lt, counter, a, Type::Logical, Shape::Scalar, Shape::Scalar ) );
-            Emit( IR( TraceOpCode::gtrue, b, Type::Nil, Shape::Scalar, Shape::Empty), &inst+2, false );
+            Emit( IR( TraceOpCode::geq, b, TrueRef, Type::Nil, Shape::Scalar, Shape::Empty), &inst+2, false );
             
             IRRef r = Emit( IR( TraceOpCode::gather1, vec.v, counter, vec.type, Shape::Scalar, Shape::Scalar ) );
 
@@ -643,7 +651,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
                 IRRef r = Emit( IR( TraceOpCode::strip, in.v, Type::Any, Shape::Scalar, Shape::Scalar) );
 
                 Value const& v = ((Object const&)val).base();
-                Shape s = SpecializeLength( v, r );
+                Shape s = SpecializeLength( v, r, &inst );
                 r = Emit( IR( TraceOpCode::unbox, r, v.type, Shape::Scalar, s ), &inst, true );
                 store(thread, Var( trace, r, MayHaveNA(v) ), inst.c);
             }
@@ -667,7 +675,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
                 IRRef r = Emit( IR( TraceOpCode::attrget, in.v, which.v, Type::Any, Shape::Scalar, Shape::Scalar) );
                 Value const& str = IN(inst.b);
                 Value const& a = ((Object const&)val).get( ((Character const&)str)[0] );
-                Shape s = SpecializeLength( a, r );
+                Shape s = SpecializeLength( a, r, &inst );
                 r = Emit( IR( TraceOpCode::unbox, r, a.type, Shape::Scalar, s ), &inst, true );
                 store(thread, Var( trace, r, MayHaveNA(a) ), inst.c);
             }
@@ -700,7 +708,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         {
             Value len = As<Integer>(thread, IN(inst.a));
             Var l = EmitCast(load(thread, inst.a, &inst), Type::Integer);
-            Shape s = SpecializeValue(len, l.v);
+            Shape s = SpecializeValue(len, l.v, &inst);
            
             Var b = load(thread, inst.b, &inst); 
             Var c = load(thread, inst.c, &inst); 
@@ -711,7 +719,7 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         {
             Value len = As<Integer>(thread, IN(inst.a));
             Var l = EmitCast(load(thread, inst.a, &inst), Type::Integer);
-            Shape s = SpecializeValue(len, l.v);
+            Shape s = SpecializeValue(len, l.v, &inst);
             Var c = load(thread, inst.c, &inst);
             Var b = load(thread, inst.b, &inst);
             Type::Enum type = c.type == Type::Double || b.type == Type::Double
@@ -724,10 +732,10 @@ bool JIT::EmitIR(Thread& thread, Instruction const& inst, bool branch) {
         {
             Value len = As<Integer>(thread, IN(inst.a));
             Var l = EmitCast(load(thread, inst.a, &inst), Type::Integer);
-            Shape s = SpecializeValue(len, l.v);
+            Shape s = SpecializeValue(len, l.v, &inst);
                 
             IRRef r = Emit( IR( TraceOpCode::random, Type::Double, s, s) );
-            IRRef q = Emit( IR( TraceOpCode::brcast, FalseRef, 1, Type::Logical, s, s) );
+            IRRef q = Emit( IR( TraceOpCode::recycle, FalseRef, 1, Type::Logical, s, s) );
                   r = Emit( IR( TraceOpCode::encode, r, q, Type::Double, s, s) );
             store(thread, Var( trace, r, false ), inst.c); 
         }   break;
@@ -935,9 +943,10 @@ void JIT::end_recording(Thread& thread) {
         trace[i].reg = 0;
     }
 
-    //dump(thread, trace, false);
     Replay(thread);
+        //dump(thread, code, true);
     StrengthenGuards(thread.state.specializationLength);
+        //dump(thread, code, true);
     RunOptimize(thread);
  
     Liveness();
@@ -1051,8 +1060,6 @@ bool JIT::Ready(JIT::IR ir, std::vector<bool>& done) {
             UNARY_BYTECODES(CASE) 
             FOLD_BYTECODES(CASE) 
             case TraceOpCode::gproto: 
-            case TraceOpCode::gtrue: 
-            case TraceOpCode::gfalse:
             case TraceOpCode::load: {
                 return done[ir.a];
             } break; 
@@ -1187,8 +1194,7 @@ void JIT::schedule() {
          if( code[i].in != gSize
           || (code[i].op == TraceOpCode::scatter && gMembers.find(code[i].c) != gMembers.end())
           || (code[i].op == TraceOpCode::gather  && gMembers.find(code[i].c) != gMembers.end())
-          || code[i].op == TraceOpCode::gtrue 
-          || code[i].op == TraceOpCode::gfalse 
+          || code[i].op == TraceOpCode::geq
           || code[i].op == TraceOpCode::load 
           || code[i].op == TraceOpCode::sload ) {
             fusable[i] = false;
@@ -1250,6 +1256,8 @@ class IRWriter {
                 return intToStr(((Integer const&)constants[ir.a])[0]) + "L";
             else if(ir.type == Type::Character && ir.out.length == 1)
                 return std::string("`") + thread.externStr(((Character const&)constants[ir.a])[0]) + "'";
+            else if(ir.type == Type::Logical)
+                return ((Logical const&)constants[ir.a])[0] ? "TRUE" : "FALSE";
         }
         return std::string("v") + intToStr(i);
     }
@@ -1320,9 +1328,6 @@ public:
             case TraceOpCode::strip:
             case TraceOpCode::box:
             case TraceOpCode::unbox:
-            case TraceOpCode::length:
-            case TraceOpCode::gtrue:
-            case TraceOpCode::gfalse: 
             case TraceOpCode::lenv: 
             case TraceOpCode::denv: 
             case TraceOpCode::cenv: 
@@ -1332,12 +1337,10 @@ public:
                 {
                     std::cout << "\t " << In(ir.a) << "\t \t";
                 } break;
-            case TraceOpCode::brcast:
+            case TraceOpCode::geq:
+            case TraceOpCode::recycle:
             case TraceOpCode::attrget:
-            case TraceOpCode::glength:
-            case TraceOpCode::gvalue:
             case TraceOpCode::encode:
-            case TraceOpCode::reshape:
             case TraceOpCode::phi: 
             case TraceOpCode::push:
             case TraceOpCode::rep:
@@ -1355,6 +1358,21 @@ public:
                 {
                     std::cout << "\t " << In(ir.a) << "\t " << In(ir.b) << "\t " << In(ir.c);
                 } break;
+            case TraceOpCode::length:
+                {
+                    if(exit >= 0)
+                        std::cout << "\t " << In(ir.a) << "\t \t=" << In(ir.c);
+                    else
+                        std::cout << "\t " << In(ir.a) << "\t \t";
+                } break;
+            case TraceOpCode::rlength:
+            case TraceOpCode::resize:
+                {
+                    if(exit >= 0)
+                        std::cout << "\t " << In(ir.a) << "\t " << In(ir.b) << "\t=" << In(ir.c);
+                    else
+                        std::cout << "\t " << In(ir.a) << "\t " << In(ir.b);
+                } break;
             default: {} break;
 
 #undef CASE
@@ -1366,7 +1384,7 @@ public:
 void JIT::dump(Thread& thread, std::vector<IR> const& t, bool exits) {
 
     IRWriter writer(thread, t, constants);
-    
+   
     for(size_t i = 0; i < t.size(); i++) {
         IR const& ir = t[i];
         if(ir.live) {

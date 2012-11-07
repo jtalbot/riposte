@@ -465,6 +465,7 @@ public:
     
     void Store(FunctionBuilder& builder, llvm::Value* a) {
         builder.CreateStore(a, v);
+        l = builder.EntryBlock().CreateInitializedAlloca(builder.getInt64(0));
     }
 
     void Set(FunctionBuilder& builder, llvm::Value* a) {
@@ -1116,14 +1117,14 @@ struct Fusion {
                 */
             } break;
 
-            case TraceOpCode::reshape:
+            case TraceOpCode::resize:
             {
                 // Initialize to current length from input
                 FunctionBuilder& b = headerBuilder;
-                llvm::Value* len = b.CreateInitializedAlloca( b.CreateLoad( RawLoad(b, ir.b) ) );
+                llvm::Value* len = b.CreateInitializedAlloca( b.CreateLoad( RawLoad(b, ir.a) ) );
                 
                 // compute max of indices
-                llvm::Value* v = Load(builder, ir.a);
+                llvm::Value* v = Load(builder, ir.b);
                 llvm::Value* nlen = builder.CreateLoad(len);
                 for(uint32_t i = 0; i < width; i++) {
                     llvm::Value* q = builder.CreateExtractElement(v, builder.getInt32(i));
@@ -1140,10 +1141,10 @@ struct Fusion {
                 _error("rep NYI");
             } break;
 
-            case TraceOpCode::brcast:
+            case TraceOpCode::recycle:
             {
                 FunctionBuilder& b = headerBuilder;
-                if(jit.code[ir.a].out.length == 1) {
+                if(ir.b == 1) {
                     llvm::Value* e = b.CreateLoad( RawLoad(b, ir.a) );
                     llvm::Value* r = llvm::UndefValue::get(llvmType(ir.type, width));
                     for(int32_t i = 0; i < width; i++) {
@@ -1325,7 +1326,7 @@ struct Fusion {
                     t = builder.CreateOr(t, builder.CreateExtractElement(a, builder.getInt32(i)));
                 }
                 break;
-            case TraceOpCode::reshape:
+            case TraceOpCode::resize:
                 t = builder.CreateLoad(a);
                 break;
             default:
@@ -1495,8 +1496,8 @@ struct TraceCompiler {
     bool Fuseable(JIT::IR ir) {
         switch(ir.op) {
             case TraceOpCode::phi:
-            case TraceOpCode::reshape:
-            case TraceOpCode::brcast:
+            case TraceOpCode::resize:
+            case TraceOpCode::recycle:
             case TraceOpCode::gather:
             case TraceOpCode::gather1:
             case TraceOpCode::scatter:
@@ -1910,17 +1911,58 @@ struct TraceCompiler {
             case TraceOpCode::length: 
             {
                 llvm::Value* a = value(ir.a);
-                reg.Set( builder, builder.Call("LENGTH", BOXED_ARG(a)) );
+
+                llvm::Value* r;
+                if(jit.code[ir.a].type == Type::Any)
+                    r = builder.Call( "LENGTH", BOXED_ARG(a) );
+                else if(jit.code[ir.a].type == Type::Integer)
+                    r = builder.CreateLoad(a);
+                else
+                    _error("Unknown length usage");
+                
+                if(jit.code[index].exit >= 0) {
+                    llvm::Value* guard = builder.CreateICmpEQ(r, builder.CreateLoad(value(ir.c)));
+                    EmitExit(guard, index);
+                }
+
+                if(ir.reg > 0)
+                    reg.Set( builder, r );
+            
+            } break;
+
+            case TraceOpCode::rlength: 
+            {
+                llvm::Value* a = builder.CreateLoad(value(ir.a));
+                llvm::Value* b = builder.CreateLoad(value(ir.b));
+                
+                llvm::Value* r = builder.Call( "RLENGTH", a, b );
+                
+                if(jit.code[index].exit >= 0) {
+                    llvm::Value* guard = builder.CreateICmpEQ(r, builder.CreateLoad(value(ir.c)));
+                    EmitExit(guard, index);
+                }
+
+                if(ir.reg > 0)
+                    reg.Set( builder, r );
+            
             } break;
 
             // Guards
              
-            case TraceOpCode::gtrue:
-            case TraceOpCode::gfalse: {
+            case TraceOpCode::geq: {
                 // TODO: check the NA mask
-                llvm::Value* r = builder.CreateTrunc(builder.CreateLoad(value(ir.a)), builder.getInt1Ty());
-                if(ir.op == TraceOpCode::gfalse)
-                    r = builder.CreateNot(r);
+                llvm::Value* a = builder.CreateLoad(value(ir.a));
+                llvm::Value* b = builder.CreateLoad(value(ir.b));
+
+                llvm::Value* r;
+           
+                Type::Enum type = jit.code[ir.a].type;
+                if( type == Type::Logical
+                 || type == Type::Integer )
+                    r = builder.CreateICmpEQ(a, b);
+                else
+                    _error("Undefined geq"); 
+                
                 EmitExit(r, index);
             } break;
 

@@ -1,6 +1,6 @@
 #include "jit.h"
 
-void JIT::AssignRegister(size_t index) {
+void JIT::AssignRegister(size_t index, IRRef source) {
     IR& ir = code[index];
     if(ir.reg <= 0) {
 
@@ -35,14 +35,14 @@ void JIT::AssignRegister(size_t index) {
 
         // if no preferred or preferred wasn't available fall back to any available or create new.
         std::map<Register, size_t>::iterator i = freeRegisters.find(r);
-        if(i != freeRegisters.end()) {
-            ir.reg = i->second;
-            freeRegisters.erase(i);
+        if(i == freeRegisters.end() || (index < Loop && source > Loop)) {
+            ir.reg = registers.size();
+            registers.push_back(r);
             return;
         }
         else {
-            ir.reg = registers.size();
-            registers.push_back(r);
+            ir.reg = i->second;
+            freeRegisters.erase(i);
             return;
         }
     }
@@ -68,50 +68,50 @@ void JIT::ReleaseRegister(size_t index) {
     }
 }
 
-void JIT::AssignSnapshot(Snapshot const& snapshot) {
+void JIT::AssignSnapshot(Snapshot const& snapshot, JIT::IRRef s) {
     for(size_t i = 0; i < snapshot.stack.size(); i++) {
-        AssignRegister(snapshot.stack[i].environment);
-        AssignRegister(snapshot.stack[i].env);
+        AssignRegister(snapshot.stack[i].environment, s);
+        AssignRegister(snapshot.stack[i].env, s);
     }
 
     for(std::map< int64_t, IRRef >::const_iterator i = snapshot.slotValues.begin();
             i != snapshot.slotValues.end(); ++i) {
-        AssignRegister(i->second);
+        AssignRegister(i->second, s);
     }
     
     for(std::set< IRRef >::const_iterator i = snapshot.memory.begin();
             i != snapshot.memory.end(); ++i) {
         if(code[*i].sunk) {
-            AssignRegister(*i);
+            AssignRegister(*i, s);
         }
     }
 }
 
-void Assign(JIT* jit, JIT::IRRef a) {
-    jit->AssignRegister(a); 
+void Assign(JIT* jit, JIT::IRRef a, JIT::IRRef s) {
+    jit->AssignRegister(a, s); 
 }
 
-void Assign(JIT* jit, JIT::IRRef a, JIT::IRRef b) {
+void Assign(JIT* jit, JIT::IRRef a, JIT::IRRef b, JIT::IRRef s) {
     if(jit->code[a].reg < 0)
-        jit->AssignRegister(a);
+        jit->AssignRegister(a, s);
     if(jit->code[b].reg < 0)
-        jit->AssignRegister(b);
+        jit->AssignRegister(b, s);
 
-    jit->AssignRegister(a); 
-    jit->AssignRegister(b); 
+    jit->AssignRegister(a, s); 
+    jit->AssignRegister(b, s); 
 }
 
-void Assign(JIT* jit, JIT::IRRef a, JIT::IRRef b, JIT::IRRef c) {
+void Assign(JIT* jit, JIT::IRRef a, JIT::IRRef b, JIT::IRRef c, JIT::IRRef s) {
     if(jit->code[a].reg < 0)
-        jit->AssignRegister(a);
+        jit->AssignRegister(a, s);
     if(jit->code[b].reg < 0)
-        jit->AssignRegister(b);
+        jit->AssignRegister(b, s);
     if(jit->code[c].reg < 0)
-        jit->AssignRegister(c);
+        jit->AssignRegister(c, s);
 
-    jit->AssignRegister(a); 
-    jit->AssignRegister(b); 
-    jit->AssignRegister(c); 
+    jit->AssignRegister(a, s); 
+    jit->AssignRegister(b, s); 
+    jit->AssignRegister(c, s); 
 }
 
 void JIT::RegisterAssign(IRRef i, IR ir) {
@@ -121,68 +121,73 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
 #define CASE(Name, ...) case TraceOpCode::Name:
         case TraceOpCode::phi: 
             {
-                AssignRegister(ir.b);
+                Assign(this, ir.b, i);
                 PreferRegister(ir.a, ir.b);
             } break;
         case TraceOpCode::gproto: 
-        case TraceOpCode::gtrue: 
-        case TraceOpCode::gfalse: 
             {
-                AssignRegister(ir.a);
+                Assign(this, ir.a, i);
             } break;
         case TraceOpCode::scatter1: 
         case TraceOpCode::scatter: 
             {
                 PreferRegister(ir.a, i);
-                Assign(this, ir.a, ir.b, ir.c);
+                Assign(this, ir.a, ir.b, ir.c, i);
                 // necessary to size input
-                AssignRegister(code[ir.a].out.length);
+                Assign(this, code[ir.a].out.length, i);
+            } break;
+        case TraceOpCode::length:
+            {
+                if(ir.exit >= 0)
+                    Assign(this, ir.a, ir.c, i);
+                else
+                    Assign(this, ir.a, i);
+            } break;
+        case TraceOpCode::rlength:
+        case TraceOpCode::resize:
+            {
+                if(ir.exit >= 0)
+                    Assign(this, ir.a, ir.b, ir.c, i);
+                else
+                    Assign(this, ir.a, ir.b, i);
             } break;
         case TraceOpCode::store:
         case TraceOpCode::newenv:
             TERNARY_BYTECODES(CASE)
             {
-                Assign(this, ir.a, ir.b, ir.c);
+                Assign(this, ir.a, ir.b, ir.c, i);
             } break;
         case TraceOpCode::sstore:
             {
-                AssignRegister(ir.c);
-            } break;
-        case TraceOpCode::reshape:
-            {
-                PreferRegister(ir.b, i);
-                AssignRegister(ir.b);
-                AssignRegister(ir.a);
+                Assign(this, ir.c, i);
             } break;
         case TraceOpCode::load:
             {
-                Assign(this, ir.a, ir.b);
+                Assign(this, ir.a, ir.b, i);
             } break;
+        case TraceOpCode::geq: 
         case TraceOpCode::attrget:
-        case TraceOpCode::glength:
-        case TraceOpCode::gvalue:
         case TraceOpCode::encode:
         case TraceOpCode::rep:
         case TraceOpCode::seq:
         case TraceOpCode::gather1:
         case TraceOpCode::gather:
-        case TraceOpCode::brcast:
+        case TraceOpCode::recycle:
             BINARY_BYTECODES(CASE)
             {
-                Assign(this, ir.a, ir.b);
+                Assign(this, ir.a, ir.b, i);
             } break;
         case TraceOpCode::strip:
         case TraceOpCode::box:
         case TraceOpCode::unbox:
         case TraceOpCode::decodevl:
         case TraceOpCode::decodena:
-        case TraceOpCode::length:
         case TraceOpCode::lenv:
         case TraceOpCode::denv:
         case TraceOpCode::cenv:
             UNARY_FOLD_SCAN_BYTECODES(CASE)
             {
-                AssignRegister(ir.a);
+                AssignRegister(ir.a, i);
             } break;
         case TraceOpCode::random:
         case TraceOpCode::loop:
@@ -203,8 +208,8 @@ void JIT::RegisterAssign(IRRef i, IR ir) {
 #undef CASE
     }
 
-    AssignRegister(ir.in.length);
-    AssignRegister(ir.out.length);
+    AssignRegister(ir.in.length, i);
+    AssignRegister(ir.out.length, i);
 }
 void JIT::RegisterAssignment() {
     // backwards pass to do register assignment on a node.
@@ -267,7 +272,7 @@ void JIT::RegisterAssignment() {
         // AssignSnapshot traverses the sunk registers
         // Never release registers used in sunk instructions 
         if(ir.live && ir.exit >= 0)
-            AssignSnapshot(dest->exits[ir.exit].snapshot);
+            AssignSnapshot(dest->exits[ir.exit].snapshot, i);
     }
 
 }
@@ -281,18 +286,16 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
     switch(ir.op) 
     {
 #define CASE(Name, ...) case TraceOpCode::Name:
+        case TraceOpCode::geq: 
         case TraceOpCode::attrget:
         case TraceOpCode::encode:
-        case TraceOpCode::glength:
-        case TraceOpCode::gvalue:
         case TraceOpCode::rep:
         case TraceOpCode::seq:
         case TraceOpCode::gather1:
         case TraceOpCode::gather:
         case TraceOpCode::load:
-        case TraceOpCode::reshape:
         case TraceOpCode::phi: 
-        case TraceOpCode::brcast:
+        case TraceOpCode::recycle:
         BINARY_BYTECODES(CASE)
             {
                 Mark(ir.a, i);
@@ -303,13 +306,10 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
         case TraceOpCode::unbox:
         case TraceOpCode::decodevl:
         case TraceOpCode::decodena:
-        case TraceOpCode::length:
         case TraceOpCode::lenv:
         case TraceOpCode::denv:
         case TraceOpCode::cenv:
         case TraceOpCode::gproto: 
-        case TraceOpCode::gtrue: 
-        case TraceOpCode::gfalse: 
             UNARY_FOLD_SCAN_BYTECODES(CASE)
             {
                 Mark(ir.a, i);
@@ -327,6 +327,20 @@ void JIT::MarkLiveness(IRRef i, IR ir) {
         case TraceOpCode::sstore:
             {
                 Mark(ir.c, i);
+            } break;
+        case TraceOpCode::length:
+            {
+                Mark(ir.a, i);
+                if(ir.exit >= 0)
+                    Mark(ir.c, i);
+            } break;
+        case TraceOpCode::rlength:
+        case TraceOpCode::resize:
+            {
+                Mark(ir.a, i);
+                Mark(ir.b, i);
+                if(ir.exit >= 0)
+                    Mark(ir.c, i);
             } break;
         case TraceOpCode::random:
         case TraceOpCode::loop:
@@ -371,10 +385,16 @@ void JIT::MarkSnapshot(IRRef ir, Snapshot const& snapshot) {
 }
 
 bool JIT::AlwaysLive(IR const& ir) {
+
+    if( (ir.op == TraceOpCode::length
+      || ir.op == TraceOpCode::rlength
+      || ir.op == TraceOpCode::resize)
+     && (ir.exit >= 0))
+        return true;
+
     return(     ir.op == TraceOpCode::sstore
             ||  ir.op == TraceOpCode::store
-            ||  ir.op == TraceOpCode::gtrue
-            ||  ir.op == TraceOpCode::gfalse
+            ||  ir.op == TraceOpCode::geq
             ||  ir.op == TraceOpCode::gproto
             ||  ir.op == TraceOpCode::push
             ||  ir.op == TraceOpCode::pop 

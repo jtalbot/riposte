@@ -29,18 +29,14 @@
         _(sstore, "sstore", ___) \
 		_(load, "load", ___) /* loads are type guarded */ \
         _(store, "store", ___) \
-        _(glength, "glength", ___) \
-        _(recycle, "recycle", ___) \
-        _(gvalue, "gvalue", ___) \
-        _(length, "length", ___) \
         _(encode, "encode", ___) \
         _(decodevl, "decodevl", ___) \
         _(decodena, "decodena", ___) \
+        _(loadna, "loadna", ___) \
         _(box, "box", ___) \
         _(unbox, "unbox", ___) \
+        _(geq, "geq", ___) \
         _(gproto,   "gproto", ___) \
-		_(gtrue, "gtrue", ___) \
-		_(gfalse, "gfalse", ___) \
 		_(gather1, "gather1", ___) \
 		_(gather, "gather", ___) \
 		_(scatter1, "scatter1", ___) \
@@ -54,9 +50,10 @@
         _(lenv, "lenv", ___) \
         _(denv, "denv", ___) \
         _(cenv, "cenv", ___) \
-        _(brcast, "brcast", ___) \
-        _(reshape, "reshape", ___) \
-        _(loadna, "loadna", ___) \
+        _(recycle, "recycle", ___) \
+        _(length, "length", ___) \
+        _(rlength, "rlength", ___) \
+        _(resize, "resize", ___) \
 		_(nop, "NOP", ___)
 
 DECLARE_ENUM(TraceOpCode,TRACE_ENUM)
@@ -150,19 +147,19 @@ public:
         }
 
         IR()
-            : op(TraceOpCode::nop), a(0), b(0), c(0), type(Type::Nil), in(Shape::Empty), out(Shape::Empty), exit(-1), sunk(false), use(0) {}
+            : op(TraceOpCode::nop), a(0), b(0), c(0), type(Type::Nil), in(Shape::Empty), out(Shape::Empty), exit(-1), live(true), sunk(false), use(0) {}
         
         IR(TraceOpCode::Enum op, Type::Enum type, Shape in, Shape out)
-            : op(op), a(0), b(0), c(0), type(type), in(in), out(out), exit(-1), sunk(false), use(0) {}
+            : op(op), a(0), b(0), c(0), type(type), in(in), out(out), exit(-1), live(true), sunk(false), use(0) {}
         
         IR(TraceOpCode::Enum op, IRRef a, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(0), c(0), type(type), in(in), out(out), exit(-1), sunk(false), use(0) {}
+            : op(op), a(a), b(0), c(0), type(type), in(in), out(out), exit(-1), live(true), sunk(false), use(0) {}
         
         IR(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(b), c(0), type(type), in(in), out(out), exit(-1), sunk(false), use(0) {}
+            : op(op), a(a), b(b), c(0), type(type), in(in), out(out), exit(-1), live(true), sunk(false), use(0) {}
         
         IR(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(b), c(c), type(type), in(in), out(out), exit(-1), sunk(false), use(0) {}
+            : op(op), a(a), b(b), c(c), type(type), in(in), out(out), exit(-1), live(true), sunk(false), use(0) {}
 	};
 
     struct Phi {
@@ -318,7 +315,7 @@ public:
 	Var EmitBinary(TraceOpCode::Enum op, Var a, Var b, Type::Enum rty, Instruction const* inst);
 	Var EmitTernary(TraceOpCode::Enum op, Var a, Var b, Var c, Type::Enum rty, Instruction const* inst);
 	Var EmitRep(Var l, Var e, Shape target);
-	Var EmitBroadcast(Var a, Shape target);
+	Var EmitRecycle(Var a, Shape target);
 	Var EmitCast(Var a, Type::Enum type);
 
     void Kill(Snapshot& snapshot, int64_t a);
@@ -328,8 +325,8 @@ public:
     IRRef DecodeNA(Var a);
     Var Encode(IRRef v, IRRef na, bool mayHaveNA);
     IRRef Box(IRRef a);
-    Shape SpecializeLength(Value const& v, IRRef r);
-    Shape SpecializeValue(Value const& v, IRRef r);
+    Shape SpecializeLength(Value const& v, IRRef r, Instruction const* inst);
+    Shape SpecializeValue(Value const& v, IRRef r, Instruction const* inst);
     Shape MergeShapes(Shape a, Shape b, Instruction const* inst);
 
     IRRef Optimize(Thread& thread, IRRef i);
@@ -383,10 +380,10 @@ public:
     IRRef EmitOptIR(Thread& thread, IR ir, std::vector<IR>& code, std::vector<IRRef>& forward, std::tr1::unordered_map<IR, IRRef>& cse, Snapshot& snapshot);
     void Replay(Thread& thread);
 
-    void AssignRegister(size_t index);
+    void AssignRegister(size_t index, IRRef source);
     void PreferRegister(size_t index, size_t share);
     void ReleaseRegister(size_t index);
-    void AssignSnapshot(Snapshot const& snapshot);
+    void AssignSnapshot(Snapshot const& snapshot, IRRef source);
     void RegisterAssignment();
     void RegisterAssign(IRRef i, IR ir);
 

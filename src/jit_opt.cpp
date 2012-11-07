@@ -36,6 +36,11 @@ JIT::IR JIT::Normalize(IR ir) {
                 ir.op = TraceOpCode::le;
             }
             break;
+        case TraceOpCode::rlength:
+            if(ir.a > ir.b) {
+                swap(ir.a, ir.b);
+            }
+            break;
         default:
             // nothing
             break;
@@ -92,12 +97,11 @@ JIT::IR JIT::ConstantFold(Thread& thread, IR ir) {
             TERNARY_BYTECODES(CASE3)
             #undef CASE3
   */          
-            case TraceOpCode::gtrue:
-            case TraceOpCode::gfalse:
             case TraceOpCode::gproto:
                 if(code[ir.a].op == TraceOpCode::constant)
                     ir = IR(TraceOpCode::nop, Type::Nil, Shape::Empty, Shape::Empty);
-                break;                
+                break;
+
             default:
                 // do nothing
                 break;
@@ -129,7 +133,7 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                         ir = IR(TraceOpCode::mul, ir.a, ir.a, Type::Double, ir.in, ir.out);
                         retry = true;
                     }
-                    else if(code[ir.b].op == TraceOpCode::brcast
+                    else if(code[ir.b].op == TraceOpCode::recycle
                             && code[code[ir.b].a].op == TraceOpCode::constant
                             && ((Double const&)constants[code[code[ir.b].a].a])[0] == 2) {
                         ir = IR(TraceOpCode::mul, ir.a, ir.a, Type::Double, ir.in, ir.out);
@@ -144,10 +148,10 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                 else if(ir.a == TrueRef || ir.b == TrueRef)
                     ir = IR(TraceOpCode::pos, TrueRef, ir.type, ir.in, ir.out);
                 else if(ir.a == FalseRef || 
-                        (code[ir.a].op == TraceOpCode::brcast && code[ir.a].a == FalseRef))
+                        (code[ir.a].op == TraceOpCode::recycle && code[ir.a].a == FalseRef))
                     ir = IR(TraceOpCode::pos, ir.b, ir.type, ir.in, ir.out);
                 else if(ir.b == FalseRef ||
-                        (code[ir.b].op == TraceOpCode::brcast && code[ir.b].a == FalseRef))
+                        (code[ir.b].op == TraceOpCode::recycle && code[ir.b].a == FalseRef))
                     ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
                 break;
 
@@ -157,10 +161,10 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                 else if(ir.a == FalseRef || ir.b == FalseRef)
                     ir = IR(TraceOpCode::pos, FalseRef, ir.type, ir.in, ir.out);
                 else if(ir.a == TrueRef || 
-                        (code[ir.a].op == TraceOpCode::brcast && code[ir.a].a == TrueRef))
+                        (code[ir.a].op == TraceOpCode::recycle && code[ir.a].a == TrueRef))
                     ir = IR(TraceOpCode::pos, ir.b, ir.type, ir.in, ir.out);
                 else if(ir.b == TrueRef ||
-                        (code[ir.b].op == TraceOpCode::brcast && code[ir.b].a == TrueRef))
+                        (code[ir.b].op == TraceOpCode::recycle && code[ir.b].a == TrueRef))
                     ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
                 break;
 
@@ -175,10 +179,10 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                     if(code[ir.b].op == TraceOpCode::constant && 
                             abs(((Integer const&)constants[code[ir.b].a])[0]) == 1)
                         ir = IR(TraceOpCode::constant, 0, Type::Integer, Shape::Empty, Shape::Scalar);
-                    if(code[ir.b].op == TraceOpCode::brcast
+                    if(code[ir.b].op == TraceOpCode::recycle
                             && code[code[ir.b].a].op == TraceOpCode::constant
                             && abs(((Integer const&)constants[code[code[ir.b].a].a])[0]) == 1)
-                        ir = IR(TraceOpCode::brcast, 0, 1, Type::Integer, ir.in, ir.out);
+                        ir = IR(TraceOpCode::recycle, 0, 1, Type::Integer, ir.in, ir.out);
                 }
                 break;
 
@@ -196,7 +200,7 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                     if(code[ir.b].op == TraceOpCode::constant && 
                             abs(((Integer const&)constants[code[ir.b].a])[0]) == 1)
                         ir = IR(TraceOpCode::pos, ir.a, Type::Integer, Shape::Empty, Shape::Scalar);
-                    if(code[ir.b].op == TraceOpCode::brcast
+                    if(code[ir.b].op == TraceOpCode::recycle
                             && code[code[ir.b].a].op == TraceOpCode::constant
                             && abs(((Integer const&)constants[code[code[ir.b].a].a])[0]) == 1)
                         ir = IR(TraceOpCode::pos, ir.a, Type::Integer, ir.in, ir.out);
@@ -206,14 +210,14 @@ JIT::IR JIT::StrengthReduce(IR ir) {
 
             case TraceOpCode::eq:
                 if(ir.a == ir.b) {
-                    ir = IR(TraceOpCode::brcast, TrueRef, 1, Type::Integer, ir.in, ir.out);
+                    ir = IR(TraceOpCode::recycle, TrueRef, 1, Type::Integer, ir.in, ir.out);
                     retry = true;
                 }
                 break;
 
             case TraceOpCode::neq:
                 if(ir.a == ir.b) {
-                    ir = IR(TraceOpCode::brcast, FalseRef, 1, Type::Integer, ir.in, ir.out);
+                    ir = IR(TraceOpCode::recycle, FalseRef, 1, Type::Integer, ir.in, ir.out);
                     retry = true;
                 }
                 break;
@@ -226,11 +230,11 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                 break;
 
             case TraceOpCode::gather:
-                // lower a gather from a scalar to a brcast
+                // lower a gather from a scalar to a recycle
                 if(code[ir.a].out.length == 1
-                        && code[ir.b].op == TraceOpCode::brcast
+                        && code[ir.b].op == TraceOpCode::recycle
                         && code[ir.b].a == 0) {
-                    ir = IR(TraceOpCode::brcast, ir.a, 1, ir.type, ir.in, ir.out);
+                    ir = IR(TraceOpCode::recycle, ir.a, 1, ir.type, ir.in, ir.out);
                     retry = true;
                 }
                 if(ir.b == 0 && code[ir.a].op == TraceOpCode::seq) {
@@ -238,27 +242,20 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                 }
                 break;
 
-            case TraceOpCode::brcast:
+            case TraceOpCode::recycle:
                 if(ir.out.length == code[ir.a].out.length) {
                     ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
                 }
                 break;
 
-            case TraceOpCode::gtrue:
-                if(ir.a == TrueRef) {
+            case TraceOpCode::geq:
+                if(ir.a == ir.b)
                     ir = IR(TraceOpCode::nop, Type::Nil, Shape::Empty, Shape::Empty);
-                }
-                break;
-
-            case TraceOpCode::gfalse:
-                if(ir.a == FalseRef) {
-                    ir = IR(TraceOpCode::nop, Type::Nil, Shape::Empty, Shape::Empty);
-                }
                 break;
 
             case TraceOpCode::encode:
                 if(ir.b == FalseRef ||
-                    (code[ir.b].op == TraceOpCode::brcast && code[ir.b].a == FalseRef)) {
+                    (code[ir.b].op == TraceOpCode::recycle && code[ir.b].a == FalseRef)) {
                     ir = IR(TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out);
                 }
                 if(code[ir.a].op == TraceOpCode::decodevl
@@ -284,14 +281,13 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                 else if(code[ir.a].op == TraceOpCode::seq ||
                         code[ir.a].op == TraceOpCode::random ||
                         code[ir.a].op == TraceOpCode::rep) {
-                    ir = IR(TraceOpCode::brcast, FalseRef, 1, Type::Logical, ir.in, ir.out);
+                    ir = IR(TraceOpCode::recycle, FalseRef, 1, Type::Logical, ir.in, ir.out);
                     retry = true;
                 }
                 break;
 
             case TraceOpCode::phi:
-                if(ir.a == ir.b &&
-                    code[ir.a].op == TraceOpCode::constant) {
+                if(ir.a == ir.b) {
                     ir = IR(TraceOpCode::nop, Type::Nil, Shape::Empty, Shape::Empty);
                 }
                 break;
@@ -326,10 +322,29 @@ JIT::IR JIT::StrengthReduce(IR ir) {
                 }
                 break;
 
-            case TraceOpCode::glength:
             case TraceOpCode::length:
                 if(code[ir.a].op == TraceOpCode::box) {
                     ir = IR( TraceOpCode::pos, code[ir.a].in.length, ir.type, ir.in, ir.out );
+                }
+                if(code[ir.a].op == TraceOpCode::constant &&
+                    code[ir.a].type == Type::Integer) {
+                    ir = IR( TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out );
+                }
+                break;
+
+            case TraceOpCode::rlength:
+                if(ir.a == ir.b) {
+                    ir = IR( TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out );
+                }
+                else if(ir.exit < 0) {
+                    if(ir.a == 0 || ir.b == 0) {
+                        ir = IR( TraceOpCode::pos, 0, ir.type, ir.in, ir.out );
+                    } else if(ir.a == ir.b || ir.b == 1) {
+                        ir = IR( TraceOpCode::pos, ir.a, ir.type, ir.in, ir.out );
+                    }
+                    else if(ir.a == 1) {
+                        ir = IR( TraceOpCode::pos, ir.b, ir.type, ir.in, ir.out );
+                    }
                 }
                 break;
 
@@ -498,21 +513,19 @@ double JIT::Opcost(std::vector<IR>& code, IR ir, bool aggressive) {
             case TraceOpCode::rep:
             case TraceOpCode::curenv: 
             case TraceOpCode::gproto:
-            case TraceOpCode::gtrue: 
-            case TraceOpCode::gfalse:
-            case TraceOpCode::glength:
-            case TraceOpCode::gvalue:
+            case TraceOpCode::geq:
             case TraceOpCode::scatter:
             case TraceOpCode::scatter1:
             case TraceOpCode::phi:
             case TraceOpCode::length:
+            case TraceOpCode::rlength:
+            case TraceOpCode::resize:
             case TraceOpCode::encode:
             case TraceOpCode::decodena:
             case TraceOpCode::decodevl:
             case TraceOpCode::lenv:
             case TraceOpCode::denv:
             case TraceOpCode::cenv:
-            case TraceOpCode::reshape:
             case TraceOpCode::constant:
             case TraceOpCode::box:
             case TraceOpCode::unbox:
@@ -543,9 +556,9 @@ double JIT::Opcost(std::vector<IR>& code, IR ir, bool aggressive) {
                 return ir.out.traceLength * memcost(code[ir.a].out.traceLength) + code[ir.b].cost;
                 break;
 
-            case TraceOpCode::brcast:
+            case TraceOpCode::recycle:
                 if(ir.b == 1)
-                    return 0.1 + code[ir.a].cost;
+                    return 0.1+code[ir.a].cost;
                 else
                     return aggressive ? 20000000000000000 : 0;
                 break;
@@ -711,11 +724,8 @@ JIT::IRRef JIT::DSE(std::vector<IR> const& code, IRRef i, bool& crossedExit) {
             break;
 
         // flag if we cross an exit
-        if( code[j].op == TraceOpCode::loop || 
-                code[j].op == TraceOpCode::unbox ||
-                code[j].op == TraceOpCode::gtrue ||
-                code[j].op == TraceOpCode::gfalse ||
-                code[j].op == TraceOpCode::gproto) 
+        if( code[j].op == TraceOpCode::loop ||
+            code[j].exit >= 0 )
             crossedExit = true;
 
         if(code[j].op == TraceOpCode::load) {
@@ -738,8 +748,7 @@ JIT::IRRef JIT::DPE(std::vector<IR> const& code, IRRef i) {
         if( code[j].op == TraceOpCode::loop || 
                 code[j].op == TraceOpCode::nest || 
                 code[j].op == TraceOpCode::unbox ||
-                code[j].op == TraceOpCode::gtrue ||
-                code[j].op == TraceOpCode::gfalse ||
+                code[j].op == TraceOpCode::geq ||
                 code[j].op == TraceOpCode::gproto) 
             break;
 
@@ -931,9 +940,12 @@ JIT::IRRef JIT::EmitOptIR(
                 return 0;
             } break;
 
-            case TraceOpCode::gproto:
-            case TraceOpCode::gfalse: 
-            case TraceOpCode::gtrue: {
+            case TraceOpCode::geq: {
+                ir.a = forward[ir.a];
+                ir.b = forward[ir.b];
+                return Insert(thread, code, cse, snapshot, ir);
+            } break;
+            case TraceOpCode::gproto: {
                 ir.a = forward[ir.a];
                 return Insert(thread, code, cse, snapshot, ir);
             } break;
@@ -962,24 +974,22 @@ JIT::IRRef JIT::EmitOptIR(
 
             case TraceOpCode::length: {
                 ir.a = forward[ir.a];
+                ir.b = forward[ir.b];
+                ir.c = forward[ir.c];
                 if(code[ir.a].op == TraceOpCode::box)
                     return code[code[ir.a].a].out.length;
+                else if(code[ir.a].op == TraceOpCode::constant
+                    && code[ir.a].type == Type::Integer)
+                    return ir.a;
                 else
                     return Insert(thread, code, cse, snapshot, ir);
             } break;
 
-            case TraceOpCode::glength: {
+            case TraceOpCode::resize:
+            case TraceOpCode::rlength: {
                 ir.a = forward[ir.a];
                 ir.b = forward[ir.b];
-                if(code[ir.a].op == TraceOpCode::box)
-                    return code[code[ir.a].a].out.length;
-                else
-                    return Insert(thread, code, cse, snapshot, ir);
-            } break;
-
-            case TraceOpCode::gvalue: {
-                ir.a = forward[ir.a];
-                ir.b = forward[ir.b];
+                ir.c = forward[ir.c];
                 return Insert(thread, code, cse, snapshot, ir);
             } break;
 
@@ -1023,9 +1033,8 @@ JIT::IRRef JIT::EmitOptIR(
                 return Insert(thread, code, cse, snapshot, ir);
             } break;
 
-            case TraceOpCode::brcast:
+            case TraceOpCode::recycle:
             case TraceOpCode::attrget:
-            case TraceOpCode::reshape:
             case TraceOpCode::gather1:
             case TraceOpCode::gather:
             case TraceOpCode::rep:
@@ -1070,11 +1079,7 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
 {
     #define MARK(k) if(marks[i]) { marks[k] = true; }
     #define ROOT { marks[i] = true; }
-
     IR const& ir = code[i];
-
-        MARK(ir.out.length);
-        MARK(ir.in.length);
 
         switch(ir.op) {
             #define CASE(Name, ...) case TraceOpCode::Name:
@@ -1086,15 +1091,13 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
                 }
                 MARK(ir.a);
             }   break;
-            case TraceOpCode::gproto:
-            case TraceOpCode::gfalse: 
-            case TraceOpCode::gtrue: {
+
+            case TraceOpCode::gproto: {
                 ROOT;
                 MARK(ir.a);
             }   break; 
           
-            case TraceOpCode::gvalue:  
-            case TraceOpCode::glength:  
+            case TraceOpCode::geq:
             case TraceOpCode::load: {
                 ROOT;
                 MARK(ir.a); MARK(ir.b);
@@ -1145,10 +1148,26 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
                 MARK(ir.a); MARK(ir.b); MARK(ir.c);
             } break;
 
-            case TraceOpCode::brcast:
+            case TraceOpCode::length: {
+                if(ir.exit >=  0) {
+                    ROOT;
+                    MARK(ir.c);
+                }
+                MARK(ir.a);
+            } break;
+            case TraceOpCode::rlength:  
+            case TraceOpCode::resize: {
+                if(ir.exit >=  0) {
+                    ROOT;
+                    MARK(ir.c);
+                }
+                MARK(ir.a);
+                MARK(ir.b);
+            } break;
+            
+            case TraceOpCode::recycle:
             case TraceOpCode::attrget:
             case TraceOpCode::encode:
-            case TraceOpCode::reshape:
             case TraceOpCode::gather1:
             case TraceOpCode::gather:
             case TraceOpCode::rep:
@@ -1162,7 +1181,6 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
 
             case TraceOpCode::strip:
             case TraceOpCode::box:
-            case TraceOpCode::length:
             case TraceOpCode::decodevl:
             case TraceOpCode::decodena:
             case TraceOpCode::cenv:
@@ -1187,6 +1205,9 @@ void JIT::sink(std::vector<bool>& marks, IRRef i)
 
             #undef CASE
         }
+        
+        MARK(ir.out.length);
+        MARK(ir.in.length);
 }
 
 void JIT::SINK(void) {

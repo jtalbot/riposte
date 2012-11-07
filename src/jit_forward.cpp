@@ -29,24 +29,19 @@ JIT::IR JIT::Forward(
             case TraceOpCode::unbox:
             case TraceOpCode::decodena:
             case TraceOpCode::decodevl:
-            case TraceOpCode::length:
             case TraceOpCode::cenv:
             case TraceOpCode::denv:
             case TraceOpCode::lenv:
             case TraceOpCode::gproto:
-            case TraceOpCode::gfalse: 
-            case TraceOpCode::gtrue:
             UNARY_FOLD_SCAN_BYTECODES(CASE)
                 ir.a = forward[ir.a];
                 break;
 
-            case TraceOpCode::brcast:
+            case TraceOpCode::geq: 
+            case TraceOpCode::recycle:
             case TraceOpCode::attrget:
             case TraceOpCode::load: 
             case TraceOpCode::phi:
-            case TraceOpCode::glength:
-            case TraceOpCode::gvalue:
-            case TraceOpCode::reshape:
             case TraceOpCode::gather1:
             case TraceOpCode::gather:
             case TraceOpCode::rep:
@@ -57,6 +52,9 @@ JIT::IR JIT::Forward(
                 ir.b = forward[ir.b];
                 break;
 
+            case TraceOpCode::length:
+            case TraceOpCode::rlength:
+            case TraceOpCode::resize:
             case TraceOpCode::store: 
             case TraceOpCode::seq:
             case TraceOpCode::newenv:

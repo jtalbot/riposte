@@ -13,7 +13,7 @@ zeta <- function(p, N) {
     t <- rep(0, length(p))
     k <- 1L
     while(k <= N) {
-        t <- t + 1.0/(k^p)
+        t <- t + (k^-p)
         k <- k+1L
     }
     return(t)

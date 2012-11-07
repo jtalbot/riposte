@@ -51,6 +51,11 @@ int64_t LENGTH(Thread& thread, Value v) {
 }
 
 extern "C"
+int64_t RLENGTH(Thread& thread, int64_t a, int64_t b) {
+    return (a==0 || b==0) ? 0 : std::max(a, b);
+}
+
+extern "C"
 __attribute__((always_inline))
 Value SLOAD(Thread& thread, int64_t i) {
     return (thread.registers+DEFAULT_NUM_REGISTERS)[i];
