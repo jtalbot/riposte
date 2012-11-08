@@ -1461,7 +1461,7 @@ struct TraceCompiler {
             JIT::IR const& ir = jit.code[i];
             if(ir.live && !ir.sunk) {
                 if(Fuseable(ir)) {
-                    if(!CanFuse(fusion, ir)) {
+                    if(!CanFuse(fusion, ir) || !thread.state.doFusion) {
                         EndFusion(fusion, i);
                         fusion = StartFusion(ir);
                     }

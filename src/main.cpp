@@ -160,10 +160,11 @@ int main(int argc, char** argv)
     int64_t specializationLength = 4;
     size_t cseLevel = 2;
     bool registerAllocate = true;
+    bool doFusion = true;
 
     int ch;
     opterr = 0;
-    while ((ch = getopt_long(argc, argv, "df:hj:vqias:c:r", longopts, NULL)) != -1)
+    while ((ch = getopt_long(argc, argv, "df:hj:vqias:c:rg", longopts, NULL)) != -1)
     {
         // don't parse args past '--args'
         if(ch == 'a')
@@ -199,6 +200,9 @@ int main(int argc, char** argv)
             case 'r':
                 registerAllocate = false;
                 break;
+            case 'g':
+                doFusion = false;
+                break;
             case 'h':
             default:
                 usage();
@@ -220,6 +224,7 @@ int main(int argc, char** argv)
     state.specializationLength = specializationLength;
     state.cseLevel = cseLevel;
     state.registerAllocate = registerAllocate;
+    state.doFusion = doFusion;
     Thread& thread = state.getMainThread();
 
     /* Load built in & base functions */
