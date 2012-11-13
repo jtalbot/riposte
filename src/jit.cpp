@@ -918,6 +918,7 @@ void JIT::Replay(Thread& thread) {
         for(std::map<IRRef, IRRef>::const_iterator i = phis.begin(); i != phis.end(); ++i) {
             IR const& ir = code[i->first];
             Insert(thread, code, cse, snapshot, IR(TraceOpCode::phi, i->first, i->second, ir.type, code[i->second].out, ir.out));
+            code[i->first].phitarget = true;
         }
 
         // Emit the JMP

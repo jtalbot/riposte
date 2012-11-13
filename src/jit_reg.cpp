@@ -435,3 +435,84 @@ void JIT::Liveness() {
             MarkLiveness(i, ir);
     }
 }
+
+
+bool JIT::CanCSE(IR ir, IRRef i) {
+
+#define CAN(ii) (!ir.phitarget && !(ii < Loop && i > Loop && code[ii].phitarget))
+
+    bool cc = CAN(ir.in.length) && CAN(ir.out.length);
+    
+    switch(ir.op) 
+    {
+#define CASE(Name, ...) case TraceOpCode::Name:
+        case TraceOpCode::random:
+        case TraceOpCode::newenv:
+        case TraceOpCode::kill:
+        case TraceOpCode::push:
+        case TraceOpCode::pop:
+        case TraceOpCode::jmp:
+        case TraceOpCode::exit:
+        case TraceOpCode::nest:
+        case TraceOpCode::loop:
+        case TraceOpCode::store:
+        case TraceOpCode::sstore:
+        case TraceOpCode::sload:
+        case TraceOpCode::load:
+            return false;
+
+        case TraceOpCode::curenv:
+        case TraceOpCode::nop:
+        case TraceOpCode::constant:
+            return true;
+
+        case TraceOpCode::geq: 
+        case TraceOpCode::attrget:
+        case TraceOpCode::encode:
+        case TraceOpCode::rep:
+        case TraceOpCode::seq:
+        case TraceOpCode::gather1:
+        case TraceOpCode::gather:
+        case TraceOpCode::phi: 
+        case TraceOpCode::recycle:
+            BINARY_BYTECODES(CASE)
+            {
+                return cc && CAN(ir.a) && CAN(ir.b);
+            } break;
+        case TraceOpCode::strip:
+        case TraceOpCode::box:
+        case TraceOpCode::unbox:
+        case TraceOpCode::decodevl:
+        case TraceOpCode::decodena:
+        case TraceOpCode::lenv:
+        case TraceOpCode::denv:
+        case TraceOpCode::cenv:
+        case TraceOpCode::gproto: 
+            UNARY_FOLD_SCAN_BYTECODES(CASE)
+            {
+                return cc && CAN(ir.a);
+            } break;
+        case TraceOpCode::scatter: 
+        case TraceOpCode::scatter1: 
+            TERNARY_BYTECODES(CASE)
+            {
+                return cc && CAN(ir.a) && CAN(ir.b) && CAN(ir.c);
+            } break;
+        case TraceOpCode::length:
+            {
+                return cc && CAN(ir.a) && (!ir.exit >= 0 || CAN(ir.c));
+            } break;
+        case TraceOpCode::rlength:
+        case TraceOpCode::resize:
+            {
+                return cc && CAN(ir.a) && CAN(ir.b) && (!ir.exit >= 0 || CAN(ir.c));
+            } break;
+        default: {
+                     printf("Unknown op is %s\n", TraceOpCode::toString(ir.op));
+                     _error("Unknown op in CAN");
+                 } break;
+#undef CASE
+    }
+
+}
+

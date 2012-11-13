@@ -1532,14 +1532,8 @@ struct TraceCompiler {
         if(jit.code[len].op == TraceOpCode::constant &&
             ((Integer const&)jit.constants[jit.code[len].a])[0] <= thread.state.specializationLength) {
             Integer const& v = (Integer const&)jit.constants[jit.code[len].a];
-            //if(v[0] <= 4) {
-                length = 0;
-                width = v[0];
-            /*}
-            else {
-                length = builder.CreateLoad(value(ir.in.length));
-                width = 4;
-            }*/
+            length = 0;
+            width = v[0];
         } 
         else {
             length = builder.CreateLoad(value(ir.in.length));
@@ -1934,9 +1928,18 @@ struct TraceCompiler {
             {
                 llvm::Value* a = builder.CreateLoad(value(ir.a));
                 llvm::Value* b = builder.CreateLoad(value(ir.b));
+                llvm::Value* z = builder.getInt64(0);
+
+                //llvm::Value* r = builder.Call( "RLENGTH", a, b );
                 
-                llvm::Value* r = builder.Call( "RLENGTH", a, b );
-                
+                llvm::Value* r = 
+                    builder.CreateSelect(
+                        builder.CreateICmpSGT(a, b), a, b);
+                r = builder.CreateSelect(
+                        builder.CreateOr(builder.CreateICmpEQ(a,z), builder.CreateICmpEQ(b,z)),
+                        z, r);
+
+
                 if(jit.code[index].exit >= 0) {
                     llvm::Value* guard = builder.CreateICmpEQ(r, builder.CreateLoad(value(ir.c)));
                     EmitExit(guard, index);

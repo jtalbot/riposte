@@ -134,6 +134,7 @@ public:
         double cost;
         bool live;
         bool sunk;
+        bool phitarget;
         IRRef use;
 
         bool operator==(IR const& o) const {
@@ -147,19 +148,19 @@ public:
         }
 
         IR()
-            : op(TraceOpCode::nop), a(0), b(0), c(0), type(Type::Nil), in(Shape::Empty), out(Shape::Empty), exit(-1), live(true), sunk(false), use(0) {}
+            : op(TraceOpCode::nop), a(0), b(0), c(0), type(Type::Nil), in(Shape::Empty), out(Shape::Empty), exit(-1), live(true), sunk(false), phitarget(false), use(0) {}
         
         IR(TraceOpCode::Enum op, Type::Enum type, Shape in, Shape out)
-            : op(op), a(0), b(0), c(0), type(type), in(in), out(out), exit(-1), live(true), sunk(false), use(0) {}
+            : op(op), a(0), b(0), c(0), type(type), in(in), out(out), exit(-1), live(true), sunk(false), phitarget(false), use(0) {}
         
         IR(TraceOpCode::Enum op, IRRef a, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(0), c(0), type(type), in(in), out(out), exit(-1), live(true), sunk(false), use(0) {}
+            : op(op), a(a), b(0), c(0), type(type), in(in), out(out), exit(-1), live(true), sunk(false), phitarget(false), use(0) {}
         
         IR(TraceOpCode::Enum op, IRRef a, IRRef b, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(b), c(0), type(type), in(in), out(out), exit(-1), live(true), sunk(false), use(0) {}
+            : op(op), a(a), b(b), c(0), type(type), in(in), out(out), exit(-1), live(true), sunk(false), phitarget(false), use(0) {}
         
         IR(TraceOpCode::Enum op, IRRef a, IRRef b, IRRef c, Type::Enum type, Shape in, Shape out)
-            : op(op), a(a), b(b), c(c), type(type), in(in), out(out), exit(-1), live(true), sunk(false), use(0) {}
+            : op(op), a(a), b(b), c(c), type(type), in(in), out(out), exit(-1), live(true), sunk(false), phitarget(false), use(0) {}
 	};
 
     struct Phi {
@@ -409,6 +410,7 @@ public:
     void Mark(IRRef i, IRRef use);
     void MarkSnapshot(IRRef i, Snapshot const& snapshot);
     void MarkLiveness(IRRef i, IR ir);
+    bool CanCSE(IR ir, IRRef i);
 
     void StrengthenGuards(int64_t specializationLength);
 
