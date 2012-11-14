@@ -1,310 +1,282 @@
+/*
+    Riposte, Copyright (C) 2010-2012 Stanford University.
+    
+    main.cpp - the REPL loop
+*/
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <err.h>
-#include <fcntl.h>
-#include <string>
-#include <getopt.h>
 #include <fstream>
-#include <iostream>
+#include <unistd.h>
+#include <getopt.h>
 
-#ifdef USE_CALLGRIND
-	#include <valgrind/callgrind.h>
-#endif
-
-#include "value.h"
 #include "parser.h"
 #include "compiler.h"
 #include "library.h"
 
-void registerCoreFunctions(State& state);
-void registerCoerceFunctions(State& state);
-
-extern int opterr;
+extern "C" 
+{
+    #include "../libs/linenoise/linenoise.h"
+}
 
 /*  Globals  */
 static int debug = 0;
-static int die   = 0;      /* end session */
 static int verbose = 0;
+
+void registerCoreFunctions(State& state);
+void registerCoerceFunctions(State& state);
+
+static void info(State& state, std::ostream& out) 
+{
+    out << "Riposte (" << state.nThreads << " threads) "
+        << "-- Copyright (C) 2010-2012 Stanford University" << std::endl;
+    out << "http://jtalbot.github.com/riposte/" << std::endl;
+}
 
 /* debug messages */
 static void d_message(const int level, const char* ifmt, const char *msg)
 {
-	char*  fmt;
-	if (debug < level) return;
-	fprintf(stderr,"DEBUG: ");
-	fmt = (char *)ifmt;
-	if (!fmt) 
-		fmt = (char *)"%s\n";
-	fprintf(stderr, fmt, msg);
-	fflush(stderr);
+    char*  fmt;
+    if (debug < level) return;
+    fprintf(stderr,"DEBUG: ");
+    fmt = (char *)ifmt;
+    if (!fmt) 
+        fmt = (char *)"%s\n";
+    fprintf(stderr, fmt, msg);
+    fflush(stderr);
 }
  
  /* error messages */
- static void e_message(const char *severity,const char *source, const char *msg)
+static void e_message(const char *severity,const char *source, const char *msg)
 {
-	fprintf(stderr, "%s: (%s) ",severity,source);
-	fprintf(stderr, "%s\n", msg);
-	fflush(stderr);
+    fprintf(stderr, "%s: (%s) ",severity,source);
+    fprintf(stderr, "%s\n", msg);
+    fflush(stderr);
 }
  
  /* verbose  messages */
- static void l_message(const int level, const char *msg)
+static void l_message(const int level, const char *msg)
 {
-	if (level > verbose) return;
-	fprintf(stderr, "%s\n", msg);
-	fflush(stderr);
-}
- 
-Value parsetty(State& state) {
-	Value ppr = Value::Nil();
-	int i = 0;
-	int is_tty = isatty(fileno(stdin));
-	char code[8192];
-	int status = 0;
-	
-	while(status == 0)
-	{
-		if(is_tty){
-		  if(i == 0)
-		   printf("> ");
-		  else
-		   printf("+ ");
-		}
-		if (NULL == fgets(code+i, 8192-i, stdin))
-                  {
-                    // EOF exit
-                    //l_message(0,"EOF");
-                    //die = 1;
-                    return Value::Nil();
-                  }
-		i = strlen(code);
-		if(i == 1)
-			i = 0;
-		if(i > 0) {
-			Parser parser(state);
-			status = parser.execute(code, i, true, ppr);	
-		}
-	}
-	
-        // if not a terminal echo the parse so as to interleave with output
-	if (!is_tty) fprintf(stdout,"%s",code); 
-	if (status == -1)
-		return Value::Nil();
-	return ppr;
+    if (level > verbose) return;
+    fprintf(stderr, "%s\n", msg);
+    fflush(stderr);
 }
 
-static void printCode(Thread const& thread, Prototype const* code) {
-	std::string r = "block:\nconstants: " + intToStr(code->constants.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)code->constants.size(); i++)
-		r = r + intToStr(i) + "=\t" + thread.stringify(code->constants[i]) + "\n";
+// interactive line entry using linenoise
+static bool terminal(State& state, std::istream & in, std::ostream & out, Value& code)
+{ 
+    std::string input;
+    code = Value::Nil();
 
-	r = r + "code: " + intToStr(code->bc.size()) + "\n";
-	for(int64_t i = 0; i < (int64_t)code->bc.size(); i++)
-		r = r + intToStr(i) + ":\t" + code->bc[i].toString() + "\n";
+    int status = 0;
+    while(status == 0)
+    {
+        char* line = linenoise( input.size() == 0 ? "> " : "+ " );
 
-	std::cout << r << std::endl;
-}
+        if(line == 0)
+            return true;
 
-int dostdin(State& state) {
-	int rc = 0;
+        input += line;
 
-	printf("\n");
-	printf("Riposte (%d threads) -- A Fast Interpreter and JIT for R\n", state.nThreads);
-	printf("Flags: \t-v\t verbose vector output\n");
-	printf("\t-j #\t start with # worker threads\n");
-	printf("\n");
-	printf("Stanford University\n");
-	printf("jtalbot@stanford.edu\n");
-	printf("\n");
-
-	Thread& thread = state.getMainThread();
-
-	while(!die) {
-		try { 
-			Value value, result;
-			value = parsetty(state);
-			if(value.isNil()) continue;
-			//std::cout << "Parsed: " << value.toString() << std::endl;
-			Prototype* proto = Compiler::compileTopLevel(thread, value);
-			//printCode(thread, proto);
-			//std::cout << "Compiled code: " << thread.stringify(proto) << std::endl;
-			result = thread.eval(proto, state.global);
-			std::cout << state.stringify(result) << std::endl;
-		} catch(RiposteError& error) { 
-			e_message("Error", "riposte", error.what().c_str());
-		} catch(RuntimeError& error) {
-			e_message("Error", "runtime", error.what().c_str());
-		} catch(CompileError& error) {
-			e_message("Error", "compiler", error.what().c_str());
-		}
-		if(thread.warnings.size() > 0) {
-			std::cout << "There were " << intToStr(thread.warnings.size()) << " warnings." << std::endl;
-			for(int64_t i = 0; i < (int64_t)thread.warnings.size(); i++) {
-				std::cout << "(" << intToStr(i+1) << ") " << thread.warnings[i] << std::endl;
-			}
-		}
-		thread.warnings.clear();
-	}
-	return rc;
-}
-
-static int dofile(const char * file, std::istream & in, State& state, bool echo) {
-	int rc = 0;
-	std::string s;
-
-	// Read in the file
-	std::string code;
-	std::string line;
-       	d_message(1,"Parsing file (%s)\n",file);
-	while(std::getline(in,line))
-        {
-		if (echo && verbose) l_message(1,line.c_str());
-		code += line + '\n';
+        if(line[0] != '\0') {
+            linenoiseHistoryAdd(line);
+            linenoiseHistorySave((char*)".riposte_history");
         }
 
-	Parser parser(state);
-	Value value;
-	parser.execute(code.c_str(), code.length(), true, value);	
+        free(line);
+        
+        input += "\n";   /* add the discarded newline back in */
+        
+        if(input.size() > 0) {
+            Parser parser(state);
+            status = parser.execute(input.c_str(), input.size(), true, code);    
+        }
+    }
 
-	if(value.isNil()) return -1;
+    if (status == -1)
+        code = Value::Nil();
 
-	try {
-		Prototype* proto = Compiler::compileTopLevel(state.getMainThread(), value);
-		Value result = state.getMainThread().eval(proto, state.global);
-		//if(echo)
-			std::cout << state.stringify(result) << std::endl;
-	} catch(RiposteError& error) {
-		e_message("Error", "riposte", error.what().c_str());
-	} catch(RuntimeError& error) {
-		e_message("Error", "runtime", error.what().c_str());
-	} catch(CompileError& error) {
-		e_message("Error", "compiler", error.what().c_str());
-	}
+    return false;
+}
 
-	return rc;
+// piped in from stream 
+static bool pipe(State& state, std::istream & in, std::ostream & out, Value& code) 
+{
+    std::string input;
+    code = Value::Nil();
+
+    int status = 0;
+    while(!in.eof() && status == 0)
+    {
+        std::string more;
+        std::getline(in, more);
+        input += more;
+
+        input += "\n";   /* add the discarded newline back in */
+        
+        if(input.size() > 0) {
+            Parser parser(state);
+            status = parser.execute(input.c_str(), input.size(), true, code);    
+        }
+    }
+
+    if (status == -1)
+        code = Value::Nil();
+
+    return in.eof();
+}
+
+static void dumpWarnings(Thread& thread, std::ostream& out) 
+{
+    if(thread.warnings.size() > 0) {
+        out << "There were " << intToStr(thread.warnings.size()) << " warnings." << std::endl;
+        for(int64_t i = 0; i < (int64_t)thread.warnings.size(); i++) {
+            out << "(" << intToStr(i+1) << ") " << thread.warnings[i] << std::endl;
+        }
+    }
+    thread.warnings.clear();
+} 
+
+static int run(State& state, std::istream& in, std::ostream& out, bool interactive) 
+{
+    Thread& thread = state.getMainThread();
+
+    int rc = 0;
+
+    if(interactive) 
+    {
+        linenoiseHistoryLoad((char*)".riposte_history");
+    }
+
+    bool done = false;
+    while(!done) {
+        try { 
+            Value code;
+            done = interactive ?
+                terminal(state, in, out, code) :
+                pipe(state, in, out, code);
+
+            if(done || code.isNil()) 
+                continue;
+
+            Prototype* proto = Compiler::compileTopLevel(thread, code);
+            Value result = thread.eval(proto, state.global);
+            
+            if(interactive)
+                out << state.stringify(result) << std::endl;
+        } 
+        catch(RiposteException& e) { 
+            e_message("Error", e.kind().c_str(), e.what().c_str());
+        } 
+        dumpWarnings(thread, out);
+    }
+    
+    return rc;
 }
 
 static void usage()
 {
-	l_message(0,"usage: riposte [--filename Rscript]");
+    l_message(0,"usage: riposte [options]... [script [args]...]");
+    l_message(0,"options:");
+    l_message(0,"    -f, --file         execute R script");
+    l_message(0,"    -v, --verbose      enable verbose output");
+    l_message(0,"    -j N               launch Riposte with N threads");
 }
 
-int
-main(int argc, char** argv)
+extern int opterr;
+
+int main(int argc, char** argv)
 {
-	int rc;
+    /*  getopt parsing  */
 
-	/*  getopt parsing  */
+    static struct option longopts[] = {
+        { "debug",     0,     NULL,           'd' },
+        { "file",      1,     NULL,           'f' },
+        { "help",      0,     NULL,           'h' },
+        { "verbose",   0,     NULL,           'v' },
+        { "quiet",     0,     NULL,           'q' },
+        { "args",      0,     NULL,           'a'  },
+        { NULL,        0,     NULL,            0 }
+    };
 
-	int ch;
-	int fd = -1;
-	char * filename = NULL;
-	bool echo = true;
-	int threads = 1; 
+    /*  Parse commandline options  */
+    char * filename = NULL;
+    bool echo = true;
+    int threads = 1; 
 
-	static struct option longopts[] = {
-		{ "debug",     0,     NULL,           'd' },
-		{ "file",      1,     NULL,           'f' },
-		{ "help",      0,     NULL,           'h' },
-		{ "verbose",   0,     NULL,           'v' },
-		{ "quiet",     0,     NULL,           'q' },
-		{ NULL,        0,     NULL,            0 }
-	};
+    int ch;
+    opterr = 0;
+    while ((ch = getopt_long(argc, argv, "df:hj:vqa", longopts, NULL)) != -1)
+    {
+        // don't parse args past '--args'
+        if(ch == 'a')
+            break;
 
-	/*  Parse commandline options  */
-	opterr = 0;
-	while ((ch = getopt_long(argc, argv, "df:hj:vq", longopts, NULL)) != -1)
-		switch (ch) {
-			case 'd':
-				debug++;
-				break;
-			case 'f':
-				filename = optarg;
-				if (0 != strcmp("-",filename))
-				{
-					if ((fd = open(filename, O_RDONLY, 0)) == -1)
-						err(1, "unable to open %s", filename);
-				}
-				break;
-			case 'h':
-				usage();
-				exit (-1);
-				break;
-			case 'v':
-				verbose++;
-				break;
-			case 'q':
-				echo = false;
-				break;
-			case 'j':
-				if(0 != strcmp("-",optarg)) {
-					threads = atoi(optarg);
-				}
-				break;
-			default:
-				//usage();
-				//exit (-1);
-				break;
-		}
+        switch (ch) {
+            case 'd':
+                debug++;
+                break;
+            case 'f':
+                filename = optarg;
+                break;
+            case 'v':
+                verbose++;
+                break;
+            case 'q':
+                echo = false;
+                break;
+            case 'j':
+                if(0 != strcmp("-",optarg)) {
+                    threads = atoi(optarg);
+                }
+                break;
+            case 'h':
+            default:
+                usage();
+                exit(-1);
+                break;
+        }
+    }
 
-	//argc -= optind;
-	//argv += optind;
+    d_message(1,NULL,"Command option processing complete");
 
-	d_message(1,NULL,"Command option processing complete");
+    /* Start garbage collector */
+    GC_INIT();
+    GC_disable();
 
-	/* start garbage collector */
-	GC_INIT();
-	//GC_disable();
-#ifdef USE_CALLGRIND
-	CALLGRIND_START_INSTRUMENTATION
-#endif
+    /* Initialize execution state */
+    State state(threads, argc, argv);
+    state.verbose = verbose;
+    Thread& thread = state.getMainThread();
 
-	State state(threads, argc, argv);
-	state.verbose = verbose;
-	Thread& thread = state.getMainThread();
+    /* Load built in & base functions */
+    try {
+        registerCoreFunctions(state);   
+        registerCoerceFunctions(state); 
+        loadLibrary(thread, "library", "core");
 
-	try {
-		registerCoreFunctions(state);	
-		registerCoerceFunctions(state);	
-		loadLibrary(thread, "library", "core");
-		//loadLibrary(thread, "library", "base");
-		//loadLibrary(thread, "library", "stats");
+    } 
+    catch(RiposteException& e) { 
+        e_message("Error", e.kind().c_str(), e.what().c_str());
+    } 
+    dumpWarnings(thread, std::cout);
+   
+ 
+    /* Either execute the specified file or read interactively from stdin  */
+    int rc;
+    if(filename != NULL) {
+        std::ifstream in(filename);
+        rc = run(state, in, std::cout, false);
+    } 
+    else {
+        info(state, std::cout);
+        rc = run(state, std::cin, std::cout, true);
+    }
 
-	} catch(RiposteError& error) { 
-		e_message("Error", "riposte", error.what().c_str());
-	} catch(RuntimeError& error) {
-		e_message("Error", "runtime", error.what().c_str());
-	} catch(CompileError& error) {
-		e_message("Error", "compiler", error.what().c_str());
-	}
-	if(thread.warnings.size() > 0) {
-		std::cout << "There were " << intToStr(thread.warnings.size()) << " warnings." << std::endl;
-		for(int64_t i = 0; i < (int64_t)thread.warnings.size(); i++) {
-			std::cout << "(" << intToStr(i+1) << ") " << thread.warnings[i] << std::endl;
-		}
-	}
-	thread.warnings.clear();
-	/* Either execute the specified file or read interactively from stdin  */
 
-	/* Load the file containing the script we are going to run */
-	if(-1 != fd) {
-		close(fd);    /* will reopen in R for parsing */
-		d_message(1,"source(%s)\n",filename);
-		std::ifstream in(filename);
-		rc = dofile(filename,in,state,echo);
-	} else if(isatty(STDIN_FILENO)){
-		rc = dostdin(state);
-	} else {
-		rc = dofile("<stdin>",std::cin,state,echo);
-	}
+    /* Session over */
 
-	/* Session over */
+    fflush(stdout);
+    fflush(stderr);
 
-	fflush(stdout);
-	fflush(stderr);
-
-	return rc;
+    return rc;
 }
-
 

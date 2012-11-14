@@ -7,6 +7,7 @@
 class RiposteException {
 public:
 	RiposteException() {}
+    virtual std::string kind() const = 0;
 	virtual std::string what() const = 0;
 };
 
@@ -15,6 +16,7 @@ class RiposteError : public RiposteException {
 	std::string message;
 public:
 	RiposteError(std::string m) : RiposteException(), message(m) {}
+    std::string kind() const { return "riposte"; }
 	std::string what() const { return message; }
 };
 
@@ -22,6 +24,7 @@ class CompileError : public RiposteException {
 	std::string message;
 public:
 	CompileError(std::string m) : RiposteException(), message(m) {}
+    std::string kind() const { return "compiler"; }
 	std::string what() const { return message; }
 };
 
@@ -29,6 +32,7 @@ class RuntimeError : public RiposteException {
 	std::string message;
 public:
 	RuntimeError(std::string m) : RiposteException(), message(m) {}
+    std::string kind() const { return "runtime"; }
 	std::string what() const { return message; }
 };
 

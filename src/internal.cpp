@@ -11,7 +11,7 @@
 
 #include <pthread.h>
 
-#include "Eigen/Dense"
+#include "../libs/Eigen/Dense"
 
 template<typename T>
 T const& Cast(Value const& v) {
