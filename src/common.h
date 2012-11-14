@@ -24,7 +24,7 @@
 #endif
 
 // Arg. Clang claims to be compatible with gcc 4.2, but it's not in this case.
-#if defined(__GNUC__) && (__GNU__ < 4 || (__GNU__ == 3 && __GNU_MINOR__ < 3)) && !defined(__clang__)
+#if defined(__GNUC__) && (__GNU__ < 4 || (__GNU__ == 4 && __GNU_MINOR__ < 3)) && !defined(__clang__)
 #define SPECIALIZED_STATIC static
 #else
 #define SPECIALIZED_STATIC
