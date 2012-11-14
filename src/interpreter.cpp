@@ -118,7 +118,7 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
 	if(result.isClosureSafe()) {
 		thread.environments.push_back(thread.frame.environment);
-		thread.KillEnvironment(thread.frame.environment);
+		thread.traces.KillEnvironment(thread.frame.environment);
 	}
 
 	REGISTER(0) = result;
@@ -128,7 +128,7 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	
 	thread.pop();
 	
-	thread.LiveEnvironment(thread.frame.environment, result);
+	thread.traces.LiveEnvironment(thread.frame.environment, result);
 
 	return returnpc;
 }
@@ -159,7 +159,7 @@ Instruction const* retp_op(Thread& thread, Instruction const& inst) {
 	} else {
 		thread.frame.env->dots[-thread.frame.dest].v = result;
 	}
-	thread.LiveEnvironment(thread.frame.env, result);
+	thread.traces.LiveEnvironment(thread.frame.env, result);
 	
 	thread.base = thread.frame.returnbase;
 	Instruction const* returnpc = thread.frame.returnpc;
@@ -309,7 +309,7 @@ Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 	}
 	else {
 		thread.state.global->insert(s) = value;
-		thread.LiveEnvironment(thread.state.global, dest);
+		thread.traces.LiveEnvironment(thread.state.global, dest);
 	}
 	return &inst+1;
 }
@@ -345,11 +345,11 @@ Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
 	
 	if(value.isFuture() && (dest.isVector() || dest.isFuture())) {
 		if(index.isInteger() && index.length == 1) {
-			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
+			OUT(thread, inst.c) = thread.traces.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
 			return &inst+1;
 		}
 		else if(index.isDouble() && index.length == 1) {
-			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Double&)index)[0], value);
+			OUT(thread, inst.c) = thread.traces.EmitSStore(thread.frame.environment, dest, ((Double&)index)[0], value);
 			return &inst+1;
 		}
 	}
@@ -368,11 +368,11 @@ Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
 	
 	if(value.isFuture() && (dest.isVector() || dest.isFuture())) {
 		if(index.isInteger() && index.length == 1) {
-			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
+			OUT(thread, inst.c) = thread.traces.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
 			return &inst+1;
 		}
 		else if(index.isDouble() && index.length == 1) {
-			OUT(thread, inst.c) = thread.EmitSStore(thread.frame.environment, dest, ((Double&)index)[0], value);
+			OUT(thread, inst.c) = thread.traces.EmitSStore(thread.frame.environment, dest, ((Double&)index)[0], value);
 			return &inst+1;
 		}
 	}
@@ -395,10 +395,10 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 	}
 
 	if(isTraceable(thread, a, i) 
-		&& thread.futureType(i) == Type::Logical 
-		&& thread.futureShape(a) == thread.futureShape(i)) {
-		OUT(thread, inst.c) = thread.EmitFilter(thread.frame.environment, a, i);
-		thread.OptBind(OUT(thread, inst.c));
+		&& thread.traces.futureType(i) == Type::Logical 
+		&& thread.traces.futureShape(a) == thread.traces.futureShape(i)) {
+		OUT(thread, inst.c) = thread.traces.EmitFilter(thread.frame.environment, a, i);
+		thread.traces.OptBind(thread, OUT(thread, inst.c));
 		return &inst+1;
 	}
 
@@ -406,9 +406,9 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 	BIND(a);
 
 	if(isTraceable(thread, a, i) 
-		&& (thread.futureType(i) == Type::Integer || thread.futureType(i) == Type::Double)) {
-		OUT(thread, inst.c) = thread.EmitGather(thread.frame.environment, a, i);
-		thread.OptBind(OUT(thread, inst.c));
+		&& (thread.traces.futureType(i) == Type::Integer || thread.traces.futureType(i) == Type::Double)) {
+		OUT(thread, inst.c) = thread.traces.EmitGather(thread.frame.environment, a, i);
+		thread.traces.OptBind(thread, OUT(thread, inst.c));
 		return &inst+1;
 	}
 
@@ -457,8 +457,8 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	if(a.isLogical1()) { Name##VOp<Logical>::Scalar(thread, a.c, c); return &inst+1; } \
 	FORCE(a, inst.a); \
 	if(isTraceable<Group>(thread,a)) { \
-		c = thread.EmitUnary<Group>(thread.frame.environment, IROpCode::Name, a, 0); \
-		thread.OptBind(c); \
+		c = thread.traces.EmitUnary<Group>(thread.frame.environment, IROpCode::Name, a, 0); \
+		thread.traces.OptBind(thread, c); \
  		return &inst+1; \
 	} \
 	BIND(a); \
@@ -493,8 +493,8 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
         } \
 	FORCE(a, inst.a); FORCE(b, inst.b); \
 	if(isTraceable<Group>(thread,a,b)) { \
-		c = thread.EmitBinary<Group>(thread.frame.environment, IROpCode::Name, a, b, 0); \
-		thread.OptBind(c); \
+		c = thread.traces.EmitBinary<Group>(thread.frame.environment, IROpCode::Name, a, b, 0); \
+		thread.traces.OptBind(thread, c); \
 		return &inst+1; \
 	} \
 	BIND(a); BIND(b); \
@@ -511,12 +511,12 @@ Instruction const* length_op(Thread& thread, Instruction const& inst) {
 	if(a.isVector())
 		Integer::InitScalar(OUT(thread, inst.c), a.length);
 	else if(a.isFuture()) {
-		IRNode::Shape shape = thread.futureShape(a);
+		IRNode::Shape shape = thread.traces.futureShape(a);
 		if(shape.split < 0 && shape.filter < 0) {
 			Integer::InitScalar(OUT(thread, inst.c), shape.length);
 		} else {
-			OUT(thread, inst.c) = thread.EmitUnary<CountFold>(thread.frame.environment, IROpCode::length, a, 0);
-			thread.OptBind(OUT(thread,inst.c));
+			OUT(thread, inst.c) = thread.traces.EmitUnary<CountFold>(thread.frame.environment, IROpCode::length, a, 0);
+			thread.traces.OptBind(thread, OUT(thread,inst.c));
 		}
 	}
 	else if(a.isObject()) { 
@@ -530,8 +530,8 @@ Instruction const* length_op(Thread& thread, Instruction const& inst) {
 Instruction const* mean_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	if(isTraceable<MomentFold>(thread,a)) {
-		OUT(thread, inst.c) = thread.EmitUnary<MomentFold>(thread.frame.environment, IROpCode::mean, a, 0);
-		thread.OptBind(OUT(thread,inst.c));
+		OUT(thread, inst.c) = thread.traces.EmitUnary<MomentFold>(thread.frame.environment, IROpCode::mean, a, 0);
+		thread.traces.OptBind(thread, OUT(thread,inst.c));
  		return &inst+1;
 	}
 	return &inst+1;
@@ -541,8 +541,8 @@ Instruction const* cm2_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	OPERAND(b, inst.b); FORCE(b, inst.b); 
 	if(isTraceable<Moment2Fold>(thread,a,b)) {
-		OUT(thread, inst.c) = thread.EmitBinary<Moment2Fold>(thread.frame.environment, IROpCode::cm2, a, b, 0);
-		thread.OptBind(OUT(thread,inst.c));
+		OUT(thread, inst.c) = thread.traces.EmitBinary<Moment2Fold>(thread.frame.environment, IROpCode::cm2, a, b, 0);
+		thread.traces.OptBind(thread, OUT(thread,inst.c));
  		return &inst+1;
 	}
 	return &inst+1;
@@ -565,8 +565,8 @@ Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 		return &inst+1; 
 	}
 	if(isTraceable<IfElse>(thread,a,b,c)) {
-		OUT(thread, inst.c) = thread.EmitIfElse(thread.frame.environment, a, b, c);
-		thread.OptBind(OUT(thread,inst.c));
+		OUT(thread, inst.c) = thread.traces.EmitIfElse(thread.frame.environment, a, b, c);
+		thread.traces.OptBind(thread, OUT(thread,inst.c));
 		return &inst+1;
 	}
 	BIND(a); BIND(b); BIND(c);
@@ -581,8 +581,8 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 	OPERAND(b, inst.b); FORCE(b, inst.b);
 	OPERAND(c, inst.c); FORCE(c, inst.c);
 	if(isTraceable<Split>(thread,b,c)) {
-		OUT(thread, inst.c) = thread.EmitSplit(thread.frame.environment, c, b, levels);
-		thread.OptBind(OUT(thread,inst.c));
+		OUT(thread, inst.c) = thread.traces.EmitSplit(thread.frame.environment, c, b, levels);
+		thread.traces.OptBind(thread, OUT(thread,inst.c));
 		return &inst+1;
 	}
 	BIND(a); BIND(b); BIND(c);
@@ -609,8 +609,8 @@ Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	if(thread.state.jitEnabled 
 		&& (type == Type::Double || type == Type::Integer || type == Type::Logical)
 		&& l >= TRACE_VECTOR_WIDTH) {
-		OUT(thread, inst.c) = thread.EmitConstant(thread.frame.environment, type, l, 0);
-		thread.OptBind(OUT(thread,inst.c));
+		OUT(thread, inst.c) = thread.traces.EmitConstant(thread.frame.environment, type, l, 0);
+		thread.traces.OptBind(thread, OUT(thread,inst.c));
 		return &inst+1;
 	}
 
@@ -652,11 +652,11 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	
 	if(len >= TRACE_VECTOR_WIDTH) {
 		if(b.isDouble() || c.isDouble()) {
-			OUT(thread, inst.c) = thread.EmitSequence(thread.frame.environment, len, start, step);
-			thread.OptBind(OUT(thread,inst.c));
+			OUT(thread, inst.c) = thread.traces.EmitSequence(thread.frame.environment, len, start, step);
+			thread.traces.OptBind(thread, OUT(thread,inst.c));
 		} else {
-			OUT(thread, inst.c) = thread.EmitSequence(thread.frame.environment, len, (int64_t)start, (int64_t)step);
-			thread.OptBind(OUT(thread,inst.c));
+			OUT(thread, inst.c) = thread.traces.EmitSequence(thread.frame.environment, len, (int64_t)start, (int64_t)step);
+			thread.traces.OptBind(thread, OUT(thread,inst.c));
 		}
 		return &inst+1;
 	}
@@ -679,8 +679,8 @@ Instruction const* rep_op(Thread& thread, Instruction const& inst) {
 	int64_t len = As<Integer>(thread, a)[0];
 	
 	if(len >= TRACE_VECTOR_WIDTH) {
-		OUT(thread, inst.c) = thread.EmitRepeat(thread.frame.environment, len, (int64_t)n, (int64_t)each);
-		thread.OptBind(OUT(thread,inst.c));
+		OUT(thread, inst.c) = thread.traces.EmitRepeat(thread.frame.environment, len, (int64_t)n, (int64_t)each);
+		thread.traces.OptBind(thread, OUT(thread,inst.c));
 		return &inst+1;
 	}
 
@@ -705,7 +705,7 @@ Instruction const* random_op(Thread& thread, Instruction const& inst) {
 
 Instruction const* type_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
-	switch(thread.futureType(a)) {
+	switch(thread.traces.futureType(a)) {
                 #define CASE(name, str) case Type::name: OUT(thread, inst.c) = Character::c(Strings::name); break;
                 TYPES(CASE)
                 #undef CASE

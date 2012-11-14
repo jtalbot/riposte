@@ -127,7 +127,7 @@ inline void argAssign(Thread& thread, Environment* env, Pair const& parameter, P
 			assert(w.p == 0);
 			w.p = env;
 		} else if(w.isFuture()) {
-			thread.LiveEnvironment(env, w);
+			thread.traces.LiveEnvironment(env, w);
 		}
 		env->insert(parameter.n) = w;
 	}
@@ -141,7 +141,7 @@ inline void dotAssign(Thread& thread, Environment* env, Pair const& argument) {
 		w.p = env;
 	}
 	else if(w.isFuture()) {
-		thread.LiveEnvironment(env, w);
+		thread.traces.LiveEnvironment(env, w);
 	}
 	Pair p;
 	p.n = argument.n;
@@ -350,7 +350,7 @@ if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
 		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
 		if(t.isConcrete()) { \
 			thread.frame.environment->insert((String)(i)) = t; \
-			thread.LiveEnvironment(thread.frame.environment, t); \
+			thread.traces.LiveEnvironment(thread.frame.environment, t); \
 			return &inst; \
 		} \
 		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
@@ -367,7 +367,7 @@ if(!a.isConcrete()) { \
 		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
 		if(t.isConcrete()) { \
 			thread.frame.environment->dots[(i)].v = t; \
-			thread.LiveEnvironment(thread.frame.environment, t); \
+			thread.traces.LiveEnvironment(thread.frame.environment, t); \
 			return &inst; \
 		} \
 		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
@@ -377,23 +377,23 @@ if(!a.isConcrete()) { \
 
 #define BIND(a) \
 if(__builtin_expect(a.isFuture(), false)) { \
-	thread.Bind(a); \
+	thread.traces.Bind(thread, a); \
 	return &inst; \
 }
 
 bool isTraceableType(Thread const& thread, Value const& a) {
-	Type::Enum type = thread.futureType(a);
+	Type::Enum type = thread.traces.futureType(a);
         return type == Type::Double || type == Type::Integer || type == Type::Logical;
 }
 
 bool isTraceableShape(Thread const& thread, Value const& a) {
-	IRNode::Shape const& shape = thread.futureShape(a);
+	IRNode::Shape const& shape = thread.traces.futureShape(a);
 	return !shape.blocking && shape.length >= TRACE_VECTOR_WIDTH;
 }
 
 bool isTraceableShape(Thread const& thread, Value const& a, Value const& b) {
-	IRNode::Shape const& shapea = thread.futureShape(a);
-	IRNode::Shape const& shapeb = thread.futureShape(b);
+	IRNode::Shape const& shapea = thread.traces.futureShape(a);
+	IRNode::Shape const& shapeb = thread.traces.futureShape(b);
 	return 	!shapea.blocking &&
 		!shapeb.blocking &&
 		(shapea.length >= TRACE_VECTOR_WIDTH || shapeb.length >=TRACE_VECTOR_WIDTH) &&
