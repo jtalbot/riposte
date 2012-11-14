@@ -7,7 +7,7 @@
 #include "type.h"
 #include "bc.h"
 #include "ops.h"
-#include "internal.h"
+#include "runtime.h"
 #include "interpreter.h"
 #include "compiler.h"
 #include "sse.h"

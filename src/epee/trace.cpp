@@ -403,7 +403,7 @@ void Trace::WriteOutputs(Thread & thread) {
 		for(size_t i = 0; i < nodes.size(); i++) {
 			if(nodes[i].liveOut) {
 				std::string v = thread.stringify(nodes[i].out);
-				printf("n%llu = %s\n", i, v.c_str());
+				std::cout << "n" << i << " = " << v << std::endl;
 			}
 		}
 	}

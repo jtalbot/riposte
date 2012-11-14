@@ -1,6 +1,6 @@
 
 #include "compiler.h"
-#include "internal.h"
+#include "runtime.h"
 
 static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::add) return ByteCode::pos; 

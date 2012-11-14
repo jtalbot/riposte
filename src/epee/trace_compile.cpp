@@ -5,9 +5,9 @@
 #include "../interpreter.h"
 #include "../vector.h"
 #include "../ops.h"
+#include "../runtime.h"
 #include "assembler-x64.h"
 #include "register_set.h"
-#include "../internal.h"
 
 #ifdef USE_AMD_LIBM
 #include <amdlibm.h>
@@ -114,7 +114,7 @@ double debug_print(int64_t offset, __m128 a) {
 		int64_t i[2];
 	};
 	c = a;
-	printf("%d %f %f %ld %ld\n", (int) offset, d[0],d[1],i[0],i[1]);
+	std::cout << offset << " " << d[0] << " " << d[1] << " " << i[0] << " " << i[1] << std::endl;
 
 	return d[0];
 }
@@ -368,7 +368,7 @@ static __m128d repeatEach_i(__m128d a, int64_t vector_index) {
 	return v.D;
 }
 
-#define FOLD_SCAN_FN(name, type, op) \
+#define FOLD_FN(name, type, op) \
 static __m128d name (__m128d input, type * last) { \
 	union { \
 		__m128d in; \
@@ -377,8 +377,10 @@ static __m128d name (__m128d input, type * last) { \
 	in = input; \
 	*last = i[0] = *last op i[0] op i[1]; \
 	return in; \
-} \
-static __m128d cum##name(__m128d input, type * last) { \
+}
+
+#define SCAN_FN(name, type, op) \
+static __m128d name(__m128d input, type * last) { \
 	union { \
 		__m128d in; \
 		type i[2]; \
@@ -389,10 +391,12 @@ static __m128d cum##name(__m128d input, type * last) { \
 	return in; \
 }
 
-FOLD_SCAN_FN(prodi, int64_t, *)
-FOLD_SCAN_FN(prodd, double , *)
-FOLD_SCAN_FN(cumsumi, int64_t, +)
-FOLD_SCAN_FN(cumsumd, double , +)
+FOLD_FN(prodi, int64_t, *)
+FOLD_FN(prodd, double , *)
+SCAN_FN(cumprodi, int64_t, *)
+SCAN_FN(cumprodd, double , *)
+SCAN_FN(cumsumi, int64_t, +)
+SCAN_FN(cumsumd, double , +)
 
 struct TraceJIT {
 	TraceJIT(Trace * t, Thread& thread)
@@ -1264,7 +1268,6 @@ struct TraceJIT {
 					((double*)node.in.p)[i] = std::numeric_limits<double>::infinity();
 				
 				Operand offset = Operand(rsp, stackOffset);
-				XMMRegister index = no_xmm;
 				
 				MoveA2R(ref);
 				if(node.shape.filter >= 0) {
@@ -1318,7 +1321,6 @@ struct TraceJIT {
 					((double*)node.in.p)[i] = -std::numeric_limits<double>::infinity();
 				
 				Operand offset = Operand(rsp, stackOffset);
-				XMMRegister index = no_xmm;
 				
 				MoveA2R(ref);
 				if(node.shape.filter >= 0) {
@@ -1375,6 +1377,7 @@ struct TraceJIT {
 					Operand op = EncodeOperand(str.store.dst.p, thread_index, times_8);
 					asm_.mulpd(RegR(ref),op);
 					asm_.movdqa(op,RegR(ref));*/
+					EmitFoldFunction(ref,(void*)prodd,Constant(0.0)); break;
 				}
 				else {
 					EmitFoldFunction(ref,(void*)prodi,Constant((int64_t)0LL)); break;
