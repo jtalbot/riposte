@@ -3,15 +3,14 @@
 default: parser
 
 lexer: 
-	ragel -o ../parser.cpp lexer.rl
+	ragel -o lexer.cpp lexer.rl
 
 lemon: lemon.c
 	gcc -o $@ $<
 
 parser: lexer lemon
-	-./lemon -q parser.y
-	mv parser.h ../tokens.h
-	mv parser.c ../ast.cpp
+	-./lemon -q grammar.y
+	mv grammar.c grammar.cpp
 
 clean:
 	rm -rf lemon 

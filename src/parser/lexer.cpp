@@ -12,12 +12,12 @@
  *            R parser has a rule for OP % OP. Is this ever used?
  */
 
-#include "parser.h"
-#include "tokens.h"
-#include "ast.cpp"
+#include "../parser.h"
+#include "grammar.h"
+#include "grammar.cpp"
 
 
-#line 21 "../parser.cpp"
+#line 21 "lexer.cpp"
 static const char _Scanner_actions[] = {
 	0, 1, 2, 1, 3, 1, 25, 1, 
 	26, 1, 27, 1, 28, 1, 29, 1, 
@@ -460,7 +460,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	const char* eof = isEof ? pe : 0;
 	int cs, act;
 	
-#line 464 "../parser.cpp"
+#line 464 "lexer.cpp"
 	{
 	cs = Scanner_start;
 	ts = 0;
@@ -470,7 +470,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 
 #line 202 "lexer.rl"
 	
-#line 474 "../parser.cpp"
+#line 474 "lexer.cpp"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -491,7 +491,7 @@ _resume:
 #line 1 "NONE"
 	{ts = p;}
 	break;
-#line 495 "../parser.cpp"
+#line 495 "lexer.cpp"
 		}
 	}
 
@@ -513,7 +513,7 @@ _resume:
 			else if ( (*p) > *_mid )
 				_lower = _mid + 1;
 			else {
-				_trans += (_mid - _keys);
+				_trans += (unsigned int)(_mid - _keys);
 				goto _match;
 			}
 		}
@@ -536,7 +536,7 @@ _resume:
 			else if ( (*p) > _mid[1] )
 				_lower = _mid + 2;
 			else {
-				_trans += ((_mid - _keys)>>1);
+				_trans += (unsigned int)((_mid - _keys)>>1);
 				goto _match;
 			}
 		}
@@ -933,7 +933,7 @@ _eof_trans:
 	}
 	}
 	break;
-#line 937 "../parser.cpp"
+#line 937 "lexer.cpp"
 		}
 	}
 
@@ -950,7 +950,7 @@ _again:
 #line 1 "NONE"
 	{act = 0;}
 	break;
-#line 954 "../parser.cpp"
+#line 954 "lexer.cpp"
 		}
 	}
 

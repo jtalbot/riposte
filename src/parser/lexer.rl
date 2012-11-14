@@ -10,9 +10,9 @@
  *            R parser has a rule for OP % OP. Is this ever used?
  */
 
-#include "parser.h"
-#include "tokens.h"
-#include "ast.cpp"
+#include "../parser.h"
+#include "grammar.h"
+#include "grammar.cpp"
 
 %%{
 	machine Scanner; 
