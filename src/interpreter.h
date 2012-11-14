@@ -7,7 +7,7 @@
 
 #include "value.h"
 #include "thread.h"
-#include "ir.h"
+#include "epee/ir.h"
 
 class Thread;
 
@@ -103,7 +103,7 @@ struct InternalFunction {
 	int64_t params;
 };
 
-#ifdef ENABLE_JIT
+#ifdef ENABLE_EPEE
 
 #define TRACE_MAX_VECTOR_REGISTERS (32)
 #define TRACE_VECTOR_WIDTH (64)
@@ -238,7 +238,7 @@ public:
 	void interpreter_init(Thread& state);
 	
 	std::string stringify(Value const& v) const;
-#ifdef ENABLE_JIT
+#ifdef ENABLE_EPEE
 	std::string stringify(Trace const & t) const;
 #endif
 	std::string deparse(Value const& v) const;
@@ -290,7 +290,7 @@ public:
 
 	std::vector<std::string> warnings;
 
-#ifdef ENABLE_JIT
+#ifdef ENABLE_EPEE
 private:
 	std::vector<Trace*, traceable_allocator<Trace*> > availableTraces;
 	std::map<int64_t, Trace*, std::less<int64_t>, traceable_allocator<std::pair<int64_t, Trace*> > > traces;
@@ -325,7 +325,7 @@ public:
 	}
 
 	std::string stringify(Value const& v) const { return state.stringify(v); }
-#ifdef ENABLE_JIT
+#ifdef ENABLE_EPEE
 	std::string stringify(Trace const & t) const { return state.stringify(t); }
 #endif
 	std::string deparse(Value const& v) const { return state.deparse(v); }

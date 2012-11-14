@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "exceptions.h"
+#include "../exceptions.h"
 #include "assembler-x64.h"
 #include "assembler-x64-inl.h"
 #include <string.h>

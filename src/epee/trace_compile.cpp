@@ -2,12 +2,12 @@
 #include <math.h>
 #include <pthread.h>
 
-#include "interpreter.h"
-#include "vector.h"
-#include "ops.h"
+#include "../interpreter.h"
+#include "../vector.h"
+#include "../ops.h"
 #include "assembler-x64.h"
 #include "register_set.h"
-#include "internal.h"
+#include "../internal.h"
 
 #ifdef USE_AMD_LIBM
 #include <amdlibm.h>

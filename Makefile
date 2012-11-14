@@ -10,7 +10,7 @@ ifeq ($(UNAME),Linux)
 LFLAGS += -lrt
 endif
 
-ENABLE_JIT=1
+ENABLE_EPEE=1
 ENABLE_ARBB=0
 ENABLE_LIBM=0
 
@@ -33,40 +33,37 @@ endif
 
 SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp parser.cpp coerce.cpp library.cpp
 
-ifeq ($(ENABLE_JIT),1)
-	CXXFLAGS += -DENABLE_JIT
-	SRC += ir.cpp trace.cpp trace_compile.cpp assembler-x64.cpp
+ifeq ($(ENABLE_EPEE),1)
+	CXXFLAGS += -DENABLE_EPEE
+	SRC += epee/ir.cpp epee/trace.cpp epee/trace_compile.cpp epee/assembler-x64.cpp
 endif
 
 EXECUTABLE := bin/riposte
 
 OBJECTS := $(patsubst %.cpp,bin/%.o,$(SRC))
+ASM := $(patsubst %.cpp,bin/%.s,$(SRC))
 DEPENDENCIES := $(patsubst %.cpp,bin/%.d,$(SRC))
 
-ASM := $(patsubst %.cpp,bin/%.s,$(SRC))
-
-default: debug 
+default: debug
 
 debug: CXXFLAGS += -DDEBUG -O0 -g
 debug: $(EXECUTABLE)
 
-release: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize 
+release: CXXFLAGS += -DNDEBUG -O3 -g 
 release: $(EXECUTABLE)
 
-irelease: CXXFLAGS += -DNDEBUG -O3 -g
-irelease: CXX := icc
-irelease: $(EXECUTABLE)
-          
-asm: CXXFLAGS += -DNDEBUG -O3 -g -ftree-vectorize 
+asm: CXXFLAGS += -DNDEBUG -O3 -g 
 asm: $(ASM)
 
 $(EXECUTABLE): $(OBJECTS)
 	$(CXX) $(LFLAGS) -o $@ $^ $(LIBS)
 
 bin/%.o: src/%.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@ 
 
 bin/%.s: src/%.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -S -c $< -o $@ 
 
 clean:
@@ -83,7 +80,8 @@ coverage_clean:	clean
 
 
 # dependency rules
-bin/%.d:	src/%.cpp
+bin/%.d: src/%.cpp
+	@mkdir -p $(dir $@)
 	@$(CXX) $(CXXFLAGS) -MM -MT '$@ $(@:.d=.o)' $< -o $@
 	
 -include $(DEPENDENCIES)

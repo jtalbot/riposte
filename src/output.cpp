@@ -150,7 +150,7 @@ std::string State::stringify(Value const& value) const {
 	return ::stringify(*this, value);
 }
 
-#ifdef ENABLE_JIT
+#ifdef ENABLE_EPEE
 std::string State::stringify(Trace const & t) const {
 	return "NYI";
 }
