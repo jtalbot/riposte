@@ -410,7 +410,7 @@ public:
     void Mark(IRRef i, IRRef use);
     void MarkSnapshot(IRRef i, Snapshot const& snapshot);
     void MarkLiveness(IRRef i, IR ir);
-    bool CanCSE(IR ir, IRRef i);
+    bool CanCSE(IR ir, IRRef i, IRRef j);
 
     void StrengthenGuards(int64_t specializationLength);
 

@@ -437,9 +437,11 @@ void JIT::Liveness() {
 }
 
 
-bool JIT::CanCSE(IR ir, IRRef i) {
+bool JIT::CanCSE(IR ir, IRRef i, IRRef j) {
 
-#define CAN(ii) (!ir.phitarget && !(ii < Loop && i > Loop && code[ii].phitarget))
+    bool together = (i < Loop && j < Loop) || (i > Loop && j > Loop);
+
+#define CAN(ii) (!ir.phitarget && !(ii < Loop && code[ii].phitarget))
 
     bool cc = CAN(ir.in.length) && CAN(ir.out.length);
     
@@ -477,7 +479,7 @@ bool JIT::CanCSE(IR ir, IRRef i) {
         case TraceOpCode::recycle:
             BINARY_BYTECODES(CASE)
             {
-                return cc && CAN(ir.a) && CAN(ir.b);
+                return together || (cc && CAN(ir.a) && CAN(ir.b));
             } break;
         case TraceOpCode::strip:
         case TraceOpCode::box:
@@ -490,22 +492,22 @@ bool JIT::CanCSE(IR ir, IRRef i) {
         case TraceOpCode::gproto: 
             UNARY_FOLD_SCAN_BYTECODES(CASE)
             {
-                return cc && CAN(ir.a);
+                return together || (cc && CAN(ir.a));
             } break;
         case TraceOpCode::scatter: 
         case TraceOpCode::scatter1: 
             TERNARY_BYTECODES(CASE)
             {
-                return cc && CAN(ir.a) && CAN(ir.b) && CAN(ir.c);
+                return together || (cc && CAN(ir.a) && CAN(ir.b) && CAN(ir.c));
             } break;
         case TraceOpCode::length:
             {
-                return cc && CAN(ir.a) && (!ir.exit >= 0 || CAN(ir.c));
+                return together || (cc && CAN(ir.a) && (ir.exit < 0 || CAN(ir.c)));
             } break;
         case TraceOpCode::rlength:
         case TraceOpCode::resize:
             {
-                return cc && CAN(ir.a) && CAN(ir.b) && (!ir.exit >= 0 || CAN(ir.c));
+                return together || (cc && CAN(ir.a) && CAN(ir.b) && (ir.exit < 0 || CAN(ir.c)));
             } break;
         default: {
                      printf("Unknown op is %s\n", TraceOpCode::toString(ir.op));

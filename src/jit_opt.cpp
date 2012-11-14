@@ -406,7 +406,7 @@ JIT::IRRef JIT::Insert(
     //if(i != cse.end() && csecost >= nocsecost)
     //    printf("%s: %f %f\n", TraceOpCode::toString(ir.op), csecost, nocsecost);
 
-    if(i != cse.end() && CanCSE(ir,code.size()) && ((csecost < nocsecost && thread.state.cseLevel == 2) || (nocsecost > 0 && thread.state.cseLevel == 1)
+    if(i != cse.end() && CanCSE(ir,code.size(),i->second) && ((csecost < nocsecost && thread.state.cseLevel == 2) || (nocsecost > 0 && thread.state.cseLevel == 1)
                 || (nocsecost >= 10000000000000 && thread.state.cseLevel == 0))
         ) {
         //printf("%d: Found a CSE for %s\n", code.size(), TraceOpCode::toString(ir.op));
@@ -467,9 +467,9 @@ void JIT::RunOptimize(Thread& thread) {
                 j = cse.find(tir);
             }
 
-            if(j != cse.end())
-            { 
-                if(CanCSE(ir, i) && ((csecost < nocsecost && thread.state.cseLevel == 2) || (nocsecost > 0 && thread.state.cseLevel == 1)
+            if(j != cse.end() && CanCSE(ir, i, j->second))
+            {
+                if(((csecost < nocsecost && thread.state.cseLevel == 2) || (nocsecost > 0 && thread.state.cseLevel == 1)
                 || (nocsecost >= 10000000000000 && thread.state.cseLevel == 0))
 /*&&
                     (ir.op == TraceOpCode::constant ||
@@ -567,7 +567,7 @@ double JIT::Opcost(std::vector<IR>& code, IR ir, bool aggressive) {
                 break;
 
             case TraceOpCode::recycle:
-                if(ir.b == 1)
+                if(ir.b == 1 || code[ir.b].c == 1)
                     return 0.1+code[ir.a].cost;
                 else
                     return aggressive ? 20000000000000000 : 0;

@@ -551,6 +551,7 @@ struct Fusion {
     llvm::BasicBlock* condition;
     llvm::BasicBlock* after;
 
+    llvm::Value* initial;
     llvm::Value* iterator;
     llvm::Value* length;
     llvm::Value* sequenceI;
@@ -572,7 +573,7 @@ struct Fusion {
     JIT::IRRef lengthIR;
 
     Fusion(LLVMState* S, JIT& jit, FunctionBuilder builder, 
-            std::vector<Register>& registers, llvm::Value* length, 
+            std::vector<Register>& registers, llvm::Value* initial, llvm::Value* length, 
             size_t width, JIT::IRRef lengthIR)
         : S(S)
           , jit(jit)
@@ -607,6 +608,8 @@ struct Fusion {
             seqI = llvm::ConstantVector::get(sI);
         }
 
+        this->initial = initial;
+
         instructions = 0;
     }
 
@@ -624,31 +627,6 @@ struct Fusion {
 
     llvm::Type* llvmType(Type::Enum type, size_t width) {
         return llvm::VectorType::get(llvmType(type), width);
-    }
-
-    void Open(llvm::BasicBlock* before) {
-        header      = builder.CreateBlock( "fusedHeader", before);
-        condition   = builder.CreateBlock( "fusedCondition", before);
-        body        = builder.CreateBlock( "fusedBody", before);
-        after       = builder.CreateBlock( "fusedAfter", before);
-
-        builder.SetInsertPoint(header);
-        headerBuilder.SetInsertPoint(header);
-        llvm::Value* initial = builder.getInt64(0);
-
-        if(length != 0) {
-            builder.SetInsertPoint(condition);
-            iterator = builder.CreatePHI(builder.getInt64Ty(), 2);
-            sequenceI = builder.CreatePHI(llvmType(Type::Integer, width), 2);
-            sequenceD = builder.CreatePHI(llvmType(Type::Double, width), 2);
-        }
-        else {
-            iterator = initial;
-            sequenceI = seqI;
-            sequenceD = seqD;
-        }
-
-        builder.SetInsertPoint(body);
     }
 
     llvm::Value* RawLoad(FunctionBuilder& builder, size_t ir) 
@@ -1337,6 +1315,30 @@ struct Fusion {
         Store(builder, r, ir.reg, builder.getInt64(0), 1); 
     }
 
+    void Open(llvm::BasicBlock* before) {
+        header      = builder.CreateBlock( "fusedHeader", before);
+        condition   = builder.CreateBlock( "fusedCondition", before);
+        body        = builder.CreateBlock( "fusedBody", before);
+        after       = builder.CreateBlock( "fusedAfter", before);
+
+        builder.SetInsertPoint(header);
+        headerBuilder.SetInsertPoint(header);
+
+        if(length != 0) {
+            builder.SetInsertPoint(condition);
+            iterator = builder.CreatePHI(builder.getInt64Ty(), 2);
+            sequenceI = builder.CreatePHI(llvmType(Type::Integer, width), 2);
+            sequenceD = builder.CreatePHI(llvmType(Type::Double, width), 2);
+        }
+        else {
+            iterator = initial;
+            sequenceI = seqI;
+            sequenceD = seqD;
+        }
+
+        builder.SetInsertPoint(body);
+    }
+
     llvm::BasicBlock* Close(JIT::IRRef postIR) {
        
         if(instructions == 0) {
@@ -1358,8 +1360,6 @@ struct Fusion {
             builder.CreateBr(body);
         }
         else {
-            llvm::Value* initial = builder.getInt64(0);
-            
             llvm::BasicBlock* bottom = builder.GetInsertBlock();
             llvm::Value* increment = builder.CreateAdd(iterator, builder.getInt64(width));
             
@@ -1374,7 +1374,8 @@ struct Fusion {
             builder.CreateBr(condition);
 
             builder.SetInsertPoint(condition);
-            llvm::Value* endCond = builder.CreateICmpULT(iterator, length);
+            llvm::Value* t = builder.CreateAdd(iterator, builder.getInt64(width));
+            llvm::Value* endCond = builder.CreateICmpULE(t, length);
             builder.CreateCondBr(endCond, body, after);
         }
 
@@ -1413,6 +1414,11 @@ struct TraceCompiler {
     FunctionBuilder builder;
     std::vector<Register> registers;
     std::vector<llvm::CallInst*> calls;
+
+    struct FusionPair {
+        Fusion* a;
+        Fusion* t;
+    };
  
     TraceCompiler(Thread& thread, JIT& jit, llvm::Function* func) 
         : thread(thread)
@@ -1456,20 +1462,21 @@ struct TraceCompiler {
         builder.SetInsertPoint(HeaderBlock);
 
         //MARKER(std::string("Entering trace ") + intToStr(jit.dest->traceIndex));
-        Fusion* fusion = 0;
+        FusionPair fp = { 0, 0 };
         for(size_t i = 0; i < jit.code.size(); i++) {
             JIT::IR const& ir = jit.code[i];
             if(ir.live && !ir.sunk) {
                 if(Fuseable(ir)) {
-                    if(!CanFuse(fusion, ir) || !thread.state.doFusion) {
-                        EndFusion(fusion, i);
-                        fusion = StartFusion(ir);
+                    if(!CanFuse(fp, ir) || !thread.state.doFusion) {
+                        EndFusion(fp, i);
+                        fp = StartFusion(ir);
                     }
                     InitializeRegister(ir);
-                    fusion->Emit(i);
+                    if(fp.a != 0) fp.a->Emit(i);
+                    if(fp.t != 0) fp.t->Emit(i);
                 }
                 else {
-                    EndFusion(fusion, i);
+                    EndFusion(fp, i);
                     InitializeRegister(ir);
                     Emit(ir, i, registers[ir.reg] );
                 }
@@ -1524,37 +1531,50 @@ struct TraceCompiler {
         return registers[ jit.code[a].reg ].value( builder );
     }
 
-    Fusion* StartFusion(JIT::IR ir) {
-        llvm::Value* length = 0;
-        int64_t width = std::min((int64_t)4, std::max((int64_t)1, (int64_t)thread.state.specializationLength)); 
+    FusionPair StartFusion(JIT::IR ir) {
+        JIT::IRRef len = ir.in.length;
 
-        JIT::IRRef len = ir.in.length; 
+        FusionPair fp = { 0, 0 };
+ 
         if(jit.code[len].op == TraceOpCode::constant &&
-            ((Integer const&)jit.constants[jit.code[len].a])[0] <= thread.state.specializationLength) {
+            ((Integer const&)jit.constants[jit.code[len].a])[0] 
+                <= thread.state.specializationLength) 
+        {
             Integer const& v = (Integer const&)jit.constants[jit.code[len].a];
-            length = 0;
-            width = v[0];
+            fp.a = new Fusion(S, jit, FunctionBuilder( function ), registers, builder.getInt64(0), 0, v[0], len);
+            fp.a->Open(InnerBlock);
+            fp.t = 0;       // no need for tail code in the case of fixed length
         } 
         else {
-            length = builder.CreateLoad(value(ir.in.length));
+            llvm::Value* length = builder.CreateLoad(value(ir.in.length));
+            int64_t width = 4;      // double pump SSE
+            fp.a = new Fusion(S, jit, FunctionBuilder( function ), registers, builder.getInt64(0), length, width, len);
+            fp.a->Open(InnerBlock);
+            fp.t = new Fusion(S, jit, FunctionBuilder( function ), registers, fp.a->iterator, length, 1, len);
+            fp.t->Open(InnerBlock);
         }
-        Fusion* fusion = new Fusion(S, jit, FunctionBuilder( function ), registers, length, width, len);
-        fusion->Open(InnerBlock);
-        return fusion;
+        return fp;
     }
 
-    void EndFusion(Fusion*& fusion, JIT::IRRef postIR) {
-        if(fusion) {
-            llvm::BasicBlock* after = fusion->Close(postIR);
-            builder.CreateBr(fusion->header);
+    void EndFusion(FusionPair& fp, JIT::IRRef postIR) {
+        if(fp.a) {
+            llvm::BasicBlock* after = fp.a->Close(postIR);
+            builder.CreateBr(fp.a->header);
             builder.SetInsertPoint(after);
-            delete fusion;
-            fusion = 0;
+            delete fp.a;
+            fp.a = 0;
+        }
+        if(fp.t) {
+            llvm::BasicBlock* after = fp.t->Close(postIR);
+            builder.CreateBr(fp.t->header);
+            builder.SetInsertPoint(after);
+            delete fp.t;
+            fp.t = 0;
         }
     }
 
-    bool CanFuse(Fusion*& fusion, JIT::IR ir) {
-        return fusion != 0 && fusion->lengthIR == ir.in.length;
+    bool CanFuse(FusionPair& fp, JIT::IR ir) {
+        return fp.a != 0 && fp.a->lengthIR == ir.in.length;
     }
 
     llvm::AllocaInst* CreateEntryBlockAlloca(llvm::Type* type, llvm::Value* size = 0) {
@@ -2003,7 +2023,7 @@ struct TraceCompiler {
     void ReconstructExit(JIT::Snapshot const& snapshot, size_t index) {
     
         // emit sunk code
-        Fusion* fusion = 0;
+        FusionPair fp = { 0, 0 };
         for(size_t i = 0; i < index; i++) {
             JIT::IR const& ir = jit.code[i];
             if(ir.live && ir.sunk) {
@@ -2011,14 +2031,15 @@ struct TraceCompiler {
                                               // initialized register
                 InitializeRegister(ir);
                 if(Fuseable(ir)) {
-                    if(!CanFuse(fusion, ir)) {
-                        EndFusion(fusion, i);
-                        fusion = StartFusion(ir);
+                    if(!CanFuse(fp, ir)) {
+                        EndFusion(fp, i);
+                        fp = StartFusion(ir);
                     }
-                    fusion->Emit(i);
+                    if(fp.a != 0) fp.a->Emit(i);
+                    if(fp.t != 0) fp.t->Emit(i);
                 }
                 else {
-                    EndFusion(fusion, i);
+                    EndFusion(fp, i);
                     Emit(ir, i, registers[ir.reg] );
                 }
             }
