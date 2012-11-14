@@ -8,7 +8,6 @@ We only do development on OSX and Linux. It's unlikely that our JIT will work on
 Compiling riposte
 -----------------
 1. Install the Boehm GC. Available in macports, `port install boehmgc`.
-   Install rlwrap. Available in macports, `port install rlwrap`.
 
 2. Run `make release` in the riposte directory, or `make debug` for the debug version
 
@@ -31,4 +30,7 @@ License
 -------
 Riposte is distributed under the BSD 2-clause license <http://www.opensource.org/licenses/bsd-license.php>.
 
-Riposte uses Eigen which is distributed under the LGPL3 license <http://www.gnu.org/copyleft/lesser.html>.
+Riposte uses the following libraries:
+* Eigen (http://eigen.tuxfamily.org) under the MPL2 license (http://www.mozilla.org/MPL/2.0/)
+* Linenoise (https://github.com/antirez/linenoise/) under a BSD license
+
