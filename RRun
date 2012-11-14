@@ -1,0 +1,44 @@
+if [ $# -lt 1 ]; then
+    SCALE=1
+else
+    SCALE=$1
+fi
+
+function bench {
+    for M in 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768 65536
+    do
+        echo -n $2,
+        echo -n $M,
+        bin/riposte -r -f bbenchmarks/$1.R --args $3 $M
+        echo -n ,
+        bin/riposte -f bbenchmarks/$1.R --args $3 $M
+        echo ""
+    done
+}
+
+function genbench {
+    Rscript sbenchmarks/gen_$1.R $2
+    echo -n $1,
+    Rscript sbenchmarks/$1.R $2
+    echo -n ,
+    luajit sbenchmarks/$1.lua $2
+}
+
+
+echo "benchmark,M,None,Vector"
+bench americanPutOption "American Put" $((SCALE*100000))
+bench binarysearch "Binary Search" $((SCALE*4000))
+bench black_scholes "Black-Scholes Put" $((SCALE*15000))
+bench colsum "Column Sum" $((SCALE*500000))
+bench fib "Fibonacci" $((SCALE*750000))
+bench mandelbrot "Mandelbrot" $((SCALE*400000))
+bench meanShift "Mean Shift" $((SCALE*165000))
+bench rw "Random Walk" $((SCALE*100000))
+bench rungeKutta "Runge-Kutta" $((SCALE*180000))
+bench zeta "Riemann zeta" $((SCALE*20000))
+
+#bench phongReflection "Phong model" $((SCALE*50000))
+#bench alphaCompositing "Image compositing" $((SCALE*200000))
+#bench qsort $((SCALE*20000))
+#bench convolve $((SCALE*200000))
+#genbench cholesky $((SCALE*250000))
