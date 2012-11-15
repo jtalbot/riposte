@@ -3,3 +3,4 @@ Tests more vector functionality
 Key functionality:
     'c' on heterogeneous inputs (casting to same type)
     vector recycling
+    1-d vector indexing
