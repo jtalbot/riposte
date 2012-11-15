@@ -777,6 +777,8 @@ struct TraceJIT {
 					p = ((Integer&)node.in).v();
 				else if(node.in.isDouble())
 					p = ((Double&)node.in).v();
+				else
+					_error("Unsupported type");
 				//printf("load: %x\n", p);
 				int64_t offset = node.constant.i;
 				if(offset % 2 == 0) {
@@ -801,6 +803,8 @@ struct TraceJIT {
 						p = ((Integer&)node.in).v();
 					else if(node.in.isDouble())
 						p = ((Double&)node.in).v();
+					else
+						_error("Unsupported type");
 			
 					asm_.movq(r8, RegA(ref));
 					asm_.movhlps(RegR(ref), RegA(ref));
