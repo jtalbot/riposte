@@ -17,10 +17,13 @@ eigen <- function(x, symmetric=FALSE) {
 
 cat <- function(..., sep = " ") .Internal(cat(list(...), sep))
 library <- function(.) .Internal(library(.))
-#inherits <- function(x, what, which=FALSE) .Internal(inherits(x, what, which))
+inherits <- function(x, what, which=FALSE) {
+    #.Internal(inherits(x, what, which))
+    any(class(x) == what)
+}
 
-unlist <- function(x, recursive = TRUE, use.names = TRUE) UseMethod("unlist")
-unlist.default <- function(x, recursive = TRUE, use.names = TRUE) {
+#unlist <- function(x, recursive = TRUE, use.names = TRUE) UseMethod("unlist")
+unlist <- function(x, recursive = TRUE, use.names = TRUE) {
 	x <- .Internal(unlist(x, as.logical(recursive), as.logical(use.names)))
 }
 

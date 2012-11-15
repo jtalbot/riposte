@@ -13,7 +13,17 @@ split <- function(x, f) {
 	split(strip(x), strip(f), length(attr(f, 'levels')))
 }
 
-c <- function(...) .Internal(unlist(list(...), TRUE, TRUE))
+c <- function(x,...) {
+    fun <- .Internal(unlist(list('c','.',class(x)), TRUE, TRUE))
+    fun <- .Internal(paste(fun, ""))
+    if(exists(fun)) {
+        return(get(fun)(x,...))
+    }
+    else {
+        .Internal(unlist(list(x,...), TRUE, TRUE))
+    }
+}
+
 print <- function(...) cat(...)
 
 `:` <- function(from, to) { 

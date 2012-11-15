@@ -86,6 +86,15 @@ length.complex <- function(x) length(x[[1]])
 	r
 }
 
+`c.complex` <- function(x, ...) {
+    l <- list(x,...)
+    re <- unlist(lapply(l, function(a) a[[1]]))
+    im <- unlist(lapply(l, function(a) a[[2]]))
+    r <- list(Re=re, Im=im)
+    class(r) <- 'complex'
+	r	
+}
+
 Re <- function(x) UseMethod("Re")
 Im <- function(x) UseMethod("Im")
 
