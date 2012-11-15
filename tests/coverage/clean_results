@@ -1,6 +1,0 @@
-#!/bin/bash
-
-for i in `find . -name *.R`; do 
-    rm $i.out
-    rm $i.run
-done

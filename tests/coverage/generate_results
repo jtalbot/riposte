@@ -1,5 +1,0 @@
-#!/bin/bash
-
-for i in `find . -name *.R`; do 
-    Rscript --vanilla --default-packages=NULL $i > $i.out
-done

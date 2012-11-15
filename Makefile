@@ -55,12 +55,37 @@ build/%.s: src/%.cpp
 $(LINENOISE): libs/linenoise/linenoise.c
 	 $(CC) $(CFLAGS) -c $< -o $@
 
+.PHONY: clean
 clean:
 	rm -rf $(EXECUTABLE) $(OBJECTS) $(LINENOISE) $(DEPENDENCIES)
 
 # dependency rules
-build/%.d: src/%.cpp src/%.c
+build/%.d: src/%.cpp
 	@mkdir -p $(dir $@)
 	@$(CXX) $(CXXFLAGS) -MM -MT '$@ $(@:.d=.o)' $< -o $@
 	
 -include $(DEPENDENCIES)
+
+
+
+# tests
+COVERAGE_TESTS = $(shell find tests/coverage -type f -name '*.R')
+BLACKBOX_TESTS = $(shell find tests/blackbox -type f -name '*.R')
+
+.PHONY: test $(COVERAGE_TESTS) $(BLACKBOX_TESTS)
+COVERAGE_FLAGS := 
+test: COVERAGE_FLAGS += >/dev/null
+test: $(COVERAGE_TESTS) $(BLACKBOX_TESTS)
+
+$(COVERAGE_TESTS):
+	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
+	-@./riposte -f $@ > $@.out
+	-@diff $@.key $@.out $(COVERAGE_FLAGS)
+	-@rm $@.key $@.out
+
+$(BLACKBOX_TESTS):
+	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
+	-@./riposte -f $@ > $@.out
+	-@diff $@.key $@.out $(COVERAGE_FLAGS)
+	-@rm $@.key $@.out
+

@@ -68,8 +68,9 @@
      printf("Giving up.  Parser is hopelessly lost...\n");
 }*/
 
+prog ::= . { parser->result = Value::Nil(); }
 prog ::= optnl statementlist(B) optnl. { parser->result = CreateExpression(B->values()); }
-prog ::= error. { parser->result = CreateExpression(List(0)); }
+prog ::= error. { parser->result = Value::Nil(); }
 
 statement(A) ::= expr(B) EQ_ASSIGN(C) optnl statement(D). { A = CreateCall(List::c(C, B, D)); }
 statement(A) ::= expr(B). { A = B; }
