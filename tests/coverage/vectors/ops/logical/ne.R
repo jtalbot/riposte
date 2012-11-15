@@ -11,9 +11,9 @@ c(3L,4L)!=c(2L,5L)
 c(4L,5L,6L)!=c(10L,5L,20L)
 
 #complex
-c(0i)!=c(0i)
-c(0i,1i)!=c(1i,0i)
-c(0+0i,0+1i,1+1i)!=c(0+0i,1+0i,2+3i)
+#c(0i)!=c(0i)
+#c(0i,1i)!=c(1i,0i)
+#c(0+0i,0+1i,1+1i)!=c(0+0i,1+0i,2+3i)
 
 #characters
 c("") != c("a")

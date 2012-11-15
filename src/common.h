@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sstream>
 #include <complex>
+#include <cmath>
 #include <iostream>
 #include <iomanip>
 #include <stdexcept>
@@ -57,7 +58,11 @@ static inline std::string intToHexStr( uint64_t n )
 static inline std::string doubleToStr( double n )
 {
     std::ostringstream result;
-    result << std::setprecision(8) << n;
+    if(std::isnan(n)) return std::string("NaN");
+    else if(n == std::numeric_limits<double>::infinity()) return std::string("Inf");
+    else if(n == -std::numeric_limits<double>::infinity()) return std::string("-Inf");
+    else if(n == 0) return std::string("0");    // handle the -0 case
+    result << std::setprecision(7) << n;
     return result.str();
 }
 

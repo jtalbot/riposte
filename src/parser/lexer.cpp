@@ -787,7 +787,7 @@ _eof_trans:
 	break;
 	case 60:
 #line 79 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NUM_CONST );}}
+	{te = p;p--;{token( TOKEN_NUM_CONST, Integer::c(strToHexInt(std::string(ts,te-ts))) );}}
 	break;
 	case 61:
 #line 82 "lexer.rl"
@@ -851,7 +851,7 @@ _eof_trans:
 	break;
 	case 76:
 #line 79 "lexer.rl"
-	{{p = ((te))-1;}{token( TOKEN_NUM_CONST );}}
+	{{p = ((te))-1;}{token( TOKEN_NUM_CONST, Integer::c(strToHexInt(std::string(ts,te-ts))) );}}
 	break;
 	case 77:
 #line 105 "lexer.rl"

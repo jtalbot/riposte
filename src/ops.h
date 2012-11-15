@@ -114,10 +114,10 @@ struct Name##VOp {\
 };
 
 inline double IDiv(double a, double b) { return floor(a/b); /* TODO: Replace with ugly R version */ }
-inline int64_t IDiv(int64_t a, int64_t b) { return a/b; }
+inline int64_t IDiv(int64_t a, int64_t b) { return b == 0 ? Integer::NAelement : a/b; }
 
 inline double Mod(double a, double b) { return a - IDiv(a,b) * b; /* TODO: Replace with ugly R version */ }
-inline int64_t Mod(int64_t a, int64_t b) { return a % b; }
+inline int64_t Mod(int64_t a, int64_t b) { return b == 0 ? Integer::NAelement : a % b; }
 
 inline double riposte_max(Thread& thread, double a, double b) { return a > b ? a : b; }
 inline int64_t riposte_max(Thread& thread, int64_t a, int64_t b) { return a > b ? a : b; }

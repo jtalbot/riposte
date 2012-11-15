@@ -28,7 +28,7 @@ template<> std::string stringify<Raw>(State const& state, Raw::Element a) {
 }  
 
 template<> std::string stringify<Integer>(State const& state, Integer::Element a) {
-	return Integer::isNA(a) ? "NA" : std::string("") + intToStr(a) + std::string("L");
+	return Integer::isNA(a) ? "NA" : std::string("") + intToStr(a);// + std::string("L");
 }  
 
 template<> std::string stringify<Double>(State const& state, Double::Element a) {

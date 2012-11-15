@@ -13,14 +13,18 @@ split <- function(x, f) {
 	split(strip(x), strip(f), length(attr(f, 'levels')))
 }
 
-c <- function(x,...) {
-    fun <- .Internal(unlist(list('c','.',class(x)), TRUE, TRUE))
+c <- function(...) {
+    l <- list(...)
+    if(length(l) == 0)
+        return(NULL)
+
+    fun <- .Internal(unlist(list('c','.',class(l[[1]])), TRUE, TRUE))
     fun <- .Internal(paste(fun, ""))
     if(exists(fun)) {
-        return(get(fun)(x,...))
+        return(get(fun)(...))
     }
     else {
-        .Internal(unlist(list(x,...), TRUE, TRUE))
+        .Internal(unlist(l, TRUE, TRUE))
     }
 }
 

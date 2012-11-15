@@ -26,8 +26,8 @@
 0x12
 0xab
 
-0i
-1i
+#0i
+#1i
 
 Inf
 NaN

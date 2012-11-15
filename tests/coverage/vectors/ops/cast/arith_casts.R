@@ -33,7 +33,7 @@ c(TRUE,TRUE)%/%c(10L,6L)
 c(5,6)/c(TRUE,FALSE)
 c(5,10)%/%c(TRUE,TRUE)
 
-c((1+2i),(2+4i))+c(1,2)
-c(4L,6L)+c((1+2i),(2+4i))
-c((1+2i),(2+4i))+c(TRUE,FALSE)
+#c((1+2i),(2+4i))+c(1,2)
+#c(4L,6L)+c((1+2i),(2+4i))
+#c((1+2i),(2+4i))+c(TRUE,FALSE)
 
