@@ -3,7 +3,7 @@
 CXXFLAGS := -Wall -msse4.1 -I/opt/local/include
 CFLAGS := -Wall -msse4.1
 LFLAGS := -L/opt/local/lib -L. -fpic
-LIBS := -lgc
+LIBS := -lgc -lpthread
 
 ENABLE_EPEE=1
 

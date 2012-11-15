@@ -384,7 +384,7 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 			}
 		}
 
-		for(int64_t j = 0; j < (*i)->dots.size(); j++) {
+		for(size_t j = 0; j < (*i)->dots.size(); j++) {
 			Value const& v = (*i)->dots[j].v;
 			if(v.isFuture() && v.length == Size) {
 				nodes[v.future.ref].liveOut = true;
