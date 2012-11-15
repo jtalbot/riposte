@@ -135,7 +135,7 @@ static void dumpWarnings(Thread& thread, std::ostream& out)
     thread.warnings.clear();
 } 
 
-static int run(State& state, std::istream& in, std::ostream& out, bool interactive) 
+static int run(State& state, std::istream& in, std::ostream& out, bool interactive, bool echo) 
 {
     Thread& thread = state.getMainThread();
 
@@ -160,7 +160,7 @@ static int run(State& state, std::istream& in, std::ostream& out, bool interacti
             Prototype* proto = Compiler::compileTopLevel(thread, code);
             Value result = thread.eval(proto, state.global);
             
-            if(interactive)
+            if(echo)
                 out << state.stringify(result) << std::endl;
         } 
         catch(RiposteException& e) { 
@@ -193,6 +193,7 @@ int main(int argc, char** argv)
         { "help",      0,     NULL,           'h' },
         { "verbose",   0,     NULL,           'v' },
         { "quiet",     0,     NULL,           'q' },
+        { "script",    0,     NULL,           's'  },
         { "args",      0,     NULL,           'a'  },
         { NULL,        0,     NULL,            0 }
     };
@@ -204,7 +205,7 @@ int main(int argc, char** argv)
 
     int ch;
     opterr = 0;
-    while ((ch = getopt_long(argc, argv, "df:hj:vqa", longopts, NULL)) != -1)
+    while ((ch = getopt_long(argc, argv, "df:hj:vqas", longopts, NULL)) != -1)
     {
         // don't parse args past '--args'
         if(ch == 'a')
@@ -264,11 +265,11 @@ int main(int argc, char** argv)
     int rc;
     if(filename != NULL) {
         std::ifstream in(filename);
-        rc = run(state, in, std::cout, false);
+        rc = run(state, in, std::cout, false, echo);
     } 
     else {
         info(state, std::cout);
-        rc = run(state, std::cin, std::cout, true);
+        rc = run(state, std::cin, std::cout, true, echo);
     }
 
 

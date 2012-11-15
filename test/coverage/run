@@ -1,0 +1,21 @@
+#!/bin/bash
+
+FAILURES=0
+
+for i in `find ./test/coverage -name *.R`; do 
+    echo $i 
+    #Rscript --vanilla --default-packages=NULL $i > $i.run 
+    ./riposte -f $i > $i.run
+    diff $i.out $i.run > /dev/null;
+    OUT=$?
+    if [ $OUT -ne 0 ]; then
+        echo "FAIL"
+        FAILURES=$(( $FAILURES + 1))
+    fi 
+done
+
+if [ $FAILURES -eq 0 ]; then
+    echo "SUCCESS"
+else
+    echo "FAILURES: " $FAILURES;
+fi

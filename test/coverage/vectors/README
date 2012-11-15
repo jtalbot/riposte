@@ -1,0 +1,9 @@
+Tests vector operations
+
+Key functionality:
+    'c' on homogeneous types.
+    built-in ops on vectors
+
+Not tested:
+    lists
+    vector recycling

@@ -1,0 +1,5 @@
+Benchmarks used in PACT 2012 paper
+
+For benchmarks that must read data, run gen_* files first to generate necessary input data. Run these in standard R since Riposte can't yet load the necessary files.
+
+C++ reference implementations are in reference
