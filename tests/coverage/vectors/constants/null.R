@@ -1,2 +1,3 @@
+NULL
 c(NULL)
 c(NULL,NULL)

@@ -5,5 +5,4 @@ Key functionality:
     built-in ops on vectors
 
 Not tested:
-    lists
     vector recycling

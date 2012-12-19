@@ -1,3 +1,5 @@
+TRUE
+FALSE
 c(TRUE)
 c(FALSE)
 c(TRUE,FALSE)
