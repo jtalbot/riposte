@@ -1,7 +1,8 @@
 # tests implicit casting due to arithmetic operations
 
 -TRUE
-+FALSE
+#DIFF: R results in FALSE, Riposte results in 0 
+#+FALSE
 
 -5L
 +10L

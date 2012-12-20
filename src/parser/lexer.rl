@@ -76,9 +76,12 @@
 
 	# Hex. Leading 0 buffered by float.
 	( '0' ( 'x' [0-9a-fA-F]+ hexponent?) ) 
-		{token( TOKEN_NUM_CONST, Integer::c(strToHexInt(std::string(ts,te-ts))) );};
+		{token( TOKEN_NUM_CONST, Double::c(strToHexInt(std::string(ts,te-ts))) );};
 
-	# Operators. 
+	( '0' ( 'x' [0-9a-fA-F]+ hexponent? 'L') ) 
+		{token( TOKEN_NUM_CONST, Integer::c(strToHexInt(std::string(ts,te-ts))) );};
+	
+    # Operators. 
 	'=' {token( TOKEN_EQ_ASSIGN, CreateSymbol(Strings::eqassign) );};
 	'+' {token( TOKEN_PLUS, CreateSymbol(Strings::add) );};
 	'-' {token( TOKEN_MINUS, CreateSymbol(Strings::sub) );};

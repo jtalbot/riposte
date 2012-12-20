@@ -3,6 +3,7 @@
 #include "type.h"
 #include "bc.h"
 #include "interpreter.h"
+#include "parser.h"
 
 #include <sstream>
 #include <iomanip>
@@ -36,7 +37,7 @@ template<> std::string stringify<Double>(State const& state, Double::Element a) 
 }  
 
 template<> std::string stringify<Character>(State const& state, Character::Element a) {
-	return Character::isNA(a) ? "NA" : std::string("\"") + state.externStr(a) + "\"";
+	return Character::isNA(a) ? "NA" : std::string("\"") + escape(state.externStr(a)) + "\"";
 }  
 
 template<> std::string stringify<List>(State const& state, List::Element a) {
@@ -62,6 +63,62 @@ std::string stringifyVector(State const& state, T const& v) {
 		result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
 		for(int64_t j = 0; j < perline && i+j < length; j++) {
 			result = result + pad(stringify<T>(state, v[i+j]), maxlength+1);
+		}
+
+		if(i+perline < length)	
+			result = result + "\n";
+	}
+	if(dots) result = result + " ... (" + intToStr(v.length) + " elements)";
+	return result;
+}
+
+uint64_t decimals(double d, uint64_t max) {
+    if(std::isnan(d)) return 0;
+    else if(d == std::numeric_limits<double>::infinity()) return 0;
+    else if(d == -std::numeric_limits<double>::infinity()) return 0;
+    if(d == 0) return 0;
+    
+    uint64_t count = 0, actual_max = 0;
+    d = fabs(d);
+    d = d - floor(d);
+    while(d != 0 && count < max) {
+        d = d * 10;
+        count++;
+        if(floor(d) != 0) actual_max = count;
+        d = d - floor(d);
+    }
+    return actual_max;
+}
+
+std::string stringify(State const& state, Double::Element a, uint64_t decimals) {
+	return Double::isNA(a) ? "NA" : doubleToStr(a, decimals, true);
+}  
+
+template<>
+std::string stringifyVector<Double>(State const& state, Double const& v) {
+	std::string result = "";
+	int64_t length = v.length;
+	if(length == 0)
+		return std::string(Type::toString(v.VectorType)) + "(0)";
+
+	bool dots = false;
+	if(length > 100) { dots = true; length = 100; }
+
+    uint64_t maxdecimals = 0;
+    for(uint64_t i = 0; i < length; i++) {
+        maxdecimals = std::max((uint64_t)maxdecimals, decimals(v[i], 7));
+    }
+	
+    int64_t maxlength = 1;
+	for(int64_t i = 0; i < length; i++) {
+		maxlength = std::max((int64_t)maxlength, (int64_t)stringify(state, v[i], maxdecimals).length());
+	}
+	int64_t indexwidth = intToStr(length+1).length();
+	int64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
+	for(int64_t i = 0; i < length; i+=perline) {
+		result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
+		for(int64_t j = 0; j < perline && i+j < length; j++) {
+			result = result + pad(stringify(state, v[i+j], maxdecimals), maxlength+1);
 		}
 
 		if(i+perline < length)	

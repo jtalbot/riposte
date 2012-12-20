@@ -4,8 +4,9 @@
 "a\tstr\\ing\r\n"
 'a\tstr\\ing\r\n'
 
-"\123"
 "\x65"
+#NYI: escape sequences
+#"\123"
 
-"\u65"
-"\U65"
+#"\u65"
+#"\U65"

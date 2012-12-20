@@ -1,7 +1,8 @@
 # tests implicit casting due to arithmetic operations
 
 -c(TRUE,FALSE)
-+c(FALSE,FALSE,TRUE)
+#DIFF: R treats this as a nop, Riposte coerces to integers 
+#+c(FALSE,FALSE,TRUE)
 
 -c(5L,6L)
 +c(10L,0L,5L)

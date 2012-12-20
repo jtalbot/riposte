@@ -1,0 +1,12 @@
+Known limitations
+-----------------
+
+"NYI:" comments mark tests that have been commented out since Riposte does not yet support them.
+
+"DIFF:" comments mark tests that have been commented out since Riposte's behavior differs from R by design.
+
+Riposte doesn't support R's visibility semantics, 
+so we wrap some statements in () to force R to echo.
+
+Riposte doesn't match R's function output format so we have formatted the
+function definitions to match R explicitly.

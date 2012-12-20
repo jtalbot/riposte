@@ -1,11 +1,11 @@
 
 {
     a <- 0
-    repeat 
+    (repeat 
     {
         if(a == 10) break
         else a <- a+1
-    }
+    })
 }
 
 {

@@ -13,13 +13,15 @@
 1.0
 1.1
 
-1.1L
+#DIFF: R results in 1.1, Riposte results in 1
+#1.1L
 
 1e3
 1e-3
 
 1e3L
-1e-3L
+#DIFF: R results in 1e-3, Riposte results in 0
+#1e-3L
 
 04L
 

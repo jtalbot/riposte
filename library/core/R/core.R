@@ -117,7 +117,7 @@ dispatch2 <- function(op, x, y, default) {
 		else if(missing(j))
 			strip(x)[(0L:(d[[2L]]-1L))*(d[[1L]])+as.integer(strip(i))]
 		else
-			strip(x)[(as.integer(strip(i))-1L)*d[[1L]]+as.integer(strip(j))]	
+			strip(x)[(as.integer(strip(j))-1L)*d[[1L]]+as.integer(strip(i))]	
 	}
 }
 

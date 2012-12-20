@@ -1,3 +1,4 @@
+# Goal: nowhere close to this yet
 # auto generate valid R programs
 # user can parametrically select language features enabled
 

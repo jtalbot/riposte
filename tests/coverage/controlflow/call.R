@@ -1,12 +1,14 @@
 
 # Basic
-f <- function(x) x
-a <- 1
+(f <- function (x) 
+x)
+(a <- 1)
 f(1)
 f(a)
 
 # Name matching
-f <- function(x, y) x/y
+(f <- function (x, y) 
+x/y)
 f(2,1)
 f(x=2,1)
 f(2,x=1)
@@ -16,7 +18,8 @@ f(x=2,y=1)
 f(y=2,x=1)
 
 # Partial name matching
-f <- function(first, second) first^second
+(f <- function (first, second) 
+first^second)
 f(2,3)
 f(first=2,3)
 f(f=2,3)
@@ -26,12 +29,18 @@ f(f=2,s=3)
 f(s=3,f=3)
 
 # Dots
-f <- function(x,...) x
-g <- function(...) f(...)
-h <- function(...) f(100, ...)
-i <- function(k, ...) f(..., k)
-j <- function(...) ..1
-k <- function(...) ..2
+(f <- function (x, ...) 
+x)
+(g <- function (...)
+f(...))
+(h <- function (...)
+f(100, ...))
+(i <- function (k, ...)
+f(..., k))
+(j <- function (...)
+..1)
+(k <- function (...)
+..2)
 
 f(1,2,3)
 g(1,2,3)
@@ -44,7 +53,8 @@ g(1-1,2,3)
 k(4,5+5,6)
 
 # Missing parameters
-f <- function(x=4,y=2) x/y
+(f <- function (x = 4, y = 2)
+x/y)
 f()
 f(8)
 f(x=8)

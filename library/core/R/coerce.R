@@ -78,7 +78,16 @@ mode <- function(x)
 		error("unsupported mode"))
 }
 
-storage.mode <- mode
+storage.mode <- function(x)
+	switch(typeof(x),
+		integer="integer",
+		double="double",
+		special="function",
+		builtin="function",
+		symbol="name",
+		language="call",
+		typeof(x))
+
 `storage.mode<-` <- `mode<-`
 
 as.environment <- function(x)

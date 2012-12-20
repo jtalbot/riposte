@@ -72,20 +72,20 @@ build/%.d: src/%.cpp
 COVERAGE_TESTS = $(shell find tests/coverage -type f -name '*.R')
 BLACKBOX_TESTS = $(shell find tests/blackbox -type f -name '*.R')
 
-.PHONY: test $(COVERAGE_TESTS) $(BLACKBOX_TESTS)
+.PHONY: tests $(COVERAGE_TESTS) $(BLACKBOX_TESTS)
 COVERAGE_FLAGS := 
-test: COVERAGE_FLAGS += >/dev/null
-test: $(COVERAGE_TESTS) $(BLACKBOX_TESTS)
+tests: COVERAGE_FLAGS += >/dev/null
+tests: $(COVERAGE_TESTS) $(BLACKBOX_TESTS)
 
 $(COVERAGE_TESTS):
 	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
 	-@./riposte -f $@ > $@.out
-	-@diff $@.key $@.out $(COVERAGE_FLAGS)
+	-@diff -b $@.key $@.out $(COVERAGE_FLAGS)
 	-@rm $@.key $@.out
 
 $(BLACKBOX_TESTS):
 	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
 	-@./riposte -f $@ > $@.out
-	-@diff $@.key $@.out $(COVERAGE_FLAGS)
+	-@diff -b $@.key $@.out $(COVERAGE_FLAGS)
 	-@rm $@.key $@.out
 

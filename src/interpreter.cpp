@@ -534,6 +534,9 @@ Instruction const* mean_op(Thread& thread, Instruction const& inst) {
 		thread.traces.OptBind(thread, OUT(thread,inst.c));
  		return &inst+1;
 	}
+    else {
+        _error("NYI: scalar mean");
+    }
 	return &inst+1;
 }
 
