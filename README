@@ -37,4 +37,4 @@ Riposte uses the following libraries:
 
 Testing
 -------
-Riposte comes with a growing set of validation tests that compare the output of Riposte and standard R. Run `make tests` to run all the tests (R must be installed). No output indicates all tests passed. Run `make /tests/path/to/test` to execute a single test and print its diff.
+Riposte comes with a growing set of validation tests that compare the output of Riposte and standard R. Run `make tests` to run all the tests (R must be installed). No output indicates all tests passed. Run `make tests/path/to/test` to execute a single test and print its diff.
