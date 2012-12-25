@@ -17,7 +17,7 @@
 		_(cast, "cast", ___) \
 		_(constant,"constant", ___) \
 		_(seq, "seq", ___) \
-		_(rep, "rep", ___) \
+		_(index, "index", ___) \
 		_(random, "random", ___) \
 		_(load,"load", ___) \
 		_(gather,"gather", ___) \
@@ -98,7 +98,7 @@ struct IRNode {
 					return eq && ((type == Type::Double && constant.d == o.constant.d) || 
 							(type == Type::Integer && constant.i == o.constant.i) || 
 							(type == Type::Logical && constant.l == o.constant.l));
-				} else if(op == IROpCode::seq || op == IROpCode::rep) {
+				} else if(op == IROpCode::seq || op == IROpCode::index) {
 					return eq && ((type == Type::Double && sequence.da == o.sequence.da && sequence.db == o.sequence.db) || 
 							(type == Type::Integer && sequence.ia == o.sequence.ia && sequence.ib == o.sequence.ib));
 				} else if(op == IROpCode::random) {

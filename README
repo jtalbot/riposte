@@ -16,7 +16,6 @@ Compiling riposte
 
 Flags
 -----
-
 -j # 		: start with # worker threads (defaults to 1, set to the number of cores on your machine)
 -f <filename>	: execute R script in <filename>
 -v 		: verbose debug output for the vector trace recorder and JIT
@@ -26,6 +25,7 @@ Limitations
 -----------
 Riposte is in heavy development. Many things haven't been implemented and many things have been implemented incorrectly. Use with caution. Fixes welcome.
 
+
 License
 -------
 Riposte is distributed under the BSD 2-clause license <http://www.opensource.org/licenses/bsd-license.php>.
@@ -34,3 +34,7 @@ Riposte uses the following libraries:
 * Eigen (http://eigen.tuxfamily.org) under the MPL2 license (http://www.mozilla.org/MPL/2.0/)
 * Linenoise (https://github.com/antirez/linenoise/) under a BSD license
 
+
+Testing
+-------
+Riposte comes with a growing set of validation tests that compare the output of Riposte and standard R. Run `make tests` to run all the tests (R must be installed). No output indicates all tests passed. Run `make /tests/dir/to/test` to execute a single test and print its diff.

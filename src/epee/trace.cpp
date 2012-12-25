@@ -49,7 +49,7 @@ std::string Trace::toString(Thread & thread) {
 		BINARY(split)
 		TRINARY(ifelse)
 		case IROpCode::seq:
-		case IROpCode::rep:
+		case IROpCode::index:
 			if(node.type == Type::Double)
 				out << node.sequence.da << "\t" << node.sequence.db;
 			else
@@ -133,7 +133,7 @@ IRef Trace::EmitBinary(IROpCode::Enum op, Type::Enum type, IRef a, IRef b, int64
 	n.binary.data = data;
 	// TODO: this should really check to see if 
 	// the operands are the same length or are constants that we can insert
-	// a rep and gather for. This length == 1 check will break on sum(a) + 1 which
+	// a index and gather for. This length == 1 check will break on sum(a) + 1 which
 	// we can't fuse.
 	if(nodes[a].shape.length == 1)
 		n.shape = nodes[b].shape;
@@ -239,8 +239,8 @@ IRef Trace::EmitRandom(int64_t length) {
 	return EmitGenerator(IROpCode::random, Type::Double, length, 0, 0);
 }
 
-IRef Trace::EmitRepeat(int64_t length, int64_t a, int64_t b) {
-	return EmitGenerator(IROpCode::rep, Type::Integer, length, a, b);
+IRef Trace::EmitIndex(int64_t length, int64_t a, int64_t b) {
+	return EmitGenerator(IROpCode::index, Type::Integer, length, a, b);
 }
 
 IRef Trace::EmitSequence(int64_t length, int64_t a, int64_t b) {

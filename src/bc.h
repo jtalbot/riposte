@@ -41,7 +41,7 @@
 #define GENERATOR_BYTECODES(_) \
 	_(vector,	"vector",	Generator) \
 	_(seq,		"seq", 		Generator) \
-	_(rep,		"rep", 		Generator) \
+	_(index,	"index", 	Generator) \
 	_(random,	"random", 	Generator) \
 
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double

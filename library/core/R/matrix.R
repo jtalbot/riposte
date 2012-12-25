@@ -152,12 +152,12 @@ upper.tri <- function(x, diag=FALSE) {
 
 row <- function(x) {
 	xd <- dim(x)
-	matrix(rep(xd[[1L]], 1L, xd[[1L]]*xd[[2L]]), xd[[1L]], xd[[2L]])
+	matrix(index(xd[[1L]], 1L, xd[[1L]]*xd[[2L]]), xd[[1L]], xd[[2L]])
 }
 
 col <- function(x) {
 	xd <- dim(x)
-	matrix(rep(xd[[2L]], xd[[1L]], xd[[1L]]*xd[[2L]]), xd[[1L]], xd[[2L]])
+	matrix(index(xd[[2L]], xd[[1L]], xd[[1L]]*xd[[2L]]), xd[[1L]], xd[[2L]])
 }
 
 `diag<-` <- function(x, value) {

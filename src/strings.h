@@ -120,7 +120,7 @@
 	_(dollarAssign, "$<-") \
 	_(UseMethod, 	"UseMethod") \
 	_(seq, 		"seq") \
-	_(rep, 		"rep") \
+	_(index, 	"index") \
 	_(random, 	"random") \
 	_(True, 	"TRUE") \
 	_(False, 	"FALSE") \

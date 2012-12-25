@@ -621,7 +621,7 @@ struct TraceJIT {
 			
 			if(node.op == IROpCode::seq)
 				stackSpace += 0x10;
-			else if(node.op == IROpCode::rep)
+			else if(node.op == IROpCode::index)
 				stackSpace += 0x20;
 			else if(node.op == IROpCode::random)
 				stackSpace += 0x10;
@@ -695,7 +695,7 @@ struct TraceJIT {
 				}
 				stackOffset += 0x10;
 			}
-			else if(node.op == IROpCode::rep) {
+			else if(node.op == IROpCode::index) {
 				Constant initial(node.sequence.ia, node.sequence.ib);
 				Operand o_initial = PushConstant(initial);
 				asm_.movdqa(xmm0, o_initial);
@@ -944,7 +944,7 @@ struct TraceJIT {
 					EmitVectorizedUnaryFunction(ref, casti2l);
 				else _error("Unimplemented cast");
 			} break;
-			case IROpCode::rep: {
+			case IROpCode::index: {
 				//TODO: Make these faster
 				Operand maxEach = PushConstant(Constant(node.sequence.ib, node.sequence.ib));
 				Operand maxN = PushConstant(Constant(node.sequence.ia, node.sequence.ia));

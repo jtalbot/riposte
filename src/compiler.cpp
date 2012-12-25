@@ -88,7 +88,7 @@ static ByteCode::Enum op3(String const& func) {
 	if(func == Strings::split) return ByteCode::split;
 	if(func == Strings::ifelse) return ByteCode::ifelse;
 	if(func == Strings::seq) return ByteCode::seq;
-	if(func == Strings::rep) return ByteCode::rep;
+	if(func == Strings::index) return ByteCode::index;
 	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a trinary operator"); 
 }
 
@@ -626,7 +626,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::split ||
 		func == Strings::ifelse ||
 		func == Strings::seq ||
-		func == Strings::rep) &&
+		func == Strings::index) &&
 		call.length == 4) {
 		Operand c = placeInRegister(compile(call[1], code));
 		Operand b = compile(call[2], code);

@@ -72,26 +72,49 @@ std::string stringifyVector(State const& state, T const& v) {
 	return result;
 }
 
-uint64_t decimals(double d, uint64_t max) {
-    if(std::isnan(d)) return 0;
-    else if(d == std::numeric_limits<double>::infinity()) return 0;
-    else if(d == -std::numeric_limits<double>::infinity()) return 0;
-    if(d == 0) return 0;
-    
-    uint64_t count = 0, actual_max = 0;
-    d = fabs(d);
-    d = d - floor(d);
-    while(d != 0 && count < max) {
-        d = d * 10;
-        count++;
-        if(floor(d) != 0) actual_max = count;
-        d = d - floor(d);
+struct Format {
+    bool scientific;
+    uint64_t sdecimals;
+    uint64_t fdecimals;
+};
+
+Format format(double d, int64_t maxsf) {
+    Format f = (Format){ false, 0, 0 };
+    if(std::isnan(d)) return f;
+    else if(d == std::numeric_limits<double>::infinity()) return f;
+    else if(d == -std::numeric_limits<double>::infinity()) return f;
+    if(d == 0) return f;
+   
+    double e = fabs(d);
+
+    // location of largest non-zero digit
+    int64_t p = (int64_t)floor(log10(e));
+   
+    // count non-zero digits after p 
+    int64_t q = p;
+    double q10 = pow(10, -q);
+
+    while((e*q10 - floor(e*q10) != 0) && (p-q) < (maxsf-1)) {
+        q -=1;
+        q10 *= 10;
     }
-    return actual_max;
+
+    f.sdecimals = p-q+1;
+    f.fdecimals = std::max( (int64_t)0, -q );
+
+    // now figure out how to format
+    if(p >= 12 || p <= -4) {
+        f.scientific = true;
+    }
+    else if(q >= 6) {
+        f.scientific = true;
+    }
+
+    return f;
 }
 
-std::string stringify(State const& state, Double::Element a, uint64_t decimals) {
-	return Double::isNA(a) ? "NA" : doubleToStr(a, decimals, true);
+std::string stringify(State const& state, Double::Element a, Format f) {
+	return Double::isNA(a) ? "NA" : doubleToStr(a, f.scientific ? f.sdecimals : f.fdecimals, !f.scientific);
 }  
 
 template<>
@@ -104,21 +127,24 @@ std::string stringifyVector<Double>(State const& state, Double const& v) {
 	bool dots = false;
 	if(length > 100) { dots = true; length = 100; }
 
-    uint64_t maxdecimals = 0;
+    Format f = { false, 0, 0 };
     for(uint64_t i = 0; i < length; i++) {
-        maxdecimals = std::max((uint64_t)maxdecimals, decimals(v[i], 7));
+        Format tf = format(v[i], 7);
+        f.scientific |= tf.scientific;
+        f.sdecimals = std::max(f.sdecimals, tf.sdecimals);
+        f.fdecimals = std::max(f.fdecimals, tf.fdecimals);
     }
 	
     int64_t maxlength = 1;
 	for(int64_t i = 0; i < length; i++) {
-		maxlength = std::max((int64_t)maxlength, (int64_t)stringify(state, v[i], maxdecimals).length());
+		maxlength = std::max((int64_t)maxlength, (int64_t)stringify(state, v[i], f).length());
 	}
 	int64_t indexwidth = intToStr(length+1).length();
 	int64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
 	for(int64_t i = 0; i < length; i+=perline) {
 		result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
 		for(int64_t j = 0; j < perline && i+j < length; j++) {
-			result = result + pad(stringify(state, v[i+j], maxdecimals), maxlength+1);
+			result = result + pad(stringify(state, v[i+j], f), maxlength+1);
 		}
 
 		if(i+perline < length)	

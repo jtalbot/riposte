@@ -35,78 +35,16 @@
 #define USE_THREADED_INTERPRETER
 #define TIMING
 
-static inline std::string rawToStr( unsigned char n )
-{
-	std::ostringstream result;
-	result << std::hex << std::setfill('0') << std::setw(2) << n;
-	return result.str();
-}
+std::string rawToStr( unsigned char n );
+std::string intToStr( int64_t n );
+std::string intToHexStr( uint64_t n );
+std::string charToHexStr( char c );
+std::string doubleToStr( double n, uint64_t decimals=7, bool fixed=false );
+std::string complexToStr( std::complex<double> n );
 
-static inline std::string intToStr( int64_t n )
-{
-    std::ostringstream result;
-    result << n;
-    return result.str();
-}
-
-static inline std::string intToHexStr( uint64_t n )
-{
-    std::ostringstream result;
-    result << "0x" << std::hex << n;
-    return result.str();
-}
-
-static inline std::string charToHexStr( char c )
-{
-    std::ostringstream result;
-    result << "0x" << std::hex << (int)c;
-    return result.str();
-}
-
-static inline std::string doubleToStr( double n, uint64_t decimals=7, bool fixed=false )
-{
-    std::ostringstream result;
-    if(std::isnan(n)) return std::string("NaN");
-    else if(n == std::numeric_limits<double>::infinity()) return std::string("Inf");
-    else if(n == -std::numeric_limits<double>::infinity()) return std::string("-Inf");
-    if(n == 0) n = 0;   // handle the -0 case
-    result << std::setprecision(decimals);
-    if(fixed) result << std::fixed;
-    result << n;
-    return result.str();
-}
-
-static inline std::string complexToStr( std::complex<double> n )
-{
-    std::ostringstream result;
-    result << n.real();
-    result.setf(std::ios::showpos);
-    result << n.imag() << "i";
-    return result.str();
-}
-
-static inline int64_t strToInt( std::string const& s) {
-    char* end;
-	int64_t r = strtol( s.c_str(), &end, 0 );
-    // TODO: should catch overflow from strtol
-    if( *s.c_str() == '\0' || *end != '\0' )
-        throw std::domain_error("strToInt");
-	return r;
-}
-
-static inline int64_t strToHexInt( std::string const& s) {
-	int64_t r;
-	std::istringstream(s) >> std::hex >> r;
-	return r;
-}
-
-static inline double strToDouble( std::string const& s) {
-    char* end;
-	double r = strtod( s.c_str(), &end );
-    if( *s.c_str() == '\0' || *end != '\0' )
-        throw std::domain_error("strToDouble");
-	return r;
-}
+int64_t strToInt( std::string const& s);
+int64_t strToHexInt( std::string const& s);
+double strToDouble( std::string const& s);
 
 static inline double time_diff (
     timespec const& end, timespec const& begin)

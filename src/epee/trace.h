@@ -49,7 +49,7 @@ class Trace : public gc {
 
 		IRef EmitGenerator(IROpCode::Enum op, Type::Enum type, int64_t length, int64_t a, int64_t b);
 		IRef EmitRandom(int64_t length);
-		IRef EmitRepeat(int64_t length, int64_t a, int64_t b);
+		IRef EmitIndex(int64_t length, int64_t a, int64_t b);
 		IRef EmitSequence(int64_t length, int64_t a, int64_t b);
 		IRef EmitSequence(int64_t length, double a, double b);
 		IRef EmitConstant(Type::Enum type, int64_t length, int64_t c);
@@ -230,10 +230,10 @@ public:
 		return v;
 	}
 
-	Value EmitRepeat(Environment* env, int64_t length, int64_t a, int64_t b) {
+	Value EmitIndex(Environment* env, int64_t length, int64_t a, int64_t b) {
 		Trace* trace = getTrace(length);
 		trace->liveEnvironments.insert(env);
-		IRef r = trace->EmitBinary(IROpCode::add, Type::Integer, trace->EmitRepeat(length, a, b), trace->EmitConstant(Type::Integer, length, 1), 0);
+		IRef r = trace->EmitBinary(IROpCode::add, Type::Integer, trace->EmitIndex(length, a, b), trace->EmitConstant(Type::Integer, length, 1), 0);
 		Value v;
 		Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
 		return v;

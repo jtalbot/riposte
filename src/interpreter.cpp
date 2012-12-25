@@ -671,7 +671,7 @@ Instruction const* seq_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
-Instruction const* rep_op(Thread& thread, Instruction const& inst) {
+Instruction const* index_op(Thread& thread, Instruction const& inst) {
 	// c = n, b = each, a = length
 	OPERAND(a, inst.a); FORCE(a, inst.a); BIND(a);
 	OPERAND(b, inst.b); FORCE(b, inst.b); BIND(b);
@@ -682,7 +682,7 @@ Instruction const* rep_op(Thread& thread, Instruction const& inst) {
 	int64_t len = As<Integer>(thread, a)[0];
 	
 	if(len >= TRACE_VECTOR_WIDTH) {
-		OUT(thread, inst.c) = thread.traces.EmitRepeat(thread.frame.environment, len, (int64_t)n, (int64_t)each);
+		OUT(thread, inst.c) = thread.traces.EmitIndex(thread.frame.environment, len, (int64_t)n, (int64_t)each);
 		thread.traces.OptBind(thread, OUT(thread,inst.c));
 		return &inst+1;
 	}
