@@ -1,8 +1,8 @@
 #adapted from https://github.com/ispc/ispc/tree/master/examples/options
 ({
 
-N_OPTIONS <- 1 
-N_BLACK_SCHOLES_ROUNDS <- 1 
+N_OPTIONS <- 10 
+N_BLACK_SCHOLES_ROUNDS <- 10
 S <- rep(100,1,N_OPTIONS)
 X <- rep(98,1,N_OPTIONS)
 T <- rep(2, 1,N_OPTIONS)

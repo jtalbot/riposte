@@ -90,14 +90,18 @@ Format format(double d, int64_t maxsf) {
     // location of largest non-zero digit
     int64_t p = (int64_t)floor(log10(e));
    
-    // count non-zero digits after p 
-    int64_t q = p;
+    // count non-zero digits after p
+    // remember last actual non-zero 
+    int64_t q = p, qq = p;
     double q10 = pow(10, -q);
 
     while((e*q10 - floor(e*q10) != 0) && (p-q) < (maxsf-1)) {
         q -=1;
         q10 *= 10;
+        if(fmod(floor(e*q10), 10.0) != 0)
+            qq = q;
     }
+    q = qq;
 
     f.sdecimals = p-q+1;
     f.fdecimals = std::max( (int64_t)0, -q );
