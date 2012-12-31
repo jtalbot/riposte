@@ -210,6 +210,8 @@ public:
 
 	std::vector<std::string> warnings;
 
+    std::vector<Value> gcStack;
+
 #ifdef ENABLE_EPEE
 	Traces traces;
 #endif

@@ -283,14 +283,7 @@ static void MatchNamedArgs(Thread& thread, Environment* env, Environment* fenv, 
 }
 
 static Environment* CreateEnvironment(Thread& thread, Environment* l, Environment* d, Value const& call) {
-	Environment* env;
-	if(thread.environments.size() == 0) {
-		env = new Environment();
-	} else {
-		env = thread.environments.back();
-		thread.environments.pop_back();
-	}
-	env->init(l, d, call);
+	Environment* env = new Environment(l, d, call);
 	return env;
 }
 

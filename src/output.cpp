@@ -126,7 +126,7 @@ std::string stringifyVector<Double>(State const& state, Double const& v) {
 	std::string result = "";
 	int64_t length = v.length;
 	if(length == 0)
-		return std::string(Type::toString(v.VectorType)) + "(0)";
+		return std::string(Type::toString(v.ValueType)) + "(0)";
 
 	bool dots = false;
 	if(length > 100) { dots = true; length = 100; }
