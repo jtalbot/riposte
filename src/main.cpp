@@ -271,7 +271,6 @@ int main(int argc, char** argv)
         rc = run(state, std::cin, std::cout, true, echo);
     }
 
-
     /* Session over */
 
     fflush(stdout);

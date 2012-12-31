@@ -13,10 +13,9 @@ ifeq ($(UNAME),Linux)
 LFLAGS += -lrt
 endif
 
-SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp runtime.cpp coerce.cpp library.cpp format.cpp
+SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp runtime.cpp coerce.cpp library.cpp format.cpp rgc.cpp
 
 SRC += parser/lexer.cpp
-
 
 ifeq ($(ENABLE_EPEE),1)
 	CXXFLAGS += -DENABLE_EPEE
