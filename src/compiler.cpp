@@ -462,6 +462,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand loop_variable = Operand(MEMORY, SymbolStr(call[1]));
 		Operand loop_vector = compile(call[2], code);
 		Operand loop_counter = allocRegister();	// save space for loop counter
+		Operand loop_limit = allocRegister(); // save space for the loop limit
 
 		emit(ByteCode::forbegin, loop_variable, loop_vector, loop_counter);
 		emit(ByteCode::jmp, 0, 0, 0);
@@ -478,7 +479,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 		ir[beginbody-1].a.i = endbody-beginbody+4;
 
-		kill(body); kill(loop_variable); kill(loop_counter); kill(loop_vector);
+		kill(body); kill(loop_limit); kill(loop_variable); 
+		kill(loop_counter); kill(loop_vector);
 		return compileConstant(Null::Singleton(), code);
 	} 
 	else if(func == Strings::whileSym)
@@ -833,6 +835,7 @@ Prototype* Compiler::compile(Value const& expr) {
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, encodeOperand(ir[i].a, n), encodeOperand(ir[i].b, n), encodeOperand(ir[i].c, n)));
 	}
+	threadByteCode(code);
 
 	return code;	
 }

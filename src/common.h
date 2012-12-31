@@ -14,11 +14,6 @@
 #include <stdio.h>
 #include <cstdlib>
 
-//#define GC_DEBUG
-#define GC_THREADS
-#include <gc/gc_cpp.h>
-#include <gc/gc_allocator.h>
-
 #ifdef __GNUC__
 	#define ALWAYS_INLINE __attribute__((always_inline))
 #else

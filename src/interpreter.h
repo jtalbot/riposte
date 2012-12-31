@@ -64,7 +64,7 @@ public:
 };
 
 
-struct CompiledCall : public gc {
+struct CompiledCall {
 	List call;
 
 	PairList arguments;
@@ -83,13 +83,12 @@ struct Prototype : public HeapObject {
 	int dotIndex;
 
 	int registers;
-	std::vector<Value, traceable_allocator<Value> > constants;
-	std::vector<CompiledCall, traceable_allocator<CompiledCall> > calls; 
+	std::vector<Value> constants;
+	std::vector<CompiledCall> calls; 
 
 	std::vector<Instruction> bc;			// bytecode
-	mutable std::vector<Instruction> tbc;		// threaded bytecode
 
-	virtual void visit() const;
+	void visit() const;
 };
 
 struct StackFrame {
@@ -111,6 +110,7 @@ struct InternalFunction {
 	int64_t params;
 };
 
+
 #define DEFAULT_NUM_REGISTERS 10000
 
 
@@ -118,17 +118,17 @@ struct InternalFunction {
 // Global shared state 
 ///////////////////////////////////////////////////////////////////
 
-class State : public gc {
+class State {
 public:
 	StringTable strings;
 	
 	std::vector<InternalFunction> internalFunctions;
 	std::map<String, int64_t> internalFunctionIndex;
 	
-	std::vector<Environment*, traceable_allocator<Environment*> > path;
+	std::vector<Environment*> path;
 	Environment* global;
 
-	std::vector<Thread*, traceable_allocator<Thread*> > threads;
+	std::vector<Thread*> threads;
 	int64_t nThreads;
 
 	bool verbose;
@@ -180,9 +180,9 @@ public:
 typedef void* (*TaskHeaderPtr)(void* args, uint64_t a, uint64_t b, Thread& thread);
 typedef void (*TaskFunctionPtr)(void* args, void* header, uint64_t a, uint64_t b, Thread& thread);
 
-class Thread : public gc {
+class Thread {
 public:
-	struct Task : public gc {
+	struct Task {
 		TaskHeaderPtr header;
 		TaskFunctionPtr func;
 		void* args;
@@ -194,7 +194,7 @@ public:
 		Task() : func(0), args(0), done(0) {}
 		Task(TaskHeaderPtr header, TaskFunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment, uint64_t ppt) 
 			: header(header), func(func), args(args), a(a), b(b), alignment(alignment), ppt(ppt) {
-			done = new (GC) int64_t(1);
+			done = new int64_t(1);
 		}
 	};
 
@@ -205,9 +205,8 @@ public:
 	Value* base;
 	Value* registers;
 
-	std::vector<StackFrame, traceable_allocator<StackFrame> > stack;
+	std::vector<StackFrame> stack;
 	StackFrame frame;
-	std::vector<Environment*, traceable_allocator<Environment*> > environments;
 
 	std::vector<std::string> warnings;
 
@@ -368,8 +367,8 @@ private:
 
 inline State::State(uint64_t threads, int64_t argc, char** argv) 
 	: nThreads(threads), verbose(false), jitEnabled(true), done(0) {
-	Environment* base = new (GC) Environment(0);
-	this->global = new (GC) Environment(base);
+	Environment* base = new Environment(0,0,Null::Singleton());
+	this->global = new Environment(base,0,Null::Singleton());
 	path.push_back(base);
 
 	arguments = Character(argc);
@@ -382,7 +381,7 @@ inline State::State(uint64_t threads, int64_t argc, char** argv)
 	pthread_attr_setscope (&attr, PTHREAD_SCOPE_SYSTEM);
 	pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
 
-	Thread* t = new (GC) Thread(*this, 0);
+	Thread* t = new Thread(*this, 0);
 	this->threads.push_back(t);
 
 	for(uint64_t i = 1; i < threads; i++) {

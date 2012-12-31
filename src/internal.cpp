@@ -15,7 +15,7 @@
 
 template<typename T>
 T const& Cast(Value const& v) {
-	if(v.type != T::VectorType) _error("incorrect type passed to internal function");
+	if(v.type != T::ValueType) _error("incorrect type passed to internal function");
 	return (T const&)v;
 }
 
@@ -37,7 +37,7 @@ TYPES(CASE)
 
 void cat(Thread& thread, Value const* args, Value& result) {
 	List const& a = Cast<List>(args[0]);
-	Character const& b = As<Character>(thread, args[-1]);
+	Character const& b = Cast<Character>(args[-1]);
 	for(int64_t i = 0; i < a.length; i++) {
 		if(!List::isNA(a[i])) {
 			Character c = As<Character>(thread, a[i]);
@@ -53,9 +53,9 @@ void cat(Thread& thread, Value const* args, Value& result) {
 
 void remove(Thread& thread, Value const* args, Value& result) {
 	Character const& a = Cast<Character>(args[0]);
-	REnvironment e(args[-1]);
+	REnvironment const& e = Cast<REnvironment>(args[-1]);
 	for(int64_t i = 0; i < a.length; i++) {
-		e.ptr()->remove(a[i]);
+		e.environment()->remove(a[i]);
 	}
 	result = Null::Singleton();
 }
@@ -175,9 +175,7 @@ void assignAttr(Thread& thread, Value const* args, Value& result)
 	Value object = args[0];
 	Character which = Cast<Character>(args[-1]);
 	if(!object.isObject()) {
-		Value v;
-		Object::Init((Object&)v, object);
-		object = v;
+		Object::Init(object, object);
 		((Object&)object).insertMutable(which[0], args[-2]);
 		result = object;
 	} else {
@@ -315,13 +313,14 @@ void unlist(Thread& thread, Value const* args, Value& result) {
 
 
 void eval_fn(Thread& thread, Value const* args, Value& result) {
-	result = thread.eval(Compiler::compilePromise(thread, args[0]), REnvironment(args[-1]).ptr());
+	result = thread.eval(Compiler::compilePromise(thread, args[0]), 
+			Cast<REnvironment>(args[-1]).environment());
 }
 
 struct mapplyargs {
-	Value& in;
+	Value const& in;
 	List& out;
-	Value func;
+	Value const& func;
 };
 
 void* mapplyheader(void* args, uint64_t start, uint64_t end, Thread& thread) {
@@ -356,8 +355,8 @@ void mapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& 
 void mapply(Thread& thread, Value const* args, Value& result) {
 	if(!args[0].isVector())
 		_error("Invalid type for argument to mapply");
-	Value x = args[0];
-	Value func = args[-1];
+	Value const& x = args[0];
+	Value const& func = args[-1];
 	// figure out result length
 	int64_t len = 1;
 	for(int i = 0; i < x.length; i++) {
@@ -367,6 +366,8 @@ void mapply(Thread& thread, Value const* args, Value& result) {
 			len = (e.length == 0 || len == 0) ? 0 : std::max(e.length, len);
 	}
 	List r(len);
+	memset(r.v(), 0, len*sizeof(List::Element));
+	thread.gcStack.push_back(r);
 
 	/*List apply(2);
 	apply[0] = func;
@@ -403,6 +404,7 @@ void mapply(Thread& thread, Value const* args, Value& result) {
 	mapplyargs a1 = (mapplyargs) {x, r, func};
 	thread.doall(mapplyheader, mapplybody, &a1, 0, r.length, 1, 1); 
 
+	thread.gcStack.pop_back();
 	result = r;
 }
 
@@ -446,14 +448,14 @@ void source(Thread& thread, Value const* args, Value& result) {
 void environment(Thread& thread, Value const* args, Value& result) {
 	Value e = args[0];
 	if(e.isFunction()) {
-		result = REnvironment(((Function const&)e).environment());
+		REnvironment::Init(result, ((Function const&)e).environment());
 		return;
 	}
 	result = Null::Singleton();
 }
 
 void newenv(Thread& thread, Value const* args, Value& result) {
-	result = REnvironment(new Environment());
+	REnvironment::Init(result, new Environment(0,0,Null::Singleton()));
 }
 
 // TODO: parent.frame and sys.call need to ignore frames for promises, etc. We may need
@@ -465,7 +467,7 @@ void parentframe(Thread& thread, Value const* args, Value& result) {
 		env = env->DynamicScope();
 		i--;
 	}
-	result = REnvironment(env);
+	REnvironment::Init(result, env);
 }
 
 void syscall(Thread& thread, Value const* args, Value& result) {
@@ -534,10 +536,10 @@ void type_of(Thread& thread, Value const* args, Value& result) {
 
 void exists(Thread& thread, Value const* args, Value& result) {
 	Character c = As<Character>(thread, args[0]);
-	REnvironment e(args[-1]);
+	REnvironment const& e = Cast<REnvironment>(args[-1]);
 	Logical l = As<Logical>(thread, args[-2]);
 
-	Value const& v = l[0] ? e.ptr()->getRecursive(c[0]) : e.ptr()->get(c[0]);
+	Value const& v = l[0] ? e.environment()->getRecursive(c[0]) : e.environment()->get(c[0]);
 	if(v.isNil())
 		result = Logical::False();
 	else
@@ -546,10 +548,10 @@ void exists(Thread& thread, Value const* args, Value& result) {
 
 void get(Thread& thread, Value const* args, Value& result) {
 	Character c = As<Character>(thread, args[0]);
-	REnvironment e(args[-1]);
+	REnvironment const& e = Cast<REnvironment>(args[-1]);
 	Logical l = As<Logical>(thread, args[-2]);
 
-	result = l[0] ? e.ptr()->getRecursive(c[0]) : e.ptr()->get(c[0]);
+	result = l[0] ? e.environment()->getRecursive(c[0]) : e.environment()->get(c[0]);
 }
 
 #include <sys/time.h>

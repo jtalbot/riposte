@@ -44,7 +44,7 @@ void openDynamic(Thread& thread, std::string path, Environment* env) {
 }
 
 void loadLibrary(Thread& thread, std::string path, std::string name) {
-	Environment* env = new Environment(thread.state.path.back());
+	Environment* env = new Environment(thread.state.path.back(),0,Null::Singleton());
 	
 	std::string p = path + "/" + name + ("/R/");
 
@@ -83,8 +83,8 @@ void loadLibrary(Thread& thread, std::string path, std::string name) {
 		}
 		closedir(dir);
 	}
-
+	
 	thread.state.path.push_back(env);
-	thread.state.global->init(thread.state.path.back(), 0, Null::Singleton());
+	thread.state.global->lexical = env;
 }
 

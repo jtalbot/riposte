@@ -9,10 +9,6 @@
 #include <algorithm>
 #include <locale>
 
-#include <gc/gc.h>
-#include <gc/gc_cpp.h>
-#include <gc/gc_allocator.h>
-
 #include "value.h"
 #include "interpreter.h"
 #include "frontend.h"
@@ -126,7 +122,7 @@ struct Parser {
 };
 
 struct Pairs {
-	std::deque<Pair, traceable_allocator<Value> > p;
+	std::deque<Pair> p;
 	int64_t length() const { return p.size(); }        
 	void push_front(String n, Value const& v) { Pair t; t.n = n; t.v = v; p.push_front(t); } 
 	void push_back(String n, Value const& v)  { Pair t; t.n = n; t.v = v; p.push_back(t); }        

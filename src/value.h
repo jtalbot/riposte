@@ -98,9 +98,9 @@ template<> inline String const& Value::scalar<String>() const { return s; }
 
 
 // Name-value Pairs are used throughout the code...
-struct Pair : public gc { String n; Value v; };
+struct Pair { String n; String pad; Value v; };
 // Not the same as the publically visible PairList which is just an S3 class
-typedef std::vector<Pair, traceable_allocator<Pair> > PairList;
+typedef std::vector<Pair> PairList;
 
 //
 // Value type implementations
@@ -115,10 +115,10 @@ template<Type::Enum VType, typename ElementType, bool Recursive>
 struct Vector : public Value {
 
 	typedef ElementType Element;
-	static const Type::Enum VectorType = VType;
+	static const Type::Enum ValueType = VType;
 	static const bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive;
 
-	struct Inner : public gc {
+	struct Inner : public HeapObject {
 		ElementType data[];
 	};
 
@@ -130,38 +130,40 @@ struct Vector : public Value {
 		return (canPack && isScalar()) ? 
 			&Value::scalar<ElementType>() : ((Inner*)p)->data; 
 	}
+
+	Inner* inner() const {
+		return (length > canPack) ? (Inner*)p : 0;
+	}
 	
 	ElementType& operator[](int64_t index) { return v()[index]; }
 	ElementType const& operator[](int64_t index) const { return v()[index]; }
 
 	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
-		Value::Init(v, VectorType, length);
+		Value::Init(v, ValueType, length);
 		if((canPack && length > 1) || (!canPack && length > 0)) {
 			int64_t l = length;
 			// round l up to nearest even number so SSE can work on tail region
 			l += (int64_t)((uint64_t)l & 1);
 			int64_t length_aligned = (l < 128) ? (l + 1) : l;
-			//v.p = Recursive ? new (GC, sizeof(Element)*length_aligned) Inner() :
-			//	new (PointerFreeGC, sizeof(Element)*length_aligned) Inner();
-			v. p = Recursive ?
-					GC_malloc(sizeof(Element)*length_aligned) :
-					GC_malloc_atomic(sizeof(Element)*length_aligned);
-			assert(l < 128 || (0xF & (int64_t)v.p) == 0);
-			if( (0xF & (int64_t)v.p) != 0)
-				v.p =  (char*)v.p + 0x8;
+			
+			Inner* i = new (sizeof(Element)*length_aligned) Inner();
+			v.p = (void*)i;
+		
+			//assert(l < 128 || (0xF & (int64_t)v.p) == 0);
+			//if( (0xF & (int64_t)v.p) != 0)
+			//	v.p =  (char*)v.p + 0x8;
 		}
 		return (Vector<VType, ElementType, Recursive>&)v;
 	}
 
 	static void InitScalar(Value& v, ElementType const& d) {
-		Value::Init(v, VectorType, 1);
+		Value::Init(v, ValueType, 1);
 		if(canPack)
 			v.scalar<ElementType>() = d;
 		else {
-			v.p = Recursive ?
-					GC_malloc(sizeof(Element)*4) :
-					GC_malloc_atomic(sizeof(Element)*4);
-			*(Element*)v.p = d;
+			Inner* i = new (sizeof(Element)*2) Inner();
+			i->data[0] = d;
+			v.p = (void*)i;
 		}
 	}
 };
@@ -183,11 +185,12 @@ struct Name : public Vector<Type::Name, Element, Recursive> { 			\
 	const static Element NAelement; \
 	static Name NA() { static Name na = Name::c(NAelement); return na; }  \
 	static Name& Init(Value& v, int64_t length) { return (Name&)Vector<Type::Name, Element, Recursive>::Init(v, length); } \
-	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); }\
+	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); \
+}\
 /* note missing }; */
 
 VECTOR_IMPL(Null, unsigned char, false)  
-	static Null Singleton() { static Null s = Null::c(); return s; } 
+	static Null const& Singleton() { static Null s = Null::c(); return s; } 
 	static bool isNA() { return false; }
 	static bool isCheckedNA() { return false; }
 };
@@ -196,8 +199,8 @@ VECTOR_IMPL(Logical, char, false)
 	const static char TrueElement;
 	const static char FalseElement;
 
-	static Logical True() { static Logical t = Logical::c(-1); return t; }
-	static Logical False() { static Logical f = Logical::c(0); return f; } 
+	static Logical const& True() { static Logical t = Logical::c(-1); return t; }
+	static Logical const& False() { static Logical f = Logical::c(0); return f; } 
 	
 	static bool isTrue(char c) { return c == -1; }
 	static bool isFalse(char c) { return c == 0; }
@@ -217,9 +220,9 @@ VECTOR_IMPL(Integer, int64_t, false)
 }; 
 
 VECTOR_IMPL(Double, double, false)
-	static Double Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
-	static Double NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
-	static Double NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } 
+	static Double const& Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
+	static Double const& NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
+	static Double const& NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } 
 	
 	static bool isNA(double c) { _doublena a, b; a.d = c; b.d = NAelement; return a.i==b.i; }
 	static bool isCheckedNA(int64_t c) { return false; }
@@ -252,8 +255,8 @@ VECTOR_IMPL(List, Value, true)
 	static bool isInfinite(Value const& c) { return false; }
 };
 
-
 struct Future : public Value {
+	static const Type::Enum ValueType = Type::Future;
 	static Future& Init(Value& f, Type::Enum typ,int64_t length,IRef ref) {
 		Value::Init(f,Type::Future,length);
 		f.future.ref = ref;
@@ -263,44 +266,50 @@ struct Future : public Value {
 };
 
 struct Function : public Value {
+	static const Type::Enum ValueType = Type::Function;
 	static Function& Init(Value& v, Prototype* proto, Environment* env) {
 		v.header = (int64_t)proto + Type::Function;
 		v.p = env;
 		return (Function&)v;
 	}
 
-	Prototype* prototype() const { return (Prototype*)(length << 4); }
+	Prototype* prototype() const { return (Prototype*)(header & ~15); }
 	Environment* environment() const { return (Environment*)p; }
 };
 
 struct Promise : public Value {
+	static const Type::Enum ValueType = Type::Promise;
 	static Promise& Init(Value& v, Prototype* proto, Environment* env) {
 		v.header = (int64_t)proto + Type::Promise;
 		v.p = env;
 		return (Promise&)v;
 	}
 
-	Prototype* prototype() const { return (Prototype*)(length << 4); }
+	Prototype* prototype() const { return (Prototype*)(header & ~15); }
 	Environment* environment() const { return (Environment*)p; }
 };
 
 struct Default : public Value {
+	static const Type::Enum ValueType = Type::Default;
 	static Default& Init(Value& v, Prototype* proto, Environment* env) {
 		v.header = (int64_t)proto + Type::Default;
 		v.p = env;
 		return (Default&)v;
 	}
 
-	Prototype* prototype() const { return (Prototype*)(length << 4); }
+	Prototype* prototype() const { return (Prototype*)(header & ~15); }
 	Environment* environment() const { return (Environment*)p; }
 };
 
 class Dictionary : public HeapObject {
 protected:
-	static const uint64_t inlineSize = 8;
 	uint64_t size, load;
-	Pair* d;
-	Pair inlineDict[inlineSize];
+	
+	struct Inner : public HeapObject {
+		Pair d[];
+	};
+
+	Inner* d;
 
 	uint64_t hash(String s) const ALWAYS_INLINE { return (uint64_t)s>>3; }
 
@@ -310,20 +319,20 @@ protected:
 	// is necessary for compiler optimizations to eliminate expensive control flow.
 	Pair* find(String name, bool& success) const ALWAYS_INLINE {
 		uint64_t i = hash(name) & (size-1);
-		if(__builtin_expect(d[i].n == name, true)) {
+		if(__builtin_expect(d->d[i].n == name, true)) {
 			success = true;
-			return &d[i];
+			return &d->d[i];
 		}
 		uint64_t j = 0;
-		while(d[i].n != Strings::NA) {
+		while(d->d[i].n != Strings::NA) {
 			i = (i+(++j)) & (size-1);
-			if(__builtin_expect(d[i].n == name, true)) {
+			if(__builtin_expect(d->d[i].n == name, true)) {
 				success = true;
-				return &d[i];
+				return &d->d[i];
 			}
 		}
 		success = false;
-		return &d[i];
+		return &d->d[i];
 	}
 
 	// Returns the location where variable `name` should be inserted.
@@ -331,42 +340,39 @@ protected:
 	// Used for rehash and insert where this is known to be true.
 	Pair* slot(String name) const ALWAYS_INLINE {
 		uint64_t i = hash(name) & (size-1);
-		if(__builtin_expect(d[i].n == Strings::NA, true)) {
-			return &d[i];
+		if(__builtin_expect(d->d[i].n == Strings::NA, true)) {
+			return &d->d[i];
 		}
 		uint64_t j = 0;
-		while(d[i].n != Strings::NA) {
+		while(d->d[i].n != Strings::NA) {
 			i = (i+(++j)) & (size-1);
 		}
-		return &d[i];
+		return &d->d[i];
 	}
 
 	void rehash(uint64_t s) {
 		uint64_t old_size = size;
 		uint64_t old_load = load;
-		Pair* old_d = d;
+		Inner* old_d = d;
 
-		s = nextPow2(s);
-		if(s <= size) return; // should rehash on shrinking sometimes, when?
-
+		d = new (sizeof(Pair)*s) Inner();
 		size = s;
-		d = new (GC) Pair[s];
 		clear();
 		
 		// copy over previous populated values...
 		if(old_load > 0) {
 			for(uint64_t i = 0; i < old_size; i++) {
-				if(old_d[i].n != Strings::NA) {
+				if(old_d->d[i].n != Strings::NA) {
 					load++;
-					*slot(old_d[i].n) = old_d[i];
+					*slot(old_d->d[i].n) = old_d->d[i];
 				}
 			}
 		}
 	}
 
 public:
-	Dictionary() : size(inlineSize), d(inlineDict) {
-		clear();
+	Dictionary(int64_t initialSize) : size(0), load(0), d(0) {
+		rehash(nextPow2(initialSize));
 	}
 
 	bool has(String name) const ALWAYS_INLINE {
@@ -404,19 +410,18 @@ public:
 
 	void clear() {
 		load = 0;
-		memset(d, 0, sizeof(Pair)*size); 
+		memset(d->d, 0, sizeof(Pair)*size); 
 	}
 
 	// clone with room for extra elements
 	Dictionary* clone(uint64_t extra) const {
-		Dictionary* clone = new Dictionary();
-		clone->rehash(size+extra);
+		Dictionary* clone = new Dictionary((load+extra)*2);
 		// copy over elements
 		if(load > 0) {
 			for(uint64_t i = 0; i < size; i++) {
-				if(d[i].n != Strings::NA) {
+				if(d->d[i].n != Strings::NA) {
 					clone->load++;
-					*clone->slot(d[i].n) = d[i];
+					*clone->slot(d->d[i].n) = d->d[i];
 				}
 			}
 		}
@@ -430,12 +435,12 @@ public:
 		const_iterator(Dictionary const* d, int64_t idx) {
 			this->d = d;
 			i = std::max((int64_t)0, std::min((int64_t)d->size, idx));
-			while(d->d[i].n == Strings::NA && i < (int64_t)d->size) i++;
+			while(d->d->d[i].n == Strings::NA && i < (int64_t)d->size) i++;
 		}
-		String string() const { return d->d[i].n; }	
-		Value const& value() const { return d->d[i].v; }
+		String string() const { return d->d->d[i].n; }	
+		Value const& value() const { return d->d->d[i].v; }
 		const_iterator& operator++() {
-			while(d->d[++i].n == Strings::NA && i < (int64_t)d->size);
+			while(d->d->d[++i].n == Strings::NA && i < (int64_t)d->size);
 			return *this;
 		}
 		bool operator==(const_iterator const& o) {
@@ -454,31 +459,30 @@ public:
 		return const_iterator(this, size);
 	}
 
-	virtual void visit() const;
+	 void visit() const;
 };
 
 // Object implements an immutable dictionary interface.
 // Objects also have a base value which right now must be a non-object type...
 //  However S4 objects can contain S3 objects so we may have to change this.
 //  If we make this change, then all code that unwraps objects must do so recursively.
-class Object : public Value {
+struct Object : public Value {
 	
-private:
-	struct Inner : public gc {
+	struct Inner : public HeapObject {
 		Value base;
 		Dictionary* d;
 		Inner(Value const& base, Dictionary* d) : base(base), d(d) {}
+		void visit() const;
 	};
 
-public:
-
-	Object() {}
+	static const Type::Enum ValueType = Type::Object;
 	
-	static void Init(Object& o, Value const& base, Dictionary* dictionary=0) {
+	static Object& Init(Value& v, Value const& base, Dictionary* dictionary=0) {
 		// Create inner first works if base and o overlap.
-		Inner* p = new (GC) Inner(base, dictionary == 0 ? new (GC) Dictionary() : dictionary);
-		Value::Init(o, Type::Object, 0);
-		o.p = p;
+		Inner* p = new Inner(base, dictionary == 0 ? new Dictionary(4) : dictionary);
+		Value::Init(v, Type::Object, 0);
+		v.p = p;
+		return (Object&)v;
 	}
 
 	Value const& base() const {
@@ -511,25 +515,16 @@ public:
 };
 
 class Environment : public Dictionary {
-private:
-	Environment* lexical, *dynamic;
-	
 public:
+	Environment* lexical, *dynamic;
 	Value call;
 	PairList dots;
 	bool named;	// true if any of the dots have names	
 
-	explicit Environment(Environment* lexical=0, Environment* dynamic=0) : 
-			lexical(lexical), dynamic(dynamic), call(Null::Singleton()) {}
+	explicit Environment(Environment* lexical, Environment* dynamic, Value const& call) :
+			Dictionary(8), 
+			lexical(lexical), dynamic(dynamic), call(call), named(false) {}
 
-	void init(Environment* l, Environment* d, Value const& call) {
-		lexical = l;
-		dynamic = d;
-		this->call = call;
-		clear();
-		dots.clear();
-	}
-	
 	Environment* LexicalScope() const { return lexical; }
 	Environment* DynamicScope() const { return dynamic; }
 
@@ -569,28 +564,20 @@ public:
 		p.env->insert(p.name) = value;
 	}
 	
-	virtual void visit() const;
+	void visit() const;
 };
 
-class REnvironment {
-private:
-	Environment* env;
-public:
-	explicit REnvironment(Environment* env) : env(env) {
-	}
-	explicit REnvironment(Value const& v) {
-		assert(v.type == Type::Environment);
-		env = (Environment*)v.p;
-	}
+struct REnvironment : public Value {
+	static const Type::Enum ValueType = Type::Environment;
 	
-	operator Value() const {
-		Value v;
+	static REnvironment& Init(Value& v, Environment* env) {
 		Value::Init(v, Type::Environment, 0);
 		v.p = (void*)env;
-		return v;
+		return (REnvironment&)v;
 	}
-	Environment* ptr() const {
-		return env;
+	
+	Environment* environment() const {
+		return (Environment*)p;
 	}
 };
 

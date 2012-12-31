@@ -239,10 +239,6 @@ int main(int argc, char** argv)
 
     d_message(1,NULL,"Command option processing complete");
 
-    /* Start garbage collector */
-    GC_INIT();
-    GC_disable();
-
     /* Initialize execution state */
     State state(threads, argc, argv);
     state.verbose = verbose;

@@ -403,8 +403,8 @@ struct TraceJIT {
 	:  trace(t), thread(thread), asm_(t->code_buffer->code,CODE_BUFFER_SIZE), alloc(XMMRegister::kNumAllocatableRegisters-2), next_constant_slot(C_FIRST_TRACE_CONST) {
 		// preserve the last register (xmm15) as a temporary exchange register
 		// to make code gen easier for now 
-		live_registers = new (PointerFreeGC) RegisterSet[trace->nodes.size()];
-		allocated_register = new (PointerFreeGC) int8_t[trace->nodes.size()];
+		live_registers = new RegisterSet[trace->nodes.size()];
+		allocated_register = new int8_t[trace->nodes.size()];
 
 	}
 

@@ -18,7 +18,7 @@
 Thread::RandomSeed Thread::seed[100];
 
 Thread::Thread(State& state, uint64_t index) : state(state), index(index), steals(1) {
-	registers = new (GC) Value[DEFAULT_NUM_REGISTERS];
+	registers = new Value[DEFAULT_NUM_REGISTERS];
 	this->base = registers + DEFAULT_NUM_REGISTERS;
 	RandomSeed& r = seed[index];
 
@@ -84,6 +84,7 @@ static Instruction const * profile_back_edge(Thread & thread, Instruction const 
 // Control flow instructions
 
 Instruction const* call_op(Thread& thread, Instruction const& inst) {
+	Heap::Global.collect(thread.state);
 	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
 	if(!f.isFunction())
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
@@ -97,6 +98,7 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* ncall_op(Thread& thread, Instruction const& inst) {
+	Heap::Global.collect(thread.state);
 	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
 	if(!f.isFunction())
 		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
@@ -117,7 +119,6 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	// as long as we don't return a closure...
 	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
 	if(result.isClosureSafe()) {
-		thread.environments.push_back(thread.frame.environment);
 		thread.traces.KillEnvironment(thread.frame.environment);
 	}
 
@@ -223,15 +224,15 @@ Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
 		return &inst+(&inst+1)->a;	// offset is in following JMP, dispatch together
 	} else {
 		Element2(vec, 0, thread.frame.environment->insert((String)inst.a));
-		Value& counter = REGISTER(inst.c);
-		counter.header = vec.length;	// warning: not a valid object, but saves a shift
-		counter.i = 1;
+		Integer::InitScalar(REGISTER(inst.c), 1);
+		Integer::InitScalar(REGISTER(inst.c-1), vec.length);
 		return &inst+2;			// skip over following JMP
 	}
 }
 Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 	Value& counter = REGISTER(inst.c);
-	if(__builtin_expect((counter.i) < counter.header, true)) {
+	Value& limit = REGISTER(inst.c-1);
+	if(__builtin_expect(counter.i < limit.i, true)) {
 		OPERAND(vec, inst.b); //FORCE(vec, inst.b); BIND(vec); // this must have necessarily been forced by the forbegin.
 		Element2(vec, counter.i, thread.frame.environment->insert((String)inst.a));
 		counter.i++;
@@ -249,7 +250,9 @@ Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 	
 	// First time through, make a result vector...
 	if(iter.i == 0) {
+		Heap::Global.collect(thread.state);
 		out = List(dots.size());
+		memset(((List&)out).v(), 0, dots.size()*sizeof(List::Element));
 	}
 	
 	if(iter.i < (int64_t)dots.size()) {
@@ -265,7 +268,7 @@ Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 			Character names(dots.size());
 			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
 				names[i] = dots[i].n;
-			Object::Init((Object&)out, out);
+			Object::Init(out, out);
 			((Object&)out).insertMutable(Strings::names, names);
 		}
 		return &inst+1;
@@ -276,6 +279,7 @@ Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* list_op(Thread& thread, Instruction const& inst) {
+	Heap::Global.collect(thread.state);
 	List out(inst.b);
 	for(int64_t i = 0; i < inst.b; i++) {
 		Value& r = REGISTER(inst.a-i);
