@@ -253,7 +253,6 @@ int main(int argc, char** argv)
         registerCoreFunctions(state);   
         registerCoerceFunctions(state); 
         loadLibrary(thread, "library", "core");
-
     } 
     catch(RiposteException& e) { 
         e_message("Error", e.kind().c_str(), e.what().c_str());

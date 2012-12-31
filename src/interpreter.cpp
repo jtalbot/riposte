@@ -326,6 +326,12 @@ Instruction const* fastmov_op(Thread& thread, Instruction const& inst) {
 	return &inst+1;
 }
 
+Instruction const* rm_op(Thread& thread, Instruction const& inst) {
+	thread.frame.environment->remove( (String)inst.a );
+	OUT(thread, inst.c) = Null::Singleton();
+    return &inst+1;
+}
+
 Instruction const* dotdot_op(Thread& thread, Instruction const& inst) {
 	if(inst.a >= (int64_t)thread.frame.environment->dots.size())
         	_error(std::string("The '...' list does not contain ") + intToStr(inst.a+1) + " elements");

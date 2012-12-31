@@ -336,65 +336,73 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		Value dest = call[1];
 		
-		// handle complex LHS assignment instructions...
+        Operand rhs = compile(call[2], code);
+      
+        // Handle simple assignment 
+        if(!isCall(dest)) { 
+            Operand target = Operand(MEMORY, SymbolStr(dest));
+		    emit(func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, 
+                target, 0, rhs);
+        }
+		
+        // Handle complex LHS assignment instructions...
 		// semantics here are kind of tricky. Consider compiling:
 		//	 dim(a)[1] <- x
 		// This is progressively turned `inside out`:
 		//	1) dim(a) <- `[<-`(dim(a), 1, x)
 		//	2) a <- `dim<-`(a, `[<-`(dim(a), 1, x))
-		// TODO: One complication is that the result value of a complex assignment is the RHS
-		// of the original expression, not the RHS of the inside out expression.
-		Value value = call[2];
-		while(isCall(dest)) {
-			List const& c = (List const&)((Object const&)dest).base();
-			List n(c.length+1);
+        else {    
 
-			for(int64_t i = 0; i < c.length; i++) { n[i] = c[i]; }
-			String as = state.internStr(state.externStr(SymbolStr(c[0])) + "<-");
-			n[0] = CreateSymbol(as);
-			n[c.length] = value;
+            Operand tmp = Operand(MEMORY, Strings::assignTmp);
+            emit( ByteCode::assign, tmp, 0, rhs );
 
-			Character nnames(c.length+1);
+            Value value = CreateSymbol(Strings::assignTmp);
+		    while(isCall(dest)) {
+			    List const& c = (List const&)((Object const&)dest).base();
+			    List n(c.length+1);
+
+			    for(int64_t i = 0; i < c.length; i++) { n[i] = c[i]; }
+			    String as = state.internStr(state.externStr(SymbolStr(c[0])) + "<-");
+			    n[0] = CreateSymbol(as);
+			    n[c.length] = value;
+
+			    Character nnames(c.length+1);
 	
-			if(!hasNames(dest) && (as == Strings::bracketAssign || as == Strings::bbAssign) && c.length == 3) {
-				for(int64_t i = 0; i < c.length+1; i++) { nnames[i] = Strings::empty; }
-			}
-			else {
-				if(hasNames(dest)) {
-					Value names = getNames((Object const&)dest);
-					for(int64_t i = 0; i < c.length; i++) { nnames[i] = ((Character const&)names)[i]; }
-				} else {
-					for(int64_t i = 0; i < c.length; i++) { nnames[i] = Strings::empty; }
-				}
-				nnames[c.length] = Strings::value;
-			}
-			value = CreateCall(n, nnames);
-			dest = c[1];
-		}
-		
-		// the source for the assignment
-		Operand source = compile(value, code);
-		Operand result = Operand(MEMORY, SymbolStr(dest));
+			    if(!hasNames(dest) && (as == Strings::bracketAssign || as == Strings::bbAssign) && c.length == 3) {
+				    for(int64_t i = 0; i < c.length+1; i++) { nnames[i] = Strings::empty; }
+			    }
+			    else {
+				    if(hasNames(dest)) {
+					    Value names = getNames((Object const&)dest);
+					    for(int64_t i = 0; i < c.length; i++) { nnames[i] = ((Character const&)names)[i]; }
+				    } else {
+					    for(int64_t i = 0; i < c.length; i++) { nnames[i] = Strings::empty; }
+				    }
+				    nnames[c.length] = Strings::value;
+			    }
+			    value = CreateCall(n, nnames);
+			    dest = c[1];
+		    }
 
-		emit(func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, result, 0, source);
-		return source;
-		
-		// PHI outputs are always in registers, so merging with previous statement is generally
-		// dangerous. Can we improve this?
-
-		/*if(func == Strings::assign2) { 
-			emit(ByteCode::assign2, source, 0, result);
-			return source;
-		} else {
-			if(ir.size() > 0 && ir.back().c.loc == REGISTER) {
-				kill(ir.back().c);
-				ir.back().c  = result;
-			} else {
-				emit(ByteCode::mov, source, 0, result);
-			}
-			return result;
-		}*/
-	} 
+            Operand target = Operand(MEMORY, SymbolStr(dest));
+		    Operand source = compile(value, code);
+		    emit(func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, 
+                target, 0, source);
+            kill( source );
+		    
+            Operand rm = allocRegister();
+            emit( ByteCode::rm, tmp, 0, rm );
+            kill( rm );
+        }
+		return rhs;
+	}
+    else if(func == Strings::rm && call.length == 2)
+    {
+        Operand symbol = Operand(MEMORY, SymbolStr(call[1]));
+		Operand rm = allocRegister();
+        emit( ByteCode::rm, symbol, 0, rm );
+        return rm;
+    }
 	else if(func == Strings::function) 
 	{
 		//compile the default parameters
@@ -541,7 +549,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		resultF = placeInRegister(
 			call.length == 4 ? 	compile(call[3], code) :
 						compileConstant(Null::Singleton(), code) );
-		assert(resultT == resultF || resultT.loc == INVALID || resultF.loc == INVALID);
+        assert(resultT == resultF || resultT.loc == INVALID || resultF.loc == INVALID);
 		int64_t end = ir.size();
 		ir[begin2-1].a = end-begin2+1;
 		

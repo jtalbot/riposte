@@ -39,7 +39,7 @@ environment <- function(x=NULL) if(is.null(x)) parent.frame() else .Internal(env
 new.env <- function() .Internal(new.env())
 sys.call <- function(which=0) .Internal(sys.call(which+1))
 alist <- function(...) as.list(sys.call())[-1L]
-rm <- function(...) .Internal(remove(as.character(sys.call())[-1L], parent.frame()))
+#rm <- function(...) .Internal(remove(as.character(sys.call())[-1L], parent.frame()))
 
 stop <- function(x) .Internal(stop(x))
 warning <- function(x) .Internal(warning(x))

@@ -11,7 +11,8 @@
 #include <dlfcn.h>
 
 void sourceFile(Thread& thread, std::string name, Environment* env) {
-	//std::cout << "Sourcing " << name << std::endl;
+	if(thread.state.verbose)
+        std::cout << "Sourcing " << name << std::endl;
 	try {
 		std::ifstream t(name.c_str());
 		std::stringstream buffer;

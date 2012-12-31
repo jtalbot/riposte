@@ -158,7 +158,7 @@ std::string stringifyVector<Double>(State const& state, Double const& v) {
 	return result;
 }
 
-std::string stringify(State const& state, Value const& value) {
+std::string stringify(State const& state, Value const& value, std::vector<int64_t> nest) {
 	std::string result = "[1]";
 	bool dots = false;
 	switch(value.type)
@@ -184,9 +184,18 @@ std::string stringify(State const& state, Value const& value) {
 			if(length == 0) return "list()";
 			if(length > 100) { dots = true; length = 100; }
 			result = "";
+
+            std::string prefix = "";
+            for(int64_t i = 0; i < nest.size(); ++i) {
+                prefix = prefix + "[[" + intToStr(nest[i]) + "]]";
+            }
+
+            nest.push_back(0);
 			for(int64_t i = 0; i < length; i++) {
-				result = result + "[[" + intToStr(i+1) + "]]\n";
-				if(!List::isNA(v[i])) result = result + state.stringify(v[i]);
+                nest.back()++;
+				result = result + prefix + "[[" + intToStr(i+1) + "]]\n";
+				if(!List::isNA(v[i])) 
+                    result = result + stringify(state, v[i], nest);
 				result = result + "\n";
 				if(i < length-1) result = result + "\n";
 			}
@@ -216,7 +225,8 @@ std::string stringify(State const& state, Value const& value) {
 		case Type::Object:
 		{
 			Object const& o = (Object const&)value;
-			result = stringify(state, o.base());
+            std::vector<int64_t> emptyNest;
+			result = stringify(state, o.base(), emptyNest);
 			result = result + "\nAttributes:\n";
 			Dictionary* d = o.dictionary();
 			for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
@@ -234,7 +244,8 @@ std::string stringify(State const& state, Value const& value) {
 
 
 std::string State::stringify(Value const& value) const {
-	return ::stringify(*this, value);
+    std::vector<int64_t> emptyNest;
+	return ::stringify(*this, value, emptyNest);
 }
 
 #ifdef ENABLE_EPEE

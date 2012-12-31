@@ -21,15 +21,16 @@
 	_(dotslist, "dotslist") \
 
 #define MEMORY_ACCESS_BYTECODES(_) \
-	_(mov, "mov") \
-	_(fastmov, "fastmov") \
-	_(dotdot, "dotdot") \
-	_(assign, "assign") \
-	_(assign2, "assign2") \
-	_(iassign, "iassign") \
-	_(eassign, "eassign") \
-	_(subset, "subset") \
-	_(subset2, "subset2") \
+	_(mov,      "mov") \
+	_(fastmov,  "fastmov") \
+	_(dotdot,   "dotdot") \
+	_(assign,   "assign") \
+	_(assign2,  "assign2") \
+	_(iassign,  "iassign") \
+	_(eassign,  "eassign") \
+	_(subset,   "subset") \
+	_(subset2,  "subset2") \
+    _(rm,       "rm") \
 
 #define UTILITY_BYTECODES(_)\
 	_(internal, "internal") \

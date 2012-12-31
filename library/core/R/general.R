@@ -29,7 +29,12 @@ make.names <- function(x) {
 }
 
 names <- function(x) attr(x, 'names')
-`names<-` <- function(x, value) attr(x, 'names') <- as.character(value)  #NYI: check length
+`names<-` <- function(x, value) { 
+    #NYI: check length
+    attr(x, 'names') <- as.character(value); 
+    x 
+}
+
 dim <- function(x) attr(x, 'dim')
 `dim<-` <- function(x, value) {
 	if(length(value) == 0L) stop("length-0 dimension vector is invalid")
@@ -38,11 +43,21 @@ dim <- function(x) attr(x, 'dim')
 	if(any(value < 0L)) stop("the dims contain negative values")
 	if(prod(value) != length(x)) stop("dims product do not match the length of object")
 	attr(x, 'dim') <- as.integer(value)
+    x
 }
+
 class <- function(x) attr(x, 'class')
-`class<-` <- function(x, value) attr(x, 'class') <- as.character(value)
+`class<-` <- function(x, value) {
+    attr(x, 'class') <- as.character(value)
+    x
+}
+
 dimnames <- function(x) attr(x, 'dimnames')
-`dimnames<-` <- function(x, value) attr(x, 'dimnames') <- value   #NYI: check length and dim
+`dimnames<-` <- function(x, value) {
+    #NYI: check length and dim
+    attr(x, 'dimnames') <- value
+    x
+} 
 
 #seq <- function(from=1, by=1, length.out=1) .Internal(seq(from, by, length.out))
 

@@ -40,6 +40,7 @@
 	_(assign, 	"<-") \
 	_(assign2, 	"<<-") \
 	_(eqassign, 	"=") \
+    _(rm,           "rm") \
 	_(function, 	"function") \
 	_(returnSym, 	"return") \
 	_(forSym, 	"for") \
@@ -146,6 +147,7 @@
 	_(vector,	"vector") \
 	_(Re,	"Re") \
 	_(Im,	"Im") \
+    _(assignTmp, "*tmp*") \
 	_(Maximal, "\255")
 
 typedef const char* String;
