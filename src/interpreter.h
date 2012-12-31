@@ -7,6 +7,7 @@
 
 #include "value.h"
 #include "thread.h"
+#include "random.h"
 
 #ifdef ENABLE_EPEE
 #include "epee/ir.h"
@@ -221,15 +222,7 @@ public:
 	int64_t steals;
 
 	int64_t assignment[64], set[64]; // temporary space for matching arguments
-	
-	struct RandomSeed {
-		uint64_t v[2];
-		uint64_t m[2];
-		uint64_t a[2];
-		uint64_t padding[10];
-	};
-
-	static RandomSeed seed[100];
+	Random<2> random;	
 
 	Thread(State& state, uint64_t index);
 

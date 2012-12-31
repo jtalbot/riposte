@@ -38,7 +38,8 @@ std::string doubleToStr( double n, uint64_t decimals=7, bool fixed=false );
 std::string complexToStr( std::complex<double> n );
 
 int64_t strToInt( std::string const& s);
-int64_t strToHexInt( std::string const& s);
+int64_t hexStrToInt( std::string const& s);
+int64_t octStrToInt( std::string const& s);
 double strToDouble( std::string const& s);
 
 static inline double time_diff (

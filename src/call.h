@@ -335,7 +335,8 @@ Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const
 #define OPERAND(a, i) \
 Value const& a = __builtin_expect((i) <= 0, true) ? \
 		*(thread.base+(i)) : \
-		thread.frame.environment->getRecursive((String)(i)); 
+		(i < 256) ? thread.frame.prototype->constants[i-1] : \
+			thread.frame.environment->getRecursive((String)(i)); 
 	
 #define FORCE(a, i) \
 if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \

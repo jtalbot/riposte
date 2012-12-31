@@ -13,26 +13,9 @@
 #include "sse.h"
 #include "call.h"
 
-#include "primes.h"
-
-Thread::RandomSeed Thread::seed[100];
-
-Thread::Thread(State& state, uint64_t index) : state(state), index(index), steals(1) {
+Thread::Thread(State& state, uint64_t index) : state(state), index(index), random1(index), random2(index),steals(1) {
 	registers = new Value[DEFAULT_NUM_REGISTERS];
 	this->base = registers + DEFAULT_NUM_REGISTERS;
-	RandomSeed& r = seed[index];
-
-	r.v[0] = 1;
-	r.v[1] = 1;
-	r.m[0] = 0x27bb2ee687b0b0fd;
-	r.m[1] = 0x27bb2ee687b0b0fd;
-	r.a[0] = primes[index*2];
-	r.a[1] = primes[index*2+1];
-	// advance a few?
-	for(int64_t i = 0; i < 1000; i++) {
-		r.v[0] = r.v[0] * r.m[0] + r.a[0];
-		r.v[1] = r.v[1] * r.m[1] + r.a[1];
-	}
 }
 
 extern Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
