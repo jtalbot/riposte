@@ -7,7 +7,7 @@
 static const void** glabels = 0;
 #endif
 
-static void printCode(Thread const& thread, Prototype const* prototype, Environment* env) {
+/*static void printCode(Thread const& thread, Prototype const* prototype, Environment* env) {
 	std::cout << "Prototype: " << intToHexStr((int64_t)prototype) << "\t(executing in " << intToHexStr((int64_t)env) << ")" << std::endl;
 	std::cout << "\tRegisters: " << prototype->registers << std::endl;
 	if(prototype->constants.size() > 0) {
@@ -26,7 +26,7 @@ static void printCode(Thread const& thread, Prototype const* prototype, Environm
 		}
 	}
 	std::cout << std::endl;
-}
+}*/
 
 static Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset) {
 	//printCode(thread, prototype, environment);

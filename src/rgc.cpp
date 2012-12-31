@@ -175,7 +175,7 @@ void Heap::mark(State& state) {
 }
 
 void Heap::sweep() {
-	uint64_t old_total = total;
+	//uint64_t old_total = total;
 	total = 0;
 	void** g = &root;
 	while(*g != 0) {

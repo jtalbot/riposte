@@ -104,10 +104,11 @@ struct StackFrame {
 };
 
 // TODO: Careful, args and result might overlap!
-typedef void (*InternalFunctionPtr)(Thread& s, Value const* args, Value& result);
 
 struct InternalFunction {
-	InternalFunctionPtr ptr;
+    typedef void (*Ptr)(Thread& s, Value const* args, Value& result);
+	
+    Ptr ptr;
 	int64_t params;
 };
 
@@ -151,7 +152,7 @@ public:
 		return *threads[0];
 	}
 
-	void registerInternalFunction(String s, InternalFunctionPtr internalFunction, int64_t params) {
+	void registerInternalFunction(String s, InternalFunction::Ptr internalFunction, int64_t params) {
 		InternalFunction i = { internalFunction, params };
 		internalFunctions.push_back(i);
 		internalFunctionIndex[s] = internalFunctions.size()-1;
@@ -222,7 +223,8 @@ public:
 	int64_t steals;
 
 	int64_t assignment[64], set[64]; // temporary space for matching arguments
-	Random<2> random;	
+	
+	Random random;	
 
 	Thread(State& state, uint64_t index);
 
