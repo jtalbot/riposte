@@ -187,7 +187,7 @@ void Heap::sweep() {
 			if(h->size == 4096) {
 				//printf("Freeing region %llx\n", t);
 				//memset(t, 0xff, h->size);
-				freeRegions.push_back(t);
+				freeRegions.push_front(t);
 			}
 			else {
 				//memset(t, 0xff, h->size);

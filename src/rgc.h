@@ -2,7 +2,7 @@
 #ifndef RIPOSTE_GC_H
 #define RIPOSTE_GC_H
 
-#include <list>
+#include <deque>
 #include "common.h"
 #include <assert.h>
 
@@ -58,7 +58,7 @@ private:
 	void makeRegions(uint64_t regions);
 	void popRegion();	
 
-	std::list<void*> freeRegions;
+	std::deque<void*> freeRegions;
 	char* bump, *limit;
 
 	GCObject* gcObject(void* v) const {
