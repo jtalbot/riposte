@@ -29,7 +29,15 @@ private:
 	
 	Scope scope;
 	uint64_t loopDepth;
-	std::map<Value, int64_t> constants;
+
+	struct ValueComp {
+		bool operator()(Value const& a, Value const& b) {
+			return a.header < b.header || 
+				(a.header == b.header && a.i < b.i);
+		}
+	};
+
+	std::map<Value, int64_t, ValueComp> constants;
 
 	enum Loc {
 		INVALID,
@@ -86,7 +94,7 @@ private:
 	Operand compileSymbol(Value const& symbol, Prototype* code); 
 	Operand compileCall(List const& call, Character const& names, Prototype* code); 
 	Operand compileFunctionCall(List const& call, Character const& names, Prototype* code); 
-	Operand compileInternalFunctionCall(Object const& o, Prototype* code); 
+	Operand compileInternalFunctionCall(List const& call, Prototype* code); 
 	Operand compileExpression(List const& values, Prototype* code);
 	
 	CompiledCall makeCall(List const& call, Character const& names);

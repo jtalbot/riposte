@@ -17,80 +17,70 @@
 const void** glabels = 0;
 #endif
 
-const int64_t Random::primes[100] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43,
-47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131,
-137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223,
-227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311,
-313, 317, 331, 337, 347, 349, 353, 359, 367, 373, 379, 383, 389, 397, 401, 409,
-419, 421, 431, 433, 439, 443, 449, 457, 461, 463, 467, 479, 487, 491, 499, 503,
-509, 521, 523, 541};
-
-Thread::Thread(State& state, uint64_t index) 
-    : state(state)
-    , index(index)
-#ifdef ENABLE_EPEE
-    , traces(state.epeeEnabled)
-#endif
-    , steals(1)
-    , random(index) 
-{
-	registers = new Value[DEFAULT_NUM_REGISTERS];
-	this->base = registers + DEFAULT_NUM_REGISTERS;
-}
-
-void Prototype::threadByteCode(Prototype*  prototype) {
-#ifdef USE_THREADED_INTERPRETER
-	for(int64_t i = 0; i < (int64_t)prototype->bc.size(); ++i) {
-		Instruction const& inst = prototype->bc[i];
-		inst.ibc = glabels[inst.bc];
+// forces a value stored in the Environments dotdot slot: dest[index]
+// call through FORCE_DOTDOT macro which inlines some performance-important checks
+Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, int64_t index) {
+	if(v.isPromise()) {
+		Promise const& a = (Promise const&)v;
+		if(a.isPrototype()) {
+			return buildStackFrame(thread, a.environment(), a.prototype(), dest, index, &inst);
+		} 
+		else if(a.isDotdot()) {
+       	        	Value const& t = a.environment()->dots[a.dotIndex()].v;
+			Instruction const* result = &inst;
+			if(!t.isObject()) {
+				result = forceDot(thread, inst, t, a.environment(), a.dotIndex());
+			}
+			if(t.isObject()) {
+				dest->dots[index].v = t;
+				thread.traces.LiveEnvironment(dest, t);
+			}
+			return result;
+		}
+		else {
+			_error("Invalid promise type");
+		}
 	}
-#endif
-}
-
-extern Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* fastmov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* subset_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* subset2_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* jc_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* lt_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* ret_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* retp_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* internal_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-extern Instruction const* strip_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-
-Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const* a, Environment* env, int64_t index) {
-	if(a->isPromise()) {
-		Function const& f = (Function const&)(*a);
-		assert(f.environment()->DynamicScope());
-		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), env, index, &inst);
-	} else {
+	else {
 		_error(std::string("Object '..") + intToStr(index+1) + "' not found, missing argument?");
-	}
+	} 
 }
 
-Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, String name) {
-	if(a->isPromise()) {
-		Function const& f = (Function const&)(*a);
-		assert(f.environment()->DynamicScope());
-		return buildStackFrame(thread, f.environment()->DynamicScope(), f.prototype(), f.environment(), name, &inst);
-	} else if(a->isDefault()) {
-		Function const& f = (Function const&)(*a);
-		assert(f.environment());
-		return buildStackFrame(thread, f.environment(), f.prototype(), f.environment(), name, &inst);
-	} else {
-		_error(std::string("Object '") + thread.externStr(name) + "' not found");
+// forces a value stored in the Environment slot: dest->name
+// call through FORCE macro which inlines some performance-important checks
+//  for the common cases.
+// Environments can have promises, defaults, or dotdots (references to ..n in the parent).
+Instruction const* force(Thread& thread, Instruction const& inst, Value const& v, Environment
+* dest, String name) {
+	if(v.isPromise()) {
+		Promise const& a = (Promise const&)v;
+		if(a.isPrototype()) {
+       	        	return buildStackFrame(thread, a.environment(), a.prototype(), dest, name, &inst);
+        	}
+		else if(a.isDotdot()) {
+                	Value const& t = a.environment()->dots[a.dotIndex()].v;
+			Instruction const* result = &inst;
+			// if this dotdot is a promise, attempt to force.
+			// first time through this will return the address of the 
+			//	promise's new stack frame.
+			// second time through this will return the resulting value
+			// => Thus, evaluating dotdot requires at most 2 sweeps up the dotdot chain
+			if(!t.isObject()) {
+				result = forceDot(thread, inst, (Promise const&)t, a.environment(), a.dotIndex());
+			}
+       	        	if(t.isObject()) {
+       	                	dest->insert(name) = t;
+       	                 	thread.traces.LiveEnvironment(dest, t);
+                	}
+                	return result;
+        	}
+		else {
+			_error("Invalid promise type");
+		}
 	}
-}
-
-// Tracing stuff
-
-//track the heat of back edge operations and invoke the recorder on hot traces
-//unused until we begin tracing loops again
-static Instruction const * profile_back_edge(Thread & thread, Instruction const * inst) {
-	return inst;
+	else {
+		_error(std::string("Object '") + thread.externStr(name) + "' not found"); 
+	} 
 }
 
 // Control flow instructions
@@ -99,27 +89,27 @@ Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	Heap::Global.collect(thread.state);
 	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
 	if(!f.isFunction())
-		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
+		_error(std::string("Non-function (") + Type::toString(f.type()) + ") as first parameter to call\n");
 	Function const& func = (Function const&)f;
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
-	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
+	Environment* fenv = new Environment((int64_t)call.arguments.size(), func.environment(), thread.frame.environment, call.call);
 	
 	MatchArgs(thread, thread.frame.environment, fenv, func, call);
 	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
 }
 
-Instruction const* ncall_op(Thread& thread, Instruction const& inst) {
+Instruction const* fastcall_op(Thread& thread, Instruction const& inst) {
 	Heap::Global.collect(thread.state);
 	OPERAND(f, inst.a); FORCE(f, inst.a); BIND(f);
 	if(!f.isFunction())
-		_error(std::string("Non-function (") + Type::toString(f.type) + ") as first parameter to call\n");
+		_error(std::string("Non-function (") + Type::toString(f.type()) + ") as first parameter to call\n");
 	Function const& func = (Function const&)f;
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
-	Environment* fenv = CreateEnvironment(thread, func.environment(), thread.frame.environment, call.call);
+	Environment* fenv = new Environment((int64_t)call.arguments.size(), func.environment(), thread.frame.environment, call.call);
 	
-	MatchNamedArgs(thread, thread.frame.environment, fenv, func, call);
+	FastMatchArgs(thread, thread.frame.environment, fenv, func, call);
 	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
 }
 
@@ -130,7 +120,7 @@ Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	// We can free this environment for reuse
 	// as long as we don't return a closure...
 	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
-	if(result.isClosureSafe()) {
+	if(!(result.isFunction() || result.isEnvironment() || result.isList())) {
 		thread.traces.KillEnvironment(thread.frame.environment);
 	}
 
@@ -232,12 +222,15 @@ Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
 	// a = loop variable (e.g. i), b = loop vector(e.g. 1:100), c = counter register
 	// following instruction is a jmp that contains offset
 	OPERAND(vec, inst.b); FORCE(vec, inst.b); BIND(vec);
-	if((int64_t)vec.length <= 0) {
+	if(!vec.isVector())
+		_error("Invalid for() loop sequence");
+	Vector const& v = (Vector const&)vec;
+	if((int64_t)v.length() <= 0) {
 		return &inst+(&inst+1)->a;	// offset is in following JMP, dispatch together
 	} else {
-		Element2(vec, 0, thread.frame.environment->insert((String)inst.a));
+		Element2(v, 0, thread.frame.environment->insert((String)inst.a));
 		Integer::InitScalar(REGISTER(inst.c), 1);
-		Integer::InitScalar(REGISTER(inst.c-1), vec.length);
+		Integer::InitScalar(REGISTER(inst.c-1), v.length());
 		return &inst+2;			// skip over following JMP
 	}
 }
@@ -248,7 +241,7 @@ Instruction const* forend_op(Thread& thread, Instruction const& inst) {
 		OPERAND(vec, inst.b); //FORCE(vec, inst.b); BIND(vec); // this must have necessarily been forced by the forbegin.
 		Element2(vec, counter.i, thread.frame.environment->insert((String)inst.a));
 		counter.i++;
-		return profile_back_edge(thread,&inst+(&inst+1)->a);
+		return &inst+(&inst+1)->a;
 	} else {
 		return &inst+2;			// skip over following JMP
 	}
@@ -280,8 +273,9 @@ Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
 			Character names(dots.size());
 			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
 				names[i] = dots[i].n;
-			Object::Init(out, out);
-			((Object&)out).insertMutable(Strings::names, names);
+			Dictionary* d = new Dictionary(1);
+			d->insert(Strings::names) = names;
+			((Object&)out).attributes(d);
 		}
 		return &inst+1;
 	}
@@ -317,11 +311,12 @@ Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
 	OPERAND(value, inst.c); FORCE(value, inst.c); /*BIND(value);*/
 	
 	String s = (String)inst.a;
-	Value& dest = thread.frame.environment->LexicalScope()->insertRecursive(s);
+	Environment* penv;
+	Value& dest = thread.frame.environment->LexicalScope()->insertRecursive(s, penv);
 
 	if(!dest.isNil()) {
 		dest = value;
-		// TODO: should add dest's environment to the liveEnvironments list
+		thread.traces.LiveEnvironment(penv, dest);
 	}
 	else {
 		thread.state.global->insert(s) = value;
@@ -366,11 +361,11 @@ Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
 	BIND(index);
 	
 	if(value.isFuture() && (dest.isVector() || dest.isFuture())) {
-		if(index.isInteger() && index.length == 1) {
+		if(index.isInteger() && ((Integer const&)index).length() == 1) {
 			OUT(thread, inst.c) = thread.traces.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
 			return &inst+1;
 		}
-		else if(index.isDouble() && index.length == 1) {
+		else if(index.isDouble() && ((Double const&)index).length() == 1) {
 			OUT(thread, inst.c) = thread.traces.EmitSStore(thread.frame.environment, dest, ((Double&)index)[0], value);
 			return &inst+1;
 		}
@@ -389,11 +384,11 @@ Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
 	BIND(index);
 	
 	if(value.isFuture() && (dest.isVector() || dest.isFuture())) {
-		if(index.isInteger() && index.length == 1) {
+		if(index.isInteger() && ((Integer const&)index).length() == 1) {
 			OUT(thread, inst.c) = thread.traces.EmitSStore(thread.frame.environment, dest, ((Integer&)index)[0], value);
 			return &inst+1;
 		}
-		else if(index.isDouble() && index.length == 1) {
+		else if(index.isDouble() && ((Double const&)index).length() == 1) {
 			OUT(thread, inst.c) = thread.traces.EmitSStore(thread.frame.environment, dest, ((Double&)index)[0], value);
 			return &inst+1;
 		}
@@ -435,14 +430,14 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 		return &inst+1;
 	}
 
-	if(a.isObject()) { 
+	if(((Object const&)a).hasAttributes()) { 
 		return GenericDispatch(thread, inst, Strings::bracket, a, i, inst.c); 
 	} 
 	
 	FORCE(i, inst.b); 
 	BIND(i);
 
-	if(i.isObject()) { 
+	if(((Object const&)i).hasAttributes()) { 
 		return GenericDispatch(thread, inst, Strings::bracket, a, i, inst.c); 
 	} 
 	
@@ -458,7 +453,7 @@ Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
 		if(i.isDouble1()) { index = i.d-1; }
 		else if(i.isInteger1()) { index = i.i-1; }
 		else if(i.isLogical1() && Logical::isTrue(i.c)) { index = 1-1; }
-		else if(i.isVector() && (i.length == 0 || i.length > 1)) { 
+		else if(i.isVector() && (((Vector const&)i).length() == 0 || ((Vector const&)i).length() > 1)) { 
 			_error("Attempt to select less or more than 1 element in subset2"); 
 		}
 		else { _error("Subscript out of bounds"); }
@@ -466,8 +461,41 @@ Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
 		return &inst+1;
 	}
  	FORCE(i, inst.b); BIND(i);
-	if(a.isObject() || i.isObject()) { return GenericDispatch(thread, inst, Strings::bb, a, i, inst.c); } 
+	if(((Object const&)a).hasAttributes() || ((Object const&)i).hasAttributes()) { return GenericDispatch(thread, inst, Strings::bb, a, i, inst.c); } 
 	_error("Invalid subset2 operation");
+}
+
+Instruction const* attrget_op(Thread& thread, Instruction const& inst) {
+	OPERAND(a, inst.a); FORCE(a, inst.a);
+	OPERAND(i, inst.b); FORCE(i, inst.b); BIND(i);
+	if(a.isObject() && i.isCharacter1()) {
+		String name = ((Character const&)i)[0];
+		Object const& o = (Object const&)a;
+		if(o.hasAttributes() && o.attributes()->has(name))
+			OUT(thread, inst.c) = o.attributes()->get(name);
+		else
+			OUT(thread, inst.c) = Null::Singleton();
+		return &inst+1;
+	}
+	_error("Invalid attrget operation");
+}
+
+Instruction const* attrset_op(Thread& thread, Instruction const& inst) {
+	OPERAND(a, inst.c); FORCE(a, inst.c);
+	OPERAND(i, inst.b); FORCE(i, inst.b); BIND(i);
+	OPERAND(v, inst.a); FORCE(v, inst.a); BIND(v);
+	if(a.isObject() && i.isCharacter1()) {
+		String name = ((Character const&)i)[0];
+		Object o = (Object const&)a;
+		Dictionary* d = o.hasAttributes()
+                	? o.attributes()->clone(1)
+                	: new Dictionary(1);
+		d->insert(name) = v;
+		o.attributes(d);
+		OUT(thread, inst.c) = o;
+		return &inst+1;
+	}
+	_error("Invalid attrset operation");
 }
 
 
@@ -485,7 +513,7 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
  		return &inst+1; \
 	} \
 	BIND(a); \
-	if(a.isObject()) { return GenericDispatch(thread, inst, Strings::Name, a, inst.c); } \
+	if(((Object const&)a).hasAttributes()) { return GenericDispatch(thread, inst, Strings::Name, a, inst.c); } \
 \
 	Group##Dispatch<Name##VOp>(thread, a, c); \
 	return &inst+1; \
@@ -521,7 +549,7 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 		return &inst+1; \
 	} \
 	BIND(a); BIND(b); \
-	if(a.isObject() || b.isObject()) { return GenericDispatch(thread, inst, Strings::Name, a, b, inst.c); } \
+	if(((Object const&)a).hasAttributes() || ((Object const&)b).hasAttributes()) { return GenericDispatch(thread, inst, Strings::Name, a, b, inst.c); } \
 \
 	Group##Dispatch<Name##VOp>(thread, a, b, c);	\
 	return &inst+1;	\
@@ -532,7 +560,7 @@ BINARY_BYTECODES(OP)
 Instruction const* length_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	if(a.isVector())
-		Integer::InitScalar(OUT(thread, inst.c), a.length);
+		Integer::InitScalar(OUT(thread, inst.c), ((Vector const&)a).length());
 	else if(a.isFuture()) {
 		IRNode::Shape shape = thread.traces.futureShape(a);
 		if(shape.split < 0 && shape.filter < 0) {
@@ -542,7 +570,7 @@ Instruction const* length_op(Thread& thread, Instruction const& inst) {
 			thread.traces.OptBind(thread, OUT(thread,inst.c));
 		}
 	}
-	else if(a.isObject()) { 
+	else if(((Object const&)a).hasAttributes()) { 
 		return GenericDispatch(thread, inst, Strings::length, a, inst.c); 
 	} else {
 		Integer::InitScalar(OUT(thread, inst.c), 1);
@@ -618,10 +646,9 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 }
 
 Instruction const* function_op(Thread& thread, Instruction const& inst) {
-	OPERAND(function, inst.a); FORCE(function, inst.a);
+	Value const& function = CONSTANT(inst.a);
 	Value& out = OUT(thread, inst.c);
-	out.header = function.header;
-	out.p = (void*)thread.frame.environment;
+	Function::Init(out, ((Function const&)function).prototype(), thread.frame.environment);
 	return &inst+1;
 }
 
@@ -642,23 +669,23 @@ Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 
 	if(type == Type::Logical) {
 		Logical v(l);
-		for(int64_t i = 0; i < v.length; i++) v[i] = Logical::FalseElement;
+		for(int64_t i = 0; i < l; i++) v[i] = Logical::FalseElement;
 		OUT(thread, inst.c) = v;
 	} else if(type == Type::Integer) {
 		Integer v(l);
-		for(int64_t i = 0; i < v.length; i++) v[i] = 0;
+		for(int64_t i = 0; i < l; i++) v[i] = 0;
 		OUT(thread, inst.c) = v;
 	} else if(type == Type::Double) {
 		Double v(l);
-		for(int64_t i = 0; i < v.length; i++) v[i] = 0;
+		for(int64_t i = 0; i < l; i++) v[i] = 0;
 		OUT(thread, inst.c) = v;
 	} else if(type == Type::Character) {
 		Character v(l);
-		for(int64_t i = 0; i < v.length; i++) v[i] = Strings::empty;
+		for(int64_t i = 0; i < l; i++) v[i] = Strings::empty;
 		OUT(thread, inst.c) = v;
 	} else if(type == Type::Raw) {
 		Raw v(l);
-		for(int64_t i = 0; i < v.length; i++) v[i] = 0;
+		for(int64_t i = 0; i < l; i++) v[i] = 0;
 		OUT(thread, inst.c) = v;
 	} else {
 		_error("Invalid type in vector");
@@ -732,7 +759,7 @@ Instruction const* random_op(Thread& thread, Instruction const& inst) {
 Instruction const* type_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	switch(thread.traces.futureType(a)) {
-                #define CASE(name, str) case Type::name: OUT(thread, inst.c) = Character::c(Strings::name); break;
+                #define CASE(name, str, ...) case Type::name: OUT(thread, inst.c) = Character::c(Strings::name); break;
                 TYPES(CASE)
                 #undef CASE
                 default: _error("Unknown type in type to string, that's bad!"); break;
@@ -760,17 +787,15 @@ Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 	// value is missing at a higher level.
 	String s = (String)inst.a;
 	Value const& v = thread.frame.environment->get(s);
-	bool missing = v.isNil() || v.isDefault();
+	bool missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
 	Logical::InitScalar(OUT(thread, inst.c), missing ? Logical::TrueElement : Logical::FalseElement);
 	return &inst+1;
 }
 Instruction const* strip_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a);
 	Value& c = OUT(thread, inst.c);
-	if(a.isObject())
-		c = ((Object const&)a).base();
-	else
-		c = a;
+	c = a;
+	((Object&)c).attributes(0);
 	return &inst+1;
 }
 
@@ -830,7 +855,7 @@ Value Thread::eval(Prototype const* prototype) {
 
 Value Thread::eval(Prototype const* prototype, Environment* environment) {
 	Value* old_base = base;
-	int64_t stackSize = stack.size();
+	uint64_t stackSize = stack.size();
 
 	// make room for the result
 	base--;	
@@ -847,4 +872,59 @@ Value Thread::eval(Prototype const* prototype, Environment* environment) {
 		throw;
 	}
 }
+
+
+
+
+const int64_t Random::primes[100] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43,
+47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131,
+137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223,
+227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311,
+313, 317, 331, 337, 347, 349, 353, 359, 367, 373, 379, 383, 389, 397, 401, 409,
+419, 421, 431, 433, 439, 443, 449, 457, 461, 463, 467, 479, 487, 491, 499, 503,
+509, 521, 523, 541};
+
+Thread::Thread(State& state, uint64_t index) 
+    : state(state)
+    , index(index)
+#ifdef ENABLE_EPEE
+    , traces(state.epeeEnabled)
+#endif
+    , random(index) 
+    , steals(1)
+{
+	registers = new Value[DEFAULT_NUM_REGISTERS];
+	this->base = registers + DEFAULT_NUM_REGISTERS;
+}
+
+void Prototype::threadByteCode(Prototype*  prototype) {
+#ifdef USE_THREADED_INTERPRETER
+	for(int64_t i = 0; i < (int64_t)prototype->bc.size(); ++i) {
+		Instruction const& inst = prototype->bc[i];
+		inst.ibc = glabels[inst.bc];
+	}
+#endif
+}
+
+void Prototype::printByteCode(Prototype const* prototype, State const& state) {
+	std::cout << "Prototype: " << intToHexStr((int64_t)prototype) << std::endl;
+	std::cout << "\tRegisters: " << prototype->registers << std::endl;
+	if(prototype->constants.size() > 0) {
+		std::cout << "\tConstants: " << std::endl;
+		for(int64_t i = 0; i < (int64_t)prototype->constants.size(); i++)
+			std::cout << "\t\t" << i << ":\t" << state.stringify(prototype->constants[i]) << std::endl;
+	}
+	if(prototype->bc.size() > 0) {
+		std::cout << "\tCode: " << std::endl;
+		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++) {
+			std::cout << std::hex << &prototype->bc[i] << std::dec << "\t" << i << ":\t" << prototype->bc[i].toString();
+			if(prototype->bc[i].bc == ByteCode::call || prototype->bc[i].bc == ByteCode::fastcall) {
+				std::cout << "\t\t(arguments: " << prototype->calls[prototype->bc[i].b].arguments.size() << ")";
+			}
+			std::cout << std::endl;
+		}
+	}
+	std::cout << std::endl;
+}
+
 

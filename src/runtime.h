@@ -20,7 +20,7 @@ Type::Enum string2Type(String str);
 
 void Element(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 inline void Element(Value const& v, int64_t index, Value& out) {
-	switch(v.type) {
+	switch(v.type()) {
 		#define CASE(Name) case Type::Name: Name::InitScalar(out, ((Name const&)v)[index]); break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
@@ -30,8 +30,8 @@ inline void Element(Value const& v, int64_t index, Value& out) {
 
 void Element2(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 inline void Element2(Value const& v, int64_t index, Value& out) {
-	if(index < 0 || index >= v.length) _error("Out-of-range index");
-	switch(v.type) {
+	if(index < 0 || index >= ((Vector const&)v).length()) _error("Out-of-range index");
+	switch(v.type()) {
 		#define CASE(Name) case Type::Name: \
 			Name::InitScalar(out, ((Name const&)v)[index]); \
 			break;
@@ -85,7 +85,7 @@ inline void Subset2(Thread& thread, Value const& a, Value const& i, Value& out) 
 
 void ElementAssign(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 inline void ElementAssign(Value const& v, int64_t index, Value& out) {
-	switch(v.type) {
+	switch(v.type()) {
 		#define CASE(Name) case Type::Name: ((Name&)out)[index] = ((Name const&)v)[0]; break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
@@ -95,8 +95,8 @@ inline void ElementAssign(Value const& v, int64_t index, Value& out) {
 
 void Element2Assign(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 inline void Element2Assign(Value const& v, int64_t index, Value& out) {
-	if(index < 0 || index > v.length) _error("Out-of-range index");
-	switch(v.type) {
+	if(index < 0 || index > ((Vector const&)v).length()) _error("Out-of-range index");
+	switch(v.type()) {
 		#define CASE(Name) case Type::Name: ((Name&)out)[index] = ((Name const&)v)[0]; break;
 		ATOMIC_VECTOR_TYPES(CASE)
 		#undef CASE
@@ -111,10 +111,10 @@ void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i
 void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c);
  
 inline void SubsetAssign(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
-	if(!clone && a.type == b.type) {
+	if(!clone && a.type() == b.type()) {
 		if(i.isDouble1()) {
 			int64_t index = (int64_t)i.d-1;
-			if(index >= 0 && index < a.length) {
+			if(index >= 0 && index < ((Vector const&)a).length()) {
 				c = a;
 				ElementAssign(b, index, c);
 				return;
@@ -122,7 +122,7 @@ inline void SubsetAssign(Thread& thread, Value const& a, bool clone, Value const
 		}
 		else if(i.isInteger1()) {
 			int64_t index = i.i-1;
-			if(index >= 0 && index < a.length) {
+			if(index >= 0 && index < ((Vector const&)a).length()) {
 				c = a;
 				ElementAssign(b, index, c);
 				return;
@@ -133,10 +133,10 @@ inline void SubsetAssign(Thread& thread, Value const& a, bool clone, Value const
 }
 
 inline void Subset2Assign(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
-	if(!clone && (a.type == b.type || a.isList())) {
+	if(!clone && (a.type() == b.type() || a.isList())) {
 		if(i.isDouble1()) {
 			int64_t index = (int64_t)i.d-1;
-			if(index >= 0 && index < a.length) {
+			if(index >= 0 && index < ((Vector const&)a).length()) {
 				c = a;
 				Element2Assign(b, index, c);
 				return;
@@ -144,7 +144,7 @@ inline void Subset2Assign(Thread& thread, Value const& a, bool clone, Value cons
 		}
 		else if(i.isInteger1()) {
 			int64_t index = i.i-1;
-			if(index >= 0 && index < a.length) {
+			if(index >= 0 && index < ((Vector const&)a).length()) {
 				c = a;
 				Element2Assign(b, index, c);
 				return;
@@ -203,7 +203,7 @@ inline Integer Repeat(Integer const& each, int64_t const length) {
 		r[i] = j+1;
 		e++; 
 		if(e > each[j]) { e = 1; j++; }
-		if(j >= each.length) j = 0;
+		if(j >= each.length()) j = 0;
 	}
 	return r;
 }

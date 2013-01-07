@@ -27,14 +27,11 @@ struct CastOp {
 
 template<class O>
 void As(Thread& thread, Value src, O& out) {
-	if(src.isObject())
-		src = ((Object const&)src).base();
-
-	if(src.type == O::ValueType) {
+	if(src.type() == O::ValueType) {
 		out = (O const&)src;
 		return;
 	}
-	switch(src.type) {
+	switch(src.type()) {
 		case Type::Null: O(0); return; break;
 		#define CASE(Name,...) case Type::Name: Zip1< CastOp<Name, O> >::eval(thread, (Name const&)src, out); return; break;
 		VECTOR_TYPES_NOT_NULL(CASE)
@@ -43,7 +40,8 @@ void As(Thread& thread, Value src, O& out) {
 			Cast1<Function, O>(thread, (Function const&)src, out); return; break;
 		default: break;
 	};
-	_error(std::string("Invalid cast from ") + Type::toString(src.type) + " to " + Type::toString(O::ValueType));
+	out.attributes(((Object const&)src).attributes());
+	_error(std::string("Invalid cast from ") + Type::toString(src.type()) + " to " + Type::toString(O::ValueType));
 }
 
 template<>
@@ -59,14 +57,14 @@ O As(Thread& thread, Value const& src) {
 }
 
 inline Value As(Thread& thread, Type::Enum type, Value const& src) {
-	if(src.type == type)
+	if(src.type() == type)
 		return src;
 	switch(type) {
 		case Type::Null: return Null::Singleton(); break;
 		#define CASE(Name,...) case Type::Name: return As<Name>(thread, src); break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
-		default: _error(std::string("Invalid cast from ") + Type::toString(src.type) + " to " + Type::toString(type)); break;
+		default: _error(std::string("Invalid cast from ") + Type::toString(src.type()) + " to " + Type::toString(type)); break;
 	};
 }
 
@@ -152,19 +150,19 @@ SPECIALIZED_STATIC List::Element Cast<Raw, List>(Thread& thread, Raw::Element co
 
 
 template<>
-SPECIALIZED_STATIC Raw::Element Cast<List, Raw>(Thread& thread, List::Element const& i) { Raw a = As<Raw>(thread, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to raw"); }
+SPECIALIZED_STATIC Raw::Element Cast<List, Raw>(Thread& thread, List::Element const& i) { Raw a = As<Raw>(thread, i); if(a.length()==1) return a[0]; else _error("Invalid cast from list to raw"); }
 
 template<>
-SPECIALIZED_STATIC Logical::Element Cast<List, Logical>(Thread& thread, List::Element const& i) { Logical a = As<Logical>(thread, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to logical"); }
+SPECIALIZED_STATIC Logical::Element Cast<List, Logical>(Thread& thread, List::Element const& i) { Logical a = As<Logical>(thread, i); if(a.length()==1) return a[0]; else _error("Invalid cast from list to logical"); }
 
 template<>
-SPECIALIZED_STATIC Integer::Element Cast<List, Integer>(Thread& thread, List::Element const& i) { Integer a = As<Integer>(thread, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to integer"); }
+SPECIALIZED_STATIC Integer::Element Cast<List, Integer>(Thread& thread, List::Element const& i) { Integer a = As<Integer>(thread, i); if(a.length()==1) return a[0]; else _error("Invalid cast from list to integer"); }
 
 template<>
-SPECIALIZED_STATIC Double::Element Cast<List, Double>(Thread& thread, List::Element const& i) { Double a = As<Double>(thread, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to double"); }
+SPECIALIZED_STATIC Double::Element Cast<List, Double>(Thread& thread, List::Element const& i) { Double a = As<Double>(thread, i); if(a.length()==1) return a[0]; else _error("Invalid cast from list to double"); }
 
 template<>
-SPECIALIZED_STATIC Character::Element Cast<List, Character>(Thread& thread, List::Element const& i) { Character a = As<Character>(thread, i); if(a.length==1) return a[0]; else _error("Invalid cast from list to character"); }
+SPECIALIZED_STATIC Character::Element Cast<List, Character>(Thread& thread, List::Element const& i) { Character a = As<Character>(thread, i); if(a.length()==1) return a[0]; else _error("Invalid cast from list to character"); }
 
 
 

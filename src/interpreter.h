@@ -60,11 +60,12 @@ struct CompiledCall {
 	List call;
 
 	PairList arguments;
+	int64_t argumentsSize;
 	int64_t dotIndex;
 	bool named;
 	
 	explicit CompiledCall(List const& call, PairList arguments, int64_t dotIndex, bool named) 
-		: call(call), arguments(arguments), dotIndex(dotIndex), named(named) {}
+		: call(call), arguments(arguments), argumentsSize(arguments.size()), dotIndex(dotIndex), named(named) {}
 };
 
 struct Prototype : public HeapObject {
@@ -72,6 +73,7 @@ struct Prototype : public HeapObject {
 	String string;
 
 	PairList parameters;
+	int64_t parametersSize;
 	int dotIndex;
 
 	int registers;
@@ -83,6 +85,7 @@ struct Prototype : public HeapObject {
 	void visit() const;
 
 	static void threadByteCode(Prototype* prototype);
+	static void printByteCode(Prototype const* prototype, State const& state); 
 };
 
 struct StackFrame {
@@ -136,7 +139,9 @@ public:
 
 	~State() {
 		fetch_and_add(&done, 1);
-		while(fetch_and_add(&done, 0) != threads.size()) { sleep(); }
+		while(fetch_and_add(&done, 0) != (int64_t)threads.size()) { 
+			sleep(); 
+		}
 	}
 
 
@@ -209,12 +214,11 @@ public:
 
 	std::deque<Task> tasks;
 	Lock tasksLock;
+	Random random;	
 	int64_t steals;
 
 	int64_t assignment[64], set[64]; // temporary space for matching arguments
 	
-	Random random;	
-
 	Thread(State& state, uint64_t index);
 
 	StackFrame& push() {
@@ -353,8 +357,8 @@ private:
 
 inline State::State(uint64_t threads, int64_t argc, char** argv) 
 	: verbose(false), epeeEnabled(true), done(0) {
-	Environment* base = new Environment(0,0,Null::Singleton());
-	this->global = new Environment(base,0,Null::Singleton());
+	Environment* base = new Environment(1,0,0,Null::Singleton());
+	this->global = new Environment(1,base,0,Null::Singleton());
 	path.push_back(base);
 
 	arguments = Character(argc);

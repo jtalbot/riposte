@@ -6,88 +6,100 @@
 // needs to know about certain attributes (names and class).
 // Here to keep the core VM clean of this stuff.
 
-inline bool hasNames(Value const& v) {
-	return v.isObject() && ((Object const&)v).has(Strings::names);
+inline bool hasNames(Object const& v) {
+	return v.hasAttributes() && v.attributes()->has(Strings::names);
 }
 
-inline bool hasClass(Value const& v) {
-	return v.isObject() && ((Object const&)v).has(Strings::classSym);
+inline bool hasClass(Object const& v) {
+	return v.hasAttributes() && v.attributes()->has(Strings::classSym);
 }
 
 inline Value const& getNames(Object const& v) {
-	return v.get(Strings::names);
+	return v.attributes()->get(Strings::names);
 }
 
 inline Value const& getClass(Object const& v) {
-	return v.get(Strings::classSym);
+	return v.attributes()->get(Strings::classSym);
 }
 
 inline String className(Object const& o) {
 	if(hasClass(o)) {
 		Value const& v = getClass(o);
-		if(v.isCharacter() && v.length > 0)
+		if(v.isCharacter() && ((Character const&)v).length() > 0)
 			return ((Character const&)v)[0];
 	}
 	return Strings::NA;
 }
 
 inline bool isSymbol(Value const& v) {
-        return hasClass(v) && className((Object const&)v) == Strings::Symbol;
+        return 	v.isObject()
+		&& hasClass((Object const&)v) 
+		&& className((Object const&)v) == Strings::Symbol;
 }
 
 inline bool isCall(Value const& v) {
-        return hasClass(v) && className((Object const&)v) == Strings::Call;
+        return 	v.isObject()
+		&& hasClass((Object const&)v) 
+		&& className((Object const&)v) == Strings::Call;
 }
 
 inline bool isExpression(Value const& v) {
-        return hasClass(v) && className((Object const&)v) == Strings::Expression;
+        return 	v.isObject()
+		&& hasClass((Object const&)v) 
+		&& className((Object const&)v) == Strings::Expression;
 }
 
 inline bool isPairlist(Value const& v) {
-        return hasClass(v) && className((Object const&)v) == Strings::Pairlist;
+        return 	v.isObject()
+		&& hasClass((Object const&)v) 
+		&& className((Object const&)v) == Strings::Pairlist;
 }
 
-inline Value CreateSymbol(String s) {
-	Object o;
-	Object::Init(o, Character::c(s));
-	o.insertMutable(Strings::classSym, Character::c(Strings::Symbol));
-        return o;
+inline Object CreateSymbol(String s) {
+	Object v = Character::c(s);
+	Dictionary* d = new Dictionary(1);
+	d->insert(Strings::classSym) = Character::c(Strings::Symbol);
+	v.attributes(d);
+	return v;
 }
 
-inline Value CreateExpression(List const& list) {
-	Object o;
-	Object::Init(o, list);
-	o.insertMutable(Strings::classSym, Character::c(Strings::Expression));
-        return o;
+inline Object CreateExpression(List l) {
+	Dictionary* d = new Dictionary(1);
+	d->insert(Strings::classSym) = Character::c(Strings::Expression);
+	l.attributes(d);
+	return l;
 }
 
-inline Value CreateCall(List const& list, Value const& names = Value::Nil()) {
-        Object o;
-	Object::Init(o, list);
-	o.insertMutable(Strings::classSym, Character::c(Strings::Call));
-	o.insertMutable(Strings::names, names);
-        return o;
+inline Object CreateCall(List l, Value const& names = Value::Nil()) {
+	Dictionary* d = new Dictionary(2);
+	d->insert(Strings::classSym) = Character::c(Strings::Call);
+	if(!names.isNil())
+		d->insert(Strings::names) = names;
+	l.attributes(d);
+	return l;
 }
 
-inline Value CreatePairlist(List const& list, Value const& names = Value::Nil()) {
-        Object o;
-	Object::Init(o, list);
-	o.insertMutable(Strings::classSym, Character::c(Strings::Pairlist));
-	o.insertMutable(Strings::names, names);
-        return o;
+inline Object CreatePairlist(List l, Value const& names = Value::Nil()) {
+	Dictionary* d = new Dictionary(2);
+	d->insert(Strings::classSym) = Character::c(Strings::Pairlist);
+	if(!names.isNil())
+		d->insert(Strings::names) = names;
+	l.attributes(d);
+	return l;
+}
+
+inline Object CreateComplex(double a) {
+	Object l = List::c(Double::c(0), Double::c(a));
+	Dictionary* d = new Dictionary(2);
+	d->insert(Strings::classSym) = Character::c(Strings::Complex);
+	d->insert(Strings::names) = Character::c(Strings::Re, Strings::Im);
+	l.attributes(d);
+	return l;
 }
 
 inline String SymbolStr(Value const& v) {
-        if(v.isObject()) return ((Character const&)((Object const&)v).base())[0];
-        else return ((Character const&)v)[0];
-}
-
-inline Value CreateComplex(double d) {
-	Object o;
-	Object::Init(o, List::c(Double::c(0), Double::c(d)));
-	o.insertMutable(Strings::names, Character::c(Strings::Re, Strings::Im));
-	o.insertMutable(Strings::classSym, Character::c(Strings::Complex));
-	return o;
+	assert(v.isCharacter() && ((Character const&)v).length() == 1);
+	return ((Character const&)v)[0];
 }
 
 #endif

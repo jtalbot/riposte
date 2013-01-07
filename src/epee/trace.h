@@ -58,16 +58,20 @@ class Trace {
 		IRef EmitSequence(int64_t length, int64_t a, int64_t b);
 		IRef EmitSequence(int64_t length, double a, double b);
 		IRef EmitConstant(Type::Enum type, int64_t length, int64_t c);
-		IRef EmitGather(Value const& v, IRef i);
-		IRef EmitLoad(Value const& v, int64_t length, int64_t offset);
-		IRef EmitSLoad(Value const& v);
+		IRef EmitGather(Vector const& v, IRef i);
+		IRef EmitLoad(Vector const& v, int64_t length, int64_t offset);
+		IRef EmitSLoad(Vector const& v);
 		IRef EmitSStore(IRef ref, int64_t index, IRef value);
 
-		IRef GetRef(Value const& v) {
-			if(v.isFuture()) return v.future.ref;
-			else if(v.length == 1) return EmitConstant(v.type, 1, v.i);
-			else return EmitLoad(v,v.length,0);
-		}
+        IRef GetRef(Value const& v) {
+            if(v.isFuture()) return ((Future const&)v).ref();
+            else if(v.isVector()) {
+                Vector const& vec = (Vector const&)v;
+                if(vec.isScalar()) return EmitConstant(vec.type(), 1, vec.i);
+                else return EmitLoad(vec,vec.length(),0);
+            }
+            _error("GetRef on invalid type");
+        }
 
 		void Execute(Thread & thread);
 		void Execute(Thread & thread, IRef ref);
@@ -102,17 +106,19 @@ class Traces {
 
         Traces(bool const& enabled) : enabled(enabled) {}
 
-        Type::Enum futureType(Value const& v) const {
-            if(v.isFuture()) return v.future.typ;
-            else return v.type;
+        Type::Enum futureType(Value const& v) {
+            if(v.isFuture()) 
+                return ((Future const&)v).trace()->nodes[((Future const&)v).ref()].type;
+            else 
+                return v.type();
         }
 
         IRNode::Shape futureShape(Value const& v) const {
             if(v.isFuture()) {
-                return traces.find(v.length)->second->nodes[v.future.ref].outShape;
+                return ((Future const&)v).trace()->nodes[((Future const&)v).ref()].outShape;
             }
             else 
-                return (IRNode::Shape) { v.length, -1, 1, -1 };
+                return (IRNode::Shape) { ((Vector const&)v).length(), -1, 1, -1 };
         }
 
         Trace* getTrace(int64_t length) {
@@ -131,12 +137,12 @@ class Traces {
         }
 
         Trace* getTrace(Value const& a) {
-            return getTrace(a.length);
+            return getTrace(futureShape(a).length);
         }
 
         Trace* getTrace(Value const& a, Value const& b) {
-            int64_t la = a.length;
-            int64_t lb = b.length;
+            int64_t la = futureShape(a).length;
+            int64_t lb = futureShape(b).length;
             if(la == lb || la == 1)
                 return getTrace(lb);
             else if(lb == 1)
@@ -146,9 +152,9 @@ class Traces {
         }
 
         Trace* getTrace(Value const& a, Value const& b, Value const& c) {
-            int64_t la = a.length;
-            int64_t lb = b.length;
-            int64_t lc = c.length;
+            int64_t la = futureShape(a).length;
+            int64_t lb = futureShape(b).length;
+            int64_t lc = futureShape(c).length;
             if(la != 1)
                 return getTrace(la);
             else if(lb != 1)
@@ -172,7 +178,7 @@ class Traces {
                     r = trace->EmitUnary(op, Group<Logical>::R::ValueType, trace->EmitCoerce(trace->GetRef(a), Group<Logical>::MA::ValueType), data);
                 } else _error("Attempting to record invalid type in EmitUnary");
                 Value v;
-                Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+                Future::Init(v, trace, r);
                 return v;
             }
 
@@ -207,7 +213,7 @@ class Traces {
                     else _error("Attempting to record invalid type in EmitBinary");
                 } else _error("Attempting to record invalid type in EmitBinary");
                 Value v;
-                Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+                Future::Init(v, trace, r);
                 return v;
             }
 
@@ -216,7 +222,7 @@ class Traces {
             trace->liveEnvironments.insert(env);
             IRef r = trace->EmitSplit(trace->GetRef(a), trace->EmitCoerce(trace->GetRef(b), Type::Integer), data);
             Value v;
-            Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+            Future::Init(v, trace, r);
             return v;
         }
 
@@ -225,7 +231,7 @@ class Traces {
             trace->liveEnvironments.insert(env);
             IRef r = trace->EmitConstant(type, length, c);
             Value v;
-            Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+            Future::Init(v, trace, r);
             return v;
         }
 
@@ -234,7 +240,7 @@ class Traces {
             trace->liveEnvironments.insert(env);
             IRef r = trace->EmitRandom(length);
             Value v;
-            Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+            Future::Init(v, trace, r);
             return v;
         }
 
@@ -243,7 +249,7 @@ class Traces {
             trace->liveEnvironments.insert(env);
             IRef r = trace->EmitBinary(IROpCode::add, Type::Integer, trace->EmitIndex(length, a, b), trace->EmitConstant(Type::Integer, length, 1), 0);
             Value v;
-            Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+            Future::Init(v, trace, r);
             return v;
         }
 
@@ -252,7 +258,7 @@ class Traces {
             trace->liveEnvironments.insert(env);
             IRef r = trace->EmitSequence(length, a, b);
             Value v;
-            Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+            Future::Init(v, trace, r);
             return v;
         }
 
@@ -261,7 +267,7 @@ class Traces {
             trace->liveEnvironments.insert(env);
             IRef r = trace->EmitSequence(length, a, b);
             Value v;
-            Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+            Future::Init(v, trace, r);
             return v;
         }
 
@@ -270,9 +276,9 @@ class Traces {
             trace->liveEnvironments.insert(env);
             IRef o = trace->EmitConstant(Type::Integer, 1, 1);
             IRef im1 = trace->EmitBinary(IROpCode::sub, Type::Integer, trace->EmitCoerce(trace->GetRef(i), Type::Integer), o, 0);
-            IRef r = trace->EmitGather(a, im1);
+            IRef r = trace->EmitGather(((Vector const&)a), im1);
             Value v;
-            Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+            Future::Init(v, trace, r);
             return v;
         }
 
@@ -281,7 +287,7 @@ class Traces {
             trace->liveEnvironments.insert(env);
             IRef r = trace->EmitFilter(trace->GetRef(a), trace->EmitCoerce(trace->GetRef(i), Type::Logical));
             Value v;
-            Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+            Future::Init(v, trace, r);
             return v;
         }
 
@@ -293,7 +299,7 @@ class Traces {
                     trace->GetRef(b),
                     trace->GetRef(cond));
             Value v;
-            Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+            Future::Init(v, trace, r);
             return v;
         }
 
@@ -301,12 +307,12 @@ class Traces {
             Trace* trace = getTrace(b);
             trace->liveEnvironments.insert(env);
 
-            IRef m = a.isFuture() ? a.future.ref : trace->EmitSLoad(a);
+            IRef m = a.isFuture() ? ((Future const&)a).ref() : trace->EmitSLoad(((Vector const&)a));
 
             IRef r = trace->EmitSStore(m, index, trace->GetRef(b));
 
             Value v;
-            Future::Init(v, trace->nodes[r].type, trace->nodes[r].shape.length, r);
+            Future::Init(v, trace, r);
             return v;
         }
 
@@ -325,14 +331,11 @@ class Traces {
 
         void Bind(Thread& thread, Value const& v) {
             if(!v.isFuture()) return;
-            std::map<int64_t, Trace*>::iterator i = traces.find(v.length);
-            if(i == traces.end()) 
-                _error("Unevaluated future left behind");
-            Trace* trace = i->second;
-            trace->Execute(thread, v.future.ref);
+            Trace* trace = ((Future const&)v).trace();
+            trace->Execute(thread, ((Future const&)v).ref());
             trace->Reset();
             availableTraces.push_back(trace);
-            traces.erase(i);
+            traces.erase(trace->Size);
         }
 
         void Flush(Thread & thread) {
@@ -348,10 +351,7 @@ class Traces {
 
         void OptBind(Thread& thread, Value const& v) {
             if(!v.isFuture()) return;
-            std::map<int64_t, Trace*>::iterator i = traces.find(v.length);
-            if(i == traces.end()) 
-                _error("Unevaluated future left behind");
-            Trace* trace = i->second;
+            Trace* trace = ((Future const&)v).trace();
             if(trace->nodes.size() > 2048) {
                 Bind(thread, v);
             }

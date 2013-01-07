@@ -11,7 +11,7 @@
 	_(jmp, "jmp") \
 	_(branch, "branch") \
 	_(call, "call") \
-	_(ncall, "ncall") \
+	_(fastcall, "fastcall") \
 	_(ret, "ret") /* return from function */ \
 	_(rets, "rets") /* return from top-level statement */ \
 	_(retp, "retp") /* return from a promise or default */ \
@@ -30,6 +30,8 @@
 	_(eassign,  "eassign") \
 	_(subset,   "subset") \
 	_(subset2,  "subset2") \
+	_(attrget,  "attr") \
+	_(attrset,  "attr<-") \
     _(rm,       "rm") \
 
 #define UTILITY_BYTECODES(_)\

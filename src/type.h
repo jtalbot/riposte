@@ -4,25 +4,22 @@
 
 #include "enum.h"
 
-#define TYPES(_) 			\
-	/* First the internal types. */ \
-	_(Promise, 	"promise") 	\
-	_(Default,	"default")	\
-	_(Dotdot,	"dotdot")	\
-	_(Future, 	"future")	\
-	_(Object,	"object")	\
-	/* The R visible types */	\
-	_(Null, 	"NULL")		\
-	_(Raw, 		"raw")		\
-	_(Logical, 	"logical")	\
-	_(Integer, 	"integer")	\
-	_(Double, 	"double")	\
-	_(Character, 	"character")	\
-	_(List,		"list")		\
-	_(Function,	"function")	\
-	_(Environment,	"environment")	\
+#define TYPES(_) 			   \
+	_(Nil,		"nil",		0) \
+	_(Promise, 	"promise",	1) \
+	/* Objects ... */		   \
+	_(Future, 	"future",       2) \
+	_(Function,	"function",	3) \
+	_(Environment,	"environment",	4) \
+	_(Null, 	"NULL",		5) \
+	_(Raw, 		"raw",		6) \
+	_(Logical, 	"logical",	7) \
+	_(Integer, 	"integer",	8) \
+	_(Double, 	"double",	9) \
+	_(Character, 	"character",   10) \
+	_(List,		"list",	       11) \
 
-DECLARE_ENUM(Type, TYPES)
+DECLARE_ENUM_WITH_VALUES(Type, TYPES)
 
 // just the vector types
 #define VECTOR_TYPES(_)	\
@@ -53,16 +50,27 @@ DECLARE_ENUM(Type, TYPES)
 #define LISTLIKE_VECTOR_TYPES(_) \
 	_(List)		\
 
+// Note that the Meet can be expresed as the max of the types
+//  assuming all are vector types
 #define DEFAULT_TYPE_MEET(_) \
+	_(Null, Null, Null) \
+	_(Logical, Null, Logical) \
+	_(Null, Logical, Logical) \
 	_(Logical, Logical, Logical) \
+	_(Integer, Null, Integer) \
+	_(Null, Integer, Integer) \
 	_(Integer, Logical, Integer) \
 	_(Logical, Integer, Integer) \
 	_(Integer, Integer, Integer) \
+	_(Double, Null, Double) \
+	_(Null, Double, Double) \
 	_(Double,  Logical, Double) \
 	_(Logical, Double,  Double) \
 	_(Double,  Integer, Double) \
 	_(Integer, Double,  Double) \
 	_(Double,  Double,  Double) \
+	_(Character, Null, Character) \
+	_(Null, Character, Character) \
 	_(Character, Logical, Character) \
 	_(Logical, Character, Character) \
 	_(Character, Integer, Character) \
@@ -70,5 +78,16 @@ DECLARE_ENUM(Type, TYPES)
 	_(Character, Double, Character) \
 	_(Double, Character, Character) \
 	_(Character, Character, Character) \
+	_(List, Null, List) \
+	_(Null, List, List) \
+	_(List, Logical, List) \
+	_(Logical, List, List) \
+	_(List, Integer, List) \
+	_(Integer, List, List) \
+	_(List, Double, List) \
+	_(Double, List, List) \
+	_(List, Character, List) \
+	_(Character, List, List) \
+	_(List, List, List) \
 
 #endif

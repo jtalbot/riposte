@@ -27,47 +27,50 @@ GCObject* HeapObject::gcObject() const {
 #define VISIT(p) if((p) != 0 && !(p)->marked()) (p)->visit()
 
 static void traverse(Value const& v) {
-	switch(v.type) {
-		case Type::Object:
-			VISIT((Object::Inner const*)v.p);
-			break;
+	switch(v.type()) {
 		case Type::Environment:
-			VISIT(((REnvironment&)v).environment());
+			VISIT(((REnvironment const&)v).attributes());
+			VISIT(((REnvironment const&)v).environment());
 			break;
 		case Type::Function:
-			VISIT(((Function&)v).prototype());
-			VISIT(((Function&)v).environment());
-			break;
-		case Type::Promise:
-			VISIT(((Promise&)v).prototype());
-			VISIT(((Promise&)v).environment());
-			break;
-		case Type::Default:
-			VISIT(((Default&)v).prototype());
-			VISIT(((Default&)v).environment());
+			VISIT(((Function const&)v).attributes());
+			VISIT((Function::Inner const*)v.p);
+			VISIT(((Function const&)v).prototype());
+			VISIT(((Function const&)v).environment());
 			break;
 		case Type::Double:
+			VISIT(((Double const&)v).attributes());
 			VISIT(((Double const&)v).inner());
 			break;
 		case Type::Integer:
+			VISIT(((Integer const&)v).attributes());
 			VISIT(((Integer const&)v).inner());
 			break;
 		case Type::Logical:
+			VISIT(((Logical const&)v).attributes());
 			VISIT(((Logical const&)v).inner());
 			break;
 		case Type::Character:
+			VISIT(((Character const&)v).attributes());
 			VISIT(((Character const&)v).inner());
 			break;
 		case Type::Raw:
+			VISIT(((Raw const&)v).attributes());
 			VISIT(((Raw const&)v).inner());
 			break;
 		case Type::List:
+			VISIT(((List const&)v).attributes());
 			VISIT(((List const&)v).inner());
 			{
 				List const& l = (List const&)v;
-				for(int64_t i = 0; i < l.length; i++)
+				for(int64_t i = 0; i < l.length(); i++)
 					traverse(l[i]);
 			}
+			break;
+		case Type::Promise:
+			VISIT(((Promise&)v).environment());
+			if(((Promise&)v).isPrototype())
+				VISIT(((Promise&)v).prototype());
 			break;
 		default:
 			// do nothing
@@ -92,18 +95,12 @@ void Dictionary::visit() const {
 	}
 }
 
-void Object::Inner::visit() const {
-	HeapObject::visit();
-	traverse(base);
-	VISIT(d);
-}
-
 void Environment::visit() const {
 	Dictionary::visit();
 	VISIT(lexical);
 	VISIT(dynamic);
 	traverse(call);
-	for(int64_t i = 0; i < dots.size(); i++) {
+	for(uint64_t i = 0; i < dots.size(); i++) {
 		traverse(dots[i].v);
 	}
 	/*for(uint64_t i = 0; i < size; i++) {
@@ -116,15 +113,15 @@ void Prototype::visit() const {
 	HeapObject::visit();
 	
 	traverse(expression);
-	for(int64_t i = 0; i < parameters.size(); i++) {
+	for(uint64_t i = 0; i < parameters.size(); i++) {
 		traverse(parameters[i].v);
 	}
-	for(int64_t i = 0; i < constants.size(); i++) {
+	for(uint64_t i = 0; i < constants.size(); i++) {
 		traverse(constants[i]);
 	}
-	for(int64_t i = 0; i < calls.size(); i++) {
+	for(uint64_t i = 0; i < calls.size(); i++) {
 		traverse(calls[i].call);
-		for(int64_t j = 0; j < calls[i].arguments.size(); j++) {
+		for(uint64_t j = 0; j < calls[i].arguments.size(); j++) {
 			traverse(calls[i].arguments[j].v);
 		}
 	}

@@ -13,16 +13,16 @@
 #include "strings.h"
 #include "exceptions.h"
 
-typedef int64_t IRef;
+typedef int16_t IRef;
 
 struct Value {
 	
 	union {
+		uint64_t header;
 		struct {
-			Type::Enum type:4;
-			int64_t length:60;
+			Type::Enum typ:8;
+			uint8_t pac;
 		};
-		int64_t header;
 	};
 	union {
 		void* p;
@@ -30,14 +30,10 @@ struct Value {
 		double d;
 		char c;
 		String s;
-		struct {
-			Type::Enum typ;
-			uint16_t ref;
-		} future;
 	};
 
-	static void Init(Value& v, Type::Enum type, int64_t length) {
-		v.header =  type + (length<<4);
+	static void Init(Value& v, Type::Enum type, int64_t packed) {
+		v.header = type + (packed<<8);
 	}
 
 	// Warning: shallow equality!
@@ -49,41 +45,39 @@ struct Value {
 		return header != other.header || p != other.p;
 	}
 
-	// Ordering solely for the purpose of putting them in a map
-	bool operator<(Value const& other) const {
-		return header < other.header || (header == other.header && p < other.p);
-	}
+	Type::Enum type() const { return (Type::Enum)typ; }
+	uint64_t packed() const { return pac; }
+
+	bool isNil() const 	{ return type() == Type::Nil; }
+	bool isPromise() const 	{ return type() == Type::Promise; }
+	bool isObject() const 	{ return type() > Type::Promise; }
 	
-	bool isNil() const { return header == 0; }
-	bool isNull() const { return type == Type::Null; }
-	bool isLogical() const { return type == Type::Logical; }
-	bool isInteger() const { return type == Type::Integer; }
-	bool isLogical1() const { return header == (1<<4) + Type::Logical; }
-	bool isInteger1() const { return header == (1<<4) + Type::Integer; }
-	bool isDouble() const { return type == Type::Double; }
-	bool isDouble1() const { return header == (1<<4) + Type::Double; }
-	bool isCharacter() const { return type == Type::Character; }
-	bool isCharacter1() const { return header == (1<<4) + Type::Character; }
-	bool isList() const { return type == Type::List; }
-	bool isPromise() const { return type == Type::Promise && !isNil(); }
-	bool isDefault() const { return type == Type::Default; }
-	bool isDotdot() const { return type == Type::Dotdot; }
-	bool isFuture() const { return type == Type::Future; }
-	bool isFunction() const { return type == Type::Function; }
-	bool isObject() const { return type == Type::Object; }
-	bool isMathCoerce() const { return isDouble() || isInteger() || isLogical(); }
-	bool isLogicalCoerce() const { return isDouble() || isInteger() || isLogical(); }
-	bool isVector() const { return isNull() || isLogical() || isInteger() || isDouble() || isCharacter() || isList(); }
-	bool isClosureSafe() const { return isNull() || isLogical() || isInteger() || isDouble() || isFuture() || isCharacter() || (isList() && length==0); }
-	bool isConcrete() const { return type > Type::Dotdot; }
-
-	bool isScalar() const { return length == 1; }
-
+	bool isFuture() const 	{ return type() == Type::Future; }
+	bool isFunction() const { return type() == Type::Function; }
+	bool isEnvironment() const { return type() == Type::Environment; }
+	
+	bool isNull() const 	{ return type() == Type::Null; }
+	bool isRaw() const 	{ return type() == Type::Raw; }
+	bool isLogical() const 	{ return type() == Type::Logical; }
+	bool isInteger() const 	{ return type() == Type::Integer; }
+	bool isDouble() const 	{ return type() == Type::Double; }
+	bool isCharacter() const { return type() == Type::Character; }
+	bool isList() const 	{ return type() == Type::List; }
+	
+	bool isRaw1() const 	{ return header == Type::Raw+(1<<8); }
+	bool isLogical1() const { return header == Type::Logical+(1<<8); }
+	bool isInteger1() const { return header == Type::Integer+(1<<8); }
+	bool isDouble1() const 	{ return header == Type::Double+(1<<8); }
+	bool isCharacter1() const { return header == Type::Character+(1<<8); }
+	
+	bool isMathCoerce() const { return type() >= Type::Logical && type() <= Type::Double; }
+	bool isLogicalCoerce() const { return type() >= Type::Logical && type() <= Type::Double; }
+	bool isVector() const { return type() >= Type::Null && type() <= Type::List; }
+	
 	template<class T> T& scalar() { throw "not allowed"; }
 	template<class T> T const& scalar() const { throw "not allowed"; }
 
-	static Value const& Nil() { static const Value v = { {{Type::Promise, 0}}, {0} }; return v; }
-
+	static Value const& Nil() { static const Value v = {{0}, {0}}; return v; }
 };
 
 template<> inline int64_t& Value::scalar<int64_t>() { return i; }
@@ -98,62 +92,187 @@ template<> inline String const& Value::scalar<String>() const { return s; }
 
 
 // Name-value Pairs are used throughout the code...
-struct Pair { String n; String pad; Value v; };
+struct Pair { String n; Value v; };
 // Not the same as the publically visible PairList which is just an S3 class
 typedef std::vector<Pair> PairList;
 
 //
 // Value type implementations
 //
-
 class State;
 class Thread;
 struct Prototype;
 class Environment;
+class Dictionary;
+class Trace;
+
+
+// Promises
+
+struct Promise : public Value {
+	enum PromiseType {
+		NIL = 0,
+		PROTOTYPE = 1,
+		PROTOTYPE_DEFAULT = 2,
+		DOTDOT = 3,
+		DOTDOT_DEFAULT = 4
+	};
+	static const Type::Enum ValueType = Type::Promise;
+	static Promise& Init(Value& v, Environment* env, Prototype* proto, bool isDefault) {
+		Value::Init(v, Type::Promise, isDefault ? PROTOTYPE_DEFAULT : PROTOTYPE);
+		v.header += (((uint64_t)env) << 16);
+		v.p = proto;
+		return (Promise&)v;
+	}
+	static Promise& Init(Value& v, Environment* env, uint64_t dotindex, bool isDefault) {
+		Value::Init(v, Type::Promise, isDefault ? DOTDOT_DEFAULT : DOTDOT);
+		v.header += (((uint64_t)env) << 16);
+		v.i = dotindex;
+		return (Promise&)v;
+	}
+
+	bool isDefault() const { 
+		return packed() == PROTOTYPE_DEFAULT || packed() == DOTDOT_DEFAULT; 
+	}
+	bool isPrototype() const {
+		return packed() == PROTOTYPE || packed() == PROTOTYPE_DEFAULT;
+	}
+	bool isDotdot() const {
+		return packed() == DOTDOT || packed() == DOTDOT_DEFAULT;
+	}
+	Environment* environment() const { 
+		return (Environment*)(((uint64_t)header) >> 16); 
+	}
+	Prototype* prototype() const { 
+		return (Prototype*)p; 
+	}
+	uint64_t dotIndex() const {
+		return i;
+	}
+	
+	void environment(Environment* env) {
+		header = (((uint64_t)env) << 16) + (pac << 8) + Type::Promise;
+	}
+};
+
+
+// Objects
+
+struct Object : public Value {
+	Dictionary* attributes() const { 
+		return (Dictionary*)(header >> 16); 
+	}
+	
+	void attributes(Dictionary* d) {
+		header = (header & ((1<<16)-1)) | ((uint64_t)d << 16);
+	}
+
+	bool hasAttributes() const { 
+		return attributes() != 0; 
+	}
+};
+
+struct REnvironment : public Object {
+	static const Type::Enum ValueType = Type::Environment;
+	
+	static REnvironment& Init(Value& v, Environment* env) {
+		Value::Init(v, Type::Environment, 0);
+		v.p = (void*)env;
+		return (REnvironment&)v;
+	}
+	
+	Environment* environment() const {
+		return (Environment*)p;
+	}
+};
+
+struct Future : public Object {
+	static const Type::Enum ValueType = Type::Future;
+	static Future& Init(Value& f, Trace* trace, IRef ref) {
+		Value::Init(f,Type::Future,0);
+		f.i = (((uint64_t)trace) << 16) + ref;
+		return (Future&)f;
+	}
+
+	Trace* trace() const { return (Trace*)(((uint64_t)i)>>16); }
+	IRef ref() const { return (IRef)(uint64_t)i; }
+};
+
+struct Function : public Object {
+	static const Type::Enum ValueType = Type::Function;
+		
+	struct Inner : public HeapObject {
+		Prototype* proto;
+		Environment* env;
+		Inner(Prototype* proto, Environment* env)
+			: proto(proto), env(env) {}
+	};
+
+	static Function& Init(Value& v, Prototype* proto, Environment* env) {
+		Value::Init(v, Type::Function, 0);
+		v.p = new Inner(proto, env);
+		return (Function&)v;
+	}
+
+	Prototype* prototype() const { return ((Inner*)p)->proto; }
+	Environment* environment() const { return ((Inner*)p)->env; }
+};
+
+struct Vector : public Object {
+	struct Inner : public HeapObject {
+		int64_t length;
+		int64_t capacity;
+	};
+
+	int64_t length() const { return packed() <= 1 ? (int64_t)packed() : ((Inner*)p)->length; }
+	bool isScalar() const { return length() == 1; }
+	void* raw() { return (void*)(((Inner*)p)+1); }	// assumes that data is immediately after capacity
+	void const* raw() const { return (void const*)(((Inner*)p)+1); }	// assumes that data is immediately after capacity
+};
 
 template<Type::Enum VType, typename ElementType, bool Recursive>
-struct Vector : public Value {
+struct VectorImpl : public Vector {
 
 	typedef ElementType Element;
 	static const Type::Enum ValueType = VType;
 	static const bool canPack = sizeof(ElementType) <= sizeof(int64_t) && !Recursive;
 
-	struct Inner : public HeapObject {
+	struct Inner : public Vector::Inner {
 		ElementType data[];
 	};
 
 	ElementType const* v() const { 
-		return (canPack && isScalar()) ? 
+		return (canPack && packed()==1) ? 
 			&Value::scalar<ElementType>() : ((Inner*)p)->data; 
 	}
 	ElementType* v() { 
-		return (canPack && isScalar()) ? 
+		return (canPack && packed()==1) ? 
 			&Value::scalar<ElementType>() : ((Inner*)p)->data; 
 	}
 
 	Inner* inner() const {
-		return (length > canPack) ? (Inner*)p : 0;
+		return (length() > canPack) ? (Inner*)p : 0;
 	}
 	
 	ElementType& operator[](int64_t index) { return v()[index]; }
 	ElementType const& operator[](int64_t index) const { return v()[index]; }
 
-	static Vector<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
-		Value::Init(v, ValueType, length);
+	static VectorImpl<VType, ElementType, Recursive>& Init(Value& v, int64_t length) {
 		if((canPack && length > 1) || (!canPack && length > 0)) {
+			Value::Init(v, ValueType, 2);
 			int64_t l = length;
 			// round l up to nearest even number so SSE can work on tail region
 			l += (int64_t)((uint64_t)l & 1);
 			int64_t length_aligned = (l < 128) ? (l + 1) : l;
 			
 			Inner* i = new (sizeof(Element)*length_aligned) Inner();
+			i->length = length;
+			i->capacity = length_aligned; 
 			v.p = (void*)i;
-		
-			//assert(l < 128 || (0xF & (int64_t)v.p) == 0);
-			//if( (0xF & (int64_t)v.p) != 0)
-			//	v.p =  (char*)v.p + 0x8;
+		} else {
+			Value::Init(v, ValueType, length);
 		}
-		return (Vector<VType, ElementType, Recursive>&)v;
+		return (VectorImpl<VType, ElementType, Recursive>&)v;
 	}
 
 	static void InitScalar(Value& v, ElementType const& d) {
@@ -162,20 +281,16 @@ struct Vector : public Value {
 			v.scalar<ElementType>() = d;
 		else {
 			Inner* i = new (sizeof(Element)*2) Inner();
+			i->length = 1;
+			i->capacity = 1;
 			i->data[0] = d;
 			v.p = (void*)i;
 		}
 	}
 };
 
-union _doublena {
-	int64_t i;
-	double d;
-};
-
-
 #define VECTOR_IMPL(Name, Element, Recursive) 				\
-struct Name : public Vector<Type::Name, Element, Recursive> { 			\
+struct Name : public VectorImpl<Type::Name, Element, Recursive> { 			\
 	explicit Name(int64_t length=0) { Init(*this, length); } 	\
 	static Name c() { Name c(0); return c; } \
 	static Name c(Element v0) { Name c(1); c[0] = v0; return c; } \
@@ -184,8 +299,8 @@ struct Name : public Vector<Type::Name, Element, Recursive> { 			\
 	static Name c(Element v0, Element v1, Element v2, Element v3) { Name c(4); c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; return c; } \
 	const static Element NAelement; \
 	static Name NA() { static Name na = Name::c(NAelement); return na; }  \
-	static Name& Init(Value& v, int64_t length) { return (Name&)Vector<Type::Name, Element, Recursive>::Init(v, length); } \
-	static void InitScalar(Value& v, Element const& d) { Vector<Type::Name, Element, Recursive>::InitScalar(v, d); \
+	static Name& Init(Value& v, int64_t length) { return (Name&)VectorImpl<Type::Name, Element, Recursive>::Init(v, length); } \
+	static void InitScalar(Value& v, Element const& d) { VectorImpl<Type::Name, Element, Recursive>::InitScalar(v, d); \
 }\
 /* note missing }; */
 
@@ -220,6 +335,11 @@ VECTOR_IMPL(Integer, int64_t, false)
 }; 
 
 VECTOR_IMPL(Double, double, false)
+	union _doublena {
+		int64_t i;
+		double d;
+	};
+
 	static Double const& Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
 	static Double const& NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
 	static Double const& NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } 
@@ -255,51 +375,6 @@ VECTOR_IMPL(List, Value, true)
 	static bool isInfinite(Value const& c) { return false; }
 };
 
-struct Future : public Value {
-	static const Type::Enum ValueType = Type::Future;
-	static Future& Init(Value& f, Type::Enum typ,int64_t length,IRef ref) {
-		Value::Init(f,Type::Future,length);
-		f.future.ref = ref;
-		f.future.typ = typ;
-		return (Future&)f;
-	}
-};
-
-struct Function : public Value {
-	static const Type::Enum ValueType = Type::Function;
-	static Function& Init(Value& v, Prototype* proto, Environment* env) {
-		v.header = (int64_t)proto + Type::Function;
-		v.p = env;
-		return (Function&)v;
-	}
-
-	Prototype* prototype() const { return (Prototype*)(header & ~15); }
-	Environment* environment() const { return (Environment*)p; }
-};
-
-struct Promise : public Value {
-	static const Type::Enum ValueType = Type::Promise;
-	static Promise& Init(Value& v, Prototype* proto, Environment* env) {
-		v.header = (int64_t)proto + Type::Promise;
-		v.p = env;
-		return (Promise&)v;
-	}
-
-	Prototype* prototype() const { return (Prototype*)(header & ~15); }
-	Environment* environment() const { return (Environment*)p; }
-};
-
-struct Default : public Value {
-	static const Type::Enum ValueType = Type::Default;
-	static Default& Init(Value& v, Prototype* proto, Environment* env) {
-		v.header = (int64_t)proto + Type::Default;
-		v.p = env;
-		return (Default&)v;
-	}
-
-	Prototype* prototype() const { return (Prototype*)(header & ~15); }
-	Environment* environment() const { return (Environment*)p; }
-};
 
 class Dictionary : public HeapObject {
 protected:
@@ -371,8 +446,8 @@ protected:
 	}
 
 public:
-	Dictionary(int64_t initialSize) : size(0), load(0), d(0) {
-		rehash(nextPow2(initialSize));
+	Dictionary(int64_t initialLoad) : size(0), load(0), d(0) {
+		rehash(nextPow2(initialLoad*2));
 	}
 
 	bool has(String name) const ALWAYS_INLINE {
@@ -462,58 +537,6 @@ public:
 	 void visit() const;
 };
 
-// Object implements an immutable dictionary interface.
-// Objects also have a base value which right now must be a non-object type...
-//  However S4 objects can contain S3 objects so we may have to change this.
-//  If we make this change, then all code that unwraps objects must do so recursively.
-struct Object : public Value {
-	
-	struct Inner : public HeapObject {
-		Value base;
-		Dictionary* d;
-		Inner(Value const& base, Dictionary* d) : base(base), d(d) {}
-		void visit() const;
-	};
-
-	static const Type::Enum ValueType = Type::Object;
-	
-	static Object& Init(Value& v, Value const& base, Dictionary* dictionary=0) {
-		// Create inner first works if base and o overlap.
-		Inner* p = new Inner(base, dictionary == 0 ? new Dictionary(4) : dictionary);
-		Value::Init(v, Type::Object, 0);
-		v.p = p;
-		return (Object&)v;
-	}
-
-	Value const& base() const {
-		return ((Inner const*)p)->base;
-	}
-
-	Dictionary* dictionary() const {
-		return ((Inner const*)p)->d;
-	}
-
-	bool has(String name) const {
-		return ((Inner const*)p)->d->has(name);
-	}
-	
-	Value const& get(String name) const {
-		return ((Inner const*)p)->d->get(name);
-	}
-
-	void insertMutable(String name, Value const& v) {
-		if(!v.isNil())
-			((Inner*)p)->d->insert(name) = v;
-	}
-
-	Object insert(String name, Value const& v) {
-		Object o;
-		Object::Init(o, ((Inner*)p)->base, ((Inner*)p)->d->clone(1));
-		o.insertMutable(name, v);
-		return o;
-	}
-};
-
 class Environment : public Dictionary {
 public:
 	Environment* lexical, *dynamic;
@@ -521,8 +544,8 @@ public:
 	PairList dots;
 	bool named;	// true if any of the dots have names	
 
-	explicit Environment(Environment* lexical, Environment* dynamic, Value const& call) :
-			Dictionary(8), 
+	explicit Environment(int64_t initialLoad, Environment* lexical, Environment* dynamic, Value const& call) :
+			Dictionary(initialLoad), 
 			lexical(lexical), dynamic(dynamic), call(call), named(false) {}
 
 	Environment* LexicalScope() const { return lexical; }
@@ -530,12 +553,11 @@ public:
 
 	// Look up insertion location using R <<- rules
 	// (i.e. find variable with same name in the lexical scope)
-	Value& insertRecursive(String name) const ALWAYS_INLINE {
+	Value& insertRecursive(String name, Environment*& env) const ALWAYS_INLINE {
 		bool success;
-		Environment const* env = this;
+		env = (Environment*)this;
 		Pair* p = env->find(name, success);
-		while(!success && env->LexicalScope()) {
-			env = env->LexicalScope();
+		while(!success && (env = env->LexicalScope())) {
 			p = env->find(name, success);
 		}
 		return p->v;
@@ -543,8 +565,8 @@ public:
 	
 	// Look up variable using standard R lexical scoping rules
 	// Should be same as insertRecursive, but with extra constness
-	Value const& getRecursive(String name) const ALWAYS_INLINE {
-		return insertRecursive(name);
+	Value const& getRecursive(String name, Environment*& env) const ALWAYS_INLINE {
+		return insertRecursive(name, env);
 	}
 
 	struct Pointer {
@@ -565,20 +587,6 @@ public:
 	}
 	
 	void visit() const;
-};
-
-struct REnvironment : public Value {
-	static const Type::Enum ValueType = Type::Environment;
-	
-	static REnvironment& Init(Value& v, Environment* env) {
-		Value::Init(v, Type::Environment, 0);
-		v.p = (void*)env;
-		return (REnvironment&)v;
-	}
-	
-	Environment* environment() const {
-		return (Environment*)p;
-	}
 };
 
 #endif

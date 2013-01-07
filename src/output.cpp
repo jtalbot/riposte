@@ -47,7 +47,7 @@ template<> std::string stringify<List>(State const& state, List::Element a) {
 template<class T>
 std::string stringifyVector(State const& state, T const& v) {
 	std::string result = "";
-	int64_t length = v.length;
+	int64_t length = v.length();
 	if(length == 0)
 		return std::string(Type::toString(v.ValueType)) + "(0)";
 
@@ -68,7 +68,7 @@ std::string stringifyVector(State const& state, T const& v) {
 		if(i+perline < length)	
 			result = result + "\n";
 	}
-	if(dots) result = result + " ... (" + intToStr(v.length) + " elements)";
+	if(dots) result = result + " ... (" + intToStr(v.length()) + " elements)";
 	return result;
 }
 
@@ -124,7 +124,7 @@ std::string stringify(State const& state, Double::Element a, Format f) {
 template<>
 std::string stringifyVector<Double>(State const& state, Double const& v) {
 	std::string result = "";
-	int64_t length = v.length;
+	int64_t length = v.length();
 	if(length == 0)
 		return std::string(Type::toString(v.ValueType)) + "(0)";
 
@@ -154,33 +154,39 @@ std::string stringifyVector<Double>(State const& state, Double const& v) {
 		if(i+perline < length)	
 			result = result + "\n";
 	}
-	if(dots) result = result + " ... (" + intToStr(v.length) + " elements)";
+	if(dots) result = result + " ... (" + intToStr(v.length()) + " elements)";
 	return result;
 }
 
 std::string stringify(State const& state, Value const& value, std::vector<int64_t> nest) {
 	std::string result = "[1]";
 	bool dots = false;
-	switch(value.type)
+	switch(value.type())
 	{
 		case Type::Null:
-			return "NULL";
+			result = "NULL";
+			break;
 		case Type::Raw:
-			return stringifyVector(state, (Raw const&)value);
+			result = stringifyVector(state, (Raw const&)value);
+			break;
 		case Type::Logical:
-			return stringifyVector(state, (Logical const&)value);
+			result = stringifyVector(state, (Logical const&)value);
+			break;
 		case Type::Integer:
-			return stringifyVector(state, (Integer const&)value);
+			result = stringifyVector(state, (Integer const&)value);
+			break;
 		case Type::Double:
-			return stringifyVector(state, (Double const&)value);
+			result = stringifyVector(state, (Double const&)value);
+			break;
 		case Type::Character:
-			return stringifyVector(state, (Character const&)value);
+			result = stringifyVector(state, (Character const&)value);
+			break;
 		
 		case Type::List:
 		{
 			List const& v = (List const&)value;
 
-			int64_t length = v.length;
+			int64_t length = v.length();
 			if(length == 0) return "list()";
 			if(length > 100) { dots = true; length = 100; }
 			result = "";
@@ -199,14 +205,12 @@ std::string stringify(State const& state, Value const& value, std::vector<int64_
 				result = result + "\n";
 				if(i < length-1) result = result + "\n";
 			}
-			if(dots) result = result + " ... (" + intToStr(v.length) + " elements)";
-			return result;
-		}
+			if(dots) result = result + " ... (" + intToStr(v.length()) + " elements)";
+		} break;
 		case Type::Function:
 		{
 			result = state.externStr(((Function const&)value).prototype()->string);
-			return result;
-		}
+		} break;
 		case Type::Environment:
 		{
 			REnvironment const& renv = (REnvironment const&)value;
@@ -221,25 +225,23 @@ std::string stringify(State const& state, Value const& value, std::vector<int64_
 						+ ":\t" + state.stringify(i.value()) + "\n";
 			}
 			return result;
-		}
-		case Type::Object:
-		{
-			Object const& o = (Object const&)value;
-            std::vector<int64_t> emptyNest;
-			result = stringify(state, o.base(), emptyNest);
-			result = result + "\nAttributes:\n";
-			Dictionary* d = o.dictionary();
-			for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
-				result = result + "\t" + state.externStr(i.string())
-						+ ":\t" + state.stringify(i.value()) + "\n";
-			}
-			return result;
-		}
+		} break;
 		case Type::Future:
-			return std::string("future") + intToStr(value.i);
+			result = std::string("future") + intToStr(value.i);
+			break;
 		default:
-			return Type::toString(value.type);
+			result = Type::toString(value.type());
+			break;
 	};
+	if(value.isObject() && ((Object const&)value).hasAttributes()) {
+		result = result + "\nAttributes:\n";
+		Dictionary* d = ((Object const&)value).attributes();
+		for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
+			result = result + "\t" + state.externStr(i.string())
+				+ ":\t" + state.stringify(i.value()) + "\n";
+		}
+	}
+	return result;
 }
 
 
@@ -275,9 +277,9 @@ template<> std::string deparse<List>(State const& state, List::Element a) {
 template<class T>
 std::string deparseVectorBody(State const& state, T const& v) {
 	std::string result = "";
-	for(int64_t i = 0; i < v.length; i++) {
+	for(int64_t i = 0; i < v.length(); i++) {
 		result = result + deparse<T>(state, v[i]);
-		if(i < v.length-1) result = result + ", ";
+		if(i < v.length()-1) result = result + ", ";
 	}
 	return result;
 }
@@ -286,8 +288,8 @@ std::string deparseVectorBody(State const& state, T const& v) {
 
 template<class T>
 std::string deparseVector(State const& state, T const& v) {
-	if(v.length == 0) return std::string(Type::toString(v.ValueType)) + "(0)";
-	if(v.length == 1) return deparseVectorBody(state, v);
+	if(v.length() == 0) return std::string(Type::toString(v.ValueType)) + "(0)";
+	if(v.length() == 1) return deparseVectorBody(state, v);
 	else return "c(" + deparseVectorBody(state, v) + ")";
 }
 /*
@@ -302,7 +304,7 @@ std::string deparseVector<Expression>(State const& state, Expression const& v, V
 }
 */
 std::string deparse(State const& state, Value const& value) {
-	switch(value.type)
+	switch(value.type())
 	{
 		case Type::Null:
 			return "NULL";
@@ -313,10 +315,8 @@ std::string deparse(State const& state, Value const& value) {
 			return state.externStr(((Function const&)value).prototype()->string);
 		case Type::Environment:
 			return "environment";
-		case Type::Object:
-			return deparse(state, ((Object const&)value).base());
 		default:
-			return Type::toString(value.type);
+			return Type::toString(value.type());
 	};
 }
 

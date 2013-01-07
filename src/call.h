@@ -18,64 +18,45 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Environment* env, int64_t resultSlot, Instruction const* returnpc);
 
-void MatchArgs(Thread& thread, Environment const* env, Environment* fenv, Function const& func, CompiledCall const& call);
+void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
 
-void MatchNamedArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
-
-inline Environment* CreateEnvironment(Thread& thread, Environment* l, Environment* d, Value const& call) {
-	Environment* env = new Environment(l, d, call);
-	return env;
-}
+void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out);
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out);
 
-Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const* a, Environment* env, int64_t index);
-
-Instruction const* forceReg(Thread& thread, Instruction const& inst, Value const* a, String name);
-
 #define REGISTER(i) (*(thread.base+(i)))
+#define CONSTANT(i) (thread.frame.prototype->constants[i-1])
 
 // Out register is currently always a register, not memory
 #define OUT(thread, i) (*(thread.base+(i)))
 
 #define OPERAND(a, i) \
-Value const& a = __builtin_expect((i) <= 0, true) ? \
-		*(thread.base+(i)) : \
-		(i < 256) ? thread.frame.prototype->constants[i-1] : \
-			thread.frame.environment->getRecursive((String)(i)); 
-	
+Environment* a##Env = 0; \
+Value const& a = \
+	__builtin_expect((i) <= 0, true) \
+		? *(thread.base+(i)) \
+		: (i < 256) \
+			? thread.frame.prototype->constants[i-1] \
+			: thread.frame.environment->getRecursive((String)(i), a##Env); 
+
 #define FORCE(a, i) \
-if(__builtin_expect((i) > 0 && !a.isConcrete(), false)) { \
-	if(a.isDotdot()) { \
-		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
-		if(t.isConcrete()) { \
-			thread.frame.environment->insert((String)(i)) = t; \
-			thread.traces.LiveEnvironment(thread.frame.environment, t); \
-			return &inst; \
-		} \
-		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
-	} \
-	else return forceReg(thread, inst, &a, (String)(i)); \
-} \
+if(__builtin_expect((i) > 0 && !a.isObject(), false)) { \
+	return force(thread, inst, a, a##Env, (String)(i)); \
+}
+
 
 #define DOTDOT(a, i) \
-Value const& a = thread.frame.environment->dots[(i)].v;
-
+Environment* a##Env = thread.frame.environment; \
+Value const& a = \
+	(thread.frame.environment->dots[(i)].v);
+	
 #define FORCE_DOTDOT(a, i) \
-if(!a.isConcrete()) { \
-	if(a.isDotdot()) { \
-		Value const& t = ((Environment*)a.p)->dots[a.length].v; \
-		if(t.isConcrete()) { \
-			thread.frame.environment->dots[(i)].v = t; \
-			thread.traces.LiveEnvironment(thread.frame.environment, t); \
-			return &inst; \
-		} \
-		else return forceDot(thread, inst, &t, (Environment*)a.p, a.length); \
-	} \
-	else return forceDot(thread, inst, &a, thread.frame.environment, (i)); \
+if(__builtin_expect(!a.isObject(), false)) { \
+	return forceDot(thread, inst, a, a##Env, (i)); \
 }
+
 
 #define BIND(a) \
 if(__builtin_expect(a.isFuture(), false)) { \

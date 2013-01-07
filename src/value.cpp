@@ -1,7 +1,7 @@
 
 #include "value.h"
 
-_doublena doublena = {0x7fff000000001953};
+Double::_doublena doublena = {0x7fff000000001953};
 
 const unsigned char Null::NAelement = 255;
 
