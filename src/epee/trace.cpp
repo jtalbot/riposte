@@ -359,8 +359,9 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 		nodes[i].liveOut = false;
 	}
 	
-	for(Value* v = thread.base-thread.frame.prototype->registers; 
-		v < thread.registers+DEFAULT_NUM_REGISTERS; v++) {
+	for(Value* v = thread.registers;
+		v < thread.frame.registers + thread.frame.prototype->registers; 
+		v++) {
 		if(v->isFuture() && ((Future const&)*v).trace() == this) {
 			nodes[((Future const&)*v).ref()].liveOut = true;
 			Output o;

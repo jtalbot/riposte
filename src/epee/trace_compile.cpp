@@ -264,12 +264,12 @@ static __m128d log_d(__m128d input) {
 }
 
 static __m128d random_d(__m128d input) {
-	SSEValue v; 
+	/*SSEValue v; 
 	v.D = input;
 
 	// TODO: fix me
 
-	/*uint64_t thread_index = v.i[0];
+	uint64_t thread_index = v.i[0];
 	
 	Thread::RandomSeed& r = Thread::seed[thread_index];
 	
@@ -766,7 +766,7 @@ struct TraceJIT {
 				asm_.movdqa(RegR(ref),PushConstant(c));
 			} break;
 			case IROpCode::load: {
-				void* p;
+				void* p=0;
 				if(node.in.isLogical())
 					p = ((Logical&)node.in).v();
 				else if(node.in.isInteger())
@@ -790,7 +790,7 @@ struct TraceJIT {
 				}
 			} break;
 			case IROpCode::gather: {
-				void* p;
+				void* p = 0;
 				if(node.in.isLogical()) {
 					p = ((Logical&)node.in).v();
 					_error("NYI: gather of logical");

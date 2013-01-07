@@ -52,7 +52,7 @@ Double RandomVector(Thread& thread, int64_t const length) {
 
 void cat(Thread& thread, Value const* args, Value& result) {
 	List const& a = Cast<List>(args[0]);
-	Character const& b = Cast<Character>(args[-1]);
+	Character const& b = Cast<Character>(args[1]);
 	for(int64_t i = 0; i < a.length(); i++) {
 		if(!List::isNA(a[i])) {
 			Character c = As<Character>(thread, a[i]);
@@ -68,7 +68,7 @@ void cat(Thread& thread, Value const* args, Value& result) {
 
 void remove(Thread& thread, Value const* args, Value& result) {
 	Character const& a = Cast<Character>(args[0]);
-	REnvironment const& e = Cast<REnvironment>(args[-1]);
+	REnvironment const& e = Cast<REnvironment>(args[1]);
 	for(int64_t i = 0; i < a.length(); i++) {
 		e.environment()->remove(a[i]);
 	}
@@ -85,8 +85,8 @@ void library(Thread& thread, Value const* args, Value& result) {
 
 void readtable(Thread& thread, Value const* args, Value& result) {
 	Character from = As<Character>(thread, args[0]);
-	Character sep_list = As<Character>(thread,args[-1]);
-	Character format = As<Character>(thread, args[-2]);
+	Character sep_list = As<Character>(thread,args[1]);
+	Character format = As<Character>(thread, args[2]);
 	if(from.length() > 0 && sep_list.length() > 0 && format.length() > 0) {
 		std::string name = thread.externStr(from[0]);
 		std::string sep = thread.externStr(sep_list[0]);
@@ -176,7 +176,7 @@ void readtable(Thread& thread, Value const* args, Value& result) {
 {
 	// NYI: exact
 	Object const& object = (Object const&)args[0];
-	Character which = Cast<Character>(args[-1]);
+	Character which = Cast<Character>(args[1]);
 	if(object.hasAttributes() && object.attributes()->has(which[0])) {
 		result = object.attributes()->get(which[0]);
 	}
@@ -188,11 +188,11 @@ void readtable(Thread& thread, Value const* args, Value& result) {
 void assignAttr(Thread& thread, Value const* args, Value& result)
 {
 	Object object = (Object const&)args[0];
-	Character which = Cast<Character>(args[-1]);
+	Character which = Cast<Character>(args[1]);
 	Dictionary* d = object.hasAttributes() 
 		? object.attributes()->clone(1)
 		: new Dictionary(1);
-	d->insert(which[0]) = args[-2];
+	d->insert(which[0]) = args[2];
 	object.attributes(d);
 	result = object;
 }*/
@@ -303,7 +303,7 @@ void unlistNames(Thread& thread, int64_t recurse, Value a, Character& out, int64
 // TODO: useNames parameter could be handled at the R level
 void unlist(Thread& thread, Value const* args, Value& result) {
 	Value v = args[0];
-	int64_t recurse = Cast<Logical>(args[-1])[0] ? std::numeric_limits<int64_t>::max() : 1;
+	int64_t recurse = Cast<Logical>(args[1])[0] ? std::numeric_limits<int64_t>::max() : 1;
 	
 	int64_t length = unlistLength(thread, recurse, v);
 	Type::Enum type = unlistType(thread, recurse, v);
@@ -324,7 +324,7 @@ void unlist(Thread& thread, Value const* args, Value& result) {
 
 void eval_fn(Thread& thread, Value const* args, Value& result) {
 	result = thread.eval(Compiler::compilePromise(thread, args[0]), 
-			Cast<REnvironment>(args[-1]).environment());
+			Cast<REnvironment>(args[1]).environment());
 }
 
 struct mapplyargs {
@@ -364,7 +364,7 @@ void mapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& 
 
 void mapply(Thread& thread, Value const* args, Value& result) {
 	List const& x = (List const&)args[0];
-	Value const& func = args[-1];
+	Value const& func = args[1];
 	// figure out result length
 	int64_t len = 1;
 	for(int i = 0; i < x.length(); i++) {
@@ -512,7 +512,7 @@ void nzchar_fn(Thread& thread, Value const* args, Value& result) {
 
 void paste(Thread& thread, Value const* args, Value& result) {
 	Character a = As<Character>(thread, args[0]);
-	String sep = As<Character>(thread, args[-1])[0];
+	String sep = As<Character>(thread, args[1])[0];
 	std::string r = "";
 	for(int64_t i = 0; i < a.length()-1; i++) {
 		r += a[i];
@@ -545,8 +545,8 @@ void type_of(Thread& thread, Value const* args, Value& result) {
 
 void exists(Thread& thread, Value const* args, Value& result) {
 	Character c = As<Character>(thread, args[0]);
-	REnvironment const& e = Cast<REnvironment>(args[-1]);
-	Logical l = As<Logical>(thread, args[-2]);
+	REnvironment const& e = Cast<REnvironment>(args[1]);
+	Logical l = As<Logical>(thread, args[2]);
 
 	Environment* penv;
 	Value const& v = l[0] ? e.environment()->getRecursive(c[0], penv) : e.environment()->get(c[0]);
@@ -558,8 +558,8 @@ void exists(Thread& thread, Value const* args, Value& result) {
 
 void get(Thread& thread, Value const* args, Value& result) {
 	Character c = As<Character>(thread, args[0]);
-	REnvironment const& e = Cast<REnvironment>(args[-1]);
-	Logical l = As<Logical>(thread, args[-2]);
+	REnvironment const& e = Cast<REnvironment>(args[1]);
+	Logical l = As<Logical>(thread, args[2]);
 
 	Environment* penv;
 	result = l[0] ? e.environment()->getRecursive(c[0], penv) : e.environment()->get(c[0]);
@@ -588,13 +588,13 @@ void traceconfig(Thread & thread, Value const* args, Value& result) {
 
 // args( A, m, n, B, m, n )
 void matrixmultiply(Thread & thread, Value const* args, Value& result) {
-	double mA = asReal1(args[-1]);
-	double nA = asReal1(args[-2]);
+	double mA = asReal1(args[1]);
+	double nA = asReal1(args[2]);
 	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
 	
-	double mB = asReal1(args[-4]);
-	double nB = asReal1(args[-5]);
-	Eigen::MatrixXd bb = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[-3]).v(), mB, nB);
+	double mB = asReal1(args[4]);
+	double nB = asReal1(args[5]);
+	Eigen::MatrixXd bb = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[3]).v(), mB, nB);
 
 	Double c(aa.rows()*bb.cols());
 	Eigen::Map<Eigen::MatrixXd>(c.v(), aa.rows(), bb.cols()) = aa*bb;
@@ -603,8 +603,8 @@ void matrixmultiply(Thread & thread, Value const* args, Value& result) {
 
 // args( A, m, n )
 void eigen_symmetric(Thread & thread, Value const* args, Value& result) {
-	double mA = asReal1(args[-1]);
-	double nA = asReal1(args[-2]);
+	double mA = asReal1(args[1]);
+	double nA = asReal1(args[2]);
 	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
 	
 	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigenSolver(aa);
@@ -621,8 +621,8 @@ void eigen_symmetric(Thread & thread, Value const* args, Value& result) {
 
 // args( A, m, n )
 void eigen(Thread & thread, Value const* args, Value& result) {
-	/*double mA = asReal1(args[-1]);
-	double nA = asReal1(args[-2]);
+	/*double mA = asReal1(args[1]);
+	double nA = asReal1(args[2]);
 	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
 	
 	Eigen::EigenSolver<Eigen::MatrixXd> eigenSolver(aa);
@@ -667,7 +667,7 @@ void commandArgs(Thread& thread, Value const* args, Value& result) {
 
 void match(Thread& thread, Value const* args, Value& result) {
 	Character a = As<Character>(thread, args[0]);
-	Character b = As<Character>(thread, args[-1]);
+	Character b = As<Character>(thread, args[1]);
 	
 	Integer r(a.length());
 	for(int64_t i = 0; i < a.length(); i++) {
@@ -683,7 +683,7 @@ void match(Thread& thread, Value const* args, Value& result) {
 
 void repeat2(Thread& thread, Value const* args, Value& result) {
 	Integer a = Cast<Integer>(args[0]);
-	int64_t len = Cast<Integer>(args[-1])[0];
+	int64_t len = Cast<Integer>(args[1])[0];
 
 	result = Repeat(a, len);
 }

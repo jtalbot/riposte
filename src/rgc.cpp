@@ -161,7 +161,7 @@ void Heap::mark(State& state) {
 		// traces only hold weak references...
 
 		//printf("--registers--\n");
-		for(Value const* r = thread->base-(thread->frame.prototype->registers); r < thread->registers+DEFAULT_NUM_REGISTERS; ++r) {
+		for(Value const* r = thread->registers; r < thread->frame.registers+thread->frame.prototype->registers; ++r) {
 			traverse(*r);
 		}
 

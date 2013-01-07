@@ -10,11 +10,9 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
 	s.environment = environment;
 	s.prototype = prototype;
 	s.returnpc = returnpc;
-	s.returnbase = thread.base;
+	s.registers += stackOffset;
 	
-	// make room for registers
-	thread.base -= stackOffset;
-	if(thread.base-prototype->registers < thread.registers)
+	if(s.registers+prototype->registers > thread.registers+DEFAULT_NUM_REGISTERS)
 		throw RiposteError("Register overflow");
 	
 	return &(prototype->bc[0]);

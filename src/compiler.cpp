@@ -150,7 +150,10 @@ Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code) 
 		return t;
 	}
 	else {
-		return Operand(MEMORY, s);
+		Operand sym = compileConstant(Character::c(s), code);
+		Operand t = allocRegister();
+		emit(ByteCode::get, sym, 0, t);
+		return t;
 	}
 }
 
@@ -234,6 +237,7 @@ Compiler::Operand Compiler::compileInternalFunctionCall(List const& call, Protot
 		reg = r.i; 
 	}
 	// kill all parameters
+	kill(reg); 	// only necessary to silence unused warning
 	kill(liveIn); 
 	Operand result = allocRegister();
 	emit(ByteCode::internal, function, result, result);
@@ -284,7 +288,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 		int64_t branch = emit(ByteCode::branch, kill(c), n, 0);
 		for(int64_t i = 2; i < call.length(); i++) {
-			emit(ByteCode::branch, (int64_t)(names.length() > i ? names[i] : Strings::empty), 0, 0);
+			Character ni = Character::c(names.length() > i ? names[i] : Strings::empty);
+			emit(ByteCode::branch, compileConstant(ni, code), 0, 0);
 		}
 		
 		std::vector<int64_t> jmps;
@@ -311,6 +316,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		}
 		for(int64_t i = 0; i < (int64_t)jmps.size(); i++) {
 			ir[jmps[i]].a = (int64_t)ir.size()-jmps[i];
+			ir[jmps[i]].a = (int64_t)ir.size()-jmps[i];
 		}
 		return result;
 	}
@@ -320,8 +326,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			complicated = true;
 	}
 	
-	if(complicated)
-		return compileFunctionCall(call, names, code);
+	//if(complicated)
+	//	return compileFunctionCall(call, names, code);
 
 
 	if(func == Strings::internal) 
@@ -339,8 +345,11 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
         Operand rhs = compile(call[2], code);
       
         // Handle simple assignment 
-        if(!isCall(dest)) { 
-            Operand target = Operand(MEMORY, SymbolStr(dest));
+        if(!isCall(dest)) {
+            Operand target =
+                func == Strings::assign2
+                    ? compileConstant(Character::c(SymbolStr(dest)), code)
+                    : Operand(MEMORY, SymbolStr(dest));
 		    emit(func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, 
                 target, 0, rhs);
         }
@@ -383,7 +392,10 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			    dest = c[1];
 		    }
 
-            Operand target = Operand(MEMORY, SymbolStr(dest));
+            Operand target =
+                func == Strings::assign2
+                    ? compileConstant(Character::c(SymbolStr(dest)), code)
+                    : Operand(MEMORY, SymbolStr(dest));
 		    Operand source = compile(value, code);
 		    emit(func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, 
                 target, 0, source);
@@ -459,7 +471,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::forSym) 
 	{
 		Operand loop_variable = Operand(MEMORY, SymbolStr(call[1]));
-		Operand loop_vector = compile(call[2], code);
+		Operand loop_vector = forceInRegister(compile(call[2], code));
 		Operand loop_counter = allocRegister();	// save space for loop counter
 		Operand loop_limit = allocRegister(); // save space for the loop limit
 
@@ -572,7 +584,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand r1 = placeInRegister(compileConstant(Logical::False(), code));
 		ir[j1].a = (int64_t)ir.size()-j1;
 		assert(r0 == r1 || r0.loc == INVALID || r1.loc == INVALID);
-		return r0;
+		return r1;
 	}
 	else if(func == Strings::land2 && call.length() == 3)
 	{
@@ -588,7 +600,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand r1 = placeInRegister(compileConstant(Logical::True(), code));
 		ir[j1].b = (int64_t)ir.size()-j1;
 		assert(r0 == r1 || r0.loc == INVALID || r1.loc == INVALID);
-		return r0;
+		return r1;
 	}
 	else if(func == Strings::brace) 
 	{
@@ -733,7 +745,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		if(call.length() != 2) _error("missing requires one argument");
 		if(!isSymbol(call[1]) && !call[1].isCharacter1()) _error("wrong parameter to missing");
-		Operand s = Operand(MEMORY, SymbolStr(call[1]));
+		Operand s = compileConstant(call[1], code);
 		Operand result = allocRegister();
 		emit(ByteCode::missing, s, 0, result); 
 		return result;
@@ -829,7 +841,6 @@ Prototype* Compiler::compile(Value const& expr) {
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, encodeOperand(ir[i].a, n), encodeOperand(ir[i].b, n), encodeOperand(ir[i].c, n)));
 	}
-	Prototype::threadByteCode(code);
 
 	return code;	
 }
