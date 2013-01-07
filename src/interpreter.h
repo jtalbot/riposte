@@ -87,9 +87,11 @@ struct Prototype : public HeapObject {
 	std::vector<Value> constants;
 	std::vector<CompiledCall> calls; 
 
-	std::vector<Instruction> bc;			// bytecode
+	std::vector<Instruction> bc;
 
 	void visit() const;
+
+	static void threadByteCode(Prototype* prototype);
 };
 
 struct StackFrame {
@@ -131,20 +133,19 @@ public:
 	Environment* global;
 
 	std::vector<Thread*> threads;
-	int64_t nThreads;
 
 	bool verbose;
-	bool jitEnabled;
+	bool epeeEnabled;
     
-	int64_t done;
-
-	Character arguments;
+    int64_t done;
+	
+    Character arguments;
 
 	State(uint64_t threads, int64_t argc, char** argv);
 
 	~State() {
 		fetch_and_add(&done, 1);
-		while(fetch_and_add(&done, 0) != nThreads) { sleep(); }
+		while(fetch_and_add(&done, 0) != threads.size()) { sleep(); }
 	}
 
 
@@ -161,9 +162,6 @@ public:
 	void interpreter_init(Thread& state);
 	
 	std::string stringify(Value const& v) const;
-#ifdef ENABLE_EPEE
-	std::string stringify(Trace const & t) const;
-#endif
 	std::string deparse(Value const& v) const;
 
 	String internStr(std::string s) {
@@ -179,14 +177,14 @@ public:
 // Per-thread state 
 ///////////////////////////////////////////////////////////////////
 
-typedef void* (*TaskHeaderPtr)(void* args, uint64_t a, uint64_t b, Thread& thread);
-typedef void (*TaskFunctionPtr)(void* args, void* header, uint64_t a, uint64_t b, Thread& thread);
-
 class Thread {
 public:
 	struct Task {
-		TaskHeaderPtr header;
-		TaskFunctionPtr func;
+		typedef void* (*HeaderPtr)(void* args, uint64_t a, uint64_t b, Thread& thread);
+		typedef void (*FunctionPtr)(void* args, void* header, uint64_t a, uint64_t b, Thread& thread);
+
+		HeaderPtr header;
+		FunctionPtr func;
 		void* args;
 		uint64_t a;	// start of range [a <= x < b]
 		uint64_t b;	// end
@@ -194,7 +192,7 @@ public:
 		uint64_t ppt;
 		int64_t* done;
 		Task() : func(0), args(0), done(0) {}
-		Task(TaskHeaderPtr header, TaskFunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment, uint64_t ppt) 
+		Task(HeaderPtr header, FunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment, uint64_t ppt) 
 			: header(header), func(func), args(args), a(a), b(b), alignment(alignment), ppt(ppt) {
 			done = new int64_t(1);
 		}
@@ -252,7 +250,7 @@ public:
 	Value eval(Prototype const* prototype, Environment* environment); 
 	Value eval(Prototype const* prototype);
 	
-	void doall(TaskHeaderPtr header, TaskFunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment=1, uint64_t ppt = 1) {
+	void doall(Task::HeaderPtr header, Task::FunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment=1, uint64_t ppt = 1) {
 		if(a < b && func != 0) {
 			uint64_t tmp = ppt+alignment-1;
 			ppt = std::max((uint64_t)1, tmp - (tmp % alignment));
@@ -363,7 +361,7 @@ private:
 };
 
 inline State::State(uint64_t threads, int64_t argc, char** argv) 
-	: nThreads(threads), verbose(false), jitEnabled(true), done(0) {
+	: verbose(false), epeeEnabled(true), done(0) {
 	Environment* base = new Environment(0,0,Null::Singleton());
 	this->global = new Environment(base,0,Null::Singleton());
 	path.push_back(base);

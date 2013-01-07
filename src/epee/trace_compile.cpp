@@ -641,11 +641,11 @@ struct TraceJIT {
 				int64_t size = node.shape.levels <= BIG_CARDINALITY ? node.shape.levels*2 : node.shape.levels;
 				if(node.type == Type::Double) {
 					// 16 min fills possibly unaligned cache line
-					node.in = Double((size+16LL)*thread.state.nThreads);
+					node.in = Double((size+16LL)*thread.state.threads.size());
 				} else if(node.type == Type::Integer) {
-					node.in = Integer((size+16LL)*thread.state.nThreads);
+					node.in = Integer((size+16LL)*thread.state.threads.size());
 				} else if(node.type == Type::Logical) {
-					node.in = Logical((size+128LL)*thread.state.nThreads);
+					node.in = Logical((size+128LL)*thread.state.threads.size());
 				} else {
 					_error("Unknown type in initialize temporary space");
 				}
@@ -721,7 +721,7 @@ struct TraceJIT {
 				stackOffset += 0x10;
 			}
 			else if(node.group == IRNode::FOLD) { 
-				int64_t step = node.in.length / thread.state.nThreads;
+				int64_t step = node.in.length / thread.state.threads.size();
 				asm_.movq(r11, Immediate(step));
 				asm_.imulq(r11, thread_index);
 				asm_.movq(Operand(rsp, stackOffset), r11);
@@ -1907,9 +1907,9 @@ struct TraceJIT {
 			IRNode & node = trace->nodes[ref];
 
 			if(node.group == IRNode::FOLD && node.outShape.length <= BIG_CARDINALITY) {
-				int64_t step = node.in.length/thread.state.nThreads;
+				int64_t step = node.in.length/thread.state.threads.size();
 
-				for(int64_t j = 0; j < thread.state.nThreads; j++) {
+				for(int64_t j = 0; j < thread.state.threads.size(); j++) {
 					for(int64_t i = 0; i < node.outShape.length; i++) {
 						int64_t a = j*step+i*2;
 						int64_t b = j*step+i*2+1;
@@ -1949,8 +1949,8 @@ struct TraceJIT {
 			IRNode & node = trace->nodes[ref];
 	
 			if(node.group == IRNode::FOLD) {
-				int64_t step = node.in.length/thread.state.nThreads;
-				for(int64_t j = 1; j < thread.state.nThreads; j++) {
+				int64_t step = node.in.length/thread.state.threads.size();
+				for(int64_t j = 1; j < thread.state.threads.size(); j++) {
 					for(int64_t i = 0; i < node.outShape.length; i++) {
 						int64_t a = 0*step+i;
 						int64_t b = j*step+i;

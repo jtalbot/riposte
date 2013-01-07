@@ -835,6 +835,7 @@ Prototype* Compiler::compile(Value const& expr) {
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, encodeOperand(ir[i].a, n), encodeOperand(ir[i].b, n), encodeOperand(ir[i].c, n)));
 	}
+	Prototype::threadByteCode(code);
 
 	return code;	
 }

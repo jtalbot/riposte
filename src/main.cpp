@@ -26,7 +26,7 @@ void registerCoerceFunctions(State& state);
 
 static void info(State& state, std::ostream& out) 
 {
-    out << "Riposte (" << state.nThreads << " threads) "
+    out << "Riposte (" << state.threads.size() << " threads) "
         << "-- Copyright (C) 2010-2012 Stanford University" << std::endl;
     out << "http://jtalbot.github.com/riposte/" << std::endl;
 }

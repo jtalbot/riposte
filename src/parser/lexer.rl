@@ -11,6 +11,7 @@
  */
 
 #include "../parser.h"
+#include "../interpreter.h"
 #include "grammar.h"
 #include "grammar.cpp"
 
@@ -268,4 +269,12 @@ int Parser::buffer_execute( )
 	return 0;
 }
 */
+
+String Parser::popSource() {
+	assert(source.size() > 0);
+	std::string s(source.top(), le-source.top());
+	String result = state.internStr(rtrim(s));
+	source.pop();
+	return result;	
+}
 

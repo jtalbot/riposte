@@ -13,6 +13,9 @@
 #include "sse.h"
 #include "call.h"
 
+#ifdef USE_THREADED_INTERPRETER
+const void** glabels = 0;
+#endif
 
 const int64_t Random::primes[100] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43,
 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131,
@@ -22,9 +25,26 @@ const int64_t Random::primes[100] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37,
 419, 421, 431, 433, 439, 443, 449, 457, 461, 463, 467, 479, 487, 491, 499, 503,
 509, 521, 523, 541};
 
-Thread::Thread(State& state, uint64_t index) : state(state), index(index), steals(1), random(index) {
+Thread::Thread(State& state, uint64_t index) 
+    : state(state)
+    , index(index)
+#ifdef ENABLE_EPEE
+    , traces(state.epeeEnabled)
+#endif
+    , steals(1)
+    , random(index) 
+{
 	registers = new Value[DEFAULT_NUM_REGISTERS];
 	this->base = registers + DEFAULT_NUM_REGISTERS;
+}
+
+void Prototype::threadByteCode(Prototype*  prototype) {
+#ifdef USE_THREADED_INTERPRETER
+	for(int64_t i = 0; i < (int64_t)prototype->bc.size(); ++i) {
+		Instruction const& inst = prototype->bc[i];
+		inst.ibc = glabels[inst.bc];
+	}
+#endif
 }
 
 extern Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -396,7 +416,7 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 		else if(i.isCharacter1()) { _error("Subscript out of bounds"); }
 	}
 
-	if(isTraceable(thread, a, i) 
+	if( thread.traces.isTraceable(a, i) 
 		&& thread.traces.futureType(i) == Type::Logical 
 		&& thread.traces.futureShape(a) == thread.traces.futureShape(i)) {
 		OUT(thread, inst.c) = thread.traces.EmitFilter(thread.frame.environment, a, i);
@@ -407,8 +427,9 @@ Instruction const* subset_op(Thread& thread, Instruction const& inst) {
 	FORCE(a, inst.a);
 	BIND(a);
 
-	if(isTraceable(thread, a, i) 
-		&& (thread.traces.futureType(i) == Type::Integer || thread.traces.futureType(i) == Type::Double)) {
+	if(thread.traces.isTraceable(a, i) 
+		&& (thread.traces.futureType(i) == Type::Integer 
+			|| thread.traces.futureType(i) == Type::Double)) {
 		OUT(thread, inst.c) = thread.traces.EmitGather(thread.frame.environment, a, i);
 		thread.traces.OptBind(thread, OUT(thread, inst.c));
 		return &inst+1;
@@ -458,7 +479,7 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	if(a.isInteger1()) { Name##VOp<Integer>::Scalar(thread, a.i, c); return &inst+1; } \
 	if(a.isLogical1()) { Name##VOp<Logical>::Scalar(thread, a.c, c); return &inst+1; } \
 	FORCE(a, inst.a); \
-	if(isTraceable<Group>(thread,a)) { \
+	if(thread.traces.isTraceable<Group>(a)) { \
 		c = thread.traces.EmitUnary<Group>(thread.frame.environment, IROpCode::Name, a, 0); \
 		thread.traces.OptBind(thread, c); \
  		return &inst+1; \
@@ -494,7 +515,7 @@ Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 		if(b.isLogical1()) { Name##VOp<Logical,Logical>::Scalar(thread, a.c, b.c, c); return &inst+1; } \
         } \
 	FORCE(a, inst.a); FORCE(b, inst.b); \
-	if(isTraceable<Group>(thread,a,b)) { \
+	if(thread.traces.isTraceable<Group>(a,b)) { \
 		c = thread.traces.EmitBinary<Group>(thread.frame.environment, IROpCode::Name, a, b, 0); \
 		thread.traces.OptBind(thread, c); \
 		return &inst+1; \
@@ -531,7 +552,7 @@ Instruction const* length_op(Thread& thread, Instruction const& inst) {
 
 Instruction const* mean_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
-	if(isTraceable<MomentFold>(thread,a)) {
+	if(thread.traces.isTraceable<MomentFold>(a)) {
 		OUT(thread, inst.c) = thread.traces.EmitUnary<MomentFold>(thread.frame.environment, IROpCode::mean, a, 0);
 		thread.traces.OptBind(thread, OUT(thread,inst.c));
  		return &inst+1;
@@ -545,7 +566,7 @@ Instruction const* mean_op(Thread& thread, Instruction const& inst) {
 Instruction const* cm2_op(Thread& thread, Instruction const& inst) {
 	OPERAND(a, inst.a); FORCE(a, inst.a); 
 	OPERAND(b, inst.b); FORCE(b, inst.b); 
-	if(isTraceable<Moment2Fold>(thread,a,b)) {
+	if(thread.traces.isTraceable<Moment2Fold>(a,b)) {
 		OUT(thread, inst.c) = thread.traces.EmitBinary<Moment2Fold>(thread.frame.environment, IROpCode::cm2, a, b, 0);
 		thread.traces.OptBind(thread, OUT(thread,inst.c));
  		return &inst+1;
@@ -569,7 +590,7 @@ Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 		OUT(thread, inst.c) = c.d ? b : a;
 		return &inst+1; 
 	}
-	if(isTraceable<IfElse>(thread,a,b,c)) {
+	if(thread.traces.isTraceable<IfElse>(a,b,c)) {
 		OUT(thread, inst.c) = thread.traces.EmitIfElse(thread.frame.environment, a, b, c);
 		thread.traces.OptBind(thread, OUT(thread,inst.c));
 		return &inst+1;
@@ -585,7 +606,7 @@ Instruction const* split_op(Thread& thread, Instruction const& inst) {
 	int64_t levels = As<Integer>(thread, a)[0];
 	OPERAND(b, inst.b); FORCE(b, inst.b);
 	OPERAND(c, inst.c); FORCE(c, inst.c);
-	if(isTraceable<Split>(thread,b,c)) {
+	if(thread.traces.isTraceable<Split>(b,c)) {
 		OUT(thread, inst.c) = thread.traces.EmitSplit(thread.frame.environment, c, b, levels);
 		thread.traces.OptBind(thread, OUT(thread,inst.c));
 		return &inst+1;
@@ -611,7 +632,7 @@ Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	int64_t l = As<Integer>(thread, b)[0];
 	
 	// TODO: replace with isTraceable...
-	if(thread.state.jitEnabled 
+	if(thread.state.epeeEnabled 
 		&& (type == Type::Double || type == Type::Integer || type == Type::Logical)
 		&& l >= TRACE_VECTOR_WIDTH) {
 		OUT(thread, inst.c) = thread.traces.EmitConstant(thread.frame.environment, type, l, 0);

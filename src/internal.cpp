@@ -586,7 +586,7 @@ void proctime(Thread& thread, Value const* args, Value& result) {
 void traceconfig(Thread & thread, Value const* args, Value& result) {
 	Logical c = As<Logical>(thread, args[0]);
 	if(c.length == 0) _error("condition is of zero length");
-	thread.state.jitEnabled = Logical::isTrue(c[0]);
+	thread.state.epeeEnabled = Logical::isTrue(c[0]);
 	result = Null::Singleton();
 }
 
