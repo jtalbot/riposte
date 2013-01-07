@@ -21,10 +21,10 @@ void sourceFile(Thread& thread, std::string name, Environment* env) {
 
 		Parser parser(thread.state);
 		Value value;
-		FILE* trace = NULL;//fopen((name+"_trace").c_str(), "w");
+		FILE* trace = NULL;
 		parser.execute(code.c_str(), code.length(), true, value, trace);
-		//fclose(trace);	
-		thread.eval(Compiler::compileTopLevel(thread, value), env);
+		if(!value.isNil())
+            thread.eval(Compiler::compileTopLevel(thread, value), env);
 	} catch(RiposteError& error) {
 		_warning(thread, "unable to load library " + name + ": " + error.what().c_str());
 	} catch(RuntimeError& error) {

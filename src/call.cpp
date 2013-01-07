@@ -2,8 +2,8 @@
 #include "call.h"
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset) {
-	std::cout << "\t(Executing in " << intToHexStr((int64_t)environment) << ")" << std::endl;
-	Prototype::printByteCode(prototype, thread.state);
+	//std::cout << "\t(Executing in " << intToHexStr((int64_t)environment) << ")" << std::endl;
+	//Prototype::printByteCode(prototype, thread.state);
 	
 	// make new stack frame
 	StackFrame& s = thread.push();

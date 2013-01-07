@@ -809,21 +809,22 @@ Prototype* Compiler::compile(Value const& expr) {
 	Prototype* code = new Prototype();
 	assert(((int64_t)code) % 16 == 0); // our type packing assumes that this is true
 
-	Operand result = compile(expr, code);
+    Operand result = compile(expr, code);
 
-	//std::reverse(code->constants.begin(), code->constants.end());
+    // insert appropriate termination statement at end of code
+    if(scope == FUNCTION)
+        emit(ByteCode::ret, result, 0, 0);
+    else if(scope == PROMISE)
+        emit(ByteCode::retp, result, 0, 0);
+    else { // TOPLEVEL
+        emit(ByteCode::rets, result, 0, 0);
+        emit(ByteCode::done, 0, 0, 0);
+    }
+    
+    //std::reverse(code->constants.begin(), code->constants.end());
 	code->expression = expr;
 	code->registers = code->constants.size() + max_n;
 	
-	// insert appropriate termination statement at end of code
-	if(scope == FUNCTION)
-		emit(ByteCode::ret, result, 0, 0);
-	else if(scope == PROMISE)
-		emit(ByteCode::retp, result, 0, 0);
-	else { // TOPLEVEL
-		emit(ByteCode::rets, result, 0, 0);
-		emit(ByteCode::done, 0, 0, 0);
-	}
 	int64_t n = code->constants.size();
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, encodeOperand(ir[i].a, n), encodeOperand(ir[i].b, n), encodeOperand(ir[i].c, n)));
