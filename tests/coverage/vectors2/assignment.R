@@ -28,9 +28,12 @@ a
 
 (a <- list(a, 4))
 
-(a[[1]] <- a)
-a
+#DIFF: A bug in R 2.15.2 (and probably earlier versions) gets the wrong
+# answer for the following. It's been reported so this test will be
+# readded after the next version of R is released.
+#(a[[1]] <- a)
+#a
 
-(a[[1]][[1]] <- 200)
-a
+#(a[[1]][[1]] <- 200)
+#a
 

@@ -29,7 +29,8 @@ template<> std::string stringify<Raw>(State const& state, Raw::Element a) {
 }  
 
 template<> std::string stringify<Integer>(State const& state, Integer::Element a) {
-	return Integer::isNA(a) ? "NA" : std::string("") + intToStr(a);// + std::string("L");
+	return Integer::isNA(a) ? "NA" : std::string("") + intToStr(a) + 
+        (state.format == State::RiposteFormat ? std::string("L") : "");
 }  
 
 template<> std::string stringify<Double>(State const& state, Double::Element a) {
@@ -214,16 +215,18 @@ std::string stringify(State const& state, Value const& value, std::vector<int64_
 		case Type::Environment:
 		{
 			REnvironment const& renv = (REnvironment const&)value;
-			if(renv.environment() == state.global)
-				result = std::string("environment <global>");
-			else
-				result = std::string("environment <") + intToHexStr((int64_t)renv.environment()) + ">";
-			result = result + "\nVariables:\n";
-			Dictionary* d = renv.environment();
-			for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
-				result = result + "\t" + state.externStr(i.string())
-						+ ":\t" + state.stringify(i.value()) + "\n";
-			}
+            if(renv.environment() == state.global)
+                result = std::string("<environment: R_GlobalEnv>");
+            else
+                result = std::string("<environment: ") + intToHexStr((int64_t)renv.environment()) + ">";
+            if(state.format == State::RiposteFormat)
+            {
+                Dictionary* d = renv.environment();
+                for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
+                    result = result + "\n$" + state.externStr(i.string())
+                        + "\n" + state.stringify(i.value()) + "\n";
+                }
+            }
 			return result;
 		} break;
 		case Type::Future:

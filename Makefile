@@ -78,13 +78,13 @@ tests: $(COVERAGE_TESTS) $(BLACKBOX_TESTS)
 
 $(COVERAGE_TESTS):
 	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
-	-@./riposte -f $@ > $@.out
+	-@./riposte --format=R -f $@ > $@.out
 	-@diff -b $@.key $@.out $(COVERAGE_FLAGS)
 	-@rm $@.key $@.out
 
 $(BLACKBOX_TESTS):
 	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
-	-@./riposte -f $@ > $@.out
+	-@./riposte --format=R -f $@ > $@.out
 	-@diff -b $@.key $@.out $(COVERAGE_FLAGS)
 	-@rm $@.key $@.out
 

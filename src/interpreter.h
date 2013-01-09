@@ -129,6 +129,12 @@ public:
 
 	bool verbose;
 	bool epeeEnabled;
+
+    enum Format {
+        RiposteFormat,
+        RFormat
+    };
+    Format format;
     
     int64_t done;
 	
@@ -354,7 +360,7 @@ private:
 };
 
 inline State::State(uint64_t threads, int64_t argc, char** argv) 
-	: verbose(false), epeeEnabled(true), done(0) {
+	: verbose(false), epeeEnabled(true), format(State::RiposteFormat), done(0) {
 	Environment* base = new Environment(1,0,0,Null::Singleton());
 	this->global = new Environment(1,base,0,Null::Singleton());
 	path.push_back(base);

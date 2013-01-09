@@ -1,4 +1,5 @@
 pi <- 3.1415926535897932384626433832795
+.GlobalEnv <- .Internal(parent.frame(1))
 
 nargs <- function() { length(.Internal(sys.call(1L)))-1L }
 

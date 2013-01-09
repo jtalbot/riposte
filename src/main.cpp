@@ -188,19 +188,21 @@ int main(int argc, char** argv)
     /*  getopt parsing  */
 
     static struct option longopts[] = {
-        { "debug",     0,     NULL,           'd' },
-        { "file",      1,     NULL,           'f' },
-        { "help",      0,     NULL,           'h' },
-        { "verbose",   0,     NULL,           'v' },
-        { "quiet",     0,     NULL,           'q' },
-        { "script",    0,     NULL,           's'  },
-        { "args",      0,     NULL,           'a'  },
-        { NULL,        0,     NULL,            0 }
+        { "debug",     0,    NULL,    'd' },
+        { "file",      1,    NULL,    'f' },
+        { "help",      0,    NULL,    'h' },
+        { "verbose",   0,    NULL,    'v' },
+        { "quiet",     0,    NULL,    'q' },
+        { "script",    0,    NULL,    's' },
+        { "args",      0,    NULL,    'a' },
+        { "format",    1,    NULL,    'F' },
+        { NULL,        0,    NULL,     0  }
     };
 
     /*  Parse commandline options  */
     char * filename = NULL;
     bool echo = true;
+    State::Format format = State::RiposteFormat;
     int threads = 1; 
 
     int ch;
@@ -229,6 +231,12 @@ int main(int argc, char** argv)
                     threads = atoi(optarg);
                 }
                 break;
+            case 'F':
+                if(0 == strcmp("R",optarg))
+                    format = State::RFormat;
+                else
+                    format = State::RiposteFormat;
+                break;
             case 'h':
             default:
                 usage();
@@ -242,6 +250,7 @@ int main(int argc, char** argv)
     /* Initialize execution state */
     State state(threads, argc, argv);
     state.verbose = verbose;
+    state.format = format;
     Thread& thread = state.getMainThread();
 
     /* Load built in & base functions */
