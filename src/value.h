@@ -9,7 +9,7 @@
 #include "common.h"
 #include "type.h"
 #include "bc.h"
-#include "rgc.h"
+#include "gc.h"
 #include "strings.h"
 #include "exceptions.h"
 

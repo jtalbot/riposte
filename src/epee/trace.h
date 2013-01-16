@@ -2,8 +2,6 @@
 #ifndef TRACE_H
 #define TRACE_H
 
-#ifdef ENABLE_EPEE
-
 #include "../value.h"
 #include "../opgroups.h"
 
@@ -421,8 +419,6 @@ inline bool Traces::isTraceable<IfElse>(Value const& a, Value const& b, Value co
         isTraceableShape(a, c) &&
         isTraceableShape(b, c);
 }
-
-#endif
 
 #endif
 

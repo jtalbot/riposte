@@ -1,5 +1,5 @@
 
-#include "rgc.h"
+#include "gc.h"
 #include "value.h"
 #include "interpreter.h"
 

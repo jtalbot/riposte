@@ -890,7 +890,7 @@ const int64_t Random::primes[100] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37,
 Thread::Thread(State& state, uint64_t index) 
     : state(state)
     , index(index)
-#ifdef ENABLE_EPEE
+#ifdef EPEE
     , traces(state.epeeEnabled)
 #endif
     , random(index) 

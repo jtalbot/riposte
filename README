@@ -7,11 +7,9 @@ We only do development on OSX and Linux. It's unlikely that our JIT will work on
 
 Compiling riposte
 -----------------
-1. Install the Boehm GC. Available in macports, `port install boehmgc`.
+1. Run `make release` in the riposte directory, or `make debug` for the debug version
 
-2. Run `make release` in the riposte directory, or `make debug` for the debug version
-
-3. Execute ./riposte to start
+2. Execute ./riposte to start
 
 
 Flags
@@ -37,4 +35,4 @@ Riposte uses the following libraries:
 
 Testing
 -------
-Riposte comes with a growing set of validation tests that compare the output of Riposte and standard R. Run `make tests` to run all the tests (R must be installed). No output indicates all tests passed. Run `make tests/path/to/test` to execute a single test and print its diff.
+Riposte comes with a growing set of validation tests that compare the output of Riposte to standard R. Run `make tests` to run all the tests (R must be installed). No output indicates all tests passed. Run `make tests/path/to/test` to execute a single test and print its diff.

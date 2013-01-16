@@ -1,24 +1,24 @@
 # This Makefile requires GNU make.
  
-CXXFLAGS := -Wall -msse4.1 -I/opt/local/include
-CFLAGS := -Wall -msse4.1
-LFLAGS := -L/opt/local/lib -L. -fpic
-LIBS := -lgc -lpthread
-
-ENABLE_EPEE=1
-
 UNAME := $(shell uname -s)
+CXXFLAGS := -Wall
+CFLAGS := -Wall
+LFLAGS := -fpic
+LIBS := -lpthread
+
 ifeq ($(UNAME),Linux)
-#for clock_gettime
-LFLAGS += -lrt
+	#for clock_gettime
+	LIBS += -lrt
 endif
 
-SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp runtime.cpp coerce.cpp library.cpp format.cpp rgc.cpp call.cpp
+EPEE=1
+
+SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp runtime.cpp coerce.cpp library.cpp format.cpp gc.cpp call.cpp
 
 SRC += parser/lexer.cpp
 
-ifeq ($(ENABLE_EPEE),1)
-	CXXFLAGS += -DENABLE_EPEE
+ifeq ($(EPEE),1)
+	CXXFLAGS += -DEPEE
 	SRC += epee/ir.cpp epee/trace.cpp epee/trace_compile.cpp epee/assembler-x64.cpp
 endif
 
@@ -34,7 +34,7 @@ default: debug
 debug: CXXFLAGS += -DDEBUG -O0 -g
 debug: $(EXECUTABLE)
 
-release: CXXFLAGS += -DNDEBUG -O3 -g 
+release: CXXFLAGS += -DNDEBUG -O4 -g
 release: $(EXECUTABLE)
 
 asm: CXXFLAGS += -DNDEBUG -O3 -g 
@@ -64,7 +64,6 @@ build/%.d: src/%.cpp
 	@$(CXX) $(CXXFLAGS) -MM -MT '$@ $(@:.d=.o)' $< -o $@
 	
 -include $(DEPENDENCIES)
-
 
 
 # tests

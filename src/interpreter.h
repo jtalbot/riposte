@@ -9,7 +9,7 @@
 #include "thread.h"
 #include "random.h"
 
-#ifdef ENABLE_EPEE
+#ifdef EPEE
 #include "epee/ir.h"
 #include "epee/trace.h"
 #endif
@@ -212,7 +212,7 @@ public:
 
     std::vector<Value> gcStack;
 
-#ifdef ENABLE_EPEE
+#ifdef EPEE
 	Traces traces;
 #endif
 
