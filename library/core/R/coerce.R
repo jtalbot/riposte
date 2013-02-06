@@ -1,26 +1,27 @@
 
-as.null <- function(x,...) .Internal(as.null(x))
-as.logical <- function(x,...) .Internal(as.logical(x))
-as.integer <- function(x,...) .Internal(as.integer(x))
-as.double <- function(x,...) .Internal(as.double(x))
-as.character <- function(x,...) .Internal(as.character(x))
-as.list <- function(x,...) .Internal(as.list(x))
-as.numeric <- function(x,...) .Internal(as.double(x))
+as.null <- function(x,...) as(x,"NULL")
+as.logical <- function(x,...) as(x,"logical")
+as.integer <- function(x,...) as(x,"integer")
+as.double <- function(x,...) as(x,"double")
+as.character <- function(x,...) as(x,"character")
+as.list <- function(x,...) as(x,"list")
+as.raw <- function(x,...) as(x,"raw")
+as.numeric <- function(x,...) as(x,"double")
 
-is.null <- function(x) .Internal(typeof(x)) == "NULL"
-is.logical <- function(x) .Internal(typeof(x)) == "logical"
-is.integer <- function(x) .Internal(typeof(x)) == "integer"
-is.real <- function(x) .Internal(typeof(x)) == "double"
-is.double <- function(x) .Internal(typeof(x)) == "double"
-is.character <- function(x) .Internal(typeof(x)) == "character"
-is.symbol <- function(x) .Internal(typeof(x)) == "symbol"
-is.environment <- function(x) .Internal(typeof(x)) == "environment"
-is.list <- function(x) .Internal(typeof(x)) == "list"
-is.pairlist <- function(x) .Internal(typeof(x)) == "pairlist"
-is.expression <- function(x) .Internal(typeof(x)) == "expression"
-is.raw <- function(x) .Internal(typeof(x)) == "raw"
-is.call <- function(x) .Internal(typeof(x)) == "language" 
-is.primitive <- function(x) .Internal(typeof(x)) == "builtin"
+is.null <- function(x) typeof(x) == "NULL"
+is.logical <- function(x) typeof(x) == "logical"
+is.integer <- function(x) typeof(x) == "integer"
+is.real <- function(x) typeof(x) == "double"
+is.double <- function(x) typeof(x) == "double"
+is.character <- function(x) typeof(x) == "character"
+is.symbol <- function(x) typeof(x) == "symbol"
+is.environment <- function(x) typeof(x) == "environment"
+is.list <- function(x) typeof(x) == "list"
+is.pairlist <- function(x) typeof(x) == "pairlist"
+is.expression <- function(x) typeof(x) == "expression"
+is.raw <- function(x) typeof(x) == "raw"
+is.call <- function(x) typeof(x) == "language" 
+is.primitive <- function(x) typeof(x) == "builtin"
 
 is.object <- function(x) "NYI"
 
@@ -32,7 +33,7 @@ is.atomic <- function(x) switch(typeof(x), logical=,integer=,double=,complex=,ch
 is.recursive <- function(x) !(is.atomic(x) || is.symbol(x))
 
 is.language <- function(x) is.call(x) || is.environment(x) || is.symbol(x)
-is.function <- function(x) .Internal(typeof(x)) == "function"
+is.function <- function(x) typeof(x) == "function"
 
 is.single <- function(x) "NYI"
 
@@ -65,13 +66,13 @@ mode <- function(x)
 
 `mode<-` <- function(x, value) {
 	switch(value,
-		logical=as.logical(x), 
-		integer=as.integer(x),
-		double=as.double(x),
+		logical=as(x,"logical"), 
+		integer=as(x,"integer"),
+		double=as(x,"double"),
 		complex=as.complex(x),
-		raw=as.raw(x),
-		character=as.character(x),
-		list=as.list(x),
+		raw=as(x,"raw"),
+		character=as(x,"character"),
+		list=as(x,"list"),
 		expression=as.expression(x),
 		name=as.name(x),
 		symbol=as.symbol(x), 

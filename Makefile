@@ -13,7 +13,7 @@ endif
 
 EPEE=1
 
-SRC := main.cpp type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp internal.cpp runtime.cpp coerce.cpp library.cpp format.cpp gc.cpp call.cpp
+SRC := type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp runtime.cpp library.cpp format.cpp gc.cpp call.cpp
 
 SRC += parser/lexer.cpp
 
@@ -23,11 +23,16 @@ ifeq ($(EPEE),1)
 endif
 
 EXECUTABLE := riposte
+RIPOSTE := riposte.dylib
+MAIN := build/main.o
 LINENOISE := build/linenoise.o
+
+ALL_SRC := $(SRC)
+ALL_SRC += main.cpp
 
 OBJECTS := $(patsubst %.cpp,build/%.o,$(SRC))
 ASM := $(patsubst %.cpp,build/%.s,$(SRC))
-DEPENDENCIES := $(patsubst %.cpp,build/%.d,$(SRC))
+DEPENDENCIES := $(patsubst %.cpp,build/%.d,$(ALL_SRC))
 
 default: debug
 
@@ -40,8 +45,11 @@ release: $(EXECUTABLE)
 asm: CXXFLAGS += -DNDEBUG -O3 -g 
 asm: $(ASM)
 
-$(EXECUTABLE): $(OBJECTS) $(LINENOISE)
-	$(CXX) $(LFLAGS) -o $@ $^ $(LIBS)
+$(EXECUTABLE): $(MAIN) $(LINENOISE) $(RIPOSTE) 
+	$(CXX) $(LFLAGS) -L. -o $@ $^ $(LIBS)
+
+$(RIPOSTE): $(OBJECTS)
+	$(CXX) $(LFLAGS) -dynamiclib -o $@ $^ $(LIBS)
 
 build/%.o: src/%.cpp
 	@mkdir -p $(dir $@)
@@ -51,12 +59,13 @@ build/%.s: src/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -S -c $< -o $@ 
 
-$(LINENOISE): libs/linenoise/linenoise.c
-	 $(CC) $(CFLAGS) -c $< -o $@
+build/linenoise.o: libs/linenoise/linenoise.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 .PHONY: clean
 clean:
-	rm -rf $(EXECUTABLE) $(OBJECTS) $(LINENOISE) $(DEPENDENCIES)
+	rm -rf $(EXECUTABLE) $(RIPOSTE) $(MAIN) $(OBJECTS) $(LINENOISE) $(DEPENDENCIES)
 
 # dependency rules
 build/%.d: src/%.cpp

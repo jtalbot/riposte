@@ -3,7 +3,14 @@
 #include "value.h"
 #include "runtime.h"
 
-Double Random(Thread& thread, int64_t const length) {
+Type::Enum string2Type(String str) {
+#define CASE(name, string, ...) if(str == Strings::name) return Type::name;
+TYPES(CASE)
+#undef CASE
+	_error("Invalid type");
+}
+
+Double RandomVector(Thread& thread, int64_t const length) {
 	//Thread::RandomSeed& r = Thread::seed[thread.index];
 	Double o(length);
 	for(int64_t i = 0; i < length; i++) {

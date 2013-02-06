@@ -31,15 +31,17 @@
 	_(subset,   "subset") \
 	_(subset2,  "subset2") \
 	_(get, "get") \
+	_(getns, "getns") \
 	_(attrget,  "attr") \
 	_(attrset,  "attr<-") \
     _(rm,       "rm") \
 
 #define UTILITY_BYTECODES(_)\
-	_(internal, "internal") \
+	_(external, "external") \
 	_(function, "function") \
 	_(type, "type") \
 	_(missing, "missing") \
+    _(promise, "promise") \
 	_(strip, "strip") \
 
 #define GENERATOR_BYTECODES(_) \
@@ -115,6 +117,7 @@
 #define SPECIAL_MAP_BYTECODES(_) \
 	_(ifelse, "ifelse", IfElse) \
 	_(split, "split", Split) \
+    _(as, "as", As)
 
 #define ARITH_FOLD_BYTECODES(_) \
 	_(sum, "sum",	ArithFold, 	add) \

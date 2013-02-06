@@ -4,7 +4,7 @@
 std::string rawToStr( unsigned char n )
 {
 	std::ostringstream result;
-	result << std::hex << std::setfill('0') << std::setw(2) << n;
+	result << std::hex << std::setfill('0') << std::setw(2) << (uint64_t)n;
 	return result.str();
 }
 

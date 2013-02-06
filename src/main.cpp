@@ -21,9 +21,6 @@ extern "C"
 static int debug = 0;
 static int verbose = 0;
 
-void registerCoreFunctions(State& state);
-void registerCoerceFunctions(State& state);
-
 static void info(State& state, std::ostream& out) 
 {
     out << "Riposte (" << state.threads.size() << " threads) "
@@ -253,11 +250,9 @@ int main(int argc, char** argv)
     state.format = format;
     Thread& thread = state.getMainThread();
 
-    /* Load built in & base functions */
+    /* Load core "internal" functions */
     try {
-        registerCoreFunctions(state);   
-        registerCoerceFunctions(state); 
-        loadLibrary(thread, "library", "core");
+        loadPackage(thread, "library", "core");
     } 
     catch(RiposteException& e) { 
         e_message("Error", e.kind().c_str(), e.what().c_str());

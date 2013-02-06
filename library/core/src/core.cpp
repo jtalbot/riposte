@@ -1,56 +1,26 @@
 
-#include "runtime.h"
-#include "compiler.h"
-#include "parser.h"
-#include "library.h"
-#include "coerce.h"
-
 #include <math.h>
 #include <fstream>
 #include <cstdio>
 
 #include <pthread.h>
 
-#include "../libs/Eigen/Dense"
+#include "../../../src/runtime.h"
+#include "../../../src/compiler.h"
+#include "../../../src/parser.h"
+#include "../../../src/library.h"
+#include "../../../src/coerce.h"
+
+#include "../../../libs/Eigen/Dense"
 
 template<typename T>
 T const& Cast(Value const& v) {
-	if(v.type() != T::ValueType) _error("incorrect type passed to internal function");
+	if(v.type() != T::ValueType) _error("incorrect type passed to core function");
 	return (T const&)v;
 }
 
-String type2String(Type::Enum type) {
-	switch(type) {
-		#define CASE(name, str, ...) case Type::name: return Strings::name; break;
-		TYPES(CASE)
-		#undef CASE
-		default: _error("Unknown type in type to string, that's bad!"); break;
-	}
-}
-
-Type::Enum string2Type(String str) {
-#define CASE(name, string, ...) if(str == Strings::name) return Type::name;
-TYPES(CASE)
-#undef CASE
-	_error("Invalid type");
-}
-
-Double RandomVector(Thread& thread, int64_t const length) {
-	//Thread::RandomSeed& r = Thread::seed[thread.index];
-	Double o(length);
-	for(int64_t i = 0; i < length; i++) {
-		/*r.v[0] = r.v[0] * r.m[0] + r.a[0];
-		r.v[0] = r.v[0] * r.m[0] + r.a[0];
-		r.v[0] = r.v[0] * r.m[0] + r.a[0];
-
-		o[i] = (double)r.v[0] / ((double)std::numeric_limits<uint64_t>::max() + 1);*/
-
-		o[i] = rand() / (double)RAND_MAX;
-	}
-	return o;
-}
-
-void cat(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value cat(Thread& thread, Value const* args) {
 	List const& a = Cast<List>(args[0]);
 	Character const& b = Cast<Character>(args[1]);
 	for(int64_t i = 0; i < a.length(); i++) {
@@ -63,27 +33,20 @@ void cat(Thread& thread, Value const* args, Value& result) {
 			}
 		}
 	}
-	result = Null::Singleton();
+	return Null::Singleton();
 }
 
-void remove(Thread& thread, Value const* args, Value& result) {
-	Character const& a = Cast<Character>(args[0]);
-	REnvironment const& e = Cast<REnvironment>(args[1]);
-	for(int64_t i = 0; i < a.length(); i++) {
-		e.environment()->remove(a[i]);
-	}
-	result = Null::Singleton();
-}
-
-void library(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value library(Thread& thread, Value const* args, Value& result) {
 	Character from = As<Character>(thread, args[0]);
 	if(from.length() > 0) {
 		loadLibrary(thread, "library", thread.externStr(from[0]));
 	}
-	result = Null::Singleton();
+	return Null::Singleton();
 }
 
-void readtable(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value readtable(Thread& thread, Value const* args) {
 	Character from = As<Character>(thread, args[0]);
 	Character sep_list = As<Character>(thread,args[1]);
 	Character format = As<Character>(thread, args[2]);
@@ -166,9 +129,9 @@ void readtable(Thread& thread, Value const* args, Value& result) {
 				list_idx++;
 			}
 		}
-		result = l;
+		return l;
 	} else {
-		result = Null::Singleton();
+		return Null::Singleton();
 	}
 }
 
@@ -301,7 +264,8 @@ void unlistNames(Thread& thread, int64_t recurse, Value a, Character& out, int64
 }
 */
 // TODO: useNames parameter could be handled at the R level
-void unlist(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value unlist(Thread& thread, Value const* args) {
 	Value v = args[0];
 	int64_t recurse = Cast<Logical>(args[1])[0] ? std::numeric_limits<int64_t>::max() : 1;
 	
@@ -314,7 +278,7 @@ void unlist(Thread& thread, Value const* args, Value& result) {
 				Name out(length); \
 				int64_t i = 0; \
 				unlist(thread, recurse, v, out, i); \
-				result = out; \
+				return out; \
 			} break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
@@ -322,8 +286,9 @@ void unlist(Thread& thread, Value const* args, Value& result) {
 	};
 }
 
-void eval_fn(Thread& thread, Value const* args, Value& result) {
-	result = thread.eval(Compiler::compilePromise(thread, args[0]), 
+extern "C"
+Value eval(Thread& thread, Value const* args) {
+	return thread.eval(Compiler::compilePromise(thread, args[0]), 
 			Cast<REnvironment>(args[1]).environment());
 }
 
@@ -362,7 +327,8 @@ void mapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& 
 	//return 0;
 }
 
-void mapply(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value mapply(Thread& thread, Value const* args) {
 	List const& x = (List const&)args[0];
 	Value const& func = args[1];
 	// figure out result length
@@ -413,7 +379,7 @@ void mapply(Thread& thread, Value const* args, Value& result) {
 	thread.doall(mapplyheader, mapplybody, &a1, 0, r.length(), 1, 1); 
 
 	thread.gcStack.pop_back();
-	result = r;
+	return r;
 }
 
 /*
@@ -439,7 +405,8 @@ void tlist(Thread& thread, Value const* args, Value& result) {
 	result = r;
 }
 */
-void source(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value source(Thread& thread, Value const* args) {
 	Character file = Cast<Character>(args[0]);
 	std::ifstream t(thread.externStr(file[0]).c_str());
 	std::stringstream buffer;
@@ -450,44 +417,54 @@ void source(Thread& thread, Value const* args, Value& result) {
 	Value value;
 	parser.execute(code.c_str(), code.length(), true, value);	
 	
-	result = thread.eval(Compiler::compileTopLevel(thread, value));
+	return thread.eval(Compiler::compileTopLevel(thread, value));
 }
 
-void environment(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value environment(Thread& thread, Value const* args) {
 	Value e = args[0];
 	if(e.isFunction()) {
+        Value result;
 		REnvironment::Init(result, ((Function const&)e).environment());
-		return;
+		return result;
 	}
-	result = Null::Singleton();
+	return Null::Singleton();
 }
 
-void newenv(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value newenv(Thread& thread, Value const* args) {
+    Value result;
 	REnvironment::Init(result, new Environment(1,0,0,Null::Singleton()));
+    return result;
 }
 
 // TODO: parent.frame and sys.call need to ignore frames for promises, etc. We may need
 // the dynamic pointer in the environment after all...
-void parentframe(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value parentframe(Thread& thread, Value const* args) {
 	int64_t i = (int64_t)asReal1(args[0]);
 	Environment* env = thread.frame.environment;
 	while(i > 0 && env->DynamicScope() != 0) {
 		env = env->DynamicScope();
 		i--;
 	}
+    Value result;
 	REnvironment::Init(result, env);
+    return result;
 }
 
-void syscall(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value sys_call(Thread& thread, Value const* args) {
 	int64_t i = (int64_t)asReal1(args[0]);
 	Environment* env = thread.frame.environment;
 	while(i > 0 && env->DynamicScope() != 0) {
 		env = env->DynamicScope();
 		i--;
 	}
-	result = env->call;
+	return env->call;
 }
 
+extern "C"
 void stop_fn(Thread& thread, Value const* args, Value& result) {
 	// this should stop whether or not the arguments are correct...
 	std::string message = thread.externStr(Cast<Character>(args[0])[0]);
@@ -495,6 +472,7 @@ void stop_fn(Thread& thread, Value const* args, Value& result) {
 	result = Null::Singleton();
 }
 
+extern "C"
 void warning_fn(Thread& thread, Value const* args, Value& result) {
 	std::string message = thread.externStr(Cast<Character>(args[0])[0]);
 	_warning(thread, message);
@@ -510,7 +488,8 @@ void nzchar_fn(Thread& thread, Value const* args, Value& result) {
 	unaryCharacter<Zip1, NzcharOp>(thread, args[0], result);
 }*/
 
-void paste(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value paste(Thread& thread, Value const* args) {
 	Character a = As<Character>(thread, args[0]);
 	String sep = As<Character>(thread, args[1])[0];
 	std::string r = "";
@@ -519,14 +498,16 @@ void paste(Thread& thread, Value const* args, Value& result) {
 		r += sep; 
 	}
 	if(0 < a.length()) r += a[a.length()-1];
-	result = Character::c(thread.internStr(r));
+	return Character::c(thread.internStr(r));
 }
 
-void deparse(Thread& thread, Value const* args, Value& result) {
-	result = Character::c(thread.internStr(thread.deparse(args[0])));
+extern "C"
+Value deparse(Thread& thread, Value const* args) {
+	return Character::c(thread.internStr(thread.deparse(args[0])));
 }
 
-void substitute(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value substitute(Thread& thread, Value const* args) {
 	Value v = args[0];
 	while(v.isPromise()) v = ((Function const&)v).prototype()->expression;
 	
@@ -536,14 +517,11 @@ void substitute(Thread& thread, Value const* args, Value& result) {
 		if(!r.isNil()) v = r;
 		while(v.isPromise()) v = ((Function const&)v).prototype()->expression;
 	}
- 	result = v;
+ 	return v;
 }
 
-void type_of(Thread& thread, Value const* args, Value& result) {
-	result = Character::c(type2String(args[0].type()));
-}
-
-void exists(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value exists(Thread& thread, Value const* args) {
 	Character c = As<Character>(thread, args[0]);
 	REnvironment const& e = Cast<REnvironment>(args[1]);
 	Logical l = As<Logical>(thread, args[2]);
@@ -551,18 +529,19 @@ void exists(Thread& thread, Value const* args, Value& result) {
 	Environment* penv;
 	Value const& v = l[0] ? e.environment()->getRecursive(c[0], penv) : e.environment()->get(c[0]);
 	if(v.isNil())
-		result = Logical::False();
+		return Logical::False();
 	else
-		result = Logical::True();
+		return Logical::True();
 }
 
-void get(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value get(Thread& thread, Value const* args) {
 	Character c = As<Character>(thread, args[0]);
 	REnvironment const& e = Cast<REnvironment>(args[1]);
 	Logical l = As<Logical>(thread, args[2]);
 
 	Environment* penv;
-	result = l[0] ? e.environment()->getRecursive(c[0], penv) : e.environment()->get(c[0]);
+	return l[0] ? e.environment()->getRecursive(c[0], penv) : e.environment()->get(c[0]);
 }
 
 #include <sys/time.h>
@@ -574,20 +553,23 @@ uint64_t readTime()
   return (uint64_t)time_tt.tv_sec * 1000 * 1000 + (uint64_t)time_tt.tv_usec;
 }
 
-void proctime(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value proctime(Thread& thread, Value const* args) {
 	uint64_t s = readTime();
-	result = Double::c(s/(1000000.0));
+	return Double::c(s/(1000000.0));
 }
 
-void traceconfig(Thread & thread, Value const* args, Value& result) {
+extern "C"
+Value traceconfig(Thread & thread, Value const* args) {
 	Logical c = As<Logical>(thread, args[0]);
 	if(c.length() == 0) _error("condition is of zero length");
 	thread.state.epeeEnabled = Logical::isTrue(c[0]);
-	result = Null::Singleton();
+	return Null::Singleton();
 }
 
 // args( A, m, n, B, m, n )
-void matrixmultiply(Thread & thread, Value const* args, Value& result) {
+extern "C"
+Value matrixmultiply(Thread & thread, Value const* args) {
 	double mA = asReal1(args[1]);
 	double nA = asReal1(args[2]);
 	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
@@ -598,11 +580,12 @@ void matrixmultiply(Thread & thread, Value const* args, Value& result) {
 
 	Double c(aa.rows()*bb.cols());
 	Eigen::Map<Eigen::MatrixXd>(c.v(), aa.rows(), bb.cols()) = aa*bb;
-	result = c;
+	return c;
 }
 
 // args( A, m, n )
-void eigen_symmetric(Thread & thread, Value const* args, Value& result) {
+extern "C"
+Value eigensymmetric(Thread & thread, Value const* args) {
 	double mA = asReal1(args[1]);
 	double nA = asReal1(args[2]);
 	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
@@ -616,11 +599,12 @@ void eigen_symmetric(Thread & thread, Value const* args, Value& result) {
 	List r(2);
 	r[0] = v;
 	r[1] = c;
-	result = r;
+	return r;
 }
 
 // args( A, m, n )
-void eigen(Thread & thread, Value const* args, Value& result) {
+extern "C"
+Value eigen(Thread & thread, Value const* args) {
 	/*double mA = asReal1(args[1]);
 	double nA = asReal1(args[2]);
 	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
@@ -638,34 +622,38 @@ void eigen(Thread & thread, Value const* args, Value& result) {
 	throw("NYI: eigen");
 }
 
-void sort(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value sort(Thread& thread, Value const* args) {
 	Value a = args[0];
 	if(a.isDouble()) {
 		Double& r = (Double&)a;
 		Resize(thread, true, r, r.length()); // just cloning
 		std::sort(r.v(), r.v()+r.length());
-		result = r;
+		return r;
 	}
 	else if(a.isInteger()) {
 		Integer& r = (Integer&)a;
 		Resize(thread, true, r, r.length()); // just cloning
 		std::sort(r.v(), r.v()+r.length());
-		result = r;
+	    return r;
 	}
 	else {
 		_error("NYI: sort on this type");
 	}
 }
 
-void force(Thread& thread, Value const* args, Value& result) {
-	result = args[0];
+extern "C"
+Value force(Thread& thread, Value const* args) {
+	return args[0];
 }
 
-void commandArgs(Thread& thread, Value const* args, Value& result) {
-	result = thread.state.arguments;
+extern "C"
+Value commandArgs(Thread& thread, Value const* args) {
+	return thread.state.arguments;
 }
 
-void match(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value match(Thread& thread, Value const* args) {
 	Character a = As<Character>(thread, args[0]);
 	Character b = As<Character>(thread, args[1]);
 	
@@ -678,69 +666,14 @@ void match(Thread& thread, Value const* args, Value& result) {
 		r[i] = (j < b.length()) ? (j+1) : Integer::NAelement;
 	}
 
-	result = r;
+	return r;
 }
 
-void repeat2(Thread& thread, Value const* args, Value& result) {
+extern "C"
+Value repeat2(Thread& thread, Value const* args) {
 	Integer a = Cast<Integer>(args[0]);
 	int64_t len = Cast<Integer>(args[1])[0];
 
-	result = Repeat(a, len);
-}
-
-void registerCoreFunctions(State& state)
-{
-	//state.registerInternalFunction(state.internStr("nchar"), (nchar_fn), 1);
-	//state.registerInternalFunction(state.internStr("nzchar"), (nzchar_fn), 1);
-	
-	state.registerInternalFunction(state.internStr("cat"), (cat), 2);
-	state.registerInternalFunction(state.internStr("library"), (library), 1);
-	
-	//state.registerInternalFunction(state.internStr("attr"), (attr), 3);
-	//state.registerInternalFunction(state.internStr("attr<-"), (assignAttr), 3);
-	
-	state.registerInternalFunction(state.internStr("unlist"), (unlist), 3);
-	
-	state.registerInternalFunction(state.internStr("eval"), (eval_fn), 3);
-	state.registerInternalFunction(state.internStr("source"), (source), 1);
-
-	state.registerInternalFunction(state.internStr("mapply"), (mapply), 2);
-	//state.registerInternalFunction(state.internStr("t.list"), (tlist));
-
-	state.registerInternalFunction(state.internStr("environment"), (environment), 1);
-	state.registerInternalFunction(state.internStr("new.env"), (newenv), 0);
-	
-	state.registerInternalFunction(state.internStr("parent.frame"), (parentframe), 1);
-	state.registerInternalFunction(state.internStr("sys.call"), (syscall), 1);
-	state.registerInternalFunction(state.internStr("remove"), (remove), 2);
-	
-	state.registerInternalFunction(state.internStr("stop"), (stop_fn), 1);
-	state.registerInternalFunction(state.internStr("warning"), (warning_fn), 1);
-	
-	state.registerInternalFunction(state.internStr("paste"), (paste), 2);
-	state.registerInternalFunction(state.internStr("deparse"), (deparse), 1);
-	state.registerInternalFunction(state.internStr("substitute"), (substitute), 1);
-	
-	state.registerInternalFunction(state.internStr("typeof"), (type_of), 1);
-	
-	state.registerInternalFunction(state.internStr("exists"), (exists), 4);
-	state.registerInternalFunction(state.internStr("get"), (get), 4);
-
-	state.registerInternalFunction(state.internStr("proc.time"), (proctime), 0);
-	state.registerInternalFunction(state.internStr("trace.config"), (traceconfig), 1);
-	
-	state.registerInternalFunction(state.internStr("read.table"), (readtable), 3);
-	
-	state.registerInternalFunction(state.internStr("matrix.multiply"), (matrixmultiply), 6);
-	state.registerInternalFunction(state.internStr("eigen"), (eigen), 3);
-	state.registerInternalFunction(state.internStr("eigen.symmetric"), (eigen_symmetric), 3);
-
-	state.registerInternalFunction(state.internStr("force"), (force), 1);
-	
-	state.registerInternalFunction(state.internStr("sort"), (sort), 1);
-	
-	state.registerInternalFunction(state.internStr("commandArgs"), (commandArgs), 0);
-	state.registerInternalFunction(state.internStr("match"), (match), 2);
-	state.registerInternalFunction(state.internStr("repeat2"), (repeat2), 2);
+	return Repeat(a, len);
 }
 

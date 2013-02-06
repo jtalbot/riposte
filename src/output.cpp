@@ -219,14 +219,15 @@ std::string stringify(State const& state, Value const& value, std::vector<int64_
                 result = std::string("<environment: R_GlobalEnv>");
             else
                 result = std::string("<environment: ") + intToHexStr((int64_t)renv.environment()) + ">";
-            if(state.format == State::RiposteFormat)
+            // TODO: avoid recursion here
+            /*if(state.format == State::RiposteFormat)
             {
                 Dictionary* d = renv.environment();
                 for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
                     result = result + "\n$" + state.externStr(i.string())
                         + "\n" + state.stringify(i.value()) + "\n";
                 }
-            }
+            }*/
 			return result;
 		} break;
 		case Type::Future:

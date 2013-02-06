@@ -1,5 +1,5 @@
 
-N <- 1000000L
+N <- 100L
 K <- 5L
 
 library(MASS)
@@ -11,5 +11,5 @@ a <- rbind(
 	mvrnorm(N/5,c(2,2), matrix(c(0.25,0.2,0.2,0.25), 2,2)),
 	mvrnorm(N/5,c(1,0), matrix(c(0.25,0.22,0.22,0.25), 2,2))
 	)
-write.table(as.vector(a), "data/kmeans.txt", col.names=FALSE, row.names=FALSE)
+write.table(as.vector(a), "kmeans.txt", col.names=FALSE, row.names=FALSE)
 

@@ -29,6 +29,7 @@ struct Value {
 		int64_t i;
 		double d;
 		char c;
+        unsigned char u;
 		String s;
 	};
 
@@ -74,22 +75,8 @@ struct Value {
 	bool isLogicalCoerce() const { return type() >= Type::Logical && type() <= Type::Double; }
 	bool isVector() const { return type() >= Type::Null && type() <= Type::List; }
 	
-	template<class T> T& scalar() { throw "not allowed"; }
-	template<class T> T const& scalar() const { throw "not allowed"; }
-
 	static Value const& Nil() { static const Value v = {{0}, {0}}; return v; }
 };
-
-template<> inline int64_t& Value::scalar<int64_t>() { return i; }
-template<> inline double& Value::scalar<double>() { return d; }
-template<> inline char& Value::scalar<char>() { return c; }
-template<> inline String& Value::scalar<String>() { return s; }
-
-template<> inline int64_t const& Value::scalar<int64_t>() const { return i; }
-template<> inline double const& Value::scalar<double>() const { return d; }
-template<> inline char const& Value::scalar<char>() const { return c; }
-template<> inline String const& Value::scalar<String>() const { return s; }
-
 
 // Name-value Pairs are used throughout the code...
 struct Pair { String n; Value v; };
@@ -228,7 +215,24 @@ struct Vector : public Object {
 	bool isScalar() const { return length() == 1; }
 	void* raw() { return (void*)(((Inner*)p)+1); }	// assumes that data is immediately after capacity
 	void const* raw() const { return (void const*)(((Inner*)p)+1); }	// assumes that data is immediately after capacity
+	
+    template<class T> T& scalar() { throw "not allowed"; }
+	template<class T> T const& scalar() const { throw "not allowed"; }
 };
+
+template<> inline int64_t& Vector::scalar<int64_t>() { return i; }
+template<> inline double& Vector::scalar<double>() { return d; }
+template<> inline char& Vector::scalar<char>() { return c; }
+template<> inline String& Vector::scalar<String>() { return s; }
+template<> inline unsigned char& Vector::scalar<unsigned char>() { return u; }
+
+template<> inline int64_t const& Vector::scalar<int64_t>() const { return i; }
+template<> inline double const& Vector::scalar<double>() const { return d; }
+template<> inline char const& Vector::scalar<char>() const { return c; }
+template<> inline String const& Vector::scalar<String>() const { return s; }
+template<> inline unsigned char const& Vector::scalar<unsigned char>() const { return u; }
+
+
 
 template<Type::Enum VType, typename ElementType, bool Recursive>
 struct VectorImpl : public Vector {
@@ -243,11 +247,11 @@ struct VectorImpl : public Vector {
 
 	ElementType const* v() const { 
 		return (canPack && packed()==1) ? 
-			&Value::scalar<ElementType>() : ((Inner*)p)->data; 
+			&scalar<ElementType>() : ((Inner*)p)->data; 
 	}
 	ElementType* v() { 
 		return (canPack && packed()==1) ? 
-			&Value::scalar<ElementType>() : ((Inner*)p)->data; 
+			&scalar<ElementType>() : ((Inner*)p)->data; 
 	}
 
 	Inner* inner() const {
@@ -276,7 +280,8 @@ struct VectorImpl : public Vector {
 		return (VectorImpl<VType, ElementType, Recursive>&)v;
 	}
 
-	static void InitScalar(Value& v, ElementType const& d) {
+	static void InitScalar(Value& _v, ElementType const& d) {
+        Vector& v = (Vector&) _v;
 		Value::Init(v, ValueType, 1);
 		if(canPack)
 			v.scalar<ElementType>() = d;

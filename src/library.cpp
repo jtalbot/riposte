@@ -35,24 +35,43 @@ void sourceFile(Thread& thread, std::string name, Environment* env) {
 }
 
 void openDynamic(Thread& thread, std::string path, Environment* env) {
-	//std::string p = std::string("/Users/jtalbot/riposte/")+path;
-	//void* lib = dlopen(p.c_str(), RTLD_LAZY);
-	//if(lib == NULL) {
-	//	_error(std::string("failed to open: ") + p + " (" + dlerror() + ")");
-	//}
-	// set lib in env...
+    if(thread.state.verbose)
+        std::cout << "Opening dynamic library " << path << std::endl;
+    void* lib = dlopen(path.c_str(), RTLD_LAZY|RTLD_LOCAL);
+    if(lib == NULL) {
+        _error(std::string("failed to open: ") + path + " (" + dlerror() + ")");
+    }
+    else {
+        thread.state.handles[path] = lib;
+    }
 }
 
-void loadLibrary(Thread& thread, std::string path, std::string name) {
+void loadPackage(Thread& thread, std::string path, std::string name) {
 	Environment* env = new Environment(1,thread.state.path.back(),0,Null::Singleton());
 	
-	std::string p = path + "/" + name + ("/R/");
-
 	dirent* file;
 	struct stat info;
 
-	// Load R files
+	// Load dynamic libraries (do this first since they may be used by the R files)
+	std::string p = path + "/" + name + "/libs/";
 	DIR* dir = opendir(p.c_str());
+	if(dir != NULL) {
+		while((file=readdir(dir))) {
+			if(file->d_name[0] != '.') {
+				stat(file->d_name, &info);
+				std::string name = file->d_name;
+				if(!S_ISDIR(info.st_mode) && 
+						(name.length()>5 && name.substr(name.length()-6,6)==".dylib")) {
+					openDynamic(thread, p+name, env);
+				}
+			}
+		}
+		closedir(dir);
+	}
+	
+	// Load R files
+	p = path + "/" + name + ("/R/");
+	dir = opendir(p.c_str());
 	if(dir != NULL) {
 		while((file=readdir(dir))) {
 			if(file->d_name[0] != '.') {
@@ -67,24 +86,8 @@ void loadLibrary(Thread& thread, std::string path, std::string name) {
 		closedir(dir);
 	}
 
-	// Load dynamic libraries
-	p = path + "/" + name + "/libs/";
-	dir = opendir(p.c_str());
-	if(dir != NULL) {
-		while((file=readdir(dir))) {
-			if(file->d_name[0] != '.') {
-				stat(file->d_name, &info);
-				std::string name = file->d_name;
-				if(!S_ISDIR(info.st_mode) && 
-						(name.length()>2 && name.substr(name.length()-3,3)==".so")) {
-					openDynamic(thread, p+name, env);
-				}
-			}
-		}
-		closedir(dir);
-	}
-	
 	thread.state.path.push_back(env);
 	thread.state.global->lexical = env;
+    thread.state.namespaces[thread.state.internStr(name)] = env;
 }
 

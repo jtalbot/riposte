@@ -1,7 +1,7 @@
 pi <- 3.1415926535897932384626433832795
-.GlobalEnv <- .Internal(parent.frame(1))
+.GlobalEnv <- .External(parentframe(1))
 
-nargs <- function() { length(.Internal(sys.call(1L)))-1L }
+nargs <- function() { length(.External(sys_call(1L)))-1L }
 
 options <- function(...) {}
 
@@ -19,13 +19,13 @@ c <- function(...) {
     if(length(l) == 0)
         return(NULL)
 
-    fun <- .Internal(unlist(list('c','.',class(l[[1]])), TRUE, TRUE))
-    fun <- .Internal(paste(fun, ""))
+    fun <- .External(unlist(list('c','.',class(l[[1]])), TRUE, TRUE))
+    fun <- .External(paste(fun, ""))
     if(exists(fun)) {
         return(get(fun)(...))
     }
     else {
-        .Internal(unlist(l, TRUE, TRUE))
+        .External(unlist(l, TRUE, TRUE))
     }
 }
 
@@ -38,7 +38,7 @@ print <- function(...) cat(...)
 }
 
 dispatch1 <- function(op, x, default) {
-	fun <- .Internal(paste(c(op, '.', class(x)), ""))
+	fun <- .External(paste(c(op, '.', class(x)), ""))
 	if(exists(fun)) {
 		get(fun)(x)
 	}
@@ -48,11 +48,11 @@ dispatch1 <- function(op, x, default) {
 }
 
 dispatch2 <- function(op, x, y, default) {
-	funx <- .Internal(paste(c(op, '.', class(x)), ""))
+	funx <- .External(paste(c(op, '.', class(x)), ""))
 	if(exists(funx)) {
 		return(get(funx)(x,y))
 	}
-	funy <- .Internal(paste(c(op, '.', class(y)), ""))
+	funy <- .External(paste(c(op, '.', class(y)), ""))
 	if(exists(funy)) {
 		return(get(funy)(x,y))
 	}
@@ -174,9 +174,9 @@ lapply <- function(x, func) {
 			return(max(x))
 		}
 	}
-	.Internal(mapply(list(x), func))
+	.External(mapply(list(x), func))
 }
 
 mapply <- function(FUN, ...) {
-	.Internal(mapply(list(...), FUN))
+	.External(mapply(list(...), FUN))
 }

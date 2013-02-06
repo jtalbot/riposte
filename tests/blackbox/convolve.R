@@ -5,7 +5,7 @@
     b <- as.double(b)
     na <- length(a)
     nb <- length(b)
-    ab <- double(na + nb)
+    ab <- vector("double", na + nb)
     for (i in 1:na) {
         for (j in 1:nb) {
             ab[i + j] <- ab[i + j] + a[i] * b[j]

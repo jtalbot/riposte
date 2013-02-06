@@ -1,17 +1,17 @@
 
-force <- function(x) .Internal(force(x))
+force <- function(x) .External(force(x))
 
 list <- function(...) list(...)
 
 system.time <- function(expr) {
-	start <- .Internal(proc.time())
-	.Internal(force(expr))
-	.Internal(proc.time())-start
+	start <- .External(proctime())
+	.External(force(expr))
+	.External(proctime())-start
 }
 
 paste <- function(..., sep = " ", collapse = NULL) {
-	r <- mapply(function(...) .Internal(paste(list(...), sep)), ...)
-	if(!is.null(collapse)) .Internal(paste(r, collapse))
+	r <- mapply(function(...) .External(paste(list(...), sep)), ...)
+	if(!is.null(collapse)) .External(paste(r, collapse))
 	else unlist.default(r)
 }
 
@@ -59,7 +59,7 @@ dimnames <- function(x) attr(x, 'dimnames')
     x
 } 
 
-#seq <- function(from=1, by=1, length.out=1) .Internal(seq(from, by, length.out))
+#seq <- function(from=1, by=1, length.out=1) .External(seq(from, by, length.out))
 
 rep <- function(x, times=1, length.out=times*each*length(x), each=1) {
 	x[index(length(x), strip(each), strip(length.out))]
@@ -68,7 +68,7 @@ rep <- function(x, times=1, length.out=times*each*length(x), each=1) {
 rep.int <- function(x, times) {
 	times <- as.integer(times)
 	if(length(times) == length(x))
-		x[.Internal(repeat2(times, sum(times)))]
+		x[.External(repeat2(times, sum(times)))]
 	else
 		x[index(length(x), 1, times*length(x))]
 }

@@ -43,6 +43,8 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::strip) return ByteCode::strip; 
 	
 	if(func == Strings::random) return ByteCode::random; 
+    if(func == Strings::getNamespace) return ByteCode::getns;
+    if(func == Strings::promise) return ByteCode::promise;
 	
 	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
 }
@@ -212,22 +214,9 @@ Compiler::Operand Compiler::compileFunctionCall(List const& call, Character cons
 	return result;
 }
 
-Compiler::Operand Compiler::compileInternalFunctionCall(List const& call, Prototype* code) {
+Compiler::Operand Compiler::compileExternalFunctionCall(List const& call, Prototype* code) {
 	String func = SymbolStr(call[0]);
-	std::map<String, int64_t>::const_iterator itr = state.internalFunctionIndex.find(func);
 	
-	int64_t function = -1;
-	
-	if(itr == state.internalFunctionIndex.end()) {
-		// this should eventually be an error, but so many are unimplemented right now that we'll just make it a warning
-		_warning(thread, std::string("Unimplemented internal function ") + state.externStr(func));
-	}
-	else {
-		function = itr->second;
-		// check parameter count
-		if(state.internalFunctions[function].params != call.length()-1)
-			_error(std::string("Incorrect number of arguments to internal function ") + state.externStr(func));
-	}
 	// compile parameters directly...reserve registers for them.
 	Operand liveIn = top();
 	int64_t reg = liveIn.i-1;
@@ -237,10 +226,10 @@ Compiler::Operand Compiler::compileInternalFunctionCall(List const& call, Protot
 		reg = r.i; 
 	}
 	// kill all parameters
-	kill(reg); 	// only necessary to silence unused warning
+	kill(reg); 	   // only necessary to silence unused warning
 	kill(liveIn); 
 	Operand result = allocRegister();
-	emit(ByteCode::internal, function, result, result);
+	emit(ByteCode::external, Operand(MEMORY, func), call.length()-1, result);
 	return result;
 }
 
@@ -332,10 +321,17 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 	if(func == Strings::internal) 
 	{
-		if(!call[1].isList() || !isCall(call[1]))
+        throw(std::string("Don't currently support .Internal"));
+		/*if(!call[1].isList() || !isCall(call[1]))
 			throw CompileError(std::string(".Internal has invalid arguments (") + Type::toString(call[1].type()) + ")");
-		return compileInternalFunctionCall((List const&)call[1], code);
-	} 
+		return compileInternalFunctionCall((List const&)call[1], code);*/
+	}
+    else if(func == Strings::external)
+    {
+		if(!call[1].isList() || !isCall(call[1]))
+			throw CompileError(std::string(".External has invalid arguments (") + Type::toString(call[1].type()) + ")");
+		return compileExternalFunctionCall((List const&)call[1], code);
+    } 
 	else if(func == Strings::assign ||
 		func == Strings::eqassign || 
 		func == Strings::assign2)
@@ -413,6 +409,15 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand rm = allocRegister();
         emit( ByteCode::rm, symbol, 0, rm );
         return rm;
+    }
+    else if(func == Strings::as && call.length() == 3)
+    {
+	    Operand src = compile(call[1], code);
+        Operand type = Operand(MEMORY, SymbolStr(call[2]));
+        kill( src );
+		Operand as = allocRegister();
+        emit( ByteCode::as, src, type, as );
+        return as;
     }
 	else if(func == Strings::function) 
 	{
@@ -731,7 +736,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::type ||
 		func == Strings::length ||
 		func == Strings::strip ||
-		func == Strings::random) &&
+		func == Strings::random ||
+        func == Strings::getNamespace) &&
 		call.length() == 2)
 	{
 		// if there isn't exactly one parameter, we should call the library version...
@@ -749,7 +755,16 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand result = allocRegister();
 		emit(ByteCode::missing, s, 0, result); 
 		return result;
-	} 
+	}
+    else if(func == Strings::promise)
+    {
+		if(call.length() != 2) _error("missing requires one argument");
+		if(!isSymbol(call[1]) && !call[1].isCharacter1()) _error("wrong parameter to promise");
+		Operand s = compileConstant(call[1], code);
+		Operand result = allocRegister();
+		emit(ByteCode::promise, s, 0, result); 
+		return result;
+    }
 	else if(func == Strings::quote)
 	{
 		if(call.length() != 2) _error("quote requires one argument");

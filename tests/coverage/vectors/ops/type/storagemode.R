@@ -4,6 +4,6 @@ storage.mode(1)
 #NYI: complex numbers
 #storage.mode(1i)
 storage.mode('a')
-storage.mode(raw())
+storage.mode(vector("raw",1))
 storage.mode(list())
 

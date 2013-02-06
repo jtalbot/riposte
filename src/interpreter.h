@@ -98,29 +98,18 @@ struct StackFrame {
 	Environment* env;
 };
 
-// TODO: Careful, args and result might overlap!
-
-struct InternalFunction {
-    typedef void (*Ptr)(Thread& s, Value const* args, Value& result);
-	
-    Ptr ptr;
-	int64_t params;
-};
-
-
-#define DEFAULT_NUM_REGISTERS 10000
-
-
 ////////////////////////////////////////////////////////////////////
 // Global shared state 
 ///////////////////////////////////////////////////////////////////
 
+#define DEFAULT_NUM_REGISTERS 10000
+
 class State {
 public:
 	StringTable strings;
-	
-	std::vector<InternalFunction> internalFunctions;
-	std::map<String, int64_t> internalFunctionIndex;
+
+    std::map<std::string, void*> handles;
+    std::map<String, Environment*> namespaces;
 	
 	std::vector<Environment*> path;
 	Environment* global;
@@ -152,12 +141,6 @@ public:
 
 	Thread& getMainThread() const {
 		return *threads[0];
-	}
-
-	void registerInternalFunction(String s, InternalFunction::Ptr internalFunction, int64_t params) {
-		InternalFunction i = { internalFunction, params };
-		internalFunctions.push_back(i);
-		internalFunctionIndex[s] = internalFunctions.size()-1;
 	}
 
 	void interpreter_init(Thread& state);

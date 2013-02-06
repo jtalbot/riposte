@@ -2,6 +2,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <dlfcn.h>
 
 #include "value.h"
 #include "type.h"
@@ -462,7 +463,19 @@ static inline Instruction const* subset2_op(Thread& thread, Instruction const& i
 		return &inst+1;
 	}
  	FORCE(b); BIND(b);
-	if(((Object const&)a).hasAttributes() || ((Object const&)b).hasAttributes()) { return GenericDispatch(thread, inst, Strings::bb, a, b, inst.c); } 
+	if(((Object const&)a).hasAttributes() || ((Object const&)b).hasAttributes()) { return GenericDispatch(thread, inst, Strings::bb, a, b, inst.c); }
+
+    if(a.isEnvironment()) {
+	    String s = ((Character const&)b).s;
+        Value const& v = ((REnvironment&)a).environment()->get(s);
+        if(!v.isObject()) {
+            return force(thread, inst, v, ((REnvironment&)a).environment(), s); 
+        }
+        else {
+            OUT(c) = v;
+            return &inst+1;
+        }
+    } 
 	_error("Invalid subset2 operation");
 }
 
@@ -478,6 +491,18 @@ static inline Instruction const* get_op(Thread& thread, Instruction const& inst)
 		OUT(c) = v;
 		return &inst+1;
 	}
+}
+
+static inline Instruction const* getns_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+	String s = ((Character const&)a).s;
+    std::map<String, Environment*>::const_iterator i = thread.state.namespaces.find(s);
+    if(i == thread.state.namespaces.end())
+        _error("There is no such namespace");
+
+    Environment* env = i->second;
+    REnvironment::Init(OUT(c), env);
+    return &inst+1;
 }
 
 static inline Instruction const* attrget_op(Thread& thread, Instruction const& inst) {
@@ -660,6 +685,28 @@ static inline Instruction const* split_op(Thread& thread, Instruction const& ins
 	return &inst+1; 
 }
 
+static inline Instruction const* as_op(Thread& thread, Instruction const& inst) {
+	DECODE(a); FORCE(a); BIND(a);
+	String type = (String)inst.b;
+    if(type == Strings::Null)
+        OUT(c) = As<Null>(thread, a);
+    else if(type == Strings::Logical)
+        OUT(c) = As<Logical>(thread, a);
+    else if(type == Strings::Integer)
+        OUT(c) = As<Integer>(thread, a);
+    else if(type == Strings::Double)
+        OUT(c) = As<Double>(thread, a);
+    else if(type == Strings::Character)
+        OUT(c) = As<Character>(thread, a);
+    else if(type == Strings::List)
+        OUT(c) = As<List>(thread, a);
+    else if(type == Strings::Raw)
+        OUT(c) = As<Raw>(thread, a);
+    else
+        _error("as not yet defined for this type");
+	return &inst+1; 
+}
+
 static inline Instruction const* function_op(Thread& thread, Instruction const& inst) {
 	Value const& function = CONSTANT(inst.a);
 	Value& out = OUT(c);
@@ -814,15 +861,37 @@ static inline Instruction const* strip_op(Thread& thread, Instruction const& ins
 	return &inst+1;
 }
 
-static inline Instruction const* internal_op(Thread& thread, Instruction const& inst) {
-	if(inst.a < 0)
-		_error("Attempting to use undefined internal function");
-	int64_t nargs = thread.state.internalFunctions[inst.a].params;
+static inline Instruction const* external_op(Thread& thread, Instruction const& inst) {
+	String name = (String)inst.a;
+    void* func = NULL;
+    for(std::map<std::string,void*>::iterator i = thread.state.handles.begin();
+        i != thread.state.handles.end(); ++i) {
+        func = dlsym(i->second, name);
+        if(func != NULL)
+            break;
+    }
+    if(func == NULL)
+        _error("Can't find external function");
+
+    uint64_t nargs = inst.b;
 	for(int64_t i = 0; i < nargs; i++) {
-		BIND(REGISTER(inst.b-i));
+		BIND(REGISTER(inst.c-i));
 	}
-	thread.state.internalFunctions[inst.a].ptr(thread, &REGISTER(inst.b), OUT(c));
+    {
+        typedef Value (*Func)(Thread&, Value const*);
+        Func f = (Func)func;
+        OUT(c) = f(thread, &REGISTER(inst.c));
+    }
 	return &inst+1;
+}
+
+static inline Instruction const* promise_op(Thread& thread, Instruction const& inst) {
+	String s = ((Character const&)CONSTANT(inst.a)).s;
+	Value v = thread.frame.environment->get(s);
+    if(v.isPromise())
+        v = ((Promise const&)v).prototype()->expression;
+	OUT(c) = v;
+    return &inst+1;
 }
 
 //

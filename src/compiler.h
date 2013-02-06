@@ -95,6 +95,7 @@ private:
 	Operand compileCall(List const& call, Character const& names, Prototype* code); 
 	Operand compileFunctionCall(List const& call, Character const& names, Prototype* code); 
 	Operand compileInternalFunctionCall(List const& call, Prototype* code); 
+	Operand compileExternalFunctionCall(List const& call, Prototype* code); 
 	Operand compileExpression(List const& values, Prototype* code);
 	
 	CompiledCall makeCall(List const& call, Character const& names);

@@ -4,7 +4,7 @@
 
 #include "value.h"
 
-void loadLibrary(Thread& thread, std::string path, std::string name);
+void loadPackage(Thread& thread, std::string path, std::string name);
 
 
 #endif

@@ -37,6 +37,7 @@
 	_(Call,		"call")		\
 	_(Expression,	"expression")	\
 	_(internal, 	".Internal") \
+	_(external, 	".External") \
 	_(assign, 	"<-") \
 	_(assign2, 	"<<-") \
 	_(eqassign, 	"=") \
@@ -125,7 +126,7 @@
 	_(random, 	"random") \
 	_(True, 	"TRUE") \
 	_(False, 	"FALSE") \
-	_(type, 	"type") \
+	_(type, 	"typeof") \
 	_(length, 	"length") \
 	_(value, 	"value") \
 	_(dotGeneric, 	".Generic") \
@@ -150,6 +151,9 @@
 	_(Re,	"Re") \
 	_(Im,	"Im") \
     _(assignTmp, "*tmp*") \
+    _(as, "as") \
+    _(getNamespace, "getNamespace") \
+    _(promise, "promise") \
 	_(Maximal, "\255")
 
 typedef const char* String;
