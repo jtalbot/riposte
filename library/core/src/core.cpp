@@ -40,7 +40,7 @@ extern "C"
 Value library(Thread& thread, Value const* args, Value& result) {
 	Character from = As<Character>(thread, args[0]);
 	if(from.length() > 0) {
-		loadLibrary(thread, "library", thread.externStr(from[0]));
+		loadPackage(thread, "library", thread.externStr(from[0]));
 	}
 	return Null::Singleton();
 }

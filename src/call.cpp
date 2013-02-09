@@ -133,7 +133,7 @@ void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function con
 
 		// if we have left over arguments, but no parameter dots, error
 		if(end < numArgs && pDotIndex >= (int64_t)parameters.size())
-			_error("Unused args");
+			_error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
 		
 		// all unused args go into ...
 		for(int64_t i = end; i < numArgs; i++) {
@@ -206,7 +206,8 @@ void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function con
 		for(int64_t i = 0; i < numArgs; i++) {
 			if(assignment[i] < 0) {
 				// if we have left over arguments, but no parameter dots, error
-				if(pDotIndex >= (int64_t)parameters.size()) _error("Unused args");	
+				if(pDotIndex >= (int64_t)parameters.size())
+			        _error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
 				Pair const& arg = argument(i, env, call);
 				if(arg.n != Strings::empty) fenv->named = true;
 				assignDot(thread, env, fenv, arg.n, arg.v);
@@ -240,7 +241,7 @@ void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Function
 	if(pDotIndex >= parametersSize) {
 		// called function doesn't take dots, unused args is an error 
 		if(argumentsSize > parametersSize)
-			_error("Unused arguments");
+			_error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
 	}
 	else {
 		// called function has dots, all unused args go into ...

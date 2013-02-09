@@ -13,8 +13,6 @@
 #include "strings.h"
 #include "exceptions.h"
 
-typedef int16_t IRef;
-
 struct Value {
 	
 	union {
@@ -173,6 +171,7 @@ struct REnvironment : public Object {
 	}
 };
 
+typedef int16_t IRef;
 struct Future : public Object {
 	static const Type::Enum ValueType = Type::Future;
 	static Future& Init(Value& f, Trace* trace, IRef ref) {

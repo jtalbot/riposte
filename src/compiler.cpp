@@ -201,8 +201,7 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 }
 
 // a standard call, not an op
-Compiler::Operand Compiler::compileFunctionCall(List const& call, Character const& names, Prototype* code) {
-	Operand function = compile(call[0], code);
+Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& call, Character const& names, Prototype* code) {
 	CompiledCall a = makeCall(call, names);
 	code->calls.push_back(a);
 	kill(function);
@@ -240,7 +239,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	}
 
 	if(!isSymbol(call[0]) && !call[0].isCharacter1())
-		return compileFunctionCall(call, names, code);
+		return compileFunctionCall(compile(call[0], code), call, names, code);
 
 	String func = SymbolStr(call[0]);
 	// list is the only built in function that handles ... or named parameters
@@ -266,7 +265,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	}
 
 	if(complicated)
-		return compileFunctionCall(call, names, code);
+		return compileFunctionCall(compile(call[0], code), call, names, code);
 
 	// switch statement supports named args
 	if(func == Strings::switchSym)
@@ -321,10 +320,29 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 	if(func == Strings::internal) 
 	{
-        throw(std::string("Don't currently support .Internal"));
-		/*if(!call[1].isList() || !isCall(call[1]))
+        if(!call[1].isList() || !isCall(call[1]))
 			throw CompileError(std::string(".Internal has invalid arguments (") + Type::toString(call[1].type()) + ")");
-		return compileInternalFunctionCall((List const&)call[1], code);*/
+        
+        List internalCall = (List const&)call[1];
+		if(!internalCall[0].isCharacter() || ((Character const&)internalCall[0]).length() != 1) 
+			throw CompileError(std::string(".Internal function is invalid (") + Type::toString(internalCall[0].type()) + ")");
+		
+        Character ns = Character::c(state.internStr("core"));
+        Operand a = compileConstant(ns, code);
+        kill(a);
+        Operand result = allocRegister();
+        emit(ByteCode::getns, a, 0, result);
+        a = result;
+
+        Operand b = compileConstant(internalCall[0], code);
+        kill(b); kill(a);
+        result = allocRegister();
+        emit(ByteCode::subset2, a, b, result);
+        
+		Character internalNames = hasNames(internalCall) ? 
+				(Character const&)getNames(internalCall) : 
+				Character(0); 
+        return compileFunctionCall(result, internalCall, internalNames, code);
 	}
     else if(func == Strings::external)
     {
@@ -771,7 +789,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		return compileConstant(call[1], code);
 	}
 	
-	return compileFunctionCall(call, names, code);
+	return compileFunctionCall(compile(call[0], code), call, names, code);
 }
 
 Compiler::Operand Compiler::compileExpression(List const& values, Prototype* code) {

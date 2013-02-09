@@ -160,7 +160,7 @@ static int run(State& state, std::istream& in, std::ostream& out, bool interacti
             if(echo)
                 out << state.stringify(result) << std::endl;
         } 
-        catch(RiposteException& e) { 
+        catch(RiposteException const& e) { 
             e_message("Error", e.kind().c_str(), e.what().c_str());
         } 
         dumpWarnings(thread, out);
@@ -254,7 +254,7 @@ int main(int argc, char** argv)
     try {
         loadPackage(thread, "library", "core");
     } 
-    catch(RiposteException& e) { 
+    catch(RiposteException const& e) { 
         e_message("Error", e.kind().c_str(), e.what().c_str());
     } 
     dumpWarnings(thread, std::cout);

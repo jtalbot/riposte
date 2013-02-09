@@ -257,13 +257,9 @@ private:
 			if(dequeue(s) || steal(s)) {
 				try {
 					run(s);
-				} catch(RiposteError& error) {
-					printf("Error (riposte:%d): %s\n", (int)index, error.what().c_str());
-				} catch(RuntimeError& error) {
-					printf("Error (runtime:%d): %s\n", (int)index, error.what().c_str());
-				} catch(CompileError& error) {
-					printf("Error (compiler:%d): %s\n", (int)index, error.what().c_str());
-				}
+                } catch(RiposteException const& e) { 
+                    std::cout << "Error (" << e.kind() << ":" << (int)index << ") " << e.what();
+                } 
 			} else sleep(); 
 		}
 		fetch_and_add(&(state.done), 1);

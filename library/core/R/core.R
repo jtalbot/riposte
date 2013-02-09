@@ -1,5 +1,14 @@
-pi <- 3.1415926535897932384626433832795
-.GlobalEnv <- .External(parentframe(1))
+# TODO: actually populate this correctly
+.Platform <- list(
+    OS.type="unix", 
+    file.sep="/", 
+    dynlib.ext=".so", 
+    GUI="X11", 
+    endian="little", 
+    pkgType="mac.binary.leopard", 
+    path.sep=":", 
+    r_arch="x86_64"
+    )
 
 nargs <- function() { length(.External(sys_call(1L)))-1L }
 
@@ -179,4 +188,12 @@ lapply <- function(x, func) {
 
 mapply <- function(FUN, ...) {
 	.External(mapply(list(...), FUN))
+}
+
+`$` <- function(a, b) {
+    a[[promise(b)]]
+}
+
+`::` <- function(a, b) {
+    getNamespace(promise(a))[[promise(b)]]
 }

@@ -25,13 +25,9 @@ void sourceFile(Thread& thread, std::string name, Environment* env) {
 		parser.execute(code.c_str(), code.length(), true, value, trace);
 		if(!value.isNil())
             thread.eval(Compiler::compileTopLevel(thread, value), env);
-	} catch(RiposteError& error) {
-		_warning(thread, "unable to load library " + name + ": " + error.what().c_str());
-	} catch(RuntimeError& error) {
-		_warning(thread, "unable to load library " + name + ": " + error.what().c_str());
-	} catch(CompileError& error) {
-		_warning(thread, "unable to load library " + name + ": " + error.what().c_str());
-	}
+    } catch(RiposteException const& e) { 
+        _warning(thread, "Unable to load library " + name + " (" + e.kind() + "): " + e.what());
+    } 
 }
 
 void openDynamic(Thread& thread, std::string path, Environment* env) {
@@ -68,7 +64,6 @@ void loadPackage(Thread& thread, std::string path, std::string name) {
 		}
 		closedir(dir);
 	}
-	
 	// Load R files
 	p = path + "/" + name + ("/R/");
 	dir = opendir(p.c_str());

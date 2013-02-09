@@ -27,16 +27,13 @@ unlist <- function(x, recursive = TRUE, use.names = TRUE) {
 	x <- .External(unlist(x, as.logical(recursive), as.logical(use.names)))
 }
 
-eval <- function(expr, envir=parent.frame()) .External(eval(expr, envir, NULL))
-evalq <- function(expr, envir=parent.frame()) .External(eval(quote(expr), envir, NULL))
-eval.parent <- function(expr, n=1) .External(eval(expr, parentframe(n+1), NULL))
-local <- function(expr, envir=new.env()) .External(eval(expr, envir, NULL))
+eval <- function(expr, envir, enclos) .External(eval(expr, envir, NULL))
 
 source <- function(x) .External(source(x))
 
-parent.frame <- function(n=1) .External(parentframe(n+1))
-environment <- function(x=NULL) if(is.null(x)) parent.frame() else .External(environment(x))
-new.env <- function() .External(new.env())
+parent.frame <- function(n) .External(parentframe(n+1))
+environment <- function(x) if(is.null(x)) parent.frame(1) else .External(environment(x))
+new.env <- function(hash, parent, size) .External(newenv())
 sys.call <- function(which=0) .External(sys.call(which+1))
 alist <- function(...) as.list(sys.call())[-1L]
 #rm <- function(...) .External(remove(as.character(sys.call())[-1L], parent.frame()))
@@ -49,8 +46,8 @@ substitute <- function(x) .External(substitute(x))
 
 typeof <- function(x) .External(typeof(x))
 
-exists <- function(x, envir, inherits=TRUE) {
-	if(missing(envir)) envir <- parent.frame()
+exists <- function(x, envir, mode, inherits=TRUE) {
+	if(missing(envir)) envir <- parent.frame(1)
 	.External(exists(x, envir, inherits, NULL))
 }
 

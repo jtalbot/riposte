@@ -932,6 +932,7 @@ Value Thread::eval(Prototype const* prototype) {
 
 Value Thread::eval(Prototype const* prototype, Environment* environment) {
 	uint64_t stackSize = stack.size();
+    StackFrame oldFrame = frame;
 
 	// make room for the result
 	Instruction const* run = buildStackFrame(*this, environment, prototype, 0, (Instruction const*)0);
@@ -941,6 +942,7 @@ Value Thread::eval(Prototype const* prototype, Environment* environment) {
 		return frame.registers[0];
 	} catch(...) {
 		stack.resize(stackSize);
+        frame = oldFrame;
 		throw;
 	}
 }
