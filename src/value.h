@@ -539,7 +539,9 @@ public:
 		return const_iterator(this, size);
 	}
 
-	 void visit() const;
+	void visit() const;
+
+    uint64_t Size() const { return load; }
 };
 
 class Environment : public Dictionary {

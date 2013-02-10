@@ -229,7 +229,7 @@ public:
 		return 0;
 	}
 
-	Value eval(Prototype const* prototype, Environment* environment); 
+	Value eval(Prototype const* prototype, Environment* environment, int64_t resultSlot = 0); 
 	Value eval(Prototype const* prototype);
 	
 	void doall(Task::HeaderPtr header, Task::FunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment=1, uint64_t ppt = 1) {

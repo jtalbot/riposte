@@ -9,12 +9,6 @@ system.time <- function(expr) {
 	.External(proctime())-start
 }
 
-paste <- function(..., sep = " ", collapse = NULL) {
-	r <- mapply(function(...) .External(paste(list(...), sep)), ...)
-	if(!is.null(collapse)) .External(paste(r, collapse))
-	else unlist.default(r)
-}
-
 anyDuplicated <- function(x) {
 	for(i in seq_len(length(x)-1)) {
 		for(j in (i+1):length(x)) {
@@ -46,11 +40,23 @@ dim <- function(x) attr(x, 'dim')
     x
 }
 
-class <- function(x) attr(x, 'class')
+class <- function(x) {
+    r <- attr(x, 'class')
+    if(is.null(r)) {
+        r <- typeof(x)
+        if(r == 'double')
+            r <- 'numeric'
+    }
+    r
+}
+
 `class<-` <- function(x, value) {
     attr(x, 'class') <- as.character(value)
     x
 }
+
+oldClass <- function(x) attr(x, 'class')
+`oldClass<-` <- function(x, value) attr(x, 'class') <- as.character(value)
 
 dimnames <- function(x) attr(x, 'dimnames')
 `dimnames<-` <- function(x, value) {
@@ -71,4 +77,8 @@ rep.int <- function(x, times) {
 		x[.External(repeat2(times, sum(times)))]
 	else
 		x[index(length(x), 1, times*length(x))]
+}
+
+attributes <- function(x) {
+    .External(getAttributes(x))
 }

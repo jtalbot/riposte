@@ -183,7 +183,16 @@ void RoundBinaryDispatch(Thread& thread, Value a, Value b, Value& c) {
 }
 
 template< template<typename T> class Op >
-void ArithFoldDispatch(Thread& thread, Value const& a, Value& c) {
+void ArithFold1Dispatch(Thread& thread, Value const& a, Value& c) {
+	if(a.isDouble())	FoldLeft< Op<Double> >::eval(thread, (Double const&)a, c);
+	else if(a.isInteger())	FoldLeft< Op<Integer> >::eval(thread, (Integer const&)a, c);
+	else if(a.isLogical())	FoldLeft< Op<Logical> >::eval(thread, (Logical const&)a, c);
+	else if(a.isNull())	Op<Double>::Scalar(thread, Op<Double>::base(), c);
+	else _error("non-numeric argument to numeric fold operator");
+}
+
+template< template<typename T> class Op >
+void ArithFold2Dispatch(Thread& thread, Value const& a, Value& c) {
 	if(a.isDouble())	FoldLeft< Op<Double> >::eval(thread, (Double const&)a, c);
 	else if(a.isInteger())	FoldLeft< Op<Integer> >::eval(thread, (Integer const&)a, c);
 	else if(a.isLogical())	FoldLeft< Op<Logical> >::eval(thread, (Logical const&)a, c);

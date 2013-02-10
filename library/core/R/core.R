@@ -194,6 +194,10 @@ mapply <- function(FUN, ...) {
     a[[promise(b)]]
 }
 
+`$<-` <- function(x, i, value) {
+    x[[promise(i)]] <- value
+}
+
 `::` <- function(a, b) {
     getNamespace(promise(a))[[promise(b)]]
 }

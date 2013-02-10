@@ -620,8 +620,8 @@ static inline Instruction const* length_op(Thread& thread, Instruction const& in
 
 static inline Instruction const* mean_op(Thread& thread, Instruction const& inst) {
 	DECODE(a); FORCE(a); 
-	if(thread.traces.isTraceable<MomentFold>(a)) {
-		OUT(c) = thread.traces.EmitUnary<MomentFold>(thread.frame.environment, IROpCode::mean, a, 0);
+	if(thread.traces.isTraceable<ArithFold2>(a)) {
+		OUT(c) = thread.traces.EmitUnary<ArithFold2>(thread.frame.environment, IROpCode::mean, a, 0);
 		thread.traces.OptBind(thread, OUT(c));
  		return &inst+1;
 	}
@@ -927,19 +927,19 @@ void State::interpreter_init(Thread& thread) {
 }
 
 Value Thread::eval(Prototype const* prototype) {
-	return eval(prototype, frame.environment);
+	return eval(prototype, frame.environment, frame.prototype->registers);
 }
 
-Value Thread::eval(Prototype const* prototype, Environment* environment) {
+Value Thread::eval(Prototype const* prototype, Environment* environment, int64_t resultSlot) {
 	uint64_t stackSize = stack.size();
     StackFrame oldFrame = frame;
 
 	// make room for the result
-	Instruction const* run = buildStackFrame(*this, environment, prototype, 0, (Instruction const*)0);
+	Instruction const* run = buildStackFrame(*this, environment, prototype, -resultSlot, (Instruction const*)0);
 	try {
 		interpret(*this, run);
 		assert(stackSize == stack.size());
-		return frame.registers[0];
+		return frame.registers[resultSlot];
 	} catch(...) {
 		stack.resize(stackSize);
         frame = oldFrame;

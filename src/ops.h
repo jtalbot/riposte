@@ -120,10 +120,7 @@ template<> struct addBase<Double> { static Double::Element base() { return 0; } 
 template<> struct addBase<Integer> { static Integer::Element base() { return 0; } };
 template<> struct addBase<Logical> { static Integer::Element base() { return 0; } };
 
-template<class X> struct mulBase {};
-template<> struct mulBase<Double> { static Double::Element base() { return 1; } };
-template<> struct mulBase<Integer> { static Integer::Element base() { return 1; } };
-template<> struct mulBase<Logical> { static Integer::Element base() { return 1; } };
+template<class X> struct mulBase { static Double::Element base() { return 1; } };
 
 template<class X> struct lorBase { static Logical::Element base() { return Logical::FalseElement; } };
 

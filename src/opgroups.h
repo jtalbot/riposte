@@ -52,13 +52,21 @@ DEFAULT_TYPE_MEET(UNIFY_BINARY)
 #undef UNIFY_BINARY
 
 
-template<class X> struct ArithFold   { typedef X A; typedef Double MA; typedef Double R; };
-template<> struct ArithFold<Logical> { typedef Logical A; typedef Integer MA; typedef Integer R; };
-template<> struct ArithFold<Integer> { typedef Integer A; typedef Integer MA; typedef Integer R; };
+template<class X> struct ArithFold1   { typedef X A; typedef Double MA; typedef Double R; };
+template<> struct ArithFold1<Logical> { typedef Logical A; typedef Integer MA; typedef Integer R; };
+template<> struct ArithFold1<Integer> { typedef Integer A; typedef Integer MA; typedef Integer R; };
+
+template<class X> struct ArithFold2   { typedef X A; typedef Double MA; typedef Double R; };
 
 template<class X> struct UnifyFold { typedef X A; typedef X MA; typedef X R; };
 
 template<class X> struct LogicalFold { typedef X A; typedef Logical MA; typedef Logical R; };
+
+// Some special folds that we need to formalize
+template<class X> struct CountFold   { typedef X A; typedef X MA; typedef Integer R; };
+template<class X, class Y> struct Moment2Fold { 
+    typedef X A; typedef Y B; typedef Double MA; typedef Double MB; typedef Double R; };
+
 
 template<class X> struct ArithScan   { typedef X A; typedef Double MA; typedef Double R; };
 template<> struct ArithScan<Logical> { typedef Logical A; typedef Integer MA; typedef Integer R; };
@@ -67,12 +75,6 @@ template<> struct ArithScan<Integer> { typedef Integer A; typedef Integer MA; ty
 template<class X> struct UnifyScan { typedef X A; typedef X MA; typedef X R; };
 
 
-
-// Some special folds that we need to formalize
-template<class X> struct CountFold   { typedef X A; typedef X MA; typedef Integer R; };
-template<class X> struct MomentFold { typedef X A; typedef Double MA; typedef Double R; };
-template<class X, class Y> struct Moment2Fold { 
-    typedef X A; typedef Y B; typedef Double MA; typedef Double MB; typedef Double R; };
 
 
 // More complicated ops

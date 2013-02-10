@@ -61,8 +61,10 @@ struct Zip1 {
 			typename Op::A::Element const* ae = a.v();
 			int64_t length = a.length();
 			int64_t i = 0;
-			for(; i < length-3; i+=4) Map1<Op,4>::eval(thread, ae+i, re+i);
-			for(; i < length; i++) Map1<Op,1>::eval(thread, ae+i, re+i);
+			for(; i < length-3; i+=4)
+                Map1<Op,4>::eval(thread, ae+i, re+i);
+			for(; i < length; i++)
+                Map1<Op,1>::eval(thread, ae+i, re+i);
 			out = (Value&)r;
 		}
 	}

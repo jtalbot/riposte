@@ -119,9 +119,10 @@
 	_(split, "split", Split) \
     _(as, "as", As)
 
+// ArithFold1 ops perform [Integer]->Integer, ArithFold2 ops perform [Integer]->Double
 #define ARITH_FOLD_BYTECODES(_) \
-	_(sum, "sum",	ArithFold, 	add) \
-	_(prod, "prod",	ArithFold, 	mul) \
+	_(sum, "sum",	ArithFold1, 	add) \
+	_(prod, "prod",	ArithFold1, 	mul) \
 
 #define LOGICAL_FOLD_BYTECODES(_) \
 	_(any, "any",	LogicalFold, 	lor) \
@@ -133,8 +134,8 @@
 
 #define SPECIAL_FOLD_BYTECODES(_) \
 	_(length, "length", CountFold) \
-	_(mean, "mean", MomentFold) \
 	_(cm2, "cm2", Moment2Fold) \
+	_(mean, "mean", ArithFold2) \
 
 #define ARITH_SCAN_BYTECODES(_) \
 	_(cumsum, "cumsum",	ArithScan,	add) \

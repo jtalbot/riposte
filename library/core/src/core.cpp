@@ -677,3 +677,29 @@ Value repeat2(Thread& thread, Value const* args) {
 	return Repeat(a, len);
 }
 
+extern "C"
+Value getAttributes(Thread& thread, Value const* args) {
+    Value v = args[0];
+
+    if(!v.isObject() || !((Object const&)v).hasAttributes())
+        return Null::Singleton();
+
+    Dictionary* attributes = ((Object const&)v).attributes();
+    if(attributes->Size() == 0)
+        return Null::Singleton();
+
+    List result(attributes->Size());
+    Character names(attributes->Size());
+    
+    Dictionary::const_iterator it = attributes->begin();
+    for(size_t i = 0; i < attributes->Size(); i++) {
+        result[i] = it.value();
+        names[i] = it.string();
+        ++it;
+    }
+    Dictionary* d = new Dictionary(1);
+    d->insert(Strings::names) = names;
+    result.attributes(d);
+    return result;
+}
+

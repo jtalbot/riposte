@@ -14,16 +14,17 @@ is.integer <- function(x) typeof(x) == "integer"
 is.real <- function(x) typeof(x) == "double"
 is.double <- function(x) typeof(x) == "double"
 is.character <- function(x) typeof(x) == "character"
-is.symbol <- function(x) typeof(x) == "symbol"
 is.environment <- function(x) typeof(x) == "environment"
 is.list <- function(x) typeof(x) == "list"
-is.pairlist <- function(x) typeof(x) == "pairlist"
-is.expression <- function(x) typeof(x) == "expression"
 is.raw <- function(x) typeof(x) == "raw"
-is.call <- function(x) typeof(x) == "language" 
-is.primitive <- function(x) typeof(x) == "builtin"
 
-is.object <- function(x) "NYI"
+is.symbol <- function(x) class(x) == "symbol"
+is.pairlist <- function(x) class(x) == "pairlist"
+is.expression <- function(x) class(x) == "expression"
+is.call <- function(x) class(x) == "call" 
+is.primitive <- function(x) class(x) == "builtin"
+
+is.object <- function(x) !is.null(attr(x,'class'))
 
 is.numeric <- function(x) is.double(x) || is.integer(x)    #should also dispatch generic
 is.matrix <- function(x) is.numeric(dim(x))
