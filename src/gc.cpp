@@ -32,11 +32,11 @@ static void traverse(Value const& v) {
 			VISIT(((REnvironment const&)v).attributes());
 			VISIT(((REnvironment const&)v).environment());
 			break;
-		case Type::Function:
-			VISIT(((Function const&)v).attributes());
-			VISIT((Function::Inner const*)v.p);
-			VISIT(((Function const&)v).prototype());
-			VISIT(((Function const&)v).environment());
+		case Type::Closure:
+			VISIT(((Closure const&)v).attributes());
+			VISIT((Closure::Inner const*)v.p);
+			VISIT(((Closure const&)v).prototype());
+			VISIT(((Closure const&)v).environment());
 			break;
 		case Type::Double:
 			VISIT(((Double const&)v).attributes());

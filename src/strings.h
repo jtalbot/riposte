@@ -6,30 +6,34 @@
 
 // predefined strings
 
-#define STRINGS(_) 			\
-	/* must match types */ 		\
-	_(Null, 	"NULL")		\
-	_(Raw, 		"raw")		\
-	_(Logical, 	"logical")	\
-	_(Integer, 	"integer")	\
-	_(Double, 	"double")	\
-	_(Complex, 	"complex")	\
-	_(Character, 	"character")	\
-	_(List,		"list")		\
-	_(Function,	"function")	\
-	_(BuiltIn,	"builtin")	\
+#define STRINGS(_) 			        \
+	/* Type names */ 		        \
+	_(Nil,		    "nil")		    \
+	_(Promise, 	    "promise") 	    \
+	_(Future,	    "future")		\
+	_(Closure,	    "closure")	    \
 	_(Environment,	"environment")	\
-	_(Object,	"object")	\
-	_(Promise, 	"promise") 	\
-	_(Default, 	"default") 	\
-	_(Dotdot, 	"dotdot") 	\
-	_(Nil,		"nil")		\
-	_(Future,	"future")		\
-	_(Date, "date")		\
-	/* Now all other strings */	\
-	_(NArep, 	"<NA>") \
-	_(empty, 	"") \
-	_(dots, 	"...") \
+	_(Null, 	    "NULL")		    \
+	_(Raw, 		    "raw")		    \
+	_(Logical, 	    "logical")	    \
+	_(Integer, 	    "integer")	    \
+	_(Double, 	    "double")	    \
+	_(Character, 	"character")	\
+	_(List,		    "list")		    \
+	/* Constant strings */	        \
+	_(empty, 	    "")             \
+	_(NArep, 	    "<NA>")         \
+	_(dots, 	    "...")          \
+    _(assignTmp,    "*tmp*")        \
+	_(Maximal,      "\255")         \
+    /* Primitive functions */ \
+	_(Complex, 	    "complex")	\
+	_(Function,	    "function")	\
+	_(BuiltIn,	    "builtin")	\
+	_(Object,	    "object")	\
+	_(Default, 	    "default") 	\
+	_(Dotdot, 	    "dotdot") 	\
+	_(Date,         "date")		\
 	_(Name, 	"name") \
 	_(Numeric, 	"numeric") \
 	_(Pairlist,	"pairlist")	\
@@ -150,11 +154,23 @@
 	_(attrset,	"attr<-") \
 	_(Re,	"Re") \
 	_(Im,	"Im") \
-    _(assignTmp, "*tmp*") \
     _(as, "as") \
     _(getNamespace, "getNamespace") \
     _(promise, "promise") \
-	_(Maximal, "\255")
+    _(getenv, ".getenv") \
+    _(setenv, ".setenv") \
+    _(ls, "ls") \
+    _(body, "body") \
+    _(formals, "formals") \
+    _(attributes, "attributes") \
+    _(pr_expr, ".pr_expr") \
+    _(pr_env, ".pr_env") \
+    _(env_new, ".env_new") \
+    _(env_exists, ".env_exists") \
+    _(env_remove, ".env_remove") \
+    _(fm_fn, ".fm_fn") \
+    _(fm_call, ".fm_call") \
+    _(fm_env, ".fm_env") \
 
 typedef const char* String;
 

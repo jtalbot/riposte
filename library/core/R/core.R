@@ -1,14 +1,3 @@
-# TODO: actually populate this correctly
-.Platform <- list(
-    OS.type="unix", 
-    file.sep="/", 
-    dynlib.ext=".so", 
-    GUI="X11", 
-    endian="little", 
-    pkgType="mac.binary.leopard", 
-    path.sep=":", 
-    r_arch="x86_64"
-    )
 
 nargs <- function() { length(.External(sys_call(1L)))-1L }
 
@@ -191,13 +180,13 @@ mapply <- function(FUN, ...) {
 }
 
 `$` <- function(a, b) {
-    a[[promise(b)]]
+    a[[strip(.pr_expr(quote(b), environment(NULL)))]]
 }
 
 `$<-` <- function(x, i, value) {
-    x[[promise(i)]] <- value
+    x[[strip(.pr_expr(quote(i), environment(NULL)))]] <- value
 }
 
 `::` <- function(a, b) {
-    getNamespace(promise(a))[[promise(b)]]
+    getNamespace(.pr_expr(quote(a), environment(NULL)))[[.pr_expr(quote(b), environment(NULL))]]
 }

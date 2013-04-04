@@ -1,3 +1,5 @@
+library('base')
+
 mode(TRUE)
 mode(1L)
 mode(1)

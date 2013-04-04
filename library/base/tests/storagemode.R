@@ -1,3 +1,6 @@
+
+library('base')
+
 storage.mode(TRUE)
 storage.mode(1L)
 storage.mode(1)

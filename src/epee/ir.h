@@ -12,6 +12,8 @@
 		FOLD_BYTECODES(_) \
 		SPECIAL_FOLD_BYTECODES(_) \
 		SCAN_BYTECODES(_) \
+        _(length, "length", ___) \
+        /*_(as, "as", ___)*/ \
 		_(addc, "addc", ___) \
 		_(mulc, "mulc", ___) \
 		_(cast, "cast", ___) \

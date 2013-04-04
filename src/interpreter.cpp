@@ -95,14 +95,14 @@ static inline Instruction const* force(Thread& thread, Instruction const& inst, 
 	} 
 }
 
-// Control flow instructions
+// CONTROL_FLOW_BYTECODES 
 
 static inline Instruction const* call_op(Thread& thread, Instruction const& inst) {
 	Heap::Global.collect(thread.state);
 	DECODE(a); FORCE(a); BIND(a);
-	if(!a.isFunction())
+	if(!a.isClosure())
 		_error(std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n");
-	Function const& func = (Function const&)a;
+	Closure const& func = (Closure const&)a;
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
 	Environment* fenv = new Environment((int64_t)call.arguments.size(), func.environment(), thread.frame.environment, call.call);
@@ -114,9 +114,9 @@ static inline Instruction const* call_op(Thread& thread, Instruction const& inst
 static inline Instruction const* fastcall_op(Thread& thread, Instruction const& inst) {
 	Heap::Global.collect(thread.state);
 	DECODE(a); FORCE(a); BIND(a);
-	if(!a.isFunction())
+	if(!a.isClosure())
 		_error(std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n");
-	Function const& func = (Function const&)a;
+	Closure const& func = (Closure const&)a;
 	
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
 	Environment* fenv = new Environment((int64_t)call.arguments.size(), func.environment(), thread.frame.environment, call.call);
@@ -132,7 +132,7 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
 	// We can free this environment for reuse
 	// as long as we don't return a closure...
 	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
-	if(!(a.isFunction() || a.isEnvironment() || a.isList())) {
+	if(!(a.isClosure() || a.isEnvironment() || a.isList())) {
 		thread.traces.KillEnvironment(thread.frame.environment);
 	}
 
@@ -143,6 +143,17 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
 	thread.traces.LiveEnvironment(thread.frame.environment, a);
 
 	return returnpc;
+}
+
+static inline Instruction const* rets_op(Thread& thread, Instruction const& inst) {
+	// top-level statements can't return futures, so bind 
+	DECODE(a); FORCE(a); BIND(a);	
+	
+	REGISTER(0) = a;
+	thread.pop();
+	
+	// there should always be a done_op after a rets
+	return &inst+1;
 }
 
 static inline Instruction const* retp_op(Thread& thread, Instruction const& inst) {
@@ -160,17 +171,6 @@ static inline Instruction const* retp_op(Thread& thread, Instruction const& inst
 	thread.pop();
 	
 	return returnpc;
-}
-
-static inline Instruction const* rets_op(Thread& thread, Instruction const& inst) {
-	// top-level statements can't return futures, so bind 
-	DECODE(a); FORCE(a); BIND(a);	
-	
-	REGISTER(0) = a;
-	thread.pop();
-	
-	// there should always be a done_op after a rets
-	return &inst+1;
 }
 
 static inline Instruction const* done_op(Thread& thread, Instruction const& inst) {
@@ -255,7 +255,142 @@ static inline Instruction const* forend_op(Thread& thread, Instruction const& in
 	}
 }
 
-static inline Instruction const* dotslist_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* mov_op(Thread& thread, Instruction const& inst) {
+	DECODE(a); FORCE(a); BIND(a);
+	OUT(c) = a;
+	return &inst+1;
+}
+
+static inline Instruction const* fastmov_op(Thread& thread, Instruction const& inst) {
+	DECODE(a); FORCE(a); // fastmov assumes we don't need to bind. So next op better be able to handle a future 
+	OUT(c) = a;
+	return &inst+1;
+}
+
+static inline Instruction const* external_op(Thread& thread, Instruction const& inst) {
+	String name = (String)inst.a;
+    void* func = NULL;
+    for(std::map<std::string,void*>::iterator i = thread.state.handles.begin();
+        i != thread.state.handles.end(); ++i) {
+        func = dlsym(i->second, name);
+        if(func != NULL)
+            break;
+    }
+    if(func == NULL)
+        _error("Can't find external function");
+
+    uint64_t nargs = inst.b;
+	for(int64_t i = 0; i < nargs; i++) {
+		BIND(REGISTER(inst.c-i));
+	}
+    {
+        typedef Value (*Func)(Thread&, Value const*);
+        Func f = (Func)func;
+        OUT(c) = f(thread, &REGISTER(inst.c));
+    }
+	return &inst+1;
+}
+
+// LOAD_STORE_BYTECODES
+
+static inline Instruction const* load_op(Thread& thread, Instruction const& inst) {
+	String s = ((Character const&)CONSTANT(inst.a)).s;
+	Environment* env;
+	Value const& v = thread.frame.environment->getRecursive(s, env);
+
+	if(!v.isObject()) {
+		return force(thread, inst, v, env, s);
+	}
+	else {
+		OUT(c) = v;
+		return &inst+1;
+	}
+}
+
+static inline Instruction const* loadfn_op(Thread& thread, Instruction const& inst) {
+	String s = ((Character const&)CONSTANT(inst.a)).s;
+	Environment* env = thread.frame.environment;
+
+    // Iterate until we find a function
+    do {
+	    Value const& v = env->getRecursive(s, env);
+
+	    if(!v.isObject()) {
+		    return force(thread, inst, v, env, s);
+	    }
+        else if(v.isClosure()) {
+            OUT(c) = v;
+            return &inst+1;
+        }
+        env = env->LexicalScope();
+	} while(env != 0);
+
+    _error("loadfn failed to find value");
+}
+
+static inline Instruction const* store_op(Thread& thread, Instruction const& inst) {
+    String s = ((Character const&)CONSTANT(inst.a)).s; 
+	DECODE(c); // don't BIND or FORCE
+	thread.frame.environment->insert(s) = c;
+	return &inst+1;
+}
+
+static inline Instruction const* storeup_op(Thread& thread, Instruction const& inst) {
+	// assign2 is always used to assign up at least one scope level...
+	// so start off looking up one level...
+	assert(thread.frame.environment->LexicalScope() != 0);
+
+    // TODO: just BIND in this scenario instead of tracking liveness?
+	
+	DECODE(c); /* FORCE(c); BIND(value);*/
+	
+	String s = ((Character const&)CONSTANT(inst.a)).s;
+	Environment* penv;
+	Value& dest = thread.frame.environment->LexicalScope()->insertRecursive(s, penv);
+
+	if(!dest.isNil()) {
+		dest = c;
+		thread.traces.LiveEnvironment(penv, dest);
+	}
+	else {
+		Value& global = thread.state.global->insert(s);
+		global = c;
+		thread.traces.LiveEnvironment(thread.state.global, global);
+	}
+	return &inst+1;
+}
+
+static inline Instruction const* rm_op(Thread& thread, Instruction const& inst) {
+	thread.frame.environment->remove( (String)inst.a );
+	OUT(c) = Null::Singleton();
+    return &inst+1;
+}
+
+static inline Instruction const* dotsv_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+
+    int64_t idx = 0;
+    if(a.isInteger1())
+        idx = ((Integer const&)a)[0] - 1;
+    else if(a.isDouble1())
+        idx = (int64_t)((Double const&)a)[0] - 1;
+    else
+        _error(std::string("Invalid type in dotsv: "));
+
+	if(idx >= (int64_t)thread.frame.environment->dots.size())
+        _error(std::string("The '...' list does not contain ") + intToStr(idx+1) + " elements");
+	
+    DOTDOT(v, idx); FORCE_DOTDOT(v, idx); // no need to bind since value is in a register
+	OUT(c) = v;
+	return &inst+1;
+}
+
+static inline Instruction const* dotsc_op(Thread& thread, Instruction const& inst) {
+    OUT(c) = Integer::c((int64_t)thread.frame.environment->dots.size());
+    return &inst+1;
+}
+
+static inline Instruction const* dots_op(Thread& thread, Instruction const& inst) {
 	PairList const& dots = thread.frame.environment->dots;
 	
 	Value& iter = REGISTER(inst.a);
@@ -292,96 +427,178 @@ static inline Instruction const* dotslist_op(Thread& thread, Instruction const& 
 	return &inst;
 }
 
-static inline Instruction const* list_op(Thread& thread, Instruction const& inst) {
-	Heap::Global.collect(thread.state);
-	List out(inst.b);
-	for(int64_t i = 0; i < inst.b; i++) {
-		Value& r = REGISTER(inst.a-i);
-		out[i] = r;
-	}
-	OUT(c) = out;
-	return &inst+1;
-}
-
-// Memory access ops
-
-static inline Instruction const* assign_op(Thread& thread, Instruction const& inst) {
-	DECODE(c); FORCE(c); // don't BIND 
-	thread.frame.environment->insert((String)inst.a) = c;
-	return &inst+1;
-}
-
-static inline Instruction const* assign2_op(Thread& thread, Instruction const& inst) {
-	// assign2 is always used to assign up at least one scope level...
-	// so start off looking up one level...
-	assert(thread.frame.environment->LexicalScope() != 0);
-	
-	DECODE(c); FORCE(c); /*BIND(value);*/
-	
+static inline Instruction const* missing_op(Thread& thread, Instruction const& inst) {
 	String s = ((Character const&)CONSTANT(inst.a)).s;
-	Environment* penv;
-	Value& dest = thread.frame.environment->LexicalScope()->insertRecursive(s, penv);
-
-	if(!dest.isNil()) {
-		dest = c;
-		thread.traces.LiveEnvironment(penv, dest);
-	}
-	else {
-		Value& global = thread.state.global->insert(s);
-		global = c;
-		thread.traces.LiveEnvironment(thread.state.global, global);
-	}
+	Value const& v = thread.frame.environment->get(s);
+	bool missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
+	Logical::InitScalar(OUT(c), missing ? Logical::TrueElement : Logical::FalseElement);
 	return &inst+1;
 }
 
-static inline Instruction const* mov_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); BIND(a);
-	OUT(c) = a;
-	return &inst+1;
-}
+static inline Instruction const* getns_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+	String s = ((Character const&)a).s;
+    std::map<String, Environment*>::const_iterator i = thread.state.namespaces.find(s);
+    if(i == thread.state.namespaces.end())
+        _error("There is no such namespace");
 
-static inline Instruction const* fastmov_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); // fastmov assumes we don't need to bind. So next op better be able to handle a future 
-	OUT(c) = a;
-	return &inst+1;
-}
-
-static inline Instruction const* rm_op(Thread& thread, Instruction const& inst) {
-	thread.frame.environment->remove( (String)inst.a );
-	OUT(c) = Null::Singleton();
+    Environment* env = i->second;
+    REnvironment::Init(OUT(c), env);
     return &inst+1;
 }
 
-static inline Instruction const* dotdot_op(Thread& thread, Instruction const& inst) {
-	if(inst.a >= (int64_t)thread.frame.environment->dots.size())
-        	_error(std::string("The '...' list does not contain ") + intToStr(inst.a+1) + " elements");
-	DOTDOT(a, inst.a); FORCE_DOTDOT(a, inst.a); // no need to bind since value is in a register
-	OUT(c) = a;
+// STACK_FRAME_BYTECODES
+static inline Instruction const* fm_fn_op(Thread& thread, Instruction const& inst) {
+    _error("fm_fn NYI");
+}
+
+static inline Instruction const* fm_call_op(Thread& thread, Instruction const& inst) {
+    _error("fm_fn NYI");
+}
+
+static inline Instruction const* fm_env_op(Thread& thread, Instruction const& inst) {
+    _error("fm_fn NYI");
+}
+
+// PROMISE_BYTECODES
+
+static inline Instruction const* pr_new_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+    DECODE(b); FORCE(b); BIND(b);
+
+    if(!b.isEnvironment())
+        _error("pr_new: Promise environment is the wrong type");
+    
+    Promise::Init(OUT(c),
+        ((REnvironment const&)b).environment(),
+        Compiler::compilePromise(thread, a),
+        false);
+    
+    return &inst+1;
+}
+
+static inline Instruction const* pr_expr_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+    DECODE(b); FORCE(b); BIND(b);
+
+    // TODO: check types
+
+    REnvironment const& env = ((REnvironment const&)a);
+	String s = ((Character const&)b).s;
+	Value v = env.environment()->get(s);
+    if(v.isPromise())
+        v = ((Promise const&)v).prototype()->expression;
+    else if(v.isNil())
+        v = Null::Singleton();
+	OUT(c) = v;
+    return &inst+1;
+}
+
+static inline Instruction const* pr_env_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+    DECODE(b); FORCE(b); BIND(b);
+
+    // TODO: check types
+
+    REnvironment const& env = ((REnvironment const&)a);
+	String s = ((Character const&)b).s;
+	Value v = env.environment()->get(s);
+    if(v.isPromise())
+        REnvironment::Init(v, ((Promise const&)v).environment());
+    else
+        v = Null::Singleton();
+	OUT(c) = v;
+    return &inst+1;
+}
+
+// OBJECT_BYTECODES
+
+static inline Instruction const* type_op(Thread& thread, Instruction const& inst) {
+	DECODE(a); FORCE(a);
+	switch(thread.traces.futureType(a)) {
+        #define CASE(name, str, ...) case Type::name: OUT(c) = Character::c(Strings::name); break;
+        TYPES(CASE)
+        #undef CASE
+        default: _error("Unknown type in type to string, that's bad!"); break;
+    }
 	return &inst+1;
 }
 
-static inline Instruction const* iassign_op(Thread& thread, Instruction const& inst) {
-	// a = value, b = index, c = dest 
+static inline Instruction const* length_op(Thread& thread, Instruction const& inst) {
 	DECODE(a); FORCE(a); 
-	DECODE(b); FORCE(b); BIND(b); 
-	DECODE(c); FORCE(c); BIND(c); 
-	
-	if(a.isFuture() && (c.isVector() || c.isFuture())) {
-		if(b.isInteger() && ((Integer const&)b).length() == 1) {
-			OUT(c) = thread.traces.EmitSStore(thread.frame.environment, c, ((Integer&)b)[0], a);
-			return &inst+1;
-		}
-		else if(b.isDouble() && ((Double const&)b).length() == 1) {
-			OUT(c) = thread.traces.EmitSStore(thread.frame.environment, c, ((Double&)b)[0], a);
-			return &inst+1;
+	if(a.isVector())
+		Integer::InitScalar(OUT(c), ((Vector const&)a).length());
+	else if(a.isFuture()) {
+		IRNode::Shape shape = thread.traces.futureShape(a);
+		if(shape.split < 0 && shape.filter < 0) {
+			Integer::InitScalar(OUT(c), shape.length);
+		} else {
+			OUT(c) = thread.traces.EmitUnary<CountFold>(thread.frame.environment, IROpCode::length, a, 0);
+			thread.traces.OptBind(thread, OUT(c));
 		}
 	}
-
-	BIND(a);
-	SubsetAssign(thread, c, true, b, a, OUT(c));
+	else if(((Object const&)a).hasAttributes()) { 
+		return GenericDispatch(thread, inst, Strings::length, a, inst.c); 
+	} else {
+		Integer::InitScalar(OUT(c), 1);
+	}
 	return &inst+1;
 }
-static inline Instruction const* eassign_op(Thread& thread, Instruction const& inst) {
+
+static inline Instruction const* get_op(Thread& thread, Instruction const& inst) {
+	DECODE(a); FORCE(a); BIND(a);
+	DECODE(b);
+	if(a.isVector()) {
+		int64_t index = 0;
+		if(b.isDouble1()) { index = b.d-1; }
+		else if(b.isInteger1()) { index = b.i-1; }
+		else if(b.isLogical1() && Logical::isTrue(b.c)) { index = 0; }
+		else if(b.isVector() && (((Vector const&)b).length() == 0 || ((Vector const&)b).length() > 1)) { 
+			_error("Attempt to select less or more than 1 element in subset2"); 
+		}
+		else { _error("Subscript out of bounds"); }
+		Element2(a, index, OUT(c));
+		return &inst+1;
+	}
+ 	FORCE(b); BIND(b);
+	if(((Object const&)a).hasAttributes() || ((Object const&)b).hasAttributes()) { return GenericDispatch(thread, inst, Strings::bb, a, b, inst.c); }
+
+    if(a.isEnvironment() && b.isCharacter1()) {
+	    String s = ((Character const&)b).s;
+        Value const& v = ((REnvironment&)a).environment()->get(s);
+        if(!v.isObject()) {
+            return force(thread, inst, v, ((REnvironment&)a).environment(), s); 
+        }
+        else {
+            OUT(c) = v;
+            return &inst+1;
+        }
+    }
+    if(a.isClosure() && b.isCharacter1()) {
+        Closure const& f = (Closure const&)a;
+	    String s = ((Character const&)b).s;
+        if(s == Strings::body) {
+            OUT(c) = f.prototype()->expression;
+            return &inst+1;
+        }
+        else if(s == Strings::formals) {
+            Character n(f.prototype()->parametersSize);
+            List v(f.prototype()->parametersSize);
+            for(size_t i = 0; i < f.prototype()->parametersSize; i++) {
+                n[i] = f.prototype()->parameters[i].n;
+                v[i] = f.prototype()->parameters[i].v;
+            }
+			Dictionary* d = new Dictionary(1);
+			d->insert(Strings::names) = n;
+			((Object&)v).attributes(d);
+            OUT(c) = v;
+            return &inst+1;
+        }
+    } 
+	_error("Invalid subset2 operation");
+}
+
+static inline Instruction const* set_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest
 	DECODE(a); FORCE(a);
 	DECODE(b); FORCE(b); BIND(b);
@@ -400,11 +617,24 @@ static inline Instruction const* eassign_op(Thread& thread, Instruction const& i
 
 	BIND(a);
 	BIND(c);
-	Subset2Assign(thread, c, true, b, a, OUT(c));
+	
+    if(c.isEnvironment() && b.isCharacter1()) {
+	    String s = ((Character const&)b).s;
+        ((REnvironment&)c).environment()->insert(s) = a;
+        OUT(c) = c;
+        return &inst+1;
+    }
+    if(c.isClosure() && b.isCharacter1()) {
+        //Closure const& f = (Closure const&)c;
+	    //String s = ((Character const&)b).s;
+        // TODO: implement assignment to function members
+        _error("Assignment to function members is not yet implemented");
+    }
+    Subset2Assign(thread, c, true, b, a, OUT(c));
 	return &inst+1; 
 }
 
-static inline Instruction const* subset_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* getsub_op(Thread& thread, Instruction const& inst) {
 	DECODE(a); 
 	DECODE(b);
 
@@ -447,65 +677,83 @@ static inline Instruction const* subset_op(Thread& thread, Instruction const& in
 	return &inst+1;
 }
 
-static inline Instruction const* subset2_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); BIND(a);
-	DECODE(b);
-	if(a.isVector()) {
-		int64_t index = 0;
-		if(b.isDouble1()) { index = b.d-1; }
-		else if(b.isInteger1()) { index = b.i-1; }
-		else if(b.isLogical1() && Logical::isTrue(b.c)) { index = 0; }
-		else if(b.isVector() && (((Vector const&)b).length() == 0 || ((Vector const&)b).length() > 1)) { 
-			_error("Attempt to select less or more than 1 element in subset2"); 
+static inline Instruction const* setsub_op(Thread& thread, Instruction const& inst) {
+	// a = value, b = index, c = dest 
+	DECODE(a); FORCE(a); 
+	DECODE(b); FORCE(b); BIND(b); 
+	DECODE(c); FORCE(c); BIND(c); 
+	
+	if(a.isFuture() && (c.isVector() || c.isFuture())) {
+		if(b.isInteger() && ((Integer const&)b).length() == 1) {
+			OUT(c) = thread.traces.EmitSStore(thread.frame.environment, c, ((Integer&)b)[0], a);
+			return &inst+1;
 		}
-		else { _error("Subscript out of bounds"); }
-		Element2(a, index, OUT(c));
-		return &inst+1;
+		else if(b.isDouble() && ((Double const&)b).length() == 1) {
+			OUT(c) = thread.traces.EmitSStore(thread.frame.environment, c, ((Double&)b)[0], a);
+			return &inst+1;
+		}
 	}
- 	FORCE(b); BIND(b);
-	if(((Object const&)a).hasAttributes() || ((Object const&)b).hasAttributes()) { return GenericDispatch(thread, inst, Strings::bb, a, b, inst.c); }
+
+	BIND(a);
+	SubsetAssign(thread, c, true, b, a, OUT(c));
+	return &inst+1;
+}
+
+static inline Instruction const* getenv_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
 
     if(a.isEnvironment()) {
-	    String s = ((Character const&)b).s;
-        Value const& v = ((REnvironment&)a).environment()->get(s);
-        if(!v.isObject()) {
-            return force(thread, inst, v, ((REnvironment&)a).environment(), s); 
-        }
-        else {
-            OUT(c) = v;
-            return &inst+1;
-        }
-    } 
-	_error("Invalid subset2 operation");
-}
-
-static inline Instruction const* get_op(Thread& thread, Instruction const& inst) {
-	String s = ((Character const&)CONSTANT(inst.a)).s;
-	Environment* env;
-	Value const& v = thread.frame.environment->getRecursive(s, env);
-
-	if(!v.isObject()) {
-		return force(thread, inst, v, env, s);
-	}
-	else {
-		OUT(c) = v;
-		return &inst+1;
-	}
-}
-
-static inline Instruction const* getns_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
-	String s = ((Character const&)a).s;
-    std::map<String, Environment*>::const_iterator i = thread.state.namespaces.find(s);
-    if(i == thread.state.namespaces.end())
-        _error("There is no such namespace");
-
-    Environment* env = i->second;
-    REnvironment::Init(OUT(c), env);
+        Environment* parent = ((REnvironment const&)a).environment()->LexicalScope();
+        if(parent == 0)
+            _error("environment does not have a parent");
+        REnvironment::Init(OUT(c), parent);
+    }
+    else if(a.isClosure()) {
+        REnvironment::Init(OUT(c), ((Closure const&)a).environment());
+    }
+    else if(a.isNull()) {
+        REnvironment::Init(OUT(c), thread.frame.environment);
+    }
+    else {
+        OUT(c) = Null::Singleton();
+    }
     return &inst+1;
 }
 
-static inline Instruction const* attrget_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* setenv_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+    DECODE(b); FORCE(b); BIND(b);
+
+    if(!b.isEnvironment())
+        _error("replacement object is not an environment");
+
+    Environment* value = ((REnvironment const&)b).environment();
+
+    if(a.isEnvironment()) {
+        Environment* target = ((REnvironment const&)a).environment();
+        
+        // Riposte allows parent environment replacement,
+        // but requires that no loops be introduced in the environment chain.
+        Environment* p = value;
+        while(p) {
+            if(p == target) 
+                _error("an environment cannot be its own ancestor");
+            p = p->LexicalScope();
+        }
+        
+        ((REnvironment const&)a).environment()->lexical = ((REnvironment const&)b).environment();
+        OUT(c) = a;
+    }
+    else if(a.isClosure()) {
+        Closure::Init(OUT(c), ((Closure const&)a).prototype(), value);
+    }
+    else {
+        _error("target of assignment does not have an enclosing environment");
+    }
+    return &inst+1;
+}
+
+static inline Instruction const* getattr_op(Thread& thread, Instruction const& inst) {
 	DECODE(a); FORCE(a);
 	DECODE(b); FORCE(b); BIND(b);
 	if(a.isObject() && b.isCharacter1()) {
@@ -520,7 +768,7 @@ static inline Instruction const* attrget_op(Thread& thread, Instruction const& i
 	_error("Invalid attrget operation");
 }
 
-static inline Instruction const* attrset_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* setattr_op(Thread& thread, Instruction const& inst) {
 	DECODE(c); FORCE(c);
 	DECODE(b); FORCE(b); BIND(b);
 	DECODE(a); FORCE(a); BIND(a);
@@ -538,6 +786,144 @@ static inline Instruction const* attrset_op(Thread& thread, Instruction const& i
 	_error("Invalid attrset operation");
 }
 
+static inline Instruction const* attributes_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a);
+    if(a.isObject()) {
+        Object o = (Object const&)a;
+        if(!o.hasAttributes() || o.attributes()->Size() == 0) {
+            OUT(c) = Null::Singleton();
+        }
+        else {
+            Character n(o.attributes()->Size());
+            List v(o.attributes()->Size());
+            int64_t j = 0;
+            for(Dictionary::const_iterator i = o.attributes()->begin();
+                    i != o.attributes()->end(); 
+                    ++i, ++j) {
+                n[j] = i.string();
+                v[j] = i.value();
+            }
+			Dictionary* d = new Dictionary(1);
+			d->insert(Strings::names) = n;
+			((Object&)v).attributes(d);
+            OUT(c) = v;
+        }
+    }
+    else {
+        OUT(c) = Null::Singleton();
+    }
+    return &inst+1;
+}
+
+static inline Instruction const* strip_op(Thread& thread, Instruction const& inst) {
+	DECODE(a); FORCE(a);
+	Value& c = OUT(c);
+	c = a;
+	((Object&)c).attributes(0);
+	return &inst+1;
+}
+
+static inline Instruction const* as_op(Thread& thread, Instruction const& inst) {
+	DECODE(a); FORCE(a); BIND(a);
+	String type = (String)inst.b;
+    if(type == Strings::Null)
+        OUT(c) = As<Null>(thread, a);
+    else if(type == Strings::Logical)
+        OUT(c) = As<Logical>(thread, a);
+    else if(type == Strings::Integer)
+        OUT(c) = As<Integer>(thread, a);
+    else if(type == Strings::Double)
+        OUT(c) = As<Double>(thread, a);
+    else if(type == Strings::Character)
+        OUT(c) = As<Character>(thread, a);
+    else if(type == Strings::List)
+        OUT(c) = As<List>(thread, a);
+    else if(type == Strings::Raw)
+        OUT(c) = As<Raw>(thread, a);
+    else
+        _error("as not yet defined for this type");
+
+    // TODO: extend to work on e.g. environment->list and list->environment, etc.
+    // Add support for futures
+	return &inst+1; 
+}
+
+/*static inline Instruction const* env_ls_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+
+    if(!a.isEnvironment())
+        _error("invalid 'envir' argument");
+
+    Environment const* env = ((REnvironment&)a).environment();
+	
+    Character result(env->Size());
+
+    Environment::const_iterator i = env->begin();
+    uint64_t j = 0;
+    for(; i != env->end(); ++i, ++j) {
+        result[j] = i.string();
+    }
+
+    OUT(c) = result;
+
+    return &inst+1;
+}*/
+
+// ENVIRONMENT_BYTECODES
+
+static inline Instruction const* env_new_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+    DECODE(b); FORCE(b); BIND(b);
+
+    if(!a.isEnvironment())
+        _error("'enclos' must be an environment");
+
+    REnvironment::Init(OUT(c), new Environment(4,((REnvironment const&)a).environment(),0,Null::Singleton()));
+    return &inst+1;
+}
+
+static inline Instruction const* env_exists_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+    DECODE(b); FORCE(b); BIND(b);
+
+    if(!a.isEnvironment())
+        _error("invalid 'envir' argument");
+
+    if(!b.isCharacter() || b.pac != 1)
+        _error("invalid exists argument");
+
+    OUT(c) = ((REnvironment const&)a).environment()->has(((Character const&)b).s)
+                ? Logical::True() : Logical::False();
+    return &inst+1;
+}
+
+// TODO: appropriately generalize
+static inline Instruction const* env_remove_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+    DECODE(b); FORCE(b); BIND(b);
+
+    if(!a.isEnvironment())
+        _error("invalid 'envir' argument");
+
+    if(!b.isCharacter1())
+        _error("invalid remove argument");
+
+	((REnvironment const&)a).environment()->remove( ((Character const&)b).s );
+	OUT(c) = Null::Singleton();
+    return &inst+1;
+}
+
+// FUNCTION_BYTECODES
+
+static inline Instruction const* fn_new_op(Thread& thread, Instruction const& inst) {
+	Value const& function = CONSTANT(inst.a);
+	Value& out = OUT(c);
+	Closure::Init(out, ((Closure const&)function).prototype(), thread.frame.environment);
+	return &inst+1;
+}
+
+
+// VECTOR BYTECODES
 
 #define OP(Name, string, Group, Func) \
 static inline Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
@@ -596,27 +982,6 @@ static inline Instruction const* Name##_op(Thread& thread, Instruction const& in
 }
 BINARY_BYTECODES(OP)
 #undef OP
-
-static inline Instruction const* length_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); 
-	if(a.isVector())
-		Integer::InitScalar(OUT(c), ((Vector const&)a).length());
-	else if(a.isFuture()) {
-		IRNode::Shape shape = thread.traces.futureShape(a);
-		if(shape.split < 0 && shape.filter < 0) {
-			Integer::InitScalar(OUT(c), shape.length);
-		} else {
-			OUT(c) = thread.traces.EmitUnary<CountFold>(thread.frame.environment, IROpCode::length, a, 0);
-			thread.traces.OptBind(thread, OUT(c));
-		}
-	}
-	else if(((Object const&)a).hasAttributes()) { 
-		return GenericDispatch(thread, inst, Strings::length, a, inst.c); 
-	} else {
-		Integer::InitScalar(OUT(c), 1);
-	}
-	return &inst+1;
-}
 
 static inline Instruction const* mean_op(Thread& thread, Instruction const& inst) {
 	DECODE(a); FORCE(a); 
@@ -685,35 +1050,6 @@ static inline Instruction const* split_op(Thread& thread, Instruction const& ins
 	return &inst+1; 
 }
 
-static inline Instruction const* as_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); BIND(a);
-	String type = (String)inst.b;
-    if(type == Strings::Null)
-        OUT(c) = As<Null>(thread, a);
-    else if(type == Strings::Logical)
-        OUT(c) = As<Logical>(thread, a);
-    else if(type == Strings::Integer)
-        OUT(c) = As<Integer>(thread, a);
-    else if(type == Strings::Double)
-        OUT(c) = As<Double>(thread, a);
-    else if(type == Strings::Character)
-        OUT(c) = As<Character>(thread, a);
-    else if(type == Strings::List)
-        OUT(c) = As<List>(thread, a);
-    else if(type == Strings::Raw)
-        OUT(c) = As<Raw>(thread, a);
-    else
-        _error("as not yet defined for this type");
-	return &inst+1; 
-}
-
-static inline Instruction const* function_op(Thread& thread, Instruction const& inst) {
-	Value const& function = CONSTANT(inst.a);
-	Value& out = OUT(c);
-	Function::Init(out, ((Function const&)function).prototype(), thread.frame.environment);
-	return &inst+1;
-}
-
 static inline Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	DECODE(a); FORCE(a); BIND(a);
 	DECODE(b); FORCE(b); BIND(b);
@@ -749,7 +1085,11 @@ static inline Instruction const* vector_op(Thread& thread, Instruction const& in
 		Raw v(l);
 		for(int64_t i = 0; i < l; i++) v[i] = 0;
 		OUT(c) = v;
-	} else {
+	} else if(type == Type::List) {
+        List v(l);
+        for(int64_t i = 0; i < l; i++) v[i] = Null::Singleton();
+        OUT(c) = v;
+    } else {
 		_error("Invalid type in vector");
 	} 
 	return &inst+1;
@@ -816,82 +1156,6 @@ static inline Instruction const* random_op(Thread& thread, Instruction const& in
 
 	OUT(c) = RandomVector(thread, len);
 	return &inst+1;
-}
-
-static inline Instruction const* type_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a);
-	switch(thread.traces.futureType(a)) {
-                #define CASE(name, str, ...) case Type::name: OUT(c) = Character::c(Strings::name); break;
-                TYPES(CASE)
-                #undef CASE
-                default: _error("Unknown type in type to string, that's bad!"); break;
-        }
-	return &inst+1;
-}
-
-static inline Instruction const* missing_op(Thread& thread, Instruction const& inst) {
-	// TODO: in R this is recursive. If this function was passed a parameter that
-	// was missing in the outer scope, then it should be missing here too. But
-	// missingness doesn't propogate through expressions, leading to strange behavior:
-	// 	f <- function(x,y) g(x,y)
-	//	g <- function(x,y) missing(y)
-	//	f(1) => TRUE
-	// but
-	//	f <- function(x,y) g(x,y+1)
-	//	g <- function(x,y) missing(y)
-	//	f(1) => FALSE
-	// but
-	//	f <- function(x,y) g(x,y+1)
-	//	g <- function(x,y) y
-	//	f(1) => Error in y+1: 'y' is missing
-	// For now I'll keep the simpler non-recursive semantics. Missing solely means
-	// whether or not this scope was passed a value, irregardless of whether that
-	// value is missing at a higher level.
-	String s = ((Character const&)CONSTANT(inst.a)).s;
-	Value const& v = thread.frame.environment->get(s);
-	bool missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
-	Logical::InitScalar(OUT(c), missing ? Logical::TrueElement : Logical::FalseElement);
-	return &inst+1;
-}
-static inline Instruction const* strip_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a);
-	Value& c = OUT(c);
-	c = a;
-	((Object&)c).attributes(0);
-	return &inst+1;
-}
-
-static inline Instruction const* external_op(Thread& thread, Instruction const& inst) {
-	String name = (String)inst.a;
-    void* func = NULL;
-    for(std::map<std::string,void*>::iterator i = thread.state.handles.begin();
-        i != thread.state.handles.end(); ++i) {
-        func = dlsym(i->second, name);
-        if(func != NULL)
-            break;
-    }
-    if(func == NULL)
-        _error("Can't find external function");
-
-    uint64_t nargs = inst.b;
-	for(int64_t i = 0; i < nargs; i++) {
-		BIND(REGISTER(inst.c-i));
-	}
-    {
-        typedef Value (*Func)(Thread&, Value const*);
-        Func f = (Func)func;
-        OUT(c) = f(thread, &REGISTER(inst.c));
-    }
-	return &inst+1;
-}
-
-static inline Instruction const* promise_op(Thread& thread, Instruction const& inst) {
-	String s = ((Character const&)CONSTANT(inst.a)).s;
-	Value v = thread.frame.environment->get(s);
-    if(v.isPromise())
-        v = ((Promise const&)v).prototype()->expression;
-	OUT(c) = v;
-    return &inst+1;
 }
 
 //

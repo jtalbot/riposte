@@ -112,6 +112,7 @@ public:
     std::map<String, Environment*> namespaces;
 	
 	std::vector<Environment*> path;
+    Environment* empty;
 	Environment* global;
 
 	std::vector<Thread*> threads;
@@ -340,9 +341,9 @@ private:
 
 inline State::State(uint64_t threads, int64_t argc, char** argv) 
 	: verbose(false), epeeEnabled(true), format(State::RiposteFormat), done(0) {
-	Environment* base = new Environment(1,0,0,Null::Singleton());
-	this->global = new Environment(1,base,0,Null::Singleton());
-	path.push_back(base);
+	this->empty = new Environment(1,0,0,Null::Singleton());
+	this->global = new Environment(1,empty,0,Null::Singleton());
+	path.push_back(empty);
 
 	arguments = Character(argc);
 	for(int64_t i = 0; i < argc; i++) {

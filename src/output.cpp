@@ -208,15 +208,17 @@ std::string stringify(State const& state, Value const& value, std::vector<int64_
 			}
 			if(dots) result = result + " ... (" + intToStr(v.length()) + " elements)";
 		} break;
-		case Type::Function:
+		case Type::Closure:
 		{
-			result = state.externStr(((Function const&)value).prototype()->string);
+			result = state.externStr(((Closure const&)value).prototype()->string);
 		} break;
 		case Type::Environment:
 		{
 			REnvironment const& renv = (REnvironment const&)value;
             if(renv.environment() == state.global)
                 result = std::string("<environment: R_GlobalEnv>");
+            else if(renv.environment() == state.empty)
+                result = std::string("<environment: R_EmptyEnv>");
             else
                 result = std::string("<environment: ") + intToHexStr((int64_t)renv.environment()) + ">";
             // TODO: avoid recursion here
@@ -315,8 +317,8 @@ std::string deparse(State const& state, Value const& value) {
 		#define CASE(Name) case Type::Name: return deparseVector(state, (Name const&)value); break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
-		case Type::Function:
-			return state.externStr(((Function const&)value).prototype()->string);
+		case Type::Closure:
+			return state.externStr(((Closure const&)value).prototype()->string);
 		case Type::Environment:
 			return "environment";
 		default:

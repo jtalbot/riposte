@@ -2,6 +2,13 @@
 #include "compiler.h"
 #include "runtime.h"
 
+static ByteCode::Enum op0(String const& func) {
+
+    if(func == Strings::dots) return ByteCode::dotsc;
+
+    throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a nullary operator"); 
+}
+
 static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::add) return ByteCode::pos; 
 	if(func == Strings::sub) return ByteCode::neg; 
@@ -44,9 +51,14 @@ static ByteCode::Enum op1(String const& func) {
 	
 	if(func == Strings::random) return ByteCode::random; 
     if(func == Strings::getNamespace) return ByteCode::getns;
-    if(func == Strings::promise) return ByteCode::promise;
 	
-	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
+    if(func == Strings::dots) return ByteCode::dotsv;
+
+    if(func == Strings::attributes) return ByteCode::attributes;
+    if(func == Strings::getenv) return ByteCode::getenv;
+    if(func == Strings::env_new) return ByteCode::env_new;
+	
+    throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
 }
 
 static ByteCode::Enum op2(String const& func) {
@@ -73,27 +85,31 @@ static ByteCode::Enum op2(String const& func) {
 
 	if(func == Strings::cm2) return ByteCode::cm2; 
 	
-	if(func == Strings::bracket) return ByteCode::subset;
-	if(func == Strings::bb) return ByteCode::subset2;
+	if(func == Strings::bracket) return ByteCode::getsub;
+	if(func == Strings::bb) return ByteCode::get;
 
 	if(func == Strings::vector) return ByteCode::vector;
 
 	if(func == Strings::round) return ByteCode::round; 
 	if(func == Strings::signif) return ByteCode::signif; 
 
-	if(func == Strings::attrget) return ByteCode::attrget;
+    if(func == Strings::attrget) return ByteCode::getattr;
+    if(func == Strings::setenv) return ByteCode::setenv;
 	
-	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a binary operator"); 
+    if(func == Strings::env_exists) return ByteCode::env_exists;
+	if(func == Strings::env_remove) return ByteCode::env_remove;
+	
+    throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a binary operator"); 
 }
 
 static ByteCode::Enum op3(String const& func) {
-	if(func == Strings::bracketAssign) return ByteCode::iassign;
-	if(func == Strings::bbAssign) return ByteCode::eassign;
+	if(func == Strings::bracketAssign) return ByteCode::setsub;
+	if(func == Strings::bbAssign) return ByteCode::set;
 	if(func == Strings::split) return ByteCode::split;
 	if(func == Strings::ifelse) return ByteCode::ifelse;
 	if(func == Strings::seq) return ByteCode::seq;
 	if(func == Strings::index) return ByteCode::index;
-	if(func == Strings::attrset) return ByteCode::attrset;
+	if(func == Strings::attrset) return ByteCode::setattr;
 	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a trinary operator"); 
 }
 
@@ -142,19 +158,20 @@ static int64_t isDotDot(String s) {
 	return -1;	
 }
 
-Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code) {
+Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code, bool isClosure) {
 	String s = SymbolStr(symbol);
 	
 	int64_t dd = isDotDot(s);
 	if(dd > 0) {
+        Operand idx = compileConstant(Integer::c(dd), code); 
 		Operand t = allocRegister();
-		emit(ByteCode::dotdot, dd-1, 0, t);
+		emit(ByteCode::dotsv, idx, 0, t);
 		return t;
 	}
 	else {
 		Operand sym = compileConstant(Character::c(s), code);
 		Operand t = allocRegister();
-		emit(ByteCode::get, sym, 0, t);
+		emit(isClosure ? ByteCode::loadfn : ByteCode::load, sym, 0, t);
 		return t;
 	}
 }
@@ -233,7 +250,9 @@ Compiler::Operand Compiler::compileExternalFunctionCall(List const& call, Protot
 }
 
 Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Prototype* code) {
+
 	int64_t length = call.length();
+
 	if(length == 0) {
 		throw CompileError("invalid empty call");
 	}
@@ -251,7 +270,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand counter = placeInRegister(compile(Integer::c(0), code));
 		Operand storage = allocRegister();
 		kill(storage); kill(counter);
-		emit(ByteCode::dotslist, counter, storage, result); 
+		emit(ByteCode::dots, counter, storage, result); 
 		return result;
 	}
 
@@ -259,7 +278,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	// there is a ... in the args list
 
 	bool complicated = false;
-	for(int64_t i = 0; i < length; i++) {
+	for(int64_t i = 1; i < length; i++) {
 		if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) 
 			complicated = true;
 	}
@@ -337,7 +356,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
         Operand b = compileConstant(internalCall[0], code);
         kill(b); kill(a);
         result = allocRegister();
-        emit(ByteCode::subset2, a, b, result);
+        emit(ByteCode::get, a, b, result);
         
 		Character internalNames = hasNames(internalCall) ? 
 				(Character const&)getNames(internalCall) : 
@@ -360,11 +379,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
       
         // Handle simple assignment 
         if(!isCall(dest)) {
-            Operand target =
-                func == Strings::assign2
-                    ? compileConstant(Character::c(SymbolStr(dest)), code)
-                    : Operand(MEMORY, SymbolStr(dest));
-		    emit(func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, 
+            Operand target = compileConstant(Character::c(SymbolStr(dest)), code);
+		    emit(func == Strings::assign2 ? ByteCode::storeup : ByteCode::store, 
                 target, 0, rhs);
         }
 		
@@ -375,8 +391,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		//	1) dim(a) <- `[<-`(dim(a), 1, x)
 		//	2) a <- `dim<-`(a, `[<-`(dim(a), 1, x))
         else {    
-            Operand tmp = Operand(MEMORY, Strings::assignTmp);
-            emit( ByteCode::assign, tmp, 0, rhs );
+            Operand tmp = compileConstant(Character::c(Strings::assignTmp), code);
+            emit( ByteCode::store, tmp, 0, rhs );
 
             Value value = CreateSymbol(Strings::assignTmp);
 		    while(isCall(dest)) {
@@ -406,12 +422,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			    dest = c[1];
 		    }
 
-            Operand target =
-                func == Strings::assign2
-                    ? compileConstant(Character::c(SymbolStr(dest)), code)
-                    : Operand(MEMORY, SymbolStr(dest));
+            Operand target = compileConstant(Character::c(SymbolStr(dest)), code);
 		    Operand source = compile(value, code);
-		    emit(func == Strings::assign2 ? ByteCode::assign2 : ByteCode::assign, 
+		    emit(func == Strings::assign2 ? ByteCode::storeup : ByteCode::store, 
                 target, 0, source);
             kill( source );
 		    
@@ -421,14 +434,16 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
         }
 		return rhs;
 	}
-    else if(func == Strings::rm && call.length() == 2)
+    else if(func == Strings::rm 
+        && call.length() == 2 
+        && (isSymbol(call[1]) || call[1].isCharacter1()))
     {
         Operand symbol = Operand(MEMORY, SymbolStr(call[1]));
 		Operand rm = allocRegister();
         emit( ByteCode::rm, symbol, 0, rm );
         return rm;
     }
-    else if(func == Strings::as && call.length() == 3)
+    else if(func == Strings::as && call.length() == 3 && call[2].isCharacter1())
     {
 	    Operand src = compile(call[1], code);
         Operand type = Operand(MEMORY, SymbolStr(call[2]));
@@ -459,7 +474,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		}
 
 		//compile the source for the body
-		Prototype* functionCode = Compiler::compileFunctionBody(thread, call[2]);
+		Prototype* functionCode = Compiler::compileClosureBody(thread, call[2]);
 
 		// Populate function info
 		functionCode->parameters = parameters;
@@ -470,11 +485,11 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			if(parameters[i].n == Strings::dots) functionCode->dotIndex = i;
 
 		Value function;
-		Function::Init(function, functionCode, 0);
+		Closure::Init(function, functionCode, 0);
 		Operand funcOp = compileConstant(function, code);
 	
 		Operand reg = allocRegister();	
-		emit(ByteCode::function, funcOp, 0, reg);
+		emit(ByteCode::fn_new, funcOp, 0, reg);
 		return reg;
 	} 
 	else if(func == Strings::returnSym)
@@ -486,7 +501,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			result = placeInRegister(compile(call[1], code));
 		else
 			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
-		if(scope != FUNCTION)
+		if(scope != CLOSURE)
 			throw CompileError("Attempting to return from top-level expression or from non-function. Riposte doesn't support return inside promises currently, and may never do so");
 		emit(ByteCode::ret, result, 0, 0);
 		return result;
@@ -649,20 +664,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		return compile(call[1], code);
 	}
-	else if(func == Strings::list) 
-	{
-		Operand f, r;
-		for(int64_t i = 1; i < call.length(); i++) {
-			Operand t = forceInRegister(compile(call[i], code));
-			if(f.loc == INVALID) { f = t; r = t; }
-			else { assert(t.i == r.i+1); r = t; }
-		}
-		if(call.length() > 1)
-			kill(f);
-		Operand result = allocRegister();
-		emit(ByteCode::list, f, Operand((int64_t)call.length()-1), result);
-		return result;
-	}
  
 	// Trinary operators
 	else if((func == Strings::bracketAssign ||
@@ -708,7 +709,10 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::vector ||
 		func == Strings::round ||
 		func == Strings::signif ||
-		func == Strings::attrget) &&
+		func == Strings::attrget ||
+        func == Strings::env_exists ||
+        func == Strings::env_remove ||
+        func == Strings::setenv) &&
 		call.length() == 3) 
 	{
 		Operand a = compile(call[1], code);
@@ -755,7 +759,12 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::length ||
 		func == Strings::strip ||
 		func == Strings::random ||
-        func == Strings::getNamespace) &&
+        func == Strings::getNamespace ||
+        func == Strings::ls ||
+        func == Strings::dots ||
+        func == Strings::attributes ||
+        func == Strings::getenv ||
+        func == Strings::env_new) &&
 		call.length() == 2)
 	{
 		// if there isn't exactly one parameter, we should call the library version...
@@ -763,6 +772,15 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		kill(a);
 		Operand result = allocRegister();
 		emit(op1(func), a, 0, result);
+		return result; 
+	} 
+	// Nullary operators
+	else if((func == Strings::dots) && 
+		call.length() == 1)
+	{
+		// if there isn't exactly zero parameters, we should call the library version...
+		Operand result = allocRegister();
+		emit(op0(func), 0, 0, result);
 		return result; 
 	} 
 	else if(func == Strings::missing)
@@ -776,20 +794,41 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	}
     else if(func == Strings::promise)
     {
-		if(call.length() != 2) _error("missing requires one argument");
-		if(!isSymbol(call[1]) && !call[1].isCharacter1()) _error("wrong parameter to promise");
-		Operand s = compileConstant(call[1], code);
+		Operand a = compile(call[1], code);
+		Operand b = compile(call[2], code);
+		kill(b); kill(a);
 		Operand result = allocRegister();
-		emit(ByteCode::promise, s, 0, result); 
+		emit(ByteCode::pr_new, a, b, result);
 		return result;
     }
+	else if(func == Strings::pr_expr)
+	{
+		if(call.length() != 3) _error("pr_expr requires two arguments");
+		Operand a = compile(call[1], code);
+		Operand b = compile(call[2], code);
+        kill(b); kill(a);
+		Operand result = allocRegister();
+		emit(ByteCode::pr_expr, a, b, result); 
+		return result;
+	}
+	else if(func == Strings::pr_env)
+	{
+		if(call.length() != 3) _error("pr_env requires two arguments");
+		Operand a = compile(call[1], code);
+		Operand b = compile(call[2], code);
+        kill(b); kill(a);
+		Operand result = allocRegister();
+		emit(ByteCode::pr_env, a, b, result); 
+		return result;
+	}
 	else if(func == Strings::quote)
 	{
 		if(call.length() != 2) _error("quote requires one argument");
 		return compileConstant(call[1], code);
 	}
-	
-	return compileFunctionCall(compile(call[0], code), call, names, code);
+
+    // Otherwise, generate standard function call...
+	return compileFunctionCall(compileSymbol(call[0], code, true), call, names, code);
 }
 
 Compiler::Operand Compiler::compileExpression(List const& values, Prototype* code) {
@@ -810,7 +849,7 @@ Compiler::Operand Compiler::compileExpression(List const& values, Prototype* cod
 
 Compiler::Operand Compiler::compile(Value const& expr, Prototype* code) {
 	if(isSymbol(expr)) {
-		return compileSymbol(expr, code);
+		return compileSymbol(expr, code, false);
 	}
 	if(isExpression(expr)) {
 		assert(expr.isList());
@@ -857,7 +896,7 @@ Prototype* Compiler::compile(Value const& expr) {
     Operand result = compile(expr, code);
 
     // insert appropriate termination statement at end of code
-    if(scope == FUNCTION)
+    if(scope == CLOSURE)
         emit(ByteCode::ret, result, 0, 0);
     else if(scope == PROMISE)
         emit(ByteCode::retp, result, 0, 0);

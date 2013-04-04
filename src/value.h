@@ -52,7 +52,7 @@ struct Value {
 	bool isObject() const 	{ return type() > Type::Promise; }
 	
 	bool isFuture() const 	{ return type() == Type::Future; }
-	bool isFunction() const { return type() == Type::Function; }
+	bool isClosure() const { return type() == Type::Closure; }
 	bool isEnvironment() const { return type() == Type::Environment; }
 	
 	bool isNull() const 	{ return type() == Type::Null; }
@@ -184,8 +184,8 @@ struct Future : public Object {
 	IRef ref() const { return (IRef)(uint64_t)i; }
 };
 
-struct Function : public Object {
-	static const Type::Enum ValueType = Type::Function;
+struct Closure : public Object {
+	static const Type::Enum ValueType = Type::Closure;
 		
 	struct Inner : public HeapObject {
 		Prototype* proto;
@@ -194,10 +194,10 @@ struct Function : public Object {
 			: proto(proto), env(env) {}
 	};
 
-	static Function& Init(Value& v, Prototype* proto, Environment* env) {
-		Value::Init(v, Type::Function, 0);
+	static Closure& Init(Value& v, Prototype* proto, Environment* env) {
+		Value::Init(v, Type::Closure, 0);
 		v.p = new Inner(proto, env);
-		return (Function&)v;
+		return (Closure&)v;
 	}
 
 	Prototype* prototype() const { return ((Inner*)p)->proto; }

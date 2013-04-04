@@ -23,7 +23,7 @@ private:
 
 	enum Scope {
 		TOPLEVEL,
-		FUNCTION,
+		CLOSURE,
 		PROMISE
 	};
 	
@@ -91,7 +91,7 @@ private:
 	Operand compile(Value const& expr, Prototype* code);		// compile into existing code block
 
 	Operand compileConstant(Value const& expr, Prototype* code);
-	Operand compileSymbol(Value const& symbol, Prototype* code); 
+	Operand compileSymbol(Value const& symbol, Prototype* code, bool isClosure); 
 	Operand compileCall(List const& call, Character const& names, Prototype* code); 
 	Operand compileFunctionCall(Operand function, List const& call, Character const& names, Prototype* code); 
 	Operand compileInternalFunctionCall(List const& call, Prototype* code); 
@@ -113,8 +113,8 @@ public:
 		return compiler.compile(expr);
 	}
 	
-	static Prototype* compileFunctionBody(Thread& thread, Value const& expr) {
-		Compiler compiler(thread, FUNCTION);
+	static Prototype* compileClosureBody(Thread& thread, Value const& expr) {
+		Compiler compiler(thread, CLOSURE);
 		return compiler.compile(expr);
 	}
 	

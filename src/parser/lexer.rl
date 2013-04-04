@@ -210,7 +210,9 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 
 	if( cs == Scanner_error && syntaxErrors == 0) {
 		syntaxErrors++;
-		std::cout << "Lexing error (" << intToStr(line+1) << "," << intToStr(col+1) << ") : unexpected '" << std::string(ts, te-ts) + "'" << std::endl; 
+		std::cout << "Lexing error" << std::endl; 
+        // TODO: make a meaningful error. te can be 0x0 sometimes! Try entering `z
+        // (" << intToStr(line+1) << "," << intToStr(col+1) << ") : unexpected '" << std::string(ts, te-ts) + "'" << std::endl; 
 	}
 	
 	if( syntaxErrors > 0 )
@@ -222,53 +224,6 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	else
 		return 0;
 }
-/*
-int Parser::buffer_execute( )
-{
-	static char buf[16384];
-
-	std::ios::sync_with_stdio(false);
-
-	bool done = false;
-	while ( !done ) {
-		char* b = buf + have;
-		const char *p = b;
-		int space = 16384 - have;
-
-		if ( space == 0 ) {
-			std::cerr << "OUT OF BUFFER SPACE" << std::endl;
-			return -1;
-		}
-
-		std::cin.read( b, space );
-		int len = std::cin.gcount();
-		const char *pe = p + len;
-		const char *eof = 0;
-
-	 	if ( std::cin.eof() ) {
-			eof = pe;
-			done = true;
-		}
-
-		%% write exec;
-
-		if ( cs == Scanner_error ) {
-			std::cerr << "PARSE ERROR" << std::endl;
-			return -1;
-		}
-
-		if ( ts == 0 )
-			have = 0;
-		else {
-			have = pe - ts;
-			memmove( buf, ts, have );
-			te -= (ts-buf);
-			ts = buf;
-		}
-	}
-	return 0;
-}
-*/
 
 String Parser::popSource() {
 	assert(source.size() > 0);

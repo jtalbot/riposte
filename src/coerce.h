@@ -36,8 +36,8 @@ void As(Thread& thread, Value src, O& out) {
 		#define CASE(Name,...) case Type::Name: Zip1< CastOp<Name, O> >::eval(thread, (Name const&)src, out); return; break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
-		case Type::Function:
-			Cast1<Function, O>(thread, (Function const&)src, out); return; break;
+		case Type::Closure:
+			Cast1<Closure, O>(thread, (Closure const&)src, out); return; break;
 		default: break;
 	};
 	out.attributes(((Object const&)src).attributes());
@@ -167,7 +167,7 @@ SPECIALIZED_STATIC Character::Element Cast<List, Character>(Thread& thread, List
 
 
 template<>
-SPECIALIZED_STATIC void Cast1<Function, List>(Thread& thread, Function const& i, List& o) { List::InitScalar(o, (Value const&)i); }
+SPECIALIZED_STATIC void Cast1<Closure, List>(Thread& thread, Closure const& i, List& o) { List::InitScalar(o, (Value const&)i); }
 
 
 #endif

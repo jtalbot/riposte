@@ -4,20 +4,21 @@
 
 #include "enum.h"
 
-#define TYPES(_) 			   \
-	_(Nil,		"nil",		0) \
-	_(Promise, 	"promise",	1) \
-	/* Objects ... */		   \
-	_(Future, 	"future",       2) \
-	_(Function,	"function",	3) \
+#define TYPES(_) 			           \
+	_(Nil,		    "nil",		    0) \
+	_(Promise, 	    "promise",	    1) \
+	/* Objects ... */		           \
+	_(Future, 	    "future",       2) \
+	_(Closure,	    "closure",	    3) \
 	_(Environment,	"environment",	4) \
-	_(Null, 	"NULL",		5) \
-	_(Raw, 		"raw",		6) \
-	_(Logical, 	"logical",	7) \
-	_(Integer, 	"integer",	8) \
-	_(Double, 	"double",	9) \
+    /*  Vectors ... */                 \
+	_(Null, 	    "NULL",		    5) \
+	_(Raw, 		    "raw",		    6) \
+	_(Logical, 	    "logical",	    7) \
+	_(Integer, 	    "integer",	    8) \
+	_(Double, 	    "double",	    9) \
 	_(Character, 	"character",   10) \
-	_(List,		"list",	       11) \
+	_(List,		    "list",	       11) \
 
 DECLARE_ENUM_WITH_VALUES(Type, TYPES)
 

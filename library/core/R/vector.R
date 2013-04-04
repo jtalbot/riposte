@@ -7,6 +7,7 @@ as.vector <- function(x, mode = "any") {
 		numeric = as(x,"double"),
 		complex = as.complex(x),
 		character = as(x,"character"),
+        list = as(x,"list"),
 		any = strip(x))
 }
 

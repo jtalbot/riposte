@@ -6,43 +6,68 @@
 #include "common.h"
 #include "strings.h"
 
-#define CONTROL_FLOW_BYTECODES(_) 	\
-	_(jc, "jc") \
-	_(jmp, "jmp") \
-	_(branch, "branch") \
-	_(call, "call") \
-	_(fastcall, "fastcall") \
-	_(ret, "ret") /* return from function */ \
-	_(rets, "rets") /* return from top-level statement */ \
-	_(retp, "retp") /* return from a promise or default */ \
-	_(forbegin, "forbegin") \
-	_(forend, "forend") \
-	_(list, "list") \
-	_(dotslist, "dotslist") \
+#define CONTROL_FLOW_BYTECODES(_)                                                   \
+    _(jc,           "jc")                                                           \
+    _(jmp,          "jmp")                                                          \
+    _(branch,       "branch")                                                       \
+    _(call,         "call")                                                         \
+    _(fastcall,     "fastcall")                                                     \
+    _(ret,          "ret")          /* return from function */                      \
+    _(rets,         "rets")         /* return from top-level statement */           \
+    _(retp,         "retp")         /* return from a promise or default */          \
+    _(forbegin,     "forbegin")                                                     \
+    _(forend,       "forend")                                                       \
+    _(mov,          "mov")                                                          \
+    _(fastmov,      "fastmov")                                                      \
+    _(external,     "external")                                                     \
 
-#define MEMORY_ACCESS_BYTECODES(_) \
-	_(mov,      "mov") \
-	_(fastmov,  "fastmov") \
-	_(dotdot,   "dotdot") \
-	_(assign,   "assign") \
-	_(assign2,  "assign2") \
-	_(iassign,  "iassign") \
-	_(eassign,  "eassign") \
-	_(subset,   "subset") \
-	_(subset2,  "subset2") \
-	_(get, "get") \
-	_(getns, "getns") \
-	_(attrget,  "attr") \
-	_(attrset,  "attr<-") \
-    _(rm,       "rm") \
+#define LOAD_STORE_BYTECODES(_)                                                     \
+    _(load,         "load" )        /* = get(x, environment(), "any", TRUE) */      \
+    _(loadfn,       "loadfn")       /* = get(x, environment(), "function", TRUE) */ \
+    _(store,        "store")        /* = <-,  assign(x, environment(), FALSE) */\
+    _(storeup,      "storeup")      /* = <<-, assign(x, parent.env(environment()), TRUE) */ \
+    _(rm,           "rm")           /* = remove('x', environment()) */              \
+    _(dotsv,        "dotsv")        /* = ..# */                                     \
+    _(dotsc,        "dotsc")        /* = length(...) */                             \
+    _(dots,         "dots")         /* = list(...) */                               \
+    _(missing,      "missing")      /* check if an argument is missing */           \
+    _(getns,        "getns")        /* get a namespace */                           \
 
-#define UTILITY_BYTECODES(_)\
-	_(external, "external") \
-	_(function, "function") \
-	_(type, "type") \
-	_(missing, "missing") \
-    _(promise, "promise") \
-	_(strip, "strip") \
+/* In R, stack bytecodes only work while the associated stack frames are still on the stack.
+   Otherwise, they return an error. In Riposte, they continue to work. */
+#define STACK_FRAME_BYTECODES(_)                                                    \
+    _(fm_fn,        "fm_fn")        /* function associated with a stack frame */    \
+    _(fm_call,      "fm_call")      /* call associated with a stack frame */        \
+    _(fm_env,       "fm_env")       /* environment associated with a stack frame */ \
+
+#define PROMISE_BYTECODES(_)                                                        \
+    _(pr_new,       "pr_new")       /* create a new promise (delayedAssign) */      \
+    _(pr_expr,      "pr_expr")      /* the expression of a promise */               \
+    _(pr_env,       "pr_env")       /* the environment of a promise */              \
+
+#define OBJECT_BYTECODES(_)                                                         \
+    _(type,         "type")                                                         \
+    _(length,       "length")                                                       \
+    _(get,          "get")          /* $, [[   (works on all objects) */            \
+    _(set,          "set")          /* $<-, [[<-  (works on all objects) */         \
+    _(getsub,       "getsub")       /* [] */                                        \
+    _(setsub,       "setsub")       /* [<- */                                       \
+    _(getenv,       "getenv")       /* get the object's containing environment */   \
+    _(setenv,       "setenv")       /* set the object's containing environment */   \
+    _(getattr,      "getattr")                                                      \
+    _(setattr,      "setattr")                                                      \
+    _(attributes,   "attributes")   /* returns list with attributes & names */      \
+    _(strip,        "strip")        /* return base object without any attributes */ \
+    _(as,           "as")           /* coerce between object types */
+
+#define ENVIRONMENT_BYTECODES(_)                                                    \
+    _(env_new,      "env_new")                                                      \
+    /* TODO: consider generalizing these to all objects */                          \
+    _(env_exists,   "env_exists")   /* check if environment contains a key */       \
+    _(env_remove,   "env_remove")   /* remove a key from an environment */          \
+
+#define FUNCTION_BYTECODES(_)                                                       \
+    _(fn_new,       "fn_new")       /* closure constructor */                       \
 
 #define GENERATOR_BYTECODES(_) \
 	_(vector,	"vector",	Generator) \
@@ -116,8 +141,7 @@
 
 #define SPECIAL_MAP_BYTECODES(_) \
 	_(ifelse, "ifelse", IfElse) \
-	_(split, "split", Split) \
-    _(as, "as", As)
+	_(split, "split", Split)
 
 // ArithFold1 ops perform [Integer]->Integer, ArithFold2 ops perform [Integer]->Double
 #define ARITH_FOLD_BYTECODES(_) \
@@ -133,7 +157,6 @@
 	_(max, "max",	UnifyFold, 	pmax) \
 
 #define SPECIAL_FOLD_BYTECODES(_) \
-	_(length, "length", CountFold) \
 	_(cm2, "cm2", Moment2Fold) \
 	_(mean, "mean", ArithFold2) \
 
@@ -175,13 +198,17 @@
 
 #define STANDARD_BYTECODES(_) \
 	CONTROL_FLOW_BYTECODES(_) \
-	MEMORY_ACCESS_BYTECODES(_) \
+	LOAD_STORE_BYTECODES(_) \
+    STACK_FRAME_BYTECODES(_) \
+    PROMISE_BYTECODES(_) \
+    OBJECT_BYTECODES(_) \
+    ENVIRONMENT_BYTECODES(_) \
+    FUNCTION_BYTECODES(_) \
 	GENERATOR_BYTECODES(_) \
 	MAP_BYTECODES(_) \
 	SPECIAL_MAP_BYTECODES(_) \
 	FOLD_BYTECODES(_) \
 	SCAN_BYTECODES(_) \
-	UTILITY_BYTECODES(_) \
 	SPECIAL_FOLD_BYTECODES(_) \
 
 #define BYTECODES(_) \

@@ -34,9 +34,9 @@ is.atomic <- function(x) switch(typeof(x), logical=,integer=,double=,complex=,ch
 is.recursive <- function(x) !(is.atomic(x) || is.symbol(x))
 
 is.language <- function(x) is.call(x) || is.environment(x) || is.symbol(x)
-is.function <- function(x) typeof(x) == "function"
+is.function <- function(x) typeof(x) == "closure"
 
-is.single <- function(x) "NYI"
+is.single <- function(x) stop('type "single" unimplemented in R')
 
 is.vector <- function(x, mode="any") switch(mode,
 	NULL=is.null(x),
@@ -55,17 +55,7 @@ is.vector <- function(x, mode="any") switch(mode,
 	FALSE)
 # is.vector is also defined to check whether or not there are any attributes other than names(?!)
 
-mode <- function(x)
-	switch(typeof(x),
-		integer="numeric",
-		double="numeric",
-		special="function",
-		builtin="function",
-		symbol="name",
-		language="call",
-		typeof(x))
-
-`mode<-` <- function(x, value) {
+`storage.mode<-` <- function(x, value) {
 	switch(value,
 		logical=as(x,"logical"), 
 		integer=as(x,"integer"),
@@ -80,22 +70,10 @@ mode <- function(x)
 		error("unsupported mode"))
 }
 
-storage.mode <- function(x)
-	switch(typeof(x),
-		integer="integer",
-		double="double",
-		special="function",
-		builtin="function",
-		symbol="name",
-		language="call",
-		typeof(x))
-
-`storage.mode<-` <- `mode<-`
-
 as.environment <- function(x)
 	switch(typeof(x),
 		environment=x,
 		double=,
-		integer=parent.frame(2),
+		integer=parent.frame(x+1),
 		error("unsupported cast to environment")) 
 

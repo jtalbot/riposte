@@ -286,12 +286,6 @@ Value unlist(Thread& thread, Value const* args) {
 	};
 }
 
-extern "C"
-Value eval(Thread& thread, Value const* args) {
-	return thread.eval(Compiler::compilePromise(thread, args[0]), 
-			Cast<REnvironment>(args[1]).environment());
-}
-
 struct mapplyargs {
 	List const& in;
 	List& out;
@@ -701,5 +695,19 @@ Value getAttributes(Thread& thread, Value const* args) {
     d->insert(Strings::names) = names;
     result.attributes(d);
     return result;
+}
+
+extern "C"
+Value emptyEnvironment(Thread& thread, Value const* args) {
+    Value v;
+    REnvironment::Init(v, thread.state.empty);
+    return v;
+}
+
+extern "C"
+Value globalEnvironment(Thread& thread, Value const* args) {
+    Value v;
+    REnvironment::Init(v, thread.state.global);
+    return v;
 }
 

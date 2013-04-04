@@ -18,9 +18,9 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Environment* env, int64_t resultSlot, Instruction const* returnpc);
 
-void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
+void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Closure const& func, CompiledCall const& call);
 
-void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call);
+void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Closure const& func, CompiledCall const& call);
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out);
 
@@ -155,21 +155,40 @@ void LogicalBinaryDispatch(Thread& thread, Value a, Value b, Value& c) {
 	else _error("non-logical argument to binary logical operator");
 }
 
+template< class Op >
+void EnvironmentBinaryDispatch(Thread& thread, Value const& a, Value const& b, Value& c) {
+	_error("non-ordinal argument to ordinal operator");
+}
+
+template<>
+void EnvironmentBinaryDispatch< struct eqVOp<REnvironment, REnvironment> >
+(Thread& thread, Value const& a, Value const& b, Value& c);
+
+template<>
+void EnvironmentBinaryDispatch< struct neqVOp<REnvironment, REnvironment> >
+(Thread& thread, Value const& a, Value const& b, Value& c);
+
 template< template<typename S, typename T> class Op > 
 void UnifyBinaryDispatch(Thread& thread, Value const& a, Value const& b, Value& c) {
-	if(!a.isVector() || !b.isVector())
-		_error("comparison is possible only for atomic and list types");
-	if(a.isCharacter() || b.isCharacter())
-		Zip2< Op<Character, Character> >::eval(thread, As<Character>(thread, a), As<Character>(thread, b), c);
-	else if(a.isDouble() || b.isDouble())
-		Zip2< Op<Double, Double> >::eval(thread, As<Double>(thread, a), As<Double>(thread, b), c);
-	else if(a.isInteger() || b.isInteger())	
-		Zip2< Op<Integer, Integer> >::eval(thread, As<Integer>(thread, a), As<Integer>(thread, b), c);
-	else if(a.isLogical() || b.isLogical())	
-		Zip2< Op<Logical, Logical> >::eval(thread, As<Logical>(thread, a), As<Logical>(thread, b), c);
-	else if(a.isNull() || b.isNull())
-		c = Null::Singleton();
-	else	_error("non-ordinal argument to ordinal operator");
+	if(a.isVector() && b.isVector())
+	{
+        if(a.isCharacter() || b.isCharacter())
+		    Zip2< Op<Character, Character> >::eval(thread, As<Character>(thread, a), As<Character>(thread, b), c);
+	    else if(a.isDouble() || b.isDouble())
+		    Zip2< Op<Double, Double> >::eval(thread, As<Double>(thread, a), As<Double>(thread, b), c);
+	    else if(a.isInteger() || b.isInteger())	
+		    Zip2< Op<Integer, Integer> >::eval(thread, As<Integer>(thread, a), As<Integer>(thread, b), c);
+	    else if(a.isLogical() || b.isLogical())	
+		    Zip2< Op<Logical, Logical> >::eval(thread, As<Logical>(thread, a), As<Logical>(thread, b), c);
+	    else if(a.isNull() || b.isNull())
+		    c = Null::Singleton();
+    }
+    else if(a.isEnvironment() && b.isEnvironment()) {
+        EnvironmentBinaryDispatch< Op<REnvironment, REnvironment> >(thread, a, b, c);
+    }
+    else {
+	    _error("non-ordinal argument to ordinal operator");
+    }
 }
 
 template< template<typename S, typename T> class Op > 

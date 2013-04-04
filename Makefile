@@ -78,11 +78,13 @@ build/%.d: src/%.cpp
 # tests
 COVERAGE_TESTS = $(shell find tests/coverage -type f -name '*.R')
 BLACKBOX_TESTS = $(shell find tests/blackbox -type f -name '*.R')
+CORE_TESTS = $(shell find library/core/tests -type f -name '*.R')
+BASE_TESTS = $(shell find library/base/tests -type f -name '*.R')
 
-.PHONY: tests $(COVERAGE_TESTS) $(BLACKBOX_TESTS)
+.PHONY: tests $(COVERAGE_TESTS) $(BLACKBOX_TESTS) $(CORE_TESTS) #$(BASE_TESTS)
 COVERAGE_FLAGS := 
 tests: COVERAGE_FLAGS += >/dev/null
-tests: $(COVERAGE_TESTS) $(BLACKBOX_TESTS)
+tests: $(COVERAGE_TESTS) $(BLACKBOX_TESTS) $(CORE_TESTS) #$(BASE_TESTS)
 
 $(COVERAGE_TESTS):
 	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
@@ -91,6 +93,18 @@ $(COVERAGE_TESTS):
 	-@rm $@.key $@.out
 
 $(BLACKBOX_TESTS):
+	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
+	-@./riposte --format=R -f $@ > $@.out
+	-@diff -b $@.key $@.out $(COVERAGE_FLAGS)
+	-@rm $@.key $@.out
+
+$(CORE_TESTS):
+	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
+	-@./riposte --format=R -f $@ > $@.out
+	-@diff -b $@.key $@.out $(COVERAGE_FLAGS)
+	-@rm $@.key $@.out
+
+$(BASE_TESTS):
 	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
 	-@./riposte --format=R -f $@ > $@.out
 	-@diff -b $@.key $@.out $(COVERAGE_FLAGS)

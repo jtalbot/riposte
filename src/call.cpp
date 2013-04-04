@@ -109,7 +109,7 @@ bool namedArguments(Environment* env, CompiledCall const& call) {
 
 
 // Generic argument matching
-void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call) {
+void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Closure const& func, CompiledCall const& call) {
 	PairList const& parameters = func.prototype()->parameters;
 	int64_t pDotIndex = func.prototype()->dotIndex;
 	int64_t numArgs = numArguments(env, call);
@@ -218,7 +218,7 @@ void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Function con
 
 // Assumes no names and no ... in the argument list.
 // Supports ... in the parameter list.
-void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Function const& func, CompiledCall const& call) {
+void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Closure const& func, CompiledCall const& call) {
 	Prototype const* prototype = func.prototype();
 	PairList const& parameters = prototype->parameters;
 	PairList const& arguments = call.arguments;
@@ -256,8 +256,8 @@ void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Function
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out) {
 	Environment* penv;
 	Value const& f = thread.frame.environment->getRecursive(op, penv);
-	if(f.isFunction()) {
-		Environment* fenv = new Environment(1, ((Function const&)f).environment(), thread.frame.environment, Null::Singleton());
+	if(f.isClosure()) {
+		Environment* fenv = new Environment(1, ((Closure const&)f).environment(), thread.frame.environment, Null::Singleton());
 		List call(0);
 		Pair p;
 		p.n = Strings::empty;
@@ -265,8 +265,8 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 		PairList args;
 		args.push_back(p);
 		CompiledCall cc(call, args, 1, false);
-		MatchArgs(thread, thread.frame.environment, fenv, ((Function const&)f), cc);
-		return buildStackFrame(thread, fenv, ((Function const&)f).prototype(), out, &inst+1);
+		MatchArgs(thread, thread.frame.environment, fenv, ((Closure const&)f), cc);
+		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype(), out, &inst+1);
 	}
 	_error("Failed to find generic for builtin op");
 }
@@ -274,8 +274,8 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out) {
 	Environment* penv;
 	Value const& f = thread.frame.environment->getRecursive(op, penv);
-	if(f.isFunction()) { 
-		Environment* fenv = new Environment(2, ((Function const&)f).environment(), thread.frame.environment, Null::Singleton());
+	if(f.isClosure()) { 
+		Environment* fenv = new Environment(2, ((Closure const&)f).environment(), thread.frame.environment, Null::Singleton());
 		List call(0);
 		PairList args;
 		Pair p;
@@ -285,9 +285,25 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 		p.v = b;
 		args.push_back(p);
 		CompiledCall cc(call, args, 2, false);
-		MatchArgs(thread, thread.frame.environment, fenv, ((Function const&)f), cc);
-		return buildStackFrame(thread, fenv, ((Function const&)f).prototype(), out, &inst+1);
+		MatchArgs(thread, thread.frame.environment, fenv, ((Closure const&)f), cc);
+		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype(), out, &inst+1);
 	}
 	_error("Failed to find generic for builtin op");
+}
+
+template<>
+void EnvironmentBinaryDispatch< struct eqVOp<REnvironment, REnvironment> >
+(Thread& thread, Value const& a, Value const& b, Value& c) {
+    Logical::InitScalar(c,
+        ((REnvironment const&)a).environment() == ((REnvironment const&)b).environment() ?
+            Logical::TrueElement : Logical::FalseElement );
+}
+
+template<>
+void EnvironmentBinaryDispatch< struct neqVOp<REnvironment, REnvironment> >
+(Thread& thread, Value const& a, Value const& b, Value& c) {
+    Logical::InitScalar(c,
+        ((REnvironment const&)a).environment() != ((REnvironment const&)b).environment() ?
+            Logical::TrueElement : Logical::FalseElement );
 }
 
