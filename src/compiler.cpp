@@ -438,7 +438,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
         && call.length() == 2 
         && (isSymbol(call[1]) || call[1].isCharacter1()))
     {
-        Operand symbol = Operand(MEMORY, SymbolStr(call[1]));
+        Operand symbol = compileConstant(Character::c(SymbolStr(call[1])), code);
 		Operand rm = allocRegister();
         emit( ByteCode::rm, symbol, 0, rm );
         return rm;

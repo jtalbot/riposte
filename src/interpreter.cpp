@@ -361,7 +361,8 @@ static inline Instruction const* storeup_op(Thread& thread, Instruction const& i
 }
 
 static inline Instruction const* rm_op(Thread& thread, Instruction const& inst) {
-	thread.frame.environment->remove( (String)inst.a );
+	String s = ((Character const&)CONSTANT(inst.a)).s;
+	thread.frame.environment->remove( s );
 	OUT(c) = Null::Singleton();
     return &inst+1;
 }

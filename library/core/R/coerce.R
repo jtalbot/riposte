@@ -67,7 +67,19 @@ is.vector <- function(x, mode="any") switch(mode,
 		expression=as.expression(x),
 		name=as.name(x),
 		symbol=as.symbol(x), 
-		error("unsupported mode"))
+		stop("unsupported mode"))
+}
+
+.list2env <- function(l) {
+    n <- names(l)
+    if(length(l) > 0 && (!is.character(n) || length(n) != length(l)))
+        stop("names(x) must be a character vector of the same length as x")
+
+    e <- new.env(FALSE, emptyenv(), 0)
+    for(i in seq(1, 1, length(l))) {
+        e[[n[[i]]]] <- l[[i]]
+    }
+    e
 }
 
 as.environment <- function(x)
@@ -75,5 +87,6 @@ as.environment <- function(x)
 		environment=x,
 		double=,
 		integer=parent.frame(x+1),
-		error("unsupported cast to environment")) 
+        list=.list2env(x),
+		stop("unsupported cast to environment")) 
 
