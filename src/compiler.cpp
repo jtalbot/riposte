@@ -412,7 +412,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
     } 
     else if(func == Strings::map_i && call.length() == 4)
     {
-        Operand a = compile(call[1], code);
+        Operand a = forceInRegister(compile(call[1], code));
         Operand b = compile(call[2], code);
         Operand c = compile(call[3], code);
         kill(c); kill(b); kill(a);
@@ -423,7 +423,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
     } 
     else if(func == Strings::map_l && call.length() == 4)
     {
-        Operand a = compile(call[1], code);
+        Operand a = forceInRegister(compile(call[1], code));
         Operand b = compile(call[2], code);
         Operand c = compile(call[3], code);
         kill(c); kill(b); kill(a);
@@ -434,7 +434,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
     } 
     else if(func == Strings::map_c && call.length() == 4)
     {
-        Operand a = compile(call[1], code);
+        Operand a = forceInRegister(compile(call[1], code));
         Operand b = compile(call[2], code);
         Operand c = compile(call[3], code);
         kill(c); kill(b); kill(a);
@@ -445,7 +445,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
     } 
     else if(func == Strings::map_r && call.length() == 4)
     {
-        Operand a = compile(call[1], code);
+        Operand a = forceInRegister(compile(call[1], code));
         Operand b = compile(call[2], code);
         Operand c = compile(call[3], code);
         kill(c); kill(b); kill(a);
@@ -456,7 +456,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
     } 
     else if(func == Strings::map_g && call.length() == 4)
     {
-        Operand a = compile(call[1], code);
+        Operand a = forceInRegister(compile(call[1], code));
         Operand b = compile(call[2], code);
         Operand c = compile(call[3], code);
         kill(c); kill(b); kill(a);

@@ -413,10 +413,10 @@ static inline Instruction const* map2_i_op(Thread& thread, Instruction const& in
     DECODE(b); BIND(b);
     DECODE(c); BIND(c);
 
-    if(!a.isCharacter1())
+    if(!c.isCharacter1())
         _error("External map function name must be a string");
 
-    if(!Map2Dispatch< BinaryFuncOp, Integer >(thread, find_function(thread, a.s), b, c, OUT(c)))
+    if(!Map2Dispatch< BinaryFuncOp, Integer >(thread, find_function(thread, c.s), a, b, OUT(c)))
         _error("Invalid external map function type");
     
     return &inst+1;
@@ -427,10 +427,10 @@ static inline Instruction const* map2_l_op(Thread& thread, Instruction const& in
     DECODE(b); BIND(b);
     DECODE(c); BIND(c);
 
-    if(!a.isCharacter1())
+    if(!c.isCharacter1())
         _error("External map function name must be a string");
 
-    if(!Map2Dispatch< BinaryFuncOp, Logical >(thread, find_function(thread, a.s), b, c, OUT(c)))
+    if(!Map2Dispatch< BinaryFuncOp, Logical >(thread, find_function(thread, c.s), a, b, OUT(c)))
         _error("Invalid external map function type");
     
     return &inst+1;
@@ -441,10 +441,10 @@ static inline Instruction const* map2_c_op(Thread& thread, Instruction const& in
     DECODE(b); BIND(b);
     DECODE(c); BIND(c);
 
-    if(!a.isCharacter1())
+    if(!c.isCharacter1())
         _error("External map function name must be a string");
 
-    if(!Map2Dispatch< BinaryFuncOp, Character >(thread, find_function(thread, a.s), b, c, OUT(c)))
+    if(!Map2Dispatch< BinaryFuncOp, Character >(thread, find_function(thread, c.s), a, b, OUT(c)))
         _error("Invalid external map function type");
     
     return &inst+1;
@@ -455,10 +455,10 @@ static inline Instruction const* map2_r_op(Thread& thread, Instruction const& in
     DECODE(b); BIND(b);
     DECODE(c); BIND(c);
 
-    if(!a.isCharacter1())
+    if(!c.isCharacter1())
         _error("External map function name must be a string");
 
-    if(!Map2Dispatch< BinaryFuncOp, Raw >(thread, find_function(thread, a.s), b, c, OUT(c)))
+    if(!Map2Dispatch< BinaryFuncOp, Raw >(thread, find_function(thread, c.s), a, b, OUT(c)))
         _error("Invalid external map function type");
     
     return &inst+1;
@@ -469,10 +469,10 @@ static inline Instruction const* map2_g_op(Thread& thread, Instruction const& in
     DECODE(b); BIND(b);
     DECODE(c); BIND(c);
 
-    if(!a.isCharacter1())
+    if(!c.isCharacter1())
         _error("External map function name must be a string");
 
-    if(!Map2Dispatch< BinaryFuncOp, List >(thread, find_function(thread, a.s), b, c, OUT(c)))
+    if(!Map2Dispatch< BinaryFuncOp, List >(thread, find_function(thread, c.s), a, b, OUT(c)))
         _error("Invalid external map function type");
     
     return &inst+1;
