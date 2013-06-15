@@ -21,8 +21,8 @@ template<class I, class O>
 struct CastOp {
 	typedef I A;
 	typedef O R;
-	static typename O::Element eval(Thread& thread, typename I::Element i) { return Cast<I, O>(thread, i); }
-	static void Scalar(Thread& thread, typename I::Element i, Value& c) { R::InitScalar(c, eval(thread, i)); }
+	static typename O::Element eval(Thread& thread, void* args, typename I::Element i) { return Cast<I, O>(thread, i); }
+	static void Scalar(Thread& thread, void* args, typename I::Element i, Value& c) { R::InitScalar(c, eval(thread, args, i)); }
 };
 
 template<class O>
@@ -33,7 +33,7 @@ void As(Thread& thread, Value src, O& out) {
 	}
 	switch(src.type()) {
 		case Type::Null: O(0); return; break;
-		#define CASE(Name,...) case Type::Name: Zip1< CastOp<Name, O> >::eval(thread, (Name const&)src, out); return; break;
+		#define CASE(Name,...) case Type::Name: Zip1< CastOp<Name, O> >::eval(thread, NULL, (Name const&)src, out); return; break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
 		case Type::Closure:

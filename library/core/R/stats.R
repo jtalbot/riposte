@@ -1,4 +1,8 @@
 
+mean <- function(x) {
+    sum(x)/length(x)
+}
+
 var <- function(x) {
 	cm2(x,x)/(length(x)-1)
 }

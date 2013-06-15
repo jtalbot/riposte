@@ -292,18 +292,99 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 }
 
 template<>
-void EnvironmentBinaryDispatch< struct eqVOp<REnvironment, REnvironment> >
-(Thread& thread, Value const& a, Value const& b, Value& c) {
+bool EnvironmentBinaryDispatch< struct eqVOp<REnvironment, REnvironment> >
+(Thread& thread, void* args, Value const& a, Value const& b, Value& c) {
     Logical::InitScalar(c,
         ((REnvironment const&)a).environment() == ((REnvironment const&)b).environment() ?
             Logical::TrueElement : Logical::FalseElement );
+    return true;
 }
 
 template<>
-void EnvironmentBinaryDispatch< struct neqVOp<REnvironment, REnvironment> >
-(Thread& thread, Value const& a, Value const& b, Value& c) {
+bool EnvironmentBinaryDispatch< struct neqVOp<REnvironment, REnvironment> >
+(Thread& thread, void* args, Value const& a, Value const& b, Value& c) {
     Logical::InitScalar(c,
         ((REnvironment const&)a).environment() != ((REnvironment const&)b).environment() ?
             Logical::TrueElement : Logical::FalseElement );
+    return true;
 }
+
+void IfElseDispatch(Thread& thread, void* args, Value const& a, Value const& b, Value const& cond, Value& c) {
+	if(a.isVector() && b.isVector())
+	{
+        if(a.isCharacter() || b.isCharacter())
+		    Zip3< IfElseVOp<Character> >::eval(thread, args, As<Character>(thread, a), As<Character>(thread, b), As<Logical>(thread, cond), c);
+	    else if(a.isDouble() || b.isDouble())
+		    Zip3< IfElseVOp<Double> >::eval(thread, args, As<Double>(thread, a), As<Double>(thread, b), As<Logical>(thread, cond), c);
+	    else if(a.isInteger() || b.isInteger())	
+		    Zip3< IfElseVOp<Integer> >::eval(thread, args, As<Integer>(thread, a), As<Integer>(thread, b), As<Logical>(thread, cond), c);
+	    else if(a.isLogical() || b.isLogical())	
+		    Zip3< IfElseVOp<Logical> >::eval(thread, args, As<Logical>(thread, a), As<Logical>(thread, b), As<Logical>(thread, cond), c);
+	    else if(a.isNull() || b.isNull() || cond.isNull())
+		    c = Null::Singleton();
+    }
+    else {
+	    _error("non-zippable argument to ifelse operator");
+    }
+}
+
+template< template<class X> class Group, IROpCode::Enum Op>
+bool RecordUnary(Thread& thread, Value const& a, Value& c) {
+    // If we can record the instruction, we can delay execution
+    if(thread.traces.isTraceable<Group>(a)) {
+        c = thread.traces.EmitUnary<Group>(thread.frame.environment, Op, a, 0);
+        thread.traces.OptBind(thread, c);
+        return true;
+    }
+    // If we couldn't delay, and the argument is a future, then we need to evaluate it.
+    if(a.isFuture()) {
+        thread.traces.Bind(thread, a);
+    }
+    return false;
+}
+
+template< template<class X, class Y> class Group, IROpCode::Enum Op>
+bool RecordBinary(Thread& thread, Value const& a, Value const& b, Value& c) {
+    // If we can record the instruction, we can delay execution
+    if(thread.traces.isTraceable<Group>(a, b)) {
+        c = thread.traces.EmitBinary<Group>(thread.frame.environment, Op, a, b, 0);
+        thread.traces.OptBind(thread, c);
+        return true;
+    }
+    // If we couldn't delay, and the arguments are futures, then we need to evaluate them.
+    if(a.isFuture()) {
+        thread.traces.Bind(thread, a);
+    }
+    if(b.isFuture()) {
+        thread.traces.Bind(thread, b);
+    }
+    return false;
+}
+
+#define SLOW_DISPATCH_DEFN(Name, String, Group, Func) \
+Instruction const* Name##Slow(Thread& thread, Instruction const& inst, void* args, Value const& a, Value& c) { \
+    if(RecordUnary<Group, IROpCode::Name>(thread, a, c)) \
+        return &inst+1; \
+    else if(!((Object const&)a).hasAttributes() \
+            && Group##Dispatch<Name##VOp>(thread, args, a, c)) \
+        return &inst+1; \
+    else \
+        return GenericDispatch(thread, inst, Strings::Name, a, inst.c); \
+}
+UNARY_FOLD_SCAN_BYTECODES(SLOW_DISPATCH_DEFN)
+#undef SLOW_DISPATCH_DEFN
+
+#define SLOW_DISPATCH_DEFN(Name, String, Group, Func) \
+Instruction const* Name##Slow(Thread& thread, Instruction const& inst, void* args, Value const& a, Value const& b, Value& c) { \
+    if(RecordBinary<Group, IROpCode::Name>(thread, a, b, c)) \
+        return &inst+1; \
+    else if(   !((Object const&)a).hasAttributes() \
+            && !((Object const&)b).hasAttributes() \
+            && Group##Dispatch<Name##VOp>(thread, args, a, b, c)) \
+        return &inst+1; \
+    else \
+        return GenericDispatch(thread, inst, Strings::Name, a, b, inst.c); \
+}
+BINARY_BYTECODES(SLOW_DISPATCH_DEFN)
+#undef SLOW_DISPATCH_DEFN
 

@@ -6,7 +6,7 @@ CFLAGS := -Wall -fPIC
 LFLAGS := -dynamiclib
 LIBS := -lpthread
 
-SRC := core.cpp output.cpp
+SRC := core.cpp print.cpp primitive.cpp
 
 EXECUTABLE := libs/core.dylib
 

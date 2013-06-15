@@ -10,7 +10,6 @@
 #define IR_ENUM(_) \
 		MAP_BYTECODES(_) \
 		FOLD_BYTECODES(_) \
-		SPECIAL_FOLD_BYTECODES(_) \
 		SCAN_BYTECODES(_) \
         _(length, "length", ___) \
         /*_(as, "as", ___)*/ \

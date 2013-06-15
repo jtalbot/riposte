@@ -326,17 +326,11 @@ VECTOR_IMPL(Logical, char, false)
 	static bool isFalse(char c) { return c == 0; }
 	static bool isNA(char c) { return c == 1; }
 	static bool isCheckedNA(char c) { return isNA(c); }
-	static bool isNaN(char c) { return false; }
-	static bool isFinite(char c) { return false; }
-	static bool isInfinite(char c) { return false; }
 };
 
 VECTOR_IMPL(Integer, int64_t, false)
 	static bool isNA(int64_t c) { return c == NAelement; }
 	static bool isCheckedNA(int64_t c) { return isNA(c); }
-	static bool isNaN(int64_t c) { return false; }
-	static bool isFinite(int64_t c) { return c != NAelement; }
-	static bool isInfinite(int64_t c) { return false; }
 }; 
 
 VECTOR_IMPL(Double, double, false)
@@ -350,34 +344,23 @@ VECTOR_IMPL(Double, double, false)
 	static Double const& NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } 
 	
 	static bool isNA(double c) { _doublena a, b; a.d = c; b.d = NAelement; return a.i==b.i; }
-	static bool isCheckedNA(int64_t c) { return false; }
 	static bool isNaN(double c) { return (c != c) && !isNA(c); }
-	static bool isFinite(double c) { return c == c && c != std::numeric_limits<double>::infinity() && c != -std::numeric_limits<double>::infinity(); }
-	static bool isInfinite(double c) { return c == std::numeric_limits<double>::infinity() || c == -std::numeric_limits<double>::infinity(); }
+	static bool isCheckedNA(int64_t c) { return false; }
 };
 
 VECTOR_IMPL(Character, String, false)
 	static bool isNA(String c) { return c == Strings::NA; }
 	static bool isCheckedNA(String c) { return isNA(c); }
-	static bool isNaN(String c) { return false; }
-	static bool isFinite(String c) { return false; }
-	static bool isInfinite(String c) { return false; }
 };
 
 VECTOR_IMPL(Raw, unsigned char, false) 
 	static bool isNA(unsigned char c) { return false; }
 	static bool isCheckedNA(unsigned char c) { return false; }
-	static bool isNaN(unsigned char c) { return false; }
-	static bool isFinite(unsigned char c) { return false; }
-	static bool isInfinite(unsigned char c) { return false; }
 };
 
 VECTOR_IMPL(List, Value, true) 
 	static bool isNA(Value const& c) { return c.isNil(); }
 	static bool isCheckedNA(Value const& c) { return isNA(c); }
-	static bool isNaN(Value const& c) { return false; }
-	static bool isFinite(Value const& c) { return false; }
-	static bool isInfinite(Value const& c) { return false; }
 };
 
 

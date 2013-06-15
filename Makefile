@@ -39,7 +39,7 @@ default: debug
 debug: CXXFLAGS += -DDEBUG -O0 -g
 debug: $(EXECUTABLE)
 
-release: CXXFLAGS += -DNDEBUG -O4 -g
+release: CXXFLAGS += -DNDEBUG -O3 -g
 release: $(EXECUTABLE)
 
 asm: CXXFLAGS += -DNDEBUG -O3 -g 

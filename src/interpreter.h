@@ -22,6 +22,21 @@ void marker(char* a);
 // VM data structures
 ///////////////////////////////////////////////////////////////////
 
+struct Instruction {
+	int64_t a, b, c;
+	ByteCode::Enum bc;
+
+	Instruction(ByteCode::Enum bc, int64_t a=0, int64_t b=0, int64_t c=0) :
+		a(a), b(b), c(c), bc(bc) {}
+	
+	std::string toString() const {
+		return std::string("") 
+            + ByteCode::toString(bc) 
+            + "\t" + intToStr(a) 
+            + "\t" + intToStr(b) 
+            + "\t" + intToStr(c);
+	}
+};
 
 // TODO: Make this use a good concurrent map implementation 
 class StringTable {

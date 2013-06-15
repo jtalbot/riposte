@@ -4,171 +4,171 @@
 
 #include "enum.h"
 #include "common.h"
-#include "strings.h"
 
-#define CONTROL_FLOW_BYTECODES(_)                                                   \
-    _(jc,           "jc")                                                           \
-    _(jmp,          "jmp")                                                          \
-    _(branch,       "branch")                                                       \
-    _(call,         "call")                                                         \
-    _(fastcall,     "fastcall")                                                     \
-    _(ret,          "ret")          /* return from function */                      \
-    _(rets,         "rets")         /* return from top-level statement */           \
-    _(retp,         "retp")         /* return from a promise or default */          \
-    _(forbegin,     "forbegin")                                                     \
-    _(forend,       "forend")                                                       \
-    _(mov,          "mov")                                                          \
-    _(fastmov,      "fastmov")                                                      \
-    _(external,     "external")                                                     \
+#define CONTROL_FLOW_BYTECODES(_)                                              \
+    _(jc,           "jc")                                                      \
+    _(jmp,          "jmp")                                                     \
+    _(branch,       "branch")                                                  \
+    _(call,         "call")                                                    \
+    _(fastcall,     "fastcall")                                                \
+    _(ret,          "ret")          /* return from function */                 \
+    _(rets,         "rets")         /* return from top-level statement */      \
+    _(retp,         "retp")         /* return from a promise or default */     \
+    _(forbegin,     "forbegin")                                                \
+    _(forend,       "forend")                                                  \
+    _(mov,          "mov")                                                     \
+    _(fastmov,      "fastmov")                                                 \
+    _(external,     "external")                                                \
 
-#define LOAD_STORE_BYTECODES(_)                                                     \
-    _(load,         "load" )        /* = get(x, environment(), "any", TRUE) */      \
+#define LOAD_STORE_BYTECODES(_)                                                \
+    _(load,         "load" )        /* = get(x, environment(), "any", TRUE) */ \
     _(loadfn,       "loadfn")       /* = get(x, environment(), "function", TRUE) */ \
     _(store,        "store")        /* = <-,  assign(x, environment(), FALSE) */\
     _(storeup,      "storeup")      /* = <<-, assign(x, parent.env(environment()), TRUE) */ \
-    _(rm,           "rm")           /* = remove('x', environment()) */              \
-    _(dotsv,        "dotsv")        /* = ..# */                                     \
-    _(dotsc,        "dotsc")        /* = length(...) */                             \
-    _(dots,         "dots")         /* = list(...) */                               \
-    _(missing,      "missing")      /* check if an argument is missing */           \
-    _(getns,        "getns")        /* get a namespace */                           \
+    _(rm,           "rm")           /* = remove('x', environment()) */         \
+    _(dotsv,        "dotsv")        /* = ..# */                                \
+    _(dotsc,        "dotsc")        /* = length(...) */                        \
+    _(dots,         "dots")         /* = list(...) */                          \
+    _(missing,      "missing")      /* check if an argument is missing */      \
+    _(getns,        "getns")        /* get a namespace */                      \
 
 /* In R, stack bytecodes only work while the associated stack frames are still on the stack.
    Otherwise, they return an error. In Riposte, they continue to work. */
-#define STACK_FRAME_BYTECODES(_)                                                    \
-    _(fm_fn,        "fm_fn")        /* function associated with a stack frame */    \
-    _(fm_call,      "fm_call")      /* call associated with a stack frame */        \
+#define STACK_FRAME_BYTECODES(_)                                               \
+    _(fm_fn,        "fm_fn")        /* function associated with a stack frame */ \
+    _(fm_call,      "fm_call")      /* call associated with a stack frame */   \
     _(fm_env,       "fm_env")       /* environment associated with a stack frame */ \
 
-#define PROMISE_BYTECODES(_)                                                        \
-    _(pr_new,       "pr_new")       /* create a new promise (delayedAssign) */      \
-    _(pr_expr,      "pr_expr")      /* the expression of a promise */               \
-    _(pr_env,       "pr_env")       /* the environment of a promise */              \
+#define PROMISE_BYTECODES(_)                                                   \
+    _(pr_new,       "pr_new")       /* create a new promise (delayedAssign) */ \
+    _(pr_expr,      "pr_expr")      /* the expression of a promise */          \
+    _(pr_env,       "pr_env")       /* the environment of a promise */         \
 
-#define OBJECT_BYTECODES(_)                                                         \
-    _(type,         "type")                                                         \
-    _(length,       "length")                                                       \
-    _(get,          "get")          /* $, [[   (works on all objects) */            \
-    _(set,          "set")          /* $<-, [[<-  (works on all objects) */         \
-    _(getsub,       "getsub")       /* [] */                                        \
-    _(setsub,       "setsub")       /* [<- */                                       \
-    _(getenv,       "getenv")       /* get the object's containing environment */   \
-    _(setenv,       "setenv")       /* set the object's containing environment */   \
-    _(getattr,      "getattr")                                                      \
-    _(setattr,      "setattr")                                                      \
-    _(attributes,   "attributes")   /* returns list with attributes & names */      \
+#define OBJECT_BYTECODES(_)                                                    \
+    _(type,         "type")                                                    \
+    _(length,       "length")                                                  \
+    _(get,          "get")          /* $, [[   (works on all objects) */       \
+    _(set,          "set")          /* $<-, [[<-  (works on all objects) */    \
+    _(getsub,       "getsub")       /* [] */                                   \
+    _(setsub,       "setsub")       /* [<- */                                  \
+    _(getenv,       "getenv")       /* get the object's containing environment */ \
+    _(setenv,       "setenv")       /* set the object's containing environment */ \
+    _(getattr,      "getattr")                                                 \
+    _(setattr,      "setattr")                                                 \
+    _(attributes,   "attributes")   /* returns list with attributes & names */ \
     _(strip,        "strip")        /* return base object without any attributes */ \
     _(as,           "as")           /* coerce between object types */
 
-#define ENVIRONMENT_BYTECODES(_)                                                    \
-    _(env_new,      "env_new")                                                      \
-    /* TODO: consider generalizing these to all objects */                          \
-    _(env_exists,   "env_exists")   /* check if environment contains a key */       \
-    _(env_remove,   "env_remove")   /* remove a key from an environment */          \
+#define ENVIRONMENT_BYTECODES(_)                                               \
+    _(env_new,      "env_new")                                                 \
+    /* TODO: consider generalizing these to all objects */                     \
+    _(env_exists,   "env_exists")   /* check if environment contains a key */  \
+    _(env_remove,   "env_remove")   /* remove a key from an environment */     \
 
-#define FUNCTION_BYTECODES(_)                                                       \
-    _(fn_new,       "fn_new")       /* closure constructor */                       \
+#define FUNCTION_BYTECODES(_)                                                  \
+    _(fn_new,       "fn_new")       /* closure constructor */                  \
 
-#define GENERATOR_BYTECODES(_) \
-	_(vector,	"vector",	Generator) \
-	_(seq,		"seq", 		Generator) \
-	_(index,	"index", 	Generator) \
-	_(random,	"random", 	Generator) \
+#define GENERATOR_BYTECODES(_)                                                 \
+	_(vector,	"vector",	Generator)                                         \
+	_(seq,		"seq", 		Generator)                                         \
+	_(index,	"index", 	Generator)                                         \
+	_(random,	"random", 	Generator)                                         \
+
+#define GENERIC_UNARY_BYTECODES(_)                                             \
+    _(map1_d,       "map1_d")                                                  \
+    _(map1_i,       "map1_i")                                                  \
+    _(map1_l,       "map1_l")                                                  \
+    _(map1_c,       "map1_c")                                                  \
+    _(map1_r,       "map1_r")                                                  \
+    _(map1_g,       "map1_g")                                                  \
 
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double
-#define ARITH_UNARY_BYTECODES(_) \
-	_(pos, "pos", 	ArithUnary1, 	PassNA(a, a)) \
-	_(neg, "neg", 	ArithUnary1, 	PassNA(a, -a)) \
-	_(abs, "abs", 	ArithUnary1, 	PassNA(a, Abs(a))) \
-	_(sign, "sign",	ArithUnary2, 	((a>0)-(a<0))) \
-	_(sqrt, "sqrt",	ArithUnary2,	sqrt(a)) \
-	_(floor, "floor",	ArithUnary2,	floor(a)) \
-	_(ceiling, "ceiling",	ArithUnary2,	ceil(a)) \
-	_(trunc, "trunc",	ArithUnary2,	trunc(a)) \
-	_(exp, "exp",	ArithUnary2,	exp(a)) \
-	_(log, "log",	ArithUnary2,	log(a)) \
-	_(cos, "cos",	ArithUnary2,	cos(a)) \
-	_(sin, "sin",	ArithUnary2,	sin(a)) \
-	_(tan, "tan",	ArithUnary2,	tan(a)) \
-	_(acos, "acos",	ArithUnary2,	acos(a)) \
-	_(asin, "asin",	ArithUnary2,	asin(a)) \
-	_(atan, "atan",	ArithUnary2,	atan(a)) \
+#define ARITH_UNARY_BYTECODES(_)                                               \
+	_(pos, "pos", 	ArithUnary1, 	PassNA(a, a))                              \
+	_(neg, "neg", 	ArithUnary1, 	PassNA(a, -a))                             \
 
-#define LOGICAL_UNARY_BYTECODES(_) \
-	_(lnot, "lnot",	LogicalUnary, PassNA(a, ~a)) \
+#define LOGICAL_UNARY_BYTECODES(_)                                             \
+	_(lnot, "lnot",	LogicalUnary, PassNA(a, ~a))                               \
 
-#define ORDINAL_UNARY_BYTECODES(_) \
-	_(isna,	"isna",	OrdinalUnary,	MA::isNA(a)?-1:0) \
-	_(isnan,	"isnan",	OrdinalUnary,	MA::isNaN(a)?-1:0) \
-	_(isfinite,	"isfinite",	OrdinalUnary,	MA::isFinite(a)?-1:0) \
-	_(isinfinite,	"isinfinite",	OrdinalUnary,	MA::isInfinite(a)?-1:0) \
-/*
-#define STRING_UNARY_BYTECODES(_) \
-	_(nchar, "nchar", nchar, StringUnary, PassNA(a, strlen(a))) \
-	_(nzchar, "nzchar", nzchar, StringUnary, PassNA(a, (*a>0))) \
-*/
+#define ORDINAL_UNARY_BYTECODES(_)                                             \
+	_(isna,	"isna",	OrdinalUnary,	MA::isNA(a)?Logical::TrueElement:Logical::FalseElement) \
+
+#define GENERIC_BINARY_BYTECODES(_)                                            \
+    _(map2_d,       "map2_d")                                                  \
+    _(map2_i,       "map2_i")                                                  \
+    _(map2_l,       "map2_l")                                                  \
+    _(map2_c,       "map2_c")                                                  \
+    _(map2_r,       "map2_r")                                                  \
+    _(map2_g,       "map2_g")                                                  \
+
 // ArithBinary1 ops perform Integer*Integer->Integer, ArithBinary2 ops perform Integer*Integer->Double
-#define ARITH_BINARY_BYTECODES(_) \
-	_(add, "add",	ArithBinary1,	PassNA(a,b,a+b)) \
-	_(sub, "sub",	ArithBinary1,	PassNA(a,b,a-b)) \
-	_(mul, "mul",	ArithBinary1,	PassNA(a,b,a*b)) \
-	_(div, "div",	ArithBinary2,	a/b) \
-	_(idiv, "idiv",	ArithBinary1,	PassNA(a,b,IDiv(a,b))) \
-	_(mod, "mod",	ArithBinary1,	PassNA(a,b,Mod(a,b))) \
-	_(pow, "pow",	ArithBinary2,	pow(a,b)) \
-	_(atan2, "atan2",	ArithBinary2,	atan2(a,b)) \
-	_(hypot, "hypot",	ArithBinary2,	hypot(a,b)) \
+#define ARITH_BINARY_BYTECODES(_)                                              \
+	_(add, "add",	ArithBinary1, PassNA(a,b,a+b))                             \
+	_(sub, "sub",	ArithBinary1, PassNA(a,b,a-b))                             \
+	_(mul, "mul",	ArithBinary1, PassNA(a,b,a*b))                             \
+	_(div, "div",	ArithBinary2, PassNA(a,b,a/b))                             \
+	_(idiv, "idiv",	ArithBinary1, PassNA(a,b,IDiv(a,b)))                       \
+	_(mod, "mod",	ArithBinary1, PassNA(a,b,Mod(a,b)))                        \
+	_(pow, "pow",	ArithBinary2, PassNA(a,b,pow(a,b)))                        \
 
-#define LOGICAL_BINARY_BYTECODES(_) \
-	_(lor, "lor",	LogicalBinary,	a|b) \
-	_(land, "land",	LogicalBinary,	a&b) \
+#define LOGICAL_BINARY_BYTECODES(_)                                            \
+	_(lor, "lor",	LogicalBinary, PassNA(a,b,a|b))                            \
+	_(land, "land",	LogicalBinary, PassNA(a,b,a&b))                            \
 
-#define UNIFY_BINARY_BYTECODES(_) \
-	_(pmin, "pmin",	UnifyBinary,	PassNA(a,b,riposte_min(thread,a,b))) \
-	_(pmax, "pmax",	UnifyBinary,	PassNA(a,b,riposte_max(thread,a,b))) \
+#define UNIFY_BINARY_BYTECODES(_)                                              \
+	_(pmin, "pmin",	UnifyBinary, PassCheckedNA(a,b,riposte_min(thread,a,b)))   \
+	_(pmax, "pmax",	UnifyBinary, PassCheckedNA(a,b,riposte_max(thread,a,b)))   \
 
-#define ROUND_BINARY_BYTECODES(_) \
-	_(round, "round", 	RoundBinary,	PassNA(a,b,riposte_round(thread,a,b))) \
-	_(signif, "signif",	RoundBinary,	PassNA(a,b,riposte_signif(thread,a,b))) \
+#define ORDINAL_BINARY_BYTECODES(_)                                            \
+	_(eq, "eq", OrdinalBinary, PassCheckedNA(a,b,(a==b)?Logical::TrueElement:Logical::FalseElement)) \
+	_(neq, "neq", OrdinalBinary, PassCheckedNA(a,b,a!=b?Logical::TrueElement:Logical::FalseElement)) \
+	_(gt, "gt",	OrdinalBinary, PassCheckedNA(a,b,gt(thread,a,b)?Logical::TrueElement:Logical::FalseElement)) \
+	_(ge, "ge",	OrdinalBinary, PassCheckedNA(a,b,ge(thread,a,b)?Logical::TrueElement:Logical::FalseElement)) \
+	_(lt, "lt",	OrdinalBinary, PassCheckedNA(a,b,lt(thread,a,b)?Logical::TrueElement:Logical::FalseElement)) \
+	_(le, "le",	OrdinalBinary, PassCheckedNA(a,b,le(thread,a,b)?Logical::TrueElement:Logical::FalseElement)) \
 
-#define ORDINAL_BINARY_BYTECODES(_) \
-	_(eq, "eq",	OrdinalBinary,	PassNA(a,b,a==b?-1:0)) \
-	_(neq, "neq",	OrdinalBinary,	PassNA(a,b,a!=b?-1:0)) \
-	_(gt, "gt",	OrdinalBinary,	PassNA(a,b,gt(thread,a,b)?-1:0)) \
-	_(ge, "ge",	OrdinalBinary,	PassNA(a,b,ge(thread,a,b)?-1:0)) \
-	_(lt, "lt",	OrdinalBinary,	PassNA(a,b,lt(thread,a,b)?-1:0)) \
-	_(le, "le",	OrdinalBinary,	PassNA(a,b,le(thread,a,b)?-1:0)) \
-
-#define SPECIAL_MAP_BYTECODES(_) \
-	_(ifelse, "ifelse", IfElse) \
+#define SPECIAL_MAP_BYTECODES(_)                                               \
+	_(ifelse, "ifelse", IfElse)                                                \
 	_(split, "split", Split)
 
+#define GENERIC_FOLD_BYTECODES(_)                                              \
+    _(fold_d,       "fold_d")                                                  \
+    _(fold_i,       "fold_i")                                                  \
+    _(fold_l,       "fold_l")                                                  \
+    _(fold_c,       "fold_c")                                                  \
+    _(fold_r,       "fold_r")                                                  \
+    _(fold_g,       "fold_g")                                                  \
+
 // ArithFold1 ops perform [Integer]->Integer, ArithFold2 ops perform [Integer]->Double
-#define ARITH_FOLD_BYTECODES(_) \
-	_(sum, "sum",	ArithFold1, 	add) \
-	_(prod, "prod",	ArithFold1, 	mul) \
+#define ARITH_FOLD_BYTECODES(_)                                                \
+	_(sum, "sum",	ArithFold1, 	add)                                       \
+	_(prod, "prod",	ArithFold1, 	mul) 
 
-#define LOGICAL_FOLD_BYTECODES(_) \
-	_(any, "any",	LogicalFold, 	lor) \
-	_(all, "all",	LogicalFold, 	land) \
+#define LOGICAL_FOLD_BYTECODES(_)                                              \
+	_(any, "any",	LogicalFold, 	lor)                                       \
+	_(all, "all",	LogicalFold, 	land) 
 
-#define UNIFY_FOLD_BYTECODES(_) \
-	_(min, "min",	UnifyFold, 	pmin) \
-	_(max, "max",	UnifyFold, 	pmax) \
+#define UNIFY_FOLD_BYTECODES(_)                                                \
+	_(min, "min",	UnifyFold, 	pmin)                                          \
+	_(max, "max",	UnifyFold, 	pmax) 
 
-#define SPECIAL_FOLD_BYTECODES(_) \
-	_(cm2, "cm2", Moment2Fold) \
-	_(mean, "mean", ArithFold2) \
+#define GENERIC_SCAN_BYTECODES(_)                                              \
+    _(scan_d,       "scan_d")                                                  \
+    _(scan_i,       "scan_i")                                                  \
+    _(scan_l,       "scan_l")                                                  \
+    _(scan_c,       "scan_c")                                                  \
+    _(scan_r,       "scan_r")                                                  \
+    _(scan_g,       "scan_g") 
 
-#define ARITH_SCAN_BYTECODES(_) \
-	_(cumsum, "cumsum",	ArithScan,	add) \
-	_(cumprod, "cumprod",	ArithScan,	mul) \
+#define ARITH_SCAN_BYTECODES(_)                                                \
+	_(cumsum, "cumsum",	ArithScan,	add)                                       \
+	_(cumprod, "cumprod",	ArithScan,	mul) 
 
-#define UNIFY_SCAN_BYTECODES(_) \
-	_(cummin, "cummin",	UnifyScan,	pmin) \
-	_(cummax, "cummax",	UnifyScan,	pmax) \
+#define UNIFY_SCAN_BYTECODES(_)                                                \
+	_(cummin, "cummin",	UnifyScan,	pmin)                                      \
+	_(cummax, "cummax",	UnifyScan,	pmax) 
 
-#define SPECIAL_BYTECODES(_) 	\
+#define SPECIAL_BYTECODES(_) 	                                               \
 	_(done, "done") 
 
 #define UNARY_BYTECODES(_) \
@@ -181,11 +181,12 @@
 	LOGICAL_BINARY_BYTECODES(_) \
 	UNIFY_BINARY_BYTECODES(_) \
 	ORDINAL_BINARY_BYTECODES(_) \
-	ROUND_BINARY_BYTECODES(_) \
 
 #define MAP_BYTECODES(_) \
 	UNARY_BYTECODES(_) \
 	BINARY_BYTECODES(_) \
+    GENERIC_UNARY_BYTECODES(_) \
+    GENERIC_BINARY_BYTECODES(_) \
 
 #define FOLD_BYTECODES(_) \
 	ARITH_FOLD_BYTECODES(_) \
@@ -209,7 +210,8 @@
 	SPECIAL_MAP_BYTECODES(_) \
 	FOLD_BYTECODES(_) \
 	SCAN_BYTECODES(_) \
-	SPECIAL_FOLD_BYTECODES(_) \
+	GENERIC_SCAN_BYTECODES(_) \
+	GENERIC_FOLD_BYTECODES(_) \
 
 #define BYTECODES(_) \
 	STANDARD_BYTECODES(_) \
@@ -233,23 +235,5 @@
 	SCAN_BYTECODES(_) \
 
 DECLARE_ENUM(ByteCode, BYTECODES)
-
-struct Instruction {
-	int64_t a, b, c;
-	ByteCode::Enum bc;
-
-	Instruction(ByteCode::Enum bc, int64_t a=0, int64_t b=0, int64_t c=0) :
-		a(a), b(b), c(c), bc(bc) {}
-	
-	std::string regToStr(int64_t a) const {
-		//if(a <= 0) return intToStr(-a);
-		//else return std::string((String)a);
-		return intToStr(a);
-	}
-
-	std::string toString() const {
-		return std::string("") + ByteCode::toString(bc) + "\t" + regToStr(a) + "\t" + regToStr(b) + "\t" + regToStr(c);
-	}
-};
 
 #endif

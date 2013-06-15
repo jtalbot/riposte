@@ -78,7 +78,11 @@ public:
 };
 
 inline HeapObject* Heap::smallalloc(uint64_t bytes) {
-	bytes = (bytes + 63) & (~63);
+	// so the slot marking scheme works, objects have to take up
+    // at least page size/slot = 64 bytes
+    // this is actually only true for recursive objects so we could
+    // be a bit more aggressive about this
+    bytes = (bytes + 63) & (~63);
 	if(bump+bytes >= limit)
 		popRegion();
 	

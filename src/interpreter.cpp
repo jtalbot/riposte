@@ -291,13 +291,392 @@ static inline Instruction const* external_op(Thread& thread, Instruction const& 
 	return &inst+1;
 }
 
+static void* find_function(Thread& thread, String name) {
+    static String lastname = Strings::empty;
+    static void* lastfunc = NULL;
+
+    void* func = NULL;
+    /*if(std::string(name) == std::string(lastname)) {
+        func = lastfunc;
+    }
+    else {*/
+        for(std::map<std::string,void*>::iterator i = thread.state.handles.begin();
+            i != thread.state.handles.end(); ++i) {
+            func = dlsym(i->second, name);
+            if(func != NULL)
+                break;
+        }
+        lastfunc = func;
+        lastname = name;
+    //}
+
+    if(func == NULL)
+        _error("Can't find external function");
+    
+    return func;
+}
+
+static inline Instruction const* map1_d_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External map function name must be a string");
+
+    if(!Map1Dispatch< Zip1, UnaryFuncOp, Double >(thread, find_function(thread, a.s), b, OUT(c)))
+        _error("Invalid external map function type");
+    
+    return &inst+1;
+}
+
+static inline Instruction const* map1_i_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External map function name must be a string");
+
+    if(!Map1Dispatch< Zip1, UnaryFuncOp, Integer >(thread, find_function(thread, a.s), b, OUT(c)))
+        _error("Invalid external map function type");
+    
+    return &inst+1;
+}
+
+static inline Instruction const* map1_l_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External map function name must be a string");
+
+    if(!Map1Dispatch< Zip1, UnaryFuncOp, Logical >(thread, find_function(thread, a.s), b, OUT(c)))
+        _error("Invalid external map function type");
+    
+    return &inst+1;
+}
+
+static inline Instruction const* map1_c_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External map function name must be a string");
+
+    if(!Map1Dispatch< Zip1, UnaryFuncOp, Character >(thread, find_function(thread, a.s), b, OUT(c)))
+        _error("Invalid external map function type");
+    
+    return &inst+1;
+}
+
+static inline Instruction const* map1_r_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External map function name must be a string");
+
+    if(!Map1Dispatch< Zip1, UnaryFuncOp, Raw >(thread, find_function(thread, a.s), b, OUT(c)))
+        _error("Invalid external map function type");
+    
+    return &inst+1;
+}
+
+static inline Instruction const* map1_g_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External map function name must be a string");
+
+    if(!Map1Dispatch< Zip1, UnaryFuncOp, List >(thread, find_function(thread, a.s), b, OUT(c)))
+        _error("Invalid external map function type");
+    
+    return &inst+1;
+}
+
+static inline Instruction const* map2_d_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+    DECODE(c); BIND(c);
+
+    if(!c.isCharacter1())
+        _error("External map function name must be a string");
+
+    if(!Map2Dispatch< BinaryFuncOp, Double >(thread, find_function(thread, c.s), a, b, OUT(c)))
+        _error("Invalid external map function type");
+    
+    return &inst+1;
+}
+
+static inline Instruction const* map2_i_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+    DECODE(c); BIND(c);
+
+    if(!a.isCharacter1())
+        _error("External map function name must be a string");
+
+    if(!Map2Dispatch< BinaryFuncOp, Integer >(thread, find_function(thread, a.s), b, c, OUT(c)))
+        _error("Invalid external map function type");
+    
+    return &inst+1;
+}
+
+static inline Instruction const* map2_l_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+    DECODE(c); BIND(c);
+
+    if(!a.isCharacter1())
+        _error("External map function name must be a string");
+
+    if(!Map2Dispatch< BinaryFuncOp, Logical >(thread, find_function(thread, a.s), b, c, OUT(c)))
+        _error("Invalid external map function type");
+    
+    return &inst+1;
+}
+
+static inline Instruction const* map2_c_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+    DECODE(c); BIND(c);
+
+    if(!a.isCharacter1())
+        _error("External map function name must be a string");
+
+    if(!Map2Dispatch< BinaryFuncOp, Character >(thread, find_function(thread, a.s), b, c, OUT(c)))
+        _error("Invalid external map function type");
+    
+    return &inst+1;
+}
+
+static inline Instruction const* map2_r_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+    DECODE(c); BIND(c);
+
+    if(!a.isCharacter1())
+        _error("External map function name must be a string");
+
+    if(!Map2Dispatch< BinaryFuncOp, Raw >(thread, find_function(thread, a.s), b, c, OUT(c)))
+        _error("Invalid external map function type");
+    
+    return &inst+1;
+}
+
+static inline Instruction const* map2_g_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+    DECODE(c); BIND(c);
+
+    if(!a.isCharacter1())
+        _error("External map function name must be a string");
+
+    if(!Map2Dispatch< BinaryFuncOp, List >(thread, find_function(thread, a.s), b, c, OUT(c)))
+        _error("Invalid external map function type");
+    
+    return &inst+1;
+}
+
+FoldFuncArgs find_fold_function(Thread& thread, String name) {
+    void* init_func = find_function(thread, (std::string(name) + "_init").c_str());
+    void* op_func = find_function(thread, (std::string(name) + "_op").c_str());
+    void* fini_func = find_function(thread, (std::string(name) + "_fini").c_str());
+
+    FoldFuncArgs funcs;
+    funcs.base = init_func;
+    funcs.func = op_func;
+    funcs.fini = fini_func;
+
+   return funcs; 
+}
+
+static inline Instruction const* fold_d_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External fold function name must be a string");
+
+    FoldFuncArgs funcs = find_fold_function(thread, a.s);
+
+    if(!Map1Dispatch< FoldLeft2, FoldFuncOp, Double >(thread, &funcs, b, OUT(c)))
+        _error("Invalid external fold function type");
+
+    return &inst+1;
+}
+
+static inline Instruction const* fold_i_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External fold function name must be a string");
+
+    FoldFuncArgs funcs = find_fold_function(thread, a.s);
+
+    if(!Map1Dispatch< FoldLeft2, FoldFuncOp, Integer >(thread, &funcs, b, OUT(c)))
+        _error("Invalid external fold function type");
+
+    return &inst+1;
+}
+
+static inline Instruction const* fold_l_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External fold function name must be a string");
+
+    FoldFuncArgs funcs = find_fold_function(thread, a.s);
+
+    if(!Map1Dispatch< FoldLeft2, FoldFuncOp, Logical >(thread, &funcs, b, OUT(c)))
+        _error("Invalid external fold function type");
+
+    return &inst+1;
+}
+
+static inline Instruction const* fold_c_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External fold function name must be a string");
+
+    FoldFuncArgs funcs = find_fold_function(thread, a.s);
+
+    if(!Map1Dispatch< FoldLeft2, FoldFuncOp, Character >(thread, &funcs, b, OUT(c)))
+        _error("Invalid external fold function type");
+
+    return &inst+1;
+}
+
+static inline Instruction const* fold_r_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External fold function name must be a string");
+
+    FoldFuncArgs funcs = find_fold_function(thread, a.s);
+
+    if(!Map1Dispatch< FoldLeft2, FoldFuncOp, Raw >(thread, &funcs, b, OUT(c)))
+        _error("Invalid external fold function type");
+
+    return &inst+1;
+}
+
+static inline Instruction const* fold_g_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External fold function name must be a string");
+
+    FoldFuncArgs funcs = find_fold_function(thread, a.s);
+
+    if(!Map1Dispatch< FoldLeft2, FoldFuncOp, List >(thread, &funcs, b, OUT(c)))
+        _error("Invalid external fold function type");
+
+    return &inst+1;
+}
+
+static inline Instruction const* scan_d_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External scan function name must be a string");
+
+    FoldFuncArgs funcs = find_fold_function(thread, a.s);
+
+    if(!Map1Dispatch< ScanLeft2, FoldFuncOp, Double >(thread, &funcs, b, OUT(c)))
+        _error("Invalid external scan function type");
+
+    return &inst+1;
+}
+
+static inline Instruction const* scan_i_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External scan function name must be a string");
+
+    FoldFuncArgs funcs = find_fold_function(thread, a.s);
+
+    if(!Map1Dispatch< ScanLeft2, FoldFuncOp, Integer >(thread, &funcs, b, OUT(c)))
+        _error("Invalid external scan function type");
+
+    return &inst+1;
+}
+
+static inline Instruction const* scan_l_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External scan function name must be a string");
+
+    FoldFuncArgs funcs = find_fold_function(thread, a.s);
+
+    if(!Map1Dispatch< ScanLeft2, FoldFuncOp, Logical >(thread, &funcs, b, OUT(c)))
+        _error("Invalid external scan function type");
+
+    return &inst+1;
+}
+
+static inline Instruction const* scan_c_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External scan function name must be a string");
+
+    FoldFuncArgs funcs = find_fold_function(thread, a.s);
+
+    if(!Map1Dispatch< ScanLeft2, FoldFuncOp, Character >(thread, &funcs, b, OUT(c)))
+        _error("Invalid external scan function type");
+
+    return &inst+1;
+}
+
+static inline Instruction const* scan_r_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External scan function name must be a string");
+
+    FoldFuncArgs funcs = find_fold_function(thread, a.s);
+
+    if(!Map1Dispatch< ScanLeft2, FoldFuncOp, Raw >(thread, &funcs, b, OUT(c)))
+        _error("Invalid external scan function type");
+
+    return &inst+1;
+}
+
+static inline Instruction const* scan_g_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isCharacter1())
+        _error("External scan function name must be a string");
+
+    FoldFuncArgs funcs = find_fold_function(thread, a.s);
+
+    if(!Map1Dispatch< ScanLeft2, FoldFuncOp, List >(thread, &funcs, b, OUT(c)))
+        _error("Invalid external scan function type");
+
+    return &inst+1;
+}
+
 // LOAD_STORE_BYTECODES
 
 static inline Instruction const* load_op(Thread& thread, Instruction const& inst) {
 	String s = ((Character const&)CONSTANT(inst.a)).s;
 	Environment* env;
 	Value const& v = thread.frame.environment->getRecursive(s, env);
-
 	if(!v.isObject()) {
 		return force(thread, inst, v, env, s);
 	}
@@ -826,7 +1205,7 @@ static inline Instruction const* strip_op(Thread& thread, Instruction const& ins
 
 static inline Instruction const* as_op(Thread& thread, Instruction const& inst) {
 	DECODE(a); FORCE(a); BIND(a);
-	String type = (String)inst.b;
+	String type = ((Character const&)CONSTANT(inst.b)).s;
     if(type == Strings::Null)
         OUT(c) = As<Null>(thread, a);
     else if(type == Strings::Logical)
@@ -929,84 +1308,25 @@ static inline Instruction const* fn_new_op(Thread& thread, Instruction const& in
 #define OP(Name, string, Group, Func) \
 static inline Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	DECODE(a);	\
-	Value & c = OUT(c);	\
-	if(a.isDouble1())  { Name##VOp<Double>::Scalar(thread, a.d, c); return &inst+1; } \
-	if(a.isInteger1()) { Name##VOp<Integer>::Scalar(thread, a.i, c); return &inst+1; } \
-	if(a.isLogical1()) { Name##VOp<Logical>::Scalar(thread, a.c, c); return &inst+1; } \
-	FORCE(a); \
-	if(thread.traces.isTraceable<Group>(a)) { \
-		c = thread.traces.EmitUnary<Group>(thread.frame.environment, IROpCode::Name, a, 0); \
-		thread.traces.OptBind(thread, c); \
- 		return &inst+1; \
-	} \
-	BIND(a); \
-	if(((Object const&)a).hasAttributes()) { return GenericDispatch(thread, inst, Strings::Name, a, inst.c); } \
-\
-	Group##Dispatch<Name##VOp>(thread, a, c); \
-	return &inst+1; \
+    if( Group##Fast<Name##VOp>( thread, NULL, a, OUT(c) ) ) \
+        return &inst+1; \
+    else \
+        return Name##Slow( thread, inst, NULL, a, OUT(c) ); \
 }
 UNARY_FOLD_SCAN_BYTECODES(OP)
 #undef OP
-
 
 #define OP(Name, string, Group, Func) \
 static inline Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
 	DECODE(a);	\
 	DECODE(b);	\
-	Value & c = OUT(c);	\
-        if(__builtin_expect(a.isDouble1(),true)) {			\
-		if(__builtin_expect(b.isDouble1(),true)) { Name##VOp<Double,Double>::Scalar(thread, a.d, b.d, c); return &inst+1; } \
-		if(b.isInteger1()) { Name##VOp<Double,Integer>::Scalar(thread, a.d, b.i, c); return &inst+1; } \
-		if(b.isLogical1()) { Name##VOp<Double,Logical>::Scalar(thread, a.d, b.c, c); return &inst+1; } \
-        }	\
-        else if(a.isInteger1()) {	\
-		if(b.isDouble1()) { Name##VOp<Integer,Double>::Scalar(thread, a.i, b.d, c); return &inst+1; } \
-		if(b.isInteger1()) { Name##VOp<Integer,Integer>::Scalar(thread, a.i, b.i, c); return &inst+1; } \
-		if(b.isLogical1()) { Name##VOp<Integer,Logical>::Scalar(thread, a.i, b.c, c); return &inst+1; } \
-        } \
-        else if(a.isLogical1()) {	\
-		if(b.isDouble1()) { Name##VOp<Logical,Double>::Scalar(thread, a.c, b.d, c); return &inst+1; } \
-		if(b.isInteger1()) { Name##VOp<Logical,Integer>::Scalar(thread, a.c, b.i, c); return &inst+1; } \
-		if(b.isLogical1()) { Name##VOp<Logical,Logical>::Scalar(thread, a.c, b.c, c); return &inst+1; } \
-        } \
-	FORCE(a); FORCE(b); \
-	if(thread.traces.isTraceable<Group>(a,b)) { \
-		c = thread.traces.EmitBinary<Group>(thread.frame.environment, IROpCode::Name, a, b, 0); \
-		thread.traces.OptBind(thread, c); \
-		return &inst+1; \
-	} \
-	BIND(a); BIND(b); \
-	if(((Object const&)a).hasAttributes() || ((Object const&)b).hasAttributes()) { return GenericDispatch(thread, inst, Strings::Name, a, b, inst.c); } \
-\
-	Group##Dispatch<Name##VOp>(thread, a, b, c);	\
-	return &inst+1;	\
+    if( Group##Fast<Name##VOp>( thread, NULL, a, b, OUT(c) ) ) \
+        return &inst+1; \
+    else \
+        return Name##Slow( thread, inst, NULL, a, b, OUT(c) ); \
 }
 BINARY_BYTECODES(OP)
 #undef OP
-
-static inline Instruction const* mean_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); 
-	if(thread.traces.isTraceable<ArithFold2>(a)) {
-		OUT(c) = thread.traces.EmitUnary<ArithFold2>(thread.frame.environment, IROpCode::mean, a, 0);
-		thread.traces.OptBind(thread, OUT(c));
- 		return &inst+1;
-	}
-    else {
-        _error("NYI: scalar mean");
-    }
-	return &inst+1;
-}
-
-static inline Instruction const* cm2_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); 
-	DECODE(b); FORCE(b); 
-	if(thread.traces.isTraceable<Moment2Fold>(a,b)) {
-		OUT(c) = thread.traces.EmitBinary<Moment2Fold>(thread.frame.environment, IROpCode::cm2, a, b, 0);
-		thread.traces.OptBind(thread, OUT(c));
- 		return &inst+1;
-	}
-	return &inst+1;
-}
 
 static inline Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
 	DECODE(a); FORCE(a);
@@ -1031,7 +1351,7 @@ static inline Instruction const* ifelse_op(Thread& thread, Instruction const& in
 	}
 	BIND(a); BIND(b); BIND(c);
 
-	_error("ifelse not defined in scalar yet");
+    IfElseDispatch(thread, NULL, b, a, c, OUT(c));
 	return &inst+1; 
 }
 

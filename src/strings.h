@@ -42,6 +42,24 @@
 	_(Expression,	"expression")	\
 	_(internal, 	".Internal") \
 	_(external, 	".External") \
+	_(map_d, 	".Map.double") \
+	_(map_i, 	".Map.integer") \
+	_(map_l, 	".Map.logical") \
+	_(map_c, 	".Map.character") \
+	_(map_r, 	".Map.raw") \
+	_(map_g, 	".Map.list") \
+	_(fold_d, 	".Fold.double") \
+	_(fold_i, 	".Fold.integer") \
+	_(fold_l, 	".Fold.logical") \
+	_(fold_c, 	".Fold.character") \
+	_(fold_r, 	".Fold.row") \
+	_(fold_g, 	".Fold.list") \
+	_(scan_d, 	".Scan.double") \
+	_(scan_i, 	".Scan.integer") \
+	_(scan_l, 	".Scan.logical") \
+	_(scan_c, 	".Scan.character") \
+	_(scan_r, 	".Scan.row") \
+	_(scan_g, 	".Scan.list") \
 	_(assign, 	"<-") \
 	_(assign2, 	"<<-") \
 	_(eqassign, 	"=") \
@@ -86,22 +104,8 @@
 	_(bracket, 	"[") \
 	_(bb, 		"[[") \
 	_(question, 	"?") \
-	_(abs, 		"abs") \
-	_(sign, 	"sign") \
-	_(sqrt, 	"sqrt") \
-	_(floor, 	"floor") \
-	_(ceiling, 	"ceiling") \
-	_(trunc, 	"trunc") \
 	_(round, 	"round") \
 	_(signif, 	"signif") \
-	_(exp, 		"exp") \
-	_(log, 		"log") \
-	_(cos, 		"cos") \
-	_(sin, 		"sin") \
-	_(tan, 		"tan") \
-	_(acos, 	"acos") \
-	_(asin, 	"asin") \
-	_(atan, 	"atan") \
 	_(sum,		"sum") \
 	_(prod,		"prod") \
 	_(mean,		"mean") \
@@ -146,9 +150,6 @@
 	_(split,	"split") \
 	_(strip,	"strip") \
 	_(isna,		"is.na") \
-	_(isnan,	"is.nan") \
-	_(isfinite,	"is.finite") \
-	_(isinfinite,	"is.infinite") \
 	_(vector,	"vector") \
 	_(attrget,	"attr") \
 	_(attrset,	"attr<-") \

@@ -6,7 +6,7 @@
 #include "../opgroups.h"
 
 #define TRACE_MAX_VECTOR_REGISTERS (32)
-#define TRACE_VECTOR_WIDTH (64)
+#define TRACE_VECTOR_WIDTH (2048)
 //maximum number of instructions to record before dropping out of the
 //recording interpreter
 #define TRACE_MAX_RECORDED (1024)

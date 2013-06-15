@@ -1226,14 +1226,14 @@ static void yy_reduce(
         break;
       case 70: /* sub ::= NULL_CONST optnl EQ_ASSIGN */
 #line 152 "grammar.y"
-{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(Strings::empty, Value::Nil());   yy_destructor(yypParser,42,&yymsp[-2].minor);
+{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(Strings::Null, Value::Nil());   yy_destructor(yypParser,42,&yymsp[-2].minor);
   yy_destructor(yypParser,9,&yymsp[0].minor);
 }
 #line 1233 "grammar.c"
         break;
       case 71: /* sub ::= NULL_CONST optnl EQ_ASSIGN optnl expr */
 #line 153 "grammar.y"
-{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(Strings::empty, yymsp[0].minor.yy0);   yy_destructor(yypParser,42,&yymsp[-4].minor);
+{ yygotominor.yy122 = new Pairs(); yygotominor.yy122->push_back(Strings::Null, yymsp[0].minor.yy0);   yy_destructor(yypParser,42,&yymsp[-4].minor);
   yy_destructor(yypParser,9,&yymsp[-2].minor);
 }
 #line 1240 "grammar.c"

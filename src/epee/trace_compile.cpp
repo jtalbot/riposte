@@ -850,12 +850,12 @@ struct TraceJIT {
 				}
 			} break;
 
-			case IROpCode::sqrt: 	asm_.sqrtpd(RegR(ref),RegA(ref)); break;
+			//case IROpCode::sqrt: 	asm_.sqrtpd(RegR(ref),RegA(ref)); break;
 			//case IROpCode::round:	asm_.roundpd(RegR(ref),RegA(ref), Assembler::kRoundToNearest); break;
-			case IROpCode::floor: 	asm_.roundpd(RegR(ref),RegA(ref), Assembler::kRoundDown); break;
-			case IROpCode::ceiling:	asm_.roundpd(RegR(ref),RegA(ref), Assembler::kRoundUp); break;
-			case IROpCode::trunc: 	asm_.roundpd(RegR(ref),RegA(ref), Assembler::kRoundToZero); break;
-			case IROpCode::abs: {
+			//case IROpCode::floor: 	asm_.roundpd(RegR(ref),RegA(ref), Assembler::kRoundDown); break;
+			//case IROpCode::ceiling:	asm_.roundpd(RegR(ref),RegA(ref), Assembler::kRoundUp); break;
+			//case IROpCode::trunc: 	asm_.roundpd(RegR(ref),RegA(ref), Assembler::kRoundToZero); break;
+			/*case IROpCode::abs: {
 				if(node.isDouble()) {
 					asm_.andpd(MoveA2R(ref), ConstantTable(C_ABS_MASK));
 				} else {			
@@ -863,7 +863,7 @@ struct TraceJIT {
 					// if(r < 0) f = ~0 else 0; r = r xor f; r -= f;
 					EmitVectorizedUnaryFunction(ref,abs_i); 
 				}
-			} break;
+			}*/ break;
 			case IROpCode::neg: {
 				if(node.isDouble()) {	
 					asm_.xorpd(MoveA2R(ref), ConstantTable(C_NEG_MASK));	
@@ -887,21 +887,21 @@ struct TraceJIT {
 			case IROpCode::atan2: 	EmitBinaryFunction(ref,amd_atan2); break;
 			case IROpCode::hypot: 	EmitBinaryFunction(ref,amd_hypot); break;
 #else
-			case IROpCode::exp: 	EmitVectorizedUnaryFunction(ref,exp_d); break;
+			/*case IROpCode::exp: 	EmitVectorizedUnaryFunction(ref,exp_d); break;
 			case IROpCode::log: 	EmitVectorizedUnaryFunction(ref,log_d); break;
 			case IROpCode::cos: 	EmitUnaryFunction(ref,cos); break;
 			case IROpCode::sin: 	EmitUnaryFunction(ref,sin); break;
 			case IROpCode::tan: 	EmitUnaryFunction(ref,tan); break;
 			case IROpCode::acos: 	EmitUnaryFunction(ref,acos); break;
 			case IROpCode::asin: 	EmitUnaryFunction(ref,asin); break;
-			case IROpCode::atan: 	EmitUnaryFunction(ref,atan); break;
+			case IROpCode::atan: 	EmitUnaryFunction(ref,atan); break;*/
 			case IROpCode::pow: 	EmitBinaryFunction(ref,pow); break;
-			case IROpCode::atan2: 	EmitBinaryFunction(ref,atan2); break;
-			case IROpCode::hypot: 	EmitBinaryFunction(ref,hypot); break;
+			//case IROpCode::atan2: 	EmitBinaryFunction(ref,atan2); break;
+			//case IROpCode::hypot: 	EmitBinaryFunction(ref,hypot); break;
 #endif
 			case IROpCode::isna:
 				asm_.pcmpeqq(MoveA2R(ref), ConstantTable(C_DOUBLE_NA)); break;
-			case IROpCode::sign: 	EmitVectorizedUnaryFunction(ref,sign_d); break;
+			//case IROpCode::sign: 	EmitVectorizedUnaryFunction(ref,sign_d); break;
 			case IROpCode::mod: {
 				if(node.isDouble()) {
 					EmitMove(xmm15, RegA(ref));
@@ -1140,7 +1140,7 @@ struct TraceJIT {
 				stackOffset += 0x10;
 			} break;
 
-			case IROpCode::mean: {
+			/*case IROpCode::mean: {
 				// relying on doubles and integers to be the same length
 				memset(node.in.raw(), 0, node.in.length()*sizeof(double));
 				
@@ -1261,7 +1261,7 @@ struct TraceJIT {
 					asm_.movdqa(operand, RegR(ref));
 				}
 				stackOffset += 0x10;
-			} break;
+			} break;*/
 			
 			case IROpCode::min:  {
 				for(int64_t i = 0; i < node.in.length(); i++)
@@ -1902,12 +1902,12 @@ struct TraceJIT {
 							case IROpCode::length:
 								mergeLength(node, a, b);
 								break;
-							case IROpCode::mean:
+							/*case IROpCode::mean:
 								mergeMean(node, a, b);
 								break;
 							case IROpCode::cm2:
 								mergeCm2(node, a, b);
-								break;
+								break;*/
 							case IROpCode::min:
 								mergeMin(node, a, b);
 								break;
@@ -1942,12 +1942,12 @@ struct TraceJIT {
 							case IROpCode::length:
 								mergeLength(node, a, b);
 								break;
-							case IROpCode::mean:
+							/*case IROpCode::mean:
 								mergeMean(node, a, b);
 								break;
 							case IROpCode::cm2:
 								mergeCm2(node, a, b);
-								break;
+								break;*/
 							case IROpCode::min:
 								mergeMin(node, a, b);
 								break;

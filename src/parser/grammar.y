@@ -149,8 +149,8 @@ sub(A) ::= SYMBOL(B) optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(SymbolStr(
 sub(A) ::= STR_CONST(B) optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(SymbolStr(B), Value::Nil()); }
 sub(A) ::= SYMBOL(B) optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(SymbolStr(B), C); }
 sub(A) ::= STR_CONST(B) optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(SymbolStr(B), C); }
-sub(A) ::= NULL_CONST optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(Strings::empty, Value::Nil()); }
-sub(A) ::= NULL_CONST optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(Strings::empty, C); }
+sub(A) ::= NULL_CONST optnl EQ_ASSIGN. { A = new Pairs(); A->push_back(Strings::Null, Value::Nil()); }
+sub(A) ::= NULL_CONST optnl EQ_ASSIGN optnl expr(C). { A = new Pairs(); A->push_back(Strings::Null, C); }
 sub(A) ::= expr(B). { A = new Pairs(); A->push_back(Strings::empty, B); }
 
 formallist(A) ::= . { A = new Pairs(); }

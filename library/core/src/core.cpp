@@ -13,6 +13,7 @@
 
 #include "../../../libs/Eigen/Dense"
 
+
 template<typename T>
 T const& Cast(Value const& v) {
 	if(v.type() != T::ValueType) _error("incorrect type passed to core function");
@@ -134,31 +135,6 @@ Value readtable(Thread& thread, Value const* args) {
 		return Null::Singleton();
 	}
 }
-
-/*void attr(Thread& thread, Value const* args, Value& result)
-{
-	// NYI: exact
-	Object const& object = (Object const&)args[0];
-	Character which = Cast<Character>(args[1]);
-	if(object.hasAttributes() && object.attributes()->has(which[0])) {
-		result = object.attributes()->get(which[0]);
-	}
-	else {
-		result = Null::Singleton();
-	}
-}
-
-void assignAttr(Thread& thread, Value const* args, Value& result)
-{
-	Object object = (Object const&)args[0];
-	Character which = Cast<Character>(args[1]);
-	Dictionary* d = object.hasAttributes() 
-		? object.attributes()->clone(1)
-		: new Dictionary(1);
-	d->insert(which[0]) = args[2];
-	object.attributes(d);
-	result = object;
-}*/
 
 Type::Enum cTypeCast(Type::Enum s, Type::Enum t)
 {
@@ -417,9 +393,9 @@ Value source(Thread& thread, Value const* args) {
 extern "C"
 Value environment(Thread& thread, Value const* args) {
 	Value e = args[0];
-	if(e.isFunction()) {
+	if(e.isClosure()) {
         Value result;
-		REnvironment::Init(result, ((Function const&)e).environment());
+		REnvironment::Init(result, ((Closure const&)e).environment());
 		return result;
 	}
 	return Null::Singleton();
@@ -503,13 +479,13 @@ Value deparse(Thread& thread, Value const* args) {
 extern "C"
 Value substitute(Thread& thread, Value const* args) {
 	Value v = args[0];
-	while(v.isPromise()) v = ((Function const&)v).prototype()->expression;
+	while(v.isPromise()) v = ((Closure const&)v).prototype()->expression;
 	
 	if(isSymbol(v)) {
 		Environment* penv;
 		Value const& r = thread.frame.environment->getRecursive(SymbolStr(v), penv);
 		if(!r.isNil()) v = r;
-		while(v.isPromise()) v = ((Function const&)v).prototype()->expression;
+		while(v.isPromise()) v = ((Closure const&)v).prototype()->expression;
 	}
  	return v;
 }

@@ -17,12 +17,12 @@ struct Name##VOp {\
 	static typename R::Element PassNA(typename MA::Element const a, typename R::Element const fa) { \
 		return !MA::isCheckedNA(a) ? fa : R::NAelement; \
 	} \
-	static typename R::Element eval(Thread& thread, typename A::Element const v) {\
+	static typename R::Element eval(Thread& thread, void* args, typename A::Element const v) {\
 		typename MA::Element a = Cast<A, MA>(thread, v); \
 		return (Func); \
 	} \
-	static void Scalar(Thread& thread, typename A::Element const a, Value& c) { \
-		R::InitScalar(c, eval(thread, a)); \
+	static void Scalar(Thread& thread, void* args, typename A::Element const a, Value& c) { \
+		R::InitScalar(c, eval(thread, args, a)); \
 	} \
 };
 
@@ -33,17 +33,6 @@ ARITH_UNARY_BYTECODES(UNARY_OP)
 LOGICAL_UNARY_BYTECODES(UNARY_OP)
 ORDINAL_UNARY_BYTECODES(UNARY_OP)
 #undef UNARY_OP 
-/*
-template<typename T>
-struct NcharOp : UnaryOp<Character, Integer> {
-	static typename NcharOp::R eval(Thread& thread, typename NcharOp::A const a) { return (a == Strings::NA) ? 2 : thread.externStr(a).length(); }
-};
-
-template<typename T>
-struct NzcharOp : UnaryOp<Character, Logical> {
-	static typename NzcharOp::R eval(Thread& thread, typename NzcharOp::A const a) { return a != Strings::empty; }
-};
-*/
 
 #define BINARY_OP(Name, String, Group, Func) \
 template<typename S, typename T> \
@@ -54,15 +43,18 @@ struct Name##VOp {\
 	typedef typename Group<S,T>::MB MB; \
 	typedef typename Group<S,T>::R R; \
 	static typename R::Element PassNA(typename MA::Element const a, typename MB::Element const b, typename R::Element const f) { \
-		return (!MA::isCheckedNA(a) && !MB::isCheckedNA(b)) ? f : R::NAelement; \
+        return (!MA::isCheckedNA(a) && !MB::isCheckedNA(b)) ? f : R::NAelement; \
 	} \
-	static typename R::Element eval(Thread& thread, typename A::Element const v, typename B::Element const w) {\
+	static typename R::Element PassCheckedNA(typename MA::Element const a, typename MB::Element const b, typename R::Element const f) { \
+        return (!MA::isNA(a) && !MB::isNA(b)) ? f : R::NAelement; \
+	} \
+	static typename R::Element eval(Thread& thread, void* args, typename A::Element const v, typename B::Element const w) {\
 		typename MA::Element const a = Cast<A, MA>(thread, v); \
 		typename MB::Element const b = Cast<B, MB>(thread, w); \
 		return (Func); \
 	} \
-	static void Scalar(Thread& thread, typename A::Element const a, typename B::Element const b, Value& c) { \
-		R::InitScalar(c, eval(thread, a, b)); \
+	static void Scalar(Thread& thread, void* args, typename A::Element const a, typename B::Element const b, Value& c) { \
+		R::InitScalar(c, eval(thread, args, a, b)); \
 	} \
 };
 
@@ -81,12 +73,6 @@ inline double riposte_min(Thread& thread, double a, double b) { return a < b ? a
 inline int64_t riposte_min(Thread& thread, int64_t a, int64_t b) { return a < b ? a : b; }
 inline int64_t riposte_min(Thread& thread, char a, char b) { return a & b; }
 inline String riposte_min(Thread& thread, String a, String b) { return strcmp(a,b) < 0 ? a : b; }
-
-inline double riposte_round(Thread& thread, double a, int64_t b) { double s = pow(10, b); return round(a*s)/s; }
-inline double riposte_signif(Thread& thread, double a, int64_t b) {
-	double d = ceil(log10(a < 0 ? -a : a));
-	return riposte_round(thread, a,b-(int64_t)d);
-}
 
 inline bool gt(Thread& thread, double a, double b) { return a > b; }
 inline bool gt(Thread& thread, int64_t a, int64_t b) { return a > b; }
@@ -112,7 +98,6 @@ ARITH_BINARY_BYTECODES(BINARY_OP)
 ORDINAL_BINARY_BYTECODES(BINARY_OP)
 LOGICAL_BINARY_BYTECODES(BINARY_OP)
 UNIFY_BINARY_BYTECODES(BINARY_OP)
-ROUND_BINARY_BYTECODES(BINARY_OP)
 #undef BINARY_OP
 
 template<class X> struct addBase {};
@@ -143,7 +128,7 @@ template<> struct pmaxBase<Character> { static Character::Element base() { retur
 template<typename T> \
 struct Name##VOp : public Func##VOp<typename Func##VOp<T, T>::R, T> {\
 	static typename Name##VOp::A::Element base() { return Func##Base<T>::base(); } \
-	static void Scalar(Thread& thread, typename Name##VOp::B::Element const b, Value& c) { \
+	static void Scalar(Thread& thread, void* args, typename Name##VOp::B::Element const b, Value& c) { \
 		Name##VOp::R::InitScalar(c, b); \
 	} \
 };
@@ -155,6 +140,82 @@ ARITH_SCAN_BYTECODES(FOLD_OP)
 UNIFY_SCAN_BYTECODES(FOLD_OP)
 #undef FOLD_OP
 
+template<typename S>
+struct IfElseVOp {
+    typedef S A;
+    typedef S B;
+    typedef Logical C;
+    typedef S R;
+    static typename R::Element eval(Thread& thread, void* args, typename A::Element const a, typename B::Element const b, typename C::Element const c) {
+        if(Logical::isTrue(c))
+            return a;
+        else if(Logical::isFalse(c))
+            return b;
+        else
+            return R::NAelement;
+    }
+    static void Scalar(Thread& thread, void* args, typename A::Element const a, typename B::Element const b, typename C::Element const c, Value& out) {
+        R::InitScalar(out, eval(thread, args, a, b, c));
+    }
+};
+
+template<typename S, typename T>
+struct UnaryFuncOp {
+    typedef S A;
+    typedef T R;
+    static typename R::Element eval(Thread& thread, void* func, typename A::Element const a) {
+        typedef typename R::Element (*Func)(Thread&, typename A::Element);
+        Func f = (Func)func;
+		return f(thread, a);
+    }
+    static void Scalar(Thread& thread, void* func, typename A::Element const a, Value& out) {
+        R::InitScalar(out, eval(thread, func, a));
+    }
+};
+
+template<typename S, typename T, typename U>
+struct BinaryFuncOp {
+    typedef S A;
+    typedef T B;
+    typedef U R;
+    static typename R::Element eval(Thread& thread, void* func, typename A::Element const a, typename B::Element const b) {
+        typedef typename R::Element (*Func)(Thread&, typename A::Element, typename B::Element);
+        Func f = (Func)func;
+		return f(thread, a, b);
+    }
+    static void Scalar(Thread& thread, void* func, typename A::Element const a, typename B::Element const b, Value& out) {
+        R::InitScalar(out, eval(thread, func, a, b));
+    }
+};
+
+struct FoldFuncArgs {
+    void* base;
+    void* func;
+    void* fini;
+};
+
+template<typename S, typename T>
+struct FoldFuncOp {
+    typedef S A;
+    typedef T R;
+    typedef void* I;
+
+    typedef I (*Base)(Thread&);
+    typedef I (*Func)(Thread&, I, typename A::Element);
+    typedef typename R::Element (*Fini)(Thread&, I);
+    
+    static I base(Thread& thread, void* funcs) {
+        return ((Base)((FoldFuncArgs*)funcs)->base)(thread);
+    }
+
+    static I eval(Thread& thread, void* funcs, I const a, typename A::Element b) {
+		return ((Func)((FoldFuncArgs*)funcs)->func)(thread, a, b);
+    }
+
+    static typename R::Element finalize(Thread& thread, void* funcs, I const a) {
+        return ((Fini)((FoldFuncArgs*)funcs)->fini)(thread, a);
+    }
+};
 
 #endif
 
