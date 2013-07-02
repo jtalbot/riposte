@@ -6,9 +6,9 @@ CFLAGS := -Wall -fPIC
 LFLAGS := -dynamiclib
 LIBS := -lpthread
 
-SRC := core.cpp print.cpp primitive.cpp
+SRC := datetime.cpp
 
-EXECUTABLE := libs/core.dylib
+EXECUTABLE := libs/internal.dylib
 
 OBJECTS := $(patsubst %.cpp,build/%.o,$(SRC))
 DEPENDENCIES := $(patsubst %.cpp,build/%.d,$(SRC))
@@ -21,7 +21,7 @@ debug: $(EXECUTABLE)
 release: CXXFLAGS += -DNDEBUG -O4 -g
 release: $(EXECUTABLE)
 
-$(EXECUTABLE): $(OBJECTS) $(LINENOISE)
+$(EXECUTABLE): $(OBJECTS)
 	$(CXX) $(LFLAGS) -o $@ $^ ../../riposte.dylib $(LIBS)
 
 build/%.o: src/%.cpp

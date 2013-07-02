@@ -41,6 +41,7 @@
 	_(expression,	"expression")	\
 	_(internal, 	".Internal") \
 	_(external, 	".External") \
+	_(map, 	        ".Map") \
 	_(map_d, 	".Map.double") \
 	_(map_i, 	".Map.integer") \
 	_(map_l, 	".Map.logical") \

@@ -546,7 +546,6 @@ Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const&
     if(!((Object const&)a).hasAttributes()) {
 	    if(a.isVector()) {
             Vector const& v = (Vector const&)a;
-            int64_t index;
 		    if(b.isInteger()) {
                 if(  ((Integer const&)b).length() != 1
                   || (b.i-1) < 0 )

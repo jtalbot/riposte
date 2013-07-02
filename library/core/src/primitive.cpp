@@ -6,6 +6,11 @@
 #include "../../../src/parser.h"
 
 extern "C"
+void addition(Thread& thread, double a, double b, double& c) {
+    c = a+b;
+}
+
+extern "C"
 int64_t nchar_map(Thread& thread, String s) {
     return strlen(s);
 }

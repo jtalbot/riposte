@@ -215,5 +215,7 @@ Double RandomVector(Thread& thread, int64_t const length);
 
 Integer Semijoin(Value const& x, Value const& table);
 
+List Map(Thread& thread, String func, List args, Character result);
+
 #endif
 

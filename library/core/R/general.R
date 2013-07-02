@@ -61,7 +61,7 @@ class <- function(x) {
 
 `class<-` <- function(x, value) {
     if(is.null(value))
-        attr(x, 'names') <- NULL
+        attr(x, 'class') <- NULL
     else
         attr(x, 'class') <- as.character(value)
     x

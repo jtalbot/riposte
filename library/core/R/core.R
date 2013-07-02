@@ -153,12 +153,30 @@ dispatch2 <- function(op, x, y, default) {
 }
 
 `[[<-.default` <- function(x, i, ..., value) {
-    r <- `[[<-`(strip(x), strip(i), strip(value))
+    if(is.character(i)) {
+        i <- which(names(x) == i)
+        if(length(i)==0)
+            stop("subscript out of bounds") 
+        else
+            r <- `[[<-`(strip(x), strip(i[[1]]), strip(value))
+    }
+    else {
+        r <- `[[<-`(strip(x), strip(i), strip(value))
+    }
     .copy.most.attributes(r, x, i)
 }
 
 `[[<-.list` <- function(x, i, ..., value) {
-    r <- `[[<-`(strip(x), strip(i), value)
+    if(is.character(i)) {
+        i <- which(names(x) == i)
+        if(length(i)==0)
+            stop("subscript out of bounds") 
+        else
+            r <- `[[<-`(strip(x), strip(i[[1]]), value)
+    }
+    else {
+        r <- `[[<-`(strip(x), strip(i), value)
+    }
     .copy.most.attributes(r, x, i)
 }
 

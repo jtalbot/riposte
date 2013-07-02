@@ -1,13 +1,12 @@
 # This Makefile requires GNU make.
  
 UNAME := $(shell uname -s)
-CXXFLAGS := -Wall
+CXXFLAGS := -Wall -I/opt/local/include
 CFLAGS := -Wall
 LFLAGS := -fpic
-LIBS := -lpthread
+LIBS := -lpthread -L/opt/local/lib -ldyncall_s
 
 ifeq ($(UNAME),Linux)
-	#for clock_gettime
 	LIBS += -lrt
 endif
 

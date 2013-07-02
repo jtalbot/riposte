@@ -164,6 +164,9 @@
 	_(cummin, "cummin",	UnifyScan,	pmin)                                      \
 	_(cummax, "cummax",	UnifyScan,	pmax) 
 
+#define GENERIC_BYTECODES(_)                                                   \
+    _(map, "map")
+
 #define JOIN_BYTECODES(_)                                                      \
     _(semijoin, "semijoin")
 
@@ -211,6 +214,7 @@
 	SCAN_BYTECODES(_) \
 	GENERIC_SCAN_BYTECODES(_) \
 	GENERIC_FOLD_BYTECODES(_) \
+	GENERIC_BYTECODES(_) \
 	JOIN_BYTECODES(_) \
 
 #define BYTECODES(_) \

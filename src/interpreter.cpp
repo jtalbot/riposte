@@ -261,6 +261,23 @@ static void* find_function(Thread& thread, String name) {
     return func;
 }
 
+static inline Instruction const* map_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+    DECODE(c); BIND(c);
+
+    if(!c.isCharacter1())
+        _error("External map function name must be a string");
+    if(!b.isList())
+        _error("External map args must be a list");
+    if(!a.isCharacter())
+        _error("External map return types must be a character vector");
+
+    OUT(c) = Map(thread, c.s, (List const&)b, (Character const&)a);
+    
+    return &inst+1;
+}
+
 static inline Instruction const* map1_d_op(Thread& thread, Instruction const& inst) {
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);

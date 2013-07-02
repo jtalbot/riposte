@@ -36,7 +36,7 @@ format <- function(x, ...) {
 
 format.default <- function(x, ...)
 {
-    format(strip(x), ...) 
+    .External(print(x))
 }
 
 format.logical <- function(x, ...)

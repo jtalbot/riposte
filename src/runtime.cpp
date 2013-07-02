@@ -3,6 +3,9 @@
 #include "value.h"
 #include "runtime.h"
 
+#include <dyncall.h>
+#include <dlfcn.h>
+
 Type::Enum string2Type(String str) {
 #define CASE(name, string, ...) if(str == Strings::name) return Type::name;
 TYPES(CASE)
@@ -415,4 +418,156 @@ Integer Semijoin(Value const& a, Value const& b) {
         return Semijoin<Character>((Character const&)a, (Character const&)b);
     else
         _error("Unsupported type in semijoin");
+}
+
+static void* find_function(Thread& thread, String name) {
+    static String lastname = Strings::empty;
+    static void* lastfunc = NULL;
+
+    void* func = NULL;
+    /*if(std::string(name) == std::string(lastname)) {
+        func = lastfunc;
+    }
+    else {*/
+        for(std::map<std::string,void*>::iterator i = thread.state.handles.begin();
+            i != thread.state.handles.end(); ++i) {
+            func = dlsym(i->second, name);
+            if(func != NULL)
+                break;
+        }
+        lastfunc = func;
+        lastname = name;
+    //}
+
+    if(func == NULL)
+        _error("Can't find external function");
+    
+    return func;
+}
+
+template<class T> void arg(DCCallVM* vm, T const& t, int64_t i) 
+{ dcArgPointer(vm, (void*) &t); }
+template<> void arg<Logical>(DCCallVM* vm, Logical const& t, int64_t i)
+{ dcArgChar(vm, t[i % t.length()]); }
+template<> void arg<Integer>(DCCallVM* vm, Integer const& t, int64_t i)
+{ dcArgLongLong(vm, t[i % t.length()]); }
+template<> void arg<Double>(DCCallVM* vm, Double const& t, int64_t i)
+{ dcArgDouble(vm, t[i % t.length()]); }
+template<> void arg<Character>(DCCallVM* vm, Character const& t, int64_t i)
+{ dcArgPointer(vm, (void*)t[i % t.length()]); }
+template<> void arg<Raw>(DCCallVM* vm, Raw const& t, int64_t i)
+{ dcArgChar(vm, t[i % t.length()]); }
+template<> void arg<List>(DCCallVM* vm, List const& t, int64_t i)
+{ dcArgPointer(vm, (void*) &(t[i % t.length()])); }
+
+struct Stream {
+    virtual ~Stream() {}
+    virtual void operator()(DCCallVM* vm, int64_t i) = 0;
+};
+
+template<class T>
+struct StreamImpl : public Stream {
+    T const& v;
+
+    StreamImpl(T const& v) : v(v) {}
+
+    void operator()(DCCallVM* vm, int64_t i) {
+        arg(vm, v, i);
+    }
+};
+
+Stream* MakeStream(Value const& v) {
+    if(v.isLogical()) return new StreamImpl<Logical>((Logical const&)v);
+    if(v.isInteger()) return new StreamImpl<Integer>((Integer const&)v);
+    if(v.isDouble()) return new StreamImpl<Double>((Double const&)v);
+    if(v.isCharacter()) return new StreamImpl<Character>((Character const&)v);
+    if(v.isRaw()) return new StreamImpl<Raw>((Raw const&)v);
+    if(v.isList()) return new StreamImpl<List>((List const&)v);
+    return new StreamImpl<Value>(v);
+}
+
+struct Unstream {
+    virtual ~Unstream() {}
+    virtual Value const& value() const = 0;
+    virtual void operator()(DCCallVM* vm, int64_t i) = 0;
+};
+
+template<class T>
+struct UnstreamImpl : public Unstream {
+    T v;
+
+    UnstreamImpl(T v) : v(v) {}
+
+    void operator()(DCCallVM* vm, int64_t i) {
+        dcArgPointer(vm, &v[i]);
+    }
+    
+    virtual Value const& value() const {
+        return v;
+    }
+};
+
+Unstream* MakeUnstream(String t, int64_t s) {
+    if(t == Strings::Logical) return new UnstreamImpl<Logical>(Logical(s));
+    if(t == Strings::Integer) return new UnstreamImpl<Integer>(Integer(s));
+    if(t == Strings::Double)  return new UnstreamImpl<Double>(Double(s));
+    if(t == Strings::Character) return new UnstreamImpl<Character>(Character(s));
+    if(t == Strings::Raw)     return new UnstreamImpl<Raw>(Raw(s));
+    if(t == Strings::List)    return new UnstreamImpl<List>(List(s));
+    _error("Can't unstream a non-vector during a map");
+}
+
+List Map(Thread& thread, String func, List args, Character result) {
+    // figure out length of result
+    int64_t length = 0;
+    for(int64_t i = 0; i < args.length(); ++i) {
+        if(args[i].isVector())
+            length = std::max(length, ((Vector const&)args[i]).length());
+        else
+            length = std::max(length, (int64_t)1);
+    }
+
+    // build up streamers and unstreamers.
+    std::vector<Stream*> s;
+    for(int64_t i = 0; i < args.length(); ++i) {
+        s.push_back(MakeStream(args[i]));
+    }
+    std::vector<Unstream*> u;
+    for(int64_t i = 0; i < result.length(); ++i) {
+        u.push_back(MakeUnstream(result[i], length));
+    }
+
+    // look up function
+    void* f = find_function(thread, func);
+    
+    // run
+    DCCallVM* vm = dcNewCallVM(4096);
+    dcMode(vm, DC_CALL_C_DEFAULT);
+
+    for(int64_t i = 0; i < length; ++i) {
+        dcReset(vm);
+        dcArgPointer(vm, (void*)&thread);
+        for(int64_t k = 0; k < s.size(); ++k) {
+            (*s[k])(vm, i);
+        }
+        for(int64_t k = 0; k < u.size(); ++k) {
+            (*u[k])(vm, i);
+        }
+        dcCallVoid(vm, f);
+    }
+    dcFree(vm);
+
+    List r(result.length());
+    for(int64_t i = 0; i < u.size(); ++i) {
+        r[i] = u[i]->value();
+    }
+        
+    for(int64_t i = 0; i < s.size(); ++i) {
+        delete s[i];
+    }
+    for(int64_t i = 0; i < u.size(); ++i) {
+        delete u[i];
+    }
+    
+    return r;
 }

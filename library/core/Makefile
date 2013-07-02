@@ -21,7 +21,7 @@ debug: $(EXECUTABLE)
 release: CXXFLAGS += -DNDEBUG -O4 -g
 release: $(EXECUTABLE)
 
-$(EXECUTABLE): $(OBJECTS) $(LINENOISE)
+$(EXECUTABLE): $(OBJECTS)
 	$(CXX) $(LFLAGS) -o $@ $^ ../../riposte.dylib $(LIBS)
 
 build/%.o: src/%.cpp
