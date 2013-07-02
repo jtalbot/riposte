@@ -10,7 +10,6 @@
 #include <locale>
 
 #include "value.h"
-#include "interpreter.h"
 #include "frontend.h"
 
 // trim from end

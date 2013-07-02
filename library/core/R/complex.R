@@ -25,7 +25,7 @@ complex <- function(length.out = 0L, real = numeric(), imaginary = numeric()) {
 }
 
 as.complex <- function(x,...) "NYI"
-is.complex <- function(x) typeof(x) == "complex"
+is.complex <- function(x) class(x) == "complex"
 
 length.complex <- function(x) length(x[[1]])
 

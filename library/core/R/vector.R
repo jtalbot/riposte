@@ -1,16 +1,4 @@
 
-as.vector <- function(x, mode = "any") {
-	switch(mode,
-		logical = as(x,"logical"),
-		integer = as(x,"integer"),
-		double  = as(x,"double"),
-		numeric = as(x,"double"),
-		complex = as.complex(x),
-		character = as(x,"character"),
-        list = as(x,"list"),
-		any = strip(x))
-}
-
 cbind <- function(...) {
 	l <- list(...)
 	rows <- max(unlist(lapply(l, length)))
@@ -30,3 +18,14 @@ seq.int <- function(from, to, by, length.out, along.with, ...) {
 }
 
 seq_len <- function(length.out) seq(1, 1, length.out)
+
+typeof <- function(x) {
+    switch(.type(x),
+        'character' = 
+            ifelse(any(attr(x,'class')=='name'), 'symbol', 'character'),
+        'list' =
+            ifelse(any(attr(x,'class')=='call'), 'language',
+            ifelse(any(attr(x,'class')=='expression'), 'expression', 'list')),
+        .type(x)
+    )
+}

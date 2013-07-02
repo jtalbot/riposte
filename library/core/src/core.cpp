@@ -28,7 +28,10 @@ Value cat(Thread& thread, Value const* args) {
 		if(!List::isNA(a[i])) {
 			Character c = As<Character>(thread, a[i]);
 			for(int64_t j = 0; j < c.length(); j++) {
-				printf("%s", thread.externStr(c[j]).c_str());
+                if(c[j] == Character::NAelement)
+                    printf("NA");
+                else
+				    printf("%s", thread.externStr(c[j]).c_str());
 				if(!(i == a.length()-1 && j == c.length()-1))
 					printf("%s", thread.externStr(b[0]).c_str());
 			}
@@ -402,40 +405,7 @@ Value environment(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value newenv(Thread& thread, Value const* args) {
-    Value result;
-	REnvironment::Init(result, new Environment(1,0,0,Null::Singleton()));
-    return result;
-}
-
-// TODO: parent.frame and sys.call need to ignore frames for promises, etc. We may need
-// the dynamic pointer in the environment after all...
-extern "C"
-Value parentframe(Thread& thread, Value const* args) {
-	int64_t i = (int64_t)asReal1(args[0]);
-	Environment* env = thread.frame.environment;
-	while(i > 0 && env->DynamicScope() != 0) {
-		env = env->DynamicScope();
-		i--;
-	}
-    Value result;
-	REnvironment::Init(result, env);
-    return result;
-}
-
-extern "C"
-Value sys_call(Thread& thread, Value const* args) {
-	int64_t i = (int64_t)asReal1(args[0]);
-	Environment* env = thread.frame.environment;
-	while(i > 0 && env->DynamicScope() != 0) {
-		env = env->DynamicScope();
-		i--;
-	}
-	return env->call;
-}
-
-extern "C"
-void stop_fn(Thread& thread, Value const* args, Value& result) {
+void stop(Thread& thread, Value const* args, Value& result) {
 	// this should stop whether or not the arguments are correct...
 	std::string message = thread.externStr(Cast<Character>(args[0])[0]);
 	_error(message);
@@ -443,7 +413,7 @@ void stop_fn(Thread& thread, Value const* args, Value& result) {
 }
 
 extern "C"
-void warning_fn(Thread& thread, Value const* args, Value& result) {
+void warning(Thread& thread, Value const* args, Value& result) {
 	std::string message = thread.externStr(Cast<Character>(args[0])[0]);
 	_warning(thread, message);
 	result = Character::c(thread.internStr(message));
@@ -620,23 +590,6 @@ Value force(Thread& thread, Value const* args) {
 extern "C"
 Value commandArgs(Thread& thread, Value const* args) {
 	return thread.state.arguments;
-}
-
-extern "C"
-Value match(Thread& thread, Value const* args) {
-	Character a = As<Character>(thread, args[0]);
-	Character b = As<Character>(thread, args[1]);
-	
-	Integer r(a.length());
-	for(int64_t i = 0; i < a.length(); i++) {
-		int64_t j = 0;
-		for(; j < b.length(); j++) {
-			if(a[i] == b[j]) break;
-		}
-		r[i] = (j < b.length()) ? (j+1) : Integer::NAelement;
-	}
-
-	return r;
 }
 
 extern "C"

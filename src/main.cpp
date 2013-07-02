@@ -24,7 +24,7 @@ static int verbose = 0;
 static void info(State& state, std::ostream& out) 
 {
     out << "Riposte (" << state.threads.size() << " threads) "
-        << "-- Copyright (C) 2010-2012 Stanford University" << std::endl;
+        << "-- Copyright (C) 2010-2013 Stanford University" << std::endl;
     out << "http://jtalbot.github.com/riposte/" << std::endl;
 }
 
@@ -143,6 +143,15 @@ static int run(State& state, std::istream& in, std::ostream& out, bool interacti
         linenoiseHistoryLoad((char*)".riposte_history");
     }
 
+    Prototype* print;
+    if(echo)
+    {
+        List p(2);
+        p[0] = CreateSymbol(Strings::print);
+        p[1] = CreateSymbol(Strings::Last_value);
+        print = Compiler::compileTopLevel(thread, CreateCall(p));
+    }
+
     bool done = false;
     while(!done) {
         try { 
@@ -156,9 +165,12 @@ static int run(State& state, std::istream& in, std::ostream& out, bool interacti
 
             Prototype* proto = Compiler::compileTopLevel(thread, code);
             Value result = thread.eval(proto, state.global);
-            
-            if(echo)
-                out << state.stringify(result) << std::endl;
+
+            state.global->insert(Strings::Last_value) = result;
+
+            if(echo) {
+                thread.eval(print, state.global);
+            }
         } 
         catch(RiposteException const& e) { 
             e_message("Error", e.kind().c_str(), e.what().c_str());

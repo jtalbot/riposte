@@ -8,17 +8,17 @@ as.list <- function(x,...) as(x,"list")
 as.raw <- function(x,...) as(x,"raw")
 as.numeric <- function(x,...) as(x,"double")
 
-is.null <- function(x) typeof(x) == "NULL"
-is.logical <- function(x) typeof(x) == "logical"
-is.integer <- function(x) typeof(x) == "integer"
-is.real <- function(x) typeof(x) == "double"
-is.double <- function(x) typeof(x) == "double"
-is.character <- function(x) typeof(x) == "character"
-is.environment <- function(x) typeof(x) == "environment"
-is.list <- function(x) typeof(x) == "list"
-is.raw <- function(x) typeof(x) == "raw"
+is.null <- function(x) .type(x) == "NULL"
+is.logical <- function(x) .type(x) == "logical"
+is.integer <- function(x) .type(x) == "integer"
+is.real <- function(x) .type(x) == "double"
+is.double <- function(x) .type(x) == "double"
+is.character <- function(x) .type(x) == "character"
+is.environment <- function(x) .type(x) == "environment"
+is.list <- function(x) .type(x) == "list"
+is.raw <- function(x) .type(x) == "raw"
 
-is.symbol <- function(x) class(x) == "symbol"
+is.symbol <- function(x) class(x) == "name"
 is.pairlist <- function(x) class(x) == "pairlist"
 is.expression <- function(x) class(x) == "expression"
 is.call <- function(x) class(x) == "call" 
@@ -30,11 +30,11 @@ is.numeric <- function(x) is.double(x) || is.integer(x)    #should also dispatch
 is.matrix <- function(x) is.numeric(dim(x))
 is.array <- is.matrix
 
-is.atomic <- function(x) switch(typeof(x), logical=,integer=,double=,complex=,character=,raw=,NULL=TRUE,FALSE)
+is.atomic <- function(x) switch(.type(x), logical=,integer=,double=,complex=,character=,raw=,NULL=TRUE,FALSE)
 is.recursive <- function(x) !(is.atomic(x) || is.symbol(x))
 
 is.language <- function(x) is.call(x) || is.environment(x) || is.symbol(x)
-is.function <- function(x) typeof(x) == "closure"
+is.function <- function(x) .type(x) == "closure"
 
 is.single <- function(x) stop('type "single" unimplemented in R')
 
@@ -75,18 +75,37 @@ is.vector <- function(x, mode="any") switch(mode,
     if(length(l) > 0 && (!is.character(n) || length(n) != length(l)))
         stop("names(x) must be a character vector of the same length as x")
 
-    e <- new.env(FALSE, emptyenv(), 0)
+    e <- .env_new(emptyenv())
     for(i in seq(1, 1, length(l))) {
         e[[n[[i]]]] <- l[[i]]
     }
     e
 }
 
+.search.path <- function(n, env) {
+    if(n > 0L) {
+        env <- .GlobalEnv
+        while(n > 0) {
+            env <- environment(env)
+            n <- n-1
+        }
+        env
+    }
+    else {
+        environment(env)
+    }
+}
+
 as.environment <- function(x)
-	switch(typeof(x),
+	switch(.type(x),
 		environment=x,
 		double=,
-		integer=parent.frame(x+1),
+		integer=.search.path(as.integer(x), parent.frame()),
         list=.list2env(x),
 		stop("unsupported cast to environment")) 
 
+as.name <- function(x) {
+    x <- as.character(x)
+    class(x) <- 'name'
+    x
+}

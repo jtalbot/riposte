@@ -1,9 +1,77 @@
 
 #include "call.h"
+#include "frontend.h"
+
+// forces a value stored in the Environments dotdot slot: dest[index]
+// call through FORCE_DOTDOT macro which inlines some performance-important checks
+Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, int64_t index) {
+	if(v.isPromise()) {
+		Promise const& a = (Promise const&)v;
+		if(a.isPrototype()) {
+			return buildStackFrame(thread, a.environment(), a.prototype(), dest, index, &inst);
+		} 
+		else if(a.isDotdot()) {
+            Value const& t = a.environment()->getContext()->dots[a.dotIndex()].v;
+			Instruction const* result = &inst;
+			if(!t.isObject()) {
+				result = forceDot(thread, inst, t, a.environment(), a.dotIndex());
+			}
+			if(t.isObject()) {
+				((Context*)dest->getContext())->dots[index].v = t;
+				thread.traces.LiveEnvironment(dest, t);
+			}
+			return result;
+		}
+		else {
+			_error("Invalid promise type");
+		}
+	}
+	else {
+		_error(std::string("Object '..") + intToStr(index+1) + "' not found, missing argument?");
+	} 
+}
+
+// forces a value stored in the Environment slot: dest->name
+// call through FORCE macro which inlines some performance-important checks
+//  for the common cases.
+// Environments can have promises, defaults, or dotdots (references to ..n in the parent).
+Instruction const* force(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, String name) {
+	if(v.isPromise()) {
+		Promise const& a = (Promise const&)v;
+		if(a.isPrototype()) {
+       	    return buildStackFrame(thread, a.environment(), a.prototype(), dest, name, &inst);
+        }
+		else if(a.isDotdot()) {
+            Value const& t = a.environment()->getContext()->dots[a.dotIndex()].v;
+			Instruction const* result = &inst;
+			// if this dotdot is a promise, attempt to force.
+			// first time through this will return the address of the 
+			//	promise's new stack frame.
+			// second time through this will return the resulting value
+			// => Thus, evaluating dotdot requires at most 2 sweeps up the dotdot chain
+			if(!t.isObject()) {
+				result = forceDot(thread, inst, (Promise const&)t, a.environment(), a.dotIndex());
+			}
+       	    if(t.isObject()) {
+       	       	dest->insert(name) = t;
+       	       	thread.traces.LiveEnvironment(dest, t);
+            }
+            return result;
+       	}
+		else {
+			_error("Invalid promise type");
+		}
+	}
+	else {
+		_error(std::string("Object '") + thread.externStr(name) + "' not found"); 
+	} 
+}
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset) {
 	//std::cout << "\t(Executing in " << intToHexStr((int64_t)environment) << ")" << std::endl;
 	//Prototype::printByteCode(prototype, thread.state);
+    //if(environment->getContext() && ((List const &)environment->getContext()->call).length() > 0)
+    //std::cout << "Call:   " << (((List const&)environment->getContext()->call)[0]).s << std::endl;
 	
 	// make new stack frame
 	StackFrame& s = thread.push();
@@ -11,10 +79,17 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
 	s.prototype = prototype;
 	s.returnpc = returnpc;
 	s.registers += stackOffset;
+    s.isPromise = false;
 	
 	if(s.registers+prototype->registers > thread.registers+DEFAULT_NUM_REGISTERS)
 		throw RiposteError("Register overflow");
-	
+
+    // avoid confusing the GC with bogus stuff in registers...
+    // can we avoid this somehow?
+    for(int64_t i = 0; i < prototype->registers; ++i) {
+        s.registers[i] = Value::Nil();
+    }
+
 	return &(prototype->bc[0]);
 }
 
@@ -26,6 +101,7 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
 	Instruction const* i = buildStackFrame(thread, environment, prototype, returnpc, thread.frame.prototype->registers);
 	thread.frame.dest = (int64_t)s;
 	thread.frame.env = env;
+    thread.frame.isPromise = true;
 	return i;
 }
 
@@ -33,6 +109,7 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
 	Instruction const* i = buildStackFrame(thread, environment, prototype, returnpc, thread.frame.prototype->registers);
 	thread.frame.dest = -resultSlot;
 	thread.frame.env = env;
+    thread.frame.isPromise = true;
 	return i;
 }
 
@@ -59,7 +136,7 @@ inline void assignDot(Thread& thread, Environment* evalEnv, Environment* assignE
 	//	thread.traces.LiveEnvironment(assignEnv, v);
 	//}
 	
-	assignEnv->dots.push_back(p);
+	((Context*)assignEnv->getContext())->dots.push_back(p);
 }
 
 
@@ -68,40 +145,41 @@ Pair argument(int64_t index, Environment* env, CompiledCall const& call) {
 		return call.arguments[index];
 	} else {
 		index -= call.dotIndex;
-		if(index < (int64_t)env->dots.size()) {
+        int64_t ndots = env->getContext() ? env->getContext()->dots.size() : 0;
+		if(index < ndots) {
 			// Promises in the dots can't be passed down 
 			//     (general rule is that promises only
 			//	occur once anywhere in the program). 
 			// But everything else can be passed down.
-			if(env->dots[index].v.isPromise()) {
+			if(env->getContext()->dots[index].v.isPromise()) {
 				Pair p;
-				p.n = env->dots[index].n;
+				p.n = env->getContext()->dots[index].n;
 				Promise::Init(p.v, env, index, false);
 				return p;
 			} 
 			else {
-				return env->dots[index];
+				return env->getContext()->dots[index];
 			}
 		}
 		else {
-			index -= env->dots.size();
+			index -= ndots;
 			return call.arguments[call.dotIndex+index+1];
 		}
 	}
 }
 
 int64_t numArguments(Environment* env, CompiledCall const& call) {
-	if(call.dotIndex < (int64_t)call.arguments.size()) {
+	if(call.dotIndex < (int64_t)call.arguments.size() && env->getContext()) {
 		// subtract 1 to not count the dots
-		return call.arguments.size() - 1 + env->dots.size();
+		return call.arguments.size() - 1 + env->getContext()->dots.size();
 	} else {
 		return call.arguments.size();
 	}
 }
 
 bool namedArguments(Environment* env, CompiledCall const& call) {
-	if(call.dotIndex < (int64_t)call.arguments.size()) {
-		return call.named || env->named;
+	if(call.dotIndex < (int64_t)call.arguments.size() && env->getContext()) {
+		return call.named || env->getContext()->named;
 	} else {
 		return call.named;
 	}
@@ -109,11 +187,24 @@ bool namedArguments(Environment* env, CompiledCall const& call) {
 
 
 // Generic argument matching
-void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Closure const& func, CompiledCall const& call) {
-	PairList const& parameters = func.prototype()->parameters;
+Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, CompiledCall const& call) {
+	
+    PairList const& parameters = func.prototype()->parameters;
 	int64_t pDotIndex = func.prototype()->dotIndex;
 	int64_t numArgs = numArguments(env, call);
 	bool named = namedArguments(env, call);
+
+    Context* context = new Context();
+    context->parent = env;
+    context->call = call.call;
+    context->function = func;
+    context->nargs = numArgs;
+    context->named = named;
+
+    Environment* fenv = new Environment(
+        (int64_t)call.arguments.size(),
+        func.environment(),
+        context);
 
 	// set defaults
 	for(int64_t i = 0; i < (int64_t)parameters.size(); ++i) {
@@ -121,7 +212,7 @@ void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Closure cons
 	}
 
 	if(!named) {
-		fenv->named = false; // if no arguments are named, no dots can be either
+		context->named = false; // if no arguments are named, no dots can be either
 
 		// call arguments are not named, do posititional matching up to the prototype's dots
 		int64_t end = std::min(numArgs, pDotIndex);
@@ -202,24 +293,26 @@ void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Closure cons
 		}
 
 		// put unused args into the dots
-		fenv->named = false;
+		context->named = false;
 		for(int64_t i = 0; i < numArgs; i++) {
 			if(assignment[i] < 0) {
 				// if we have left over arguments, but no parameter dots, error
 				if(pDotIndex >= (int64_t)parameters.size())
 			        _error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
 				Pair const& arg = argument(i, env, call);
-				if(arg.n != Strings::empty) fenv->named = true;
+				if(arg.n != Strings::empty) context->named = true;
 				assignDot(thread, env, fenv, arg.n, arg.v);
 			}
 		}
 	}
+    return fenv;
 }
 
 // Assumes no names and no ... in the argument list.
 // Supports ... in the parameter list.
-void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Closure const& func, CompiledCall const& call) {
-	Prototype const* prototype = func.prototype();
+Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func, CompiledCall const& call) {
+	
+    Prototype const* prototype = func.prototype();
 	PairList const& parameters = prototype->parameters;
 	PairList const& arguments = call.arguments;
 
@@ -228,6 +321,17 @@ void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Closure 
 
 	int64_t const pDotIndex = prototype->dotIndex;
 	int64_t const end = std::min(argumentsSize, pDotIndex);
+
+    Context* context = new Context();
+    context->parent = env;
+    context->call = call.call;
+    context->function = func;
+    context->nargs = argumentsSize;
+
+    Environment* fenv = new Environment(
+        (int64_t)call.arguments.size(),
+        func.environment(),
+        context);
 
 	// set parameters from arguments & defaults
 	for(int64_t i = 0; i < parametersSize; i++) {
@@ -245,38 +349,54 @@ void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Closure 
 	}
 	else {
 		// called function has dots, all unused args go into ...
-		fenv->named = false; // if no arguments are named, no dots can be either
-		fenv->dots.reserve(argumentsSize-end);
+		context->named = false; // if no arguments are named, no dots can be either
+		context->dots.reserve(argumentsSize-end);
 		for(int64_t i = end; i < (int64_t)argumentsSize; i++) {
 			assignDot(thread, env, fenv, arguments[i].n, arguments[i].v);
 		}
 	}
+
+    return fenv;
+}
+
+Value Quote(Thread& thread, Value const& v) {
+    if(isSymbol(v) || isCall(v) || isExpression(v)) {
+        List call(2);
+        call[0] = CreateSymbol(thread.state.internStr("quote"));
+        call[1] = v;
+        return CreateCall(call);
+    } else {
+        return v;
+    }
 }
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out) {
 	Environment* penv;
 	Value const& f = thread.frame.environment->getRecursive(op, penv);
 	if(f.isClosure()) {
-		Environment* fenv = new Environment(1, ((Closure const&)f).environment(), thread.frame.environment, Null::Singleton());
-		List call(0);
+		List call(2);
+        call[0] = CreateSymbol(op);
+        call[1] = Quote(thread, a);
 		Pair p;
 		p.n = Strings::empty;
 		p.v = a;
 		PairList args;
 		args.push_back(p);
-		CompiledCall cc(call, args, 1, false);
-		MatchArgs(thread, thread.frame.environment, fenv, ((Closure const&)f), cc);
+		CompiledCall cc(CreateCall(call), args, 1, false);
+		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
 		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype(), out, &inst+1);
 	}
-	_error("Failed to find generic for builtin op");
+	_error(std::string("Failed to find generic for builtin op: ") + op);
 }
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out) {
 	Environment* penv;
 	Value const& f = thread.frame.environment->getRecursive(op, penv);
 	if(f.isClosure()) { 
-		Environment* fenv = new Environment(2, ((Closure const&)f).environment(), thread.frame.environment, Null::Singleton());
-		List call(0);
+		List call(3);
+        call[0] = CreateSymbol(op);
+        call[1] = Quote(thread, a);
+        call[2] = Quote(thread, b);
 		PairList args;
 		Pair p;
 		p.n = Strings::empty;
@@ -284,11 +404,42 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 		args.push_back(p);
 		p.v = b;
 		args.push_back(p);
-		CompiledCall cc(call, args, 2, false);
-		MatchArgs(thread, thread.frame.environment, fenv, ((Closure const&)f), cc);
+		CompiledCall cc(CreateCall(call), args, 2, false);
+		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
 		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype(), out, &inst+1);
 	}
-	_error("Failed to find generic for builtin op");
+	_error(std::string("Failed to find generic for builtin op: ") + op + " type: " + Type::toString(a.type()) + " " + Type::toString(b.type()));
+}
+
+Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, Value const& c, int64_t out) {
+	Environment* penv;
+	Value const& f = thread.frame.environment->getRecursive(op, penv);
+	if(f.isClosure()) { 
+		List call(4);
+        call[0] = CreateSymbol(op);
+        call[1] = Quote(thread, a);
+        call[2] = Quote(thread, b);
+        call[3] = Quote(thread, c);
+        Character names(4);
+        names[0] = Strings::empty;
+        names[1] = Strings::empty;
+        names[2] = Strings::empty;
+        names[3] = Strings::value;
+		PairList args;
+		Pair p;
+		p.n = Strings::empty;
+		p.v = a;
+		args.push_back(p);
+		p.v = b;
+		args.push_back(p);
+        p.n = Strings::value;
+		p.v = c;
+		args.push_back(p);
+		CompiledCall cc(CreateCall(call, names), args, 3, true);
+        Environment* fenv = MatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
+		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype(), out, &inst+1);
+	}
+	_error(std::string("Failed to find generic for builtin op: ") + op);
 }
 
 template<>
@@ -387,4 +538,87 @@ Instruction const* Name##Slow(Thread& thread, Instruction const& inst, void* arg
 }
 BINARY_BYTECODES(SLOW_DISPATCH_DEFN)
 #undef SLOW_DISPATCH_DEFN
+
+Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const& a, Value const& b, Value& c) {
+ 	// TODO: should attempt to record this instruction
+    BIND(a); BIND(b);
+    
+    if(!((Object const&)a).hasAttributes()) {
+	    if(a.isVector()) {
+            Vector const& v = (Vector const&)a;
+            int64_t index;
+		    if(b.isInteger()) {
+                if(  ((Integer const&)b).length() != 1
+                  || (b.i-1) < 0 )
+                    _error("attempt to select more or less than one element");
+                if( (b.i-1) >= v.length() )
+                    _error("subscript out of bounds");
+
+                Element2(v, b.i-1, c);
+                return &inst+1;
+            }
+		    else if(b.isDouble()) {
+                if(  ((Double const&)b).length() != 1
+                  || ((int64_t)b.d-1) < 0 )
+                    _error("attempt to select more or less than one element");
+                if( ((int64_t)b.d-1) >= v.length())
+                    _error("subscript out of bounds");
+                
+                Element2(a, (int64_t)b.d-1, c);
+                return &inst+1;
+            }
+            _error("invalid subscript type");
+	    }
+        else if(a.isEnvironment()) {
+            if( b.isCharacter()
+                && ((Character const&)b).length() == 1) {
+	            String s = ((Character const&)b).s;
+                Value const& v = ((REnvironment&)a).environment()->get(s);
+                if(v.isObject()) {
+                    c = v;
+                    return &inst+1;
+                }
+                else if(v.isNull()) {
+                    c = Null::Singleton();
+                    return &inst+1;
+                }
+                else {
+                    return force(thread, inst, v, 
+                        ((REnvironment&)a).environment(), s); 
+                }
+            }
+            _error("wrong arguments for subsetting an environment");
+        }
+        else if(a.isClosure()) {
+            if( b.isCharacter()
+                && ((Character const&)b).length() == 1 ) {
+                Closure const& f = (Closure const&)a;
+	            String s = ((Character const&)b).s;
+                if(s == Strings::body) {
+                    c = f.prototype()->expression;
+                    return &inst+1;
+                }
+                else if(s == Strings::formals) {
+                    Character n(f.prototype()->parametersSize);
+                    List v(f.prototype()->parametersSize);
+                    for(size_t i = 0; i < f.prototype()->parametersSize; i++) {
+                        n[i] = f.prototype()->parameters[i].n;
+                        v[i] = f.prototype()->parameters[i].v;
+                    }
+			        Dictionary* d = new Dictionary(1);
+			        d->insert(Strings::names) = n;
+			        ((Object&)v).attributes(d);
+                    c = v;
+                    return &inst+1;
+                }
+            }
+            _error("wrong arguments for subsetting a closure");
+        }
+        else {
+            _error("object is not subsettable");
+        }
+    } 
+	else 
+        return GenericDispatch(thread, inst, Strings::bb, a, b, inst.c); 
+}
 

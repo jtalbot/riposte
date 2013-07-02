@@ -16,84 +16,17 @@
 
 static inline Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* fastmov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* assign_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* store_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* subset_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* subset2_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* get_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
+static inline Instruction const* getsub_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* jc_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* lt_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* ret_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* retp_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* internal_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* strip_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 
-
-// forces a value stored in the Environments dotdot slot: dest[index]
-// call through FORCE_DOTDOT macro which inlines some performance-important checks
-static inline Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, int64_t index) {
-	if(v.isPromise()) {
-		Promise const& a = (Promise const&)v;
-		if(a.isPrototype()) {
-			return buildStackFrame(thread, a.environment(), a.prototype(), dest, index, &inst);
-		} 
-		else if(a.isDotdot()) {
-       	        	Value const& t = a.environment()->dots[a.dotIndex()].v;
-			Instruction const* result = &inst;
-			if(!t.isObject()) {
-				result = forceDot(thread, inst, t, a.environment(), a.dotIndex());
-			}
-			if(t.isObject()) {
-				dest->dots[index].v = t;
-				thread.traces.LiveEnvironment(dest, t);
-			}
-			return result;
-		}
-		else {
-			_error("Invalid promise type");
-		}
-	}
-	else {
-		_error(std::string("Object '..") + intToStr(index+1) + "' not found, missing argument?");
-	} 
-}
-
-// forces a value stored in the Environment slot: dest->name
-// call through FORCE macro which inlines some performance-important checks
-//  for the common cases.
-// Environments can have promises, defaults, or dotdots (references to ..n in the parent).
-static inline Instruction const* force(Thread& thread, Instruction const& inst, Value const& v, Environment
-* dest, String name) {
-	if(v.isPromise()) {
-		Promise const& a = (Promise const&)v;
-		if(a.isPrototype()) {
-       	        	return buildStackFrame(thread, a.environment(), a.prototype(), dest, name, &inst);
-        	}
-		else if(a.isDotdot()) {
-                	Value const& t = a.environment()->dots[a.dotIndex()].v;
-			Instruction const* result = &inst;
-			// if this dotdot is a promise, attempt to force.
-			// first time through this will return the address of the 
-			//	promise's new stack frame.
-			// second time through this will return the resulting value
-			// => Thus, evaluating dotdot requires at most 2 sweeps up the dotdot chain
-			if(!t.isObject()) {
-				result = forceDot(thread, inst, (Promise const&)t, a.environment(), a.dotIndex());
-			}
-       	        	if(t.isObject()) {
-       	                	dest->insert(name) = t;
-       	                 	thread.traces.LiveEnvironment(dest, t);
-                	}
-                	return result;
-        	}
-		else {
-			_error("Invalid promise type");
-		}
-	}
-	else {
-		_error(std::string("Object '") + thread.externStr(name) + "' not found"); 
-	} 
-}
 
 // CONTROL_FLOW_BYTECODES 
 
@@ -102,13 +35,12 @@ static inline Instruction const* call_op(Thread& thread, Instruction const& inst
 	DECODE(a); FORCE(a); BIND(a);
 	if(!a.isClosure())
 		_error(std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n");
-	Closure const& func = (Closure const&)a;
 	
+    Closure const& func = (Closure const&)a;
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
-	Environment* fenv = new Environment((int64_t)call.arguments.size(), func.environment(), thread.frame.environment, call.call);
-	
-	MatchArgs(thread, thread.frame.environment, fenv, func, call);
-	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
+
+	Environment* fenv = MatchArgs(thread, thread.frame.environment, func, call);
+    return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
 }
 
 static inline Instruction const* fastcall_op(Thread& thread, Instruction const& inst) {
@@ -116,13 +48,12 @@ static inline Instruction const* fastcall_op(Thread& thread, Instruction const& 
 	DECODE(a); FORCE(a); BIND(a);
 	if(!a.isClosure())
 		_error(std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n");
-	Closure const& func = (Closure const&)a;
 	
+    Closure const& func = (Closure const&)a;
 	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
-	Environment* fenv = new Environment((int64_t)call.arguments.size(), func.environment(), thread.frame.environment, call.call);
 	
-	FastMatchArgs(thread, thread.frame.environment, fenv, func, call);
-	return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
+	Environment* fenv = FastMatchArgs(thread, thread.frame.environment, func, call);
+    return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
 }
 
 static inline Instruction const* ret_op(Thread& thread, Instruction const& inst) {
@@ -136,10 +67,23 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
 		thread.traces.KillEnvironment(thread.frame.environment);
 	}
 
+    if(thread.stack.size() == 1)
+        _error("no function to return from, jumping to top level");
+
+    if(thread.frame.isPromise) {
+        Environment* env = thread.frame.environment;
+        do {
+            if(thread.stack.size() <= 1)
+                _error("no function to return from, jumping to top level");
+            thread.pop();
+        } while( !(thread.frame.environment == env 
+                 && thread.frame.isPromise == false) );
+    }
+
 	REGISTER(0) = a;
 	Instruction const* returnpc = thread.frame.returnpc;
 	thread.pop();
-	
+
 	thread.traces.LiveEnvironment(thread.frame.environment, a);
 
 	return returnpc;
@@ -158,12 +102,13 @@ static inline Instruction const* rets_op(Thread& thread, Instruction const& inst
 
 static inline Instruction const* retp_op(Thread& thread, Instruction const& inst) {
 	// we can return futures from promises, so don't BIND
-	DECODE(a); FORCE(a);	
+	DECODE(a); FORCE(a);
 	
 	if(thread.frame.dest > 0) {
 		thread.frame.env->insert((String)thread.frame.dest) = a;
 	} else {
-		thread.frame.env->dots[-thread.frame.dest].v = a;
+        assert(thread.frame.env->getContext());
+        ((Context*)thread.frame.env->getContext())->dots[-thread.frame.dest].v = a;
 	}
 	thread.traces.LiveEnvironment(thread.frame.env, a);
 	
@@ -277,7 +222,7 @@ static inline Instruction const* external_op(Thread& thread, Instruction const& 
             break;
     }
     if(func == NULL)
-        _error("Can't find external function");
+        _error(std::string("Can't find external function: ") + name);
 
     uint64_t nargs = inst.b;
 	for(int64_t i = 0; i < nargs; i++) {
@@ -701,7 +646,7 @@ static inline Instruction const* loadfn_op(Thread& thread, Instruction const& in
             OUT(c) = v;
             return &inst+1;
         }
-        env = env->LexicalScope();
+        env = env->getParent();
 	} while(env != 0);
 
     _error("loadfn failed to find value");
@@ -717,7 +662,7 @@ static inline Instruction const* store_op(Thread& thread, Instruction const& ins
 static inline Instruction const* storeup_op(Thread& thread, Instruction const& inst) {
 	// assign2 is always used to assign up at least one scope level...
 	// so start off looking up one level...
-	assert(thread.frame.environment->LexicalScope() != 0);
+	assert(thread.frame.environment->getParent() != 0);
 
     // TODO: just BIND in this scenario instead of tracking liveness?
 	
@@ -725,7 +670,7 @@ static inline Instruction const* storeup_op(Thread& thread, Instruction const& i
 	
 	String s = ((Character const&)CONSTANT(inst.a)).s;
 	Environment* penv;
-	Value& dest = thread.frame.environment->LexicalScope()->insertRecursive(s, penv);
+	Value& dest = thread.frame.environment->getParent()->insertRecursive(s, penv);
 
 	if(!dest.isNil()) {
 		dest = c;
@@ -757,7 +702,9 @@ static inline Instruction const* dotsv_op(Thread& thread, Instruction const& ins
     else
         _error(std::string("Invalid type in dotsv: "));
 
-	if(idx >= (int64_t)thread.frame.environment->dots.size())
+	if(!thread.frame.environment->getContext() ||
+       idx >= (int64_t)thread.frame.environment->getContext()->dots.size() ||
+       idx < (int64_t)0)
         _error(std::string("The '...' list does not contain ") + intToStr(idx+1) + " elements");
 	
     DOTDOT(v, idx); FORCE_DOTDOT(v, idx); // no need to bind since value is in a register
@@ -766,16 +713,23 @@ static inline Instruction const* dotsv_op(Thread& thread, Instruction const& ins
 }
 
 static inline Instruction const* dotsc_op(Thread& thread, Instruction const& inst) {
-    OUT(c) = Integer::c((int64_t)thread.frame.environment->dots.size());
+    if(!thread.frame.environment->getContext())
+        OUT(c) = Integer::c(0);
+    else
+        OUT(c) = Integer::c((int64_t)thread.frame.environment->getContext()->dots.size());
     return &inst+1;
 }
 
 static inline Instruction const* dots_op(Thread& thread, Instruction const& inst) {
-	PairList const& dots = thread.frame.environment->dots;
+	static const PairList empty;
+    PairList const& dots = 
+        thread.frame.environment->getContext()
+            ? thread.frame.environment->getContext()->dots
+            : empty;
 	
 	Value& iter = REGISTER(inst.a);
 	Value& out = OUT(c);
-	
+
 	// First time through, make a result vector...
 	if(iter.i == 0) {
 		Heap::Global.collect(thread.state);
@@ -791,8 +745,8 @@ static inline Instruction const* dots_op(Thread& thread, Instruction const& inst
 	}
 	
 	// If we're all done, check to see if we need to add names and then exit
-	if(iter.i >= (int64_t)dots.size()) {
-		if(thread.frame.environment->named) {
+	if(iter.i >= (int64_t)dots.size() ) {
+		if(thread.frame.environment->getContext()->named && dots.size() > 0) {
 			Character names(dots.size());
 			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
 				names[i] = dots[i].n;
@@ -808,10 +762,21 @@ static inline Instruction const* dots_op(Thread& thread, Instruction const& inst
 }
 
 static inline Instruction const* missing_op(Thread& thread, Instruction const& inst) {
-	String s = ((Character const&)CONSTANT(inst.a)).s;
-	Value const& v = thread.frame.environment->get(s);
-	bool missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
-	Logical::InitScalar(OUT(c), missing ? Logical::TrueElement : Logical::FalseElement);
+	Value const& c = CONSTANT(inst.a);
+    bool missing = true;
+    if( c.isCharacter() ) {
+        Value const& v = thread.frame.environment->get(c.s);
+	    missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
+    }
+    else {
+        if(thread.frame.environment->getContext()
+            && (c.i-1) < thread.frame.environment->getContext()->dots.size()) {
+            Value const& v = thread.frame.environment->getContext()->dots[c.i-1].v;
+	        missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
+        }
+    }
+	Logical::InitScalar(OUT(c), 
+        missing ? Logical::TrueElement : Logical::FalseElement);
 	return &inst+1;
 }
 
@@ -828,16 +793,38 @@ static inline Instruction const* getns_op(Thread& thread, Instruction const& ins
 }
 
 // STACK_FRAME_BYTECODES
-static inline Instruction const* fm_fn_op(Thread& thread, Instruction const& inst) {
-    _error("fm_fn NYI");
-}
+static inline Instruction const* frame_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+    int64_t index = a.i;
 
-static inline Instruction const* fm_call_op(Thread& thread, Instruction const& inst) {
-    _error("fm_fn NYI");
-}
+    Environment* env = thread.frame.environment;
 
-static inline Instruction const* fm_env_op(Thread& thread, Instruction const& inst) {
-    _error("fm_fn NYI");
+    while(index > 0
+        && env->getContext()
+        && env->getContext()->parent) {
+        env = env->getContext()->parent;
+        index--;
+    }
+
+    if(index == 0) {
+        List r(4);
+        REnvironment::Init(r[0], env);
+        if(env->getContext()) {
+            r[1] = env->getContext()->call;
+            r[2] = env->getContext()->function;
+            r[3] = Integer::c(env->getContext()->nargs);
+        }
+        else {
+            r[1] = Null::Singleton();
+            r[2] = Null::Singleton();
+            r[3] = Integer::NA();
+        }
+        OUT(c) = r;
+    }
+    else {
+        _error("not that many frames on the stack");
+    }
+    return &inst+1;
 }
 
 // PROMISE_BYTECODES
@@ -846,15 +833,18 @@ static inline Instruction const* pr_new_op(Thread& thread, Instruction const& in
     DECODE(a); FORCE(a); BIND(a);
     DECODE(b); FORCE(b); BIND(b);
 
-    if(!b.isEnvironment())
-        _error("pr_new: Promise environment is the wrong type");
-    
-    Promise::Init(OUT(c),
-        ((REnvironment const&)b).environment(),
-        Compiler::compilePromise(thread, a),
+    REnvironment& eval = (REnvironment&)REGISTER((&inst+1)->a);
+    REnvironment& assign = (REnvironment&)REGISTER((&inst+1)->b);
+
+    Value& v = assign.environment()->insert(a.s);
+    Promise::Init(v,
+        eval.environment(),
+        Compiler::compilePromise(thread, b),
         false);
-    
-    return &inst+1;
+
+    OUT(c) = Null::Singleton();
+
+    return &inst+2;
 }
 
 static inline Instruction const* pr_expr_op(Thread& thread, Instruction const& inst) {
@@ -926,63 +916,28 @@ static inline Instruction const* length_op(Thread& thread, Instruction const& in
 }
 
 static inline Instruction const* get_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); BIND(a);
-	DECODE(b);
-	if(a.isVector()) {
-		int64_t index = 0;
-		if(b.isDouble1()) { index = b.d-1; }
-		else if(b.isInteger1()) { index = b.i-1; }
-		else if(b.isLogical1() && Logical::isTrue(b.c)) { index = 0; }
-		else if(b.isVector() && (((Vector const&)b).length() == 0 || ((Vector const&)b).length() > 1)) { 
-			_error("Attempt to select less or more than 1 element in subset2"); 
-		}
-		else { _error("Subscript out of bounds"); }
-		Element2(a, index, OUT(c));
-		return &inst+1;
-	}
- 	FORCE(b); BIND(b);
-	if(((Object const&)a).hasAttributes() || ((Object const&)b).hasAttributes()) { return GenericDispatch(thread, inst, Strings::bb, a, b, inst.c); }
+	DECODE(a); DECODE(b);
 
-    if(a.isEnvironment() && b.isCharacter1()) {
-	    String s = ((Character const&)b).s;
-        Value const& v = ((REnvironment&)a).environment()->get(s);
-        if(!v.isObject()) {
-            return force(thread, inst, v, ((REnvironment&)a).environment(), s); 
-        }
-        else {
-            OUT(c) = v;
-            return &inst+1;
-        }
-    }
-    if(a.isClosure() && b.isCharacter1()) {
-        Closure const& f = (Closure const&)a;
-	    String s = ((Character const&)b).s;
-        if(s == Strings::body) {
-            OUT(c) = f.prototype()->expression;
-            return &inst+1;
-        }
-        else if(s == Strings::formals) {
-            Character n(f.prototype()->parametersSize);
-            List v(f.prototype()->parametersSize);
-            for(size_t i = 0; i < f.prototype()->parametersSize; i++) {
-                n[i] = f.prototype()->parameters[i].n;
-                v[i] = f.prototype()->parameters[i].v;
-            }
-			Dictionary* d = new Dictionary(1);
-			d->insert(Strings::names) = n;
-			((Object&)v).attributes(d);
-            OUT(c) = v;
-            return &inst+1;
-        }
-    } 
-	_error("Invalid subset2 operation");
+    if(GetFast(thread, a, b, OUT(c)))
+        return &inst+1;
+    else
+        return GetSlow( thread, inst, a, b, OUT(c) );
 }
 
 static inline Instruction const* set_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest
-	DECODE(a); FORCE(a);
+	DECODE(a);
 	DECODE(b); FORCE(b); BIND(b);
 	DECODE(c); FORCE(c);
+
+    if(c.isEnvironment() && b.isCharacter1()) {
+	    String s = ((Character const&)b).s;
+        ((REnvironment&)c).environment()->insert(s) = a;
+        OUT(c) = c;
+        return &inst+1;
+    }
+    
+    FORCE(a);
 
 	if(a.isFuture() && (c.isVector() || c.isFuture())) {
 		if(b.isInteger() && ((Integer const&)b).length() == 1) {
@@ -998,31 +953,34 @@ static inline Instruction const* set_op(Thread& thread, Instruction const& inst)
 	BIND(a);
 	BIND(c);
 	
-    if(c.isEnvironment() && b.isCharacter1()) {
-	    String s = ((Character const&)b).s;
-        ((REnvironment&)c).environment()->insert(s) = a;
-        OUT(c) = c;
-        return &inst+1;
-    }
     if(c.isClosure() && b.isCharacter1()) {
         //Closure const& f = (Closure const&)c;
 	    //String s = ((Character const&)b).s;
         // TODO: implement assignment to function members
         _error("Assignment to function members is not yet implemented");
     }
+
+    if(     ((Object const&)b).hasAttributes()
+        ||  ((Object const&)c).hasAttributes()) { 
+		return GenericDispatch(thread, inst, Strings::bbAssign, c, b, a, inst.c); 
+	} 
+	
     Subset2Assign(thread, c, true, b, a, OUT(c));
 	return &inst+1; 
 }
 
 static inline Instruction const* getsub_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); 
-	DECODE(b);
+	DECODE(a); DECODE(b);
 
-	if(a.isVector()) {
-		if(b.isDouble1()) { Element(a, b.d-1, OUT(c)); return &inst+1; }
-		else if(b.isInteger1()) { Element(a, b.i-1, OUT(c)); return &inst+1; }
-		else if(b.isLogical1()) { Element(a, Logical::isTrue(b.c) ? 0 : -1, OUT(c)); return &inst+1; }
-		else if(b.isCharacter1()) { _error("Subscript out of bounds"); }
+	if(a.isVector() && !((Object const&)a).hasAttributes()) {
+		if(b.isDouble1()
+            && (int64_t)(b.d-1) >= 0
+            && (int64_t)(b.d-1) < ((Vector const&)a).length()) { 
+            Element(a, b.d-1, OUT(c)); return &inst+1; }
+		else if(b.isInteger1()
+            && (b.i-1) >= 0
+            && (b.i-1) < ((Vector const&)a).length()) { 
+            Element(a, b.i-1, OUT(c)); return &inst+1; }
 	}
 
 	if( thread.traces.isTraceable(a, b) 
@@ -1033,7 +991,7 @@ static inline Instruction const* getsub_op(Thread& thread, Instruction const& in
 		return &inst+1;
 	}
 
-	FORCE(a); BIND(a);
+	BIND(a);
 
 	if(thread.traces.isTraceable(a, b) 
 		&& (thread.traces.futureType(b) == Type::Integer 
@@ -1047,7 +1005,7 @@ static inline Instruction const* getsub_op(Thread& thread, Instruction const& in
 		return GenericDispatch(thread, inst, Strings::bracket, a, b, inst.c); 
 	} 
 	
-	FORCE(b); BIND(b);
+	BIND(b);
 
 	if(((Object const&)b).hasAttributes()) { 
 		return GenericDispatch(thread, inst, Strings::bracket, a, b, inst.c); 
@@ -1075,6 +1033,12 @@ static inline Instruction const* setsub_op(Thread& thread, Instruction const& in
 	}
 
 	BIND(a);
+	
+    if(     ((Object const&)b).hasAttributes()
+        ||  ((Object const&)c).hasAttributes()) { 
+		return GenericDispatch(thread, inst, Strings::bracketAssign, c, b, a, inst.c); 
+	} 
+	
 	SubsetAssign(thread, c, true, b, a, OUT(c));
 	return &inst+1;
 }
@@ -1083,7 +1047,7 @@ static inline Instruction const* getenv_op(Thread& thread, Instruction const& in
     DECODE(a); FORCE(a); BIND(a);
 
     if(a.isEnvironment()) {
-        Environment* parent = ((REnvironment const&)a).environment()->LexicalScope();
+        Environment* parent = ((REnvironment const&)a).environment()->getParent();
         if(parent == 0)
             _error("environment does not have a parent");
         REnvironment::Init(OUT(c), parent);
@@ -1118,10 +1082,10 @@ static inline Instruction const* setenv_op(Thread& thread, Instruction const& in
         while(p) {
             if(p == target) 
                 _error("an environment cannot be its own ancestor");
-            p = p->LexicalScope();
+            p = p->getParent();
         }
         
-        ((REnvironment const&)a).environment()->lexical = ((REnvironment const&)b).environment();
+        ((REnvironment const&)a).environment()->setParent(((REnvironment const&)b).environment());
         OUT(c) = a;
     }
     else if(a.isClosure()) {
@@ -1155,11 +1119,26 @@ static inline Instruction const* setattr_op(Thread& thread, Instruction const& i
 	if(c.isObject() && b.isCharacter1()) {
 		String name = ((Character const&)b)[0];
 		Object o = (Object const&)c;
-		Dictionary* d = o.hasAttributes()
-                	? o.attributes()->clone(1)
-                	: new Dictionary(1);
-		d->insert(name) = a;
-		o.attributes(d);
+        if(a.isNull()) {
+            if(o.hasAttributes()
+               && o.attributes()->has(name)) {
+                if(o.attributes()->Size() > 1) {
+                    Dictionary* d = o.attributes()->clone(0);
+                    d->remove(name);
+		            o.attributes(d);
+                }
+                else {
+                    o.attributes(NULL);
+                }
+            }
+        }
+        else {
+		    Dictionary* d = o.hasAttributes()
+                    	? o.attributes()->clone(1)
+                    	: new Dictionary(1);
+		    d->insert(name) = a;
+		    o.attributes(d);
+        }
 		OUT(c) = o;
 		return &inst+1;
 	}
@@ -1258,7 +1237,7 @@ static inline Instruction const* env_new_op(Thread& thread, Instruction const& i
     if(!a.isEnvironment())
         _error("'enclos' must be an environment");
 
-    REnvironment::Init(OUT(c), new Environment(4,((REnvironment const&)a).environment(),0,Null::Singleton()));
+    REnvironment::Init(OUT(c), new Environment(4,((REnvironment const&)a).environment()));
     return &inst+1;
 }
 
@@ -1479,6 +1458,17 @@ static inline Instruction const* random_op(Thread& thread, Instruction const& in
 	return &inst+1;
 }
 
+static inline Instruction const* semijoin_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+    DECODE(b); FORCE(b); BIND(b);
+
+    // assumes that the two arguments are the same type...
+    assert(a.type() == b.type());
+    OUT(c) = Semijoin(a, b);
+
+    return &inst+1;
+}
+
 //
 //    Main interpreter loop 
 //
@@ -1523,13 +1513,14 @@ Value Thread::eval(Prototype const* prototype, Environment* environment, int64_t
 	Instruction const* run = buildStackFrame(*this, environment, prototype, -resultSlot, (Instruction const*)0);
 	try {
 		interpret(*this, run);
-		assert(stackSize == stack.size());
+        if(stackSize != stack.size())
+		    _error("Stack was the wrong size at the end of eval");
 		return frame.registers[resultSlot];
 	} catch(...) {
-		stack.resize(stackSize);
+        stack.resize(stackSize);
         frame = oldFrame;
-		throw;
-	}
+	    throw;
+    }
 }
 
 

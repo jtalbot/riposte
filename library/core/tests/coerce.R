@@ -1,14 +1,18 @@
 
+# NYI: needs access to the search path
 ({
-    as.environment(1)
+    #as.environment(1)
 })
 
 ({
-    as.environment(1L)
+    #as.environment(1L)
 })
 
 ({
-    as.environment(parent.frame(1))
+    f <- function() {
+        as.environment(parent.frame())
+    }
+    f()
 })
 
 #DIFF: R doesn't support turning an empty list into an environment (?!)

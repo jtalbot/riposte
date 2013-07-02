@@ -5,7 +5,6 @@
 static ByteCode::Enum op0(String const& func) {
 
     if(func == Strings::dots) return ByteCode::dotsc;
-
     throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a nullary operator"); 
 }
 
@@ -29,8 +28,8 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::cummax) return ByteCode::cummax; 
 	
 	if(func == Strings::type) return ByteCode::type; 
-	if(func == Strings::length) return ByteCode::length; 
 	if(func == Strings::strip) return ByteCode::strip; 
+    if(func == Strings::length) return ByteCode::length;
 	
 	if(func == Strings::random) return ByteCode::random; 
     if(func == Strings::getNamespace) return ByteCode::getns;
@@ -40,6 +39,7 @@ static ByteCode::Enum op1(String const& func) {
     if(func == Strings::attributes) return ByteCode::attributes;
     if(func == Strings::getenv) return ByteCode::getenv;
     if(func == Strings::env_new) return ByteCode::env_new;
+    if(func == Strings::frame) return ByteCode::frame;
 	
     throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
 }
@@ -74,6 +74,8 @@ static ByteCode::Enum op2(String const& func) {
 	
     if(func == Strings::env_exists) return ByteCode::env_exists;
 	if(func == Strings::env_remove) return ByteCode::env_remove;
+
+    if(func == Strings::semijoin) return ByteCode::semijoin;
 	
     throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a binary operator"); 
 }
@@ -174,7 +176,7 @@ Compiler::Operand Compiler::forceInRegister(Operand r) {
 
 CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 	// compute compiled call...precompiles promise code and some necessary values
-	int64_t dotIndex = call.length()-1;
+    int64_t dotIndex = call.length()-1;
 	PairList arguments;
 	for(int64_t i = 1; i < call.length(); i++) {
 		Pair p;
@@ -312,17 +314,16 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	//if(complicated)
 	//	return compileFunctionCall(call, names, code);
 
-
-	if(func == Strings::internal) 
-	{
+    if(func == Strings::internal) 
+    {
         if(!call[1].isList() || !isCall(call[1]))
-			throw CompileError(std::string(".Internal has invalid arguments (") + Type::toString(call[1].type()) + ")");
-        
+            throw ;//CompileError(std::string(".Internal has invalid arguments (") + Type::toString(call[1].type()) +
+      
         List internalCall = (List const&)call[1];
-		if(!internalCall[0].isCharacter() || ((Character const&)internalCall[0]).length() != 1) 
-			throw CompileError(std::string(".Internal function is invalid (") + Type::toString(internalCall[0].type()) + ")");
-		
-        Character ns = Character::c(state.internStr("core"));
+        if(!internalCall[0].isCharacter() || ((Character const&)internalCall[0]).length() != 1) 
+            throw ;//CompileError(std::string(".Internal function is invalid (") + Type::toString(internalCall[0].typ
+               
+        Character ns = Character::c(state.internStr("internal"));
         Operand a = compileConstant(ns, code);
         kill(a);
         Operand result = allocRegister();
@@ -334,11 +335,11 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
         result = allocRegister();
         emit(ByteCode::get, a, b, result);
         
-		Character internalNames = hasNames(internalCall) ? 
-				(Character const&)getNames(internalCall) : 
-				Character(0); 
+        Character internalNames = hasNames(internalCall)
+            ? (Character const&)getNames(internalCall)
+            : Character(0); 
         return compileFunctionCall(result, internalCall, internalNames, code);
-	}
+    }
     else if(func == Strings::external)
     {
 		if(!call[1].isList() || !isCall(call[1]))
@@ -705,8 +706,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			result = placeInRegister(compile(call[1], code));
 		else
 			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
-		if(scope != CLOSURE)
-			throw CompileError("Attempting to return from top-level expression or from non-function. Riposte doesn't support return inside promises currently, and may never do so");
 		emit(ByteCode::ret, result, 0, 0);
 		return result;
 	} 
@@ -911,7 +910,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::attrget ||
         func == Strings::env_exists ||
         func == Strings::env_remove ||
-        func == Strings::setenv) &&
+        func == Strings::setenv ||
+        func == Strings::semijoin) &&
 		call.length() == 3) 
 	{
 		Operand a = compile(call[1], code);
@@ -937,7 +937,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::cummin ||
 		func == Strings::cummax ||
 		func == Strings::type ||
-		func == Strings::length ||
 		func == Strings::strip ||
 		func == Strings::random ||
         func == Strings::getNamespace ||
@@ -945,7 +944,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
         func == Strings::dots ||
         func == Strings::attributes ||
         func == Strings::getenv ||
-        func == Strings::env_new) &&
+        func == Strings::env_new ||
+        func == Strings::length ||
+        func == Strings::frame) &&
 		call.length() == 2)
 	{
 		// if there isn't exactly one parameter, we should call the library version...
@@ -956,19 +957,23 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		return result; 
 	} 
 	// Nullary operators
-	else if((func == Strings::dots) && 
+	else if(func == Strings::dots &&
 		call.length() == 1)
 	{
 		// if there isn't exactly zero parameters, we should call the library version...
 		Operand result = allocRegister();
 		emit(op0(func), 0, 0, result);
 		return result; 
-	} 
+	}
 	else if(func == Strings::missing)
 	{
 		if(call.length() != 2) _error("missing requires one argument");
 		if(!isSymbol(call[1]) && !call[1].isCharacter1()) _error("wrong parameter to missing");
-		Operand s = compileConstant(call[1], code);
+	    String sym = SymbolStr(call[1]);
+        int64_t dd = isDotDot(sym);
+        Operand s = dd > 0
+            ? compileConstant(Integer::c(dd), code)
+            : compileConstant(call[1], code);
 		Operand result = allocRegister();
 		emit(ByteCode::missing, s, 0, result); 
 		return result;
@@ -977,9 +982,12 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
     {
 		Operand a = compile(call[1], code);
 		Operand b = compile(call[2], code);
-		kill(b); kill(a);
+		Operand c = compile(call[3], code);
+		Operand d = compile(call[4], code);
+		kill(d); kill(c); kill(b); kill(a);
 		Operand result = allocRegister();
 		emit(ByteCode::pr_new, a, b, result);
+		emit(ByteCode::pr_new, c, d, result);
 		return result;
     }
 	else if(func == Strings::pr_expr)
@@ -1001,11 +1009,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand result = allocRegister();
 		emit(ByteCode::pr_env, a, b, result); 
 		return result;
-	}
-	else if(func == Strings::quote)
-	{
-		if(call.length() != 2) _error("quote requires one argument");
-		return compileConstant(call[1], code);
 	}
 
     // Otherwise, generate standard function call...

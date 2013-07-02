@@ -1,4 +1,9 @@
 
+quote <- function(expr)
+{
+    .pr_expr(parent.frame(0), 'expr')
+}
+
 .substitute <- function(expr, env)
 {
     if (is.expression(expr) || is.call(expr)) 
@@ -18,5 +23,5 @@
 
 substitute <- function(expr, env=parent.frame(1))
 {
-    .substitute(.pr_expr(parent.frame(0), quote(expr)), as.environment(env))
+    .substitute(.pr_expr(parent.frame(0), 'expr'), as.environment(env))
 }

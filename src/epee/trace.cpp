@@ -5,6 +5,14 @@
 //#include <unordered_set>
 #include <stdlib.h>
 
+Value const& Pointer::operator*() const {
+    return env->get(name);
+}
+
+Value& Pointer::operator*() {
+    return env->insert(name);
+}
+
 void Trace::Reset() {
 	n_recorded_since_last_exec = 0;
 	nodes.clear();
@@ -377,23 +385,25 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 				nodes[((Future const&)v).ref()].liveOut = true;
 				Output o;
 				o.type = Output::MEMORY;
-				o.pointer = (*i)->makePointer(j.string());
+				o.pointer = (Pointer){ (*i), j.string() };
 				o.ref = ((Future const&)v).ref();
 				outputs.push_back(o);
 			}
 		}
 
-		for(size_t j = 0; j < (*i)->dots.size(); j++) {
-			Value const& v = (*i)->dots[j].v;
-			if(v.isFuture() && ((Future const&)v).trace() == this) {
-				nodes[((Future const&)v).ref()].liveOut = true;
-				Output o;
-				o.type = Output::REG;
-				o.reg = (Value*)&v;
-				o.ref = ((Future const&)v).ref();
-				outputs.push_back(o);
-			}
-		}
+        if( (*i)->getContext() ) {
+		    for(size_t j = 0; j < (*i)->getContext()->dots.size(); j++) {
+			    Value const& v = (*i)->getContext()->dots[j].v;
+			    if(v.isFuture() && ((Future const&)v).trace() == this) {
+				    nodes[((Future const&)v).ref()].liveOut = true;
+    				Output o;
+	    			o.type = Output::REG;
+		    		o.reg = (Value*)&v;
+			    	o.ref = ((Future const&)v).ref();
+				    outputs.push_back(o);
+    			}
+	    	}
+        }
 	}
 }
 
@@ -416,7 +426,7 @@ void Trace::WriteOutputs(Thread & thread) {
 			*o.reg = v;
 			break;
 		case Output::MEMORY:
-			Environment::assignPointer(o.pointer,v);
+			*o.pointer = v;
 			break;
 		}
 	}

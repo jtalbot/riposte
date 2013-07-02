@@ -11,6 +11,14 @@
 //recording interpreter
 #define TRACE_MAX_RECORDED (1024)
 
+struct Pointer {
+    Environment* env;
+    String name;
+
+    Value& operator*();
+    Value const& operator*() const;
+};
+
 struct TraceCodeBuffer;
 class Trace {
 
@@ -24,7 +32,7 @@ class Trace {
 			Type type;
 			union {
 				Value* reg;
-				Environment::Pointer pointer;
+				Pointer pointer;
 			};
 			IRef ref;	   //location of the associated store
 		};

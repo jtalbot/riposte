@@ -34,12 +34,11 @@
 	_(Default, 	    "default") 	\
 	_(Dotdot, 	    "dotdot") 	\
 	_(Date,         "date")		\
-	_(Name, 	"name") \
-	_(Numeric, 	"numeric") \
-	_(Pairlist,	"pairlist")	\
-	_(Symbol,	"symbol")	\
-	_(Call,		"call")		\
-	_(Expression,	"expression")	\
+	_(numeric, 	"numeric") \
+	_(pairlist,	"pairlist")	\
+	_(name,	    "name")	\
+	_(call,	"call")		\
+	_(expression,	"expression")	\
 	_(internal, 	".Internal") \
 	_(external, 	".External") \
 	_(map_d, 	".Map.double") \
@@ -134,7 +133,7 @@
 	_(random, 	"random") \
 	_(True, 	"TRUE") \
 	_(False, 	"FALSE") \
-	_(type, 	"typeof") \
+	_(type, 	".type") \
 	_(length, 	"length") \
 	_(value, 	"value") \
 	_(dotGeneric, 	".Generic") \
@@ -143,7 +142,6 @@
 	_(docall,	"do.call") \
 	_(list,		"list") \
 	_(missing,	"missing") \
-	_(quote,	"quote") \
 	_(mmul,		"%*%") \
 	_(apply,	"apply") \
 	_(ifelse,	"ifelse") \
@@ -169,9 +167,11 @@
     _(env_new, ".env_new") \
     _(env_exists, ".env_exists") \
     _(env_remove, ".env_remove") \
-    _(fm_fn, ".fm_fn") \
-    _(fm_call, ".fm_call") \
-    _(fm_env, ".fm_env") \
+    _(frame, ".frame") \
+    _(top, ".top") \
+    _(print, "print") \
+    _(Last_value, ".Last.value") \
+    _(semijoin, ".semijoin") \
 
 typedef const char* String;
 

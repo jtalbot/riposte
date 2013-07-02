@@ -97,16 +97,20 @@ void Dictionary::visit() const {
 
 void Environment::visit() const {
 	Dictionary::visit();
-	VISIT(lexical);
-	VISIT(dynamic);
-	traverse(call);
+	VISIT(parent);
+    VISIT(context);
+}
+
+void Context::visit() const {
+    HeapObject::visit();
+    
+    VISIT(parent);
+    traverse(call);
+    traverse(function);
+
 	for(uint64_t i = 0; i < dots.size(); i++) {
 		traverse(dots[i].v);
 	}
-	/*for(uint64_t i = 0; i < size; i++) {
-		if(d[i].n != Strings::NA)
-			traverse(d[i].v);
-	}*/
 }
 
 void Prototype::visit() const {
@@ -150,12 +154,12 @@ void Heap::mark(State& state) {
 
 		//printf("--stack--\n");
 		for(uint64_t i = 0; i < thread->stack.size(); i++) {
-			VISIT(thread->stack[i].environment);
 			VISIT(thread->stack[i].prototype);
+			VISIT(thread->stack[i].environment);
 		}
 		//printf("--frame--\n");
-		VISIT(thread->frame.environment);
 		VISIT(thread->frame.prototype);
+		VISIT(thread->frame.environment);
 
 		//printf("--trace--\n");
 		// traces only hold weak references...

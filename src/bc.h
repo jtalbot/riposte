@@ -32,12 +32,8 @@
     _(missing,      "missing")      /* check if an argument is missing */      \
     _(getns,        "getns")        /* get a namespace */                      \
 
-/* In R, stack bytecodes only work while the associated stack frames are still on the stack.
-   Otherwise, they return an error. In Riposte, they continue to work. */
 #define STACK_FRAME_BYTECODES(_)                                               \
-    _(fm_fn,        "fm_fn")        /* function associated with a stack frame */ \
-    _(fm_call,      "fm_call")      /* call associated with a stack frame */   \
-    _(fm_env,       "fm_env")       /* environment associated with a stack frame */ \
+    _(frame,        "frame")        /* get a stack frame by index */           \
 
 #define PROMISE_BYTECODES(_)                                                   \
     _(pr_new,       "pr_new")       /* create a new promise (delayedAssign) */ \
@@ -168,6 +164,9 @@
 	_(cummin, "cummin",	UnifyScan,	pmin)                                      \
 	_(cummax, "cummax",	UnifyScan,	pmax) 
 
+#define JOIN_BYTECODES(_)                                                      \
+    _(semijoin, "semijoin")
+
 #define SPECIAL_BYTECODES(_) 	                                               \
 	_(done, "done") 
 
@@ -212,6 +211,7 @@
 	SCAN_BYTECODES(_) \
 	GENERIC_SCAN_BYTECODES(_) \
 	GENERIC_FOLD_BYTECODES(_) \
+	JOIN_BYTECODES(_) \
 
 #define BYTECODES(_) \
 	STANDARD_BYTECODES(_) \

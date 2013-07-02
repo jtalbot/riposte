@@ -7,8 +7,13 @@
 #include "ops.h"
 #include "vector.h"
 #include "exceptions.h"
+#include "runtime.h"
 
 void printCode(Thread const& thread, Prototype const* prototype, Environment* env);
+
+Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, int64_t index);
+
+Instruction const* force(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, String name);
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset);
 
@@ -18,13 +23,15 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Environment* env, int64_t resultSlot, Instruction const* returnpc);
 
-void MatchArgs(Thread& thread, Environment* env, Environment* fenv, Closure const& func, CompiledCall const& call);
+Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, CompiledCall const& call);
 
-void FastMatchArgs(Thread& thread, Environment* env, Environment* fenv, Closure const& func, CompiledCall const& call);
+Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func, CompiledCall const& call);
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out);
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out);
+
+Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, Value const& c, int64_t out);
 
 #define REGISTER(i) (*(thread.frame.registers+(-(i))))
 #define CONSTANT(i) (thread.frame.prototype->constants[(i)-1])
@@ -59,7 +66,7 @@ Value const& X = \
 #define DOTDOT(X, i) \
 Environment* X##Env = thread.frame.environment; \
 Value const& X = \
-	(thread.frame.environment->dots[(i)].v);
+	(thread.frame.environment->getContext()->dots[(i)].v);
 	
 #define FORCE_DOTDOT(X, i) \
 if(__builtin_expect(!X.isObject(), false)) { \
@@ -524,5 +531,43 @@ Instruction const* Name##Slow(Thread& thread, Instruction const& inst, void* arg
 BINARY_BYTECODES(SLOW_DISPATCH_DEFN)
 #undef SLOW_DISPATCH_DEFN
 
+inline bool GetFast(Thread& thread, Value a, Value b, Value& c) {
+	if(((Object const&)a).hasAttributes())
+        return false;
+
+	else if(a.isVector()) {
+        Vector const& v = (Vector const&)a;
+		if(    b.isInteger() 
+            && ((Integer const&)b).length() == 1
+            && (b.i-1) >= 0 
+            && (b.i-1) < v.length() ) {
+            Element2(v, b.i-1, c);
+            return true;
+        }
+		else if(b.isDouble() 
+            && ((Double const&)b).length() == 1
+            && (b.d-1) >= 0
+            && (b.d-1) < v.length()) {
+            Element2(a, b.d-1, c);
+            return true;
+        }
+	}
+
+    else if(a.isEnvironment() ) {
+         if( b.isCharacter()
+         && ((Character const&)b).length() == 1) {
+	        String s = ((Character const&)b).s;
+            Value const& v = ((REnvironment&)a).environment()->get(s);
+            if(v.isObject()) {
+                c = v;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const& a, Value const& b, Value& c);
 
 #endif

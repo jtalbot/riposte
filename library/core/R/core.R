@@ -1,6 +1,4 @@
 
-nargs <- function() { length(.External(sys_call(1L)))-1L }
-
 options <- function(...) {}
 
 factor <- function(x, levels) {
@@ -11,23 +9,6 @@ factor <- function(x, levels) {
 split <- function(x, f) {
 	split(strip(x), strip(f), length(attr(f, 'levels')))
 }
-
-c <- function(...) {
-    l <- list(...)
-    if(length(l) == 0)
-        return(NULL)
-
-    fun <- .External(unlist(list('c','.',class(l[[1]])), TRUE, TRUE))
-    fun <- .External(paste(fun, ""))
-    if(exists(fun)) {
-        return(get(fun)(...))
-    }
-    else {
-        .External(unlist(l, TRUE, TRUE))
-    }
-}
-
-print <- function(...) cat(...)
 
 `:` <- function(from, to) { 
 	if(to > from) seq(from,1L,to-from+1L)
@@ -104,26 +85,88 @@ dispatch2 <- function(op, x, y, default) {
 #	a <- cumprod(nd)
 #}
 
-`[` <- function(x, i, j) {
-	if(nargs() == 2L || nargs() == -1L) {
-		strip(x)[strip(i)]
-	} else {
-		d <- dim(x)
-		if(missing(i) && missing(j))
-			x
-		else if(missing(i))
-			strip(x)[(1L:d[[1L]])+(d[[1L]]*(as.integer(strip(j))-1L))]
-		else if(missing(j))
-			strip(x)[(0L:(d[[2L]]-1L))*(d[[1L]])+as.integer(strip(i))]
-		else
-			strip(x)[(as.integer(strip(j))-1L)*d[[1L]]+as.integer(strip(i))]	
-	}
+`[` <- function(x, ...) UseMethod('[', x, ...)
+
+`[.default` <- function(x, ...) {
+    if(nargs() < 2L) {
+        x
+    } else if(nargs() == 2L) {
+        i <- ..1
+
+        if(is.character(i)) {
+            i <- which(names(x) == i)
+        }
+
+        r <- strip(x)[strip(i)]
+        # discard all attributes but e.g. names
+        if(!is.null(names(x))) {
+            names(r) <- names(x)[strip(i)]
+        }
+        r
+    } else if(nargs() == 3L) {
+        d <- dim(x)
+        if(missing(..1) && missing(..2))
+            x
+        else if(missing(..1))
+            strip(x)[(1L:d[[1L]])+(d[[1L]]*(as.integer(strip(..2))-1L))]
+        else if(missing(..2))
+            strip(x)[(0L:(d[[2L]]-1L))*(d[[1L]])+as.integer(strip(..1))]
+        else
+            strip(x)[(as.integer(strip(..2))-1L)*d[[1L]]+as.integer(strip(..1))]	
+    }
+    else {
+        stop("Unsupported indexing length")
+    }
 }
 
-`[<-` <- function(x, i, ..., value) `[<-`(strip(x), strip(i), strip(value))
-`[[<-` <- function(x, i, ..., value) `[[<-`(strip(x), strip(i), strip(value))
+`[<-` <- function(x, ..., value) UseMethod('[<-', x, ..., value=value)
 
-#`[[` <- function(x, ..., exact = TRUE) UseMethod('[[')
+.copy.most.attributes <- function(r, x, i) {
+    i <- strip(i)
+    # copy over attributes, taking care to keep names lined up
+    for(n in names(attributes(x))) {
+        a <- attr(x,n)
+        if(n == 'names') {
+            a[i] <- ifelse(is.na(a[i]), '', a[i])
+            a[is.na(a)] <- ''
+        }
+        attr(r,n) <- a
+    }
+    r
+}
+
+`[<-.default` <- function(x, i, ..., value) {
+    r <- `[<-`(strip(x), strip(i), strip(value))
+    .copy.most.attributes(r, x, i)
+}
+
+`[<-.list` <- function(x, i, value) {
+    r <- `[<-`(strip(x), strip(i), value)
+    .copy.most.attributes(r, x, i)
+}
+
+`[<-.call` <- `[<-.list`
+`[<-.expression` <- `[<-.list`
+
+`[[<-` <- function(x, ..., value) {
+    UseMethod('[[<-', x)
+}
+
+`[[<-.default` <- function(x, i, ..., value) {
+    r <- `[[<-`(strip(x), strip(i), strip(value))
+    .copy.most.attributes(r, x, i)
+}
+
+`[[<-.list` <- function(x, i, ..., value) {
+    r <- `[[<-`(strip(x), strip(i), value)
+    .copy.most.attributes(r, x, i)
+}
+
+`[[<-.call` <- `[[<-.list`
+`[[<-.expression` <- `[[<-.list`
+
+`[[` <- function(x, ..., exact = TRUE)
+    UseMethod('[[', x, ..., exact=exact)
 
 #`[[` <- function(x, ..., exact = TRUE) {
 #	i <- as.integer(list(...))
@@ -141,8 +184,28 @@ dispatch2 <- function(op, x, y, default) {
 #	strip(x)[[d]]
 #}
 
-`[[` <- function(x, i) {
-	strip(x)[[strip(i)]]
+`[[.default` <- function(x, i, ..., exact = TRUE) {
+    if(is.character(i)) {
+        i <- which(names(x)==i)
+        if(length(i)==0)
+            stop("subscript out of bounds") 
+        else
+            strip(x)[[ i[[1]] ]]
+    }
+    else {
+	    strip(x)[[strip(i)]]
+    }
+}
+
+`[[.environment` <- function(x, i, ...) {
+    strip(x)[[strip(i)]]
+}
+
+which <- function(x) {
+    if(!is.logical(x))
+        stop("argument to 'which' is not logical")
+
+    seq(1,1,length(x))[x]
 }
 
 length <- function(x) length(strip(x))
@@ -151,27 +214,6 @@ nrow <- function(x) dim(x)[1L]
 ncol <- function(x) dim(x)[2L]
 
 lapply <- function(x, func) {
-	# should check that input is actually a list
-	if(is.character(func)) {
-		if(func == "sum") {
-			return(sum(x))
-		}
-		else if(func == "prod") {
-			return(prod(x))
-		}
-		else if(func == "mean") {
-			return(mean(x))
-		}
-		else if(func == "length") {
-			return(length(x))
-		}
-		else if(func == "min") {
-			return(min(x))
-		}
-		else if(func == "max") {
-			return(max(x))
-		}
-	}
 	.External(mapply(list(x), func))
 }
 
@@ -180,13 +222,15 @@ mapply <- function(FUN, ...) {
 }
 
 `$` <- function(a, b) {
-    a[[strip(.pr_expr(quote(b), environment(NULL)))]]
+    a[[strip(.pr_expr(parent.frame(0), quote(b)))]]
 }
 
 `$<-` <- function(x, i, value) {
-    x[[strip(.pr_expr(quote(i), environment(NULL)))]] <- value
+    x[[strip(.pr_expr(parent.frame(0), quote(i)))]] <- value
+    x
 }
 
 `::` <- function(a, b) {
-    getNamespace(.pr_expr(quote(a), environment(NULL)))[[.pr_expr(quote(b), environment(NULL))]]
+    getNamespace(strip(.pr_expr(parent.frame(0), quote(a))))[[strip(.pr_expr(parent.frame(0), quote(b)))]]
 }
+

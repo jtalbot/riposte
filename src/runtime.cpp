@@ -92,7 +92,8 @@ struct SubsetInclude {
 		typename A::Element* re = r.v();
 		int64_t length = d.length();
 		for(int64_t i = 0; i < length; i++) {
-			if(Integer::isNA(de[i])) re[j++] = A::NAelement;	
+			if(Integer::isNA(de[i]) ||
+                (de[i]-1) >= a.length()) re[j++] = A::NAelement;
 			else if(de[i] != 0) re[j++] = ae[de[i]-1];
 		}
 		out = r;
@@ -357,3 +358,61 @@ void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& 
 		_error("NYI indexing type");
 }
 
+template<class T>
+Integer Semijoin(T const& x, T const& table) {
+    Integer r(x.length());
+
+    // TODO: turn this into a hash...
+    if(table.length() <= x.length()) {
+        std::map<typename T::Element, int64_t> index;
+        for(int64_t i = table.length()-1; i >= 0; --i) {
+            index[table[i]] = i;
+        }
+        for(int64_t i = 0; i < x.length(); ++i) {
+            typename std::map<typename T::Element, int64_t>::const_iterator 
+                j = index.find(x[i]);
+            r[i] = (j == index.end()) ? Integer::NAelement : (j->second+1);
+        }
+    }
+    else {
+        for(int64_t i = 0; i < x.length(); ++i) {
+            r[i] = Integer::NAelement;
+        }
+        std::map< typename T::Element, std::vector<int64_t> > queries;
+        for(int64_t i = 0; i < x.length(); ++i) {
+            queries[x[i]].push_back(i);
+        }
+        for(int64_t i = 0; i < table.length() && queries.size() > 0; ++i) {
+            typename std::map< typename T::Element, std::vector<int64_t> >::iterator
+                j = queries.find(table[i]);
+            if(j != queries.end()) {
+                std::vector<int64_t> const& q = j->second;
+                for(int64_t k = 0; k < q.size(); ++k) {
+                    r[q[k]] = (i+1);
+                }
+                queries.erase(j);
+            }
+        }
+    }
+
+    return r;
+}
+
+Integer Semijoin(Value const& a, Value const& b) {
+
+    // assumes that the two arguments are the same type...
+    if(a.isNull())
+        return Integer(0);
+    else if(a.isRaw())
+        return Semijoin<Raw>((Raw const&)a, (Raw const&)b);
+    else if(a.isLogical())
+        return Semijoin<Logical>((Logical const&)a, (Logical const&)b);
+    else if(a.isInteger())
+        return Semijoin<Integer>((Integer const&)a, (Integer const&)b);
+    else if(a.isDouble())
+        return Semijoin<Double>((Double const&)a, (Double const&)b);
+    else if(a.isCharacter())
+        return Semijoin<Character>((Character const&)a, (Character const&)b);
+    else
+        _error("Unsupported type in semijoin");
+}

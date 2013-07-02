@@ -1,6 +1,6 @@
 
 .ArithUnary1 <- function(ffunc, ifunc, x) {
-    switch(typeof(x),
+    switch(.type(x),
         double=.Map.double(ffunc, x),
         integer=,
         logical=.Map.integer(ifunc, as.integer(x)),
@@ -11,7 +11,7 @@ abs <- function(x) .ArithUnary1('fabs_map', 'iabs_map', x)
 
 
 .ArithUnary2 <- function(func, x) {
-    switch(typeof(x),
+    switch(.type(x),
         double=.Map.double(func, x),
         integer=,
         logical=.Map.double(func, as.double(x)),
@@ -56,7 +56,7 @@ nzchar <- function(x) .Map.logical('nzchar_map', as.character(x))
 }
 
 .OrdinalUnary <- function(func, x) {
-    switch(typeof(x),
+    switch(.type(x),
         double=.Map.logical(func, x),
         integer=,
         logical=,
@@ -83,14 +83,14 @@ is.infinite <- function(x) {
 }
 
 .ArithBinary2 <- function(func, x, y) {
-    x <- switch(typeof(x),
+    x <- switch(.type(x),
         double=x,
         integer=,
         logical=,
         NULL=as.double(x),
         stop("Non-numeric argument to mathematical function"))
 
-    y <- switch(typeof(y),
+    y <- switch(.type(y),
         double=y,
         integer=,
         logical=,
@@ -105,14 +105,14 @@ atan2 <- function(x, y) .ArithBinary2('atan2_map', x, y)
 hypot <- function(x, y) .ArithBinary2('hypot_map', x, y)
 
 .Digits <- function(func, x, y) {
-    x <- switch(typeof(x),
+    x <- switch(.type(x),
         double=x,
         integer=,
         logical=,
         NULL=as.double(x),
         stop("Non-numeric argument to mathematical function"))
 
-    y <- switch(typeof(y),
+    y <- switch(.type(y),
         double=,
         integer=,
         logical=,
@@ -128,7 +128,7 @@ signif <- function(x, digits = 6) .Digits('signif', x, digits)
 
 
 .ArithUnary2 <- function(func, x) {
-    switch(typeof(x),
+    switch(.type(x),
         double=.Map.double(func, x),
         integer=,
         logical=.Map.double(func, as.double(x)),

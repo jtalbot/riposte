@@ -29,8 +29,38 @@ unlist <- function(x, recursive = TRUE, use.names = TRUE) {
 
 source <- function(x) .External(source(x))
 
-parent.frame <- function(n) .External(parentframe(n+1))
-sys.call <- function(which=0) .External(sys.call(which+1))
+sys.call <- function(which = 0L) {
+    .frame(as.integer(-which+1L))[[2L]]
+}
+
+sys.frame <- function(which = 0L) {
+    .frame(as.integer(-which+1L))[[1L]]
+}
+
+sys.nframe <- function() {
+    0
+}
+
+sys.function <- function(which = 0L) {
+    .frame(as.integer(-which+1L))[[3L]]
+}
+
+sys.nargs <- function(which = 0L) {
+    .frame(as.integer(-which+1L))[[4L]]
+}
+
+sys.parent <- function(n = 1L) {
+    -n
+}
+
+parent.frame <- function(n = 1L) {
+    .frame(as.integer(n+1L))[[1L]]
+}
+
+nargs <- function() {
+    .frame(1L)[[4L]]
+}
+
 alist <- function(...) as.list(sys.call())[-1L]
 #rm <- function(...) .External(remove(as.character(sys.call())[-1L], parent.frame()))
 
@@ -39,8 +69,6 @@ warning <- function(x) .External(warning(x))
 
 deparse <- function(x) .External(deparse(x))
 substitute <- function(x) .External(substitute(x))
-
-typeof <- function(x) .External(typeof(x))
 
 exists <- function(x, envir, mode, inherits=TRUE) {
 	if(missing(envir)) envir <- parent.frame(1)
@@ -56,11 +84,6 @@ proc.time <- function(x) .External(proc.time())
 trace.config <- function(trace=0) .External(trace.config(trace))
 
 read.table <- function(file,sep=" ",colClasses=c("double")) .External(readtable(file,sep,colClasses))
-
-match <- function(x, table, nomatch = NA_integer_) {
-	r <- .External(match(x, table))
-	r[is.na(r)] <- nomatch
-}
 
 commandArgs <- function (trailingOnly = FALSE) 
 {

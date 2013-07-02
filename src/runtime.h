@@ -21,7 +21,10 @@ Type::Enum string2Type(String str);
 void Element(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 inline void Element(Value const& v, int64_t index, Value& out) {
 	switch(v.type()) {
-		#define CASE(Name) case Type::Name: Name::InitScalar(out, ((Name const&)v)[index]); break;
+		#define CASE(Name)   \
+            case Type::Name: \
+                Name::InitScalar(out, ((Name const&)v)[index]); \
+            break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: Element of this type"); break;
@@ -30,10 +33,10 @@ inline void Element(Value const& v, int64_t index, Value& out) {
 
 void Element2(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 inline void Element2(Value const& v, int64_t index, Value& out) {
-	if(index < 0 || index >= ((Vector const&)v).length()) _error("Out-of-range index");
 	switch(v.type()) {
-		#define CASE(Name) case Type::Name: \
-			Name::InitScalar(out, ((Name const&)v)[index]); \
+		#define CASE(Name)   \
+            case Type::Name: \
+			    Name::InitScalar(out, ((Name const&)v)[index]); \
 			break;
 		ATOMIC_VECTOR_TYPES(CASE)
 		#undef CASE
@@ -209,6 +212,8 @@ inline Integer Repeat(Integer const& each, int64_t const length) {
 }
 
 Double RandomVector(Thread& thread, int64_t const length);
+
+Integer Semijoin(Value const& x, Value const& table);
 
 #endif
 

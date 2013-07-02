@@ -24,26 +24,35 @@ make.names <- function(x) {
 
 names <- function(x) attr(x, 'names')
 `names<-` <- function(x, value) { 
-    #NYI: check length
-    attr(x, 'names') <- as.character(value); 
+    if(is.null(value))
+        attr(x, 'names') <- NULL
+    else {
+        if(length(value) != length(x))
+            stop("'names' attributes must be the same length as the vector")
+        attr(x, 'names') <- as.character(value)
+    }
     x 
 }
 
 dim <- function(x) attr(x, 'dim')
 `dim<-` <- function(x, value) {
-	if(length(value) == 0L) stop("length-0 dimension vector is invalid")
-	if(any(is.na(value))) stop("the dims contain missing values")
-	value <- as.integer(value)
-	if(any(value < 0L)) stop("the dims contain negative values")
-	if(prod(value) != length(x)) stop("dims product do not match the length of object")
-	attr(x, 'dim') <- as.integer(value)
+    if(is.null(value))
+        attr(x, 'dim') <- NULL
+    else {
+    	if(length(value) == 0L) stop("length-0 dimension vector is invalid")
+    	if(any(is.na(value))) stop("the dims contain missing values")
+    	value <- as.integer(value)
+    	if(any(value < 0L)) stop("the dims contain negative values")
+    	if(prod(value) != length(x)) stop("dims product do not match the length of object")
+    	attr(x, 'dim') <- as.integer(value)
+    }
     x
 }
 
 class <- function(x) {
     r <- attr(x, 'class')
     if(is.null(r)) {
-        r <- typeof(x)
+        r <- .type(x)
         if(r == 'double')
             r <- 'numeric'
     }
@@ -51,7 +60,10 @@ class <- function(x) {
 }
 
 `class<-` <- function(x, value) {
-    attr(x, 'class') <- as.character(value)
+    if(is.null(value))
+        attr(x, 'names') <- NULL
+    else
+        attr(x, 'class') <- as.character(value)
     x
 }
 

@@ -13,6 +13,16 @@
 #include "strings.h"
 #include "exceptions.h"
 
+// Forward declare the HeapObjects
+class State;
+class Thread;
+struct Prototype;
+class Environment;
+class Dictionary;
+class Trace;
+class Context;
+
+
 struct Value {
 	
 	union {
@@ -84,13 +94,6 @@ typedef std::vector<Pair> PairList;
 //
 // Value type implementations
 //
-class State;
-class Thread;
-struct Prototype;
-class Environment;
-class Dictionary;
-class Trace;
-
 
 // Promises
 
@@ -188,19 +191,19 @@ struct Closure : public Object {
 	static const Type::Enum ValueType = Type::Closure;
 		
 	struct Inner : public HeapObject {
-		Prototype* proto;
+		Prototype const* proto;
 		Environment* env;
-		Inner(Prototype* proto, Environment* env)
+		Inner(Prototype const* proto, Environment* env)
 			: proto(proto), env(env) {}
 	};
 
-	static Closure& Init(Value& v, Prototype* proto, Environment* env) {
+	static Closure& Init(Value& v, Prototype const* proto, Environment* env) {
 		Value::Init(v, Type::Closure, 0);
 		v.p = new Inner(proto, env);
 		return (Closure&)v;
 	}
 
-	Prototype* prototype() const { return ((Inner*)p)->proto; }
+	Prototype const* prototype() const { return ((Inner*)p)->proto; }
 	Environment* environment() const { return ((Inner*)p)->env; }
 };
 
@@ -363,220 +366,5 @@ VECTOR_IMPL(List, Value, true)
 	static bool isCheckedNA(Value const& c) { return isNA(c); }
 };
 
-
-class Dictionary : public HeapObject {
-protected:
-	uint64_t size, load, ksize;
-	
-	struct Inner : public HeapObject {
-		Pair d[];
-	};
-
-	Inner* d;
-
-	// Returns the location of variable `name` in this environment or
-	// an empty pair (String::NA, Value::Nil).
-	// success is set to true if the variable is found. This boolean flag
-	// is necessary for compiler optimizations to eliminate expensive control flow.
-	Pair* find(String name, bool& success) const ALWAYS_INLINE {
-		uint64_t i = ((uint64_t)name >> 3) & ksize;
-		Pair* first = &d->d[i];
-		if(__builtin_expect(first->n == name, true)) {
-			success = true;
-			return first;
-		}
-		uint64_t j = 0;
-		while(d->d[i].n != Strings::NA) {
-			i = (i+(++j)) & ksize;
-			if(__builtin_expect(d->d[i].n == name, true)) {
-				success = true;
-				return &d->d[i];
-			}
-		}
-		success = false;
-		return &d->d[i];
-	}
-
-	// Returns the location where variable `name` should be inserted.
-	// Assumes that `name` doesn't exist in the hash table yet.
-	// Used for rehash and insert where this is known to be true.
-	Pair* slot(String name) const ALWAYS_INLINE {
-		uint64_t i = ((uint64_t)name >> 3) & ksize;
-		if(__builtin_expect(d->d[i].n == Strings::NA, true)) {
-			return &d->d[i];
-		}
-		uint64_t j = 0;
-		while(d->d[i].n != Strings::NA) {
-			i = (i+(++j)) & ksize;
-		}
-		return &d->d[i];
-	}
-
-	void rehash(uint64_t s) {
-		uint64_t old_size = size;
-		uint64_t old_load = load;
-		Inner* old_d = d;
-
-		d = new (sizeof(Pair)*s) Inner();
-		size = s;
-		ksize = s-1;
-		clear();
-		
-		// copy over previous populated values...
-		if(old_load > 0) {
-			for(uint64_t i = 0; i < old_size; i++) {
-				if(old_d->d[i].n != Strings::NA) {
-					load++;
-					*slot(old_d->d[i].n) = old_d->d[i];
-				}
-			}
-		}
-	}
-
-public:
-	Dictionary(int64_t initialLoad) : size(0), load(0), d(0) {
-		rehash(std::max((uint64_t)1, nextPow2(initialLoad*2)));
-	}
-
-	bool has(String name) const ALWAYS_INLINE {
-		bool success;
-		find(name, success);
-		return success;
-	}
-
-	Value const& get(String name) const ALWAYS_INLINE {
-		bool success;
-		return find(name, success)->v;
-	}
-
-	Value& insert(String name) ALWAYS_INLINE {
-		bool success;
-		Pair* p = find(name, success);
-		if(!success) {
-			if(((load+1) * 2) > size)
-				rehash((size*2));
-			load++;
-			p = slot(name);
-			p->n = name;
-		}
-		return p->v;
-	}
-
-	void remove(String name) {
-		bool success;
-		Pair* p = find(name, success);
-		if(success) {
-			load--;
-			memset(p, 0, sizeof(Pair));
-		}
-	}
-
-	void clear() {
-		memset(d->d, 0, sizeof(Pair)*size); 
-		load = 0;
-	}
-
-	// clone with room for extra elements
-	Dictionary* clone(uint64_t extra) const {
-		Dictionary* clone = new Dictionary((load+extra)*2);
-		// copy over elements
-		if(load > 0) {
-			for(uint64_t i = 0; i < size; i++) {
-				if(d->d[i].n != Strings::NA) {
-					clone->load++;
-					*clone->slot(d->d[i].n) = d->d[i];
-				}
-			}
-		}
-		return clone;
-	}
-
-	class const_iterator {
-		Dictionary const* d;
-		int64_t i;
-	public:
-		const_iterator(Dictionary const* d, int64_t idx) {
-			this->d = d;
-			i = std::max((int64_t)0, std::min((int64_t)d->size, idx));
-			while(d->d->d[i].n == Strings::NA && i < (int64_t)d->size) i++;
-		}
-		String string() const { return d->d->d[i].n; }	
-		Value const& value() const { return d->d->d[i].v; }
-		const_iterator& operator++() {
-			while(d->d->d[++i].n == Strings::NA && i < (int64_t)d->size);
-			return *this;
-		}
-		bool operator==(const_iterator const& o) {
-			return d == o.d && i == o.i;
-		}
-		bool operator!=(const_iterator const& o) {
-			return d != o.d || i != o.i;
-		}
-	};
-
-	const_iterator begin() const {
-		return const_iterator(this, 0);
-	}
-
-	const_iterator end() const {
-		return const_iterator(this, size);
-	}
-
-	void visit() const;
-
-    uint64_t Size() const { return load; }
-};
-
-class Environment : public Dictionary {
-public:
-	Environment* lexical, *dynamic;
-	Value call;
-	PairList dots;
-	bool named;	// true if any of the dots have names	
-
-	explicit Environment(int64_t initialLoad, Environment* lexical, Environment* dynamic, Value const& call) :
-			Dictionary(initialLoad), 
-			lexical(lexical), dynamic(dynamic), call(call), named(false) {}
-
-	Environment* LexicalScope() const { return lexical; }
-	Environment* DynamicScope() const { return dynamic; }
-
-	// Look up insertion location using R <<- rules
-	// (i.e. find variable with same name in the lexical scope)
-	Value& insertRecursive(String name, Environment*& env) const ALWAYS_INLINE {
-		bool success;
-		env = (Environment*)this;
-		Pair* p = env->find(name, success);
-		while(!success && (env = env->LexicalScope())) {
-			p = env->find(name, success);
-		}
-		return p->v;
-	}
-	
-	// Look up variable using standard R lexical scoping rules
-	// Should be same as insertRecursive, but with extra constness
-	Value const& getRecursive(String name, Environment*& env) const ALWAYS_INLINE {
-		return insertRecursive(name, env);
-	}
-
-	struct Pointer {
-		Environment* env;
-		String name;
-	};
-
-	Pointer makePointer(String name) {
-		return (Pointer) { this, name };
-	}
-
-	static Value const& getPointer(Pointer const& p) {
-		return p.env->get(p.name);
-	}
-
-	static void assignPointer(Pointer const& p, Value const& value) {
-		p.env->insert(p.name) = value;
-	}
-	
-	void visit() const;
-};
-
 #endif
+

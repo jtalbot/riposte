@@ -15,8 +15,8 @@ a
 (a[0] <- 0)
 a
 
-#NYI: printing vectors with names
 #(a <- c(a=10, b=20, c=30))
+# NYI: character indexing
 #(a[['a']] <- 40)
 #a
 
