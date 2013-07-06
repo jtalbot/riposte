@@ -19,7 +19,7 @@ Flags
 -----
 -j # 		: start with # worker threads (defaults to 1, set to the number of cores on your machine)
 
--f <filename>	: execute R script in <filename>
+-f filename	: execute R script
 
 -v 		: verbose debug output for the vector trace recorder and JIT
 
