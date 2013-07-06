@@ -18,7 +18,9 @@ Compiling riposte
 Flags
 -----
 -j # 		: start with # worker threads (defaults to 1, set to the number of cores on your machine)
+
 -f <filename>	: execute R script in <filename>
+
 -v 		: verbose debug output for the vector trace recorder and JIT
 
 
@@ -29,7 +31,7 @@ Riposte is in heavy development. Many things haven't been implemented and many t
 
 License
 -------
-Riposte is distributed under the BSD 2-clause license <http://www.opensource.org/licenses/bsd-license.php>.
+Riposte is distributed under the BSD 2-clause license (http://www.opensource.org/licenses/bsd-license.php).
 
 Riposte uses the following libraries:
 * Eigen (http://eigen.tuxfamily.org) under the MPL2 license (http://www.mozilla.org/MPL/2.0/)
