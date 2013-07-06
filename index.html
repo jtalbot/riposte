@@ -36,17 +36,15 @@
 <p>We do development on OSX and Linux. Windows compilation is completely untested and we doubt the JIT will work on Windows.</p>
 
 <ol>
-<li><p>Install the Boehm GC. Available in macports, port install boehmgc.
-Install rlwrap. Available in macports, port install rlwrap.</p></li>
-<li><p>Run make release in the riposte directory, or make debug for the debug version</p></li>
-<li><p>Execute ./riposte to start</p></li>
+<li><p>Run <code>make release</code> in the riposte directory, or <code>make debug</code> for the debug version</p></li>
+<li><p>Execute <code>./riposte</code> to start</p></li>
 </ol><h3>Flags</h3>
 
 <p><code>-j #</code>: start with <code>#</code> worker threads (defaults to <code>1</code>)</p>
 
-<p><code>-f &lt;filename&gt;</code>: execute R script</p>
-
 <p><code>-v</code>: verbose debug output for the vector trace recorder and JIT</p>
+
+<p><code>-f &lt;filename&gt;</code>: execute R script</p>
 
 <p><code>--args</code>: pass arguments after <code>--args</code> to the R script</p>
 
@@ -54,7 +52,12 @@ Install rlwrap. Available in macports, port install rlwrap.</p></li>
 
 <p>Riposte is distributed under the <a href="http://www.opensource.org/licenses/bsd-license.php">BSD 2-clause license</a>.</p>
 
-<p>Riposte uses Eigen which is distributed under the <a href="http://www.gnu.org/copyleft/lesser.html">LGPL3 license</a>.</p>
+<p>Riposte uses the following libraries:
+<ul>
+<li><a href="http://eigen.tuxfamily.org">Eigen</a> under the <a href="http://www.mozilla.org/MPL/2.0/">MPL2 license</a></li>
+<li><a href="https://github.com/antirez/linenoise/">Linenoise</a> under a BSD license
+</ul></p>
+
       </section>
       <footer>
         <p>This project is maintained by <a href="https://github.com/jtalbot">jtalbot</a></p>
