@@ -25,6 +25,7 @@ EXECUTABLE := riposte
 RIPOSTE := riposte.dylib
 MAIN := build/main.o
 LINENOISE := build/linenoise.o
+PACKAGES:= core internal
 
 ALL_SRC := $(SRC)
 ALL_SRC += main.cpp
@@ -36,16 +37,22 @@ DEPENDENCIES := $(patsubst %.cpp,build/%.d,$(ALL_SRC))
 default: debug
 
 debug: CXXFLAGS += -DDEBUG -O0 -g
-debug: $(EXECUTABLE)
+debug: all
 
 release: CXXFLAGS += -DNDEBUG -O3 -g
-release: $(EXECUTABLE)
+release: all
 
 asm: CXXFLAGS += -DNDEBUG -O3 -g 
 asm: $(ASM)
 
+.PHONY: all
+all: $(EXECUTABLE) $(PACKAGES)
+
 $(EXECUTABLE): $(MAIN) $(LINENOISE) $(RIPOSTE) 
 	$(CXX) $(LFLAGS) -L. -o $@ $^ $(LIBS)
+
+$(PACKAGES): $(RIPOSTE)
+	$(MAKE) -C library/$@ $(MAKECMDGOALS)
 
 $(RIPOSTE): $(OBJECTS)
 	$(CXX) $(LFLAGS) -dynamiclib -o $@ $^ $(LIBS)
@@ -63,7 +70,7 @@ build/linenoise.o: libs/linenoise/linenoise.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 .PHONY: clean
-clean:
+clean: $(PACKAGES)
 	rm -rf $(EXECUTABLE) $(RIPOSTE) $(MAIN) $(OBJECTS) $(LINENOISE) $(DEPENDENCIES)
 
 # dependency rules
@@ -80,10 +87,10 @@ BLACKBOX_TESTS = $(shell find tests/blackbox -type f -name '*.R')
 CORE_TESTS = $(shell find library/core/tests -type f -name '*.R')
 BASE_TESTS = $(shell find library/base/tests -type f -name '*.R')
 
-.PHONY: tests $(COVERAGE_TESTS) $(BLACKBOX_TESTS) $(CORE_TESTS) #$(BASE_TESTS)
+.PHONY: tests $(BASE_TESTS) #$(COVERAGE_TESTS) $(BLACKBOX_TESTS) $(CORE_TESTS) #$(BASE_TESTS)
 COVERAGE_FLAGS := 
 tests: COVERAGE_FLAGS += >/dev/null
-tests: $(COVERAGE_TESTS) $(BLACKBOX_TESTS) $(CORE_TESTS) #$(BASE_TESTS)
+tests: $(BASE_TESTS) #$(COVERAGE_TESTS) $(BLACKBOX_TESTS) $(CORE_TESTS) #$(BASE_TESTS)
 
 $(COVERAGE_TESTS):
 	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null

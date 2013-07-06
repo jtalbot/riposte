@@ -18,9 +18,9 @@
 
 .flatten <- function(x, nested, type) {
     r <- vector(type, 0)
-    for(i in seq(1L, 1L, length(x))) {
+    for(i in seq_len(length(x))) {
         if(nested[[i]]) {
-            r[seq((length(r)+1L),1L,length(x[[i]]))] <- x[[i]]
+            r[length(r)+seq_len(length(x[[i]]))] <- x[[i]]
         }
         else {
             r[[length(r)+1L]] <- x[[i]]
@@ -36,7 +36,7 @@
         n <- rep('', length(x))
 
     r <- vector('character', 0)
-    for(i in seq(1L, 1L, length(x))) {
+    for(i in seq_len(length(x))) {
         if(nested[[i]]) {
             e <- names(x[[i]])
             has.names <- has.names || !is.null(e)
@@ -44,8 +44,8 @@
                 e <- rep('', length(x[[i]]))
             if(n[[i]] != '')
                 e <- .pconcat(n[[i]], 
-                    ifelse(e=='', seq(1L, 1L, length(e)), .pconcat('.',e)))
-            r[seq((length(r)+1L),1L,length(e))] <- e
+                    ifelse(e=='', seq_len(length(e)), .pconcat('.',e)))
+            r[length(r)+seq_len(length(e))] <- e
         }
         else {
             r[[length(r)+1L]] <- n[[i]]

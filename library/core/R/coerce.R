@@ -59,7 +59,7 @@ is.single <- function(x) stop('type "single" unimplemented in R')
         stop("names(x) must be a character vector of the same length as x")
 
     e <- .env_new(emptyenv())
-    for(i in seq(1, 1, length(l))) {
+    for(i in seq_len(length(l))) {
         e[[n[[i]]]] <- l[[i]]
     }
     e

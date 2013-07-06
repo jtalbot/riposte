@@ -139,132 +139,6 @@ Value readtable(Thread& thread, Value const* args) {
 	}
 }
 
-Type::Enum cTypeCast(Type::Enum s, Type::Enum t)
-{
-	#define MEET(X, Y, Z) if(s == Type::X && t == Type::Y) return Type::Z;
-	DEFAULT_TYPE_MEET(MEET);
-	#undef MEET
-	_error("Unexpected non-basic type in unlist (cTypeCast)");
-}
-
-// These are all tree-based reductions. Should we have a tree reduction byte code?
-int64_t unlistLength(Thread& thread, int64_t recurse, Value a) {
-	if(recurse > 0 && a.isList()) {
-		List const& l = (List const&)a;
-		int64_t t = 0;
-		for(int64_t i = 0; i < l.length(); i++) 
-			t += unlistLength(thread, recurse-1, l[i]);
-		return t;
-	}
-	else if(a.isVector()) return ((Vector const&)a).length();
-	else return 1;
-}
-
-Type::Enum unlistType(Thread& thread, int64_t recurse, Value a) {
-	if(a.isList()) {
-		List const& l = (List const&)a;
-		Type::Enum t = Type::Null;
-		for(int64_t i = 0; i < l.length(); i++) 
-			t = cTypeCast(recurse > 0 ? unlistType(thread, recurse-1, l[i]) : l[i].type(), t);
-		return t;
-	}
-	else if(a.isVector()) return a.type();
-	else return Type::List;
-}
-
-template< class T >
-void unlist(Thread& thread, int64_t recurse, Value a, T& out, int64_t& start) {
-	if(recurse > 0 && a.isList()) {
-		List const& l = (List const&)a;
-		for(int64_t i = 0; i < l.length(); i++) 
-			unlist(thread, recurse-1, l[i], out, start);
-		return;
-	}
-	else if(a.isVector()) { Insert(thread, a, 0, out, start, ((Vector const&)a).length()); start += ((Vector const&)a).length(); }
-	else _error("Unexpected non-basic type in unlist");
-}
-
-template<>
-void unlist<List>(Thread& thread, int64_t recurse, Value a, List& out, int64_t& start) {
-	if(recurse > 0 && a.isList()) {
-		List const& l = (List const&)a;
-		for(int64_t i = 0; i < l.length(); i++) 
-			unlist(thread, recurse-1, l[i], out, start);
-		return;
-	}
-	else if(a.isVector()) { Insert(thread, a, 0, out, start, ((Vector const&)a).length()); start += ((Vector const&)a).length(); }
-	else out[start++] = a;
-}
-/*
-bool unlistHasNames(Thread& thread, int64_t recurse, Value a) {
-	if(a.isObject() && ((Object const&)a).hasNames()) return true;
-	if(a.isObject()) a = ((Object&)a).base();
-	if(recurse > 0 && a.isList()) {
-		List l(a);
-		bool hasNames = false;
-		for(int64_t i = 0; i < l.length; i++) 
-			hasNames = hasNames || unlistHasNames(thread, recurse-1, l[i]);
-		return hasNames;
-	}
-	else return false;
-}
-*/
-std::string makeName(Thread& thread, std::string prefix, String name, int64_t i) {
-	if(prefix.length() > 0) {
-		if(name != Strings::empty)
-			return prefix + "." + thread.externStr(name);
-		else
-			return prefix + intToStr(i+1);
-	}
-	else {
-		return thread.externStr(name);
-	}
-}
-/*
-void unlistNames(Thread& thread, int64_t recurse, Value a, Character& out, int64_t& start, std::string prefix) {
-	Character names(0);
-	if(a.isObject() && ((Object&)a).hasNames()) {
-		names = (Character)((Object&)a).getNames();
-	}
-	if(a.isObject()) a = ((Object&)a).base();
-
-	if(recurse > 0 && a.isList()) {
-		List l(a);
-		for(int64_t i = 0; i < l.length; i++)
-			unlistNames(thread, recurse-1, l[i], out, start, makeName(thread, prefix, i < names.length ? names[i] : Strings::empty, i));
-		return;
-	}
-	else if(a.isVector() && a.length != 1) { 
-		for(int64_t i = 0; i < a.length; i++) {
-			out[start++] = thread.internStr(makeName(thread, prefix, (i < names.length) ? names[i] : Strings::empty, i));
-		}
-	}
-	else out[start++] = thread.internStr(prefix);
-}
-*/
-// TODO: useNames parameter could be handled at the R level
-extern "C"
-Value unlist(Thread& thread, Value const* args) {
-	Value v = args[0];
-	int64_t recurse = Cast<Logical>(args[1])[0] ? std::numeric_limits<int64_t>::max() : 1;
-	
-	int64_t length = unlistLength(thread, recurse, v);
-	Type::Enum type = unlistType(thread, recurse, v);
-
-	switch(type) {
-		#define CASE(Name) \
-			case Type::Name: { \
-				Name out(length); \
-				int64_t i = 0; \
-				unlist(thread, recurse, v, out, i); \
-				return out; \
-			} break;
-		VECTOR_TYPES(CASE)
-		#undef CASE
-		default: _error("NYI: Insert into this type"); break;
-	};
-}
-
 struct mapplyargs {
 	List const& in;
 	List& out;
@@ -443,7 +317,7 @@ Value paste(Thread& thread, Value const* args) {
 
 extern "C"
 Value deparse(Thread& thread, Value const* args) {
-	return Character::c(thread.internStr(thread.deparse(args[0])));
+    return Character::c(thread.internStr(thread.deparse(args[0])));
 }
 
 extern "C"

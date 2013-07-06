@@ -27,7 +27,9 @@ static ByteCode::Enum op1(String const& func) {
 	if(func == Strings::cummin) return ByteCode::cummin; 
 	if(func == Strings::cummax) return ByteCode::cummax; 
 	
-	if(func == Strings::type) return ByteCode::type; 
+	if(func == Strings::seqlen) return ByteCode::seq;
+	
+    if(func == Strings::type) return ByteCode::type; 
 	if(func == Strings::strip) return ByteCode::strip; 
     if(func == Strings::length) return ByteCode::length;
 	
@@ -85,7 +87,6 @@ static ByteCode::Enum op3(String const& func) {
 	if(func == Strings::bbAssign) return ByteCode::set;
 	if(func == Strings::split) return ByteCode::split;
 	if(func == Strings::ifelse) return ByteCode::ifelse;
-	if(func == Strings::seq) return ByteCode::seq;
 	if(func == Strings::index) return ByteCode::index;
 	if(func == Strings::attrset) return ByteCode::setattr;
 	if(func == Strings::map) return ByteCode::map;
@@ -683,6 +684,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Prototype* functionCode = Compiler::compileClosureBody(thread, call[2]);
 
 		// Populate function info
+        functionCode->formals = c;
 		functionCode->parameters = parameters;
 		functionCode->parametersSize = parameters.size();
 		functionCode->string = SymbolStr(call[3]);
@@ -874,7 +876,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::bbAssign ||
 		func == Strings::split ||
 		func == Strings::ifelse ||
-		func == Strings::seq ||
 		func == Strings::index ||
         func == Strings::attrset ||
         func == Strings::map) &&
@@ -938,6 +939,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::cumprod ||
 		func == Strings::cummin ||
 		func == Strings::cummax ||
+        func == Strings::seqlen ||
 		func == Strings::type ||
 		func == Strings::strip ||
 		func == Strings::random ||
@@ -1093,6 +1095,7 @@ Prototype* Compiler::compile(Value const& expr) {
     
     //std::reverse(code->constants.begin(), code->constants.end());
 	code->expression = expr;
+    code->formals = Null::Singleton();
 	code->registers = code->constants.size() + max_n;
 	
 	int64_t n = code->constants.size();

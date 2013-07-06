@@ -6,20 +6,33 @@
 #include "common.h"
 #include <assert.h>
 
-#define PAGE_SIZE 4096
+struct HeapObject;
+typedef void (*GCFinalizer)(HeapObject*);
 
 struct GCObject {
-	void* next;
+    void* head;
 	uint64_t size;
-	uint64_t flags;
-	uint64_t padding[5];
+	
+    GCObject* next;
+    GCFinalizer finalizer;
+	
+    uint64_t flags;
+	uint64_t padding[3];
 	char data[];
 
-	void* init(uint64_t s, void* n) {
+    void Init(void* h, uint64_t s) {
+        head = h;
+        size = s;
+        next = 0;
+        finalizer = 0;
+        flags = 0;
+    }
+    
+	GCObject* Activate(GCObject* n, GCFinalizer f) {
 		next = n;
-		size = s;
+        finalizer = f;
 		flags = 0;
-		return this;
+        return this;
 	}
 
 	bool marked() const {
@@ -32,7 +45,6 @@ struct GCObject {
 };
 
 struct HeapObject {
-
 	bool marked() const;
 	void visit() const;
 	uint64_t slot() const;
@@ -40,15 +52,15 @@ struct HeapObject {
 
 	void* operator new(unsigned long bytes);
 	void* operator new(unsigned long bytes, unsigned long extra);
+	void* operator new(unsigned long bytes, GCFinalizer finalizer);
 };
 
 class State;
 
 class Heap {
 private:
-	static const uint64_t regionSize = (1<<12);
 
-	void* root;
+	GCObject* root;
 	uint64_t heapSize;
 	uint64_t total;
 
@@ -58,21 +70,20 @@ private:
 	void makeRegions(uint64_t regions);
 	void popRegion();	
 
-	std::deque<void*> freeRegions;
+	std::deque<GCObject*> freeRegions;
 	char* bump, *limit;
 
-	GCObject* gcObject(void* v) const {
-		return (GCObject*)(((uint64_t)v+(regionSize-1)) & (~(regionSize-1)));
-	}
-
 public:
-	Heap() : root(0), heapSize(1<<20), total(0) {
+	static const uint64_t regionSize = (1<<12);
+	
+    Heap() : root(0), heapSize(1<<20), total(0) {
 		popRegion();
 	}
 
 	HeapObject* smallalloc(uint64_t bytes);
-	HeapObject* alloc(uint64_t bytes);
-	void collect(State& state);
+	HeapObject* alloc(uint64_t bytes, GCFinalizer finalizer = 0);
+	
+    void collect(State& state);
 
 	static Heap Global;
 };
@@ -94,42 +105,43 @@ inline HeapObject* Heap::smallalloc(uint64_t bytes) {
 	return o;
 }
 
-inline HeapObject* Heap::alloc(uint64_t bytes) {
+inline HeapObject* Heap::alloc(uint64_t bytes, GCFinalizer finalizer) {
 	bytes += sizeof(GCObject);
-	bytes = (bytes + 63) & (~63);
 	
 	total += bytes+regionSize;
-	void* head = (void*)malloc(bytes+regionSize);
+	char* head = (char*)malloc(bytes+regionSize);
 	//memset(head, 0xab, bytes+regionSize);
-	GCObject* g = gcObject(head);
-	assert(((uint64_t) g & 63) == 0);
-	g->init(bytes+regionSize, root);
-	root = head;
+	GCObject* g = ((HeapObject*)(head+regionSize-1))->gcObject();
+	g->Init(head, bytes+regionSize);
+    root = g->Activate(root, finalizer);
 
 	return (HeapObject*)(g->data);
 }
 
 inline void Heap::collect(State& state) {
-	if(total > heapSize) {
-		mark(state);
-		sweep();
-		if(total > heapSize*0.6 && heapSize < (1<<30))
-			heapSize *= 2;
-	}
+    if(total > heapSize) {
+        mark(state);
+        sweep();
+        if(total > heapSize*0.6 && heapSize < (1<<30))
+            heapSize *= 2;
+    }
 }
 
 
 inline void* HeapObject::operator new(unsigned long bytes) {
-	assert(bytes <= 2048);
-	return Heap::Global.smallalloc(bytes);
+    assert(bytes <= 2048);
+    return Heap::Global.smallalloc(bytes);
 }
 
 inline void* HeapObject::operator new(unsigned long bytes, unsigned long extra) {
-	unsigned long total = bytes + extra;
-	return total <= 2048 ? 
-		Heap::Global.smallalloc(total) : 
-		Heap::Global.alloc(total);
+    unsigned long total = bytes + extra;
+    return total <= 2048 ? 
+        Heap::Global.smallalloc(total) : 
+        Heap::Global.alloc(total);
 }
 
+inline void* HeapObject::operator new(unsigned long bytes, GCFinalizer finalizer) {
+    return Heap::Global.alloc(bytes, finalizer);
+}
 #endif
 

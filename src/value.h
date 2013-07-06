@@ -160,20 +160,6 @@ struct Object : public Value {
 	}
 };
 
-struct REnvironment : public Object {
-	static const Type::Enum ValueType = Type::Environment;
-	
-	static REnvironment& Init(Value& v, Environment* env) {
-		Value::Init(v, Type::Environment, 0);
-		v.p = (void*)env;
-		return (REnvironment&)v;
-	}
-	
-	Environment* environment() const {
-		return (Environment*)p;
-	}
-};
-
 typedef int16_t IRef;
 struct Future : public Object {
 	static const Type::Enum ValueType = Type::Future;
@@ -205,6 +191,52 @@ struct Closure : public Object {
 
 	Prototype const* prototype() const { return ((Inner*)p)->proto; }
 	Environment* environment() const { return ((Inner*)p)->env; }
+};
+
+struct REnvironment : public Object {
+	static const Type::Enum ValueType = Type::Environment;
+	
+	static REnvironment& Init(Value& v, Environment* env) {
+		Value::Init(v, Type::Environment, 0);
+		v.p = (void*)env;
+		return (REnvironment&)v;
+	}
+	
+	Environment* environment() const {
+		return (Environment*)p;
+	}
+};
+
+struct Externalptr : public Object {
+    typedef void (*Finalizer)(Value v);
+
+    struct Inner : public HeapObject {
+        void* ptr;
+        Value tag;
+        Value prot;
+        Finalizer fun;
+        Inner(void* ptr, Value const& tag, Value const& prot, Finalizer fun)
+            : ptr(ptr), tag(tag), prot(prot), fun(fun) {}
+    };
+
+    static void Finalize(HeapObject* o) {
+        Inner* i = (Inner*)o;
+        Value v;
+        Value::Init(v, Type::Externalptr, 0);
+        v.p = i;
+        i->fun(v);
+    }
+
+    static Externalptr& Init(Value& v, void* ptr, Value tag, Value prot, Finalizer fun) {
+        Value::Init(v, Type::Externalptr, 0);
+        v.p = new (Finalize) Inner(ptr, tag, prot, fun);
+        return (Externalptr&)v;
+    }
+
+    void* ptr() const { return ((Inner*)p)->ptr; }
+    Value tag() const { return ((Inner*)p)->tag; }
+    Value prot() const { return ((Inner*)p)->prot; }
+    Finalizer fun() const { return ((Inner*)p)->fun; }
 };
 
 struct Vector : public Object {

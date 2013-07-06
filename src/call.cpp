@@ -598,16 +598,7 @@ Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const&
                     return &inst+1;
                 }
                 else if(s == Strings::formals) {
-                    Character n(f.prototype()->parametersSize);
-                    List v(f.prototype()->parametersSize);
-                    for(size_t i = 0; i < f.prototype()->parametersSize; i++) {
-                        n[i] = f.prototype()->parameters[i].n;
-                        v[i] = f.prototype()->parameters[i].v;
-                    }
-			        Dictionary* d = new Dictionary(1);
-			        d->insert(Strings::names) = n;
-			        ((Object&)v).attributes(d);
-                    c = v;
+                    c = f.prototype()->formals;
                     return &inst+1;
                 }
             }

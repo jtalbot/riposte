@@ -1034,9 +1034,9 @@ static inline Instruction const* getsub_op(Thread& thread, Instruction const& in
 
 static inline Instruction const* setsub_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest 
-	DECODE(a); FORCE(a); 
-	DECODE(b); FORCE(b); BIND(b); 
-	DECODE(c); FORCE(c); BIND(c); 
+	DECODE(a);
+	DECODE(b); BIND(b); 
+	DECODE(c); BIND(c); 
 	
 	if(a.isFuture() && (c.isVector() || c.isFuture())) {
 		if(b.isInteger() && ((Integer const&)b).length() == 1) {
@@ -1413,31 +1413,18 @@ static inline Instruction const* vector_op(Thread& thread, Instruction const& in
 }
 
 static inline Instruction const* seq_op(Thread& thread, Instruction const& inst) {
-	// c = start, b = step, a = length
-	DECODE(a); FORCE(a); BIND(a);
-	DECODE(b); FORCE(b); BIND(b);
-	DECODE(c); FORCE(c); BIND(c);
+    DECODE(a); BIND(a);
 
-	double start = As<Double>(thread, c)[0];
-	double step = As<Double>(thread, b)[0];
-	int64_t len = As<Integer>(thread, a)[0];
-	
-	if(len >= TRACE_VECTOR_WIDTH) {
-		if(b.isDouble() || c.isDouble()) {
-			OUT(c) = thread.traces.EmitSequence(thread.frame.environment, len, start, step);
-			thread.traces.OptBind(thread, OUT(c));
-		} else {
-			OUT(c) = thread.traces.EmitSequence(thread.frame.environment, len, (int64_t)start, (int64_t)step);
-			thread.traces.OptBind(thread, OUT(c));
-		}
-		return &inst+1;
-	}
+    int64_t len = As<Integer>(thread, a)[0];
 
-	if(b.isDouble() || c.isDouble())	
-		OUT(c) = Sequence(start, step, len);
-	else
-		OUT(c) = Sequence((int64_t)start, (int64_t)step, len);
-	return &inst+1;
+    if(len >= TRACE_VECTOR_WIDTH) {
+        OUT(c) = thread.traces.EmitSequence(thread.frame.environment, len, 1LL, 1LL);
+        thread.traces.OptBind(thread, OUT(c));
+        return &inst+1;
+    }
+
+    OUT(c) = Sequence(1LL, 1LL, len);
+    return &inst+1;
 }
 
 static inline Instruction const* index_op(Thread& thread, Instruction const& inst) {

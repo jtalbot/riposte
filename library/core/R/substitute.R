@@ -8,7 +8,7 @@ quote <- function(expr)
 {
     if (is.expression(expr) || is.call(expr)) 
     {
-        for(i in seq(1,1,length(expr)))
+        for(i in seq_len(length(expr)))
         {
             expr[[i]] <- .substitute(expr[[i]], env)
         }

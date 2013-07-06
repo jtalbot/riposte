@@ -10,7 +10,7 @@ system.time <- function(expr) {
 }
 
 anyDuplicated <- function(x) {
-	for(i in seq_len(length(x)-1)) {
+	for(i in seq_len(length(x)-1L)) {
 		for(j in (i+1):length(x)) {
 			if(x[[i]] == x[[j]]) return(j)
 		}
@@ -76,8 +76,6 @@ dimnames <- function(x) attr(x, 'dimnames')
     attr(x, 'dimnames') <- value
     x
 } 
-
-#seq <- function(from=1, by=1, length.out=1) .External(seq(from, by, length.out))
 
 rep <- function(x, times=1, length.out=times*each*length(x), each=1) {
 	x[index(length(x), strip(each), strip(length.out))]

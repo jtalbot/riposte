@@ -13,12 +13,6 @@ array <- function(data, dims) {
 	r
 }
 
-seq.int <- function(from, to, by, length.out, along.with, ...) {
-	seq(from, by, (to-from)/by+1)
-}
-
-seq_len <- function(length.out) seq(1, 1, length.out)
-
 typeof <- function(x) {
     switch(.type(x),
         'character' = 

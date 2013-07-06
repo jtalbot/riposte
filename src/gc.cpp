@@ -13,14 +13,13 @@ void HeapObject::visit() const {
 
 uint64_t HeapObject::slot() const {
 	assert(((uint64_t)this & 63) == 0);
-	uint64_t s = ((uint64_t)this & (PAGE_SIZE-1)) >> 6;
+	uint64_t s = ((uint64_t)this & (Heap::regionSize-1)) >> 6;
 	assert(s >= 1 && s <= 63);
 	return (((uint64_t)1) << s);
 }
 
 GCObject* HeapObject::gcObject() const {
-	return (GCObject*)((uint64_t)this & ~(PAGE_SIZE-1));
-	//return (GCObject*)((uint64_t)this - sizeof(GCObject));
+	return (GCObject*)((uint64_t)this & ~(Heap::regionSize-1));
 }
 
 
@@ -38,6 +37,12 @@ static void traverse(Value const& v) {
 			VISIT(((Closure const&)v).prototype());
 			VISIT(((Closure const&)v).environment());
 			break;
+        case Type::Externalptr:
+            printf("Visiting external ptr\n");
+            VISIT((Externalptr::Inner const*)v.p);
+            traverse(((Externalptr const&)v).tag());
+            traverse(((Externalptr const&)v).prot());
+            break;
 		case Type::Double:
 			VISIT(((Double const&)v).attributes());
 			VISIT(((Double const&)v).inner());
@@ -117,6 +122,7 @@ void Prototype::visit() const {
 	HeapObject::visit();
 	
 	traverse(expression);
+    traverse(formals);
 	for(uint64_t i = 0; i < parameters.size(); i++) {
 		traverse(parameters[i].v);
 	}
@@ -137,8 +143,7 @@ void Prototype::visit() const {
 void Heap::mark(State& state) {
 	// traverse root set
 	// mark the region that I'm currently allocating into
-	((GCObject*)((uint64_t)bump & ~(PAGE_SIZE-1)))->flags |= 1;
-	gcObject(bump)->flags |= 1;
+    ((HeapObject*)bump)->visit();
 	
 	// iterate over path, then stack, then trace locations, then registers
 	//printf("--path--\n");
@@ -169,6 +174,7 @@ void Heap::mark(State& state) {
 			traverse(*r);
 		}
 
+		//printf("--gc stack--\n");
 		for(uint64_t i = 0; i < thread->gcStack.size(); i++) {
 			traverse(thread->gcStack[i]);
 		}
@@ -178,21 +184,24 @@ void Heap::mark(State& state) {
 void Heap::sweep() {
 	//uint64_t old_total = total;
 	total = 0;
-	void** g = &root;
+	GCObject** g = &root;
 	while(*g != 0) {
-		void* t = *g;
-		GCObject* h = gcObject(t);
+		GCObject* h = *g;
 		if(!h->marked()) {
 		//	//printf("Deleting %llx\n", h);
 			*g = h->next;
-			if(h->size == 4096) {
+            if(h->finalizer != 0) {
+                h->finalizer((HeapObject*)h->data);
+            }
+
+			if(h->size == regionSize) {
 				//printf("Freeing region %llx\n", t);
 				//memset(t, 0xff, h->size);
-				freeRegions.push_front(t);
+				freeRegions.push_front(h);
 			}
 			else {
 				//memset(t, 0xff, h->size);
-				free(t);
+				free(h->head);
 			}
 		} else {
 			total += h->size;
@@ -205,10 +214,9 @@ void Heap::sweep() {
 
 void Heap::makeRegions(uint64_t regions) {
 	char* head = (char*)malloc((regions+1)*regionSize);
-	head = (char*)(((uint64_t)head+regionSize-1) & (~(regionSize-1)));
 	for(uint64_t i = 0; i < regions; i++) {
-		GCObject* r = (GCObject*)head;
-		r->init(regionSize, 0);
+	    GCObject* r = ((HeapObject*)(head+regionSize-1))->gcObject();
+		r->Init(head, regionSize);
 		assert(((uint64_t)r & (regionSize-1)) == 0);
 		freeRegions.push_back(r);
 		head += regionSize;
@@ -220,17 +228,16 @@ void Heap::popRegion() {
 	if(freeRegions.empty())
 		makeRegions(256);
 
-	void* r = freeRegions.front();
+	GCObject* g = freeRegions.front();
 	freeRegions.pop_front();
-	GCObject* g = gcObject(r);
 	//printf("Popping to %llx\n", g);
-	g->init(regionSize, root);
 	total += g->size;
-	root = r;
+	root = g->Activate(root, 0);
 
 	bump = (char*)(g->data);
 	limit = ((char*)g) + regionSize;
 }
 
 Heap Heap::Global;
+
 

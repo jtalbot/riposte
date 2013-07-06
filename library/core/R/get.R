@@ -17,7 +17,7 @@ mget <- function(x, envir, mode, ifnotfound, inherits) {
 
     # TODO -- deal with ifnotfound
 
-    for(i in seq_along(x)) {
+    for(i in seq_len(length(x))) {
         if (.env_exists(envir, x[[i]]) && (mode(envir[[x[[i]]]]) == mode || mode == "any"))
             r[[i]] <- envir[[x[[i]]]]
         if (inherits) {

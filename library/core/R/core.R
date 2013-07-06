@@ -11,13 +11,13 @@ split <- function(x, f) {
 }
 
 `:` <- function(from, to) { 
-	if(to > from) seq(from,1L,to-from+1L)
-	else if(to < from) seq(from,-1L,from-to+1L)
-	else seq(from,0L,1L)
+	if(to > from) (seq_len(to-from+1L)-1L)+from
+	else if(to < from) (1L-seq_len(from-to+1L))+from
+	else from
 }
 
 dispatch1 <- function(op, x, default) {
-	fun <- .External(paste(c(op, '.', class(x)), ""))
+	fun <- .concat(list(op, '.', class(x)))
 	if(exists(fun)) {
 		get(fun)(x)
 	}
@@ -27,11 +27,11 @@ dispatch1 <- function(op, x, default) {
 }
 
 dispatch2 <- function(op, x, y, default) {
-	funx <- .External(paste(c(op, '.', class(x)), ""))
+	funx <- .concat(list(op, '.', class(x)))
 	if(exists(funx)) {
 		return(get(funx)(x,y))
 	}
-	funy <- .External(paste(c(op, '.', class(y)), ""))
+	funy <- .concat(list(op, '.', class(y)))
 	if(exists(funy)) {
 		return(get(funy)(x,y))
 	}
@@ -121,13 +121,13 @@ dispatch2 <- function(op, x, y, default) {
 
 `[<-` <- function(x, ..., value) UseMethod('[<-', x, ..., value=value)
 
-.copy.most.attributes <- function(r, x, i) {
+.copy.most.attributes <- function(r, x, i, nn) {
     i <- strip(i)
     # copy over attributes, taking care to keep names lined up
     for(n in names(attributes(x))) {
         a <- attr(x,n)
         if(n == 'names') {
-            a[i] <- ifelse(is.na(a[i]), '', a[i])
+            a[i] <- ifelse(is.na(a[i]), nn, a[i])
             a[is.na(a)] <- ''
         }
         attr(r,n) <- a
@@ -137,12 +137,12 @@ dispatch2 <- function(op, x, y, default) {
 
 `[<-.default` <- function(x, i, ..., value) {
     r <- `[<-`(strip(x), strip(i), strip(value))
-    .copy.most.attributes(r, x, i)
+    .copy.most.attributes(r, x, i, '')
 }
 
 `[<-.list` <- function(x, i, value) {
     r <- `[<-`(strip(x), strip(i), value)
-    .copy.most.attributes(r, x, i)
+    .copy.most.attributes(r, x, i, '')
 }
 
 `[<-.call` <- `[<-.list`
@@ -153,31 +153,31 @@ dispatch2 <- function(op, x, y, default) {
 }
 
 `[[<-.default` <- function(x, i, ..., value) {
+    nn <- ''
     if(is.character(i)) {
+        nn <- strip(i)
         i <- which(names(x) == i)
         if(length(i)==0)
-            stop("subscript out of bounds") 
+            i <- length(x)+1
         else
-            r <- `[[<-`(strip(x), strip(i[[1]]), strip(value))
+            i <- i[[1]]
     }
-    else {
-        r <- `[[<-`(strip(x), strip(i), strip(value))
-    }
-    .copy.most.attributes(r, x, i)
+    r <- `[[<-`(strip(x), strip(i), strip(value))
+    .copy.most.attributes(r, x, i, nn)
 }
 
 `[[<-.list` <- function(x, i, ..., value) {
+    nn <- ''
     if(is.character(i)) {
+        nn <- strip(i)
         i <- which(names(x) == i)
         if(length(i)==0)
-            stop("subscript out of bounds") 
+            i <- length(x) + 1
         else
-            r <- `[[<-`(strip(x), strip(i[[1]]), value)
+            i <- i[[1]]
     }
-    else {
-        r <- `[[<-`(strip(x), strip(i), value)
-    }
-    .copy.most.attributes(r, x, i)
+    r <- `[[<-`(strip(x), strip(i), value)
+    .copy.most.attributes(r, x, i, nn)
 }
 
 `[[<-.call` <- `[[<-.list`
@@ -223,7 +223,7 @@ which <- function(x) {
     if(!is.logical(x))
         stop("argument to 'which' is not logical")
 
-    seq(1,1,length(x))[x]
+    seq_len(length(x))[x]
 }
 
 length <- function(x) length(strip(x))

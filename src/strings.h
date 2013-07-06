@@ -13,6 +13,7 @@
 	_(Future,	    "future")		\
 	_(Closure,	    "closure")	    \
 	_(Environment,	"environment")	\
+	_(Externalptr,	"externalptr")	\
 	_(Null, 	    "NULL")		    \
 	_(Raw, 		    "raw")		    \
 	_(Logical, 	    "logical")	    \
@@ -129,7 +130,7 @@
 	_(bbAssign, 	"[[<-") \
 	_(dollarAssign, "$<-") \
 	_(UseMethod, 	"UseMethod") \
-	_(seq, 		"seq") \
+	_(seqlen, 		"seq_len") \
 	_(index, 	"index") \
 	_(random, 	"random") \
 	_(True, 	"TRUE") \

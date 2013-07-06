@@ -6,13 +6,13 @@ paste <- function(items, sep, collapse)
     if(length(items) > 0) {
         sep <- as.character(sep)
         r <- items[[1]]
-        for(i in seq(2L,1L,length(items)-1L)) {
+        for(i in 1L+seq_len(length(items)-1L)) {
             r <- .pconcat(r, sep)
             r <- .pconcat(r, items[[i]])
         }
     }
     if(!is.null(collapse) && length(r) > 1L) {
-        if(length(collapse) != 1)
+        if(length(collapse) != 1L)
             stop("invalid 'collapse' argument")
         collapse <- as.character(collapse)
         r <- .concat(.pconcat(r, c(rep(collapse, length(r)-1L),'')))

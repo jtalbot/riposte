@@ -86,6 +86,23 @@ void loadPackage(Thread& thread, std::string path, std::string name) {
 		closedir(dir);
 	}
 
+	// Load data files
+	p = path + "/" + name + ("/data/");
+	dir = opendir(p.c_str());
+	if(dir != NULL) {
+		while((file=readdir(dir))) {
+			if(file->d_name[0] != '.') {
+				stat(file->d_name, &info);
+				std::string name = file->d_name;
+				if(!S_ISDIR(info.st_mode) && 
+						(name.length()>2 && name.substr(name.length()-2,2)==".R")) {
+					sourceFile(thread, p+name, env);
+				}
+			}
+		}
+		closedir(dir);
+	}
+
 	thread.state.path.push_back(env);
 	thread.state.global->setParent(env);
 }

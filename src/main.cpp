@@ -150,6 +150,11 @@ static int run(State& state, std::istream& in, std::ostream& out, bool interacti
         p[0] = CreateSymbol(Strings::print);
         p[1] = CreateSymbol(Strings::Last_value);
         print = Compiler::compileTopLevel(thread, CreateCall(p));
+        // save the promise to the gcStack so that the gc doesn't clean it up.
+        // TODO: this seems rather hacky
+        Value v;
+        Promise::Init(v, 0, print, false);
+        thread.gcStack.push_back(v);
     }
 
     bool done = false;

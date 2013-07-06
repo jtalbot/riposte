@@ -8,7 +8,7 @@
     if(is.null(n))
         stop('attributes must be named')
 
-    for(i in seq(1,1,length(value))) {
+    for(i in seq_len(length(value))) {
         attr(obj, n[[i]]) <- value[[i]]
     }
 

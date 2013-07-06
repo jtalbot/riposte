@@ -22,11 +22,6 @@ inherits <- function(x, what, which=FALSE) {
     any(class(x) == what)
 }
 
-#unlist <- function(x, recursive = TRUE, use.names = TRUE) UseMethod("unlist")
-unlist <- function(x, recursive = TRUE, use.names = TRUE) {
-	x <- .External(unlist(x, as.logical(recursive), as.logical(use.names)))
-}
-
 source <- function(x) .External(source(x))
 
 sys.call <- function(which = 0L) {
@@ -67,7 +62,6 @@ alist <- function(...) as.list(sys.call())[-1L]
 stop <- function(x) .External(stop(x))
 warning <- function(x) .External(warning(x))
 
-deparse <- function(x) .External(deparse(x))
 substitute <- function(x) .External(substitute(x))
 
 exists <- function(x, envir, mode, inherits=TRUE) {

@@ -4,6 +4,7 @@
 #include <map>
 #include <set>
 #include <deque>
+#include <iostream>
 
 #include "value.h"
 #include "thread.h"
@@ -60,8 +61,9 @@ public:
 			lock.release();
 			return string;
 		} else {
+            String ss = i->second;
 			lock.release();
-			return i->second;
+			return ss;
 		}
 	}
 
@@ -69,7 +71,6 @@ public:
 		return std::string(s);
 	}
 };
-
 
 struct CompiledCall {
 	List call;
@@ -86,6 +87,8 @@ struct CompiledCall {
 struct Prototype : public HeapObject {
 	Value expression;
 	String string;
+
+    Value formals;
 
 	PairList parameters;
 	int64_t parametersSize;

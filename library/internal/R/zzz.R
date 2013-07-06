@@ -16,3 +16,4 @@
 promise('.BaseNamespaceEnv', quote(baseenv()), core::parent.frame(0), core::parent.frame(0))
 
 .GlobalEnv <- globalenv()
+
