@@ -84,7 +84,6 @@ template< template<typename T> class Op >
 bool ArithUnary1Fast(Thread& thread, void* args, Value const& a, Value& c) {
     if     (a.isDouble1())  { Op<Double>::Scalar(thread, args, a.d, c);   return true; }
     else if(a.isInteger1()) { Op<Integer>::Scalar(thread, args, a.i, c);  return true; }
-    //else if(a.isLogical1()) { Op<Logical>::Scalar(thread, args, a.c, c);  return true; }
     else return false;
 }
 

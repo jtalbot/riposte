@@ -103,6 +103,25 @@ struct SubsetInclude {
 	}
 };
 
+template<>
+struct SubsetInclude<List> {
+	static void eval(Thread& thread, List const& a, Integer const& d, int64_t nonzero, Value& out)
+	{
+		List r(nonzero);
+		int64_t j = 0;
+		typename List::Element const* ae = a.v();
+		typename Integer::Element const* de = d.v();
+		typename List::Element* re = r.v();
+		int64_t length = d.length();
+		for(int64_t i = 0; i < length; i++) {
+			if(Integer::isNA(de[i]) ||
+                (de[i]-1) >= a.length()) re[j++] = Null::Singleton();
+			else if(de[i] != 0) re[j++] = ae[de[i]-1];
+		}
+		out = r;
+	}
+};
+
 template< class A >
 struct SubsetExclude {
 	static void eval(Thread& thread, A const& a, Integer const& d, int64_t nonzero, Value& out)
@@ -154,33 +173,6 @@ struct SubsetLogical {
 		out = r;
 	}
 };
-
-template< class A >
-inline int64_t find(Thread& thread, A const& a, typename A::Element const& b) {
-	typename A::Element const* ae = a.v();
-	// eventually use an index here...
-	for(int64_t i = 0; i < a.length(); i++) {
-		if(ae[i] == b) return i;
-	}
-	return -1;
-}
-
-/*template< class A, class B >
-struct SubsetIndexed {
-	static void eval(Thread& thread, A const& a, B const& b, B const& d, Value& out)
-	{
-		typename A::Element const* ae = a.v();
-		typename B::Element const* de = d.v();
-		
-		int64_t length = d.length;
-		A r(length);
-		for(int64_t i = 0; i < length; i++) {
-			int64_t index = find(thread, b, de[i]);
-			r[i] = index >= 0 ? ae[index] : A::NAelement;
-		}
-		out = r;
-	}
-};*/
 
 void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble() || i.isInteger()) {
@@ -285,33 +277,6 @@ struct SubsetAssignLogical {
 		out = r;
 	}
 };
-
-/*template< class A, class B >
-struct SubsetAssignIndexed {
-	static void eval(Thread& thread, A const& a, bool clone, B const& b, B const& d, A const& v, Value& out)
-	{
-		typename B::Element const* de = d.v();
-		
-		std::map<typename B::Element, int64_t> overflow;
-		int64_t extra = a.length;
-
-		int64_t length = d.length;
-		Integer include(length);
-		for(int64_t i = 0; i < length; i++) {
-			int64_t index = find(thread, b, de[i]);
-			if(index < 0) {
-				if(overflow.find(de[i]) != overflow.end())
-					index = overflow[de[i]];
-				else {
-					index = extra++;
-					overflow[de[i]] = index;
-				}
-			}
-			include[i] = index+1;
-		}
-		SubsetAssignInclude<A>::eval(thread, a, clone, include, v, out);
-	}
-};*/
 
 void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(i.isDouble() || i.isInteger()) {

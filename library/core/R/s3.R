@@ -37,7 +37,7 @@ UseMethod <- function(generic, object, ...)
         if(length(formals) == 0)
             object <- NULL
         else {
-            f <- formals[[1]]
+            f <- formals[[1L]]
             if(f == '...')
                 f <- '..1'
             call <- list(as.name('missing'), as.name(f))
@@ -57,7 +57,7 @@ UseMethod <- function(generic, object, ...)
             call <- sys.call(sys.parent(1))
             n <- names(call)
             call <- strip(call) 
-            call[[1]] <- fn
+            call[[1L]] <- fn
             class(call) <- 'call'
             names(call) <- n
             promise('p', call, parent.frame(2), parent.frame(0))

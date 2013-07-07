@@ -943,18 +943,8 @@ static inline Instruction const* get_op(Thread& thread, Instruction const& inst)
 
 static inline Instruction const* set_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest
-	DECODE(a);
-	DECODE(b); FORCE(b); BIND(b);
-	DECODE(c); FORCE(c);
-
-    if(c.isEnvironment() && b.isCharacter1()) {
-	    String s = ((Character const&)b).s;
-        ((REnvironment&)c).environment()->insert(s) = a;
-        OUT(c) = c;
-        return &inst+1;
-    }
-    
-    FORCE(a);
+	DECODE(a); DECODE(b); DECODE(c);
+	BIND(b);
 
 	if(a.isFuture() && (c.isVector() || c.isFuture())) {
 		if(b.isInteger() && ((Integer const&)b).length() == 1) {
@@ -969,21 +959,26 @@ static inline Instruction const* set_op(Thread& thread, Instruction const& inst)
 
 	BIND(a);
 	BIND(c);
-	
-    if(c.isClosure() && b.isCharacter1()) {
-        //Closure const& f = (Closure const&)c;
-	    //String s = ((Character const&)b).s;
-        // TODO: implement assignment to function members
-        _error("Assignment to function members is not yet implemented");
-    }
 
-    if(     ((Object const&)b).hasAttributes()
-        ||  ((Object const&)c).hasAttributes()) { 
-		return GenericDispatch(thread, inst, Strings::bbAssign, c, b, a, inst.c); 
-	} 
-	
-    Subset2Assign(thread, c, true, b, a, OUT(c));
-	return &inst+1; 
+    if( !((Object const&)c).hasAttributes() ) {
+        if(c.isVector() && ( b.isDouble1() || b.isInteger1() )) {
+            Subset2Assign(thread, c, true, b, a, OUT(c));
+            return &inst+1;
+        }
+        else if(c.isEnvironment() && b.isCharacter1()) {
+	        String s = ((Character const&)b).s;
+            ((REnvironment&)c).environment()->insert(s) = a;
+            OUT(c) = c;
+            return &inst+1;
+        }
+        else if(c.isClosure() && b.isCharacter1()) {
+            //Closure const& f = (Closure const&)c;
+	        //String s = ((Character const&)b).s;
+            // TODO: implement assignment to function members
+            _error("Assignment to function members is not yet implemented");
+        }
+    }
+    return GenericDispatch(thread, inst, Strings::bbAssign, c, b, a, inst.c); 
 }
 
 static inline Instruction const* getsub_op(Thread& thread, Instruction const& inst) {
@@ -1017,26 +1012,22 @@ static inline Instruction const* getsub_op(Thread& thread, Instruction const& in
 		thread.traces.OptBind(thread, OUT(c));
 		return &inst+1;
 	}
-
-	if(((Object const&)a).hasAttributes()) { 
-		return GenericDispatch(thread, inst, Strings::bracket, a, b, inst.c); 
-	} 
 	
-	BIND(b);
+    BIND(b);
 
-	if(((Object const&)b).hasAttributes()) { 
-		return GenericDispatch(thread, inst, Strings::bracket, a, b, inst.c); 
-	} 
-	
-	SubsetSlow(thread, a, b, OUT(c)); 
-	return &inst+1;
+    if(a.isVector() && !((Object const&)a).hasAttributes() &&
+        (b.isInteger() || b.isDouble() || b.isLogical()) ) {
+        SubsetSlow(thread, a, b, OUT(c)); 
+        return &inst+1;
+    }
+
+    return GenericDispatch(thread, inst, Strings::bracket, a, b, inst.c); 
 }
 
 static inline Instruction const* setsub_op(Thread& thread, Instruction const& inst) {
 	// a = value, b = index, c = dest 
-	DECODE(a);
-	DECODE(b); BIND(b); 
-	DECODE(c); BIND(c); 
+	DECODE(a); DECODE(b); DECODE(c); 
+    BIND(b); BIND(c);
 	
 	if(a.isFuture() && (c.isVector() || c.isFuture())) {
 		if(b.isInteger() && ((Integer const&)b).length() == 1) {
@@ -1050,14 +1041,15 @@ static inline Instruction const* setsub_op(Thread& thread, Instruction const& in
 	}
 
 	BIND(a);
-	
-    if(     ((Object const&)b).hasAttributes()
-        ||  ((Object const&)c).hasAttributes()) { 
-		return GenericDispatch(thread, inst, Strings::bracketAssign, c, b, a, inst.c); 
-	} 
-	
-	SubsetAssign(thread, c, true, b, a, OUT(c));
-	return &inst+1;
+
+    if( !((Object const&)c).hasAttributes() ) {
+        if(c.isVector() && ( b.isDouble() || b.isInteger() || b.isLogical() )) {
+            SubsetAssign(thread, c, true, b, a, OUT(c));
+            return &inst+1;
+        }
+	}
+
+	return GenericDispatch(thread, inst, Strings::bracketAssign, c, b, a, inst.c); 
 }
 
 static inline Instruction const* getenv_op(Thread& thread, Instruction const& inst) {

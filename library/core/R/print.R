@@ -62,11 +62,11 @@ format.list <- function(x, ..., prefix='')
         r <- ''
         n <- names(x)
         for(i in seq_len(length(x))) {
-            if(is.null(n) || n[[i]] == '') {
+            if(is.null(n) || identical(n[[i]],'')) {
                 p <- .pconcat(.pconcat('[[', i), ']]')
             }
             else {
-                p <- .pconcat('$', n[[i]])
+                p <- .pconcat('$', ifelse(is.na(n[[i]]), '<NA>', n[[i]]))
             }
             r <- .pconcat(r, .pconcat(.pconcat(prefix, p),'\n'))
             r <- .pconcat(r, format(x[[i]], prefix=p))

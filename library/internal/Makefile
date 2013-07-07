@@ -6,7 +6,7 @@ CFLAGS := -Wall -fPIC
 LFLAGS := -dynamiclib
 LIBS := -lpthread
 
-SRC := datetime.cpp connections.cpp
+SRC := datetime.cpp connections.cpp fileinfo.cpp
 
 EXECUTABLE := libs/internal.dylib
 

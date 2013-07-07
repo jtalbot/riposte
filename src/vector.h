@@ -202,7 +202,7 @@ struct FoldLeft {
 		int64_t length = b.length();
 		for(int64_t i = 0; i < length; ++i) {
 			a = Op::eval(thread, args, a, be[i]);
-		}
+        }
 		Op::R::InitScalar(out, a);
 	}
 };

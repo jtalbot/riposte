@@ -94,15 +94,24 @@ dispatch2 <- function(op, x, y, default) {
         i <- ..1
 
         if(is.character(i)) {
-            i <- which(names(x) == i)
+            i <- .semijoin(i, as.character(names(x)))
+            i[i == 0] <- length(x)+1
+        }
+        else if(is.null(i)) {
+            i <- vector('integer',0)
         }
 
-        r <- strip(x)[strip(i)]
-        # discard all attributes but e.g. names
-        if(!is.null(names(x))) {
-            names(r) <- names(x)[strip(i)]
+        if(is.integer(i) || is.double(i) || is.logical(i)) {
+            r <- strip(x)[strip(i)]
+            # discard all attributes but e.g. names
+            if(!is.null(names(x))) {
+                names(r) <- names(x)[strip(i)]
+            }
+            r
         }
-        r
+        else {
+            stop("invalid subscript type")
+        }
     } else if(nargs() == 3L) {
         d <- dim(x)
         if(missing(..1) && missing(..2))
@@ -119,72 +128,10 @@ dispatch2 <- function(op, x, y, default) {
     }
 }
 
-`[<-` <- function(x, ..., value) UseMethod('[<-', x, ..., value=value)
 
-.copy.most.attributes <- function(r, x, i, nn) {
-    i <- strip(i)
-    # copy over attributes, taking care to keep names lined up
-    for(n in names(attributes(x))) {
-        a <- attr(x,n)
-        if(n == 'names') {
-            a[i] <- ifelse(is.na(a[i]), nn, a[i])
-            a[is.na(a)] <- ''
-        }
-        attr(r,n) <- a
-    }
-    r
-}
-
-`[<-.default` <- function(x, i, ..., value) {
-    r <- `[<-`(strip(x), strip(i), strip(value))
-    .copy.most.attributes(r, x, i, '')
-}
-
-`[<-.list` <- function(x, i, value) {
-    r <- `[<-`(strip(x), strip(i), value)
-    .copy.most.attributes(r, x, i, '')
-}
-
-`[<-.call` <- `[<-.list`
-`[<-.expression` <- `[<-.list`
-
-`[[<-` <- function(x, ..., value) {
-    UseMethod('[[<-', x)
-}
-
-`[[<-.default` <- function(x, i, ..., value) {
-    nn <- ''
-    if(is.character(i)) {
-        nn <- strip(i)
-        i <- which(names(x) == i)
-        if(length(i)==0)
-            i <- length(x)+1
-        else
-            i <- i[[1]]
-    }
-    r <- `[[<-`(strip(x), strip(i), strip(value))
-    .copy.most.attributes(r, x, i, nn)
-}
-
-`[[<-.list` <- function(x, i, ..., value) {
-    nn <- ''
-    if(is.character(i)) {
-        nn <- strip(i)
-        i <- which(names(x) == i)
-        if(length(i)==0)
-            i <- length(x) + 1
-        else
-            i <- i[[1]]
-    }
-    r <- `[[<-`(strip(x), strip(i), value)
-    .copy.most.attributes(r, x, i, nn)
-}
-
-`[[<-.call` <- `[[<-.list`
-`[[<-.expression` <- `[[<-.list`
-
-`[[` <- function(x, ..., exact = TRUE)
+`[[` <- function(x, ..., exact = TRUE) {
     UseMethod('[[', x, ..., exact=exact)
+}
 
 #`[[` <- function(x, ..., exact = TRUE) {
 #	i <- as.integer(list(...))
@@ -207,16 +154,117 @@ dispatch2 <- function(op, x, y, default) {
         i <- which(names(x)==i)
         if(length(i)==0)
             stop("subscript out of bounds") 
-        else
-            strip(x)[[ i[[1]] ]]
+       
+        strip(x)[[ i[[1]] ]]
+    }
+    else if(is.integer(i) || is.double(i)) {
+	    strip(x)[[strip(i)]]
     }
     else {
+        stop("invalid subscript type")
+    }
+}
+
+`[[.list` <- function(x, i, ..., exact = TRUE) {
+    if(is.character(i)) {
+        i <- which(names(x)==i)
+        if(length(i)==0)
+            NULL
+        else 
+            strip(x)[[ i[[1]] ]]
+    }
+    else if(is.integer(i) || is.double(i)) {
 	    strip(x)[[strip(i)]]
+    }
+    else {
+        stop("invalid subscript type")
     }
 }
 
 `[[.environment` <- function(x, i, ...) {
     strip(x)[[strip(i)]]
+}
+
+`[[.closure` <- function(x, i, ...) {
+    strip(x)[[strip(i)]]
+}
+
+`[<-` <- function(x, ..., value) UseMethod('[<-', x, ..., value=value)
+
+.copy.most.attributes <- function(r, x, i, nn) {
+    i <- strip(i)
+    # copy over attributes, taking care to keep names lined up
+    for(n in names(attributes(x))) {
+        a <- attr(x,n)
+        if(n == 'names') {
+            a[i] <- ifelse(is.na(a[i]), nn, a[i])
+            a[is.na(a)] <- ''
+        }
+        attr(r,n) <- a
+    }
+    r
+}
+
+`[<-.default` <- function(x, i, ..., value) {
+    nn <- ''
+    if(is.character(i)) {
+        i <- nn <- strip(i)
+        i <- .semijoin(i, as.character(names(x)))
+        i[is.na(i)] <- length(x)+seq_len(sum(is.na(i)))
+        
+        if(is.null(attr(x,'names')))
+            attr(x,'names') <- rep('', length(x))
+    }
+    else if(is.null(i)) {
+        i <- vector('integer',0)
+    }
+
+    if(is.integer(i) || is.double(i) || is.logical(i)) {
+        r <- `[<-`(strip(x), strip(i), value)
+        .copy.most.attributes(r, x, i, nn)
+    }
+    else {
+        stop('invalid subscript type')
+    }
+}
+
+`[[<-` <- function(x, ..., value) {
+    UseMethod('[[<-', x)
+}
+
+`[[<-.default` <- function(x, i, ..., value) {
+    nn <- ''
+    if(is.character(i)) {
+        i <- nn <- strip(i)
+        i <- which(names(x) == i)
+        if(length(i)==0)
+            i <- length(x)+1
+        else
+            i <- i[[1]]
+
+        if(is.null(attr(x,'names'))) 
+            attr(x,'names') <- rep('', length(x))
+    }
+    
+    if(is.integer(i) || is.double(i)) {
+        r <- `[[<-`(strip(x), strip(i), value)
+        .copy.most.attributes(r, x, i, nn)
+    }
+    else {
+        stop('invalid subscript type')
+    }
+}
+
+`[[<-.environment` <- function(x, i, ..., value) {
+    if(is.character(i))
+        `[[<-`(strip(x), strip(i), value)
+    else
+        stop('wrong args for environment subassignment')
+    x
+}
+
+`[[<-.closure` <- function(x, i, ..., value) {
+    stop('Assignment to function members is not yet implemented')
 }
 
 which <- function(x) {

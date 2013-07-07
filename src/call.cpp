@@ -566,7 +566,6 @@ Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const&
                 Element2(a, (int64_t)b.d-1, c);
                 return &inst+1;
             }
-            _error("invalid subscript type");
 	    }
         else if(a.isEnvironment()) {
             if( b.isCharacter()
@@ -586,7 +585,6 @@ Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const&
                         ((REnvironment&)a).environment(), s); 
                 }
             }
-            _error("wrong arguments for subsetting an environment");
         }
         else if(a.isClosure()) {
             if( b.isCharacter()
@@ -602,13 +600,9 @@ Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const&
                     return &inst+1;
                 }
             }
-            _error("wrong arguments for subsetting a closure");
         }
-        else {
-            _error("object is not subsettable");
-        }
-    } 
-	else 
-        return GenericDispatch(thread, inst, Strings::bb, a, b, inst.c); 
+    }
+ 
+    return GenericDispatch(thread, inst, Strings::bb, a, b, inst.c); 
 }
 

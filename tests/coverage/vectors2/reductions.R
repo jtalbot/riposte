@@ -10,3 +10,7 @@ length(a)
 #NYI: mean
 #mean(a)
 
+sum(TRUE)
+sum(FALSE)
+
+sum()

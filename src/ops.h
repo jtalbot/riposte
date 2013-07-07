@@ -129,7 +129,7 @@ template<typename T> \
 struct Name##VOp : public Func##VOp<typename Func##VOp<T, T>::R, T> {\
 	static typename Name##VOp::A::Element base() { return Func##Base<T>::base(); } \
 	static void Scalar(Thread& thread, void* args, typename Name##VOp::B::Element const b, Value& c) { \
-		Name##VOp::R::InitScalar(c, b); \
+		Name##VOp::R::InitScalar(c, Cast<typename Name##VOp::B, typename Name##VOp::MB>(thread, b)); \
 	} \
 };
 
