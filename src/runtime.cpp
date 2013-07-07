@@ -512,11 +512,11 @@ List Map(Thread& thread, String func, List args, Character result) {
     for(int64_t i = 0; i < length; ++i) {
         dcReset(vm);
         dcArgPointer(vm, (void*)&thread);
-        for(int64_t k = 0; k < s.size(); ++k) {
-            (*s[k])(vm, i);
-        }
         for(int64_t k = 0; k < u.size(); ++k) {
             (*u[k])(vm, i);
+        }
+        for(int64_t k = 0; k < s.size(); ++k) {
+            (*s[k])(vm, i);
         }
         dcCallVoid(vm, f);
     }

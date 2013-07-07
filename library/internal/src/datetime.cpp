@@ -9,9 +9,10 @@
 #include "../../../src/coerce.h"
 
 extern "C"
-void strptime_map(Thread& thread, String x, String format, String tz,
+void strptime_map(Thread& thread,
     double& sec, int64_t& min, int64_t& hour, int64_t& mday, int64_t& mon, 
-    int64_t& year, int64_t& wday, int64_t& yday, int64_t& isdst) {
+    int64_t& year, int64_t& wday, int64_t& yday, int64_t& isdst,
+    String x, String format, String tz) {
 
     tm t;
     memset(&t, 0, sizeof(tm));
@@ -38,8 +39,9 @@ void strptime_map(Thread& thread, String x, String format, String tz,
 
 extern "C"
 void mktime_map(Thread& thread,
+    double& out,
     double sec, int64_t min, int64_t hour, int64_t mday, int64_t mon, 
-    int64_t year, int64_t wday, int64_t yday, int64_t isdst, double& out) {
+    int64_t year, int64_t wday, int64_t yday, int64_t isdst) {
     tm t;
     t.tm_sec = sec;
     t.tm_min = min;
