@@ -79,9 +79,11 @@ struct CompiledCall {
 	int64_t argumentsSize;
 	int64_t dotIndex;
 	bool named;
+
+    PairList extraArgs;
 	
-	explicit CompiledCall(List const& call, PairList arguments, int64_t dotIndex, bool named) 
-		: call(call), arguments(arguments), argumentsSize(arguments.size()), dotIndex(dotIndex), named(named) {}
+	explicit CompiledCall(List const& call, PairList const& arguments, int64_t dotIndex, bool named, PairList const& extraArgs) 
+		: call(call), arguments(arguments), argumentsSize(arguments.size()), dotIndex(dotIndex), named(named), extraArgs(extraArgs) {}
 };
 
 struct Prototype : public HeapObject {
@@ -275,6 +277,8 @@ public:
     Value function;
     int64_t nargs;
 	
+    Value onexit;
+    
     PairList dots;
 	bool named;	// true if any of the dots have names	
 

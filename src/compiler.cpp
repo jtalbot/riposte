@@ -5,6 +5,7 @@
 static ByteCode::Enum op0(String const& func) {
 
     if(func == Strings::dots) return ByteCode::dotsc;
+    if(func == Strings::env_global) return ByteCode::env_global;
     throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a nullary operator"); 
 }
 
@@ -34,15 +35,15 @@ static ByteCode::Enum op1(String const& func) {
     if(func == Strings::length) return ByteCode::length;
 	
 	if(func == Strings::random) return ByteCode::random; 
-    if(func == Strings::getNamespace) return ByteCode::getns;
 	
     if(func == Strings::dots) return ByteCode::dotsv;
 
     if(func == Strings::attributes) return ByteCode::attributes;
     if(func == Strings::getenv) return ByteCode::getenv;
     if(func == Strings::env_new) return ByteCode::env_new;
+    if(func == Strings::env_names) return ByteCode::env_names;
     if(func == Strings::frame) return ByteCode::frame;
-	
+    
     throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
 }
 
@@ -178,23 +179,53 @@ Compiler::Operand Compiler::forceInRegister(Operand r) {
 
 CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 	// compute compiled call...precompiles promise code and some necessary values
+    List rcall = call;
     int64_t dotIndex = call.length()-1;
-	PairList arguments;
+	PairList arguments, extraArgs;
 	for(int64_t i = 1; i < call.length(); i++) {
 		Pair p;
 		if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
 
-		if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) {
-			p.v = call[i];
-			dotIndex = i-1;
-		} else if(isCall(call[i]) || isSymbol(call[i])) {
-			Promise::Init(p.v, NULL, Compiler::compilePromise(thread, call[i]), false);
-		} else {
-			p.v = call[i];
-		}
-		arguments.push_back(p);
-	}
-	return CompiledCall(call, arguments, dotIndex, names.length() > 0);
+        if(p.n == Strings::__extraArgs__) {
+            List const& l = (List const&)call[i];
+            Character const& n = hasNames(l) ? 
+				(Character const&)getNames((List const&)l) : 
+				Character(0);
+            
+            for(size_t j = 0; j < l.length(); ++j) {
+                if(n.length() > j && n[j] != Strings::empty) {
+                    Pair q;
+                    q.n = n[j];
+                    q.v = l[j];
+                    extraArgs.push_back(q);
+                }
+            }
+            // also need to remove the extraArgs from the original call
+            rcall = List(call.length()-1);
+            for(size_t j=0, k=0; j < call.length(); ++j)
+                if(j != i)
+                    rcall[k++] = call[j];
+            if(names.length() > 0 ) {
+                Character rnames = Character(names.length()-1);
+                for(size_t j=0, k=0; j < names.length(); ++j)
+                    if(j != i)
+                        rnames[k++] = names[j];
+                rcall = CreateNamedList(rcall, rnames);
+            }
+        }
+        else {
+		    if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) {
+			    p.v = call[i];
+    			dotIndex = i-1;
+	    	} else if(isCall(call[i]) || isSymbol(call[i])) {
+		    	Promise::Init(p.v, NULL, Compiler::compilePromise(thread, call[i]), false);
+    		} else {
+	    		p.v = call[i];
+		    }
+    		arguments.push_back(p);
+	    }
+    }
+	return CompiledCall(rcall, arguments, dotIndex, names.length() > 0, extraArgs);
 }
 
 // a standard call, not an op
@@ -203,7 +234,9 @@ Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& ca
 	code->calls.push_back(a);
 	kill(function);
 	Operand result = allocRegister();
-	if(!a.named && a.dotIndex >= (int64_t)a.arguments.size())
+	if(!a.named 
+      && a.dotIndex >= (int64_t)a.arguments.size() 
+      && a.extraArgs.size() == 0)
 		emit(ByteCode::fastcall, function, code->calls.size()-1, result);
 	else
 		emit(ByteCode::call, function, code->calls.size()-1, result);
@@ -316,33 +349,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	//if(complicated)
 	//	return compileFunctionCall(call, names, code);
 
-    if(func == Strings::internal) 
-    {
-        if(!call[1].isList() || !isCall(call[1]))
-            throw ;//CompileError(std::string(".Internal has invalid arguments (") + Type::toString(call[1].type()) +
-      
-        List internalCall = (List const&)call[1];
-        if(!internalCall[0].isCharacter() || ((Character const&)internalCall[0]).length() != 1) 
-            throw ;//CompileError(std::string(".Internal function is invalid (") + Type::toString(internalCall[0].typ
-               
-        Character ns = Character::c(state.internStr("internal"));
-        Operand a = compileConstant(ns, code);
-        kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::getns, a, 0, result);
-        a = result;
-
-        Operand b = compileConstant(internalCall[0], code);
-        kill(b); kill(a);
-        result = allocRegister();
-        emit(ByteCode::get, a, b, result);
-        
-        Character internalNames = hasNames(internalCall)
-            ? (Character const&)getNames(internalCall)
-            : Character(0); 
-        return compileFunctionCall(result, internalCall, internalNames, code);
-    }
-    else if(func == Strings::external)
+    if(func == Strings::external)
     {
 		if(!call[1].isList() || !isCall(call[1]))
 			throw CompileError(std::string(".External has invalid arguments (") + Type::toString(call[1].type()) + ")");
@@ -943,15 +950,14 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::type ||
 		func == Strings::strip ||
 		func == Strings::random ||
-        func == Strings::getNamespace ||
-        func == Strings::ls ||
         func == Strings::dots ||
         func == Strings::attributes ||
         func == Strings::getenv ||
         func == Strings::env_new ||
+        func == Strings::env_names ||
         func == Strings::length ||
-        func == Strings::frame) &&
-		call.length() == 2)
+        func == Strings::frame)
+		&& call.length() == 2)
 	{
 		// if there isn't exactly one parameter, we should call the library version...
 		Operand a = compile(call[1], code);
@@ -961,8 +967,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		return result; 
 	} 
 	// Nullary operators
-	else if(func == Strings::dots &&
-		call.length() == 1)
+	else if((func == Strings::dots ||
+             func == Strings::env_global)
+		&& call.length() == 1)
 	{
 		// if there isn't exactly zero parameters, we should call the library version...
 		Operand result = allocRegister();

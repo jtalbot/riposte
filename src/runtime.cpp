@@ -245,11 +245,13 @@ struct SubsetAssignInclude {
 		A r = a;
 		Resize(thread, clone, r, outlength);
 		typename A::Element* re = r.v();
-		for(int64_t i = 0, j = 0; i < length; i++, j++) {	
+		for(int64_t i = 0, j = 0; i < length; i++) {
 			if(j >= b.length()) j = 0;
 			int64_t idx = de[i];
-			if(idx != 0)
-				re[idx-1] = be[j];
+            if(idx != 0 && b.length() == 0)
+                _error("replacement has length zero");
+			if(idx != 0 && !Integer::isNA(idx))
+				re[idx-1] = be[j++];
 		}
 		out = r;
 	}
@@ -269,8 +271,12 @@ struct SubsetAssignLogical {
 		typename A::Element* re = r.v();
 		int64_t j = 0, k = 0;
 		for(int64_t i = 0; i < length; i++) {
-			if(i >= a.length() && !Logical::isTrue(de[j])) re[i] = A::NAelement;
-			else if(Logical::isTrue(de[j])) re[i] = be[k++];
+            if(!Logical::isFalse(de[j]) && b.length() == 0)
+                _error("replacement has length zero");
+			if(i >= a.length() && !Logical::isTrue(de[j])) 
+                re[i] = A::NAelement;
+			else if(Logical::isTrue(de[j]))
+                re[i] = be[k++];
 			if(++j >= d.length()) j = 0;
 			if(k >= b.length()) k = 0;
 		}
@@ -281,21 +287,39 @@ struct SubsetAssignLogical {
 void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(i.isDouble() || i.isInteger()) {
 		Integer idx = As<Integer>(thread, i);
-		switch(a.type()) {
-#define CASE(Name) case Type::Name: SubsetAssignInclude<Name>::eval(thread, (Name const&)a, clone, idx, As<Name>(thread, b), c); break;
-			VECTOR_TYPES_NOT_NULL(CASE)
-#undef CASE
-			default: _error("NYI: subset assign type"); break;
-		};
+        #define CASE(Name) \
+            (a.is##Name() || b.is##Name()) \
+            SubsetAssignInclude<Name>::eval( \
+                thread, As<Name>(thread, a), clone, idx, As<Name>(thread, b), c);
+
+        if CASE(List)
+        else if CASE(Character)
+        else if CASE(Double)
+        else if CASE(Integer)
+        else if CASE(Logical)
+        else if CASE(Raw)
+        else if CASE(Null)
+	    else _error("NYI: subset assign type");
+        
+        #undef CASE
 	}
 	else if(i.isLogical()) {
-		Logical const& index = (Logical const&)i;
-		switch(a.type()) {
-#define CASE(Name) case Type::Name: SubsetAssignLogical<Name>::eval(thread, (Name const&)a, clone, index, As<Name>(thread, b), c); break;
-					 VECTOR_TYPES_NOT_NULL(CASE)
-#undef CASE
-			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type())); break;
-		};	
+		Logical const& idx = (Logical const&)i;
+        #define CASE(Name) \
+            (a.is##Name() || b.is##Name()) \
+            SubsetAssignLogical<Name>::eval( \
+                thread, As<Name>(thread, a), clone, idx, As<Name>(thread, b), c);
+
+        if CASE(List)
+        else if CASE(Character)
+        else if CASE(Double)
+        else if CASE(Integer)
+        else if CASE(Logical)
+        else if CASE(Raw)
+        else if CASE(Null)
+	    else _error("NYI: subset assign type");
+       
+        #undef CASE 
 	}
 	else {
 		_error("NYI indexing type");
@@ -484,52 +508,59 @@ Unstream* MakeUnstream(String t, int64_t s) {
 
 List Map(Thread& thread, String func, List args, Character result) {
     // figure out length of result
-    int64_t length = 0;
+    int64_t length = 1, minlength = 1;
     for(int64_t i = 0; i < args.length(); ++i) {
-        if(args[i].isVector())
+        if(args[i].isVector()) {
             length = std::max(length, ((Vector const&)args[i]).length());
-        else
+            minlength = std::min(minlength, ((Vector const&)args[i]).length());
+        } else {
             length = std::max(length, (int64_t)1);
+        }
     }
+    if(minlength == 0) length = 0;
 
     // build up streamers and unstreamers.
-    std::vector<Stream*> s;
-    for(int64_t i = 0; i < args.length(); ++i) {
-        s.push_back(MakeStream(args[i]));
-    }
     std::vector<Unstream*> u;
     for(int64_t i = 0; i < result.length(); ++i) {
         u.push_back(MakeUnstream(result[i], length));
     }
 
-    // look up function
-    void* f = find_function(thread, func);
-    
-    // run
-    DCCallVM* vm = dcNewCallVM(4096);
-    dcMode(vm, DC_CALL_C_DEFAULT);
+    if(length > 0) {
+        std::vector<Stream*> s;
+        for(int64_t i = 0; i < args.length(); ++i) {
+            s.push_back(MakeStream(args[i]));
+        }
 
-    for(int64_t i = 0; i < length; ++i) {
-        dcReset(vm);
-        dcArgPointer(vm, (void*)&thread);
-        for(int64_t k = 0; k < u.size(); ++k) {
-            (*u[k])(vm, i);
+        // look up function
+        void* f = find_function(thread, func);
+    
+        // run
+        DCCallVM* vm = dcNewCallVM(4096);
+        dcMode(vm, DC_CALL_C_DEFAULT);
+
+        for(int64_t i = 0; i < length; ++i) {
+            dcReset(vm);
+            dcArgPointer(vm, (void*)&thread);
+            for(int64_t k = 0; k < u.size(); ++k) {
+                (*u[k])(vm, i);
+            }
+            for(int64_t k = 0; k < s.size(); ++k) {
+                (*s[k])(vm, i);
+            }
+            dcCallVoid(vm, f);
         }
-        for(int64_t k = 0; k < s.size(); ++k) {
-            (*s[k])(vm, i);
+        dcFree(vm);
+        
+        for(int64_t i = 0; i < s.size(); ++i) {
+            delete s[i];
         }
-        dcCallVoid(vm, f);
     }
-    dcFree(vm);
 
     List r(result.length());
     for(int64_t i = 0; i < u.size(); ++i) {
         r[i] = u[i]->value();
     }
-        
-    for(int64_t i = 0; i < s.size(); ++i) {
-        delete s[i];
-    }
+       
     for(int64_t i = 0; i < u.size(); ++i) {
         delete u[i];
     }

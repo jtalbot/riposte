@@ -42,8 +42,7 @@ void openDynamic(Thread& thread, std::string path, Environment* env) {
     }
 }
 
-void loadPackage(Thread& thread, std::string path, std::string name) {
-	Environment* env = new Environment(1,thread.state.path.back());
+void loadPackage(Thread& thread, Environment* env, std::string path, std::string name) {
 	
 	dirent* file;
 	struct stat info;
@@ -64,10 +63,6 @@ void loadPackage(Thread& thread, std::string path, std::string name) {
 		}
 		closedir(dir);
 	}
-
-    // Add to the namespace before loading, so R files can find their
-    // own environment by the namespace name.
-    thread.state.namespaces[thread.state.internStr(name)] = env;
 
 	// Load R files
 	p = path + "/" + name + ("/R/");
@@ -102,8 +97,21 @@ void loadPackage(Thread& thread, std::string path, std::string name) {
 		}
 		closedir(dir);
 	}
-
-	thread.state.path.push_back(env);
-	thread.state.global->setParent(env);
 }
 
+Environment* exportOnSearchPath(Thread& thread, Environment* env) {
+   
+    Environment* exported = 
+        new Environment(env->Size(),thread.state.path.back());
+    
+    for(Dictionary::const_iterator i = env->begin(); i != env->end(); ++i) {
+        if(i.string()[0] != '.') {
+            exported->insert(i.string()) = i.value();
+        }
+    }
+
+	thread.state.path.push_back(exported);
+	thread.state.global->setParent(exported);
+
+    return exported;
+}

@@ -16,7 +16,24 @@ eigen <- function(x, symmetric=FALSE) {
 }
 
 cat <- function(..., sep = " ") .External(cat(list(...), sep))
-library <- function(.) .External(library(.))
+
+library <- function(.) {
+    e <- .env_new(getRegisteredNamespace('core'))
+    .External(library(e, .))
+    setRegisteredNamespace(., e)
+    e
+}
+
+attach <- function(.) {
+    g <- globalenv()
+    e <- .env_new(environment(g))
+    # copy over exported bindings
+    for(n in .env_names(.)) {
+        e[[n]] <- .[[n]]
+    }
+    environment(g) <- e
+}
+
 inherits <- function(x, what, which=FALSE) {
     #.External(inherits(x, what, which))
     any(class(x) == what)

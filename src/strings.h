@@ -40,7 +40,6 @@
 	_(name,	    "name")	\
 	_(call,	"call")		\
 	_(expression,	"expression")	\
-	_(internal, 	".Internal") \
 	_(external, 	".External") \
 	_(map, 	        ".Map") \
 	_(map_d, 	".Map.double") \
@@ -156,17 +155,17 @@
 	_(Re,	"Re") \
 	_(Im,	"Im") \
     _(as, "as") \
-    _(getNamespace, "getNamespace") \
     _(promise, "promise") \
     _(getenv, ".getenv") \
     _(setenv, ".setenv") \
-    _(ls, "ls") \
     _(body, "body") \
     _(formals, "formals") \
     _(attributes, "attributes") \
     _(pr_expr, ".pr_expr") \
     _(pr_env, ".pr_env") \
     _(env_new, ".env_new") \
+    _(env_names, ".env_names") \
+    _(env_global, ".env_global") \
     _(env_exists, ".env_exists") \
     _(env_remove, ".env_remove") \
     _(frame, ".frame") \
@@ -174,6 +173,10 @@
     _(print, "print") \
     _(Last_value, ".Last.value") \
     _(semijoin, ".semijoin") \
+    _(__onexit__, "__on.exit__") \
+    _(__onexittmp__, "__on.exit.tmp__") \
+    _(__handlers__, "__handlers__") \
+    _(__extraArgs__, "__extraArgs__") \
 
 typedef const char* String;
 

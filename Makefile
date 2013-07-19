@@ -1,6 +1,8 @@
 # This Makefile requires GNU make.
  
 UNAME := $(shell uname -s)
+CXX := clang++
+CC := clang
 CXXFLAGS := -Wall -I/opt/local/include
 CFLAGS := -Wall
 LFLAGS := -fpic
@@ -45,7 +47,6 @@ release: all
 asm: CXXFLAGS += -DNDEBUG -O3 -g 
 asm: $(ASM)
 
-.PHONY: all
 all: $(EXECUTABLE) $(PACKAGES)
 
 $(EXECUTABLE): $(MAIN) $(LINENOISE) $(RIPOSTE) 
@@ -70,8 +71,10 @@ build/linenoise.o: libs/linenoise/linenoise.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 .PHONY: clean
-clean: $(PACKAGES)
+clean:
 	rm -rf $(EXECUTABLE) $(RIPOSTE) $(MAIN) $(OBJECTS) $(LINENOISE) $(DEPENDENCIES)
+	$(MAKE) -C library/core $(MAKECMDGOALS)
+	$(MAKE) -C library/internal $(MAKECMDGOALS)
 
 # dependency rules
 build/%.d: src/%.cpp

@@ -58,15 +58,8 @@ static inline Instruction const* fastcall_op(Thread& thread, Instruction const& 
 
 static inline Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	// we can return futures from functions, so don't BIND
-	DECODE(a); FORCE(a);	
+	DECODE(a); FORCE(a);
 	
-	// We can free this environment for reuse
-	// as long as we don't return a closure...
-	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
-	if(!(a.isClosure() || a.isEnvironment() || a.isList())) {
-		thread.traces.KillEnvironment(thread.frame.environment);
-	}
-
     if(thread.stack.size() == 1)
         _error("no function to return from, jumping to top level");
 
@@ -82,7 +75,29 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
 
 	REGISTER(0) = a;
 	Instruction const* returnpc = thread.frame.returnpc;
-	thread.pop();
+    
+    Value const& onexit = thread.frame.environment->get(Strings::__onexit__);
+    if(onexit.isObject()) {
+        // TODO: yuck, get rid of the onexittmp variable
+        Value& v = thread.frame.environment->insert(Strings::__onexittmp__);
+        Promise::Init(v,
+            thread.frame.environment,
+            Compiler::compilePromise(thread, onexit),
+            false);
+        // remove it, so we don't call it recursively
+        thread.frame.environment->remove(Strings::__onexit__);
+		return force(thread, inst, v, 
+            thread.frame.environment, Strings::__onexittmp__);
+	}
+    
+	// We can free this environment for reuse
+	// as long as we don't return a closure...
+	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
+	if(!(a.isClosure() || a.isEnvironment() || a.isList())) {
+		thread.traces.KillEnvironment(thread.frame.environment);
+	}
+
+    thread.pop();
 
 	thread.traces.LiveEnvironment(thread.frame.environment, a);
 
@@ -797,18 +812,6 @@ static inline Instruction const* missing_op(Thread& thread, Instruction const& i
 	return &inst+1;
 }
 
-static inline Instruction const* getns_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
-	String s = ((Character const&)a).s;
-    std::map<String, Environment*>::const_iterator i = thread.state.namespaces.find(s);
-    if(i == thread.state.namespaces.end())
-        _error("There is no such namespace");
-
-    Environment* env = i->second;
-    REnvironment::Init(OUT(c), env);
-    return &inst+1;
-}
-
 // STACK_FRAME_BYTECODES
 static inline Instruction const* frame_op(Thread& thread, Instruction const& inst) {
     DECODE(a); FORCE(a); BIND(a);
@@ -830,17 +833,28 @@ static inline Instruction const* frame_op(Thread& thread, Instruction const& ins
             r[1] = env->getContext()->call;
             r[2] = env->getContext()->function;
             r[3] = Integer::c(env->getContext()->nargs);
+            r[4] = env->getContext()->onexit;
         }
         else {
             r[1] = Null::Singleton();
             r[2] = Null::Singleton();
             r[3] = Integer::NA();
+            r[4] = Null::Singleton();
         }
         OUT(c) = r;
     }
     else {
         _error("not that many frames on the stack");
     }
+    return &inst+1;
+}
+
+static inline Instruction const* setexit_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); BIND(a);
+
+    //if(thread.frame.environment->getContext())
+    //    thread.frame.environment->getContext()->onexit = a;
+
     return &inst+1;
 }
 
@@ -1250,6 +1264,25 @@ static inline Instruction const* env_new_op(Thread& thread, Instruction const& i
     return &inst+1;
 }
 
+static inline Instruction const* env_names_op(Thread& thread, Instruction const& inst) {
+    DECODE(a); FORCE(a); BIND(a);
+
+    if(!a.isEnvironment())
+        _error("'enclos' must be an environment");
+
+    Environment* env = ((REnvironment const&)a).environment();
+
+    Character r(env->Size());
+    int64_t j = 0;
+    for(Dictionary::const_iterator i = env->begin(); i != env->end(); ++i, ++j)
+    {
+        r[j] = i.string();
+    }
+
+    OUT(c) = r;
+    return &inst+1;
+}
+
 static inline Instruction const* env_exists_op(Thread& thread, Instruction const& inst) {
     DECODE(a); FORCE(a); BIND(a);
     DECODE(b); FORCE(b); BIND(b);
@@ -1278,6 +1311,11 @@ static inline Instruction const* env_remove_op(Thread& thread, Instruction const
 
 	((REnvironment const&)a).environment()->remove( ((Character const&)b).s );
 	OUT(c) = Null::Singleton();
+    return &inst+1;
+}
+
+static inline Instruction const* env_global_op(Thread& thread, Instruction const& inst) {
+    REnvironment::Init(OUT(c), thread.state.global);
     return &inst+1;
 }
 
@@ -1513,6 +1551,13 @@ Value Thread::eval(Prototype const* prototype, Environment* environment, int64_t
 		    _error("Stack was the wrong size at the end of eval");
 		return frame.registers[resultSlot];
 	} catch(...) {
+        if(!frame.isPromise && stack.size() > 1) {
+            std::cout << stack.size() << ": " << stringify(frame.environment->getContext()->call);
+        }
+        for(int64_t i = stack.size()-1; i > std::max(stackSize, 1ULL); --i) {
+            if(!stack[i].isPromise)
+                std::cout << i << ": " << stringify(stack[i].environment->getContext()->call);
+        }
         stack.resize(stackSize);
         frame = oldFrame;
 	    throw;

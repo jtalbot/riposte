@@ -37,7 +37,7 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 // Environments can have promises, defaults, or dotdots (references to ..n in the parent).
 Instruction const* force(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, String name) {
 	if(v.isPromise()) {
-		Promise const& a = (Promise const&)v;
+		Promise a = (Promise const&)v;
 		if(a.isPrototype()) {
        	    return buildStackFrame(thread, a.environment(), a.prototype(), dest, name, &inst);
         }
@@ -200,11 +200,18 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
     context->function = func;
     context->nargs = numArgs;
     context->named = named;
+    context->onexit = Null::Singleton();
 
     Environment* fenv = new Environment(
         (int64_t)call.arguments.size(),
         func.environment(),
         context);
+
+    // set extra args
+    for(size_t i = 0; i < call.extraArgs.size(); ++i) {
+        assignArgument(thread, env, fenv, 
+            call.extraArgs[i].n, call.extraArgs[i].v);
+    }
 
 	// set defaults
 	for(int64_t i = 0; i < (int64_t)parameters.size(); ++i) {
@@ -253,12 +260,12 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 				}
 			}
 		}
-		// named args, search for incomplete matches
+		// named args, search for incomplete matches but only to the ...
 		for(int64_t i = 0; i < numArgs; ++i) {
 			Pair const& arg = argument(i, env, call);
 			if(arg.n != Strings::empty && assignment[i] < 0) {
-				for(int64_t j = 0; j < (int64_t)parameters.size(); ++j) {
-					if(set[j] < 0 && j != pDotIndex && strncmp(arg.n, parameters[j].n, strlen(arg.n)) == 0) {
+				for(int64_t j = 0; j < pDotIndex; ++j) {
+					if(set[j] < 0 && strncmp(arg.n, parameters[j].n, strlen(arg.n)) == 0) {
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -327,6 +334,7 @@ Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func
     context->call = call.call;
     context->function = func;
     context->nargs = argumentsSize;
+    context->onexit = Null::Singleton();
 
     Environment* fenv = new Environment(
         (int64_t)call.arguments.size(),
@@ -380,9 +388,9 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 		Pair p;
 		p.n = Strings::empty;
 		p.v = a;
-		PairList args;
+		PairList args, extra;
 		args.push_back(p);
-		CompiledCall cc(CreateCall(call), args, 1, false);
+		CompiledCall cc(CreateCall(call), args, 1, false, extra);
 		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
 		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype(), out, &inst+1);
 	}
@@ -397,14 +405,14 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
         call[0] = CreateSymbol(op);
         call[1] = Quote(thread, a);
         call[2] = Quote(thread, b);
-		PairList args;
+		PairList args, extra;
 		Pair p;
 		p.n = Strings::empty;
 		p.v = a;
 		args.push_back(p);
 		p.v = b;
 		args.push_back(p);
-		CompiledCall cc(CreateCall(call), args, 2, false);
+		CompiledCall cc(CreateCall(call), args, 2, false, extra);
 		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
 		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype(), out, &inst+1);
 	}
@@ -425,7 +433,7 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
         names[1] = Strings::empty;
         names[2] = Strings::empty;
         names[3] = Strings::value;
-		PairList args;
+		PairList args, extra;
 		Pair p;
 		p.n = Strings::empty;
 		p.v = a;
@@ -435,7 +443,7 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
         p.n = Strings::value;
 		p.v = c;
 		args.push_back(p);
-		CompiledCall cc(CreateCall(call, names), args, 3, true);
+		CompiledCall cc(CreateCall(call, names), args, 3, true, extra);
         Environment* fenv = MatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
 		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype(), out, &inst+1);
 	}
@@ -576,7 +584,7 @@ Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const&
                     c = v;
                     return &inst+1;
                 }
-                else if(v.isNull()) {
+                else if(v.isNil()) {
                     c = Null::Singleton();
                     return &inst+1;
                 }

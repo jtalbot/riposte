@@ -87,10 +87,12 @@ dispatch2 <- function(op, x, y, default) {
 
 `[` <- function(x, ...) UseMethod('[', x, ...)
 
-`[.default` <- function(x, ...) {
-    if(nargs() < 2L) {
+.subset <- function(x, ...) `[`(unclass(x), ...)
+
+`[.default` <- function(x, ..., drop=TRUE) {
+    if(...() < 0L) {
         x
-    } else if(nargs() == 2L) {
+    } else if(...() == 1L) {
         i <- ..1
 
         if(is.character(i)) {
@@ -112,7 +114,7 @@ dispatch2 <- function(op, x, y, default) {
         else {
             stop("invalid subscript type")
         }
-    } else if(nargs() == 3L) {
+    } else if(...() == 2L) {
         d <- dim(x)
         if(missing(..1) && missing(..2))
             x
@@ -128,10 +130,11 @@ dispatch2 <- function(op, x, y, default) {
     }
 }
 
-
 `[[` <- function(x, ..., exact = TRUE) {
     UseMethod('[[', x, ..., exact=exact)
 }
+
+.subset2 <- function(x, ...) `[[`(unclass(x), ...)
 
 #`[[` <- function(x, ..., exact = TRUE) {
 #	i <- as.integer(list(...))
@@ -165,7 +168,7 @@ dispatch2 <- function(op, x, y, default) {
     }
 }
 
-`[[.list` <- function(x, i, ..., exact = TRUE) {
+`[[.list` <- `[[.pairlist` <- function(x, i, ..., exact = TRUE) {
     if(is.character(i)) {
         i <- which(names(x)==i)
         if(length(i)==0)
@@ -297,6 +300,6 @@ mapply <- function(FUN, ...) {
 }
 
 `::` <- function(a, b) {
-    getNamespace(strip(.pr_expr(parent.frame(0), quote(a))))[[strip(.pr_expr(parent.frame(0), quote(b)))]]
+    getRegisteredNamespace(strip(.pr_expr(parent.frame(0), quote(a))))[[strip(.pr_expr(parent.frame(0), quote(b)))]]
 }
 

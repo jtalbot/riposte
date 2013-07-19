@@ -12,13 +12,22 @@ file <- function(description, open, blocking, encoding, raw) {
     class(r) <- c('file', 'connection')
     attr(r, 'conn_id') <- .External(file_new(description))
     r
+    
+    if(!identical(open,''))
+        .open.file(r, open, blocking)
+
+    r
 }
 
-.open.file <- function(con, open, blocking)
+.open.file <- function(con, open, blocking) {
     .External(file_open(attr(con, 'conn_id')))
+    NULL
+}
 
-.close.file <- function(con, type)
+.close.file <- function(con, type) {
     .External(file_close(attr(con, 'conn_id')))
+    NULL
+}
 
 .cat.file <- function(con, x) {
     .External(file_cat(attr(con, 'conn_id'), x))
@@ -52,4 +61,15 @@ stderr <- function() {
     else if(i == 1L) .External(stdout_cat(x))
     else if(i == 2L) .External(stderr_cat(x))
     NULL
+}
+
+summary.connection <- function(object) UseMethod('.summary', object)
+
+
+.summary.file <- function(con) {
+    # TODO: populate the rest of the attributes
+    description <- .External(file_description(attr(con, 'conn_id')))
+    r <- list(description, class(con)[[1]], '', '', '', '', '')
+    names(r) <- c('description', 'class', 'mode', 'text', 'opened', 'can read', 'can write')
+    r
 }

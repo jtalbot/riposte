@@ -1,4 +1,4 @@
 
 # TODO: support this somehow
 
-invisible <- function(x) x
+invisible <- function(x=NULL) x

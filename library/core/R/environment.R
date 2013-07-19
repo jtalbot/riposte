@@ -16,14 +16,14 @@ environment <- function(fun) {
 # is.environment defined in coerce.R
 
 globalenv <- function() {
-    getNamespace('global')
+    .env_global()
 }
 
 emptyenv <- function() {
-    getNamespace('empty')
+    getRegisteredNamespace('empty')
 }
 
 baseenv <- function() {
-    getNamespace('base')
+    getRegisteredNamespace('base')
 }
 

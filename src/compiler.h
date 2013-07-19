@@ -31,7 +31,7 @@ private:
 	uint64_t loopDepth;
 
 	struct ValueComp {
-		bool operator()(Value const& a, Value const& b) {
+		bool operator()(Value const& a, Value const& b) const {
 			return a.header < b.header || 
 				(a.header == b.header && a.i < b.i);
 		}

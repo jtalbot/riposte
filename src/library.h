@@ -4,7 +4,8 @@
 
 #include "value.h"
 
-void loadPackage(Thread& thread, std::string path, std::string name);
+void loadPackage(Thread& thread, Environment* env, std::string path, std::string name);
 
+Environment* exportOnSearchPath(Thread& thread, Environment* env);
 
 #endif

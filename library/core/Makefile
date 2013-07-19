@@ -1,6 +1,7 @@
 # This Makefile requires GNU make.
  
 UNAME := $(shell uname -s)
+CXX := clang++
 CXXFLAGS := -Wall
 CFLAGS := -Wall -fPIC
 LFLAGS := -dynamiclib

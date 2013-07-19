@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <string>
 
 #include "../../../src/runtime.h"
 #include "../../../src/coerce.h"
@@ -29,7 +30,7 @@ struct FileConnection {
 
     void write(char const* c) {
         f.write(c, strlen(c));
-    } 
+    }
 };
 
 
@@ -87,3 +88,31 @@ Value stderr_cat(Thread& thread, Value const* args) {
     std::cerr << c[0];
     return Null::Singleton();
 }
+
+extern "C"
+Value file_readLines(Thread& thread, Value const* args) {
+    // TODO: implement the other readLines arguments
+    // TODO: stream this
+    Externalptr const& p = (Externalptr const&)args[0];
+    FileConnection* fc = (FileConnection*)p.ptr();
+    std::vector<std::string> lines;
+    std::string str;
+    while(std::getline(fc->f, str)) {
+        lines.push_back(str);
+    }
+
+    Character r(lines.size());
+    for(size_t i = 0; i < lines.size(); ++i) {
+        r[i] = thread.internStr(lines[i].c_str());
+    }
+
+    return r;
+}
+
+extern "C"
+Value file_description(Thread& thread, Value const* args) {
+    Externalptr const& p = (Externalptr const&)args[0];
+    FileConnection* fc = (FileConnection*)p.ptr();
+    return Character::c(thread.internStr(fc->name));
+}
+

@@ -30,7 +30,6 @@
     _(dotsc,        "dotsc")        /* = length(...) */                        \
     _(dots,         "dots")         /* = list(...) */                          \
     _(missing,      "missing")      /* check if an argument is missing */      \
-    _(getns,        "getns")        /* get a namespace */                      \
 
 #define STACK_FRAME_BYTECODES(_)                                               \
     _(frame,        "frame")        /* get a stack frame by index */           \
@@ -57,6 +56,8 @@
 
 #define ENVIRONMENT_BYTECODES(_)                                               \
     _(env_new,      "env_new")                                                 \
+    _(env_names,    "env_names")    /* get symbols defined in environment */   \
+    _(env_global,   "env_global")   /* get the global environment */           \
     /* TODO: consider generalizing these to all objects */                     \
     _(env_exists,   "env_exists")   /* check if environment contains a key */  \
     _(env_remove,   "env_remove")   /* remove a key from an environment */     \

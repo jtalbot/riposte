@@ -538,6 +538,7 @@ inline bool GetFast(Thread& thread, Value a, Value b, Value& c) {
         Vector const& v = (Vector const&)a;
 		if(    b.isInteger() 
             && ((Integer const&)b).length() == 1
+            && !Integer::isNA(b.i)
             && (b.i-1) >= 0 
             && (b.i-1) < v.length() ) {
             Element2(v, b.i-1, c);
@@ -545,6 +546,7 @@ inline bool GetFast(Thread& thread, Value a, Value b, Value& c) {
         }
 		else if(b.isDouble() 
             && ((Double const&)b).length() == 1
+            && !Double::isNA(b.d)
             && (b.d-1) >= 0
             && (b.d-1) < v.length()) {
             Element2(a, b.d-1, c);

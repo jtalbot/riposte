@@ -21,7 +21,6 @@ is.raw <- function(x) .type(x) == "raw"
 is.symbol <- function(x) class(x) == "name"
 is.pairlist <- function(x) class(x) == "pairlist"
 is.expression <- function(x) class(x) == "expression"
-is.call <- function(x) class(x) == "call" 
 is.primitive <- function(x) class(x) == "builtin"
 
 is.object <- function(x) !is.null(attr(x,'class'))

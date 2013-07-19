@@ -90,6 +90,13 @@ inline List CreatePairlist(List l, Value const& names = Value::Nil()) {
 	return l;
 }
 
+inline List CreateNamedList(List l, Value const& names) {
+	Dictionary* d = new Dictionary(1);
+    d->insert(Strings::names) = names;
+	l.attributes(d);
+	return l;
+}
+
 inline Object CreateComplex(double a) {
 	Object l = List::c(Double::c(0), Double::c(a));
 	Dictionary* d = new Dictionary(2);

@@ -13,7 +13,8 @@
     order <- as.character(list('NULL', 'raw', 'logical', 'integer', 'double', 'character', 'list'))
     types <- as.character(lapply(x, function(e) 
         ifelse(any(attr(e, 'class') == 'name'), 'name', typeof(e))))
-    order[[max(match(types, order, 'list', NULL))]]
+    order[[max(match(types, order, 7L, NULL))]]
+    
 }
 
 .flatten <- function(x, nested, type) {

@@ -26,8 +26,52 @@ characters <- function(...) as.character(list(...))
     else {
         
     }
-    r[[length(r)+1L]] <- 'default'
     r
+}
+
+.resolve.generic.call <- function(generic, classlist, call, callenv, defenv, match.first) {
+    targets <- classlist
+    targets[[length(targets)+1L]] <- 'default'
+
+    searchlist <- .pconcat(.pconcat(generic, '.'), targets)
+
+    for(i in seq_len(length(searchlist))) {
+        if(i == 1 && !match.first)
+            next
+
+        n <- searchlist[[i]]
+        fn <- .find(n, callenv, "closure")
+
+        if(!is.null(fn)) {
+            # TODO: clean this up...
+            ncall <- names(call)
+            call <- strip(call) 
+            
+            call[[1L]] <- fn
+
+            if(i <= length(classlist))
+                .Class <- classlist[i:length(classlist)]
+            else
+                .Class <- NULL
+            if(i != 1L)
+                attr(.Class, 'previous') <- classlist
+
+            call[[length(call)+1L]] <-
+                list(`.Generic`=generic,
+                     `.Method`=n,
+                     `.Class`=.Class,
+                     `.GenericCallEnv`=callenv,
+                     `.GenericDefEnv`=defenv)
+            
+            if(is.null(ncall)) ncall <- rep('', length(call))
+            ncall[[length(call)]] <- '__extraArgs__'
+            names(call) <- ncall
+            
+            class(call) <- 'call'
+            return(call)
+        }
+    }
+    return(NULL)
 }
 
 UseMethod <- function(generic, object, ...)
@@ -40,30 +84,29 @@ UseMethod <- function(generic, object, ...)
             f <- formals[[1L]]
             if(f == '...')
                 f <- '..1'
-            call <- list(as.name('missing'), as.name(f))
-            class(call) <- 'call'
-            promise('miss', call, parent.frame(), parent.frame(0))
+            mcall <- call('missing', as.name(f))
+            promise('miss', mcall, parent.frame(), parent.frame(0))
             if(miss)
                 object <- NULL
             else
                 promise('object', as.name(f), parent.frame(), parent.frame(0))
         }
     }
-    names <- .pconcat(.pconcat(generic, '.'), .class(object))
-    for(n in names) {
-        fn <- .find(n, parent.frame(2), "closure")
-        if(!is.null(fn)) {
-            # TODO: clean this up...
-            call <- sys.call(sys.parent(1))
-            n <- names(call)
-            call <- strip(call) 
-            call[[1L]] <- fn
-            class(call) <- 'call'
-            names(call) <- n
-            promise('p', call, parent.frame(2), parent.frame(0))
-            return(p)
-        }
+    call <- .resolve.generic.call(
+        generic, 
+        .class(object), 
+        sys.call(sys.parent(1)), 
+        parent.frame(2), 
+        environment(sys.function(sys.parent(1))),
+        TRUE
+        )
+
+    if(!is.null(call)) {
+        promise('p', call, parent.frame(2), parent.frame(0))
+        return(p)
     }
-    stop("UseMethod could not find matching generic")
+    else {
+        stop(.concat(list("no applicable method for '", generic,"' applied to and object of class \"", .class(object)[[1]], "\"")))
+    }
 }
 

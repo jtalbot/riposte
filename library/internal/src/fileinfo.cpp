@@ -16,7 +16,7 @@ void fileinfo_map(Thread& thread,
     double& size, char& isdir, int64_t& mode, 
     int64_t& mtime, int64_t& ctime, int64_t& atime,
     int64_t& uid, int64_t& gid, String& uname, String& grname,
-    String& f)
+    String f)
 {
     struct stat t;
     if( stat(f, &t) != -1) {

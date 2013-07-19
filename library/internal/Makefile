@@ -1,12 +1,13 @@
 # This Makefile requires GNU make.
  
 UNAME := $(shell uname -s)
-CXXFLAGS := -Wall
+CXX := clang++
+CXXFLAGS := -Wall -I/opt/local/include
 CFLAGS := -Wall -fPIC
-LFLAGS := -dynamiclib
-LIBS := -lpthread
+LFLAGS := -dynamiclib -L/opt/local/lib
+LIBS := -lpthread -ltre
 
-SRC := datetime.cpp connections.cpp fileinfo.cpp sprintf.cpp
+SRC := datetime.cpp connections.cpp fileinfo.cpp sprintf.cpp grep.cpp substr.cpp getwd.cpp
 
 EXECUTABLE := libs/internal.dylib
 
