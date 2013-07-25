@@ -7,7 +7,7 @@
 	if(is.null(yd)) yd <- c(length(y), 1L)
 
 	if(xd[[2L]] != yd[[1L]])
-		stop("Matrices are not conformable")
+		.stop("Matrices are not conformable")
 
 	if(xd[[1L]] == 1L && yd[[2L]] == 1L) {
 		return(sum(strip(x)*strip(y)))
@@ -39,7 +39,7 @@
 	xd <- dim(x)
 	yd <- dim(y)
 	if(!all(xd == yd))
-		stop("Matrices are not conformable")
+		.stop("Matrices are not conformable")
 	r <- strip(x) + strip(y)
 	matrix(r, xd[[1L]], xd[[2L]])
 }
@@ -48,7 +48,7 @@
 	xd <- dim(x)
 	yd <- dim(y)
 	if(!all(xd == yd))
-		stop("Matrices are not conformable")
+		.stop("Matrices are not conformable")
 	r <- strip(x) * strip(y)
 	matrix(r, xd[[1L]], xd[[2L]])
 }
@@ -57,7 +57,7 @@
 	xd <- dim(x)
 	yd <- dim(y)
 	if(!all(xd == yd))
-		stop("Matrices are not conformable")
+		.stop("Matrices are not conformable")
 	r <- strip(x) / strip(y)
 	if(is.null(yd))
 		matrix(r, xd[[1L]], xd[[2L]])
@@ -69,7 +69,7 @@
 	xd <- dim(x)
 	yd <- dim(y)
 	if(!all(xd == yd))
-		stop("Matrices are not conformable")
+		.stop("Matrices are not conformable")
 	r <- strip(x) <= strip(y)
 	matrix(r, xd[[1L]], xd[[2L]])
 }
@@ -78,7 +78,7 @@
 	xd <- dim(x)
 	yd <- dim(y)
 	if(!all(xd == yd))
-		stop("Matrices are not conformable")
+		.stop("Matrices are not conformable")
 	r <- strip(x) < strip(y)
 	matrix(r, xd[[1L]], xd[[2L]])
 }

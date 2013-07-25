@@ -271,7 +271,6 @@ int main(int argc, char** argv)
     try {
         Environment* env = new Environment(1, state.empty);
         loadPackage(thread, env, "library", "core");
-        exportOnSearchPath(thread, env);
     } 
     catch(RiposteException const& e) { 
         e_message("Error", e.kind().c_str(), e.what().c_str());

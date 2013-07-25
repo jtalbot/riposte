@@ -6,6 +6,4 @@
 
 void loadPackage(Thread& thread, Environment* env, std::string path, std::string name);
 
-Environment* exportOnSearchPath(Thread& thread, Environment* env);
-
 #endif

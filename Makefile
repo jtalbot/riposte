@@ -27,7 +27,7 @@ EXECUTABLE := riposte
 RIPOSTE := riposte.dylib
 MAIN := build/main.o
 LINENOISE := build/linenoise.o
-PACKAGES:= core internal
+PACKAGES:= core
 
 ALL_SRC := $(SRC)
 ALL_SRC += main.cpp
@@ -88,12 +88,12 @@ build/%.d: src/%.cpp
 COVERAGE_TESTS = $(shell find tests/coverage -type f -name '*.R')
 BLACKBOX_TESTS = $(shell find tests/blackbox -type f -name '*.R')
 CORE_TESTS = $(shell find library/core/tests -type f -name '*.R')
-BASE_TESTS = $(shell find library/base/tests -type f -name '*.R')
+#BASE_TESTS = $(shell find library/base/tests -type f -name '*.R')
 
-.PHONY: tests $(BASE_TESTS) #$(COVERAGE_TESTS) $(BLACKBOX_TESTS) $(CORE_TESTS) #$(BASE_TESTS)
+.PHONY: tests $(COVERAGE_TESTS) $(BLACKBOX_TESTS) $(CORE_TESTS) #$(BASE_TESTS)
 COVERAGE_FLAGS := 
 tests: COVERAGE_FLAGS += >/dev/null
-tests: $(BASE_TESTS) #$(COVERAGE_TESTS) $(BLACKBOX_TESTS) $(CORE_TESTS) #$(BASE_TESTS)
+tests: $(COVERAGE_TESTS) $(BLACKBOX_TESTS) $(CORE_TESTS) #$(BASE_TESTS)
 
 $(COVERAGE_TESTS):
 	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null

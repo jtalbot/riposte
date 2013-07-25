@@ -178,6 +178,9 @@ static inline Instruction const* branch_op(Thread& thread, Instruction const& in
 			}
 		}
 	}
+    else
+        _error("EXPR must be a length 1 vector");
+
 	if(index >= 1 && index <= inst.b) {
 		return &inst + ((&inst+index)->c);
 	} 
@@ -827,19 +830,24 @@ static inline Instruction const* frame_op(Thread& thread, Instruction const& ins
     }
 
     if(index == 0) {
-        List r(4);
+        List r(6);
         REnvironment::Init(r[0], env);
         if(env->getContext()) {
             r[1] = env->getContext()->call;
             r[2] = env->getContext()->function;
             r[3] = Integer::c(env->getContext()->nargs);
             r[4] = env->getContext()->onexit;
+            if(env->getContext()->parent)
+                REnvironment::Init(r[5], env->getContext()->parent);
+            else
+                r[5] = Null::Singleton();
         }
         else {
             r[1] = Null::Singleton();
             r[2] = Null::Singleton();
             r[3] = Integer::NA();
             r[4] = Null::Singleton();
+            r[5] = Null::Singleton();
         }
         OUT(c) = r;
     }
@@ -886,12 +894,14 @@ static inline Instruction const* pr_expr_op(Thread& thread, Instruction const& i
 
     REnvironment const& env = ((REnvironment const&)a);
 	String s = ((Character const&)b).s;
+
+    // TODO: must support ... & ..n
 	Value v = env.environment()->get(s);
     if(v.isPromise())
         v = ((Promise const&)v).prototype()->expression;
     else if(v.isNil())
         v = Null::Singleton();
-	OUT(c) = v;
+    OUT(c) = v;
     return &inst+1;
 }
 
@@ -1290,8 +1300,10 @@ static inline Instruction const* env_exists_op(Thread& thread, Instruction const
     if(!a.isEnvironment())
         _error("invalid 'envir' argument");
 
-    if(!b.isCharacter() || b.pac != 1)
+    if(!b.isCharacter() || b.pac != 1) {
+        printf("%d %d\n", b.type(), b.pac);
         _error("invalid exists argument");
+    }
 
     OUT(c) = ((REnvironment const&)a).environment()->has(((Character const&)b).s)
                 ? Logical::True() : Logical::False();
@@ -1400,7 +1412,8 @@ static inline Instruction const* split_op(Thread& thread, Instruction const& ins
 static inline Instruction const* vector_op(Thread& thread, Instruction const& inst) {
 	DECODE(a); FORCE(a); BIND(a);
 	DECODE(b); FORCE(b); BIND(b);
-	Type::Enum type = string2Type( As<Character>(thread, a)[0] );
+	String stype = As<Character>(thread, a)[0];
+	Type::Enum type = string2Type( stype );
 	int64_t l = As<Integer>(thread, b)[0];
 	
 	// TODO: replace with isTraceable...
@@ -1437,7 +1450,7 @@ static inline Instruction const* vector_op(Thread& thread, Instruction const& in
         for(int64_t i = 0; i < l; i++) v[i] = Null::Singleton();
         OUT(c) = v;
     } else {
-		_error("Invalid type in vector");
+		_error(std::string("Invalid type in vector: ") + stype);
 	} 
 	return &inst+1;
 }
@@ -1551,11 +1564,11 @@ Value Thread::eval(Prototype const* prototype, Environment* environment, int64_t
 		    _error("Stack was the wrong size at the end of eval");
 		return frame.registers[resultSlot];
 	} catch(...) {
-        if(!frame.isPromise && stack.size() > 1) {
+        if(!frame.isPromise && frame.environment->getContext()) {
             std::cout << stack.size() << ": " << stringify(frame.environment->getContext()->call);
         }
         for(int64_t i = stack.size()-1; i > std::max(stackSize, 1ULL); --i) {
-            if(!stack[i].isPromise)
+            if(!stack[i].isPromise && stack[i].environment->getContext())
                 std::cout << i << ": " << stringify(stack[i].environment->getContext()->call);
         }
         stack.resize(stackSize);

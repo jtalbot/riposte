@@ -4,19 +4,19 @@ call <- function(name, ...) {
         r <- list(name, ...)
     else
         r <- list(as.symbol(name), ...)
-    class(r) <- 'call'
+    attr(r, 'class') <- 'call'
     r
 }
 
 is.call <- function(x) {
-    any('call' == class(x))
+    any('call' == attr(x, 'class'))
 }
 
 as.call <- function(x) {
     if(!is.list(x))
-        stop("invalid argument list")
+        .stop("invalid argument list")
     if(length(x) == 0)
-        stop("invalid length 0 argument")
-    class(x) <- 'call'
+        .stop("invalid length 0 argument")
+    attr(x, 'class') <- 'call'
     x
 }

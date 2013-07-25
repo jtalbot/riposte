@@ -1,32 +1,50 @@
 
+.mode <- function(m) {
+    switch(m,
+        'numeric' = c('integer', 'double'),
+        'name' = 'symbol',
+        m)
+}
+
 get <- function(x, envir, mode, inherits) {
-    if (.env_exists(envir, x) && (mode(envir[[x]]) == mode || mode == "any"))
+    mode <- .mode(mode)
+    
+    if (.env_exists(envir, x) 
+        && (any(match(typeof(envir[[x]]), mode, 0, NULL)) || mode == "any")) {
         return(envir[[x]])
+    }
     if (inherits) {
         while(envir != emptyenv()) {
-            envir <- environment(envir)
-            if (.env_exists(envir, x) && (mode(envir[[x]]) == mode || mode == "any"))
+            envir <- .getenv(envir)
+            if (.env_exists(envir, x) 
+                && (any(match(typeof(envir[[x]]), mode, 0, NULL)) || mode == "any"))
                 return(envir[[x]])
         }
     }
-    stop('object not found')
+    .stop('object not found')
 }
 
 mget <- function(x, envir, mode, ifnotfound, inherits) {
     r <- vector("list", length(x))
 
-    # TODO -- deal with ifnotfound
-
     for(i in seq_len(length(x))) {
-        if (.env_exists(envir, x[[i]]) && (mode(envir[[x[[i]]]]) == mode || mode == "any"))
+        r[[i]] <- get(x[[i]], envir, mode, inherits)
+        if (.env_exists(envir, x[[i]]) 
+            && (any(match(typeof(envir[[x[[i]]]]), mode, 0, NULL)) || mode == "any")) {
             r[[i]] <- envir[[x[[i]]]]
+            next
+        }
         if (inherits) {
             while(envir != emptyenv()) {
                 envir <- environment(envir)
-                if (.env_exists(envir, x[[i]]) && (mode(envir[[x[[i]]]]) == mode || mode == "any"))
+                if (.env_exists(envir, x[[i]]) 
+                    && (mode(envir[[x[[i]]]]) == mode || mode == "any")) {
                     r[[i]] <- envir[[x[[i]]]]
+                    next
+                }
             }
         }
+        r[[i]] <- ifnotfound[[i]]
     }
 
     names(r) <- x

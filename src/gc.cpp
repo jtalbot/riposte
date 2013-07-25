@@ -102,7 +102,7 @@ void Dictionary::visit() const {
 
 void Environment::visit() const {
 	Dictionary::visit();
-	VISIT(parent);
+    VISIT(parent);
     VISIT(context);
 }
 

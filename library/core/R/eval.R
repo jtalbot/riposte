@@ -5,7 +5,7 @@ eval <- function(expr, envir, enclos) {
         environment(envir) <- enclos
     }
 
-    promise('f', expr, envir, parent.frame(0))
+    promise('f', expr, envir, .getenv(NULL))
     f
 }
 

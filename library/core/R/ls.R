@@ -1,6 +1,6 @@
 
 ls <- function(envir, all.names) {
-    n <- names(as.list(envir))
+    n <- .env_names(envir)
     if (all.names)
         n
     else

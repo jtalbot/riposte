@@ -24,7 +24,7 @@
 }
 
 format <- function(x, ...) {
-    UseMethod("format", x, ...)
+    UseMethod("format", x)
 }
 
 format.default <- function(x, ...)
@@ -75,13 +75,16 @@ format.list <- function(x, ..., prefix='')
             else
                 r <- .pconcat(r,'\n')
         }
-        .pconcat(r, .format.attributes(x, prefix=prefix))
     }
+    .pconcat(r, .format.attributes(x, prefix=prefix))
 }
 
 format.environment <- function(x, ...)
 {
-    .External(print(x))
+    if(!is.null(attr(x, 'name')))
+        sprintf('<environment: %s>', attr(x, 'name'))
+    else
+        .External(print(x))
 }
 
 format.NULL <- function(x, ...)
@@ -95,7 +98,7 @@ format.function <- function(x, ...)
 }
 
 
-deparse <- function(x, ...) UseMethod("deparse", x, ...)
+deparse <- function(x, ...) UseMethod("deparse", x)
 
 deparse.default <- function(x)
 {
@@ -142,8 +145,10 @@ deparse.list <- function(x)
 
 deparse.environment <- function(x)
 {
-    
-    .External(deparse(x))
+    if(!is.null(attr(x, 'name')))
+        sprintf('<environment: %s>', attr(x, 'name'))
+    else
+        .External(deparse(x))
 }
 
 deparse.NULL <- function(x)
@@ -277,10 +282,20 @@ format.expression <- deparse.expression <- function(x, ...)
 }
 
 
-print <- function(x, ...)
+# This is hidden by print in the base package.
+# Include here so we can have minimal printing
+# functionality with only the core package.
+print <- function(x, ...) UseMethod('print', x)
+
+print.default <- function(x, digits, quote, na.print, print.gap, right, max, useSource, noOpt) 
 {
-    text <- format(x)
-    cat(text, '\n')
+    .cat(format(x), '\n')
+    x
+}
+
+print.function <- function(x, useSource, ...)
+{
+    .cat(format.function(x), '\n')
     x
 }
 

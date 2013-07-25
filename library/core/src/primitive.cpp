@@ -109,6 +109,36 @@ double atan2_map(Thread& thread, double a, double b) {
 }
 
 extern "C"
+double cosh_map(Thread& thread, double a) {
+    return cosh(a);
+}
+
+extern "C"
+double sinh_map(Thread& thread, double a) {
+    return sinh(a);
+}
+
+extern "C"
+double tanh_map(Thread& thread, double a) {
+    return tanh(a);
+}
+
+extern "C"
+double acosh_map(Thread& thread, double a) {
+    return acosh(a);
+}
+
+extern "C"
+double asinh_map(Thread& thread, double a) {
+    return asinh(a);
+}
+
+extern "C"
+double atanh_map(Thread& thread, double a) {
+    return atanh(a);
+}
+
+extern "C"
 double hypot_map(Thread& thread, double a, double b) {
     return hypot(a,b);
 }

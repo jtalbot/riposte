@@ -99,19 +99,3 @@ void loadPackage(Thread& thread, Environment* env, std::string path, std::string
 	}
 }
 
-Environment* exportOnSearchPath(Thread& thread, Environment* env) {
-   
-    Environment* exported = 
-        new Environment(env->Size(),thread.state.path.back());
-    
-    for(Dictionary::const_iterator i = env->begin(); i != env->end(); ++i) {
-        if(i.string()[0] != '.') {
-            exported->insert(i.string()) = i.value();
-        }
-    }
-
-	thread.state.path.push_back(exported);
-	thread.state.global->setParent(exported);
-
-    return exported;
-}

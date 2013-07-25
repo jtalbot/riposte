@@ -1,5 +1,5 @@
 
-seq.int <- function(...) UseMethod('seq')
+seq.int <- function(...) UseMethod('seq', ..1)
 
 seq_along <- function(along.with) seq_len(length(along.with))
 

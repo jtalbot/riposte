@@ -2,12 +2,12 @@
  
 UNAME := $(shell uname -s)
 CXX := clang++
-CXXFLAGS := -Wall
+CXXFLAGS := -Wall -I/opt/local/include
 CFLAGS := -Wall -fPIC
-LFLAGS := -dynamiclib
-LIBS := -lpthread
+LFLAGS := -dynamiclib -L/opt/local/lib
+LIBS := -lpthread -ltre
 
-SRC := core.cpp print.cpp primitive.cpp
+SRC := core.cpp print.cpp primitive.cpp connections.cpp datetime.cpp fileinfo.cpp getwd.cpp grep.cpp sprintf.cpp substr.cpp
 
 EXECUTABLE := libs/core.dylib
 

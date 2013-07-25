@@ -265,7 +265,7 @@ Value source(Thread& thread, Value const* args) {
 	Value value;
 	parser.execute(code.c_str(), code.length(), true, value);	
 	
-	return thread.eval(Compiler::compileTopLevel(thread, value));
+	return value;
 }
 
 extern "C"

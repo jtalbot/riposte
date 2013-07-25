@@ -1,18 +1,50 @@
 
+Re <- function(x) UseGroupMethod("Re", "Complex", x)
+Re.default <- function(x) {
+    .ArithCheckUnary(x)
+    x
+}
+Re.complex <- function(x) {
+    x[[1]]
+}
 
-#complex <- function(length.out = 0,
-#		    real = numeric(), imaginary = numeric(),
-#		    modulus = 1, argument = 0) {
-#    if(missing(modulus) && missing(argument)) {
-#	## assume 'real' and 'imaginary'
-#	n <- max(length.out, length(real), length(imaginary))
-#	vector("complex", n) + real + imaginary*1i
-#    } else {
-#	n <- max(length.out, length(argument), length(modulus))
-#	rep(modulus,length.out=n) *
-#	    exp(1i * rep(argument, length.out=n))
-#    }
-#}
+Im <- function(x) UseGroupMethod("Im", "Complex", x)
+Im.default <- function(x) {
+    .ArithCheckUnary(x)
+    vector('double', length(x))
+}
+Im.complex <- function(x) {
+    x[[2]]
+}
+
+Mod <- function(x) UseGroupMethod("Mod", "Complex", x)
+Mod.default <- function(x) {
+    .ArithCheckUnary(x)
+    x
+}
+Mod.complex <- function(x) {
+    hypot(x[[2]], x[[1]])
+}
+
+Arg <- function(x) UseGroupMethod("Arg", "Complex", x)
+Arg.default <- function(x) {
+    .ArithCheckUnary(x)
+    vector('double', length(x))
+}
+Arg.complex <- function(x) {
+    atan2(x[[2]], x[[1]])
+}
+
+Conj <- function(x) UseGroupMethod("Conj", "Complex", x)
+Conj.default <- function(x) {
+    .ArithCheckUnary(x)
+    x
+}
+Conj.complex <- function(x) {
+    r <- list(Re=x[[1]], Im=-x[[2]])
+    class(r) <- 'complex'
+    r 
+}
 
 complex <- function(length.out = 0L, real = numeric(), imaginary = numeric()) {
 	if(missing(real) && missing(imaginary) && missing(modulus) && missing(argument)) {
@@ -95,16 +127,3 @@ length.complex <- function(x) length(x[[1]])
 	r	
 }
 
-Re <- function(x) UseMethod("Re")
-Im <- function(x) UseMethod("Im")
-
-Re.numeric <- function(x) x
-Im.numeric <- function(x) numeric(length(x))
-
-Re.complex <- function(x) {
-	x[[1]]
-}
-
-Im.complex <- function(x) {
-	x[[2]]
-}

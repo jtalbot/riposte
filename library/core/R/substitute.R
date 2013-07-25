@@ -1,7 +1,7 @@
 
 quote <- function(expr)
 {
-    .pr_expr(parent.frame(0), 'expr')
+    .pr_expr(.getenv(NULL), 'expr')
 }
 
 .substitute <- function(expr, env)
@@ -13,7 +13,7 @@ quote <- function(expr)
             expr[[i]] <- .substitute(expr[[i]], env)
         }
     }
-    else if (is.symbol(expr) && env != globalenv() && .env_exists(env, expr))
+    else if (is.symbol(expr) && env != .env_global() && .env_exists(env, expr))
     {
         expr <- .pr_expr(env, expr)
     }
@@ -21,7 +21,7 @@ quote <- function(expr)
     return(expr)
 }
 
-substitute <- function(expr, env=parent.frame(1))
+substitute <- function(expr, env=.frame(1L)[[1L]])
 {
-    .substitute(.pr_expr(parent.frame(0), 'expr'), as.environment(env))
+    .substitute(.pr_expr(.getenv(NULL), 'expr'), as.environment(env))
 }
