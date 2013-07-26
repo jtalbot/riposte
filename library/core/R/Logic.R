@@ -21,12 +21,10 @@
 }
 
 `&&` <- function(x, y) {
-    .LogicCheckBinary(x,y)
-    strip(x) && strip(y)
+    `if`(x, `if`(y, TRUE, FALSE, NA), FALSE, `if`(y, NA, FALSE, NA))
 }
 
 `||` <- function(x, y) {
-    .LogicCheckBinary(x,y)
-    strip(x) || strip(y)
+    `if`(x, TRUE, `if`(y, TRUE, FALSE, NA), `if`(y, TRUE, NA, NA))
 }
 

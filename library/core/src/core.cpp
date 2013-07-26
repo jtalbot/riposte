@@ -269,39 +269,11 @@ Value source(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value environment(Thread& thread, Value const* args) {
-	Value e = args[0];
-	if(e.isClosure()) {
-        Value result;
-		REnvironment::Init(result, ((Closure const&)e).environment());
-		return result;
-	}
-	return Null::Singleton();
-}
-
-extern "C"
-void stop(Thread& thread, Value const* args, Value& result) {
-	// this should stop whether or not the arguments are correct...
-	std::string message = thread.externStr(Cast<Character>(args[0])[0]);
-	_error(message);
-	result = Null::Singleton();
-}
-
-extern "C"
 void warning(Thread& thread, Value const* args, Value& result) {
 	std::string message = thread.externStr(Cast<Character>(args[0])[0]);
 	_warning(thread, message);
 	result = Character::c(thread.internStr(message));
 } 
-
-/*void nchar_fn(Thread& thread, Value const* args, Value& result) {
-	// NYI: type or allowNA
-	unaryCharacter<Zip1, NcharOp>(thread, args[0], result);
-}
-
-void nzchar_fn(Thread& thread, Value const* args, Value& result) {
-	unaryCharacter<Zip1, NzcharOp>(thread, args[0], result);
-}*/
 
 extern "C"
 Value paste(Thread& thread, Value const* args) {
@@ -319,34 +291,6 @@ Value paste(Thread& thread, Value const* args) {
 extern "C"
 Value deparse(Thread& thread, Value const* args) {
     return Character::c(thread.internStr(thread.deparse(args[0])));
-}
-
-extern "C"
-Value substitute(Thread& thread, Value const* args) {
-	Value v = args[0];
-	while(v.isPromise()) v = ((Closure const&)v).prototype()->expression;
-	
-	if(isSymbol(v)) {
-		Environment* penv;
-		Value const& r = thread.frame.environment->getRecursive(SymbolStr(v), penv);
-		if(!r.isNil()) v = r;
-		while(v.isPromise()) v = ((Closure const&)v).prototype()->expression;
-	}
- 	return v;
-}
-
-extern "C"
-Value exists(Thread& thread, Value const* args) {
-	Character c = As<Character>(thread, args[0]);
-	REnvironment const& e = Cast<REnvironment>(args[1]);
-	Logical l = As<Logical>(thread, args[2]);
-
-	Environment* penv;
-	Value const& v = l[0] ? e.environment()->getRecursive(c[0], penv) : e.environment()->get(c[0]);
-	if(v.isNil())
-		return Logical::False();
-	else
-		return Logical::True();
 }
 
 extern "C"
@@ -458,60 +402,14 @@ Value sort(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value force(Thread& thread, Value const* args) {
-	return args[0];
-}
-
-extern "C"
 Value commandArgs(Thread& thread, Value const* args) {
 	return thread.state.arguments;
 }
 
 extern "C"
-Value repeat2(Thread& thread, Value const* args) {
-	Integer a = Cast<Integer>(args[0]);
-	int64_t len = Cast<Integer>(args[1])[0];
-
-	return Repeat(a, len);
+void stop(Thread& thread, Value const* args, Value& result) {
+    // this should stop whether or not the arguments are correct...
+    std::string message = thread.externStr(Cast<Character>(args[0])[0]);
+    _error(message);
+    result = Null::Singleton();
 }
-
-extern "C"
-Value getAttributes(Thread& thread, Value const* args) {
-    Value v = args[0];
-
-    if(!v.isObject() || !((Object const&)v).hasAttributes())
-        return Null::Singleton();
-
-    Dictionary* attributes = ((Object const&)v).attributes();
-    if(attributes->Size() == 0)
-        return Null::Singleton();
-
-    List result(attributes->Size());
-    Character names(attributes->Size());
-    
-    Dictionary::const_iterator it = attributes->begin();
-    for(size_t i = 0; i < attributes->Size(); i++) {
-        result[i] = it.value();
-        names[i] = it.string();
-        ++it;
-    }
-    Dictionary* d = new Dictionary(1);
-    d->insert(Strings::names) = names;
-    result.attributes(d);
-    return result;
-}
-
-extern "C"
-Value emptyEnvironment(Thread& thread, Value const* args) {
-    Value v;
-    REnvironment::Init(v, thread.state.empty);
-    return v;
-}
-
-extern "C"
-Value globalEnvironment(Thread& thread, Value const* args) {
-    Value v;
-    REnvironment::Init(v, thread.state.global);
-    return v;
-}
-

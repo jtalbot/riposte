@@ -68,11 +68,11 @@ Instruction const* force(Thread& thread, Instruction const& inst, Value const& v
 }
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset) {
-	//std::cout << "\t(Executing in " << intToHexStr((int64_t)environment) << ")" << std::endl;
-	//Prototype::printByteCode(prototype, thread.state);
-    //if(environment->getContext() && ((List const &)environment->getContext()->call).length() > 0)
-    //std::cout << "Call:   " << (((List const&)environment->getContext()->call)[0]).s << std::endl;
-	
+	/*std::cout << "\t(Executing in " << intToHexStr((int64_t)environment) << ")" << std::endl;
+	Prototype::printByteCode(prototype, thread.state);
+    if(environment->getContext() && ((List const &)environment->getContext()->call).length() > 0)
+    std::cout << "Call:   " << (((List const&)environment->getContext()->call)[0]).s << std::endl;
+	*/
 	// make new stack frame
 	StackFrame& s = thread.push();
 	s.environment = environment;

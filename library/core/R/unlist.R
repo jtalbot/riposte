@@ -67,6 +67,9 @@ unlist.default <- function(x, recursive, use.names) {
     if(!is.vector(x, 'any'))
         .stop('argument not a list')
 
+    if(length(x) == 0L)
+        return( NULL )
+
     if(!use.names)
         x <- strip(x)
 
@@ -78,7 +81,11 @@ unlist.default <- function(x, recursive, use.names) {
             if(use.names)
                 names(y) <- .flatten.names(x, n)
             x <- y
-            f <- .is.nested(x)
+
+            if(length(x) == 0L)
+                break
+
+            n <- .is.nested(x)
             t <- .simple.type(x)
         }
         

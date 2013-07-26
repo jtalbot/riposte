@@ -288,17 +288,23 @@ public:
 class Environment : public Dictionary {
 
 	Environment* parent;
+    Dictionary* attributes;
     Context const* context;
 
 public:
 	explicit Environment(int64_t initialLoad, Environment* parent, Context const* context=0)
         : Dictionary(initialLoad)
         , parent(parent)
+        , attributes(0)
         , context(context) {}
 
 	Environment* getParent() const { return parent; }
 	void setParent(Environment* env) { parent = env; }
 	Context const* getContext() const { return context; }
+
+    Dictionary* getAttributes() const { return attributes; }
+    void setAttributes(Dictionary* d) { attributes = d; }
+    bool hasAttributes() const { return attributes != 0; }
 
 	// Look up insertion location using R <<- rules
 	// (i.e. find variable with same name in the lexical scope)

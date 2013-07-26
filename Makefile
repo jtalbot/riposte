@@ -74,7 +74,6 @@ build/linenoise.o: libs/linenoise/linenoise.c
 clean:
 	rm -rf $(EXECUTABLE) $(RIPOSTE) $(MAIN) $(OBJECTS) $(LINENOISE) $(DEPENDENCIES)
 	$(MAKE) -C library/core $(MAKECMDGOALS)
-	$(MAKE) -C library/internal $(MAKECMDGOALS)
 
 # dependency rules
 build/%.d: src/%.cpp

@@ -5,8 +5,9 @@
     {
         if(.env_exists(env, name) && (type == "any" || .type(env[[name]]) == type))
             return(as.name(name))
-        else
+        else {
             env <- .getenv(env)
+        }
     }
     NULL
 }
@@ -94,7 +95,6 @@ UseMethod <- function(generic, object)
                 promise('object', as.name(f), .frame(1L)[[1L]], .getenv(NULL))
         }
     }
-    
     call <- .resolve.generic.call(
         generic,
         generic, 
@@ -111,7 +111,7 @@ UseMethod <- function(generic, object)
         return(p)
     }
     else {
-        .stop(sprintf("no applicable method for '%s' applied to an object of class \"%s\"", generic, .class(object)[[1]]))
+        #.stop(sprintf("no applicable method for '%s' applied to an object of class \"%s\"", generic, .class(object)[[1]]))
     }
 }
 

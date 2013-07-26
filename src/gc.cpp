@@ -38,7 +38,6 @@ static void traverse(Value const& v) {
 			VISIT(((Closure const&)v).environment());
 			break;
         case Type::Externalptr:
-            printf("Visiting external ptr\n");
             VISIT((Externalptr::Inner const*)v.p);
             traverse(((Externalptr const&)v).tag());
             traverse(((Externalptr const&)v).prot());
@@ -103,6 +102,7 @@ void Dictionary::visit() const {
 void Environment::visit() const {
 	Dictionary::visit();
     VISIT(parent);
+    VISIT(attributes);
     VISIT(context);
 }
 

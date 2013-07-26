@@ -30,7 +30,7 @@ match <- function(x, table, nomatch, incomparables) {
 
     index <- .match(x, table)
     notcompared <- .match(x, incomparables)
-    index[is.na(index) | !is.na(notcompared)] <- as.integer(nomatch)
+    index[index==0L | notcompared != 0L] <- as.integer(nomatch)
     index
 }
 

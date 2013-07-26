@@ -175,6 +175,8 @@ static int run(State& state, std::istream& in, std::ostream& out, bool interacti
 
             if(echo) {
                 thread.eval(print, state.global);
+                // Print directly (for debugging)
+                //std::cout<< thread.stringify(result) << std::endl;
             }
         } 
         catch(RiposteException const& e) { 

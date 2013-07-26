@@ -6,10 +6,15 @@ library <- function(.) {
     setRegisteredNamespace(.pconcat('',.), e)
 
     # TODO: a better way to handle this case?
-    if(identical(.,'base'))
+    if(identical(.,'base')) {
         e[['.BaseNamespaceEnv']] <- e
+    }
 
     .External(library(e, .))
+        
+    if(identical(.,'base')) {
+        e[['.Options']] <- options()
+    }
 
     # export names and place in search path
     names <- .env_names(e)

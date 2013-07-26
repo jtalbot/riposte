@@ -1,0 +1,4 @@
+
+interactive <- function() {
+    TRUE
+}

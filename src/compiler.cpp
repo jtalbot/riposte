@@ -748,7 +748,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::whileSym)
 	{
 		Operand head_condition = compile(call[1], code);
-		emit(ByteCode::jc, 1, 0, kill(head_condition));
+		emit(ByteCode::jc, 2, 0, kill(head_condition));
+        // TODO: replace with a real error bytecode
+        emit(ByteCode::done, (int64_t)0, (int64_t)0, (int64_t)0);
 		loopDepth++;
 		
 		int64_t beginbody = ir.size();
@@ -758,9 +760,11 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand tail_condition = compile(call[1], code);
 		int64_t endbody = ir.size();
 		
-		emit(ByteCode::jc, beginbody-endbody, 1, kill(tail_condition));
-		resolveLoopExits(beginbody, endbody, tail, endbody+1);
-		ir[beginbody-1].b = endbody-beginbody+2;
+		emit(ByteCode::jc, beginbody-endbody, 2, kill(tail_condition));
+        // TODO: replace with a real error bytecode
+        emit(ByteCode::done, (int64_t)0, (int64_t)0, (int64_t)0);
+		resolveLoopExits(beginbody, endbody, tail, endbody+2);
+		ir[beginbody-2].b = endbody-beginbody+4;
 		loopDepth--;
 		
 		return compileConstant(Null::Singleton(), code);
@@ -792,66 +796,54 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	} 
 	else if(func == Strings::ifSym) 
 	{
-		Operand resultT, resultF;
-		if(call.length() != 3 && call.length() != 4)	
+		Operand resultT, resultF, resultNA;
+		if(call.length() < 3 || call.length() > 5)
 			throw CompileError("invalid if statement");
 		
-		// resultT and resultF need to be in the same register so if statements can be used as expressions.
-		// if either one is not in a register move into register. They should be in the same register at
-		// the end. They could also be in the same MEMORY location at the end, but that's harder to code
-		// gen for...
-		
 		Operand cond = compile(call[1], code);
-		emit(ByteCode::jc, 1, 0, kill(cond));
-		int64_t begin1 = ir.size(), begin2 = 0;
-		resultT = placeInRegister(compile(call[2], code));
+		emit(ByteCode::jc, 0, 0, kill(cond));
 		
+        int64_t begin1 = ir.size();
+        if(call.length() == 5) {
+            resultNA = placeInRegister(compile(call[4], code));
+		    emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0);
+		}
+        else {
+            resultNA = Operand();
+            // TODO: hacky, replace with a real error bytecode
+            emit(ByteCode::done, (int64_t)0, (int64_t)0, (int64_t)0);
+        }
+        kill(resultNA);
+
+		int64_t begin2 = ir.size();
+        resultF = placeInRegister(
+			call.length() >= 4 
+                ? compile(call[3], code)
+                : compileConstant(Null::Singleton(), code) );
+        assert(resultNA == resultF || 
+               resultNA.loc == INVALID || 
+               resultF.loc == INVALID);
 		emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0);
-		begin2 = ir.size();
-	
-		kill(resultT);
-		resultF = placeInRegister(
-			call.length() == 4 ? 	compile(call[3], code) :
-						compileConstant(Null::Singleton(), code) );
-        assert(resultT == resultF || resultT.loc == INVALID || resultF.loc == INVALID);
-		int64_t end = ir.size();
-		ir[begin2-1].a = end-begin2+1;
+		kill(resultF);
 		
+		int64_t begin3 = ir.size();
+        resultT = placeInRegister(compile(call[2], code));
+        assert(resultT == resultF || 
+               resultT.loc == INVALID || 
+               resultF.loc == INVALID);
+		kill(resultT);
+
+		int64_t end = ir.size();
+		ir[begin3-1].a = end-begin3+1;
+        ir[begin2-1].a = end-begin2+1;
+		ir[begin1-1].a = begin3-begin1+1;
 		ir[begin1-1].b = begin2-begin1+1;
 
-		return resultT.loc == INVALID ? resultF : resultT;
-	}
-	else if(func == Strings::lor2 && call.length() == 3)
-	{
-		Operand r0 = placeInRegister(compileConstant(Logical::True(), code));
-		
-		Operand left = compile(call[1], code);
-		emit(ByteCode::jc, 0, 1, kill(left));
-		int64_t j1 = ir.size()-1;
-		Operand right = compile(call[2], code);
-		emit(ByteCode::jc, 2, 1, kill(right));
-	
-		kill(r0);	
-		Operand r1 = placeInRegister(compileConstant(Logical::False(), code));
-		ir[j1].a = (int64_t)ir.size()-j1;
-		assert(r0 == r1 || r0.loc == INVALID || r1.loc == INVALID);
-		return r1;
-	}
-	else if(func == Strings::land2 && call.length() == 3)
-	{
-		Operand r0 = placeInRegister(compileConstant(Logical::False(), code));
-
-		Operand left = compile(call[1], code);
-		emit(ByteCode::jc, 1, 0, kill(left));
-		int64_t j1 = ir.size()-1;
-		Operand right = compile(call[2], code);
-		emit(ByteCode::jc, 1, 2, kill(right));
-
-		kill(r0);
-		Operand r1 = placeInRegister(compileConstant(Logical::True(), code));
-		ir[j1].b = (int64_t)ir.size()-j1;
-		assert(r0 == r1 || r0.loc == INVALID || r1.loc == INVALID);
-		return r1;
+		return resultT.loc != INVALID 
+                    ? resultT
+                    : ( resultF.loc != INVALID 
+                        ? resultF 
+                        : resultNA );
 	}
 	else if(func == Strings::brace) 
 	{

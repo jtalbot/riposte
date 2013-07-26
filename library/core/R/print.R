@@ -57,7 +57,7 @@ format.character <- function(x, ...)
 format.list <- function(x, ..., prefix='')
 {
     if(length(x) == 0)
-        'list()'
+        r <- 'list()'
     else {
         r <- ''
         n <- names(x)

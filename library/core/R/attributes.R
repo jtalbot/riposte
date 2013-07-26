@@ -11,7 +11,7 @@ attributes <- function(obj) {
         .stop('attributes must be named')
 
     dim <- .semijoin('dim', n)
-    if(!is.na(dim))
+    if(dim != 0L)
         dim(obj) <- value[[dim]]
 
     for(i in seq_len(length(value))) {

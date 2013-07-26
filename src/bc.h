@@ -109,8 +109,8 @@
 	_(pow, "pow",	ArithBinary2, PassNA(a,b,pow(a,b)))                        \
 
 #define LOGICAL_BINARY_BYTECODES(_)                                            \
-	_(lor, "lor",	LogicalBinary, PassNA(a,b,a|b))                            \
-	_(land, "land",	LogicalBinary, PassNA(a,b,a&b))                            \
+	_(lor, "lor",	LogicalBinary, ((a<0||b<0)?-1:(a>0)?1:b))                  \
+	_(land, "land",	LogicalBinary, ((!a||!b)  ?0:(a>0)?1:b))                   \
 
 #define UNIFY_BINARY_BYTECODES(_)                                              \
 	_(pmin, "pmin",	UnifyBinary, PassCheckedNA(a,b,riposte_min(thread,a,b)))   \

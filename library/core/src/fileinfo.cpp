@@ -84,6 +84,7 @@ Value sysglob(Thread& thread, Value const* args)
 
     glob_t gl;
     gl.gl_pathc = 0;
+    gl.gl_pathv = 0;
     for(int64_t j = 0; j < c.length(); ++j) {
         if(c[j] == NULL)
             continue;

@@ -26,6 +26,16 @@ getNamespaceRegistry <- NULL
     }
 })()
 
+# TODO: is there a better place to set this?
+(function() {
+    g <- globalenv()
+    attr(g, 'name') <- 'R_GlobalEnv'
+    
+    e <- emptyenv()
+    attr(e, 'name') <- 'R_EmptyEnv'
+})()
+
+
 
 # TODO: actually populate this correctly
 .Platform <- list(
@@ -86,9 +96,9 @@ primitives <- .characters(
     # Extract.R
     '[',
     '[.default',
+    '[.environment',
     '[.matrix',
     '[.array',
-    '.subset',
     '[[',
     '[[.default',
     '[[.list',
@@ -97,9 +107,9 @@ primitives <- .characters(
     '[[.pairlist',
     '[[.environment',
     '[[.closure',
-    '.subset2',
     '[<-',
     '[<-.default',
+    '[<-.environment',
     '[[<-',
     '[[<-.default',
     '[[<-.environment',
@@ -210,6 +220,11 @@ primitives <- .characters(
     'attributes',
     'attributes<-',
 
+    # base-internal.R (TODO: hide all of these)
+    '.subset',
+    '.subset2',
+    '.isMethodsDispatchOn',
+
     # c.R
     'c',
     'c.default',
@@ -293,6 +308,9 @@ primitives <- .characters(
     'as.integer',
     'is.integer',
 
+    # interactive.R
+    'interactive',
+
     # invisible.R
     'invisible',
 
@@ -373,7 +391,6 @@ primitives <- .characters(
     'nargs',
 
     # nchar.R
-    'nchar',
     'nzchar',
 
     # numeric.R
@@ -447,6 +464,12 @@ primitives <- .characters(
     )
 
 internals <- .characters(
+    # R.Version.R
+    'Version',
+
+    # Rhome.R
+    'R.home',
+
     # Special.R
     'beta',
     'lbeta',
@@ -474,6 +497,10 @@ internals <- .characters(
     # attach.R
     'attach',
 
+    # basename.R
+    'basename',
+    'dirname',
+
     # cat.R
     'cat',
 
@@ -488,6 +515,7 @@ internals <- .characters(
 
     # conditions.R
     '.addCondHands',
+    'signalCondition',
 
     # connections.R
     'file',
@@ -521,6 +549,9 @@ internals <- .characters(
 
     # exists.R
     'exists',
+
+    # file.R
+    'file.exists',
 
     # file.info.R
     'file.info',
@@ -561,6 +592,10 @@ internals <- .characters(
     # list.R 
     'env2list',
 
+    # locales.R
+    'Sys.getlocale',
+    'Sys.setlocale',
+
     # ls.R
     'ls',
 
@@ -575,6 +610,9 @@ internals <- .characters(
 
     # mean.R
     'mean',
+
+    # nchar.R
+    'nchar',
 
     # normalizePath.R
     'normalizePath', 
@@ -642,6 +680,9 @@ internals <- .characters(
     'substr',
     'substr<-',
 
+    # Sys.getenv
+    'Sys.getenv',
+
     # sys.parent
     'sys.call',
     'sys.frame',
@@ -654,6 +695,9 @@ internals <- .characters(
 
     # typeof.R
     'typeof',
+
+    # unique.R
+    'unique',
 
     # unlist.R
     'unlist',

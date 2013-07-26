@@ -1,8 +1,6 @@
 
 `[` <- function(x, ...) UseMethod('[', x)
 
-.subset <- function(x, ...) `[`(unclass(x), ...)
-
 `[.default` <- function(x, ..., drop = TRUE)
 {
     if(...() == 0L)
@@ -13,7 +11,7 @@
     i <- ..1
     if(is.character(i)) {
         i <- .semijoin(i, as.character(names(x)))
-        i[is.na(i)] <- length(x)+1
+        i[i==0L] <- length(x)+1
     }
     else if(is.null(i)) {
         i <- vector('integer',0)
@@ -30,6 +28,12 @@
     else {
         .stop("invalid subscript type")
     }
+}
+
+`[.environment` <- function(x, i, ...) {
+    if(!is.character(i))
+        .stop('wrong arguments for subsetting an environment')
+    strip(x)[[strip(i)]]
 }
 
 #`[` <- function(x, ..., drop = TRUE) {
@@ -72,7 +76,7 @@
                 if(is.null(attr(x, 'dimnames')))
                     .stop("no 'dimnames' attribute for array")
                 r <- .semijoin(id, as.character(attr(x,'dimnames'))[[i]])
-                if(any(is.na(r)))
+                if(any(r==0L))
                     .stop("subscript out of bounds")
                 r
             }
@@ -98,8 +102,6 @@
 `[[` <- function(x, ..., exact = TRUE) {
     UseMethod('[[', x)
 }
-
-.subset2 <- function(x, ...) `[[`(unclass(x), ...)
 
 #`[[` <- function(x, ..., exact = TRUE) {
 #	i <- as.integer(list(...))
@@ -182,7 +184,7 @@
     if(is.character(i)) {
         i <- nn <- strip(i)
         i <- .semijoin(i, as.character(names(x)))
-        i[is.na(i)] <- length(x)+seq_len(sum(is.na(i)))
+        i[i==0L] <- length(x)+seq_len(sum(i==0L))
         
         if(is.null(attr(x,'names')))
             attr(x,'names') <- rep('', length(x))
@@ -198,6 +200,14 @@
     else {
         .stop('invalid subscript type')
     }
+}
+
+`[<-.environment` <- function(x, i, ..., value) {
+    if(is.character(i))
+        `[<-`(strip(x), strip(i), value)
+    else
+        .stop('wrong args for environment subassignment')
+    x
 }
 
 `[[<-` <- function(x, ..., value) {

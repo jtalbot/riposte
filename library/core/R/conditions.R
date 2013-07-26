@@ -4,3 +4,24 @@
     h[name] <- handler
     handle.env[['__handlers__']] <- h
 }
+
+signalCondition <- function(cond, call) {
+    frame <- 1L
+    cc <- class(cond)
+
+    while(.frame(frame)[[1L]] != globalenv()) {
+        e <- .frame(frame)[[1L]]
+        h <- e[['__handlers__']]
+        n <- names(h)
+        for(i in seq_len(length(n))) {
+            if(any(cc == n[[i]])) {
+                r <- list(cond, call, h[[i]])
+                promise('throw', call('return', r), e, .getenv(NULL))
+                throw
+            }
+        }
+        frame <- frame + 1L
+    }
+    NULL
+}
+

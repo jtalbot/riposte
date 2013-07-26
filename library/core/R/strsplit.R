@@ -2,7 +2,7 @@
 strsplit <- function(text, split, fixed, perl, useBytes)
 {
     splits <- gregexpr(split, text, FALSE, perl, fixed, useBytes)
-
+    
     # TODO: figure out how to vectorize this
     for(i in seq_len(length(text))) {
         s <- strip(splits[[i]])

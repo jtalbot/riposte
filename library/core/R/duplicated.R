@@ -10,8 +10,8 @@ duplicated <- function(x, incomparables, fromLast, nmax) {
     if(.isTRUE(fromLast))
         x <- .rev(x)
         
-    r <- (match(x, x, 0L, NULL) != seq_len(length(x))) &
-         (match(x, incomparables, 0L, NULL) == 0)
+    r <- (.match(x, x) != seq_len(length(x))) &
+         (.match(x, incomparables) == 0L)
 
     if(.isTRUE(fromLast))
         r <- .rev(r)
@@ -20,6 +20,7 @@ duplicated <- function(x, incomparables, fromLast, nmax) {
 }
 
 anyDuplicated <- function(x, incomparables, fromLast) {
-    any((match(x, x, 0L, NULL) != seq_len(length(x))) &
-        (match(x, incomparables, 0L, NULL) == 0))
+    any( (.match(x, x) != seq_len(length(x))) &
+         (.match(x, incomparables) == 0L))
 }
+

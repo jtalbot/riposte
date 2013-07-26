@@ -1,5 +1,5 @@
 
 file.path <- function(parts, fsep) {
-    paste(parts, fsep, fsep)
+    paste(parts, fsep, NULL)
 }
 

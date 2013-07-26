@@ -363,12 +363,12 @@ Integer Semijoin(T const& x, T const& table) {
         for(int64_t i = 0; i < x.length(); ++i) {
             typename std::map<typename T::Element, int64_t>::const_iterator 
                 j = index.find(x[i]);
-            r[i] = (j == index.end()) ? Integer::NAelement : (j->second+1);
+            r[i] = (j == index.end()) ? 0 : (j->second+1);
         }
     }
     else {
         for(int64_t i = 0; i < x.length(); ++i) {
-            r[i] = Integer::NAelement;
+            r[i] = 0;
         }
         std::map< typename T::Element, std::vector<int64_t> > queries;
         for(int64_t i = 0; i < x.length(); ++i) {
@@ -449,8 +449,24 @@ template<> void arg<Raw>(DCCallVM* vm, Raw const& t, int64_t i)
 template<> void arg<List>(DCCallVM* vm, List const& t, int64_t i)
 { dcArgPointer(vm, (void*) &(t[i % t.length()])); }
 
+template<class T> bool isna(T const& t, int64_t i) 
+{ return false; }
+template<> bool isna<Logical>(Logical const& t, int64_t i)
+{ return Logical::isNA(t[i % t.length()]); }
+template<> bool isna<Integer>(Integer const& t, int64_t i)
+{ return Integer::isNA(t[i % t.length()]); }
+template<> bool isna<Double>(Double const& t, int64_t i)
+{ return Double::isNA(t[i % t.length()]); }
+template<> bool isna<Character>(Character const& t, int64_t i)
+{ return Character::isNA(t[i % t.length()]); }
+template<> bool isna<Raw>(Raw const& t, int64_t i)
+{ return Raw::isNA(t[i % t.length()]); }
+template<> bool isna<List>(List const& t, int64_t i)
+{ return List::isNA(t[i % t.length()]); }
+
 struct Stream {
     virtual ~Stream() {}
+    virtual bool isNA(int64_t i) = 0;
     virtual void operator()(DCCallVM* vm, int64_t i) = 0;
 };
 
@@ -459,6 +475,10 @@ struct StreamImpl : public Stream {
     T const& v;
 
     StreamImpl(T const& v) : v(v) {}
+
+    bool isNA(int64_t i) {
+        return isna(v, i);
+    }
 
     void operator()(DCCallVM* vm, int64_t i) {
         arg(vm, v, i);
@@ -478,6 +498,7 @@ Stream* MakeStream(Value const& v) {
 struct Unstream {
     virtual ~Unstream() {}
     virtual Value const& value() const = 0;
+    virtual void dona(int64_t i) = 0;
     virtual void operator()(DCCallVM* vm, int64_t i) = 0;
 };
 
@@ -489,6 +510,10 @@ struct UnstreamImpl : public Unstream {
 
     void operator()(DCCallVM* vm, int64_t i) {
         dcArgPointer(vm, &v[i]);
+    }
+
+    void dona(int64_t i) {
+        v[i] = T::NAelement;
     }
     
     virtual Value const& value() const {
@@ -539,15 +564,28 @@ List Map(Thread& thread, String func, List args, Character result) {
         dcMode(vm, DC_CALL_C_DEFAULT);
 
         for(int64_t i = 0; i < length; ++i) {
-            dcReset(vm);
-            dcArgPointer(vm, (void*)&thread);
-            for(int64_t k = 0; k < u.size(); ++k) {
-                (*u[k])(vm, i);
-            }
+
+            bool isna = false;
             for(int64_t k = 0; k < s.size(); ++k) {
-                (*s[k])(vm, i);
+                isna = isna | (*s[k]).isNA(i);
             }
-            dcCallVoid(vm, f);
+
+            if(!isna) {
+                dcReset(vm);
+                dcArgPointer(vm, (void*)&thread);
+                for(int64_t k = 0; k < u.size(); ++k) {
+                    (*u[k])(vm, i);
+                }
+                for(int64_t k = 0; k < s.size(); ++k) {
+                    (*s[k])(vm, i);
+                }
+                dcCallVoid(vm, f);
+            }
+            else {
+                for(int64_t k = 0; k < u.size(); ++k) {
+                    (*u[k]).dona(i);
+                }
+            }
         }
         dcFree(vm);
         

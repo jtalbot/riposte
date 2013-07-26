@@ -142,21 +142,31 @@ static inline Instruction const* jmp_op(Thread& thread, Instruction const& inst)
 }
 
 static inline Instruction const* jc_op(Thread& thread, Instruction const& inst) {
-	DECODE(c);
+	DECODE(c); BIND(c);
 	if(c.isLogical1()) {
 		if(Logical::isTrue(c.c)) return &inst+inst.a;
 		else if(Logical::isFalse(c.c)) return &inst+inst.b;
-		else _error("NA where TRUE/FALSE needed"); 
+		else if((&inst+1)->bc != ByteCode::done) return &inst+1;
+        else _error("NA where TRUE/FALSE needed"); 
 	} else if(c.isInteger1()) {
-		if(Integer::isNA(c.i)) _error("NA where TRUE/FALSE needed");
-		else if(c.i != 0) return &inst + inst.a;
+		if(Integer::isNA(c.i)) {
+            if((&inst+1)->bc != ByteCode::done)
+                return &inst+1;
+            else
+                _error("NA where TRUE/FALSE needed");
+        }
+		else if(c.i != 0) return &inst+inst.a;
 		else return & inst+inst.b;
 	} else if(c.isDouble1()) {
-		if(Double::isNA(c.d)) _error("NA where TRUE/FALSE needed");
-		else if(c.d != 0) return &inst + inst.a;
+		if(Double::isNA(c.d)) {
+            if((&inst+1)->bc != ByteCode::done)
+                return &inst+1;
+            else
+                _error("NA where TRUE/FALSE needed");
+        }
+		else if(c.d != 0) return &inst+inst.a;
 		else return & inst+inst.b;
 	}
-	FORCE(c); BIND(c);
 	_error("Need single element logical in conditional jump");
 }
 
@@ -1044,6 +1054,19 @@ static inline Instruction const* getsub_op(Thread& thread, Instruction const& in
         SubsetSlow(thread, a, b, OUT(c)); 
         return &inst+1;
     }
+    else if(a.isEnvironment() && b.isCharacter()) {
+        REnvironment const& env = ((REnvironment const&)a);
+        Character const& i = ((Character const&)b);
+        List r(i.length());
+        for(int64_t k = 0; k < i.length(); ++k) {
+            if(env.environment()->has(i[k]))
+                r[k] = env.environment()->get(i[k]);
+            else
+                r[k] = Null::Singleton();
+        }
+        OUT(c) = r; 
+        return &inst+1;
+    }
 
     return GenericDispatch(thread, inst, Strings::bracket, a, b, inst.c); 
 }
@@ -1072,6 +1095,20 @@ static inline Instruction const* setsub_op(Thread& thread, Instruction const& in
             return &inst+1;
         }
 	}
+    if(c.isEnvironment() && b.isCharacter() && a.isVector()) {
+        REnvironment const& env = ((REnvironment const&)c);
+        Character const& i = ((Character const&)b);
+        List const& l = As<List>(thread, a);
+        int64_t len = std::max(l.length(), i.length());
+        if(l.length() == 0 || i.length() == 0) len = 0;
+        for(int64_t k = 0; k < len; ++k) {
+            if(i[k] != Strings::empty && !Character::isNA(i[k]))
+                env.environment()->insert(i[k % i.length()]) 
+                    = l[k % l.length()];
+        }
+        OUT(c) = env; 
+        return &inst+1;
+    }
 
 	return GenericDispatch(thread, inst, Strings::bracketAssign, c, b, a, inst.c); 
 }
@@ -1136,10 +1173,19 @@ static inline Instruction const* getattr_op(Thread& thread, Instruction const& i
 	if(a.isObject() && b.isCharacter1()) {
 		String name = ((Character const&)b)[0];
 		Object const& o = (Object const&)a;
-		if(o.hasAttributes() && o.attributes()->has(name))
-			OUT(c) = o.attributes()->get(name);
-		else
-			OUT(c) = Null::Singleton();
+        if(o.isEnvironment()) {
+            if(((REnvironment&)o).environment()->hasAttributes() &&
+               ((REnvironment&)o).environment()->getAttributes()->has(name))
+                OUT(c) = ((REnvironment&)o).environment()->getAttributes()->get(name);
+            else
+                OUT(c) = Null::Singleton();
+        }
+        else {
+            if(o.hasAttributes() && o.attributes()->has(name))
+                OUT(c) = o.attributes()->get(name);
+            else
+                OUT(c) = Null::Singleton();
+        }
 		return &inst+1;
 	}
 	_error("Invalid attrget operation");
@@ -1153,7 +1199,19 @@ static inline Instruction const* setattr_op(Thread& thread, Instruction const& i
 		String name = ((Character const&)b)[0];
 		Object o = (Object const&)c;
         if(a.isNull()) {
-            if(o.hasAttributes()
+            if(o.isEnvironment() &&
+                ((REnvironment&)o).environment()->hasAttributes() &&
+                ((REnvironment&)o).environment()->getAttributes()->has(name)) {
+                if(((REnvironment&)o).environment()->getAttributes()->Size() > 1) {
+                    Dictionary* d = ((REnvironment&)o).environment()->getAttributes()->clone(0);
+                    d->remove(name);
+		            ((REnvironment&)o).environment()->setAttributes(d);
+                }
+                else {
+		            ((REnvironment&)o).environment()->setAttributes(NULL);
+                }
+            }
+            else if(o.hasAttributes()
                && o.attributes()->has(name)) {
                 if(o.attributes()->Size() > 1) {
                     Dictionary* d = o.attributes()->clone(0);
@@ -1166,11 +1224,19 @@ static inline Instruction const* setattr_op(Thread& thread, Instruction const& i
             }
         }
         else {
-		    Dictionary* d = o.hasAttributes()
-                    	? o.attributes()->clone(1)
-                    	: new Dictionary(1);
-		    d->insert(name) = a;
-		    o.attributes(d);
+            if(o.isEnvironment()) {
+                Dictionary* d = ((REnvironment&)o).environment()->getAttributes();
+                d = d ? d->clone(1) : new Dictionary(1);
+                d->insert(name) = a;
+                ((REnvironment&)o).environment()->setAttributes(d);
+            }
+            else {
+                Dictionary* d = o.hasAttributes()
+                            ? o.attributes()->clone(1)
+                            : new Dictionary(1);
+                d->insert(name) = a;
+                o.attributes(d);
+            }
         }
 		OUT(c) = o;
 		return &inst+1;
@@ -1182,22 +1248,27 @@ static inline Instruction const* attributes_op(Thread& thread, Instruction const
     DECODE(a); FORCE(a);
     if(a.isObject()) {
         Object o = (Object const&)a;
-        if(!o.hasAttributes() || o.attributes()->Size() == 0) {
+
+        Dictionary* d = o.isEnvironment()
+            ? ((REnvironment&)o).environment()->getAttributes()
+            : o.attributes();
+
+        if(d == NULL || d->Size() == 0) {
             OUT(c) = Null::Singleton();
         }
         else {
-            Character n(o.attributes()->Size());
-            List v(o.attributes()->Size());
+            Character n(d->Size());
+            List v(d->Size());
             int64_t j = 0;
-            for(Dictionary::const_iterator i = o.attributes()->begin();
-                    i != o.attributes()->end(); 
+            for(Dictionary::const_iterator i = d->begin();
+                    i != d->end(); 
                     ++i, ++j) {
                 n[j] = i.string();
                 v[j] = i.value();
             }
-			Dictionary* d = new Dictionary(1);
-			d->insert(Strings::names) = n;
-			((Object&)v).attributes(d);
+			Dictionary* r = new Dictionary(1);
+			r->insert(Strings::names) = n;
+			v.attributes(r);
             OUT(c) = v;
         }
     }
@@ -1564,13 +1635,14 @@ Value Thread::eval(Prototype const* prototype, Environment* environment, int64_t
 		    _error("Stack was the wrong size at the end of eval");
 		return frame.registers[resultSlot];
 	} catch(...) {
-        if(!frame.isPromise && frame.environment->getContext()) {
+/*        if(!frame.isPromise && frame.environment->getContext()) {
             std::cout << stack.size() << ": " << stringify(frame.environment->getContext()->call);
         }
         for(int64_t i = stack.size()-1; i > std::max(stackSize, 1ULL); --i) {
             if(!stack[i].isPromise && stack[i].environment->getContext())
                 std::cout << i << ": " << stringify(stack[i].environment->getContext()->call);
         }
+  */      
         stack.resize(stackSize);
         frame = oldFrame;
 	    throw;
