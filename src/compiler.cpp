@@ -126,6 +126,11 @@ Compiler::Operand Compiler::compileConstant(Value const& expr, Prototype* code) 
 
 static int64_t isDotDot(String s) {
 	if(s != 0 && s[0] == '.' && s[1] == '.') {
+
+        // catch ...
+        if(s[2] == '.' && s[3] == 0)
+            return 0;
+
 		int64_t v = 0;
 		int64_t i = 2;
 		// maximum 64-bit integer has 19 digits, but really who's going to pass
@@ -274,7 +279,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		return compileFunctionCall(compile(call[0], code), call, names, code);
 
 	String func = SymbolStr(call[0]);
-	// list is the only built in function that handles ... or named parameters
+	// list and missing are the only built in function that 
+    // handles ... or named parameters
 	// we only handle the list(...) case through an op for now
 	if(func == Strings::list && call.length() == 2 
 		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
@@ -284,6 +290,31 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand storage = allocRegister();
 		kill(storage); kill(counter);
 		emit(ByteCode::dots, counter, storage, result); 
+		return result;
+	}
+	else if(func == Strings::missing)
+	{
+		if(call.length() != 2) _error("missing requires one argument");
+
+        Operand s;
+        // lots of special cases to handle
+        if(call[1].isCharacter() && ((Character const&)call[1]).length() == 1) {
+            int64_t dd = isDotDot(call[1].s);
+            s = dd > 0
+                ? compileConstant(Integer::c(dd), code)
+                : dd == 0
+                    ? compileConstant(Null::Singleton(), code)
+                    : compileConstant(call[1], code);
+        }
+        else if(isCall(call[1]) 
+            && ((List const&)call[1]).length() == 2
+            && ((List const&)call[1])[0].s == Strings::dots) {
+            s = compile(((List const&)call[1])[1], code);
+        }
+		else _error("wrong parameter to missing");
+
+		Operand result = allocRegister();
+		emit(ByteCode::missing, s, 0, result); 
 		return result;
 	}
 
@@ -967,19 +998,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand result = allocRegister();
 		emit(op0(func), 0, 0, result);
 		return result; 
-	}
-	else if(func == Strings::missing)
-	{
-		if(call.length() != 2) _error("missing requires one argument");
-		if(!isSymbol(call[1]) && !call[1].isCharacter1()) _error("wrong parameter to missing");
-	    String sym = SymbolStr(call[1]);
-        int64_t dd = isDotDot(sym);
-        Operand s = dd > 0
-            ? compileConstant(Integer::c(dd), code)
-            : compileConstant(call[1], code);
-		Operand result = allocRegister();
-		emit(ByteCode::missing, s, 0, result); 
-		return result;
 	}
     else if(func == Strings::promise)
     {

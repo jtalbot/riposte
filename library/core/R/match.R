@@ -17,9 +17,9 @@
     else if(is.logical(x) || is.logical(table))
         .semijoin(as.logical(x), as.logical(table))
     else if(is.null(x))
-        vector('integer',0)
+        vector('integer',0L)
     else if(is.null(table))
-        rep(NA_integer_, length(x))
+        vector(0L, length(x))
     else
         .stop("'match' requires vector arguments")
 }

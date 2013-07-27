@@ -1,4 +1,31 @@
 
+matrix <- function(data, nrow, ncol, byrow, dimnames, missing.nrow, missing.ncol) {
+	if(missing.nrow && missing.ncol) {
+        ncol <- 1
+        nrow <- length(data)
+    }
+    else if(missing.nrow) {
+        nrow <- ceiling(length(data)/ncol)
+    }
+    else if(missing.ncol) {
+        ncol <- ceiling(length(data)/nrow)
+    }
+
+    if(length(data) < nrow*ncol)
+		data <- rep_len(data, nrow*ncol)
+
+    if(byrow)
+		data <- data[nrow*(index(ncol,1L,length(data))-1L)+
+                        index(nrow,ncol,length(data))]
+
+    dim(data) <- c(nrow, ncol)
+    dimnames(data) <- dimnames
+    data    
+}
+
+is.matrix <- function(x)
+    length(attr(x, 'dim')) == 2L
+
 `%*%` <- function(x,y) {
 
 	xd <- dim(x)
@@ -29,10 +56,6 @@
 		dim(r) <- c(xd[[1L]],yd[[2L]])
 		return(r)
 	}
-}
-
-`%o%` <- function(x,y) {
-	outer(x,y,`*`)
 }
 
 `+.matrix` <- function(x,y) {
@@ -86,61 +109,6 @@
 `sqrt.matrix` <- function(x) {
 	xd <- dim(x)
 	matrix(sqrt(strip(x)), xd[[1L]], xd[[2L]])
-}
-
-matrix <- function(data = NA, nrow = 1, ncol = 1) {
-	if(length(data) < nrow*ncol)
-		data <- rep(data, length.out=nrow*ncol)
-	dim(data) <- c(nrow, ncol)
-	class(data) <- 'matrix'
-	data
-}
-
-outer <- function (X, Y, FUN = "*", ...) 
-{
-    if (is.array(X)) {
-        dX <- dim(X)
-        nx <- dimnames(X)
-        no.nx <- is.null(nx)
-    }
-    else {
-        dX <- length(X)
-        no.nx <- is.null(names(X))
-        if (!no.nx) 
-            nx <- list(names(X))
-    }
-    if (is.array(Y)) {
-        dY <- dim(Y)
-        ny <- dimnames(Y)
-        no.ny <- is.null(ny)
-    }
-    else {
-        dY <- length(Y)
-        no.ny <- is.null(names(Y))
-        if (!no.ny) 
-            ny <- list(names(Y))
-    }
-    if (is.character(FUN) && FUN == "*") {
-        robj <- as.vector(X) %*% t(as.vector(Y))
-        dim(robj) <- c(dX, dY)
-	class(robj) <- 'matrix'
-    }
-    else {
-        #FUN <- match.fun(FUN)
-        Y <- rep.int(Y, rep.int(length(X), length(Y)))
-        if (length(X)) 
-            X <- rep(X, times = ceiling(length(Y)/length(X)))
-        robj <- FUN(X, Y, ...)
-        dim(robj) <- c(dX, dY)
-	class(robj) <- 'matrix'
-    }
-    #if (no.nx) 
-    #    nx <- vector("list", length(dX))
-    #else if (no.ny) 
-    #    ny <- vector("list", length(dY))
-    #if (!(no.nx && no.ny)) 
-    #    dimnames(robj) <- c(nx, ny)
-    robj
 }
 
 upper.tri <- function(x, diag=FALSE) {

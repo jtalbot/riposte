@@ -5,9 +5,7 @@
         .stop("names(x) must be a character vector of the same length as x")
 
     e <- .env_new(emptyenv())
-    for(i in seq_len(length(l))) {
-        e[[n[[i]]]] <- l[[i]]
-    }
+    e[n] <- strip(l)
     e
 }
 

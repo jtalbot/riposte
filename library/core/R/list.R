@@ -4,10 +4,7 @@ list <- function(...) list(...)
 # .Internal
 env2list <- function(x, all.names) {
     names <- .env_names(x)
-    r <- list()
-    for(n in names) {
-        r[[length(r)+1L]] <- x[[n]]
-    }
+    r <- x[names]
     attr(r, 'names') <- names
     r
 }

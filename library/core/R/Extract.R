@@ -49,10 +49,11 @@
 
 `[.matrix` <- `[.array` <- function(x, ..., drop = TRUE)
 {
+    # TODO: make this whole thing more efficient
     if(...() == 0L)
         return(x)
 
-    d <- dim(x)
+    d <- attr(x, 'dim')
     
     if((length(d) != 1L || identical(drop,TRUE)) && ...() == 1L)
         return( `[.default`(x,..1) )
@@ -60,43 +61,56 @@
     if(length(d) != ...())
         .stop("incorrect number of dimensions")
 
-    idx <- list(...)
-
-    idx <- lapply(seq_len(length(d)), function(i) {
-            id <- strip(idx[[i]])
+    idx <- list()
+    for(i in seq_len(...())) {
+        if(missing(...(i))) {
+            idx[[i]] <- seq_len(d[[i]])
+        }
+        else { 
+            id <- strip(...(i))
 
             # TODO: needs to support dropping indicies too 
             if(is.na(id))
-                seq_len(d[[i]])
+                idx[[i]] <- rep_len(NA, d[[i]])
             else if(is.null(id))
-                vector('integer',0)
+                idx[[i]] <- vector('integer',0)
             else if(is.logical(id))
-                which(id)
+                idx[[i]] <- which(id)
             else if(is.character(id)) {
                 if(is.null(attr(x, 'dimnames')))
                     .stop("no 'dimnames' attribute for array")
                 r <- .semijoin(id, as.character(attr(x,'dimnames'))[[i]])
                 if(any(r==0L))
                     .stop("subscript out of bounds")
-                r
+                idx[[i]] <- r
             }
             else if(is.integer(id) || is.double(id))
-                as.integer(id)
+                idx[[i]] <- as.integer(id)
             else
                 .stop(sprintf("invalid subscript type '%s'", class(id)))
-        })
+        }
+    }
 
-    # TODO: this math is all wrong
-    indices <- idx[[1]]
+    mult <- 1
+    indices <- idx[[1]]*mult
     for(i in seq_len(length(d)-1L)) {
-        indices <- indices + (idx[[i+1L]]-1L)*d[[i]]
+        mult <- mult * d[[i]]
+        indices <- rep.int(indices, length(idx[[i+1L]]))
+        indices <- indices + (idx[[i+1L]]-1L)*mult
     }
 
     r <- strip(x)[indices]
     attr(r,'dim') <- as.integer(lapply(idx, function(x) length(x)))
-    r
 
-    # TODO: need to carry over names
+    dn <- dimnames.default(x)
+    if(!is.null(dn)) {
+        rn <- list()
+        for(i in seq_len(length(dn))) {
+            rn[[i]] <- dn[[i]][idx[[i]]]
+        }
+        dimnames(r) <- rn
+    }
+    r
 }
 
 `[[` <- function(x, ..., exact = TRUE) {

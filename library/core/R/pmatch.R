@@ -1,39 +1,35 @@
 
-.pmatch <- function(x, table, nomatch, ambiguous, duplicates.ok) {
-    
-    # find complete matches
-    r <- match(x, table, NA_integer_, '')
-    complete <- rep(FALSE, length(table)) 
-    complete[r] <- TRUE
+pmatch <- function(x, table, nomatch, duplicates.ok)
+{
+    # TODO: clean this up. Can it share code with match.call?
 
-    # find partial matches 
-    partial <- rep(FALSE, length(table))
-     
-    for(i in seq_len(length(x))) {
-        if(is.na(r[[i]]) && x[[i]] != '') {
-            m <- (substr(table,1L,nchar(x[[i]])) == x[[i]])
-            if(!duplicates.ok)
+    nomatch <- as.integer(nomatch)
+
+    if(duplicates.ok) {
+        r <- match(x, table, 0L, '')
+        for(i in seq_len(length(x))) {
+            m <- which(substr(table,1L,nchar(x[[i]])) == x[[i]])
+            if(length(m) > 0L)
+                r[[i]] <- m[[1L]]
+        }
+        r[i==0L] <- nomatch
+    }
+    else {
+        r <- match(x, table, 0L, '')
+        complete <- .match(seq_len(length(table)), x) > 0L
+
+        for(i in seq_len(length(x))) {
+            if(r[[i]] == 0L && x[[i]] != '') {
+                m <- (substr(table,1L,nchar(x[[i]])) == x[[i]])
                 m <- m & !complete
 
-            if(sum(m) == 0L)
-                r[[i]] <- as.integer(nomatch)
-            else if(sum(m) > 1L)
-                r[[i]] <- as.integer(ambiguous)
-            else {
-                j <- which(m)
-                if(duplicates.ok || partial[[j]] == FALSE) {
-                    partial[[j]] <- TRUE
-                    r[[i]] <- j
-                }
-                else {
-                    r[r==j] <- as.integer(ambiguous)
-                }
+                if(sum(m) == 1L)
+                    r[[i]] <- which(m)[[1L]]
+                else
+                    r[[i]] <- nomatch
             }
         }
     }
-}
-
-pmatch <- function(x, table, nomatch, duplicates.ok) {
-    .pmatch(x, table, nomatch, nomatch, duplicates.ok)
+    r
 }
 

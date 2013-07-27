@@ -325,11 +325,25 @@ primitives <- .characters(
     # is.function.R
     'is.function',
 
+    # is.language.R
+    'is.language',
+
     # is.na.R
     'is.na',
 
     # is.object.R
     'is.object',
+
+    # is.raw.R
+    'is.raw',
+    'as.raw',
+
+    # is.recursive.R
+    'is.atomic',
+    'is.recursive',
+
+    # is.single.R
+    'is.single',
 
     # length.R
     'length',
@@ -363,6 +377,9 @@ primitives <- .characters(
     # logical.R
     'as.logical',
     'is.logical',
+
+    # matrix.R
+    'is.matrix',
 
     # max.R
     'max',
@@ -467,6 +484,9 @@ internals <- .characters(
     # R.Version.R
     'Version',
 
+    # Recall.R
+    'Recall',
+
     # Rhome.R
     'R.home',
 
@@ -506,6 +526,9 @@ internals <- .characters(
 
     # cbind.R
     'cbind',
+
+    # charmatch.R
+    'charmatch',
 
     # class.R
     'inherits',
@@ -608,6 +631,9 @@ internals <- .characters(
     # match.call.R
     'match.call',
 
+    # matrix.R
+    'matrix',
+
     # mean.R
     'mean',
 
@@ -636,6 +662,9 @@ internals <- .characters(
 
     # path.expand.R
     'path.expand',
+
+    # pmatch.R
+    'pmatch',
 
     # print.R
     'print',
@@ -669,6 +698,7 @@ internals <- .characters(
     # stop.R
     'stop',
     'geterrmessage',
+    'seterrmessage',
 
     # strptime.R
     'strptime',
@@ -712,7 +742,11 @@ internals <- .characters(
     'warning',
 
     # which.R
-    'which'
+    'which',
+    
+    # which.min.R
+    'which.min',
+    'which.max'
     )
 
 setRegisteredNamespace('core',

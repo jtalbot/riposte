@@ -807,18 +807,33 @@ static inline Instruction const* dots_op(Thread& thread, Instruction const& inst
 }
 
 static inline Instruction const* missing_op(Thread& thread, Instruction const& inst) {
-	Value const& c = CONSTANT(inst.a);
+    DECODE(a);
     bool missing = true;
-    if( c.isCharacter() ) {
-        Value const& v = thread.frame.environment->get(c.s);
+    if( a.isCharacter() && ((Character const&)a).length() == 1 ) {
+        Value const& v = thread.frame.environment->get(a.s);
 	    missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
     }
-    else {
+    else if( a.isInteger() && ((Integer const&)a).length() == 1 ) {
         if(thread.frame.environment->getContext()
-            && (c.i-1) < thread.frame.environment->getContext()->dots.size()) {
-            Value const& v = thread.frame.environment->getContext()->dots[c.i-1].v;
+            && (a.i-1) < thread.frame.environment->getContext()->dots.size()) {
+            Value const& v = thread.frame.environment->getContext()->dots[a.i-1].v;
 	        missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
         }
+    }
+    else if( a.isDouble() && ((Double const&)a).length() == 1 ) {
+        if(thread.frame.environment->getContext()
+            && (int64_t)(a.d-1) < thread.frame.environment->getContext()->dots.size()) {
+            Value const& v = thread.frame.environment->getContext()->dots[(int64_t)a.d-1].v;
+	        missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
+        }
+    }
+    else if( a.isNull() ) {
+        if(thread.frame.environment->getContext()) {
+            missing = thread.frame.environment->getContext()->dots.size() == 0;
+        }
+    }
+    else {
+        _error("Invalid argument to missing");
     }
 	Logical::InitScalar(OUT(c), 
         missing ? Logical::TrueElement : Logical::FalseElement);
@@ -1635,14 +1650,14 @@ Value Thread::eval(Prototype const* prototype, Environment* environment, int64_t
 		    _error("Stack was the wrong size at the end of eval");
 		return frame.registers[resultSlot];
 	} catch(...) {
-/*        if(!frame.isPromise && frame.environment->getContext()) {
+        /*if(!frame.isPromise && frame.environment->getContext()) {
             std::cout << stack.size() << ": " << stringify(frame.environment->getContext()->call);
         }
         for(int64_t i = stack.size()-1; i > std::max(stackSize, 1ULL); --i) {
             if(!stack[i].isPromise && stack[i].environment->getContext())
                 std::cout << i << ": " << stringify(stack[i].environment->getContext()->call);
-        }
-  */      
+        }*/
+        
         stack.resize(stackSize);
         frame = oldFrame;
 	    throw;

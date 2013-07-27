@@ -1,13 +1,14 @@
 
 stop <- NULL
 geterrmessage <- NULL
+seterrmessage <- NULL
 
 (function() {
 
     errmessage <- ""
 
     stop <<- function(include.call, message) {
-        errmessage <- .pconcat(message, '\n')
+        errmessage <<- .pconcat(message, '\n')
 
         if(include.call)
             message <- sprintf("Error in %s : %s", 
@@ -36,5 +37,8 @@ geterrmessage <- NULL
         errmessage
     }
 
+    seterrmessage <<- function(msg) {
+        errmessage <<- msg
+    }
 })()
 
