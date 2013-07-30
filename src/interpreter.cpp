@@ -78,7 +78,6 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
     
     Value const& onexit = thread.frame.environment->get(Strings::__onexit__);
     if(onexit.isObject()) {
-        // TODO: yuck, get rid of the onexittmp variable
         Value& v = thread.frame.environment->insert(Strings::__onexittmp__);
         Promise::Init(v,
             thread.frame.environment,
@@ -92,7 +91,8 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
     
 	// We can free this environment for reuse
 	// as long as we don't return a closure...
-	// TODO: but also can't if an assignment to an out of scope variable occurs (<<-, assign) with a value of a closure!
+	// but also can't if an assignment to an 
+    // out of scope variable occurs (<<-, assign) with a value of a closure!
 	if(!(a.isClosure() || a.isEnvironment() || a.isList())) {
 		thread.traces.KillEnvironment(thread.frame.environment);
 	}
@@ -1023,7 +1023,6 @@ static inline Instruction const* set_op(Thread& thread, Instruction const& inst)
         else if(c.isClosure() && b.isCharacter1()) {
             //Closure const& f = (Closure const&)c;
 	        //String s = ((Character const&)b).s;
-            // TODO: implement assignment to function members
             _error("Assignment to function members is not yet implemented");
         }
     }
@@ -1321,31 +1320,9 @@ static inline Instruction const* as_op(Thread& thread, Instruction const& inst) 
     else
         _error("as not yet defined for this type");
 
-    // TODO: extend to work on e.g. environment->list and list->environment, etc.
     // Add support for futures
 	return &inst+1; 
 }
-
-/*static inline Instruction const* env_ls_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
-
-    if(!a.isEnvironment())
-        _error("invalid 'envir' argument");
-
-    Environment const* env = ((REnvironment&)a).environment();
-	
-    Character result(env->Size());
-
-    Environment::const_iterator i = env->begin();
-    uint64_t j = 0;
-    for(; i != env->end(); ++i, ++j) {
-        result[j] = i.string();
-    }
-
-    OUT(c) = result;
-
-    return &inst+1;
-}*/
 
 // ENVIRONMENT_BYTECODES
 
@@ -1396,7 +1373,6 @@ static inline Instruction const* env_exists_op(Thread& thread, Instruction const
     return &inst+1;
 }
 
-// TODO: appropriately generalize
 static inline Instruction const* env_remove_op(Thread& thread, Instruction const& inst) {
     DECODE(a); FORCE(a); BIND(a);
     DECODE(b); FORCE(b); BIND(b);
@@ -1502,7 +1478,6 @@ static inline Instruction const* vector_op(Thread& thread, Instruction const& in
 	Type::Enum type = string2Type( stype );
 	int64_t l = As<Integer>(thread, b)[0];
 	
-	// TODO: replace with isTraceable...
 	if(thread.state.epeeEnabled 
 		&& (type == Type::Double || type == Type::Integer || type == Type::Logical)
 		&& l >= TRACE_VECTOR_WIDTH) {

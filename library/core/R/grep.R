@@ -6,8 +6,6 @@
     if(length(pattern)>1L)
         .stop("argument 'pattern' has length > 1")
 
-    # TODO: respect useBytes
-    
     if(.isTRUE(perl)) {
         .stop("NYI: perl regex")
     }
@@ -52,8 +50,6 @@ grep <- function(pattern, x, ignore.case, value, perl, fixed, useBytes, invert)
     if(length(pattern)>1L)
         .stop("argument 'pattern' has length > 1")
 
-    # TODO: respect useBytes
-    
     if(.isTRUE(perl)) {
         .stop("NYI: perl regex")
     }
@@ -85,8 +81,6 @@ regexpr <- function(pattern, text, ignore.case, perl, fixed, useBytes)
     if(length(pattern)>1L)
         .stop("argument 'pattern' has length > 1")
 
-    # TODO: respect useBytes
-    
     if(.isTRUE(perl)) {
         .stop("NYI: perl regex")
     }
@@ -107,7 +101,6 @@ gregexpr <- function(pattern, text, ignore.case, perl, fixed, useBytes)
     m <- .gregex(pattern, text, ignore.case, perl, fixed, useBytes)
     r <- m[[1]]
 
-    # TODO: replace with an lapply
     for(i in seq_len(length(r))) {
         attr(r[[i]], 'match.length') <- m[[2]][[i]]
         attr(r[[i]], 'useBytes') <- useBytes
@@ -118,7 +111,6 @@ gregexpr <- function(pattern, text, ignore.case, perl, fixed, useBytes)
 
 sub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
 {
-    # TODO: sub needs to be able to use submatches
     m <- regexpr(pattern, text, ignore.case, perl, fixed, useBytes)
     
     start <- strip(m)

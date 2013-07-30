@@ -1,6 +1,4 @@
 
-# TODO: support localization
-
 gettext <- function(domain, args) {
     args
 }

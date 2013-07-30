@@ -1,7 +1,6 @@
 
 
 .format.attributes <- function(x, prefix='', show.names=FALSE) {
-    # TODO: nested attributes need to use the prefix
     a <- attributes(x)
     if(!is.null(a)) {
         n <- names(a)
@@ -104,7 +103,6 @@ format.call <- function(x, ...)
         "NULL"
     }
     else {
-        # TODO: vectorize
         e <- x[[1]]
         func <- format(e)
         n <- names(x)

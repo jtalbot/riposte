@@ -58,7 +58,6 @@ summary.connection <- function(object) UseMethod('.summary', object)
 
 
 .summary.file <- function(con) {
-    # TODO: populate the rest of the attributes
     description <- .External(file_description(attr(con, 'conn_id')))
     r <- list(description, class(con)[[1]], '', '', '', '', '')
     names(r) <- c('description', 'class', 'mode', 'text', 'opened', 'can read', 'can write')

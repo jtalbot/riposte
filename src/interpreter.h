@@ -39,7 +39,6 @@ struct Instruction {
 	}
 };
 
-// TODO: Make this use a good concurrent map implementation 
 class StringTable {
 	std::map<std::string, String> stringTable;
 	Lock lock;

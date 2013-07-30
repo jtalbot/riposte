@@ -9,7 +9,6 @@ log10.default <- function(x) log(x, 10)
 log2 <- function(x) UseGroupMethod('log2', 'Math', x)
 log2.default <- function(x) log(x, 2)
 
-# TODO: compute in a numerically stable manner
 log1p <- function(x) UseGroupMethod('log1p', 'Math', x)
 log1p.default <- function(x) log(1+x)
 
@@ -17,7 +16,6 @@ log1p.default <- function(x) log(1+x)
 exp <- function(x) UseGroupMethod('exp', 'Math', x)
 exp.default <- function(x) .ArithUnary2('exp_map', x)
 
-# TODO: compute in a numerically stable manner
 expm1 <- function(x) UseGroupMethod('expm1', 'Math', x)
 expm1.default <- function(x) exp(x)-1
 

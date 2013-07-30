@@ -55,7 +55,6 @@ std::string complexToStr( std::complex<double> n )
 int64_t strToInt( std::string const& s) {
     char* end;
 	int64_t r = strtol( s.c_str(), &end, 0 );
-    // TODO: should catch overflow from strtol
     if( *s.c_str() == '\0' || *end != '\0' )
         throw std::domain_error("strToInt");
 	return r;

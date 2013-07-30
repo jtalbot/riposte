@@ -1,6 +1,5 @@
 
 deparse <- function(expr, width.cutoff, backtick, control, nlines) {
-    # TODO: support all the arguments
     .deparse(expr)
 }
 
@@ -8,7 +7,6 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
 
 
 .format.attributes <- function(x, prefix='', show.names=FALSE) {
-    # TODO: nested attributes need to use the prefix
     a <- attributes(x)
     if(!is.null(a)) {
         n <- names(a)
@@ -218,7 +216,6 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
         "NULL"
     }
     else {
-        # TODO: vectorize
         e <- x[[1]]
         func <- .deparse(e)
         n <- names(x)

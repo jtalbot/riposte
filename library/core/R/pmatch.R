@@ -1,8 +1,6 @@
 
 pmatch <- function(x, table, nomatch, duplicates.ok)
 {
-    # TODO: clean this up. Can it share code with match.call?
-
     nomatch <- as.integer(nomatch)
 
     if(duplicates.ok) {

@@ -100,8 +100,6 @@ unlist.default <- function(x, recursive, use.names) {
 }
 
 islistfactor <- function(x, recursive) {
-    # TODO: what is this internal function used in base::unlist?
-    # I can't seem to get it to return TRUE for any factor
     FALSE
 }
 

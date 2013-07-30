@@ -781,7 +781,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		Operand head_condition = compile(call[1], code);
 		emit(ByteCode::jc, 2, 0, kill(head_condition));
-        // TODO: replace with a real error bytecode
         emit(ByteCode::done, (int64_t)0, (int64_t)0, (int64_t)0);
 		loopDepth++;
 		
@@ -793,7 +792,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		int64_t endbody = ir.size();
 		
 		emit(ByteCode::jc, beginbody-endbody, 2, kill(tail_condition));
-        // TODO: replace with a real error bytecode
         emit(ByteCode::done, (int64_t)0, (int64_t)0, (int64_t)0);
 		resolveLoopExits(beginbody, endbody, tail, endbody+2);
 		ir[beginbody-2].b = endbody-beginbody+4;
@@ -842,7 +840,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		}
         else {
             resultNA = Operand();
-            // TODO: hacky, replace with a real error bytecode
             emit(ByteCode::done, (int64_t)0, (int64_t)0, (int64_t)0);
         }
         kill(resultNA);

@@ -49,7 +49,6 @@
 
 `[.matrix` <- `[.array` <- function(x, ..., drop = TRUE)
 {
-    # TODO: make this whole thing more efficient
     if(...() == 0L)
         return(x)
 
@@ -69,7 +68,6 @@
         else { 
             id <- strip(...(i))
 
-            # TODO: needs to support dropping indicies too 
             if(is.na(id))
                 idx[[i]] <- rep_len(NA, d[[i]])
             else if(is.null(id))

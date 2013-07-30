@@ -361,7 +361,6 @@ template<class T>
 Integer Semijoin(T const& x, T const& table) {
     Integer r(x.length());
 
-    // TODO: turn this into a hash...
     if(table.length() <= x.length()) {
         std::map<typename T::Element, int64_t> index;
         for(int64_t i = table.length()-1; i >= 0; --i) {

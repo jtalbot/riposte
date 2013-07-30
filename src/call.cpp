@@ -548,7 +548,6 @@ BINARY_BYTECODES(SLOW_DISPATCH_DEFN)
 #undef SLOW_DISPATCH_DEFN
 
 Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const& a, Value const& b, Value& c) {
- 	// TODO: should attempt to record this instruction
     BIND(a); BIND(b);
     
     if(!((Object const&)a).hasAttributes()) {

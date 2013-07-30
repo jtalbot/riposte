@@ -46,7 +46,6 @@
         fn <- .find(n, callenv, "closure")
 
         if(!is.null(fn)) {
-            # TODO: clean this up...
             ncall <- attr(call, 'names')
             call <- strip(call) 
             
@@ -119,7 +118,6 @@ NextMethod <- function(generic, object, ...) {
     if(missing(generic))
         generic <- parent.frame(1L)[['.Generic']]
 
-    # TODO: what does setting object do?
     formals <- names(sys.function(sys.parent(1))[['formals']])
 
     call <- list(as.name(generic))

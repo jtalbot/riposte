@@ -1,8 +1,6 @@
 
 .match.call <- function(x, table) {
     
-    # TODO: clean this up!
-
     # find complete matches
     r <- match(x, table, 0L, '')
     complete <- rep(FALSE, length(table))
@@ -59,8 +57,6 @@
 
 match.call <- function(definition, call, expand.dots) {
   
-    # TODO: there's got to be a way to make this all more elegant
-
     if(is.null(definition))
         definition <- .frame(2L)[[3L]]
 

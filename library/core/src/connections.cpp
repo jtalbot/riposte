@@ -91,8 +91,6 @@ Value stderr_cat(Thread& thread, Value const* args) {
 
 extern "C"
 Value file_readLines(Thread& thread, Value const* args) {
-    // TODO: implement the other readLines arguments
-    // TODO: stream this
     Externalptr const& p = (Externalptr const&)args[0];
     Integer const& n = (Integer const&)args[1];
     FileConnection* fc = (FileConnection*)p.ptr();
@@ -123,8 +121,6 @@ Value file_description(Thread& thread, Value const* args) {
 
 extern "C"
 Value terminal_readLines(Thread& thread, Value const* args) {
-    // TODO: implement the other readLines arguments
-    // TODO: stream this
     Integer const& n = (Integer const&)args[1];
     int64_t maxLines = n[0];
     

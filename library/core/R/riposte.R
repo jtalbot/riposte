@@ -29,7 +29,6 @@ library <- function(.) {
     e <- .env_new(getRegisteredNamespace('core'))
     setRegisteredNamespace(.pconcat('',.), e)
 
-    # TODO: a better way to handle this case?
     if(identical(.,'base')) {
         e[['.BaseNamespaceEnv']] <- e
     }

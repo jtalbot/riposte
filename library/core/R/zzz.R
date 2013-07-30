@@ -26,7 +26,6 @@ getNamespaceRegistry <- NULL
     }
 })()
 
-# TODO: is there a better place to set this?
 (function() {
     g <- globalenv()
     attr(g, 'name') <- 'R_GlobalEnv'
@@ -37,7 +36,6 @@ getNamespaceRegistry <- NULL
 
 
 
-# TODO: actually populate this correctly
 .Platform <- list(
     OS.type="unix", 
     file.sep="/", 
@@ -220,7 +218,7 @@ primitives <- .characters(
     'attributes',
     'attributes<-',
 
-    # base-internal.R (TODO: hide all of these)
+    # base-internal.R
     '.subset',
     '.subset2',
     '.isMethodsDispatchOn',

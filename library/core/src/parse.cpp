@@ -12,9 +12,8 @@ extern "C"
 Value parse(Thread& thread, Value const* args)
 {
     Character const& c = (Character const&)args[0];
-    Integer const& n = (Integer const&)args[1];
+    //Integer const& n = (Integer const&)args[1];
     Character const& name = (Character const&)args[2];
-    // TODO: support n
 
     Value result;
     parse(thread.state, name[0], c[0], strlen(c[0]), true, result);
