@@ -225,6 +225,9 @@ primitives <- .characters(
     '.subset2',
     '.isMethodsDispatchOn',
 
+    # browser.R
+    'browser',
+
     # c.R
     'c',
     'c.default',
@@ -436,7 +439,9 @@ primitives <- .characters(
     'rep',
     'rep.default',
 
-    # riposte.R 
+    # riposte.R
+    'repl',
+    'warnings', 
     'trace.config',
     'library',
     '::',
@@ -500,6 +505,9 @@ internals <- .characters(
     # Sys.glob.R
     'Sys.glob',
 
+    # args.R
+    'args',
+
     # array.R
     'array',
 
@@ -521,6 +529,11 @@ internals <- .characters(
     'basename',
     'dirname',
 
+    # browser.R
+    'browserText',
+    'browserCondition',
+    'browserSetDebug',
+
     # cat.R
     'cat',
 
@@ -535,6 +548,10 @@ internals <- .characters(
 
     # commandArgs.R
     'commandArgs',
+
+    # comment.R
+    'comment',
+    'comment<-',
 
     # conditions.R
     '.addCondHands',
@@ -554,6 +571,9 @@ internals <- .characters(
 
     # deparse.R
     'deparse',
+
+    # do.call.R
+    'do.call',
 
     # duplicated.R
     'duplicated',
@@ -656,6 +676,9 @@ internals <- .characters(
     # options.R
     'options',
 
+    # parse
+    'parse',
+
     # paste.R
     'paste',
     'paste0',
@@ -740,6 +763,7 @@ internals <- .characters(
 
     # warning.R
     'warning',
+    'printDeferredWarnings',
 
     # which.R
     'which',

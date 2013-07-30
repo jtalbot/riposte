@@ -123,4 +123,29 @@ static inline uint32_t numSetBits(uint32_t i) {
 	return (((i + (i >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
 }
 
+static inline std::string escape(std::string const& s) {
+    std::string::const_iterator i = s.begin();
+
+    std::string r;
+    while(i != s.end()) 
+    {
+        char c = *i++;
+        switch(c) {
+            case '\a': r += "\\a"; break;
+	        case '\b': r += "\\b"; break;
+			case '\f': r += "\\f"; break;
+			case '\n': r += "\\n"; break;
+			case '\r': r += "\\r"; break;
+			case '\t': r += "\\t"; break;
+			case '\v': r += "\\v"; break;
+			case '\\': r += "\\\\"; break;
+			case '"': r += "\\\""; break;
+			default:
+                if(c >= 0x20 && c <= 0x7e) r += c;
+                else r += std::string("\\x") + charToHexStr(c); 
+        }
+    }
+    return r;
+}
+
 #endif

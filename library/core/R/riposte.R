@@ -1,4 +1,28 @@
 
+repl <- function() {
+    promise('print', quote(print(.Last.value)), globalenv(), .getenv(NULL))
+    print
+   
+    if(     (identical(options('warn')[[1]], 0L) || 
+            is.null(options('warn')[[1]])) &&
+            length(last.warning) > 0L) {
+        if(!is.null(baseenv())) {
+            env <- baseenv()
+            env[['last.warning']] <- last.warning
+            last.warning <<- NULL
+        }
+        promise('warnings', quote(print(warnings())), globalenv(), .getenv(NULL))
+        warnings
+    }
+    NULL
+}
+
+warnings <- function() {
+    w <- last.warning
+    last.warning <<- NULL
+    w
+}
+
 trace.config <- function(trace=0) .External(trace.config(trace))
 
 library <- function(.) {

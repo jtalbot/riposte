@@ -18,6 +18,10 @@ rep.default <- function(x, times = 1, length.out = NA_integer_, each = 1) {
 }
 
 rep.int <- function(x, times) {
+    times <- as.integer(times)
+    if(any(times < 0L))
+        .stop("invalid 'times' argument")
+
     if(length(times) == 1) {
         x[index(length(x), 1, length(x)*times)]
     }

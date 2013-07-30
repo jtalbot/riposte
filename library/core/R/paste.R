@@ -5,17 +5,20 @@ paste <- function(items, sep, collapse)
     r <- vector('character',0)
     if(length(items) > 0) {
         sep <- as.character(sep)
-        r <- items[[1]]
+        r <- as.character(items[[1]])
         for(i in 1L+seq_len(length(items)-1L)) {
             r <- .pconcat(r, sep)
-            r <- .pconcat(r, items[[i]])
+            r <- .pconcat(ifelse(length(r) == 0L && length(items[[i]]) > 0L,
+                    '', r), 
+                ifelse(length(r) > 0L && length(items[[i]])==0L, 
+                    '', as.character(items[[i]])))
         }
     }
-    if(!is.null(collapse) && length(r) > 1L) {
+    if(!is.null(collapse)) {
         if(length(collapse) != 1L)
             stop("invalid 'collapse' argument")
         collapse <- as.character(collapse)
-        r <- .concat(.pconcat(r, c(rep(collapse, length(r)-1L),'')))
+        r <- .concat(.pconcat(r, c(rep(collapse, max(0L,length(r)-1L)),'')))
     }
     r
 }

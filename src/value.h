@@ -81,6 +81,7 @@ struct Value {
 	
 	bool isMathCoerce() const { return type() >= Type::Logical && type() <= Type::Double; }
 	bool isLogicalCoerce() const { return type() >= Type::Logical && type() <= Type::Double; }
+	bool isAtomic() const { return type() >= Type::Null && type() < Type::List; }
 	bool isVector() const { return type() >= Type::Null && type() <= Type::List; }
 	
 	static Value const& Nil() { static const Value v = {{0}, {0}}; return v; }

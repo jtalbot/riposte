@@ -18,9 +18,12 @@ as.vector <- function(x, mode) {
             if(class(x) == 'name')
                 list(x)
             else if(class(x) == 'expression' || class(x) == 'call')
-                strip(x)
-            else
-                as(strip(x), 'list') 
+                x
+            else {
+                r <- as(strip(x), 'list')
+                attributes(r) <- attributes(x)
+                r
+            }
             },
 		any = strip(x))
 }

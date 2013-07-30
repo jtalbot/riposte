@@ -12,7 +12,7 @@
  *            R parser has a rule for OP % OP. Is this ever used?
  */
 
-#include "../parser.h"
+#include "parser.h"
 #include "../interpreter.h"
 #include "grammar.h"
 #include "grammar.cpp"
@@ -438,11 +438,13 @@ void Parser::token(int tok, Value v)
 	}
 
 	if(errors > initialErrors) {
-		std::cout << "Error (" << intToStr(line+1) << "," << intToStr(col+1) << ") : unexpected '" << std::string(data, len) + "'" << std::endl; 
+		std::cout << "Error (" << filename << ":" << intToStr(line+1) << "," 
+            << intToStr(col+1) << ") : unexpected '" 
+            << std::string(data, len) + "'" << std::endl; 
 	}
 }
 
-Parser::Parser(State& state) : line(0), col(0), state(state), errors(0), complete(false), lastTokenWasNL(false) 
+Parser::Parser(State& state, char const* filename) : line(0), col(0), state(state), filename(filename), errors(0), complete(false), lastTokenWasNL(false) 
 {}
 
 int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* trace )
@@ -461,7 +463,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	const char* eof = isEof ? pe : 0;
 	int cs, act;
 	
-#line 465 "lexer.cpp"
+#line 467 "lexer.cpp"
 	{
 	cs = Scanner_start;
 	ts = 0;
@@ -469,9 +471,9 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 	act = 0;
 	}
 
-#line 205 "lexer.rl"
+#line 207 "lexer.rl"
 	
-#line 475 "lexer.cpp"
+#line 477 "lexer.cpp"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -492,7 +494,7 @@ _resume:
 #line 1 "NONE"
 	{ts = p;}
 	break;
-#line 496 "lexer.cpp"
+#line 498 "lexer.cpp"
 		}
 	}
 
@@ -938,7 +940,7 @@ _eof_trans:
 	}
 	}
 	break;
-#line 942 "lexer.cpp"
+#line 944 "lexer.cpp"
 		}
 	}
 
@@ -955,7 +957,7 @@ _again:
 #line 1 "NONE"
 	{act = 0;}
 	break;
-#line 959 "lexer.cpp"
+#line 961 "lexer.cpp"
 		}
 	}
 
@@ -975,7 +977,7 @@ _again:
 	_out: {}
 	}
 
-#line 206 "lexer.rl"
+#line 208 "lexer.rl"
 	int syntaxErrors = errors;
 	Parse(pParser, 0, Value::Nil(), this);
 	ParseFree(pParser, free);
@@ -983,7 +985,7 @@ _again:
 
 	if( cs == Scanner_error && syntaxErrors == 0) {
 		syntaxErrors++;
-		std::cout << "Lexing error" << std::endl; 
+		std::cout << "Lexing error (" << filename << ":" << intToStr(line+1) << ")" << std::endl; 
         // TODO: make a meaningful error. te can be 0x0 sometimes! Try entering `z
         // (" << intToStr(line+1) << "," << intToStr(col+1) << ") : unexpected '" << std::string(ts, te-ts) + "'" << std::endl; 
 	}
@@ -1004,5 +1006,11 @@ String Parser::popSource() {
 	String result = state.internStr(rtrim(s));
 	source.pop();
 	return result;	
+}
+
+int parse(State& state, char const* filename,
+    char const* code, size_t len, bool isEof, Value& result, FILE* trace) {
+    Parser parser(state, filename);
+    return parser.execute(code, len, isEof, result, trace);
 }
 

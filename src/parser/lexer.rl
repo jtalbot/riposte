@@ -10,7 +10,7 @@
  *            R parser has a rule for OP % OP. Is this ever used?
  */
 
-#include "../parser.h"
+#include "parser.h"
 #include "../interpreter.h"
 #include "grammar.h"
 #include "grammar.cpp"
@@ -179,11 +179,13 @@ void Parser::token(int tok, Value v)
 	}
 
 	if(errors > initialErrors) {
-		std::cout << "Error (" << intToStr(line+1) << "," << intToStr(col+1) << ") : unexpected '" << std::string(data, len) + "'" << std::endl; 
+		std::cout << "Error (" << filename << ":" << intToStr(line+1) << "," 
+            << intToStr(col+1) << ") : unexpected '" 
+            << std::string(data, len) + "'" << std::endl; 
 	}
 }
 
-Parser::Parser(State& state) : line(0), col(0), state(state), errors(0), complete(false), lastTokenWasNL(false) 
+Parser::Parser(State& state, char const* filename) : line(0), col(0), state(state), filename(filename), errors(0), complete(false), lastTokenWasNL(false) 
 {}
 
 int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* trace )
@@ -210,7 +212,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 
 	if( cs == Scanner_error && syntaxErrors == 0) {
 		syntaxErrors++;
-		std::cout << "Lexing error" << std::endl; 
+		std::cout << "Lexing error (" << filename << ":" << intToStr(line+1) << ")" << std::endl; 
         // TODO: make a meaningful error. te can be 0x0 sometimes! Try entering `z
         // (" << intToStr(line+1) << "," << intToStr(col+1) << ") : unexpected '" << std::string(ts, te-ts) + "'" << std::endl; 
 	}
@@ -231,5 +233,11 @@ String Parser::popSource() {
 	String result = state.internStr(rtrim(s));
 	source.pop();
 	return result;	
+}
+
+int parse(State& state, char const* filename,
+    char const* code, size_t len, bool isEof, Value& result, FILE* trace) {
+    Parser parser(state, filename);
+    return parser.execute(code, len, isEof, result, trace);
 }
 

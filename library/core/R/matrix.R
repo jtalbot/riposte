@@ -1,7 +1,7 @@
 
 matrix <- function(data, nrow, ncol, byrow, dimnames, missing.nrow, missing.ncol) {
 	if(missing.nrow && missing.ncol) {
-        ncol <- 1
+        ncol <- 1L
         nrow <- length(data)
     }
     else if(missing.nrow) {
@@ -10,6 +10,11 @@ matrix <- function(data, nrow, ncol, byrow, dimnames, missing.nrow, missing.ncol
     else if(missing.ncol) {
         ncol <- ceiling(length(data)/nrow)
     }
+    nrow <- as.integer(nrow)
+    ncol <- as.integer(ncol)
+
+    if((nrow*ncol) %% length(data) != 0L)
+        warning(TRUE,FALSE,sprintf('data length [%d] is not a sub-multiple or multiple of the number of rows [%d]', length(data), nrow))
 
     if(length(data) < nrow*ncol)
 		data <- rep_len(data, nrow*ncol)

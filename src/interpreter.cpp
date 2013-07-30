@@ -1650,13 +1650,13 @@ Value Thread::eval(Prototype const* prototype, Environment* environment, int64_t
 		    _error("Stack was the wrong size at the end of eval");
 		return frame.registers[resultSlot];
 	} catch(...) {
-        /*if(!frame.isPromise && frame.environment->getContext()) {
+        if(!frame.isPromise && frame.environment->getContext()) {
             std::cout << stack.size() << ": " << stringify(frame.environment->getContext()->call);
         }
         for(int64_t i = stack.size()-1; i > std::max(stackSize, 1ULL); --i) {
             if(!stack[i].isPromise && stack[i].environment->getContext())
                 std::cout << i << ": " << stringify(stack[i].environment->getContext()->call);
-        }*/
+        }
         
         stack.resize(stackSize);
         frame = oldFrame;

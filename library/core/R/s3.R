@@ -111,7 +111,7 @@ UseMethod <- function(generic, object)
         return(p)
     }
     else {
-        #.stop(sprintf("no applicable method for '%s' applied to an object of class \"%s\"", generic, .class(object)[[1]]))
+        .stop(sprintf("no applicable method for '%s' applied to an object of class \"%s\"", generic, .class(object)[[1]]))
     }
 }
 

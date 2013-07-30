@@ -11,7 +11,7 @@ seterrmessage <- NULL
         errmessage <<- .pconcat(message, '\n')
 
         if(include.call)
-            message <- sprintf("Error in %s : %s", 
+            message <- sprintf("Error in %s :\n  %s", 
                 format.call(.frame(2L)[[2L]]), message)
            
         n <- 1L

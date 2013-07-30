@@ -352,17 +352,15 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			if(!call[i+1].isNil()) {
 				kill(result);
 				Operand r = placeInRegister(compile(call[i+1], code));
-				if(r != result) 
+				if(r.loc != INVALID && r != result)
 					throw CompileError(std::string("switch statement doesn't put all its results in the same register"));
-				if(i < n)
+                if(i < n)
 					jmps.push_back(emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0));
-				result = r;
 			} else if(i == n) {
 				kill(result);
 				Operand r = placeInRegister(compileConstant(Null::Singleton(), code));
-				if(r != result) 
+				if(r.loc != INVALID && r != result) 
 					throw CompileError(std::string("switch statement doesn't put all its results in the same register"));
-				result = r;
 			}
 		}
 		for(int64_t i = 0; i < (int64_t)jmps.size(); i++) {
@@ -642,7 +640,10 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
             Value value = CreateSymbol(Strings::assignTmp);
 		    while(isCall(dest)) {
 			    List const& c = (List const&)dest;
-			    List n(c.length()+1);
+			    if(c.length() < 2L)
+                    _error("invalid left side of assignment");
+
+                List n(c.length()+1);
 
 			    for(int64_t i = 0; i < c.length(); i++) { n[i] = c[i]; }
 			    String as = state.internStr(state.externStr(SymbolStr(c[0])) + "<-");

@@ -58,7 +58,7 @@ static void l_message(const int level, const char *msg)
 }
 
 // interactive line entry using linenoise
-static bool terminal(State& state, std::istream & in, std::ostream & out, Value& code)
+static bool terminal(State& state, std::string inname, std::istream & in, std::ostream & out, Value& code)
 { 
     std::string input;
     code = Value::Nil();
@@ -83,8 +83,8 @@ static bool terminal(State& state, std::istream & in, std::ostream & out, Value&
         input += "\n";   /* add the discarded newline back in */
         
         if(input.size() > 0) {
-            Parser parser(state);
-            status = parser.execute(input.c_str(), input.size(), true, code);    
+            status = parse(state, inname.c_str(),
+                input.c_str(), input.size(), true, code);
         }
     }
 
@@ -95,7 +95,7 @@ static bool terminal(State& state, std::istream & in, std::ostream & out, Value&
 }
 
 // piped in from stream 
-static bool pipe(State& state, std::istream & in, std::ostream & out, Value& code) 
+static bool pipe(State& state, std::string inname, std::istream & in, std::ostream & out, Value& code) 
 {
     std::string input;
     code = Value::Nil();
@@ -110,8 +110,8 @@ static bool pipe(State& state, std::istream & in, std::ostream & out, Value& cod
         input += "\n";   /* add the discarded newline back in */
         
         if(input.size() > 0) {
-            Parser parser(state);
-            status = parser.execute(input.c_str(), input.size(), true, code);    
+            status = parse(state, inname.c_str(),
+                input.c_str(), input.size(), true, code);    
         }
     }
 
@@ -132,7 +132,7 @@ static void dumpWarnings(Thread& thread, std::ostream& out)
     thread.warnings.clear();
 } 
 
-static int run(State& state, std::istream& in, std::ostream& out, bool interactive, bool echo) 
+static int run(State& state, std::string inname, std::istream& in, std::ostream& out, bool interactive, bool echo) 
 {
     Thread& thread = state.getMainThread();
 
@@ -146,9 +146,9 @@ static int run(State& state, std::istream& in, std::ostream& out, bool interacti
     Prototype* print;
     if(echo)
     {
-        List p(2);
-        p[0] = CreateSymbol(Strings::print);
-        p[1] = CreateSymbol(Strings::Last_value);
+        List p(1);
+        p[0] = CreateSymbol(thread.internStr("repl"));
+        //p[1] = CreateSymbol(Strings::Last_value);
         print = Compiler::compileTopLevel(thread, CreateCall(p));
         // save the promise to the gcStack so that the gc doesn't clean it up.
         // TODO: this seems rather hacky
@@ -162,8 +162,8 @@ static int run(State& state, std::istream& in, std::ostream& out, bool interacti
         try { 
             Value code;
             done = interactive ?
-                terminal(state, in, out, code) :
-                pipe(state, in, out, code);
+                terminal(state, inname, in, out, code) :
+                pipe(state, inname, in, out, code);
 
             if(done || code.isNil()) 
                 continue;
@@ -182,7 +182,7 @@ static int run(State& state, std::istream& in, std::ostream& out, bool interacti
         catch(RiposteException const& e) { 
             e_message("Error", e.kind().c_str(), e.what().c_str());
         } 
-        dumpWarnings(thread, out);
+        //dumpWarnings(thread, out);
     }
     
     return rc;
@@ -284,11 +284,11 @@ int main(int argc, char** argv)
     int rc;
     if(filename != NULL) {
         std::ifstream in(filename);
-        rc = run(state, in, std::cout, false, echo);
+        rc = run(state, std::string(filename), in, std::cout, false, echo);
     } 
     else {
         info(state, std::cout);
-        rc = run(state, std::cin, std::cout, true, echo);
+        rc = run(state, std::string("<stdin>"), std::cin, std::cout, true, echo);
     }
 
     /* Session over */

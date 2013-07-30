@@ -94,11 +94,16 @@ Value file_readLines(Thread& thread, Value const* args) {
     // TODO: implement the other readLines arguments
     // TODO: stream this
     Externalptr const& p = (Externalptr const&)args[0];
+    Integer const& n = (Integer const&)args[1];
     FileConnection* fc = (FileConnection*)p.ptr();
+    int64_t maxLines = n[0];
+
     std::vector<std::string> lines;
     std::string str;
-    while(std::getline(fc->f, str)) {
+    int64_t i = 0;
+    while((maxLines < 0 || i < maxLines) && std::getline(fc->f, str)) {
         lines.push_back(str);
+        i++;
     }
 
     Character r(lines.size());
@@ -114,5 +119,28 @@ Value file_description(Thread& thread, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     FileConnection* fc = (FileConnection*)p.ptr();
     return Character::c(thread.internStr(fc->name));
+}
+
+extern "C"
+Value terminal_readLines(Thread& thread, Value const* args) {
+    // TODO: implement the other readLines arguments
+    // TODO: stream this
+    Integer const& n = (Integer const&)args[1];
+    int64_t maxLines = n[0];
+    
+    std::vector<std::string> lines;
+    std::string str;
+    int64_t i = 0;
+    while((maxLines < 0 || i < maxLines) && std::getline(std::cin, str)) {
+        lines.push_back(str);
+        i++;
+    }
+
+    Character r(lines.size());
+    for(size_t i = 0; i < lines.size(); ++i) {
+        r[i] = thread.internStr(lines[i].c_str());
+    }
+
+    return r;
 }
 

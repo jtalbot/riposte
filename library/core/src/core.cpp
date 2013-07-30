@@ -256,14 +256,13 @@ void tlist(Thread& thread, Value const* args, Value& result) {
 extern "C"
 Value source(Thread& thread, Value const* args) {
 	Character file = Cast<Character>(args[0]);
-	std::ifstream t(thread.externStr(file[0]).c_str());
+	std::ifstream t(file[0]);
 	std::stringstream buffer;
 	buffer << t.rdbuf();
 	std::string code = buffer.str();
 
-	Parser parser(thread.state);
 	Value value;
-	parser.execute(code.c_str(), code.length(), true, value);	
+	parse(thread.state, file[0], code.c_str(), code.length(), true, value);	
 	
 	return value;
 }
@@ -286,11 +285,6 @@ Value paste(Thread& thread, Value const* args) {
 	}
 	if(0 < a.length()) r += a[a.length()-1];
 	return Character::c(thread.internStr(r));
-}
-
-extern "C"
-Value deparse(Thread& thread, Value const* args) {
-    return Character::c(thread.internStr(thread.deparse(args[0])));
 }
 
 extern "C"

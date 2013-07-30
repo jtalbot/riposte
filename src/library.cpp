@@ -19,11 +19,11 @@ void sourceFile(Thread& thread, std::string name, Environment* env) {
 		buffer << t.rdbuf();
 		std::string code = buffer.str();
 
-		Parser parser(thread.state);
 		Value value;
-		FILE* trace = NULL;
-		parser.execute(code.c_str(), code.length(), true, value, trace);
-		if(!value.isNil())
+		parse(thread.state, name.c_str(), 
+            code.c_str(), code.length(), true, value);
+		
+        if(!value.isNil())
             thread.eval(Compiler::compileTopLevel(thread, value), env);
     } catch(RiposteException const& e) { 
         _warning(thread, "Unable to load library " + name + " (" + e.kind() + "): " + e.what());

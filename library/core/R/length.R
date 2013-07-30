@@ -8,7 +8,7 @@ length.default <- function(x) length(strip(x))
 
 `length<-.default` <- function(x, value)
 {
-    if(!is.vector(x))
+    if(!is.atomic(x) && !is.list(x))
         .stop("invalid argument")
 
     a <- NULL

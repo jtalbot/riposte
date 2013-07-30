@@ -1,7 +1,5 @@
 
-on.exit <- function(expr = NULL, add = FALSE) {
-    e <- .frame(1L)[[1L]]
-    expr <- .pr_expr(.getenv(NULL), 'expr')
+.on.exit <- function(e, expr, add) {
     if(add) {
         # It would be much easier to just build an expression,
         # but this matches R's current behavior
@@ -18,5 +16,9 @@ on.exit <- function(expr = NULL, add = FALSE) {
     }
     e[['__on.exit__']] <- expr
     NULL
+}
+
+on.exit <- function(expr = NULL, add = FALSE) {
+    .on.exit(.frame(1L)[[1L]], .pr_expr(.getenv(NULL), 'expr'), add)
 }
 

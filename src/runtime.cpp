@@ -339,7 +339,14 @@ void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& 
 			else {
 				_error("NYI negative indexes on [[");
 			}
-		} else {
+		}
+        else if(a.isNull() && 
+            (!b.isAtomic() || ((Vector const&)b).length() != 1)) {
+            List r(1);
+            r[0] = b;
+            c = r;
+        }
+        else {
 			SubsetAssignSlow(thread, a, clone, i, b, c);
 		}
 	}

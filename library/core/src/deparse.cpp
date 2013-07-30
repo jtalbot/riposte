@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <math.h>
 
+static
 std::string pad(std::string s, int64_t width)
 {
 	std::stringstream ss;
@@ -16,35 +17,43 @@ std::string pad(std::string s, int64_t width)
 	return ss.str();
 }
 
+static
 template<class T> std::string stringify(State const& state, typename T::Element a) {
 	return "";
 }
 
+static
 template<> std::string stringify<Logical>(State const& state, Logical::Element a) {
 	return Logical::isNA(a) ? "NA" : (a ? "TRUE" : "FALSE");
 }  
 
+static
 template<> std::string stringify<Raw>(State const& state, Raw::Element a) {
 	return rawToStr(a);
 }  
 
+static
 template<> std::string stringify<Integer>(State const& state, Integer::Element a) {
 	return Integer::isNA(a) ? "NA" : std::string("") + intToStr(a) + 
         (state.format == State::RiposteFormat ? std::string("L") : "");
 }  
 
+static
 template<> std::string stringify<Double>(State const& state, Double::Element a) {
 	return Double::isNA(a) ? "NA" : doubleToStr(a);
 }  
 
+static
 template<> std::string stringify<Character>(State const& state, Character::Element a) {
 	return Character::isNA(a) ? "NA" : std::string("\"") + escape(state.externStr(a)) + "\"";
 }  
 
+static
 template<> std::string stringify<List>(State const& state, List::Element a) {
 	return state.stringify(a);
 }  
 
+static
 template<class T>
 std::string stringifyVector(State const& state, T const& v) {
 	std::string result = "";
@@ -79,6 +88,7 @@ struct Format {
     uint64_t fdecimals;
 };
 
+static
 Format format(double d, int64_t maxsf) {
     Format f = (Format){ false, 0, 0 };
     if(std::isnan(d)) return f;
@@ -118,10 +128,12 @@ Format format(double d, int64_t maxsf) {
     return f;
 }
 
+static
 std::string stringify(State const& state, Double::Element a, Format f) {
 	return Double::isNA(a) ? "NA" : doubleToStr(a, f.scientific ? f.sdecimals : f.fdecimals, !f.scientific);
 }  
 
+static
 template<>
 std::string stringifyVector<Double>(State const& state, Double const& v) {
 	std::string result = "";
@@ -159,6 +171,7 @@ std::string stringifyVector<Double>(State const& state, Double const& v) {
 	return result;
 }
 
+static
 std::string stringify(State const& state, Value const& value, std::vector<int64_t> nest) {
 	std::string result = "[1]";
 	bool dots = false;
@@ -251,13 +264,6 @@ std::string stringify(State const& state, Value const& value, std::vector<int64_
 }
 
 
-extern "C"
-Value print(Thread& thread, Value const* args) {
-    std::vector<int64_t> emptyNest;
-	std::string r = stringify(thread.state, args[0], emptyNest);
-    return Character::c(thread.internStr(r));
-}
-
 template<class T> std::string deparse(State const& state, typename T::Element a) {
 	return "";
 }
@@ -333,50 +339,7 @@ std::string State::deparse(Value const& value) const {
 }
 
 extern "C"
-void decimals_map(Thread& thread, Integer::Element& r, 
-    Double::Element d, Integer::Element maxsf) {
-    
-    r = 0;
-    if(std::isnan(d)) return;
-    else if(d == std::numeric_limits<double>::infinity()) return;
-    else if(d == -std::numeric_limits<double>::infinity()) return;
-    if(d == 0) return;
-   
-    double e = fabs(d);
-
-    // location of largest non-zero digit
-    int64_t p = (int64_t)floor(log10(e));
-  
-    // generate digits after p, then apply rounding
-    // to find last non-zero
-    char digits[23];
-    
-    e = e * pow(10, -p);
-    for(int64_t i = 0; i < 23; ++i) {
-        digits[i] = (char)e;
-        e = (e-digits[i])*10;
-    }
-
-    int64_t q = maxsf;
-    bool foundnon0 = false;
-    for(int64_t i = 21; i >= 0; --i) {
-        if(digits[i+1] > 5 || (digits[i+1] == 5 && digits[i] % 2 == 1))
-            digits[i]++;
-        if(i < q && !foundnon0) {
-            if(digits[i] == 0 || digits[i] == 10)
-                q = i;
-            else
-                foundnon0 = true;
-        }
-    }
-
-    if(p >= 12 || p <= -5) {
-        // return scientific format as negative number
-        // count includes the leading digit
-        r = -q; 
-    }
-    else {
-        // return fixed format as positive number or 0.
-        r = std::max( (int64_t)0, q-p-1L );
-    }
+Value deparse(Thread& thread, Value const* args) {
+    return Character::c(thread.internStr(thread.deparse(args[0])));
 }
+
