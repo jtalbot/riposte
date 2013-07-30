@@ -4,7 +4,6 @@
 
 #include <vector>
 #include <assert.h>
-#include <limits>
 
 #include "common.h"
 #include "type.h"
