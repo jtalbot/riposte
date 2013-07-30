@@ -13,7 +13,7 @@
 #include <sys/time.h>
 #include <stdio.h>
 #include <cstdlib>
-
+#include <limits>
 #ifdef __GNUC__
 	#define ALWAYS_INLINE __attribute__((always_inline))
 #else
