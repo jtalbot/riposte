@@ -55,24 +55,12 @@
 
 .cat <- function(..., sep="") .External(cat(list(...), sep))
 
-.stop <- function(x) {
-    n <- 1L
-    repeat {
-        call <- .frame(n)[[2L]]
-        if(!is.null(call))
-            .cat(n, ': ', format.call(call),'\n')
+.stop <- function(message, call=.frame(1L)[[2L]]) {
+    e <- list(message=message, call=call)
+    attr(e, 'class') <- c('error', 'condition')
 
-        if(is.null(.frame(n)[[6L]]))
-            break
-        if(n > 10L)
-            break
-
-        n <- n+1L
-    }
-
-    .cat('Error: ', x,'\n')
-
-    .External(stop(x))
+    .signalCondition(e, message, call)
+    .dfltStop(message, call)
 }
 
 .escape <- function(x) {

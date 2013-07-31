@@ -49,7 +49,7 @@ static inline std::string& unescape(std::string& s) {
 				case '\'': r += '\''; break;
 				case ' ': r += ' '; break;
 				case '\n': r += '\n'; break;
-				default: throw RiposteError(std::string("Unrecognized escape in \"") + s + "\""); break;
+				default: throw CompileError(std::string("Unrecognized escape in \"") + s + "\""); break;
 			}
 		}
 		else r += c;

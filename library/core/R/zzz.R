@@ -200,6 +200,10 @@ primitives <- .characters(
     'any',
     'any.default',
 
+    # array.R
+    'is.array',
+    'is.array.default',
+
     # as.environment.R
     'as.environment',
 
@@ -448,6 +452,7 @@ primitives <- .characters(
     'hypot',
     'time',
     'source',
+    '__stop__',
 
     # s3.R
     'UseMethod',
@@ -544,6 +549,9 @@ internals <- .characters(
     # class.R
     'inherits',
 
+    # col.R
+    'col',
+
     # commandArgs.R
     'commandArgs',
 
@@ -553,7 +561,7 @@ internals <- .characters(
 
     # conditions.R
     '.addCondHands',
-    'signalCondition',
+    '.signalCondition',
 
     # connections.R
     'file',
@@ -569,6 +577,9 @@ internals <- .characters(
 
     # deparse.R
     'deparse',
+
+    # diag.R
+    'diag',
 
     # do.call.R
     'do.call',
@@ -622,6 +633,7 @@ internals <- .characters(
     'regexpr',
     'gregexpr',
     'sub',
+    'gsub',
 
     # identical.R
     'identical',
@@ -699,6 +711,9 @@ internals <- .characters(
     'rep.int',
     'rep_len',
 
+    # row.R
+    'row',
+
     # s3.R
     'NextMethod',
 
@@ -733,6 +748,10 @@ internals <- .characters(
 
     # Sys.getenv
     'Sys.getenv',
+
+    # Sys.setenv
+    'Sys.setenv',
+    'Sys.unsetenv',
 
     # sys.parent
     'sys.call',

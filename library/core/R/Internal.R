@@ -8,6 +8,6 @@
         call
     }
     else {
-        .stop(.concat(list("there is no .Internal function '", call[[1]], "'")))
+        .stop(.concat(list("there is no .Internal function '", call[[1]], "'")), .frame(1L)[[2L]])
     }
 }

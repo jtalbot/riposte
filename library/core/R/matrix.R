@@ -116,27 +116,3 @@ is.matrix <- function(x)
 	matrix(sqrt(strip(x)), xd[[1L]], xd[[2L]])
 }
 
-upper.tri <- function(x, diag=FALSE) {
-	if(diag)
-		row(x) <= col(x)
-	else
-		row(x) < col(x)
-}
-
-row <- function(x) {
-	xd <- dim(x)
-	matrix(index(xd[[1L]], 1L, xd[[1L]]*xd[[2L]]), xd[[1L]], xd[[2L]])
-}
-
-col <- function(x) {
-	xd <- dim(x)
-	matrix(index(xd[[2L]], xd[[1L]], xd[[1L]]*xd[[2L]]), xd[[1L]], xd[[2L]])
-}
-
-`diag<-` <- function(x, value) {
-	xd <- dim(x)
-	len <- min(xd)
-	r <- strip(x)
-	r[(seq_len(len)-1L)*xd[[1L]]+seq_len(len)] <- value
-	matrix(r, xd[[1L]], xd[[2L]])
-}

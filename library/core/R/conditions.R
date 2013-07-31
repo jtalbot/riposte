@@ -1,15 +1,16 @@
 
-.addCondHands <- function(name, handler, eval.env, handle.env, run) {
+.addCondHands <- function(name, handler, handle.env, other.env, run) {
     h <- handle.env[['__handlers__']]
     h[name] <- handler
     handle.env[['__handlers__']] <- h
 }
 
-signalCondition <- function(cond, call) {
-    frame <- 1L
+.signalCondition <- function(cond, msg, call) {
+    frame <- 2L
     cc <- class(cond)
 
-    while(.frame(frame)[[1L]] != globalenv()) {
+    while(.frame(frame)[[1L]] != globalenv()
+            && !is.null(.frame(frame)[[6L]])) {
         e <- .frame(frame)[[1L]]
         h <- e[['__handlers__']]
         n <- names(h)

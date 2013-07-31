@@ -82,7 +82,7 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Pro
     s.isPromise = false;
 	
 	if(s.registers+prototype->registers > thread.registers+DEFAULT_NUM_REGISTERS)
-		throw RiposteError("Register overflow");
+		_internalError("Register overflow");
 
     // avoid confusing the GC with bogus stuff in registers...
     // can we avoid this somehow?
@@ -449,6 +449,29 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 	}
 	_error(std::string("Failed to find generic for builtin op: ") + op);
 }
+
+
+Instruction const* StopDispatch(Thread& thread, Instruction const& inst, String msg, int64_t out) {
+	Environment* penv;
+	Value const& f = thread.frame.environment->getRecursive(thread.internStr("__stop__"), penv);
+	if(f.isClosure()) {
+        Character v(1);
+        v[0] = msg;
+		List call(2);
+        call[0] = f;
+        call[1] = v;
+		Pair p;
+		p.n = Strings::empty;
+		p.v = v;
+		PairList args, extra;
+		args.push_back(p);
+		CompiledCall cc(CreateCall(call), args, 1, false, extra);
+		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
+		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype(), out, &inst+1);
+	}
+	_error(std::string("Failed to find stop handler (__stop__)"));
+}
+
 
 template<>
 bool EnvironmentBinaryDispatch< struct eqVOp<REnvironment, REnvironment> >

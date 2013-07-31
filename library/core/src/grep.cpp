@@ -95,3 +95,96 @@ void gregex_map(Thread& thread,
     length = l;
 }
 
+static std::string replaceAll( 
+    std::string const& s,
+    std::string const& pattern,
+    std::string const& sub )
+{
+    std::string r;
+    std::string::const_iterator current = s.begin();
+    std::string::const_iterator next =
+        std::search( current, s.end(), pattern.begin(), pattern.end() );
+    while( next != s.end() ) {
+        r.append( current, next );
+        r.append( sub );
+        current = next + pattern.size();
+        next = std::search( current, s.end(), pattern.begin(), pattern.end() );
+    }
+    r.append( current, next );
+    return r;
+}
+
+extern "C"
+void sub_map(Thread& thread, Character::Element& out,
+        Value const& regex, String text, String sub) {
+    
+    Externalptr const& p = (Externalptr const&)regex;
+    regex_t* r = (regex_t*)p.ptr();
+
+    regmatch_t m[10];
+    int match = tre_regexec(r, text, 10, m, 0);
+    if(match != 0) {
+        out = text;
+    }
+    else {
+        std::string s(sub);
+        // replace all back references in sub
+        char c = '1';
+        for(int i = 1; i <= 9; ++i, ++c) {
+            if(m[i].rm_so >= 0) {
+                s = replaceAll(s, std::string("\\")+c, 
+                    std::string(text+m[i].rm_so, text+m[i].rm_eo));
+            }
+            else {
+                s = replaceAll(s, std::string("\\")+c, 
+                    std::string(""));
+            }
+        }
+        std::string result;
+        result.append( text, text+m[0].rm_so );
+        result.append( s );
+        result.append( text+m[0].rm_eo, text+strlen(text) );
+        out = thread.internStr(result.c_str());
+    }
+}
+
+extern "C"
+void gsub_map(Thread& thread, Character::Element& out,
+        Value const& regex, String ctext, String sub) {
+    
+    Externalptr const& p = (Externalptr const&)regex;
+    regex_t* r = (regex_t*)p.ptr();
+
+    regmatch_t m[10];
+    
+    size_t offset = 0;
+    int match = 0;
+    std::string text(ctext);
+    do {
+        match = tre_regexec(r, text.c_str()+offset, 10, m, 0);
+        if(match == 0) {
+            std::string s(sub);
+            // replace all back references in sub
+            char c = '1';
+            for(int i = 1; i <= 9; ++i, ++c) {
+                if(m[i].rm_so >= 0) {
+                    s = replaceAll(s, std::string("\\")+c, 
+                        std::string(text.c_str()+m[i].rm_so+offset, 
+                                    text.c_str()+m[i].rm_eo+offset));
+                }
+                else {
+                    s = replaceAll(s, std::string("\\")+c, 
+                        std::string(""));
+                }
+            }
+            std::string result;
+            result.append( text.c_str(), text.c_str()+m[0].rm_so+offset );
+            result.append( s );
+            result.append( text.c_str()+m[0].rm_eo+offset, 
+                           text.c_str()+text.size() );
+            text = result;
+            offset += m[0].rm_so + s.size();
+        }
+    } while( match == 0 );
+    out = thread.internStr(text.c_str());
+}

@@ -68,3 +68,14 @@ source <- function(file, eval.env) {
     promise('q', p, eval.env, .getenv(NULL))
     q
 }
+
+# this is called when interpreter bytecodes fail
+# should propagate error nicely
+`__stop__` <- function(message, call = NULL) {
+    e <- list(message = message, call = call)
+    attr(e, 'class') <- c('error', 'condition')
+
+    .signalCondition(e, message, call)
+    .dfltStop(message, call)
+}
+

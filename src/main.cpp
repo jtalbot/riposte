@@ -170,12 +170,15 @@ static int run(State& state, std::string inname, std::istream& in, std::ostream&
             Prototype* proto = Compiler::compileTopLevel(thread, code);
             Value result = thread.eval(proto, state.global);
 
-            state.global->insert(Strings::Last_value) = result;
-
-            if(echo) {
-                thread.eval(print, state.global);
-                // Print directly (for debugging)
-                //std::cout<< thread.stringify(result) << std::endl;
+            // Nil indicates an error that was dispatched correctly.
+            // Don't print anything, but no need to propagate error.
+            if(!result.isNil()) {
+                state.global->insert(Strings::Last_value) = result;
+                if(echo) {
+                    thread.eval(print, state.global);
+                    // Print directly (for debugging)
+                    //std::cout<< thread.stringify(result) << std::endl;
+                }
             }
         } 
         catch(RiposteException const& e) { 

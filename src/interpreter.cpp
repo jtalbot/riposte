@@ -668,8 +668,13 @@ static inline Instruction const* load_op(Thread& thread, Instruction const& inst
 	Environment* env;
 	Value const& v = thread.frame.environment->getRecursive(s, env);
 	if(!v.isObject()) {
-		return force(thread, inst, v, env, s);
-	}
+        try {
+		    return force(thread, inst, v, env, s);
+	    }
+        catch(RuntimeError const& e) {
+            return StopDispatch(thread, inst, thread.internStr(e.what().c_str()), inst.c);
+        }
+    }
 	else {
 		OUT(c) = v;
 		return &inst+1;
@@ -685,7 +690,12 @@ static inline Instruction const* loadfn_op(Thread& thread, Instruction const& in
 	    Value const& v = env->getRecursive(s, env);
 
 	    if(!v.isObject()) {
-		    return force(thread, inst, v, env, s);
+            try {
+		        return force(thread, inst, v, env, s);
+            }
+            catch(RuntimeError const& e) {
+                return StopDispatch(thread, inst, thread.internStr(e.what().c_str()), inst.c);
+            }
 	    }
         else if(v.isClosure()) {
             OUT(c) = v;
@@ -694,7 +704,7 @@ static inline Instruction const* loadfn_op(Thread& thread, Instruction const& in
         env = env->getParent();
 	} while(env != 0);
 
-    _error("loadfn failed to find value");
+    _internalError("loadfn failed to find value");
 }
 
 static inline Instruction const* store_op(Thread& thread, Instruction const& inst) {
@@ -745,12 +755,12 @@ static inline Instruction const* dotsv_op(Thread& thread, Instruction const& ins
     else if(a.isDouble1())
         idx = (int64_t)((Double const&)a)[0] - 1;
     else
-        _error(std::string("Invalid type in dotsv: "));
+        return StopDispatch(thread, inst, thread.internStr("Invalid type in dotsv"), inst.c);
 
 	if(!thread.frame.environment->getContext() ||
        idx >= (int64_t)thread.frame.environment->getContext()->dots.size() ||
        idx < (int64_t)0)
-        _error(std::string("The '...' list does not contain ") + intToStr(idx+1) + " elements");
+        return StopDispatch(thread, inst, thread.internStr((std::string("The '...' list does not contain ") + intToStr(idx+1) + " elements").c_str()), inst.c);
 	
     DOTDOT(v, idx); FORCE_DOTDOT(v, idx); // no need to bind since value is in a register
 	OUT(c) = v;
@@ -1581,7 +1591,7 @@ static inline Instruction const* semijoin_op(Thread& thread, Instruction const& 
 //    Main interpreter loop 
 //
 //__attribute__((__noinline__,__noclone__)) 
-void interpret(Thread& thread, Instruction const* pc) {
+bool interpret(Thread& thread, Instruction const* pc) {
 
 #ifdef USE_THREADED_INTERPRETER
     	#define LABELS_THREADED(name,type,...) (void*)&&name##_label,
@@ -1592,7 +1602,8 @@ void interpret(Thread& thread, Instruction const* pc) {
 		name##_label: \
 			{ pc = name##_op(thread, *pc); goto *(void*)(labels[pc->bc]); } 
 	STANDARD_BYTECODES(LABELED_OP)
-	done_label: {}
+	stop_label: { return false; }
+	done_label: { return true; }
 #else
 	while(pc->bc != ByteCode::done) {
 		switch(pc->bc) {
@@ -1620,11 +1631,19 @@ Value Thread::eval(Prototype const* prototype, Environment* environment, int64_t
 	// make room for the result
 	Instruction const* run = buildStackFrame(*this, environment, prototype, -resultSlot, (Instruction const*)0);
 	try {
-		interpret(*this, run);
-        if(stackSize != stack.size())
-		    _error("Stack was the wrong size at the end of eval");
-		return frame.registers[resultSlot];
-	} catch(...) {
+		bool success = interpret(*this, run);
+        if(success) {
+            if(stackSize != stack.size())
+		        _error("Stack was the wrong size at the end of eval");
+		    return frame.registers[resultSlot];
+        }
+        else {
+            stack.resize(stackSize);
+            frame = oldFrame;
+            return Value::Nil();
+        }
+    } catch(...) {
+        std::cout << "Unknown error: " << std::endl;
         if(!frame.isPromise && frame.environment->getContext()) {
             std::cout << stack.size() << ": " << stringify(frame.environment->getContext()->call);
         }

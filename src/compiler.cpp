@@ -6,6 +6,7 @@ static ByteCode::Enum op0(String const& func) {
 
     if(func == Strings::dots) return ByteCode::dotsc;
     if(func == Strings::env_global) return ByteCode::env_global;
+    if(func == Strings::stop) return ByteCode::stop;
     throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a nullary operator"); 
 }
 
@@ -989,7 +990,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	} 
 	// Nullary operators
 	else if((func == Strings::dots ||
-             func == Strings::env_global)
+             func == Strings::env_global ||
+             func == Strings::stop)
 		&& call.length() == 1)
 	{
 		// if there isn't exactly zero parameters, we should call the library version...

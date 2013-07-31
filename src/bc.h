@@ -171,7 +171,8 @@
     _(semijoin, "semijoin")
 
 #define SPECIAL_BYTECODES(_) 	                                               \
-	_(done, "done") 
+    _(stop,         "stop")                                                    \
+	_(done,         "done") 
 
 #define UNARY_BYTECODES(_) \
 	ARITH_UNARY_BYTECODES(_) \

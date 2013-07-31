@@ -400,10 +400,3 @@ Value commandArgs(Thread& thread, Value const* args) {
 	return thread.state.arguments;
 }
 
-extern "C"
-void stop(Thread& thread, Value const* args, Value& result) {
-    // this should stop whether or not the arguments are correct...
-    std::string message = thread.externStr(Cast<Character>(args[0])[0]);
-    _error(message);
-    result = Null::Singleton();
-}

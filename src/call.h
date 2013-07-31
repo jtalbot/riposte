@@ -33,6 +33,8 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, Value const& c, int64_t out);
 
+Instruction const* StopDispatch(Thread& thread, Instruction const& inst, String msg, int64_t out);
+
 #define REGISTER(i) (*(thread.frame.registers+(-(i))))
 #define CONSTANT(i) (thread.frame.prototype->constants[(i)-1])
 

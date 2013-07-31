@@ -11,15 +11,19 @@ public:
 	virtual std::string what() const = 0;
 };
 
-// An R-level error
-class RiposteError : public RiposteException {
+// An R-level error (something is wrong with the users' code)
+// Should be propagated through R's error handling mechanism
+class RuntimeError : public RiposteException {
 	std::string message;
 public:
-	RiposteError(std::string m) : RiposteException(), message(m) {}
-    std::string kind() const { return "riposte"; }
+	RuntimeError(std::string m) : RiposteException(), message(m) {}
+    std::string kind() const { return "runtime"; }
 	std::string what() const { return message; }
 };
 
+// A bytecode compiler error (also something is wrong with the users' code)
+// Don't propagate through R's error handling mechanism since
+// the R level error handling may not compile
 class CompileError : public RiposteException {
 	std::string message;
 public:
@@ -28,11 +32,13 @@ public:
 	std::string what() const { return message; }
 };
 
-class RuntimeError : public RiposteException {
+// An internal error (something is wrong with Riposte)
+// Don't propagate, we're hosed.
+class InternalError : public RiposteException {
 	std::string message;
 public:
-	RuntimeError(std::string m) : RiposteException(), message(m) {}
-    std::string kind() const { return "runtime"; }
+	InternalError(std::string m) : RiposteException(), message(m) {}
+    std::string kind() const { return "internal"; }
 	std::string what() const { return message; }
 };
 
@@ -54,9 +60,11 @@ static inline void attachGDB() {
 		execl("/usr/bin/gdb","/usr/bin/gdb","bin/riposte",buf,NULL);
 	}
 }
-#define _error(T) do { attachGDB(); throw RiposteError(T); } while(0)
+#define _error(T) do { attachGDB(); throw RuntimeError(T); } while(0)
+#define _internalError(T) do { attachGDB(); throw InternalError(T); } while(0)
 #else
-#define _error(T) (throw RiposteError(T))
+#define _error(T) (throw RuntimeError(T))
+#define _internalError(T) (throw InternalError(T))
 #endif
 #define _warning(S, T) (S.warnings.push_back(T))
 

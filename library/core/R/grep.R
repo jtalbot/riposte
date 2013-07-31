@@ -111,13 +111,27 @@ gregexpr <- function(pattern, text, ignore.case, perl, fixed, useBytes)
 
 sub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
 {
-    m <- regexpr(pattern, text, ignore.case, perl, fixed, useBytes)
-    
-    start <- strip(m)
-    start <- pmin(pmax(as.integer(start)-1L, 0L), nchar(text))
-    
-    length <- attr(m, 'match.length')
-
-    .Map('substrassign_map', 
-        list(text, start, length, replacement), 'character')[[1]]
+    .Map('sub_map',
+        list(
+            .External(regex_compile(
+                as.character(pattern), 
+                identical(ignore.case, TRUE),
+                identical(fixed, TRUE))),
+            as.character(text),
+            as.character(replacement)
+        ), .characters('character'))[[1]]
 }
+
+gsub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
+{
+    .Map('gsub_map',
+        list(
+            .External(regex_compile(
+                as.character(pattern), 
+                identical(ignore.case, TRUE),
+                identical(fixed, TRUE))),
+            as.character(text),
+            as.character(replacement)
+        ), .characters('character'))[[1]]
+}
+

@@ -173,6 +173,7 @@
     _(print, "print") \
     _(Last_value, ".Last.value") \
     _(semijoin, ".semijoin") \
+    _(stop, ".stop") \
     _(__onexit__, "__on.exit__") \
     _(__onexittmp__, "__on.exit.tmp__") \
     _(__handlers__, "__handlers__") \
