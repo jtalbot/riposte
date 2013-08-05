@@ -121,17 +121,6 @@ static bool pipe(State& state, std::string inname, std::istream & in, std::ostre
     return in.eof();
 }
 
-static void dumpWarnings(Thread& thread, std::ostream& out) 
-{
-    if(thread.warnings.size() > 0) {
-        out << "There were " << intToStr(thread.warnings.size()) << " warnings." << std::endl;
-        for(int64_t i = 0; i < (int64_t)thread.warnings.size(); i++) {
-            out << "(" << intToStr(i+1) << ") " << thread.warnings[i] << std::endl;
-        }
-    }
-    thread.warnings.clear();
-} 
-
 static int run(State& state, std::string inname, std::istream& in, std::ostream& out, bool interactive, bool echo) 
 {
     Thread& thread = state.getMainThread();
@@ -143,7 +132,7 @@ static int run(State& state, std::string inname, std::istream& in, std::ostream&
         linenoiseHistoryLoad((char*)".riposte_history");
     }
 
-    Prototype* print;
+    Code* print;
     if(echo)
     {
         List p(1);
@@ -159,32 +148,33 @@ static int run(State& state, std::string inname, std::istream& in, std::ostream&
     bool done = false;
     while(!done) {
         try { 
-            Value code;
+            Value expr;
             done = interactive ?
-                terminal(state, inname, in, out, code) :
-                pipe(state, inname, in, out, code);
+                terminal(state, inname, in, out, expr) :
+                pipe(state, inname, in, out, expr);
 
-            if(done || code.isNil()) 
+            if(done || expr.isNil()) 
                 continue;
 
-            Prototype* proto = Compiler::compileTopLevel(thread, code);
-            Value result = thread.eval(proto, state.global);
+            Code* code = Compiler::compileTopLevel(thread, expr);
+            Value result = thread.eval(code, state.global);
 
             // Nil indicates an error that was dispatched correctly.
             // Don't print anything, but no need to propagate error.
-            if(!result.isNil()) {
-                state.global->insert(Strings::Last_value) = result;
-                if(echo) {
-                    thread.eval(print, state.global);
-                    // Print directly (for debugging)
-                    //std::cout<< thread.stringify(result) << std::endl;
-                }
+            if(result.isNil()) 
+                continue;
+
+            state.global->insert(Strings::Last_value) = result;
+            if(echo && thread.visible) {
+                thread.eval(print, state.global);
+                // Print directly (for debugging)
+                //std::cout<< thread.stringify(result) << std::endl;
             }
+            thread.visible = true;
         } 
         catch(RiposteException const& e) { 
             e_message("Error", e.kind().c_str(), e.what().c_str());
         } 
-        //dumpWarnings(thread, out);
     }
     
     return rc;
@@ -271,6 +261,9 @@ int main(int argc, char** argv)
     state.format = format;
     Thread& thread = state.getMainThread();
 
+    if(!filename)
+        info(state, std::cout);
+
     /* Load core functions */
     try {
         Environment* env = new Environment(1, state.empty);
@@ -279,17 +272,21 @@ int main(int argc, char** argv)
     catch(RiposteException const& e) { 
         e_message("Error", e.kind().c_str(), e.what().c_str());
     } 
-    dumpWarnings(thread, std::cout);
-   
+  
+    int rc; 
+    /* Load bootstrap file if it exists */
+    /*{
+        std::ifstream in("bootstrap.R");
+        rc = run(state, std::string("bootstrap.R"), in, std::cout, false, echo);
+    }*/   
+
  
     /* Either execute the specified file or read interactively from stdin  */
-    int rc;
-    if(filename != NULL) {
+    if(filename) {
         std::ifstream in(filename);
         rc = run(state, std::string(filename), in, std::cout, false, echo);
     } 
     else {
-        info(state, std::cout);
         rc = run(state, std::string("<stdin>"), std::cin, std::cout, true, echo);
     }
 

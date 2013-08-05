@@ -15,7 +15,6 @@
 #include "call.h"
 
 static inline Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* fastmov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* store_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* add_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -31,34 +30,36 @@ static inline Instruction const* strip_op(Thread& thread, Instruction const& ins
 // CONTROL_FLOW_BYTECODES 
 
 static inline Instruction const* call_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	Heap::Global.collect(thread.state);
-	DECODE(a); FORCE(a); BIND(a);
+	DECODE(a); BIND(a);
 	if(!a.isClosure())
 		_error(std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n");
 	
     Closure const& func = (Closure const&)a;
-	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
+	CompiledCall const& call = thread.frame.code->calls[inst.b];
 
 	Environment* fenv = MatchArgs(thread, thread.frame.environment, func, call);
-    return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
+    return buildStackFrame(thread, fenv, func.prototype()->code, inst.c, &inst+1);
 }
 
 static inline Instruction const* fastcall_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	Heap::Global.collect(thread.state);
-	DECODE(a); FORCE(a); BIND(a);
+	DECODE(a); BIND(a);
 	if(!a.isClosure())
 		_error(std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n");
 	
     Closure const& func = (Closure const&)a;
-	CompiledCall const& call = thread.frame.prototype->calls[inst.b];
+	CompiledCall const& call = thread.frame.code->calls[inst.b];
 	
 	Environment* fenv = FastMatchArgs(thread, thread.frame.environment, func, call);
-    return buildStackFrame(thread, fenv, func.prototype(), inst.c, &inst+1);
+    return buildStackFrame(thread, fenv, func.prototype()->code, inst.c, &inst+1);
 }
 
 static inline Instruction const* ret_op(Thread& thread, Instruction const& inst) {
 	// we can return futures from functions, so don't BIND
-	DECODE(a); FORCE(a);
+	DECODE(a);
 	
     if(thread.stack.size() == 1)
         _error("no function to return from, jumping to top level");
@@ -104,20 +105,9 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
 	return returnpc;
 }
 
-static inline Instruction const* rets_op(Thread& thread, Instruction const& inst) {
-	// top-level statements can't return futures, so bind 
-	DECODE(a); FORCE(a); BIND(a);	
-	
-	REGISTER(0) = a;
-	thread.pop();
-	
-	// there should always be a done_op after a rets
-	return &inst+1;
-}
-
 static inline Instruction const* retp_op(Thread& thread, Instruction const& inst) {
 	// we can return futures from promises, so don't BIND
-	DECODE(a); FORCE(a);
+	DECODE(a);
 	
 	if(thread.frame.dest > 0) {
 		thread.frame.env->insert((String)thread.frame.dest) = a;
@@ -127,14 +117,12 @@ static inline Instruction const* retp_op(Thread& thread, Instruction const& inst
 	}
 	thread.traces.LiveEnvironment(thread.frame.env, a);
 	
-	Instruction const* returnpc = thread.frame.returnpc;
+	REGISTER(0) = a;
+	
+    Instruction const* returnpc = thread.frame.returnpc;
 	thread.pop();
 	
 	return returnpc;
-}
-
-static inline Instruction const* done_op(Thread& thread, Instruction const& inst) {
-	return 0;
 }
 
 static inline Instruction const* jmp_op(Thread& thread, Instruction const& inst) {
@@ -142,15 +130,16 @@ static inline Instruction const* jmp_op(Thread& thread, Instruction const& inst)
 }
 
 static inline Instruction const* jc_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	DECODE(c); BIND(c);
 	if(c.isLogical1()) {
 		if(Logical::isTrue(c.c)) return &inst+inst.a;
 		else if(Logical::isFalse(c.c)) return &inst+inst.b;
-		else if((&inst+1)->bc != ByteCode::done) return &inst+1;
+		else if((&inst+1)->bc != ByteCode::stop) return &inst+1;
         else _error("NA where TRUE/FALSE needed"); 
 	} else if(c.isInteger1()) {
 		if(Integer::isNA(c.i)) {
-            if((&inst+1)->bc != ByteCode::done)
+            if((&inst+1)->bc != ByteCode::stop)
                 return &inst+1;
             else
                 _error("NA where TRUE/FALSE needed");
@@ -159,7 +148,7 @@ static inline Instruction const* jc_op(Thread& thread, Instruction const& inst) 
 		else return & inst+inst.b;
 	} else if(c.isDouble1()) {
 		if(Double::isNA(c.d)) {
-            if((&inst+1)->bc != ByteCode::done)
+            if((&inst+1)->bc != ByteCode::stop)
                 return &inst+1;
             else
                 _error("NA where TRUE/FALSE needed");
@@ -171,6 +160,7 @@ static inline Instruction const* jc_op(Thread& thread, Instruction const& inst) 
 }
 
 static inline Instruction const* branch_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	DECODE(a);
 	int64_t index = -1;
 	if(a.isDouble1()) index = (int64_t)a.d;
@@ -194,15 +184,17 @@ static inline Instruction const* branch_op(Thread& thread, Instruction const& in
 	if(index >= 1 && index <= inst.b) {
 		return &inst + ((&inst+index)->c);
 	} 
-	FORCE(a); BIND(a);
+	BIND(a);
 	return &inst+1+inst.b;
 }
 
 static inline Instruction const* forbegin_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	// a = loop variable (e.g. i), b = loop vector(e.g. 1:100), c = counter register
 	// following instruction is a jmp that contains offset
-	Value& b = REGISTER(inst.b);
-	if(!b.isVector())
+    Value const& b = REGISTER(inst.b);
+	BIND(b);
+    if(!b.isVector())
 		_error("Invalid for() loop sequence");
 	Vector const& v = (Vector const&)b;
 	if((int64_t)v.length() <= 0) {
@@ -216,10 +208,11 @@ static inline Instruction const* forbegin_op(Thread& thread, Instruction const& 
 }
 
 static inline Instruction const* forend_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	Value& counter = REGISTER(inst.c);
 	Value& limit = REGISTER(inst.c-1);
 	if(__builtin_expect(counter.i < limit.i, true)) {
-		Value& b = REGISTER(inst.b);
+		Value const& b = REGISTER(inst.b);
 		Element2(b, counter.i, thread.frame.environment->insert((String)inst.a));
 		counter.i++;
 		return &inst+(&inst+1)->a;
@@ -229,18 +222,40 @@ static inline Instruction const* forend_op(Thread& thread, Instruction const& in
 }
 
 static inline Instruction const* mov_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); BIND(a);
+	DECODE(a);
 	OUT(c) = a;
 	return &inst+1;
 }
 
-static inline Instruction const* fastmov_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); // fastmov assumes we don't need to bind. So next op better be able to handle a future 
-	OUT(c) = a;
-	return &inst+1;
+static inline Instruction const* invisible_op(Thread& thread, Instruction const& inst) {
+    thread.visible = false;
+    DECODE(a);
+    OUT(c) = a;
+    return &inst+1;
 }
+
+static inline Instruction const* visible_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
+    DECODE(a);
+    OUT(c) = a;
+    return &inst+1;
+}
+
+/*static inline Instruction const* force_op(Thread& thread, Instruction const& inst) {
+    Value& a = REGISTER(inst.a);
+ 
+    a = ((Promise const&)a).environment()->getContext()->dots[((Promise const&)a).dotIndex()].v;
+    
+    if(!t.isObject()) {
+        return forceDot(thread, &inst+1, 
+            (Promise const&)t, ((Promise const&)a).environment(), ((Promise const&)a).dotIndex());
+    }
+     
+    return &inst+1;
+}*/
 
 static inline Instruction const* external_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	String name = (String)inst.a;
     void* func = NULL;
     for(std::map<std::string,void*>::iterator i = thread.state.handles.begin();
@@ -264,32 +279,8 @@ static inline Instruction const* external_op(Thread& thread, Instruction const& 
 	return &inst+1;
 }
 
-static void* find_function(Thread& thread, String name) {
-    static String lastname = Strings::empty;
-    static void* lastfunc = NULL;
-
-    void* func = NULL;
-    /*if(std::string(name) == std::string(lastname)) {
-        func = lastfunc;
-    }
-    else {*/
-        for(std::map<std::string,void*>::iterator i = thread.state.handles.begin();
-            i != thread.state.handles.end(); ++i) {
-            func = dlsym(i->second, name);
-            if(func != NULL)
-                break;
-        }
-        lastfunc = func;
-        lastname = name;
-    //}
-
-    if(func == NULL)
-        _error("Can't find external function");
-    
-    return func;
-}
-
 static inline Instruction const* map_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
     DECODE(c); BIND(c);
@@ -306,382 +297,65 @@ static inline Instruction const* map_op(Thread& thread, Instruction const& inst)
     return &inst+1;
 }
 
-static inline Instruction const* map1_d_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External map function name must be a string");
-
-    if(!Map1Dispatch< Zip1, UnaryFuncOp, Double >(thread, find_function(thread, a.s), b, OUT(c)))
-        _error("Invalid external map function type");
-    
-    return &inst+1;
-}
-
-static inline Instruction const* map1_i_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External map function name must be a string");
-
-    if(!Map1Dispatch< Zip1, UnaryFuncOp, Integer >(thread, find_function(thread, a.s), b, OUT(c)))
-        _error("Invalid external map function type");
-    
-    return &inst+1;
-}
-
-static inline Instruction const* map1_l_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External map function name must be a string");
-
-    if(!Map1Dispatch< Zip1, UnaryFuncOp, Logical >(thread, find_function(thread, a.s), b, OUT(c)))
-        _error("Invalid external map function type");
-    
-    return &inst+1;
-}
-
-static inline Instruction const* map1_c_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External map function name must be a string");
-
-    if(!Map1Dispatch< Zip1, UnaryFuncOp, Character >(thread, find_function(thread, a.s), b, OUT(c)))
-        _error("Invalid external map function type");
-    
-    return &inst+1;
-}
-
-static inline Instruction const* map1_r_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External map function name must be a string");
-
-    if(!Map1Dispatch< Zip1, UnaryFuncOp, Raw >(thread, find_function(thread, a.s), b, OUT(c)))
-        _error("Invalid external map function type");
-    
-    return &inst+1;
-}
-
-static inline Instruction const* map1_g_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External map function name must be a string");
-
-    if(!Map1Dispatch< Zip1, UnaryFuncOp, List >(thread, find_function(thread, a.s), b, OUT(c)))
-        _error("Invalid external map function type");
-    
-    return &inst+1;
-}
-
-static inline Instruction const* map2_d_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* scan_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
     DECODE(c); BIND(c);
 
     if(!c.isCharacter1())
-        _error("External map function name must be a string");
+        _error("External scan function name must be a string");
+    if(!b.isList())
+        _error("External scan args must be a list");
+    if(!a.isCharacter())
+        _error("External scan return types must be a character vector");
 
-    if(!Map2Dispatch< BinaryFuncOp, Double >(thread, find_function(thread, c.s), a, b, OUT(c)))
-        _error("Invalid external map function type");
+    OUT(c) = Scan(thread, c.s, (List const&)b, (Character const&)a);
     
     return &inst+1;
 }
 
-static inline Instruction const* map2_i_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* fold_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
     DECODE(c); BIND(c);
 
     if(!c.isCharacter1())
-        _error("External map function name must be a string");
+        _error("External fold function name must be a string");
+    if(!b.isList())
+        _error("External fold args must be a list");
+    if(!a.isCharacter())
+        _error("External fold return types must be a character vector");
 
-    if(!Map2Dispatch< BinaryFuncOp, Integer >(thread, find_function(thread, c.s), a, b, OUT(c)))
-        _error("Invalid external map function type");
+    OUT(c) = Fold(thread, c.s, (List const&)b, (Character const&)a);
     
-    return &inst+1;
-}
-
-static inline Instruction const* map2_l_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-    DECODE(c); BIND(c);
-
-    if(!c.isCharacter1())
-        _error("External map function name must be a string");
-
-    if(!Map2Dispatch< BinaryFuncOp, Logical >(thread, find_function(thread, c.s), a, b, OUT(c)))
-        _error("Invalid external map function type");
-    
-    return &inst+1;
-}
-
-static inline Instruction const* map2_c_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-    DECODE(c); BIND(c);
-
-    if(!c.isCharacter1())
-        _error("External map function name must be a string");
-
-    if(!Map2Dispatch< BinaryFuncOp, Character >(thread, find_function(thread, c.s), a, b, OUT(c)))
-        _error("Invalid external map function type");
-    
-    return &inst+1;
-}
-
-static inline Instruction const* map2_r_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-    DECODE(c); BIND(c);
-
-    if(!c.isCharacter1())
-        _error("External map function name must be a string");
-
-    if(!Map2Dispatch< BinaryFuncOp, Raw >(thread, find_function(thread, c.s), a, b, OUT(c)))
-        _error("Invalid external map function type");
-    
-    return &inst+1;
-}
-
-static inline Instruction const* map2_g_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-    DECODE(c); BIND(c);
-
-    if(!c.isCharacter1())
-        _error("External map function name must be a string");
-
-    if(!Map2Dispatch< BinaryFuncOp, List >(thread, find_function(thread, c.s), a, b, OUT(c)))
-        _error("Invalid external map function type");
-    
-    return &inst+1;
-}
-
-FoldFuncArgs find_fold_function(Thread& thread, String name) {
-    void* init_func = find_function(thread, (std::string(name) + "_init").c_str());
-    void* op_func = find_function(thread, (std::string(name) + "_op").c_str());
-    void* fini_func = find_function(thread, (std::string(name) + "_fini").c_str());
-
-    FoldFuncArgs funcs;
-    funcs.base = init_func;
-    funcs.func = op_func;
-    funcs.fini = fini_func;
-
-   return funcs; 
-}
-
-static inline Instruction const* fold_d_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External fold function name must be a string");
-
-    FoldFuncArgs funcs = find_fold_function(thread, a.s);
-
-    if(!Map1Dispatch< FoldLeft2, FoldFuncOp, Double >(thread, &funcs, b, OUT(c)))
-        _error("Invalid external fold function type");
-
-    return &inst+1;
-}
-
-static inline Instruction const* fold_i_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External fold function name must be a string");
-
-    FoldFuncArgs funcs = find_fold_function(thread, a.s);
-
-    if(!Map1Dispatch< FoldLeft2, FoldFuncOp, Integer >(thread, &funcs, b, OUT(c)))
-        _error("Invalid external fold function type");
-
-    return &inst+1;
-}
-
-static inline Instruction const* fold_l_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External fold function name must be a string");
-
-    FoldFuncArgs funcs = find_fold_function(thread, a.s);
-
-    if(!Map1Dispatch< FoldLeft2, FoldFuncOp, Logical >(thread, &funcs, b, OUT(c)))
-        _error("Invalid external fold function type");
-
-    return &inst+1;
-}
-
-static inline Instruction const* fold_c_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External fold function name must be a string");
-
-    FoldFuncArgs funcs = find_fold_function(thread, a.s);
-
-    if(!Map1Dispatch< FoldLeft2, FoldFuncOp, Character >(thread, &funcs, b, OUT(c)))
-        _error("Invalid external fold function type");
-
-    return &inst+1;
-}
-
-static inline Instruction const* fold_r_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External fold function name must be a string");
-
-    FoldFuncArgs funcs = find_fold_function(thread, a.s);
-
-    if(!Map1Dispatch< FoldLeft2, FoldFuncOp, Raw >(thread, &funcs, b, OUT(c)))
-        _error("Invalid external fold function type");
-
-    return &inst+1;
-}
-
-static inline Instruction const* fold_g_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External fold function name must be a string");
-
-    FoldFuncArgs funcs = find_fold_function(thread, a.s);
-
-    if(!Map1Dispatch< FoldLeft2, FoldFuncOp, List >(thread, &funcs, b, OUT(c)))
-        _error("Invalid external fold function type");
-
-    return &inst+1;
-}
-
-static inline Instruction const* scan_d_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External scan function name must be a string");
-
-    FoldFuncArgs funcs = find_fold_function(thread, a.s);
-
-    if(!Map1Dispatch< ScanLeft2, FoldFuncOp, Double >(thread, &funcs, b, OUT(c)))
-        _error("Invalid external scan function type");
-
-    return &inst+1;
-}
-
-static inline Instruction const* scan_i_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External scan function name must be a string");
-
-    FoldFuncArgs funcs = find_fold_function(thread, a.s);
-
-    if(!Map1Dispatch< ScanLeft2, FoldFuncOp, Integer >(thread, &funcs, b, OUT(c)))
-        _error("Invalid external scan function type");
-
-    return &inst+1;
-}
-
-static inline Instruction const* scan_l_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External scan function name must be a string");
-
-    FoldFuncArgs funcs = find_fold_function(thread, a.s);
-
-    if(!Map1Dispatch< ScanLeft2, FoldFuncOp, Logical >(thread, &funcs, b, OUT(c)))
-        _error("Invalid external scan function type");
-
-    return &inst+1;
-}
-
-static inline Instruction const* scan_c_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External scan function name must be a string");
-
-    FoldFuncArgs funcs = find_fold_function(thread, a.s);
-
-    if(!Map1Dispatch< ScanLeft2, FoldFuncOp, Character >(thread, &funcs, b, OUT(c)))
-        _error("Invalid external scan function type");
-
-    return &inst+1;
-}
-
-static inline Instruction const* scan_r_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External scan function name must be a string");
-
-    FoldFuncArgs funcs = find_fold_function(thread, a.s);
-
-    if(!Map1Dispatch< ScanLeft2, FoldFuncOp, Raw >(thread, &funcs, b, OUT(c)))
-        _error("Invalid external scan function type");
-
-    return &inst+1;
-}
-
-static inline Instruction const* scan_g_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isCharacter1())
-        _error("External scan function name must be a string");
-
-    FoldFuncArgs funcs = find_fold_function(thread, a.s);
-
-    if(!Map1Dispatch< ScanLeft2, FoldFuncOp, List >(thread, &funcs, b, OUT(c)))
-        _error("Invalid external scan function type");
-
     return &inst+1;
 }
 
 // LOAD_STORE_BYTECODES
 
 static inline Instruction const* load_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	String s = ((Character const&)CONSTANT(inst.a)).s;
 	Environment* env;
 	Value const& v = thread.frame.environment->getRecursive(s, env);
-	if(!v.isObject()) {
-        try {
-		    return force(thread, inst, v, env, s);
-	    }
-        catch(RuntimeError const& e) {
-            return StopDispatch(thread, inst, thread.internStr(e.what().c_str()), inst.c);
-        }
-    }
-	else {
+	if(v.isObject()) {
 		OUT(c) = v;
 		return &inst+1;
-	}
+    }
+    else {
+        try {
+            return force(thread, inst, v, env, s);
+        }
+        catch(...) {
+            return StopDispatch(thread, inst, thread.internStr((std::string("Object '") + s + "' not found").c_str()), inst.c);
+        }
+    }
 }
 
 static inline Instruction const* loadfn_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	String s = ((Character const&)CONSTANT(inst.a)).s;
 	Environment* env = thread.frame.environment;
 
@@ -708,38 +382,34 @@ static inline Instruction const* loadfn_op(Thread& thread, Instruction const& in
 }
 
 static inline Instruction const* store_op(Thread& thread, Instruction const& inst) {
+    thread.visible = false;
     String s = ((Character const&)CONSTANT(inst.a)).s; 
-	DECODE(c); // don't BIND or FORCE
+	DECODE(c); // don't BIND
 	thread.frame.environment->insert(s) = c;
 	return &inst+1;
 }
 
 static inline Instruction const* storeup_op(Thread& thread, Instruction const& inst) {
+    thread.visible = false;
 	// assign2 is always used to assign up at least one scope level...
 	// so start off looking up one level...
 	assert(thread.frame.environment->getParent() != 0);
 
-    // TODO: just BIND in this scenario instead of tracking liveness?
-	
-	DECODE(c); /* FORCE(c); BIND(value);*/
+	DECODE(c); BIND(c);
 	
 	String s = ((Character const&)CONSTANT(inst.a)).s;
 	Environment* penv;
 	Value& dest = thread.frame.environment->getParent()->insertRecursive(s, penv);
+    if(!dest.isNil())
+        dest = c;
+    else
+        thread.state.global->insert(s) = c;
 
-	if(!dest.isNil()) {
-		dest = c;
-		thread.traces.LiveEnvironment(penv, dest);
-	}
-	else {
-		Value& global = thread.state.global->insert(s);
-		global = c;
-		thread.traces.LiveEnvironment(thread.state.global, global);
-	}
 	return &inst+1;
 }
 
 static inline Instruction const* rm_op(Thread& thread, Instruction const& inst) {
+    thread.visible = false;
 	String s = ((Character const&)CONSTANT(inst.a)).s;
 	thread.frame.environment->remove( s );
 	OUT(c) = Null::Singleton();
@@ -747,7 +417,8 @@ static inline Instruction const* rm_op(Thread& thread, Instruction const& inst) 
 }
 
 static inline Instruction const* dotsv_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
+    thread.visible = true;
+    DECODE(a); BIND(a);
 
     int64_t idx = 0;
     if(a.isInteger1())
@@ -768,6 +439,7 @@ static inline Instruction const* dotsv_op(Thread& thread, Instruction const& ins
 }
 
 static inline Instruction const* dotsc_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
     if(!thread.frame.environment->getContext())
         OUT(c) = Integer::c(0);
     else
@@ -776,6 +448,7 @@ static inline Instruction const* dotsc_op(Thread& thread, Instruction const& ins
 }
 
 static inline Instruction const* dots_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	static const PairList empty;
     PairList const& dots = 
         thread.frame.environment->getContext()
@@ -817,6 +490,7 @@ static inline Instruction const* dots_op(Thread& thread, Instruction const& inst
 }
 
 static inline Instruction const* missing_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
     DECODE(a);
     bool missing = true;
     if( a.isCharacter() && ((Character const&)a).length() == 1 ) {
@@ -852,7 +526,8 @@ static inline Instruction const* missing_op(Thread& thread, Instruction const& i
 
 // STACK_FRAME_BYTECODES
 static inline Instruction const* frame_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
+    thread.visible = true;
+    DECODE(a); BIND(a);
     int64_t index = a.i;
 
     Environment* env = thread.frame.environment;
@@ -892,20 +567,12 @@ static inline Instruction const* frame_op(Thread& thread, Instruction const& ins
     return &inst+1;
 }
 
-static inline Instruction const* setexit_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); BIND(a);
-
-    //if(thread.frame.environment->getContext())
-    //    thread.frame.environment->getContext()->onexit = a;
-
-    return &inst+1;
-}
-
 // PROMISE_BYTECODES
 
 static inline Instruction const* pr_new_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
-    DECODE(b); FORCE(b); BIND(b);
+    thread.visible = true;
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
 
     REnvironment& eval = (REnvironment&)REGISTER((&inst+1)->a);
     REnvironment& assign = (REnvironment&)REGISTER((&inst+1)->b);
@@ -922,8 +589,9 @@ static inline Instruction const* pr_new_op(Thread& thread, Instruction const& in
 }
 
 static inline Instruction const* pr_expr_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
-    DECODE(b); FORCE(b); BIND(b);
+    thread.visible = true;
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
 
     // TODO: check types
 
@@ -933,7 +601,7 @@ static inline Instruction const* pr_expr_op(Thread& thread, Instruction const& i
     // TODO: must support ... & ..n
 	Value v = env.environment()->get(s);
     if(v.isPromise())
-        v = ((Promise const&)v).prototype()->expression;
+        v = ((Promise const&)v).code()->expression;
     else if(v.isNil())
         v = Null::Singleton();
     OUT(c) = v;
@@ -941,8 +609,9 @@ static inline Instruction const* pr_expr_op(Thread& thread, Instruction const& i
 }
 
 static inline Instruction const* pr_env_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
-    DECODE(b); FORCE(b); BIND(b);
+    thread.visible = true;
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
 
     // TODO: check types
 
@@ -960,7 +629,8 @@ static inline Instruction const* pr_env_op(Thread& thread, Instruction const& in
 // OBJECT_BYTECODES
 
 static inline Instruction const* type_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a);
+    thread.visible = true;
+	DECODE(a);
 	switch(thread.traces.futureType(a)) {
         #define CASE(name, str, ...) case Type::name: OUT(c) = Character::c(Strings::name); break;
         TYPES(CASE)
@@ -971,7 +641,8 @@ static inline Instruction const* type_op(Thread& thread, Instruction const& inst
 }
 
 static inline Instruction const* length_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); 
+    thread.visible = true;
+	DECODE(a);
 	if(a.isVector())
 		Integer::InitScalar(OUT(c), ((Vector const&)a).length());
 	else if(a.isFuture()) {
@@ -992,6 +663,7 @@ static inline Instruction const* length_op(Thread& thread, Instruction const& in
 }
 
 static inline Instruction const* get_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	DECODE(a); DECODE(b);
 
     if(GetFast(thread, a, b, OUT(c)))
@@ -1001,6 +673,7 @@ static inline Instruction const* get_op(Thread& thread, Instruction const& inst)
 }
 
 static inline Instruction const* set_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	// a = value, b = index, c = dest
 	DECODE(a); DECODE(b); DECODE(c);
 	BIND(b);
@@ -1040,6 +713,7 @@ static inline Instruction const* set_op(Thread& thread, Instruction const& inst)
 }
 
 static inline Instruction const* getsub_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	DECODE(a); DECODE(b);
 
 	if(a.isVector() && !((Object const&)a).hasAttributes()) {
@@ -1096,6 +770,7 @@ static inline Instruction const* getsub_op(Thread& thread, Instruction const& in
 }
 
 static inline Instruction const* setsub_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	// a = value, b = index, c = dest 
 	DECODE(a); DECODE(b); DECODE(c); 
     BIND(b); BIND(c);
@@ -1138,7 +813,8 @@ static inline Instruction const* setsub_op(Thread& thread, Instruction const& in
 }
 
 static inline Instruction const* getenv_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
+    thread.visible = true;
+    DECODE(a); BIND(a);
 
     if(a.isEnvironment()) {
         Environment* parent = ((REnvironment const&)a).environment()->getParent();
@@ -1159,8 +835,9 @@ static inline Instruction const* getenv_op(Thread& thread, Instruction const& in
 }
 
 static inline Instruction const* setenv_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
-    DECODE(b); FORCE(b); BIND(b);
+    thread.visible = true;
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
 
     if(!b.isEnvironment())
         _error("replacement object is not an environment");
@@ -1192,8 +869,9 @@ static inline Instruction const* setenv_op(Thread& thread, Instruction const& in
 }
 
 static inline Instruction const* getattr_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a);
-	DECODE(b); FORCE(b); BIND(b);
+    thread.visible = true;
+	DECODE(a);
+	DECODE(b); BIND(b);
 	if(a.isObject() && b.isCharacter1()) {
 		String name = ((Character const&)b)[0];
 		Object const& o = (Object const&)a;
@@ -1216,9 +894,10 @@ static inline Instruction const* getattr_op(Thread& thread, Instruction const& i
 }
 
 static inline Instruction const* setattr_op(Thread& thread, Instruction const& inst) {
-	DECODE(c); FORCE(c);
-	DECODE(b); FORCE(b); BIND(b);
-	DECODE(a); FORCE(a); BIND(a);
+    thread.visible = true;
+	DECODE(c);
+	DECODE(b); BIND(b);
+	DECODE(a); BIND(a);
 	if(c.isObject() && b.isCharacter1()) {
 		String name = ((Character const&)b)[0];
 		Object o = (Object const&)c;
@@ -1269,7 +948,8 @@ static inline Instruction const* setattr_op(Thread& thread, Instruction const& i
 }
 
 static inline Instruction const* attributes_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a);
+    thread.visible = true;
+    DECODE(a);
     if(a.isObject()) {
         Object o = (Object const&)a;
 
@@ -1303,7 +983,8 @@ static inline Instruction const* attributes_op(Thread& thread, Instruction const
 }
 
 static inline Instruction const* strip_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a);
+    thread.visible = true;
+	DECODE(a);
 	Value& c = OUT(c);
 	c = a;
 	((Object&)c).attributes(0);
@@ -1311,7 +992,8 @@ static inline Instruction const* strip_op(Thread& thread, Instruction const& ins
 }
 
 static inline Instruction const* as_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); BIND(a);
+    thread.visible = true;
+	DECODE(a); BIND(a);
 	String type = ((Character const&)CONSTANT(inst.b)).s;
     if(type == Strings::Null)
         OUT(c) = As<Null>(thread, a);
@@ -1337,8 +1019,9 @@ static inline Instruction const* as_op(Thread& thread, Instruction const& inst) 
 // ENVIRONMENT_BYTECODES
 
 static inline Instruction const* env_new_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
-    DECODE(b); FORCE(b); BIND(b);
+    thread.visible = true;
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
 
     if(!a.isEnvironment())
         _error("'enclos' must be an environment");
@@ -1348,7 +1031,8 @@ static inline Instruction const* env_new_op(Thread& thread, Instruction const& i
 }
 
 static inline Instruction const* env_names_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
+    thread.visible = true;
+    DECODE(a); BIND(a);
 
     if(!a.isEnvironment())
         _error("'enclos' must be an environment");
@@ -1367,8 +1051,9 @@ static inline Instruction const* env_names_op(Thread& thread, Instruction const&
 }
 
 static inline Instruction const* env_exists_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
-    DECODE(b); FORCE(b); BIND(b);
+    thread.visible = true;
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
 
     if(!a.isEnvironment())
         _error("invalid 'envir' argument");
@@ -1384,8 +1069,9 @@ static inline Instruction const* env_exists_op(Thread& thread, Instruction const
 }
 
 static inline Instruction const* env_remove_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
-    DECODE(b); FORCE(b); BIND(b);
+    thread.visible = true;
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
 
     if(!a.isEnvironment())
         _error("invalid 'envir' argument");
@@ -1399,6 +1085,7 @@ static inline Instruction const* env_remove_op(Thread& thread, Instruction const
 }
 
 static inline Instruction const* env_global_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
     REnvironment::Init(OUT(c), thread.state.global);
     return &inst+1;
 }
@@ -1406,6 +1093,7 @@ static inline Instruction const* env_global_op(Thread& thread, Instruction const
 // FUNCTION_BYTECODES
 
 static inline Instruction const* fn_new_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	Value const& function = CONSTANT(inst.a);
 	Value& out = OUT(c);
 	Closure::Init(out, ((Closure const&)function).prototype(), thread.frame.environment);
@@ -1417,6 +1105,7 @@ static inline Instruction const* fn_new_op(Thread& thread, Instruction const& in
 
 #define OP(Name, string, Group, Func) \
 static inline Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
+    thread.visible = true; \
 	DECODE(a);	\
     if( Group##Fast<Name##VOp>( thread, NULL, a, OUT(c) ) ) \
         return &inst+1; \
@@ -1428,6 +1117,7 @@ UNARY_FOLD_SCAN_BYTECODES(OP)
 
 #define OP(Name, string, Group, Func) \
 static inline Instruction const* Name##_op(Thread& thread, Instruction const& inst) { \
+    thread.visible = true; \
 	DECODE(a);	\
 	DECODE(b);	\
     if( Group##Fast<Name##VOp>( thread, NULL, a, b, OUT(c) ) ) \
@@ -1439,9 +1129,10 @@ BINARY_BYTECODES(OP)
 #undef OP
 
 static inline Instruction const* ifelse_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a);
-	DECODE(b); FORCE(b);
-	DECODE(c); FORCE(c);
+    thread.visible = true;
+	DECODE(a);
+	DECODE(b);
+	DECODE(c);
 	if(c.isLogical1()) {
 		OUT(c) = Logical::isTrue(c.c) ? b : a;
 		return &inst+1; 
@@ -1466,9 +1157,10 @@ static inline Instruction const* ifelse_op(Thread& thread, Instruction const& in
 }
 
 static inline Instruction const* split_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); BIND(a);
-	DECODE(b); FORCE(b);
-	DECODE(c); FORCE(c);
+    thread.visible = true;
+	DECODE(a); BIND(a);
+	DECODE(b);
+	DECODE(c);
 	int64_t levels = As<Integer>(thread, a)[0];
 	if(thread.traces.isTraceable<Split>(b,c)) {
 		OUT(c) = thread.traces.EmitSplit(thread.frame.environment, c, b, levels);
@@ -1482,8 +1174,9 @@ static inline Instruction const* split_op(Thread& thread, Instruction const& ins
 }
 
 static inline Instruction const* vector_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); BIND(a);
-	DECODE(b); FORCE(b); BIND(b);
+    thread.visible = true;
+	DECODE(a); BIND(a);
+	DECODE(b); BIND(b);
 	String stype = As<Character>(thread, a)[0];
 	Type::Enum type = string2Type( stype );
 	int64_t l = As<Integer>(thread, b)[0];
@@ -1527,6 +1220,7 @@ static inline Instruction const* vector_op(Thread& thread, Instruction const& in
 }
 
 static inline Instruction const* seq_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
     DECODE(a); BIND(a);
 
     int64_t len = As<Integer>(thread, a)[0];
@@ -1542,10 +1236,11 @@ static inline Instruction const* seq_op(Thread& thread, Instruction const& inst)
 }
 
 static inline Instruction const* index_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
 	// c = n, b = each, a = length
-	DECODE(a); FORCE(a); BIND(a);
-	DECODE(b); FORCE(b); BIND(b);
-	DECODE(c); FORCE(c); BIND(c);
+	DECODE(a); BIND(a);
+	DECODE(b); BIND(b);
+	DECODE(c); BIND(c);
 
 	int64_t n = As<Integer>(thread, c)[0];
 	int64_t each = As<Integer>(thread, b)[0];
@@ -1562,7 +1257,8 @@ static inline Instruction const* index_op(Thread& thread, Instruction const& ins
 }
 
 static inline Instruction const* random_op(Thread& thread, Instruction const& inst) {
-	DECODE(a); FORCE(a); BIND(a);
+    thread.visible = true;
+	DECODE(a); BIND(a);
 
 	int64_t len = As<Integer>(thread, a)[0];
 	
@@ -1577,8 +1273,9 @@ static inline Instruction const* random_op(Thread& thread, Instruction const& in
 }
 
 static inline Instruction const* semijoin_op(Thread& thread, Instruction const& inst) {
-    DECODE(a); FORCE(a); BIND(a);
-    DECODE(b); FORCE(b); BIND(b);
+    thread.visible = true;
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
 
     // assumes that the two arguments are the same type...
     assert(a.type() == b.type());
@@ -1594,42 +1291,53 @@ static inline Instruction const* semijoin_op(Thread& thread, Instruction const& 
 bool interpret(Thread& thread, Instruction const* pc) {
 
 #ifdef USE_THREADED_INTERPRETER
-    	#define LABELS_THREADED(name,type,...) (void*)&&name##_label,
-	static const void* labels[] = {BYTECODES(LABELS_THREADED)};
+    #define LABELS_THREADED(name,type,...) (void*)&&name##_label,
+    static const void* labels[] = {BYTECODES(LABELS_THREADED)};
 
-	goto *(void*)(labels[pc->bc]);
-	#define LABELED_OP(name,type,...) \
-		name##_label: \
-			{ pc = name##_op(thread, *pc); goto *(void*)(labels[pc->bc]); } 
-	STANDARD_BYTECODES(LABELED_OP)
-	stop_label: { return false; }
-	done_label: { return true; }
+    goto *(void*)(labels[pc->bc]);
+    #define LABELED_OP(name,type,...) \
+        name##_label: \
+            { pc = name##_op(thread, *pc); goto *(void*)(labels[pc->bc]); } 
+    STANDARD_BYTECODES(LABELED_OP)
+    stop_label: { 
+        return false; 
+    }
+    done_label: {
+	    thread.pop();
+        return true;
+    }
 #else
-	while(pc->bc != ByteCode::done) {
-		switch(pc->bc) {
-			#define SWITCH_OP(name,type,...) \
-				case ByteCode::name: { pc = name##_op(thread, *pc); } break;
-			BYTECODES(SWITCH_OP)
-		};
-	}
+    while(pc->bc != ByteCode::done) {
+        switch(pc->bc) {
+            #define SWITCH_OP(name,type,...) \
+            case ByteCode::name: { pc = name##_op(thread, *pc); } break;
+            STANDARD_BYTECODES(SWITCH_OP)
+            case ByteCode::stop: { 
+                return false; 
+            } break;
+	        case ByteCode::done: { 
+                thread.pop();
+                return true;
+            }
+        };
+    }
 #endif
-
 }
 
 void State::interpreter_init(Thread& thread) {
 	// nothing for now
 }
 
-Value Thread::eval(Prototype const* prototype) {
-	return eval(prototype, frame.environment, frame.prototype->registers);
+Value Thread::eval(Code const* code) {
+	return eval(code, frame.environment, frame.code->registers);
 }
 
-Value Thread::eval(Prototype const* prototype, Environment* environment, int64_t resultSlot) {
+Value Thread::eval(Code const* code, Environment* environment, int64_t resultSlot) {
 	uint64_t stackSize = stack.size();
     StackFrame oldFrame = frame;
 
 	// make room for the result
-	Instruction const* run = buildStackFrame(*this, environment, prototype, -resultSlot, (Instruction const*)0);
+	Instruction const* run = buildStackFrame(*this, environment, code, -resultSlot, (Instruction const*)0);
 	try {
 		bool success = interpret(*this, run);
         if(success) {
@@ -1644,13 +1352,13 @@ Value Thread::eval(Prototype const* prototype, Environment* environment, int64_t
         }
     } catch(...) {
         std::cout << "Unknown error: " << std::endl;
-        if(!frame.isPromise && frame.environment->getContext()) {
+/*        if(!frame.isPromise && frame.environment->getContext()) {
             std::cout << stack.size() << ": " << stringify(frame.environment->getContext()->call);
         }
         for(int64_t i = stack.size()-1; i > std::max(stackSize, 1ULL); --i) {
             if(!stack[i].isPromise && stack[i].environment->getContext())
                 std::cout << i << ": " << stringify(stack[i].environment->getContext()->call);
-        }
+        }*/
         
         stack.resize(stackSize);
         frame = oldFrame;
@@ -1672,6 +1380,7 @@ const int64_t Random::primes[100] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37,
 Thread::Thread(State& state, uint64_t index) 
     : state(state)
     , index(index)
+    , visible(true)
 #ifdef EPEE
     , traces(state.epeeEnabled)
 #endif
@@ -1682,20 +1391,20 @@ Thread::Thread(State& state, uint64_t index)
 	frame.registers = registers;
 }
 
-void Prototype::printByteCode(Prototype const* prototype, State const& state) {
-	std::cout << "Prototype: " << intToHexStr((int64_t)prototype) << std::endl;
-	std::cout << "\tRegisters: " << prototype->registers << std::endl;
-	if(prototype->constants.size() > 0) {
+void Code::printByteCode(State const& state) const {
+	std::cout << "Code: " << intToHexStr((int64_t)this) << std::endl;
+	std::cout << "\tRegisters: " << registers << std::endl;
+	if(constants.size() > 0) {
 		std::cout << "\tConstants: " << std::endl;
-		for(int64_t i = 0; i < (int64_t)prototype->constants.size(); i++)
-			std::cout << "\t\t" << i << ":\t" << state.stringify(prototype->constants[i]) << std::endl;
+		for(int64_t i = 0; i < (int64_t)constants.size(); i++)
+			std::cout << "\t\t" << i << ":\t" << state.stringify(constants[i]) << std::endl;
 	}
-	if(prototype->bc.size() > 0) {
+	if(bc.size() > 0) {
 		std::cout << "\tCode: " << std::endl;
-		for(int64_t i = 0; i < (int64_t)prototype->bc.size(); i++) {
-			std::cout << std::hex << &prototype->bc[i] << std::dec << "\t" << i << ":\t" << prototype->bc[i].toString();
-			if(prototype->bc[i].bc == ByteCode::call || prototype->bc[i].bc == ByteCode::fastcall) {
-				std::cout << "\t\t(arguments: " << prototype->calls[prototype->bc[i].b].arguments.size() << ")";
+		for(int64_t i = 0; i < (int64_t)bc.size(); i++) {
+			std::cout << std::hex << &bc[i] << std::dec << "\t" << i << ":\t" << bc[i].toString();
+			if(bc[i].bc == ByteCode::call || bc[i].bc == ByteCode::fastcall) {
+				std::cout << "\t\t(arguments: " << calls[bc[i].b].arguments.size() << ")";
 			}
 			std::cout << std::endl;
 		}

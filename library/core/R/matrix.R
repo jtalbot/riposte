@@ -13,7 +13,7 @@ matrix <- function(data, nrow, ncol, byrow, dimnames, missing.nrow, missing.ncol
     nrow <- as.integer(nrow)
     ncol <- as.integer(ncol)
 
-    if((nrow*ncol) %% length(data) != 0L)
+    if((length(data) != 0) && ((nrow*ncol) %% length(data) != 0L))
         warning(TRUE,FALSE,sprintf('data length [%d] is not a sub-multiple or multiple of the number of rows [%d]', length(data), nrow))
 
     if(length(data) < nrow*ncol)

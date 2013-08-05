@@ -26,7 +26,7 @@ void sourceFile(Thread& thread, std::string name, Environment* env) {
         if(!value.isNil())
             thread.eval(Compiler::compileTopLevel(thread, value), env);
     } catch(RiposteException const& e) { 
-        _warning(thread, "Unable to load library " + name + " (" + e.kind() + "): " + e.what());
+        _error("Unable to load library " + name + " (" + e.kind() + "): " + e.what());
     } 
 }
 

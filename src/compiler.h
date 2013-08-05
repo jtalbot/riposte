@@ -87,40 +87,42 @@ private:
 
 	Compiler(Thread& thread, Scope scope) : thread(thread), state(thread.state), scope(scope), loopDepth(0), n(0), max_n(0) {}
 	
-	Prototype* compile(Value const& expr);			// compile function block, code ends with return
-	Operand compile(Value const& expr, Prototype* code);		// compile into existing code block
+	Code* compile(Value const& expr);			// compile function block, code ends with return
+	Operand compile(Value const& expr, Code* code);		// compile into existing code block
 
-	Operand compileConstant(Value const& expr, Prototype* code);
-	Operand compileSymbol(Value const& symbol, Prototype* code, bool isClosure); 
-	Operand compileCall(List const& call, Character const& names, Prototype* code); 
-	Operand compileFunctionCall(Operand function, List const& call, Character const& names, Prototype* code); 
-	Operand compileInternalFunctionCall(List const& call, Prototype* code); 
-	Operand compileExternalFunctionCall(List const& call, Prototype* code); 
-	Operand compileExpression(List const& values, Prototype* code);
+	Operand compileConstant(Value const& expr, Code* code);
+	Operand compileSymbol(Value const& symbol, Code* code, bool isClosure); 
+	Operand compileCall(List const& call, Character const& names, Code* code); 
+	Operand compileFunctionCall(Operand function, List const& call, Character const& names, Code* code); 
+	Operand compileInternalFunctionCall(List const& call, Code* code); 
+	Operand compileExternalFunctionCall(List const& call, Code* code); 
+	Operand compileExpression(List const& values, Code* code);
 	
 	CompiledCall makeCall(List const& call, Character const& names);
 
 	Operand placeInRegister(Operand r);
-	Operand forceInRegister(Operand r);
 	int64_t emit(ByteCode::Enum bc, Operand a, Operand b, Operand c);
 	void resolveLoopExits(int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget);
 	int64_t encodeOperand(Operand op, int64_t n) const;
 	void dumpCode() const;
 
 public:
-	static Prototype* compileTopLevel(Thread& thread, Value const& expr) {
+	static Code* compileTopLevel(Thread& thread, Value const& expr) {
 		Compiler compiler(thread, TOPLEVEL);
 		return compiler.compile(expr);
 	}
 	
-	static Prototype* compileClosureBody(Thread& thread, Value const& expr) {
-		Compiler compiler(thread, CLOSURE);
+	static Code* compilePromise(Thread& thread, Value const& expr) {
+		Compiler compiler(thread, PROMISE);
 		return compiler.compile(expr);
 	}
 	
-	static Prototype* compilePromise(Thread& thread, Value const& expr) {
-		Compiler compiler(thread, PROMISE);
-		return compiler.compile(expr);
+    static Prototype* compileClosureBody(Thread& thread, Value const& expr) {
+		Compiler compiler(thread, CLOSURE);
+        Code* code = compiler.compile(expr);
+        Prototype* p = new Prototype();
+        p->code = code;
+        return p;
 	}
 };
 

@@ -45,6 +45,9 @@ static ByteCode::Enum op1(String const& func) {
     if(func == Strings::env_names) return ByteCode::env_names;
     if(func == Strings::frame) return ByteCode::frame;
     
+    if(func == Strings::invisible) return ByteCode::invisible;
+    if(func == Strings::visible) return ByteCode::visible;
+    
     throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
 }
 
@@ -92,6 +95,8 @@ static ByteCode::Enum op3(String const& func) {
 	if(func == Strings::index) return ByteCode::index;
 	if(func == Strings::attrset) return ByteCode::setattr;
 	if(func == Strings::map) return ByteCode::map;
+	if(func == Strings::scan) return ByteCode::scan;
+	if(func == Strings::fold) return ByteCode::fold;
 	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a trinary operator"); 
 }
 
@@ -112,7 +117,7 @@ void Compiler::resolveLoopExits(int64_t start, int64_t end, int64_t nextTarget, 
 	}
 }
 
-Compiler::Operand Compiler::compileConstant(Value const& expr, Prototype* code) {
+Compiler::Operand Compiler::compileConstant(Value const& expr, Code* code) {
 	std::map<Value, int64_t>::const_iterator i = constants.find(expr);
 	int64_t index = 0;
 	if(i == constants.end()) {
@@ -145,7 +150,7 @@ static int64_t isDotDot(String s) {
 	return -1;	
 }
 
-Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code, bool isClosure) {
+Compiler::Operand Compiler::compileSymbol(Value const& symbol, Code* code, bool isClosure) {
 	String s = SymbolStr(symbol);
 	
 	int64_t dd = isDotDot(s);
@@ -165,16 +170,6 @@ Compiler::Operand Compiler::compileSymbol(Value const& symbol, Prototype* code, 
 
 Compiler::Operand Compiler::placeInRegister(Operand r) {
 	if(r.loc != REGISTER && r.loc != INVALID) {
-		kill(r);
-		Operand t = allocRegister();
-		emit(ByteCode::fastmov, r, 0, t);
-		return t;
-	}
-	return r;
-}
-
-Compiler::Operand Compiler::forceInRegister(Operand r) {
-	if(r.loc != INVALID) {
 		kill(r);
 		Operand t = allocRegister();
 		emit(ByteCode::mov, r, 0, t);
@@ -235,7 +230,7 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
 }
 
 // a standard call, not an op
-Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& call, Character const& names, Prototype* code) {
+Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& call, Character const& names, Code* code) {
 	CompiledCall a = makeCall(call, names);
 	code->calls.push_back(a);
 	kill(function);
@@ -249,7 +244,7 @@ Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& ca
 	return result;
 }
 
-Compiler::Operand Compiler::compileExternalFunctionCall(List const& call, Prototype* code) {
+Compiler::Operand Compiler::compileExternalFunctionCall(List const& call, Code* code) {
 	String func = SymbolStr(call[0]);
 	
 	// compile parameters directly...reserve registers for them.
@@ -268,7 +263,7 @@ Compiler::Operand Compiler::compileExternalFunctionCall(List const& call, Protot
 	return result;
 }
 
-Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Prototype* code) {
+Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Code* code) {
 
 	int64_t length = call.length();
 
@@ -385,234 +380,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 			throw CompileError(std::string(".External has invalid arguments (") + Type::toString(call[1].type()) + ")");
 		return compileExternalFunctionCall((List const&)call[1], code);
     }
-    else if(func == Strings::map_d && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::map1_d, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::map_i && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::map1_i, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::map_l && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::map1_l, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::map_c && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::map1_c, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::map_r && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::map1_r, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::map_g && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::map1_g, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::map_d && call.length() == 4)
-    {
-        Operand a = forceInRegister(compile(call[1], code));
-        Operand b = compile(call[2], code);
-        Operand c = compile(call[3], code);
-        kill(c); kill(b); kill(a);
-        Operand result = allocRegister();
-        assert(a == result);
-        emit(ByteCode::map2_d, b, c, result);
-        return result;
-    } 
-    else if(func == Strings::map_i && call.length() == 4)
-    {
-        Operand a = forceInRegister(compile(call[1], code));
-        Operand b = compile(call[2], code);
-        Operand c = compile(call[3], code);
-        kill(c); kill(b); kill(a);
-        Operand result = allocRegister();
-        assert(a == result);
-        emit(ByteCode::map2_i, b, c, result);
-        return result;
-    } 
-    else if(func == Strings::map_l && call.length() == 4)
-    {
-        Operand a = forceInRegister(compile(call[1], code));
-        Operand b = compile(call[2], code);
-        Operand c = compile(call[3], code);
-        kill(c); kill(b); kill(a);
-        Operand result = allocRegister();
-        assert(a == result);
-        emit(ByteCode::map2_l, b, c, result);
-        return result;
-    } 
-    else if(func == Strings::map_c && call.length() == 4)
-    {
-        Operand a = forceInRegister(compile(call[1], code));
-        Operand b = compile(call[2], code);
-        Operand c = compile(call[3], code);
-        kill(c); kill(b); kill(a);
-        Operand result = allocRegister();
-        assert(a == result);
-        emit(ByteCode::map2_c, b, c, result);
-        return result;
-    } 
-    else if(func == Strings::map_r && call.length() == 4)
-    {
-        Operand a = forceInRegister(compile(call[1], code));
-        Operand b = compile(call[2], code);
-        Operand c = compile(call[3], code);
-        kill(c); kill(b); kill(a);
-        Operand result = allocRegister();
-        assert(a == result);
-        emit(ByteCode::map2_r, b, c, result);
-        return result;
-    } 
-    else if(func == Strings::map_g && call.length() == 4)
-    {
-        Operand a = forceInRegister(compile(call[1], code));
-        Operand b = compile(call[2], code);
-        Operand c = compile(call[3], code);
-        kill(c); kill(b); kill(a);
-        Operand result = allocRegister();
-        assert(a == result);
-        emit(ByteCode::map2_g, b, c, result);
-        return result;
-    } 
-    else if(func == Strings::fold_d && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::fold_d, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::fold_i && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::fold_i, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::fold_l && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::fold_l, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::fold_c && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::fold_c, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::fold_r && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::fold_r, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::fold_g && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::fold_g, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::scan_d && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::scan_d, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::scan_i && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::scan_i, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::scan_l && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::scan_l, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::scan_c && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::scan_c, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::scan_r && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::scan_r, a, b, result);
-        return result;
-    } 
-    else if(func == Strings::scan_g && call.length() == 3)
-    {
-        Operand a = compile(call[1], code);
-        Operand b = compile(call[2], code);
-        kill(b); kill(a);
-        Operand result = allocRegister();
-        emit(ByteCode::scan_g, a, b, result);
-        return result;
-    } 
 	else if(func == Strings::assign ||
 		func == Strings::eqassign || 
 		func == Strings::assign2)
@@ -755,7 +522,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::forSym) 
 	{
 		Operand loop_variable = Operand(MEMORY, SymbolStr(call[1]));
-		Operand loop_vector = forceInRegister(compile(call[2], code));
+		Operand loop_vector = placeInRegister(compile(call[2], code));
 		Operand loop_counter = allocRegister();	// save space for loop counter
 		Operand loop_limit = allocRegister(); // save space for the loop limit
 
@@ -782,7 +549,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		Operand head_condition = compile(call[1], code);
 		emit(ByteCode::jc, 2, 0, kill(head_condition));
-        emit(ByteCode::done, (int64_t)0, (int64_t)0, (int64_t)0);
+        emit(ByteCode::stop, (int64_t)0, (int64_t)0, (int64_t)0);
 		loopDepth++;
 		
 		int64_t beginbody = ir.size();
@@ -793,7 +560,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		int64_t endbody = ir.size();
 		
 		emit(ByteCode::jc, beginbody-endbody, 2, kill(tail_condition));
-        emit(ByteCode::done, (int64_t)0, (int64_t)0, (int64_t)0);
+        emit(ByteCode::stop, (int64_t)0, (int64_t)0, (int64_t)0);
 		resolveLoopExits(beginbody, endbody, tail, endbody+2);
 		ir[beginbody-2].b = endbody-beginbody+4;
 		loopDepth--;
@@ -841,7 +608,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		}
         else {
             resultNA = Operand();
-            emit(ByteCode::done, (int64_t)0, (int64_t)0, (int64_t)0);
+            emit(ByteCode::stop, (int64_t)0, (int64_t)0, (int64_t)0);
         }
         kill(resultNA);
 
@@ -897,7 +664,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	} 
 	else if(func == Strings::paren) 
 	{
-		return compile(call[1], code);
+		Operand result = compile(call[1], code);
+        emit(ByteCode::visible, result, 0, result);
+        return result;
 	}
  
 	// Trinary operators
@@ -907,7 +676,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::ifelse ||
 		func == Strings::index ||
         func == Strings::attrset ||
-        func == Strings::map) &&
+        func == Strings::map ||
+        func == Strings::scan ||
+        func == Strings::fold) &&
 		call.length() == 4) {
 		Operand c = placeInRegister(compile(call[1], code));
 		Operand b = compile(call[2], code);
@@ -978,7 +749,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
         func == Strings::env_new ||
         func == Strings::env_names ||
         func == Strings::length ||
-        func == Strings::frame)
+        func == Strings::frame ||
+        func == Strings::invisible ||
+        func == Strings::visible)
 		&& call.length() == 2)
 	{
 		// if there isn't exactly one parameter, we should call the library version...
@@ -1036,7 +809,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	return compileFunctionCall(compileSymbol(call[0], code, true), call, names, code);
 }
 
-Compiler::Operand Compiler::compileExpression(List const& values, Prototype* code) {
+Compiler::Operand Compiler::compileExpression(List const& values, Code* code) {
 	Operand result;
 	if(values.length() == 0) result = compileConstant(Null::Singleton(), code);
 	for(int64_t i = 0; i < values.length(); i++) {
@@ -1052,7 +825,7 @@ Compiler::Operand Compiler::compileExpression(List const& values, Prototype* cod
 	return result;
 }
 
-Compiler::Operand Compiler::compile(Value const& expr, Prototype* code) {
+Compiler::Operand Compiler::compile(Value const& expr, Code* code) {
 	if(isSymbol(expr)) {
 		return compileSymbol(expr, code, false);
 	}
@@ -1094,8 +867,8 @@ int64_t Compiler::encodeOperand(Operand op, int64_t n) const {
 	else return 0;
 }
 
-Prototype* Compiler::compile(Value const& expr) {
-	Prototype* code = new Prototype();
+Code* Compiler::compile(Value const& expr) {
+	Code* code = new Code();
 	assert(((int64_t)code) % 16 == 0); // our type packing assumes that this is true
 
     Operand result = compile(expr, code);
@@ -1106,13 +879,13 @@ Prototype* Compiler::compile(Value const& expr) {
     else if(scope == PROMISE)
         emit(ByteCode::retp, result, 0, 0);
     else { // TOPLEVEL
-        emit(ByteCode::rets, result, 0, 0);
-        emit(ByteCode::done, 0, 0, 0);
+        result = placeInRegister(result);
+        if(result.i != 0)
+            _error("Top level expression did not place its result in register 0");
+        emit(ByteCode::done, result, 0, 0);
     }
     
-    //std::reverse(code->constants.begin(), code->constants.end());
 	code->expression = expr;
-    code->formals = Null::Singleton();
 	code->registers = code->constants.size() + max_n;
 	
 	int64_t n = code->constants.size();

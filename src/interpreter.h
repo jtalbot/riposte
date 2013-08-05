@@ -85,25 +85,28 @@ struct CompiledCall {
 		: call(call), arguments(arguments), argumentsSize(arguments.size()), dotIndex(dotIndex), named(named), extraArgs(extraArgs) {}
 };
 
-struct Prototype : public HeapObject {
-	Value expression;
-	String string;
+struct Code : public HeapObject {
+    std::vector<Instruction> bc;
+    std::vector<Value> constants;
+    std::vector<CompiledCall> calls;
+    int registers;
+    
+    Value expression;
 
+	void printByteCode(State const& state) const;
+	void visit() const;
+};
+
+struct Prototype : public HeapObject {
+    Code const* code;
+    String string;
     Value formals;
 
 	PairList parameters;
 	int64_t parametersSize;
 	int dotIndex;
 
-	int registers;
-	std::vector<Value> constants;
-	std::vector<CompiledCall> calls; 
-
-	std::vector<Instruction> bc;
-
 	void visit() const;
-
-	static void printByteCode(Prototype const* prototype, State const& state); 
 };
 
 class Dictionary : public HeapObject {
@@ -329,7 +332,7 @@ public:
 struct StackFrame {
 	Value* registers;
 	Environment* environment;
-    Prototype const* prototype;
+    Code const* code;
     bool isPromise;
 
 	Instruction const* returnpc;
@@ -432,9 +435,8 @@ public:
 	std::vector<StackFrame> stack;
 	StackFrame frame;
 
-	std::vector<std::string> warnings;
-
     std::vector<Value> gcStack;
+    bool visible;
 
 #ifdef EPEE
 	Traces traces;
@@ -470,8 +472,8 @@ public:
 		return 0;
 	}
 
-	Value eval(Prototype const* prototype, Environment* environment, int64_t resultSlot = 0); 
-	Value eval(Prototype const* prototype);
+	Value eval(Code const* code, Environment* environment, int64_t resultSlot = 0); 
+	Value eval(Code const* code);
 
 	void doall(Task::HeaderPtr header, Task::FunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment=1, uint64_t ppt = 1) {
 		if(a < b && func != 0) {

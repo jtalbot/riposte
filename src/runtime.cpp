@@ -440,6 +440,25 @@ static void* find_function(Thread& thread, String name) {
     return func;
 }
 
+struct FoldFuncArgs {
+    void* base;
+    void* func;
+    void* fini;
+};
+
+FoldFuncArgs find_fold_function(Thread& thread, String name) {
+    void* init_func = find_function(thread, (std::string(name) + "_init").c_str());
+    void* op_func = find_function(thread, (std::string(name) + "_op").c_str());
+    void* fini_func = find_function(thread, (std::string(name) + "_fini").c_str());
+
+    FoldFuncArgs funcs;
+    funcs.base = init_func;
+    funcs.func = op_func;
+    funcs.fini = fini_func;
+
+   return funcs;
+}
+
 template<class T> void arg(DCCallVM* vm, T const& t, int64_t i) 
 { dcArgPointer(vm, (void*) &t); }
 template<> void arg<Logical>(DCCallVM* vm, Logical const& t, int64_t i)
@@ -611,3 +630,180 @@ List Map(Thread& thread, String func, List args, Character result) {
     
     return r;
 }
+
+List Scan(Thread& thread, String func, List args, Character result) {
+    // figure out length of result
+    int64_t length = 1, minlength = 1;
+    for(int64_t i = 0; i < args.length(); ++i) {
+        if(args[i].isVector()) {
+            length = std::max(length, ((Vector const&)args[i]).length());
+            minlength = std::min(minlength, ((Vector const&)args[i]).length());
+        } else {
+            length = std::max(length, (int64_t)1);
+        }
+    }
+    if(minlength == 0) length = 0;
+
+    // look up function
+    FoldFuncArgs funcs = find_fold_function(thread, func);
+    
+    // run
+    DCCallVM* vm = dcNewCallVM(4096);
+    dcMode(vm, DC_CALL_C_DEFAULT);
+
+    // build up streamers and unstreamers.
+    std::vector<Unstream*> u;
+    for(int64_t i = 0; i < result.length(); ++i) {
+        u.push_back(MakeUnstream(result[i], length));
+    }
+
+    if(length > 0) {
+        std::vector<Stream*> s;
+        for(int64_t i = 0; i < args.length(); ++i) {
+            s.push_back(MakeStream(args[i]));
+        }
+
+        // init call
+        dcReset(vm);
+        dcArgPointer(vm, (void*)&thread);
+        void* state = (void*)dcCallPointer(vm, funcs.base);
+
+        bool isna = false;
+        for(int64_t i = 0; i < length; ++i) {
+
+            for(int64_t k = 0; k < s.size(); ++k) {
+                isna = isna | (*s[k]).isNA(i);
+            }
+
+            if(!isna) {
+                dcReset(vm);
+                dcArgPointer(vm, (void*)&thread);
+                dcArgPointer(vm, state);
+                for(int64_t k = 0; k < u.size(); ++k) {
+                    (*u[k])(vm, i);
+                }
+                for(int64_t k = 0; k < s.size(); ++k) {
+                    (*s[k])(vm, i);
+                }
+                dcCallVoid(vm, funcs.func);
+            }
+            else {
+                for(int64_t k = 0; k < u.size(); ++k) {
+                    (*u[k]).dona(i);
+                }
+            }
+        }
+
+        dcReset(vm);
+        dcArgPointer(vm, (void*)&thread);
+        dcArgPointer(vm, state);
+        dcCallVoid(vm, funcs.fini);
+
+        dcFree(vm);
+        
+        for(int64_t i = 0; i < s.size(); ++i) {
+            delete s[i];
+        }
+    }
+
+    List r(result.length());
+    for(int64_t i = 0; i < u.size(); ++i) {
+        r[i] = u[i]->value();
+    }
+       
+    for(int64_t i = 0; i < u.size(); ++i) {
+        delete u[i];
+    }
+    
+    return r;
+}
+
+List Fold(Thread& thread, String func, List args, Character result) {
+    // figure out length of result
+    int64_t length = 1, minlength = 1;
+    for(int64_t i = 0; i < args.length(); ++i) {
+        if(args[i].isVector()) {
+            length = std::max(length, ((Vector const&)args[i]).length());
+            minlength = std::min(minlength, ((Vector const&)args[i]).length());
+        } else {
+            length = std::max(length, (int64_t)1);
+        }
+    }
+    if(minlength == 0) length = 0;
+
+    // look up function
+    FoldFuncArgs funcs = find_fold_function(thread, func);
+    
+    // run
+    DCCallVM* vm = dcNewCallVM(4096);
+    dcMode(vm, DC_CALL_C_DEFAULT);
+
+    // init call
+    dcReset(vm);
+    dcArgPointer(vm, (void*)&thread);
+    void* state = (void*)dcCallPointer(vm, funcs.base);
+
+    // build up streamers and unstreamers.
+    std::vector<Unstream*> u;
+    for(int64_t i = 0; i < result.length(); ++i) {
+        u.push_back(MakeUnstream(result[i], 1));
+    }
+
+    bool isna = false;
+    if(length > 0) {
+        std::vector<Stream*> s;
+        for(int64_t i = 0; i < args.length(); ++i) {
+            s.push_back(MakeStream(args[i]));
+        }
+
+        for(int64_t i = 0; i < length && !isna; ++i) {
+
+            for(int64_t k = 0; k < s.size(); ++k) {
+                isna = isna | (*s[k]).isNA(i);
+            }
+
+            if(!isna) {
+                dcReset(vm);
+                dcArgPointer(vm, (void*)&thread);
+                dcArgPointer(vm, state);
+                for(int64_t k = 0; k < s.size(); ++k) {
+                    (*s[k])(vm, i);
+                }
+                dcCallVoid(vm, funcs.func);
+            }
+        }
+
+        for(int64_t i = 0; i < s.size(); ++i) {
+            delete s[i];
+        }
+    }
+
+    dcReset(vm);
+    dcArgPointer(vm, (void*)&thread);
+    dcArgPointer(vm, state);
+
+    if(!isna) {
+        for(int64_t k = 0; k < u.size(); ++k) {
+            (*u[k])(vm, 0);
+        }
+    }
+    else {
+        for(int64_t k = 0; k < u.size(); ++k) {
+            (*u[k]).dona(0);
+        }
+    }
+    dcCallVoid(vm, funcs.fini);
+    dcFree(vm);
+        
+    List r(result.length());
+    for(int64_t i = 0; i < u.size(); ++i) {
+        r[i] = u[i]->value();
+    }
+       
+    for(int64_t i = 0; i < u.size(); ++i) {
+        delete u[i];
+    }
+    
+    return r;
+}
+

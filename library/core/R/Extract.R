@@ -54,7 +54,7 @@
 
     d <- attr(x, 'dim')
     
-    if((length(d) != 1L || identical(drop,TRUE)) && ...() == 1L)
+    if((length(d) != 1L || .isTRUE(drop)) && ...() == 1L)
         return( `[.default`(x,..1) )
 
     if(length(d) != ...())
@@ -108,6 +108,9 @@
         }
         dimnames(r) <- rn
     }
+
+    if(.isTRUE(drop))
+        r <- drop(r)
     r
 }
 

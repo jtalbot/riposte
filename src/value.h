@@ -15,6 +15,7 @@
 // Forward declare the HeapObjects
 class State;
 class Thread;
+struct Code;
 struct Prototype;
 class Environment;
 class Dictionary;
@@ -100,16 +101,16 @@ typedef std::vector<Pair> PairList;
 struct Promise : public Value {
 	enum PromiseType {
 		NIL = 0,
-		PROTOTYPE = 1,
-		PROTOTYPE_DEFAULT = 2,
+		EXPR = 1,
+		EXPR_DEFAULT = 2,
 		DOTDOT = 3,
 		DOTDOT_DEFAULT = 4
 	};
 	static const Type::Enum ValueType = Type::Promise;
-	static Promise& Init(Value& v, Environment* env, Prototype* proto, bool isDefault) {
-		Value::Init(v, Type::Promise, isDefault ? PROTOTYPE_DEFAULT : PROTOTYPE);
+	static Promise& Init(Value& v, Environment* env, Code* code, bool isDefault) {
+		Value::Init(v, Type::Promise, isDefault ? EXPR_DEFAULT : EXPR);
 		v.header += (((uint64_t)env) << 16);
-		v.p = proto;
+		v.p = code;
 		return (Promise&)v;
 	}
 	static Promise& Init(Value& v, Environment* env, uint64_t dotindex, bool isDefault) {
@@ -120,10 +121,10 @@ struct Promise : public Value {
 	}
 
 	bool isDefault() const { 
-		return packed() == PROTOTYPE_DEFAULT || packed() == DOTDOT_DEFAULT; 
+		return packed() == EXPR_DEFAULT || packed() == DOTDOT_DEFAULT; 
 	}
-	bool isPrototype() const {
-		return packed() == PROTOTYPE || packed() == PROTOTYPE_DEFAULT;
+	bool isExpression() const {
+		return packed() == EXPR || packed() == EXPR_DEFAULT;
 	}
 	bool isDotdot() const {
 		return packed() == DOTDOT || packed() == DOTDOT_DEFAULT;
@@ -131,8 +132,8 @@ struct Promise : public Value {
 	Environment* environment() const { 
 		return (Environment*)(((uint64_t)header) >> 16); 
 	}
-	Prototype* prototype() const { 
-		return (Prototype*)p; 
+	Code* code() const { 
+		return (Code*)p; 
 	}
 	uint64_t dotIndex() const {
 		return i;

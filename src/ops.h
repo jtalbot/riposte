@@ -159,35 +159,6 @@ struct IfElseVOp {
     }
 };
 
-template<typename S, typename T>
-struct UnaryFuncOp {
-    typedef S A;
-    typedef T R;
-    static typename R::Element eval(Thread& thread, void* func, typename A::Element const a) {
-        typedef typename R::Element (*Func)(Thread&, typename A::Element);
-        Func f = (Func)func;
-		return f(thread, a);
-    }
-    static void Scalar(Thread& thread, void* func, typename A::Element const a, Value& out) {
-        R::InitScalar(out, eval(thread, func, a));
-    }
-};
-
-template<typename S, typename T, typename U>
-struct BinaryFuncOp {
-    typedef S A;
-    typedef T B;
-    typedef U R;
-    static typename R::Element eval(Thread& thread, void* func, typename A::Element const a, typename B::Element const b) {
-        typedef typename R::Element (*Func)(Thread&, typename A::Element, typename B::Element);
-        Func f = (Func)func;
-		return f(thread, a, b);
-    }
-    static void Scalar(Thread& thread, void* func, typename A::Element const a, typename B::Element const b, Value& out) {
-        R::InitScalar(out, eval(thread, func, a, b));
-    }
-};
-
 struct FoldFuncArgs {
     void* base;
     void* func;

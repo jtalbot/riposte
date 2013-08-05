@@ -81,7 +81,7 @@ expr(A) ::= NULL_CONST(B). { A = B; }
 expr(A) ::= SYMBOL(B). { A = B; }
 
 expr(A) ::= LBRACE(B) optnl statementlist(C) optnl RBRACE. { C->push_front(Strings::empty, B); A = CreateCall(C->values(), C->names(false)); }
-expr(A) ::= LPAREN optnl statement(B) optnl RPAREN. { A = B; }
+expr(A) ::= LPAREN(B) optnl statementlist(C) optnl RPAREN. { C->push_front(Strings::empty, B); A = CreateCall(C->values(), C->names(false)); }
 
 expr(A) ::= MINUS(B) optnl expr(C). [UMINUS] { A = CreateCall(List::c(B, C)); }
 expr(A) ::= PLUS(B) optnl expr(C).  [UPLUS]  { A = CreateCall(List::c(B, C)); }

@@ -9,19 +9,13 @@
 #include "exceptions.h"
 #include "runtime.h"
 
-void printCode(Thread const& thread, Prototype const* prototype, Environment* env);
-
 Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, int64_t index);
 
 Instruction const* force(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, String name);
 
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset);
+Instruction const* buildStackFrame(Thread& thread, Environment* environment, Code const* code, Instruction const* returnpc, int64_t stackOffset);
 
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, int64_t resultSlot, Instruction const* returnpc);
-
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Environment* env, String s, Instruction const* returnpc);
-
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Environment* env, int64_t resultSlot, Instruction const* returnpc);
+Instruction const* buildStackFrame(Thread& thread, Environment* environment, Code const* code, int64_t resultSlot, Instruction const* returnpc);
 
 Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, CompiledCall const& call);
 
@@ -36,34 +30,16 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 Instruction const* StopDispatch(Thread& thread, Instruction const& inst, String msg, int64_t out);
 
 #define REGISTER(i) (*(thread.frame.registers+(-(i))))
-#define CONSTANT(i) (thread.frame.prototype->constants[(i)-1])
+#define CONSTANT(i) (thread.frame.code->constants[(i)-1])
 
 // Out register is currently always a register, not memory
 #define OUT(X) (*(thread.frame.registers+(-inst.X)))
-
-/*#define DECODE(X) \
-Environment* X##Env = 0; \
-Value const& X = \
-	__builtin_expect((inst.X) <= 0, true) \
-		? *(thread.frame.registers+(-inst.X)) \
-		: ((inst.X) < 256) \
-			? thread.frame.prototype->constants[(inst.X)-1] \
-			: thread.frame.environment->getRecursive((String)(inst.X), X##Env); 
-
-#define FORCE(X) \
-if(__builtin_expect((inst.X) > 0 && !X.isObject(), false)) { \
-	return force(thread, inst, X, X##Env, (String)(inst.X)); \
-}
-*/
 
 #define DECODE(X) \
 Value const& X = \
 	__builtin_expect((inst.X) <= 0, true) \
 		? *(thread.frame.registers+(-inst.X)) \
-	    : thread.frame.prototype->constants[(inst.X)-1];
-
-#define FORCE(X)
-
+	    : thread.frame.code->constants[(inst.X)-1];
 
 #define DOTDOT(X, i) \
 Environment* X##Env = thread.frame.environment; \
@@ -419,108 +395,6 @@ bool UnifyScanDispatch(Thread& thread, void* args, Value const& a, Value& c) {
 	else if(a.isNull())	{ Op<Double>::Scalar(thread, args, Op<Double>::base(), c); return true; }
 	else return false;
 }
-
-
-template< template< class Op > class Func, template<typename S, typename T> class Op, class Result > 
-bool Map1Dispatch(Thread& thread, void* args, Value a, Value& c) {
-    if(a.isDouble()) { 
-        Func< Op<Double, Result> >::eval(thread, args, (Double const&)a, c); return true; }
-    else if(a.isInteger()) { 
-        Func< Op<Integer, Result> >::eval(thread, args, (Integer const&)a, c); return true; }
-    else if(a.isLogical()) { 
-        Func< Op<Logical, Result> >::eval(thread, args, (Logical const&)a, c); return true; }
-    else if(a.isCharacter()) { 
-        Func< Op<Character, Result> >::eval(thread, args, (Character const&)a, c); return true; }
-    else if(a.isRaw()) { 
-        Func< Op<Raw, Result> >::eval(thread, args, (Raw const&)a, c); return true; }
-    else if(a.isNull()) {
-        Func< Op<Null, Result> >::eval(thread, args, (Null const&)a, c); return true; }
-    else return false;
-}
-
-template< template<typename S, typename T, typename U> class Op, class Result > 
-bool Map2Dispatch(Thread& thread, void* args, Value a, Value b, Value& c) {
-    if(b.isDouble()) {
-        if(a.isDouble()) { 
-            Zip2< Op<Double, Double, Result> >::eval(thread, args, (Double const&)a, (Double const&)b, c); return true; }
-        else if(a.isInteger()) { 
-            Zip2< Op<Integer, Double, Result> >::eval(thread, args, (Integer const&)a, (Double const&)b, c); return true; }
-        else if(a.isLogical()) { 
-            Zip2< Op<Logical, Double, Result> >::eval(thread, args, (Logical const&)a, (Double const&)b, c); return true; }
-        else if(a.isCharacter()) { 
-            Zip2< Op<Character, Double, Result> >::eval(thread, args, (Character const&)a, (Double const&)b, c); return true; }
-        else if(a.isRaw()) { 
-            Zip2< Op<Raw, Double, Result> >::eval(thread, args, (Raw const&)a, (Double const&)b, c); return true; }
-        else if(a.isNull()) {
-            Result::Init(c, 0); return true; }
-        else return false;
-    }
-    else if(b.isInteger()) {
-        if(a.isDouble()) { 
-            Zip2< Op<Double, Integer, Result> >::eval(thread, args, (Double const&)a, (Integer const&)b, c); return true; }
-        else if(a.isInteger()) { 
-            Zip2< Op<Integer, Integer, Result> >::eval(thread, args, (Integer const&)a, (Integer const&)b, c); return true; }
-        else if(a.isLogical()) { 
-            Zip2< Op<Logical, Integer, Result> >::eval(thread, args, (Logical const&)a, (Integer const&)b, c); return true; }
-        else if(a.isCharacter()) { 
-            Zip2< Op<Character, Integer, Result> >::eval(thread, args, (Character const&)a, (Integer const&)b, c); return true; }
-        else if(a.isRaw()) { 
-            Zip2< Op<Raw, Integer, Result> >::eval(thread, args, (Raw const&)a, (Integer const&)b, c); return true; }
-        else if(a.isNull()) {
-            Result::Init(c, 0); return true; }
-        else return false;
-    }
-    else if(b.isLogical()) {
-        if(a.isDouble()) { 
-            Zip2< Op<Double, Logical, Result> >::eval(thread, args, (Double const&)a, (Logical const&)b, c); return true; }
-        else if(a.isInteger()) { 
-            Zip2< Op<Integer, Logical, Result> >::eval(thread, args, (Integer const&)a, (Logical const&)b, c); return true; }
-        else if(a.isLogical()) { 
-            Zip2< Op<Logical, Logical, Result> >::eval(thread, args, (Logical const&)a, (Logical const&)b, c); return true; }
-        else if(a.isCharacter()) { 
-            Zip2< Op<Character, Logical, Result> >::eval(thread, args, (Character const&)a, (Logical const&)b, c); return true; }
-        else if(a.isRaw()) { 
-            Zip2< Op<Raw, Logical, Result> >::eval(thread, args, (Raw const&)a, (Logical const&)b, c); return true; }
-        else if(a.isNull()) {
-            Result::Init(c, 0); return true; }
-        else return false;
-    }
-    else if(b.isCharacter()) {
-        if(a.isDouble()) { 
-            Zip2< Op<Double, Character, Result> >::eval(thread, args, (Double const&)a, (Character const&)b, c); return true; }
-        else if(a.isInteger()) { 
-            Zip2< Op<Integer, Character, Result> >::eval(thread, args, (Integer const&)a, (Character const&)b, c); return true; }
-        else if(a.isLogical()) { 
-            Zip2< Op<Logical, Character, Result> >::eval(thread, args, (Logical const&)a, (Character const&)b, c); return true; }
-        else if(a.isCharacter()) { 
-            Zip2< Op<Character, Character, Result> >::eval(thread, args, (Character const&)a, (Character const&)b, c); return true; }
-        else if(a.isRaw()) { 
-            Zip2< Op<Raw, Character, Result> >::eval(thread, args, (Raw const&)a, (Character const&)b, c); return true; }
-        else if(a.isNull()) {
-            Result::Init(c, 0); return true; }
-        else return false;
-    }
-    else if(b.isRaw()) {
-        if(a.isDouble()) { 
-            Zip2< Op<Double, Raw, Result> >::eval(thread, args, (Double const&)a, (Raw const&)b, c); return true; }
-        else if(a.isInteger()) { 
-            Zip2< Op<Integer, Raw, Result> >::eval(thread, args, (Integer const&)a, (Raw const&)b, c); return true; }
-        else if(a.isLogical()) { 
-            Zip2< Op<Logical, Raw, Result> >::eval(thread, args, (Logical const&)a, (Raw const&)b, c); return true; }
-        else if(a.isCharacter()) { 
-            Zip2< Op<Character, Raw, Result> >::eval(thread, args, (Character const&)a, (Raw const&)b, c); return true; }
-        else if(a.isRaw()) { 
-            Zip2< Op<Raw, Raw, Result> >::eval(thread, args, (Raw const&)a, (Raw const&)b, c); return true; }
-        else if(a.isNull()) {
-            Result::Init(c, 0); return true; }
-        else return false;
-    }
-    else if(b.isNull()) {
-        Result::Init(c, 0); return true; }
-    else return false;
-}
-
-
 
 #define SLOW_DISPATCH_DEFN(Name, String, Group, Func) \
 Instruction const* Name##Slow(Thread& thread, Instruction const& inst, void* args, Value const& a, Value& c);

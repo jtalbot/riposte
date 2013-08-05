@@ -12,13 +12,13 @@
     _(call,         "call")                                                    \
     _(fastcall,     "fastcall")                                                \
     _(ret,          "ret")          /* return from function */                 \
-    _(rets,         "rets")         /* return from top-level statement */      \
     _(retp,         "retp")         /* return from a promise or default */     \
     _(forbegin,     "forbegin")                                                \
     _(forend,       "forend")                                                  \
     _(mov,          "mov")                                                     \
-    _(fastmov,      "fastmov")                                                 \
     _(external,     "external")                                                \
+    _(invisible,    "invisible")                                               \
+    _(visible,      "visible")                                                 \
 
 #define LOAD_STORE_BYTECODES(_)                                                \
     _(load,         "load" )        /* = get(x, environment(), "any", TRUE) */ \
@@ -70,14 +70,6 @@
 	_(index,	"index", 	Generator)                                         \
 	_(random,	"random", 	Generator)                                         \
 
-#define GENERIC_UNARY_BYTECODES(_)                                             \
-    _(map1_d,       "map1_d")                                                  \
-    _(map1_i,       "map1_i")                                                  \
-    _(map1_l,       "map1_l")                                                  \
-    _(map1_c,       "map1_c")                                                  \
-    _(map1_r,       "map1_r")                                                  \
-    _(map1_g,       "map1_g")                                                  \
-
 // ArithUnary1 ops perform Integer->Integer, ArithUnary2 ops perform Integer->Double
 #define ARITH_UNARY_BYTECODES(_)                                               \
 	_(pos, "pos", 	ArithUnary1, 	PassNA(a, a))                              \
@@ -88,14 +80,6 @@
 
 #define ORDINAL_UNARY_BYTECODES(_)                                             \
 	_(isna,	"isna",	OrdinalUnary,	MA::isNA(a)?Logical::TrueElement:Logical::FalseElement) \
-
-#define GENERIC_BINARY_BYTECODES(_)                                            \
-    _(map2_d,       "map2_d")                                                  \
-    _(map2_i,       "map2_i")                                                  \
-    _(map2_l,       "map2_l")                                                  \
-    _(map2_c,       "map2_c")                                                  \
-    _(map2_r,       "map2_r")                                                  \
-    _(map2_g,       "map2_g")                                                  \
 
 // ArithBinary1 ops perform Integer*Integer->Integer, ArithBinary2 ops perform Integer*Integer->Double
 #define ARITH_BINARY_BYTECODES(_)                                              \
@@ -127,14 +111,6 @@
 	_(ifelse, "ifelse", IfElse)                                                \
 	_(split, "split", Split)
 
-#define GENERIC_FOLD_BYTECODES(_)                                              \
-    _(fold_d,       "fold_d")                                                  \
-    _(fold_i,       "fold_i")                                                  \
-    _(fold_l,       "fold_l")                                                  \
-    _(fold_c,       "fold_c")                                                  \
-    _(fold_r,       "fold_r")                                                  \
-    _(fold_g,       "fold_g")                                                  \
-
 // ArithFold1 ops perform [Integer]->Integer, ArithFold2 ops perform [Integer]->Double
 #define ARITH_FOLD_BYTECODES(_)                                                \
 	_(sum, "sum",	ArithFold1, 	add)                                       \
@@ -148,14 +124,6 @@
 	_(min, "min",	UnifyFold, 	pmin)                                          \
 	_(max, "max",	UnifyFold, 	pmax) 
 
-#define GENERIC_SCAN_BYTECODES(_)                                              \
-    _(scan_d,       "scan_d")                                                  \
-    _(scan_i,       "scan_i")                                                  \
-    _(scan_l,       "scan_l")                                                  \
-    _(scan_c,       "scan_c")                                                  \
-    _(scan_r,       "scan_r")                                                  \
-    _(scan_g,       "scan_g") 
-
 #define ARITH_SCAN_BYTECODES(_)                                                \
 	_(cumsum, "cumsum",	ArithScan,	add)                                       \
 	_(cumprod, "cumprod",	ArithScan,	mul) 
@@ -165,7 +133,9 @@
 	_(cummax, "cummax",	UnifyScan,	pmax) 
 
 #define GENERIC_BYTECODES(_)                                                   \
-    _(map, "map")
+    _(map, "map")                                                              \
+    _(scan, "scan")                                                            \
+    _(fold, "fold")
 
 #define JOIN_BYTECODES(_)                                                      \
     _(semijoin, "semijoin")
@@ -188,8 +158,6 @@
 #define MAP_BYTECODES(_) \
 	UNARY_BYTECODES(_) \
 	BINARY_BYTECODES(_) \
-    GENERIC_UNARY_BYTECODES(_) \
-    GENERIC_BINARY_BYTECODES(_) \
 
 #define FOLD_BYTECODES(_) \
 	ARITH_FOLD_BYTECODES(_) \
@@ -213,8 +181,6 @@
 	SPECIAL_MAP_BYTECODES(_) \
 	FOLD_BYTECODES(_) \
 	SCAN_BYTECODES(_) \
-	GENERIC_SCAN_BYTECODES(_) \
-	GENERIC_FOLD_BYTECODES(_) \
 	GENERIC_BYTECODES(_) \
 	JOIN_BYTECODES(_) \
 

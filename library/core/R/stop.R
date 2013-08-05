@@ -15,7 +15,7 @@ seterrmessage <- NULL
         else
             message <- sprintf("Error: %s", message)
 
-        .cat(message, '\n') 
+        .connection.cat.terminal(2L, .pconcat(message, '\n')) 
         
         n <- 1L
         repeat {

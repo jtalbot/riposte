@@ -80,7 +80,7 @@ void gregex_map(Thread& thread,
         if(match == 0) {
             ss.push_back(m.rm_so+1+offset);
             ll.push_back(m.rm_eo - m.rm_so);
-            offset += m.rm_so+1;
+            offset += m.rm_eo;
         }
     } while( match == 0 );
 
@@ -150,7 +150,7 @@ void sub_map(Thread& thread, Character::Element& out,
 
 extern "C"
 void gsub_map(Thread& thread, Character::Element& out,
-        Value const& regex, String ctext, String sub) {
+        Value const& regex, String text, String sub) {
     
     Externalptr const& p = (Externalptr const&)regex;
     regex_t* r = (regex_t*)p.ptr();
@@ -159,9 +159,9 @@ void gsub_map(Thread& thread, Character::Element& out,
     
     size_t offset = 0;
     int match = 0;
-    std::string text(ctext);
+    std::string result="";
     do {
-        match = tre_regexec(r, text.c_str()+offset, 10, m, 0);
+        match = tre_regexec(r, text+offset, 10, m, 0);
         if(match == 0) {
             std::string s(sub);
             // replace all back references in sub
@@ -169,22 +169,18 @@ void gsub_map(Thread& thread, Character::Element& out,
             for(int i = 1; i <= 9; ++i, ++c) {
                 if(m[i].rm_so >= 0) {
                     s = replaceAll(s, std::string("\\")+c, 
-                        std::string(text.c_str()+m[i].rm_so+offset, 
-                                    text.c_str()+m[i].rm_eo+offset));
+                        std::string(text+m[i].rm_so+offset, 
+                                    text+m[i].rm_eo+offset));
                 }
                 else {
                     s = replaceAll(s, std::string("\\")+c, 
                         std::string(""));
                 }
             }
-            std::string result;
-            result.append( text.c_str(), text.c_str()+m[0].rm_so+offset );
+            result.append( text+offset, text+m[0].rm_so+offset );
             result.append( s );
-            result.append( text.c_str()+m[0].rm_eo+offset, 
-                           text.c_str()+text.size() );
-            text = result;
-            offset += m[0].rm_so + s.size();
+            offset += m[0].rm_eo;
         }
     } while( match == 0 );
-    out = thread.internStr(text.c_str());
+    out = thread.internStr(result.c_str());
 }

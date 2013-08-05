@@ -152,13 +152,13 @@ void* mapplyheader(void* args, uint64_t start, uint64_t end, Thread& thread) {
 	apply[0] = l.func;
 	for(int64_t i = 0; i < l.in.length(); i++)
 		apply[i+1] = Value::Nil();
-	Prototype* p = Compiler::compileTopLevel(thread, CreateCall(apply));
+	Code* p = Compiler::compileTopLevel(thread, CreateCall(apply));
 	return p;
 }
 
 void mapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& thread) {
 	mapplyargs& l = *(mapplyargs*)args;
-	Prototype* p = (Prototype*) header;
+	Code* p = (Code*) header;
 	for( size_t i=start; i!=end; ++i ) {
 		for(int64_t j=0; j < l.in.length(); j++) {
 			Value e;
@@ -230,29 +230,6 @@ Value mapply(Thread& thread, Value const* args) {
 	return r;
 }
 
-/*
-void tlist(Thread& thread, Value const* args, Value& result) {
-	int64_t length = args.length > 0 ? 1 : 0;
-	List a = Clone(args);
-	for(int64_t i = 0; i < a.length; i++) {
-		a[i] = force(thread, a[i]);
-		if(a[i].isVector() && a[i].length != 0 && length != 0)
-			length = std::max(length, (int64_t)a[i].length);
-	}
-	List r(length);
-	for(int64_t i = 0; i < length; i++) {
-		List element(args.length);
-		for(int64_t j = 0; j < a.length; j++) {
-			if(a[j].isVector())
-				Element2(a[j], i%a[j].length, element[j]);
-			else
-				element[j] = a[j];
-		}
-		r[i] = element;
-	}
-	result = r;
-}
-*/
 extern "C"
 Value source(Thread& thread, Value const* args) {
 	Character file = Cast<Character>(args[0]);
@@ -268,13 +245,6 @@ Value source(Thread& thread, Value const* args) {
 }
 
 extern "C"
-void warning(Thread& thread, Value const* args, Value& result) {
-	std::string message = thread.externStr(Cast<Character>(args[0])[0]);
-	_warning(thread, message);
-	result = Character::c(thread.internStr(message));
-} 
-
-extern "C"
 Value paste(Thread& thread, Value const* args) {
 	Character a = As<Character>(thread, args[0]);
 	String sep = As<Character>(thread, args[1])[0];
@@ -285,16 +255,6 @@ Value paste(Thread& thread, Value const* args) {
 	}
 	if(0 < a.length()) r += a[a.length()-1];
 	return Character::c(thread.internStr(r));
-}
-
-extern "C"
-Value get(Thread& thread, Value const* args) {
-	Character c = As<Character>(thread, args[0]);
-	REnvironment const& e = Cast<REnvironment>(args[1]);
-	Logical l = As<Logical>(thread, args[2]);
-
-	Environment* penv;
-	return l[0] ? e.environment()->getRecursive(c[0], penv) : e.environment()->get(c[0]);
 }
 
 #include <sys/time.h>

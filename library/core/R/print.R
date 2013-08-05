@@ -99,86 +99,7 @@ format.function <- function(x, ...)
 
 format.call <- function(x, ...)
 {
-    if(length(x) == 0) {
-        "NULL"
-    }
-    else {
-        e <- x[[1]]
-        func <- format(e)
-        n <- names(x)
-
-        if(length(x) == 2 && (func == '+' || func == '-' || func == '!')
-            && is.null(n)) {
-            .pconcat(func, .deparse(x[[2]]))
-        }
-        else if(length(x) == 3 && (
-            func == '/' ||
-            func == '%/%' ||
-            func == '^' ||
-            func == '%%' ||
-            func == '$' ||
-            func == '@' ||
-            func == ':' ||
-            func == '::' ||
-            func == ':::')
-            && is.null(n)) {
-            .concat(list(.deparse(x[[2]]), func, .deparse(x[[3]])))
-        }
-        else if(length(x) == 3 && (
-            func == '+' ||
-            func == '-' ||
-            func == '*' ||
-            func == '~' ||
-            func == '&' ||
-            func == '|' ||
-            func == '&&' ||
-            func == '||' ||
-            func == '==' ||
-            func == '!=' ||
-            func == '<' ||
-            func == '<=' ||
-            func == '>' ||
-            func == '>=' ||
-            func == '<-' ||
-            func == '<<-')
-            && is.null(n)) {
-            .concat(list(.deparse(x[[2]]), func, .deparse(x[[3]])))
-        }
-        else if(func == '[') {
-            .deparse.indexing(x, '[', ']') 
-        }
-        else if(func == '[[') {
-            .deparse.indexing(x, '[[', ']]') 
-        }
-        else if(func == '{' && is.null(n)) {
-            func <- .pconcat(func,'\n')
-            for(i in 1L+seq_len(length(x)-1L)) {
-                func <- .pconcat(func, .pconcat('\t',.deparse(x[[i]])))
-                func <- .pconcat(func,'\n')
-            }
-            .pconcat(func, '}')
-        }
-        else if(is.null(n)) {
-            func <- .pconcat(func, '(')
-            for(i in 1L+seq_len(length(x)-1L)) {
-                func <- .pconcat(func, .deparse(x[[i]]))
-                if(i < length(x))
-                    func <- .pconcat(func, ', ')
-            }
-            .pconcat(func, ')')
-        }
-        else {
-            func <- .pconcat(func, '(')
-            for(i in 1L+seq_len(length(x)-1L)) {
-                if(n[[i]] != '')
-                    func <- .pconcat(.pconcat(func, n[[i]]), ' = ')
-                func <- .pconcat(func, .deparse(x[[i]]))
-                if(i < length(x))
-                    func <- .pconcat(func, ', ')
-            }
-            .pconcat(func, ')')
-        }
-    }
+    .deparse.call(x)
 }
 
 format.expression <- function(x, ...)
@@ -203,12 +124,12 @@ print <- function(x, ...) UseMethod('print', x)
 print.default <- function(x, digits, quote, na.print, print.gap, right, max, useSource, noOpt) 
 {
     .cat(format(x), '\n')
-    x
+    .invisible(x)
 }
 
 print.function <- function(x, useSource, ...)
 {
     .cat(format.function(x), '\n')
-    x
+    .invisible(x)
 }
 

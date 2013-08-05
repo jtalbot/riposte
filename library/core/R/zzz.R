@@ -584,6 +584,9 @@ internals <- .characters(
     # do.call.R
     'do.call',
 
+    # drop.R
+    'drop',
+
     # duplicated.R
     'duplicated',
     'anyDuplicated',

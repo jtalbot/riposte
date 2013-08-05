@@ -64,15 +64,15 @@
 }
 
 .escape <- function(x) {
-    .Map.character("escape_map", as.character(x))
+    .Map("escape_map", list(as.character(x)), 'character')[[1L]]
 }
 
 .pconcat <- function(x,y) {
-    .Map.character("concat_map", as.character(x), as.character(y))
+    .Map("concat_map", list(as.character(x), as.character(y)), 'character')[[1L]]
 }
 
 .concat <- function(x) {
-    .Fold.character("concat", as.character(x))
+    .Fold("concat", list(as.character(x)), 'character')[[1L]]
 }
 
 # argument check functions...
@@ -129,17 +129,17 @@
 
 .ArithUnary1 <- function(ffunc, ifunc, x) {
     switch(.type(x),
-        double=.Map.double(ffunc, x),
+        double=.Map(ffunc, list(x), 'double')[[1L]],
         integer=,
-        logical=.Map.integer(ifunc, as.integer(x)),
+        logical=.Map(ifunc, list(as.integer(x)), 'integer')[[1L]],
         .stop("non-numeric argument to mathematical function"))
 }
 
 .ArithUnary2 <- function(func, x) {
     switch(.type(x),
-        double=.Map.double(func, x),
+        double=.Map(func, list(x), 'double')[[1L]],
         integer=,
-        logical=.Map.double(func, as.double(x)),
+        logical=.Map(func, list(as.double(x)), 'double')[[1L]],
         .stop("non-numeric argument to mathematical function"))
 }
 
@@ -158,15 +158,15 @@
         NULL=as.double(y),
         .stop("non-numeric argument to mathematical function"))
 
-    .Map.double(func, x, y)
+    .Map(func, list(x, y), 'double')[[1L]]
 }
 
 .OrdinalUnary <- function(func, x) {
     switch(.type(x),
-        double=.Map.logical(func, x),
+        double=.Map(func, list(x), 'logical')[[1L]],
         integer=,
         logical=,
-        NULL=.Map.logical(func, as.double(x)),
+        NULL=.Map(func, list(as.double(x)), 'logical')[[1L]],
         .stop("non-numeric argument to mathematical function"))
 }
 
@@ -185,6 +185,6 @@
         NULL=as.integer(y),
         .stop("non-numeric argument to mathematical function"))
 
-    .Map.double(func, x, y)
+    .Map(func, list(x, y), 'double')[[1L]]
 }
 

@@ -92,33 +92,21 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
 {
     attrs <- attributes(x)
     x <- strip(x)
-    if(length(x) > 1L && .isTRUE(all(x == x[[1]]:(x[[1]]+length(x)-1L)))) {
-        x <- c(x[[1]], x[[length(x)]])
-        d <- .Map('decimals_map', list(x, 15L), 'integer')[[1]]
-        format <- ifelse(d >= 0, '%.*f', '%.*e')
-        .wrap(sprintf(.concat(list(format[[1]],':',format[[2]])),
-                ifelse(d[[1]]>=0,d[[1]],-d[[1]]-1L), x[[1]], 
-                ifelse(d[[2]]>=0,d[[2]],-d[[2]]-1L), x[[2]]),
-                'double',
-                attrs)
-    }
-    else {
-        d <- .Map('decimals_map', list(x, 15L), 'integer')[[1]]
-        format <- ifelse(d >= 0, '%.*f', '%.*e')
-        .wrap(
-            ifelse(is.infinite(x),
-                ifelse(x>0, 'Inf', '-Inf'),
-                ifelse(is.nan(x),
-                    'NaN',
-                    ifelse(is.na(x),
-                        'NA_real_',
-                        ifelse(x,
-                            sprintf(format, ifelse(d>=0,d,-d-1L), x),
-                            '0'                # handles the -0 case
-            )))),
-            'double',
-            attrs)
-    }
+    d <- .Map('decimals_map', list(x, 15L), 'integer')[[1]]
+    format <- ifelse(d >= 0, '%.*f', '%.*e')
+    .wrap(
+        ifelse(is.infinite(x),
+            ifelse(x>0, 'Inf', '-Inf'),
+            ifelse(is.nan(x),
+                'NaN',
+                ifelse(is.na(x),
+                    'NA_real_',
+                    ifelse(x,
+                        sprintf(format, ifelse(d>=0,d,-d-1L), x),
+                        '0'                # handles the -0 case
+        )))),
+        'double',
+        attrs)
 }
 
 .deparse.character <- function(x)
@@ -263,8 +251,13 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
         else if(func == '[[') {
             .deparse.indexing(x, '[[', ']]') 
         }
+        else if(func == '(' && is.null(n) && length(x) == 2) {
+            func <- '('
+            func <- .pconcat(func, .deparse(x[[2]]))
+            .pconcat(func, ')')
+        }
         else if(func == '{' && is.null(n)) {
-            func <- .pconcat(func,'\n')
+            func <- '{\n'
             for(i in 1L+seq_len(length(x)-1L)) {
                 func <- .pconcat(func, .pconcat('\t',.deparse(x[[i]])))
                 func <- .pconcat(func,'\n')

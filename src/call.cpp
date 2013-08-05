@@ -7,8 +7,12 @@
 Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, int64_t index) {
 	if(v.isPromise()) {
 		Promise const& a = (Promise const&)v;
-		if(a.isPrototype()) {
-			return buildStackFrame(thread, a.environment(), a.prototype(), dest, index, &inst);
+		if(a.isExpression()) {
+			Instruction const* r = buildStackFrame(thread, a.environment(), a.code(), &inst, thread.frame.code->registers);
+	        thread.frame.dest = -index;
+	        thread.frame.env = dest;
+            thread.frame.isPromise = true;
+            return r;
 		} 
 		else if(a.isDotdot()) {
             Value const& t = a.environment()->getContext()->dots[a.dotIndex()].v;
@@ -38,8 +42,12 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 Instruction const* force(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, String name) {
 	if(v.isPromise()) {
 		Promise a = (Promise const&)v;
-		if(a.isPrototype()) {
-       	    return buildStackFrame(thread, a.environment(), a.prototype(), dest, name, &inst);
+		if(a.isExpression()) {
+       	    Instruction const* r = buildStackFrame(thread, a.environment(), a.code(), &inst, thread.frame.code->registers);
+	        thread.frame.dest = (int64_t)name;
+	        thread.frame.env = dest;
+            thread.frame.isPromise = true;
+            return r;
         }
 		else if(a.isDotdot()) {
             Value const& t = a.environment()->getContext()->dots[a.dotIndex()].v;
@@ -67,50 +75,42 @@ Instruction const* force(Thread& thread, Instruction const& inst, Value const& v
 	} 
 }
 
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Instruction const* returnpc, int64_t stackOffset) {
+/*Instruction const* force2(Thread& thread, Instruction const& inst, Value const& v, Environment* dest) {
+    Promise const& a = (Promise const&)v;
+
+    Prototype const* p = a.isPrototype() ? a.prototype() : allProto;
+
+    return buildStackFrame(thread, a.environment(), p, dest, name, &inst);
+}*/
+
+Instruction const* buildStackFrame(Thread& thread, Environment* environment, Code const* code, Instruction const* returnpc, int64_t stackOffset) {
 	/*std::cout << "\t(Executing in " << intToHexStr((int64_t)environment) << ")" << std::endl;
-	Prototype::printByteCode(prototype, thread.state);
+	code->printByteCode(thread.state);
     if(environment->getContext() && ((List const &)environment->getContext()->call).length() > 0)
     std::cout << "Call:   " << (((List const&)environment->getContext()->call)[0]).s << std::endl;
 	*/
 	// make new stack frame
 	StackFrame& s = thread.push();
 	s.environment = environment;
-	s.prototype = prototype;
+	s.code = code;
 	s.returnpc = returnpc;
 	s.registers += stackOffset;
     s.isPromise = false;
 	
-	if(s.registers+prototype->registers > thread.registers+DEFAULT_NUM_REGISTERS)
+	if(s.registers+code->registers > thread.registers+DEFAULT_NUM_REGISTERS)
 		_internalError("Register overflow");
 
     // avoid confusing the GC with bogus stuff in registers...
     // can we avoid this somehow?
-    for(int64_t i = 0; i < prototype->registers; ++i) {
+    for(int64_t i = 0; i < code->registers; ++i) {
         s.registers[i] = Value::Nil();
     }
 
-	return &(prototype->bc[0]);
+	return &(code->bc[0]);
 }
 
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, int64_t resultSlot, Instruction const* returnpc) {
-	return buildStackFrame(thread, environment, prototype, returnpc, -resultSlot);
-}
-
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Environment* env, String s, Instruction const* returnpc) {
-	Instruction const* i = buildStackFrame(thread, environment, prototype, returnpc, thread.frame.prototype->registers);
-	thread.frame.dest = (int64_t)s;
-	thread.frame.env = env;
-    thread.frame.isPromise = true;
-	return i;
-}
-
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Prototype const* prototype, Environment* env, int64_t resultSlot, Instruction const* returnpc) {
-	Instruction const* i = buildStackFrame(thread, environment, prototype, returnpc, thread.frame.prototype->registers);
-	thread.frame.dest = -resultSlot;
-	thread.frame.env = env;
-    thread.frame.isPromise = true;
-	return i;
+Instruction const* buildStackFrame(Thread& thread, Environment* environment, Code const* code, int64_t resultSlot, Instruction const* returnpc) {
+	return buildStackFrame(thread, environment, code, returnpc, -resultSlot);
 }
 
 inline void assignArgument(Thread& thread, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {
@@ -392,7 +392,7 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 		args.push_back(p);
 		CompiledCall cc(CreateCall(call), args, 1, false, extra);
 		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
-		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype(), out, &inst+1);
+		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
 	_error(std::string("Failed to find generic for builtin op: ") + op);
 }
@@ -414,7 +414,7 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 		args.push_back(p);
 		CompiledCall cc(CreateCall(call), args, 2, false, extra);
 		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
-		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype(), out, &inst+1);
+		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
 	_error(std::string("Failed to find generic for builtin op: ") + op + " type: " + Type::toString(a.type()) + " " + Type::toString(b.type()));
 }
@@ -445,7 +445,7 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 		args.push_back(p);
 		CompiledCall cc(CreateCall(call, names), args, 3, true, extra);
         Environment* fenv = MatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
-		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype(), out, &inst+1);
+		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
 	_error(std::string("Failed to find generic for builtin op: ") + op);
 }
@@ -467,7 +467,7 @@ Instruction const* StopDispatch(Thread& thread, Instruction const& inst, String 
 		args.push_back(p);
 		CompiledCall cc(CreateCall(call), args, 1, false, extra);
 		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
-		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype(), out, &inst+1);
+		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
 	_error(std::string("Failed to find stop handler (__stop__)"));
 }
@@ -622,7 +622,7 @@ Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const&
                 Closure const& f = (Closure const&)a;
 	            String s = ((Character const&)b).s;
                 if(s == Strings::body) {
-                    c = f.prototype()->expression;
+                    c = f.prototype()->code->expression;
                     return &inst+1;
                 }
                 else if(s == Strings::formals) {

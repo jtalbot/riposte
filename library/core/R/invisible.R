@@ -1,2 +1,2 @@
 
-invisible <- function(x=NULL) x
+invisible <- function(x=NULL) .invisible(x)

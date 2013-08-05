@@ -73,8 +73,8 @@ static void traverse(Value const& v) {
 			break;
 		case Type::Promise:
 			VISIT(((Promise&)v).environment());
-			if(((Promise&)v).isPrototype())
-				VISIT(((Promise&)v).prototype());
+			if(((Promise&)v).isExpression())
+				VISIT(((Promise&)v).code());
 			break;
 		default:
 			// do nothing
@@ -118,15 +118,11 @@ void Context::visit() const {
 	}
 }
 
-void Prototype::visit() const {
+void Code::visit() const {
 	HeapObject::visit();
-	
 	traverse(expression);
-    traverse(formals);
-	for(uint64_t i = 0; i < parameters.size(); i++) {
-		traverse(parameters[i].v);
-	}
-	for(uint64_t i = 0; i < constants.size(); i++) {
+	
+    for(uint64_t i = 0; i < constants.size(); i++) {
 		traverse(constants[i]);
 	}
 	for(uint64_t i = 0; i < calls.size(); i++) {
@@ -135,9 +131,16 @@ void Prototype::visit() const {
 			traverse(calls[i].arguments[j].v);
 		}
 	}
-	//for(int64_t i = 0; i < prototypes.size(); i++) {
-	//	traverse(prototypes[i]);
-	//}
+}
+
+void Prototype::visit() const {
+	HeapObject::visit();
+	VISIT(code);
+	
+    traverse(formals);
+	for(uint64_t i = 0; i < parameters.size(); i++) {
+		traverse(parameters[i].v);
+	}
 }
 
 void Heap::mark(State& state) {
@@ -159,18 +162,18 @@ void Heap::mark(State& state) {
 
 		//printf("--stack--\n");
 		for(uint64_t i = 0; i < thread->stack.size(); i++) {
-			VISIT(thread->stack[i].prototype);
+			VISIT(thread->stack[i].code);
 			VISIT(thread->stack[i].environment);
 		}
 		//printf("--frame--\n");
-		VISIT(thread->frame.prototype);
+		VISIT(thread->frame.code);
 		VISIT(thread->frame.environment);
 
 		//printf("--trace--\n");
 		// traces only hold weak references...
 
 		//printf("--registers--\n");
-		for(Value const* r = thread->registers; r < thread->frame.registers+thread->frame.prototype->registers; ++r) {
+		for(Value const* r = thread->registers; r < thread->frame.registers+thread->frame.code->registers; ++r) {
 			traverse(*r);
 		}
 

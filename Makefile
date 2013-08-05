@@ -95,25 +95,25 @@ tests: COVERAGE_FLAGS += >/dev/null
 tests: $(COVERAGE_TESTS) $(BLACKBOX_TESTS) $(CORE_TESTS) #$(BASE_TESTS)
 
 $(COVERAGE_TESTS):
-	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
+	-@Rscript --vanilla --default-packages=NULL $@ > $@.key
 	-@./riposte --format=R -f $@ > $@.out
 	-@diff -b $@.key $@.out $(COVERAGE_FLAGS)
 	-@rm $@.key $@.out
 
 $(BLACKBOX_TESTS):
-	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
+	-@Rscript --vanilla --default-packages=NULL $@ > $@.key
 	-@./riposte --format=R -f $@ > $@.out
 	-@diff -b $@.key $@.out $(COVERAGE_FLAGS)
 	-@rm $@.key $@.out
 
 $(CORE_TESTS):
-	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
+	-@Rscript --vanilla --default-packages=NULL $@ > $@.key
 	-@./riposte --format=R -f $@ > $@.out
 	-@diff -b $@.key $@.out $(COVERAGE_FLAGS)
 	-@rm $@.key $@.out
 
 $(BASE_TESTS):
-	-@Rscript --vanilla --default-packages=NULL $@ > $@.key 2>/dev/null
+	-@Rscript --vanilla --default-packages=NULL $@ > $@.key
 	-@./riposte --format=R -f $@ > $@.out
 	-@diff -b $@.key $@.out $(COVERAGE_FLAGS)
 	-@rm $@.key $@.out

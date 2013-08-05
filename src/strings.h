@@ -35,31 +35,15 @@
 	_(Default, 	    "default") 	\
 	_(Dotdot, 	    "dotdot") 	\
 	_(Date,         "date")		\
-	_(numeric, 	"numeric") \
-	_(pairlist,	"pairlist")	\
-	_(name,	    "name")	\
-	_(call,	"call")		\
+	_(numeric, 	    "numeric") \
+	_(pairlist,	    "pairlist")	\
+	_(name,	        "name")	\
+	_(call,	        "call")		\
 	_(expression,	"expression")	\
 	_(external, 	".External") \
 	_(map, 	        ".Map") \
-	_(map_d, 	".Map.double") \
-	_(map_i, 	".Map.integer") \
-	_(map_l, 	".Map.logical") \
-	_(map_c, 	".Map.character") \
-	_(map_r, 	".Map.raw") \
-	_(map_g, 	".Map.list") \
-	_(fold_d, 	".Fold.double") \
-	_(fold_i, 	".Fold.integer") \
-	_(fold_l, 	".Fold.logical") \
-	_(fold_c, 	".Fold.character") \
-	_(fold_r, 	".Fold.row") \
-	_(fold_g, 	".Fold.list") \
-	_(scan_d, 	".Scan.double") \
-	_(scan_i, 	".Scan.integer") \
-	_(scan_l, 	".Scan.logical") \
-	_(scan_c, 	".Scan.character") \
-	_(scan_r, 	".Scan.row") \
-	_(scan_g, 	".Scan.list") \
+	_(scan, 	    ".Scan") \
+	_(fold, 	    ".Fold") \
 	_(assign, 	"<-") \
 	_(assign2, 	"<<-") \
 	_(eqassign, 	"=") \
@@ -174,6 +158,8 @@
     _(Last_value, ".Last.value") \
     _(semijoin, ".semijoin") \
     _(stop, ".stop") \
+    _(invisible, ".invisible") \
+    _(visible, ".visible") \
     _(__onexit__, "__on.exit__") \
     _(__onexittmp__, "__on.exit.tmp__") \
     _(__handlers__, "__handlers__") \
