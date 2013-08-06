@@ -7,7 +7,6 @@
 
 #include "common.h"
 #include "type.h"
-#include "bc.h"
 #include "gc.h"
 #include "strings.h"
 #include "exceptions.h"

@@ -282,7 +282,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
 	{
 		Operand result = allocRegister();
-		Operand counter = placeInRegister(compile(Integer::c(0), code));
+		Operand counter = placeInRegister(compile(Integer::c(-1), code));
 		Operand storage = allocRegister();
 		kill(storage); kill(counter);
 		emit(ByteCode::dots, counter, storage, result); 
@@ -892,7 +892,10 @@ Code* Compiler::compile(Value const& expr) {
     }
     
 	code->expression = expr;
-	code->registers = max_n;
+    
+    // interpreter assumes at least 2 registers for each function
+    // one for the return value and one for an onexit result 
+	code->registers = std::max(max_n, 2LL); 
 	
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, 

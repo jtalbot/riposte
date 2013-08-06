@@ -19,6 +19,7 @@
     _(external,     "external")                                                \
     _(invisible,    "invisible")                                               \
     _(visible,      "visible")                                                 \
+    _(force,        "force")                                                   \
 
 #define LOAD_STORE_BYTECODES(_)                                                \
     _(load,         "load" )        /* = get(x, environment(), "any", TRUE) */ \

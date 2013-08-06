@@ -181,6 +181,7 @@ void Heap::mark(State& state) {
 		for(uint64_t i = 0; i < thread->gcStack.size(); i++) {
 			traverse(thread->gcStack[i]);
 		}
+        VISIT(thread->promiseCode);
 	}
 }
 

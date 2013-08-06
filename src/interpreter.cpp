@@ -77,17 +77,15 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
 	REGISTER(0) = a;
 	Instruction const* returnpc = thread.frame.returnpc;
     
-    Value const& onexit = thread.frame.environment->get(Strings::__onexit__);
+    Value& onexit = thread.frame.environment->insert(Strings::__onexit__);
     if(onexit.isObject()) {
-        Value& v = thread.frame.environment->insert(Strings::__onexittmp__);
-        Promise::Init(v,
+        Promise::Init(onexit,
             thread.frame.environment,
             Compiler::compilePromise(thread, onexit),
             false);
-        // remove it, so we don't call it recursively
-        thread.frame.environment->remove(Strings::__onexit__);
-		return force(thread, inst, v, 
-            thread.frame.environment, Strings::__onexittmp__);
+		return force(thread, (Promise const&)onexit,
+            thread.frame.environment, Value::Nil(),
+            1, &inst);
 	}
     
 	// We can free this environment for reuse
@@ -110,13 +108,15 @@ static inline Instruction const* retp_op(Thread& thread, Instruction const& inst
 	DECODE(a);
     assert(REGISTER(0).isEnvironment());
 	Environment* env = ((REnvironment const&)REGISTER(0)).environment();
-	if(REGISTER(1).isCharacter()) {
+	
+    if(REGISTER(1).isCharacter()) {
 		env->insert(REGISTER(1).s) = a;
-	} else {
+	    thread.traces.LiveEnvironment(env, a);
+	} else if(REGISTER(1).isInteger()) {
         assert(env->getContext());
         ((Context*)env->getContext())->dots[REGISTER(1).i].v = a;
-	}
-	thread.traces.LiveEnvironment(env, a);
+	    thread.traces.LiveEnvironment(env, a);
+	} // otherwise, don't store anywhere...
 	
 	REGISTER(0) = a;
 	
@@ -242,18 +242,24 @@ static inline Instruction const* visible_op(Thread& thread, Instruction const& i
     return &inst+1;
 }
 
-/*static inline Instruction const* force_op(Thread& thread, Instruction const& inst) {
-    Value& a = REGISTER(inst.a);
- 
-    a = ((Promise const&)a).environment()->getContext()->dots[((Promise const&)a).dotIndex()].v;
+static inline Instruction const* force_op(Thread& thread, Instruction const& inst) {
+    Value const& a = REGISTER(inst.a);
+
+    Value const& t = thread.frame.environment->getContext()->dots[a.i].v;
     
-    if(!t.isObject()) {
-        return forceDot(thread, &inst+1, 
-            (Promise const&)t, ((Promise const&)a).environment(), ((Promise const&)a).dotIndex());
+    if(t.isObject()) {
+        OUT(c) = t;
+        return &inst+1;
     }
-     
-    return &inst+1;
-}*/
+    else if(t.isPromise()) {
+        return force(thread, (Promise const&)t,
+                thread.frame.environment, a,
+                inst.c, &inst+1);
+    }
+    else {
+        _internalError("Unexpected Nil operand in force_op");
+    }
+}
 
 static inline Instruction const* external_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
@@ -345,13 +351,15 @@ static inline Instruction const* load_op(Thread& thread, Instruction const& inst
 		OUT(c) = v;
 		return &inst+1;
     }
+    else if(v.isPromise()) {
+        return force(thread, (Promise const&)v, 
+            env, ((Character const&)CONSTANT(inst.a)),
+            inst.c, &inst+1);
+    }
     else {
-        try {
-            return force(thread, inst, v, env, s);
-        }
-        catch(...) {
-            return StopDispatch(thread, inst, thread.internStr((std::string("Object '") + s + "' not found").c_str()), inst.c);
-        }
+        return StopDispatch(thread, inst, thread.internStr(
+            (std::string("Object '") + s + "' not found").c_str()), 
+            inst.c);
     }
 }
 
@@ -364,17 +372,20 @@ static inline Instruction const* loadfn_op(Thread& thread, Instruction const& in
     do {
 	    Value const& v = env->getRecursive(s, env);
 
-	    if(!v.isObject()) {
-            try {
-		        return force(thread, inst, v, env, s);
-            }
-            catch(RuntimeError const& e) {
-                return StopDispatch(thread, inst, thread.internStr(e.what().c_str()), inst.c);
-            }
-	    }
-        else if(v.isClosure()) {
+        if(v.isClosure()) {
             OUT(c) = v;
             return &inst+1;
+        }
+	    else if(v.isPromise()) {
+            // Must return to this instruction to check if it's a function.
+            return force(thread, (Promise const&)v, 
+                env, ((Character const&)CONSTANT(inst.a)),
+                inst.c, &inst);
+        }
+        else if(v.isNil()) {
+            return StopDispatch(thread, inst, thread.internStr(
+                (std::string("Object '") + s + "' not found").c_str()), 
+                inst.c);
         }
         env = env->getParent();
 	} while(env != 0);
@@ -434,9 +445,23 @@ static inline Instruction const* dotsv_op(Thread& thread, Instruction const& ins
        idx < (int64_t)0)
         return StopDispatch(thread, inst, thread.internStr((std::string("The '...' list does not contain ") + intToStr(idx+1) + " elements").c_str()), inst.c);
 	
-    DOTDOT(v, idx); FORCE_DOTDOT(v, idx); // no need to bind since value is in a register
-	OUT(c) = v;
-	return &inst+1;
+    Value const& v = DOTS(idx); 
+   
+    if(v.isObject()) {
+        OUT(c) = v;
+        return &inst+1;
+    }
+    else if(v.isPromise()) {
+        return force(thread, (Promise const&)v,
+            thread.frame.environment, Integer::c(idx),
+            inst.c, &inst+1);
+    }
+    else {
+        return StopDispatch(thread, inst, thread.internStr(
+            (std::string("Object '..") + intToStr(idx+1) + 
+                "' not found, missing argument?").c_str()), 
+            inst.c);
+    }
 }
 
 static inline Instruction const* dotsc_op(Thread& thread, Instruction const& inst) {
@@ -460,34 +485,43 @@ static inline Instruction const* dots_op(Thread& thread, Instruction const& inst
 	Value& out = OUT(c);
 
 	// First time through, make a result vector...
-	if(iter.i == 0) {
+	if(iter.i == -1) {
 		Heap::Global.collect(thread.state);
 		out = List(dots.size());
 		memset(((List&)out).v(), 0, dots.size()*sizeof(List::Element));
+	    iter.i++;
+    }
+	
+	while(iter.i < (int64_t)dots.size()) {
+		Value const& v = DOTS(iter.i);
+
+        if(v.isObject()) {
+		    BIND(v); // BIND since we don't yet support futures in lists
+		    ((List&)out)[iter.i] = v;
+		    iter.i++;
+        }
+        else if(v.isPromise()) {
+            return force(thread, (Promise const&)v,
+                thread.frame.environment, Integer::c(iter.i),
+                inst.b, &inst);
+        }
+        else if(v.isNil()) {
+            return StopDispatch(thread, inst, thread.internStr(
+                "argument is missing, with no default"),
+                inst.c);
+        }
 	}
 	
-	if(iter.i < (int64_t)dots.size()) {
-		DOTDOT(a, iter.i); FORCE_DOTDOT(a, iter.i); 
-		BIND(a); // BIND since we don't yet support futures in lists
-		((List&)out)[iter.i] = a;
-		iter.i++;
+	// check to see if we need to add names
+    if(thread.frame.environment->getContext()->named && dots.size() > 0) {
+        Character names(dots.size());
+        for(int64_t i = 0; i < (int64_t)dots.size(); i++)
+            names[i] = dots[i].n;
+        Dictionary* d = new Dictionary(1);
+        d->insert(Strings::names) = names;
+        ((Object&)out).attributes(d);
 	}
-	
-	// If we're all done, check to see if we need to add names and then exit
-	if(iter.i >= (int64_t)dots.size() ) {
-		if(thread.frame.environment->getContext()->named && dots.size() > 0) {
-			Character names(dots.size());
-			for(int64_t i = 0; i < (int64_t)dots.size(); i++)
-				names[i] = dots[i].n;
-			Dictionary* d = new Dictionary(1);
-			d->insert(Strings::names) = names;
-			((Object&)out).attributes(d);
-		}
-		return &inst+1;
-	}
-	
-	// Loop on this instruction until done.
-	return &inst;
+    return &inst+1;
 }
 
 static inline Instruction const* missing_op(Thread& thread, Instruction const& inst) {
@@ -1390,6 +1424,12 @@ Thread::Thread(State& state, uint64_t index)
 {
 	registers = new Value[DEFAULT_NUM_REGISTERS];
 	frame.registers = registers;
+
+    promiseCode = new Code();
+    promiseCode->bc.push_back(Instruction(ByteCode::force, 2, 0, 2));
+    promiseCode->bc.push_back(Instruction(ByteCode::retp, 2, 0, 0));
+    promiseCode->registers = 3;
+    promiseCode->expression = Value::Nil();
 }
 
 void Code::printByteCode(State const& state) const {

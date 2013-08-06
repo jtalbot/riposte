@@ -2,90 +2,25 @@
 #include "call.h"
 #include "frontend.h"
 
-// forces a value stored in the Environments dotdot slot: dest[index]
-// call through FORCE_DOTDOT macro which inlines some performance-important checks
-Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, int64_t index) {
-	if(v.isPromise()) {
-		Promise const& a = (Promise const&)v;
-		if(a.isExpression()) {
-            Instruction const* r = buildStackFrame(thread, a.environment(), a.code(), &inst, thread.frame.code->registers);
+Instruction const* force(
+    Thread& thread, Promise const& p,
+    Environment* targetEnv, Value targetIndex,
+    int64_t outRegister, Instruction const* returnpc) {
+
+    Code* code = p.isExpression() ? p.code() : thread.promiseCode;
+    Instruction const* r = buildStackFrame(
+        thread, p.environment(), code, returnpc, outRegister);
+    
+    REnvironment::Init(REGISTER(0), targetEnv);
+    REGISTER(1) = targetIndex;
+	
+    if(p.isDotdot())		
+        Integer::InitScalar(REGISTER(2), p.dotIndex());
+
+    thread.frame.isPromise = true;
             
-            REnvironment::Init(REGISTER(0), dest);
-            Integer::InitScalar(REGISTER(1), index);
-			
-            thread.frame.isPromise = true;
-            return r;
-		} 
-		else if(a.isDotdot()) {
-            Value const& t = a.environment()->getContext()->dots[a.dotIndex()].v;
-			Instruction const* result = &inst;
-			if(!t.isObject()) {
-				result = forceDot(thread, inst, t, a.environment(), a.dotIndex());
-			}
-			if(t.isObject()) {
-				((Context*)dest->getContext())->dots[index].v = t;
-				thread.traces.LiveEnvironment(dest, t);
-			}
-			return result;
-		}
-		else {
-			_error("Invalid promise type");
-		}
-	}
-	else {
-		_error(std::string("Object '..") + intToStr(index+1) + "' not found, missing argument?");
-	} 
+    return r;
 }
-
-// forces a value stored in the Environment slot: dest->name
-// call through FORCE macro which inlines some performance-important checks
-//  for the common cases.
-// Environments can have promises, defaults, or dotdots (references to ..n in the parent).
-Instruction const* force(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, String name) {
-	if(v.isPromise()) {
-		Promise a = (Promise const&)v;
-		if(a.isExpression()) {
-       	    Instruction const* r = buildStackFrame(thread, a.environment(), a.code(), &inst, thread.frame.code->registers);
-            
-            REnvironment::Init(REGISTER(0), dest);
-            Character::InitScalar(REGISTER(1), name);
-			
-            thread.frame.isPromise = true;
-            return r;
-        }
-		else if(a.isDotdot()) {
-            Value const& t = a.environment()->getContext()->dots[a.dotIndex()].v;
-			Instruction const* result = &inst;
-			// if this dotdot is a promise, attempt to force.
-			// first time through this will return the address of the 
-			//	promise's new stack frame.
-			// second time through this will return the resulting value
-			// => Thus, evaluating dotdot requires at most 2 sweeps up the dotdot chain
-			if(!t.isObject()) {
-				result = forceDot(thread, inst, (Promise const&)t, a.environment(), a.dotIndex());
-			}
-       	    if(t.isObject()) {
-       	       	dest->insert(name) = t;
-       	       	thread.traces.LiveEnvironment(dest, t);
-            }
-            return result;
-       	}
-		else {
-			_error("Invalid promise type");
-		}
-	}
-	else {
-		_error(std::string("Object '") + thread.externStr(name) + "' not found"); 
-	} 
-}
-
-/*Instruction const* force2(Thread& thread, Instruction const& inst, Value const& v, Environment* dest) {
-    Promise const& a = (Promise const&)v;
-
-    Prototype const* p = a.isPrototype() ? a.prototype() : allProto;
-
-    return buildStackFrame(thread, a.environment(), p, dest, name, &inst);
-}*/
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Code const* code, Instruction const* returnpc, int64_t stackOffset) {
 	/*std::cout << "\t(Executing in " << intToHexStr((int64_t)environment) << ")" << std::endl;
@@ -615,8 +550,9 @@ Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const&
                     return &inst+1;
                 }
                 else {
-                    return force(thread, inst, v, 
-                        ((REnvironment&)a).environment(), s); 
+                    return force(thread, ((Promise const&)v), 
+                        ((REnvironment&)a).environment(), b,
+                        inst.c, &inst+1); 
                 }
             }
         }

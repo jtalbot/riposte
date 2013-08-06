@@ -9,6 +9,7 @@
 #include "value.h"
 #include "thread.h"
 #include "random.h"
+#include "bc.h"
 
 #ifdef EPEE
 #include "epee/ir.h"
@@ -433,6 +434,7 @@ public:
 	StackFrame frame;
 
     std::vector<Value> gcStack;
+    Code* promiseCode;
     bool visible;
 
 #ifdef EPEE

@@ -9,9 +9,30 @@
 #include "exceptions.h"
 #include "runtime.h"
 
-Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, int64_t index);
 
-Instruction const* force(Thread& thread, Instruction const& inst, Value const& v, Environment* dest, String name);
+#define REGISTER(i) (*(thread.frame.registers+(i)))
+#define CONSTANT(i) (thread.frame.code->constants[-1-(i)])
+#define DOTS(i) (thread.frame.environment->getContext()->dots[(i)].v)
+
+// Out register is currently always a register, not memory
+#define OUT(X) (*(thread.frame.registers+(inst.X)))
+
+#define DECODE(X) \
+Value const& X = \
+	__builtin_expect((inst.X) >= 0, true) \
+		? *(thread.frame.registers+(inst.X)) \
+	    : thread.frame.code->constants[-1-(inst.X)];
+
+#define BIND(X) \
+if(__builtin_expect(X.isFuture(), false)) { \
+	thread.traces.Bind(thread,X); \
+	return &inst; \
+}
+
+Instruction const* force(
+    Thread& thread, Promise const& p,
+    Environment* targetEnv, Value targetIndex,
+    int64_t outRegister, Instruction const* returnpc);
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Code const* code, Instruction const* returnpc, int64_t stackOffset);
 
@@ -29,34 +50,6 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 
 Instruction const* StopDispatch(Thread& thread, Instruction const& inst, String msg, int64_t out);
 
-#define REGISTER(i) (*(thread.frame.registers+(i)))
-#define CONSTANT(i) (thread.frame.code->constants[-1-(i)])
-
-// Out register is currently always a register, not memory
-#define OUT(X) (*(thread.frame.registers+(inst.X)))
-
-#define DECODE(X) \
-Value const& X = \
-	__builtin_expect((inst.X) >= 0, true) \
-		? *(thread.frame.registers+(inst.X)) \
-	    : thread.frame.code->constants[-1-(inst.X)];
-
-#define DOTDOT(X, i) \
-Environment* X##Env = thread.frame.environment; \
-Value const& X = \
-	(thread.frame.environment->getContext()->dots[(i)].v);
-	
-#define FORCE_DOTDOT(X, i) \
-if(__builtin_expect(!X.isObject(), false)) { \
-	return forceDot(thread, inst, X, X##Env, (i)); \
-}
-
-
-#define BIND(X) \
-if(__builtin_expect(X.isFuture(), false)) { \
-	thread.traces.Bind(thread,X); \
-	return &inst; \
-}
 
 template< template<typename T> class Op >
 bool ArithUnary1Fast(Thread& thread, void* args, Value const& a, Value& c) {
