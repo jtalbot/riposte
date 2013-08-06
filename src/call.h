@@ -29,17 +29,17 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 
 Instruction const* StopDispatch(Thread& thread, Instruction const& inst, String msg, int64_t out);
 
-#define REGISTER(i) (*(thread.frame.registers+(-(i))))
-#define CONSTANT(i) (thread.frame.code->constants[(i)-1])
+#define REGISTER(i) (*(thread.frame.registers+(i)))
+#define CONSTANT(i) (thread.frame.code->constants[-1-(i)])
 
 // Out register is currently always a register, not memory
-#define OUT(X) (*(thread.frame.registers+(-inst.X)))
+#define OUT(X) (*(thread.frame.registers+(inst.X)))
 
 #define DECODE(X) \
 Value const& X = \
-	__builtin_expect((inst.X) <= 0, true) \
-		? *(thread.frame.registers+(-inst.X)) \
-	    : thread.frame.code->constants[(inst.X)-1];
+	__builtin_expect((inst.X) >= 0, true) \
+		? *(thread.frame.registers+(inst.X)) \
+	    : thread.frame.code->constants[-1-(inst.X)];
 
 #define DOTDOT(X, i) \
 Environment* X##Env = thread.frame.environment; \

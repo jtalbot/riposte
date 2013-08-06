@@ -103,7 +103,7 @@ private:
 	Operand placeInRegister(Operand r);
 	int64_t emit(ByteCode::Enum bc, Operand a, Operand b, Operand c);
 	void resolveLoopExits(int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget);
-	int64_t encodeOperand(Operand op, int64_t n) const;
+	int64_t encodeOperand(Operand op) const;
 	void dumpCode() const;
 
 public:

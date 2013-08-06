@@ -336,9 +336,6 @@ struct StackFrame {
     bool isPromise;
 
 	Instruction const* returnpc;
-	
-	int64_t dest;
-	Environment* env;
 };
 
 ////////////////////////////////////////////////////////////////////

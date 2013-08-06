@@ -8,9 +8,11 @@ Instruction const* forceDot(Thread& thread, Instruction const& inst, Value const
 	if(v.isPromise()) {
 		Promise const& a = (Promise const&)v;
 		if(a.isExpression()) {
-			Instruction const* r = buildStackFrame(thread, a.environment(), a.code(), &inst, thread.frame.code->registers);
-	        thread.frame.dest = -index;
-	        thread.frame.env = dest;
+            Instruction const* r = buildStackFrame(thread, a.environment(), a.code(), &inst, thread.frame.code->registers);
+            
+            REnvironment::Init(REGISTER(0), dest);
+            Integer::InitScalar(REGISTER(1), index);
+			
             thread.frame.isPromise = true;
             return r;
 		} 
@@ -44,8 +46,10 @@ Instruction const* force(Thread& thread, Instruction const& inst, Value const& v
 		Promise a = (Promise const&)v;
 		if(a.isExpression()) {
        	    Instruction const* r = buildStackFrame(thread, a.environment(), a.code(), &inst, thread.frame.code->registers);
-	        thread.frame.dest = (int64_t)name;
-	        thread.frame.env = dest;
+            
+            REnvironment::Init(REGISTER(0), dest);
+            Character::InitScalar(REGISTER(1), name);
+			
             thread.frame.isPromise = true;
             return r;
         }
@@ -110,7 +114,7 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Cod
 }
 
 Instruction const* buildStackFrame(Thread& thread, Environment* environment, Code const* code, int64_t resultSlot, Instruction const* returnpc) {
-	return buildStackFrame(thread, environment, code, returnpc, -resultSlot);
+	return buildStackFrame(thread, environment, code, returnpc, resultSlot);
 }
 
 inline void assignArgument(Thread& thread, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {

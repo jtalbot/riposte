@@ -108,14 +108,15 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
 static inline Instruction const* retp_op(Thread& thread, Instruction const& inst) {
 	// we can return futures from promises, so don't BIND
 	DECODE(a);
-	
-	if(thread.frame.dest > 0) {
-		thread.frame.env->insert((String)thread.frame.dest) = a;
+    assert(REGISTER(0).isEnvironment());
+	Environment* env = ((REnvironment const&)REGISTER(0)).environment();
+	if(REGISTER(1).isCharacter()) {
+		env->insert(REGISTER(1).s) = a;
 	} else {
-        assert(thread.frame.env->getContext());
-        ((Context*)thread.frame.env->getContext())->dots[-thread.frame.dest].v = a;
+        assert(env->getContext());
+        ((Context*)env->getContext())->dots[REGISTER(1).i].v = a;
 	}
-	thread.traces.LiveEnvironment(thread.frame.env, a);
+	thread.traces.LiveEnvironment(env, a);
 	
 	REGISTER(0) = a;
 	
@@ -202,7 +203,7 @@ static inline Instruction const* forbegin_op(Thread& thread, Instruction const& 
 	} else {
 		Element2(v, 0, thread.frame.environment->insert((String)inst.a));
 		Integer::InitScalar(REGISTER(inst.c), 1);
-		Integer::InitScalar(REGISTER(inst.c-1), v.length());
+		Integer::InitScalar(REGISTER(inst.c+1), v.length());
 		return &inst+2;			// skip over following JMP
 	}
 }
@@ -210,7 +211,7 @@ static inline Instruction const* forbegin_op(Thread& thread, Instruction const& 
 static inline Instruction const* forend_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
 	Value& counter = REGISTER(inst.c);
-	Value& limit = REGISTER(inst.c-1);
+	Value& limit = REGISTER(inst.c+1);
 	if(__builtin_expect(counter.i < limit.i, true)) {
 		Value const& b = REGISTER(inst.b);
 		Element2(b, counter.i, thread.frame.environment->insert((String)inst.a));
@@ -269,7 +270,7 @@ static inline Instruction const* external_op(Thread& thread, Instruction const& 
 
     uint64_t nargs = inst.b;
 	for(int64_t i = 0; i < nargs; i++) {
-		BIND(REGISTER(inst.c-i));
+		BIND(REGISTER(inst.c+i));
 	}
     {
         typedef Value (*Func)(Thread&, Value const*);
@@ -1337,7 +1338,7 @@ Value Thread::eval(Code const* code, Environment* environment, int64_t resultSlo
     StackFrame oldFrame = frame;
 
 	// make room for the result
-	Instruction const* run = buildStackFrame(*this, environment, code, -resultSlot, (Instruction const*)0);
+	Instruction const* run = buildStackFrame(*this, environment, code, resultSlot, (Instruction const*)0);
 	try {
 		bool success = interpret(*this, run);
         if(success) {

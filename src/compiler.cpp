@@ -856,20 +856,26 @@ void Compiler::dumpCode() const {
 
 // generate actual code from IR as follows...
 // 	MEMORY and INTEGER operands unchanged
-//	CONSTANT operands placed in lower N registers (starting at 0)
-//	REGISTER operands placed in above those
-//	all register ops encoded with negative integer.
+//	CONSTANT operands encoded with negative integers
+//	REGISTER operands encoded with non-negative integers
 //	INVALID operands just go to 0 since they will never be used
-int64_t Compiler::encodeOperand(Operand op, int64_t n) const {
+int64_t Compiler::encodeOperand(Operand op) const {
 	if(op.loc == MEMORY || op.loc == INTEGER) return op.i;
-	else if(op.loc == CONSTANT) return (op.i+1);
-	else if(op.loc == REGISTER) return -(op.i);
+	else if(op.loc == CONSTANT) return -(op.i+1);
+	else if(op.loc == REGISTER) return (op.i);
 	else return 0;
 }
 
 Code* Compiler::compile(Value const& expr) {
 	Code* code = new Code();
 	assert(((int64_t)code) % 16 == 0); // our type packing assumes that this is true
+
+    if(scope == PROMISE) {
+        // promises use first two registers to pass environment info
+        // for replacing promise with evaluated value
+        allocRegister();
+        allocRegister();
+    }
 
     Operand result = compile(expr, code);
 
@@ -886,11 +892,13 @@ Code* Compiler::compile(Value const& expr) {
     }
     
 	code->expression = expr;
-	code->registers = code->constants.size() + max_n;
+	code->registers = max_n;
 	
-	int64_t n = code->constants.size();
 	for(size_t i = 0; i < ir.size(); i++) {
-		code->bc.push_back(Instruction(ir[i].bc, encodeOperand(ir[i].a, n), encodeOperand(ir[i].b, n), encodeOperand(ir[i].c, n)));
+		code->bc.push_back(Instruction(ir[i].bc, 
+            encodeOperand(ir[i].a),
+            encodeOperand(ir[i].b),
+            encodeOperand(ir[i].c)));
 	}
 
 	return code;	
