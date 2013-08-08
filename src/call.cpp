@@ -104,7 +104,7 @@ Value argument(int64_t index, Environment* env, CompiledCall const& call) {
 			// But everything else can be passed down.
 			if(env->getContext()->dots[index].v.isPromise()) {
 				Value p;
-				Promise::Init(p, env, index, false);
+				Promise::Init(p, env, index);
 				return p;
 			} 
 			else {
@@ -167,6 +167,7 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
     context->nargs = numArgs;
     context->named = named;
     context->onexit = Null::Singleton();
+    context->missing = Logical(parameters.length());
 
     Environment* fenv = new Environment(
         (int64_t)std::min(numArgs, (int64_t)parameters.length()),
@@ -182,7 +183,8 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 	// set defaults
 	for(int64_t i = 0; i < (int64_t)parameters.length(); ++i) {
 		assignArgument(thread, fenv, fenv, parameters[i], defaults[i]);
-	}
+	    context->missing[i] = Logical::TrueElement;
+    }
 
 	if(!named) {
 		// call arguments are not named, 
@@ -190,8 +192,10 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 		int64_t end = std::min(numArgs, pDotIndex);
 		for(int64_t i = 0; i < end; ++i) {
 			Value arg = argument(i, env, call);
-			if(!arg.isNil())
+			if(!arg.isNil()) {
 				assignArgument(thread, env, fenv, parameters[i], arg);
+	            context->missing[i] = Logical::FalseElement;
+            }
 		}
 
         if(numArgs > end) {
@@ -200,6 +204,7 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
                 _error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
 		    }
             // all unused args go into ...
+            context->missing[pDotIndex] = Logical::FalseElement;
             for(int64_t i = end; i < numArgs; i++) {
 	            Value arg = argument(i, env, call);
                 assignDot(thread, env, fenv, Strings::empty, arg);
@@ -208,6 +213,7 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
     }
     // function only has dots, can just stick everything there
     else if(parameters.length() == 1 && pDotIndex == 0) {
+        context->missing[pDotIndex] = Logical::FalseElement;
 		for(int64_t i = 0; i < numArgs; i++) {
             Value arg = argument(i, env, call);
             String n = name(i, env, call);
@@ -275,6 +281,7 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 				Value arg = argument(set[j], env, call);
 				if(!arg.isNil()) {
 					assignArgument(thread, env, fenv, parameters[j], arg);
+                    context->missing[j] = Logical::FalseElement;
 			    }
             }
 		}
@@ -286,6 +293,7 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 				// if we have left over arguments, but no parameter dots, error
 				if(pDotIndex >= (int64_t)parameters.length())
 			        _error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
+                context->missing[pDotIndex] = Logical::FalseElement;
 				Value arg = argument(i, env, call);
                 String n = name(i, env, call);
 				if(n != Strings::empty)
@@ -315,6 +323,7 @@ Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func
     context->nargs = arguments.length();
     context->named = false; 
     context->onexit = Null::Singleton();
+    context->missing = Logical(parameters.length());
 
     Environment* fenv = new Environment(
         (int64_t)call.arguments.length(),
@@ -329,10 +338,14 @@ Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func
 
 	// set parameters from arguments & defaults
 	for(int64_t i = 0; i < parameters.length(); i++) {
-		if(i < end && !arguments[i].isNil())
+		if(i < end && !arguments[i].isNil()) {
 			assignArgument(thread, env, fenv, parameters[i], arguments[i]);
-		else
+            context->missing[i] = Logical::FalseElement;
+        }
+		else {
 			assignArgument(thread, fenv, fenv, parameters[i], defaults[i]);
+            context->missing[i] = Logical::TrueElement;
+        }
 	}
 
 	// handle unused arguments
@@ -341,12 +354,11 @@ Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func
 		    // called function doesn't take dots, unused args is an error 
 			_error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
 	    }
-	    else {
-            // called function has dots, all unused args go into ...
-            context->dots.reserve(arguments.length()-end);
-            for(int64_t i = end; i < (int64_t)arguments.length(); i++) {
-                assignDot(thread, env, fenv, Strings::empty, arguments[i]);
-            }
+        // called function has dots, all unused args go into ...
+        context->missing[pDotIndex] = Logical::FalseElement;
+        context->dots.reserve(arguments.length()-end);
+        for(int64_t i = end; i < (int64_t)arguments.length(); i++) {
+            assignDot(thread, env, fenv, Strings::empty, arguments[i]);
         }
     }
 

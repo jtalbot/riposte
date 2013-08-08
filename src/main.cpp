@@ -141,7 +141,7 @@ static int run(State& state, std::string inname, std::istream& in, std::ostream&
         print = Compiler::compileTopLevel(thread, CreateCall(p));
         // save the promise to the gcStack so that the gc doesn't clean it up.
         Value v;
-        Promise::Init(v, 0, print, false);
+        Promise::Init(v, 0, print);
         thread.gcStack.push_back(v);
     }
 

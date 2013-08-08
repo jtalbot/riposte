@@ -238,7 +238,7 @@ CompiledCall Compiler::makeCall(Thread& thread, List const& call, Character cons
                 p.n = Strings::empty;
 	    	} else if(isCall(call[i]) || isSymbol(call[i])) {
                 if(p.n != Strings::empty) named = true;
-		    	Promise::Init(p.v, NULL, Compiler::compilePromise(thread, call[i]), false);
+		    	Promise::Init(p.v, NULL, Compiler::compilePromise(thread, call[i]));
     		} else {
                 if(p.n != Strings::empty) named = true;
 	    		p.v = call[i];
@@ -328,9 +328,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
             int64_t dd = isDotDot(call[1].s);
             s = dd > 0
                 ? compileConstant(Integer::c(dd), code)
-                : dd == 0
-                    ? compileConstant(Null::Singleton(), code)
-                    : compileConstant(call[1], code);
+                : compileConstant(call[1], code);
         }
         else if(isCall(call[1]) 
             && ((List const&)call[1]).length() == 2
@@ -526,7 +524,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
             }
 			else if(isCall(formals[i]) || isSymbol(formals[i])) {
 				Promise::Init(defaults[i], NULL, 
-                    compilePromise(thread, formals[i]), true);
+                    compilePromise(thread, formals[i]));
 			}
 			else {
 				defaults[i] = formals[i];

@@ -99,34 +99,28 @@ typedef std::vector<Pair> PairList;
 
 struct Promise : public Value {
 	enum PromiseType {
-		NIL = 0,
-		EXPR = 1,
-		EXPR_DEFAULT = 2,
-		DOTDOT = 3,
-		DOTDOT_DEFAULT = 4
+		EXPR,
+		DOTDOT,
 	};
 	static const Type::Enum ValueType = Type::Promise;
-	static Promise& Init(Value& v, Environment* env, Code* code, bool isDefault) {
-		Value::Init(v, Type::Promise, isDefault ? EXPR_DEFAULT : EXPR);
+	static Promise& Init(Value& v, Environment* env, Code* code) {
+		Value::Init(v, Type::Promise, EXPR);
 		v.header += (((uint64_t)env) << 16);
 		v.p = code;
 		return (Promise&)v;
 	}
-	static Promise& Init(Value& v, Environment* env, uint64_t dotindex, bool isDefault) {
-		Value::Init(v, Type::Promise, isDefault ? DOTDOT_DEFAULT : DOTDOT);
+	static Promise& Init(Value& v, Environment* env, uint64_t dotindex) {
+		Value::Init(v, Type::Promise, DOTDOT);
 		v.header += (((uint64_t)env) << 16);
 		v.i = dotindex;
 		return (Promise&)v;
 	}
 
-	bool isDefault() const { 
-		return packed() == EXPR_DEFAULT || packed() == DOTDOT_DEFAULT; 
-	}
 	bool isExpression() const {
-		return packed() == EXPR || packed() == EXPR_DEFAULT;
+		return packed() == EXPR;
 	}
 	bool isDotdot() const {
-		return packed() == DOTDOT || packed() == DOTDOT_DEFAULT;
+		return packed() == DOTDOT;
 	}
 	Environment* environment() const { 
 		return (Environment*)(((uint64_t)header) >> 16); 

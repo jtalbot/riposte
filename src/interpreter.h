@@ -287,14 +287,16 @@ public:
 class Context : public HeapObject {
 public:
     Environment* parent;
-    Value call;
-    Value function;
+    List call;
+    Closure function;
     int64_t nargs;
 	
     Value onexit;
     
     PairList dots;
 	bool named;	// true if any of the dots have names	
+
+    Logical missing;
 
     void visit() const;
 };

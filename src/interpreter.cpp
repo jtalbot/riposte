@@ -81,8 +81,7 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
     if(onexit.isObject()) {
         Promise::Init(onexit,
             thread.frame.environment,
-            Compiler::compilePromise(thread, onexit),
-            false);
+            Compiler::compilePromise(thread, onexit));
 		return force(thread, (Promise const&)onexit,
             thread.frame.environment, Value::Nil(),
             1, &inst);
@@ -530,28 +529,36 @@ static inline Instruction const* dots_op(Thread& thread, Instruction const& inst
 static inline Instruction const* missing_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
     DECODE(a);
-    bool missing = true;
+    bool missing = false;
     if( a.isCharacter() && ((Character const&)a).length() == 1 ) {
-        Value const& v = thread.frame.environment->get(a.s);
-	    missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
+        // check the parameter list
+        if(thread.frame.environment->getContext()) {
+            Character const& parameters = 
+                thread.frame.environment->getContext()
+                    ->function.prototype()->parameters;
+            int64_t i = 0;
+            for(; i < parameters.length(); ++i) {
+                if(a.s == parameters[i]) {
+                    missing = thread.frame.environment->getContext()->missing[i] == Logical::TrueElement;
+                    break;
+                }
+            }
+            if(i == parameters.length())
+                _error("'missing' can only be used for arguments");
+        }
     }
     else if( a.isInteger() && ((Integer const&)a).length() == 1 ) {
         if(thread.frame.environment->getContext()
             && (a.i-1) < thread.frame.environment->getContext()->dots.size()) {
             Value const& v = thread.frame.environment->getContext()->dots[a.i-1].v;
-	        missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
+	        missing = v.isNil();
         }
     }
     else if( a.isDouble() && ((Double const&)a).length() == 1 ) {
         if(thread.frame.environment->getContext()
             && (int64_t)(a.d-1) < thread.frame.environment->getContext()->dots.size()) {
             Value const& v = thread.frame.environment->getContext()->dots[(int64_t)a.d-1].v;
-	        missing = v.isNil() || (v.isPromise() && ((Promise const&)v).isDefault());
-        }
-    }
-    else if( a.isNull() ) {
-        if(thread.frame.environment->getContext()) {
-            missing = thread.frame.environment->getContext()->dots.size() == 0;
+	        missing = v.isNil();
         }
     }
     else {
@@ -618,8 +625,7 @@ static inline Instruction const* pr_new_op(Thread& thread, Instruction const& in
     Value& v = assign.environment()->insert(a.s);
     Promise::Init(v,
         eval.environment(),
-        Compiler::compilePromise(thread, b),
-        false);
+        Compiler::compilePromise(thread, b));
 
     OUT(c) = Null::Singleton();
 
