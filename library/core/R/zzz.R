@@ -35,7 +35,6 @@ getNamespaceRegistry <- NULL
 })()
 
 
-
 .Platform <- list(
     OS.type="unix", 
     file.sep="/", 
@@ -90,6 +89,10 @@ primitives <- .characters(
     'repeat',
     'break',
     'next',
+
+    # Encoding.R
+    'enc2native',
+    'enc2utf8',
 
     # Extract.R
     '[',
@@ -489,6 +492,10 @@ primitives <- .characters(
     )
 
 internals <- .characters(
+    # Encoding.R
+    'Encoding',
+    'setEncoding',
+
     # R.Version.R
     'Version',
 
@@ -640,6 +647,9 @@ internals <- .characters(
 
     # identical.R
     'identical',
+
+    # l10n_info.R
+    'l10n_info',
 
     # lapply.R
     'lapply',

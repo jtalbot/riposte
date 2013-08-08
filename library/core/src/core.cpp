@@ -168,7 +168,7 @@ void mapplybody(void* args, void* header, uint64_t start, uint64_t end, Thread& 
 				Element2(e, i % ((Vector const&)e).length(), a);
 			else
 				a = e;
-			p->calls[0].arguments[j].v = a;
+			p->calls[0].arguments[j] = a;
 		}
 		l.out[i] = thread.eval(p);
 	}

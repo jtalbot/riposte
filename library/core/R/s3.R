@@ -65,7 +65,7 @@
                      `.GenericCallEnv`=callenv,
                      `.GenericDefEnv`=defenv,
                      `.Group`=generic)
-            
+           
             if(is.null(ncall)) ncall <- rep.int('', length(call))
             ncall[[length(call)]] <- '__extraArgs__'
             attr(call, 'names') <- ncall
@@ -94,6 +94,7 @@ UseMethod <- function(generic, object)
                 promise('object', as.name(f), .frame(1L)[[1L]], .getenv(NULL))
         }
     }
+
     call <- .resolve.generic.call(
         generic,
         generic, 

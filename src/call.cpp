@@ -1,6 +1,7 @@
 
 #include "call.h"
 #include "frontend.h"
+#include "compiler.h"
 
 Instruction const* force(
     Thread& thread, Promise const& p,
@@ -9,32 +10,47 @@ Instruction const* force(
 
     Code* code = p.isExpression() ? p.code() : thread.promiseCode;
     Instruction const* r = buildStackFrame(
-        thread, p.environment(), code, returnpc, outRegister);
-    
+        thread, p.environment(), code, outRegister, returnpc);
+    thread.frame.isPromise = true;
+            
     REnvironment::Init(REGISTER(0), targetEnv);
     REGISTER(1) = targetIndex;
 	
     if(p.isDotdot())		
         Integer::InitScalar(REGISTER(2), p.dotIndex());
 
-    thread.frame.isPromise = true;
-            
     return r;
 }
 
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Code const* code, Instruction const* returnpc, int64_t stackOffset) {
-	/*std::cout << "\t(Executing in " << intToHexStr((int64_t)environment) << ")" << std::endl;
-	code->printByteCode(thread.state);
-    if(environment->getContext() && ((List const &)environment->getContext()->call).length() > 0)
-    std::cout << "Call:   " << (((List const&)environment->getContext()->call)[0]).s << std::endl;
-	*/
+void dumpStackFrame(Thread& thread) {
+    std::cout << "\t(Executing in " << 
+        intToHexStr((int64_t)thread.frame.environment) << ")" << std::endl;
+	
+    thread.frame.code->printByteCode(thread.state);
+    
+    if( thread.frame.environment->getContext() && 
+        ((List const &)thread.frame.environment->getContext()->call).length() > 0) {
+        std::cout << "Call:   " << 
+            (((List const&)thread.frame.environment->getContext()->call)[0]).s << std::endl;
+    }
+
+    std::cout << "Returning to: " << 
+        intToHexStr((int64_t)thread.frame.returnpc) << std::endl;
+}
+
+Instruction const* buildStackFrame(Thread& thread, 
+    Environment* environment, Code const* code, 
+    int64_t outRegister, Instruction const* returnpc) {
+
 	// make new stack frame
 	StackFrame& s = thread.push();
 	s.environment = environment;
 	s.code = code;
 	s.returnpc = returnpc;
-	s.registers += stackOffset;
+	s.registers += outRegister;
     s.isPromise = false;
+	
+    //dumpStackFrame(thread);
 	
 	if(s.registers+code->registers > thread.registers+DEFAULT_NUM_REGISTERS)
 		_internalError("Register overflow");
@@ -46,10 +62,6 @@ Instruction const* buildStackFrame(Thread& thread, Environment* environment, Cod
     }
 
 	return &(code->bc[0]);
-}
-
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Code const* code, int64_t resultSlot, Instruction const* returnpc) {
-	return buildStackFrame(thread, environment, code, returnpc, resultSlot);
 }
 
 inline void assignArgument(Thread& thread, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {
@@ -79,7 +91,7 @@ inline void assignDot(Thread& thread, Environment* evalEnv, Environment* assignE
 }
 
 
-Pair argument(int64_t index, Environment* env, CompiledCall const& call) {
+Value argument(int64_t index, Environment* env, CompiledCall const& call) {
 	if(index < call.dotIndex) {
 		return call.arguments[index];
 	} else {
@@ -91,13 +103,12 @@ Pair argument(int64_t index, Environment* env, CompiledCall const& call) {
 			//	occur once anywhere in the program). 
 			// But everything else can be passed down.
 			if(env->getContext()->dots[index].v.isPromise()) {
-				Pair p;
-				p.n = env->getContext()->dots[index].n;
-				Promise::Init(p.v, env, index, false);
+				Value p;
+				Promise::Init(p, env, index, false);
 				return p;
 			} 
 			else {
-				return env->getContext()->dots[index];
+				return env->getContext()->dots[index].v;
 			}
 		}
 		else {
@@ -107,28 +118,44 @@ Pair argument(int64_t index, Environment* env, CompiledCall const& call) {
 	}
 }
 
-int64_t numArguments(Environment* env, CompiledCall const& call) {
-	if(call.dotIndex < (int64_t)call.arguments.size() && env->getContext()) {
-		// subtract 1 to not count the dots
-		return call.arguments.size() - 1 + env->getContext()->dots.size();
+String name(int64_t index, Environment* env, CompiledCall const& call) {
+	if(index < call.dotIndex) {
+		return call.names[index];
 	} else {
-		return call.arguments.size();
+		index -= call.dotIndex;
+        int64_t ndots = env->getContext() ? env->getContext()->dots.size() : 0;
+		if(index < ndots) {
+		    return env->getContext()->dots[index].n;
+		}
+		else {
+			index -= ndots;
+			return call.names[call.dotIndex+index+1];
+		}
+	}
+}
+
+int64_t numArguments(Environment* env, CompiledCall const& call) {
+	if(call.dotIndex < (int64_t)call.arguments.length() && env->getContext()) {
+		// subtract 1 to not count the dots
+		return call.arguments.length() - 1 + env->getContext()->dots.size();
+	} else {
+		return call.arguments.length();
 	}
 }
 
 bool namedArguments(Environment* env, CompiledCall const& call) {
-	if(call.dotIndex < (int64_t)call.arguments.size() && env->getContext()) {
-		return call.named || env->getContext()->named;
+	if(call.dotIndex < (int64_t)call.arguments.length() && env->getContext()) {
+		return call.names.length()>0 || env->getContext()->named;
 	} else {
-		return call.named;
+		return call.names.length()>0;
 	}
 }
 
 
 // Generic argument matching
 Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, CompiledCall const& call) {
-	
-    PairList const& parameters = func.prototype()->parameters;
+    Character const& parameters = func.prototype()->parameters;
+    List const& defaults = func.prototype()->defaults;
 	int64_t pDotIndex = func.prototype()->dotIndex;
 	int64_t numArgs = numArguments(env, call);
 	bool named = namedArguments(env, call);
@@ -142,56 +169,68 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
     context->onexit = Null::Singleton();
 
     Environment* fenv = new Environment(
-        (int64_t)call.arguments.size(),
+        (int64_t)std::min(numArgs, (int64_t)parameters.length()),
         func.environment(),
         context);
 
-    // set extra args
-    for(size_t i = 0; i < call.extraArgs.size(); ++i) {
+    // set extra args (they must be named)
+    for(size_t i = 0; i < call.extraArgs.length(); ++i) {
         assignArgument(thread, env, fenv, 
-            call.extraArgs[i].n, call.extraArgs[i].v);
+            call.extraNames[i], call.extraArgs[i]);
     }
 
 	// set defaults
-	for(int64_t i = 0; i < (int64_t)parameters.size(); ++i) {
-		assignArgument(thread, fenv, fenv, parameters[i].n, parameters[i].v);
+	for(int64_t i = 0; i < (int64_t)parameters.length(); ++i) {
+		assignArgument(thread, fenv, fenv, parameters[i], defaults[i]);
 	}
 
 	if(!named) {
-		context->named = false; // if no arguments are named, no dots can be either
-
-		// call arguments are not named, do posititional matching up to the prototype's dots
+		// call arguments are not named, 
+        // do posititional matching up to the prototype's dots
 		int64_t end = std::min(numArgs, pDotIndex);
 		for(int64_t i = 0; i < end; ++i) {
-			Pair const& arg = argument(i, env, call);
-			if(!arg.v.isNil())
-				assignArgument(thread, env, fenv, parameters[i].n, arg.v);
+			Value arg = argument(i, env, call);
+			if(!arg.isNil())
+				assignArgument(thread, env, fenv, parameters[i], arg);
 		}
 
-		// if we have left over arguments, but no parameter dots, error
-		if(end < numArgs && pDotIndex >= (int64_t)parameters.size())
-			_error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
-		
-		// all unused args go into ...
-		for(int64_t i = end; i < numArgs; i++) {
-			Pair const& arg = argument(i, env, call);
-			assignDot(thread, env, fenv, arg.n, arg.v);
-		}
-	}
+        if(numArgs > end) {
+            if(pDotIndex >= (int64_t)parameters.length()) {
+		        // if we have left over arguments, but no parameter dots, error
+                _error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
+		    }
+            // all unused args go into ...
+            for(int64_t i = end; i < numArgs; i++) {
+	            Value arg = argument(i, env, call);
+                assignDot(thread, env, fenv, Strings::empty, arg);
+            }
+        }
+    }
+    // function only has dots, can just stick everything there
+    else if(parameters.length() == 1 && pDotIndex == 0) {
+		for(int64_t i = 0; i < numArgs; i++) {
+            Value arg = argument(i, env, call);
+            String n = name(i, env, call);
+            assignDot(thread, env, fenv, n, arg);
+        }
+    }
 	else {
 		// call arguments are named, do matching by name
-		// we should be able to cache and reuse this assignment for pairs of functions and call sites.
+		// we should be able to cache and reuse this assignment 
+        // for pairs of functions and call sites.
 	
 		int64_t *assignment = thread.assignment, *set = thread.set;
-		for(int64_t i = 0; i < numArgs; i++) assignment[i] = -1;
-		for(int64_t i = 0; i < (int64_t)parameters.size(); i++) set[i] = -(i+1);
+		for(int64_t i = 0; i < numArgs; i++)
+            assignment[i] = -1;
+		for(int64_t i = 0; i < (int64_t)parameters.length(); i++)
+            set[i] = -(i+1);
 
 		// named args, search for complete matches
 		for(int64_t i = 0; i < numArgs; ++i) {
-			Pair const& arg = argument(i, env, call);
-			if(arg.n != Strings::empty) {
-				for(int64_t j = 0; j < (int64_t)parameters.size(); ++j) {
-					if(j != pDotIndex && arg.n == parameters[j].n) {
+			String n = name(i, env, call);
+			if(n != Strings::empty) {
+				for(int64_t j = 0; j < (int64_t)parameters.length(); ++j) {
+					if(j != pDotIndex && n == parameters[j]) {
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -201,10 +240,11 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 		}
 		// named args, search for incomplete matches but only to the ...
 		for(int64_t i = 0; i < numArgs; ++i) {
-			Pair const& arg = argument(i, env, call);
-			if(arg.n != Strings::empty && assignment[i] < 0) {
+			String n = name(i, env, call);
+			if(n != Strings::empty && assignment[i] < 0) {
 				for(int64_t j = 0; j < pDotIndex; ++j) {
-					if(set[j] < 0 && strncmp(arg.n, parameters[j].n, strlen(arg.n)) == 0) {
+					if(set[j] < 0 && 
+                        strncmp(n, parameters[j], strlen(n)) == 0) {
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -215,8 +255,8 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 		// unnamed args, fill into first missing spot.
 		int64_t firstEmpty = 0;
 		for(int64_t i = 0; i < numArgs; ++i) {
-			Pair const& arg = argument(i, env, call);
-			if(arg.n == Strings::empty) {
+			String n = name(i, env, call);
+			if(n == Strings::empty) {
 				for(; firstEmpty < pDotIndex; ++firstEmpty) {
 					if(set[firstEmpty] < 0) {
 						assignment[i] = firstEmpty;
@@ -230,12 +270,13 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 		// stuff that can't be cached...
 
 		// assign all the arguments
-		for(int64_t j = 0; j < (int64_t)parameters.size(); ++j) {
+		for(int64_t j = 0; j < (int64_t)parameters.length(); ++j) {
 			if(j != pDotIndex && set[j] >= 0) {
-				Pair const& arg = argument(set[j], env, call);
-				if(!arg.v.isNil())
-					assignArgument(thread, env, fenv, parameters[j].n, arg.v);
-			}
+				Value arg = argument(set[j], env, call);
+				if(!arg.isNil()) {
+					assignArgument(thread, env, fenv, parameters[j], arg);
+			    }
+            }
 		}
 
 		// put unused args into the dots
@@ -243,11 +284,13 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 		for(int64_t i = 0; i < numArgs; i++) {
 			if(assignment[i] < 0) {
 				// if we have left over arguments, but no parameter dots, error
-				if(pDotIndex >= (int64_t)parameters.size())
+				if(pDotIndex >= (int64_t)parameters.length())
 			        _error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
-				Pair const& arg = argument(i, env, call);
-				if(arg.n != Strings::empty) context->named = true;
-				assignDot(thread, env, fenv, arg.n, arg.v);
+				Value arg = argument(i, env, call);
+                String n = name(i, env, call);
+				if(n != Strings::empty)
+                    context->named = true;
+				assignDot(thread, env, fenv, n, arg);
 			}
 		}
 	}
@@ -257,51 +300,55 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 // Assumes no names and no ... in the argument list.
 // Supports ... in the parameter list.
 Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func, CompiledCall const& call) {
-	
     Prototype const* prototype = func.prototype();
-	PairList const& parameters = prototype->parameters;
-	PairList const& arguments = call.arguments;
-
-	int64_t const parametersSize = prototype->parametersSize;
-	int64_t const argumentsSize = call.argumentsSize;
+	Character const& parameters = prototype->parameters;
+    List const& defaults = prototype->defaults;
+	List const& arguments = call.arguments;
 
 	int64_t const pDotIndex = prototype->dotIndex;
-	int64_t const end = std::min(argumentsSize, pDotIndex);
+	int64_t const end = std::min(arguments.length(), pDotIndex);
 
     Context* context = new Context();
     context->parent = env;
     context->call = call.call;
     context->function = func;
-    context->nargs = argumentsSize;
+    context->nargs = arguments.length();
+    context->named = false; 
     context->onexit = Null::Singleton();
 
     Environment* fenv = new Environment(
-        (int64_t)call.arguments.size(),
+        (int64_t)call.arguments.length(),
         func.environment(),
         context);
 
+    // set extra args (they must be named)
+    for(size_t i = 0; i < call.extraArgs.length(); ++i) {
+        assignArgument(thread, env, fenv, 
+            call.extraNames[i], call.extraArgs[i]);
+    }
+
 	// set parameters from arguments & defaults
-	for(int64_t i = 0; i < parametersSize; i++) {
-		if(i < end && !arguments[i].v.isNil())
-			assignArgument(thread, env, fenv, parameters[i].n, arguments[i].v);
+	for(int64_t i = 0; i < parameters.length(); i++) {
+		if(i < end && !arguments[i].isNil())
+			assignArgument(thread, env, fenv, parameters[i], arguments[i]);
 		else
-			assignArgument(thread, fenv, fenv, parameters[i].n, parameters[i].v);
+			assignArgument(thread, fenv, fenv, parameters[i], defaults[i]);
 	}
 
 	// handle unused arguments
-	if(pDotIndex >= parametersSize) {
-		// called function doesn't take dots, unused args is an error 
-		if(argumentsSize > parametersSize)
+    if(arguments.length() > end) {
+	    if(pDotIndex >= parameters.length()) {
+		    // called function doesn't take dots, unused args is an error 
 			_error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
-	}
-	else {
-		// called function has dots, all unused args go into ...
-		context->named = false; // if no arguments are named, no dots can be either
-		context->dots.reserve(argumentsSize-end);
-		for(int64_t i = end; i < (int64_t)argumentsSize; i++) {
-			assignDot(thread, env, fenv, arguments[i].n, arguments[i].v);
-		}
-	}
+	    }
+	    else {
+            // called function has dots, all unused args go into ...
+            context->dots.reserve(arguments.length()-end);
+            for(int64_t i = end; i < (int64_t)arguments.length(); i++) {
+                assignDot(thread, env, fenv, Strings::empty, arguments[i]);
+            }
+        }
+    }
 
     return fenv;
 }
@@ -321,15 +368,10 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 	Environment* penv;
 	Value const& f = thread.frame.environment->getRecursive(op, penv);
 	if(f.isClosure()) {
-		List call(2);
-        call[0] = CreateSymbol(op);
-        call[1] = Quote(thread, a);
-		Pair p;
-		p.n = Strings::empty;
-		p.v = a;
-		PairList args, extra;
-		args.push_back(p);
-		CompiledCall cc(CreateCall(call), args, 1, false, extra);
+		List call = List::c(
+                        CreateSymbol(op),
+                        Quote(thread, a));
+        CompiledCall cc = Compiler::makeCall(thread, call, Character(0));
 		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
 		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
@@ -340,18 +382,11 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 	Environment* penv;
 	Value const& f = thread.frame.environment->getRecursive(op, penv);
 	if(f.isClosure()) { 
-		List call(3);
-        call[0] = CreateSymbol(op);
-        call[1] = Quote(thread, a);
-        call[2] = Quote(thread, b);
-		PairList args, extra;
-		Pair p;
-		p.n = Strings::empty;
-		p.v = a;
-		args.push_back(p);
-		p.v = b;
-		args.push_back(p);
-		CompiledCall cc(CreateCall(call), args, 2, false, extra);
+		List call = List::c(
+                        CreateSymbol(op),
+                        Quote(thread, a),
+                        Quote(thread, b));
+        CompiledCall cc = Compiler::makeCall(thread, call, Character(0));
 		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
 		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
@@ -362,27 +397,17 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 	Environment* penv;
 	Value const& f = thread.frame.environment->getRecursive(op, penv);
 	if(f.isClosure()) { 
-		List call(4);
-        call[0] = CreateSymbol(op);
-        call[1] = Quote(thread, a);
-        call[2] = Quote(thread, b);
-        call[3] = Quote(thread, c);
-        Character names(4);
-        names[0] = Strings::empty;
-        names[1] = Strings::empty;
-        names[2] = Strings::empty;
-        names[3] = Strings::value;
-		PairList args, extra;
-		Pair p;
-		p.n = Strings::empty;
-		p.v = a;
-		args.push_back(p);
-		p.v = b;
-		args.push_back(p);
-        p.n = Strings::value;
-		p.v = c;
-		args.push_back(p);
-		CompiledCall cc(CreateCall(call, names), args, 3, true, extra);
+		List call = List::c(
+                        CreateSymbol(op),
+                        Quote(thread, a),
+                        Quote(thread, b),
+                        Quote(thread, c));
+        Character names = Character::c(
+                        Strings::empty,
+                        Strings::empty,
+                        Strings::empty,
+                        Strings::value);
+        CompiledCall cc = Compiler::makeCall(thread, call, names);
         Environment* fenv = MatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
 		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
@@ -394,17 +419,10 @@ Instruction const* StopDispatch(Thread& thread, Instruction const& inst, String 
 	Environment* penv;
 	Value const& f = thread.frame.environment->getRecursive(thread.internStr("__stop__"), penv);
 	if(f.isClosure()) {
-        Character v(1);
-        v[0] = msg;
-		List call(2);
-        call[0] = f;
-        call[1] = v;
-		Pair p;
-		p.n = Strings::empty;
-		p.v = v;
-		PairList args, extra;
-		args.push_back(p);
-		CompiledCall cc(CreateCall(call), args, 1, false, extra);
+		List call = List::c(
+                        f, 
+                        Character::c(msg));
+        CompiledCall cc = Compiler::makeCall(thread, call, Character(0));
 		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
 		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}

@@ -127,9 +127,10 @@ void Code::visit() const {
 	}
 	for(uint64_t i = 0; i < calls.size(); i++) {
 		traverse(calls[i].call);
-		for(uint64_t j = 0; j < calls[i].arguments.size(); j++) {
-			traverse(calls[i].arguments[j].v);
-		}
+        traverse(calls[i].arguments);
+        traverse(calls[i].names);
+        traverse(calls[i].extraArgs);
+        traverse(calls[i].extraNames);
 	}
 }
 
@@ -138,9 +139,8 @@ void Prototype::visit() const {
 	VISIT(code);
 	
     traverse(formals);
-	for(uint64_t i = 0; i < parameters.size(); i++) {
-		traverse(parameters[i].v);
-	}
+	traverse(parameters);
+    traverse(defaults);
 }
 
 void Heap::mark(State& state) {
@@ -148,11 +148,6 @@ void Heap::mark(State& state) {
 	// mark the region that I'm currently allocating into
     ((HeapObject*)bump)->visit();
 	
-	// iterate over path, then stack, then trace locations, then registers
-	//printf("--path--\n");
-	for(uint64_t i = 0; i < state.path.size(); i++) {
-		VISIT(state.path[i]);
-	}
 	//printf("--global--\n");
 	VISIT(state.global);
 	traverse(state.arguments);

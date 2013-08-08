@@ -41,8 +41,6 @@ inline void Element2(Value const& v, int64_t index, Value& out) {
 		ATOMIC_VECTOR_TYPES(CASE)
 		#undef CASE
 		case Type::List: 
-			if(List::isNA(((List const&)v)[index]))
-				_error("Extracting missing element");
 			out = ((List const&)v)[index]; 
 			break;
 		default: _error("NYI: Element of this type"); break;

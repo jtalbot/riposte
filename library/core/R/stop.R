@@ -21,7 +21,7 @@ seterrmessage <- NULL
         repeat {
             call <- .frame(n)[[2L]]
             if(!is.null(call))
-                .cat(n, ': ', .deparse.call(call),'\n')
+                .cat(n, ': ', .deparse(call[[1]][['formals']]),'\n')
 
             if(is.null(.frame(n)[[6L]]))
                 break

@@ -75,15 +75,26 @@ public:
 struct CompiledCall {
 	List call;
 
-	PairList arguments;
-	int64_t argumentsSize;
+    List arguments;
+    Character names;
 	int64_t dotIndex;
-	bool named;
 
-    PairList extraArgs;
+    List extraArgs;
+    Character extraNames;
 	
-	explicit CompiledCall(List const& call, PairList const& arguments, int64_t dotIndex, bool named, PairList const& extraArgs) 
-		: call(call), arguments(arguments), argumentsSize(arguments.size()), dotIndex(dotIndex), named(named), extraArgs(extraArgs) {}
+	explicit CompiledCall(
+        List const& call, 
+        List const& arguments, 
+        Character const& names,
+        int64_t dotIndex,
+        List const& extraArgs,
+        Character const& extraNames) 
+		: call(call)
+        , arguments(arguments)
+        , names(names)
+        , dotIndex(dotIndex)
+        , extraArgs(extraArgs)
+        , extraNames(extraNames) {}
 };
 
 struct Code : public HeapObject {
@@ -103,8 +114,8 @@ struct Prototype : public HeapObject {
     String string;
     Value formals;
 
-	PairList parameters;
-	int64_t parametersSize;
+    Character parameters;
+    List defaults;
 	int dotIndex;
 
 	void visit() const;
@@ -330,6 +341,7 @@ public:
 
 	void visit() const;
 };
+
 struct StackFrame {
 	Value* registers;
 	Environment* environment;
@@ -343,16 +355,14 @@ struct StackFrame {
 // Global shared state 
 ///////////////////////////////////////////////////////////////////
 
-#define DEFAULT_NUM_REGISTERS 10000
+#define DEFAULT_NUM_REGISTERS 10000 
 
 class State {
 public:
 	StringTable strings;
 
     std::map<std::string, void*> handles;
-    std::map<String, Environment*> namespaces;
 	
-	std::vector<Environment*> path;
     Environment* empty;
 	Environment* global;
 
@@ -584,10 +594,6 @@ inline State::State(uint64_t threads, int64_t argc, char** argv)
 	: verbose(false), epeeEnabled(true), format(State::RiposteFormat), done(0) {
 	this->empty = new Environment(1,(Environment*)0);
     this->global = new Environment(1,empty);
-    path.push_back(empty);
-
-    namespaces[internStr("empty")] = empty;
-    namespaces[internStr("global")] = global;
 
 	arguments = Character(argc);
 	for(int64_t i = 0; i < argc; i++) {

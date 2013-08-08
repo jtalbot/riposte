@@ -48,6 +48,8 @@ static ByteCode::Enum op1(String const& func) {
     if(func == Strings::invisible) return ByteCode::invisible;
     if(func == Strings::visible) return ByteCode::visible;
     
+    if(func == Strings::isnil) return ByteCode::isnil;
+    
     throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
 }
 
@@ -103,6 +105,20 @@ static ByteCode::Enum op3(String const& func) {
 int64_t Compiler::emit(ByteCode::Enum bc, Operand a, Operand b, Operand c) {
 	ir.push_back(IRNode(bc, a, b, c));
 	return ir.size()-1;
+}
+
+Compiler::Operand Compiler::invisible(Operand op) {
+    kill(op);
+    Operand r = allocRegister();
+    emit(ByteCode::invisible, op, 0, r);
+    return r;
+}
+
+Compiler::Operand Compiler::visible(Operand op) {
+    kill(op);
+    Operand r = allocRegister();
+    emit(ByteCode::visible, op, 0, r);
+    return r;
 }
 
 void Compiler::resolveLoopExits(int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget) {
@@ -178,30 +194,31 @@ Compiler::Operand Compiler::placeInRegister(Operand r) {
 	return r;
 }
 
-CompiledCall Compiler::makeCall(List const& call, Character const& names) {
-	// compute compiled call...precompiles promise code and some necessary values
-    List rcall = call;
+// Compute compiled call...precompiles promise code and some necessary values
+CompiledCall Compiler::makeCall(Thread& thread, List const& call, Character const& names) {
+    List rcall = CreateCall(call, names.length() > 0 ? names : Value::Nil());
     int64_t dotIndex = call.length()-1;
-	PairList arguments, extraArgs;
+	PairList arguments;
+    bool named = false;
+
+    List extraArgs(0);
+    Character extraNames(0);
+
 	for(int64_t i = 1; i < call.length(); i++) {
 		Pair p;
 		if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
 
         if(p.n == Strings::__extraArgs__) {
             List const& l = (List const&)call[i];
-            Character const& n = hasNames(l) ? 
-				(Character const&)getNames((List const&)l) : 
-				Character(0);
-            
-            for(size_t j = 0; j < l.length(); ++j) {
-                if(n.length() > j && n[j] != Strings::empty) {
-                    Pair q;
-                    q.n = n[j];
-                    q.v = l[j];
-                    extraArgs.push_back(q);
-                }
+            if(!hasNames(l) 
+                || l.length() != ((Character const&)getNames(l)).length()) {
+                _error("__extraArgs__ must be named");
             }
-            // also need to remove the extraArgs from the original call
+            extraArgs = l;
+            extraArgs.attributes(0);
+            extraNames = (Character const&)getNames(l);
+
+            // remove the extraArgs from the original call
             rcall = List(call.length()-1);
             for(size_t j=0, k=0; j < call.length(); ++j)
                 if(j != i)
@@ -211,33 +228,46 @@ CompiledCall Compiler::makeCall(List const& call, Character const& names) {
                 for(size_t j=0, k=0; j < names.length(); ++j)
                     if(j != i)
                         rnames[k++] = names[j];
-                rcall = CreateNamedList(rcall, rnames);
+                rcall = CreateCall(rcall, rnames);
             }
         }
         else {
 		    if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) {
 			    p.v = call[i];
     			dotIndex = i-1;
+                p.n = Strings::empty;
 	    	} else if(isCall(call[i]) || isSymbol(call[i])) {
+                if(p.n != Strings::empty) named = true;
 		    	Promise::Init(p.v, NULL, Compiler::compilePromise(thread, call[i]), false);
     		} else {
+                if(p.n != Strings::empty) named = true;
 	    		p.v = call[i];
 		    }
     		arguments.push_back(p);
 	    }
     }
-	return CompiledCall(rcall, arguments, dotIndex, names.length() > 0, extraArgs);
+
+    List args(arguments.size());
+    for(size_t i = 0; i < arguments.size(); ++i) {
+        args[i] = arguments[i].v;
+    }
+    Character argnames(named ? arguments.size() : 0);
+    for(size_t i = 0; i < arguments.size() && named; ++i) {
+        argnames[i] = arguments[i].n;
+    }
+
+
+	return CompiledCall(rcall, args, argnames, dotIndex, extraArgs, extraNames);
 }
 
 // a standard call, not an op
 Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& call, Character const& names, Code* code) {
-	CompiledCall a = makeCall(call, names);
+	CompiledCall a = makeCall(thread, call, names);
 	code->calls.push_back(a);
 	kill(function);
 	Operand result = allocRegister();
-	if(!a.named 
-      && a.dotIndex >= (int64_t)a.arguments.size() 
-      && a.extraArgs.size() == 0)
+	if(a.names.length() == 0 
+      && a.dotIndex >= (int64_t)a.arguments.length())
 		emit(ByteCode::fastcall, function, code->calls.size()-1, result);
 	else
 		emit(ByteCode::call, function, code->calls.size()-1, result);
@@ -420,15 +450,24 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 			    Character nnames(c.length()+1);
 	
-			    if(!hasNames(c) && (as == Strings::bracketAssign || as == Strings::bbAssign) && c.length() == 3) {
-				    for(int64_t i = 0; i < c.length()+1; i++) { nnames[i] = Strings::empty; }
+			    if(!hasNames(c) && 
+                   (as == Strings::bracketAssign || 
+                    as == Strings::bbAssign) && 
+                   c.length() == 3) {
+				    for(int64_t i = 0; i < c.length()+1; i++) {
+                        nnames[i] = Strings::empty;
+                    }
 			    }
 			    else {
 				    if(hasNames(c)) {
 					    Value names = getNames(c);
-					    for(int64_t i = 0; i < c.length(); i++) { nnames[i] = ((Character const&)names)[i]; }
+					    for(int64_t i = 0; i < c.length(); i++) { 
+                            nnames[i] = ((Character const&)names)[i];
+                        }
 				    } else {
-					    for(int64_t i = 0; i < c.length(); i++) { nnames[i] = Strings::empty; }
+					    for(int64_t i = 0; i < c.length(); i++) {
+                            nnames[i] = Strings::empty;
+                        }
 				    }
 				    nnames[c.length()] = Strings::value;
 			    }
@@ -470,34 +509,39 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
 		//compile the default parameters
 		assert(call[1].isList());
-		List const& c = (List const&)call[1];
-		Character names = hasNames(c) ? 
-			(Character const&)getNames(c) : Character(0);
-		
-		PairList parameters;
-		for(int64_t i = 0; i < c.length(); i++) {
-			Pair p;
-			if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
-			if(!c[i].isNil()) {
-				Promise::Init(p.v, NULL, compilePromise(thread, c[i]), true);
+		List const& formals = (List const&)call[1];
+		if(!hasNames(formals)
+            || formals.length() != 
+                ((Character const&)getNames(formals)).length()) {
+            _error("Function parameters must be named");
+        }
+        
+        Character parameters = (Character const&)getNames(formals);
+	    List defaults(formals.length());
+        int64_t dotIndex = formals.length();
+		for(int64_t i = 0; i < formals.length(); i++) {
+            if(parameters[i] == Strings::dots) {
+                dotIndex = i;
+                defaults[i] = Value::Nil();
+            }
+			else if(isCall(formals[i]) || isSymbol(formals[i])) {
+				Promise::Init(defaults[i], NULL, 
+                    compilePromise(thread, formals[i]), true);
 			}
 			else {
-				p.v = c[i];
+				defaults[i] = formals[i];
 			}
-			parameters.push_back(p);
 		}
 
 		//compile the source for the body
 		Prototype* functionCode = Compiler::compileClosureBody(thread, call[2]);
 
 		// Populate function info
-        functionCode->formals = c;
+        functionCode->formals = formals;
 		functionCode->parameters = parameters;
-		functionCode->parametersSize = parameters.size();
+		functionCode->defaults = defaults;
 		functionCode->string = SymbolStr(call[3]);
-		functionCode->dotIndex = parameters.size();
-		for(int64_t i = 0; i < (int64_t)parameters.size(); i++) 
-			if(parameters[i].n == Strings::dots) functionCode->dotIndex = i;
+		functionCode->dotIndex = dotIndex;
 
 		Value function;
 		Closure::Init(function, functionCode, 0);
@@ -543,7 +587,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 		kill(body); kill(loop_limit); kill(loop_variable); 
 		kill(loop_counter); kill(loop_vector);
-		return compileConstant(Null::Singleton(), code);
+		return invisible(compileConstant(Null::Singleton(), code));
 	} 
 	else if(func == Strings::whileSym)
 	{
@@ -565,7 +609,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		ir[beginbody-2].b = endbody-beginbody+4;
 		loopDepth--;
 		
-		return compileConstant(Null::Singleton(), code);
+		return invisible(compileConstant(Null::Singleton(), code));
 	} 
 	else if(func == Strings::repeatSym)
 	{
@@ -578,7 +622,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(ByteCode::jmp, beginbody-endbody, 0, 0);
 		
 		kill(body);
-		return compileConstant(Null::Singleton(), code);
+		return invisible(compileConstant(Null::Singleton(), code));
 	}
 	else if(func == Strings::nextSym)
 	{
@@ -616,7 +660,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
         resultF = placeInRegister(
 			call.length() >= 4 
                 ? compile(call[3], code)
-                : compileConstant(Null::Singleton(), code) );
+                : invisible(compileConstant(Null::Singleton(), code)));
         assert(resultNA == resultF || 
                resultNA.loc == INVALID || 
                resultF.loc == INVALID);
@@ -751,7 +795,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
         func == Strings::length ||
         func == Strings::frame ||
         func == Strings::invisible ||
-        func == Strings::visible)
+        func == Strings::visible ||
+        func == Strings::isnil)
 		&& call.length() == 2)
 	{
 		// if there isn't exactly one parameter, we should call the library version...
@@ -772,6 +817,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		emit(op0(func), 0, 0, result);
 		return result; 
 	}
+    else if(func == Strings::isnil && call.length() == 1) {
+        return compileConstant(Logical::True(), code);
+    }
     else if(func == Strings::promise)
     {
 		Operand a = compile(call[1], code);
@@ -842,7 +890,7 @@ Compiler::Operand Compiler::compile(Value const& expr, Code* code) {
 			code);
 	}
 	else {
-		return compileConstant(expr, code);
+		return visible(compileConstant(expr, code));
 	}
 }
 

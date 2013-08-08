@@ -28,7 +28,8 @@
     _(assignTmp,    "*tmp*")        \
 	_(Maximal,      "\255")         \
     /* Primitive functions */ \
-	_(Complex, 	    "complex")	\
+	_(isnil,        "is.nil")   \
+    _(Complex, 	    "complex")	\
 	_(Function,	    "function")	\
 	_(BuiltIn,	    "builtin")	\
 	_(Object,	    "object")	\

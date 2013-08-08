@@ -33,7 +33,6 @@
 .make.namespace <- function(name, env, exported) {
     r <- .env_new(emptyenv())
     e <- .env_new(emptyenv())
-
     attr(r, 'name') <- name
 
     for(f in exported) {

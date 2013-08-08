@@ -54,7 +54,7 @@ format.character <- function(x, ...)
     .External(print(x))
 }
 
-format.list <- function(x, ..., prefix='')
+format.pairlist <- format.list <- function(x, ..., prefix='')
 {
     if(length(x) == 0)
         r <- 'list()'
@@ -69,7 +69,8 @@ format.list <- function(x, ..., prefix='')
                 p <- .pconcat('$', ifelse(is.na(n[[i]]), '<NA>', n[[i]]))
             }
             r <- .pconcat(r, .pconcat(.pconcat(prefix, p),'\n'))
-            r <- .pconcat(r, format(x[[i]], prefix=p))
+            if(!is.nil(x[[i]]))
+                r <- .pconcat(r, format(x[[i]], prefix=p))
             if(i != length(x))
                 r <- .pconcat(r,'\n\n')
             else

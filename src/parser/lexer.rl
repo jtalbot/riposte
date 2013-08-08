@@ -27,6 +27,7 @@
 	main := |*
 
 	# Keywords.
+    'Nil'   {token( TOKEN_NIL_CONST );};
 	'NULL' 	{token( TOKEN_NULL_CONST, Null::Singleton() );};
 	'NA' 	{token( TOKEN_NUM_CONST, Logical::NA() );};
 	'TRUE' 	{token( TOKEN_NUM_CONST, Logical::True() );};
@@ -37,6 +38,7 @@
 	'NA_real_'	{token( TOKEN_NUM_CONST, Double::NA() );};
 	'NA_character_'	{token( TOKEN_STR_CONST, Character::NA() );};
 	# 'NA_complex_'	{token( TOKEN_NUM_CONST, Complex::NA() );};
+	'NA_list_'	{token( TOKEN_STR_CONST, List::NA() );};
 	'function'	{token( TOKEN_FUNCTION, CreateSymbol(Strings::function) );};
 	'while'	{token( TOKEN_WHILE, CreateSymbol(Strings::whileSym) );};
 	'repeat'	{token( TOKEN_REPEAT, CreateSymbol(Strings::repeatSym) );};

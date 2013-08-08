@@ -506,9 +506,12 @@ static inline Instruction const* dots_op(Thread& thread, Instruction const& inst
                 inst.b, &inst);
         }
         else if(v.isNil()) {
-            return StopDispatch(thread, inst, thread.internStr(
+            // We're allowing Nils to escape now
+		    ((List&)out)[iter.i] = v;
+		    iter.i++;
+            /*return StopDispatch(thread, inst, thread.internStr(
                 "argument is missing, with no default"),
-                inst.c);
+                inst.c);*/
         }
 	}
 	
@@ -637,8 +640,6 @@ static inline Instruction const* pr_expr_op(Thread& thread, Instruction const& i
 	Value v = env.environment()->get(s);
     if(v.isPromise())
         v = ((Promise const&)v).code()->expression;
-    else if(v.isNil())
-        v = Null::Singleton();
     OUT(c) = v;
     return &inst+1;
 }
@@ -662,6 +663,13 @@ static inline Instruction const* pr_env_op(Thread& thread, Instruction const& in
 }
 
 // OBJECT_BYTECODES
+
+static inline Instruction const* isnil_op(Thread& thread, Instruction const& inst) {
+    thread.visible = true;
+	DECODE(a);
+	OUT(c) = a.isNil() ? Logical::True() : Logical::False();
+    return &inst+1;
+}
 
 static inline Instruction const* type_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
@@ -1445,7 +1453,7 @@ void Code::printByteCode(State const& state) const {
 		for(int64_t i = 0; i < (int64_t)bc.size(); i++) {
 			std::cout << std::hex << &bc[i] << std::dec << "\t" << i << ":\t" << bc[i].toString();
 			if(bc[i].bc == ByteCode::call || bc[i].bc == ByteCode::fastcall) {
-				std::cout << "\t\t(arguments: " << calls[bc[i].b].arguments.size() << ")";
+				std::cout << "\t\t(arguments: " << calls[bc[i].b].arguments.length() << ")";
 			}
 			std::cout << std::endl;
 		}

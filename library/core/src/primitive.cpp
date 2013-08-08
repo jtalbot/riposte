@@ -139,8 +139,13 @@ void hypot_map(Thread& thread, double& r, double a, double b) {
 }
 
 inline double riposte_round(Thread& thread, double a, int64_t b) { 
-    double s = pow(10, b); 
-    return round(a*s)/s;
+    double s = pow(10, b);
+    double i = floor(a*s);
+    double r = a*s - i;
+    if(r > 0.5) return (i+1)/s;
+    else if(r < 0.5) return i/s;
+    else if(i/2 - floor(i/2) < 0.25) return i/s;
+    else return (i+1)/s;
 }
 
 inline double riposte_signif(Thread& thread, double a, int64_t b) {

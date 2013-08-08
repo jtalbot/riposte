@@ -1,5 +1,5 @@
 
-`(` <- function(x) x
+`(` <- function(x) .visible(x)
 
 `{` <- function(...)
 {

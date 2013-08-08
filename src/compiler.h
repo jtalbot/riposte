@@ -97,9 +97,10 @@ private:
 	Operand compileInternalFunctionCall(List const& call, Code* code); 
 	Operand compileExternalFunctionCall(List const& call, Code* code); 
 	Operand compileExpression(List const& values, Code* code);
-	
-	CompiledCall makeCall(List const& call, Character const& names);
+    Operand visible(Operand op);
+    Operand invisible(Operand op);
 
+	
 	Operand placeInRegister(Operand r);
 	int64_t emit(ByteCode::Enum bc, Operand a, Operand b, Operand c);
 	void resolveLoopExits(int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget);
@@ -107,6 +108,8 @@ private:
 	void dumpCode() const;
 
 public:
+	static CompiledCall makeCall(Thread& thread, List const& call, Character const& names);
+
 	static Code* compileTopLevel(Thread& thread, Value const& expr) {
 		Compiler compiler(thread, TOPLEVEL);
 		return compiler.compile(expr);

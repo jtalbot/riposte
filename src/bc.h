@@ -41,6 +41,7 @@
     _(pr_env,       "pr_env")       /* the environment of a promise */         \
 
 #define OBJECT_BYTECODES(_)                                                    \
+    _(isnil,        "isnil")                                                   \
     _(type,         "type")                                                    \
     _(length,       "length")                                                  \
     _(get,          "get")          /* $, [[   (works on all objects) */       \

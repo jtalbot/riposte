@@ -75,6 +75,7 @@ prog ::= error. { parser->result = Value::Nil(); }
 statement(A) ::= expr(B) EQ_ASSIGN(C) optnl statement(D). { A = CreateCall(List::c(C, B, D)); }
 statement(A) ::= expr(B). { A = B; }
 
+expr(A) ::= NIL_CONST. { A = Value::Nil(); }
 expr(A) ::= NUM_CONST(B). { A = B; }
 expr(A) ::= STR_CONST(B). { A = B; }
 expr(A) ::= NULL_CONST(B). { A = B; }

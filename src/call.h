@@ -34,9 +34,9 @@ Instruction const* force(
     Environment* targetEnv, Value targetIndex,
     int64_t outRegister, Instruction const* returnpc);
 
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Code const* code, Instruction const* returnpc, int64_t stackOffset);
-
-Instruction const* buildStackFrame(Thread& thread, Environment* environment, Code const* code, int64_t resultSlot, Instruction const* returnpc);
+Instruction const* buildStackFrame(Thread& thread, 
+    Environment* environment, Code const* code, 
+    int64_t outRegister, Instruction const* returnpc);
 
 Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, CompiledCall const& call);
 
