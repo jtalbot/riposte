@@ -1,7 +1,7 @@
 
 environment <- function(fun) {
     if(is.null(fun))
-        .frame(2L)[[1L]]
+        .frame(2L)
     else
         .getenv(fun)
 }

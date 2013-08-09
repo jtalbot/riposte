@@ -24,7 +24,10 @@
 }
 
 format <- function(x, ...) {
-    UseMethod("format", x)
+    if(is.nil(x))
+        ''
+    else
+        UseMethod("format", x)
 }
 
 format.default <- function(x, ...)
@@ -69,8 +72,7 @@ format.pairlist <- format.list <- function(x, ..., prefix='')
                 p <- .pconcat('$', ifelse(is.na(n[[i]]), '<NA>', n[[i]]))
             }
             r <- .pconcat(r, .pconcat(.pconcat(prefix, p),'\n'))
-            if(!is.nil(x[[i]]))
-                r <- .pconcat(r, format(x[[i]], prefix=p))
+            r <- .pconcat(r, format(x[[i]], prefix=p))
             if(i != length(x))
                 r <- .pconcat(r,'\n\n')
             else

@@ -9,9 +9,9 @@
     frame <- 2L
     cc <- class(cond)
 
-    while(.frame(frame)[[1L]] != globalenv()
-            && !is.null(.frame(frame)[[6L]])) {
-        e <- .frame(frame)[[1L]]
+    while(.frame(frame) != globalenv()
+            && !is.nil(.frame(frame)[['__parent__']])) {
+        e <- .frame(frame)
         h <- e[['__handlers__']]
         n <- names(h)
         for(i in seq_len(length(n))) {

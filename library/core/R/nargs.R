@@ -1,3 +1,3 @@
 
-nargs <- function() .frame(1L)[[4L]]
+nargs <- function() .frame(1L)[['__nargs__']]
 

@@ -151,8 +151,8 @@
     _(env_new, ".env_new") \
     _(env_names, ".env_names") \
     _(env_global, ".env_global") \
-    _(env_exists, ".env_exists") \
     _(env_remove, ".env_remove") \
+    _(env_get, ".get") \
     _(frame, ".frame") \
     _(top, ".top") \
     _(print, "print") \
@@ -162,9 +162,14 @@
     _(invisible, ".invisible") \
     _(visible, ".visible") \
     _(__onexit__, "__on.exit__") \
-    _(__onexittmp__, "__on.exit.tmp__") \
-    _(__handlers__, "__handlers__") \
     _(__extraArgs__, "__extraArgs__") \
+    _(__missing__, "__missing__") \
+    _(__nargs__, "__nargs__") \
+    _(__function__, "__function__") \
+    _(__call__, "__call__") \
+    _(__parent__, "__parent__") \
+    _(__dots__, "__dots__") \
+    _(__names__, "__names__") \
 
 typedef const char* String;
 

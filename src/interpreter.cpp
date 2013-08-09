@@ -112,8 +112,8 @@ static inline Instruction const* retp_op(Thread& thread, Instruction const& inst
 		env->insert(REGISTER(1).s) = a;
 	    thread.traces.LiveEnvironment(env, a);
 	} else if(REGISTER(1).isInteger()) {
-        assert(env->getContext());
-        ((Context*)env->getContext())->dots[REGISTER(1).i].v = a;
+        assert(env->get(Strings::__dots__).isList());
+        ((List&)env->insert(Strings::__dots__))[REGISTER(1).i] = a;
 	    thread.traces.LiveEnvironment(env, a);
 	} // otherwise, don't store anywhere...
 	
@@ -136,13 +136,17 @@ static inline Instruction const* jc_op(Thread& thread, Instruction const& inst) 
 		if(Logical::isTrue(c.c)) return &inst+inst.a;
 		else if(Logical::isFalse(c.c)) return &inst+inst.b;
 		else if((&inst+1)->bc != ByteCode::stop) return &inst+1;
-        else _error("NA where TRUE/FALSE needed"); 
+        else return StopDispatch(thread, inst, thread.internStr(
+            "NA where TRUE/FALSE needed"), 
+            inst.c);
 	} else if(c.isInteger1()) {
 		if(Integer::isNA(c.i)) {
             if((&inst+1)->bc != ByteCode::stop)
                 return &inst+1;
-            else
-                _error("NA where TRUE/FALSE needed");
+            else 
+                return StopDispatch(thread, inst, thread.internStr(
+                    "NA where TRUE/FALSE needed"), 
+                    inst.c);
         }
 		else if(c.i != 0) return &inst+inst.a;
 		else return & inst+inst.b;
@@ -150,13 +154,17 @@ static inline Instruction const* jc_op(Thread& thread, Instruction const& inst) 
 		if(Double::isNA(c.d)) {
             if((&inst+1)->bc != ByteCode::stop)
                 return &inst+1;
-            else
-                _error("NA where TRUE/FALSE needed");
+            else 
+                return StopDispatch(thread, inst, thread.internStr(
+                    "NA where TRUE/FALSE needed"), 
+                    inst.c);
         }
 		else if(c.d != 0) return &inst+inst.a;
 		else return & inst+inst.b;
 	}
-	_error("Need single element logical in conditional jump");
+    return StopDispatch(thread, inst, thread.internStr(
+             "Need single element logical in conditional jump"), 
+             inst.c);
 }
 
 static inline Instruction const* branch_op(Thread& thread, Instruction const& inst) {
@@ -244,7 +252,8 @@ static inline Instruction const* visible_op(Thread& thread, Instruction const& i
 static inline Instruction const* force_op(Thread& thread, Instruction const& inst) {
     Value const& a = REGISTER(inst.a);
 
-    Value const& t = thread.frame.environment->getContext()->dots[a.i].v;
+    assert(thread.frame.environment->get(Strings::__dots__).isList());
+    Value const& t = ((List const&)thread.frame.environment->get(Strings::__dots__))[a.i];
     
     if(t.isObject()) {
         OUT(c) = t;
@@ -386,7 +395,7 @@ static inline Instruction const* loadfn_op(Thread& thread, Instruction const& in
                 (std::string("Object '") + s + "' not found").c_str()), 
                 inst.c);
         }
-        env = env->getParent();
+        env = env->getEnclosure();
 	} while(env != 0);
 
     _internalError("loadfn failed to find value");
@@ -404,13 +413,13 @@ static inline Instruction const* storeup_op(Thread& thread, Instruction const& i
     thread.visible = false;
 	// assign2 is always used to assign up at least one scope level...
 	// so start off looking up one level...
-	assert(thread.frame.environment->getParent() != 0);
+	assert(thread.frame.environment->getEnclosure() != 0);
 
 	DECODE(c); BIND(c);
 	
 	String s = ((Character const&)CONSTANT(inst.a)).s;
 	Environment* penv;
-	Value& dest = thread.frame.environment->getParent()->insertRecursive(s, penv);
+	Value& dest = thread.frame.environment->getEnclosure()->insertRecursive(s, penv);
     if(!dest.isNil())
         dest = c;
     else
@@ -420,10 +429,9 @@ static inline Instruction const* storeup_op(Thread& thread, Instruction const& i
 }
 
 static inline Instruction const* rm_op(Thread& thread, Instruction const& inst) {
-    thread.visible = false;
-	String s = ((Character const&)CONSTANT(inst.a)).s;
-	thread.frame.environment->remove( s );
-	OUT(c) = Null::Singleton();
+    String s = ((Character const&)CONSTANT(inst.a)).s;
+    thread.frame.environment->remove( s );
+    OUT(c) = Null::Singleton();
     return &inst+1;
 }
 
@@ -439,8 +447,8 @@ static inline Instruction const* dotsv_op(Thread& thread, Instruction const& ins
     else
         return StopDispatch(thread, inst, thread.internStr("Invalid type in dotsv"), inst.c);
 
-	if(!thread.frame.environment->getContext() ||
-       idx >= (int64_t)thread.frame.environment->getContext()->dots.size() ||
+	if(!thread.frame.environment->get(Strings::__dots__).isList() ||
+       idx >= (int64_t)((List const&)thread.frame.environment->get(Strings::__dots__)).length() ||
        idx < (int64_t)0)
         return StopDispatch(thread, inst, thread.internStr((std::string("The '...' list does not contain ") + intToStr(idx+1) + " elements").c_str()), inst.c);
 	
@@ -465,19 +473,19 @@ static inline Instruction const* dotsv_op(Thread& thread, Instruction const& ins
 
 static inline Instruction const* dotsc_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
-    if(!thread.frame.environment->getContext())
+    if(!thread.frame.environment->get(Strings::__dots__).isList())
         OUT(c) = Integer::c(0);
     else
-        OUT(c) = Integer::c((int64_t)thread.frame.environment->getContext()->dots.size());
+        OUT(c) = Integer::c((int64_t)((List const&)thread.frame.environment->get(Strings::__dots__)).length());
     return &inst+1;
 }
 
 static inline Instruction const* dots_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
-	static const PairList empty;
-    PairList const& dots = 
-        thread.frame.environment->getContext()
-            ? thread.frame.environment->getContext()->dots
+	static const List empty(0);
+    List const& dots = 
+        thread.frame.environment->has(Strings::__dots__)
+            ? (List const&)thread.frame.environment->get(Strings::__dots__)
             : empty;
 	
 	Value& iter = REGISTER(inst.a);
@@ -486,13 +494,13 @@ static inline Instruction const* dots_op(Thread& thread, Instruction const& inst
 	// First time through, make a result vector...
 	if(iter.i == -1) {
 		Heap::Global.collect(thread.state);
-		out = List(dots.size());
-		memset(((List&)out).v(), 0, dots.size()*sizeof(List::Element));
+		out = List(dots.length());
+		memset(((List&)out).v(), 0, dots.length()*sizeof(List::Element));
 	    iter.i++;
     }
 	
-	while(iter.i < (int64_t)dots.size()) {
-		Value const& v = DOTS(iter.i);
+	while(iter.i < (int64_t)dots.length()) {
+		Value const& v = dots[iter.i];
 
         if(v.isObject()) {
 		    BIND(v); // BIND since we don't yet support futures in lists
@@ -515,12 +523,10 @@ static inline Instruction const* dots_op(Thread& thread, Instruction const& inst
 	}
 	
 	// check to see if we need to add names
-    if(thread.frame.environment->getContext()->named && dots.size() > 0) {
-        Character names(dots.size());
-        for(int64_t i = 0; i < (int64_t)dots.size(); i++)
-            names[i] = dots[i].n;
+    if(thread.frame.environment->get(Strings::__names__).isCharacter() 
+        && dots.length() > 0) {
         Dictionary* d = new Dictionary(1);
-        d->insert(Strings::names) = names;
+        d->insert(Strings::names) = thread.frame.environment->get(Strings::__names__);
         ((Object&)out).attributes(d);
 	}
     return &inst+1;
@@ -532,37 +538,40 @@ static inline Instruction const* missing_op(Thread& thread, Instruction const& i
     bool missing = false;
     if( a.isCharacter() && ((Character const&)a).length() == 1 ) {
         // check the parameter list
-        if(thread.frame.environment->getContext()) {
-            Character const& parameters = 
-                thread.frame.environment->getContext()
-                    ->function.prototype()->parameters;
-            int64_t i = 0;
-            for(; i < parameters.length(); ++i) {
-                if(a.s == parameters[i]) {
-                    missing = thread.frame.environment->getContext()->missing[i] == Logical::TrueElement;
-                    break;
-                }
+        Value const& f = thread.frame.environment->get(Strings::__function__);
+        if(!f.isClosure())
+            _error("invalid function in missing"); 
+        Character const& parameters = ((Closure const&)f).prototype()->parameters;
+        
+        Value const& m = thread.frame.environment->get(Strings::__missing__);
+        if(!m.isLogical() || ((Logical const&)m).length() != parameters.length())
+            _error("invalid missing vector");
+
+        Logical const& ms = (Logical const&)m;
+        
+        int64_t i = 0;
+        for(; i < parameters.length(); ++i) {
+            if(a.s == parameters[i]) {
+                missing = ms[i] == Logical::TrueElement;
+                break;
             }
-            if(i == parameters.length())
-                _error("'missing' can only be used for arguments");
         }
-    }
-    else if( a.isInteger() && ((Integer const&)a).length() == 1 ) {
-        if(thread.frame.environment->getContext()
-            && (a.i-1) < thread.frame.environment->getContext()->dots.size()) {
-            Value const& v = thread.frame.environment->getContext()->dots[a.i-1].v;
-	        missing = v.isNil();
-        }
-    }
-    else if( a.isDouble() && ((Double const&)a).length() == 1 ) {
-        if(thread.frame.environment->getContext()
-            && (int64_t)(a.d-1) < thread.frame.environment->getContext()->dots.size()) {
-            Value const& v = thread.frame.environment->getContext()->dots[(int64_t)a.d-1].v;
-	        missing = v.isNil();
-        }
+        if(i == parameters.length())
+            _error("'missing' can only be used for arguments");
     }
     else {
-        _error("Invalid argument to missing");
+        int64_t index = -1;
+        if( a.isInteger() && ((Integer const&)a).length() == 1 )
+            index = a.i-1;
+        else if( a.isDouble() && ((Double const&)a).length() == 1 )
+            index = a.d-1;
+        else
+            _error("Invalid argument to missing");
+        
+        List const& dots = (List const&)
+            thread.frame.environment->get(Strings::__dots__);
+        if(dots.isList() && index >= 0 && index < dots.length())
+            missing = dots[index].isNil();
     }
 	Logical::InitScalar(OUT(c), 
         missing ? Logical::TrueElement : Logical::FalseElement);
@@ -577,39 +586,22 @@ static inline Instruction const* frame_op(Thread& thread, Instruction const& ins
 
     Environment* env = thread.frame.environment;
 
-    while(index > 0
-        && env->getContext()
-        && env->getContext()->parent) {
-        env = env->getContext()->parent;
+    while(index > 0) {
+        Value const& v = env->get(Strings::__parent__);
+        if(v.isEnvironment())
+            env = ((REnvironment const&)v).environment();
+        else
+            break;
         index--;
     }
 
     if(index == 0) {
-        List r(6);
-        REnvironment::Init(r[0], env);
-        if(env->getContext()) {
-            r[1] = env->getContext()->call;
-            r[2] = env->getContext()->function;
-            r[3] = Integer::c(env->getContext()->nargs);
-            r[4] = env->getContext()->onexit;
-            if(env->getContext()->parent)
-                REnvironment::Init(r[5], env->getContext()->parent);
-            else
-                r[5] = Null::Singleton();
-        }
-        else {
-            r[1] = Null::Singleton();
-            r[2] = Null::Singleton();
-            r[3] = Integer::NA();
-            r[4] = Null::Singleton();
-            r[5] = Null::Singleton();
-        }
-        OUT(c) = r;
+        REnvironment::Init(OUT(c), env);
+        return &inst+1;
     }
     else {
         _error("not that many frames on the stack");
     }
-    return &inst+1;
 }
 
 // PROMISE_BYTECODES
@@ -748,7 +740,10 @@ static inline Instruction const* set_op(Thread& thread, Instruction const& inst)
         }
         else if(c.isEnvironment() && b.isCharacter1()) {
 	        String s = ((Character const&)b).s;
-            ((REnvironment&)c).environment()->insert(s) = a;
+            if(a.isNil())
+                ((REnvironment&)c).environment()->remove(s);
+            else
+                ((REnvironment&)c).environment()->insert(s) = a;
             OUT(c) = c;
             return &inst+1;
         }
@@ -801,6 +796,7 @@ static inline Instruction const* getsub_op(Thread& thread, Instruction const& in
         SubsetSlow(thread, a, b, OUT(c)); 
         return &inst+1;
     }
+    // TODO: this should force promises...
     else if(a.isEnvironment() && b.isCharacter()) {
         REnvironment const& env = ((REnvironment const&)a);
         Character const& i = ((Character const&)b);
@@ -843,16 +839,39 @@ static inline Instruction const* setsub_op(Thread& thread, Instruction const& in
             return &inst+1;
         }
 	}
-    if(c.isEnvironment() && b.isCharacter() && a.isVector()) {
+    if(c.isEnvironment() && b.isCharacter()) {
         REnvironment const& env = ((REnvironment const&)c);
         Character const& i = ((Character const&)b);
-        List const& l = As<List>(thread, a);
-        int64_t len = std::max(l.length(), i.length());
-        if(l.length() == 0 || i.length() == 0) len = 0;
-        for(int64_t k = 0; k < len; ++k) {
-            if(i[k] != Strings::empty && !Character::isNA(i[k]))
-                env.environment()->insert(i[k % i.length()]) 
-                    = l[k % l.length()];
+        if(a.isVector()) {
+            List const& l = As<List>(thread, a);
+            int64_t len = std::max(l.length(), i.length());
+            if(l.length() == 0 || i.length() == 0) len = 0;
+            for(int64_t k = 0; k < len; ++k) {
+                int64_t ix = k % i.length();
+                int64_t lx = k % l.length();
+                if(i[ix] != Strings::empty 
+                    && !Character::isNA(i[ix])) {
+                    if(l[lx].isNil())
+                        env.environment()->remove(i[ix]);
+                    else
+                        env.environment()->insert(i[ix]) = l[lx];
+                }
+            }
+        }
+        else {
+            int64_t len = i.length();
+            if(a.isNil()) {
+                for(int64_t k = 0; k < len; ++k) {
+                    if(i[k] != Strings::empty && !Character::isNA(i[k]))
+                        env.environment()->remove(i[k]);
+                }
+            }
+            else {
+                for(int64_t k = 0; k < len; ++k) {
+                    if(i[k] != Strings::empty && !Character::isNA(i[k]))
+                        env.environment()->insert(i[k]) = a;
+                }
+            }
         }
         OUT(c) = env; 
         return &inst+1;
@@ -866,10 +885,10 @@ static inline Instruction const* getenv_op(Thread& thread, Instruction const& in
     DECODE(a); BIND(a);
 
     if(a.isEnvironment()) {
-        Environment* parent = ((REnvironment const&)a).environment()->getParent();
-        if(parent == 0)
-            _error("environment does not have a parent");
-        REnvironment::Init(OUT(c), parent);
+        Environment* enc = ((REnvironment const&)a).environment()->getEnclosure();
+        if(enc == 0)
+            _error("environment does not have an enclosing environment");
+        REnvironment::Init(OUT(c), enc);
     }
     else if(a.isClosure()) {
         REnvironment::Init(OUT(c), ((Closure const&)a).environment());
@@ -896,16 +915,17 @@ static inline Instruction const* setenv_op(Thread& thread, Instruction const& in
     if(a.isEnvironment()) {
         Environment* target = ((REnvironment const&)a).environment();
         
-        // Riposte allows parent environment replacement,
+        // Riposte allows enclosing environment replacement,
         // but requires that no loops be introduced in the environment chain.
         Environment* p = value;
         while(p) {
             if(p == target) 
                 _error("an environment cannot be its own ancestor");
-            p = p->getParent();
+            p = p->getEnclosure();
         }
         
-        ((REnvironment const&)a).environment()->setParent(((REnvironment const&)b).environment());
+        ((REnvironment const&)a).environment()->setEnclosure(
+            ((REnvironment const&)b).environment());
         OUT(c) = a;
     }
     else if(a.isClosure()) {
@@ -950,7 +970,7 @@ static inline Instruction const* setattr_op(Thread& thread, Instruction const& i
 	if(c.isObject() && b.isCharacter1()) {
 		String name = ((Character const&)b)[0];
 		Object o = (Object const&)c;
-        if(a.isNull()) {
+        if(a.isNil() || a.isNull()) {
             if(o.isEnvironment() &&
                 ((REnvironment&)o).environment()->hasAttributes() &&
                 ((REnvironment&)o).environment()->getAttributes()->has(name)) {
@@ -1099,7 +1119,7 @@ static inline Instruction const* env_names_op(Thread& thread, Instruction const&
     return &inst+1;
 }
 
-static inline Instruction const* env_exists_op(Thread& thread, Instruction const& inst) {
+static inline Instruction const* env_get_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -1108,28 +1128,11 @@ static inline Instruction const* env_exists_op(Thread& thread, Instruction const
         _error("invalid 'envir' argument");
 
     if(!b.isCharacter() || b.pac != 1) {
-        printf("%d %d\n", b.type(), b.pac);
         _error("invalid exists argument");
     }
 
-    OUT(c) = ((REnvironment const&)a).environment()->has(((Character const&)b).s)
-                ? Logical::True() : Logical::False();
-    return &inst+1;
-}
-
-static inline Instruction const* env_remove_op(Thread& thread, Instruction const& inst) {
-    thread.visible = true;
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isEnvironment())
-        _error("invalid 'envir' argument");
-
-    if(!b.isCharacter1())
-        _error("invalid remove argument");
-
-	((REnvironment const&)a).environment()->remove( ((Character const&)b).s );
-	OUT(c) = Null::Singleton();
+    OUT(c) = ((REnvironment const&)a).environment()->
+                get(((Character const&)b).s);
     return &inst+1;
 }
 

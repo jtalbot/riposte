@@ -166,9 +166,9 @@ static int run(State& state, std::string inname, std::istream& in, std::ostream&
 
             state.global->insert(Strings::Last_value) = result;
             if(echo && thread.visible) {
-                //thread.eval(print, state.global);
+                thread.eval(print, state.global);
                 // Print directly (for debugging)
-                std::cout<< thread.stringify(result) << std::endl;
+                //std::cout<< thread.stringify(result) << std::endl;
             }
             thread.visible = true;
         } 

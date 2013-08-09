@@ -19,6 +19,6 @@
 }
 
 on.exit <- function(expr = NULL, add = FALSE) {
-    .on.exit(.frame(1L)[[1L]], .pr_expr(.getenv(NULL), 'expr'), add)
+    .on.exit(.frame(1L), .pr_expr(.getenv(NULL), 'expr'), add)
 }
 

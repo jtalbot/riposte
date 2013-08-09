@@ -3,8 +3,12 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
     .deparse(expr)
 }
 
-.deparse <- function(x,...) UseMethod(".deparse", x)
-
+.deparse <- function(x,...) {
+    if(is.nil(x))
+        ''
+    else
+        UseMethod(".deparse", x)
+}
 
 .format.attributes <- function(x, prefix='', show.names=FALSE) {
     a <- attributes(x)
@@ -83,9 +87,9 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
         .wrap(
             ifelse(is.na(x),
                 'NA_integer_', 
-                sprintf("%lldL", x),
+                sprintf("%lldL", x)),
                 'integer',
-                attrs))
+                attrs)
 }
 
 .deparse.double <- function(x)

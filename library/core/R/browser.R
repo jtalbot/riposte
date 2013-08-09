@@ -34,13 +34,13 @@ browserSetDebug <- NULL
 
             switch(cmd,
                 'c'=,
-                'cont'=,
+               'cont'=,
                 'n'=break,
                 'Q'=.External(stop('Exiting browser')),
                 'where'= {
                     n <- skipCalls 
                     repeat {
-                        call <- .frame(n)[[2L]]
+                        call <- .frame(n)[['__call__']]
                         if(!is.null(call))
                             .cat(n, ': ', format.call(call),'\n')
 
@@ -52,7 +52,7 @@ browserSetDebug <- NULL
                 },
                 {
                     promise('expr', .External(parse(cmd, -1L, '<stdin>')), 
-                        .frame(skipCalls)[[1L]], .getenv(NULL))
+                        .frame(skipCalls), .getenv(NULL))
                     .cat(format(expr),'\n')
                 })
         }
@@ -78,7 +78,7 @@ browserSetDebug <- NULL
     }
 
     browserSetDebug <<- function(n) {
-        env <- .frame(n+1L)[[1L]]
+        env <- .frame(n+1L)
         .on.exit(env, quote(browser('', NULL, TRUE, 1L)), TRUE)
         NULL
     }

@@ -391,9 +391,10 @@ void Trace::MarkLiveOutputs(Thread& thread) {
 			}
 		}
 
-        if( (*i)->getContext() ) {
-		    for(size_t j = 0; j < (*i)->getContext()->dots.size(); j++) {
-			    Value const& v = (*i)->getContext()->dots[j].v;
+        if( (*i)->get(Strings::__dots__).isList() ) {
+            List const& dots = (List const&)(*i)->get(Strings::__dots__);
+		    for(size_t j = 0; j < dots.length(); j++) {
+			    Value const& v = dots[j];
 			    if(v.isFuture() && ((Future const&)v).trace() == this) {
 				    nodes[((Future const&)v).ref()].liveOut = true;
     				Output o;

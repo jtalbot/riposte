@@ -101,21 +101,8 @@ void Dictionary::visit() const {
 
 void Environment::visit() const {
 	Dictionary::visit();
-    VISIT(parent);
+    VISIT(enclosure);
     VISIT(attributes);
-    VISIT(context);
-}
-
-void Context::visit() const {
-    HeapObject::visit();
-    
-    VISIT(parent);
-    traverse(call);
-    traverse(function);
-
-	for(uint64_t i = 0; i < dots.size(); i++) {
-		traverse(dots[i].v);
-	}
 }
 
 void Code::visit() const {

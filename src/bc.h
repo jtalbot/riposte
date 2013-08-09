@@ -58,10 +58,9 @@
 
 #define ENVIRONMENT_BYTECODES(_)                                               \
     _(env_new,      "env_new")                                                 \
+    _(env_get,      "env_get")      /* get a value from an environment */      \
     _(env_names,    "env_names")    /* get symbols defined in environment */   \
     _(env_global,   "env_global")   /* get the global environment */           \
-    _(env_exists,   "env_exists")   /* check if environment contains a key */  \
-    _(env_remove,   "env_remove")   /* remove a key from an environment */     \
 
 #define FUNCTION_BYTECODES(_)                                                  \
     _(fn_new,       "fn_new")       /* closure constructor */                  \

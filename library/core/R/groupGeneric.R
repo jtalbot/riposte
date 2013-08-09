@@ -4,9 +4,9 @@
         generic, 
         generic,
         .class(object), 
-        .frame(2L)[[2L]], 
-        .frame(3L)[[1L]], 
-        .getenv(.frame(2L)[[3L]]),
+        .frame(2L)[['__call__']], 
+        .frame(3L), 
+        .getenv(.frame(2L)[['__function__']]),
         TRUE,
         FALSE
         )
@@ -17,9 +17,9 @@
             group,
             generic, 
             .class(object), 
-            .frame(2L)[[2L]], 
-            .frame(3L)[[1L]], 
-            .getenv(.frame(2L)[[3L]]),
+            .frame(2L)[['__call__']], 
+            .frame(3L), 
+            .getenv(.frame(2L)[['__function__']]),
             TRUE,
             FALSE
             )
@@ -38,16 +38,16 @@ UseGroupMethod <- function(generic, group, object)
             generic,
             generic, 
             'default', 
-            .frame(1L)[[2L]], 
-            .frame(2L)[[1L]], 
-            .getenv(.frame(1L)[[3L]]),
+            .frame(1L)[['__call__']], 
+            .frame(2L), 
+            .getenv(.frame(1L)[['__function__']]),
             TRUE,
             FALSE
             )
     }
 
     if(!is.null(call)) {
-        promise('p', call, .frame(2L)[[1L]], .getenv(NULL))
+        promise('p', call, .frame(2L), .getenv(NULL))
         return(p)
     }
     else {
@@ -84,16 +84,16 @@ UseMultiMethod <- function(generic, group, ...)
             generic,
             generic, 
             'default', 
-            .frame(1L)[[2L]], 
-            .frame(2L)[[1L]], 
-            .getenv(.frame(1L)[[3L]]),
+            .frame(1L)[['__call__']], 
+            .frame(2L), 
+            .getenv(.frame(1L)[['__function__']]),
             TRUE,
             FALSE
             )
     }
 
     if(!is.null(call)) {
-        promise('p', call, .frame(2L)[[1L]], .getenv(NULL))
+        promise('p', call, .frame(2L), .getenv(NULL))
         return(p)
     }
     else {

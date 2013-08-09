@@ -81,8 +81,7 @@ static ByteCode::Enum op2(String const& func) {
     if(func == Strings::attrget) return ByteCode::getattr;
     if(func == Strings::setenv) return ByteCode::setenv;
 	
-    if(func == Strings::env_exists) return ByteCode::env_exists;
-	if(func == Strings::env_remove) return ByteCode::env_remove;
+    if(func == Strings::env_get) return ByteCode::env_get;
 
     if(func == Strings::semijoin) return ByteCode::semijoin;
 	
@@ -136,6 +135,7 @@ void Compiler::resolveLoopExits(int64_t start, int64_t end, int64_t nextTarget, 
 Compiler::Operand Compiler::compileConstant(Value const& expr, Code* code) {
 	std::map<Value, int64_t>::const_iterator i = constants.find(expr);
 	int64_t index = 0;
+
 	if(i == constants.end()) {
 		index = code->constants.size();
 		code->constants.push_back(expr);
@@ -198,7 +198,8 @@ Compiler::Operand Compiler::placeInRegister(Operand r) {
 CompiledCall Compiler::makeCall(Thread& thread, List const& call, Character const& names) {
     List rcall = CreateCall(call, names.length() > 0 ? names : Value::Nil());
     int64_t dotIndex = call.length()-1;
-	PairList arguments;
+    struct Pair { String n; Value v; };
+	std::vector<Pair>  arguments;
     bool named = false;
 
     List extraArgs(0);
@@ -415,7 +416,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Value dest = call[1];
 		
         Operand rhs = compile(call[2], code);
-      
+
         // Handle simple assignment 
         if(!isCall(dest)) {
             Operand target = compileConstant(Character::c(SymbolStr(dest)), code);
@@ -429,11 +430,13 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		// This is progressively turned `inside out`:
 		//	1) dim(a) <- `[<-`(dim(a), 1, x)
 		//	2) a <- `dim<-`(a, `[<-`(dim(a), 1, x))
-        else {    
+        else {
             Operand tmp = compileConstant(Character::c(Strings::assignTmp), code);
             emit( ByteCode::store, tmp, 0, rhs );
 
-            Value value = CreateSymbol(Strings::assignTmp);
+            List y = CreateCall(List::c(CreateSymbol(Strings::getenv), Null::Singleton()));
+            List z = CreateCall(List::c(CreateSymbol(Strings::env_get), y, Character::c(Strings::assignTmp)));
+            Value value = z;
 		    while(isCall(dest)) {
 			    List const& c = (List const&)dest;
 			    if(c.length() < 2L)
@@ -477,8 +480,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		    Operand source = compile(value, code);
 		    emit(func == Strings::assign2 ? ByteCode::storeup : ByteCode::store, 
                 target, 0, source);
-            kill( source );
-		    
+            kill(source);
+            kill(target);
+
             Operand rm = allocRegister();
             emit( ByteCode::rm, tmp, 0, rm );
             kill( rm );
@@ -727,7 +731,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand a = compile(call[3], code);
 		kill(a); kill(b); kill(c);
 		Operand result = allocRegister();
-		assert(c == result);
+        assert(c == result);
 		emit(op3(func), a, b, result);
 		return result;
 	}
@@ -753,8 +757,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::bb ||
 		func == Strings::vector ||
 		func == Strings::attrget ||
-        func == Strings::env_exists ||
-        func == Strings::env_remove ||
+        func == Strings::env_get ||
         func == Strings::setenv ||
         func == Strings::semijoin) &&
 		call.length() == 3) 

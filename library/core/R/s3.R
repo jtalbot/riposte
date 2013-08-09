@@ -3,7 +3,7 @@
 {
     while(env != emptyenv())
     {
-        if(.env_exists(env, name) && (type == "any" || .type(env[[name]]) == type))
+        if(!is.nil(.get(env, name)) && (type == "any" || .type(env[[name]]) == type))
             return(as.name(name))
         else {
             env <- .getenv(env)
@@ -79,7 +79,7 @@
 UseMethod <- function(generic, object)
 {
     if(missing(object)) {
-        formals <- attr(.frame(1L)[[3L]][['formals']], 'names')
+        formals <- attr(.frame(1L)[['__function__']][['formals']], 'names')
         if(length(formals) == 0)
             object <- NULL
         else {
@@ -87,11 +87,11 @@ UseMethod <- function(generic, object)
             if(f == '...')
                 f <- '..1'
             mcall <- call('missing', as.name(f))
-            promise('miss', mcall, .frame(1L)[[1L]], .getenv(NULL))
+            promise('miss', mcall, .frame(1L), .getenv(NULL))
             if(miss)
                 object <- NULL
             else
-                promise('object', as.name(f), .frame(1L)[[1L]], .getenv(NULL))
+                promise('object', as.name(f), .frame(1L), .getenv(NULL))
         }
     }
 
@@ -99,15 +99,15 @@ UseMethod <- function(generic, object)
         generic,
         generic, 
         .class(object), 
-        .frame(1L)[[2L]], 
-        .frame(2L)[[1L]], 
-        .getenv(.frame(1L)[[3L]]),
+        .frame(1L)[['__call__']], 
+        .frame(2L), 
+        .getenv(.frame(1L)[['__function__']]),
         TRUE,
         TRUE
         )
 
     if(!is.null(call)) {
-        promise('p', call, .frame(2L)[[1L]], .getenv(NULL))
+        promise('p', call, .frame(2L), .getenv(NULL))
         return(p)
     }
     else {
@@ -130,9 +130,9 @@ NextMethod <- function(generic, object, ...) {
     names(call) <- names
     class(call) <- 'call'
 
-    class <- .frame(2L)[[1L]][['.Class']]
-    callenv <- .frame(2L)[[1L]][['.GenericCallEnv']]
-    defenv <- .frame(2L)[[1L]][['.GenericDefEnv']]
+    class <- .frame(2L)[['.Class']]
+    callenv <- .frame(2L)[['.GenericCallEnv']]
+    defenv <- .frame(2L)[['.GenericDefEnv']]
 
     call <- .resolve.generic.call(
         generic,
@@ -145,7 +145,7 @@ NextMethod <- function(generic, object, ...) {
         TRUE)
     
     if(!is.null(call)) {
-        promise('p', call, .frame(2L)[[1L]], .getenv(NULL))
+        promise('p', call, .frame(2L), .getenv(NULL))
         return(p)
     }
     else {

@@ -1,5 +1,5 @@
 
 isNamespaceEnv <- function(ns) {
-    .env_exists(ns, '.__NAMESPACE__.')
+    !is.nil(.get(ns, '.__NAMESPACE__.'))
 }
 

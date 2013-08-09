@@ -1,5 +1,7 @@
 
-list <- function(...) list(...)
+list <- function(...) {
+    list(...)
+}
 
 # .Internal
 env2list <- function(x, all.names) {

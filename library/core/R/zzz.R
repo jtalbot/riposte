@@ -15,7 +15,7 @@ getNamespaceRegistry <- NULL
     setRegisteredNamespace <<- function(name, env) {
         namespaces[[strip(name)]] <- env
 
-        if(!.env_exists(env, '.__NAMESPACE__.'))
+        if(is.nil(.get(env, '.__NAMESPACE__.')))
             env[['.__NAMESPACE__.']] <- NULL
     
         env
@@ -720,6 +720,9 @@ internals <- .characters(
     # readLines.R
     'readLines',
 
+    # remove.R
+    'remove',
+
     # rep.R
     'rep.int',
     'rep_len',
@@ -771,7 +774,6 @@ internals <- .characters(
     'sys.frame',
     'sys.nframe',
     'sys.function',
-    'sys.nargs',
     'sys.parent',
     'sys.on.exit',
     'parent.frame',

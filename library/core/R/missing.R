@@ -1,5 +1,5 @@
 
-missing <- function(x) {
-    .stop("invalid use of 'missing'")
+missing <- function(...) {
+    .stop("Invalid use of 'missing'")
 }
 

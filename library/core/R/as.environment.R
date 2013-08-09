@@ -27,7 +27,7 @@ as.environment <- function(x)
 	switch(.type(x),
 		environment=x,
 		double=,
-		integer=.search.path(as.integer(x), .frame(1L)[[1L]]),
+		integer=.search.path(as.integer(x), .frame(1L)),
         list=.list2env(x),
 		.stop("unsupported cast to environment")) 
 

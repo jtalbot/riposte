@@ -58,7 +58,7 @@
 match.call <- function(definition, call, expand.dots) {
   
     if(is.null(definition))
-        definition <- .frame(2L)[[3L]]
+        definition <- .frame(2L)[['__function__']]
 
     # If the call has dots, expand the call using the dots in the
     # enclosing scope.
@@ -69,7 +69,7 @@ match.call <- function(definition, call, expand.dots) {
         if(identical(strip(call[[i]]), '...'))
             d <- i
     if(d > 0L) {
-        promise('dots', quote(list(...)), .frame(3L)[[1L]], .getenv(NULL))
+        promise('dots', quote(list(...)), .frame(3L), .getenv(NULL))
         call <- c(call[seq_len(d-1L)], dots, call[d+seq_len(length(call)-d)])
     }
     

@@ -124,6 +124,8 @@ struct Prototype : public HeapObject {
 class Dictionary : public HeapObject {
 protected:
 	uint64_t size, load, ksize;
+
+    struct Pair { String n; Value v; };
 	
 	struct Inner : public HeapObject {
 		Pair d[];
@@ -206,7 +208,7 @@ public:
 		return find(name, success)->v;
 	}
 
-	Value& insert(String name) ALWAYS_INLINE {
+	Value& insert(String name) {
 		bool success;
 		Pair* p = find(name, success);
 		if(!success) {
@@ -284,39 +286,19 @@ public:
     uint64_t Size() const { return load; }
 };
 
-class Context : public HeapObject {
-public:
-    Environment* parent;
-    List call;
-    Closure function;
-    int64_t nargs;
-	
-    Value onexit;
-    
-    PairList dots;
-	bool named;	// true if any of the dots have names	
-
-    Logical missing;
-
-    void visit() const;
-};
-
 class Environment : public Dictionary {
 
-	Environment* parent;
+	Environment* enclosure;
     Dictionary* attributes;
-    Context const* context;
 
 public:
-	explicit Environment(int64_t initialLoad, Environment* parent, Context const* context=0)
+	explicit Environment(int64_t initialLoad, Environment* enclosure)
         : Dictionary(initialLoad)
-        , parent(parent)
-        , attributes(0)
-        , context(context) {}
+        , enclosure(enclosure)
+        , attributes(0) {}
 
-	Environment* getParent() const { return parent; }
-	void setParent(Environment* env) { parent = env; }
-	Context const* getContext() const { return context; }
+	Environment* getEnclosure() const { return enclosure; }
+	void setEnclosure(Environment* env) { enclosure = env; }
 
     Dictionary* getAttributes() const { return attributes; }
     void setAttributes(Dictionary* d) { attributes = d; }
@@ -329,7 +311,7 @@ public:
 		
         bool success;
 		Pair* p = env->find(name, success);
-		while(!success && (env = env->getParent())) {
+		while(!success && (env = env->getEnclosure())) {
 			p = env->find(name, success);
 		}
 		return p->v;

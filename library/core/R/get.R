@@ -9,14 +9,14 @@
 get <- function(x, envir, mode, inherits) {
     mode <- .mode(mode)
     
-    if (.env_exists(envir, x) 
+    if (!is.nil(.get(envir, x)) 
         && (any(match(typeof(envir[[x]]), mode, 0, NULL)) || mode == "any")) {
         return(envir[[x]])
     }
     if (inherits) {
         while(envir != emptyenv()) {
             envir <- .getenv(envir)
-            if (.env_exists(envir, x) 
+            if (!is.nil(.get(envir, x))
                 && (any(match(typeof(envir[[x]]), mode, 0, NULL)) || mode == "any"))
                 return(envir[[x]])
         }
@@ -29,7 +29,7 @@ mget <- function(x, envir, mode, ifnotfound, inherits) {
 
     for(i in seq_len(length(x))) {
         r[[i]] <- get(x[[i]], envir, mode, inherits)
-        if (.env_exists(envir, x[[i]]) 
+        if (!is.nil(.get(envir, x[[i]]))
             && (any(match(typeof(envir[[x[[i]]]]), mode, 0, NULL)) || mode == "any")) {
             r[[i]] <- envir[[x[[i]]]]
             next
@@ -37,7 +37,7 @@ mget <- function(x, envir, mode, ifnotfound, inherits) {
         if (inherits) {
             while(envir != emptyenv()) {
                 envir <- environment(envir)
-                if (.env_exists(envir, x[[i]]) 
+                if (!is.nil(.get(envir, x[[i]]))
                     && (mode(envir[[x[[i]]]]) == mode || mode == "any")) {
                     r[[i]] <- envir[[x[[i]]]]
                     next

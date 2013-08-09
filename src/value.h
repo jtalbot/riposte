@@ -86,11 +86,6 @@ struct Value {
 	static Value const& Nil() { static const Value v = {{0}, {0}}; return v; }
 };
 
-// Name-value Pairs are used throughout the code...
-struct Pair { String n; Value v; };
-// Not the same as the publically visible PairList which is just an S3 class
-typedef std::vector<Pair> PairList;
-
 //
 // Value type implementations
 //
@@ -99,12 +94,12 @@ typedef std::vector<Pair> PairList;
 
 struct Promise : public Value {
 	enum PromiseType {
-		EXPR,
-		DOTDOT,
+		EXPRESSION,
+		DOTDOT
 	};
 	static const Type::Enum ValueType = Type::Promise;
 	static Promise& Init(Value& v, Environment* env, Code* code) {
-		Value::Init(v, Type::Promise, EXPR);
+		Value::Init(v, Type::Promise, EXPRESSION);
 		v.header += (((uint64_t)env) << 16);
 		v.p = code;
 		return (Promise&)v;
@@ -117,7 +112,7 @@ struct Promise : public Value {
 	}
 
 	bool isExpression() const {
-		return packed() == EXPR;
+		return packed() == EXPRESSION;
 	}
 	bool isDotdot() const {
 		return packed() == DOTDOT;

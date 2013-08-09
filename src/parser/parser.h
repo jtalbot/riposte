@@ -90,6 +90,7 @@ struct Parser {
 };
 
 struct Pairs {
+    struct Pair { String n; Value v; };
 	std::deque<Pair> p;
 	int64_t length() const { return p.size(); }        
 	void push_front(String n, Value const& v) { Pair t; t.n = n; t.v = v; p.push_front(t); } 
