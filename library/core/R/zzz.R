@@ -13,7 +13,7 @@ getNamespaceRegistry <- NULL
     }
 
     setRegisteredNamespace <<- function(name, env) {
-        namespaces[[strip(name)]] <- env
+        namespaces[[strip(name)]] <<- env
 
         if(is.nil(.get(env, '.__NAMESPACE__.')))
             env[['.__NAMESPACE__.']] <- NULL
@@ -47,7 +47,10 @@ getNamespaceRegistry <- NULL
     )
 
 primitives <- .characters(
-  
+ 
+    # 000
+    '.make.namespace',
+ 
     # Arithmetic.R
     '+',
     '+.default',
@@ -269,6 +272,7 @@ primitives <- .characters(
     'Conj',
     'Conj.default',
     'Conj.complex',
+    'is.complex',
 
     # cumsum.R
     'cumsum',
@@ -386,6 +390,9 @@ primitives <- .characters(
     'as.logical',
     'is.logical',
 
+    # matmult.R
+    '%*%',
+
     # matrix.R
     'is.matrix',
 
@@ -425,10 +432,6 @@ primitives <- .characters(
     # on.exit.R
     'on.exit',
 
-    # print.R (will be hidden by base)
-    'print',
-    'print.default',
-
     # proc.time
     'proc.time',
 
@@ -456,6 +459,8 @@ primitives <- .characters(
     'time',
     'source',
     '__stop__',
+    'print',
+    '.cat',
 
     # s3.R
     'UseMethod',
@@ -624,6 +629,9 @@ internals <- .characters(
     # formals.R
     'formals',
 
+    # format.R
+    'format',
+
     # get.R
     'get',
     'mget',
@@ -648,6 +656,9 @@ internals <- .characters(
     # identical.R
     'identical',
 
+    # internal.R
+    'shortRowNames',
+
     # l10n_info.R
     'l10n_info',
 
@@ -667,6 +678,12 @@ internals <- .characters(
 
     # mapply.R
     'mapply',
+
+    # make.names.R
+    'make.names',
+    
+    # make.unique.R
+    'make.unique',
 
     # match.R
     'match',
@@ -713,7 +730,6 @@ internals <- .characters(
     'pmatch',
 
     # print.R
-    'print',
     'print.default',
     'print.function',
 
@@ -732,6 +748,9 @@ internals <- .characters(
 
     # s3.R
     'NextMethod',
+
+    # scan
+    'scan',
 
     # search.R
     'search',
@@ -777,6 +796,9 @@ internals <- .characters(
     'sys.parent',
     'sys.on.exit',
     'parent.frame',
+
+    # t.R
+    't.default',
 
     # typeof.R
     'typeof',

@@ -7,7 +7,10 @@ environment <- function(fun) {
 }
 
 `environment<-` <- function(fun, value) {
-    .setenv(fun, value)
+    if(inherits(fun, 'formula', FALSE))
+        attr(fun, '.Environment') <- value
+    else
+        .setenv(fun, value)
 }
 
 

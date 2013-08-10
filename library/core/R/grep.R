@@ -12,10 +12,10 @@
     else {
         .Map('grep_map', 
             list(
-                .External(regex_compile(
+                .External('regex_compile',
                     as.character(pattern), 
                     identical(ignore.case, TRUE),
-                    identical(fixed, TRUE))),
+                    identical(fixed, TRUE)),
                 as.character(text)
             ), 'logical')
     }
@@ -56,10 +56,10 @@ grep <- function(pattern, x, ignore.case, value, perl, fixed, useBytes, invert)
     else {
         .Map('regex_map', 
             list(
-                .External(regex_compile(
+                .External('regex_compile',
                     as.character(pattern), 
                     identical(ignore.case, TRUE),
-                    identical(fixed, TRUE))),
+                    identical(fixed, TRUE)),
                 as.character(text)
             ), .characters('integer', 'integer'))
     }
@@ -87,10 +87,10 @@ regexpr <- function(pattern, text, ignore.case, perl, fixed, useBytes)
     else {
         .Map('gregex_map', 
             list(
-                .External(regex_compile(
+                .External('regex_compile',
                     as.character(pattern), 
                     identical(ignore.case, TRUE),
-                    identical(fixed, TRUE))),
+                    identical(fixed, TRUE)),
                 as.character(text)
             ), .characters('list', 'list'))
     }
@@ -113,10 +113,10 @@ sub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
 {
     .Map('sub_map',
         list(
-            .External(regex_compile(
+            .External('regex_compile',
                 as.character(pattern), 
                 identical(ignore.case, TRUE),
-                identical(fixed, TRUE))),
+                identical(fixed, TRUE)),
             as.character(text),
             as.character(replacement)
         ), .characters('character'))[[1]]
@@ -126,10 +126,10 @@ gsub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
 {
     .Map('gsub_map',
         list(
-            .External(regex_compile(
+            .External('regex_compile',
                 as.character(pattern), 
                 identical(ignore.case, TRUE),
-                identical(fixed, TRUE))),
+                identical(fixed, TRUE)),
             as.character(text),
             as.character(replacement)
         ), .characters('character'))[[1]]

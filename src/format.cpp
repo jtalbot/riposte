@@ -18,14 +18,21 @@ std::string intToStr( int64_t n )
 std::string intToHexStr( uint64_t n )
 {
     std::ostringstream result;
-    result << "0x" << std::hex << n;
+    result << std::hex << n;
     return result.str();
 }
 
 std::string charToHexStr( char c )
 {
     std::ostringstream result;
-    result << "0x" << std::hex << (int)c;
+    result << std::hex << (int)c;
+    return result.str();
+}
+
+std::string charToOctStr( char c )
+{
+    std::ostringstream result;
+	result << std::oct << std::setfill('0') << std::setw(3) << (uint64_t)c;
     return result.str();
 }
 

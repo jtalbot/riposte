@@ -52,13 +52,13 @@
     env
 }
 
-.cat <- function(..., sep="") .External(cat(list(...), sep))
+.cat <- function(..., sep="") .External('cat', list(...), sep)
 
 .stop <- function(message, call=.frame(1L)[['__call__']]) {
     e <- list(message=message, call=call)
     attr(e, 'class') <- c('error', 'condition')
 
-    .signalCondition(e, message, call)
+    #.signalCondition(e, message, call)
     .dfltStop(message, call)
 }
 

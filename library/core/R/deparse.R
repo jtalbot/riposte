@@ -10,29 +10,6 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
         UseMethod(".deparse", x)
 }
 
-.format.attributes <- function(x, prefix='', show.names=FALSE) {
-    a <- attributes(x)
-    if(!is.null(a)) {
-        n <- names(a)
-        r <- ''
-        for(i in seq_len(length(a))) {
-            if((show.names || n[[i]] != 'names')
-               && n[[i]] != 'comment') {
-                r <- .pconcat(r, '\n')
-                p <- .pconcat(prefix, 
-                        .pconcat(
-                            .pconcat('attr(,"',n[[i]]),'")'))
-                r <- .pconcat(.pconcat(r, p), '\n')
-                r <- .pconcat(r, format(a[[i]], prefix=p))
-            }
-        }
-        r
-    }
-    else {
-        ''
-    }
-}
-
 .wrap <- function(x, type, attrs) {
     if(length(x) == 0L)
         r <- sprintf("%s(0)", type)
@@ -79,7 +56,8 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
 {
     attrs <- attributes(x)
     x <- strip(x)
-    if(length(x) > 1L && .isTRUE(all(x == x[[1]]:(x[[1]]+length(x)-1L))))
+    if(length(x) > 1L && !any(is.na(x)) && 
+        .isTRUE(all(x == x[[1]]:(x[[1]]+length(x)-1L))))
         .wrap(sprintf('%dL:%dL', x[[1]], x[[1]]+length(x)-1L),
                 'integer',
                 attrs)
@@ -212,7 +190,7 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
         func <- .deparse(e)
         n <- names(x)
 
-        if(length(x) == 2 && (func == '+' || func == '-' || func == '!')
+        if(length(x) == 2 && (func == '+' || func == '-' || func == '!' || func == '~')
             && is.null(n)) {
             .pconcat(func, .deparse(x[[2]]))
         }
@@ -280,8 +258,6 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
         else {
             func <- .pconcat(func, '(')
             for(i in 1L+seq_len(length(x)-1L)) {
-                if(n[[i]] != '')
-                    func <- .pconcat(.pconcat(func, n[[i]]), ' = ')
                 func <- .pconcat(func, .deparse(x[[i]]))
                 if(i < length(x))
                     func <- .pconcat(func, ', ')

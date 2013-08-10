@@ -1,3 +1,3 @@
 
-proc.time <- function(x) .External(proctime())
+proc.time <- function(x) .External('proctime')
 

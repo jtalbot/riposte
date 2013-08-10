@@ -34,6 +34,7 @@ std::string rawToStr( unsigned char n );
 std::string intToStr( int64_t n );
 std::string intToHexStr( uint64_t n );
 std::string charToHexStr( char c );
+std::string charToOctStr( char c );
 std::string doubleToStr( double n, uint64_t decimals=7, bool fixed=false );
 std::string complexToStr( std::complex<double> n );
 
@@ -142,7 +143,7 @@ static inline std::string escape(std::string const& s) {
 			case '"': r += "\\\""; break;
 			default:
                 if(c >= 0x20 && c <= 0x7e) r += c;
-                else r += std::string("\\x") + charToHexStr(c); 
+                else r += std::string("\\") + charToOctStr(c); 
         }
     }
     return r;

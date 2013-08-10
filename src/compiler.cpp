@@ -276,21 +276,22 @@ Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& ca
 }
 
 Compiler::Operand Compiler::compileExternalFunctionCall(List const& call, Code* code) {
-	String func = SymbolStr(call[0]);
+	if(call.length() < 2)
+        _error(".External needs at least one argument");
+    Operand func = placeInRegister(compile(call[1], code));
 	
 	// compile parameters directly...reserve registers for them.
-	Operand liveIn = top();
-	int64_t reg = liveIn.i-1;
-	for(int64_t i = 1; i < call.length(); i++) {
+	int64_t reg = func.i;
+	for(int64_t i = 2; i < call.length(); i++) {
 		Operand r = placeInRegister(compile(call[i], code));
 		assert(r.i == reg+1);
 		reg = r.i; 
 	}
 	// kill all parameters
-	kill(reg); 	   // only necessary to silence unused warning
-	kill(liveIn); 
+	kill(reg);	   // only necessary to silence unused warning
+    kill(func); 
 	Operand result = allocRegister();
-	emit(ByteCode::external, Operand(MEMORY, func), call.length()-1, result);
+	emit(ByteCode::external, func, call.length()-1, result);
 	return result;
 }
 
@@ -405,9 +406,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
     if(func == Strings::external)
     {
-		if(!call[1].isList() || !isCall(call[1]))
-			throw CompileError(std::string(".External has invalid arguments (") + Type::toString(call[1].type()) + ")");
-		return compileExternalFunctionCall((List const&)call[1], code);
+		return compileExternalFunctionCall(call, code);
     }
 	else if(func == Strings::assign ||
 		func == Strings::eqassign || 
@@ -498,10 +497,11 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
         emit( ByteCode::rm, symbol, 0, rm );
         return rm;
     }
-    else if(func == Strings::as && call.length() == 3 && call[2].isCharacter1())
+    else if(func == Strings::as && call.length() == 3)
     {
 	    Operand src = compile(call[1], code);
-        Operand type = compileConstant(call[2], code);
+        Operand type = compile(call[2], code);
+        kill(type);
         kill( src );
 		Operand as = allocRegister();
         emit( ByteCode::as, src, type, as );

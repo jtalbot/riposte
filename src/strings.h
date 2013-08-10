@@ -170,6 +170,7 @@
     _(__parent__, "__parent__") \
     _(__dots__, "__dots__") \
     _(__names__, "__names__") \
+    _(rownames, "row.names") \
 
 typedef const char* String;
 

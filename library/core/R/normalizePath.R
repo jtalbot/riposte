@@ -7,7 +7,7 @@ normalizePath <- function(path, winslash, mustWork) {
     if(.isTRUE(mustWork) && any(is.na(r)))
         .stop("No such file or directory")
     else if(is.na(mustWork) && any(is.na(r)))
-        warning("No such file or directory")
+        warning(TRUE, FALSE, "No such file or directory")
 
     r
 }

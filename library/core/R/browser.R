@@ -36,13 +36,13 @@ browserSetDebug <- NULL
                 'c'=,
                'cont'=,
                 'n'=break,
-                'Q'=.External(stop('Exiting browser')),
+                'Q'=.stop(),
                 'where'= {
                     n <- skipCalls 
                     repeat {
                         call <- .frame(n)[['__call__']]
                         if(!is.null(call))
-                            .cat(n, ': ', format.call(call),'\n')
+                            .cat(n, ': ', .format.call(call),'\n')
 
                         if(is.null(.frame(n)[[6L]]))
                             break
@@ -51,9 +51,9 @@ browserSetDebug <- NULL
                     }
                 },
                 {
-                    promise('expr', .External(parse(cmd, -1L, '<stdin>')), 
+                    promise('expr', .External('parse', cmd, -1L, '<stdin>'), 
                         .frame(skipCalls), .getenv(NULL))
-                    .cat(format(expr),'\n')
+                    .cat(.format(expr),'\n')
                 })
         }
         NULL

@@ -10,7 +10,7 @@ dim.default <- function(x) attr(x, 'dim')
     attr(x, 'names') <- NULL
     attr(x, 'dimnames') <- NULL
 
-    if(is.null(x)) {
+    if(is.nil(value) || is.null(value)) {
         attr(x, 'dim') <- NULL
     }
     else {

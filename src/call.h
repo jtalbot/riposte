@@ -23,11 +23,15 @@ Value const& X = \
 		? *(thread.frame.registers+(inst.X)) \
 	    : thread.frame.code->constants[-1-(inst.X)];
 
+#ifdef EPEE
 #define BIND(X) \
 if(__builtin_expect(X.isFuture(), false)) { \
 	thread.traces.Bind(thread,X); \
 	return &inst; \
 }
+#else
+#define BIND(X)
+#endif
 
 Instruction const* force(
     Thread& thread, Promise const& p,

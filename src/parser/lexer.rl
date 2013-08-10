@@ -50,9 +50,9 @@
 	'break'	{token( TOKEN_BREAK, CreateSymbol(Strings::breakSym) );};
 	
 	# Single and double-quoted string literals.
-	( "'" ( [^'\\\n] | /\\./ )* "'" ) 
+	( "'" ( [^'\\] | /\\./ )* "'" ) 
 		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.internStr(unescape(s))) );};
-	( '"' ( [^"\\\n] | /\\./ )* '"' ) 
+	( '"' ( [^"\\] | /\\./ )* '"' ) 
 		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.internStr(unescape(s))) );};
 
 	# CreateSymbols.
@@ -61,7 +61,7 @@
 
 	( ('.' ([a-zA-Z_.] [a-zA-Z0-9_.]*)?) | [a-zA-Z] [a-zA-Z0-9_.]* ) 
 		{token( TOKEN_SYMBOL, CreateSymbol(state.internStr(std::string(ts, te-ts))) );};
-	( '`' ( [^`\\\n] | /\\./ )* '`' ) 
+	( '`' ( [^`\\] | /\\./ )* '`' ) 
 		{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol(state.internStr(unescape(s))) );};
 	# Numeric literals.
 	( float exponent? ) 
@@ -150,7 +150,11 @@ void Parser::token(int tok, Value v)
 
 	// Do the lookahead to resolve the dangling else conflict
 	if(lastTokenWasNL) {
-		if(tok != TOKEN_ELSE && (nesting.size()==0 || nesting.top()!=TOKEN_LPAREN))
+		if(tok != TOKEN_ELSE && 
+            (nesting.size()==0 ||
+                (nesting.top()!=TOKEN_LPAREN &&
+                 nesting.top()!=TOKEN_LBRACKET &&
+                 nesting.top()!=TOKEN_LBB)))
 			Parse(pParser, TOKEN_NEWLINE, Value::Nil(), this);
 		Parse(pParser, tok, v, this);
 		lastTokenWasNL = false;
@@ -164,10 +168,28 @@ void Parser::token(int tok, Value v)
 
 	le = te;
 
-	if(tok == TOKEN_LPAREN) nesting.push(tok);
-	else if(tok == TOKEN_LBRACE) nesting.push(tok);
-	else if(tok == TOKEN_RPAREN || tok == TOKEN_RBRACE) nesting.pop();
-	else if(tok == TOKEN_FUNCTION) source.push(ts);
+	if( tok == TOKEN_LPAREN ||
+	    tok == TOKEN_LBRACKET ||
+	    tok == TOKEN_LBB || 
+	    tok == TOKEN_LBRACE)
+        nesting.push(tok);
+	else if(
+        tok == TOKEN_RPAREN || 
+        tok == TOKEN_RBRACE)
+        nesting.pop();
+    else if(
+        tok == TOKEN_RBRACKET) {
+        // need to do a bit of extra work to catch ]] vs. ]
+        if(nesting.top() == TOKEN_LBRACKET) {
+            nesting.pop();
+        }
+        else {
+            nesting.pop();
+            nesting.push(TOKEN_LBRACKET);
+        }
+    }
+	else if(tok == TOKEN_FUNCTION)
+        source.push(ts);
 
 	/* Count newlines and columns. Use for error reporting? */ 
 	for ( int i = 0; i < len; i ++ ) {

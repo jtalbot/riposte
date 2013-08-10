@@ -97,7 +97,7 @@ UseMethod <- function(generic, object)
 
     call <- .resolve.generic.call(
         generic,
-        generic, 
+        generic,
         .class(object), 
         .frame(1L)[['__call__']], 
         .frame(2L), 
@@ -105,6 +105,14 @@ UseMethod <- function(generic, object)
         TRUE,
         TRUE
         )
+
+    names <- attr(call,'names')
+    call <- strip(call)
+    qq <- list(as.name('quote'), object)
+    attr(qq, 'class') <- 'call'
+    call[[2L]] <- qq 
+    attr(call, 'names') <- names
+    attr(call, 'class') <- 'call'
 
     if(!is.null(call)) {
         promise('p', call, .frame(2L), .getenv(NULL))

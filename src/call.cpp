@@ -24,7 +24,7 @@ Instruction const* force(
 
 void dumpStackFrame(Thread& thread) {
     std::cout << "\t(Executing in " << 
-        intToHexStr((int64_t)thread.frame.environment) << ")" << std::endl;
+        "0x" << intToHexStr((int64_t)thread.frame.environment) << ")" << std::endl;
 	
     thread.frame.code->printByteCode(thread.state);
     
@@ -35,7 +35,7 @@ void dumpStackFrame(Thread& thread) {
     }*/
 
     std::cout << "Returning to: " << 
-        intToHexStr((int64_t)thread.frame.returnpc) << std::endl;
+        "0x" << intToHexStr((int64_t)thread.frame.returnpc) << std::endl;
 }
 
 Instruction const* buildStackFrame(Thread& thread, 
@@ -113,7 +113,9 @@ Value argument(int64_t index, List const& dots, CompiledCall const& call, Enviro
 String name(int64_t index, List const& dots, 
                 Character const& dotnames, CompiledCall const& call) {
 	if(index < call.dotIndex) {
-		return call.names[index];
+		return index < call.names.length() 
+            ? call.names[index] 
+            : Strings::empty;
 	} else {
 		index -= call.dotIndex;
         int64_t ndots = dots.isList() ? dots.length() : 0;
@@ -122,7 +124,9 @@ String name(int64_t index, List const& dots,
 		}
 		else {
 			index -= ndots;
-			return call.names[call.dotIndex+index+1];
+			return call.dotIndex+index+1 < call.names.length()
+                ? call.names[call.dotIndex+index+1]
+                : Strings::empty;
 		}
 	}
 }
@@ -191,7 +195,8 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 
         if(pDotIndex < (int64_t)parameters.length()) {
             // all unused args go into ...
-            missing[pDotIndex] = Logical::FalseElement;
+            if(end < numArgs)
+                missing[pDotIndex] = Logical::FalseElement;
             List newdots(numArgs-end);
             for(int64_t i = end; i < numArgs; i++) {
 	            Value arg = argument(i, dots, call, env);
@@ -206,7 +211,8 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
     }
     // function only has dots, can just stick everything there
     else if(parameters.length() == 1 && pDotIndex == 0) {
-        missing[pDotIndex] = Logical::FalseElement;
+        if(numArgs > 0)
+            missing[pDotIndex] = Logical::FalseElement;
         List newdots(numArgs);
         Character names(numArgs);
 		for(int64_t i = 0; i < numArgs; i++) {
@@ -362,7 +368,8 @@ Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func
 	// handle unused arguments
 	if(pDotIndex < parameters.length()) {
         // called function has dots, all unused args go into ...
-        missing[pDotIndex] = Logical::FalseElement;
+        if(arguments.length() > end)
+            missing[pDotIndex] = Logical::FalseElement;
         List dots(arguments.length()-end);
         for(int64_t i = end; i < (int64_t)arguments.length(); i++) {
             assignDot(thread, arguments[i], env, dots[i-end]);
@@ -497,6 +504,7 @@ void IfElseDispatch(Thread& thread, void* args, Value const& a, Value const& b, 
     }
 }
 
+#ifdef EPEE
 template< template<class X> class Group, IROpCode::Enum Op>
 bool RecordUnary(Thread& thread, Value const& a, Value& c) {
     // If we can record the instruction, we can delay execution
@@ -529,7 +537,9 @@ bool RecordBinary(Thread& thread, Value const& a, Value const& b, Value& c) {
     }
     return false;
 }
+#endif
 
+#ifdef EPEE
 #define SLOW_DISPATCH_DEFN(Name, String, Group, Func) \
 Instruction const* Name##Slow(Thread& thread, Instruction const& inst, void* args, Value const& a, Value& c) { \
     if(RecordUnary<Group, IROpCode::Name>(thread, a, c)) \
@@ -556,6 +566,31 @@ Instruction const* Name##Slow(Thread& thread, Instruction const& inst, void* arg
 }
 BINARY_BYTECODES(SLOW_DISPATCH_DEFN)
 #undef SLOW_DISPATCH_DEFN
+#else
+#define SLOW_DISPATCH_DEFN(Name, String, Group, Func) \
+Instruction const* Name##Slow(Thread& thread, Instruction const& inst, void* args, Value const& a, Value& c) { \
+    if(!((Object const&)a).hasAttributes() \
+            && Group##Dispatch<Name##VOp>(thread, args, a, c)) \
+        return &inst+1; \
+    else \
+        return GenericDispatch(thread, inst, Strings::Name, a, inst.c); \
+}
+UNARY_FOLD_SCAN_BYTECODES(SLOW_DISPATCH_DEFN)
+#undef SLOW_DISPATCH_DEFN
+
+#define SLOW_DISPATCH_DEFN(Name, String, Group, Func) \
+Instruction const* Name##Slow(Thread& thread, Instruction const& inst, void* args, Value const& a, Value const& b, Value& c) { \
+    if(   !((Object const&)a).hasAttributes() \
+            && !((Object const&)b).hasAttributes() \
+            && Group##Dispatch<Name##VOp>(thread, args, a, b, c)) \
+        return &inst+1; \
+    else \
+        return GenericDispatch(thread, inst, Strings::Name, a, b, inst.c); \
+}
+BINARY_BYTECODES(SLOW_DISPATCH_DEFN)
+#undef SLOW_DISPATCH_DEFN
+#endif
+
 
 Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const& a, Value const& b, Value& c) {
     BIND(a); BIND(b);

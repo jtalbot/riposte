@@ -1,5 +1,5 @@
 
 mapply <- function(FUN, dots, MoreArgs) {
-	.External(mapply(dots, FUN))
+	.External('mapply', dots, FUN)
 }
 

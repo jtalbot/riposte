@@ -17,23 +17,31 @@ repl <- function() {
     NULL
 }
 
+# This is hidden by print in the base package.
+# Include here so we can have minimal printing
+# functionality with only the core package.
+print <- function(x, ...) {
+    .cat(.format(x),'\n')
+    .invisible(x)
+}
+
 warnings <- function() {
     w <- last.warning
     last.warning <<- NULL
     w
 }
 
-trace.config <- function(trace=0) .External(trace.config(trace))
+trace.config <- function(trace=0) .External('trace.config', trace)
 
-library <- function(.) {
-    e <- .env_new(getRegisteredNamespace('core'))
+library <- function(., parent.env) {
+    e <- .env_new(parent.env)
     setRegisteredNamespace(.pconcat('',.), e)
 
     if(identical(.,'base')) {
         e[['.BaseNamespaceEnv']] <- e
     }
 
-    .External(library(e, .))
+    .External('library', e, .)
         
     if(identical(.,'base')) {
         e[['.Options']] <- options()
@@ -64,7 +72,7 @@ time <- function(x) {
 }
 
 source <- function(file, eval.env) {
-    p <- .External(source(file))
+    p <- .External('source', file)
     promise('q', p, eval.env, .getenv(NULL))
     q
 }
@@ -74,7 +82,7 @@ source <- function(file, eval.env) {
 `__stop__` <- function(message, call = NULL) {
     e <- list(message = message, call = call)
     attr(e, 'class') <- c('error', 'condition')
-    .signalCondition(e, message, call)
+    #.signalCondition(e, message, call)
     .dfltStop(message, call)
 }
 

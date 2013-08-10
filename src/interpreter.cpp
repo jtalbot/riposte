@@ -91,14 +91,17 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
 	// as long as we don't return a closure...
 	// but also can't if an assignment to an 
     // out of scope variable occurs (<<-, assign) with a value of a closure!
+#ifdef EPEE
 	if(!(a.isClosure() || a.isEnvironment() || a.isList())) {
 		thread.traces.KillEnvironment(thread.frame.environment);
 	}
+#endif
 
     thread.pop();
 
+#ifdef EPEE
 	thread.traces.LiveEnvironment(thread.frame.environment, a);
-
+#endif
 	return returnpc;
 }
 
@@ -110,11 +113,15 @@ static inline Instruction const* retp_op(Thread& thread, Instruction const& inst
 	
     if(REGISTER(1).isCharacter()) {
 		env->insert(REGISTER(1).s) = a;
+#ifdef EPEE
 	    thread.traces.LiveEnvironment(env, a);
+#endif
 	} else if(REGISTER(1).isInteger()) {
         assert(env->get(Strings::__dots__).isList());
         ((List&)env->insert(Strings::__dots__))[REGISTER(1).i] = a;
+#ifdef EPEE
 	    thread.traces.LiveEnvironment(env, a);
+#endif
 	} // otherwise, don't store anywhere...
 	
 	REGISTER(0) = a;
@@ -271,7 +278,15 @@ static inline Instruction const* force_op(Thread& thread, Instruction const& ins
 
 static inline Instruction const* external_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
-	String name = (String)inst.a;
+	DECODE(a);
+
+    if(!a.isCharacter1()) {
+        return StopDispatch(thread, inst, thread.internStr(
+            ".External needs a character(1) as its first argument"), 
+            inst.c);
+    }   
+
+    String name = a.s;
     void* func = NULL;
     for(std::map<std::string,void*>::iterator i = thread.state.handles.begin();
         i != thread.state.handles.end(); ++i) {
@@ -284,12 +299,12 @@ static inline Instruction const* external_op(Thread& thread, Instruction const& 
 
     uint64_t nargs = inst.b;
 	for(int64_t i = 0; i < nargs; i++) {
-		BIND(REGISTER(inst.c+i));
+		BIND(REGISTER(inst.a+i+1));
 	}
     {
         typedef Value (*Func)(Thread&, Value const*);
         Func f = (Func)func;
-        OUT(c) = f(thread, &REGISTER(inst.c));
+        OUT(c) = f(thread, &REGISTER(inst.a+1));
     }
 	return &inst+1;
 }
@@ -450,7 +465,7 @@ static inline Instruction const* dotsv_op(Thread& thread, Instruction const& ins
 	if(!thread.frame.environment->get(Strings::__dots__).isList() ||
        idx >= (int64_t)((List const&)thread.frame.environment->get(Strings::__dots__)).length() ||
        idx < (int64_t)0)
-        return StopDispatch(thread, inst, thread.internStr((std::string("The '...' list does not contain ") + intToStr(idx+1) + " elements").c_str()), inst.c);
+        return StopDispatch(thread, inst, thread.internStr((std::string("The '...' list does not contain ") + "0x" + intToStr(idx+1) + " elements").c_str()), inst.c);
 	
     Value const& v = DOTS(idx); 
    
@@ -600,7 +615,9 @@ static inline Instruction const* frame_op(Thread& thread, Instruction const& ins
         return &inst+1;
     }
     else {
-        _error("not that many frames on the stack");
+        return StopDispatch(thread, inst, thread.internStr(
+            "not that many frames on the stack"), 
+            inst.c);
     }
 }
 
@@ -672,7 +689,11 @@ static inline Instruction const* isnil_op(Thread& thread, Instruction const& ins
 static inline Instruction const* type_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
 	DECODE(a);
+#ifdef EPEE
 	switch(thread.traces.futureType(a)) {
+#else
+    switch(a.type()) {
+#endif
         #define CASE(name, str, ...) case Type::name: OUT(c) = Character::c(Strings::name); break;
         TYPES(CASE)
         #undef CASE
@@ -686,6 +707,7 @@ static inline Instruction const* length_op(Thread& thread, Instruction const& in
 	DECODE(a);
 	if(a.isVector())
 		Integer::InitScalar(OUT(c), ((Vector const&)a).length());
+#ifdef EPEE
 	else if(a.isFuture()) {
 		IRNode::Shape shape = thread.traces.futureShape(a);
 		if(shape.split < 0 && shape.filter < 0) {
@@ -695,6 +717,7 @@ static inline Instruction const* length_op(Thread& thread, Instruction const& in
 			thread.traces.OptBind(thread, OUT(c));
 		}
 	}
+#endif
 	else if(((Object const&)a).hasAttributes()) { 
 		return GenericDispatch(thread, inst, Strings::length, a, inst.c); 
 	} else {
@@ -709,8 +732,16 @@ static inline Instruction const* get_op(Thread& thread, Instruction const& inst)
 
     if(GetFast(thread, a, b, OUT(c)))
         return &inst+1;
-    else
-        return GetSlow( thread, inst, a, b, OUT(c) );
+    else {
+        try {
+            return GetSlow( thread, inst, a, b, OUT(c) );
+        }
+        catch(RuntimeError const& e) {
+            return StopDispatch(thread, inst, thread.internStr(
+                e.what().c_str()), 
+                inst.c);
+        }
+    }
 }
 
 static inline Instruction const* set_op(Thread& thread, Instruction const& inst) {
@@ -719,6 +750,7 @@ static inline Instruction const* set_op(Thread& thread, Instruction const& inst)
 	DECODE(a); DECODE(b); DECODE(c);
 	BIND(b);
 
+#ifdef EPEE
 	if(a.isFuture() && (c.isVector() || c.isFuture())) {
 		if(b.isInteger() && ((Integer const&)b).length() == 1) {
 			OUT(c) = thread.traces.EmitSStore(thread.frame.environment, c, ((Integer&)b)[0], a);
@@ -729,6 +761,7 @@ static inline Instruction const* set_op(Thread& thread, Instruction const& inst)
 			return &inst+1;
 		}
 	}
+#endif
 
 	BIND(a);
 	BIND(c);
@@ -771,6 +804,7 @@ static inline Instruction const* getsub_op(Thread& thread, Instruction const& in
             Element(a, b.i-1, OUT(c)); return &inst+1; }
 	}
 
+#ifdef EPEE
 	if( thread.traces.isTraceable(a, b) 
 		&& thread.traces.futureType(b) == Type::Logical 
 		&& thread.traces.futureShape(a) == thread.traces.futureShape(b)) {
@@ -778,9 +812,11 @@ static inline Instruction const* getsub_op(Thread& thread, Instruction const& in
 		thread.traces.OptBind(thread, OUT(c));
 		return &inst+1;
 	}
+#endif
 
 	BIND(a);
 
+#ifdef EPEE
 	if(thread.traces.isTraceable(a, b) 
 		&& (thread.traces.futureType(b) == Type::Integer 
 			|| thread.traces.futureType(b) == Type::Double)) {
@@ -788,7 +824,8 @@ static inline Instruction const* getsub_op(Thread& thread, Instruction const& in
 		thread.traces.OptBind(thread, OUT(c));
 		return &inst+1;
 	}
-	
+#endif	
+
     BIND(b);
 
     if(a.isVector() && !((Object const&)a).hasAttributes() &&
@@ -819,7 +856,8 @@ static inline Instruction const* setsub_op(Thread& thread, Instruction const& in
 	// a = value, b = index, c = dest 
 	DECODE(a); DECODE(b); DECODE(c); 
     BIND(b); BIND(c);
-	
+
+#ifdef EPEE	
 	if(a.isFuture() && (c.isVector() || c.isFuture())) {
 		if(b.isInteger() && ((Integer const&)b).length() == 1) {
 			OUT(c) = thread.traces.EmitSStore(thread.frame.environment, c, ((Integer&)b)[0], a);
@@ -830,6 +868,7 @@ static inline Instruction const* setsub_op(Thread& thread, Instruction const& in
 			return &inst+1;
 		}
 	}
+#endif
 
 	BIND(a);
 
@@ -932,7 +971,9 @@ static inline Instruction const* setenv_op(Thread& thread, Instruction const& in
         Closure::Init(OUT(c), ((Closure const&)a).prototype(), value);
     }
     else {
-        _error("target of assignment does not have an enclosing environment");
+        return StopDispatch(thread, inst, thread.internStr(
+            "target of assignment does not have an enclosing environment"), 
+            inst.c);
     }
     return &inst+1;
 }
@@ -959,6 +1000,7 @@ static inline Instruction const* getattr_op(Thread& thread, Instruction const& i
         }
 		return &inst+1;
 	}
+    printf("%d %d\n", a.type(), b.type());
 	_error("Invalid attrget operation");
 }
 
@@ -996,17 +1038,24 @@ static inline Instruction const* setattr_op(Thread& thread, Instruction const& i
             }
         }
         else {
+            Value v = a;
+            if(name == Strings::rownames && v.isInteger()) {
+                Integer const& i = (Integer const&)v;
+                if(i.length() == 2 && Integer::isNA(i[0])) {    
+                    v = Sequence((int64_t)1,1,abs(i[1]));
+                }
+            }
             if(o.isEnvironment()) {
                 Dictionary* d = ((REnvironment&)o).environment()->getAttributes();
                 d = d ? d->clone(1) : new Dictionary(1);
-                d->insert(name) = a;
+                d->insert(name) = v;
                 ((REnvironment&)o).environment()->setAttributes(d);
             }
             else {
                 Dictionary* d = o.hasAttributes()
                             ? o.attributes()->clone(1)
                             : new Dictionary(1);
-                d->insert(name) = a;
+                d->insert(name) = v;
                 o.attributes(d);
             }
         }
@@ -1063,23 +1112,38 @@ static inline Instruction const* strip_op(Thread& thread, Instruction const& ins
 static inline Instruction const* as_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
 	DECODE(a); BIND(a);
-	String type = ((Character const&)CONSTANT(inst.b)).s;
-    if(type == Strings::Null)
-        OUT(c) = As<Null>(thread, a);
-    else if(type == Strings::Logical)
-        OUT(c) = As<Logical>(thread, a);
-    else if(type == Strings::Integer)
-        OUT(c) = As<Integer>(thread, a);
-    else if(type == Strings::Double)
-        OUT(c) = As<Double>(thread, a);
-    else if(type == Strings::Character)
-        OUT(c) = As<Character>(thread, a);
-    else if(type == Strings::List)
-        OUT(c) = As<List>(thread, a);
-    else if(type == Strings::Raw)
-        OUT(c) = As<Raw>(thread, a);
-    else
-        _error("as not yet defined for this type");
+    DECODE(b); BIND(b);
+    if(!b.isCharacter1()) {
+        return StopDispatch(thread, inst, thread.internStr(
+            "invalid type argument to 'as'"), 
+            inst.c);
+    }
+	String type = b.s;
+    try {
+        if(type == Strings::Null)
+            OUT(c) = As<Null>(thread, a);
+        else if(type == Strings::Logical)
+            OUT(c) = As<Logical>(thread, a);
+        else if(type == Strings::Integer)
+            OUT(c) = As<Integer>(thread, a);
+        else if(type == Strings::Double)
+            OUT(c) = As<Double>(thread, a);
+        else if(type == Strings::Character)
+            OUT(c) = As<Character>(thread, a);
+        else if(type == Strings::List)
+            OUT(c) = As<List>(thread, a);
+        else if(type == Strings::Raw)
+            OUT(c) = As<Raw>(thread, a);
+        else
+            return StopDispatch(thread, inst, thread.internStr(
+                "'as' not yet defined for this type"), 
+                inst.c);
+    }
+    catch(RuntimeError const& e) {
+        return StopDispatch(thread, inst, thread.internStr(
+                e.what()), 
+                inst.c);
+    }
 
     // Add support for futures
 	return &inst+1; 
@@ -1090,7 +1154,6 @@ static inline Instruction const* as_op(Thread& thread, Instruction const& inst) 
 static inline Instruction const* env_new_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
     DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
 
     if(!a.isEnvironment())
         _error("'enclos' must be an environment");
@@ -1124,11 +1187,15 @@ static inline Instruction const* env_get_op(Thread& thread, Instruction const& i
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
-    if(!a.isEnvironment())
-        _error("invalid 'envir' argument");
-
+    if(!a.isEnvironment()) {
+        return StopDispatch(thread, inst, thread.internStr(
+            "invalid 'envir' argument to .getenv"), 
+            inst.c);
+    }
     if(!b.isCharacter() || b.pac != 1) {
-        _error("invalid exists argument");
+        return StopDispatch(thread, inst, thread.internStr(
+            "invalid 'x' argument to .getenv"), 
+            inst.c);
     }
 
     OUT(c) = ((REnvironment const&)a).environment()->
@@ -1197,11 +1264,13 @@ static inline Instruction const* ifelse_op(Thread& thread, Instruction const& in
 		OUT(c) = c.d ? b : a;
 		return &inst+1; 
 	}
+#ifdef EPEE
 	if(thread.traces.isTraceable<IfElse>(a,b,c)) {
 		OUT(c) = thread.traces.EmitIfElse(thread.frame.environment, a, b, c);
 		thread.traces.OptBind(thread, OUT(c));
 		return &inst+1;
 	}
+#endif
 	BIND(a); BIND(b); BIND(c);
 
     IfElseDispatch(thread, NULL, b, a, c, OUT(c));
@@ -1210,6 +1279,7 @@ static inline Instruction const* ifelse_op(Thread& thread, Instruction const& in
 
 static inline Instruction const* split_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
+#ifdef EPEE
 	DECODE(a); BIND(a);
 	DECODE(b);
 	DECODE(c);
@@ -1220,6 +1290,7 @@ static inline Instruction const* split_op(Thread& thread, Instruction const& ins
 		return &inst+1;
 	}
 	BIND(a); BIND(b); BIND(c);
+#endif
 
 	_error("split not defined in scalar yet");
 	return &inst+1; 
@@ -1232,7 +1303,8 @@ static inline Instruction const* vector_op(Thread& thread, Instruction const& in
 	String stype = As<Character>(thread, a)[0];
 	Type::Enum type = string2Type( stype );
 	int64_t l = As<Integer>(thread, b)[0];
-	
+
+#ifdef EPEE	
 	if(thread.state.epeeEnabled 
 		&& (type == Type::Double || type == Type::Integer || type == Type::Logical)
 		&& l >= TRACE_VECTOR_WIDTH) {
@@ -1240,6 +1312,7 @@ static inline Instruction const* vector_op(Thread& thread, Instruction const& in
 		thread.traces.OptBind(thread, OUT(c));
 		return &inst+1;
 	}
+#endif
 
 	if(type == Type::Logical) {
 		Logical v(l);
@@ -1277,11 +1350,13 @@ static inline Instruction const* seq_op(Thread& thread, Instruction const& inst)
 
     int64_t len = As<Integer>(thread, a)[0];
 
+#ifdef EPEE
     if(len >= TRACE_VECTOR_WIDTH) {
         OUT(c) = thread.traces.EmitSequence(thread.frame.environment, len, 1LL, 1LL);
         thread.traces.OptBind(thread, OUT(c));
         return &inst+1;
     }
+#endif
 
     OUT(c) = Sequence(1LL, 1LL, len);
     return &inst+1;
@@ -1297,12 +1372,14 @@ static inline Instruction const* index_op(Thread& thread, Instruction const& ins
 	int64_t n = As<Integer>(thread, c)[0];
 	int64_t each = As<Integer>(thread, b)[0];
 	int64_t len = As<Integer>(thread, a)[0];
-	
+
+#ifdef EPEE	
 	if(len >= TRACE_VECTOR_WIDTH) {
 		OUT(c) = thread.traces.EmitIndex(thread.frame.environment, len, (int64_t)n, (int64_t)each);
 		thread.traces.OptBind(thread, OUT(c));
 		return &inst+1;
 	}
+#endif
 
 	OUT(c) = Repeat((int64_t)n, (int64_t)each, len);
 	return &inst+1;

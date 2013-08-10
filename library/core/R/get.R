@@ -8,7 +8,7 @@
 
 get <- function(x, envir, mode, inherits) {
     mode <- .mode(mode)
-    
+
     if (!is.nil(.get(envir, x)) 
         && (any(match(typeof(envir[[x]]), mode, 0, NULL)) || mode == "any")) {
         return(envir[[x]])

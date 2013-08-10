@@ -1,3 +1,3 @@
 
-sort <- function(x) .External(sort(x))
+sort <- function(x) .External('sort', x)
 

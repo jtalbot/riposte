@@ -220,7 +220,7 @@ std::string stringify(State const& state, Value const& value, std::vector<int64_
             else if(renv.environment() == state.empty)
                 result = std::string("<environment: R_EmptyEnv>");
             else
-                result = std::string("<environment: ") + intToHexStr((int64_t)renv.environment()) + ">";
+                result = std::string("<environment: ") + "0x" + intToHexStr((int64_t)renv.environment()) + ">";
             // TODO: avoid recursion here
             /*if(state.format == State::RiposteFormat)
             {
