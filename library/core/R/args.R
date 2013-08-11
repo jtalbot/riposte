@@ -1,6 +1,6 @@
 
 args <- function(name) {
-    if(is.character(name)) {
+    if(is.character.default(name)) {
         name <- get(name, .frame(1L), 'closure', TRUE)
     }
 

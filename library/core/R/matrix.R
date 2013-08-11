@@ -19,8 +19,8 @@ matrix <- function(data, nrow, ncol, byrow, dimnames, missing.nrow, missing.ncol
     if(length(data) < nrow*ncol)
 		data <- rep_len(data, nrow*ncol)
 
-    if(length(r) > nrow*ncol)
-        r <- r[seq_len(nrow*ncol)]
+    if(length(data) > nrow*ncol)
+        data <- data[seq_len(nrow*ncol)]
 
     if(byrow)
 		data <- data[nrow*(index(ncol,1L,length(data))-1L)+

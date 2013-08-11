@@ -13,10 +13,10 @@
         .Map('grep_map', 
             list(
                 .External('regex_compile',
-                    as.character(pattern), 
+                    as.character.default(pattern), 
                     identical(ignore.case, TRUE),
                     identical(fixed, TRUE)),
-                as.character(text)
+                as.character.default(text)
             ), 'logical')
     }
 }
@@ -57,10 +57,10 @@ grep <- function(pattern, x, ignore.case, value, perl, fixed, useBytes, invert)
         .Map('regex_map', 
             list(
                 .External('regex_compile',
-                    as.character(pattern), 
+                    as.character.default(pattern), 
                     identical(ignore.case, TRUE),
                     identical(fixed, TRUE)),
-                as.character(text)
+                as.character.default(text)
             ), .characters('integer', 'integer'))
     }
 }
@@ -88,10 +88,10 @@ regexpr <- function(pattern, text, ignore.case, perl, fixed, useBytes)
         .Map('gregex_map', 
             list(
                 .External('regex_compile',
-                    as.character(pattern), 
+                    as.character.default(pattern), 
                     identical(ignore.case, TRUE),
                     identical(fixed, TRUE)),
-                as.character(text)
+                as.character.default(text)
             ), .characters('list', 'list'))
     }
 }
@@ -114,11 +114,11 @@ sub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
     .Map('sub_map',
         list(
             .External('regex_compile',
-                as.character(pattern), 
+                as.character.default(pattern), 
                 identical(ignore.case, TRUE),
                 identical(fixed, TRUE)),
-            as.character(text),
-            as.character(replacement)
+            as.character.default(text),
+            as.character.default(replacement)
         ), .characters('character'))[[1]]
 }
 
@@ -127,11 +127,11 @@ gsub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
     .Map('gsub_map',
         list(
             .External('regex_compile',
-                as.character(pattern), 
+                as.character.default(pattern), 
                 identical(ignore.case, TRUE),
                 identical(fixed, TRUE)),
-            as.character(text),
-            as.character(replacement)
+            as.character.default(text),
+            as.character.default(replacement)
         ), .characters('character'))[[1]]
 }
 

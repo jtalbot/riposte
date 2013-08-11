@@ -12,6 +12,8 @@
 
     # set some things that I don't yet know where R sets them
     options(verbose=FALSE)
+    options(width=80L)
+    options(ts.eps=1e-05)
 
     load <- function(name) {
         env <- core::library(name, baseenv())
@@ -22,8 +24,12 @@
     }
 
     load('tools')
+    load('utils')
     load('stats')
     load('datasets')
+    load('methods')
+    load('grDevices')
+    load('graphics')
 
     "Loaded base library"
 })()

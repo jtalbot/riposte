@@ -22,7 +22,7 @@ class <- function(x) {
         x
     }
     else {
-        value <- as.character(value)
+        value <- as.character.default(value)
         if(length(value) == 1L) {
             switch(value,
                 'logical' = as.logical(x),
@@ -30,16 +30,16 @@ class <- function(x) {
                 'double' = as.double(x),
                 'numeric' = as.double(x),
                 'complex' = as.complex(x),
-                'character' = as.character(x),
+                'character' = as.character.default(x),
                 'list' = as.list(x),
                 {
-                    attr(x, 'class') <- as.character(value)
+                    attr(x, 'class') <- as.character.default(value)
                     x
                 }
                 )
         }
         else {
-            attr(x, 'class') <- as.character(value)
+            attr(x, 'class') <- as.character.default(value)
             x
         }
     }
@@ -65,7 +65,7 @@ oldClass <- function(x) {
     if(length(value)==0L)
         attr(x, 'class') <- NULL
     else
-        attr(x, 'class') <- as.character(value)
+        attr(x, 'class') <- as.character.default(value)
     x
 }
 

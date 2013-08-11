@@ -5,5 +5,5 @@ Sys.getlocale <- function(category) {
 
 Sys.setlocale <- function(category, locale) {
     .Map('getlocale_map',
-        list(as.character(category), as.integer(locale)), 'character')[[1]]
+        list(as.character.default(category), as.integer(locale)), 'character')[[1]]
 }

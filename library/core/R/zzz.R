@@ -247,7 +247,9 @@ primitives <- .characters(
 
     # character.R
     'as.character',
+    'as.character.default',
     'is.character',
+    'is.character.default',
 
     # class.R
     'class',
@@ -558,6 +560,11 @@ internals <- .characters(
     # charmatch.R
     'charmatch',
 
+    # chartr.R
+    'chartr',
+    'tolower',
+    'toupper',
+
     # class.R
     'inherits',
 
@@ -602,6 +609,9 @@ internals <- .characters(
     # duplicated.R
     'duplicated',
     'anyDuplicated',
+
+    # encodeString.R
+    'encodeString',
 
     # environment.R
     'environment',

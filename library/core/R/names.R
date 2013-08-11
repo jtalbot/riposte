@@ -12,7 +12,7 @@ names.default <- function(x) attr(x, 'names')
     else {
         if(length(value) != length(x))
             .stop("'names' attributes must be the same length as the vector")
-        attr(x, 'names') <- as.character(value)
+        attr(x, 'names') <- as.character.default(value)
     }
     x
 }

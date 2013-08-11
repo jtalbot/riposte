@@ -1,4 +1,4 @@
 
 file.exists <- function(files) {
-    .Map('fileexists_map', list(as.character(files)), 'logical')[[1]]
+    .Map('fileexists_map', list(as.character.default(files)), 'logical')[[1]]
 }

@@ -22,8 +22,8 @@ quote <- function(...) {
                 n <- .get(env, '__names__')
                 if(is.list(.get(env,'__dots__'))) {
                     for(k in seq_len(length(d))) {
-                        expr[[j]] <- d[[k]]
-                        if(is.character(.get(env, '__names__')))
+                        expr[[j]] <- .pr_expr(d, k)
+                        if(is.character.default(.get(env, '__names__')))
                             attr(expr, 'names')[[j]] <- n[[k]]
                         j <- j+1L
                     }

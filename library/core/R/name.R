@@ -2,7 +2,7 @@
 as.symbol <- as.name <- function(x) {
     if(length(x) != 1 || !is.atomic(x))
         .stop("invalid type/length in vector allocation")
-    x <- as.character(x)
+    x <- as.character.default(x)
     if(is.na(x))
         x <- 'NA'
     if(identical(x, ''))

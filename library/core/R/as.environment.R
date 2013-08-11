@@ -1,7 +1,7 @@
 
 .list2env <- function(l) {
     n <- names(l)
-    if(length(l) > 0 && (!is.character(n) || length(n) != length(l)))
+    if(length(l) > 0 && (!is.character.default(n) || length(n) != length(l)))
         .stop("names(x) must be a character vector of the same length as x")
 
     e <- .env_new(emptyenv())

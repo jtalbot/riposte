@@ -594,8 +594,14 @@ BINARY_BYTECODES(SLOW_DISPATCH_DEFN)
 
 Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const& a, Value const& b, Value& c) {
     BIND(a); BIND(b);
-    
-    if(!((Object const&)a).hasAttributes()) {
+   
+    // This case seems wrong, but some base code relies on this behavior. 
+    if(a.isNull()) {
+        OUT(c) = Null::Singleton();
+        return &inst+1;
+    }
+
+    else if(!((Object const&)a).hasAttributes()) {
 	    if(a.isVector()) {
             Vector const& v = (Vector const&)a;
 		    if(b.isInteger()) {

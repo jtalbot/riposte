@@ -1,5 +1,13 @@
 
-as.character <- function(x, ...) as(strip(x), 'character')
+as.character <- function(x, ...) 
+    UseMethod('as.character', x)
 
-is.character <- function(x) .type(x) == 'character'
+as.character.default <- function(x, ...)
+    as(strip(x), 'character')
+
+is.character <- function(x) 
+    UseMethod('is.character', x)
+
+is.character.default <- function(x)
+    .type(x) == 'character'
 

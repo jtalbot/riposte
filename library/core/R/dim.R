@@ -22,7 +22,7 @@ dim.default <- function(x) attr(x, 'dim')
         if(any(value < 0L))
             .stop("the dims contain negative values")
         if(prod(value) != length(x))
-            .stop(sprintf("dims [product %d] do not match the length of object[%d]", prod(value), length(x)))
+            .stop(sprintf("dims [product %d] do not match the length of object [%d]", prod(value), length(x)))
 
         attr(x, 'dim') <- value 
     }

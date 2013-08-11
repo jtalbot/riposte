@@ -66,7 +66,7 @@ UseMultiMethod <- function(generic, group, ...)
     for(i in seq_len(length(args)))
         calls[[i]] <- .find.group.method(generic, group, args[[i]])
 
-    funcs <- as.character(
+    funcs <- as.character.default(
         lapply(calls, function(x) 
             if(is.null(x)) 'NULL' else strip(x[[1]])))
 

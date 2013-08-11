@@ -108,9 +108,14 @@ UseMethod <- function(generic, object)
 
     names <- attr(call,'names')
     call <- strip(call)
-    qq <- list(as.name('quote'), object)
-    attr(qq, 'class') <- 'call'
-    call[[2L]] <- qq 
+    if(!is.null(attr(object,'class'))) {
+        qq <- list(as.name('quote'), object)
+        attr(qq, 'class') <- 'call'
+        call[[2L]] <- qq
+    }
+    else {
+        call[[2L]] <- object
+    }
     attr(call, 'names') <- names
     attr(call, 'class') <- 'call'
 
@@ -127,17 +132,6 @@ NextMethod <- function(generic, object, ...) {
     if(missing(generic))
         generic <- parent.frame(1L)[['.Generic']]
 
-    formals <- names(sys.function(sys.parent(1))[['formals']])
-
-    call <- list(as.name(generic))
-    names <- ''
-    for(i in seq_len(length(formals))) {
-        call[[length(call)+1L]] <- as.name(formals[[i]])
-        names[[length(names)+1L]] <- formals[[i]]
-    }
-    names(call) <- names
-    class(call) <- 'call'
-
     class <- .frame(2L)[['.Class']]
     callenv <- .frame(2L)[['.GenericCallEnv']]
     defenv <- .frame(2L)[['.GenericDefEnv']]
@@ -146,12 +140,12 @@ NextMethod <- function(generic, object, ...) {
         generic,
         generic,
         class, 
-        call,
+        .frame(2L)[['__call__']], 
         callenv,
         defenv,
         FALSE,
         TRUE)
-    
+  
     if(!is.null(call)) {
         promise('p', call, .frame(2L), .getenv(NULL))
         return(p)

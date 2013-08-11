@@ -1,6 +1,6 @@
 
 substr <- function(x, start, stop) {
-    text <- as.character(x)
+    text <- as.character.default(x)
    
     start <- pmin(pmax(as.integer(start)-1L, 0L), nchar(text))
     length <- pmax(as.integer(stop)-start, 0L)
@@ -9,8 +9,8 @@ substr <- function(x, start, stop) {
 }
 
 `substr<-` <- function(x, start, stop, value) {
-    text <- as.character(x)
-    repl <- as.character(value)
+    text <- as.character.default(x)
+    repl <- as.character.default(value)
  
     start <- pmin(pmax(as.integer(start)-1L, 0L), nchar(text))
     length <- pmin(pmax(as.integer(stop)-start, 0L), nchar(repl))

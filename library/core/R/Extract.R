@@ -7,10 +7,10 @@
         return(x)
     if(...() != 1L)
         .stop("incorrect number of dimensions")
-    
+
     i <- ..1
-    if(is.character(i)) {
-        i <- .semijoin(i, as.character(names(x)))
+    if(is.character.default(i)) {
+        i <- .semijoin(i, as.character.default(names(x)))
         i[i==0L] <- length(x)+1
     }
     else if(is.null(i)) {
@@ -31,7 +31,7 @@
 }
 
 `[.environment` <- function(x, i, ...) {
-    if(!is.character(i))
+    if(!is.character.default(i))
         .stop('wrong arguments for subsetting an environment')
     strip(x)[[strip(i)]]
 }
@@ -74,10 +74,10 @@
                 idx[[i]] <- vector('integer',0)
             else if(is.logical(id))
                 idx[[i]] <- which(id)
-            else if(is.character(id)) {
+            else if(is.character.default(id)) {
                 if(is.null(attr(x, 'dimnames')))
                     .stop("no 'dimnames' attribute for array")
-                r <- .semijoin(id, as.character(attr(x,'dimnames'))[[i]])
+                r <- .semijoin(id, as.character.default(attr(x,'dimnames'))[[i]])
                 if(any(r==0L))
                     .stop("subscript out of bounds")
                 idx[[i]] <- r
@@ -135,7 +135,9 @@
 #}
 
 `[[.default` <- function(x, i, ..., exact = TRUE) {
-    if(is.character(i)) {
+    if(is.null(x))
+        NULL
+    else if(is.character.default(i)) {
         i <- which(names(x)==i)
         if(length(i)==0)
             .stop("subscript out of bounds") 
@@ -152,7 +154,7 @@
 
 `[[.call` <- `[[.expression` <- `[[.list` <- `[[.pairlist` <- 
     function(x, i, ..., exact = TRUE) {
-    if(is.character(i)) {
+    if(is.character.default(i)) {
         i <- which(names(x)==i)
         if(length(i)==0)
             NULL
@@ -168,7 +170,7 @@
 }
 
 `[[.environment` <- function(x, i, ...) {
-    if(!is.character(i) || length(i) != 1L)
+    if(!is.character.default(i) || length(i) != 1L)
         .stop('wrong arguments for subsetting an environment')
     strip(x)[[strip(i)]]
 }
@@ -196,9 +198,13 @@
 
 `[<-.default` <- function(x, i, ..., value) {
     nn <- ''
-    if(is.character(i)) {
+    if(missing(i)) {
+        x[seq_len(length(x))] <- strip(value)
+        return(x)
+    }
+    else if(is.character.default(i)) {
         i <- nn <- strip(i)
-        i <- .semijoin(i, as.character(names(x)))
+        i <- .semijoin(i, as.character.default(names(x)))
         i[i==0L] <- length(x)+seq_len(sum(i==0L))
         
         if(is.null(attr(x,'names')))
@@ -218,7 +224,7 @@
 }
 
 `[<-.environment` <- function(x, i, ..., value) {
-    if(is.character(i))
+    if(is.character.default(i))
         `[<-`(strip(x), strip(i), value)
     else
         .stop('wrong args for environment subassignment')
@@ -231,7 +237,7 @@
 
 `[[<-.default` <- function(x, i, ..., value) {
     nn <- ''
-    if(is.character(i)) {
+    if(is.character.default(i)) {
         i <- nn <- strip(i)
         i <- which(names(x) == i)
         if(length(i)==0)
@@ -253,7 +259,7 @@
 }
 
 `[[<-.environment` <- function(x, i, ..., value) {
-    if(is.character(i))
+    if(is.character.default(i))
         `[[<-`(strip(x), strip(i), value)
     else
         .stop('wrong args for environment subassignment')

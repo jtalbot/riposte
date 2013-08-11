@@ -23,9 +23,9 @@ options <- (function() {
             }
 
             if(!is.null(n))
-                nuargs <- as.character(strip(args)[n == ''])
+                nuargs <- as.character.default(strip(args)[n == ''])
             else
-                nuargs <- as.character(strip(args))
+                nuargs <- as.character.default(strip(args))
             uargs <- Options[nuargs]
             names(uargs) <- nuargs
  

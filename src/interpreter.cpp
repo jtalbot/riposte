@@ -34,7 +34,9 @@ static inline Instruction const* call_op(Thread& thread, Instruction const& inst
 	Heap::Global.collect(thread.state);
 	DECODE(a); BIND(a);
 	if(!a.isClosure())
-		_error(std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n");
+        return StopDispatch(thread, inst, thread.internStr(
+		    (std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n").c_str()),
+            inst.c);
 	
     Closure const& func = (Closure const&)a;
 	CompiledCall const& call = thread.frame.code->calls[inst.b];
@@ -48,7 +50,9 @@ static inline Instruction const* fastcall_op(Thread& thread, Instruction const& 
 	Heap::Global.collect(thread.state);
 	DECODE(a); BIND(a);
 	if(!a.isClosure())
-		_error(std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n");
+        return StopDispatch(thread, inst, thread.internStr(
+		    (std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n").c_str()),
+            inst.c);
 	
     Closure const& func = (Closure const&)a;
 	CompiledCall const& call = thread.frame.code->calls[inst.b];
@@ -139,39 +143,52 @@ static inline Instruction const* jmp_op(Thread& thread, Instruction const& inst)
 static inline Instruction const* jc_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
 	DECODE(c); BIND(c);
-	if(c.isLogical1()) {
-		if(Logical::isTrue(c.c)) return &inst+inst.a;
-		else if(Logical::isFalse(c.c)) return &inst+inst.b;
-		else if((&inst+1)->bc != ByteCode::stop) return &inst+1;
-        else return StopDispatch(thread, inst, thread.internStr(
+    Logical::Element cond;
+    if(c.isLogical1())
+        cond = c.c;
+    else if(c.isInteger1())
+        cond = Cast<Integer, Logical>(thread, c.i);
+    else if(c.isDouble1())
+        cond = Cast<Double, Logical>(thread, c.i);
+    // It breaks my heart to allow non length-1 vectors,
+    // but this seems to be somewhat widely used, even
+    // in some of the recommended R packages.
+    else if(c.isLogical()) {
+        if(((Logical const&)c).length() > 0)
+            cond = ((Logical const&)c)[0];
+        else
+            return StopDispatch(thread, inst, thread.internStr(
+            "conditional is of length zero"), 
+            inst.c);
+    }
+    else if(c.isInteger()) {
+        if(((Integer const&)c).length() > 0)
+            cond = Cast<Integer, Logical>(thread, ((Integer const&)c)[0]);
+        else
+            return StopDispatch(thread, inst, thread.internStr(
+            "conditional is of length zero"), 
+            inst.c);
+    }
+    else if(c.isDouble()) {
+        if(((Double const&)c).length() > 0)
+            cond = Cast<Double, Logical>(thread, ((Double const&)c)[0]);
+        else
+            return StopDispatch(thread, inst, thread.internStr(
+            "conditional is of length zero"), 
+            inst.c);
+    }
+    else {
+        return StopDispatch(thread, inst, thread.internStr(
+                    "conditional argument is not interpretable as logical"), 
+                    inst.c);
+    }
+    
+    if(Logical::isTrue(cond)) return &inst+inst.a;
+    else if(Logical::isFalse(cond)) return &inst+inst.b;
+    else if((&inst+1)->bc != ByteCode::stop) return &inst+1;
+    else return StopDispatch(thread, inst, thread.internStr(
             "NA where TRUE/FALSE needed"), 
             inst.c);
-	} else if(c.isInteger1()) {
-		if(Integer::isNA(c.i)) {
-            if((&inst+1)->bc != ByteCode::stop)
-                return &inst+1;
-            else 
-                return StopDispatch(thread, inst, thread.internStr(
-                    "NA where TRUE/FALSE needed"), 
-                    inst.c);
-        }
-		else if(c.i != 0) return &inst+inst.a;
-		else return & inst+inst.b;
-	} else if(c.isDouble1()) {
-		if(Double::isNA(c.d)) {
-            if((&inst+1)->bc != ByteCode::stop)
-                return &inst+1;
-            else 
-                return StopDispatch(thread, inst, thread.internStr(
-                    "NA where TRUE/FALSE needed"), 
-                    inst.c);
-        }
-		else if(c.d != 0) return &inst+inst.a;
-		else return & inst+inst.b;
-	}
-    return StopDispatch(thread, inst, thread.internStr(
-             "Need single element logical in conditional jump"), 
-             inst.c);
 }
 
 static inline Instruction const* branch_op(Thread& thread, Instruction const& inst) {
@@ -646,17 +663,31 @@ static inline Instruction const* pr_expr_op(Thread& thread, Instruction const& i
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
-    // TODO: check types
+    if(a.isEnvironment() && b.isCharacter() && ((Character const&)b).length() == 1) {
+        REnvironment const& env = ((REnvironment const&)a);
+	    String s = ((Character const&)b).s;
 
-    REnvironment const& env = ((REnvironment const&)a);
-	String s = ((Character const&)b).s;
-
-    // TODO: must support ... & ..n
-	Value v = env.environment()->get(s);
-    if(v.isPromise())
-        v = ((Promise const&)v).code()->expression;
-    OUT(c) = v;
-    return &inst+1;
+	    Value v = env.environment()->get(s);
+        if(v.isPromise())
+            v = ((Promise const&)v).code()->expression;
+        OUT(c) = v;
+        return &inst+1;
+    }
+    else if(a.isList() && b.isInteger1()) {
+        List const& l = ((List const&)a);
+        int64_t i = ((Integer const&)b).i - 1;
+        if(i >= 0 && i < l.length()) {
+            Value v = l[i];
+            if(v.isPromise())
+                v = ((Promise const&)v).code()->expression;
+            OUT(c) = v;
+            return &inst+1;
+        }
+    }
+    printf("%d %d\n", a.type(), b.type());
+    return StopDispatch(thread, inst, thread.internStr(
+                "invalid pr_expr expression"), 
+                inst.c);
 }
 
 static inline Instruction const* pr_env_op(Thread& thread, Instruction const& inst) {

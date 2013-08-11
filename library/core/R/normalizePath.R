@@ -1,7 +1,7 @@
 
 normalizePath <- function(path, winslash, mustWork) {
     r <- .Map('realpath_map', 
-        list(as.character(path), as.character(winslash)), c('character'))[[1]]
+        list(as.character.default(path), as.character.default(winslash)), c('character'))[[1]]
     
     mustWork <- as.logical(mustWork)
     if(.isTRUE(mustWork) && any(is.na(r)))

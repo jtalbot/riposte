@@ -12,7 +12,7 @@
 }
 
 .characters <- function(...) {
-    as.character(list(...))
+    as.character.default(list(...))
 }
 
 .nargs <- function() {
@@ -63,15 +63,15 @@
 }
 
 .escape <- function(x) {
-    .Map("escape_map", list(as.character(x)), 'character')[[1L]]
+    .Map("escape_map", list(as.character.default(x)), 'character')[[1L]]
 }
 
 .pconcat <- function(x,y) {
-    .Map("concat_map", list(as.character(x), as.character(y)), 'character')[[1L]]
+    .Map("concat_map", list(as.character.default(x), as.character.default(y)), 'character')[[1L]]
 }
 
 .concat <- function(x) {
-    .Fold("concat", list(as.character(x)), 'character')[[1L]]
+    .Fold("concat", list(as.character.default(x)), 'character')[[1L]]
 }
 
 # argument check functions...

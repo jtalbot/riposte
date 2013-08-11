@@ -10,7 +10,7 @@ as.vector <- function(x, mode) {
 		complex = as.complex(x),
 		character = as(strip(x),"character"),
         symbol = {
-            x <- as.character(strip(x))[[1]]
+            x <- as.character.default(strip(x))[[1]]
             class(x) <- 'name'
             x
             },
@@ -36,7 +36,7 @@ is.vector <- function(x, mode)
         real=is.real(x),
         double=is.double(x),
         complex=is.complex(x),
-        character=is.character(x),
+        character=is.character.default(x),
         symbol=is.symbol(x),
         environment=is.environment(x),
         list=is.list(x),

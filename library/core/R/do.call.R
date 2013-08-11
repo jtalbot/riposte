@@ -3,7 +3,7 @@ do.call <- function(what, args, envir) {
     if(is.function(what)) {
         # do nothing
     }
-    else if(is.character(what)) {
+    else if(is.character.default(what)) {
         what <- as.name(what)
     }
     # otherwise, assume it's an expression that will evaluate to a function
