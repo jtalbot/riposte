@@ -56,7 +56,13 @@ library <- function(., parent.env) {
 }
 
 `::` <- function(a, b) {
-    getRegisteredNamespace(strip(.pr_expr(.getenv(NULL), 'a')))[[strip(.pr_expr(.getenv(NULL), 'b'))]]
+    envname <- strip(.pr_expr(.getenv(NULL), 'a'))
+    name <- strip(.pr_expr(.getenv(NULL), 'b'))
+    env <- getRegisteredNamespace(envname)
+    if(is.nil(.get(env, name)))
+        .stop(sprintf("'%s' is not an exported object from 'namespace:%s'",name,envname))
+    else
+        .get(env,name)
 }
 
 cummean <- function(x) UseGroupMethod('cummean', 'Math', x)

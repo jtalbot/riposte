@@ -21,7 +21,7 @@ get <- function(x, envir, mode, inherits) {
                 return(envir[[x]])
         }
     }
-    .stop('object not found')
+    .stop(sprintf("object '%s' not found",x))
 }
 
 mget <- function(x, envir, mode, ifnotfound, inherits) {

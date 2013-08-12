@@ -77,7 +77,7 @@
             else if(is.character.default(id)) {
                 if(is.null(attr(x, 'dimnames')))
                     .stop("no 'dimnames' attribute for array")
-                r <- .semijoin(id, as.character.default(attr(x,'dimnames'))[[i]])
+                r <- .semijoin(id, as.character.default(attr(x,'dimnames')[[i]]))
                 if(any(r==0L))
                     .stop("subscript out of bounds")
                 idx[[i]] <- r

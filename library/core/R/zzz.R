@@ -161,6 +161,9 @@ primitives <- .characters(
     '(',
     '{',
 
+    # Primitive.R
+    '.Primitive',
+
     # Round.R
     'floor',
     'floor.default',
@@ -546,6 +549,9 @@ internals <- .characters(
     'basename',
     'dirname',
 
+    # bindenv.R
+    'environmentIsLocked',
+
     # browser.R
     'browserText',
     'browserCondition',
@@ -556,6 +562,7 @@ internals <- .characters(
 
     # cbind.R
     'cbind',
+    'rbind',
 
     # charmatch.R
     'charmatch',
@@ -725,6 +732,9 @@ internals <- .characters(
 
     # options.R
     'options',
+
+    # order.R
+    'order',
 
     # parse
     'parse',

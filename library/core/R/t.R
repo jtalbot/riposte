@@ -6,6 +6,10 @@ t.default <- function(x) {
         x
     }
     else if(length(d) == 2L) {
+        nrow <- d[[1L]]
+        ncol <- d[[2L]]
+        x <- x[nrow*(index(ncol,1L,length(x))-1L)+
+               index(nrow,ncol,length(x))]
         attr(x, 'dim') <- c(d[[2L]], d[[1L]])
         x
     }

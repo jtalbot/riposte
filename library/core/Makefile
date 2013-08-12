@@ -7,7 +7,7 @@ CFLAGS := -Wall -fPIC
 LFLAGS := -dynamiclib -L/opt/local/lib
 LIBS := -lpthread -ltre -lprofiler
 
-SRC := core.cpp print.cpp primitive.cpp connections.cpp datetime.cpp fileinfo.cpp getwd.cpp grep.cpp sprintf.cpp substr.cpp getenv.cpp setenv.cpp files.cpp basename.cpp locales.cpp parse.cpp chartr.cpp
+SRC := core.cpp print.cpp primitive.cpp connections.cpp datetime.cpp fileinfo.cpp getwd.cpp grep.cpp sprintf.cpp substr.cpp getenv.cpp setenv.cpp files.cpp basename.cpp locales.cpp parse.cpp chartr.cpp order.cpp
 
 EXECUTABLE := libs/core.dylib
 

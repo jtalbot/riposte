@@ -1,0 +1,4 @@
+
+environmentIsLocked <- function(env) {
+    FALSE
+}
