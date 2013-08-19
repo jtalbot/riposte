@@ -96,7 +96,7 @@ inline void ElementAssign(Value const& v, int64_t index, Value& out) {
 
 void Element2Assign(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
 inline void Element2Assign(Value const& v, int64_t index, Value& out) {
-	if(index < 0 || index > ((Vector const&)v).length()) _error("Out-of-range index");
+	if(index < 0 || index > ((Vector const&)out).length()) _error("Out-of-range index");
 	switch(v.type()) {
 		#define CASE(Name) case Type::Name: ((Name&)out)[index] = ((Name const&)v)[0]; break;
 		ATOMIC_VECTOR_TYPES(CASE)
@@ -216,6 +216,8 @@ Integer Semijoin(Value const& x, Value const& table);
 List Map(Thread& thread, String func, List args, Character result);
 List Scan(Thread& thread, String func, List args, Character result);
 List Fold(Thread& thread, String func, List args, Character result);
+
+List MapR(Thread& thread, Closure const& func, List args, Character result);
 
 #endif
 

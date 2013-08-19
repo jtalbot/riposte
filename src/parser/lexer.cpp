@@ -711,11 +711,11 @@ _eof_trans:
 	break;
 	case 30:
 #line 71 "lexer.rl"
-	{te = p+1;{token( TOKEN_NUM_CONST, Integer::c(atof(std::string(ts, te-ts-1).c_str())) );}}
+	{te = p+1;{token( TOKEN_NUM_CONST, Integer::c(strtoll(std::string(ts, te-1).c_str(), NULL, 10)) );}}
 	break;
 	case 31:
 #line 74 "lexer.rl"
-	{te = p+1;{token( TOKEN_NUM_CONST, CreateComplex(atof(std::string(ts, te-ts-1).c_str())) );}}
+	{te = p+1;{token( TOKEN_NUM_CONST, CreateComplex(strtod(std::string(ts, te-1).c_str(), NULL)) );}}
 	break;
 	case 32:
 #line 85 "lexer.rl"
@@ -839,7 +839,7 @@ _eof_trans:
 	break;
 	case 62:
 #line 68 "lexer.rl"
-	{te = p;p--;{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );}}
+	{te = p;p--;{token( TOKEN_NUM_CONST, Double::c(strtod(std::string(ts, te).c_str(), NULL)) );}}
 	break;
 	case 63:
 #line 82 "lexer.rl"
@@ -903,7 +903,7 @@ _eof_trans:
 	break;
 	case 78:
 #line 68 "lexer.rl"
-	{{p = ((te))-1;}{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );}}
+	{{p = ((te))-1;}{token( TOKEN_NUM_CONST, Double::c(strtod(std::string(ts, te).c_str(), NULL)) );}}
 	break;
 	case 79:
 #line 82 "lexer.rl"

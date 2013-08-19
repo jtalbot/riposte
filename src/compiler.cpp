@@ -195,10 +195,11 @@ Compiler::Operand Compiler::placeInRegister(Operand r) {
 }
 
 // Compute compiled call...precompiles promise code and some necessary values
+struct Pair { String n; Value v; };
+
 CompiledCall Compiler::makeCall(Thread& thread, List const& call, Character const& names) {
     List rcall = CreateCall(call, names.length() > 0 ? names : Value::Nil());
     int64_t dotIndex = call.length()-1;
-    struct Pair { String n; Value v; };
 	std::vector<Pair>  arguments;
     bool named = false;
 
@@ -567,7 +568,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	} 
 	else if(func == Strings::forSym) 
 	{
-		Operand loop_variable = Operand(MEMORY, SymbolStr(call[1]));
+		Operand loop_variable =
+            compileConstant(Character::c(SymbolStr(call[1])), code);
 		Operand loop_vector = placeInRegister(compile(call[2], code));
 		Operand loop_counter = allocRegister();	// save space for loop counter
 		Operand loop_limit = allocRegister(); // save space for the loop limit
@@ -696,12 +698,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		} else {
 			Operand result;
 			for(int64_t i = 1; i < length; i++) {
-				// memory results need to be forced to handle things like:
-				// 	function(x,y) { x; y }
-				// if x is a promise, it must be forced
-				if(result.loc == MEMORY) {
-					result = placeInRegister(result);
-				}
 				kill(result);
 				result = compile(call[i], code);
 			}
@@ -862,12 +858,6 @@ Compiler::Operand Compiler::compileExpression(List const& values, Code* code) {
 	Operand result;
 	if(values.length() == 0) result = compileConstant(Null::Singleton(), code);
 	for(int64_t i = 0; i < values.length(); i++) {
-		// memory results need to be forced to handle things like:
-		// 	function(x,y) { x; y }
-		// if x is a promise, it must be forced
-		if(result.loc == MEMORY) {
-			result = placeInRegister(result);
-		}
 		kill(result);
 		result = compile(values[i], code);
 	}
@@ -904,12 +894,12 @@ void Compiler::dumpCode() const {
 }
 
 // generate actual code from IR as follows...
-// 	MEMORY and INTEGER operands unchanged
+// 	INTEGER operands unchanged
 //	CONSTANT operands encoded with negative integers
 //	REGISTER operands encoded with non-negative integers
 //	INVALID operands just go to 0 since they will never be used
 int64_t Compiler::encodeOperand(Operand op) const {
-	if(op.loc == MEMORY || op.loc == INTEGER) return op.i;
+	if(op.loc == INTEGER) return op.i;
 	else if(op.loc == CONSTANT) return -(op.i+1);
 	else if(op.loc == REGISTER) return (op.i);
 	else return 0;

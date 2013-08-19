@@ -68,10 +68,12 @@ UseMultiMethod <- function(generic, group, ...)
 
     funcs <- as.character.default(
         lapply(calls, function(x) 
-            if(is.null(x)) 'NULL' else strip(x[[1]])))
+            if(is.null(x)) NA_character_ else strip(x[[1L]])))
 
-    if(!any(funcs=='NULL') && all(funcs[[1]] == funcs))
-        call <- calls[[1]]
+    if(!any(is.na(funcs)) && all(funcs[[1L]] == funcs))
+        call <- calls[[1L]]
+    else if(sum(!is.na(funcs)) == 1L)
+        call <- calls[!is.na(funcs)][[1L]]
     else
         call <- NULL
 

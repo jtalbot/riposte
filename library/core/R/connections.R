@@ -17,7 +17,7 @@ close <- function(con, type)
 file <- function(description, open, blocking, encoding, raw) {
     r <- .connection.seq
     .connection.seq <- .connection.seq + 1L
-
+    
     class(r) <- c('file', 'connection')
     attr(r, 'conn_id') <- .External('file_new', description)
     r
@@ -28,12 +28,26 @@ file <- function(description, open, blocking, encoding, raw) {
     r
 }
 
-.open.file <- function(con, open, blocking) {
+gzfile <- function(description, open, blocking, encoding, raw) {
+    r <- .connection.seq
+    .connection.seq <- .connection.seq + 1L
+
+    class(r) <- c('gzfile', 'connection')
+    attr(r, 'conn_id') <- .External('file_new', description)
+    r
+    
+    if(!identical(open,''))
+        .open.file(r, open, blocking)
+
+    r
+}
+
+.open.gzfile <- .open.file <- function(con, open, blocking) {
     .External('file_open', attr(con, 'conn_id'))
     NULL
 }
 
-.close.file <- function(con, type) {
+.close.gzfile <- .close.file <- function(con, type) {
     .External('file_close', attr(con, 'conn_id'))
     NULL
 }
@@ -57,9 +71,10 @@ file <- function(description, open, blocking, encoding, raw) {
 summary.connection <- function(object) UseMethod('.summary', object)
 
 
-.summary.file <- function(con) {
+.summary.gzfile <- .summary.file <- function(con) {
     description <- .External('file_description', attr(con, 'conn_id'))
     r <- list(description, class(con)[[1]], '', '', '', '', '')
     names(r) <- c('description', 'class', 'mode', 'text', 'opened', 'can read', 'can write')
     r
 }
+

@@ -5,9 +5,9 @@ CXX := clang++
 CXXFLAGS := -Wall -I/opt/local/include
 CFLAGS := -Wall -fPIC
 LFLAGS := -dynamiclib -L/opt/local/lib
-LIBS := -lpthread -ltre -lprofiler
+LIBS := -lpthread -ltre -lprofiler -lboost_iostreams-mt
 
-SRC := core.cpp print.cpp primitive.cpp connections.cpp datetime.cpp fileinfo.cpp getwd.cpp grep.cpp sprintf.cpp substr.cpp getenv.cpp setenv.cpp files.cpp basename.cpp locales.cpp parse.cpp chartr.cpp order.cpp
+SRC := core.cpp print.cpp primitive.cpp connections.cpp datetime.cpp fileinfo.cpp getwd.cpp grep.cpp sprintf.cpp substr.cpp getenv.cpp setenv.cpp files.cpp basename.cpp locales.cpp parse.cpp chartr.cpp order.cpp solve.cpp mapply.cpp tabulate.cpp
 
 EXECUTABLE := libs/core.dylib
 

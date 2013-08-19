@@ -6,7 +6,16 @@ readLines <- function(con, n, ok, warn, encoding)
     UseMethod('.readLines', con)
 
 .readLines.file <- function(con, n, ok, warn, encoding) {
+    .open.file(con)
     r <- .External('file_readLines', attr(con, 'conn_id'), as.integer(n))
+    if(n > 0L && length(r) != n)
+        .stop("readLines didn't get enough lines")
+    r
+}
+
+.readLines.gzfile <- function(con, n, ok, warn, encoding) {
+    .open.gzfile(con)
+    r <- .External('gzfile_readLines', attr(con, 'conn_id'), as.integer(n))
     if(n > 0L && length(r) != n)
         .stop("readLines didn't get enough lines")
     r

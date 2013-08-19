@@ -2,7 +2,7 @@
 # maybe just one more argument?
 
 scan <- function(file, what, nmax, sep, dec, quote, skip, nlines, na.strings, flush, fill, strip.white, quiet, blank.lines.skip, multi.line, comment.char, allowEscapes, encoding) {
-    a <- readLines(file, ifelse(nlines > 0L, nlines, -1L), FALSE, encoding)
+    a <- readLines(file, ifelse(nlines > 0L, nlines, -1L), TRUE, FALSE, encoding)
    
     if(comment.char != '') {
         a <- a[substr(a,1L,1L) != comment.char]

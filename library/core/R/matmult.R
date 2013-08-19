@@ -27,19 +27,20 @@
 
     if(xd[[1L]] == 1L && yd[[2L]] == 1L) {
         return(sum(strip(x)*strip(y)))
-    } else if(xd[[1L]] == 1L) {
-        r <- double(0)
-        for(i in 1L:yd[[2L]])
-            r[[i]] <- sum(strip(x)*strip(y[,i]))
-        return(r)
-    }
-    else if(yd[[2L]] == 1L) {
-        r <- 0
-        for(i in 1L:xd[[2L]]) {
-            r <- r + strip(x[,i])*strip(y)[[i]]
-        }
-        return(r)
-    }
+    } 
+    #else if(xd[[1L]] == 1L) {
+    #    r <- double(0)
+    #    for(i in 1L:yd[[2L]])
+    #        r[[i]] <- sum(strip(x)*strip(y[,i]))
+    #    return(r)
+    #}
+    #else if(yd[[2L]] == 1L) {
+    #    r <- 0
+    #    for(i in 1L:xd[[2L]]) {
+    #        r <- r + strip(x[,i])*strip(y)[[i]]
+    #    }
+    #    return(r)
+    #}
     else {
         r <- .External('matrixmultiply',strip(x),xd[[1L]],xd[[2L]],y,yd[[1L]],yd[[2L]])
         dim(r) <- c(xd[[1L]],yd[[2L]])

@@ -25,10 +25,10 @@ void marker(char* a);
 ///////////////////////////////////////////////////////////////////
 
 struct Instruction {
-	int64_t a, b, c;
-	ByteCode::Enum bc;
+	int16_t a, b, c;
+	ByteCode::Enum bc:16;
 
-	Instruction(ByteCode::Enum bc, int64_t a=0, int64_t b=0, int64_t c=0) :
+	Instruction(ByteCode::Enum bc, int16_t a=0, int16_t b=0, int16_t c=0) :
 		a(a), b(b), c(c), bc(bc) {}
 	
 	std::string toString() const {

@@ -1,6 +1,7 @@
 
 copyDFattr <- function(xx, x) {
     attributes(x) <- attributes(xx)
+    x
 }
 
 shortRowNames <- function(x, type) {

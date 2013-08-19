@@ -47,9 +47,18 @@ is.matrix <- function(x)
 	xd <- dim(x)
 	yd <- dim(y)
 	if(!all(xd == yd))
-		.stop("Matrices are not conformable")
+		.stop("non-conformable arrays")
 	r <- strip(x) * strip(y)
-	matrix(r, xd[[1L]], xd[[2L]])
+    if(is.null(xd)) {
+        attr(r, 'dim') <- yd
+        attr(r, 'dimnames') <- attr(y, 'dimnames')
+    }
+    else {
+        attr(r, 'dim') <- xd
+        attr(r, 'dimnames') <- attr(x, 'dimnames')
+    }
+    attr(r, 'class') <- 'matrix'
+    r
 }
 
 `/.matrix` <- function(x,y) {

@@ -347,6 +347,7 @@ primitives <- .characters(
 
     # is.na.R
     'is.na',
+    'is.na.default',
 
     # is.object.R
     'is.object',
@@ -361,6 +362,9 @@ primitives <- .characters(
 
     # is.single.R
     'is.single',
+
+    # isS4.R
+    'isS4',
 
     # length.R
     'length',
@@ -400,6 +404,7 @@ primitives <- .characters(
 
     # matrix.R
     'is.matrix',
+    '*.matrix',
 
     # max.R
     'max',
@@ -591,6 +596,7 @@ internals <- .characters(
 
     # connections.R
     'file',
+    'gzfile',
     'open',
     'close',
     'summary.connection',
@@ -753,6 +759,9 @@ internals <- .characters(
     'print.default',
     'print.function',
 
+    # read.dcf
+    'readDCF',
+
     # readLines.R
     'readLines',
 
@@ -785,6 +794,9 @@ internals <- .characters(
 
     # sprintf.R
     'sprintf',
+
+    # solve.R
+    'La_solve',
 
     # stop.R
     'stop',
@@ -819,6 +831,9 @@ internals <- .characters(
 
     # t.R
     't.default',
+
+    # tabulate.R
+    'tabulate',
 
     # typeof.R
     'typeof',

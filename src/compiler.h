@@ -42,20 +42,15 @@ private:
 	enum Loc {
 		INVALID,
 		REGISTER,
-		MEMORY,
 		CONSTANT,
 		INTEGER
 	};
 
-	struct Operand {
-		Loc loc;
-		union {
-			int64_t i;
-			String s;
-		};
+    struct Operand {
+        Loc loc;
+        int64_t i;
 		Operand() : loc(INVALID), i(0) {}
 		Operand(Loc loc, int64_t i) : loc(loc), i(i) {}
-		Operand(Loc loc, String s) : loc(loc), s(s) {}
 		Operand(int64_t i) : loc(INTEGER), i(i) {}
 		Operand(int i) : loc(INTEGER), i(i) {}
 		Operand(size_t i) : loc(INTEGER), i(i) {}
@@ -66,7 +61,6 @@ private:
 			if(loc == INVALID) return "I";
 			else if(loc == REGISTER) return intToStr(i) + "R";
 			else if(loc == CONSTANT) return intToStr(i) + "C";
-			else if(loc == MEMORY) return std::string(s);
 			else return intToStr(i) + "L";
 		}
 	};

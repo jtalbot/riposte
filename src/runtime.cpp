@@ -2,6 +2,7 @@
 #include "coerce.h"
 #include "value.h"
 #include "runtime.h"
+#include "compiler.h"
 
 #include <dyncall.h>
 #include <dlfcn.h>
@@ -489,10 +490,27 @@ template<> bool isna<Raw>(Raw const& t, int64_t i)
 template<> bool isna<List>(List const& t, int64_t i)
 { return List::isNA(t[i % t.length()]); }
 
+
+template<class T> Value element(T const& t, int64_t i) 
+{ return t; }
+template<> Value element<Logical>(Logical const& t, int64_t i)
+{ return Logical::c(t[i % t.length()]); }
+template<> Value element<Integer>(Integer const& t, int64_t i)
+{ return Integer::c(t[i % t.length()]); }
+template<> Value element<Double>(Double const& t, int64_t i)
+{ return Double::c(t[i % t.length()]); }
+template<> Value element<Character>(Character const& t, int64_t i)
+{ return Character::c(t[i % t.length()]); }
+template<> Value element<Raw>(Raw const& t, int64_t i)
+{ return Raw::c(t[i % t.length()]); }
+template<> Value element<List>(List const& t, int64_t i)
+{ return List::c(t[i % t.length()]); }
+
 struct Stream {
     virtual ~Stream() {}
     virtual bool isNA(int64_t i) = 0;
     virtual void operator()(DCCallVM* vm, int64_t i) = 0;
+    virtual Value operator()(int64_t i) = 0;
 };
 
 template<class T>
@@ -507,6 +525,10 @@ struct StreamImpl : public Stream {
 
     void operator()(DCCallVM* vm, int64_t i) {
         arg(vm, v, i);
+    }
+
+    Value operator()(int64_t i) {
+        return element(v, i);
     }
 };
 
@@ -525,6 +547,7 @@ struct Unstream {
     virtual Value const& value() const = 0;
     virtual void dona(int64_t i) = 0;
     virtual void operator()(DCCallVM* vm, int64_t i) = 0;
+    virtual void operator()(int64_t i, Value const& r) = 0;
 };
 
 template<class T>
@@ -535,6 +558,10 @@ struct UnstreamImpl : public Unstream {
 
     void operator()(DCCallVM* vm, int64_t i) {
         dcArgPointer(vm, &v[i]);
+    }
+
+    void operator()(int64_t i, Value const& r) {
+        Element2Assign(r, i, v);
     }
 
     void dona(int64_t i) {
@@ -795,6 +822,64 @@ List Fold(Thread& thread, String func, List args, Character result) {
     dcCallVoid(vm, funcs.fini);
     dcFree(vm);
         
+    List r(result.length());
+    for(int64_t i = 0; i < u.size(); ++i) {
+        r[i] = u[i]->value();
+    }
+       
+    for(int64_t i = 0; i < u.size(); ++i) {
+        delete u[i];
+    }
+    
+    return r;
+}
+
+List MapR(Thread& thread, Closure const& func, List args, Character result) {
+    // figure out length of result
+    int64_t length = 1, minlength = 1;
+    for(int64_t i = 0; i < args.length(); ++i) {
+        if(args[i].isVector()) {
+            length = std::max(length, ((Vector const&)args[i]).length());
+            minlength = std::min(minlength, ((Vector const&)args[i]).length());
+        } else {
+            length = std::max(length, (int64_t)1);
+        }
+    }
+    if(minlength == 0) length = 0;
+
+    // build up streamers and unstreamers.
+    std::vector<Unstream*> u;
+    for(int64_t i = 0; i < result.length(); ++i) {
+        u.push_back(MakeUnstream(result[i], length));
+    }
+
+    if(length > 0) {
+        std::vector<Stream*> s;
+        for(int64_t i = 0; i < args.length(); ++i) {
+            s.push_back(MakeStream(args[i]));
+        }
+
+        List apply(1+args.length());
+        apply[0] = func;
+        for(int64_t i = 0; i < args.length(); i++)
+            apply[i+1] = Value::Nil();
+        Code* p = Compiler::compileTopLevel(thread, CreateCall(apply));
+
+        for(int64_t i = 0; i < length; ++i) {
+            for(int64_t k = 0; k < s.size(); ++k) {
+                p->calls[0].arguments[k] = (*s[k])(i);
+            }
+            List r = As<List>(thread, thread.eval(p));
+            for(int64_t k = 0; k < u.size(); ++k) {
+                (*u[k])(i, r[k]);
+            }
+        }
+        
+        for(int64_t i = 0; i < s.size(); ++i) {
+            delete s[i];
+        }
+    }
+
     List r(result.length());
     for(int64_t i = 0; i < u.size(); ++i) {
         r[i] = u[i]->value();

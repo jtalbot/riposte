@@ -232,7 +232,8 @@ static inline Instruction const* forbegin_op(Thread& thread, Instruction const& 
 	if((int64_t)v.length() <= 0) {
 		return &inst+(&inst+1)->a;	// offset is in following JMP, dispatch together
 	} else {
-		Element2(v, 0, thread.frame.environment->insert((String)inst.a));
+        String i = ((Character const&)CONSTANT(inst.a)).s;
+		Element2(v, 0, thread.frame.environment->insert(i));
 		Integer::InitScalar(REGISTER(inst.c), 1);
 		Integer::InitScalar(REGISTER(inst.c+1), v.length());
 		return &inst+2;			// skip over following JMP
@@ -244,8 +245,9 @@ static inline Instruction const* forend_op(Thread& thread, Instruction const& in
 	Value& counter = REGISTER(inst.c);
 	Value& limit = REGISTER(inst.c+1);
 	if(__builtin_expect(counter.i < limit.i, true)) {
+        String i = ((Character const&)CONSTANT(inst.a)).s;
 		Value const& b = REGISTER(inst.b);
-		Element2(b, counter.i, thread.frame.environment->insert((String)inst.a));
+		Element2(b, counter.i, thread.frame.environment->insert(i));
 		counter.i++;
 		return &inst+(&inst+1)->a;
 	} else {
@@ -332,14 +334,17 @@ static inline Instruction const* map_op(Thread& thread, Instruction const& inst)
     DECODE(b); BIND(b);
     DECODE(c); BIND(c);
 
-    if(!c.isCharacter1())
-        _error("External map function name must be a string");
     if(!b.isList())
         _error("External map args must be a list");
     if(!a.isCharacter())
         _error("External map return types must be a character vector");
 
-    OUT(c) = Map(thread, c.s, (List const&)b, (Character const&)a);
+    if(c.isCharacter1())
+        OUT(c) = Map(thread, c.s, (List const&)b, (Character const&)a);
+    else if(c.isClosure())
+        OUT(c) = MapR(thread, (Closure const&)c, (List const&)b, (Character const&)a);
+    else
+        _error(".Map function name must be a string or a closure");
     
     return &inst+1;
 }
@@ -760,7 +765,6 @@ static inline Instruction const* length_op(Thread& thread, Instruction const& in
 static inline Instruction const* get_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
 	DECODE(a); DECODE(b);
-
     if(GetFast(thread, a, b, OUT(c)))
         return &inst+1;
     else {

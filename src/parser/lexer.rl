@@ -65,13 +65,13 @@
 		{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol(state.internStr(unescape(s))) );};
 	# Numeric literals.
 	( float exponent? ) 
-		{token( TOKEN_NUM_CONST, Double::c(atof(std::string(ts, te-ts).c_str())) );};
+		{token( TOKEN_NUM_CONST, Double::c(strtod(std::string(ts, te).c_str(), NULL)) );};
 	
 	( float exponent? 'L' ) 
-		{token( TOKEN_NUM_CONST, Integer::c(atof(std::string(ts, te-ts-1).c_str())) );};
+		{token( TOKEN_NUM_CONST, Integer::c(strtoll(std::string(ts, te-1).c_str(), NULL, 10)) );};
 	
 	( float exponent? 'i' ) 
-		{token( TOKEN_NUM_CONST, CreateComplex(atof(std::string(ts, te-ts-1).c_str())) );};
+		{token( TOKEN_NUM_CONST, CreateComplex(strtod(std::string(ts, te-1).c_str(), NULL)) );};
 	
 	# Integer octal. Leading part buffered by float.
 	#( '0' [0-9]+ [ulUL]{0,2} ) 

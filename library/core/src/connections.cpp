@@ -2,6 +2,8 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <boost/iostreams/filtering_stream.hpp>
+#include <boost/iostreams/filter/gzip.hpp>
 
 #include "../../../src/runtime.h"
 #include "../../../src/coerce.h"
@@ -21,11 +23,13 @@ struct FileConnection {
     }
 
     void open() {
-        f.open(name.c_str());
+        if(!f.is_open())
+            f.open(name.c_str());
     }
 
     void close() {
-        f.close();
+        if(f.is_open())
+            f.close();
     }
 
     void write(char const* c) {
@@ -117,6 +121,44 @@ Value file_description(Thread& thread, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     FileConnection* fc = (FileConnection*)p.ptr();
     return Character::c(thread.internStr(fc->name));
+}
+
+extern "C"
+Value gzfile_readLines(Thread& thread, Value const* args) {
+    Externalptr const& p = (Externalptr const&)args[0];
+    Integer const& n = (Integer const&)args[1];
+    FileConnection* fc = (FileConnection*)p.ptr();
+    int64_t maxLines = n[0];
+
+    boost::iostreams::filtering_istream in;
+    in.push(boost::iostreams::gzip_decompressor());
+    in.push(fc->f);
+
+    std::vector<std::string> lines;
+    std::string str;
+    int64_t i = 0;
+    while((maxLines < 0 || i < maxLines) && std::getline(in, str)) {
+        lines.push_back(str);
+        i++;
+    }
+
+    // If we failed to read, perhaps it's not gzip compressed
+    // try to read normally...
+    if (in.bad()) {
+        fc->f.clear();
+        fc->f.seekg(0, std::ios::beg);
+        while((maxLines < 0 || i < maxLines) && std::getline(fc->f, str)) {
+            lines.push_back(str);
+            i++;
+        }
+    }
+
+    Character r(lines.size());
+    for(size_t i = 0; i < lines.size(); ++i) {
+        r[i] = thread.internStr(lines[i].c_str());
+    }
+
+    return r;
 }
 
 extern "C"

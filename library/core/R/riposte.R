@@ -35,23 +35,7 @@ trace.config <- function(trace=0) .External('trace.config', trace)
 
 library <- function(., parent.env) {
     e <- .env_new(parent.env)
-    setRegisteredNamespace(.pconcat('',.), e)
-
-    if(identical(.,'base')) {
-        e[['.BaseNamespaceEnv']] <- e
-    }
-
     .External('library', e, .)
-        
-    if(identical(.,'base')) {
-        e[['.Options']] <- options()
-    }
-
-    # export names and place in search path
-    names <- .env_names(e)
-    exported <- names[grepl('^[^\\.]', names, FALSE, '', FALSE, FALSE, TRUE, FALSE)]
-    .attach(.export(.pconcat('package:',.), e, exported))
-
     e
 }
 

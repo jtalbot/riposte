@@ -7,7 +7,7 @@ sum <- function(..., na.rm = FALSE) {
 }
 
 sum.default <- function(..., na.rm = FALSE) {
-    x <- c(...)
+    x <- unlist.default(list(...), FALSE, FALSE)
 
     if(na.rm)
         sum(x[!is.na(x)])
