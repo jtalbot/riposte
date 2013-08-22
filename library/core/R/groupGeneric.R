@@ -67,8 +67,8 @@ UseMultiMethod <- function(generic, group, ...)
         calls[[i]] <- .find.group.method(generic, group, args[[i]])
 
     funcs <- as.character.default(
-        lapply(calls, function(x) 
-            if(is.null(x)) NA_character_ else strip(x[[1L]])))
+        .Map(function(x) 
+            if(is.null(x)) NA_character_ else strip(x[[1L]]), list(calls)))
 
     if(!any(is.na(funcs)) && all(funcs[[1L]] == funcs))
         call <- calls[[1L]]

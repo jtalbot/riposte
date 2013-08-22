@@ -7,7 +7,7 @@ static ByteCode::Enum op0(String const& func) {
     if(func == Strings::dots) return ByteCode::dotsc;
     if(func == Strings::env_global) return ByteCode::env_global;
     if(func == Strings::stop) return ByteCode::stop;
-    throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a nullary operator"); 
+    throw RuntimeError(std::string("unexpected symbol '") + func->s + "' used as a nullary operator"); 
 }
 
 static ByteCode::Enum op1(String const& func) {
@@ -50,7 +50,7 @@ static ByteCode::Enum op1(String const& func) {
     
     if(func == Strings::isnil) return ByteCode::isnil;
     
-    throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a unary operator"); 
+    throw RuntimeError(std::string("unexpected symbol '") + func->s + "' used as a unary operator"); 
 }
 
 static ByteCode::Enum op2(String const& func) {
@@ -85,7 +85,7 @@ static ByteCode::Enum op2(String const& func) {
 
     if(func == Strings::semijoin) return ByteCode::semijoin;
 	
-    throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a binary operator"); 
+    throw RuntimeError(std::string("unexpected symbol '") + func->s + "' used as a binary operator"); 
 }
 
 static ByteCode::Enum op3(String const& func) {
@@ -98,7 +98,7 @@ static ByteCode::Enum op3(String const& func) {
 	if(func == Strings::map) return ByteCode::map;
 	if(func == Strings::scan) return ByteCode::scan;
 	if(func == Strings::fold) return ByteCode::fold;
-	throw RuntimeError(std::string("unexpected symbol '") + func + "' used as a trinary operator"); 
+	throw RuntimeError(std::string("unexpected symbol '") + func->s + "' used as a trinary operator"); 
 }
 
 int64_t Compiler::emit(ByteCode::Enum bc, Operand a, Operand b, Operand c) {
@@ -147,21 +147,21 @@ Compiler::Operand Compiler::compileConstant(Value const& expr, Code* code) {
 }
 
 static int64_t isDotDot(String s) {
-	if(s != 0 && s[0] == '.' && s[1] == '.') {
+	if(s != 0 && s->s[0] == '.' && s->s[1] == '.') {
 
         // catch ...
-        if(s[2] == '.' && s[3] == 0)
+        if(s->s[2] == '.' && s->s[3] == 0)
             return 0;
 
 		int64_t v = 0;
 		int64_t i = 2;
 		// maximum 64-bit integer has 19 digits, but really who's going to pass
 		// that many var args?
-		while(i < (19+2) && s[i] >= '0' && s[i] <= '9') {
-			v = v*10 + (s[i] - '0');
+		while(i < (19+2) && s->s[i] >= '0' && s->s[i] <= '9') {
+			v = v*10 + (s->s[i] - '0');
 			i++;
 		}
-		if(i < (19+2) && s[i] == 0) return v;
+		if(i < (19+2) && s->s[i] == 0) return v;
 	}
 	return -1;	
 }
@@ -725,6 +725,18 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		Operand c = placeInRegister(compile(call[1], code));
 		Operand b = compile(call[2], code);
 		Operand a = compile(call[3], code);
+		kill(a); kill(b); kill(c);
+		Operand result = allocRegister();
+        assert(c == result);
+		emit(op3(func), a, b, result);
+		return result;
+	}
+	else if(
+        func == Strings::map &&
+		call.length() == 3) {
+		Operand c = placeInRegister(compile(call[1], code));
+		Operand b = compile(call[2], code);
+		Operand a = compileConstant(Value::Nil(), code);
 		kill(a); kill(b); kill(c);
 		Operand result = allocRegister();
         assert(c == result);

@@ -177,6 +177,14 @@ static inline Instruction const* jc_op(Thread& thread, Instruction const& inst) 
             "conditional is of length zero"), 
             inst.c);
     }
+    else if(c.isRaw()) {
+        if(((Raw const&)c).length() > 0)
+            cond = Cast<Raw, Logical>(thread, ((Raw const&)c)[0]);
+        else
+            return StopDispatch(thread, inst, thread.internStr(
+            "conditional is of length zero"), 
+            inst.c);
+    }
     else {
         return StopDispatch(thread, inst, thread.internStr(
                     "conditional argument is not interpretable as logical"), 
@@ -309,12 +317,12 @@ static inline Instruction const* external_op(Thread& thread, Instruction const& 
     void* func = NULL;
     for(std::map<std::string,void*>::iterator i = thread.state.handles.begin();
         i != thread.state.handles.end(); ++i) {
-        func = dlsym(i->second, name);
+        func = dlsym(i->second, name->s);
         if(func != NULL)
             break;
     }
     if(func == NULL)
-        _error(std::string("Can't find external function: ") + name);
+        _error(std::string("Can't find external function: ") + name->s);
 
     uint64_t nargs = inst.b;
 	for(int64_t i = 0; i < nargs; i++) {
@@ -336,13 +344,18 @@ static inline Instruction const* map_op(Thread& thread, Instruction const& inst)
 
     if(!b.isList())
         _error("External map args must be a list");
-    if(!a.isCharacter())
-        _error("External map return types must be a character vector");
 
-    if(c.isCharacter1())
+    if(c.isCharacter1()) {
+        if(!a.isCharacter())
+            _error("External map return types must be a character vector");
         OUT(c) = Map(thread, c.s, (List const&)b, (Character const&)a);
-    else if(c.isClosure())
-        OUT(c) = MapR(thread, (Closure const&)c, (List const&)b, (Character const&)a);
+    }
+    else if(c.isClosure()) {
+        if(a.isCharacter())
+            OUT(c) = MapR(thread, (Closure const&)c, (List const&)b, (Character const&)a);
+        else
+            OUT(c) = MapI(thread, (Closure const&)c, (List const&)b);
+    }
     else
         _error(".Map function name must be a string or a closure");
     
@@ -403,7 +416,7 @@ static inline Instruction const* load_op(Thread& thread, Instruction const& inst
     }
     else {
         return StopDispatch(thread, inst, thread.internStr(
-            (std::string("Object '") + s + "' not found").c_str()), 
+            (std::string("Object '") + s->s + "' not found").c_str()), 
             inst.c);
     }
 }
@@ -429,7 +442,7 @@ static inline Instruction const* loadfn_op(Thread& thread, Instruction const& in
         }
         else if(v.isNil()) {
             return StopDispatch(thread, inst, thread.internStr(
-                (std::string("Object '") + s + "' not found").c_str()), 
+                (std::string("Object '") + s->s + "' not found").c_str()), 
                 inst.c);
         }
         env = env->getEnclosure();
@@ -1374,7 +1387,7 @@ static inline Instruction const* vector_op(Thread& thread, Instruction const& in
         for(int64_t i = 0; i < l; i++) v[i] = Null::Singleton();
         OUT(c) = v;
     } else {
-		_error(std::string("Invalid type in vector: ") + stype);
+		_error(std::string("Invalid type in vector: ") + stype->s);
 	} 
 	return &inst+1;
 }
@@ -1559,6 +1572,41 @@ Thread::Thread(State& state, uint64_t index)
     promiseCode->bc.push_back(Instruction(ByteCode::retp, 2, 0, 0));
     promiseCode->registers = 3;
     promiseCode->expression = Value::Nil();
+}
+
+State::State(uint64_t threads, int64_t argc, char** argv) 
+	: verbose(false), epeeEnabled(true), format(State::RiposteFormat), done(0) {
+
+    // initialize string table
+	#define ENUM_STRING_TABLE(name, str) \
+        Strings::name = strings.in(std::string(str));
+    STRINGS(ENUM_STRING_TABLE);
+   
+    // initialize basic environments 
+	this->empty = new Environment(1,(Environment*)0);
+    this->global = new Environment(1,empty);
+
+    // intialize arguments list
+	arguments = Character(argc);
+	for(int64_t i = 0; i < argc; i++) {
+		arguments[i] = internStr(std::string(argv[i]));
+	}
+	
+	pthread_attr_t  attr;
+	pthread_attr_init (&attr);
+	pthread_attr_setscope (&attr, PTHREAD_SCOPE_SYSTEM);
+	pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
+
+	Thread* t = new Thread(*this, 0);
+	this->threads.push_back(t);
+
+	for(uint64_t i = 1; i < threads; i++) {
+		Thread* t = new Thread(*this, i);
+		pthread_create (&t->thread, &attr, Thread::start, t);
+		this->threads.push_back(t);
+	}
+
+	interpreter_init(getMainThread());
 }
 
 void Code::printByteCode(State const& state) const {

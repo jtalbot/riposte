@@ -416,9 +416,9 @@ Integer Semijoin(Value const& a, Value const& b) {
         _error("Unsupported type in semijoin");
 }
 
-static void* find_function(Thread& thread, String name) {
-    static String lastname = Strings::empty;
-    static void* lastfunc = NULL;
+static void* find_function(Thread& thread, const char* name) {
+    //static String lastname = Strings::empty;
+    //static void* lastfunc = NULL;
 
     void* func = NULL;
     /*if(std::string(name) == std::string(lastname)) {
@@ -431,8 +431,8 @@ static void* find_function(Thread& thread, String name) {
             if(func != NULL)
                 break;
         }
-        lastfunc = func;
-        lastname = name;
+        //lastfunc = func;
+        //lastname = name;
     //}
 
     if(func == NULL)
@@ -448,9 +448,9 @@ struct FoldFuncArgs {
 };
 
 FoldFuncArgs find_fold_function(Thread& thread, String name) {
-    void* init_func = find_function(thread, (std::string(name) + "_init").c_str());
-    void* op_func = find_function(thread, (std::string(name) + "_op").c_str());
-    void* fini_func = find_function(thread, (std::string(name) + "_fini").c_str());
+    void* init_func = find_function(thread, (std::string(name->s) + "_init").c_str());
+    void* op_func = find_function(thread, (std::string(name->s) + "_op").c_str());
+    void* fini_func = find_function(thread, (std::string(name->s) + "_fini").c_str());
 
     FoldFuncArgs funcs;
     funcs.base = init_func;
@@ -504,7 +504,7 @@ template<> Value element<Character>(Character const& t, int64_t i)
 template<> Value element<Raw>(Raw const& t, int64_t i)
 { return Raw::c(t[i % t.length()]); }
 template<> Value element<List>(List const& t, int64_t i)
-{ return List::c(t[i % t.length()]); }
+{ return t[i % t.length()]; }
 
 struct Stream {
     virtual ~Stream() {}
@@ -609,7 +609,7 @@ List Map(Thread& thread, String func, List args, Character result) {
         }
 
         // look up function
-        void* f = find_function(thread, func);
+        void* f = find_function(thread, func->s);
     
         // run
         DCCallVM* vm = dcNewCallVM(4096);
@@ -863,7 +863,19 @@ List MapR(Thread& thread, Closure const& func, List args, Character result) {
         apply[0] = func;
         for(int64_t i = 0; i < args.length(); i++)
             apply[i+1] = Value::Nil();
-        Code* p = Compiler::compileTopLevel(thread, CreateCall(apply));
+        if(hasNames(args)) {
+            Character const& names = (Character const&)getNames(args);
+            Character nn(1+names.length());
+            nn[0] = Strings::empty;
+            for(int64_t i = 0; i < names.length(); i++)
+                nn[i+1] = names[i];
+            apply = CreateCall(apply, nn);
+        }
+        else {
+            apply = CreateCall(apply);
+        }
+
+        Code* p = Compiler::compileTopLevel(thread, apply);
 
         for(int64_t i = 0; i < length; ++i) {
             for(int64_t k = 0; k < s.size(); ++k) {
@@ -890,5 +902,60 @@ List MapR(Thread& thread, Closure const& func, List args, Character result) {
     }
     
     return r;
+}
+
+List MapI(Thread& thread, Closure const& func, List args) {
+    // figure out length of result
+    int64_t length = 1, minlength = 1;
+    for(int64_t i = 0; i < args.length(); ++i) {
+        if(args[i].isVector()) {
+            length = std::max(length, ((Vector const&)args[i]).length());
+            minlength = std::min(minlength, ((Vector const&)args[i]).length());
+        } else {
+            length = std::max(length, (int64_t)1);
+        }
+    }
+    if(minlength == 0) length = 0;
+
+    List result(length);
+
+    if(length > 0) {
+        std::vector<Stream*> s;
+        for(int64_t i = 0; i < args.length(); ++i) {
+            s.push_back(MakeStream(args[i]));
+        }
+
+        List apply(1+args.length());
+        apply[0] = func;
+        for(int64_t i = 0; i < args.length(); i++)
+            apply[i+1] = Value::Nil();
+
+        if(hasNames(args)) {
+            Character const& names = (Character const&)getNames(args);
+            Character nn(1+names.length());
+            nn[0] = Strings::empty;
+            for(int64_t i = 0; i < names.length(); i++)
+                nn[i+1] = names[i];
+            apply = CreateCall(apply, nn);
+        }
+        else {
+            apply = CreateCall(apply);
+        }
+
+        Code* p = Compiler::compileTopLevel(thread, apply);
+
+        for(int64_t i = 0; i < length; ++i) {
+            for(int64_t k = 0; k < s.size(); ++k) {
+                p->calls[0].arguments[k] = (*s[k])(i);
+            }
+            result[i] = thread.eval(p);
+        }
+        
+        for(int64_t i = 0; i < s.size(); ++i) {
+            delete s[i];
+        }
+    }
+
+    return result;
 }
 

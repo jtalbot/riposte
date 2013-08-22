@@ -12,9 +12,9 @@ cbind <- function(deparse.level, ...) {
             NA_integer_
     }
 
-    rows <- as.integer(lapply(l, f))
+    rows <- .Map(f, list(l), 'integer')[[1L]]
     if(all(is.na(rows))) {
-        nrow <- max(as.integer(lapply(l, length)))
+        nrow <- max(.Map(length, list(l), 'integer')[[1L]])
     }
     else {
         nrow <- min(rows[!is.na(rows)])
@@ -29,7 +29,7 @@ cbind <- function(deparse.level, ...) {
             rep_len(x, nrow)
     }
 
-	x <- unlist(lapply(l, r),FALSE,FALSE)
+	x <- unlist(.Map(r, list(l)),FALSE,FALSE)
     ncol <- length(x)/nrow
     
     dim(x) <- c(nrow, ncol)
@@ -48,9 +48,9 @@ rbind <- function(deparse.level, ...) {
             NA_integer_
     }
 
-    cols <- as.integer(lapply(l, f))
+    cols <- .Map(f, list(l), 'integer')[[1L]]
     if(all(is.na(cols))) {
-        ncol <- max(as.integer(lapply(l, length)))
+        ncol <- max(.Map(length, list(l), 'integer')[[1L]])
     }
     else {
         ncol <- min(cols[!is.na(cols)])
@@ -68,7 +68,7 @@ rbind <- function(deparse.level, ...) {
             rep_len(x, ncol)
     }
 
-	x <- unlist(lapply(l, r),FALSE,FALSE)
+	x <- unlist(.Map(r, list(l), 'list')[[1L]],FALSE,FALSE)
     nrow <- length(x)/ncol
     # t
     x <- x[ncol*(index(nrow,1L,length(x))-1L)+

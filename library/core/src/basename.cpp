@@ -12,8 +12,8 @@ void basename_map(Thread& thread,
     Character::Element& r, Character::Element f)
 {
     // basename may mutate the string, so copy...
-    char* copy = (char*)malloc(1+strlen(f));
-    strcpy(copy, f);
+    char* copy = (char*)malloc(1+strlen(f->s));
+    strcpy(copy, f->s);
     char* p = basename(copy);
     r = thread.internStr(p);
     free(copy);
@@ -24,8 +24,8 @@ void dirname_map(Thread& thread,
     Character::Element& r, Character::Element f)
 {
     // dirname may mutate the string, so copy...
-    char* copy = (char*)malloc(1+strlen(f));
-    strcpy(copy, f);
+    char* copy = (char*)malloc(1+strlen(f->s));
+    strcpy(copy, f->s);
     char* p = dirname(copy);
     r = thread.internStr(p);
     free(copy);

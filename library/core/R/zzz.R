@@ -759,11 +759,24 @@ internals <- .characters(
     'print.default',
     'print.function',
 
+    # rawConversion.R
+    'charToRaw',
+    'rawToChar',
+
     # read.dcf
     'readDCF',
 
+    # readBin.R
+    'readBin',
+
+    # readChar.R
+    'readChar',
+
     # readLines.R
     'readLines',
+
+    # readRDS.R
+    'unserializeFromConn',
 
     # remove.R
     'remove',

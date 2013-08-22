@@ -87,6 +87,7 @@ bool LogicalUnaryFast(Thread& thread, void* args, Value a, Value& c) {
     if     (a.isLogical1()) { Op<Logical>::Scalar(thread, args, a.c, c);  return true; }
     else if(a.isDouble1())  { Op<Double>::Scalar(thread, args, a.d, c);   return true; }
     else if(a.isInteger1()) { Op<Integer>::Scalar(thread, args, a.i, c);  return true; }
+    else if(a.isRaw1()) { Op<Raw>::Scalar(thread, args, a.u, c);  return true; }
     else return false;
 }
 
@@ -95,6 +96,7 @@ bool LogicalUnaryDispatch(Thread& thread, void* args, Value a, Value& c) {
 	if(a.isLogical())	{ Zip1< Op<Logical> >::eval(thread, args, (Logical const&)a, c); return true; }
 	else if(a.isDouble()) { Zip1< Op<Double> >::eval(thread, args, (Double const&)a, c); return true; }
 	else if(a.isInteger()) { Zip1< Op<Integer> >::eval(thread, args, (Integer const&)a, c); return true; }
+    else if(a.isRaw()) { Zip1< Op<Raw> >::eval(thread, args, (Raw const&)a, c); return true; }
 	else if(a.isNull())	{ c = Logical(0); return true; }
 	else return false;
 };
@@ -167,8 +169,14 @@ bool ArithBinary2Dispatch(Thread& thread, void* args, Value a, Value b, Value& c
 
 template< template<typename S, typename T> class Op > 
 bool LogicalBinaryFast(Thread& thread, void* args, Value a, Value b, Value& c) {
-    if(a.isLogical1() && b.isLogical1())
-        { Op<Logical, Logical>::Scalar(thread, args, a.c, b.c, c); return true; }
+    if(a.isLogical1() && b.isLogical1()) { 
+        Op<Logical, Logical>::Scalar(thread, args, a.c, b.c, c);
+        return true;
+    }
+	else if(a.isRaw() && b.isRaw()) {
+		Op<Raw,Raw>::Scalar(thread, args, a.u, b.u, c); 
+        return true;
+    } 
 	else return false;
 }
 
@@ -192,11 +200,14 @@ bool LogicalBinaryDispatch(Thread& thread, void* args, Value a, Value b, Value& 
 		else if(b.isInteger()) { Zip2< Op<Integer,Integer> >::eval(thread, args, (Integer const&)a, (Integer const&)b, c); return true; }
 		else if(b.isNull())	{ c = Logical(0); return true; }
 		else return false; 
+	} else if(a.isRaw() && b.isRaw()) {
+		Zip2< Op<Raw,Raw> >::eval(thread, args, (Raw const&)a, (Raw const&)b, c); 
+        return true;
 	} else if(a.isNull()) {
 		if(b.isDouble() || b.isInteger() || b.isLogical() || b.isNull()) { c = Logical(0); return true; }
 		else return false;
-	} 
-	else return false;
+	}
+    else return false;
 }
 
 template< class Op >

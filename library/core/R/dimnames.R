@@ -26,7 +26,7 @@ dimnames.default <- function(x) {
         if(length(value) != length(d))
             .stop(sprintf("length of 'dimnames' [%d] not equal to array extent", length(value)))
 
-        value <- lapply(value, function(x) if(length(x) == 0L) NULL else x)
+        value <- .Map(function(x) if(length(x) == 0L) NULL else x, list(value))
         
         for(i in seq_len(length(value))) {
             if(!is.null(value[[i]]) && length(value[[i]]) != d[[i]])

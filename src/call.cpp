@@ -254,7 +254,7 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 			if(n != Strings::empty && assignment[i] < 0) {
 				for(int64_t j = 0; j < pDotIndex; ++j) {
 					if(set[j] < 0 && 
-                        strncmp(n, parameters[j], strlen(n)) == 0) {
+                        strncmp(n->s, parameters[j]->s, strlen(n->s)) == 0) {
 						assignment[i] = j;
 						set[j] = i;
 						break;
@@ -412,7 +412,7 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
 		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
-	_error(std::string("Failed to find generic for builtin op: ") + op);
+	_error(std::string("Failed to find generic for builtin op: ") + op->s);
 }
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out) {
@@ -427,7 +427,7 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
 		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
 		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
-	_error(std::string("Failed to find generic for builtin op: ") + op + " type: " + Type::toString(a.type()) + " " + Type::toString(b.type()));
+	_error(std::string("Failed to find generic for builtin op: ") + op->s + " type: " + Type::toString(a.type()) + " " + Type::toString(b.type()));
 }
 
 Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, Value const& c, int64_t out) {
@@ -448,7 +448,7 @@ Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, Stri
         Environment* fenv = MatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
 		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
-	_error(std::string("Failed to find generic for builtin op: ") + op);
+	_error(std::string("Failed to find generic for builtin op: ") + op->s);
 }
 
 

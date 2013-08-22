@@ -7,13 +7,13 @@
 
 extern "C"
 void nchar_map(Thread& thread, int64_t& r, String s) {
-    r = strlen(s);
+    r = strlen(s->s);
 }
 
 extern "C"
 void nzchar_map(Thread& thread, Logical::Element& r, String s) {
-    r = (*s != 0) ? Logical::TrueElement 
-                  : Logical::FalseElement;
+    r = (s->s[0] != 0) ? Logical::TrueElement 
+                       : Logical::FalseElement;
 }
 
 
@@ -165,7 +165,7 @@ void signif_map(Thread& thread, double& r, double a, int64_t b) {
 
 extern "C"
 void concat_map(Thread& thread, String& r, String a, String b) {
-    r = thread.internStr(std::string(a) + b);
+    r = thread.internStr(std::string(a->s) + b->s);
 }
 
 extern "C"
@@ -175,7 +175,7 @@ void* concat_init(Thread& thread) {
 
 extern "C"
 void concat_op(Thread& thread, void* state, String a) {
-    *((std::string*)state) += a;
+    *((std::string*)state) += a->s;
 }
 
 extern "C"

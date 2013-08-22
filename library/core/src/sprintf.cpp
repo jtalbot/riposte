@@ -12,7 +12,7 @@ void sprintf_map(Thread& thread, String& r, String fmt, ...) {
 
     va_list arglist;
     va_start( arglist, fmt );
-    vsnprintf( out, maxlength, fmt, arglist );
+    vsnprintf( out, maxlength, fmt->s, arglist );
     va_end( arglist );
 
     r = thread.internStr(out);

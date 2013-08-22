@@ -34,7 +34,7 @@ struct compare<Character, nalast, descending> {
         typename Character::Element const& b = t[bi];
 
         if(!Character::isNA(a) && !Character::isNA(b))
-            return descending ? (strcmp(a,b)>0) : (strcmp(a,b)<0);
+            return descending ? (strcmp(a->s,b->s)>0) : (strcmp(a->s,b->s)<0);
         else if(Character::isNA(a) && !Character::isNA(b))
             return !nalast;
         else if(!Character::isNA(a) && Character::isNA(b))
@@ -121,7 +121,7 @@ struct compare2_impl<Character, nalast, descending> : public compare2 {
 
         if(!Character::isNA(a) && !Character::isNA(b)) {
             if(a == b && next) return next->operator()(ai, bi);
-            else return descending ? (strcmp(a,b)>0) : (strcmp(a,b)<0);
+            else return descending ? (strcmp(a->s,b->s)>0) : (strcmp(a->s,b->s)<0);
         }
         else if(Character::isNA(a) && !Character::isNA(b))
             return !nalast;

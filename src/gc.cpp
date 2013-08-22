@@ -139,6 +139,13 @@ void Heap::mark(State& state) {
 	VISIT(state.global);
 	traverse(state.arguments);
 
+    for(std::map<std::string, String>::const_iterator i = 
+            state.strings.table().begin();
+            i != state.strings.table().end();
+            ++i) {
+        VISIT(i->second);
+    }
+
 	for(uint64_t t = 0; t < state.threads.size(); t++) {
 		Thread* thread = state.threads[t];
 

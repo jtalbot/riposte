@@ -3,6 +3,7 @@
 #define _RIPOSTE_SYMBOLS_H
 
 #include "common.h"
+#include "gc.h"
 
 // predefined strings
 
@@ -60,7 +61,9 @@
 	_(switchSym, 	"switch") \
 	_(brace, 	"{") \
 	_(paren, 	"(") \
+	_(pos, 		"+") \
 	_(add, 		"+") \
+	_(neg, 		"-") \
 	_(sub, 		"-") \
 	_(mul, 		"*") \
 	_(tilde, 	"~") \
@@ -172,15 +175,19 @@
     _(__names__, "__names__") \
     _(rownames, "row.names") \
 
-typedef const char* String;
+struct StringImpl : public HeapObject {
+    char s[];
+};
+typedef const StringImpl* String;
+
+//typedef const char* String;
 
 namespace Strings {
 	static const String NA = 0;
 #define DECLARE(name, string, ...) extern String name;
 	STRINGS(DECLARE)
 #undef DECLARE
-	extern String pos;
-	extern String neg;
 }
 
 #endif
+

@@ -26,7 +26,7 @@ rep.int <- function(x, times) {
         x[index(length(x), 1, length(x)*times)]
     }
     else if(length(times) == length(x)) {
-        unlist(mapply(function(x,t) rep.int(x,t), list(x, times), NULL), FALSE, FALSE)
+        unlist(.Map(rep_len, list(x, times)), FALSE, FALSE)
     }
     else {
         .stop("invalid 'times' argument")

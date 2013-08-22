@@ -34,6 +34,20 @@ LOGICAL_UNARY_BYTECODES(UNARY_OP)
 ORDINAL_UNARY_BYTECODES(UNARY_OP)
 #undef UNARY_OP 
 
+template<>
+struct lnotVOp<Raw> {
+    typedef Raw A;
+    typedef Raw MA;
+    typedef Raw R;
+    static Raw::Element eval(Thread& thread, void* args, Raw::Element const v) {
+        return ~v;
+    }
+    static void Scalar(Thread& thread, void* args, Raw::Element const a, Value& c) {
+        Raw::InitScalar(c, eval(thread, args, a));
+    }
+};
+
+
 #define BINARY_OP(Name, String, Group, Func) \
 template<typename S, typename T> \
 struct Name##VOp {\
@@ -67,38 +81,70 @@ inline int64_t Mod(int64_t a, int64_t b) { return b == 0 ? Integer::NAelement : 
 inline double riposte_max(Thread& thread, double a, double b) { return a > b ? a : b; }
 inline int64_t riposte_max(Thread& thread, int64_t a, int64_t b) { return a > b ? a : b; }
 inline int64_t riposte_max(Thread& thread, char a, char b) { return a | b; }
-inline String riposte_max(Thread& thread, String a, String b) { return strcmp(a,b) > 0 ? a : b; } 
+inline String riposte_max(Thread& thread, String a, String b) { return strcmp(a->s,b->s) > 0 ? a : b; } 
 
 inline double riposte_min(Thread& thread, double a, double b) { return a < b ? a : b; }
 inline int64_t riposte_min(Thread& thread, int64_t a, int64_t b) { return a < b ? a : b; }
 inline int64_t riposte_min(Thread& thread, char a, char b) { return a & b; }
-inline String riposte_min(Thread& thread, String a, String b) { return strcmp(a,b) < 0 ? a : b; }
+inline String riposte_min(Thread& thread, String a, String b) { return strcmp(a->s,b->s) < 0 ? a : b; }
 
 inline bool gt(Thread& thread, double a, double b) { return a > b; }
 inline bool gt(Thread& thread, int64_t a, int64_t b) { return a > b; }
 inline bool gt(Thread& thread, char a, char b) { return (unsigned char)a > (unsigned char)b; }
-inline bool gt(Thread& thread, String a, String b) { return strcmp(a,b) > 0; }
+inline bool gt(Thread& thread, String a, String b) { return strcmp(a->s,b->s) > 0; }
 
 inline bool ge(Thread& thread, double a, double b) { return a >= b; }
 inline bool ge(Thread& thread, int64_t a, int64_t b) { return a >= b; }
 inline bool ge(Thread& thread, char a, char b) { return (unsigned char)a >= (unsigned char)b; }
-inline bool ge(Thread& thread, String a, String b) { return strcmp(a,b) >= 0; }
+inline bool ge(Thread& thread, String a, String b) { return strcmp(a->s,b->s) >= 0; }
 
 inline bool lt(Thread& thread, double a, double b) { return a < b; }
 inline bool lt(Thread& thread, int64_t a, int64_t b) { return a < b; }
 inline bool lt(Thread& thread, char a, char b) { return (unsigned char)a < (unsigned char)b; }
-inline bool lt(Thread& thread, String a, String b) { return strcmp(a,b) < 0; }
+inline bool lt(Thread& thread, String a, String b) { return strcmp(a->s,b->s) < 0; }
 
 inline bool le(Thread& thread, double a, double b) { return a <= b; }
 inline bool le(Thread& thread, int64_t a, int64_t b) { return a <= b; }
 inline bool le(Thread& thread, char a, char b) { return (unsigned char)a <= (unsigned char)b; }
-inline bool le(Thread& thread, String a, String b) { return strcmp(a,b) <= 0; }
+inline bool le(Thread& thread, String a, String b) { return strcmp(a->s,b->s) <= 0; }
 
 ARITH_BINARY_BYTECODES(BINARY_OP)
 ORDINAL_BINARY_BYTECODES(BINARY_OP)
 LOGICAL_BINARY_BYTECODES(BINARY_OP)
 UNIFY_BINARY_BYTECODES(BINARY_OP)
 #undef BINARY_OP
+
+template<>
+struct lorVOp<Raw,Raw> {
+    typedef Raw A;
+    typedef Raw B;
+    typedef Raw MA;
+    typedef Raw MB;
+    typedef Raw R;
+
+    static Raw::Element eval(Thread& thread, void* args, Raw::Element const v, Raw::Element const w) {
+        return v | w;
+    }
+    static void Scalar(Thread& thread, void* args, Raw::Element const a, Raw::Element const b, Value& c) {
+        Raw::InitScalar(c, eval(thread, args, a, b));
+    }
+};
+
+template<>
+struct landVOp<Raw,Raw> {
+    typedef Raw A;
+    typedef Raw B;
+    typedef Raw MA;
+    typedef Raw MB;
+    typedef Raw R;
+
+    static Raw::Element eval(Thread& thread, void* args, Raw::Element const v, Raw::Element const w) {
+        return v & w;
+    }
+    static void Scalar(Thread& thread, void* args, Raw::Element const a, Raw::Element const b, Value& c) {
+        Raw::InitScalar(c, eval(thread, args, a, b));
+    }
+};
 
 template<class X> struct addBase {};
 template<> struct addBase<Double> { static Double::Element base() { return 0; } };

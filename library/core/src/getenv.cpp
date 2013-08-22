@@ -13,7 +13,7 @@ void sysgetenv_map(Thread& thread,
     Character::Element& r,
     Character::Element name, Character::Element unset)
 {
-    char const* var = getenv(name);
+    char const* var = getenv(name->s);
     r = (var == NULL) 
         ? unset 
         : thread.internStr(var);

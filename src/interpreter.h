@@ -16,10 +16,6 @@
 #include "epee/trace.h"
 #endif
 
-class Thread;
-
-void marker(char* a);
-
 ////////////////////////////////////////////////////////////////////
 // VM data structures
 ///////////////////////////////////////////////////////////////////
@@ -44,19 +40,13 @@ class StringTable {
 	std::map<std::string, String> stringTable;
 	Lock lock;
 public:
-	StringTable() {
-	#define ENUM_STRING_TABLE(name, string) \
-		stringTable[string] = Strings::name; 
-		STRINGS(ENUM_STRING_TABLE);
-	}
 
 	String in(std::string const& s) {
 		lock.acquire();
 		std::map<std::string, String>::const_iterator i = stringTable.find(s);
 		if(i == stringTable.end()) {
-			char* str = new char[s.size()+1];
-			memcpy(str, s.c_str(), s.size()+1);
-			String string = (String)str;
+            String string = new (s.size()+1) StringImpl();
+			memcpy((void*)string->s, s.c_str(), s.size()+1);
 			stringTable[s] = string;
 			lock.release();
 			return string;
@@ -68,8 +58,12 @@ public:
 	}
 
 	std::string out(String s) const {
-		return std::string(s);
+		return std::string(s->s);
 	}
+
+    std::map<std::string, String> const& table() const {
+        return stringTable;
+    }
 };
 
 struct CompiledCall {
@@ -339,6 +333,8 @@ struct StackFrame {
 // Global shared state 
 ///////////////////////////////////////////////////////////////////
 
+class Thread;
+
 #define DEFAULT_NUM_REGISTERS 10000 
 
 class State {
@@ -573,32 +569,5 @@ private:
 		return found;
 	}
 };
-
-inline State::State(uint64_t threads, int64_t argc, char** argv) 
-	: verbose(false), epeeEnabled(true), format(State::RiposteFormat), done(0) {
-	this->empty = new Environment(1,(Environment*)0);
-    this->global = new Environment(1,empty);
-
-	arguments = Character(argc);
-	for(int64_t i = 0; i < argc; i++) {
-		arguments[i] = internStr(std::string(argv[i]));
-	}
-	
-	pthread_attr_t  attr;
-	pthread_attr_init (&attr);
-	pthread_attr_setscope (&attr, PTHREAD_SCOPE_SYSTEM);
-	pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
-
-	Thread* t = new Thread(*this, 0);
-	this->threads.push_back(t);
-
-	for(uint64_t i = 1; i < threads; i++) {
-		Thread* t = new Thread(*this, i);
-		pthread_create (&t->thread, &attr, Thread::start, t);
-		this->threads.push_back(t);
-	}
-
-	interpreter_init(getMainThread());
-}
 
 #endif

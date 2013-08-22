@@ -1,4 +1,4 @@
 
 l10n_info <- function() {
-    list('MBCS'=TRUE, 'UTF-8'=TRUE, 'Latin-1'=FALSE)
+    list('MBCS'=FALSE, 'UTF-8'=FALSE, 'Latin-1'=FALSE)
 }

@@ -20,7 +20,6 @@ file <- function(description, open, blocking, encoding, raw) {
     
     class(r) <- c('file', 'connection')
     attr(r, 'conn_id') <- .External('file_new', description)
-    r
     
     if(!identical(open,''))
         .open.file(r, open, blocking)
@@ -34,7 +33,6 @@ gzfile <- function(description, open, blocking, encoding, raw) {
 
     class(r) <- c('gzfile', 'connection')
     attr(r, 'conn_id') <- .External('file_new', description)
-    r
     
     if(!identical(open,''))
         .open.file(r, open, blocking)
@@ -43,7 +41,7 @@ gzfile <- function(description, open, blocking, encoding, raw) {
 }
 
 .open.gzfile <- .open.file <- function(con, open, blocking) {
-    .External('file_open', attr(con, 'conn_id'))
+    .External('file_open', attr(con, 'conn_id'), as.character(open))
     NULL
 }
 

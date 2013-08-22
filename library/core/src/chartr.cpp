@@ -18,8 +18,8 @@ Value chartr_compile(Thread& thread, Value const* args) {
     unsigned char* map = new unsigned char[256];
     for(size_t i = 0; i < 256; i++) map[i] = i;
     size_t i = 0;
-    while(o.s[i]) {
-        map[(unsigned char)o.s[i]] = n.s[i];
+    while(o[0]->s[i]) {
+        map[(unsigned char)o[0]->s[i]] = n[0]->s[i];
         ++i;
     }
 
@@ -36,7 +36,7 @@ void chartr_map(Thread& thread,
     Externalptr const& p = (Externalptr const&)map;
     unsigned char* m = (unsigned char*)p.ptr();
 
-    std::string t(text);
+    std::string t(text->s);
     for(size_t i = 0; i < t.size(); i++) {
         t[i] = m[(unsigned char)t[i]];
     }

@@ -23,7 +23,7 @@ Value setwd_impl(Thread& thread, Value const* args) {
     Value r = getwd_impl(thread, 0);
     Character const& wd = (Character const&)args[0];
     if(wd.length() == 1)
-        chdir(wd.s);
+        chdir(wd[0]->s);
     return r;
 }
 

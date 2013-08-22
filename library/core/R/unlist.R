@@ -1,18 +1,21 @@
 
-.is.nested <- function(x) {
-    as.logical(lapply(x, 
+.is.nested <- function(x) 
+    .Map(
         function(e)
             (is.list(e) 
           && all(attr(e, 'class') != 'expression')
           && all(attr(e, 'class') != 'call'))
          || (is.atomic(e)
-          && length(e) != 1) ))
-}
+          && length(e) != 1),
+        list(x),
+        'logical')[[1L]]
 
 .simple.type <- function(x) {
     order <- .characters('NULL', 'raw', 'logical', 'integer', 'double', 'character', 'list')
-    types <- as.character.default(lapply(x, function(e) 
-        ifelse(any(attr(e, 'class') == 'name'), 'name', typeof(e))))
+    types <- as.character.default(
+        .Map(function(e) 
+            ifelse(any(attr(e, 'class') == 'name'), 'name', typeof(e)),
+            list(x)))
     order[[max(match(types, order, 7L, NULL))]]
     
 }

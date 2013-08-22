@@ -12,14 +12,14 @@ scan <- function(file, what, nmax, sep, dec, quote, skip, nlines, na.strings, fl
         if(sep != '') {
             a <- strsplit(a, sep, TRUE, FALSE, FALSE)
         }
-        lengths <- as.integer(lapply(a, length))
+        lengths <- .Map(length, list(a), 'integer')[[1L]]
         if(!all(lengths == length(what)))
             .stop("all rows not the same length in 'scan'")
 
 
         r <- list()
         for(i in seq_len(length(what))) {
-            r[[i]] <- as(lapply(a, function(x) x[[i]]), .type(what[[i]]))
+            r[[i]] <- as(.lapply(a, function(x) x[[i]]), .type(what[[i]]))
         }
         names(r) <- names(what)
         r

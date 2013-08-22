@@ -13,7 +13,7 @@ strsplit <- function(text, split, fixed, perl, useBytes)
             r[[length(r)+1L]] <- substr(text[[i]], start, s[[j]]-1L)
             start <- s[[j]] + l[[j]]
         }
-        if(start < nchar(text[[i]])) {
+        if(start <= nchar(text[[i]])) {
             r[[length(r)+1L]] <- substr(text[[i]], start, nchar(text[[i]]))
         }
         splits[[i]] <- r

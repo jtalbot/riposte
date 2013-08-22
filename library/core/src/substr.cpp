@@ -10,7 +10,7 @@ void substr_map(Thread& thread,
         Character::Element text,
         Integer::Element start,
         Integer::Element length) {
-    std::string s(text);
+    std::string s(text->s);
     result = thread.internStr(s.substr(start, length).c_str());
 }
 
@@ -22,8 +22,8 @@ void substrassign_map(Thread& thread,
         Integer::Element length,
         Character::Element repl) {
 
-    std::string s(text);
+    std::string s(text->s);
     result = thread.internStr(
-        (s.substr(0, start) + repl + s.substr(
+        (s.substr(0, start) + repl->s + s.substr(
             std::min((Integer::Element)s.size(),start+length)).c_str()));
 }

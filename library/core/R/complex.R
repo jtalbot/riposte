@@ -120,8 +120,8 @@ length.complex <- function(x) length(x[[1]])
 
 `c.complex` <- function(x, ...) {
     l <- list(x,...)
-    re <- unlist(lapply(l, function(a) a[[1]]))
-    im <- unlist(lapply(l, function(a) a[[2]]))
+    re <- unlist(.Map(function(a) a[[1L]], list(l)))
+    im <- unlist(.Map(function(a) a[[2L]], list(l)))
     r <- list(Re=re, Im=im)
     class(r) <- 'complex'
 	r	

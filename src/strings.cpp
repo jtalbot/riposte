@@ -1,8 +1,8 @@
 #include "strings.h"
 
-#define DEFINE(name, string, ...) String Strings::name = string;
+// Strings are actually initialized in State::State
+
+#define DEFINE(name, string, ...) String Strings::name = 0;
 STRINGS(DEFINE)
 #undef DEFINE
 
-String Strings::pos = Strings::add;
-String Strings::neg = Strings::sub;

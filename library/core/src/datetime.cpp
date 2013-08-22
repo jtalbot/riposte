@@ -16,7 +16,7 @@ void strptime_map(Thread& thread,
 
     tm t;
     memset(&t, 0, sizeof(tm));
-    if( strptime(x, format, &t) != NULL ) {
+    if( strptime(x->s, format->s, &t) != NULL ) {
         // sets the wday and yday elements 
         mktime(&t);
 

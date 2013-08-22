@@ -11,16 +11,17 @@
     internal::setRegisteredNamespace('base',base)
     base[['.BaseNamespaceEnv']] <- base
     
-    .External('library', base, 'base')
-    
-    base[['.Options']] <- internal::options()
-    
     # all primitive functions are also available in the base library
     core <- internal::getRegisteredNamespace('core')
     names <- internal::ls(core, TRUE)
     base <- internal::getRegisteredNamespace('base')
     base[names] <- core[names]
 
+    # now actually load
+    .External('library', base, 'base')
+    
+    base[['.Options']] <- internal::options()
+    
     core::source('library/profile/Rprofile.unix', baseenv())
     core::source('library/profile/Common.R', baseenv())
 
@@ -126,8 +127,8 @@
     # base packages
 
     # the first 5 have to be in this order
-    load('tools')
-    load('utils')
+#    load('tools')
+#    load('utils')
 #    load('stats')
 #    load('datasets')
 #    load('methods')
@@ -158,3 +159,7 @@
 
     "Loaded base library"
 })()
+
+
+.First.sys()
+

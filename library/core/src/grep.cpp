@@ -24,7 +24,7 @@ Value regex_compile(Thread& thread, Value const* args) {
     
     regex_t* r = new regex_t();
 
-    tre_regcomp(r, pattern[0], flags);
+    tre_regcomp(r, pattern[0]->s, flags);
 
     Value v;
     Externalptr::Init(v, r, Value::Nil(), Value::Nil(), regex_finalize);
@@ -38,7 +38,7 @@ void grep_map(Thread& thread, Logical::Element& s,
     Externalptr const& p = (Externalptr const&)regex;
     regex_t* r = (regex_t*)p.ptr();
 
-    s = (tre_regexec(r, text, 0, NULL, 0) == 0)
+    s = (tre_regexec(r, text->s, 0, NULL, 0) == 0)
             ? Logical::TrueElement 
             : Logical::FalseElement;
 }
@@ -51,7 +51,7 @@ void regex_map(Thread& thread, Integer::Element& s, Integer::Element& l,
     regex_t* r = (regex_t*)p.ptr();
 
     regmatch_t m;
-    int match = tre_regexec(r, text, 1, &m, 0);
+    int match = tre_regexec(r, text->s, 1, &m, 0);
     if(match != 0) {
         s = -1;
         l = -1;
@@ -76,7 +76,7 @@ void gregex_map(Thread& thread,
     size_t offset = 0;
     int match = 0;
     do {
-        match = tre_regexec(r, text+offset, 1, &m, 0);
+        match = tre_regexec(r, text->s+offset, 1, &m, 0);
         if(match == 0) {
             ss.push_back(m.rm_so+1+offset);
             ll.push_back(m.rm_eo - m.rm_so);
@@ -122,18 +122,18 @@ void sub_map(Thread& thread, Character::Element& out,
     regex_t* r = (regex_t*)p.ptr();
 
     regmatch_t m[10];
-    int match = tre_regexec(r, text, 10, m, 0);
+    int match = tre_regexec(r, text->s, 10, m, 0);
     if(match != 0) {
         out = text;
     }
     else {
-        std::string s(sub);
+        std::string s(sub->s);
         // replace all back references in sub
         char c = '1';
         for(int i = 1; i <= 9; ++i, ++c) {
             if(m[i].rm_so >= 0) {
                 s = replaceAll(s, std::string("\\")+c, 
-                    std::string(text+m[i].rm_so, text+m[i].rm_eo));
+                    std::string(text->s+m[i].rm_so, text->s+m[i].rm_eo));
             }
             else {
                 s = replaceAll(s, std::string("\\")+c, 
@@ -141,9 +141,9 @@ void sub_map(Thread& thread, Character::Element& out,
             }
         }
         std::string result;
-        result.append( text, text+m[0].rm_so );
+        result.append( text->s, text->s+m[0].rm_so );
         result.append( s );
-        result.append( text+m[0].rm_eo, text+strlen(text) );
+        result.append( text->s+m[0].rm_eo, text->s+strlen(text->s) );
         out = thread.internStr(result.c_str());
     }
 }
@@ -161,23 +161,23 @@ void gsub_map(Thread& thread, Character::Element& out,
     int match = 0;
     std::string result="";
     do {
-        match = tre_regexec(r, text+offset, 10, m, 0);
+        match = tre_regexec(r, text->s+offset, 10, m, 0);
         if(match == 0) {
-            std::string s(sub);
+            std::string s(sub->s);
             // replace all back references in sub
             char c = '1';
             for(int i = 1; i <= 9; ++i, ++c) {
                 if(m[i].rm_so >= 0) {
                     s = replaceAll(s, std::string("\\")+c, 
-                        std::string(text+m[i].rm_so+offset, 
-                                    text+m[i].rm_eo+offset));
+                        std::string(text->s+m[i].rm_so+offset, 
+                                    text->s+m[i].rm_eo+offset));
                 }
                 else {
                     s = replaceAll(s, std::string("\\")+c, 
                         std::string(""));
                 }
             }
-            result.append( text+offset, text+m[0].rm_so+offset );
+            result.append( text->s+offset, text->s+m[0].rm_so+offset );
             result.append( s );
             offset += m[0].rm_eo;
         }

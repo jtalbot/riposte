@@ -23,7 +23,7 @@ extern "C"
 void setlocale_map(Thread& thread,
     Character::Element& r, Integer::Element category, Character::Element locale)
 {
-    char const* v = setlocale(category, locale);
+    char const* v = setlocale(category, locale->s);
     if(v)
         r = thread.internStr(v);
     else

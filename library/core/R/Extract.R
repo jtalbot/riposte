@@ -98,7 +98,7 @@
     }
 
     r <- strip(x)[indices]
-    attr(r,'dim') <- as.integer(lapply(idx, function(x) length(x)))
+    attr(r,'dim') <- .Map(length, list(idx), 'integer')[[1L]]
 
     dn <- dimnames.default(x)
     if(!is.null(dn)) {

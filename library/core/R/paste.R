@@ -18,7 +18,7 @@ paste <- function(items, sep, collapse)
         if(length(collapse) != 1L)
             stop("invalid 'collapse' argument")
         collapse <- as.character.default(collapse)
-        r <- .concat(.pconcat(r, c(rep(collapse, max(0L,length(r)-1L)),'')))
+        r <- .concat(.pconcat(r, c(rep_len(collapse, pmax(0L,length(r)-1L)),'')))
     }
     r
 }

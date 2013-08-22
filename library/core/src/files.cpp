@@ -13,6 +13,8 @@ void fileexists_map(Thread& thread,
     Logical::Element& r, Character::Element f)
 {
     struct stat t;
-    r = stat(f, &t) != -1 ? Logical::TrueElement : Logical::FalseElement;
+    r = stat(f->s, &t) != -1 
+            ? Logical::TrueElement
+            : Logical::FalseElement;
 }
 

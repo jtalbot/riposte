@@ -19,7 +19,7 @@ void fileinfo_map(Thread& thread,
     String f)
 {
     struct stat t;
-    if( stat(f, &t) != -1) {
+    if( stat(f->s, &t) != -1) {
         size = t.st_size;
         isdir = S_ISDIR(t.st_mode) ? Logical::TrueElement : Logical::FalseElement; 
         mode = t.st_mode % 512;
@@ -53,8 +53,8 @@ extern "C"
 void pathexpand_map(Thread& thread, String& g, String f)
 {
     // glob will expand all magic characters...force it to only expand ~
-    if(f != NULL && f[0] == '~') {
-        std::string file(f);
+    if(f != NULL && f->s[0] == '~') {
+        std::string file(f->s);
         size_t slash = file.find_first_of('/');
         std::string head = file.substr(0, slash);
       
@@ -89,7 +89,7 @@ Value sysglob(Thread& thread, Value const* args)
         if(c[j] == NULL)
             continue;
         
-        glob(c[j], flags, NULL, &gl);
+        glob(c[j]->s, flags, NULL, &gl);
         flags |= GLOB_APPEND;
     }
 
@@ -105,7 +105,7 @@ Value sysglob(Thread& thread, Value const* args)
 extern "C"
 void realpath_map(Thread& thread, String& g, String f, String winslash)
 {
-    char* r = realpath(f, NULL);
+    char* r = realpath(f->s, NULL);
     if(r != NULL) {
         g = thread.internStr(r);
         free(r);

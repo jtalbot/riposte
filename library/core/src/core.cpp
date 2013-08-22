@@ -144,13 +144,13 @@ Value readtable(Thread& thread, Value const* args) {
 extern "C"
 Value source(Thread& thread, Value const* args) {
 	Character file = Cast<Character>(args[0]);
-	std::ifstream t(file[0]);
+	std::ifstream t(file[0]->s);
 	std::stringstream buffer;
 	buffer << t.rdbuf();
 	std::string code = buffer.str();
 
 	Value value;
-	parse(thread.state, file[0], code.c_str(), code.length(), true, value);	
+	parse(thread.state, file[0]->s, code.c_str(), code.length(), true, value);	
 	
 	return value;
 }
@@ -161,10 +161,10 @@ Value paste(Thread& thread, Value const* args) {
 	String sep = As<Character>(thread, args[1])[0];
 	std::string r = "";
 	for(int64_t i = 0; i < a.length()-1; i++) {
-		r += a[i];
-		r += sep; 
+		r += a[i]->s;
+		r += sep->s; 
 	}
-	if(0 < a.length()) r += a[a.length()-1];
+	if(0 < a.length()) r += a[a.length()-1]->s;
 	return Character::c(thread.internStr(r));
 }
 

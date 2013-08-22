@@ -13,7 +13,7 @@ void syssetenv_map(Thread& thread,
     Logical::Element& r,
     Character::Element name, Character::Element value)
 {
-    r = setenv(name, value, 1) == 0
+    r = setenv(name->s, value->s, 1) == 0
             ? Logical::TrueElement
             : Logical::FalseElement;
 } 
@@ -23,7 +23,7 @@ void sysunsetenv_map(Thread& thread,
     Logical::Element& r,
     Character::Element name)
 {
-    r = unsetenv(name) == 0
+    r = unsetenv(name->s) == 0
             ? Logical::TrueElement
             : Logical::FalseElement;
 } 
