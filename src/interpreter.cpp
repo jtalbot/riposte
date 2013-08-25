@@ -1276,8 +1276,16 @@ static inline Instruction const* Name##_op(Thread& thread, Instruction const& in
 	DECODE(a);	\
     if( Group##Fast<Name##VOp>( thread, NULL, a, OUT(c) ) ) \
         return &inst+1; \
-    else \
-        return Name##Slow( thread, inst, NULL, a, OUT(c) ); \
+    else { \
+        try { \
+            return Name##Slow( thread, inst, NULL, a, OUT(c) ); \
+        } \
+        catch(RuntimeError const& e) {\
+            return StopDispatch(thread, inst, thread.internStr( \
+                e.what().c_str()), \
+                inst.c); \
+        } \
+    } \
 }
 UNARY_FOLD_SCAN_BYTECODES(OP)
 #undef OP
@@ -1289,8 +1297,16 @@ static inline Instruction const* Name##_op(Thread& thread, Instruction const& in
 	DECODE(b);	\
     if( Group##Fast<Name##VOp>( thread, NULL, a, b, OUT(c) ) ) \
         return &inst+1; \
-    else \
-        return Name##Slow( thread, inst, NULL, a, b, OUT(c) ); \
+    else { \
+        try { \
+            return Name##Slow( thread, inst, NULL, a, b, OUT(c) ); \
+        } \
+        catch(RuntimeError const& e) { \
+            return StopDispatch(thread, inst, thread.internStr( \
+                e.what().c_str()), \
+                inst.c); \
+        } \
+    } \
 }
 BINARY_BYTECODES(OP)
 #undef OP
