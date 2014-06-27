@@ -5,13 +5,13 @@
 
 #include <pthread.h>
 
+#include <eigen3/Eigen/Dense>
+
 #include "../../../src/runtime.h"
 #include "../../../src/compiler.h"
 #include "../../../src/parser.h"
 #include "../../../src/library.h"
 #include "../../../src/coerce.h"
-
-#include "../../../libs/Eigen/Dense"
 
 
 template<typename T>

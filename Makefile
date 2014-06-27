@@ -3,10 +3,10 @@
 UNAME := $(shell uname -s)
 CXX := clang++
 CC := clang
-CXXFLAGS := -Wall -I/opt/local/include
+CXXFLAGS := -Wall
 CFLAGS := -Wall
 LFLAGS := -fpic
-LIBS := -lpthread -L/opt/local/lib -ldyncall_s
+LIBS := -Llibs/dyncall/dyncall -lpthread -ldyncall_s
 
 ifeq ($(UNAME),Linux)
 	LIBS += -lrt
@@ -27,6 +27,7 @@ EXECUTABLE := riposte
 RIPOSTE := riposte.dylib
 MAIN := build/main.o
 LINENOISE := build/linenoise.o
+DYNCALL := libs/dyncall/dyncall/libdyncall_s.a
 PACKAGES:= core
 
 ALL_SRC := $(SRC)
@@ -49,7 +50,7 @@ asm: $(ASM)
 
 all: $(EXECUTABLE) $(PACKAGES)
 
-$(EXECUTABLE): $(MAIN) $(LINENOISE) $(RIPOSTE) 
+$(EXECUTABLE): $(MAIN) $(LINENOISE) $(DYNCALL) $(RIPOSTE)
 	$(CXX) $(LFLAGS) -L. -o $@ $^ $(LIBS)
 
 $(PACKAGES): $(RIPOSTE)
@@ -66,14 +67,18 @@ build/%.s: src/%.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -S -c $< -o $@ 
 
-build/linenoise.o: libs/linenoise/linenoise.c
+$(LINENOISE): libs/linenoise/linenoise.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+$(DYNCALL):
+	$(MAKE) -C libs/dyncall -f Makefile.embedded
 
 .PHONY: clean
 clean:
 	rm -rf $(EXECUTABLE) $(RIPOSTE) $(MAIN) $(OBJECTS) $(LINENOISE) $(DEPENDENCIES)
 	$(MAKE) -C library/core $(MAKECMDGOALS)
+	$(MAKE) -C libs/dyncall -f Makefile.embedded clean
 
 # dependency rules
 build/%.d: src/%.cpp

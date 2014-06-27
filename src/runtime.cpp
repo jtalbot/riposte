@@ -4,8 +4,8 @@
 #include "runtime.h"
 #include "compiler.h"
 
-#include <dyncall.h>
 #include <dlfcn.h>
+#include "../libs/dyncall/dyncall/dyncall.h"
 
 Type::Enum string2Type(String str) {
 #define CASE(name, string, ...) if(str == Strings::name) return Type::name;

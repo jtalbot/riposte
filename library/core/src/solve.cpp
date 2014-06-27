@@ -2,7 +2,7 @@
 #include "../../../src/runtime.h"
 #include "../../../src/coerce.h"
 
-#include "../../../libs/Eigen/Dense"
+#include <eigen3/Eigen/Dense>
 
 extern "C"
 Value solve(Thread& thread, Value const* args) {

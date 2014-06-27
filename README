@@ -7,6 +7,12 @@ We only do development on OSX and Linux. It's unlikely that our JIT will work on
 
 Compiling riposte
 -----------------
+0. Install dependencies:
+	`brew install boost`
+   	`brew install eigen`
+	`brew install tre`
+	Note: If you use a different package system, you may need to change the directories in Riposte's Makefiles 
+
 1. Run `make release` in the riposte directory, or `make debug` for the debug version
 
 2. Execute ./riposte to start
@@ -28,10 +34,11 @@ License
 -------
 Riposte is distributed under the BSD 2-clause license <http://www.opensource.org/licenses/bsd-license.php>.
 
-Riposte uses the following libraries:
+Riposte depends on the following libraries:
 * Eigen (http://eigen.tuxfamily.org) under the MPL2 license (http://www.mozilla.org/MPL/2.0/)
 * Linenoise (https://github.com/antirez/linenoise/) under a BSD license
-
+* dyncall (http://dyncall.org) under a very liberal license
+* tre (http://laurikari.net/tre/) under a 2-clause BSD license
 
 Testing
 -------

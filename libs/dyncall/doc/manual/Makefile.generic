@@ -1,0 +1,16 @@
+all: manual.pdf
+
+manual.pdf:
+	# run twice for toc on some tex installs
+	cd ${VPATH} && pdflatex -output-directory=${PWD} manual.tex
+	cd ${VPATH} && pdflatex -output-directory=${PWD} manual.tex
+
+manual.html:
+	cd ${VPATH} && htlatex manual.tex "xhtml,uni-html4" " -cunihtf"
+
+clean:
+	# pdf
+	for i in pdf aux lof log lol lot out toc; do rm -f manual.$$i || true; done
+	# html
+	for i in 4ct 4tc css dvi html idv lg tmp xref; do rm -f manual.$$i || true; done
+	for i in manual*x.png texput.log zzmanual.ps; do rm -f $$i || true; done
