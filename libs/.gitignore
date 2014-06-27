@@ -1,0 +1,6 @@
+dyncall/dyncall/*.o
+dyncall/dyncall/*.a
+dyncall/dyncallback/*.o
+dyncall/dyncallback/*.a
+dyncall/dynload/*.o
+dyncall/dynload/*.a
