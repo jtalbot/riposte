@@ -15,7 +15,9 @@ Compiling riposte
 
 1. Run `make release` in the riposte directory, or `make debug` for the debug version
 
-2. Execute ./riposte to start
+2. Set RIPOSTE_HOME environment variable to the riposte directory
+
+3. Execute ./riposte to start
 
 
 Flags

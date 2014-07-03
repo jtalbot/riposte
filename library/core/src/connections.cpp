@@ -249,3 +249,22 @@ Value gzfile_readBin(Thread& thread, Value const* args) {
     return r;
 }
 
+extern "C"
+Value file_seek(Thread& thread, Value const* args) {
+    Externalptr const& p = (Externalptr const&)args[0];
+    Double const& n = (Double const&)args[1];
+
+    // TODO: implement origin & rw
+
+    FileConnection* fc = (FileConnection*)p.ptr();
+
+    if(!Double::isNA(n[0])) {
+        int64_t offset = (int64_t)n[0];
+        fc->f.seekg(offset, fc->f.beg);
+    }
+
+    int64_t offset = fc->f.tellg();
+
+    return Integer::c(offset);
+}
+

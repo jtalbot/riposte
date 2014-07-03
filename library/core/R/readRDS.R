@@ -23,6 +23,30 @@ unserializeFromConn <- function(con, refhook) {
         type <- as.integer(sexp[[4L]])
         flags <- sexp[[3L]]
 
+        if(type == 0xf1)
+            return(baseenv())
+
+        if(type == 0xf2)
+            return(emptyenv())
+
+        if(type == 0xf9) {
+            # this is a namespace, but not sure how to read it.
+            int1 <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
+            int2 <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
+            name <- .unserialize()
+            version <- .unserialize()
+            return(internal::getRegisteredNamespace(name))
+        }
+
+        if(type == 0xfa)
+            return(internal::getRegisteredNamespace('base'))
+
+        if(type == 0xfb)
+            return(Nil)     # missing argument in Riposte
+
+        if(type == 0xfd)
+            return(globalenv())
+
         if(type == 0xfe)
             return(NULL)
 
@@ -31,6 +55,10 @@ unserializeFromConn <- function(con, refhook) {
             if(idx == 0L)
                 idx <- readBin(con, 'integer', 1L, 4L, FALSE, TRUE)
             return(refs[[idx]])
+        }
+
+        if(as.integer(type) > 25) {
+            .stop("Unsupported type in .unserialize (unknown)")
         }
 
         # if it has attributes and it's a pairlist, they come first...
@@ -45,21 +73,26 @@ unserializeFromConn <- function(con, refhook) {
             .unserialize.closure(),
             .unserialize.environment(),
             .unserialize.promise(),
-            .unserialize.language(),
+            .unserialize.language(flags),
             .unserialize.special(),
             .unserialize.builtin(),
             .unserialize.string(),
             .unserialize.logical(),
-            .stop('Unsupported type in .unserialize'),
-            .stop('Unsupported type in .unserialize'),
+            .stop('Unsupported type in .unserialize (factors deprecated)'),
+            .stop('Unsupported type in .unserialize (ordered factors deprecated)'),
             .unserialize.integer(),
             .unserialize.double(),
             .unserialize.complex(),
             .unserialize.character(),
-            .stop('Unsupported type in .unserialize'),
-            .stop('Unsupported type in .unserialize'),
+            .stop('Unsupported type in .unserialize (...)'),
+            .stop('Unsupported type in .unserialize (any)'),
             .unserialize.list(),
-            .stop('Unsupported type in .unserialize')
+            .stop('Unsupported type in .unserialize (expressions vector)'),
+            .unserialize.bytecode(),
+            .stop('Unsupported type in .unserialize (extermal pointer)'),
+            .stop('Unsupported type in .unserialize (weak reference)'),
+            .stop('Unsupported type in .unserialize (raw bytes)'),
+            .stop('Unsupported type in .unserialize (S4, non-vector)')
             )
 
         if(flags & as.raw(0x02)) {
@@ -87,6 +120,24 @@ unserializeFromConn <- function(con, refhook) {
         r
     }
 
+    .unserialize.closure <- function() {
+        .stop("Unserializing closures is not yet implemented")
+        a1 <- .unserialize()
+        a2 <- .unserialize()
+        a3 <- .unserialize()
+        a4 <- .unserialize()
+    }
+
+    .unserialize.environment <- function() {
+        locked <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
+        enclosure <- .unserialize()
+        frame <- .unserialize()
+        tag <- .unserialize()
+        e <- env.new(enclosure)
+        e[names(tag)] <- strip(tag)
+        e
+    }
+
     .unserialize.string <- function() {
         len <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
         if(len < 0L)
@@ -112,6 +163,11 @@ unserializeFromConn <- function(con, refhook) {
     .unserialize.double <- function() {
         len <- .length()
         readBin(con, 'double', len, 8L, TRUE, TRUE)
+    }
+
+    .unserialize.logical <- function() {
+        len <- .length()
+        readBin(con, 'logical', len, 4L, FALSE, FALSE)
     }
 
     .unserialize.list <- function() {
@@ -159,5 +215,25 @@ unserializeFromConn <- function(con, refhook) {
         r 
     }
 
+    .unserialize.language <- function(flags) {
+        r <- .unserialize.pairlist(as.raw(0x04))
+        attr(r, 'class') <- 'call'
+        r
+    }
+
+    .unserialize.bytecode <- function() {
+        .stop("Unserializing bytecode is not yet supported")
+        # don't know why I need this length
+        len <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
+        bc <- .unserialize()
+        # more stuff?
+        len <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
+        for( i in seq_len(len) ) {
+            a <- .unserialize()
+        }
+        NULL
+    }
+
     .unserialize()
 }
+

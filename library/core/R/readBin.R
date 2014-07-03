@@ -59,3 +59,10 @@ readBin <- function(con, what, n, size, signed, swap) {
     .External('gzfile_readBin', attr(con, 'conn_id'), as.integer(n))
 }
 
+.readBin.rawConnection <- function(con, n) {
+    e <- attr(con, 'conn')
+    r <- e$raw[e$offset+seq_len(as.integer(n))]
+    e$offset <- e$offset + as.integer(n)
+    r
+}
+

@@ -235,6 +235,7 @@ primitives <- .characters(
     '.subset',
     '.subset2',
     '.isMethodsDispatchOn',
+    'lazyLoadDBfetch',
 
     # browser.R
     'browser',
@@ -597,6 +598,7 @@ internals <- .characters(
     # connections.R
     'file',
     'gzfile',
+    'rawConnection',
     'open',
     'close',
     'summary.connection',
