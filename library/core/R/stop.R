@@ -40,7 +40,7 @@ seterrmessage <- NULL
         e <- list(message=message, call=call)
         attr(e, 'class') <- c('error', 'condition')
 
-        .signalCondition(e, message, call)
+        #.signalCondition(e, message, call)
         .dfltStop(message, call)
     }
            

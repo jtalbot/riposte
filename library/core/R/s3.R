@@ -136,16 +136,24 @@ NextMethod <- function(generic, object, ...) {
     callenv <- .frame(2L)[['.GenericCallEnv']]
     defenv <- .frame(2L)[['.GenericDefEnv']]
 
+    formals <- attr(.frame(2L)[['__function__']][['formals']], 'names')
+    call <- list()
+    call[[1]] <- as.name(generic)
+    for(i in seq_len(length(formals))) {
+        call[[i+1L]] <- as.name(formals[[i]]) 
+    }
+    attr(call, 'class') <- 'call'
+    
     call <- .resolve.generic.call(
         generic,
         generic,
         class, 
-        .frame(2L)[['__call__']], 
+        call, 
         callenv,
         defenv,
         FALSE,
         TRUE)
-  
+ 
     if(!is.null(call)) {
         promise('p', call, .frame(2L), .getenv(NULL))
         return(p)

@@ -84,7 +84,7 @@ static ByteCode::Enum op2(String const& func) {
     if(func == Strings::env_get) return ByteCode::env_get;
 
     if(func == Strings::semijoin) return ByteCode::semijoin;
-	
+    
     throw RuntimeError(std::string("unexpected symbol '") + func->s + "' used as a binary operator"); 
 }
 
@@ -543,7 +543,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
         functionCode->formals = formals;
 		functionCode->parameters = parameters;
 		functionCode->defaults = defaults;
-		functionCode->string = SymbolStr(call[3]);
+		functionCode->string = call[3].isCharacter()
+            ? SymbolStr(call[3])
+            : Strings::empty;
 		functionCode->dotIndex = dotIndex;
 
 		Value function;

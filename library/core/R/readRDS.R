@@ -48,7 +48,7 @@ unserializeFromConn <- function(con, refhook) {
             return(globalenv())
 
         if(type == 0xfe)
-            return(NULL)
+            return(list())
 
         if(type == 0xff) {
             idx <- as.integer(flags)
@@ -61,8 +61,10 @@ unserializeFromConn <- function(con, refhook) {
             .stop("Unsupported type in .unserialize (unknown)")
         }
 
-        # if it has attributes and it's a pairlist, they come first...
-        if((flags & as.raw(0x02)) && type == 0x02) {
+        # if it has attributes and it's a pairlist
+        # (or apparently some other things), they come first...
+        if((flags & as.raw(0x02)) && 
+            (type == 0x02 || type == 0x03 || type == 0x06)) {
             attrs <- .unserialize()
         }
 
@@ -89,14 +91,14 @@ unserializeFromConn <- function(con, refhook) {
             .unserialize.list(),
             .stop('Unsupported type in .unserialize (expressions vector)'),
             .unserialize.bytecode(),
-            .stop('Unsupported type in .unserialize (extermal pointer)'),
+            .stop('Unsupported type in .unserialize (external pointer)'),
             .stop('Unsupported type in .unserialize (weak reference)'),
             .stop('Unsupported type in .unserialize (raw bytes)'),
             .stop('Unsupported type in .unserialize (S4, non-vector)')
             )
 
         if(flags & as.raw(0x02)) {
-            if(type != 0x02)
+            if(type != 0x02 && type != 0x03 && type != 0x06)
                 attrs <- .unserialize()
             attributes(v) <- attrs
         }
@@ -115,17 +117,19 @@ unserializeFromConn <- function(con, refhook) {
     }
 
     .unserialize.symbol <- function() {
-        r <- as.vector(.unserialize(), 'symbol')
+        r <- as.name(.unserialize())
         refs[[length(refs)+1L]] <<- r
         r
     }
 
     .unserialize.closure <- function() {
-        .stop("Unserializing closures is not yet implemented")
-        a1 <- .unserialize()
-        a2 <- .unserialize()
-        a3 <- .unserialize()
-        a4 <- .unserialize()
+        env <- .unserialize()
+        args <- .unserialize()
+        body <- .unserialize()
+        print(body)
+        x <- as.call(list(as.name('function'), args, body, 'From compiled bytecode'))
+        promise('f', x, env, .getenv(NULL))
+        f
     }
 
     .unserialize.environment <- function() {
@@ -167,7 +171,7 @@ unserializeFromConn <- function(con, refhook) {
 
     .unserialize.logical <- function() {
         len <- .length()
-        readBin(con, 'logical', len, 4L, FALSE, FALSE)
+        readBin(con, 'logical', len, 4L, FALSE, TRUE)
     }
 
     .unserialize.list <- function() {
@@ -216,22 +220,98 @@ unserializeFromConn <- function(con, refhook) {
     }
 
     .unserialize.language <- function(flags) {
-        r <- .unserialize.pairlist(as.raw(0x04))
+        head <- .unserialize()
+        tail <- .unserialize()
+        r <- c.default(head, tail)
         attr(r, 'class') <- 'call'
         r
     }
 
-    .unserialize.bytecode <- function() {
-        .stop("Unserializing bytecode is not yet supported")
-        # don't know why I need this length
-        len <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
+    # for reasons beyond me, when parsing bytecodes, the format changes subtly.
+    .unserialize.bc <- function() {
+        sexp <- readBin(con, 'raw', 4L, 1L, TRUE, TRUE)
+        type <- as.integer(sexp[[4L]])
+        flags <- sexp[[3L]]
+        
+        # Byte code stuff that I don't care about...
+        if(type == 0xf3) {
+            int1 <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
+            return(NULL)
+        }
+
+        if(type == 0xf4) {
+            int1 <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
+            sexp <- readBin(con, 'raw', 4L, 1L, TRUE, TRUE)
+            type <- as.integer(sexp[[4L]])
+            flags <- sexp[[3L]]
+        }
+
+        if(type == 0xf0) {
+            type <- 0x06
+            flags <- 0x02
+        }
+
+        if(type == 0xef) {
+            type <- 0x02
+            flags <- 0x02
+        }
+
+        if( type == 0x02 ) {
+            if(flags & as.raw(0x02))
+                attrs <- .unserialize()
+           
+            b <- list()
+ 
+            a <- .unserialize()
+            b[[1]] <- .unserialize.bc()
+            q <- .unserialize.bc()
+             
+            if(!is.list(a)) {
+                names(b) <- a
+            }
+            r <- c.default(b,q)
+            attr(r, 'class') <- 'pairlist'
+            return(r)
+        }
+
+        if( type == 0x06 ) {
+            if(flags & as.raw(0x02))
+                attrs <- .unserialize()
+            a <- .unserialize()
+            b <- .unserialize.bc()
+            q <- .unserialize.bc()
+           
+            r <- c.default(b,q)
+            attr(r, 'class') <- 'call'
+            return(r)
+        }
+
+        if( type == 0x15 ) {
+            return(.unserialize.bc.body())
+        }
+        
+        .unserialize()
+    }
+
+    .unserialize.bc.body <- function() {
         bc <- .unserialize()
         # more stuff?
+        # the body is in the first block here, but I have to parse
+        # the rest to know where the end is
+        r <- NULL
         len <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
         for( i in seq_len(len) ) {
-            a <- .unserialize()
+            x <- .unserialize.bc()
+            if(i == 1)
+                r <- x
         }
-        NULL
+        r
+    }
+
+    .unserialize.bytecode <- function() {
+        # don't know why I need this length
+        len <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
+        .unserialize.bc.body()
     }
 
     .unserialize()

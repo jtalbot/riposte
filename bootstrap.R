@@ -17,8 +17,10 @@
     base <- internal::getRegisteredNamespace('base')
     base[names] <- core[names]
 
+    core::source('library/base/R/base', baseenv())
+
     # now actually load
-    .External('library', base, 'base')
+    #.External('library', base, 'base')
     
     base[['.Options']] <- internal::options()
     

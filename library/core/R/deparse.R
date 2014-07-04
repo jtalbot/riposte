@@ -246,6 +246,31 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
             }
             .pconcat(func, '}')
         }
+        else if(func == 'function' && is.null(n)) {
+            if(is.character(x[[4]]))
+                x[[4]][[1]]
+            else {
+                n <- names(x[[2]])
+                a <- strip(x[[2]])
+                args <- ''
+                for(i in seq_len(length(a))) {
+                    k <- n[[i]]
+                    if(!is.nil(a[[i]]))
+                        k <- .pconcat(.pconcat(k, '='), a[[i]])
+                    args <- .pconcat(args, k)
+                    if(i < length(a))
+                        args <- .pconcat(args, ', ')
+                }
+                .pconcat(.pconcat(.pconcat(.pconcat(func, '('), args), ') '), .deparse(x[[3]])) 
+            }
+        }
+        else if(func == 'if' && is.null(n)) {
+            r <- .pconcat(.pconcat(.pconcat('if (', .deparse(x[[2]])), ') '), .deparse(x[[3]]))
+            if(length(x) == 4) {
+                r <- .pconcat(r, .pconcat('else ', .deparse(x[[4]])))
+            }
+            r
+        }
         else if(is.null(n)) {
             func <- .pconcat(func, '(')
             for(i in 1L+seq_len(length(x)-1L)) {
@@ -258,7 +283,10 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
         else {
             func <- .pconcat(func, '(')
             for(i in 1L+seq_len(length(x)-1L)) {
-                func <- .pconcat(func, .deparse(x[[i]]))
+                a <- .deparse(x[[i]])
+                if(n[[i]] != '')
+                    a <- .pconcat(.pconcat(n[[i]], ' = '), a)
+                func <- .pconcat(func, a)
                 if(i < length(x))
                     func <- .pconcat(func, ', ')
             }

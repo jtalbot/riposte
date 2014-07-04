@@ -153,7 +153,9 @@ Value rawToLogical(Thread& thread, Value const* args)
         } t;
         for(int64_t i = 0; i < n; ++i) {
             memcpy(t.b, c.v()+i, 1);
-            r[i] = t.s ? Logical::TrueElement : Logical::FalseElement;
+            r[i] = t.s < 0
+                        ? Logical::NAelement
+                        : t.s ? Logical::TrueElement : Logical::FalseElement;
         }
     }
     else if(size == 2) {
@@ -163,7 +165,9 @@ Value rawToLogical(Thread& thread, Value const* args)
         } t;
         for(int64_t i = 0; i < n; ++i) {
             memcpy(t.b, c.v()+2*i, 2);
-            r[i] = t.s ? Logical::TrueElement : Logical::FalseElement;
+            r[i] = t.s < 0
+                        ? Logical::NAelement
+                        : t.s ? Logical::TrueElement : Logical::FalseElement;
         }
     }
     else if(size == 4) {
@@ -173,7 +177,9 @@ Value rawToLogical(Thread& thread, Value const* args)
         } t;
         for(int64_t i = 0; i < n; ++i) {
             memcpy(t.b, c.v()+4*i, 4);
-            r[i] = t.s ? Logical::TrueElement : Logical::FalseElement;
+            r[i] = t.s < 0 
+                        ? Logical::NAelement
+                        : t.s ? Logical::TrueElement : Logical::FalseElement;
         }
     }
     else if(size == 8) {
@@ -183,7 +189,9 @@ Value rawToLogical(Thread& thread, Value const* args)
         } t;
         for(int64_t i = 0; i < n; ++i) {
             memcpy(t.b, c.v()+8*i, 8);
-            r[i] = t.s ? Logical::TrueElement : Logical::FalseElement;
+            r[i] = t.s < 0
+                        ? Logical::NAelement
+                        : t.s ? Logical::TrueElement : Logical::FalseElement;
         }
     }
     else

@@ -11,13 +11,13 @@
 
     while(.frame(frame) != globalenv()
             && !is.nil(.get(.frame(frame), '__parent__'))) {
-        e <- .frame(frame)
+        e <- .get(.frame(frame), '__parent__')
         h <- e[['__handlers__']]
         n <- names(h)
         for(i in seq_len(length(n))) {
             if(any(cc == n[[i]])) {
                 r <- list(cond, call, h[[i]])
-                promise('throw', call('return', r), e, .getenv(NULL))
+                promise('throw', call('return', r), .frame(frame), .getenv(NULL))
                 throw
             }
         }

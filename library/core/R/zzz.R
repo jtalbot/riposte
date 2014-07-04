@@ -551,6 +551,9 @@ internals <- .characters(
     # attach.R
     'attach',
 
+    # base-internal.R
+    'makeLazy',
+    
     # basename.R
     'basename',
     'dirname',

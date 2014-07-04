@@ -47,16 +47,13 @@ Value decompress(Thread& thread, Value const* args) {
     else if(c == '1') {
         // gzip decompression
         try {
-        boost::iostreams::filtering_istream is;
-        is.push(boost::iostreams::zlib_decompressor());
-        is.push(boost::iostreams::array_source((const char*)data.v(), data.length()));
-        boost::iostreams::read(is, (char*)out.v(), out.length());
+            boost::iostreams::filtering_istream is;
+            is.push(boost::iostreams::zlib_decompressor());
+            is.push(boost::iostreams::array_source((const char*)data.v(), data.length()));
+            boost::iostreams::read(is, (char*)out.v(), out.length());
         }
         catch( const std::ios_base::failure& e)
         {
-                    std::cout << "Caught an ios_base::failure.\n"
-                  << "Explanatory string: " << e.what() << '\n'
-                  << "Error code: " << e.code() << '\n';
         }
     }
     else {
