@@ -511,15 +511,20 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	else if(func == Strings::function) 
 	{
 		//compile the default parameters
-		assert(call[1].isList());
-		List const& formals = (List const&)call[1];
-		if(!hasNames(formals)
-            || formals.length() != 
-                ((Character const&)getNames(formals)).length()) {
-            _error("Function parameters must be named");
+		assert(call[1].isList() || call[1].isNull());
+		List formals = call[1].isList()
+                ? (List const&)call[1]
+                : List::c();
+        Character parameters = hasNames(formals) 
+                ? (Character const&)getNames(formals)
+                : Character::c();
+
+		if(formals.length() != parameters.length()) {
+            std::stringstream ss;
+            ss << "Function does not have the same number of parameter names as parameter defaults: (" << parameters.length() << " != " << formals.length() << ")";
+            _error(ss.str());
         }
         
-        Character parameters = (Character const&)getNames(formals);
 	    List defaults(formals.length());
         int64_t dotIndex = formals.length();
 		for(int64_t i = 0; i < formals.length(); i++) {

@@ -256,7 +256,7 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
                 for(i in seq_len(length(a))) {
                     k <- n[[i]]
                     if(!is.nil(a[[i]]))
-                        k <- .pconcat(.pconcat(k, '='), a[[i]])
+                        k <- .pconcat(.pconcat(k, '='), .deparse(a[[i]]))
                     args <- .pconcat(args, k)
                     if(i < length(a))
                         args <- .pconcat(args, ', ')

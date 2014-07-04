@@ -667,9 +667,17 @@ static inline Instruction const* pr_new_op(Thread& thread, Instruction const& in
     REnvironment& assign = (REnvironment&)REGISTER((&inst+1)->b);
 
     Value& v = assign.environment()->insert(a.s);
-    Promise::Init(v,
-        eval.environment(),
-        Compiler::compilePromise(thread, b));
+
+    try {
+        Promise::Init(v,
+            eval.environment(),
+            Compiler::compilePromise(thread, b));
+    }
+    catch(RuntimeError const& e) {
+        return StopDispatch(thread, inst, thread.internStr(
+            e.what().c_str()), 
+            inst.c);
+    }
 
     OUT(c) = Null::Singleton();
 

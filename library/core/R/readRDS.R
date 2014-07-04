@@ -48,7 +48,7 @@ unserializeFromConn <- function(con, refhook) {
             return(globalenv())
 
         if(type == 0xfe)
-            return(list())
+            return(NULL)
 
         if(type == 0xff) {
             idx <- as.integer(flags)
@@ -57,7 +57,7 @@ unserializeFromConn <- function(con, refhook) {
             return(refs[[idx]])
         }
 
-        if(as.integer(type) > 25) {
+        if(as.integer(type) < 1 || as.integer(type) > 25) {
             .stop("Unsupported type in .unserialize (unknown)")
         }
 
@@ -69,13 +69,13 @@ unserializeFromConn <- function(con, refhook) {
         }
 
         v <- switch(as.integer(type)+1,
-            Nil,
+            NULL,
             .unserialize.symbol(),
-            .unserialize.pairlist(flags),
+            .unserialize.pairlist(sexp),
             .unserialize.closure(),
             .unserialize.environment(),
             .unserialize.promise(),
-            .unserialize.language(flags),
+            .unserialize.language(),
             .unserialize.special(),
             .unserialize.builtin(),
             .unserialize.string(),
@@ -86,7 +86,7 @@ unserializeFromConn <- function(con, refhook) {
             .unserialize.double(),
             .unserialize.complex(),
             .unserialize.character(),
-            .stop('Unsupported type in .unserialize (...)'),
+            as.name('...'),
             .stop('Unsupported type in .unserialize (any)'),
             .unserialize.list(),
             .stop('Unsupported type in .unserialize (expressions vector)'),
@@ -126,8 +126,8 @@ unserializeFromConn <- function(con, refhook) {
         env <- .unserialize()
         args <- .unserialize()
         body <- .unserialize()
-        print(body)
-        x <- as.call(list(as.name('function'), args, body, 'From compiled bytecode'))
+        x <- as.call(list(as.name('function'), args, body, list()))
+        x <- as.call(list(as.name('function'), args, body, .deparse(x)))
         promise('f', x, env, .getenv(NULL))
         f
     }
@@ -183,35 +183,20 @@ unserializeFromConn <- function(con, refhook) {
         r
     }
 
-    .unserialize.pairlist <- function(flags) {
+    .unserialize.pairlist <- function(sexp) {
         r <- list()
         names <- vector('character',0)
-       
-        if(flags & as.raw(0x04)) {
-            names[[length(names)+1L]] <- .unserialize()
-        }
-        else {
-            names[[length(names)+1L]] <- ""
-        }
-     
-        sexp <- readBin(con, 'raw', 4L, 1L, TRUE, TRUE)
-        while(sexp[[4L]] != 0xfe) {
-            # unserialize CAR
-            r[[length(r)+1L]] <- .unserialize.dispatch(sexp)
-            sexp <- readBin(con, 'raw', 4L, 1L, TRUE, TRUE)
-            # if CDR is also a pairlist, flatten into this list
-            if(sexp[[4L]] == 0x02) {
-                flags <- sexp[[3L]]
 
-                if(flags & as.raw(0x04)) {
-                    names[[length(names)+1L]] <- .unserialize()
-                }
-                else {
-                    names[[length(names)+1L]] <- ""
-                }
-
-                sexp <- readBin(con, 'raw', 4L, 1L, TRUE, TRUE)
+        while(sexp[[4L]] == 0x02) { 
+            if(sexp[[3L]] & as.raw(0x04)) {
+                names[[length(names)+1L]] <- .unserialize()
             }
+            else {
+                names[[length(names)+1L]] <- ""
+            }
+
+            r[[length(r)+1L]] <- .unserialize()
+            sexp <- readBin(con, 'raw', 4L, 1L, TRUE, TRUE)
         }
         if(any(names != ""))
             attr(r, 'names') <- names
@@ -219,7 +204,7 @@ unserializeFromConn <- function(con, refhook) {
         r 
     }
 
-    .unserialize.language <- function(flags) {
+    .unserialize.language <- function() {
         head <- .unserialize()
         tail <- .unserialize()
         r <- c.default(head, tail)
@@ -265,7 +250,6 @@ unserializeFromConn <- function(con, refhook) {
             a <- .unserialize()
             b[[1]] <- .unserialize.bc()
             q <- .unserialize.bc()
-             
             if(!is.list(a)) {
                 names(b) <- a
             }
@@ -280,7 +264,7 @@ unserializeFromConn <- function(con, refhook) {
             a <- .unserialize()
             b <- .unserialize.bc()
             q <- .unserialize.bc()
-           
+            
             r <- c.default(b,q)
             attr(r, 'class') <- 'call'
             return(r)
