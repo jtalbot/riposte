@@ -628,6 +628,13 @@ internals <- .characters(
     'duplicated',
     'anyDuplicated',
 
+    # dyn.load.R
+    'getLoadedDLLs',
+    'dyn.load',
+    'dyn.unload',
+    'is.loaded',
+    'getRegisteredRoutines',
+
     # encodeString.R
     'encodeString',
 

@@ -308,7 +308,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		return compileFunctionCall(compile(call[0], code), call, names, code);
 
 	String func = SymbolStr(call[0]);
-	// list and missing are the only built in function that 
+    // list and missing are the only built in function that
     // handles ... or named parameters
 	// we only handle the list(...) case through an op for now
 	if(func == Strings::list && call.length() == 2 
@@ -637,13 +637,15 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	}
 	else if(func == Strings::nextSym)
 	{
-		if(loopDepth == 0) throw CompileError("next used outside of loop");
+		if(loopDepth == 0)
+            throw CompileError("next used outside of loop");
 		emit(ByteCode::jmp, 0, 1, 0);
 		return Operand(INVALID, (int64_t)0);
 	} 
 	else if(func == Strings::breakSym)
 	{
-		if(loopDepth == 0) throw CompileError("break used outside of loop");
+		if(loopDepth == 0)
+            throw CompileError("break used outside of loop");
 		emit(ByteCode::jmp, 0, 2, 0);
 		return Operand(INVALID, (int64_t)0);
 	} 

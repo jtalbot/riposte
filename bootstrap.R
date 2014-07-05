@@ -6,33 +6,35 @@
 # You can get them from CRAN.
 
 (function() {
-    base <- .env_new(internal::getRegisteredNamespace('core'))
-    attr(base,'name') <- 'base'
-    internal::setRegisteredNamespace('base',base)
-    base[['.BaseNamespaceEnv']] <- base
-    
-    # all primitive functions are also available in the base library
+    # The core package in Riposte holds what are primitive and internal functions in GNU R.
     core <- internal::getRegisteredNamespace('core')
+
+    # Set up the base namespace
+    namespace.base <- .env_new(core)
+    attr(namespace.base,'name') <- 'namespace:base'
+    internal::setRegisteredNamespace('base',namespace.base)
+    internal::setRegisteredNamespace('baseenv',namespace.base)
+    namespace.base[['.BaseNamespaceEnv']] <- namespace.base
+
+    # All primitive functions are also available in the base library
     names <- internal::ls(core, TRUE)
-    base <- internal::getRegisteredNamespace('base')
-    base[names] <- core[names]
+    namespace.base[names] <- core[names]
 
-    core::source('library/base/R/base', baseenv())
+    # Pretend like we've loaded a base DLL (one doesn't really exist)
+    internal::dyn.load('base', FALSE, FALSE, '')
 
-    # now actually load
-    #.External('library', base, 'base')
-    
-    base[['.Options']] <- internal::options()
-    
-    core::source('library/profile/Rprofile.unix', baseenv())
-    core::source('library/profile/Common.R', baseenv())
+    # Run the base stuffs
+    core::source('library/base/R/base', namespace.base)
+    core::source('library/base/R/Rprofile', namespace.base)
 
-    # set some things that I don't yet know where R sets them
+    # Set up some other variables that R must set somewhere else
+    namespace.base[['.Options']] <- internal::options()
+
     internal::options(verbose=FALSE)
     internal::options(width=80L)
     internal::options(ts.eps=1e-05)
 
-    base$.Machine <- list(
+    namespace.base$.Machine <- list(
         double.eps = 2.22044604925031e-16,
         double.neg.eps = 1.11022302462516e-16,
         double.xmin = 2.2250738585072e-308,
@@ -53,78 +55,87 @@
         sizeof.pointer = 8L
         )
 
+    # Create the base package to go in the search path
+    base <- .env_new(emptyenv())
+    attr(base,'name') <- 'base'
+
+    # Expose all the base namespace functions in the search path
+    names <- internal::ls(namespace.base, TRUE)
+    base[names] <- namespace.base[names]
+    internal::setRegisteredNamespace('baseenv',base)
+
+    # Put the base package in the search path
     .attach <- function(env) {
         .setenv(env, .getenv(.env_global()))
         .setenv(.env_global(), env)
         env
     }
-
     .attach(base)
 
-    namespace <- function(name, env) {
+    #namespace <- function(name, env) {
     
-    import <- new.env(env)
-    attr(import, 'name') <- paste('imports:',name,sep="")
+    #import <- new.env(env)
+    #attr(import, 'name') <- paste('imports:',name,sep="")
 
-    exports <- new.env()
-    exportpatterns <- character(0)
-    S3methods <- matrix(character(0), nrow=0, ncol=3)
+    #exports <- new.env()
+    #exportpatterns <- character(0)
+    #S3methods <- matrix(character(0), nrow=0, ncol=3)
 
-    ns <- new.env(baseenv())
-    ns$useDynLib <- function(library, ..., .registration=FALSE, .fixes="") NULL
-    ns$import <- function(library) {
-        env <- getRegisteredNamespace(strip(.pr_expr(.getenv(NULL), 'library')))
-        names <- ls(env)
-        import[names] <- env[names]
-    }
-    ns$importFrom <- function(library, ...) {
-        env <- getRegisteredNamespace(strip(.pr_expr(.getenv(NULL), 'library')))
-        for(i in seq_len(length(`__dots__`))) {
-            name <- strip(.pr_expr(`__dots__`, i))
-            import[[name]] <- env[[name]]
-        }
-    }
-    ns$export <- function(...) {
-        for(i in seq_len(length(`__dots__`))) {
-            name <- strip(.pr_expr(`__dots__`, i))
-            exports[[name]] <- name
-        }
-    }
-    ns$exportPattern <- function(pattern)
-        exportpatterns[length(exportpatterns)+1] <- pattern
+    #ns <- new.env(baseenv())
+    #ns$useDynLib <- function(library, ..., .registration=FALSE, .fixes="") NULL
+    #ns$import <- function(library) {
+    #    env <- getRegisteredNamespace(strip(.pr_expr(.getenv(NULL), 'library')))
+    #    names <- ls(env)
+    #    import[names] <- env[names]
+    #}
+    #ns$importFrom <- function(library, ...) {
+    #    env <- getRegisteredNamespace(strip(.pr_expr(.getenv(NULL), 'library')))
+    #    for(i in seq_len(length(`__dots__`))) {
+    #        name <- strip(.pr_expr(`__dots__`, i))
+    #        import[[name]] <- env[[name]]
+    #    }
+    #}
+    #ns$export <- function(...) {
+    #    for(i in seq_len(length(`__dots__`))) {
+    #        name <- strip(.pr_expr(`__dots__`, i))
+    #        exports[[name]] <- name
+    #    }
+    #}
+    #ns$exportPattern <- function(pattern)
+    #    exportpatterns[length(exportpatterns)+1] <- pattern
+    #
+    #ns$S3method <- function(func, type, f) {
+    #    if(missing(f))
+    #        f <- paste(func,type,sep='.')
+    #    else
+    #        f <- strip(.pr_expr(.getenv(NULL), 'f'))
+    #    S3methods <- rbind(S3methods, c(func,type,f))
+    #}
 
-    ns$S3method <- function(func, type, f) {
-        if(missing(f))
-            f <- paste(func,type,sep='.')
-        else
-            f <- strip(.pr_expr(.getenv(NULL), 'f'))
-        S3methods <- rbind(S3methods, c(func,type,f))
-    }
+    #list( ns,
+    #        function() import,
+    #        function() exports,
+    #        function() exportpatterns,
+    #        function() S3methods )
+    #}
 
-    list( ns,
-            function() import, 
-            function() exports,
-            function() exportpatterns,
-            function() S3methods )
-    }
-
-    load <- function(name) {
-        ns <- namespace(name, baseenv())
-        core::source(paste('library/',name, '/NAMESPACE', sep=""), ns[[1L]])
-        env <- core::library(name, ns[[2L]]())
-        exports <- ns[[3L]]()
-        patterns <- ns[[4L]]()
-        n <- ls(env, TRUE)
-        for(p in patterns) {
-            exported <- grepl(p, n)
-            exports[exported] <- exported
-        }
-        env[['.__NAMESPACE__.']] <- new.env(emptyenv())
-        env[['.__NAMESPACE__.']][['exports']] <- exports
-        env[['.__NAMESPACE__.']][['S3methods']] <- ns[[5L]]()
-        attr(env, 'name') <- paste('namespace:', name, sep="")
-        internal::setRegisteredNamespace(name, env)
-    }
+    #load <- function(name) {
+    #    ns <- namespace(name, baseenv())
+    #    core::source(paste('library/',name, '/NAMESPACE', sep=""), ns[[1L]])
+    #    env <- core::library(name, ns[[2L]]())
+    #    exports <- ns[[3L]]()
+    #    patterns <- ns[[4L]]()
+    #    n <- ls(env, TRUE)
+    #    for(p in patterns) {
+    #        exported <- grepl(p, n)
+    #        exports[exported] <- exported
+    #    }
+    #    env[['.__NAMESPACE__.']] <- new.env(emptyenv())
+    #    env[['.__NAMESPACE__.']][['exports']] <- exports
+    #    env[['.__NAMESPACE__.']][['S3methods']] <- ns[[5L]]()
+    #    attr(env, 'name') <- paste('namespace:', name, sep="")
+    #    internal::setRegisteredNamespace(name, env)
+    #}
 
     # base packages
 

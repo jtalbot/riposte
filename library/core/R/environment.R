@@ -20,7 +20,7 @@ is.environment <- function(x) .type(x) == 'environment'
 globalenv <- function() .env_global()
 
 emptyenv <- function() getRegisteredNamespace('empty')
-baseenv <- function() getRegisteredNamespace('base')
+baseenv <- function() getRegisteredNamespace('baseenv')
 
 new.env <- function(hash, parent, size) {
     if(!is.environment(parent))
