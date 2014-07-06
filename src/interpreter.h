@@ -92,13 +92,13 @@ struct CompiledCall {
 };
 
 struct Code : public HeapObject {
+    Value expression;
+
     std::vector<Instruction> bc;
     std::vector<Value> constants;
     std::vector<CompiledCall> calls;
     int registers;
     
-    Value expression;
-
 	void printByteCode(State const& state) const;
 	void visit() const;
 };

@@ -1,7 +1,7 @@
 
 last.warning <- NULL
 
-warning <- function(include.call, immediate, msg) {
+warning <- function(include.call, immediate, no.breaks, msg) {
     
     level <- options('warn')[[1]]
     if(is.null(level))

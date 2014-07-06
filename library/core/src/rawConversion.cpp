@@ -118,7 +118,13 @@ Value rawToInteger(Thread& thread, Value const* args)
         } t;
         for(int64_t i = 0; i < n; ++i) {
             memcpy(t.b, c.v()+4*i, 4);
-            r[i] = sign ? (int64_t)t.s : (int64_t)t.u;
+            // Handle NA for 4-byte integers since that's what gnu R
+            // will give us. The R documentation says that, in general,
+            // size changes won't preserve NAs.
+            r[i] =
+                t.s == std::numeric_limits<int32_t>::min()
+                    ? Integer::NAelement
+                    : sign ? (int64_t)t.s : (int64_t)t.u;
         }
     }
     else if(size == 8) {

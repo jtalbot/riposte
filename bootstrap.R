@@ -6,26 +6,33 @@
 # You can get them from CRAN.
 
 (function() {
-    # The core package in Riposte holds what are primitive and internal functions in GNU R.
-    core <- internal::getRegisteredNamespace('core')
-
     # Set up the base namespace
-    namespace.base <- .env_new(core)
+    namespace.base <- .env_new(emptyenv())
     attr(namespace.base,'name') <- 'namespace:base'
-    internal::setRegisteredNamespace('base',namespace.base)
-    internal::setRegisteredNamespace('baseenv',namespace.base)
+    internal::registerNamespace('base',namespace.base)
+    internal::registerNamespace('baseenv',namespace.base)
     namespace.base[['.BaseNamespaceEnv']] <- namespace.base
 
+    # Riposte's primitive package holds what are primitive functions in GNU R.
     # All primitive functions are also available in the base library
-    names <- internal::ls(core, TRUE)
-    namespace.base[names] <- core[names]
+    primitive <- internal::getRegisteredNamespace('primitive')
+    names <- internal::ls(primitive, TRUE)
+    namespace.base[names] <- primitive[names]
+
+    # Create the base package to go in the search path and put it there
+    # replacing the primitive package which was just there to bootstrap
+    base <- .env_new(emptyenv())
+    attr(base,'name') <- 'base'
+    base[names] <- primitive[names]
+    .setenv(base, emptyenv())
+    .setenv(.env_global(), base)
 
     # Pretend like we've loaded a base DLL (one doesn't really exist)
     internal::dyn.load('base', FALSE, FALSE, '')
 
     # Run the base stuffs
-    core::source('library/base/R/base', namespace.base)
-    core::source('library/base/R/Rprofile', namespace.base)
+    source('library/base/R/base', namespace.base)
+    source('library/base/R/Rprofile', namespace.base)
 
     # Set up some other variables that R must set somewhere else
     namespace.base[['.Options']] <- internal::options()
@@ -55,22 +62,10 @@
         sizeof.pointer = 8L
         )
 
-    # Create the base package to go in the search path
-    base <- .env_new(emptyenv())
-    attr(base,'name') <- 'base'
-
     # Expose all the base namespace functions in the search path
     names <- internal::ls(namespace.base, TRUE)
     base[names] <- namespace.base[names]
-    internal::setRegisteredNamespace('baseenv',base)
-
-    # Put the base package in the search path
-    .attach <- function(env) {
-        .setenv(env, .getenv(.env_global()))
-        .setenv(.env_global(), env)
-        env
-    }
-    .attach(base)
+    internal::registerNamespace('baseenv',base)
 
     #namespace <- function(name, env) {
     

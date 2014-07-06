@@ -85,7 +85,7 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
     if(onexit.isObject()) {
         Promise::Init(onexit,
             thread.frame.environment,
-            Compiler::compilePromise(thread, onexit));
+            Compiler::deferPromiseCompilation(thread, onexit));
 		return force(thread, (Promise const&)onexit,
             thread.frame.environment, Value::Nil(),
             1, &inst);
@@ -671,7 +671,7 @@ static inline Instruction const* pr_new_op(Thread& thread, Instruction const& in
     try {
         Promise::Init(v,
             eval.environment(),
-            Compiler::compilePromise(thread, b));
+            Compiler::deferPromiseCompilation(thread, b));
     }
     catch(RuntimeError const& e) {
         return StopDispatch(thread, inst, thread.internStr(

@@ -1,6 +1,6 @@
 
 getRegisteredNamespace <- NULL
-setRegisteredNamespace <- NULL
+registerNamespace <- NULL
 getNamespaceRegistry <- NULL
 
 (function() {
@@ -12,7 +12,7 @@ getNamespaceRegistry <- NULL
         return( namespaces[[strip(name)]] )
     }
 
-    setRegisteredNamespace <<- function(name, env) {
+    registerNamespace <<- function(name, env) {
         namespaces[[strip(name)]] <<- env
 
         if(is.nil(.get(env, '.__NAMESPACE__.')))
@@ -746,7 +746,7 @@ internals <- .characters(
     
     # ns-reflect.R (in zzz...)
     'getRegisteredNamespace',
-    'setRegisteredNamespace',
+    'registerNamespace',
 
     # options.R
     'options',
@@ -887,11 +887,13 @@ internals <- .characters(
     'which.max'
     )
 
-setRegisteredNamespace('core',
-    .make.namespace('core', .getenv(NULL), primitives))
-setRegisteredNamespace('internal',
+registerNamespace('primitive',
+    .make.namespace('primitive', .getenv(NULL), primitives))
+registerNamespace('internal',
     .make.namespace('internal', .getenv(NULL), internals))
 
-.attach(.export('package:core', .getenv(NULL), primitives))
+# Attach the primitives so we can bootstrap
+.attach(.export('primitive', .getenv(NULL), primitives))
 
 NULL
+

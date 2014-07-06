@@ -240,7 +240,7 @@ CompiledCall Compiler::makeCall(Thread& thread, List const& call, Character cons
                 p.n = Strings::empty;
 	    	} else if(isCall(call[i]) || isSymbol(call[i])) {
                 if(p.n != Strings::empty) named = true;
-		    	Promise::Init(p.v, NULL, Compiler::compilePromise(thread, call[i]));
+		    	Promise::Init(p.v, NULL, deferPromiseCompilation(thread, call[i]));
     		} else {
                 if(p.n != Strings::empty) named = true;
 	    		p.v = call[i];
@@ -534,7 +534,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
             }
 			else if(isCall(formals[i]) || isSymbol(formals[i])) {
 				Promise::Init(defaults[i], NULL, 
-                    compilePromise(thread, formals[i]));
+                    deferPromiseCompilation(thread, formals[i]));
 			}
 			else {
 				defaults[i] = formals[i];
@@ -926,6 +926,7 @@ int64_t Compiler::encodeOperand(Operand op) const {
 	else return 0;
 }
 
+
 Code* Compiler::compile(Value const& expr) {
 	Code* code = new Code();
 	assert(((int64_t)code) % 16 == 0); // our type packing assumes that this is true
@@ -956,7 +957,7 @@ Code* Compiler::compile(Value const& expr) {
     // interpreter assumes at least 2 registers for each function
     // one for the return value and one for an onexit result 
 	code->registers = std::max(max_n, 2LL); 
-	
+
 	for(size_t i = 0; i < ir.size(); i++) {
 		code->bc.push_back(Instruction(ir[i].bc, 
             encodeOperand(ir[i].a),
@@ -964,6 +965,6 @@ Code* Compiler::compile(Value const& expr) {
             encodeOperand(ir[i].c)));
 	}
 
-	return code;	
+    return code;
 }
 

@@ -121,6 +121,39 @@ public:
         p->code = code;
         return p;
 	}
+
+    static Code* deferPromiseCompilation(Thread& thread, Value const& expr) {
+        Code* code = new Code();
+        assert(((int64_t)code) % 16 == 0); // do we still need this assumption?
+        code->expression = expr;
+        return code;
+    }
+
+    static void doPromiseCompilation(Thread& thread, Code* code) {
+        if(!code->bc.empty())
+            return;
+ 
+        Compiler compiler(thread, PROMISE);
+
+        // promises use first two registers to pass environment info
+        // for replacing promise with evaluated value
+        compiler.allocRegister();
+        compiler.allocRegister();
+
+        Operand result = compiler.compile(code->expression, code);
+
+        compiler.emit(ByteCode::retp, result, 0, 0);
+
+        for(std::vector<IRNode>::const_iterator i = compiler.ir.begin();
+                i != compiler.ir.end(); ++i) {
+            code->bc.push_back(Instruction(i->bc,
+                compiler.encodeOperand(i->a),
+                compiler.encodeOperand(i->b),
+                compiler.encodeOperand(i->c)));
+        }
+
+        code->registers = compiler.max_n;
+    }
 };
 
 // compilation routines

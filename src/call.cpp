@@ -9,6 +9,7 @@ Instruction const* force(
     int64_t outRegister, Instruction const* returnpc) {
 
     Code* code = p.isExpression() ? p.code() : thread.promiseCode;
+    Compiler::doPromiseCompilation(thread, code);
     Instruction const* r = buildStackFrame(
         thread, p.environment(), code, outRegister, returnpc);
     thread.frame.isPromise = true;

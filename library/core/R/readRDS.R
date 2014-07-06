@@ -29,13 +29,23 @@ unserializeFromConn <- function(con, refhook) {
         if(type == 0xf2)
             return(emptyenv())
 
+        if(type == 0xf7) {
+            # this seems to be 0 all the time
+            int1 <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
+            r <- refhook(.unserialize.character())
+            refs[[length(refs)+1L]] <<- r
+            return(r)
+        }
+
         if(type == 0xf9) {
             # this is a namespace, but not sure how to read it.
             int1 <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
             int2 <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
             name <- .unserialize()
             version <- .unserialize()
-            return(internal::getRegisteredNamespace(name))
+            r <- internal::getRegisteredNamespace(name)
+            refs[[length(refs)+1L]] <<- r
+            return(r)
         }
 
         if(type == 0xfa)
@@ -58,6 +68,7 @@ unserializeFromConn <- function(con, refhook) {
         }
 
         if(as.integer(type) < 1 || as.integer(type) > 25) {
+            print(type)
             .stop("Unsupported type in .unserialize (unknown)")
         }
 
@@ -134,10 +145,13 @@ unserializeFromConn <- function(con, refhook) {
 
     .unserialize.environment <- function() {
         locked <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
+
         enclosure <- .unserialize()
+        e <- env.new(enclosure)
+        refs[[length(refs)+1L]] <<- e
+
         frame <- .unserialize()
         tag <- .unserialize()
-        e <- env.new(enclosure)
         e[names(tag)] <- strip(tag)
         e
     }
@@ -273,7 +287,6 @@ unserializeFromConn <- function(con, refhook) {
         if( type == 0x15 ) {
             return(.unserialize.bc.body())
         }
-        
         .unserialize()
     }
 

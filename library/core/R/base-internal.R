@@ -46,6 +46,6 @@ lazyLoadDBfetch <- function(key, file, compressed, hook) {
         r <- .External('decompress', r, size, comp)
 
     con <- rawConnection('', r, 'r')
-    unserializeFromConn(con, NULL)
+    unserializeFromConn(con, hook)
 }
 
