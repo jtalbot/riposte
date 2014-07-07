@@ -30,6 +30,17 @@
     # Pretend like we've loaded a base DLL (one doesn't really exist)
     internal::dyn.load('base', FALSE, FALSE, '')
 
+    namespace.base$.Platform <- list(
+        OS.type="unix",
+        file.sep="/",
+        dynlib.ext=".so",
+        GUI="X11",
+        endian="little",
+        pkgType="mac.binary.leopard",
+        path.sep=":",
+        r_arch="x86_64"
+        )
+
     # Run the base stuffs
     source('library/base/R/base', namespace.base)
     source('library/base/R/Rprofile', namespace.base)
