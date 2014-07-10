@@ -85,7 +85,7 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
     if(onexit.isObject()) {
         Promise::Init(onexit,
             thread.frame.environment,
-            Compiler::deferPromiseCompilation(thread, onexit));
+            Compiler::deferPromiseCompilation(thread, onexit), false);
 		return force(thread, (Promise const&)onexit,
             thread.frame.environment, Value::Nil(),
             1, &inst);
@@ -586,28 +586,11 @@ static inline Instruction const* missing_op(Thread& thread, Instruction const& i
     thread.visible = true;
     DECODE(a);
     bool missing = false;
-    if( a.isCharacter() && ((Character const&)a).length() == 1 ) {
-        // check the parameter list
-        Value const& f = thread.frame.environment->get(Strings::__function__);
-        if(!f.isClosure())
-            _error("invalid function in missing"); 
-        Character const& parameters = ((Closure const&)f).prototype()->parameters;
-        
-        Value const& m = thread.frame.environment->get(Strings::__missing__);
-        if(!m.isLogical() || ((Logical const&)m).length() != parameters.length())
-            _error("invalid missing vector");
 
-        Logical const& ms = (Logical const&)m;
-        
-        int64_t i = 0;
-        for(; i < parameters.length(); ++i) {
-            if(a.s == parameters[i]) {
-                missing = ms[i] == Logical::TrueElement;
-                break;
-            }
-        }
-        if(i == parameters.length())
-            _error("'missing' can only be used for arguments");
+    if( a.isCharacter() && ((Character const&)a).length() == 1 ) {
+        Value const& v = thread.frame.environment->get(a.s);
+        missing = (v.isPromise() && ((Promise const&)v).isDefault()) ||
+                  v.isNil();
     }
     else {
         int64_t index = -1;
@@ -617,15 +600,19 @@ static inline Instruction const* missing_op(Thread& thread, Instruction const& i
             index = a.d-1;
         else
             _error("Invalid argument to missing");
-        
+
         List const& dots = (List const&)
             thread.frame.environment->get(Strings::__dots__);
-        if(dots.isList() && index >= 0 && index < dots.length())
-            missing = dots[index].isNil();
+
+        missing = dots.isList() &&
+                  index >= 0 && index < dots.length() &&
+                  dots[index].isNil();
     }
-	Logical::InitScalar(OUT(c), 
+
+    Logical::InitScalar(OUT(c),
         missing ? Logical::TrueElement : Logical::FalseElement);
-	return &inst+1;
+
+    return &inst+1;
 }
 
 // STACK_FRAME_BYTECODES
@@ -671,7 +658,7 @@ static inline Instruction const* pr_new_op(Thread& thread, Instruction const& in
     try {
         Promise::Init(v,
             eval.environment(),
-            Compiler::deferPromiseCompilation(thread, b));
+            Compiler::deferPromiseCompilation(thread, b), false);
     }
     catch(RuntimeError const& e) {
         return StopDispatch(thread, inst, thread.internStr(

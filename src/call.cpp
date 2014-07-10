@@ -97,7 +97,7 @@ Value argument(int64_t index, List const& dots, CompiledCall const& call, Enviro
 			// But everything else can be passed down.
 			if(dots[index].isPromise()) {
 				Value p;
-				Promise::Init(p, env, index);
+				Promise::Init(p, env, index, false);
 				return p;
 			} 
 			else {
@@ -164,22 +164,18 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 	int64_t numArgs = numArguments(dots, call);
 	bool named = namedArguments(dotnames, call);
 
-    Logical missing(parameters.length());
-
     Environment* fenv = new Environment(
         (int64_t)std::min(numArgs, (int64_t)parameters.length()) + 5,
         func.environment());
 
     // set extra args (they must be named)
     for(size_t i = 0; i < call.extraArgs.length(); ++i) {
-        assignArgument(thread, env, fenv, 
-            call.extraNames[i], call.extraArgs[i]);
+        assignArgument(thread, env, fenv, call.extraNames[i], call.extraArgs[i]);
     }
 
 	// set defaults
 	for(int64_t i = 0; i < (int64_t)parameters.length(); ++i) {
 		assignArgument(thread, fenv, fenv, parameters[i], defaults[i]);
-	    missing[i] = Logical::TrueElement;
     }
 
 	if(!named) {
@@ -190,40 +186,40 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 			Value arg = argument(i, dots, call, env);
 			if(!arg.isNil()) {
 				assignArgument(thread, env, fenv, parameters[i], arg);
-	            missing[i] = Logical::FalseElement;
             }
 		}
 
-        if(pDotIndex < (int64_t)parameters.length()) {
-            // all unused args go into ...
-            if(end < numArgs)
-                missing[pDotIndex] = Logical::FalseElement;
-            List newdots(numArgs-end);
-            for(int64_t i = end; i < numArgs; i++) {
-	            Value arg = argument(i, dots, call, env);
-                assignDot(thread, arg, env, newdots[i-end]);
+        // if we have left over arguments:
+        if(numArgs > end) {
+            // if we have a ... stick them there
+            if(pDotIndex < (int64_t)parameters.length()) {
+                List newdots(numArgs-end);
+                for(int64_t i = end; i < numArgs; i++) {
+	                Value arg = argument(i, dots, call, env);
+                    assignDot(thread, arg, env, newdots[i-end]);
+                }
+                fenv->insert(Strings::__dots__) = newdots;
             }
-            fenv->insert(Strings::__dots__) = newdots;
-        }
-        else if(numArgs > end) {
-		    // if we have left over arguments, but no parameter dots, error
-            _error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
+            else {
+                _error(std::string("Unused args in call: ")
+                        + thread.state.deparse(call.call));
+            }
         }
     }
     // function only has dots, can just stick everything there
     else if(parameters.length() == 1 && pDotIndex == 0) {
-        if(numArgs > 0)
-            missing[pDotIndex] = Logical::FalseElement;
-        List newdots(numArgs);
-        Character names(numArgs);
-		for(int64_t i = 0; i < numArgs; i++) {
-            Value arg = argument(i, dots, call, env);
-            String n = name(i, dots, dotnames, call);
-            assignDot(thread, arg, env, newdots[i]);
-            names[i] = n;
+        if(numArgs > 0) {
+            List newdots(numArgs);
+            Character names(numArgs);
+		    for(int64_t i = 0; i < numArgs; i++) {
+                Value arg = argument(i, dots, call, env);
+                String n = name(i, dots, dotnames, call);
+                assignDot(thread, arg, env, newdots[i]);
+                names[i] = n;
+            }
+            fenv->insert(Strings::__dots__) = newdots;
+            fenv->insert(Strings::__names__) = names;
         }
-        fenv->insert(Strings::__dots__) = newdots;
-        fenv->insert(Strings::__names__) = names;
     }
 	else {
 		// call arguments are named, do matching by name
@@ -287,45 +283,44 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 				Value arg = argument(set[j], dots, call, env);
 				if(!arg.isNil()) {
 					assignArgument(thread, env, fenv, parameters[j], arg);
-                    missing[j] = Logical::FalseElement;
 			    }
                 numDots--;
             }
 		}
 
 		// put unused args into the dots
-        if(pDotIndex < (int64_t)parameters.length()) {
-    		named = false;
-            List newdots(numDots);
-            Character names(numDots);
-            int64_t j = 0;
-		    for(int64_t i = 0; i < numArgs; i++) {
-			    if(assignment[i] < 0) {
-				    Value arg = argument(i, dots, call, env);
-                    String n = name(i, dots, dotnames, call);
-				    if(n != Strings::empty)
-                        named = true;
-                    assignDot(thread, arg, env, newdots[j]);
-                    names[j] = n;
-                    j++;
-			    }
-		    }
-            if(numDots > 0)
-                missing[pDotIndex] = Logical::FalseElement;
-            
-            fenv->insert(Strings::__dots__) = newdots;
-            if(named)
-                fenv->insert(Strings::__names__) = names;
+        if( numDots > 0 ) {
+            if(pDotIndex < (int64_t)parameters.length()) {
+                named = false;
+                List newdots(numDots);
+                Character names(numDots);
+                int64_t j = 0;
+		        for(int64_t i = 0; i < numArgs; i++) {
+                    if(assignment[i] < 0) {
+                        Value arg = argument(i, dots, call, env);
+                        String n = name(i, dots, dotnames, call);
+                        if(n != Strings::empty)
+                            named = true;
+                        assignDot(thread, arg, env, newdots[j]);
+                        names[j] = n;
+                        j++;
+			        }
+		        }
+
+                fenv->insert(Strings::__dots__) = newdots;
+                if(named)
+                    fenv->insert(Strings::__names__) = names;
+            }
+            else {
+                _error(std::string("Unused args in call: ")
+                        + thread.state.deparse(call.call));
+	        }
         }
-        else if(numDots > 0) { 
-            _error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
-	    }
     }
 
     REnvironment::Init(fenv->insert(Strings::__parent__), env);
     fenv->insert(Strings::__call__) = call.call;
     fenv->insert(Strings::__function__) = func;
-    fenv->insert(Strings::__missing__) = missing;
     fenv->insert(Strings::__nargs__) = Integer::c(numArgs);
 
     return fenv;
@@ -342,8 +337,6 @@ Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func
 	int64_t const pDotIndex = prototype->dotIndex;
 	int64_t const end = std::min(arguments.length(), pDotIndex);
 
-    Logical missing(parameters.length());
-
     Environment* fenv = new Environment(
         (int64_t)call.arguments.length() + 5,
         func.environment());
@@ -358,34 +351,31 @@ Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func
 	for(int64_t i = 0; i < parameters.length(); i++) {
 		if(i < end && !arguments[i].isNil()) {
 			assignArgument(thread, env, fenv, parameters[i], arguments[i]);
-            missing[i] = Logical::FalseElement;
         }
 		else {
 			assignArgument(thread, fenv, fenv, parameters[i], defaults[i]);
-            missing[i] = Logical::TrueElement;
         }
 	}
 
 	// handle unused arguments
-	if(pDotIndex < parameters.length()) {
-        // called function has dots, all unused args go into ...
-        if(arguments.length() > end)
-            missing[pDotIndex] = Logical::FalseElement;
-        List dots(arguments.length()-end);
-        for(int64_t i = end; i < (int64_t)arguments.length(); i++) {
-            assignDot(thread, arguments[i], env, dots[i-end]);
+    if( arguments.length() > end ) {
+        // if we have a ..., put them there
+	    if(pDotIndex < parameters.length()) {
+            List dots(arguments.length()-end);
+            for(int64_t i = end; i < (int64_t)arguments.length(); i++) {
+                assignDot(thread, arguments[i], env, dots[i-end]);
+            }
+            fenv->insert(Strings::__dots__) = dots;
         }
-        fenv->insert(Strings::__dots__) = dots;
+        else if(arguments.length() > end) {
+            _error(std::string("Unused args in call: ")
+                    + thread.state.deparse(call.call));
+	    }
     }
-    else if(arguments.length() > end) {
-        // called function doesn't take dots, unused args is an error 
-        _error(std::string("Unused args in call: ") + thread.state.deparse(call.call));
-	}
 
     REnvironment::Init(fenv->insert(Strings::__parent__), env);
     fenv->insert(Strings::__call__) = call.call;
     fenv->insert(Strings::__function__) = func;
-    fenv->insert(Strings::__missing__) = missing;
     fenv->insert(Strings::__nargs__) = Integer::c(arguments.length());
     
     return fenv;

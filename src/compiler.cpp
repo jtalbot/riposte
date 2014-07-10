@@ -240,7 +240,7 @@ CompiledCall Compiler::makeCall(Thread& thread, List const& call, Character cons
                 p.n = Strings::empty;
 	    	} else if(isCall(call[i]) || isSymbol(call[i])) {
                 if(p.n != Strings::empty) named = true;
-		    	Promise::Init(p.v, NULL, deferPromiseCompilation(thread, call[i]));
+                Promise::Init(p.v, NULL, deferPromiseCompilation(thread, call[i]), false);
     		} else {
                 if(p.n != Strings::empty) named = true;
 	    		p.v = call[i];
@@ -532,13 +532,13 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
                 dotIndex = i;
                 defaults[i] = Value::Nil();
             }
-			else if(isCall(formals[i]) || isSymbol(formals[i])) {
+			else /*if(isCall(formals[i]) || isSymbol(formals[i]))*/ {
 				Promise::Init(defaults[i], NULL, 
-                    deferPromiseCompilation(thread, formals[i]));
+                    deferPromiseCompilation(thread, formals[i]), true);
 			}
-			else {
-				defaults[i] = formals[i];
-			}
+			//else {
+			//	defaults[i] = formals[i];
+			//}
 		}
 
 		//compile the source for the body

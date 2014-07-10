@@ -61,7 +61,7 @@ time <- function(x) {
     proc.time()-start
 }
 
-source <- function(file, eval.env) {
+source <- function(file, eval.env=globalenv()) {
     p <- .External('source', file)
     promise('q', p, eval.env, .getenv(NULL))
     q

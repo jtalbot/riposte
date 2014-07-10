@@ -93,36 +93,41 @@ struct Value {
 // Promises
 
 struct Promise : public Value {
-	enum PromiseType {
-		EXPRESSION,
-		DOTDOT
-	};
 	static const Type::Enum ValueType = Type::Promise;
-	static Promise& Init(Value& v, Environment* env, Code* code) {
-		Value::Init(v, Type::Promise, EXPRESSION);
+
+    enum PromiseType {
+        Default=(1<<0),
+
+		Expression=(1<<1),
+		Dots=(1<<2)
+	};
+
+	static Promise& Init(Value& v, Environment* env, Code* code, bool isDefault) {
+		Value::Init(v, Type::Promise, Expression|isDefault);
 		v.header += (((uint64_t)env) << 16);
 		v.p = code;
 		return (Promise&)v;
 	}
-	static Promise& Init(Value& v, Environment* env, uint64_t dotindex) {
-		Value::Init(v, Type::Promise, DOTDOT);
+
+	static Promise& Init(Value& v, Environment* env, uint64_t dotindex, bool isDefault) {
+		Value::Init(v, Type::Promise, Dots|isDefault);
 		v.header += (((uint64_t)env) << 16);
 		v.i = dotindex;
 		return (Promise&)v;
 	}
 
-	bool isExpression() const {
-		return packed() == EXPRESSION;
-	}
-	bool isDotdot() const {
-		return packed() == DOTDOT;
-	}
+    bool isDefault() const { return packed() & Default; }
+	bool isExpression() const { return packed() & Expression; }
+	bool isDotdot() const { return packed() & Dots; }
+
 	Environment* environment() const { 
 		return (Environment*)(((uint64_t)header) >> 16); 
 	}
+
 	Code* code() const { 
 		return (Code*)p; 
 	}
+
 	uint64_t dotIndex() const {
 		return i;
 	}

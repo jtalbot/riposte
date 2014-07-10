@@ -166,7 +166,6 @@
     _(visible, ".visible") \
     _(__onexit__, "__on.exit__") \
     _(__extraArgs__, "__extraArgs__") \
-    _(__missing__, "__missing__") \
     _(__nargs__, "__nargs__") \
     _(__function__, "__function__") \
     _(__call__, "__call__") \
