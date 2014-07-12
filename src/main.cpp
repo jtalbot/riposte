@@ -275,10 +275,10 @@ int main(int argc, char** argv)
   
     int rc; 
     /* Load bootstrap file if it exists */
-    /*{
+    {
         std::ifstream in("bootstrap.R");
         rc = run(state, std::string("bootstrap.R"), in, std::cout, false, echo);
-    }*/   
+    }
 
  
     /* Either execute the specified file or read interactively from stdin  */

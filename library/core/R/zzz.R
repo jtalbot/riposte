@@ -1,31 +1,4 @@
 
-getRegisteredNamespace <- NULL
-registerNamespace <- NULL
-getNamespaceRegistry <- NULL
-
-(function() {
-    namespaces <- .env_new(.getenv(.getenv(.getenv(NULL))))
-    
-    namespaces[['empty']] <- .getenv(.getenv(.getenv(NULL)))
-    
-    getRegisteredNamespace <<- function(name) {
-        return( namespaces[[strip(name)]] )
-    }
-
-    registerNamespace <<- function(name, env) {
-        namespaces[[strip(name)]] <<- env
-
-        if(is.nil(.get(env, '.__NAMESPACE__.')))
-            env[['.__NAMESPACE__.']] <- NULL
-    
-        env
-    }
-
-    getNamespaceRegistry <<- function() {
-        namespaces
-    }
-})()
-
 (function() {
     g <- globalenv()
     attr(g, 'name') <- 'R_GlobalEnv'
@@ -335,10 +308,6 @@ primitives <- .characters(
     # is.language.R
     'is.language',
 
-    # is.na.R
-    'is.na',
-    'is.na.default',
-
     # is.object.R
     'is.object',
 
@@ -409,6 +378,11 @@ primitives <- .characters(
 
     # mode.R
     'storage.mode<-',
+
+    # is.na.R
+    'is.na',
+    'is.na.default',
+    'anyNA',
 
     # name.R
     'is.symbol',
@@ -548,7 +522,11 @@ internals <- .characters(
     'dirname',
 
     # bindenv.R
+    'lockEnvironment',
     'environmentIsLocked',
+    'lockBinding',
+    'unlockBinding',
+    'bindingIsLocked',
 
     # browser.R
     'browserText',
@@ -672,6 +650,8 @@ internals <- .characters(
     # grep.R
     'grepl',
     'grep',
+    'agrepl',
+    'agrep',
     'regexpr',
     'gregexpr',
     'sub',
@@ -729,6 +709,7 @@ internals <- .characters(
 
     # ns-internals.R
     'isNamespaceEnv',
+    'importIntoEnv',
 
     # ns-load.R
     'getNamespaceRegistry',

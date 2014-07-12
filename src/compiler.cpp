@@ -532,13 +532,13 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
                 dotIndex = i;
                 defaults[i] = Value::Nil();
             }
-			else /*if(isCall(formals[i]) || isSymbol(formals[i]))*/ {
+			else if(!formals[i].isNil()) /*if(isCall(formals[i]) || isSymbol(formals[i]))*/ {
 				Promise::Init(defaults[i], NULL, 
                     deferPromiseCompilation(thread, formals[i]), true);
 			}
-			//else {
-			//	defaults[i] = formals[i];
-			//}
+			else {
+				defaults[i] = formals[i];
+			}
 		}
 
 		//compile the source for the body

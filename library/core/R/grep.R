@@ -10,10 +10,10 @@
         .stop("NYI: perl regex")
     }
     else {
-        .Map('grep_map', 
+        .Map('grep_map',
             list(
                 .External('regex_compile',
-                    as.character.default(pattern), 
+                    as.character.default(pattern),
                     identical(ignore.case, TRUE),
                     identical(fixed, TRUE)),
                 as.character.default(text)
@@ -40,6 +40,42 @@ grep <- function(pattern, x, ignore.case, value, perl, fixed, useBytes, invert)
     if(.isTRUE(value))
         x[r]
     else 
+        seq_len(length(x))[r]
+}
+
+.agrep <- function(pattern, text, ignore.case, costs, bounds, useBytes, fixed)
+{
+    if(length(pattern)==0L)
+        .stop("invalid 'pattern' argument")
+    if(length(pattern)>1L)
+        .stop("argument 'pattern' has length > 1")
+
+    .Map('agrep_map',
+        list(
+            .External('regex_compile',
+                as.character.default(pattern),
+                identical(ignore.case, TRUE),
+                identical(fixed, TRUE)),
+            as.character.default(text),
+            list(as.integer(costs)),
+            list(as.double(bounds)),
+            list(length(pattern))
+        ), 'logical')
+}
+
+agrepl <- function(pattern, x, ignore.case, value, costs, bounds, useBytes, fixed)
+{
+    # value argument is ignored
+    .agrep(pattern, x, ignore.case, costs, bounds, useBytes, fixed)[[1]]
+}
+
+agrep <- function(pattern, x, ignore.case, value, costs, bounds, useBytes, fixed)
+{
+    r <- agrepl(pattern, x, ignore.case, FALSE, costs, bounds, useBytes, fixed)
+
+    if(.isTRUE(value))
+        x[r]
+    else
         seq_len(length(x))[r]
 }
 

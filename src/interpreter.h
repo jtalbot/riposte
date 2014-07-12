@@ -436,7 +436,7 @@ public:
 	Random random;	
 	int64_t steals;
 
-	int64_t assignment[64], set[64]; // temporary space for matching arguments
+	int64_t assignment[256], set[256]; // temporary space for matching arguments
 	
 	Thread(State& state, uint64_t index);
 

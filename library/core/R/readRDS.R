@@ -61,9 +61,12 @@ unserializeFromConn <- function(con, refhook) {
             return(NULL)
 
         if(type == 0xff) {
-            idx <- as.integer(flags)
-            if(idx == 0L)
-                idx <- readBin(con, 'integer', 1L, 4L, FALSE, TRUE)
+            idx <- as.integer(sexp[[3L]])+
+                   256*as.integer(sexp[[2L]])+
+                   65536*as.integer(sexp[[1L]])
+            if(idx == 0L) {
+                idx <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
+            }
             return(refs[[idx]])
         }
 

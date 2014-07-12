@@ -68,7 +68,7 @@ rbind <- function(deparse.level, ...) {
             rep_len(x, ncol)
     }
 
-	x <- unlist(.Map(r, list(l), 'list')[[1L]],FALSE,FALSE)
+	x <- unlist(.Map(r, list(l))[[1L]],FALSE,FALSE)
     nrow <- length(x)/ncol
     # t
     x <- x[ncol*(index(nrow,1L,length(x))-1L)+

@@ -44,6 +44,45 @@ void grep_map(Thread& thread, Logical::Element& s,
 }
 
 extern "C"
+void agrep_map(Thread& thread, Logical::Element& s,
+        Value const& regex, String text, Integer const& costs, Double const& bounds, Integer const& length) {
+
+    Externalptr const& p = (Externalptr const&)regex;
+    regex_t* r = (regex_t*)p.ptr();
+
+    regamatch_t match;
+    match.nmatch = 0;
+    match.pmatch = NULL;
+
+    regaparams_t params;
+    params.cost_ins = (int)costs[0];
+    params.cost_del = (int)costs[1];
+    params.cost_subst = (int)costs[2];
+
+    int64_t cost = std::max(costs[0], std::max(costs[1], costs[2]));
+
+    params.max_cost = Double::isNA(bounds[0])
+            ? std::numeric_limits<int>::max()
+            : (int)ceil(bounds[0] <= 1 ? bounds[0]*cost*length[0] : bounds[0]);
+    params.max_ins = Double::isNA(bounds[0])
+            ? std::numeric_limits<int>::max()
+            : (int)ceil(bounds[0] <= 1 ? bounds[0]*length[0] : bounds[0]);
+    params.max_del = Double::isNA(bounds[0])
+            ? std::numeric_limits<int>::max()
+            : (int)ceil(bounds[0] <= 1 ? bounds[0]*length[0] : bounds[0]);
+    params.max_subst = Double::isNA(bounds[0])
+            ? std::numeric_limits<int>::max()
+            : (int)ceil(bounds[0] <= 1 ? bounds[0]*length[0] : bounds[0]);
+    params.max_err = Double::isNA(bounds[0])
+            ? std::numeric_limits<int>::max()
+            : (int)ceil(bounds[0] <= 1 ? bounds[0]*length[0] : bounds[0]);
+
+    s = (tre_regaexec(r, text->s, &match, params, 0) == 0)
+            ? Logical::TrueElement
+            : Logical::FalseElement;
+}
+
+extern "C"
 void regex_map(Thread& thread, Integer::Element& s, Integer::Element& l,
         Value const& regex, String text) {
     

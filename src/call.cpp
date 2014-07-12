@@ -225,6 +225,10 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 		// call arguments are named, do matching by name
 		// we should be able to cache and reuse this assignment 
         // for pairs of functions and call sites.
+
+        if(numArgs > 256) {
+            _error("Too many arguments for fixed size assignment arrays");
+        }
 	
 		int64_t *assignment = thread.assignment, *set = thread.set;
 		for(int64_t i = 0; i < numArgs; i++)

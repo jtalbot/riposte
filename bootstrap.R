@@ -8,9 +8,8 @@
 (function() {
     # Set up the base namespace
     namespace.base <- .env_new(emptyenv())
-    attr(namespace.base,'name') <- 'namespace:base'
-    internal::registerNamespace('base',namespace.base)
     internal::registerNamespace('baseenv',namespace.base)
+    internal::registerNamespace('base',namespace.base)
     namespace.base[['.BaseNamespaceEnv']] <- namespace.base
 
     # Riposte's primitive package holds what are primitive functions in GNU R.
@@ -36,14 +35,10 @@
         dynlib.ext=".so",
         GUI="X11",
         endian="little",
-        pkgType="mac.binary.leopard",
+        pkgType="mac.binary.mavericks",
         path.sep=":",
-        r_arch="x86_64"
+        r_arch=""
         )
-
-    # Run the base stuffs
-    source('library/base/R/base', namespace.base)
-    source('library/base/R/Rprofile', namespace.base)
 
     # Set up some other variables that R must set somewhere else
     namespace.base[['.Options']] <- internal::options()
@@ -51,6 +46,8 @@
     internal::options(verbose=FALSE)
     internal::options(width=80L)
     internal::options(ts.eps=1e-05)
+    internal::options(keep.source=internal::Sys.getenv('R_KEEP_PKG_SOURCE','')=='yes')
+    internal::options(keep.source.pkgs=internal::Sys.getenv('R_KEEP_PKG_SOURCE','')=='yes')
 
     namespace.base$.Machine <- list(
         double.eps = 2.22044604925031e-16,
@@ -72,6 +69,10 @@
         sizeof.longdouble = 16L,
         sizeof.pointer = 8L
         )
+
+    # Run the base stuffs
+    source('library/base/R/base', namespace.base)
+    source('library/base/R/Rprofile', namespace.base)
 
     # Expose all the base namespace functions in the search path
     names <- internal::ls(namespace.base, TRUE)

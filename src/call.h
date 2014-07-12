@@ -12,7 +12,6 @@
 
 #define REGISTER(i) (*(thread.frame.registers+(i)))
 #define CONSTANT(i) (thread.frame.code->constants[-1-(i)])
-#define DOTS(i) (((List const&)thread.frame.environment->get(Strings::__dots__))[(i)])
 
 // Out register is currently always a register, not memory
 #define OUT(X) (*(thread.frame.registers+(inst.X)))

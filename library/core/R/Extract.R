@@ -68,9 +68,7 @@
         else { 
             id <- strip(...(i))
 
-            if(is.na(id))
-                idx[[i]] <- rep_len(NA, d[[i]])
-            else if(is.null(id))
+            if(is.null(id))
                 idx[[i]] <- vector('integer',0)
             else if(is.logical(id))
                 idx[[i]] <- which(id)

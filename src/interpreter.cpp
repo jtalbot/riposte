@@ -283,26 +283,6 @@ static inline Instruction const* visible_op(Thread& thread, Instruction const& i
     return &inst+1;
 }
 
-static inline Instruction const* force_op(Thread& thread, Instruction const& inst) {
-    Value const& a = REGISTER(inst.a);
-
-    assert(thread.frame.environment->get(Strings::__dots__).isList());
-    Value const& t = ((List const&)thread.frame.environment->get(Strings::__dots__))[a.i];
-    
-    if(t.isObject()) {
-        OUT(c) = t;
-        return &inst+1;
-    }
-    else if(t.isPromise()) {
-        return force(thread, (Promise const&)t,
-                thread.frame.environment, a,
-                inst.c, &inst+1);
-    }
-    else {
-        _internalError("Unexpected Nil operand in force_op");
-    }
-}
-
 static inline Instruction const* external_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
 	DECODE(a);
@@ -485,6 +465,26 @@ static inline Instruction const* rm_op(Thread& thread, Instruction const& inst) 
     return &inst+1;
 }
 
+static inline Instruction const* force_op(Thread& thread, Instruction const& inst) {
+    Value const& a = REGISTER(inst.a);
+
+    assert(thread.frame.environment->get(Strings::__dots__).isList());
+    Value const& t = ((List const&)thread.frame.environment->get(Strings::__dots__))[a.i];
+
+    if(t.isObject()) {
+        OUT(c) = t;
+        return &inst+1;
+    }
+    else if(t.isPromise()) {
+        return force(thread, (Promise const&)t,
+                thread.frame.environment, a,
+                inst.c, &inst+1);
+    }
+    else {
+        _internalError("Unexpected Nil operand in force_op");
+    }
+}
+
 static inline Instruction const* dotsv_op(Thread& thread, Instruction const& inst) {
     thread.visible = true;
     DECODE(a); BIND(a);
@@ -497,12 +497,14 @@ static inline Instruction const* dotsv_op(Thread& thread, Instruction const& ins
     else
         return StopDispatch(thread, inst, thread.internStr("Invalid type in dotsv"), inst.c);
 
-	if(!thread.frame.environment->get(Strings::__dots__).isList() ||
-       idx >= (int64_t)((List const&)thread.frame.environment->get(Strings::__dots__)).length() ||
+    Value const& t = thread.frame.environment->get(Strings::__dots__);
+
+	if(!t.isList() ||
+       idx >= (int64_t)((List const&)t).length() ||
        idx < (int64_t)0)
-        return StopDispatch(thread, inst, thread.internStr((std::string("The '...' list does not contain ") + "0x" + intToStr(idx+1) + " elements").c_str()), inst.c);
+        return StopDispatch(thread, inst, thread.internStr((std::string("The '...' list does not contain ") + intToStr(idx+1) + " elements").c_str()), inst.c);
 	
-    Value const& v = DOTS(idx); 
+    Value const& v = ((List const&)t)[idx];
    
     if(v.isObject()) {
         OUT(c) = v;
@@ -587,27 +589,50 @@ static inline Instruction const* missing_op(Thread& thread, Instruction const& i
     DECODE(a);
     bool missing = false;
 
-    if( a.isCharacter() && ((Character const&)a).length() == 1 ) {
-        Value const& v = thread.frame.environment->get(a.s);
-        missing = (v.isPromise() && ((Promise const&)v).isDefault()) ||
+    Environment* e = thread.frame.environment;
+    Value x = a;
+
+    do {
+
+    if( x.isCharacter() && ((Character const&)x).length() == 1 ) {
+        Value const& v = e->get(x.s);
+        missing = (v.isPromise() && ((Promise const&)v).isDefault() && e == thread.frame.environment) ||
                   v.isNil();
+
+        if(v.isPromise() && !((Promise const&)v).isDefault()) {
+            // see if missing is passed down
+            if(((Promise const&)v).isExpression()) {
+                Value const& expr = ((Promise const&)v).code()->expression;
+                if(isSymbol(expr)) {
+                    e = ((Promise const&)v).environment();
+                    x = expr;
+                    continue;
+                }
+            }
+        }
+        break;
     }
     else {
         int64_t index = -1;
-        if( a.isInteger() && ((Integer const&)a).length() == 1 )
-            index = a.i-1;
-        else if( a.isDouble() && ((Double const&)a).length() == 1 )
-            index = a.d-1;
+        if( x.isInteger() && ((Integer const&)x).length() == 1 )
+            index = x.i-1;
+        else if( x.isDouble() && ((Double const&)x).length() == 1 )
+            index = x.d-1;
         else
             _error("Invalid argument to missing");
 
         List const& dots = (List const&)
-            thread.frame.environment->get(Strings::__dots__);
+            e->get(Strings::__dots__);
 
-        missing = dots.isList() &&
-                  index >= 0 && index < dots.length() &&
+        missing = !dots.isList() ||
+                  index < 0 ||
+                  index >= dots.length() ||
                   dots[index].isNil();
+
+        break;
     }
+
+    } while(true);
 
     Logical::InitScalar(OUT(c),
         missing ? Logical::TrueElement : Logical::FalseElement);
@@ -1466,6 +1491,10 @@ static inline Instruction const* semijoin_op(Thread& thread, Instruction const& 
     DECODE(b); BIND(b);
 
     // assumes that the two arguments are the same type...
+    if(a.type() != b.type())
+        return StopDispatch(thread, inst, thread.internStr(
+		    std::string("Arguments to semijoin must have the same type\n").c_str()),
+            inst.c);
     assert(a.type() == b.type());
     OUT(c) = Semijoin(a, b);
 

@@ -1,10 +1,9 @@
 
 lapply <- function(X, FUN) {
     # annoyingly, R doesn't pass the dots here, have to go back up and get them
-    MoreArgs <- .frame(1L)[['__dots__']]
+    promise('MoreArgs', quote(list(...)), .frame(1L), .getenv(NULL))
     # enlist the MoreArgs so they get repeated correctly...
     MoreArgs <- .Map(function(x) list(x), list(MoreArgs))
-
     args <- list(X)
     args[seq_len(length(MoreArgs))+1L] <- MoreArgs
 
@@ -21,7 +20,7 @@ lapply <- function(X, FUN) {
 
 vapply <- function(X, FUN, FUN.VALUE, USE.NAMES) {
     # annoyingly, R doesn't pass the dots here, have to go back up and get them
-    MoreArgs <- .frame(1L)[['__dots__']]
+    promise('MoreArgs', quote(list(...)), .frame(1L), .getenv(NULL))
     # enlist the MoreArgs so they get repeated correctly...
     MoreArgs <- .Map(function(x) list(x), list(MoreArgs))
 

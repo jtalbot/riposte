@@ -25,7 +25,6 @@ makeLazy <- function(n, v, expr, env1, env2) {
 }
 
 lazyLoadDBfetch <- function(key, file, compressed, hook) {
-
     len <- key[[2]]
 
     f <- file(file, 'r', TRUE, '', FALSE)
