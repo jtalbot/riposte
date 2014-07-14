@@ -1,18 +1,32 @@
 
 sys.call <- function(which) {
-    .frame(as.integer(-which+2L))[['__call__']]
+    if(which < 0L)
+        .frame(as.integer(-which+2L))[['.__call__.']]
+    else
+        sys.frame(which)[['.__call__.']]
 }
 
 sys.frame <- function(which) {
-    .frame(as.integer(-which+2L))
+    if(which < 0L)
+        .frame(as.integer(-which+2L))
+    else {
+        n <- 1L
+        while(.frame(n) != globalenv()) n <- n+1L
+        .frame(as.integer(n-which))
+    }
 }
 
 sys.nframe <- function() {
-    0
+    n <- 2L
+    while(.frame(n) != globalenv()) { n <- n+1L }
+    n-2L
 }
 
 sys.function <- function(which) {
-    .frame(as.integer(-which+2L))[['__function__']]
+    if(which < 0L)
+        .frame(as.integer(-which+2L))[['.__function__.']]
+    else
+        sys.frame(which)[['.__function__.']]
 }
 
 sys.parent <- function(n) {
@@ -20,7 +34,7 @@ sys.parent <- function(n) {
 }
 
 sys.on.exit <- function() {
-    .frame(2L)[['__on.exit__']]
+    .frame(2L)[['.__on.exit__.']]
 }
 
 parent.frame <- function(n) {

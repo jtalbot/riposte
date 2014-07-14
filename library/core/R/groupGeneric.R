@@ -4,9 +4,9 @@
         generic, 
         generic,
         .class(object), 
-        .frame(2L)[['__call__']], 
+        .frame(2L)[['.__call__.']], 
         .frame(3L), 
-        .getenv(.frame(2L)[['__function__']]),
+        .getenv(.frame(2L)[['.__function__.']]),
         TRUE,
         FALSE
         )
@@ -17,9 +17,9 @@
             group,
             generic, 
             .class(object), 
-            .frame(2L)[['__call__']], 
+            .frame(2L)[['.__call__.']], 
             .frame(3L), 
-            .getenv(.frame(2L)[['__function__']]),
+            .getenv(.frame(2L)[['.__function__.']]),
             TRUE,
             FALSE
             )
@@ -38,9 +38,9 @@ UseGroupMethod <- function(generic, group, object)
             generic,
             generic, 
             'default', 
-            .frame(1L)[['__call__']], 
+            .frame(1L)[['.__call__.']], 
             .frame(2L), 
-            .getenv(.frame(1L)[['__function__']]),
+            .getenv(.frame(1L)[['.__function__.']]),
             TRUE,
             FALSE
             )
@@ -86,9 +86,9 @@ UseMultiMethod <- function(generic, group, ...)
             generic,
             generic, 
             'default', 
-            .frame(1L)[['__call__']], 
+            .frame(1L)[['.__call__.']], 
             .frame(2L), 
-            .getenv(.frame(1L)[['__function__']]),
+            .getenv(.frame(1L)[['.__function__.']]),
             TRUE,
             FALSE
             )

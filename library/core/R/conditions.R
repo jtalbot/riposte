@@ -1,8 +1,8 @@
 
 .addCondHands <- function(name, handler, handle.env, other.env, run) {
-    h <- handle.env[['__handlers__']]
+    h <- handle.env[['.__handlers__.']]
     h[name] <- handler
-    handle.env[['__handlers__']] <- h
+    handle.env[['.__handlers__.']] <- h
 }
 
 .signalCondition <- function(cond, msg, call) {
@@ -10,9 +10,9 @@
     cc <- class(cond)
 
     while(.frame(frame) != globalenv()
-            && !is.nil(.get(.frame(frame), '__parent__'))) {
-        e <- .get(.frame(frame), '__parent__')
-        h <- e[['__handlers__']]
+            && !is.nil(.get(.frame(frame), '.__parent__.'))) {
+        e <- .get(.frame(frame), '.__parent__.')
+        h <- e[['.__handlers__.']]
         n <- names(h)
         for(i in seq_len(length(n))) {
             if(any(cc == n[[i]])) {

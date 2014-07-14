@@ -65,6 +65,7 @@ primitives <- .characters(
     '[.environment',
     '[.matrix',
     '[.array',
+    '[.expression',
     '[[',
     '[[.default',
     '[[.list',
@@ -532,6 +533,10 @@ internals <- .characters(
     'browserText',
     'browserCondition',
     'browserSetDebug',
+
+    # capabilities.R
+    'capabilities',
+    'capabilitiesX11',
 
     # cat.R
     'cat',

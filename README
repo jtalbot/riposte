@@ -11,6 +11,7 @@ Compiling riposte
 	`brew install boost`
    	`brew install eigen`
 	`brew install tre`
+	`brew install pcre`
 	Note: If you use a different package system, you may need to change the directories in Riposte's Makefiles 
 
 1. Run `make release` in the riposte directory, or `make debug` for the debug version

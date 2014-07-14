@@ -115,6 +115,9 @@ bool OrdinalUnaryDispatch(Thread& thread, void* args, Value a, Value& c) {
 	else if(a.isInteger())	{ Zip1< Op<Integer> >::eval(thread, args, (Integer const&)a, c); return true; }
 	else if(a.isLogical())	{ Zip1< Op<Logical> >::eval(thread, args, (Logical const&)a, c); return true; }
 	else if(a.isCharacter()) { Zip1< Op<Character> >::eval(thread, args, (Character const&)a, c); return true; }
+    else if(a.isList() && ((List const&)a).length() == 0) {
+        c = Logical::c(); return true;
+    }
 	else { c = Logical::False(); return true; }
 }
 
@@ -264,6 +267,11 @@ bool UnifyBinaryDispatch(Thread& thread, void* args, Value const& a, Value const
 		    c = Null::Singleton();
             return true;
         }
+        else if(a.isList() && ((List const&)a).length() == 0 &&
+                b.isList() && ((List const&)b).length() == 0) {
+            c = List(0);
+            return true;
+        }
         else
             return false;
     }
@@ -284,7 +292,14 @@ bool OrdinalBinaryFast(Thread& thread, void* args, Value const& a, Value const& 
 
 template< template<typename S, typename T> class Op > 
 bool OrdinalBinaryDispatch(Thread& thread, void* args, Value const& a, Value const& b, Value& c) {
-	return UnifyBinaryDispatch<Op>(thread, args, a, b, c);
+    if(a.isList() && ((List const&)a).length() == 0 &&
+       b.isList() && ((List const&)b).length() == 0) {
+        c = Logical(0);
+        return true;
+    }
+    else {
+	    return UnifyBinaryDispatch<Op>(thread, args, a, b, c);
+    }
 }
 
 template< template<typename S, typename T> class Op > 

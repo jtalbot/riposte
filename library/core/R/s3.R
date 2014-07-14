@@ -67,7 +67,7 @@
                      `.Group`=generic)
            
             if(is.null(ncall)) ncall <- rep.int('', length(call))
-            ncall[[length(call)]] <- '__extraArgs__'
+            ncall[[length(call)]] <- '.__extraArgs__.'
             attr(call, 'names') <- ncall
             attr(call, 'class') <- 'call'
             return(call)
@@ -79,7 +79,7 @@
 UseMethod <- function(generic, object)
 {
     if(missing(object)) {
-        formals <- attr(.frame(1L)[['__function__']][['formals']], 'names')
+        formals <- attr(.frame(1L)[['.__function__.']][['formals']], 'names')
         if(length(formals) == 0)
             object <- NULL
         else {
@@ -99,9 +99,9 @@ UseMethod <- function(generic, object)
         generic,
         generic,
         .class(object), 
-        .frame(1L)[['__call__']], 
+        .frame(1L)[['.__call__.']], 
         .frame(2L), 
-        .getenv(.frame(1L)[['__function__']]),
+        .getenv(.frame(1L)[['.__function__.']]),
         TRUE,
         TRUE
         )
@@ -136,7 +136,7 @@ NextMethod <- function(generic, object, ...) {
     callenv <- .frame(2L)[['.GenericCallEnv']]
     defenv <- .frame(2L)[['.GenericDefEnv']]
 
-    formals <- attr(.frame(2L)[['__function__']][['formals']], 'names')
+    formals <- attr(.frame(2L)[['.__function__.']][['formals']], 'names')
     call <- list()
     call[[1]] <- as.name(generic)
     for(i in seq_len(length(formals))) {

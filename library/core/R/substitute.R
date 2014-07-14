@@ -1,8 +1,12 @@
 
 quote <- function(...) {
-    r <- strip(`__call__`)
+    # this roundabout approach is necessary to handle quote(...),
+    # which should return `...`, but normal evaluation will
+    # substitute for the ... and give the wrong results.
+    # Maybe should be special.
+    r <- strip(`.__call__.`)
     if(length(r) < 2L)
-        Nil
+        .stop("0 arguments passed to 'quote' which requires 1")
     else if(length(r) > 2L)
         .stop(.pconcat(length(r)-1L, " arguments passed to 'quote' which requires 1"))
     else
@@ -18,12 +22,12 @@ quote <- function(...) {
         {
             if(is.symbol(expr[[i]]) && strip(expr[[i]]) == '...') {
                 # expand dots in place
-                d <- .get(env, '__dots__')
-                n <- .get(env, '__names__')
-                if(is.list(.get(env,'__dots__'))) {
+                d <- .get(env, '.__dots__.')
+                n <- .get(env, '.__names__.')
+                if(is.list(.get(env,'.__dots__.'))) {
                     for(k in seq_len(length(d))) {
                         expr[[j]] <- .pr_expr(d, k)
-                        if(is.character.default(.get(env, '__names__')))
+                        if(is.character.default(.get(env, '.__names__.')))
                             attr(expr, 'names')[[j]] <- n[[k]]
                         j <- j+1L
                     }

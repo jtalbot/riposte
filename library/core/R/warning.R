@@ -13,12 +13,12 @@ warning <- function(include.call, immediate, no.breaks, msg) {
     if(identical(level, 1L) || immediate) {
         if(.isTRUE(include.call))
             msg <- sprintf("Warning in %s :\n  %s", 
-                .format.call(.frame(2L)[['__call__']]), msg)
+                .format.call(.frame(2L)[['.__call__.']]), msg)
         .cat(msg,'\n')
     }
     else if(identical(level, 0L)) {
         if(.isTRUE(include.call))
-            call <- .frame(2L)[['__call__']]
+            call <- .frame(2L)[['.__call__.']]
         else
             call <- NULL
 

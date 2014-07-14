@@ -23,20 +23,28 @@ Instruction const* force(
     return r;
 }
 
-void dumpStackFrame(Thread& thread) {
-    std::cout << "\t(Executing in " << 
+void dumpStack(Thread& thread) {
+   
+    for(int64_t i = thread.stack.size()-1; i >= 0; --i) {
+        StackFrame const& s = thread.stack[i];
+
+        std::cout << i << ": ";
+        if(s.isPromise) {
+            std::cout << "Forcing " << thread.deparse(s.registers[1]) << std::endl;
+        }
+        else {
+            std::cout << thread.deparse(s.environment->get(Strings::__call__)) << std::endl;
+        }
+    }
+
+    /*std::cout << "\t(Executing in " << 
         "0x" << intToHexStr((int64_t)thread.frame.environment) << ")" << std::endl;
 	
     thread.frame.code->printByteCode(thread.state);
     
-    /*if( thread.frame.environment->getContext() && 
-        ((List const &)thread.frame.environment->getContext()->call).length() > 0) {
-        std::cout << "Call:   " << 
-            (((List const&)thread.frame.environment->getContext()->call)[0]).s << std::endl;
-    }*/
-
     std::cout << "Returning to: " << 
         "0x" << intToHexStr((int64_t)thread.frame.returnpc) << std::endl;
+    */
 }
 
 Instruction const* buildStackFrame(Thread& thread, 
@@ -51,10 +59,10 @@ Instruction const* buildStackFrame(Thread& thread,
 	s.registers += outRegister;
     s.isPromise = false;
 	
-    //dumpStackFrame(thread);
-	
-	if(s.registers+code->registers > thread.registers+DEFAULT_NUM_REGISTERS)
+	if(s.registers+code->registers > thread.registers+DEFAULT_NUM_REGISTERS) {
+        dumpStack(thread);
 		_internalError("Register overflow");
+    }
 
     // avoid confusing the GC with bogus stuff in registers...
     // can we avoid this somehow?

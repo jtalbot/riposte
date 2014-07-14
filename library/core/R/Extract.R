@@ -112,6 +112,18 @@
     r
 }
 
+# normal subsetting loses the class.
+# expressions need to keep their class
+
+`[.expression` <- function(x, ..., drop = TRUE)
+{
+    r <- `[.default`(x, ..., drop=drop)
+    attr(r, 'class') <- 'expression'
+    r
+}
+
+
+
 `[[` <- function(x, ..., exact = TRUE) {
     UseMethod('[[', x)
 }

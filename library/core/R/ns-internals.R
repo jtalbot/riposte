@@ -4,13 +4,17 @@ isNamespaceEnv <- function(ns) {
 }
 
 importIntoEnv <- function(impenv, impnames, expenv, expnames) {
-    impnames <- as.character(impnames)
-    expnames <- as.character(expnames)
+    # The base importIntoEnv code pulls all names in the environment,
+    # including .__x__. ones that we're treating specially. Exclude
+    # any name that is not a simple string.
 
     if(length(impnames) != length(expnames))
         .stop('length of import and export names must match')
 
-    .External('importIntoEnv', impenv, impnames, expenv, expnames)
+    for(i in seq_along(impnames)) {
+        if(is.character(impnames[[i]]) && is.character(expnames[[i]]))
+            .External('importIntoEnv', impenv, impnames[[i]], expenv, expnames[[i]])
+    }
 
     NULL
 }

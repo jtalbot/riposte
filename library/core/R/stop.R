@@ -19,11 +19,11 @@ seterrmessage <- NULL
         
         n <- 1L
         repeat {
-            call <- .frame(n)[['__call__']]
+            call <- .frame(n)[['.__call__.']]
             if(!is.null(call))
                 .cat(n, ': ', .deparse(call),'\n')
 
-            if(is.null(.frame(n)[['__parent__']]))
+            if(is.null(.frame(n)[['.__parent__.']]))
                 break
             if(n > 100L)
                 break
@@ -36,7 +36,7 @@ seterrmessage <- NULL
 
     stop <<- function(include.call, message) {
         # R seems to ignore include.call, what's up?
-        call <- .frame(2L)[['__call__']]
+        call <- .frame(2L)[['.__call__.']]
         e <- list(message=message, call=call)
         attr(e, 'class') <- c('error', 'condition')
 

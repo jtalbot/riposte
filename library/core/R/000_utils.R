@@ -16,7 +16,7 @@
 }
 
 .nargs <- function() {
-    .frame(1L)[['__nargs__']]
+    .frame(1L)[['.__nargs__.']]
 }
 
 .export <- function(name, env, exported) {
@@ -54,7 +54,7 @@
 
 .cat <- function(..., sep="") .External('cat', list(...), sep)
 
-.stop <- function(message, call=.frame(1L)[['__call__']]) {
+.stop <- function(message, call=.frame(1L)[['.__call__.']]) {
     e <- list(message=message, call=call)
     attr(e, 'class') <- c('error', 'condition')
 

@@ -6,16 +6,22 @@
     if(length(pattern)>1L)
         .stop("argument 'pattern' has length > 1")
 
-    if(.isTRUE(perl)) {
-        .stop("NYI: perl regex")
-    }
-    else {
+    if(.isTRUE(fixed) || !.isTRUE(perl)) {
         .Map('grep_map',
             list(
                 .External('regex_compile',
                     as.character.default(pattern),
                     identical(ignore.case, TRUE),
                     identical(fixed, TRUE)),
+                as.character.default(text)
+            ), 'logical')
+    }
+    else {
+        .Map('pcre_grep_map',
+            list(
+                .External('pcre_regex_compile',
+                    as.character.default(pattern),
+                    identical(ignore.case, TRUE)),
                 as.character.default(text)
             ), 'logical')
     }
@@ -86,16 +92,22 @@ agrep <- function(pattern, x, ignore.case, value, costs, bounds, useBytes, fixed
     if(length(pattern)>1L)
         .stop("argument 'pattern' has length > 1")
 
-    if(.isTRUE(perl)) {
-        .stop("NYI: perl regex")
-    }
-    else {
+    if(.isTRUE(fixed) || !.isTRUE(perl)) {
         .Map('regex_map', 
             list(
                 .External('regex_compile',
                     as.character.default(pattern), 
                     identical(ignore.case, TRUE),
                     identical(fixed, TRUE)),
+                as.character.default(text)
+            ), .characters('integer', 'integer'))
+    }
+    else {
+        .Map('pcre_regex_map', 
+            list(
+                .External('pcre_regex_compile',
+                    as.character.default(pattern), 
+                    identical(ignore.case, TRUE)),
                 as.character.default(text)
             ), .characters('integer', 'integer'))
     }
@@ -117,16 +129,22 @@ regexpr <- function(pattern, text, ignore.case, perl, fixed, useBytes)
     if(length(pattern)>1L)
         .stop("argument 'pattern' has length > 1")
 
-    if(.isTRUE(perl)) {
-        .stop("NYI: perl regex")
-    }
-    else {
+    if(.isTRUE(fixed) || !.isTRUE(perl)) {
         .Map('gregex_map', 
             list(
                 .External('regex_compile',
                     as.character.default(pattern), 
                     identical(ignore.case, TRUE),
                     identical(fixed, TRUE)),
+                as.character.default(text)
+            ), .characters('list', 'list'))
+    }
+    else {
+        .Map('pcre_gregex_map', 
+            list(
+                .External('pcre_regex_compile',
+                    as.character.default(pattern), 
+                    identical(ignore.case, TRUE)),
                 as.character.default(text)
             ), .characters('list', 'list'))
     }

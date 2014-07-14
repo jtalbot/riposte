@@ -164,14 +164,14 @@
     _(stop, ".stop") \
     _(invisible, ".invisible") \
     _(visible, ".visible") \
-    _(__onexit__, "__on.exit__") \
-    _(__extraArgs__, "__extraArgs__") \
-    _(__nargs__, "__nargs__") \
-    _(__function__, "__function__") \
-    _(__call__, "__call__") \
-    _(__parent__, "__parent__") \
-    _(__dots__, "__dots__") \
-    _(__names__, "__names__") \
+    _(__onexit__, ".__on.exit__.") \
+    _(__extraArgs__, ".__extraArgs__.") \
+    _(__nargs__, ".__nargs__.") \
+    _(__function__, ".__function__.") \
+    _(__call__, ".__call__.") \
+    _(__parent__, ".__parent__.") \
+    _(__dots__, ".__dots__.") \
+    _(__names__, ".__names__.") \
     _(rownames, "row.names") \
 
 struct StringImpl : public HeapObject {

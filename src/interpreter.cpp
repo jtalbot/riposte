@@ -766,7 +766,11 @@ static inline Instruction const* type_op(Thread& thread, Instruction const& inst
         #define CASE(name, str, ...) case Type::name: OUT(c) = Character::c(Strings::name); break;
         TYPES(CASE)
         #undef CASE
-        default: _error("Unknown type in type to string, that's bad!"); break;
+        default:
+            return StopDispatch(thread, inst, thread.internStr(
+                (std::string("Unknown type (") + intToStr(a.type()) + ") in type to string, that's bad!").c_str()), 
+                inst.c);
+            break;
     }
 	return &inst+1;
 }
@@ -1226,7 +1230,11 @@ static inline Instruction const* env_new_op(Thread& thread, Instruction const& i
     if(!a.isEnvironment())
         _error("'enclos' must be an environment");
 
-    REnvironment::Init(OUT(c), new Environment(4,((REnvironment const&)a).environment()));
+    Environment* env = new Environment(4,((REnvironment const&)a).environment());
+    Value p;
+    REnvironment::Init(p, thread.frame.environment);
+    env->insert(Strings::__parent__) = p;
+    REnvironment::Init(OUT(c), env);
     return &inst+1;
 }
 

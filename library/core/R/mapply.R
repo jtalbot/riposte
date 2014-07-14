@@ -7,9 +7,9 @@ mapply <- function(FUN, dots, MoreArgs) {
     args <- list(X)
     args[seq_len(length(MoreArgs))+1L] <- MoreArgs
 
-    if(!is.null(.frame(1L)[['__names__']])) {
+    if(!is.null(.frame(1L)[['.__names__.']])) {
         n <- ''
-        n[seq_len(length(MoreArgs))+1L] <- .frame(1L)[['__names__']]
+        n[seq_len(length(MoreArgs))+1L] <- .frame(1L)[['.__names__.']]
         names(args) <- n
     }
 

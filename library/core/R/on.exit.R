@@ -3,7 +3,7 @@
     if(add) {
         # It would be much easier to just build an expression,
         # but this matches R's current behavior
-        a <- e[['__on.exit__']]
+        a <- e[['.__on.exit__.']]
         if(!is.null(a)) {
             if(is.call(a) && identical(strip(a[[1]]), '{')) {
                 a[[length(a)+1]] <- expr
@@ -14,7 +14,7 @@
             }
         }
     }
-    e[['__on.exit__']] <- expr
+    e[['.__on.exit__.']] <- expr
     NULL
 }
 

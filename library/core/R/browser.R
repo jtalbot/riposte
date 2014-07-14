@@ -40,7 +40,7 @@ browserSetDebug <- NULL
                 'where'= {
                     n <- skipCalls 
                     repeat {
-                        call <- .frame(n)[['__call__']]
+                        call <- .frame(n)[['.__call__.']]
                         if(!is.null(call))
                             .cat(n, ': ', .format.call(call),'\n')
 

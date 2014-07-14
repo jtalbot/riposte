@@ -58,7 +58,7 @@
 match.call <- function(definition, call, expand.dots) {
   
     if(is.null(definition))
-        definition <- .frame(2L)[['__function__']]
+        definition <- .frame(2L)[['.__function__.']]
 
     # If the call has dots, expand the call using the dots in the
     # enclosing scope.

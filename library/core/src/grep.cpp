@@ -1,5 +1,7 @@
 
 #include <tre/tre.h>
+#include <pcre.h>
+
 #include "../../../src/runtime.h"
 #include "../../../src/coerce.h"
 
@@ -40,45 +42,6 @@ void grep_map(Thread& thread, Logical::Element& s,
 
     s = (tre_regexec(r, text->s, 0, NULL, 0) == 0)
             ? Logical::TrueElement 
-            : Logical::FalseElement;
-}
-
-extern "C"
-void agrep_map(Thread& thread, Logical::Element& s,
-        Value const& regex, String text, Integer const& costs, Double const& bounds, Integer const& length) {
-
-    Externalptr const& p = (Externalptr const&)regex;
-    regex_t* r = (regex_t*)p.ptr();
-
-    regamatch_t match;
-    match.nmatch = 0;
-    match.pmatch = NULL;
-
-    regaparams_t params;
-    params.cost_ins = (int)costs[0];
-    params.cost_del = (int)costs[1];
-    params.cost_subst = (int)costs[2];
-
-    int64_t cost = std::max(costs[0], std::max(costs[1], costs[2]));
-
-    params.max_cost = Double::isNA(bounds[0])
-            ? std::numeric_limits<int>::max()
-            : (int)ceil(bounds[0] <= 1 ? bounds[0]*cost*length[0] : bounds[0]);
-    params.max_ins = Double::isNA(bounds[0])
-            ? std::numeric_limits<int>::max()
-            : (int)ceil(bounds[0] <= 1 ? bounds[0]*length[0] : bounds[0]);
-    params.max_del = Double::isNA(bounds[0])
-            ? std::numeric_limits<int>::max()
-            : (int)ceil(bounds[0] <= 1 ? bounds[0]*length[0] : bounds[0]);
-    params.max_subst = Double::isNA(bounds[0])
-            ? std::numeric_limits<int>::max()
-            : (int)ceil(bounds[0] <= 1 ? bounds[0]*length[0] : bounds[0]);
-    params.max_err = Double::isNA(bounds[0])
-            ? std::numeric_limits<int>::max()
-            : (int)ceil(bounds[0] <= 1 ? bounds[0]*length[0] : bounds[0]);
-
-    s = (tre_regaexec(r, text->s, &match, params, 0) == 0)
-            ? Logical::TrueElement
             : Logical::FalseElement;
 }
 
@@ -223,3 +186,148 @@ void gsub_map(Thread& thread, Character::Element& out,
     } while( match == 0 );
     out = thread.internStr(result.c_str());
 }
+
+extern "C"
+void agrep_map(Thread& thread, Logical::Element& s,
+        Value const& regex, String text, Integer const& costs, Double const& bounds, Integer const& length) {
+
+    Externalptr const& p = (Externalptr const&)regex;
+    regex_t* r = (regex_t*)p.ptr();
+
+    regamatch_t match;
+    match.nmatch = 0;
+    match.pmatch = NULL;
+
+    regaparams_t params;
+    params.cost_ins = (int)costs[0];
+    params.cost_del = (int)costs[1];
+    params.cost_subst = (int)costs[2];
+
+    int64_t cost = std::max(costs[0], std::max(costs[1], costs[2]));
+
+    params.max_cost = Double::isNA(bounds[0])
+            ? std::numeric_limits<int>::max()
+            : (int)ceil(bounds[0] <= 1 ? bounds[0]*cost*length[0] : bounds[0]);
+    params.max_ins = Double::isNA(bounds[0])
+            ? std::numeric_limits<int>::max()
+            : (int)ceil(bounds[0] <= 1 ? bounds[0]*length[0] : bounds[0]);
+    params.max_del = Double::isNA(bounds[0])
+            ? std::numeric_limits<int>::max()
+            : (int)ceil(bounds[0] <= 1 ? bounds[0]*length[0] : bounds[0]);
+    params.max_subst = Double::isNA(bounds[0])
+            ? std::numeric_limits<int>::max()
+            : (int)ceil(bounds[0] <= 1 ? bounds[0]*length[0] : bounds[0]);
+    params.max_err = Double::isNA(bounds[0])
+            ? std::numeric_limits<int>::max()
+            : (int)ceil(bounds[0] <= 1 ? bounds[0]*length[0] : bounds[0]);
+
+    s = (tre_regaexec(r, text->s, &match, params, 0) == 0)
+            ? Logical::TrueElement
+            : Logical::FalseElement;
+}
+
+
+extern "C"
+void pcre_finalize(Value v) {
+    Externalptr const& p = (Externalptr const&)v;
+    pcre* r = (pcre*)p.ptr();
+    pcre_free(r);
+}
+
+extern "C"
+Value pcre_regex_compile(Thread& thread, Value const* args) {
+    Character pattern = (Character const&)args[0];
+    Logical ignorecase = (Logical const&)args[1];
+
+    int flags = 0;
+    if(Logical::isTrue(ignorecase[0]))
+        flags |= PCRE_CASELESS;
+   
+    char const* error;
+    int erroffset;
+    pcre* r = pcre_compile(pattern[0]->s, flags, &error, &erroffset, NULL);
+
+    if(!r)
+        printf("PCRE compilation failed at offset %d: %s\n", erroffset, error);
+
+    Value v;
+    Externalptr::Init(v, r, Value::Nil(), Value::Nil(), pcre_finalize);
+    return v;
+}
+
+extern "C"
+void pcre_grep_map(Thread& thread, Logical::Element& s,
+        Value const& regex, String text) {
+    
+    Externalptr const& p = (Externalptr const&)regex;
+    pcre* r = (pcre*)p.ptr();
+
+    int rc = pcre_exec(r, NULL, text->s, strlen(text->s), 0, 0, 0, 0);
+
+    if(rc < 0 && rc != PCRE_ERROR_NOMATCH)
+        printf("PCRE matching error %d\n", rc);
+
+    s = rc >= 0 ? Logical::TrueElement : Logical::FalseElement;
+}
+
+extern "C"
+void pcre_regex_map(Thread& thread, Integer::Element& s, Integer::Element& l,
+        Value const& regex, String text) {
+    
+    Externalptr const& p = (Externalptr const&)regex;
+    pcre* r = (pcre*)p.ptr();
+
+    int ovector[6] = {0};
+    int rc = pcre_exec(r, NULL, text->s, strlen(text->s), 0, 0, ovector, 6);
+    
+    if(rc < 0 && rc != PCRE_ERROR_NOMATCH)
+        printf("PCRE matching error %d\n", rc);
+
+    if(rc < 0) {
+        s = -1;
+        l = -1;
+    }
+    else {
+        s = ovector[0]+1;
+        l = ovector[1]-ovector[0];
+    }
+}
+
+extern "C"
+void pcre_gregex_map(Thread& thread,
+        Value& start, Value& length, Value const& regex, String text) {
+    
+    Externalptr const& p = (Externalptr const&)regex;
+    pcre* r = (pcre*)p.ptr();
+
+    std::vector<Integer::Element> ss;
+    std::vector<Integer::Element> ll;
+
+    regmatch_t m;
+    size_t len = strlen(text->s);
+    size_t offset = 0;
+    int rc = 0;
+    do {
+        int ovector[6] = {0};
+        rc = pcre_exec(r, NULL, text->s, len, offset, 0, ovector, 6);
+        if(rc < 0 && rc != PCRE_ERROR_NOMATCH)
+            printf("PCRE matching error %d\n", rc);
+
+        if( rc >= 0 ) {
+            ss.push_back(ovector[0]+1);
+            ll.push_back(ovector[1]-ovector[0]);
+            offset = ovector[1];
+        }
+    } while( rc >= 0 );
+
+    Integer s(ss.size());
+    Integer l(ll.size());
+    for(size_t i = 0; i < ss.size(); ++i) {
+        s[i] = ss[i];
+        l[i] = ll[i];
+    }
+    
+    start = s;
+    length = l;
+}
+
