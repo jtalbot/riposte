@@ -150,9 +150,9 @@
     else if(is.character.default(i)) {
         i <- which(names(x)==i)
         if(length(i)==0)
-            .stop("subscript out of bounds") 
-       
-        strip(x)[[ i[[1]] ]]
+            NULL
+        else
+            strip(x)[[ i[[1]] ]]
     }
     else if(is.integer(i) || is.double(i)) {
 	    strip(x)[[strip(i)]]

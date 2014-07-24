@@ -3,8 +3,8 @@
 UNAME := $(shell uname -s)
 CXX := clang++
 CC := clang
-CXXFLAGS := -Wall
-CFLAGS := -Wall
+CXXFLAGS := -Wall -g -Iinclude
+CFLAGS := -Wall -g -Iinclude
 LFLAGS := -fpic
 LIBS := -Llibs/dyncall/dyncall -lpthread -ldyncall_s
 
@@ -23,18 +23,26 @@ ifeq ($(EPEE),1)
 	SRC += epee/ir.cpp epee/trace.cpp epee/trace_compile.cpp epee/assembler-x64.cpp
 endif
 
+API_SRC := api/api.cpp api/Connections.cpp api/Defn.cpp api/Error.cpp api/Fileio.cpp api/Print.cpp api/R.cpp api/Rinterface.cpp api/Rinternals.cpp api/Arith.cpp api/eventloop.cpp api/GraphicsDevice.cpp api/GraphicsEngine.cpp api/Memory.cpp api/Rdynload.cpp api/Riconv.cpp api/Rmath.cpp api/Utils.cpp
+
+
 EXECUTABLE := riposte
-RIPOSTE := riposte.dylib
+RIPOSTE := libRiposte.dylib
+API := libR.dylib
 MAIN := build/main.o
 LINENOISE := build/linenoise.o
 DYNCALL := libs/dyncall/dyncall/libdyncall_s.a
 PACKAGES:= core
 
 ALL_SRC := $(SRC)
+ALL_SRC += $(API_SRC)
 ALL_SRC += main.cpp
 
 OBJECTS := $(patsubst %.cpp,build/%.o,$(SRC))
 ASM := $(patsubst %.cpp,build/%.s,$(SRC))
+
+API_OBJECTS := $(patsubst %.cpp,build/%.o,$(API_SRC))
+
 DEPENDENCIES := $(patsubst %.cpp,build/%.d,$(ALL_SRC))
 
 default: debug
@@ -48,13 +56,16 @@ release: all
 asm: CXXFLAGS += -DNDEBUG -O3 -g 
 asm: $(ASM)
 
-all: $(EXECUTABLE) $(PACKAGES)
+all: $(EXECUTABLE) $(API) $(PACKAGES)
 
 $(EXECUTABLE): $(MAIN) $(LINENOISE) $(DYNCALL) $(RIPOSTE)
 	$(CXX) $(LFLAGS) -L. -o $@ $^ $(LIBS)
 
 $(PACKAGES): $(RIPOSTE)
 	$(MAKE) -C library/$@ $(MAKECMDGOALS)
+
+$(API): $(API_OBJECTS) $(RIPOSTE)
+	$(CXX) $(LFLAGS) -L/usr/local/opt/gettext/lib/ -L. -lRiposte -Xlinker -reexport-lintl -Xlinker -reexport-lRmath -dynamiclib -compatibility_version 3.1.0 -current_version 3.1.0 -o $@ $^
 
 $(RIPOSTE): $(OBJECTS)
 	$(CXX) $(LFLAGS) -dynamiclib -o $@ $^ $(LIBS)
@@ -76,7 +87,7 @@ $(DYNCALL):
 
 .PHONY: clean
 clean:
-	rm -rf $(EXECUTABLE) $(RIPOSTE) $(MAIN) $(OBJECTS) $(LINENOISE) $(DEPENDENCIES)
+	rm -rf $(EXECUTABLE) $(RIPOSTE) $(API) $(MAIN) $(OBJECTS) $(API_OBJECTS) $(LINENOISE) $(DEPENDENCIES)
 	$(MAKE) -C library/core $(MAKECMDGOALS)
 	$(MAKE) -C libs/dyncall -f Makefile.embedded clean
 

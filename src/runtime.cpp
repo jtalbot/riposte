@@ -552,9 +552,16 @@ struct Unstream {
 
 template<class T>
 struct UnstreamImpl : public Unstream {
+    Thread& thread;
     T v;
 
-    UnstreamImpl(T v) : v(v) {}
+    UnstreamImpl(Thread& thread, T v) : thread(thread), v(v) {
+        thread.gcStack.push_back(v);
+    }
+
+    ~UnstreamImpl() {
+        thread.gcStack.pop_back();
+    }
 
     void operator()(DCCallVM* vm, int64_t i) {
         dcArgPointer(vm, &v[i]);
@@ -573,13 +580,13 @@ struct UnstreamImpl : public Unstream {
     }
 };
 
-Unstream* MakeUnstream(String t, int64_t s) {
-    if(t == Strings::Logical) return new UnstreamImpl<Logical>(Logical(s));
-    if(t == Strings::Integer) return new UnstreamImpl<Integer>(Integer(s));
-    if(t == Strings::Double)  return new UnstreamImpl<Double>(Double(s));
-    if(t == Strings::Character) return new UnstreamImpl<Character>(Character(s));
-    if(t == Strings::Raw)     return new UnstreamImpl<Raw>(Raw(s));
-    if(t == Strings::List)    return new UnstreamImpl<List>(List(s));
+Unstream* MakeUnstream(Thread& thread, String t, int64_t s) {
+    if(t == Strings::Logical) return new UnstreamImpl<Logical>(thread, Logical(s));
+    if(t == Strings::Integer) return new UnstreamImpl<Integer>(thread, Integer(s));
+    if(t == Strings::Double)  return new UnstreamImpl<Double>(thread, Double(s));
+    if(t == Strings::Character) return new UnstreamImpl<Character>(thread, Character(s));
+    if(t == Strings::Raw)     return new UnstreamImpl<Raw>(thread, Raw(s));
+    if(t == Strings::List)    return new UnstreamImpl<List>(thread, List(s));
     _error("Can't unstream a non-vector during a map");
 }
 
@@ -599,7 +606,7 @@ List Map(Thread& thread, String func, List args, Character result) {
     // build up streamers and unstreamers.
     std::vector<Unstream*> u;
     for(int64_t i = 0; i < result.length(); ++i) {
-        u.push_back(MakeUnstream(result[i], length));
+        u.push_back(MakeUnstream(thread, result[i], length));
     }
 
     if(length > 0) {
@@ -681,7 +688,7 @@ List Scan(Thread& thread, String func, List args, Character result) {
     // build up streamers and unstreamers.
     std::vector<Unstream*> u;
     for(int64_t i = 0; i < result.length(); ++i) {
-        u.push_back(MakeUnstream(result[i], length));
+        u.push_back(MakeUnstream(thread, result[i], length));
     }
 
     if(length > 0) {
@@ -773,7 +780,7 @@ List Fold(Thread& thread, String func, List args, Character result) {
     // build up streamers and unstreamers.
     std::vector<Unstream*> u;
     for(int64_t i = 0; i < result.length(); ++i) {
-        u.push_back(MakeUnstream(result[i], 1));
+        u.push_back(MakeUnstream(thread, result[i], 1));
     }
 
     bool isna = false;
@@ -850,7 +857,7 @@ List MapR(Thread& thread, Closure const& func, List args, Character result) {
     // build up streamers and unstreamers.
     std::vector<Unstream*> u;
     for(int64_t i = 0; i < result.length(); ++i) {
-        u.push_back(MakeUnstream(result[i], length));
+        u.push_back(MakeUnstream(thread, result[i], length));
     }
 
     if(length > 0) {
@@ -875,6 +882,9 @@ List MapR(Thread& thread, Closure const& func, List args, Character result) {
             apply = CreateCall(apply);
         }
 
+        // Protect apply from the gc
+        thread.gcStack.push_back(apply);
+
         Code* p = Compiler::compileTopLevel(thread, apply);
 
         for(int64_t i = 0; i < length; ++i) {
@@ -886,7 +896,9 @@ List MapR(Thread& thread, Closure const& func, List args, Character result) {
                 (*u[k])(i, r[k]);
             }
         }
-        
+       
+        thread.gcStack.pop_back();
+ 
         for(int64_t i = 0; i < s.size(); ++i) {
             delete s[i];
         }
@@ -918,6 +930,7 @@ List MapI(Thread& thread, Closure const& func, List args) {
     if(minlength == 0) length = 0;
 
     List result(length);
+    thread.gcStack.push_back(result);
 
     if(length > 0) {
         std::vector<Stream*> s;
@@ -944,6 +957,9 @@ List MapI(Thread& thread, Closure const& func, List args) {
 
         Code* p = Compiler::compileTopLevel(thread, apply);
 
+        // Protect apply from the gc
+        thread.gcStack.push_back(apply);
+
         for(int64_t i = 0; i < length; ++i) {
             for(int64_t k = 0; k < s.size(); ++k) {
                 p->calls[0].arguments[k] = (*s[k])(i);
@@ -951,11 +967,14 @@ List MapI(Thread& thread, Closure const& func, List args) {
             result[i] = thread.eval(p);
         }
         
+        thread.gcStack.pop_back();
+
         for(int64_t i = 0; i < s.size(); ++i) {
             delete s[i];
         }
     }
 
+    thread.gcStack.pop_back();
     return result;
 }
 

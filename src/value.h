@@ -63,6 +63,7 @@ struct Value {
 	bool isFuture() const 	{ return type() == Type::Future; }
 	bool isClosure() const { return type() == Type::Closure; }
 	bool isEnvironment() const { return type() == Type::Environment; }
+	bool isExternalptr() const { return type() == Type::Externalptr; }
 	
 	bool isNull() const 	{ return type() == Type::Null; }
 	bool isRaw() const 	{ return type() == Type::Raw; }
@@ -215,10 +216,12 @@ struct Externalptr : public Object {
 
     static void Finalize(HeapObject* o) {
         Inner* i = (Inner*)o;
-        Value v;
-        Value::Init(v, Type::Externalptr, 0);
-        v.p = i;
-        i->fun(v);
+        if(i->fun) {
+            Value v;
+            Value::Init(v, Type::Externalptr, 0);
+            v.p = i;
+            i->fun(v);
+        }
     }
 
     static Externalptr& Init(Value& v, void* ptr, Value tag, Value prot, Finalizer fun) {

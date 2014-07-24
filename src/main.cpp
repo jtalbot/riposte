@@ -176,6 +176,11 @@ static int run(State& state, std::string inname, std::istream& in, std::ostream&
             e_message("Error", e.kind().c_str(), e.what().c_str());
         } 
     }
+
+    // Clean up after myself
+    if(echo) {
+        thread.gcStack.pop_back();
+    }
     
     return rc;
 }
@@ -256,17 +261,18 @@ int main(int argc, char** argv)
     d_message(1,NULL,"Command option processing complete");
 
     /* Initialize execution state */
-    State state(threads, argc, argv);
-    state.verbose = verbose;
-    state.format = format;
-    Thread& thread = state.getMainThread();
+    globalState = new State(threads, argc, argv);
+    globalState->verbose = verbose;
+    globalState->format = format;
+
+    Thread& thread = globalState->getMainThread();
 
     if(!filename)
-        info(state, std::cout);
+        info(*globalState, std::cout);
 
     /* Load core functions */
     try {
-        Environment* env = new Environment(1, state.empty);
+        Environment* env = new Environment(1, globalState->empty);
         loadPackage(thread, env, "library", "core");
     } 
     catch(RiposteException const& e) { 
@@ -275,25 +281,27 @@ int main(int argc, char** argv)
   
     int rc; 
     /* Load bootstrap file if it exists */
-    /*{
+    {
         std::ifstream in("bootstrap.R");
-        rc = run(state, std::string("bootstrap.R"), in, std::cout, false, echo);
-    }*/
+        rc = run(*globalState, std::string("bootstrap.R"), in, std::cout, false, echo);
+    }
 
  
     /* Either execute the specified file or read interactively from stdin  */
     if(filename) {
         std::ifstream in(filename);
-        rc = run(state, std::string(filename), in, std::cout, false, echo);
+        rc = run(*globalState, std::string(filename), in, std::cout, false, echo);
     } 
     else {
-        rc = run(state, std::string("<stdin>"), std::cin, std::cout, true, echo);
+        rc = run(*globalState, std::string("<stdin>"), std::cin, std::cout, true, echo);
     }
 
     /* Session over */
 
     fflush(stdout);
     fflush(stderr);
+
+    delete globalState;
 
     return rc;
 }

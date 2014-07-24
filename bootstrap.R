@@ -79,103 +79,10 @@
     base[names] <- namespace.base[names]
     internal::registerNamespace('baseenv',base)
 
-    #namespace <- function(name, env) {
-    
-    #import <- new.env(env)
-    #attr(import, 'name') <- paste('imports:',name,sep="")
-
-    #exports <- new.env()
-    #exportpatterns <- character(0)
-    #S3methods <- matrix(character(0), nrow=0, ncol=3)
-
-    #ns <- new.env(baseenv())
-    #ns$useDynLib <- function(library, ..., .registration=FALSE, .fixes="") NULL
-    #ns$import <- function(library) {
-    #    env <- getRegisteredNamespace(strip(.pr_expr(.getenv(NULL), 'library')))
-    #    names <- ls(env)
-    #    import[names] <- env[names]
-    #}
-    #ns$importFrom <- function(library, ...) {
-    #    env <- getRegisteredNamespace(strip(.pr_expr(.getenv(NULL), 'library')))
-    #    for(i in seq_len(length(`__dots__`))) {
-    #        name <- strip(.pr_expr(`__dots__`, i))
-    #        import[[name]] <- env[[name]]
-    #    }
-    #}
-    #ns$export <- function(...) {
-    #    for(i in seq_len(length(`__dots__`))) {
-    #        name <- strip(.pr_expr(`__dots__`, i))
-    #        exports[[name]] <- name
-    #    }
-    #}
-    #ns$exportPattern <- function(pattern)
-    #    exportpatterns[length(exportpatterns)+1] <- pattern
-    #
-    #ns$S3method <- function(func, type, f) {
-    #    if(missing(f))
-    #        f <- paste(func,type,sep='.')
-    #    else
-    #        f <- strip(.pr_expr(.getenv(NULL), 'f'))
-    #    S3methods <- rbind(S3methods, c(func,type,f))
-    #}
-
-    #list( ns,
-    #        function() import,
-    #        function() exports,
-    #        function() exportpatterns,
-    #        function() S3methods )
-    #}
-
-    #load <- function(name) {
-    #    ns <- namespace(name, baseenv())
-    #    core::source(paste('library/',name, '/NAMESPACE', sep=""), ns[[1L]])
-    #    env <- core::library(name, ns[[2L]]())
-    #    exports <- ns[[3L]]()
-    #    patterns <- ns[[4L]]()
-    #    n <- ls(env, TRUE)
-    #    for(p in patterns) {
-    #        exported <- grepl(p, n)
-    #        exports[exported] <- exported
-    #    }
-    #    env[['.__NAMESPACE__.']] <- new.env(emptyenv())
-    #    env[['.__NAMESPACE__.']][['exports']] <- exports
-    #    env[['.__NAMESPACE__.']][['S3methods']] <- ns[[5L]]()
-    #    attr(env, 'name') <- paste('namespace:', name, sep="")
-    #    internal::setRegisteredNamespace(name, env)
-    #}
-
-    # base packages
-
-    # the first 5 have to be in this order
-#    load('tools')
-#    load('utils')
-#    load('stats')
-#    load('datasets')
-#    load('methods')
-#    # then, in any order
-#    load('grDevices')
-#    load('graphics')
-#    load('grid')
-##    load('parallel')
-#    load('splines')
-#    load('stats4')
-
-    # recommended
-#    load('KernSmooth')
-#    load('MASS')
-#    load('Matrix')
-#    load('boot')
-#    load('class')
-#    load('cluster')
-#    load('codetools')
-#    load('foreign')
-#    load('lattice')
-#    load('mgcv')
-#    load('nlme')
-#    load('nnet')
-#    load('rpart')
-#    load('spatial')
-#    load('survival')
+    # Load the R dynamic libraries
+    #internal::dyn.load('lib/libRblas.dylib', TRUE, TRUE, '')
+    #internal::dyn.load('lib/libRlapack.dylib', TRUE, TRUE, '')
+    internal::dyn.load('libR.dylib', TRUE, TRUE, '')
 
     "Loaded base library"
 })()

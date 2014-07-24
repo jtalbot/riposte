@@ -45,13 +45,20 @@ Value dynsym(Thread& thread, Value const* args) {
     Character const& name = (Character const&)args[1];
     
     dlerror();
-    dlsym(p.ptr(), name.s->s);
+    void* r = dlsym(p.ptr(), name.s->s);
 
     char* err = dlerror();
     if(err) {
         std::cerr << err << std::endl;
     }
 
-    return Logical::c(!err);
+    if(r) {
+        Value v;
+        Externalptr::Init(v, r, Value::Nil(), Value::Nil(), NULL);
+        return v;
+    }
+    else {
+        return Null::Singleton();
+    }
 }
 

@@ -14,6 +14,8 @@
 #include "sse.h"
 #include "call.h"
 
+State* globalState;
+
 static inline Instruction const* mov_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* store_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* forend_op(Thread& thread, Instruction const& inst) ALWAYS_INLINE;
@@ -287,32 +289,44 @@ static inline Instruction const* external_op(Thread& thread, Instruction const& 
     thread.visible = true;
 	DECODE(a);
 
-    if(!a.isCharacter1()) {
-        return StopDispatch(thread, inst, thread.internStr(
-            ".External needs a character(1) as its first argument"), 
-            inst.c);
-    }   
-
-    String name = a.s;
     void* func = NULL;
-    for(std::map<std::string,void*>::iterator i = thread.state.handles.begin();
-        i != thread.state.handles.end(); ++i) {
-        func = dlsym(i->second, name->s);
-        if(func != NULL)
-            break;
+    if(a.isCharacter1()) {
+        String name = a.s;
+        for(std::map<std::string,void*>::iterator i = thread.state.handles.begin();
+            i != thread.state.handles.end(); ++i) {
+            func = dlsym(i->second, name->s);
+            if(func != NULL)
+                break;
+        }
+        if(func == NULL)
+            _error(std::string("Can't find external function: ") + name->s);
     }
-    if(func == NULL)
-        _error(std::string("Can't find external function: ") + name->s);
+    else if(a.isExternalptr()) {
+        func = ((Externalptr const&)a).ptr();
+    }
+
+    if(func == NULL) {
+        return StopDispatch(thread, inst, thread.internStr(
+            ".External needs a Character(1) or Externalptr as its first argument"), 
+            inst.c);
+    }
 
     uint64_t nargs = inst.b;
 	for(int64_t i = 0; i < nargs; i++) {
 		BIND(REGISTER(inst.a+i+1));
 	}
-    {
+    try {
         typedef Value (*Func)(Thread&, Value const*);
         Func f = (Func)func;
         OUT(c) = f(thread, &REGISTER(inst.a+1));
     }
+    catch( char const* e ) {
+        _error(std::string("External function call failed: ") + e);
+    }
+    catch( ... ) {
+        _error(std::string("External function call failed with unknown error"));
+    }
+
 	return &inst+1;
 }
 
@@ -767,9 +781,12 @@ static inline Instruction const* type_op(Thread& thread, Instruction const& inst
         TYPES(CASE)
         #undef CASE
         default:
-            return StopDispatch(thread, inst, thread.internStr(
+            // This can happen in stop dispatch, so don't re-dispatch.
+            /*return StopDispatch(thread, inst, thread.internStr(
                 (std::string("Unknown type (") + intToStr(a.type()) + ") in type to string, that's bad!").c_str()), 
-                inst.c);
+                inst.c);*/
+            printf("Unknown type in type_op %d\n", a.type());
+            OUT(c) = Character::c(thread.internStr(std::string("Unknown type (") + intToStr(a.type()) + ")"));
             break;
     }
 	return &inst+1;

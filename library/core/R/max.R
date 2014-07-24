@@ -12,8 +12,8 @@ max.default <- function(..., na.rm = FALSE) {
     x <- c(...)
 
     if(na.rm)
-        max(x[!is.na(x)])
+        max(strip(x)[!is.na(strip(x))])
     else
-        max(x)
+        max(strip(x))
 }
 

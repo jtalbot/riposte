@@ -29,6 +29,10 @@ primitives <- .characters(
     '%/%',
     '%/%.default',
 
+    # CallExternal.R
+    '.C',
+    '.Call',
+
     # Colon.R
     ':',
 
@@ -606,6 +610,7 @@ internals <- .characters(
     'dyn.unload',
     'is.loaded',
     'getRegisteredRoutines',
+    'getSymbolInfo',
 
     # encodeString.R
     'encodeString',

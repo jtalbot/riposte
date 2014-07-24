@@ -7,19 +7,66 @@ getLoadedDLLs <- function() {
 }
 
 dyn.load <- function(x, local, now, str) {
+    name <- x
+    handle <- NULL
+    info <- list(`.C`=list(), `.Call`=list(), `.Fortran`=list(), `.External`=list(), useDynamicLookup=FALSE, forceSymbols=FALSE)
+        
     if(x != 'base') {
-        p <- .External('dynload', as.character(x), .isTRUE(local), .isTRUE(now))
-        attr(p, 'class') <- 'DLLHandle'
+        handle <- .External('dynload', as.character(x), .isTRUE(local), .isTRUE(now))
+        attr(handle, 'class') <- 'DLLHandle'
+        
+        name <- sub('\\.[[:alnum:]]+$', '', basename(x), FALSE, FALSE, FALSE, FALSE)
 
-        name <- basename(x)
-
-        a <- list(name=name, path=x, dynamicLookup=FALSE, handle=p, info=NULL)
+        init <- .External('dynsym', handle, .pconcat('R_init_', name))
+        if(!is.null(init)) {
+            info <- .External('dotC', init, list(info))[[1]]
+        }
     }
     else {
-        a <- list(name=x, path=x, dynamicLookup=FALSE, handle=NULL, info=NULL)
+
+        Call <- function(name, num) {
+            x <- list(name=name,address=NULL,dll=NULL,numParameters=num)
+            attr(x, 'class') <- c.default('CallRoutine', 'NativeSymbolInfo')
+            x
+        }
+        
+        Fortran <- function(name, num) {
+            x <- list(name=name,address=NULL,dll=NULL,numParameters=num)
+            attr(x, 'class') <- c.default('FortranRoutine', 'NativeSymbolInfo')
+            x
+        }
+
+        empty <- list()
+        attr(empty, 'class') <- 'NativeRoutineList'
+    
+        call <- empty
+        call[[1]] <- Call('R_addTaskCallback', 4)
+        call[[2]] <- Call('R_getTaskCallbackNames', 0)
+        call[[3]] <- Call('R_removeTaskCallback', 1)
+
+        fortran <- empty
+        fortran[[1]] <- Fortran('dqrcf', 8)
+        fortran[[2]] <- Fortran('dqrdc2', 9)
+        fortran[[3]] <- Fortran('dqrqty', 7)
+        fortran[[4]] <- Fortran('dqrqy', 7)
+        fortran[[5]] <- Fortran('dqrrsd', 7)
+        fortran[[6]] <- Fortran('dqrxb', 7)
+        fortran[[7]] <- Fortran('dtrco', 6)
+    
+        info[[1]] <- empty
+        info[[2]] <- call
+        info[[3]] <- fortran
+        info[[4]] <- empty
     }
+    
+    dllInfo <- info[1:4]
+    attr(dllInfo, 'useDynamicLookup') <- info[[5]]
+    attr(dllInfo, 'forceSymbols') <- info[[6]]
+    attr(dllInfo, 'class') <- 'DLLRegisteredRoutines'
+    
+    a <- list(name=name, path=x, dynamicLookup=FALSE, handle=handle, info=dllInfo)
     attr(a, 'class') <- 'DLLInfo'
-    loadedDLLs[[x]] <<- a
+    loadedDLLs[[name]] <<- a
 }
 
 dyn.unload <- function(x) {
@@ -31,63 +78,42 @@ is.loaded <- function(symbol, PACKAGE, type) {
     .stop("is.loaded NYI")
 }
 
+getSymbolInfo <- function(symbol, PACKAGE, withRegistrationInfo) {
+    
+    if(!is.null(PACKAGE)) {
+        if(PACKAGE == 'base')
+            .stop("Can't look up symbol in the base package")
+
+        p <- loadedDLLs[[PACKAGE]]
+    
+        if(is.null(p))
+            .stop(sprintf("Package %s is not loaded", PACKAGE))
+
+        f <- .External('dynsym', p$handle, symbol)
+    
+        if(is.null(f))
+            .stop(sprintf("no such symbol %s in package %s", symbol, PACKAGE))
+
+    }
+    else {
+        for(p in loadedDLLs) {
+            if(!is.null(p$handle)) {
+                f <- .External('dynsym', p$handle, symbol)
+                if(!is.null(f))
+                    break
+            }
+        }
+        if(is.null(f))
+            .stop(sprintf("no such symbol %s in any package", symbol))
+    }
+    
+    attr(f, 'class') <- 'NativeSymbol'
+
+    x <- list('name'=symbol, 'address'=f, 'package'=p)
+    attr(x, 'class') <- c.default('FortranRoutine', 'NativeSymbolInfo')
+    x
+}
+
 getRegisteredRoutines <- function(dllInfo) {
-    r <- list()
-
-    a <- list()
-    attr(a, 'class') <- 'NativeRoutineList'
-    
-    call <- list()
-
-    x <- list(name='R_addTaskCallback',address=NULL,dll=NULL,numParameters=4)
-    attr(x, 'class') <- c.default('CallRoutine', 'NativeSymbolInfo')
-    call[[1]] <- x
-
-    x <- list(name='R_getTaskCallbackNames',address=NULL,dll=NULL,numParameters=0)
-    attr(x, 'class') <- c.default('CallRoutine', 'NativeSymbolInfo')
-    call[[2]] <- x
-    
-    x <- list(name='R_removeTaskCallback',address=NULL,dll=NULL,numParameters=1)
-    attr(x, 'class') <- c.default('CallRoutine', 'NativeSymbolInfo')
-    call[[3]] <- x
-    
-    attr(call, 'class') <- 'NativeRoutineList'
-
-
-    fortran <- list()
-
-    x <- list(name='dqrcf',address=NULL,dll=NULL,numParameters=8)
-    attr(x, 'class') <- c.default('CallRoutine', 'NativeSymbolInfo')
-    fortran[[1]] <- x
- 
-    x <- list(name='dqrdc2',address=NULL,dll=NULL,numParameters=9)
-    attr(x, 'class') <- c.default('CallRoutine', 'NativeSymbolInfo')
-    fortran[[2]] <- x
-    
-    x <- list(name='dqrqty',address=NULL,dll=NULL,numParameters=7)
-    attr(x, 'class') <- c.default('CallRoutine', 'NativeSymbolInfo')
-    fortran[[3]] <- x
-    
-    x <- list(name='dqrqy',address=NULL,dll=NULL,numParameters=7)
-    attr(x, 'class') <- c.default('CallRoutine', 'NativeSymbolInfo')
-    fortran[[4]] <- x
-    
-    x <- list(name='dqrrsd',address=NULL,dll=NULL,numParameters=7)
-    attr(x, 'class') <- c.default('CallRoutine', 'NativeSymbolInfo')
-    fortran[[5]] <- x
-    
-    x <- list(name='dqrxb',address=NULL,dll=NULL,numParameters=7)
-    attr(x, 'class') <- c.default('CallRoutine', 'NativeSymbolInfo')
-    fortran[[6]] <- x
-    
-    x <- list(name='dtrco',address=NULL,dll=NULL,numParameters=6)
-    attr(x, 'class') <- c.default('CallRoutine', 'NativeSymbolInfo')
-    fortran[[7]] <- x
-    
-    r$.C <- a
-    r$.Call <- call
-    r$.Fortran <- fortran
-    r$.External <- a
-
-    r
+    dllInfo
 }
