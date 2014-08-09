@@ -2,6 +2,14 @@
 #include <R_ext/Print.h>
 
 
+void Rprintf(const char *, ...) {
+    throw "NYI: Rprintf";
+}
+
+void REprintf(const char *, ...) {
+    throw "NYI: REprintf";
+}
+
 // The following is from Print.h
 
 typedef void* SEXP;
@@ -25,7 +33,20 @@ typedef struct {
 R_print_par_t R_print;
 
 extern "C" {
+const char *Rf_EncodeElement0(SEXP, int, int, const char *) {
+    throw "NYI: Rf_EncodeElement0";
+}
+
 const char Rf_EncodeElement(SEXP, int, int, char) {
     throw "NYI: Rf_EncodeElement";
 }
+
 }
+
+extern "C" {
+    // Needed by libRblas
+    void xerbla_(const char *srname, int *info) {
+        throw "NYI: xerbla";
+    }
+}
+

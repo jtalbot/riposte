@@ -3,6 +3,7 @@
     switch(m,
         'numeric' = c('integer', 'double'),
         'name' = 'symbol',
+        'function' = 'closure',
         m)
 }
 
@@ -10,14 +11,15 @@ get <- function(x, envir, mode, inherits) {
     mode <- .mode(mode)
 
     if (!is.nil(.get(envir, x)) 
-        && (any(match(typeof(envir[[x]]), mode, 0, NULL)) || mode == "any")) {
+        && (mode == 'any' || any(match(typeof(envir[[x]]), mode, 0, NULL)))) {
         return(envir[[x]])
     }
     if (inherits) {
         while(envir != emptyenv()) {
             envir <- .getenv(envir)
             if (!is.nil(.get(envir, x))
-                && (any(match(typeof(envir[[x]]), mode, 0, NULL)) || mode == "any"))
+                && (mode == 'any' ||
+                    any(match(typeof(envir[[x]]), mode, 0, NULL))))
                 return(envir[[x]])
         }
     }
@@ -30,7 +32,7 @@ mget <- function(x, envir, mode, ifnotfound, inherits) {
     for(i in seq_len(length(x))) {
         r[[i]] <- get(x[[i]], envir, mode, inherits)
         if (!is.nil(.get(envir, x[[i]]))
-            && (any(match(typeof(envir[[x[[i]]]]), mode, 0, NULL)) || mode == "any")) {
+            && (mode == 'any' || any(match(typeof(envir[[x[[i]]]]), mode, 0, NULL)))) {
             r[[i]] <- envir[[x[[i]]]]
             next
         }
@@ -38,7 +40,7 @@ mget <- function(x, envir, mode, ifnotfound, inherits) {
             while(envir != emptyenv()) {
                 envir <- environment(envir)
                 if (!is.nil(.get(envir, x[[i]]))
-                    && (mode(envir[[x[[i]]]]) == mode || mode == "any")) {
+                    && (mode == 'any' || mode(envir[[x[[i]]]]) == mode)) {
                     r[[i]] <- envir[[x[[i]]]]
                     next
                 }

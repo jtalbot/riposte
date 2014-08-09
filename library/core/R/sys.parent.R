@@ -1,6 +1,8 @@
 
 sys.call <- function(which) {
-    if(which < 0L)
+    # sys.call has inconsistent behavior on which==0
+    # compared to the other sys.* functions!
+    if(which <= 0L)
         .frame(as.integer(-which+2L))[['.__call__.']]
     else
         sys.frame(which)[['.__call__.']]

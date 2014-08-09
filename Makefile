@@ -23,7 +23,7 @@ ifeq ($(EPEE),1)
 	SRC += epee/ir.cpp epee/trace.cpp epee/trace_compile.cpp epee/assembler-x64.cpp
 endif
 
-API_SRC := api/api.cpp api/Connections.cpp api/Defn.cpp api/Error.cpp api/Fileio.cpp api/Print.cpp api/R.cpp api/Rinterface.cpp api/Rinternals.cpp api/Arith.cpp api/eventloop.cpp api/GraphicsDevice.cpp api/GraphicsEngine.cpp api/Memory.cpp api/Rdynload.cpp api/Riconv.cpp api/Rmath.cpp api/Utils.cpp
+API_SRC := api/api.cpp api/Applic.cpp api/Connections.cpp api/Defn.cpp api/Error.cpp api/Fileio.cpp api/Linpack.cpp api/Print.cpp api/R.cpp api/Rinterface.cpp api/Rinternals.cpp api/Arith.cpp api/eventloop.cpp api/GraphicsDevice.cpp api/GraphicsEngine.cpp api/Memory.cpp api/PrtUtil.cpp api/Random.cpp api/Rdynload.cpp api/Riconv.cpp api/Rmath.cpp api/Utils.cpp api/RS.cpp
 
 
 EXECUTABLE := riposte
@@ -65,7 +65,7 @@ $(PACKAGES): $(RIPOSTE)
 	$(MAKE) -C library/$@ $(MAKECMDGOALS)
 
 $(API): $(API_OBJECTS) $(RIPOSTE)
-	$(CXX) $(LFLAGS) -L/usr/local/opt/gettext/lib/ -L. -lRiposte -Xlinker -reexport-lintl -Xlinker -reexport-lRmath -dynamiclib -compatibility_version 3.1.0 -current_version 3.1.0 -o $@ $^
+	$(CXX) $(LFLAGS) -L/usr/local/opt/gettext/lib/ -L. -lRiposte -Xlinker -reexport-lintl -Xlinker -reexport-lRmath -dynamiclib -compatibility_version 3.1.0 -current_version 3.1.1 -o $@ $^
 
 $(RIPOSTE): $(OBJECTS)
 	$(CXX) $(LFLAGS) -dynamiclib -o $@ $^ $(LIBS)

@@ -53,7 +53,7 @@
         return(x)
 
     d <- attr(x, 'dim')
-    
+
     if((length(d) != 1L || .isTRUE(drop)) && ...() == 1L)
         return( `[.default`(x,..1) )
 
@@ -87,16 +87,19 @@
         }
     }
 
-    mult <- 1
-    indices <- idx[[1]]*mult
+    mult <- 1L
+    indices <- idx[[1L]]*mult
     for(i in seq_len(length(d)-1L)) {
         mult <- mult * d[[i]]
-        indices <- rep.int(indices, length(idx[[i+1L]]))
-        indices <- indices + (idx[[i+1L]]-1L)*mult
+        indices <- rep.int(indices, length(idx[[i+1L]])) +
+                   rep.default(idx[[i+1L]]-1L, each=length(indices))*mult
     }
 
     r <- strip(x)[indices]
     attr(r,'dim') <- .Map(length, list(idx), 'integer')[[1L]]
+
+    if(length(r) != prod(attr(r,'dim')))
+        .stop('dim length is not correct')
 
     dn <- dimnames.default(x)
     if(!is.null(dn)) {
@@ -206,13 +209,20 @@
     r
 }
 
-`[<-.default` <- function(x, i, ..., value) {
-    nn <- ''
-    if(missing(i)) {
+`[<-.default` <- function(x, ..., value) {
+   
+    if(...() == 0L) {
         x[seq_len(length(x))] <- strip(value)
         return(x)
     }
-    else if(is.character.default(i)) {
+    
+    if(...() != 1L)
+        .stop("incorrect number of dimensions")
+
+    i <- ..1
+    
+    nn <- ''
+    if(is.character.default(i)) {
         i <- nn <- strip(i)
         i <- .semijoin(i, as.character.default(names(x)))
         i[i==0L] <- length(x)+seq_len(sum(i==0L))
@@ -231,6 +241,68 @@
     else {
         .stop('invalid subscript type')
     }
+}
+
+`[<-.matrix` <- `[<-.array` <- function(x, ..., value)
+{
+    if(...() <= 1L)
+        return( `[<-.default`(x, ..., value=value) )
+
+    d <- attr(x, 'dim')
+    
+    if(length(d) != ...()) {
+        .stop("incorrect number of dimensions")
+    }
+
+    idx <- list()
+    for(i in seq_len(...())) {
+        if(missing(...(i))) {
+            idx[[i]] <- seq_len(d[[i]])
+        }
+        else { 
+            id <- strip(...(i))
+
+            if(is.null(id))
+                idx[[i]] <- vector('integer',0)
+            else if(is.logical(id))
+                idx[[i]] <- which(id)
+            else if(is.character.default(id)) {
+                if(is.null(attr(x, 'dimnames')))
+                    .stop("no 'dimnames' attribute for array")
+                r <- .semijoin(id, as.character.default(attr(x,'dimnames')[[i]]))
+                if(any(r==0L))
+                    .stop("subscript out of bounds")
+                idx[[i]] <- r
+            }
+            else if(is.integer(id) || is.double(id)) {
+                if(any(id < 1L) | any(id > d[[i]]))
+                    .stop("subscript out of bounds")
+                idx[[i]] <- as.integer(id)
+            }
+            else
+                .stop(sprintf("invalid subscript type '%s'", class(id)))
+        }
+    }
+
+    mult <- 1L
+    indices <- idx[[1L]]*mult
+    for(i in seq_len(length(d)-1L)) {
+        mult <- mult * d[[i]]
+        indices <- rep.int(indices, length(idx[[i+1L]])) +
+                   rep.default(idx[[i+1L]]-1L, each=length(indices))*mult
+    }
+
+    r <- `[<-`(strip(x), strip(indices), value)
+
+    attr(r,'dim') <- d
+
+    if(length(r) != prod(d)) {
+        .stop('dim does not match array length')
+    }
+
+    dimnames(r) <- dimnames.default(x)
+    
+    r
 }
 
 `[<-.environment` <- function(x, i, ..., value) {

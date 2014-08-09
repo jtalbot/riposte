@@ -12,7 +12,7 @@ Compiling riposte
    	`brew install eigen`
 	`brew install tre`
 	`brew install pcre`
-    `brew install gettext`
+    `brew install gettext` (for libintl)
 	Note: If you use a different package system, you may need to change the directories in Riposte's Makefiles 
 
 1. Run `make release` in the riposte directory, or `make debug` for the debug version
@@ -21,6 +21,13 @@ Compiling riposte
 
 3. Execute ./riposte to start
 
+4. To load R standard library
+    Build R 3.1.1 from sources with
+    ./configure --with-aqua=no --with-tcltk=no --with-x=no --with-cairo=no --with-recommended-packages=no --with-ICU=no --enable-byte-compiled-packges=no --enable-strict-barrier=yes
+    Copy lib/libRblas.dylib and lib/libRlapack.dylib into Riposte's home directory
+    Copy the contents of the library directory into Riposte's library directory
+    Build the standalone R math library and copy src/nmath/standalone/libRmath.a into Riposte's home directory
+delete -DMATHLIB_STANDALONE from Makefile, do make shared
 
 Flags
 -----

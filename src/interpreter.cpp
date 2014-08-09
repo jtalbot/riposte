@@ -609,11 +609,14 @@ static inline Instruction const* missing_op(Thread& thread, Instruction const& i
     do {
 
     if( x.isCharacter() && ((Character const&)x).length() == 1 ) {
-        Value const& v = e->get(x.s);
-        missing = (v.isPromise() && ((Promise const&)v).isDefault() && e == thread.frame.environment) ||
-                  v.isNil();
+        Environment* foundEnv;
+        Value const& v = e->getRecursive(x.s, foundEnv);
+        missing = (    v.isPromise()
+                    && ((Promise const&)v).isDefault() 
+                    && foundEnv == thread.frame.environment
+                  ) || v.isNil();
 
-        if(v.isPromise() && !((Promise const&)v).isDefault()) {
+        if(v.isPromise() && !((Promise const&)v).isDefault() && foundEnv == e) {
             // see if missing is passed down
             if(((Promise const&)v).isExpression()) {
                 Value const& expr = ((Promise const&)v).code()->expression;
@@ -1651,6 +1654,8 @@ State::State(uint64_t threads, int64_t argc, char** argv)
 	this->empty = new Environment(1,(Environment*)0);
     this->global = new Environment(1,empty);
 
+    this->apiStack = NULL;
+
     // intialize arguments list
 	arguments = Character(argc);
 	for(int64_t i = 0; i < argc; i++) {
@@ -1694,5 +1699,4 @@ void Code::printByteCode(State const& state) const {
 	}
 	std::cout << std::endl;
 }
-
 

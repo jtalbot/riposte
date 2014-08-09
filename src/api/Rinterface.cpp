@@ -1,4 +1,5 @@
 
+#define R_NO_REMAP
 #include <Rinterface.h>
 #include <Rinternals.h>
 

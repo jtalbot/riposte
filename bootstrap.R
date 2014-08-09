@@ -79,10 +79,9 @@
     base[names] <- namespace.base[names]
     internal::registerNamespace('baseenv',base)
 
-    # Load the R dynamic libraries
-    #internal::dyn.load('lib/libRblas.dylib', TRUE, TRUE, '')
-    #internal::dyn.load('lib/libRlapack.dylib', TRUE, TRUE, '')
+    # Load the Riposte version of the R API 
     internal::dyn.load('libR.dylib', TRUE, TRUE, '')
+    #internal::dyn.load('libRblas.dylib', TRUE, TRUE, '')
 
     "Loaded base library"
 })()

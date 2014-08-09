@@ -28,6 +28,8 @@ matrix <- function(data, nrow, ncol, byrow, dimnames, missing.nrow, missing.ncol
 
     dim(data) <- c(nrow, ncol)
     dimnames(data) <- dimnames
+    attr(data,'class') <- 'matrix'
+
     data    
 }
 

@@ -17,3 +17,4 @@ t.default <- function(x) {
         .stop('argument is not a matrix')
     }
 }
+

@@ -100,7 +100,7 @@ inline HeapObject* Heap::smallalloc(uint64_t bytes) {
 	//printf("Region: allocating %d at %llx\n", bytes, (uint64_t)bump);
 	HeapObject* o = (HeapObject*)bump;
 	assert(((uint64_t) o & 63) == 0);
-	//memset(o, 0xba, bytes);
+	memset(o, 0xba, bytes);
 	bump += bytes;
 	return o;
 }
@@ -110,7 +110,7 @@ inline HeapObject* Heap::alloc(uint64_t bytes, GCFinalizer finalizer) {
 	
 	total += bytes+regionSize;
 	char* head = (char*)malloc(bytes+regionSize);
-	//memset(head, 0xab, bytes+regionSize);
+	memset(head, 0xab, bytes+regionSize);
 	GCObject* g = ((HeapObject*)(head+regionSize-1))->gcObject();
 	g->Init(head, bytes+regionSize);
     root = g->Activate(root, finalizer);

@@ -1,4 +1,5 @@
 
+#define R_NO_REMAP
 #include <Rinternals.h>
 #include <R_ext/GraphicsEngine.h>
 
@@ -22,6 +23,10 @@ void GEaddDevice2(pGEDevDesc, const char *) {
     throw "NYI: GEaddDevice2";
 }
 
+void GEaddDevice2f(pGEDevDesc, const char *, const char *) {
+    throw "NYI: GEaddDevice2f";
+}
+
 void GEkillDevice(pGEDevDesc) {
     throw "NYI: GEkillDevice";
 }
@@ -30,15 +35,29 @@ pGEDevDesc GEcreateDevDesc(pDevDesc dev) {
     throw "NYI: GEcreateDevDesc";
 }
 
+void GEregisterSystem(GEcallback callback, int *systemRegisterIndex) {
+    // TODO: figure out what this function does and implement it.
+    systemRegisterIndex = 0;
+}
+
+void GEunregisterSystem(int registerIndex) {
+    throw "NYI: GEunregisterSystem";
+}
+
+
 /* Convert an element of a R colour specification (which might be a
    number or a string) into an internal colour specification. */
-rcolor RGBpar(SEXP, int) {
-    throw "NYI: RGBpar";
+rcolor Rf_RGBpar(SEXP, int) {
+    throw "NYI: Rf_RGBpar";
+}
+
+rcolor Rf_RGBpar3(SEXP, int, rcolor) {
+    throw "NYI: Rf_RGBpar3";
 }
 
 /* Convert an internal colour specification to/from a colour name */
-const char *col2name(rcolor col) { /* used in par.c, grid */
-    throw "NYI: col2name";
+const char *Rf_col2name(rcolor col) { /* used in par.c, grid */
+    throw "NYI: Rf_col2name";
 }
 
 /* Convert either a name or a #RRGGBB[AA] string to internal.
@@ -49,8 +68,135 @@ rcolor R_GE_str2col(const char *s) {
     throw "NYI: R_GE_str2col";
 }
 
+R_GE_lineend GE_LENDpar(SEXP value, int ind) {
+    throw "NYI: GE_LENDpar";
+}
+
+SEXP GE_LENDget(R_GE_lineend lend) {
+    throw "NYI: GE_LENDget";
+}
+
+R_GE_linejoin GE_LJOINpar(SEXP value, int ind) {
+    throw "NYI: GE_LJOINpar";
+}
+
+SEXP GE_LJOINget(R_GE_linejoin ljoin) {
+    throw "NYI: GE_LJOINget";
+}
+
+void GESetClip(double x1, double y1, double x2, double y2, pGEDevDesc dd) {
+    throw "NYI: GE_SetClip";
+}
+
+void GENewPage(const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GENewPage";
+}
+
+void GELine(double x1, double y1, double x2, double y2,
+        const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GELine";
+}
+
+void GEPolyline(int n, double *x, double *y,
+        const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GEPolyline";
+}
+
+void GEPolygon(int n, double *x, double *y,
+           const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GEPolygon";
+}
+
+SEXP GEXspline(int n, double *x, double *y, double *s, Rboolean open,
+           Rboolean repEnds, Rboolean draw,
+           const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GEXspline";
+}
+
+void GECircle(double x, double y, double radius,
+          const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GECircle";
+}
+
+void GERect(double x0, double y0, double x1, double y1,
+        const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GERect";
+}
+
+void GEPath(double *x, double *y,
+            int npoly, int *nper,
+            Rboolean winding,
+            const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GEPath";
+}
+
+void GERaster(unsigned int *raster, int w, int h,
+              double x, double y, double width, double height,
+              double angle, Rboolean interpolate,
+              const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GERaster";
+}
+
 SEXP GECap(pGEDevDesc dd) {
     throw "NYI: GECap";
+}
+
+void GEText(double x, double y, const char * const str, cetype_t enc,
+        double xc, double yc, double rot,
+        const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GEText";
+}
+
+void GEMode(int mode, pGEDevDesc dd) {
+    throw "NYI: GEMode";
+}
+
+void GESymbol(double x, double y, int pch, double size,
+          const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GESymbol";
+}
+
+void GEPretty(double *lo, double *up, int *ndiv) {
+    throw "NYI: GEPretty";
+}
+
+void GEMetricInfo(int c, const pGEcontext gc,
+          double *ascent, double *descent, double *width,
+          pGEDevDesc dd) {
+    throw "NYI: GEMetricInfo";
+}
+
+double GEStrWidth(const char *str, cetype_t enc,
+          const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GEStrWidth";
+}
+
+double GEStrHeight(const char *str, cetype_t enc,
+          const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GEStrHeight";
+}
+
+void GEStrMetric(const char *str, cetype_t enc, const pGEcontext gc,
+                 double *ascent, double *descent, double *width,
+                 pGEDevDesc dd) {
+    throw "NYI: GEStrMetric";
+}
+
+int GEstring_to_pch(SEXP pch) {
+    throw "NYI: GEstring_to_pch";
+}
+
+/*-------------------------------------------------------------------
+ *
+ *  LINE TEXTURE CODE is concerned with the internals of R
+ *  line texture representation.
+ */
+unsigned int GE_LTYpar(SEXP, int) {
+    throw "NYI: GE_LTYpar";
+}
+
+SEXP GE_LTYget(unsigned int) {
+    throw "NYI: GE_LTYget";
 }
 
 /*
@@ -61,8 +207,48 @@ void R_GE_rasterInterpolate(unsigned int *sraster, int sw, int sh,
     throw "NYI: R_GE_rasterInterpolate";
 }
 
+/*
+ * From plotmath.c
+ */
+double GEExpressionWidth(SEXP expr,
+             const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GEExpressionWidth";
+}
+
+double GEExpressionHeight(SEXP expr,
+              const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GEExpressionHeight";
+}
+
+void GEExpressionMetric(SEXP expr, const pGEcontext gc,
+                        double *ascent, double *descent, double *width,
+                        pGEDevDesc dd) {
+    throw "NYI: GEExpressionMetric";
+}
+
+void GEMathText(double x, double y, SEXP expr,
+        double xc, double yc, double rot,
+        const pGEcontext gc, pGEDevDesc dd) {
+    throw "NYI: GEMathText";
+}
+
+
+
+
 pGEDevDesc GEcurrentDevice(void) {
     throw "NYI: GEcurrentDevice";
+}
+
+void GEdirtyDevice(pGEDevDesc dd) {
+    throw "NYI: GEdirtyDevice";
+}
+
+Rboolean GErecording(SEXP call, pGEDevDesc dd) {
+    throw "NYI: GErecording";
+}
+
+void GErecordGraphicOperation(SEXP op, SEXP args, pGEDevDesc dd) {
+    throw "NYI: GErecordGraphicOperation";
 }
 
 void GEinitDisplayList(pGEDevDesc dd) {
@@ -158,3 +344,26 @@ SEXP do_playSnapshot(SEXP, SEXP, SEXP, SEXP) {
 
 }
 
+// Functions used by graphics
+
+extern "C" {
+
+int baseRegisterIndex;
+
+struct GPar;
+
+GPar* Rf_gpptr(pGEDevDesc dd) {
+    throw "NYI: Rf_gpptr";
+}
+
+GPar* Rf_dpptr(pGEDevDesc dd) {
+    throw "NYI: Rf_dpptr";
+}
+
+/* Return a "nice" min, max and number of intervals for a given
+ * range on a linear or _log_ scale, respectively: */
+void Rf_GPretty(double*, double*, int*) { /* used in plot3d.c */
+    throw "NYI: Rf_GPretty";
+}
+
+}

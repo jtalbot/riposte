@@ -94,6 +94,7 @@ UseMethod <- function(generic, object)
                 promise('object', as.name(f), .frame(1L), .getenv(NULL))
         }
     }
+    object
 
     call <- .resolve.generic.call(
         generic,

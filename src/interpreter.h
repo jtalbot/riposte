@@ -4,6 +4,7 @@
 #include <map>
 #include <set>
 #include <deque>
+#include <list>
 #include <iostream>
 
 #include "value.h"
@@ -114,6 +115,7 @@ struct Prototype : public HeapObject {
 
 	void visit() const;
 };
+
 
 class Dictionary : public HeapObject {
 protected:
@@ -329,6 +331,20 @@ struct StackFrame {
 	Instruction const* returnpc;
 };
 
+// For R API support
+struct SEXPREC : public HeapObject {
+    Value v;
+    SEXPREC(Value const& v) : v(v) {}
+	void visit() const;
+};
+
+typedef SEXPREC* SEXP;
+
+struct SEXPStack {
+    int* size;
+    SEXP* stack;
+};
+
 ////////////////////////////////////////////////////////////////////
 // Global shared state 
 ///////////////////////////////////////////////////////////////////
@@ -347,6 +363,30 @@ public:
 	Environment* global;
 
 	std::vector<Thread*> threads;
+
+    // For R API support
+    Lock apiLock;
+    SEXPStack* apiStack;
+    // SEXPs that the API needs to have live between calls.
+    std::list<SEXP> installedSEXPs;
+    SEXP installSEXP(SEXP s) {
+        installedSEXPs.push_back(s);
+        return s;
+    }
+    SEXP installSEXP(Value const& v) {
+        return installSEXP(new SEXPREC(v));
+    }
+    void uninstallSEXP(SEXP s) {
+        // go back to front, assuming we're uninstalling something
+        // we recently installed.
+        for(std::list<SEXP>::reverse_iterator i = installedSEXPs.rbegin();
+            i != installedSEXPs.rend(); ++i) {
+            if(*i == s) {
+                installedSEXPs.erase((++i).base());
+                break;
+            }
+        }
+    }
 
 	bool verbose;
 	bool epeeEnabled;

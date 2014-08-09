@@ -5,6 +5,7 @@ array <- function(data, dim, dimnames) {
         r <- r[seq_len(prod(dim))]
 	dim(r) <- strip(dim)
     dimnames(r) <- strip(dimnames)
+    attr(data,'class') <- 'array'
 	r
 }
 

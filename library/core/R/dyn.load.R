@@ -59,14 +59,15 @@ dyn.load <- function(x, local, now, str) {
         info[[4]] <- empty
     }
     
-    dllInfo <- info[1:4]
-    attr(dllInfo, 'useDynamicLookup') <- info[[5]]
-    attr(dllInfo, 'forceSymbols') <- info[[6]]
-    attr(dllInfo, 'class') <- 'DLLRegisteredRoutines'
-    
-    a <- list(name=name, path=x, dynamicLookup=FALSE, handle=handle, info=dllInfo)
-    attr(a, 'class') <- 'DLLInfo'
-    loadedDLLs[[name]] <<- a
+    routines <- info[1:4]
+    attr(routines, 'useDynamicLookup') <- info[[5]]
+    attr(routines, 'forceSymbols') <- info[[6]]
+    attr(routines, 'handle') <- handle   
+    attr(routines, 'class') <- 'DLLRegisteredRoutines'
+ 
+    dllInfo <- list(name=name, path=x, dynamicLookup=FALSE, handle=handle, info=routines)
+    attr(dllInfo, 'class') <- 'DLLInfo'
+    loadedDLLs[[name]] <<- dllInfo
 }
 
 dyn.unload <- function(x) {
@@ -81,15 +82,24 @@ is.loaded <- function(symbol, PACKAGE, type) {
 getSymbolInfo <- function(symbol, PACKAGE, withRegistrationInfo) {
     
     if(!is.null(PACKAGE)) {
-        if(PACKAGE == 'base')
-            .stop("Can't look up symbol in the base package")
+        p <- PACKAGE
+        if(is.character(PACKAGE)) {
+            if(PACKAGE == 'base')
+                .stop("Can't look up symbol in the base package")
 
-        p <- loadedDLLs[[PACKAGE]]
+            p <- loadedDLLs[[PACKAGE]]
+        
+            if(is.null(p))
+                .stop(sprintf("Package %s is not loaded", PACKAGE))
+        
+            p <- p$info
+        }
+
+        if(!inherits(p, 'DLLRegisteredRoutines', FALSE)) {
+            .stop('getSymbolInfo needs a DLLRegisteredRoutines')
+        }
     
-        if(is.null(p))
-            .stop(sprintf("Package %s is not loaded", PACKAGE))
-
-        f <- .External('dynsym', p$handle, symbol)
+        f <- .External('dynsym', attr(p,'handle'), symbol)
     
         if(is.null(f))
             .stop(sprintf("no such symbol %s in package %s", symbol, PACKAGE))

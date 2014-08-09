@@ -13,7 +13,17 @@ void fileexists_map(Thread& thread,
     Logical::Element& r, Character::Element f)
 {
     struct stat t;
-    r = stat(f->s, &t) != -1 
+    r = lstat(f->s, &t) == 0
+            ? Logical::TrueElement
+            : Logical::FalseElement;
+}
+
+extern "C"
+void direxists_map(Thread& thread,
+    Logical::Element& r, Character::Element f)
+{
+    struct stat t;
+    r = (lstat(f->s, &t) == 0 && S_ISDIR(t.st_mode))
             ? Logical::TrueElement
             : Logical::FalseElement;
 }

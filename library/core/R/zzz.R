@@ -81,6 +81,8 @@ primitives <- .characters(
     '[<-',
     '[<-.default',
     '[<-.environment',
+    '[<-.matrix',
+    '[<-.array',
     '[[<-',
     '[[<-.default',
     '[[<-.environment',
@@ -502,6 +504,9 @@ internals <- .characters(
     # args.R
     'args',
 
+    # aperm.R
+    'aperm',
+
     # array.R
     'array',
 
@@ -631,6 +636,7 @@ internals <- .characters(
 
     # file.R
     'file.exists',
+    'dir.exists',
 
     # file.info.R
     'file.info',
@@ -666,6 +672,9 @@ internals <- .characters(
     'gregexpr',
     'sub',
     'gsub',
+
+    # iconv.R
+    'iconv',
 
     # identical.R
     'identical',

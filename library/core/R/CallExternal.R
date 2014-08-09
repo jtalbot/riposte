@@ -7,11 +7,12 @@
             .stop(sprintf("Can't find .C function: %s", .NAME))
     }
 
+    print(sprintf(".C: %s", .NAME$name))
     if(!inherits(.NAME, 'NativeSymbolInfo', FALSE)) {
         .stop("Unknown .NAME argument to .Call")
     }
     
-    .External('dotC', .NAME, list(...))
+    .External('dotC', .NAME$address, list(...))
 }
 
 .Call <- function(.NAME, ..., PACKAGE=NULL) {
@@ -22,11 +23,11 @@
             .stop(sprintf("Can't find .Call function: %s", .NAME))
     }
     
+    print(sprintf(".Call: %s", .NAME$name))
     if(!inherits(.NAME, 'NativeSymbolInfo', FALSE)) {
         .stop("Unknown .NAME argument to .Call")
     }
 
-    print('.Call')
-    print(.NAME)
+    .External('dotCall', .NAME$address, list(...))
 }
 

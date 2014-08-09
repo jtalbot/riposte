@@ -7,6 +7,13 @@
 #include <dlfcn.h>
 #include "../libs/dyncall/dyncall/dyncall.h"
 
+// Needed by libRblas, figure out a good placd to put this...
+extern "C" {
+    void xerbla_(const char *srname, int *info) {
+        throw "NYI: xerbla";
+    }
+}
+
 Type::Enum string2Type(String str) {
 #define CASE(name, string, ...) if(str == Strings::name) return Type::name;
 TYPES(CASE)
@@ -586,7 +593,13 @@ Unstream* MakeUnstream(Thread& thread, String t, int64_t s) {
     if(t == Strings::Double)  return new UnstreamImpl<Double>(thread, Double(s));
     if(t == Strings::Character) return new UnstreamImpl<Character>(thread, Character(s));
     if(t == Strings::Raw)     return new UnstreamImpl<Raw>(thread, Raw(s));
-    if(t == Strings::List)    return new UnstreamImpl<List>(thread, List(s));
+    if(t == Strings::List) {
+        List v(s);
+        // clear the result vector so the gc isn't confused
+        for(size_t i = 0; i < s; ++i)
+            v[i] = Value::Nil();
+        return new UnstreamImpl<List>(thread, v);
+    }
     _error("Can't unstream a non-vector during a map");
 }
 
@@ -882,9 +895,6 @@ List MapR(Thread& thread, Closure const& func, List args, Character result) {
             apply = CreateCall(apply);
         }
 
-        // Protect apply from the gc
-        thread.gcStack.push_back(apply);
-
         Code* p = Compiler::compileTopLevel(thread, apply);
 
         for(int64_t i = 0; i < length; ++i) {
@@ -897,8 +907,6 @@ List MapR(Thread& thread, Closure const& func, List args, Character result) {
             }
         }
        
-        thread.gcStack.pop_back();
- 
         for(int64_t i = 0; i < s.size(); ++i) {
             delete s[i];
         }
@@ -930,6 +938,10 @@ List MapI(Thread& thread, Closure const& func, List args) {
     if(minlength == 0) length = 0;
 
     List result(length);
+    // clear the result vector so the gc isn't confused
+    for(size_t i = 0; i < length; ++i)
+        result[i] = Value::Nil();
+
     thread.gcStack.push_back(result);
 
     if(length > 0) {
@@ -957,9 +969,6 @@ List MapI(Thread& thread, Closure const& func, List args) {
 
         Code* p = Compiler::compileTopLevel(thread, apply);
 
-        // Protect apply from the gc
-        thread.gcStack.push_back(apply);
-
         for(int64_t i = 0; i < length; ++i) {
             for(int64_t k = 0; k < s.size(); ++k) {
                 p->calls[0].arguments[k] = (*s[k])(i);
@@ -967,8 +976,6 @@ List MapI(Thread& thread, Closure const& func, List args) {
             result[i] = thread.eval(p);
         }
         
-        thread.gcStack.pop_back();
-
         for(int64_t i = 0; i < s.size(); ++i) {
             delete s[i];
         }

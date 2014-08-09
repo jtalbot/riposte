@@ -130,6 +130,11 @@ void Prototype::visit() const {
     traverse(defaults);
 }
 
+void SEXPREC::visit() const {
+	HeapObject::visit();
+    traverse(v);
+}
+
 void Heap::mark(State& state) {
 	// traverse root set
 	// mark the region that I'm currently allocating into
@@ -172,6 +177,18 @@ void Heap::mark(State& state) {
 		}
         VISIT(thread->promiseCode);
 	}
+	
+    // R API support	
+    for(std::list<SEXP>::iterator i = state.installedSEXPs.begin(); 
+            i != state.installedSEXPs.end(); ++i) {
+	    VISIT(*i);
+	}
+
+    if(state.apiStack) {
+        for(int i = 0; i < *state.apiStack->size; ++i) {
+            VISIT(state.apiStack->stack[i]);
+        }
+    }
 }
 
 void Heap::sweep() {

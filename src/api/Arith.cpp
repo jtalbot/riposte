@@ -2,6 +2,8 @@
 #include "../value.h"
 #include <limits>
 
+#include <R_ext/Arith.h>
+
 Double::_doublena doublena = {0x7fff000000001953};
 
 double R_NaN    = std::numeric_limits<double>::quiet_NaN();  /* IEEE NaN */

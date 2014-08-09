@@ -1,4 +1,5 @@
 
+#define R_NO_REMAP
 #include <Rinternals.h>
 #include <R_ext/GraphicsEngine.h>
 
@@ -36,3 +37,12 @@ int selectDevice(int) {
 void Rf_killDevice(int) {
     throw "NYI: Rf_killDevice";
 }
+
+int NoDevices(void) { /* used in engine, graphics, plot, grid */
+    throw "NYI: Rf_NoDevices";
+}
+
+void Rf_NewFrameConfirm(pDevDesc) { /* used in graphics.c, grid */
+    throw "NYI: Rf_NewFrameConfirm";
+}
+
