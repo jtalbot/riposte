@@ -2,6 +2,7 @@
 #include <stddef.h>
 
 #include "../frontend.h"
+#include "../compiler.h"
 
 #define HAVE_POPEN
 #define R_NO_REMAP
@@ -163,7 +164,17 @@ SEXP (STRING_ELT)(SEXP x, R_xlen_t i) {
 }
 
 SEXP (VECTOR_ELT)(SEXP x, R_xlen_t i) {
-    throw "NYI: VECTOR_ELT";
+    if(!x->v.isList()) {
+        printf("Argument to VECTOR_ELT is not a list");
+        throw;
+    }
+    List& l = (List&)x->v;
+    if(i >= l.length()) {
+        printf("Accessing past the end of the list in VECTOR_ELT");
+        throw;
+    }
+    Value v = l[i];
+    return new SEXPREC(v);
 }
 
 void SET_STRING_ELT(SEXP x, R_xlen_t i, SEXP a) {
@@ -320,6 +331,13 @@ SEXP Rf_VectorToPairList(SEXP x) {
 }
 
 int Rf_asLogical(SEXP x) {
+    Value const& a = x->v;
+    if(a.isLogical1()) {
+        if(Logical::isTrue(a.c)) return 1;
+        else if(Logical::isFalse(a.c)) return 0;
+        else return R_NaInt;
+    }
+    printf("NYI type in Rf_asLogical");
     throw "NYI: Rf_asLogical";
 }
 int Rf_asInteger(SEXP x) {
@@ -396,13 +414,20 @@ SEXP Rf_duplicated(SEXP, Rboolean) {
 
 SEXP Rf_eval(SEXP v, SEXP env) {
     if(!v->v.isPromise())
-        return v;
+        printf("v in Rf_eval is not a promise");
+
+    if(!env->v.isEnvironment())
+        printf("env in Rf_eval is not an environment");
+
+    //Environment* evalenv = ((REnvironment&)env->v).environment();
 
     Promise const& p = (Promise const&)v->v;
-    Code* code = p.isExpression() ? p.code() : thread.promiseCode;
-    Compiler::doPromiseCompilation(thread, code);
 
-    // Going to have to build a temporary thread to execute in...
+    Thread* thread = globalState->getThread();
+    Value r = thread->eval(p, 0);
+    globalState->deleteThread(thread);
+    
+    return new SEXPREC(r);
 }
 
 SEXP Rf_findFun(SEXP, SEXP) {

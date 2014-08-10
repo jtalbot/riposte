@@ -14,13 +14,8 @@
 
 makeLazy <- function(n, v, expr, env1, env2) {
     for(i in seq_len(length(n))) {
-        a <- as.call(
-                list(as.name('lazyLoadDBfetch'),
-                    v[[i]],
-                    as.name('datafile'),
-                    as.name('compressed'),
-                    as.name('envhook')))
-        promise(n[[i]], a, env1, env2)
+        expr[[2]] <- v[[i]]
+        promise(n[[i]], expr, env1, env2)
     } 
 }
 

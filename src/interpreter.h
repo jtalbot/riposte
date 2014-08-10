@@ -102,6 +102,8 @@ struct Code : public HeapObject {
     
 	void printByteCode(State const& state) const;
 	void visit() const;
+
+    static void Finalize(HeapObject* o);
 };
 
 struct Prototype : public HeapObject {
@@ -361,8 +363,7 @@ public:
 	
     Environment* empty;
 	Environment* global;
-
-	std::vector<Thread*> threads;
+    Code* promiseCode;
 
     // For R API support
     Lock apiLock;
@@ -388,6 +389,10 @@ public:
         }
     }
 
+    std::list<Thread*> threads;
+    Thread* getThread();
+    void deleteThread(Thread* s);
+
 	bool verbose;
 	bool epeeEnabled;
 
@@ -397,26 +402,12 @@ public:
     };
     Format format;
     
-    int64_t done;
-	
     Character arguments;
+
+    TaskQueues queues;
 
 	State(uint64_t threads, int64_t argc, char** argv);
 
-	~State() {
-		fetch_and_add(&done, 1);
-		while(fetch_and_add(&done, 0) != (int64_t)threads.size()) { 
-			sleep(); 
-		}
-	}
-
-
-	Thread& getMainThread() const {
-		return *threads[0];
-	}
-
-	void interpreter_init(Thread& state);
-	
 	std::string stringify(Value const& v) const;
 	std::string deparse(Value const& v) const;
 
@@ -439,50 +430,27 @@ extern State* globalState;
 
 class Thread {
 public:
-	struct Task {
-		typedef void* (*HeaderPtr)(void* args, uint64_t a, uint64_t b, Thread& thread);
-		typedef void (*FunctionPtr)(void* args, void* header, uint64_t a, uint64_t b, Thread& thread);
-
-		HeaderPtr header;
-		FunctionPtr func;
-		void* args;
-		uint64_t a;	// start of range [a <= x < b]
-		uint64_t b;	// end
-		uint64_t alignment;
-		uint64_t ppt;
-		int64_t* done;
-		Task() : header(0), func(0), args(0), a(0), b(0), alignment(0), ppt(0), done(0) {}
-		Task(HeaderPtr header, FunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment, uint64_t ppt) 
-			: header(header), func(func), args(args), a(a), b(b), alignment(alignment), ppt(ppt) {
-			done = new int64_t(1);
-		}
-	};
-
 	State& state;
-	uint64_t index;
-	pthread_t thread;
-	
 	Value* registers;
 
 	std::vector<StackFrame> stack;
 	StackFrame frame;
 
     std::vector<Value> gcStack;
-    Code* promiseCode;
+    
     bool visible;
-
+	
+    int64_t assignment[256], set[256]; // temporary space for matching arguments
+	
 #ifdef EPEE
 	Traces traces;
 #endif
 
-	std::deque<Task> tasks;
-	Lock tasksLock;
-	Random random;	
-	int64_t steals;
+	Random random;
 
-	int64_t assignment[256], set[256]; // temporary space for matching arguments
-	
-	Thread(State& state, uint64_t index);
+    TaskQueue* queue;
+
+	Thread(State& state, TaskQueue* queue);
 
 	StackFrame& push() {
 		stack.push_back(frame);
@@ -499,119 +467,9 @@ public:
 	String internStr(std::string s) { return state.internStr(s); }
 	std::string externStr(String s) const { return state.externStr(s); }
 
-	static void* start(void* ptr) {
-		Thread* p = (Thread*)ptr;
-		p->loop();
-		return 0;
-	}
-
 	Value eval(Code const* code, Environment* environment, int64_t resultSlot = 0); 
 	Value eval(Code const* code);
-
-	void doall(Task::HeaderPtr header, Task::FunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment=1, uint64_t ppt = 1) {
-		if(a < b && func != 0) {
-			uint64_t tmp = ppt+alignment-1;
-			ppt = std::max((uint64_t)1, tmp - (tmp % alignment));
-
-			Task t(header, func, args, a, b, alignment, ppt);
-			run(t);
-	
-			while(fetch_and_add(t.done, 0) != 0) {
-				Task s;
-				if(dequeue(s) || steal(s)) run(s);
-				else sleep(); 
-			}
-		}
-	}
-
-private:
-	void loop() {
-		while(fetch_and_add(&(state.done), 0) == 0) {
-			// pull stuff off my queue and run
-			// or steal and run
-			Task s;
-			if(dequeue(s) || steal(s)) {
-				try {
-					run(s);
-                } catch(RiposteException const& e) { 
-                    std::cout << "Error (" << e.kind() << ":" << (int)index << ") " << e.what();
-                } 
-			} else sleep(); 
-		}
-		fetch_and_add(&(state.done), 1);
-	}
-
-	void run(Task& t) {
-		void* h = t.header != NULL ? t.header(t.args, t.a, t.b, *this) : 0;
-		while(t.a < t.b) {
-			// check if we need to relinquish some of our chunk...
-			int64_t s = atomic_xchg(&steals, 0);
-			if(s > 0 && (t.b-t.a) > t.ppt) {
-				Task n = t;
-				if((t.b-t.a) > t.ppt*4) {
-					uint64_t half = split(t);
-					t.b = half;
-					n.a = half;
-				} else {
-					t.b = t.a+t.ppt;
-					n.a = t.a+t.ppt;
-				}
-				if(n.a < n.b) {
-					//printf("Thread %d relinquishing %d (%d %d)\n", index, n.b-n.a, t.a, t.b);
-					tasksLock.acquire();
-					fetch_and_add(t.done, 1); 
-					tasks.push_front(n);
-					tasksLock.release();
-				}
-			}
-			t.func(t.args, h, t.a, std::min(t.a+t.ppt,t.b), *this);
-			t.a += t.ppt;
-		}
-		//printf("Thread %d finished %d %d (%d)\n", index, t.a, t.b, t.done);
-		fetch_and_add(t.done, -1);
-	}
-
-	uint64_t split(Task const& t) {
-		uint64_t half = (t.a+t.b)/2;
-		uint64_t r = half + (t.alignment/2);
-		half = r - (r % t.alignment);
-		if(half < t.a) half = t.a;
-		if(half > t.b) half = t.b;
-		return half;
-	}
-
-	bool dequeue(Task& out) {
-		tasksLock.acquire();
-		if(tasks.size() >= 1) {
-			out = tasks.front();
-			tasks.pop_front();
-			tasksLock.release();
-			return true;
-		}
-		tasksLock.release();
-		return false;
-	}
-
-	bool steal(Task& out) {
-		// check other threads for available tasks, don't check myself.
-		bool found = false;
-		for(uint64_t i = 0; i < state.threads.size() && !found; i++) {
-			if(i != index) {
-				Thread& t = *(state.threads[i]);
-				t.tasksLock.acquire();
-				if(t.tasks.size() > 0) {
-					out = t.tasks.back();
-					t.tasks.pop_back();
-					t.tasksLock.release();
-					found = true;
-				} else {
-					fetch_and_add(&t.steals,1);
-					t.tasksLock.release();
-				}
-			}
-		}
-		return found;
-	}
+    Value eval(Promise const& p, int64_t resultSlot = 0);
 };
 
 #endif

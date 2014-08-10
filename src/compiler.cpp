@@ -928,7 +928,7 @@ int64_t Compiler::encodeOperand(Operand op) const {
 
 
 Code* Compiler::compile(Value const& expr) {
-	Code* code = new Code();
+	Code* code = new (Code::Finalize) Code();
 	assert(((int64_t)code) % 16 == 0); // our type packing assumes that this is true
 
     if(scope == PROMISE) {

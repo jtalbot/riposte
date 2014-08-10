@@ -89,7 +89,7 @@ Value mapply(Thread& thread, Value const* args) {
 	*/
 
 	mapplyargs a1 = (mapplyargs) {x, r, func};
-	thread.doall(mapplyheader, mapplybody, &a1, 0, r.length(), 1, 1); 
+	thread.queue->doall(thread, mapplyheader, mapplybody, &a1, 0, r.length(), 1, 1); 
 
 	thread.gcStack.pop_back();
 	return r;

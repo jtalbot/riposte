@@ -121,6 +121,13 @@ void Code::visit() const {
 	}
 }
 
+void Code::Finalize(HeapObject* o) {
+    Code* code = (Code*)o;
+    code->bc.clear();
+    code->constants.clear();
+    code->calls.clear();
+}
+
 void Prototype::visit() const {
 	HeapObject::visit();
 	VISIT(code);
@@ -143,6 +150,7 @@ void Heap::mark(State& state) {
 	//printf("--global--\n");
 	VISIT(state.global);
 	traverse(state.arguments);
+    VISIT(state.promiseCode);
 
     for(std::map<std::string, String>::const_iterator i = 
             state.strings.table().begin();
@@ -151,8 +159,9 @@ void Heap::mark(State& state) {
         VISIT(i->second);
     }
 
-	for(uint64_t t = 0; t < state.threads.size(); t++) {
-		Thread* thread = state.threads[t];
+	for(std::list<Thread*>::iterator t = state.threads.begin();
+            t != state.threads.end(); ++t) {
+		Thread* thread = *t;
 
 		//printf("--stack--\n");
 		for(uint64_t i = 0; i < thread->stack.size(); i++) {
@@ -175,7 +184,6 @@ void Heap::mark(State& state) {
 		for(uint64_t i = 0; i < thread->gcStack.size(); i++) {
 			traverse(thread->gcStack[i]);
 		}
-        VISIT(thread->promiseCode);
 	}
 	
     // R API support	

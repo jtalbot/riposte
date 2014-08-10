@@ -123,7 +123,7 @@ public:
 	}
 
     static Code* deferPromiseCompilation(Thread& thread, Value const& expr) {
-        Code* code = new Code();
+        Code* code = new (Code::Finalize) Code();
         assert(((int64_t)code) % 16 == 0); // do we still need this assumption?
         code->expression = expr;
         return code;

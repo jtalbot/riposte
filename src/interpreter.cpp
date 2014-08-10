@@ -114,15 +114,19 @@ static inline Instruction const* ret_op(Thread& thread, Instruction const& inst)
 static inline Instruction const* retp_op(Thread& thread, Instruction const& inst) {
 	// we can return futures from promises, so don't BIND
 	DECODE(a);
-    assert(REGISTER(0).isEnvironment());
-	Environment* env = ((REnvironment const&)REGISTER(0)).environment();
 	
     if(REGISTER(1).isCharacter()) {
-		env->insert(REGISTER(1).s) = a;
+        assert(REGISTER(0).isEnvironment());
+	    Environment* env = ((REnvironment const&)REGISTER(0)).environment();
+		
+        env->insert(REGISTER(1).s) = a;
 #ifdef EPEE
 	    thread.traces.LiveEnvironment(env, a);
 #endif
 	} else if(REGISTER(1).isInteger()) {
+        assert(REGISTER(0).isEnvironment());
+	    Environment* env = ((REnvironment const&)REGISTER(0)).environment();
+        
         assert(env->get(Strings::__dots__).isList());
         ((List&)env->insert(Strings::__dots__))[REGISTER(1).i] = a;
 #ifdef EPEE
@@ -1548,7 +1552,6 @@ bool interpret(Thread& thread, Instruction const* pc) {
         return false; 
     }
     done_label: {
-	    thread.pop();
         return true;
     }
 #else
@@ -1561,16 +1564,11 @@ bool interpret(Thread& thread, Instruction const* pc) {
                 return false; 
             } break;
 	        case ByteCode::done: { 
-                thread.pop();
                 return true;
             }
         };
     }
 #endif
-}
-
-void State::interpreter_init(Thread& thread) {
-	// nothing for now
 }
 
 Value Thread::eval(Code const* code) {
@@ -1581,11 +1579,14 @@ Value Thread::eval(Code const* code, Environment* environment, int64_t resultSlo
 	uint64_t stackSize = stack.size();
     StackFrame oldFrame = frame;
 
+    Instruction done(ByteCode::done, 0, 0, 0);
+
 	// make room for the result
-	Instruction const* run = buildStackFrame(*this, environment, code, resultSlot, (Instruction const*)0);
+	Instruction const* run = buildStackFrame(*this, environment, code, resultSlot, &done);
 	try {
 		bool success = interpret(*this, run);
         if(success) {
+            pop();
             if(stackSize != stack.size())
 		        _error("Stack was the wrong size at the end of eval");
 		    return frame.registers[resultSlot];
@@ -1611,7 +1612,35 @@ Value Thread::eval(Code const* code, Environment* environment, int64_t resultSlo
     }
 }
 
+Value Thread::eval(Promise const& p, int64_t resultSlot) {
+    
+	uint64_t stackSize = stack.size();
+    StackFrame oldFrame = frame;
+    
+    Instruction done(ByteCode::done, 0, 0, 0);
 
+    Instruction const* run = force(*this, p, NULL, Value::Nil(), resultSlot, &done);
+   
+    try {
+		bool success = interpret(*this, run);
+        if(success) {
+            if(stackSize != stack.size())
+		        _error("Stack was the wrong size at the end of eval");
+		    return frame.registers[resultSlot];
+        }
+        else {
+            stack.resize(stackSize);
+            frame = oldFrame;
+            return Value::Nil();
+        }
+    } catch(...) {
+        std::cout << "Unknown error: " << std::endl;
+        
+        stack.resize(stackSize);
+        frame = oldFrame;
+	    throw;
+    } 
+}
 
 
 const int64_t Random::primes[100] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43,
@@ -1622,28 +1651,24 @@ const int64_t Random::primes[100] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37,
 419, 421, 431, 433, 439, 443, 449, 457, 461, 463, 467, 479, 487, 491, 499, 503,
 509, 521, 523, 541};
 
-Thread::Thread(State& state, uint64_t index) 
+Thread::Thread(State& state, TaskQueue* queue) 
     : state(state)
-    , index(index)
     , visible(true)
 #ifdef EPEE
     , traces(state.epeeEnabled)
 #endif
-    , random(index) 
-    , steals(1)
+    , random(0)
+    , queue(queue)
 {
 	registers = new Value[DEFAULT_NUM_REGISTERS];
 	frame.registers = registers;
-
-    promiseCode = new Code();
-    promiseCode->bc.push_back(Instruction(ByteCode::force, 2, 0, 2));
-    promiseCode->bc.push_back(Instruction(ByteCode::retp, 2, 0, 0));
-    promiseCode->registers = 3;
-    promiseCode->expression = Value::Nil();
 }
 
 State::State(uint64_t threads, int64_t argc, char** argv) 
-	: verbose(false), epeeEnabled(true), format(State::RiposteFormat), done(0) {
+	: verbose(false)
+    , epeeEnabled(true)
+    , format(State::RiposteFormat)
+    , queues(threads) {
 
     // initialize string table
 	#define ENUM_STRING_TABLE(name, str) \
@@ -1661,22 +1686,30 @@ State::State(uint64_t threads, int64_t argc, char** argv)
 	for(int64_t i = 0; i < argc; i++) {
 		arguments[i] = internStr(std::string(argv[i]));
 	}
-	
-	pthread_attr_t  attr;
-	pthread_attr_init (&attr);
-	pthread_attr_setscope (&attr, PTHREAD_SCOPE_SYSTEM);
-	pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
 
-	Thread* t = new Thread(*this, 0);
-	this->threads.push_back(t);
+    promiseCode = new (Code::Finalize) Code();
+    promiseCode->bc.push_back(Instruction(ByteCode::force, 2, 0, 2));
+    promiseCode->bc.push_back(Instruction(ByteCode::retp, 2, 0, 0));
+    promiseCode->registers = 3;
+    promiseCode->expression = Value::Nil();
+}
 
-	for(uint64_t i = 1; i < threads; i++) {
-		Thread* t = new Thread(*this, i);
-		pthread_create (&t->thread, &attr, Thread::start, t);
-		this->threads.push_back(t);
-	}
+Thread* State::getThread() {
+    // TODO: assign threads to different task queues
+    Thread* r = new Thread(*this, queues.queues[0]);
+    threads.push_back(r);
+    return r;
+}
 
-	interpreter_init(getMainThread());
+void State::deleteThread(Thread* s) {
+    for(std::list<Thread*>::reverse_iterator i = threads.rbegin();
+        i != threads.rend(); ++i) {
+        if(*i == s) {
+            threads.erase((++i).base());
+            break;
+        }
+    }
+    delete s;
 }
 
 void Code::printByteCode(State const& state) const {

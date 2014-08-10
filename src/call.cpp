@@ -8,7 +8,7 @@ Instruction const* force(
     Environment* targetEnv, Value targetIndex,
     int64_t outRegister, Instruction const* returnpc) {
 
-    Code* code = p.isExpression() ? p.code() : thread.promiseCode;
+    Code* code = p.isExpression() ? p.code() : thread.state.promiseCode;
     Compiler::doPromiseCompilation(thread, code);
     Instruction const* r = buildStackFrame(
         thread, p.environment(), code, outRegister, returnpc);

@@ -23,8 +23,8 @@ static int verbose = 0;
 
 static void info(State& state, std::ostream& out) 
 {
-    out << "Riposte (" << state.threads.size() << " threads) "
-        << "-- Copyright (C) 2010-2013 Stanford University" << std::endl;
+    out << "Riposte (" << state.queues.queues.size() << " threads) "
+        << "-- Copyright (C) 2010-2013 Stanford University, 2014 Justin Talbot" << std::endl;
     out << "http://jtalbot.github.com/riposte/" << std::endl;
 }
 
@@ -121,10 +121,8 @@ static bool pipe(State& state, std::string inname, std::istream & in, std::ostre
     return in.eof();
 }
 
-static int run(State& state, std::string inname, std::istream& in, std::ostream& out, bool interactive, bool echo) 
+static int run(Thread& thread, std::string inname, std::istream& in, std::ostream& out, bool interactive, bool echo) 
 {
-    Thread& thread = state.getMainThread();
-
     int rc = 0;
 
     if(interactive) 
@@ -150,23 +148,23 @@ static int run(State& state, std::string inname, std::istream& in, std::ostream&
         try { 
             Value expr;
             done = interactive ?
-                terminal(state, inname, in, out, expr) :
-                pipe(state, inname, in, out, expr);
+                terminal(thread.state, inname, in, out, expr) :
+                pipe(thread.state, inname, in, out, expr);
 
             if(done || expr.isNil()) 
                 continue;
 
             Code* code = Compiler::compileTopLevel(thread, expr);
-            Value result = thread.eval(code, state.global);
+            Value result = thread.eval(code, thread.state.global);
 
             // Nil indicates an error that was dispatched correctly.
             // Don't print anything, but no need to propagate error.
             if(result.isNil()) 
                 continue;
 
-            state.global->insert(Strings::Last_value) = result;
+            thread.state.global->insert(Strings::Last_value) = result;
             if(echo && thread.visible) {
-                thread.eval(print, state.global);
+                thread.eval(print, thread.state.global);
                 // Print directly (for debugging)
                 //std::cout<< thread.stringify(result) << std::endl;
             }
@@ -265,7 +263,7 @@ int main(int argc, char** argv)
     globalState->verbose = verbose;
     globalState->format = format;
 
-    Thread& thread = globalState->getMainThread();
+    Thread* thread = globalState->getThread();
 
     if(!filename)
         info(*globalState, std::cout);
@@ -273,7 +271,7 @@ int main(int argc, char** argv)
     /* Load core functions */
     try {
         Environment* env = new Environment(1, globalState->empty);
-        loadPackage(thread, env, "library", "core");
+        loadPackage(*thread, env, "library", "core");
     } 
     catch(RiposteException const& e) { 
         e_message("Error", e.kind().c_str(), e.what().c_str());
@@ -283,18 +281,18 @@ int main(int argc, char** argv)
     /* Load bootstrap file if it exists */
     {
         std::ifstream in("bootstrap.R");
-        rc = run(*globalState, std::string("bootstrap.R"), in, std::cout, false, echo);
+        rc = run(*thread, std::string("bootstrap.R"), in, std::cout, false, echo);
     }
 
  
     /* Either execute the specified file or read interactively from stdin  */
-    if(filename) {
+    /*if(filename) {
         std::ifstream in(filename);
-        rc = run(*globalState, std::string(filename), in, std::cout, false, echo);
+        rc = run(*thread, std::string(filename), in, std::cout, false, echo);
     } 
     else {
-        rc = run(*globalState, std::string("<stdin>"), std::cin, std::cout, true, echo);
-    }
+        rc = run(*thread, std::string("<stdin>"), std::cin, std::cout, true, echo);
+    }*/
 
     /* Session over */
 

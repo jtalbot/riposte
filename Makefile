@@ -3,8 +3,8 @@
 UNAME := $(shell uname -s)
 CXX := clang++
 CC := clang
-CXXFLAGS := -Wall -g -Iinclude
-CFLAGS := -Wall -g -Iinclude
+CXXFLAGS := -Wall -Iinclude
+CFLAGS := -Wall -Iinclude
 LFLAGS := -fpic
 LIBS := -Llibs/dyncall/dyncall -lpthread -ldyncall_s
 
@@ -14,7 +14,7 @@ endif
 
 EPEE=0
 
-SRC := type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp runtime.cpp library.cpp format.cpp gc.cpp call.cpp
+SRC := type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp runtime.cpp library.cpp format.cpp gc.cpp call.cpp thread.cpp
 
 SRC += parser/lexer.cpp
 
