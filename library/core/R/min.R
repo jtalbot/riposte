@@ -9,7 +9,7 @@ min <- function(..., na.rm = FALSE) {
 }
 
 min.default <- function(..., na.rm = FALSE) {
-    x <- c(...)
+    x <- unlist(list(...), FALSE, FALSE) 
 
     if(na.rm)
         min(x[!is.na(x)])

@@ -23,7 +23,7 @@ Compiling riposte
 
 4. To load R standard library
     Build R 3.1.1 from sources with
-    ./configure --with-aqua=no --with-tcltk=no --with-x=no --with-cairo=no --with-recommended-packages=no --with-ICU=no --enable-byte-compiled-packges=no --enable-strict-barrier=yes
+    ./configure --with-aqua=no --with-tcltk=no --with-x=no --with-cairo=no --with-ICU=no --enable-byte-compiled-packages=no --enable-strict-barrier=yes --enable-R-profiling=no
     Copy lib/libRblas.dylib and lib/libRlapack.dylib into Riposte's home directory
     Copy the contents of the library directory into Riposte's library directory
     Build the standalone R math library and copy src/nmath/standalone/libRmath.a into Riposte's home directory
@@ -43,13 +43,17 @@ Riposte is in heavy development. Many things haven't been implemented and many t
 
 License
 -------
-Riposte is distributed under the BSD 2-clause license <http://www.opensource.org/licenses/bsd-license.php>.
+Riposte itself is distributed under the BSD 2-clause license <http://www.opensource.org/licenses/bsd-license.php>.
 
 Riposte depends on the following libraries:
 * Eigen (http://eigen.tuxfamily.org) under the MPL2 license (http://www.mozilla.org/MPL/2.0/)
 * Linenoise (https://github.com/antirez/linenoise/) under a BSD license
 * dyncall (http://dyncall.org) under a very liberal license
 * tre (http://laurikari.net/tre/) under a 2-clause BSD license
+
+Riposte uses the following under the LGPL:
+* R header files (in the include directory)
+* GNU implementation of printf-parser (in library/core/src)
 
 Testing
 -------

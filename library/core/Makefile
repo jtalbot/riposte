@@ -7,7 +7,7 @@ CFLAGS := -Wall -fPIC
 LFLAGS := -dynamiclib -L/usr/local/lib
 LIBS := -lpthread -ltre -lpcre -lboost_iostreams-mt -llzma -liconv
 
-SRC := core.cpp print.cpp primitive.cpp connections.cpp datetime.cpp fileinfo.cpp getwd.cpp grep.cpp sprintf.cpp substr.cpp getenv.cpp setenv.cpp files.cpp basename.cpp locales.cpp parse.cpp chartr.cpp order.cpp solve.cpp mapply.cpp tabulate.cpp rawConversion.cpp base-internal.cpp ns-internals.cpp dynload.cpp callexternal.cpp iconv.cpp
+SRC := core.cpp print.cpp primitive.cpp connections.cpp datetime.cpp fileinfo.cpp getwd.cpp grep.cpp sprintf.cpp substr.cpp getenv.cpp setenv.cpp files.cpp basename.cpp locales.cpp parse.cpp chartr.cpp order.cpp solve.cpp mapply.cpp tabulate.cpp rawConversion.cpp base-internal.cpp ns-internals.cpp dynload.cpp callexternal.cpp iconv.cpp listfiles.cpp
 
 EXECUTABLE := libs/core.dylib
 

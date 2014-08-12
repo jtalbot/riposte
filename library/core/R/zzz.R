@@ -371,6 +371,8 @@ primitives <- .characters(
     # matrix.R
     'is.matrix',
     '*.matrix',
+    'is.na.matrix',
+    '!.matrix',
 
     # max.R
     'max',
@@ -692,6 +694,9 @@ internals <- .characters(
     # list.R 
     'env2list',
 
+    # list.files.R
+    'list.files',
+
     # locales.R
     'Sys.getlocale',
     'Sys.setlocale',
@@ -808,6 +813,7 @@ internals <- .characters(
 
     # sprintf.R
     'sprintf',
+    'printf_parse',
 
     # solve.R
     'La_solve',

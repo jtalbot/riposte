@@ -9,7 +9,7 @@ max <- function(..., na.rm = FALSE) {
 }
 
 max.default <- function(..., na.rm = FALSE) {
-    x <- c(...)
+    x <- unlist(list(...), FALSE, FALSE) 
 
     if(na.rm)
         max(strip(x)[!is.na(strip(x))])

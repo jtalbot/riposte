@@ -77,6 +77,7 @@ rbind <- function(deparse.level, ...) {
 	dim(x) <- c(nrow, ncol)
     if(!is.null(names(l)) || !is.null(names(l[[1L]])))
         dimnames(x) <- list(names(l), rep_len(names(l[[1L]]), ncol))
-	x
+	
+    x
 }
 

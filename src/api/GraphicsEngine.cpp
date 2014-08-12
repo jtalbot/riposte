@@ -239,6 +239,10 @@ pGEDevDesc GEcurrentDevice(void) {
     throw "NYI: GEcurrentDevice";
 }
 
+Rboolean GEdeviceDirty(pGEDevDesc dd) {
+    throw "NYI: GEdeviceDirty";
+}
+
 void GEdirtyDevice(pGEDevDesc dd) {
     throw "NYI: GEdirtyDevice";
 }

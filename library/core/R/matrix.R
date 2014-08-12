@@ -98,3 +98,14 @@ is.matrix <- function(x)
 	matrix(sqrt(strip(x)), xd[[1L]], xd[[2L]])
 }
 
+`!.matrix` <- function(x) {
+    r <- !strip(x)
+    attributes(r) <- attributes(x)
+    r
+}
+
+`is.na.matrix` <- function(x) {
+    r <- is.na(strip(x))
+    attributes(r) <- attributes(x)
+    r
+}
