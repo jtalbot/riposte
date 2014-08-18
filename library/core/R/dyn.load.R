@@ -9,17 +9,17 @@ getLoadedDLLs <- function() {
 dyn.load <- function(x, local, now, str) {
     name <- x
     handle <- NULL
-    info <- list(`.C`=list(), `.Call`=list(), `.Fortran`=list(), `.External`=list(), useDynamicLookup=FALSE, forceSymbols=FALSE)
+    info <- list(`.C`=list(), `.Call`=list(), `.Fortran`=list(), `.Riposte`=list(), useDynamicLookup=FALSE, forceSymbols=FALSE)
         
     if(x != 'base') {
-        handle <- .External('dynload', as.character(x), .isTRUE(local), .isTRUE(now))
+        handle <- .Riposte('dynload', as.character(x), .isTRUE(local), .isTRUE(now))
         attr(handle, 'class') <- 'DLLHandle'
         
         name <- sub('\\.[[:alnum:]]+$', '', basename(x), FALSE, FALSE, FALSE, FALSE)
 
-        init <- .External('dynsym', handle, .pconcat('R_init_', name))
+        init <- .Riposte('dynsym', handle, .pconcat('R_init_', name))
         if(!is.null(init)) {
-            info <- .External('dotC', init, list(info))[[1]]
+            info <- .Riposte('dotC', init, list(info))[[1]]
         }
     }
     else {
@@ -71,7 +71,7 @@ dyn.load <- function(x, local, now, str) {
 }
 
 dyn.unload <- function(x) {
-    .External('dynunload', x)
+    .Riposte('dynunload', x)
     NULL
 }
 
@@ -99,7 +99,7 @@ getSymbolInfo <- function(symbol, PACKAGE, withRegistrationInfo) {
             .stop('getSymbolInfo needs a DLLRegisteredRoutines')
         }
     
-        f <- .External('dynsym', attr(p,'handle'), symbol)
+        f <- .Riposte('dynsym', attr(p,'handle'), symbol)
     
         if(is.null(f))
             .stop(sprintf("no such symbol %s in package %s", symbol, PACKAGE))
@@ -108,7 +108,7 @@ getSymbolInfo <- function(symbol, PACKAGE, withRegistrationInfo) {
     else {
         for(p in loadedDLLs) {
             if(!is.null(p$handle)) {
-                f <- .External('dynsym', p$handle, symbol)
+                f <- .Riposte('dynsym', p$handle, symbol)
                 if(!is.null(f))
                     break
             }

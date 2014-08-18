@@ -31,11 +31,11 @@ warnings <- function() {
     w
 }
 
-trace.config <- function(trace=0) .External('trace.config', trace)
+trace.config <- function(trace=0) .Riposte('trace.config', trace)
 
 library <- function(., parent.env) {
     e <- .env_new(parent.env)
-    .External('library', e, .)
+    .Riposte('library', e, .)
     e
 }
 
@@ -62,7 +62,7 @@ time <- function(x) {
 }
 
 source <- function(file, eval.env=globalenv()) {
-    p <- .External('source', file)
+    p <- .Riposte('source', file)
     promise('q', p, eval.env, .getenv(NULL))
     q
 }

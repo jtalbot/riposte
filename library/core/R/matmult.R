@@ -42,7 +42,7 @@
     #    return(r)
     #}
     else {
-        r <- .External('matrixmultiply',strip(x),xd[[1L]],xd[[2L]],y,yd[[1L]],yd[[2L]])
+        r <- .Riposte('matrixmultiply',strip(x),xd[[1L]],xd[[2L]],y,yd[[1L]],yd[[2L]])
         dim(r) <- c(xd[[1L]],yd[[2L]])
         return(r)
     }

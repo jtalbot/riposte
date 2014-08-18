@@ -360,6 +360,8 @@ public:
 
     Type getType() const { return type; }
 
+    Value& getActualValue() { return v; }
+
     Value getValue() const {
         if(type == VALUE) return v;
         else if(type == INT32) {

@@ -14,7 +14,7 @@ chartr <- function(old, new, x) {
 
     .Map('chartr_map',
             list(x,
-            .External('chartr_compile',
+            .Riposte('chartr_compile',
                 old[[1L]],
                 new[[1L]])),
             'character')[[1L]]

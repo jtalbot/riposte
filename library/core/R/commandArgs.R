@@ -1,3 +1,3 @@
 
-commandArgs <- function () .External('commandArgs')
+commandArgs <- function () .Riposte('commandArgs')
 

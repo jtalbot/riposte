@@ -36,29 +36,29 @@ format <- function(x, trim, digits, nsmall, width, something, na.encode, scienti
 
 .format.default <- function(x, ...)
 {
-    .External('print', x)
+    .Riposte('print', x)
 }
 
 .format.logical <- function(x, ...)
 {
-    .External('print', x)
+    .Riposte('print', x)
 }
 
 .format.integer <- function(x, ...)
 {
-    .External('print', x)
+    .Riposte('print', x)
 }
 
 .format.double <- function(x, ...)
 {
-    .External('print', x)
+    .Riposte('print', x)
 }
 
 .format.character <- function(x, ...)
 {
     #x <- ifelse(is.na(x), "NA", paste(list('"', .escape(x), '"'), "", NULL))
     #.format.vector(x, 'character')
-    .External('print', x)
+    .Riposte('print', x)
 }
 
 .format.pairlist <- .format.list <- function(x, ..., prefix='')
@@ -91,7 +91,7 @@ format <- function(x, trim, digits, nsmall, width, something, na.encode, scienti
     if(!is.null(attr(x, 'name')))
         sprintf('<environment: %s>', attr(x, 'name'))
     else
-        .External('print', x)
+        .Riposte('print', x)
 }
 
 .format.NULL <- function(x, ...)
@@ -101,7 +101,7 @@ format <- function(x, trim, digits, nsmall, width, something, na.encode, scienti
 
 .format.function <- function(x, ...)
 {
-    .External('print', x)
+    .Riposte('print', x)
 }
 
 .format.call <- function(x, ...)

@@ -49,16 +49,16 @@ Value dotCall(Thread& thread, Value const* args) {
     if(!thread.state.apiStack)
         throw "Cannot use .Call interface without R API loaded";
 
-    // The API will push user-created SEXPs on the global R_PPStack.
-    // Remember the size so we can restore to the correct size.
-    int stackSize = *thread.state.apiStack->size;
-
     DCCallVM* vm = dcNewCallVM(4096);
     dcMode(vm, DC_CALL_C_DEFAULT);
 
     // Get the lock on the global state...
     thread.state.apiLock.acquire();
     
+    // The API will push user-created SEXPs on the global R_PPStack.
+    // Remember the size so we can restore to the correct size.
+    int stackSize = *thread.state.apiStack->size;
+
     // Pass as SEXPs, these need to be protected as well...
     // We should probably save them in the thread-specific stack instead
     for(size_t i = 0; i < arguments.length(); ++i) {
@@ -89,15 +89,16 @@ Value dotExternal(Thread& thread, Value const* args) {
     if(!thread.state.apiStack)
         throw "Cannot use .Call interface without R API loaded";
 
-    // The API will push user-created SEXPs on the global R_PPStack.
-    // Remember the size so we can restore to the correct size.
-    int stackSize = *thread.state.apiStack->size;
-
     DCCallVM* vm = dcNewCallVM(4096);
     dcMode(vm, DC_CALL_C_DEFAULT);
 
     // Get the lock on the global state...
     thread.state.apiLock.acquire();
+    
+    // The API will push user-created SEXPs on the global R_PPStack.
+    // Remember the size so we can restore to the correct size.
+    int stackSize = *thread.state.apiStack->size;
+
     // Pass as SEXPs, these need to be protected as well...
     // We should probably save them in the thread-specific stack instead
     {
@@ -108,7 +109,7 @@ Value dotExternal(Thread& thread, Value const* args) {
 
     SEXP result = (SEXP)dcCallPointer(vm, func.ptr());
 
-    (*thread.state.apiStack->size) -= arguments.length();
+    (*thread.state.apiStack->size)--;
     if(*thread.state.apiStack->size != stackSize)
         printf("Protection stack not restored to original size");
     *thread.state.apiStack->size = stackSize;

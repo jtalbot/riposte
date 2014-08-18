@@ -9,7 +9,7 @@
     if(.isTRUE(fixed) || !.isTRUE(perl)) {
         .Map('grep_map',
             list(
-                .External('regex_compile',
+                .Riposte('regex_compile',
                     as.character.default(pattern),
                     identical(ignore.case, TRUE),
                     identical(fixed, TRUE)),
@@ -19,7 +19,7 @@
     else {
         .Map('pcre_grep_map',
             list(
-                .External('pcre_regex_compile',
+                .Riposte('pcre_regex_compile',
                     as.character.default(pattern),
                     identical(ignore.case, TRUE)),
                 as.character.default(text)
@@ -58,7 +58,7 @@ grep <- function(pattern, x, ignore.case, value, perl, fixed, useBytes, invert)
 
     .Map('agrep_map',
         list(
-            .External('regex_compile',
+            .Riposte('regex_compile',
                 as.character.default(pattern),
                 identical(ignore.case, TRUE),
                 identical(fixed, TRUE)),
@@ -95,7 +95,7 @@ agrep <- function(pattern, x, ignore.case, value, costs, bounds, useBytes, fixed
     if(.isTRUE(fixed) || !.isTRUE(perl)) {
         .Map('regex_map', 
             list(
-                .External('regex_compile',
+                .Riposte('regex_compile',
                     as.character.default(pattern), 
                     identical(ignore.case, TRUE),
                     identical(fixed, TRUE)),
@@ -105,7 +105,7 @@ agrep <- function(pattern, x, ignore.case, value, costs, bounds, useBytes, fixed
     else {
         .Map('pcre_regex_map', 
             list(
-                .External('pcre_regex_compile',
+                .Riposte('pcre_regex_compile',
                     as.character.default(pattern), 
                     identical(ignore.case, TRUE)),
                 as.character.default(text)
@@ -132,7 +132,7 @@ regexpr <- function(pattern, text, ignore.case, perl, fixed, useBytes)
     if(.isTRUE(fixed) || !.isTRUE(perl)) {
         .Map('gregex_map', 
             list(
-                .External('regex_compile',
+                .Riposte('regex_compile',
                     as.character.default(pattern), 
                     identical(ignore.case, TRUE),
                     identical(fixed, TRUE)),
@@ -142,7 +142,7 @@ regexpr <- function(pattern, text, ignore.case, perl, fixed, useBytes)
     else {
         .Map('pcre_gregex_map', 
             list(
-                .External('pcre_regex_compile',
+                .Riposte('pcre_regex_compile',
                     as.character.default(pattern), 
                     identical(ignore.case, TRUE)),
                 as.character.default(text)
@@ -167,7 +167,7 @@ sub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
 {
     .Map('sub_map',
         list(
-            .External('regex_compile',
+            .Riposte('regex_compile',
                 as.character.default(pattern), 
                 identical(ignore.case, TRUE),
                 identical(fixed, TRUE)),
@@ -180,7 +180,7 @@ gsub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
 {
     .Map('gsub_map',
         list(
-            .External('regex_compile',
+            .Riposte('regex_compile',
                 as.character.default(pattern), 
                 identical(ignore.case, TRUE),
                 identical(fixed, TRUE)),

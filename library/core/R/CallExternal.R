@@ -12,7 +12,7 @@
         .stop("Unknown .NAME argument to .Call")
     }
     
-    .External('dotC', .NAME$address, list(...))
+    .Riposte('dotC', .NAME$address, list(...))
 }
 
 .Call <- function(.NAME, ..., PACKAGE=NULL) {
@@ -28,7 +28,7 @@
         .stop("Unknown .NAME argument to .Call")
     }
 
-    .External('dotCall', .NAME$address, list(...))
+    .Riposte('dotCall', .NAME$address, list(...))
 }
 
 .External <- function(.NAME, ..., PACKAGE=NULL) {
@@ -36,14 +36,14 @@
         .NAME <- getSymbolInfo(.NAME, PACKAGE, FALSE)
         
         if(is.null(.NAME))
-            .stop(sprintf("Can't find .External function: %s", .NAME))
+            .stop(sprintf("Can't find .Riposte function: %s", .NAME))
     }
     
     print(sprintf(".External: %s", .NAME$name))
     if(!inherits(.NAME, 'NativeSymbolInfo', FALSE)) {
-        .stop("Unknown .NAME argument to .External")
+        .stop("Unknown .NAME argument to .Riposte")
     }
 
-    .External('dotCall', .NAME$address, list(...))
+    .Riposte('dotExternal', .NAME$address, list(.NAME, ...))
 }
 

@@ -19,7 +19,7 @@ file <- function(description, open, blocking, encoding, raw) {
     .connection.seq <- .connection.seq + 1L
     
     class(r) <- c('file', 'connection')
-    attr(r, 'conn_id') <- .External('file_new', description)
+    attr(r, 'conn_id') <- .Riposte('file_new', description)
     
     if(!identical(open,''))
         .open.file(r, open, blocking)
@@ -32,7 +32,7 @@ gzfile <- function(description, open, blocking, encoding, raw) {
     .connection.seq <- .connection.seq + 1L
 
     class(r) <- c('gzfile', 'connection')
-    attr(r, 'conn_id') <- .External('file_new', description)
+    attr(r, 'conn_id') <- .Riposte('file_new', description)
     
     if(!identical(open,''))
         .open.file(r, open, blocking)
@@ -41,17 +41,17 @@ gzfile <- function(description, open, blocking, encoding, raw) {
 }
 
 .open.gzfile <- .open.file <- function(con, open, blocking) {
-    .External('file_open', attr(con, 'conn_id'), as.character(open))
+    .Riposte('file_open', attr(con, 'conn_id'), as.character(open))
     NULL
 }
 
 .close.gzfile <- .close.file <- function(con, type) {
-    .External('file_close', attr(con, 'conn_id'))
+    .Riposte('file_close', attr(con, 'conn_id'))
     NULL
 }
 
 .connection.cat.file <- function(con, x) {
-    .External('file_cat', attr(con, 'conn_id'), x)
+    .Riposte('file_cat', attr(con, 'conn_id'), x)
     NULL
 }
 
@@ -61,8 +61,8 @@ gzfile <- function(description, open, blocking, encoding, raw) {
 .connection.cat.terminal <- function(con, x) {
     i <- strip(con)
     if(i == 0L) .stop("cannot write to this connection")
-    else if(i == 1L) .External('stdout_cat', x)
-    else if(i == 2L) .External('stderr_cat', x)
+    else if(i == 1L) .Riposte('stdout_cat', x)
+    else if(i == 2L) .Riposte('stderr_cat', x)
     NULL
 }
 
@@ -70,7 +70,7 @@ summary.connection <- function(object) UseMethod('.summary', object)
 
 
 .summary.gzfile <- .summary.file <- function(con) {
-    description <- .External('file_description', attr(con, 'conn_id'))
+    description <- .Riposte('file_description', attr(con, 'conn_id'))
     r <- list(description, class(con)[[1]], '', '', '', '', '')
     names(r) <- c('description', 'class', 'mode', 'text', 'opened', 'can read', 'can write')
     r

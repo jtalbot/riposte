@@ -3,7 +3,7 @@ sprintf <- function(...) {
     args <- list(...)
 
     args[[1]] <- as.character(args[[1]])
-    specs <- .External('printf_parse', args[[1]][[1]])
+    specs <- .Riposte('printf_parse', args[[1]][[1]])
 
     if(length(specs)+1L != length(args)) {
         print("sprintf called with the wrong number of arguments")
@@ -25,5 +25,5 @@ sprintf <- function(...) {
 }
 
 printf_parse <- function(format) {
-    .External('printf_parse', as.character(format))
+    .Riposte('printf_parse', as.character(format))
 }

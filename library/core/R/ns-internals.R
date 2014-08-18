@@ -13,7 +13,7 @@ importIntoEnv <- function(impenv, impnames, expenv, expnames) {
 
     for(i in seq_along(impnames)) {
         if(is.character(impnames[[i]]) && is.character(expnames[[i]]))
-            .External('importIntoEnv', impenv, impnames[[i]], expenv, expnames[[i]])
+            .Riposte('importIntoEnv', impenv, impnames[[i]], expenv, expnames[[i]])
     }
 
     NULL

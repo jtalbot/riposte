@@ -7,7 +7,7 @@ readLines <- function(con, n, ok, warn, encoding)
 
 .readLines.file <- function(con, n, ok, warn, encoding) {
     .open.file(con, 'r')
-    r <- .External('file_readLines', attr(con, 'conn_id'), as.integer(n))
+    r <- .Riposte('file_readLines', attr(con, 'conn_id'), as.integer(n))
     if(n > 0L && length(r) != n)
         .stop("readLines didn't get enough lines")
     r
@@ -15,14 +15,14 @@ readLines <- function(con, n, ok, warn, encoding)
 
 .readLines.gzfile <- function(con, n, ok, warn, encoding) {
     .open.gzfile(con, 'r')
-    r <- .External('gzfile_readLines', attr(con, 'conn_id'), as.integer(n))
+    r <- .Riposte('gzfile_readLines', attr(con, 'conn_id'), as.integer(n))
     if(n > 0L && length(r) != n)
         .stop("readLines didn't get enough lines")
     r
 }
 
 .readLines.terminal <- function(con, n, ok, warn, encoding) {
-    r <- .External('terminal_readLines', strip(con), as.integer(n))
+    r <- .Riposte('terminal_readLines', strip(con), as.integer(n))
     if(n > 0L && length(r) != n)
         .stop("readLines didn't get enough lines")
     r

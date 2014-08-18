@@ -52,7 +52,7 @@
     env
 }
 
-.cat <- function(..., sep="") .External('cat', list(...), sep)
+.cat <- function(..., sep="") .Riposte('cat', list(...), sep)
 
 .warning <- function(msg) {
     warning(TRUE, FALSE, FALSE, msg)

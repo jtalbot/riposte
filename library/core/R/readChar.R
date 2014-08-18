@@ -6,7 +6,7 @@ readChar <- function(con, nchars, useBytes) {
         else
             con <- con[seq_len(n*size)]
 
-        .External('rawToChar', con)
+        .Riposte('rawToChar', con)
     }
     else {
         .stop('NYI: readChar with useBytes=FALSE')

@@ -222,7 +222,13 @@ Rbyte *(RAW)(SEXP x) {
 }
 
 double *(REAL)(SEXP x) {
-    _NYI("REAL");
+    Value& v = x->getActualValue();
+    if(!v.isDouble()) {
+        printf("Called REAL on something that is not a double\n");
+        return NULL;
+    }
+
+    return ((Double&)v).v();
 }
 
 Rcomplex *(COMPLEX)(SEXP x) {
@@ -285,31 +291,85 @@ SEXP (TAG)(SEXP e) {
 }
 
 SEXP (CAR)(SEXP e) {
-    _NYI("CAR");
+    Value v = e->getValue();
+    if(!v.isList()) {
+        printf("Argument is not a list in CAR: %d\n", v.type());
+        throw;
+    }
+    // TODO: check length
+    return new SEXPREC(((List const&)v)[0]);
 }
 
 SEXP (CDR)(SEXP e) {
-    _NYI("CDR");
+    Value v = e->getValue();
+    if(!v.isList()) {
+        printf("Argument is not a list in CDR\n");
+        throw;
+    }
+    // TODO: this is going to lose names.
+    // TODO: check length
+    List const& l = (List const&)v;
+    List r(l.length()-1);
+    for(int64_t i = 1; i < l.length(); ++i)
+        r[i-1] = l[i];
+    
+    return new SEXPREC(r);
 }
 
 SEXP (CADR)(SEXP e) {
-    _NYI("CADR");
+    Value v = e->getValue();
+    if(!v.isList()) {
+        printf("Argument is not a list in CADR\n");
+        throw;
+    }
+    // TODO: check length
+    return new SEXPREC(((List const&)v)[1]);
 }
 
 SEXP (CDDR)(SEXP e) {
-    _NYI("CDDR");
+    Value v = e->getValue();
+    if(!v.isList()) {
+        printf("Argument is not a list in CDDR\n");
+        throw;
+    }
+    // TODO: this is going to lose names.
+    // TODO: check length
+    List const& l = (List const&)v;
+    List r(l.length()-2);
+    for(int64_t i = 2; i < l.length(); ++i)
+        r[i-2] = l[i];
+    
+    return new SEXPREC(r);
 }
 
 SEXP (CADDR)(SEXP e) {
-    _NYI("CADDR");
+    Value v = e->getValue();
+    if(!v.isList()) {
+        printf("Argument is not a list in CADDR\n");
+        throw;
+    }
+    // TODO: check length
+    return new SEXPREC(((List const&)v)[2]);
 }
 
 SEXP (CADDDR)(SEXP e) {
-    _NYI("CADDDR");
+    Value v = e->getValue();
+    if(!v.isList()) {
+        printf("Argument is not a list in CADDR\n");
+        throw;
+    }
+    // TODO: check length
+    return new SEXPREC(((List const&)v)[3]);
 }
 
 SEXP (CAD4R)(SEXP e) {
-    _NYI("CAD4R");
+    Value v = e->getValue();
+    if(!v.isList()) {
+        printf("Argument is not a list in CAD4R\n");
+        throw;
+    }
+    // TODO: check length
+    return new SEXPREC(((List const&)v)[4]);
 }
 
 void SET_TAG(SEXP x, SEXP y) {
@@ -401,7 +461,10 @@ SEXP Rf_asChar(SEXP) {
     _NYI("Rf_asChar");
 }
 
-SEXP Rf_coerceVector(SEXP, SEXPTYPE) {
+SEXP Rf_coerceVector(SEXP v, SEXPTYPE type) {
+    if(TYPEOF(v) == type)
+        return v;
+
     _NYI("Rf_coerceVector");
 }
 
@@ -410,7 +473,7 @@ SEXP Rf_PairToVectorList(SEXP x) {
 }
 
 SEXP Rf_VectorToPairList(SEXP x) {
-    _NYI("Rf_VectorTpPairList");
+    _NYI("Rf_VectorToPairList");
 }
 
 int Rf_asLogical(SEXP x) {
@@ -433,7 +496,13 @@ int Rf_asInteger(SEXP x) {
         _NYI("Rf_asInteger");
 }
 double Rf_asReal(SEXP x) {
-    _NYI("Rf_asReal");
+    Value a = x->getValue();
+    if(a.isInteger1())
+        return (double)a.i;
+    else if(a.isDouble1())
+        return (double)a.d;
+    else 
+        _NYI("Rf_asReal");
 }
 
 /* Other Internally Used Functions, excluding those which are inline-able*/
@@ -578,8 +647,27 @@ SEXP Rf_findVarInFrame3(SEXP, SEXP, Rboolean) {
     _NYI("Rf_findVarInFrame3");
 }
 
-SEXP Rf_getAttrib(SEXP, SEXP) {
-    _NYI("Rf_getAttrib");
+SEXP Rf_getAttrib(SEXP obj, SEXP symbol) {
+    Value v = symbol->getValue();
+    Value o = obj->getValue();
+
+    if(!o.isObject()) {
+        printf("argument to getAttrib is not an object");
+        throw;
+    }
+    if(!v.isCharacter() ||
+       ((Character const&)v).length() != 1) {
+        printf("argument to getAttrib is not a one element Character");
+        throw;
+    }
+
+    if( ((Object const&)o).hasAttributes() &&
+        ((Object const&)o).attributes()->has(SymbolStr(v)) ) {
+        return new SEXPREC(
+            ((Object const&)o).attributes()->get(SymbolStr(v)) );
+    }
+
+    return R_NilValue;
 }
 
 SEXP Rf_GetOption1(SEXP) {
@@ -853,28 +941,63 @@ Rboolean Rf_isMatrix(SEXP) {
     _NYI("Rf_isMatrix");
 }
 
-Rboolean Rf_isNewList(SEXP) {
-    _NYI("Rf_isNewList");
+Rboolean Rf_isNewList(SEXP s) {
+    return (TYPEOF(s) == NILSXP || TYPEOF(s) == VECSXP) ? TRUE : FALSE;
 }
 
-Rboolean Rf_isNumeric(SEXP) {
-    _NYI("Rf_isNumeric");
+Rboolean Rf_isNumeric(SEXP s) {
+    switch(TYPEOF(s)) {
+    case INTSXP:
+    case REALSXP:
+        return TRUE;
+    default:
+        return FALSE;
+    }
 }
 
-Rboolean Rf_isValidString(SEXP) {
+Rboolean Rf_isValidString(SEXP s) {
     _NYI("Rf_isValidString");
 }
 
-Rboolean Rf_isVector(SEXP) {
-    _NYI("Rf_isVector");
+Rboolean Rf_isVector(SEXP s) {
+    switch(TYPEOF(s)) {
+    case LGLSXP:
+    case INTSXP:
+    case REALSXP:
+    case CPLXSXP:
+    case STRSXP:
+    case RAWSXP:
+
+    case VECSXP:
+    case EXPRSXP:
+        return TRUE;
+    default:
+        return FALSE;
+    }
 }
 
-Rboolean Rf_isVectorAtomic(SEXP) {
-    _NYI("Rf_isVectorAtomic");
+Rboolean Rf_isVectorAtomic(SEXP s) {
+    switch (TYPEOF(s)) {
+    case LGLSXP:
+    case INTSXP:
+    case REALSXP:
+    case CPLXSXP:
+    case STRSXP:
+    case RAWSXP:
+        return TRUE;
+    default: /* including NULL */
+        return FALSE;
+    }
 }
 
-Rboolean Rf_isVectorList(SEXP) {
-    _NYI("Rf_isVectorList");
+Rboolean Rf_isVectorList(SEXP s) {
+    switch (TYPEOF(s)) {
+    case VECSXP:
+    case EXPRSXP:
+        return TRUE;
+    default:
+        return FALSE;
+    }
 }
 
 SEXP     Rf_lang1(SEXP) {

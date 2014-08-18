@@ -32,6 +32,7 @@ primitives <- .characters(
     # CallExternal.R
     '.C',
     '.Call',
+    '.External',
 
     # Colon.R
     ':',
@@ -502,6 +503,12 @@ internals <- .characters(
 
     # Sys.glob.R
     'Sys.glob',
+
+    # Sys.info.R
+    'Sys.info',
+
+    # Sys.time.R
+    'Sys.time',
 
     # args.R
     'args',

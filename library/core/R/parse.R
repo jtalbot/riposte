@@ -14,5 +14,5 @@ parse <- function(file, n, text, prompt, srcfile, encoding) {
         srcfile <- ''
     }
 
-    .External('parse', as.character.default(text), as.integer(n), as.character.default(srcfile))
+    .Riposte('parse', as.character.default(text), as.integer(n), as.character.default(srcfile))
 }

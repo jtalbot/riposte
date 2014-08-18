@@ -51,7 +51,7 @@ browserSetDebug <- NULL
                     }
                 },
                 {
-                    promise('expr', .External('parse', cmd, -1L, '<stdin>'), 
+                    promise('expr', .Riposte('parse', cmd, -1L, '<stdin>'), 
                         .frame(skipCalls), .getenv(NULL))
                     .cat(.format(expr),'\n')
                 })

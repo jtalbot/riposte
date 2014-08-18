@@ -9,7 +9,7 @@
 
 .seek.file <- function(con, offset) {
     .open.file(con, 'r')
-    r <- .External('file_seek', attr(con, 'conn_id'), as.double(offset))
+    r <- .Riposte('file_seek', attr(con, 'conn_id'), as.double(offset))
 }
 
 makeLazy <- function(n, v, expr, env1, env2) {
@@ -37,7 +37,7 @@ lazyLoadDBfetch <- function(key, file, compressed, hook) {
     .close.file(f)
 
     if(compressed)
-        r <- .External('decompress', r, size, comp)
+        r <- .Riposte('decompress', r, size, comp)
 
     con <- rawConnection('', r, 'r')
     unserializeFromConn(con, hook)
