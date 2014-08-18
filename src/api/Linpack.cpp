@@ -1,48 +1,49 @@
 
+#include "api.h"
 #include <R_ext/Linpack.h>
 
 /* Double Precision Linpack */
 
 void dpbfa_(double*, int*, int*, int*, int*) {
-    throw "NYI: dpbfa";
+    _NYI("dpbfa");
 }
 
 void dpbsl_(double*, int*, int*, int*, double*) {
-    throw "NYI: dpbsl";
+    _NYI("dpbsl");
 }
 
 void dpoco_(double*, int*, int*, double*, double*, int*) {
-    throw "NYI: dpoco";
+    _NYI("dpoco");
 }
 
 void dpodi_(double*, int*, int*, double*, int*) {
-    throw "NYI: dpodi";
+    _NYI("dpodi");
 }
 
 void dpofa_(double*, int*, int*, int*) {
-    throw "NYI: dpofa";
+    _NYI("dpofa");
 }
 
 void dposl_(double*, int*, int*, double*) {
-    throw "NYI: dposl";
+    _NYI("dposl");
 }
 
 void dqrdc_(double*, int*, int*, int*, double*, int*, double*, int*) {
-    throw "NYI: dqrdc";
+    _NYI("dqrdc");
 }
 void dqrsl_(double*, int*, int*, int*, double*, double*, double*, double*, double*, double*, double*, int*, int*) {
-    throw "NYI: dqrsl";
+    _NYI("dqrsl");
 }
 
 void dsvdc_(double*, int*, int*, int*, double*, double*, double*, int*, double*, int*, double*, int*, int*) {
-    throw "NYI: dsvdc";
+    _NYI("dsvdc");
 }
 
 void dtrco_(double*, int*, int*, double*, double*, int*) {
-    throw "NYI: dtrco";
+    _NYI("dtrco");
 }
 
 void dtrsl_(double*, int*, int*, double*, int*, int*) {
-    throw "NYI: dtrsl";
+    _NYI("dtrsl");
 }
 

@@ -1,15 +1,16 @@
 
+#include "api.h"
 #include <R_ext/Random.h>
 
 void GetRNGstate(void) {
-    throw "NYI: GetRNGstate";
+    _NYI("GetRNGstate");
 }
 
 void PutRNGstate(void) {
-    throw "NYI: PutRNGstate";
+    _NYI("PutRNGstate");
 }
 
 void FixupProb(double *, int, int, Rboolean) {
-    throw "NYI: FixupProb";
+    _NYI("FixupProb");
 }
 

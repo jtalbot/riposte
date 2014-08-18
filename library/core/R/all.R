@@ -9,8 +9,11 @@ all <- function(..., na.rm = FALSE) {
 all.default <- function(..., na.rm = FALSE) {
     x <- c(...)
 
-    if(!is.logical(x) && !is.integer(x))
+    if(!is.logical(x) && !is.integer(x)) {
         .warning(sprintf("coercing argument of type '%s' to logical", .type(x)))
+    }
+    
+    x <- as(strip(x), 'logical')
 
     if(na.rm)
         all(x[!is.na(x)])

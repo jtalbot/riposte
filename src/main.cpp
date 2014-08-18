@@ -24,8 +24,11 @@ static int verbose = 0;
 static void info(State& state, std::ostream& out) 
 {
     out << "Riposte (" << state.queues.queues.size() << " threads) "
-        << "-- Copyright (C) 2010-2013 Stanford University, 2014 Justin Talbot" << std::endl;
+        << "-- Copyright (C) 2010-2013 Stanford, 2014 Justin Talbot" << std::endl;
     out << "http://jtalbot.github.com/riposte/" << std::endl;
+    out << std::endl;
+    out << "If you have the base R libraries installed, you can load them by running:" << std::endl << "source('bootstrap.R')" << std::endl;
+
 }
 
 /* debug messages */

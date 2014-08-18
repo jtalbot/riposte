@@ -580,6 +580,7 @@ internals <- .characters(
     # conditions.R
     '.addCondHands',
     '.signalCondition',
+    '.addRestart',
 
     # connections.R
     'file',
@@ -747,6 +748,7 @@ internals <- .characters(
 
     # order.R
     'order',
+    'sort',
 
     # parse
     'parse',
@@ -893,8 +895,6 @@ registerNamespace('internal',
 if( R.home() == '' ) {
     .cat("Warning: RIPOSTE_HOME is not set.", '\n')
 }
-
-.cat("\nIf you have the base R libraries installed, you can load them by running:\nsource('bootstrap.R')\n", '\n')
 
 NULL
 

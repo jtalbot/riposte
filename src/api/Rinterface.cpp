@@ -1,4 +1,5 @@
 
+#include "api.h"
 #define R_NO_REMAP
 #include <Rinterface.h>
 #include <Rinternals.h>
@@ -13,7 +14,7 @@ int R_HistorySize;   /* Size of the history file */
 int R_RestoreHistory;    /* restore the history file? */
 
 void onintr(void) {
-    throw "NYI: onintr";
+    _NYI("onintr");
 }
 
 void (*ptr_R_Suicide)(const char *);

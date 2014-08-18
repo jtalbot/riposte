@@ -247,26 +247,6 @@ Value eigen(Thread & thread, Value const* args) {
 }
 
 extern "C"
-Value sort(Thread& thread, Value const* args) {
-	Value a = args[0];
-	if(a.isDouble()) {
-		Double& r = (Double&)a;
-		Resize(thread, true, r, r.length()); // just cloning
-		std::sort(r.v(), r.v()+r.length());
-		return r;
-	}
-	else if(a.isInteger()) {
-		Integer& r = (Integer&)a;
-		Resize(thread, true, r, r.length()); // just cloning
-		std::sort(r.v(), r.v()+r.length());
-	    return r;
-	}
-	else {
-		_error("NYI: sort on this type");
-	}
-}
-
-extern "C"
 Value commandArgs(Thread& thread, Value const* args) {
 	return thread.state.arguments;
 }

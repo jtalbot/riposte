@@ -622,10 +622,26 @@ static inline Instruction const* missing_op(Thread& thread, Instruction const& i
 
         if(v.isPromise() && !((Promise const&)v).isDefault() && foundEnv == e) {
             // see if missing is passed down
+            // missing is only passed down if
+            // the referenced symbol is an argument.
+            // this whole feature is a disaster.
             if(((Promise const&)v).isExpression()) {
                 Value const& expr = ((Promise const&)v).code()->expression;
-                if(isSymbol(expr)) {
-                    e = ((Promise const&)v).environment();
+                Environment* env = ((Promise const&)v).environment();
+                Value const& func = env->get(Strings::__function__);
+                if(isSymbol(expr) && func.isClosure()) {
+                    // see if the expr is an argument
+                    Character const& parameters = ((Closure const&)func).prototype()->parameters;
+                    bool matched = false;
+                    for(size_t i = 0; i < parameters.length() && !matched; ++i) {
+                        if(((Character const&)expr).s == parameters[i])
+                            matched = true;
+                    }
+                    
+                    if(!matched)
+                        break;
+
+                    e = env;
                     x = expr;
                     continue;
                 }

@@ -19,3 +19,4 @@ order <- function(na.last, decreasing, ...) {
         seq_len(mn)
     }
 }
+

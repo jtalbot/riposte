@@ -42,7 +42,7 @@
 	_(name,	        "name")	\
 	_(call,	        "call")		\
 	_(expression,	"expression")	\
-	_(external, 	".External") \
+	_(external, 	".Riposte") \
 	_(map, 	        ".Map") \
 	_(scan, 	    ".Scan") \
 	_(fold, 	    ".Fold") \

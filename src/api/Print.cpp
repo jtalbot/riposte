@@ -1,13 +1,14 @@
 
+#include "api.h"
 #include <R_ext/Print.h>
 
 
 void Rprintf(const char *, ...) {
-    throw "NYI: Rprintf";
+    _NYI("Rprintf");
 }
 
 void REprintf(const char *, ...) {
-    throw "NYI: REprintf";
+    _NYI("REprintf");
 }
 
 // The following is from Print.h
@@ -34,11 +35,11 @@ R_print_par_t R_print;
 
 extern "C" {
 const char *Rf_EncodeElement0(SEXP, int, int, const char *) {
-    throw "NYI: Rf_EncodeElement0";
+    _NYI("Rf_EncodeElement0");
 }
 
 const char Rf_EncodeElement(SEXP, int, int, char) {
-    throw "NYI: Rf_EncodeElement";
+    _NYI("Rf_EncodeElement");
 }
 
 }
@@ -46,7 +47,7 @@ const char Rf_EncodeElement(SEXP, int, int, char) {
 extern "C" {
     // Needed by libRblas
     void xerbla_(const char *srname, int *info) {
-        throw "NYI: xerbla";
+        _NYI("xerbla");
     }
 }
 

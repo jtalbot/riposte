@@ -1,4 +1,5 @@
 
+#include "api.h"
 #include <cwchar>
 #include <stdint.h>
 
@@ -8,11 +9,11 @@
 extern "C" {
 
 int ENC_KNOWN(SEXP x) {
-    throw "NYI: ENC_KNOWN";
+    _NYI("ENC_KNOWN");
 }
 
 int IS_CACHED(SEXP x) {
-    throw "NYI: IS_CACHED";
+    _NYI("IS_CACHED");
 }
 
 /*--- Global Variables ---------------------------------------------------- */
@@ -35,17 +36,17 @@ R_stdGen_ptr_t R_set_standardGeneric_ptr(R_stdGen_ptr_t, SEXP) { /* set method *
 SEXP R_MethodsNamespace;
 
 SEXP R_deferred_default_method(void) {
-    throw "NYI: R_deferred_default_method";
+    _NYI("R_deferred_default_method");
 }
 
 SEXP R_set_prim_method(SEXP fname, SEXP op, SEXP code_vec, SEXP fundef,
                SEXP mlist) {
-    throw "NYI: R_set_prim_method";
+    _NYI("R_set_prim_method");
 }
 
 SEXP do_set_prim_method(SEXP op, const char *code_string, SEXP fundef,
             SEXP mlist) {
-    throw "NYI: do_set_prim_method";
+    _NYI("do_set_prim_method");
 }
 
 void R_set_quick_method_check(R_stdGen_ptr_t) {
@@ -53,11 +54,11 @@ void R_set_quick_method_check(R_stdGen_ptr_t) {
 }
 
 SEXP R_primitive_methods(SEXP op) {
-    throw "NYI: R_primitive_methods";
+    _NYI("R_primitive_methods");
 }
 
 SEXP R_primitive_generic(SEXP op) {
-    throw "NYI: R_primitive_generic";
+    _NYI("R_primitive_generic");
 }
 
 /* R Home Directory */
@@ -100,80 +101,80 @@ Rboolean useaqua;
 
 /* ../../main/printutils.c : */
 const char *EncodeChar(SEXP) {
-    throw "NYI: EncodeChar";
+    _NYI("EncodeChar");
 }
 
 /* main/subassign.c */
 SEXP R_subassign3_dflt(SEXP, SEXP, SEXP, SEXP) {
-    throw "NYI: R_subassign3_dflt";
+    _NYI("R_subassign3_dflt");
 }
 
 /* main/util.c */
 void UNIMPLEMENTED_TYPE(const char *s, SEXP x) {
-    throw "NYI: UNIMPLEMENTED_TYPE";
+    _NYI("UNIMPLEMENTED_TYPE");
 }
 
 Rboolean Rf_strIsASCII(const char *str) {
-    throw "NYI: Rf_strIsASCII";
+    _NYI("Rf_strIsASCII");
 }
 
 typedef unsigned short ucs2_t;
 size_t mbcsToUcs2(const char *in, ucs2_t *out, int nout, int enc) {
-    throw "NYI: mbcsToUcs2";
+    _NYI("mbcsToUcs2");
 }
 
 size_t Rf_utf8towcs(wchar_t *wc, const char *s, size_t n) {
-    throw "NYI: Rf_utf8towcs";
+    _NYI("Rf_utf8towcs");
 }
 
 SEXP Rf_installTrChar(SEXP) {
-    throw "NYI: Rf_installTrChar";
+    _NYI("Rf_installTrChar");
 }
 
 size_t Rf_mbrtowc(wchar_t *wc, const char *s, size_t n, mbstate_t *ps) {
-    throw "NYI: Rf_mbrtowc";
+    _NYI("Rf_mbrtowc");
 }
 
 char *Rf_strchr(const char *s, int c) {
-    throw "NYI: strchr";
+    _NYI("strchr");
 }
 
 int R_OutputCon; /* from connections.c */
 int R_InitReadItemDepth, R_ReadItemDepth; /* from serialize.c */
 
 FILE *RC_fopen(const SEXP fn, const char *mode, const Rboolean expand) {
-    throw "NYI: RC_fopen";
+    _NYI("RC_fopen");
 }
 
 struct RCNTXT;
 void Rf_begincontext(RCNTXT*, int, SEXP, SEXP, SEXP, SEXP, SEXP) {
-    throw "NYI: Rf_begincontext";
+    _NYI("Rf_begincontext");
 }
 
 void Rf_endcontext(RCNTXT*) {
-    throw "NYI: Rf_endcontext";
+    _NYI("Rf_endcontext");
 }
 
 int R_ReadConsole(const char *, unsigned char *, int, int) {
-    throw "NYI: R_ReadConsole";
+    _NYI("R_ReadConsole");
 }
 void R_WriteConsole(const char *, int); /* equivalent to R_WriteConsoleEx(a, b, 0) */
 void R_WriteConsoleEx(const char *, int, int);
 void R_ResetConsole(void);
 
 void R_ClearerrConsole(void) {
-    throw "NYI: R_ClearerrConsole";
+    _NYI("R_ClearerrConsole");
 }
 void R_Busy(int);
 int R_ShowFiles(int, const char **, const char **, const char *,
             Rboolean, const char *);
 int R_EditFiles(int, const char **, const char **, const char *) {
-    throw "NYI: R_EditFiles";
+    _NYI("R_EditFiles");
 }
 int R_ChooseFile(int, char *, int);
 char *R_HomeDir(void);
 Rboolean R_FileExists(const char *) {
-    throw "NYI: R_FileExists";
+    _NYI("R_FileExists");
 }
 
 Rboolean R_HiddenFile(const char *);
@@ -183,68 +184,72 @@ double R_FileMtime(const char *);
 
 /* Other Internally Used Functions */
 void Rf_copyMostAttribNoTs(SEXP, SEXP) {
-    throw "NYI: Rf_copyMostAttribNoTs";
+    _NYI("Rf_copyMostAttribNoTs");
 }
 
 SEXP Rf_deparse1(SEXP,Rboolean,int) {
-    throw "NYI: Rf_deparse1";
+    _NYI("Rf_deparse1");
 }
 
 SEXP Rf_deparse1line(SEXP,Rboolean) {
-    throw "NYI: Rf_deparse1line";
+    _NYI("Rf_deparse1line");
 }
 
 SEXP R_data_class(SEXP , Rboolean) {
-    throw "NYI: R_data_class";
+    _NYI("R_data_class");
 }
 
 /* environment cell access */
 typedef struct R_varloc_st *R_varloc_t;
 R_varloc_t R_findVarLocInFrame(SEXP, SEXP) {
-    throw "NYI: R_findVarLocInFrame";
+    _NYI("R_findVarLocInFrame");
 }
 
 Rboolean R_GetVarLocMISSING(R_varloc_t) {
-    throw "NYI: R_GetVarLocMISSING";
+    _NYI("R_GetVarLocMISSING");
 }
 
 double R_strtod5(const char *str, char **endptr, char dec,
          Rboolean NA, int exact) {
-    throw "NYI: R_strtod5";
+    _NYI("R_strtod5");
 }
 
 SEXP Rf_mkFalse(void) {
-    throw "NYI: Rf_mkFalse";
+    _NYI("Rf_mkFalse");
 }
 
 SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP) {
-    throw "NYI: Rf_NewEnvironment";
+    _NYI("Rf_NewEnvironment");
 }
 
 void Rf_PrintDefaults(void) {
-    throw "NYI: Rf_PrintDefaults";
+    _NYI("Rf_PrintDefaults");
 }
 
 int Rf_envlength(SEXP) {
-    throw "NYI: Rf_envlength";
+    _NYI("Rf_envlength");
 }
 
 void Rf_sortVector(SEXP, Rboolean) {
-    throw "NYI: Rf_sortVector";
+    _NYI("Rf_sortVector");
 }
 
 SEXP R_NewHashedEnv(SEXP, SEXP) {
-    throw "NYI: R_NewHashedEnv";
+    _NYI("R_NewHashedEnv");
+}
+
+double R_atof(const char *str) {
+    _NYI("R_atof");
 }
 
 /* From localecharset.c */
 const char *locale2charset(const char *) {
-    throw "NYI: locale2charset";
+    _NYI("locale2charset");
 }
 
 /* From Parse.h */
 void parseError(SEXP call, int linenum) {
-    throw "NYI: parseError";
+    _NYI("parseError");
 }
 
 }

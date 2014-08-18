@@ -26,3 +26,7 @@
     NULL
 }
 
+.addRestart <- function(restart) {
+    print(".addRestart called, but it's not implemented yet")
+    NULL
+}

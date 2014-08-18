@@ -1,5 +1,7 @@
 // Some of this code is taken from R header files under the LGPL.
 
+#include "api.h"
+
 #include "../frontend.h"
 
 #define R_NO_REMAP
@@ -68,6 +70,7 @@ int R_PPStackSize;
 int R_PPStackTop;
 SEXP* R_PPStack;
 
+Rboolean R_Interactive;
 
 extern "C" {
 
@@ -92,7 +95,8 @@ void R_init_libR(DLLInfo *) {
     REnvironment::Init(empty, globalState->empty);
     R_EmptyEnv = globalState->installSEXP(empty);
 
-    R_NilValue = R_UnboundValue = R_MissingArg =
+    R_NilValue = globalState->installSEXP(Null::Singleton());
+    R_UnboundValue = R_MissingArg =
         globalState->installSEXP(Value::Nil());
 
     R_TrueValue = globalState->installSEXP(Logical::c(Logical::TrueElement));
@@ -155,6 +159,9 @@ void R_init_libR(DLLInfo *) {
 
     R_NaString = (SEXP)Strings::NA;        /* NA_STRING as a CHARSXP */
     R_BlankString = (SEXP)Strings::empty;     /* "" as a CHARSXP */
+
+    R_Interactive = TRUE;
+
 }
 
 }

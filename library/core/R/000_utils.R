@@ -54,6 +54,10 @@
 
 .cat <- function(..., sep="") .External('cat', list(...), sep)
 
+.warning <- function(msg) {
+    warning(TRUE, FALSE, FALSE, msg)
+}
+
 .stop <- function(message, call=.frame(1L)[['.__call__.']]) {
     e <- list(message=message, call=call)
     attr(e, 'class') <- c('error', 'condition')

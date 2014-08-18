@@ -335,9 +335,55 @@ struct StackFrame {
 
 // For R API support
 struct SEXPREC : public HeapObject {
-    Value v;
-    SEXPREC(Value const& v) : v(v) {}
+public:
+    enum Type {
+        VALUE,
+        STRING,
+        INT32
+    };
+
+    // For storing R API facing integers and logicals
+    struct Int32 : public HeapObject {    
+        int64_t length;
+        int32_t data[];
+    };
+    // For storing R API facing complex numbers
+    //struct Complex : public HeapObject {
+    //    int64_t length;
+    //    complex data[];
+    //};
+
+    SEXPREC(Value const& v) : v(v), type(VALUE) {}
+    SEXPREC(String const& s) : s(s), type(STRING) {}
+    SEXPREC(Int32* i) : i(i), type(INT32) {}
 	void visit() const;
+
+    Type getType() const { return type; }
+
+    Value getValue() const {
+        if(type == VALUE) return v;
+        else if(type == INT32) {
+            Integer result(i->length);
+            for(int64_t x = 0; x < i->length; ++x)
+                result[x] = i->data[x];
+            return result;
+        }
+        else {
+            throw "Can't convert this SEXP type to a Value";
+        }
+    }
+
+    String getString() const { return s; }
+
+    Int32* getInt32() const { return i; }
+private:
+    union {
+        Value v;
+        String s;
+        Int32* i;
+    };
+
+    Type type;
 };
 
 typedef SEXPREC* SEXP;

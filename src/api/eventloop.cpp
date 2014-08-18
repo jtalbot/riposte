@@ -1,8 +1,9 @@
 
+#include "api.h"
 #include <R_ext/eventloop.h>
 
 InputHandler *addInputHandler(InputHandler *handlers, int fd, InputHandlerProc handler, int activity) {
-    throw "NYI: addInputHandler";
+    _NYI("addInputHandler");
 }
 
 InputHandler *R_InputHandlers;

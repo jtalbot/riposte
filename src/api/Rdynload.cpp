@@ -1,4 +1,5 @@
 
+#include "api.h"
 #include <R_ext/Rdynload.h>
 
 #include "../frontend.h"
@@ -165,7 +166,7 @@ Rboolean R_forceSymbols(DllInfo *info, Rboolean value) {
 
 DL_FUNC R_FindSymbol(char const *, char const *,
                        R_RegisteredNativeSymbol *symbol) {
-    throw "NYI: R_FindSymbol";
+    _NYI("R_FindSymbol");
 }
 
 /* Experimental interface for exporting and importing functions from
@@ -181,14 +182,14 @@ extern "C" {
 
 // This is in main/Rdynload.c, but is used by grDevices.
 int R_cairoCdynload(int local, int now) {
-    throw "NYI: R_cairoCdynload";
+    _NYI("R_cairoCdynload");
 }
 
 // From Rdynpriv.h
 
 // Used by methods
 SEXP R_MakeExternalPtrFn(DL_FUNC p, SEXP tag, SEXP prot) {
-    throw "NYI: R_MakeExternalPtrFn";
+    _NYI("R_MakeExternalPtrFn");
 }
 
 }

@@ -31,3 +31,19 @@
     .External('dotCall', .NAME$address, list(...))
 }
 
+.External <- function(.NAME, ..., PACKAGE=NULL) {
+    if(is.character(.NAME)) {
+        .NAME <- getSymbolInfo(.NAME, PACKAGE, FALSE)
+        
+        if(is.null(.NAME))
+            .stop(sprintf("Can't find .External function: %s", .NAME))
+    }
+    
+    print(sprintf(".External: %s", .NAME$name))
+    if(!inherits(.NAME, 'NativeSymbolInfo', FALSE)) {
+        .stop("Unknown .NAME argument to .External")
+    }
+
+    .External('dotCall', .NAME$address, list(...))
+}
+

@@ -1,38 +1,39 @@
 
+#include "api.h"
 #define R_NO_REMAP
 #include <Rinternals.h>
 #include <R_ext/GraphicsEngine.h>
 
 void R_GE_checkVersionOrDie(int version) {
-    throw "NYI: R_GE_checkVersionOrDie";
+    _NYI("R_GE_checkVersionOrDie");
 }
 
 pGEDevDesc Rf_desc2GEDesc(pDevDesc dd) {
-    throw "NYI: Rf_desc2GEDesc";
+    _NYI("Rf_desc2GEDesc");
 }
 
 pGEDevDesc GEgetDevice(int) {
-    throw "NYI: GEgetDevice";
+    _NYI("GEgetDevice");
 }
 
 void GEaddDevice(pGEDevDesc) {
-    throw "NYI: GEaddDevice";
+    _NYI("GEaddDevice");
 }
 
 void GEaddDevice2(pGEDevDesc, const char *) {
-    throw "NYI: GEaddDevice2";
+    _NYI("GEaddDevice2");
 }
 
 void GEaddDevice2f(pGEDevDesc, const char *, const char *) {
-    throw "NYI: GEaddDevice2f";
+    _NYI("GEaddDevice2f");
 }
 
 void GEkillDevice(pGEDevDesc) {
-    throw "NYI: GEkillDevice";
+    _NYI("GEkillDevice");
 }
 
 pGEDevDesc GEcreateDevDesc(pDevDesc dev) {
-    throw "NYI: GEcreateDevDesc";
+    _NYI("GEcreateDevDesc");
 }
 
 void GEregisterSystem(GEcallback callback, int *systemRegisterIndex) {
@@ -41,23 +42,54 @@ void GEregisterSystem(GEcallback callback, int *systemRegisterIndex) {
 }
 
 void GEunregisterSystem(int registerIndex) {
-    throw "NYI: GEunregisterSystem";
+    _NYI("GEunregisterSystem");
 }
 
+double GEfromDeviceX(double value, GEUnit to, pGEDevDesc dd) {
+    _NYI("GEfromDeviceX");
+}
+
+double GEtoDeviceX(double value, GEUnit from, pGEDevDesc dd) {
+    _NYI("GEtoDeviceX");
+}
+
+double GEfromDeviceY(double value, GEUnit to, pGEDevDesc dd) {
+    _NYI("GEfromDeviceY");
+}
+
+double GEtoDeviceY(double value, GEUnit from, pGEDevDesc dd) {
+    _NYI("GEtoDeviceY");
+}
+
+double GEfromDeviceWidth(double value, GEUnit to, pGEDevDesc dd) {
+    _NYI("GEfromDeviceWidth");
+}
+
+double GEtoDeviceWidth(double value, GEUnit from, pGEDevDesc dd) {
+    _NYI("GEtoDeviceWidth");
+}
+
+double GEfromDeviceHeight(double value, GEUnit to, pGEDevDesc dd) {
+    _NYI("GEfromDeviceHeight");
+}
+
+double GEtoDeviceHeight(double value, GEUnit from, pGEDevDesc dd) {
+    _NYI("GEtoDeviceHeight");
+}
 
 /* Convert an element of a R colour specification (which might be a
    number or a string) into an internal colour specification. */
 rcolor Rf_RGBpar(SEXP, int) {
-    throw "NYI: Rf_RGBpar";
+    _NYI("Rf_RGBpar");
 }
 
 rcolor Rf_RGBpar3(SEXP, int, rcolor) {
-    throw "NYI: Rf_RGBpar3";
+    _NYI("Rf_RGBpar3");
 }
 
 /* Convert an internal colour specification to/from a colour name */
 const char *Rf_col2name(rcolor col) { /* used in par.c, grid */
-    throw "NYI: Rf_col2name";
+    _NYI("Rf_col2name");
 }
 
 /* Convert either a name or a #RRGGBB[AA] string to internal.
@@ -65,125 +97,125 @@ const char *Rf_col2name(rcolor col) { /* used in par.c, grid */
    to a colour in the palette, and "0" to transparent white.
 */
 rcolor R_GE_str2col(const char *s) {
-    throw "NYI: R_GE_str2col";
+    _NYI("R_GE_str2col");
 }
 
 R_GE_lineend GE_LENDpar(SEXP value, int ind) {
-    throw "NYI: GE_LENDpar";
+    _NYI("GE_LENDpar");
 }
 
 SEXP GE_LENDget(R_GE_lineend lend) {
-    throw "NYI: GE_LENDget";
+    _NYI("GE_LENDget");
 }
 
 R_GE_linejoin GE_LJOINpar(SEXP value, int ind) {
-    throw "NYI: GE_LJOINpar";
+    _NYI("GE_LJOINpar");
 }
 
 SEXP GE_LJOINget(R_GE_linejoin ljoin) {
-    throw "NYI: GE_LJOINget";
+    _NYI("GE_LJOINget");
 }
 
 void GESetClip(double x1, double y1, double x2, double y2, pGEDevDesc dd) {
-    throw "NYI: GE_SetClip";
+    _NYI("GE_SetClip");
 }
 
 void GENewPage(const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GENewPage";
+    _NYI("GENewPage");
 }
 
 void GELine(double x1, double y1, double x2, double y2,
         const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GELine";
+    _NYI("GELine");
 }
 
 void GEPolyline(int n, double *x, double *y,
         const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GEPolyline";
+    _NYI("GEPolyline");
 }
 
 void GEPolygon(int n, double *x, double *y,
            const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GEPolygon";
+    _NYI("GEPolygon");
 }
 
 SEXP GEXspline(int n, double *x, double *y, double *s, Rboolean open,
            Rboolean repEnds, Rboolean draw,
            const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GEXspline";
+    _NYI("GEXspline");
 }
 
 void GECircle(double x, double y, double radius,
           const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GECircle";
+    _NYI("GECircle");
 }
 
 void GERect(double x0, double y0, double x1, double y1,
         const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GERect";
+    _NYI("GERect");
 }
 
 void GEPath(double *x, double *y,
             int npoly, int *nper,
             Rboolean winding,
             const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GEPath";
+    _NYI("GEPath");
 }
 
 void GERaster(unsigned int *raster, int w, int h,
               double x, double y, double width, double height,
               double angle, Rboolean interpolate,
               const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GERaster";
+    _NYI("GERaster");
 }
 
 SEXP GECap(pGEDevDesc dd) {
-    throw "NYI: GECap";
+    _NYI("GECap");
 }
 
 void GEText(double x, double y, const char * const str, cetype_t enc,
         double xc, double yc, double rot,
         const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GEText";
+    _NYI("GEText");
 }
 
 void GEMode(int mode, pGEDevDesc dd) {
-    throw "NYI: GEMode";
+    _NYI("GEMode");
 }
 
 void GESymbol(double x, double y, int pch, double size,
           const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GESymbol";
+    _NYI("GESymbol");
 }
 
 void GEPretty(double *lo, double *up, int *ndiv) {
-    throw "NYI: GEPretty";
+    _NYI("GEPretty");
 }
 
 void GEMetricInfo(int c, const pGEcontext gc,
           double *ascent, double *descent, double *width,
           pGEDevDesc dd) {
-    throw "NYI: GEMetricInfo";
+    _NYI("GEMetricInfo");
 }
 
 double GEStrWidth(const char *str, cetype_t enc,
           const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GEStrWidth";
+    _NYI("GEStrWidth");
 }
 
 double GEStrHeight(const char *str, cetype_t enc,
           const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GEStrHeight";
+    _NYI("GEStrHeight");
 }
 
 void GEStrMetric(const char *str, cetype_t enc, const pGEcontext gc,
                  double *ascent, double *descent, double *width,
                  pGEDevDesc dd) {
-    throw "NYI: GEStrMetric";
+    _NYI("GEStrMetric");
 }
 
 int GEstring_to_pch(SEXP pch) {
-    throw "NYI: GEstring_to_pch";
+    _NYI("GEstring_to_pch");
 }
 
 /*-------------------------------------------------------------------
@@ -192,11 +224,11 @@ int GEstring_to_pch(SEXP pch) {
  *  line texture representation.
  */
 unsigned int GE_LTYpar(SEXP, int) {
-    throw "NYI: GE_LTYpar";
+    _NYI("GE_LTYpar");
 }
 
 SEXP GE_LTYget(unsigned int) {
-    throw "NYI: GE_LTYget";
+    _NYI("GE_LTYget");
 }
 
 /*
@@ -204,7 +236,7 @@ SEXP GE_LTYget(unsigned int) {
  */
 void R_GE_rasterInterpolate(unsigned int *sraster, int sw, int sh,
                             unsigned int *draster, int dw, int dh) {
-    throw "NYI: R_GE_rasterInterpolate";
+    _NYI("R_GE_rasterInterpolate");
 }
 
 /*
@@ -212,77 +244,77 @@ void R_GE_rasterInterpolate(unsigned int *sraster, int sw, int sh,
  */
 double GEExpressionWidth(SEXP expr,
              const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GEExpressionWidth";
+    _NYI("GEExpressionWidth");
 }
 
 double GEExpressionHeight(SEXP expr,
               const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GEExpressionHeight";
+    _NYI("GEExpressionHeight");
 }
 
 void GEExpressionMetric(SEXP expr, const pGEcontext gc,
                         double *ascent, double *descent, double *width,
                         pGEDevDesc dd) {
-    throw "NYI: GEExpressionMetric";
+    _NYI("GEExpressionMetric");
 }
 
 void GEMathText(double x, double y, SEXP expr,
         double xc, double yc, double rot,
         const pGEcontext gc, pGEDevDesc dd) {
-    throw "NYI: GEMathText";
+    _NYI("GEMathText");
 }
 
 
 
 
 pGEDevDesc GEcurrentDevice(void) {
-    throw "NYI: GEcurrentDevice";
+    _NYI("GEcurrentDevice");
 }
 
 Rboolean GEdeviceDirty(pGEDevDesc dd) {
-    throw "NYI: GEdeviceDirty";
+    _NYI("GEdeviceDirty");
 }
 
 void GEdirtyDevice(pGEDevDesc dd) {
-    throw "NYI: GEdirtyDevice";
+    _NYI("GEdirtyDevice");
 }
 
 Rboolean GErecording(SEXP call, pGEDevDesc dd) {
-    throw "NYI: GErecording";
+    _NYI("GErecording");
 }
 
 void GErecordGraphicOperation(SEXP op, SEXP args, pGEDevDesc dd) {
-    throw "NYI: GErecordGraphicOperation";
+    _NYI("GErecordGraphicOperation");
 }
 
 void GEinitDisplayList(pGEDevDesc dd) {
-    throw "NYI: GEinitDisplayList";
+    _NYI("GEinitDisplayList");
 }
 
 void GEplayDisplayList(pGEDevDesc dd) {
-    throw "NYI: GEplayDisplayList";
+    _NYI("GEplayDisplayList");
 }
 
 void GEcopyDisplayList(int fromDevice) {
-    throw "NYI: GEcopyDisplayList";
+    _NYI("GEcopyDisplayList");
 }
 
 SEXP GEcreateSnapshot(pGEDevDesc dd) {
-    throw "NYI: GEcreateSnapshot";
+    _NYI("GEcreateSnapshot");
 }
 
 void GEplaySnapshot(SEXP snapshot, pGEDevDesc dd) {
-    throw "NYI: GEplaySnapshot";
+    _NYI("GEplaySnapshot");
 }
 
 /* From ../../main/plot.c, used by ../../library/grid/src/grid.c : */
 // Also used by grDevices
 SEXP Rf_CreateAtVector(double*, double*, int, Rboolean) {
-    throw "NYI: CreateAtVector";
+    _NYI("CreateAtVector");
 }
 
 void Rf_GAxisPars(double *min, double *max, int *n, Rboolean log, int axis) {
-    throw "NYI: Rf_GAxisPars";
+    _NYI("Rf_GAxisPars");
 }
 
 
@@ -315,35 +347,35 @@ void Rg_set_col_ptrs(F1 f1, F2 f2, F3 f3, F4 f4)
 extern "C" {
 
 SEXP do_X11(SEXP, SEXP, SEXP, SEXP) {
-    throw "NYI: do_X11";
+    _NYI("do_X11");
 }
 
 SEXP do_contourLines(SEXP, SEXP, SEXP, SEXP) {
-    throw "NYI: do_contourLines";
+    _NYI("do_contourLines");
 }
 
 SEXP do_getGraphicsEvent(SEXP, SEXP, SEXP, SEXP) {
-    throw "NYI: do_getGraphicsEvent";
+    _NYI("do_getGraphicsEvent");
 }
 
 SEXP do_getGraphicsEventEnv(SEXP, SEXP, SEXP, SEXP) {
-    throw "NYI: do_getGraphicsEventEnv";
+    _NYI("do_getGraphicsEventEnv");
 }
 
 SEXP do_saveplot(SEXP, SEXP, SEXP, SEXP) {
-    throw "NYI: do_saveplot";
+    _NYI("do_saveplot");
 }
 
 SEXP do_setGraphicsEventEnv(SEXP, SEXP, SEXP, SEXP) {
-    throw "NYI: do_setGraphicsEventEnv";
+    _NYI("do_setGraphicsEventEnv");
 }
 
 SEXP do_getSnapshot(SEXP, SEXP, SEXP, SEXP) {
-    throw "NYI: do_getSnapshot";
+    _NYI("do_getSnapshot");
 }
 
 SEXP do_playSnapshot(SEXP, SEXP, SEXP, SEXP) {
-    throw "NYI: do_playSnapshot";
+    _NYI("do_playSnapshot");
 }
 
 }
@@ -357,17 +389,17 @@ int baseRegisterIndex;
 struct GPar;
 
 GPar* Rf_gpptr(pGEDevDesc dd) {
-    throw "NYI: Rf_gpptr";
+    _NYI("Rf_gpptr");
 }
 
 GPar* Rf_dpptr(pGEDevDesc dd) {
-    throw "NYI: Rf_dpptr";
+    _NYI("Rf_dpptr");
 }
 
 /* Return a "nice" min, max and number of intervals for a given
  * range on a linear or _log_ scale, respectively: */
 void Rf_GPretty(double*, double*, int*) { /* used in plot3d.c */
-    throw "NYI: Rf_GPretty";
+    _NYI("Rf_GPretty");
 }
 
 }

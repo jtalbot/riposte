@@ -1,4 +1,5 @@
 
+#include "api.h"
 #include <stddef.h>
 
 #include "../frontend.h"
@@ -16,12 +17,17 @@ extern SEXP* R_PPStack;
 
 extern "C" {
 R_len_t R_BadLongVector(SEXP, const char *, int) {
-    throw "NYI: R_BadLongVector";
+    _NYI("R_BadLongVector");
 }
 }
 
 const char *(R_CHAR)(SEXP x) {
-    throw "NYI: R_CHAR";
+    if(x->getType() != SEXPREC::STRING) {
+        printf("R_CHAR is not a string\n");
+        return NULL;
+    }
+
+    return x->getString()->s;
 }
 
 /* Accessor functions.  Many are declared using () to avoid the macro
@@ -32,55 +38,68 @@ const char *(R_CHAR)(SEXP x) {
 
 /* Various tests with macro versions below */
 Rboolean (Rf_isNull)(SEXP s) {
-    return s->v.isNull() ? TRUE : FALSE;
+    Value v = s->getValue();
+    return v.isNull() ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isSymbol)(SEXP s) {
-    throw "NYI: Rf_isSymbol";
+    Value v = s->getValue();
+    return isSymbol(v) ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isLogical)(SEXP s) {
-    throw "NYI: Rf_isLogical";
+    Value v = s->getValue();
+    return v.isLogical() ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isReal)(SEXP s) {
-    throw "NYI: Rf_isReal";
+    Value v = s->getValue();
+    return v.isDouble() ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isComplex)(SEXP s) {
-    throw "NYI: Rf_isComplex";
+    _NYI("Rf_isComplex");
 }
 
 Rboolean (Rf_isExpression)(SEXP s) {
-    throw "NYI: Rf_isExpression";
+    Value v = s->getValue();
+    return isExpression(v) ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isEnvironment)(SEXP s) {
-    throw "NYI: Rf_isEnvironment";
+    Value v = s->getValue();
+    return v.isEnvironment() ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isString)(SEXP s) {
-    throw "NYI: Rf_isString";
+    Value v = s->getValue();
+    return v.isCharacter() ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isObject)(SEXP s) {
-    throw "NYI: Rf_isObject";
+    _NYI("Rf_isObject");
 }
 
 
 /* General Cons Cell Attributes */
 SEXP (ATTRIB)(SEXP x) {
-    throw "NYI: ATTRIB";
+    _NYI("ATTRIB");
 }
 
 int  (TYPEOF)(SEXP x) {
 
-    int type = x->v.type();
+    if(x->getType() == SEXPREC::INT32)
+        return INTSXP;
+    else if(x->getType() == SEXPREC::STRING)
+        return CHARSXP;
+
+    Value v = x->getValue();
+    int type = v.type();
 
     switch(type) {
-        case Type::Nil:         return NILSXP;
+        case Type::Nil:         throw "Nil type cannot be extracted in TYPEOF";
         case Type::Promise:     return PROMSXP;
-        case Type::Future:      throw "NYI: TYPEOF for future";
+        case Type::Future:      _NYI("TYPEOF for future");
         case Type::Closure:     return CLOSXP;
         case Type::Environment: return ENVSXP;
         case Type::Externalptr: return EXTPTRSXP;
@@ -90,12 +109,12 @@ int  (TYPEOF)(SEXP x) {
         case Type::Integer:     return INTSXP;
         case Type::Double:      return REALSXP;
         case Type::Character:
-            if(isSymbol(x->v))  return SYMSXP;
+            if(isSymbol(v))     return SYMSXP;
             else                return STRSXP;
         case Type::List:
-            if(isCall(x->v))    return LANGSXP;
-            else if(isExpression(x->v)) return EXPRSXP;
-            else if(isPairlist(x->v)) return LISTSXP;
+            if(isCall(v))       return LANGSXP;
+            else if(isExpression(v)) return EXPRSXP;
+            else if(isPairlist(v)) return LISTSXP;
             else                return VECSXP;
         default:
             throw "Unknown type in TYPEOF";
@@ -103,86 +122,150 @@ int  (TYPEOF)(SEXP x) {
 }
 
 int  (NAMED)(SEXP x) {
-    throw "NYI: NAMED";
+    _NYI("NAMED");
 }
 
 void (SET_OBJECT)(SEXP x, int v) {
-    throw "NYI: SET_OBJECT";
+    _NYI("SET_OBJECT");
 }
 
 void (SET_TYPEOF)(SEXP x, int v) {
-    throw "NYI: SET_TYPEOF";
+    _NYI("SET_TYPEOF");
 }
 
 void (SET_NAMED)(SEXP x, int v) {
-    throw "NYI: SET_NAMED";
+    _NYI("SET_NAMED");
 }
 
 void SET_ATTRIB(SEXP x, SEXP v) {
-    throw "NYI: SET_ATTRIB";
+    _NYI("SET_ATTRIB");
 }
 
 void DUPLICATE_ATTRIB(SEXP to, SEXP from) {
-    throw "NYI: DUPLICATE_ATTRIB";
+    _NYI("DUPLICATE_ATTRIB");
+}
+
+/* S4 object testing */
+int (IS_S4_OBJECT)(SEXP x) {
+    _NYI("IS_S4_OBJECT");
+}
+
+void (SET_S4_OBJECT)(SEXP x) {
+    _NYI("SET_S4_OBJECT");
+}
+
+void (UNSET_S4_OBJECT)(SEXP x) {
+    _NYI("UNSET_S4_OBJECT");
 }
 
 /* Vector Access Functions */
 int  (LENGTH)(SEXP x) {
-    throw "NYI: LENGTH";
+    Value v = x->getValue();
+    if(!v.isVector()) {
+        printf("LENGTH called on non-vector\n");
+        return 0;
+    }
+
+    // TODO: should check to make sure the length doesn't overflow.
+    return (int)((Vector const&)v).length();    
 }
 
 R_xlen_t  (XLENGTH)(SEXP x) {
-    throw "NYI: XLENGTH";
+    Value v = x->getValue();
+    if(!v.isVector()) {
+        printf("LENGTH called on non-vector\n");
+        return 0;
+    }
+
+    return (R_xlen_t)((Vector const&)v).length();    
+}
+
+void (SETLENGTH)(SEXP x, int v) {
+    _NYI("SETLENGTH");
 }
 
 int  (IS_LONG_VEC)(SEXP x) {
-    throw "NYI: IS_LONG_VEC";
+    _NYI("IS_LONG_VEC");
 }
 
 int  *(LOGICAL)(SEXP x) {
-    throw "NYI: LOGICAL";
+    _NYI("LOGICAL");
 }
 
 int  *(INTEGER)(SEXP x) {
-    throw "NYI: INTEGER";
+    if(x->getType() == SEXPREC::INT32)
+        return x->getInt32()->data;
+    else {
+        Value v = x->getValue();
+        if(!v.isInteger()) {
+            printf("Called INTEGER on something that is not an integer\n");
+            return NULL;
+        }
+
+        Integer const& i = (Integer const&)v;
+
+        SEXPREC::Int32* i32 = new (sizeof(int32_t) * i.length()) SEXPREC::Int32();
+        i32->length = i.length();
+        // TODO: warn when we truncate down to 32-bits
+        for(int64_t j = 0; j < i.length(); ++j)
+            i32->data[j] = (int32_t)i[j];
+
+        // TODO: this is going to lose all attributes...
+        x = new SEXPREC(i32);
+        return x->getInt32()->data;
+    }
+    _NYI("INTEGER");
 }
 
 Rbyte *(RAW)(SEXP x) {
-    throw "NYI: RAW";
+    _NYI("RAW");
 }
 
 double *(REAL)(SEXP x) {
-    throw "NYI: REAL";
+    _NYI("REAL");
 }
 
 Rcomplex *(COMPLEX)(SEXP x) {
-    throw "NYI: COMPLEX";
+    _NYI("COMPLEX");
 }
 
 SEXP (STRING_ELT)(SEXP x, R_xlen_t i) {
-    throw "NYI: STRING_ELT";
+    Value v = x->getValue();
+    if(!v.isCharacter()) {
+        printf("Argument to STRING_ELT is not a list");
+        throw;
+    }
+    Character const& l = (Character const&)v;
+    if(i >= l.length()) {
+        printf("Accessing past the end of the vector in STRING_ELT");
+        throw;
+    }
+    String s = l[i];
+    return new SEXPREC(s);
 }
 
 SEXP (VECTOR_ELT)(SEXP x, R_xlen_t i) {
-    if(!x->v.isList()) {
+    Value v = x->getValue();
+    if(!v.isList()) {
         printf("Argument to VECTOR_ELT is not a list");
         throw;
     }
-    List& l = (List&)x->v;
+    List const& l = (List const&)v;
     if(i >= l.length()) {
         printf("Accessing past the end of the list in VECTOR_ELT");
         throw;
     }
-    Value v = l[i];
-    return new SEXPREC(v);
+    Value r = l[i];
+    return new SEXPREC(r);
 }
 
 void SET_STRING_ELT(SEXP x, R_xlen_t i, SEXP a) {
-    if(!x->v.isCharacter()) {
+    Value v = x->getValue();
+    if(!v.isCharacter()) {
         printf("Argument is not a Character vector in SET_STRING_ELT");
         throw;
     }
-    Character& c = (Character&)x->v;
+    Character& c = (Character&)v;
     if(i >= c.length()) {
         printf("Assigning past the end in SET_STRING_ELT");
         throw;
@@ -191,192 +274,192 @@ void SET_STRING_ELT(SEXP x, R_xlen_t i, SEXP a) {
 }
 
 SEXP SET_VECTOR_ELT(SEXP x, R_xlen_t i, SEXP v) {
-    throw "NYI: SET_VECTOR_ELT";
+    _NYI("SET_VECTOR_ELT");
 }
 
 /* List Access Functions */
 /* These also work for ... objects */
 
 SEXP (TAG)(SEXP e) {
-    throw "NYI: TAG";
+    _NYI("TAG");
 }
 
 SEXP (CAR)(SEXP e) {
-    throw "NYI: CAR";
+    _NYI("CAR");
 }
 
 SEXP (CDR)(SEXP e) {
-    throw "NYI: CDR";
+    _NYI("CDR");
 }
 
 SEXP (CADR)(SEXP e) {
-    throw "NYI: CADR";
+    _NYI("CADR");
 }
 
 SEXP (CDDR)(SEXP e) {
-    throw "NYI: CDDR";
+    _NYI("CDDR");
 }
 
 SEXP (CADDR)(SEXP e) {
-    throw "NYI: CADDR";
+    _NYI("CADDR");
 }
 
 SEXP (CADDDR)(SEXP e) {
-    throw "NYI: CADDDR";
+    _NYI("CADDDR");
 }
 
 SEXP (CAD4R)(SEXP e) {
-    throw "NYI: CAD4R";
+    _NYI("CAD4R");
 }
 
 void SET_TAG(SEXP x, SEXP y) {
-    throw "NYI: SET_TAG";
+    _NYI("SET_TAG");
 }
 
 SEXP SETCAR(SEXP x, SEXP y) {
-    throw "NYI: SETCAR";
+    _NYI("SETCAR");
 }
 
 SEXP SETCDR(SEXP x, SEXP y) {
-    throw "NYI: SETCDR";
+    _NYI("SETCDR");
 }
 
 SEXP SETCADR(SEXP x, SEXP y) {
-    throw "NYI: SETCADR";
+    _NYI("SETCADR");
 }
 
 SEXP SETCADDR(SEXP x, SEXP y) {
-    throw "NYI: SETCADDR";
+    _NYI("SETCADDR");
 }
 
 SEXP SETCADDDR(SEXP x, SEXP y) {
-    throw "NYI: SETCADDDR";
+    _NYI("SETCADDDR");
 }
 
 SEXP SETCAD4R(SEXP e, SEXP y) {
-    throw "NYI: SETCAD4R";
+    _NYI("SETCAD4R");
 }
 
 /* Closure Access Functions */
 SEXP (FORMALS)(SEXP x) {
-    throw "NYI: FORMALS";
+    _NYI("FORMALS");
 }
 
 SEXP (CLOENV)(SEXP x) {
-    throw "NYI: CLOENV";
+    _NYI("CLOENV");
 }
 
 void SET_FORMALS(SEXP x, SEXP v) {
-    throw "NYI: SET_FORMALS";
+    _NYI("SET_FORMALS");
 }
 
 void SET_BODY(SEXP x, SEXP v) {
-    throw "NYI: SET_BODY";
+    _NYI("SET_BODY");
 }
 
 void SET_CLOENV(SEXP x, SEXP v) {
-    throw "NYI: SET_CLOENV";
+    _NYI("SET_CLOENV");
 }
 
 /* Symbol Access Functions */
 SEXP (PRINTNAME)(SEXP x) {
-    throw "NYI: PRINTNAME";
+    _NYI("PRINTNAME");
 }
 
 SEXP (SYMVALUE)(SEXP x) {
-    throw "NYI: SYMVALUE";
+    _NYI("SYMVALUE");
 }
 
 int  (DDVAL)(SEXP x) {
-    throw "NYI: DDVAL";
+    _NYI("DDVAL");
 }
 
 /* Environment Access Functions */
 SEXP (ENCLOS)(SEXP x) {
-    throw "NYI: ENCLOS";
+    _NYI("ENCLOS");
 }
 
 /* Promise Access Functions */
 SEXP (PRCODE)(SEXP x) {
-    throw "NYI: PRCODE";
+    _NYI("PRCODE");
 }
 
 SEXP (PRENV)(SEXP x) {
-    throw "NYI: PRENV";
+    _NYI("PRENV");
 }
 
 SEXP (PRVALUE)(SEXP x) {
-    throw "NYI: PRVALUE";
+    _NYI("PRVALUE");
 }
 
 void SET_PRVALUE(SEXP x, SEXP v) {
-    throw "NYI: SET_PRVALUE";
+    _NYI("SET_PRVALUE");
 }
 
 /* Type Coercions of all kinds */
 SEXP Rf_asChar(SEXP) {
-    throw "NYI: Rf_asChar";
+    _NYI("Rf_asChar");
 }
 
 SEXP Rf_coerceVector(SEXP, SEXPTYPE) {
-    throw "NYI: Rf_coerceVector";
+    _NYI("Rf_coerceVector");
 }
 
 SEXP Rf_PairToVectorList(SEXP x) {
-    throw "NYI: Rf_PairToVectorList";
+    _NYI("Rf_PairToVectorList");
 }
 
 SEXP Rf_VectorToPairList(SEXP x) {
-    throw "NYI: Rf_VectorTpPairList";
+    _NYI("Rf_VectorTpPairList");
 }
 
 int Rf_asLogical(SEXP x) {
-    Value const& a = x->v;
+    Value a = x->getValue();
     if(a.isLogical1()) {
         if(Logical::isTrue(a.c)) return 1;
         else if(Logical::isFalse(a.c)) return 0;
         else return R_NaInt;
     }
-    printf("NYI type in Rf_asLogical");
-    throw "NYI: Rf_asLogical";
+    printf("_NYI type in Rf_asLogical");
+    _NYI("Rf_asLogical");
 }
 int Rf_asInteger(SEXP x) {
-    Value const& a = x->v;
+    Value a = x->getValue();
     if(a.isInteger1())
         return (int)a.i;
     else if(a.isDouble1())
         return (int)a.d;
     else 
-        throw "NYI: Rf_asInteger";
+        _NYI("Rf_asInteger");
 }
 double Rf_asReal(SEXP x) {
-    throw "NYI: Rf_asReal";
+    _NYI("Rf_asReal");
 }
 
 /* Other Internally Used Functions, excluding those which are inline-able*/
 
 char * Rf_acopy_string(const char *) {
-    throw "NYI: Rf_acopy_string";
+    _NYI("Rf_acopy_string");
 }
 
 SEXP Rf_alloc3DArray(SEXPTYPE, int, int, int) {
-    throw "NYI: Rf_alloc3DArray";
+    _NYI("Rf_alloc3DArray");
 }
 
 SEXP Rf_allocMatrix(SEXPTYPE, int, int) {
-    throw "NYI: Rf_allocMatrix";
+    _NYI("Rf_allocMatrix");
 }
 
 SEXP Rf_allocList(int) {
-    throw "NYI: Rf_allocList";
+    _NYI("Rf_allocList");
 }
 
 SEXP Rf_allocS4Object(void) {
-    throw "NYI: Rf_allocS4Object";
+    _NYI("Rf_allocS4Object");
 }
 
 SEXP Rf_allocSExp(SEXPTYPE) {
-    throw "NYI: Rf_allocSExp";
+    _NYI("Rf_allocSExp");
 }
 
 SEXP Rf_allocVector3(SEXPTYPE type, R_xlen_t len, R_allocator_t* alloc) {
@@ -385,43 +468,75 @@ SEXP Rf_allocVector3(SEXPTYPE type, R_xlen_t len, R_allocator_t* alloc) {
     
     Value v;
     switch(type) {
+        case LGLSXP: v = Logical(len); break;
+        case INTSXP: v = Integer(len); break;
+        case REALSXP: v = Double(len); break;
         case STRSXP: v = Character(len); break;
-        default: printf("Unsupported type in Rf_allocVector3"); throw; break;
+        default: printf("Unsupported type in Rf_allocVector3: %d\n", type); throw; break;
     }
 
     return new SEXPREC(v);
 }
 
+SEXP Rf_classgets(SEXP, SEXP) {
+    _NYI("Rf_classgets");
+}
+
 SEXP Rf_cons(SEXP, SEXP) {
-    throw "NYI: Rf_cons";
+    _NYI("Rf_cons");
+}
+
+void Rf_copyMatrix(SEXP, SEXP, Rboolean) {
+    _NYI("Rf_copyMatrix");
 }
 
 void Rf_copyVector(SEXP, SEXP) {
-    throw "NYI: Rf_copyVector";
+    _NYI("Rf_copyVector");
 }
 
-void Rf_defineVar(SEXP, SEXP, SEXP) {
-    throw "NYI: Rf_defineVar";
+void Rf_defineVar(SEXP symbol, SEXP val, SEXP env) {
+    Value s = symbol->getValue();
+    if(!isSymbol(s)) {
+        printf("Rf_defineVar called without a symbol\n");
+        throw;
+    }
+
+    Value e = env->getValue();
+    if(!e.isEnvironment()) {
+        printf("Rf_defineVar called without an environment\n");
+        throw;
+    }
+
+    Value v = val->getValue();
+
+    ((REnvironment&)e).environment()->insert(SymbolStr(s)) = v;
+}
+
+SEXP Rf_dimnamesgets(SEXP, SEXP) {
+    _NYI("Rf_dimnamesgets");
 }
 
 SEXP Rf_duplicate(SEXP) {
-    throw "NYI: Rf_duplicate";
+    _NYI("Rf_duplicate");
 }
 
 SEXP Rf_duplicated(SEXP, Rboolean) {
-    throw "NYI: Rf_duplicated";
+    _NYI("Rf_duplicated");
 }
 
-SEXP Rf_eval(SEXP v, SEXP env) {
-    if(!v->v.isPromise())
+SEXP Rf_eval(SEXP x, SEXP env) {
+    Value v = x->getValue();
+    Value e = env->getValue();
+
+    if(!v.isPromise())
         printf("v in Rf_eval is not a promise");
 
-    if(!env->v.isEnvironment())
+    if(!e.isEnvironment())
         printf("env in Rf_eval is not an environment");
 
     //Environment* evalenv = ((REnvironment&)env->v).environment();
 
-    Promise const& p = (Promise const&)v->v;
+    Promise const& p = (Promise const&)v;
 
     Thread* thread = globalState->getThread();
     Value r = thread->eval(p, 0);
@@ -431,45 +546,48 @@ SEXP Rf_eval(SEXP v, SEXP env) {
 }
 
 SEXP Rf_findFun(SEXP, SEXP) {
-    throw "NYI: Rf_findFun";
+    _NYI("Rf_findFun");
 }
 
 SEXP Rf_findVar(SEXP symbol, SEXP env) {
-    if(!env->v.isEnvironment()) {
+    Value v = symbol->getValue();
+    Value e = env->getValue();
+
+    if(!e.isEnvironment()) {
         printf("argument to findVar is not an environment");
         throw;
     }
-    if(!symbol->v.isCharacter() ||
-       ((Character const&)symbol->v).length() != 1) {
+    if(!v.isCharacter() ||
+       ((Character const&)v).length() != 1) {
         printf("argument to findVar is not a one element Character");
         throw;
     }
     Environment* foundEnv;
-    Value v = ((REnvironment&)env->v).environment()->getRecursive(symbol->v.s, foundEnv);
-    if(v.isNil())
+    Value r = ((REnvironment&)e).environment()->getRecursive(v.s, foundEnv);
+    if(r.isNil())
         return R_UnboundValue;
     else
-        return new SEXPREC(v);
+        return new SEXPREC(r);
 }
 
 SEXP Rf_findVarInFrame(SEXP, SEXP) {
-    throw "NYI: Rf_findVarInFrame";
+    _NYI("Rf_findVarInFrame");
 }
 
 SEXP Rf_findVarInFrame3(SEXP, SEXP, Rboolean) {
-    throw "NYI: Rf_findVarInFrame3";
+    _NYI("Rf_findVarInFrame3");
 }
 
 SEXP Rf_getAttrib(SEXP, SEXP) {
-    throw "NYI: Rf_getAttrib";
+    _NYI("Rf_getAttrib");
 }
 
 SEXP Rf_GetOption1(SEXP) {
-    throw "NYI: Rf_GetOptions1";
+    _NYI("Rf_GetOptions1");
 }
 
 void Rf_gsetVar(SEXP, SEXP, SEXP) {
-    throw "NYI: Rf_gsetVar";
+    _NYI("Rf_gsetVar");
 }
 
 SEXP Rf_install(const char * s) {
@@ -477,7 +595,7 @@ SEXP Rf_install(const char * s) {
 }
 
 SEXP Rf_lengthgets(SEXP, R_len_t) {
-    throw "NYI: Rf_lengthgets";
+    _NYI("Rf_lengthgets");
 }
 
 SEXP Rf_xlengthgets(SEXP, R_xlen_t) {
@@ -485,23 +603,27 @@ SEXP Rf_xlengthgets(SEXP, R_xlen_t) {
 }
 
 SEXP Rf_matchE(SEXP, SEXP, int, SEXP) {
-    throw "NYI: Rf_matchE";
+    _NYI("Rf_matchE");
+}
+
+SEXP Rf_namesgets(SEXP, SEXP) {
+    _NYI("Rf_namesgets");
 }
 
 SEXP Rf_mkChar(const char * str) {
-    return (SEXP)globalState->internStr(str);
+    return new SEXPREC(globalState->internStr(str));
 }
 
 int Rf_ncols(SEXP) {
-    throw "NYI: Rf_ncols";
+    _NYI("Rf_ncols");
 }
 
 int Rf_nrows(SEXP) {
-    throw "NYI: Rf_nrows";
+    _NYI("Rf_nrows");
 }
 
 SEXP Rf_nthcdr(SEXP, int) {
-    throw "NYI: Rf_nthcdr";
+    _NYI("Rf_nthcdr");
 }
 
 SEXP Rf_protect(SEXP s) {
@@ -512,8 +634,9 @@ SEXP Rf_protect(SEXP s) {
 }
 
 SEXP Rf_setAttrib(SEXP in, SEXP attr, SEXP value) {
-    Value a = attr->v;
-    if(!in->v.isObject()) {
+    Value i = in->getValue();
+    Value a = attr->getValue();
+    if(!i.isObject()) {
         printf("in argument is not an object in Rf_setAttrib");
     }
     if(!a.isCharacter() || ((Character const&)a).length() != 1) {
@@ -523,30 +646,34 @@ SEXP Rf_setAttrib(SEXP in, SEXP attr, SEXP value) {
     // TODO: This needs to erase attributes too.
     // I should probably just be calling a shared SetAttr API function
     // which is also used by the interpreter.
-    Object o = (Object&)in->v;
+    Object o = (Object&)i;
 
     Dictionary* d = o.hasAttributes()
                     ? o.attributes()->clone(1)
                     : new Dictionary(1);
-    d->insert(((Character const&)a)[0]) = value->v;
+    d->insert(((Character const&)a)[0]) = value->getValue();
     o.attributes(d);
     return new SEXPREC(o);
 }
 
+void Rf_setVar(SEXP, SEXP, SEXP) {
+    _NYI("Rf_setVar");
+}
+
 SEXP Rf_substitute(SEXP,SEXP) {
-    throw "NYI: Rf_substitute";
+    _NYI("Rf_substitute");
 }
 
 const char * Rf_translateChar(SEXP) {
-    throw "NYI: Rf_translateChar";
+    _NYI("Rf_translateChar");
 }
 
 const char * Rf_translateCharUTF8(SEXP) {
-    throw "NYI: Rf_translateCharUTF8";
+    _NYI("Rf_translateCharUTF8");
 }
 
 const char * Rf_type2char(SEXPTYPE) {
-    throw "NYI: Rf_type2char";
+    _NYI("Rf_type2char");
 }
 
 void Rf_unprotect(int l) {
@@ -556,93 +683,118 @@ void Rf_unprotect(int l) {
 }
 
 void Rf_unprotect_ptr(SEXP) {
-    throw "Rf_unprotect_ptr";
+    _NYI("Rf_unprotect_ptr");
 }
 
 void R_signal_protect_error(void) {
-    throw "NYI: R_signal_protect_error";
+    _NYI("R_signal_protect_error");
 }
 
 void R_signal_unprotect_error(void) {
-    throw "NYI: R_signal_unprotect_error";
+    _NYI("R_signal_unprotect_error");
 }
 
 void R_signal_reprotect_error(PROTECT_INDEX i) {
-    throw "NYI: R_signal_reprotect_error";
+    _NYI("R_signal_reprotect_error");
 }
 
 void R_ProtectWithIndex(SEXP, PROTECT_INDEX *) {
-    throw "NYI: R_ProtectWithIndex";
+    _NYI("R_ProtectWithIndex");
 }
 
 void R_Reprotect(SEXP, PROTECT_INDEX) {
-    throw "NYI: R_Reprotect";
+    _NYI("R_Reprotect");
 }
 
 SEXP R_tryEvalSilent(SEXP, SEXP, int *) {
-    throw "NYI: R_tryEvalSilent";
+    _NYI("R_tryEvalSilent");
 }
 
 const char *R_curErrorBuf() {
-    throw "NYI: R_curErrorBuf";
+    _NYI("R_curErrorBuf");
 }
 
 cetype_t Rf_getCharCE(SEXP) {
-    throw "NYI: Rf_getCharCE";
+    _NYI("Rf_getCharCE");
 }
 
 SEXP Rf_mkCharCE(const char *, cetype_t) {
-    throw "NYI: Rf_mkCharCE";
+    _NYI("Rf_mkCharCE");
 }
 
 SEXP Rf_mkCharLenCE(const char *, int, cetype_t) {
-    throw "NYI: Rf_mkCharLenCE";
+    _NYI("Rf_mkCharLenCE");
 }
 
 
 /* External pointer interface */
 SEXP R_MakeExternalPtr(void *p, SEXP tag, SEXP prot) {
-    throw "NYI: R_MakeExternalPtr";
+    _NYI("R_MakeExternalPtr");
 }
 
 void *R_ExternalPtrAddr(SEXP s) {
-    throw "NYI: R_ExternalPtrAddr";
+    _NYI("R_ExternalPtrAddr");
 }
 
 SEXP R_ExternalPtrTag(SEXP s) {
-    throw "NYI: R_ExternalPtrTag";
+    _NYI("R_ExternalPtrTag");
 }
 
 /* Environment and Binding Features */
 SEXP R_FindNamespace(SEXP info) {
-    throw "NYI: R_FindNamespace";
+    Value i = info->getValue();
+    List call(2);
+    
+    Character fn(1);
+    fn[0] = globalState->internStr("getNamespace");
+    
+    call[0] = fn;
+    call[1] = i;
+
+    call = CreateCall(call);
+   
+    Thread* thread = globalState->getThread();
+    Code* code = Compiler::compileTopLevel(*thread, call);
+    Value r = thread->eval(code, globalState->global);
+    globalState->deleteThread(thread);
+
+    return new SEXPREC(r);
 }
 
 /* needed for R_load/savehistory handling in front ends */
 void Rf_warningcall(SEXP, const char *, ...) {
-    throw "NYI: Rf_warningcall";
+    _NYI("Rf_warningcall");
 }
 
 /* slot management (in attrib.c) */
 SEXP R_do_slot(SEXP obj, SEXP name) {
-    throw "NYI: R_do_slot";
+    _NYI("R_do_slot");
 }
 
 SEXP R_do_slot_assign(SEXP obj, SEXP name, SEXP value) {
-    throw "NYI: R_do_slot_assign";
+    _NYI("R_do_slot_assign");
 }
 
 int R_has_slot(SEXP obj, SEXP name) {
-    throw "NYI: R_has_slot";
+    _NYI("R_has_slot");
 }
 
 /* class definition, new objects (objects.c) */
 SEXP R_do_MAKE_CLASS(const char *what) {
-    throw "NYI: R_do_MAKE_CLASS";
+    _NYI("R_do_MAKE_CLASS");
 }
 
 SEXP R_do_new_object(SEXP class_def) {
-    throw "NYI: R_do_new_object";
+    _NYI("R_do_new_object");
+}
+
+/* supporting  a C-level version of  is(., .) : */
+int R_check_class_and_super(SEXP x, const char **valid, SEXP rho) {
+    _NYI("R_check_class_and_super");
+}
+
+int R_check_class_etc      (SEXP x, const char **valid) {
+    _NYI("R_check_class_etc");
 }
 
 /* preserve objects across GCs */
@@ -656,11 +808,11 @@ void R_ReleaseObject(SEXP object) {
 
 /* Replacements for popen and system */
 FILE *R_popen(const char *, const char *) {
-    throw "NYI: R_popen";
+    _NYI("R_popen");
 }
 
 int R_system(const char *) {
-    throw "NYI: R_system";
+    _NYI("R_system");
 }
 
 /*
@@ -669,105 +821,130 @@ int R_system(const char *) {
    with or without the Rf_ prefix.
 */
 
-SEXP     Rf_allocVector(SEXPTYPE, R_xlen_t) {
-    throw "NYI: Rf_allocVector";
+SEXP     Rf_allocVector(SEXPTYPE type, R_xlen_t length) {
+    return Rf_allocVector3(type, length, NULL);
 }
 
 Rboolean Rf_inherits(SEXP, const char *) {
-    throw "NYI: Rf_inherits";
+    _NYI("Rf_inherits");
 }
 
 Rboolean Rf_isArray(SEXP) {
-    throw "NYI: Rf_isArray";
+    _NYI("Rf_isArray");
 }
 
 Rboolean Rf_isFrame(SEXP) {
-    throw "NYI: Rf_isFrame";
+    _NYI("Rf_isFrame");
 }
 
 Rboolean Rf_isFunction(SEXP) {
-    throw "NYI: Rf_isFunction";
+    _NYI("Rf_isFunction");
 }
 
 Rboolean Rf_isInteger(SEXP) {
-    throw "NYI: Rf_isInteger";
+    _NYI("Rf_isInteger");
+}
+
+Rboolean Rf_isLanguage(SEXP) {
+    _NYI("Rf_isLanguage");
 }
 
 Rboolean Rf_isMatrix(SEXP) {
-    throw "NYI: Rf_isMatrix";
+    _NYI("Rf_isMatrix");
 }
 
 Rboolean Rf_isNewList(SEXP) {
-    throw "NYI: Rf_isNewList";
+    _NYI("Rf_isNewList");
 }
 
 Rboolean Rf_isNumeric(SEXP) {
-    throw "NYI: Rf_isNumeric";
+    _NYI("Rf_isNumeric");
+}
+
+Rboolean Rf_isValidString(SEXP) {
+    _NYI("Rf_isValidString");
+}
+
+Rboolean Rf_isVector(SEXP) {
+    _NYI("Rf_isVector");
 }
 
 Rboolean Rf_isVectorAtomic(SEXP) {
-    throw "NYI: Rf_isVectorAtomic";
+    _NYI("Rf_isVectorAtomic");
 }
 
 Rboolean Rf_isVectorList(SEXP) {
-    throw "NYI: Rf_isVectorList";
+    _NYI("Rf_isVectorList");
 }
 
 SEXP     Rf_lang1(SEXP) {
-    throw "NYI: Rf_lang1";
+    _NYI("Rf_lang1");
 }
 
 SEXP     Rf_lang2(SEXP, SEXP) {
-    throw "NYI: Rf_lang2";
+    _NYI("Rf_lang2");
 }
 
 SEXP     Rf_lang3(SEXP, SEXP, SEXP) {
-    throw "NYI: Rf_lang3";
+    _NYI("Rf_lang3");
 }
 
 SEXP     Rf_lang4(SEXP, SEXP, SEXP, SEXP) {
-    throw "NYI: Rf_lang4";
+    _NYI("Rf_lang4");
 }
 
 SEXP     Rf_lang5(SEXP, SEXP, SEXP, SEXP, SEXP) {
-    throw "NYI: Rf_lang5";
+    _NYI("Rf_lang5");
 }
 
 R_len_t  Rf_length(SEXP) {
-    throw "NYI: Rf_length";
+    _NYI("Rf_length");
 }
 
 SEXP     Rf_list4(SEXP, SEXP, SEXP, SEXP) {
-    throw "NYI: Rf_list4";
+    _NYI("Rf_list4");
 }
 
 SEXP     Rf_mkNamed(SEXPTYPE, const char **) {
-    throw "NYI: Rf_mkNamed";
+    _NYI("Rf_mkNamed");
 }
 
-SEXP     Rf_mkString(const char *) {
-    throw "NYI: Rf_mkString";
+SEXP     Rf_mkString(const char * s) {
+    Character v(1);
+    v[0] = globalState->internStr(s);
+    return new SEXPREC(v);
 }
 
 int  Rf_nlevels(SEXP) {
-    throw "NYI: Rf_nlevels";
+    _NYI("Rf_nlevels");
 }
 
-SEXP     Rf_ScalarInteger(int) {
-    throw "NYI: Rf_ScalarInteger";
+SEXP     Rf_ScalarInteger(int i) {
+    return new SEXPREC(Integer::c(i));
 }
 
 SEXP     Rf_ScalarLogical(int f) {
     return new SEXPREC(Logical::c(f ? Logical::TrueElement : Logical::FalseElement));
 }
 
-SEXP     Rf_ScalarReal(double) {
-    throw "NYI: Rf_ScalarReal";
+SEXP     Rf_ScalarReal(double d) {
+    return new SEXPREC(Double::c(d));
+}
+
+SEXP     Rf_ScalarString(SEXP s) {
+    if(s->getType() != SEXPREC::STRING) {
+        printf("Rf_ScalarString called without a scalar string\n");
+        throw;
+    }
+
+    Character r(1);
+    r[0] = s->getString();
+    return new SEXPREC(r);
 }
 
 extern "C" {
 void R_SignalCStackOverflow(intptr_t) {
-    throw "NYI: R_SignalCStackOverflow";
+    _NYI("R_SignalCStackOverflow");
 }
 }
 
@@ -783,16 +960,16 @@ typedef struct {
 // From RBufferUtils.h, which isn't in the external
 // API, but which is used by the utils package
 void *R_AllocStringBuffer(size_t blen, R_StringBuffer *buf) {
-    throw "NYI: R_AllocStringBuffer";
+    _NYI("R_AllocStringBuffer");
 }
 
 void R_FreeStringBuffer(R_StringBuffer *buf) {
-    throw "NYI: R_FreeStringBuffer";
+    _NYI("R_FreeStringBuffer");
 }
 
 // From main/unique.c, used by the utils package
 SEXP Rf_csduplicated(SEXP x) {
-    throw "NYI: Rf_csduplicated";
+    _NYI("Rf_csduplicated");
 }
 
 // For some reason the utils package also wants this without the Rf_.
@@ -803,93 +980,93 @@ SEXP csduplicated(SEXP x) {
 
 // From main/internet.c, used by the utils package
 SEXP Rsockclose(SEXP ssock) {
-    throw "NYI: Rsockclose";
+    _NYI("Rsockclose");
 }
 
 SEXP Rsockconnect(SEXP sport, SEXP shost) {
-    throw "NYI: Rsockconnect";
+    _NYI("Rsockconnect");
 }
 
 SEXP Rsocklisten(SEXP ssock) {
-    throw "NYI: Rsocklisten";
+    _NYI("Rsocklisten");
 }
 
 SEXP Rsockopen(SEXP sport) {
-    throw "NYI: Rsockopen";
+    _NYI("Rsockopen");
 }
 
 SEXP Rsockread(SEXP ssock, SEXP smaxlen) {
-    throw "NYI: Rsockread";
+    _NYI("Rsockread");
 }
 
 SEXP Rsockwrite(SEXP ssock, SEXP sstring) {
-    throw "NYI: Rsockwrite";
+    _NYI("Rsockwrite");
 }
 
 // From main/internet.c, used by the tools package
 int extR_HTTPDCreate(const char *ip, int port) {
-    throw "NYI: extR_HTTPDCreate";
+    _NYI("extR_HTTPDCreate");
 }
 
 void extR_HTTPDStop(void) {
-    throw "NYI: extR_HTTPDStop";
+    _NYI("extR_HTTPDStop");
 }
 
 // From main/dounzip.c, used by the utils package
 SEXP Runzip(SEXP args) {
-    throw "NYI: Runzip";
+    _NYI("Runzip");
 }
 
 // From main/eval.c, used by the utils package
 SEXP do_Rprof(SEXP args) {
-    throw "NYI: do_Rprof";
+    _NYI("do_Rprof");
 }
 
 // From main/eval.c, used by the stats package
 SEXP R_execMethod(SEXP op, SEXP rho) {
-    throw "NYI: R_execMethod";
+    _NYI("R_execMethod");
 }
 
 // From main/memory.c, used by the utils package
 SEXP do_Rprofmem(SEXP args) {
-    throw "NYI: do_Rprofmem";
+    _NYI("do_Rprofmem");
 }
 
 // From main/edit.c, used by the utils package
 SEXP do_edit(SEXP call, SEXP op, SEXP args, SEXP rho) {
-    throw "NYI: do_edit";
+    _NYI("do_edit");
 }
 
 // From main/rlocale.c, used by the grDevices package
 int Ri18n_wcwidth(wchar_t c) {
-    throw "NYI: Ri18n_wcwidth";
+    _NYI("Ri18n_wcwidth");
 }
 
 // From main/names.c, used by the methods package
 const char *getPRIMNAME(SEXP object) {
-    throw "NYI: getPRIMNAME";
+    _NYI("getPRIMNAME");
 }
 
 // From main/xxxpr.f, used by the stats package
 void intpr_() {
-    throw "NYI: intpr";
+    _NYI("intpr");
 }
 
 void dblepr_() {
-    throw "NYI: dblepr";
+    _NYI("dblepr");
 }
 
 void rexit_() {
-    throw "NYI: rexit";
+    _NYI("rexit");
 }
 
 void rwarn_() {
-    throw "NYI: rwarn";
+    _NYI("rwarn");
 }
 
 // From main/util.c, used by stats
 void rchkusr_(void) {
-    throw "NYI: rchkusr";
+    _NYI("rchkusr");
 }
 
 }
