@@ -22,12 +22,12 @@ R_len_t R_BadLongVector(SEXP, const char *, int) {
 }
 
 const char *(R_CHAR)(SEXP x) {
-    if(x->getType() != SEXPREC::STRING) {
+    if(x->v.type() != Type::ScalarString) {
         printf("R_CHAR is not a string\n");
         return NULL;
     }
 
-    return x->getString()->s;
+    return ((ScalarString const&)x->v).string()->s;
 }
 
 /* Accessor functions.  Many are declared using () to avoid the macro
@@ -38,23 +38,19 @@ const char *(R_CHAR)(SEXP x) {
 
 /* Various tests with macro versions below */
 Rboolean (Rf_isNull)(SEXP s) {
-    Value v = s->getValue();
-    return v.isNull() ? TRUE : FALSE;
+    return s->v.isNull() ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isSymbol)(SEXP s) {
-    Value v = s->getValue();
-    return isSymbol(v) ? TRUE : FALSE;
+    return isSymbol(s->v) ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isLogical)(SEXP s) {
-    Value v = s->getValue();
-    return v.isLogical() ? TRUE : FALSE;
+    return s->v.isLogical() ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isReal)(SEXP s) {
-    Value v = s->getValue();
-    return v.isDouble() ? TRUE : FALSE;
+    return s->v.isDouble() ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isComplex)(SEXP s) {
@@ -62,18 +58,15 @@ Rboolean (Rf_isComplex)(SEXP s) {
 }
 
 Rboolean (Rf_isExpression)(SEXP s) {
-    Value v = s->getValue();
-    return isExpression(v) ? TRUE : FALSE;
+    return isExpression(s->v) ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isEnvironment)(SEXP s) {
-    Value v = s->getValue();
-    return v.isEnvironment() ? TRUE : FALSE;
+    return s->v.isEnvironment() ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isString)(SEXP s) {
-    Value v = s->getValue();
-    return v.isCharacter() ? TRUE : FALSE;
+    return s->v.isCharacter() ? TRUE : FALSE;
 }
 
 Rboolean (Rf_isObject)(SEXP s) {
@@ -88,13 +81,7 @@ SEXP (ATTRIB)(SEXP x) {
 
 int  (TYPEOF)(SEXP x) {
 
-    if(x->getType() == SEXPREC::INT32)
-        return INTSXP;
-    else if(x->getType() == SEXPREC::STRING)
-        return CHARSXP;
-
-    Value v = x->getValue();
-    int type = v.type();
+    int type = x->v.type();
 
     switch(type) {
         case Type::Nil:         throw "Nil type cannot be extracted in TYPEOF";
@@ -109,13 +96,16 @@ int  (TYPEOF)(SEXP x) {
         case Type::Integer:     return INTSXP;
         case Type::Double:      return REALSXP;
         case Type::Character:
-            if(isSymbol(v))     return SYMSXP;
+            if(isSymbol(x->v))  return SYMSXP;
             else                return STRSXP;
         case Type::List:
-            if(isCall(v))       return LANGSXP;
-            else if(isExpression(v)) return EXPRSXP;
-            else if(isPairlist(v)) return LISTSXP;
+            if(isCall(x->v))    return LANGSXP;
+            else if(isExpression(x->v)) return EXPRSXP;
+            else if(isPairlist(x->v)) return LISTSXP;
             else                return VECSXP;
+        case Type::Integer32:   return INTSXP;
+        case Type::Logical32:   return LGLSXP;
+        case Type::ScalarString: return CHARSXP;
         default:
             throw "Unknown type in TYPEOF";
     }
@@ -160,24 +150,22 @@ void (UNSET_S4_OBJECT)(SEXP x) {
 
 /* Vector Access Functions */
 int  (LENGTH)(SEXP x) {
-    Value v = x->getValue();
-    if(!v.isVector()) {
+    if(!x->v.isVector()) {
         printf("LENGTH called on non-vector\n");
         return 0;
     }
 
     // TODO: should check to make sure the length doesn't overflow.
-    return (int)((Vector const&)v).length();    
+    return (int)((Vector const&)x->v).length();    
 }
 
 R_xlen_t  (XLENGTH)(SEXP x) {
-    Value v = x->getValue();
-    if(!v.isVector()) {
+    if(!x->v.isVector()) {
         printf("LENGTH called on non-vector\n");
         return 0;
     }
 
-    return (R_xlen_t)((Vector const&)v).length();    
+    return (R_xlen_t)((Vector const&)x->v).length();    
 }
 
 void (SETLENGTH)(SEXP x, int v) {
@@ -193,28 +181,18 @@ int  *(LOGICAL)(SEXP x) {
 }
 
 int  *(INTEGER)(SEXP x) {
-    if(x->getType() == SEXPREC::INT32)
-        return x->getInt32()->data;
-    else {
-        Value v = x->getValue();
-        if(!v.isInteger()) {
-            printf("Called INTEGER on something that is not an integer\n");
-            return NULL;
-        }
 
-        Integer const& i = (Integer const&)v;
-
-        SEXPREC::Int32* i32 = new (sizeof(int32_t) * i.length()) SEXPREC::Int32();
-        i32->length = i.length();
-        // TODO: warn when we truncate down to 32-bits
-        for(int64_t j = 0; j < i.length(); ++j)
-            i32->data[j] = (int32_t)i[j];
-
-        // TODO: this is going to lose all attributes...
-        x = new SEXPREC(i32);
-        return x->getInt32()->data;
+    if(x->v.isInteger()) {
+        x->v = Integer32::fromInteger((Integer const&)x->v);
     }
-    _NYI("INTEGER");
+    
+    if(x->v.type() == Type::Integer32) {
+        return ((Integer32&)x->v).v();
+    }
+    else {
+        printf("Called INTEGER on something that is not an integer\n");
+        return NULL;
+    }
 }
 
 Rbyte *(RAW)(SEXP x) {
@@ -222,13 +200,14 @@ Rbyte *(RAW)(SEXP x) {
 }
 
 double *(REAL)(SEXP x) {
-    Value& v = x->getActualValue();
-    if(!v.isDouble()) {
+    if(x->v.isDouble()) {
+        return ((Double&)x->v).v();
+    }
+    else {
         printf("Called REAL on something that is not a double\n");
         return NULL;
     }
 
-    return ((Double&)v).v();
 }
 
 Rcomplex *(COMPLEX)(SEXP x) {
@@ -236,47 +215,50 @@ Rcomplex *(COMPLEX)(SEXP x) {
 }
 
 SEXP (STRING_ELT)(SEXP x, R_xlen_t i) {
-    Value v = x->getValue();
-    if(!v.isCharacter()) {
+    if(!x->v.isCharacter()) {
         printf("Argument to STRING_ELT is not a list");
         throw;
     }
-    Character const& l = (Character const&)v;
+    Character const& l = (Character const&)x->v;
     if(i >= l.length()) {
         printf("Accessing past the end of the vector in STRING_ELT");
         throw;
     }
-    String s = l[i];
-    return new SEXPREC(s);
+    Value r;
+    ScalarString::Init(r, l[i]);
+    return new SEXPREC(r);
 }
 
 SEXP (VECTOR_ELT)(SEXP x, R_xlen_t i) {
-    Value v = x->getValue();
-    if(!v.isList()) {
+    if(!x->v.isList()) {
         printf("Argument to VECTOR_ELT is not a list");
         throw;
     }
-    List const& l = (List const&)v;
+    List const& l = (List const&)x->v;
     if(i >= l.length()) {
         printf("Accessing past the end of the list in VECTOR_ELT");
         throw;
     }
-    Value r = l[i];
-    return new SEXPREC(r);
+    return new SEXPREC(l[i]);
 }
 
 void SET_STRING_ELT(SEXP x, R_xlen_t i, SEXP a) {
-    Value v = x->getValue();
-    if(!v.isCharacter()) {
+    if(!x->v.isCharacter()) {
         printf("Argument is not a Character vector in SET_STRING_ELT");
         throw;
     }
-    Character& c = (Character&)v;
+    if(a->v.type() != Type::ScalarString) {
+        printf("Argument is not a scalar string in SET_STRING_ELT");
+        throw;
+    }
+    
+    Character& c = (Character&)x->v;
     if(i >= c.length()) {
         printf("Assigning past the end in SET_STRING_ELT");
         throw;
     }
-    c[i] = (String)a;
+    
+    c[i] = ((ScalarString const&)a).string();
 }
 
 SEXP SET_VECTOR_ELT(SEXP x, R_xlen_t i, SEXP v) {
@@ -291,24 +273,22 @@ SEXP (TAG)(SEXP e) {
 }
 
 SEXP (CAR)(SEXP e) {
-    Value v = e->getValue();
-    if(!v.isList()) {
-        printf("Argument is not a list in CAR: %d\n", v.type());
+    if(!e->v.isList()) {
+        printf("Argument is not a list in CAR: %d\n", e->v.type());
         throw;
     }
     // TODO: check length
-    return new SEXPREC(((List const&)v)[0]);
+    return new SEXPREC(((List const&)e->v)[0]);
 }
 
 SEXP (CDR)(SEXP e) {
-    Value v = e->getValue();
-    if(!v.isList()) {
+    if(!e->v.isList()) {
         printf("Argument is not a list in CDR\n");
         throw;
     }
     // TODO: this is going to lose names.
     // TODO: check length
-    List const& l = (List const&)v;
+    List const& l = (List const&)e->v;
     List r(l.length()-1);
     for(int64_t i = 1; i < l.length(); ++i)
         r[i-1] = l[i];
@@ -317,24 +297,22 @@ SEXP (CDR)(SEXP e) {
 }
 
 SEXP (CADR)(SEXP e) {
-    Value v = e->getValue();
-    if(!v.isList()) {
+    if(!e->v.isList()) {
         printf("Argument is not a list in CADR\n");
         throw;
     }
     // TODO: check length
-    return new SEXPREC(((List const&)v)[1]);
+    return new SEXPREC(((List const&)e->v)[1]);
 }
 
 SEXP (CDDR)(SEXP e) {
-    Value v = e->getValue();
-    if(!v.isList()) {
+    if(!e->v.isList()) {
         printf("Argument is not a list in CDDR\n");
         throw;
     }
     // TODO: this is going to lose names.
     // TODO: check length
-    List const& l = (List const&)v;
+    List const& l = (List const&)e->v;
     List r(l.length()-2);
     for(int64_t i = 2; i < l.length(); ++i)
         r[i-2] = l[i];
@@ -343,33 +321,30 @@ SEXP (CDDR)(SEXP e) {
 }
 
 SEXP (CADDR)(SEXP e) {
-    Value v = e->getValue();
-    if(!v.isList()) {
+    if(!e->v.isList()) {
         printf("Argument is not a list in CADDR\n");
         throw;
     }
     // TODO: check length
-    return new SEXPREC(((List const&)v)[2]);
+    return new SEXPREC(((List const&)e->v)[2]);
 }
 
 SEXP (CADDDR)(SEXP e) {
-    Value v = e->getValue();
-    if(!v.isList()) {
+    if(!e->v.isList()) {
         printf("Argument is not a list in CADDR\n");
         throw;
     }
     // TODO: check length
-    return new SEXPREC(((List const&)v)[3]);
+    return new SEXPREC(((List const&)e->v)[3]);
 }
 
 SEXP (CAD4R)(SEXP e) {
-    Value v = e->getValue();
-    if(!v.isList()) {
+    if(!e->v.isList()) {
         printf("Argument is not a list in CAD4R\n");
         throw;
     }
     // TODO: check length
-    return new SEXPREC(((List const&)v)[4]);
+    return new SEXPREC(((List const&)e->v)[4]);
 }
 
 void SET_TAG(SEXP x, SEXP y) {
@@ -477,30 +452,27 @@ SEXP Rf_VectorToPairList(SEXP x) {
 }
 
 int Rf_asLogical(SEXP x) {
-    Value a = x->getValue();
-    if(a.isLogical1()) {
-        if(Logical::isTrue(a.c)) return 1;
-        else if(Logical::isFalse(a.c)) return 0;
+    if(x->v.isLogical1()) {
+        if(Logical::isTrue(x->v.c)) return 1;
+        else if(Logical::isFalse(x->v.c)) return 0;
         else return R_NaInt;
     }
     printf("_NYI type in Rf_asLogical");
     _NYI("Rf_asLogical");
 }
 int Rf_asInteger(SEXP x) {
-    Value a = x->getValue();
-    if(a.isInteger1())
-        return (int)a.i;
-    else if(a.isDouble1())
-        return (int)a.d;
+    if(x->v.isInteger1())
+        return (int)x->v.i;
+    else if(x->v.isDouble1())
+        return (int)x->v.d;
     else 
         _NYI("Rf_asInteger");
 }
 double Rf_asReal(SEXP x) {
-    Value a = x->getValue();
-    if(a.isInteger1())
-        return (double)a.i;
-    else if(a.isDouble1())
-        return (double)a.d;
+    if(x->v.isInteger1())
+        return (double)x->v.i;
+    else if(x->v.isDouble1())
+        return (double)x->v.d;
     else 
         _NYI("Rf_asReal");
 }
@@ -564,21 +536,19 @@ void Rf_copyVector(SEXP, SEXP) {
 }
 
 void Rf_defineVar(SEXP symbol, SEXP val, SEXP env) {
-    Value s = symbol->getValue();
-    if(!isSymbol(s)) {
+    if(!isSymbol(symbol->v)) {
         printf("Rf_defineVar called without a symbol\n");
         throw;
     }
 
-    Value e = env->getValue();
-    if(!e.isEnvironment()) {
+    if(!env->v.isEnvironment()) {
         printf("Rf_defineVar called without an environment\n");
         throw;
     }
 
-    Value v = val->getValue();
+    Value v = ToRiposteValue(val->v);
 
-    ((REnvironment&)e).environment()->insert(SymbolStr(s)) = v;
+    ((REnvironment&)env->v).environment()->insert(SymbolStr(symbol->v)) = v;
 }
 
 SEXP Rf_dimnamesgets(SEXP, SEXP) {
@@ -594,18 +564,15 @@ SEXP Rf_duplicated(SEXP, Rboolean) {
 }
 
 SEXP Rf_eval(SEXP x, SEXP env) {
-    Value v = x->getValue();
-    Value e = env->getValue();
-
-    if(!v.isPromise())
+    if(!x->v.isPromise())
         printf("v in Rf_eval is not a promise");
 
-    if(!e.isEnvironment())
+    if(!env->v.isEnvironment())
         printf("env in Rf_eval is not an environment");
 
     //Environment* evalenv = ((REnvironment&)env->v).environment();
 
-    Promise const& p = (Promise const&)v;
+    Promise const& p = (Promise const&)x->v;
 
     Thread* thread = globalState->getThread();
     Value r = thread->eval(p, 0);
@@ -619,20 +586,17 @@ SEXP Rf_findFun(SEXP, SEXP) {
 }
 
 SEXP Rf_findVar(SEXP symbol, SEXP env) {
-    Value v = symbol->getValue();
-    Value e = env->getValue();
-
-    if(!e.isEnvironment()) {
+    if(!env->v.isEnvironment()) {
         printf("argument to findVar is not an environment");
         throw;
     }
-    if(!v.isCharacter() ||
-       ((Character const&)v).length() != 1) {
+    if(!symbol->v.isCharacter() ||
+       ((Character const&)symbol->v).length() != 1) {
         printf("argument to findVar is not a one element Character");
         throw;
     }
     Environment* foundEnv;
-    Value r = ((REnvironment&)e).environment()->getRecursive(v.s, foundEnv);
+    Value r = ((REnvironment&)env->v).environment()->getRecursive(symbol->v.s, foundEnv);
     if(r.isNil())
         return R_UnboundValue;
     else
@@ -648,23 +612,20 @@ SEXP Rf_findVarInFrame3(SEXP, SEXP, Rboolean) {
 }
 
 SEXP Rf_getAttrib(SEXP obj, SEXP symbol) {
-    Value v = symbol->getValue();
-    Value o = obj->getValue();
-
-    if(!o.isObject()) {
+    if(!obj->v.isObject()) {
         printf("argument to getAttrib is not an object");
         throw;
     }
-    if(!v.isCharacter() ||
-       ((Character const&)v).length() != 1) {
+    if(!symbol->v.isCharacter() ||
+       ((Character const&)symbol->v).length() != 1) {
         printf("argument to getAttrib is not a one element Character");
         throw;
     }
 
-    if( ((Object const&)o).hasAttributes() &&
-        ((Object const&)o).attributes()->has(SymbolStr(v)) ) {
+    if( ((Object const&)obj->v).hasAttributes() &&
+        ((Object const&)obj->v).attributes()->has(SymbolStr(symbol->v)) ) {
         return new SEXPREC(
-            ((Object const&)o).attributes()->get(SymbolStr(v)) );
+            ((Object const&)obj->v).attributes()->get(SymbolStr(symbol->v)) );
     }
 
     return R_NilValue;
@@ -699,7 +660,10 @@ SEXP Rf_namesgets(SEXP, SEXP) {
 }
 
 SEXP Rf_mkChar(const char * str) {
-    return new SEXPREC(globalState->internStr(str));
+    String s = globalState->internStr(str);
+    Value r;
+    ScalarString::Init(r, s);
+    return new SEXPREC(r);
 }
 
 int Rf_ncols(SEXP) {
@@ -722,24 +686,22 @@ SEXP Rf_protect(SEXP s) {
 }
 
 SEXP Rf_setAttrib(SEXP in, SEXP attr, SEXP value) {
-    Value i = in->getValue();
-    Value a = attr->getValue();
-    if(!i.isObject()) {
+    if(!in->v.isObject()) {
         printf("in argument is not an object in Rf_setAttrib");
     }
-    if(!a.isCharacter() || ((Character const&)a).length() != 1) {
+    if(!attr->v.isCharacter() || ((Character const&)attr->v).length() != 1) {
         printf("attr argument is not a 1-element Character in Rf_setAttrib");
     }
 
     // TODO: This needs to erase attributes too.
     // I should probably just be calling a shared SetAttr API function
     // which is also used by the interpreter.
-    Object o = (Object&)i;
+    Object o = (Object&)in->v;
 
     Dictionary* d = o.hasAttributes()
                     ? o.attributes()->clone(1)
                     : new Dictionary(1);
-    d->insert(((Character const&)a)[0]) = value->getValue();
+    d->insert(((Character const&)attr->v)[0]) = ToRiposteValue(value->v);
     o.attributes(d);
     return new SEXPREC(o);
 }
@@ -803,11 +765,14 @@ const char *R_curErrorBuf() {
 }
 
 cetype_t Rf_getCharCE(SEXP) {
-    _NYI("Rf_getCharCE");
+    return CE_NATIVE;
 }
 
-SEXP Rf_mkCharCE(const char *, cetype_t) {
-    _NYI("Rf_mkCharCE");
+SEXP Rf_mkCharCE(const char * str, cetype_t type) {
+    String s = globalState->internStr(str);
+    Value r;
+    ScalarString::Init(r, s);
+    return new SEXPREC(r);
 }
 
 SEXP Rf_mkCharLenCE(const char *, int, cetype_t) {
@@ -830,14 +795,13 @@ SEXP R_ExternalPtrTag(SEXP s) {
 
 /* Environment and Binding Features */
 SEXP R_FindNamespace(SEXP info) {
-    Value i = info->getValue();
     List call(2);
     
     Character fn(1);
     fn[0] = globalState->internStr("getNamespace");
     
     call[0] = fn;
-    call[1] = i;
+    call[1] = ToRiposteValue(info->v);
 
     call = CreateCall(call);
    
@@ -1020,8 +984,14 @@ SEXP     Rf_lang5(SEXP, SEXP, SEXP, SEXP, SEXP) {
     _NYI("Rf_lang5");
 }
 
-R_len_t  Rf_length(SEXP) {
-    _NYI("Rf_length");
+R_len_t  Rf_length(SEXP x) {
+    if(!x->v.isVector()) {
+        printf("Rf_length called on non-vector\n");
+        return 0;
+    }
+
+    // TODO: should check to make sure the length doesn't overflow.
+    return (R_len_t)((Vector const&)x->v).length();    
 }
 
 SEXP     Rf_list4(SEXP, SEXP, SEXP, SEXP) {
@@ -1055,13 +1025,13 @@ SEXP     Rf_ScalarReal(double d) {
 }
 
 SEXP     Rf_ScalarString(SEXP s) {
-    if(s->getType() != SEXPREC::STRING) {
+    if(s->v.type() != Type::ScalarString) {
         printf("Rf_ScalarString called without a scalar string\n");
         throw;
     }
 
     Character r(1);
-    r[0] = s->getString();
+    r[0] = ((ScalarString const&)s->v).string();
     return new SEXPREC(r);
 }
 

@@ -22,6 +22,9 @@
 	_(Double, 	    "double")	    \
 	_(Character, 	"character")	\
 	_(List,		    "list")		    \
+	_(Logical32,    "logical32")    \
+	_(Integer32,    "integer32")    \
+	_(ScalarString, "scalarstring") \
 	/* Constant strings */	        \
 	_(empty, 	    "")             \
 	_(NArep, 	    "<NA>")         \

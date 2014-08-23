@@ -138,6 +138,21 @@ Value file_readLines(Thread& thread, Value const* args) {
 }
 
 extern "C"
+Value file_writeLines(Thread& thread, Value const* args) {
+    Externalptr const& p = (Externalptr const&)args[0];
+    Character const& lines = (Character const&)args[1];
+    Character const& sep = (Character const&)args[2];
+    FileConnection* fc = (FileConnection*)p.ptr();
+
+    for(int64_t i = 0; i < lines.length(); ++i) {
+        fc->f.write(lines[i]->s, strlen(lines[i]->s));
+        fc->f.write(sep[0]->s, strlen(sep[0]->s));
+    }
+    
+    return Null::Singleton();
+}
+
+extern "C"
 Value file_description(Thread& thread, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     FileConnection* fc = (FileConnection*)p.ptr();
@@ -204,6 +219,18 @@ Value terminal_readLines(Thread& thread, Value const* args) {
     }
 
     return r;
+}
+
+extern "C"
+Value terminal_writeLines(Thread& thread, Value const* args) {
+    Character const& lines = (Character const&)args[1];
+    Character const& sep = (Character const&)args[2];
+
+    for(int64_t i = 0; i < lines.length(); ++i) {
+        std::cout << lines[i]->s << sep[0]->s;
+    }
+    
+    return Null::Singleton();
 }
 
 extern "C"

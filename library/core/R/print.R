@@ -1,13 +1,13 @@
 
 print.default <- function(x, digits, quote, na.print, print.gap, right, max, useSource, noOpt) 
 {
-    .cat(.format(x), '\n')
+    cat(.pconcat(.format(x),'\n'), '', '', FALSE, NULL, NULL)
     .invisible(x)
 }
 
 print.function <- function(x, useSource, ...)
 {
-    .cat(.format.function(x), '\n')
+    cat(.pconcat(.format.function(x),'\n'), '', '', FALSE, NULL, NULL)
     .invisible(x)
 }
 

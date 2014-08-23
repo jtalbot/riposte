@@ -92,3 +92,21 @@ rawConnection <- function(description, object, open) {
 .open.rawConnection <- function(con, open, blocking) NULL
 .close.rawConnection <- function(con, type) NULL
 
+textConnection <- function(nm, object, open, env, type) {
+    r <- .connection.seq
+    .connection.seq <- .connection.seq + 1L
+
+    class(r) <- c('textConnection', 'connection')
+    e <- .env_new(emptyenv())
+    e$nm <- nm
+    e$text <- object
+    e$env <- env
+    e$offset <- 0
+    attr(r, 'conn') <- e
+
+    r
+}
+
+.open.textConnection <- function(con, open, blocking) NULL
+.close.textConnection <- function(con, type) NULL
+

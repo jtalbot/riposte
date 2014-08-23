@@ -20,6 +20,10 @@
 	_(Double,       "double",	   10) \
 	_(Character,    "character",   11) \
 	_(List,         "list",	       12) \
+    /* R API compatibility only ... */ \
+	_(Logical32,    "logical32",   13) \
+	_(Integer32,    "integer32",   14) \
+	_(ScalarString, "scalarstring",15) \
 
 DECLARE_ENUM_WITH_VALUES(Type, TYPES)
 

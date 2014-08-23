@@ -33,6 +33,7 @@ struct Value {
 	};
 	union {
 		void* p;
+		int32_t i32;
 		int64_t i;
 		double d;
 		char c;
@@ -252,12 +253,14 @@ struct Vector : public Object {
 };
 
 template<> inline int64_t& Vector::scalar<int64_t>() { return i; }
+template<> inline int32_t& Vector::scalar<int32_t>() { return i32; }
 template<> inline double& Vector::scalar<double>() { return d; }
 template<> inline char& Vector::scalar<char>() { return c; }
 template<> inline String& Vector::scalar<String>() { return s; }
 template<> inline unsigned char& Vector::scalar<unsigned char>() { return u; }
 
 template<> inline int64_t const& Vector::scalar<int64_t>() const { return i; }
+template<> inline int32_t const& Vector::scalar<int32_t>() const { return i32; }
 template<> inline double const& Vector::scalar<double>() const { return d; }
 template<> inline char const& Vector::scalar<char>() const { return c; }
 template<> inline String const& Vector::scalar<String>() const { return s; }

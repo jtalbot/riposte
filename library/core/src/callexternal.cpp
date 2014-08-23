@@ -5,7 +5,7 @@
 
 #include "../../../src/runtime.h"
 #include "../../../src/coerce.h"
-
+#include "../../../src/api/api.h"
 #include "../../../libs/dyncall/dyncall/dyncall.h"
 
 extern "C"
@@ -78,7 +78,7 @@ Value dotCall(Thread& thread, Value const* args) {
     
     dcFree(vm);
 
-    return result->getValue();
+    return ToRiposteValue(result->v);
 }
 
 extern "C"
@@ -118,6 +118,6 @@ Value dotExternal(Thread& thread, Value const* args) {
     
     dcFree(vm);
 
-    return result->getValue();
+    return ToRiposteValue(result->v);
 }
 

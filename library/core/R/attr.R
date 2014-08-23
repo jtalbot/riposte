@@ -1,6 +1,6 @@
 
 attr <- function(x, which, exact=TRUE) {
-    if(.isTRUE(exact))
+    if(!.isTRUE(exact))
         .stop('attribute matching is always exact in Riposte')
     attr(x, which)
 }

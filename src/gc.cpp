@@ -139,10 +139,7 @@ void Prototype::visit() const {
 
 void SEXPREC::visit() const {
 	HeapObject::visit();
-    if(type == VALUE)
-        traverse(v);
-    else if(type == INT32)
-        VISIT(i);
+    traverse(v);
 }
 
 void Heap::mark(State& state) {

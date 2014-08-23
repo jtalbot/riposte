@@ -558,6 +558,8 @@ internals <- .characters(
 
     # cat.R
     'cat',
+    'sink',
+    'sink.number',
 
     # cbind.R
     'cbind',
@@ -593,6 +595,7 @@ internals <- .characters(
     'file',
     'gzfile',
     'rawConnection',
+    'textConnection',
     'open',
     'close',
     'summary.connection',
@@ -864,6 +867,10 @@ internals <- .characters(
     # tabulate.R
     'tabulate',
 
+    # tempfile.R
+    'tempfile',
+    'tempdir',
+
     # typeof.R
     'typeof',
 
@@ -888,7 +895,10 @@ internals <- .characters(
     
     # which.min.R
     'which.min',
-    'which.max'
+    'which.max',
+    
+    # writeLines.R
+    'writeLines'
     )
 
 registerNamespace('primitive',

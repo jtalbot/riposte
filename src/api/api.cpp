@@ -7,6 +7,58 @@
 #define R_NO_REMAP
 #include <Rinternals.h>
 
+
+const int32_t Integer32::NAelement = std::numeric_limits<int32_t>::min();
+const int32_t Logical32::NAelement = std::numeric_limits<int32_t>::min();
+
+Integer Integer32::toInteger(Integer32 const& i) {
+    Integer result(i.length());
+    result.attributes(i.attributes());
+    for(int64_t j = 0; j < i.length(); ++j)
+        result[j] = i[j];
+    return result;
+}
+
+Integer32 Integer32::fromInteger(Integer const& i) {
+    Integer32 result(i.length());
+    result.attributes(i.attributes());
+    // TODO: warn on truncation
+    for(int64_t j = 0; j < i.length(); ++j)
+        result[j] = (int32_t)i[j];
+    return result;
+}
+
+Logical Logical32::toLogical(Logical32 const& i) {
+    Logical result(i.length());
+    result.attributes(i.attributes());
+    for(int64_t j = 0; j < i.length(); ++j)
+        result[j] = Logical32::isNA(i[j])
+            ? Logical::NAelement
+            : i[j] ? Logical::TrueElement : Logical::FalseElement;
+    return result;
+}
+
+Logical32 Logical32::fromLogical(Logical const& i) {
+    Logical32 result(i.length());
+    result.attributes(i.attributes());
+    for(int64_t j = 0; j < i.length(); ++j)
+        result[j] = Logical::isNA(i[j])
+            ? Logical32::NAelement
+            : i[j] == Logical::TrueElement ? 1 : 0;
+    return result;
+}
+
+Value ToRiposteValue(Value const& v) {
+    if(v.type() == Type::Integer32)
+        return Integer32::toInteger((Integer32 const&)v);
+    else if(v.type() == Type::Logical32)
+        return Logical32::toLogical((Logical32 const&)v);
+    else if(v.type() == Type::ScalarString)
+        return Character::c(((ScalarString const&)v).string());
+    else
+        return v;
+}
+
 // Rinternals.h
 
 /* Evaluation Environment */

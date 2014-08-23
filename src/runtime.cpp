@@ -825,21 +825,23 @@ List Fold(Thread& thread, String func, List args, Character result) {
         }
     }
 
-    dcReset(vm);
-    dcArgPointer(vm, (void*)&thread);
-    dcArgPointer(vm, state);
-
     if(!isna) {
+        dcReset(vm);
+        dcArgPointer(vm, (void*)&thread);
+        dcArgPointer(vm, state);
+
         for(int64_t k = 0; k < u.size(); ++k) {
             (*u[k])(vm, 0);
         }
+    
+        dcCallVoid(vm, funcs.fini);
     }
     else {
         for(int64_t k = 0; k < u.size(); ++k) {
             (*u[k]).dona(0);
         }
     }
-    dcCallVoid(vm, funcs.fini);
+
     dcFree(vm);
         
     List r(result.length());
