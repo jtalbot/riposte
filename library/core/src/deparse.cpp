@@ -339,7 +339,7 @@ std::string State::deparse(Value const& value) const {
 }
 
 extern "C"
-Value deparse(Thread& thread, Value const* args) {
-    return Character::c(thread.internStr(thread.deparse(args[0])));
+Value deparse(State& state, Value const* args) {
+    return Character::c(state.internStr(state.deparse(args[0])));
 }
 

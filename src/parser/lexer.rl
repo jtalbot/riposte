@@ -51,18 +51,18 @@
 	
 	# Single and double-quoted string literals.
 	( "'" ( [^'\\] | /\\./ )* "'" ) 
-		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.internStr(unescape(s))) );};
+		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(global.internStr(unescape(s))) );};
 	( '"' ( [^"\\] | /\\./ )* '"' ) 
-		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.internStr(unescape(s))) );};
+		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(global.internStr(unescape(s))) );};
 
 	# CreateSymbols.
 	( '..' digit+ )
-		{token( TOKEN_SYMBOL, CreateSymbol(state.internStr(std::string(ts, te-ts))));};
+		{token( TOKEN_SYMBOL, CreateSymbol(global.internStr(std::string(ts, te-ts))));};
 
 	( ('.' ([a-zA-Z_.] [a-zA-Z0-9_.]*)?) | [a-zA-Z] [a-zA-Z0-9_.]* ) 
-		{token( TOKEN_SYMBOL, CreateSymbol(state.internStr(std::string(ts, te-ts))) );};
+		{token( TOKEN_SYMBOL, CreateSymbol(global.internStr(std::string(ts, te-ts))) );};
 	( '`' ( [^`\\] | /\\./ )* '`' ) 
-		{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol(state.internStr(unescape(s))) );};
+		{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol(global.internStr(unescape(s))) );};
 	# Numeric literals.
 	( float exponent? ) 
 		{token( TOKEN_NUM_CONST, Double::c(strtod(std::string(ts, te).c_str(), NULL)) );};
@@ -123,7 +123,7 @@
 	'?' {token( TOKEN_QUESTION, CreateSymbol(Strings::question) );};
 	
 	# Special Operators.
-	('%' [^\n%]* '%') {token(TOKEN_SPECIALOP, CreateSymbol(state.internStr(std::string(ts, te-ts))) ); };
+	('%' [^\n%]* '%') {token(TOKEN_SPECIALOP, CreateSymbol(global.internStr(std::string(ts, te-ts))) ); };
 
 	# Separators.
 	',' {token( TOKEN_COMMA );};
@@ -209,7 +209,7 @@ void Parser::token(int tok, Value v)
 	}
 }
 
-Parser::Parser(State& state, char const* filename) : line(0), col(0), state(state), filename(filename), errors(0), complete(false), lastTokenWasNL(false) 
+Parser::Parser(Global& global, char const* filename) : line(0), col(0), global(global), filename(filename), errors(0), complete(false), lastTokenWasNL(false) 
 {}
 
 int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* trace )
@@ -254,14 +254,14 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 String Parser::popSource() {
 	assert(source.size() > 0);
 	std::string s(source.top(), le-source.top());
-	String result = state.internStr(rtrim(s));
+	String result = global.internStr(rtrim(s));
 	source.pop();
 	return result;	
 }
 
-int parse(State& state, char const* filename,
+int parse(Global& global, char const* filename,
     char const* code, size_t len, bool isEof, Value& result, FILE* trace) {
-    Parser parser(state, filename);
+    Parser parser(global, filename);
     return parser.execute(code, len, isEof, result, trace);
 }
 

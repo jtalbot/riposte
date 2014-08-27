@@ -13,6 +13,7 @@ Compiling riposte
 	`brew install tre`
 	`brew install pcre`
     `brew install gettext` (for libintl)
+	`brew install xz` (for lzma)
 	Note: If you use a different package system, you may need to change the directories in Riposte's Makefiles 
 
 1. Run `make release` in the riposte directory, or `make debug` for the debug version
@@ -26,8 +27,9 @@ Compiling riposte
     ./configure --with-aqua=no --with-tcltk=no --with-x=no --with-cairo=no --with-ICU=no --enable-byte-compiled-packages=no --enable-strict-barrier=yes --enable-R-profiling=no
     Copy lib/libRblas.dylib and lib/libRlapack.dylib into Riposte's home directory
     Copy the contents of the library directory into Riposte's library directory
-    Build the standalone R math library and copy src/nmath/standalone/libRmath.a into Riposte's home directory
-delete -DMATHLIB_STANDALONE from Makefile, do make shared
+
+	In R-3.1.1/src/nmath/standalone, delete -DMATHLIB_STANDALONE from Makefile, do make shared
+    Copy src/nmath/standalone/libRmath.dylib into Riposte's home directory
 
 Flags
 -----

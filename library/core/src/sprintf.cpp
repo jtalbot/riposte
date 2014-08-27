@@ -9,7 +9,7 @@
 #include "printf-parse.c"
 
 extern "C"
-void sprintf_map(Thread& thread, String& r, String fmt, ...) {
+void sprintf_map(State& state, String& r, String fmt, ...) {
     static const size_t maxlength = 8192; // from R documentation
     char out[maxlength];
 
@@ -18,11 +18,11 @@ void sprintf_map(Thread& thread, String& r, String fmt, ...) {
     vsnprintf( out, maxlength, fmt->s, arglist );
     va_end( arglist );
 
-    r = thread.internStr(out);
+    r = state.internStr(out);
 }
 
 extern "C"
-Value printf_parse(Thread& thread, Value const* args)
+Value printf_parse(State& state, Value const* args)
 {
     Character const& c = (Character const&)args[0];
     

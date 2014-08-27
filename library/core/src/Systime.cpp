@@ -2,13 +2,11 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "../../../src/runtime.h"
+#include "../../../src/value.h"
+class State;
 
 extern "C"
-Value systime(Thread& thread, Value const* args) {
-    time_t t = time(NULL);
-    Integer r = Integer::c(t);
-
-    return r;
+Value systime(State& state, Value const* args) {
+    return Integer::c(time(NULL));
 }
 

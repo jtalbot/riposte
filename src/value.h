@@ -12,15 +12,11 @@
 #include "exceptions.h"
 
 // Forward declare the HeapObjects
-class State;
-class Thread;
 struct Code;
 struct Prototype;
 class Environment;
 class Dictionary;
 class Trace;
-class Context;
-
 
 struct Value {
 	

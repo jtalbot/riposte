@@ -66,8 +66,8 @@ void file_finalize(Value v) {
 }
 
 extern "C"
-Value file_new(Thread& thread, Value const* args) {
-    Character desc = As<Character>(thread, args[0]);
+Value file_new(State& state, Value const* args) {
+    Character desc = As<Character>(state, args[0]);
     FileConnection* fc = new FileConnection(desc[0]->s);
     Value v;
     Externalptr::Init(v, fc, Value::Nil(), Value::Nil(), file_finalize);
@@ -75,7 +75,7 @@ Value file_new(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value file_open(Thread& thread, Value const* args) {
+Value file_open(State& state, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     Character const& mode = (Character const&)args[1];
     FileConnection* fc = (FileConnection*)p.ptr();
@@ -84,7 +84,7 @@ Value file_open(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value file_close(Thread& thread, Value const* args) {
+Value file_close(State& state, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     FileConnection* fc = (FileConnection*)p.ptr();
     fc->close();
@@ -92,7 +92,7 @@ Value file_close(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value file_cat(Thread& thread, Value const* args) {
+Value file_cat(State& state, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     FileConnection* fc = (FileConnection*)p.ptr();
     Character const& c = (Character const&)args[1];
@@ -101,21 +101,21 @@ Value file_cat(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value stdout_cat(Thread& thread, Value const* args) {
+Value stdout_cat(State& state, Value const* args) {
     Character const& c = (Character const&)args[0];
     std::cout << c[0]->s;
     return Null::Singleton();
 }
 
 extern "C"
-Value stderr_cat(Thread& thread, Value const* args) {
+Value stderr_cat(State& state, Value const* args) {
     Character const& c = (Character const&)args[0];
     std::cerr << c[0]->s;
     return Null::Singleton();
 }
 
 extern "C"
-Value file_readLines(Thread& thread, Value const* args) {
+Value file_readLines(State& state, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     Integer const& n = (Integer const&)args[1];
     FileConnection* fc = (FileConnection*)p.ptr();
@@ -131,14 +131,14 @@ Value file_readLines(Thread& thread, Value const* args) {
 
     Character r(lines.size());
     for(size_t i = 0; i < lines.size(); ++i) {
-        r[i] = thread.internStr(lines[i].c_str());
+        r[i] = state.internStr(lines[i].c_str());
     }
 
     return r;
 }
 
 extern "C"
-Value file_writeLines(Thread& thread, Value const* args) {
+Value file_writeLines(State& state, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     Character const& lines = (Character const&)args[1];
     Character const& sep = (Character const&)args[2];
@@ -153,14 +153,14 @@ Value file_writeLines(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value file_description(Thread& thread, Value const* args) {
+Value file_description(State& state, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     FileConnection* fc = (FileConnection*)p.ptr();
-    return Character::c(thread.internStr(fc->name));
+    return Character::c(state.internStr(fc->name));
 }
 
 extern "C"
-Value gzfile_readLines(Thread& thread, Value const* args) {
+Value gzfile_readLines(State& state, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     Integer const& n = (Integer const&)args[1];
     FileConnection* fc = (FileConnection*)p.ptr();
@@ -194,14 +194,14 @@ Value gzfile_readLines(Thread& thread, Value const* args) {
 
     Character r(lines.size());
     for(size_t i = 0; i < lines.size(); ++i) {
-        r[i] = thread.internStr(lines[i].c_str());
+        r[i] = state.internStr(lines[i].c_str());
     }
 
     return r;
 }
 
 extern "C"
-Value terminal_readLines(Thread& thread, Value const* args) {
+Value terminal_readLines(State& state, Value const* args) {
     Integer const& n = (Integer const&)args[1];
     int64_t maxLines = n[0];
     
@@ -215,14 +215,14 @@ Value terminal_readLines(Thread& thread, Value const* args) {
 
     Character r(lines.size());
     for(size_t i = 0; i < lines.size(); ++i) {
-        r[i] = thread.internStr(lines[i].c_str());
+        r[i] = state.internStr(lines[i].c_str());
     }
 
     return r;
 }
 
 extern "C"
-Value terminal_writeLines(Thread& thread, Value const* args) {
+Value terminal_writeLines(State& state, Value const* args) {
     Character const& lines = (Character const&)args[1];
     Character const& sep = (Character const&)args[2];
 
@@ -234,7 +234,7 @@ Value terminal_writeLines(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value file_readBin(Thread& thread, Value const* args) {
+Value file_readBin(State& state, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     Integer const& n = (Integer const&)args[1];
 
@@ -248,7 +248,7 @@ Value file_readBin(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value gzfile_readBin(Thread& thread, Value const* args) {
+Value gzfile_readBin(State& state, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     Integer const& n = (Integer const&)args[1];
 
@@ -277,7 +277,7 @@ Value gzfile_readBin(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value file_seek(Thread& thread, Value const* args) {
+Value file_seek(State& state, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     Double const& n = (Double const&)args[1];
 

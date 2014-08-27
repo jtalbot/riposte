@@ -21,8 +21,8 @@ TYPES(CASE)
 	_error("Invalid type");
 }
 
-Double RandomVector(Thread& thread, int64_t const length) {
-	//Thread::RandomSeed& r = Thread::seed[thread.index];
+Double RandomVector(State& state, int64_t const length) {
+	//State::RandomSeed& r = State::seed[state.index];
 	Double o(length);
 	for(int64_t i = 0; i < length; i++) {
 		/*r.v[0] = r.v[0] * r.m[0] + r.a[0];
@@ -37,31 +37,31 @@ Double RandomVector(Thread& thread, int64_t const length) {
 }
 
 template<class D>
-void Insert(Thread& thread, D const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
+void Insert(State& state, D const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
 	if((length > 0 && srcIndex+length > src.length()) || dstIndex+length > dst.length())
 		_error("insert index out of bounds");
 	memcpy(dst.v()+dstIndex, src.v()+srcIndex, length*sizeof(typename D::Element));
 }
 
 template<class S, class D>
-void Insert(Thread& thread, S const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
-	D as = As<D>(thread, src);
-	Insert(thread, as, srcIndex, dst, dstIndex, length);
+void Insert(State& state, S const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
+	D as = As<D>(state, src);
+	Insert(state, as, srcIndex, dst, dstIndex, length);
 }
 
 template<class D>
-void Insert(Thread& thread, Value const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
+void Insert(State& state, Value const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
 	switch(src.type()) {
-		#define CASE(Name) case Type::Name: Insert(thread, (Name const&)src, srcIndex, dst, dstIndex, length); break;
+		#define CASE(Name) case Type::Name: Insert(state, (Name const&)src, srcIndex, dst, dstIndex, length); break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: Insert into this type"); break;
 	};
 }
 
-void Insert(Thread& thread, Value const& src, int64_t srcIndex, Value& dst, int64_t dstIndex, int64_t length) {
+void Insert(State& state, Value const& src, int64_t srcIndex, Value& dst, int64_t dstIndex, int64_t length) {
 	switch(dst.type()) {
-		#define CASE(Name) case Type::Name: { Insert(thread, src, srcIndex, (Name&) dst, dstIndex, length); } break;
+		#define CASE(Name) case Type::Name: { Insert(state, src, srcIndex, (Name&) dst, dstIndex, length); } break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: Insert into this type"); break;
@@ -69,10 +69,10 @@ void Insert(Thread& thread, Value const& src, int64_t srcIndex, Value& dst, int6
 }
 
 template<class D>
-void Resize(Thread& thread, bool clone, D& src, int64_t newLength, typename D::Element fill = D::NAelement) {
+void Resize(State& state, bool clone, D& src, int64_t newLength, typename D::Element fill = D::NAelement) {
 	if(clone || newLength > src.length()) {
 		D r(newLength);
-		Insert(thread, src, 0, r, 0, std::min(src.length(), newLength));
+		Insert(state, src, 0, r, 0, std::min(src.length(), newLength));
 		for(int64_t i = src.length(); i < newLength; i++) r[i] = fill;	
 		src = r; 
 	} else if(newLength < src.length()) {
@@ -83,9 +83,9 @@ void Resize(Thread& thread, bool clone, D& src, int64_t newLength, typename D::E
 	}
 }
 
-void Resize(Thread& thread, bool clone, Value& src, int64_t newLength) {
+void Resize(State& state, bool clone, Value& src, int64_t newLength) {
 	switch(src.type()) {
-		#define CASE(Name) case Type::Name: { Resize(thread, clone, src, newLength); } break;
+		#define CASE(Name) case Type::Name: { Resize(state, clone, src, newLength); } break;
 		VECTOR_TYPES(CASE)
 		#undef CASE
 		default: _error("NYI: Resize this type"); break;
@@ -94,7 +94,7 @@ void Resize(Thread& thread, bool clone, Value& src, int64_t newLength) {
 
 template< class A >
 struct SubsetInclude {
-	static void eval(Thread& thread, A const& a, Integer const& d, int64_t nonzero, Value& out)
+	static void eval(State& state, A const& a, Integer const& d, int64_t nonzero, Value& out)
 	{
 		A r(nonzero);
 		int64_t j = 0;
@@ -113,7 +113,7 @@ struct SubsetInclude {
 
 template<>
 struct SubsetInclude<List> {
-	static void eval(Thread& thread, List const& a, Integer const& d, int64_t nonzero, Value& out)
+	static void eval(State& state, List const& a, Integer const& d, int64_t nonzero, Value& out)
 	{
 		List r(nonzero);
 		int64_t j = 0;
@@ -132,7 +132,7 @@ struct SubsetInclude<List> {
 
 template< class A >
 struct SubsetExclude {
-	static void eval(Thread& thread, A const& a, Integer const& d, int64_t nonzero, Value& out)
+	static void eval(State& state, A const& a, Integer const& d, int64_t nonzero, Value& out)
 	{
 		std::set<Integer::Element> index; 
 		typename A::Element const* ae = a.v();
@@ -156,7 +156,7 @@ struct SubsetExclude {
 
 template< class A >
 struct SubsetLogical {
-	static void eval(Thread& thread, A const& a, Logical const& d, Value& out)
+	static void eval(State& state, A const& a, Logical const& d, Value& out)
 	{
 		typename A::Element const* ae = a.v();
 		typename Logical::Element const* de = d.v();
@@ -182,9 +182,9 @@ struct SubsetLogical {
 	}
 };
 
-void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out) {
+void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble() || i.isInteger()) {
-		Integer index = As<Integer>(thread, i);
+		Integer index = As<Integer>(state, i);
 		int64_t positive = 0, negative = 0;
 		for(int64_t i = 0; i < index.length(); i++) {
 			if(index[i] > 0 || Integer::isNA(index[i])) positive++;
@@ -195,7 +195,7 @@ void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out) {
 		else if(positive > 0) {
 			switch(a.type()) {
 				case Type::Null: out = Null::Singleton(); break;
-#define CASE(Name,...) case Type::Name: SubsetInclude<Name>::eval(thread, (Name const&)a, index, positive, out); break;
+#define CASE(Name,...) case Type::Name: SubsetInclude<Name>::eval(state, (Name const&)a, index, positive, out); break;
 						 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type())); break;
@@ -204,7 +204,7 @@ void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out) {
 		else if(negative > 0) {
 			switch(a.type()) {
 				case Type::Null: out = Null::Singleton(); break;
-#define CASE(Name) case Type::Name: SubsetExclude<Name>::eval(thread, (Name const&)a, index, negative, out); break;
+#define CASE(Name) case Type::Name: SubsetExclude<Name>::eval(state, (Name const&)a, index, negative, out); break;
 						 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 				default: _error(std::string("NYI: Subset of ") + Type::toString(a.type())); break;
@@ -224,7 +224,7 @@ void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out) {
 		Logical const& index = (Logical const&)i;
 		switch(a.type()) {
 			case Type::Null: out = Null::Singleton(); break;
-#define CASE(Name) case Type::Name: SubsetLogical<Name>::eval(thread, (Name const&)a, index, out); break;
+#define CASE(Name) case Type::Name: SubsetLogical<Name>::eval(state, (Name const&)a, index, out); break;
 					 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
 			default: _error(std::string("NYI: Subset of ") + Type::toString(a.type())); break;
@@ -237,7 +237,7 @@ void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out) {
 
 template< class A  >
 struct SubsetAssignInclude {
-	static void eval(Thread& thread, A const& a, bool clone, Integer const& d, A const& b, Value& out)
+	static void eval(State& state, A const& a, bool clone, Integer const& d, A const& b, Value& out)
 	{
 		typename A::Element const* be = b.v();
 		typename Integer::Element const* de = d.v();
@@ -251,7 +251,7 @@ struct SubsetAssignInclude {
 
 		// should use max index here to extend vector if necessary	
 		A r = a;
-		Resize(thread, clone, r, outlength);
+		Resize(state, clone, r, outlength);
 		typename A::Element* re = r.v();
 		for(int64_t i = 0, j = 0; i < length; i++) {
 			if(j >= b.length()) j = 0;
@@ -267,7 +267,7 @@ struct SubsetAssignInclude {
 
 template< class A >
 struct SubsetAssignLogical {
-	static void eval(Thread& thread, A const& a, bool clone, Logical const& d, A const& b, Value& out)
+	static void eval(State& state, A const& a, bool clone, Logical const& d, A const& b, Value& out)
 	{
 		typename A::Element const* be = b.v();
 		typename Logical::Element const* de = d.v();
@@ -275,7 +275,7 @@ struct SubsetAssignLogical {
 		// determine length
 		int64_t length = std::max(a.length(), d.length());
 		A r = a;
-		Resize(thread, clone, r, length);
+		Resize(state, clone, r, length);
 		typename A::Element* re = r.v();
 		int64_t j = 0, k = 0;
 		for(int64_t i = 0; i < length; i++) {
@@ -292,13 +292,13 @@ struct SubsetAssignLogical {
 	}
 };
 
-void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
+void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(i.isDouble() || i.isInteger()) {
-		Integer idx = As<Integer>(thread, i);
+		Integer idx = As<Integer>(state, i);
         #define CASE(Name) \
             (a.is##Name() || b.is##Name()) \
             SubsetAssignInclude<Name>::eval( \
-                thread, As<Name>(thread, a), clone, idx, As<Name>(thread, b), c);
+                state, As<Name>(state, a), clone, idx, As<Name>(state, b), c);
 
         if CASE(List)
         else if CASE(Character)
@@ -316,7 +316,7 @@ void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i
         #define CASE(Name) \
             (a.is##Name() || b.is##Name()) \
             SubsetAssignLogical<Name>::eval( \
-                thread, As<Name>(thread, a), clone, idx, As<Name>(thread, b), c);
+                state, As<Name>(state, a), clone, idx, As<Name>(state, b), c);
 
         if CASE(List)
         else if CASE(Character)
@@ -334,13 +334,13 @@ void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i
 	}
 }
 
-void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
+void Subset2AssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if((i.isDouble() || i.isInteger()) && ((Vector const&)i).length() == 1) {
 		if(a.isList()) {
 			List r = (List&)a;
 			int64_t index = asReal1(i)-1;
 			if(index >= 0) {
-				Resize(thread, clone, r, std::max(index+1, r.length()));
+				Resize(state, clone, r, std::max(index+1, r.length()));
 				r[index] = b;
 				c = r;
 			}
@@ -355,12 +355,12 @@ void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& 
             c = r;
         }
         else {
-			SubsetAssignSlow(thread, a, clone, i, b, c);
+			SubsetAssignSlow(state, a, clone, i, b, c);
 		}
 	}
 	// Frankly it seems pointless to support this case. We should make this an error.
 	//else if(i.isLogical() && i.length == 1 && ((Logical const&)i)[0])
-	//	SubsetAssignSlow(thread, a, clone, As<Integer>(thread, i), b, c);
+	//	SubsetAssignSlow(state, a, clone, As<Integer>(state, i), b, c);
 	else
 		_error("NYI indexing type");
 }
@@ -423,7 +423,7 @@ Integer Semijoin(Value const& a, Value const& b) {
         _error("Unsupported type in semijoin");
 }
 
-static void* find_function(Thread& thread, const char* name) {
+static void* find_function(State& state, const char* name) {
     //static String lastname = Strings::empty;
     //static void* lastfunc = NULL;
 
@@ -432,8 +432,8 @@ static void* find_function(Thread& thread, const char* name) {
         func = lastfunc;
     }
     else {*/
-        for(std::map<std::string,void*>::iterator i = thread.state.handles.begin();
-            i != thread.state.handles.end(); ++i) {
+        for(std::map<std::string,void*>::iterator i = state.global.handles.begin();
+            i != state.global.handles.end(); ++i) {
             func = dlsym(i->second, name);
             if(func != NULL)
                 break;
@@ -454,10 +454,10 @@ struct FoldFuncArgs {
     void* fini;
 };
 
-FoldFuncArgs find_fold_function(Thread& thread, String name) {
-    void* init_func = find_function(thread, (std::string(name->s) + "_init").c_str());
-    void* op_func = find_function(thread, (std::string(name->s) + "_op").c_str());
-    void* fini_func = find_function(thread, (std::string(name->s) + "_fini").c_str());
+FoldFuncArgs find_fold_function(State& state, String name) {
+    void* init_func = find_function(state, (std::string(name->s) + "_init").c_str());
+    void* op_func = find_function(state, (std::string(name->s) + "_op").c_str());
+    void* fini_func = find_function(state, (std::string(name->s) + "_fini").c_str());
 
     FoldFuncArgs funcs;
     funcs.base = init_func;
@@ -559,15 +559,15 @@ struct Unstream {
 
 template<class T>
 struct UnstreamImpl : public Unstream {
-    Thread& thread;
+    State& state;
     T v;
 
-    UnstreamImpl(Thread& thread, T v) : thread(thread), v(v) {
-        thread.gcStack.push_back(v);
+    UnstreamImpl(State& state, T v) : state(state), v(v) {
+        state.gcStack.push_back(v);
     }
 
     ~UnstreamImpl() {
-        thread.gcStack.pop_back();
+        state.gcStack.pop_back();
     }
 
     void operator()(DCCallVM* vm, int64_t i) {
@@ -587,23 +587,23 @@ struct UnstreamImpl : public Unstream {
     }
 };
 
-Unstream* MakeUnstream(Thread& thread, String t, int64_t s) {
-    if(t == Strings::Logical) return new UnstreamImpl<Logical>(thread, Logical(s));
-    if(t == Strings::Integer) return new UnstreamImpl<Integer>(thread, Integer(s));
-    if(t == Strings::Double)  return new UnstreamImpl<Double>(thread, Double(s));
-    if(t == Strings::Character) return new UnstreamImpl<Character>(thread, Character(s));
-    if(t == Strings::Raw)     return new UnstreamImpl<Raw>(thread, Raw(s));
+Unstream* MakeUnstream(State& state, String t, int64_t s) {
+    if(t == Strings::Logical) return new UnstreamImpl<Logical>(state, Logical(s));
+    if(t == Strings::Integer) return new UnstreamImpl<Integer>(state, Integer(s));
+    if(t == Strings::Double)  return new UnstreamImpl<Double>(state, Double(s));
+    if(t == Strings::Character) return new UnstreamImpl<Character>(state, Character(s));
+    if(t == Strings::Raw)     return new UnstreamImpl<Raw>(state, Raw(s));
     if(t == Strings::List) {
         List v(s);
         // clear the result vector so the gc isn't confused
         for(size_t i = 0; i < s; ++i)
             v[i] = Value::Nil();
-        return new UnstreamImpl<List>(thread, v);
+        return new UnstreamImpl<List>(state, v);
     }
     _error("Can't unstream a non-vector during a map");
 }
 
-List Map(Thread& thread, String func, List args, Character result) {
+List Map(State& state, String func, List args, Character result) {
     // figure out length of result
     int64_t length = 1, minlength = 1;
     for(int64_t i = 0; i < args.length(); ++i) {
@@ -619,7 +619,7 @@ List Map(Thread& thread, String func, List args, Character result) {
     // build up streamers and unstreamers.
     std::vector<Unstream*> u;
     for(int64_t i = 0; i < result.length(); ++i) {
-        u.push_back(MakeUnstream(thread, result[i], length));
+        u.push_back(MakeUnstream(state, result[i], length));
     }
 
     if(length > 0) {
@@ -629,7 +629,7 @@ List Map(Thread& thread, String func, List args, Character result) {
         }
 
         // look up function
-        void* f = find_function(thread, func->s);
+        void* f = find_function(state, func->s);
     
         // run
         DCCallVM* vm = dcNewCallVM(4096);
@@ -644,7 +644,7 @@ List Map(Thread& thread, String func, List args, Character result) {
 
             if(!isna) {
                 dcReset(vm);
-                dcArgPointer(vm, (void*)&thread);
+                dcArgPointer(vm, (void*)&state);
                 for(int64_t k = 0; k < u.size(); ++k) {
                     (*u[k])(vm, i);
                 }
@@ -678,7 +678,7 @@ List Map(Thread& thread, String func, List args, Character result) {
     return r;
 }
 
-List Scan(Thread& thread, String func, List args, Character result) {
+List Scan(State& state, String func, List args, Character result) {
     // figure out length of result
     int64_t length = 1, minlength = 1;
     for(int64_t i = 0; i < args.length(); ++i) {
@@ -692,7 +692,7 @@ List Scan(Thread& thread, String func, List args, Character result) {
     if(minlength == 0) length = 0;
 
     // look up function
-    FoldFuncArgs funcs = find_fold_function(thread, func);
+    FoldFuncArgs funcs = find_fold_function(state, func);
     
     // run
     DCCallVM* vm = dcNewCallVM(4096);
@@ -701,7 +701,7 @@ List Scan(Thread& thread, String func, List args, Character result) {
     // build up streamers and unstreamers.
     std::vector<Unstream*> u;
     for(int64_t i = 0; i < result.length(); ++i) {
-        u.push_back(MakeUnstream(thread, result[i], length));
+        u.push_back(MakeUnstream(state, result[i], length));
     }
 
     if(length > 0) {
@@ -712,7 +712,7 @@ List Scan(Thread& thread, String func, List args, Character result) {
 
         // init call
         dcReset(vm);
-        dcArgPointer(vm, (void*)&thread);
+        dcArgPointer(vm, (void*)&state);
         void* state = (void*)dcCallPointer(vm, funcs.base);
 
         bool isna = false;
@@ -724,7 +724,7 @@ List Scan(Thread& thread, String func, List args, Character result) {
 
             if(!isna) {
                 dcReset(vm);
-                dcArgPointer(vm, (void*)&thread);
+                dcArgPointer(vm, (void*)&state);
                 dcArgPointer(vm, state);
                 for(int64_t k = 0; k < u.size(); ++k) {
                     (*u[k])(vm, i);
@@ -742,7 +742,7 @@ List Scan(Thread& thread, String func, List args, Character result) {
         }
 
         dcReset(vm);
-        dcArgPointer(vm, (void*)&thread);
+        dcArgPointer(vm, (void*)&state);
         dcArgPointer(vm, state);
         dcCallVoid(vm, funcs.fini);
 
@@ -765,7 +765,7 @@ List Scan(Thread& thread, String func, List args, Character result) {
     return r;
 }
 
-List Fold(Thread& thread, String func, List args, Character result) {
+List Fold(State& state, String func, List args, Character result) {
     // figure out length of result
     int64_t length = 1, minlength = 1;
     for(int64_t i = 0; i < args.length(); ++i) {
@@ -779,7 +779,7 @@ List Fold(Thread& thread, String func, List args, Character result) {
     if(minlength == 0) length = 0;
 
     // look up function
-    FoldFuncArgs funcs = find_fold_function(thread, func);
+    FoldFuncArgs funcs = find_fold_function(state, func);
     
     // run
     DCCallVM* vm = dcNewCallVM(4096);
@@ -787,13 +787,13 @@ List Fold(Thread& thread, String func, List args, Character result) {
 
     // init call
     dcReset(vm);
-    dcArgPointer(vm, (void*)&thread);
-    void* state = (void*)dcCallPointer(vm, funcs.base);
+    dcArgPointer(vm, (void*)&state);
+    void* accumulator = (void*)dcCallPointer(vm, funcs.base);
 
     // build up streamers and unstreamers.
     std::vector<Unstream*> u;
     for(int64_t i = 0; i < result.length(); ++i) {
-        u.push_back(MakeUnstream(thread, result[i], 1));
+        u.push_back(MakeUnstream(state, result[i], 1));
     }
 
     bool isna = false;
@@ -811,8 +811,8 @@ List Fold(Thread& thread, String func, List args, Character result) {
 
             if(!isna) {
                 dcReset(vm);
-                dcArgPointer(vm, (void*)&thread);
-                dcArgPointer(vm, state);
+                dcArgPointer(vm, (void*)&state);
+                dcArgPointer(vm, accumulator);
                 for(int64_t k = 0; k < s.size(); ++k) {
                     (*s[k])(vm, i);
                 }
@@ -827,8 +827,8 @@ List Fold(Thread& thread, String func, List args, Character result) {
 
     if(!isna) {
         dcReset(vm);
-        dcArgPointer(vm, (void*)&thread);
-        dcArgPointer(vm, state);
+        dcArgPointer(vm, (void*)&state);
+        dcArgPointer(vm, accumulator);
 
         for(int64_t k = 0; k < u.size(); ++k) {
             (*u[k])(vm, 0);
@@ -856,7 +856,7 @@ List Fold(Thread& thread, String func, List args, Character result) {
     return r;
 }
 
-List MapR(Thread& thread, Closure const& func, List args, Character result) {
+List MapR(State& state, Closure const& func, List args, Character result) {
     // figure out length of result
     int64_t length = 1, minlength = 1;
     for(int64_t i = 0; i < args.length(); ++i) {
@@ -872,7 +872,7 @@ List MapR(Thread& thread, Closure const& func, List args, Character result) {
     // build up streamers and unstreamers.
     std::vector<Unstream*> u;
     for(int64_t i = 0; i < result.length(); ++i) {
-        u.push_back(MakeUnstream(thread, result[i], length));
+        u.push_back(MakeUnstream(state, result[i], length));
     }
 
     if(length > 0) {
@@ -897,13 +897,13 @@ List MapR(Thread& thread, Closure const& func, List args, Character result) {
             apply = CreateCall(apply);
         }
 
-        Code* p = Compiler::compileTopLevel(thread, apply);
+        Code* p = Compiler::compileTopLevel(state, apply);
 
         for(int64_t i = 0; i < length; ++i) {
             for(int64_t k = 0; k < s.size(); ++k) {
                 p->calls[0].arguments[k] = (*s[k])(i);
             }
-            List r = As<List>(thread, thread.eval(p));
+            List r = As<List>(state, state.eval(p));
             for(int64_t k = 0; k < u.size(); ++k) {
                 (*u[k])(i, r[k]);
             }
@@ -926,7 +926,7 @@ List MapR(Thread& thread, Closure const& func, List args, Character result) {
     return r;
 }
 
-List MapI(Thread& thread, Closure const& func, List args) {
+List MapI(State& state, Closure const& func, List args) {
     // figure out length of result
     int64_t length = 1, minlength = 1;
     for(int64_t i = 0; i < args.length(); ++i) {
@@ -944,7 +944,7 @@ List MapI(Thread& thread, Closure const& func, List args) {
     for(size_t i = 0; i < length; ++i)
         result[i] = Value::Nil();
 
-    thread.gcStack.push_back(result);
+    state.gcStack.push_back(result);
 
     if(length > 0) {
         std::vector<Stream*> s;
@@ -969,13 +969,13 @@ List MapI(Thread& thread, Closure const& func, List args) {
             apply = CreateCall(apply);
         }
 
-        Code* p = Compiler::compileTopLevel(thread, apply);
+        Code* p = Compiler::compileTopLevel(state, apply);
 
         for(int64_t i = 0; i < length; ++i) {
             for(int64_t k = 0; k < s.size(); ++k) {
                 p->calls[0].arguments[k] = (*s[k])(i);
             }
-            result[i] = thread.eval(p);
+            result[i] = state.eval(p);
         }
         
         for(int64_t i = 0; i < s.size(); ++i) {
@@ -983,7 +983,7 @@ List MapI(Thread& thread, Closure const& func, List args) {
         }
     }
 
-    thread.gcStack.pop_back();
+    state.gcStack.pop_back();
     return result;
 }
 

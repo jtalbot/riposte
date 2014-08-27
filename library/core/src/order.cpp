@@ -167,7 +167,7 @@ struct compare_chain {
 };
 
 extern "C"
-Value order(Thread& thread, Value const* args) {
+Value order(State& state, Value const* args) {
     bool nalast = Logical::isTrue(((Logical const&)args[0])[0]);
     bool descending = Logical::isTrue(((Logical const&)args[1])[0]);
     List const& l = (List const&)args[2];

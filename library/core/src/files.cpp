@@ -9,7 +9,7 @@
 #include "../../../src/coerce.h"
 
 extern "C"
-void fileexists_map(Thread& thread,
+void fileexists_map(State& state,
     Logical::Element& r, Character::Element f)
 {
     struct stat t;
@@ -19,7 +19,7 @@ void fileexists_map(Thread& thread,
 }
 
 extern "C"
-void direxists_map(Thread& thread,
+void direxists_map(State& state,
     Logical::Element& r, Character::Element f)
 {
     struct stat t;

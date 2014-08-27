@@ -1,13 +1,14 @@
 
+#include <sstream>
+#include <iomanip>
+#include <math.h>
+
+#include "riposte.h"
 #include "value.h"
 #include "type.h"
 #include "bc.h"
 #include "interpreter.h"
 #include "parser.h"
-
-#include <sstream>
-#include <iomanip>
-#include <math.h>
 
 std::string pad(std::string s, int64_t width)
 {
@@ -16,37 +17,37 @@ std::string pad(std::string s, int64_t width)
 	return ss.str();
 }
 
-template<class T> std::string stringify(State const& state, typename T::Element a) {
+template<class T> std::string stringify(Global const& global, typename T::Element a) {
 	return "";
 }
 
-template<> std::string stringify<Logical>(State const& state, Logical::Element a) {
+template<> std::string stringify<Logical>(Global const& global, Logical::Element a) {
 	return Logical::isNA(a) ? "NA" : (a ? "TRUE" : "FALSE");
 }  
 
-template<> std::string stringify<Raw>(State const& state, Raw::Element a) {
+template<> std::string stringify<Raw>(Global const& global, Raw::Element a) {
 	return rawToStr(a);
 }  
 
-template<> std::string stringify<Integer>(State const& state, Integer::Element a) {
+template<> std::string stringify<Integer>(Global const& global, Integer::Element a) {
 	return Integer::isNA(a) ? "NA" : std::string("") + intToStr(a) + 
-        (state.format == State::RiposteFormat ? std::string("L") : "");
+        (global.format == Riposte::RiposteFormat ? std::string("L") : "");
 }  
 
-template<> std::string stringify<Double>(State const& state, Double::Element a) {
+template<> std::string stringify<Double>(Global const& global, Double::Element a) {
 	return Double::isNA(a) ? "NA" : doubleToStr(a);
 }  
 
-template<> std::string stringify<Character>(State const& state, Character::Element a) {
-	return Character::isNA(a) ? "NA" : std::string("\"") + escape(state.externStr(a)) + "\"";
+template<> std::string stringify<Character>(Global const& global, Character::Element a) {
+	return Character::isNA(a) ? "NA" : std::string("\"") + escape(global.externStr(a)) + "\"";
 }  
 
-template<> std::string stringify<List>(State const& state, List::Element a) {
-	return state.stringify(a);
+template<> std::string stringify<List>(Global const& global, List::Element a) {
+	return global.stringify(a);
 }  
 
 template<class T>
-std::string stringifyVector(State const& state, T const& v) {
+std::string stringifyVector(Global const& global, T const& v) {
 	std::string result = "";
 	int64_t length = v.length();
 	if(length == 0)
@@ -56,14 +57,14 @@ std::string stringifyVector(State const& state, T const& v) {
 	if(length > 100) { dots = true; length = 100; }
 	int64_t maxlength = 1;
 	for(int64_t i = 0; i < length; i++) {
-		maxlength = std::max((int64_t)maxlength, (int64_t)stringify<T>(state, v[i]).length());
+		maxlength = std::max((int64_t)maxlength, (int64_t)stringify<T>(global, v[i]).length());
 	}
 	int64_t indexwidth = intToStr(length+1).length();
 	int64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
 	for(int64_t i = 0; i < length; i+=perline) {
 		result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
 		for(int64_t j = 0; j < perline && i+j < length; j++) {
-			result = result + pad(stringify<T>(state, v[i+j]), maxlength+1);
+			result = result + pad(stringify<T>(global, v[i+j]), maxlength+1);
 		}
 
 		if(i+perline < length)	
@@ -118,12 +119,12 @@ Format format(double d, int64_t maxsf) {
     return f;
 }
 
-std::string stringify(State const& state, Double::Element a, Format f) {
+std::string stringify(Global const& global, Double::Element a, Format f) {
 	return Double::isNA(a) ? "NA" : doubleToStr(a, f.scientific ? f.sdecimals : f.fdecimals, !f.scientific);
 }  
 
 template<>
-std::string stringifyVector<Double>(State const& state, Double const& v) {
+std::string stringifyVector<Double>(Global const& global, Double const& v) {
 	std::string result = "";
 	int64_t length = v.length();
 	if(length == 0)
@@ -142,14 +143,14 @@ std::string stringifyVector<Double>(State const& state, Double const& v) {
 	
     int64_t maxlength = 1;
 	for(int64_t i = 0; i < length; i++) {
-		maxlength = std::max((int64_t)maxlength, (int64_t)stringify(state, v[i], f).length());
+		maxlength = std::max((int64_t)maxlength, (int64_t)stringify(global, v[i], f).length());
 	}
 	int64_t indexwidth = intToStr(length+1).length();
 	int64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
 	for(int64_t i = 0; i < length; i+=perline) {
 		result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
 		for(int64_t j = 0; j < perline && i+j < length; j++) {
-			result = result + pad(stringify(state, v[i+j], f), maxlength+1);
+			result = result + pad(stringify(global, v[i+j], f), maxlength+1);
 		}
 
 		if(i+perline < length)	
@@ -159,7 +160,7 @@ std::string stringifyVector<Double>(State const& state, Double const& v) {
 	return result;
 }
 
-std::string stringify(State const& state, Value const& value, std::vector<int64_t> nest) {
+std::string stringify(Global const& global, Value const& value, std::vector<int64_t> nest) {
 	std::string result = "[1]";
 	bool dots = false;
 	switch(value.type())
@@ -168,19 +169,19 @@ std::string stringify(State const& state, Value const& value, std::vector<int64_
 			result = "NULL";
 			break;
 		case Type::Raw:
-			result = stringifyVector(state, (Raw const&)value);
+			result = stringifyVector(global, (Raw const&)value);
 			break;
 		case Type::Logical:
-			result = stringifyVector(state, (Logical const&)value);
+			result = stringifyVector(global, (Logical const&)value);
 			break;
 		case Type::Integer:
-			result = stringifyVector(state, (Integer const&)value);
+			result = stringifyVector(global, (Integer const&)value);
 			break;
 		case Type::Double:
-			result = stringifyVector(state, (Double const&)value);
+			result = stringifyVector(global, (Double const&)value);
 			break;
 		case Type::Character:
-			result = stringifyVector(state, (Character const&)value);
+			result = stringifyVector(global, (Character const&)value);
 			break;
 		
 		case Type::List:
@@ -202,7 +203,7 @@ std::string stringify(State const& state, Value const& value, std::vector<int64_
                 nest.back()++;
 				result = result + prefix + "[[" + intToStr(i+1) + "]]\n";
 				if(!List::isNA(v[i])) 
-                    result = result + stringify(state, v[i], nest);
+                    result = result + stringify(global, v[i], nest);
 				result = result + "\n";
 				if(i < length-1) result = result + "\n";
 			}
@@ -210,24 +211,24 @@ std::string stringify(State const& state, Value const& value, std::vector<int64_
 		} break;
 		case Type::Closure:
 		{
-			result = state.externStr(((Closure const&)value).prototype()->string);
+			result = global.externStr(((Closure const&)value).prototype()->string);
 		} break;
 		case Type::Environment:
 		{
 			REnvironment const& renv = (REnvironment const&)value;
-            if(renv.environment() == state.global)
+            if(renv.environment() == global.global)
                 result = std::string("<environment: R_GlobalEnv>");
-            else if(renv.environment() == state.empty)
+            else if(renv.environment() == global.empty)
                 result = std::string("<environment: R_EmptyEnv>");
             else
                 result = std::string("<environment: ") + "0x" + intToHexStr((int64_t)renv.environment()) + ">";
             // TODO: avoid recursion here
-            /*if(state.format == State::RiposteFormat)
+            /*if(global.format == Global::RiposteFormat)
             {
                 Dictionary* d = renv.environment();
                 for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
-                    result = result + "\n$" + state.externStr(i.string())
-                        + "\n" + state.stringify(i.value()) + "\n";
+                    result = result + "\n$" + global.externStr(i.string())
+                        + "\n" + global.stringify(i.value()) + "\n";
                 }
             }*/
 			return result;
@@ -243,48 +244,48 @@ std::string stringify(State const& state, Value const& value, std::vector<int64_
 		result = result + "\nAttributes:\n";
 		Dictionary* d = ((Object const&)value).attributes();
 		for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
-			result = result + "\t" + state.externStr(i.string())
-				+ ":\t" + state.stringify(i.value()) + "\n";
+			result = result + "\t" + global.externStr(i.string())
+				+ ":\t" + global.stringify(i.value()) + "\n";
 		}
 	}
 	return result;
 }
 
 
-std::string State::stringify(Value const& value) const {
+std::string Global::stringify(Value const& value) const {
     std::vector<int64_t> emptyNest;
 	return ::stringify(*this, value, emptyNest);
 }
 
-template<class T> std::string deparse(State const& state, typename T::Element a) {
+template<class T> std::string deparse(Global const& global, typename T::Element a) {
 	return "";
 }
 
-template<> std::string deparse<Logical>(State const& state, Logical::Element a) {
+template<> std::string deparse<Logical>(Global const& global, Logical::Element a) {
 	return Logical::isNA(a) ? "NA" : (a ? "TRUE" : "FALSE");
 }  
 
-template<> std::string deparse<Integer>(State const& state, Integer::Element a) {
+template<> std::string deparse<Integer>(Global const& global, Integer::Element a) {
 	return Integer::isNA(a) ? "NA_integer_" : std::string("") + intToStr(a) + std::string("L");
 }  
 
-template<> std::string deparse<Double>(State const& state, Double::Element a) {
+template<> std::string deparse<Double>(Global const& global, Double::Element a) {
 	return Double::isNA(a) ? "NA_real_" : doubleToStr(a);
 }  
 
-template<> std::string deparse<Character>(State const& state, Character::Element a) {
-	return Character::isNA(a) ? "NA_character_" : std::string("\"") + state.externStr(a) + "\"";
+template<> std::string deparse<Character>(Global const& global, Character::Element a) {
+	return Character::isNA(a) ? "NA_character_" : std::string("\"") + global.externStr(a) + "\"";
 }  
 
-template<> std::string deparse<List>(State const& state, List::Element a) {
-	return state.deparse(a);
+template<> std::string deparse<List>(Global const& global, List::Element a) {
+	return global.deparse(a);
 }  
 
 template<class T>
-std::string deparseVectorBody(State const& state, T const& v) {
+std::string deparseVectorBody(Global const& global, T const& v) {
 	std::string result = "";
 	for(int64_t i = 0; i < v.length(); i++) {
-		result = result + deparse<T>(state, v[i]);
+		result = result + deparse<T>(global, v[i]);
 		if(i < v.length()-1) result = result + ", ";
 	}
 	return result;
@@ -293,32 +294,32 @@ std::string deparseVectorBody(State const& state, T const& v) {
 
 
 template<class T>
-std::string deparseVector(State const& state, T const& v) {
+std::string deparseVector(Global const& global, T const& v) {
 	if(v.length() == 0) return std::string(Type::toString(v.ValueType)) + "(0)";
-	if(v.length() == 1) return deparseVectorBody(state, v);
-	else return "c(" + deparseVectorBody(state, v) + ")";
+	if(v.length() == 1) return deparseVectorBody(global, v);
+	else return "c(" + deparseVectorBody(global, v) + ")";
 }
 /*
 template<>
-std::string deparseVector<Call>(State const& state, Call const& v, Value const& names) {
-	return state.deparse(Call(v)[0]) + "(" + deparseVectorBody(state, Subset(v, 1, v.length-1), names) + ")";
+std::string deparseVector<Call>(Global const& global, Call const& v, Value const& names) {
+	return global.deparse(Call(v)[0]) + "(" + deparseVectorBody(global, Subset(v, 1, v.length-1), names) + ")";
 }
 
 template<>
-std::string deparseVector<Expression>(State const& state, Expression const& v, Value const& names) {
-	return "expression(" + deparseVectorBody(state, v, names) + ")";
+std::string deparseVector<Expression>(Global const& global, Expression const& v, Value const& names) {
+	return "expression(" + deparseVectorBody(global, v, names) + ")";
 }
 */
-std::string deparse(State const& state, Value const& value) {
+std::string deparse(Global const& global, Value const& value) {
 	switch(value.type())
 	{
 		case Type::Null:
 			return "NULL";
-		#define CASE(Name) case Type::Name: return deparseVector(state, (Name const&)value); break;
+		#define CASE(Name) case Type::Name: return deparseVector(global, (Name const&)value); break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE
 		case Type::Closure:
-			return state.externStr(((Closure const&)value).prototype()->string);
+			return global.externStr(((Closure const&)value).prototype()->string);
 		case Type::Environment:
 			return "environment";
 		default:
@@ -326,6 +327,6 @@ std::string deparse(State const& state, Value const& value) {
 	};
 }
 
-std::string State::deparse(Value const& value) const {
+std::string Global::deparse(Value const& value) const {
 	return ::deparse(*this, value);
 }

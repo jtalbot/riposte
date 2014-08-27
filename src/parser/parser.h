@@ -109,7 +109,7 @@ static inline std::string& unescape(std::string& s) {
 struct Parser {
 
 	int line, col;
-	State& state;
+	Global& global;
 	char const* filename;
     void* pParser;
 	const char *ts, *te, *le;
@@ -135,7 +135,7 @@ struct Parser {
 
 	void token( int tok, Value v=Value::Nil() );
 	int execute( const char* data, int len, bool isEof, Value& result, FILE* trace=NULL );
-	Parser(State& state, char const* filename); 
+	Parser(Global& global, char const* filename); 
 };
 
 struct Pairs {
@@ -173,7 +173,7 @@ struct Pairs {
 };
 
 
-int parse(State& state, char const* filename,
+int parse(Global& global, char const* filename,
     char const* code, size_t len, bool isEof, Value& result, FILE* trace=NULL);
 
 #endif

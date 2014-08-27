@@ -5,7 +5,7 @@
 #include "../../../src/frontend.h"
 
 extern "C"
-void iconv_map(Thread& thread,
+void iconv_map(State& state,
     String& result,
     String str, String from, String to, String sub)
 {
@@ -24,7 +24,7 @@ void iconv_map(Thread& thread,
         printf("iconv failed\n");
     }
     else {
-        result = thread.internStr(out);
+        result = state.internStr(out);
     }
 
     iconv_close(descriptor);

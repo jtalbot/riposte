@@ -6,7 +6,7 @@
 #include "../../../src/coerce.h"
 
 extern "C"
-Value charToRaw(Thread& thread, Value const* args)
+Value charToRaw(State& state, Value const* args)
 {
     Character const& c = (Character const&)args[0];
 
@@ -22,29 +22,29 @@ Value charToRaw(Thread& thread, Value const* args)
 }
 
 extern "C"
-Value rawToChar(Thread& thread, Value const* args)
+Value rawToChar(State& state, Value const* args)
 {
     Raw const& c = (Raw const&)args[0];
 
     std::string s((const char*)c.v(), c.length());
 
-    return Character::c(thread.internStr(s));
+    return Character::c(state.internStr(s));
 }
 
 extern "C"
-Value rawToCharacters(Thread& thread, Value const* args)
+Value rawToCharacters(State& state, Value const* args)
 {
     Raw const& c = (Raw const&)args[0];
 
     Character r(c.length());
     for(int64_t i = 0; i < c.length(); ++i) {
-        r[i] = thread.internStr(std::string(1, c[i]));
+        r[i] = state.internStr(std::string(1, c[i]));
     }
     return r;
 }
 
 extern "C"
-Value rawToDouble(Thread& thread, Value const* args)
+Value rawToDouble(State& state, Value const* args)
 {
     Raw const& c = (Raw const&)args[0];
     int64_t size = ((Integer const&)args[1])[0];
@@ -79,7 +79,7 @@ Value rawToDouble(Thread& thread, Value const* args)
 }
 
 extern "C"
-Value rawToInteger(Thread& thread, Value const* args)
+Value rawToInteger(State& state, Value const* args)
 {
     Raw const& c = (Raw const&)args[0];
     int64_t size = ((Integer const&)args[1])[0];
@@ -144,7 +144,7 @@ Value rawToInteger(Thread& thread, Value const* args)
 }
 
 extern "C"
-Value rawToLogical(Thread& thread, Value const* args)
+Value rawToLogical(State& state, Value const* args)
 {
     Raw const& c = (Raw const&)args[0];
     int64_t size = ((Integer const&)args[1])[0];

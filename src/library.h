@@ -4,6 +4,8 @@
 
 #include "value.h"
 
-void loadPackage(Thread& thread, Environment* env, std::string path, std::string name);
+class State;
+
+void loadPackage(State& state, Environment* env, std::string path, std::string name);
 
 #endif

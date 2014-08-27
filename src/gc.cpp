@@ -142,59 +142,59 @@ void SEXPREC::visit() const {
     traverse(v);
 }
 
-void Heap::mark(State& state) {
+void Heap::mark(Global& global) {
 	// traverse root set
 	// mark the region that I'm currently allocating into
     ((HeapObject*)bump)->visit();
 	
 	//printf("--global--\n");
-	VISIT(state.global);
-	traverse(state.arguments);
-    VISIT(state.promiseCode);
+	VISIT(global.global);
+	traverse(global.arguments);
+    VISIT(global.promiseCode);
 
     for(std::map<std::string, String>::const_iterator i = 
-            state.strings.table().begin();
-            i != state.strings.table().end();
+            global.strings.table().begin();
+            i != global.strings.table().end();
             ++i) {
         VISIT(i->second);
     }
 
-	for(std::list<Thread*>::iterator t = state.threads.begin();
-            t != state.threads.end(); ++t) {
-		Thread* thread = *t;
+	for(std::list<State*>::iterator t = global.states.begin();
+            t != global.states.end(); ++t) {
+		State* state = *t;
 
 		//printf("--stack--\n");
-		for(uint64_t i = 0; i < thread->stack.size(); i++) {
-			VISIT(thread->stack[i].code);
-			VISIT(thread->stack[i].environment);
+		for(uint64_t i = 0; i < state->stack.size(); i++) {
+			VISIT(state->stack[i].code);
+			VISIT(state->stack[i].environment);
 		}
 		//printf("--frame--\n");
-		VISIT(thread->frame.code);
-		VISIT(thread->frame.environment);
+		VISIT(state->frame.code);
+		VISIT(state->frame.environment);
 
 		//printf("--trace--\n");
 		// traces only hold weak references...
 
 		//printf("--registers--\n");
-		for(Value const* r = thread->registers; r < thread->frame.registers+thread->frame.code->registers; ++r) {
+		for(Value const* r = state->registers; r < state->frame.registers+state->frame.code->registers; ++r) {
 			traverse(*r);
 		}
 
 		//printf("--gc stack--\n");
-		for(uint64_t i = 0; i < thread->gcStack.size(); i++) {
-			traverse(thread->gcStack[i]);
+		for(uint64_t i = 0; i < state->gcStack.size(); i++) {
+			traverse(state->gcStack[i]);
 		}
 	}
 	
     // R API support	
-    for(std::list<SEXP>::iterator i = state.installedSEXPs.begin(); 
-            i != state.installedSEXPs.end(); ++i) {
+    for(std::list<SEXP>::iterator i = global.installedSEXPs.begin(); 
+            i != global.installedSEXPs.end(); ++i) {
 	    VISIT(*i);
 	}
 
-    if(state.apiStack) {
-        for(int i = 0; i < *state.apiStack->size; ++i) {
-            VISIT(state.apiStack->stack[i]);
+    if(global.apiStack) {
+        for(int i = 0; i < *global.apiStack->size; ++i) {
+            VISIT(global.apiStack->stack[i]);
         }
     }
 }
@@ -256,6 +256,6 @@ void Heap::popRegion() {
 	limit = ((char*)g) + regionSize;
 }
 
-Heap Heap::Global;
+Heap Heap::GlobalHeap;
 
 

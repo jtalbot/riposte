@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <getopt.h>
 
+#include "riposte.h"
 #include "parser.h"
 #include "compiler.h"
 #include "library.h"
@@ -21,9 +22,9 @@ extern "C"
 static int debug = 0;
 static int verbose = 0;
 
-static void info(State& state, std::ostream& out) 
+static void info(int threads, std::ostream& out) 
 {
-    out << "Riposte (" << state.queues.queues.size() << " threads) "
+    out << "Riposte (" << threads << " threads) "
         << "-- Copyright (C) 2010-2013 Stanford, 2014 Justin Talbot" << std::endl;
     out << "http://jtalbot.github.com/riposte/" << std::endl;
     out << std::endl;
@@ -61,7 +62,7 @@ static void l_message(const int level, const char *msg)
 }
 
 // interactive line entry using linenoise
-static bool terminal(State& state, std::string inname, std::istream & in, std::ostream & out, Value& code)
+static bool terminal(Global& global, std::string inname, std::istream & in, std::ostream & out, Value& code)
 { 
     std::string input;
     code = Value::Nil();
@@ -86,7 +87,7 @@ static bool terminal(State& state, std::string inname, std::istream & in, std::o
         input += "\n";   /* add the discarded newline back in */
         
         if(input.size() > 0) {
-            status = parse(state, inname.c_str(),
+            status = parse(global, inname.c_str(),
                 input.c_str(), input.size(), true, code);
         }
     }
@@ -98,7 +99,7 @@ static bool terminal(State& state, std::string inname, std::istream & in, std::o
 }
 
 // piped in from stream 
-static bool pipe(State& state, std::string inname, std::istream & in, std::ostream & out, Value& code) 
+static bool pipe(Global& global, std::string inname, std::istream & in, std::ostream & out, Value& code) 
 {
     std::string input;
     code = Value::Nil();
@@ -113,7 +114,7 @@ static bool pipe(State& state, std::string inname, std::istream & in, std::ostre
         input += "\n";   /* add the discarded newline back in */
         
         if(input.size() > 0) {
-            status = parse(state, inname.c_str(),
+            status = parse(global, inname.c_str(),
                 input.c_str(), input.size(), true, code);    
         }
     }
@@ -124,7 +125,7 @@ static bool pipe(State& state, std::string inname, std::istream & in, std::ostre
     return in.eof();
 }
 
-static int run(Thread& thread, std::string inname, std::istream& in, std::ostream& out, bool interactive, bool echo) 
+static int run(State& state, std::string inname, std::istream& in, std::ostream& out, bool interactive, bool echo) 
 {
     int rc = 0;
 
@@ -137,13 +138,13 @@ static int run(Thread& thread, std::string inname, std::istream& in, std::ostrea
     if(echo)
     {
         List p(1);
-        p[0] = CreateSymbol(thread.internStr("repl"));
+        p[0] = CreateSymbol(state.internStr("repl"));
         //p[1] = CreateSymbol(Strings::Last_value);
-        print = Compiler::compileTopLevel(thread, CreateCall(p));
+        print = Compiler::compileTopLevel(state, CreateCall(p));
         // save the promise to the gcStack so that the gc doesn't clean it up.
         Value v;
         Promise::Init(v, 0, print, false);
-        thread.gcStack.push_back(v);
+        state.gcStack.push_back(v);
     }
 
     bool done = false;
@@ -151,27 +152,27 @@ static int run(Thread& thread, std::string inname, std::istream& in, std::ostrea
         try { 
             Value expr;
             done = interactive ?
-                terminal(thread.state, inname, in, out, expr) :
-                pipe(thread.state, inname, in, out, expr);
+                terminal(state.global, inname, in, out, expr) :
+                pipe(state.global, inname, in, out, expr);
 
             if(done || expr.isNil()) 
                 continue;
 
-            Code* code = Compiler::compileTopLevel(thread, expr);
-            Value result = thread.eval(code, thread.state.global);
+            Code* code = Compiler::compileTopLevel(state, expr);
+            Value result = state.eval(code, state.global.global);
 
             // Nil indicates an error that was dispatched correctly.
             // Don't print anything, but no need to propagate error.
             if(result.isNil()) 
                 continue;
 
-            thread.state.global->insert(Strings::Last_value) = result;
-            if(echo && thread.visible) {
-                thread.eval(print, thread.state.global);
+            state.global.global->insert(Strings::Last_value) = result;
+            if(echo && state.visible) {
+                state.eval(print, state.global.global);
                 // Print directly (for debugging)
-                //std::cout<< thread.stringify(result) << std::endl;
+                //std::cout<< state.stringify(result) << std::endl;
             }
-            thread.visible = true;
+            state.visible = true;
         } 
         catch(RiposteException const& e) { 
             e_message("Error", e.kind().c_str(), e.what().c_str());
@@ -180,7 +181,7 @@ static int run(Thread& thread, std::string inname, std::istream& in, std::ostrea
 
     // Clean up after myself
     if(echo) {
-        thread.gcStack.pop_back();
+        state.gcStack.pop_back();
     }
     
     return rc;
@@ -216,7 +217,7 @@ int main(int argc, char** argv)
     /*  Parse commandline options  */
     char * filename = NULL;
     bool echo = true;
-    State::Format format = State::RiposteFormat;
+    Riposte::Format format = Riposte::RiposteFormat;
     int threads = 1; 
 
     int ch;
@@ -247,9 +248,9 @@ int main(int argc, char** argv)
                 break;
             case 'F':
                 if(0 == strcmp("R",optarg))
-                    format = State::RFormat;
+                    format = Riposte::RFormat;
                 else
-                    format = State::RiposteFormat;
+                    format = Riposte::RiposteFormat;
                 break;
             case 'h':
             default:
@@ -261,20 +262,19 @@ int main(int argc, char** argv)
 
     d_message(1,NULL,"Command option processing complete");
 
-    /* Initialize execution state */
-    globalState = new State(threads, argc, argv);
-    globalState->verbose = verbose;
-    globalState->format = format;
-
-    Thread* thread = globalState->getThread();
-
     if(!filename)
-        info(*globalState, std::cout);
+        info(threads, std::cout);
+
+    /* Initialize Riposte VM */
+    Riposte::initialize(argc, argv, threads, verbose, format);
+
+    /* Create an execution state for the main thread */
+    Riposte::State& state = Riposte::newState();
 
     /* Load core functions */
     try {
-        Environment* env = new Environment(1, globalState->empty);
-        loadPackage(*thread, env, "library", "core");
+        Environment* env = new Environment(1, global->empty);
+        loadPackage((State&)state, env, "library", "core");
     } 
     catch(RiposteException const& e) { 
         e_message("Error", e.kind().c_str(), e.what().c_str());
@@ -284,17 +284,16 @@ int main(int argc, char** argv)
     /* Load bootstrap file if it exists */
     {
         std::ifstream in("bootstrap.R");
-        rc = run(*thread, std::string("bootstrap.R"), in, std::cout, false, echo);
+        rc = run((State&)state, std::string("bootstrap.R"), in, std::cout, false, echo);
     }
 
- 
     /* Either execute the specified file or read interactively from stdin  */
     if(filename) {
         std::ifstream in(filename);
-        rc = run(*thread, std::string(filename), in, std::cout, false, echo);
+        rc = run((State&)state, std::string(filename), in, std::cout, false, echo);
     } 
     else {
-        rc = run(*thread, std::string("<stdin>"), std::cin, std::cout, true, echo);
+        rc = run((State&)state, std::string("<stdin>"), std::cin, std::cout, true, echo);
     }
 
     /* Session over */
@@ -302,7 +301,8 @@ int main(int argc, char** argv)
     fflush(stdout);
     fflush(stderr);
 
-    delete globalState;
+    Riposte::deleteState(state);
+    Riposte::finalize();
 
     return rc;
 }

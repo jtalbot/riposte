@@ -5,17 +5,17 @@
 #include "../../../src/coerce.h"
 
 extern "C"
-void substr_map(Thread& thread,
+void substr_map(State& state,
         Character::Element& result,
         Character::Element text,
         Integer::Element start,
         Integer::Element length) {
     std::string s(text->s);
-    result = thread.internStr(s.substr(start, length).c_str());
+    result = state.internStr(s.substr(start, length).c_str());
 }
 
 extern "C"
-void substrassign_map(Thread& thread,
+void substrassign_map(State& state,
         Character::Element& result,
         Character::Element text,
         Integer::Element start,
@@ -23,7 +23,7 @@ void substrassign_map(Thread& thread,
         Character::Element repl) {
 
     std::string s(text->s);
-    result = thread.internStr(
+    result = state.internStr(
         (s.substr(0, start) + repl->s + s.substr(
             std::min((Integer::Element)s.size(),start+length)).c_str()));
 }

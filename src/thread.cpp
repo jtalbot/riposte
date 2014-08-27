@@ -1,7 +1,7 @@
 
 #include "thread.h"
 
-TaskQueues::TaskQueues(uint64_t threads)
+TaskQueues::TaskQueues(uint64_t states)
     : done(0) {
 
     pthread_attr_t  attr;
@@ -12,7 +12,7 @@ TaskQueues::TaskQueues(uint64_t threads)
     TaskQueue* t = new TaskQueue(*this, 0);
     this->queues.push_back(t);
 
-    for(uint64_t i = 1; i < threads; i++) {
+    for(uint64_t i = 1; i < states; i++) {
         TaskQueue* t = new TaskQueue(*this, i);
         pthread_create (&t->pthread, &attr, TaskQueue::start, t);
         this->queues.push_back(t);
@@ -24,7 +24,7 @@ TaskQueue::TaskQueue(TaskQueues& qs, uint64_t index)
     , index(index) {}
 
 void TaskQueue::doall(
-    Thread& thread,
+    State& state,
     Task::HeaderPtr header,
     Task::FunctionPtr func,
     void* args,
@@ -37,11 +37,11 @@ void TaskQueue::doall(
         ppt = std::max((uint64_t)1, tmp - (tmp % alignment));
 
         Task t(header, func, args, a, b, alignment, ppt);
-        run(thread, t);
+        run(state, t);
 	
         while(fetch_and_add(t.done, 0) != 0) {
             Task s;
-            if(dequeue(s) || steal(s)) run(thread, s);
+            if(dequeue(s) || steal(s)) run(state, s);
             else sleep();
         }
     }
@@ -54,7 +54,7 @@ void TaskQueue::loop() {
         Task s;
         if(dequeue(s) || steal(s)) {
             try {
-                run(*thread, s);
+                run(*state, s);
             } catch(RiposteException const& e) { 
                 std::cout << "Error (" << e.kind() << ":" << (int)index << ") " << e.what();
             } 
@@ -63,8 +63,8 @@ void TaskQueue::loop() {
     fetch_and_add(&(qs.done), 1);
 }
 
-void TaskQueue::run(Thread& thread, Task& t) {
-    void* h = t.header != NULL ? t.header(t.args, t.a, t.b, thread) : 0;
+void TaskQueue::run(State& state, Task& t) {
+    void* h = t.header != NULL ? t.header(t.args, t.a, t.b, state) : 0;
     while(t.a < t.b) {
         // check if we need to relinquish some of our chunk...
         int64_t s = atomic_xchg(&steals, 0);
@@ -79,17 +79,17 @@ void TaskQueue::run(Thread& thread, Task& t) {
                 n.a = t.a+t.ppt;
             }
             if(n.a < n.b) {
-                //printf("Thread %d relinquishing %d (%d %d)\n", index, n.b-n.a, t.a, t.b);
+                //printf("State %d relinquishing %d (%d %d)\n", index, n.b-n.a, t.a, t.b);
                 tasksLock.acquire();
                 fetch_and_add(t.done, 1); 
                 tasks.push_front(n);
                 tasksLock.release();
             }
         }
-        t.func(t.args, h, t.a, std::min(t.a+t.ppt,t.b), thread);
+        t.func(t.args, h, t.a, std::min(t.a+t.ppt,t.b), state);
         t.a += t.ppt;
     }
-    //printf("Thread %d finished %d %d (%d)\n", index, t.a, t.b, t.done);
+    //printf("State %d finished %d %d (%d)\n", index, t.a, t.b, t.done);
     fetch_and_add(t.done, -1);
 }
 

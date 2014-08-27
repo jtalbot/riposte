@@ -9,6 +9,8 @@
 #include <set>
 #include <algorithm>
 
+class State;
+
 inline double asReal1(Value const& v) { 
 	if(v.isInteger()) return ((Integer const&)v)[0]; 
 	else if(v.isDouble()) return ((Double const&)v)[0]; 
@@ -47,9 +49,9 @@ inline void Element2(Value const& v, int64_t index, Value& out) {
 	};
 }
 
-void SubsetSlow(Thread& thread, Value const& a, Value const& i, Value& out); 
+void SubsetSlow(State& state, Value const& a, Value const& i, Value& out); 
 
-inline void Subset(Thread& thread, Value const& a, Value const& i, Value& out) {
+inline void Subset(State& state, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble1() && i.d >= 1) {
 		Element(a, (int64_t)i.d-1, out);
 	}
@@ -57,11 +59,11 @@ inline void Subset(Thread& thread, Value const& a, Value const& i, Value& out) {
 		Element(a, i.i-1, out);
 	}
 	else {
-		SubsetSlow(thread, a, i, out);
+		SubsetSlow(state, a, i, out);
 	}
 }
 
-inline void Subset2(Thread& thread, Value const& a, Value const& i, Value& out) {
+inline void Subset2(State& state, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble1() && i.d >= 1) {
 		Element2(a, (int64_t)i.d-1, out);
 		return;
@@ -108,10 +110,10 @@ inline void Element2Assign(Value const& v, int64_t index, Value& out) {
 	};
 }
 
-void SubsetAssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c);
-void Subset2AssignSlow(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c);
+void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c);
+void Subset2AssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c);
  
-inline void SubsetAssign(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
+inline void SubsetAssign(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(!clone && a.type() == b.type()) {
 		if(i.isDouble1()) {
 			int64_t index = (int64_t)i.d-1;
@@ -130,10 +132,10 @@ inline void SubsetAssign(Thread& thread, Value const& a, bool clone, Value const
 			}
 		}
 	}
-	SubsetAssignSlow(thread, a, clone, i, b, c);
+	SubsetAssignSlow(state, a, clone, i, b, c);
 }
 
-inline void Subset2Assign(Thread& thread, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
+inline void Subset2Assign(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(!clone && (a.type() == b.type() || a.isList())) {
 		if(i.isDouble1()) {
 			int64_t index = (int64_t)i.d-1;
@@ -152,13 +154,13 @@ inline void Subset2Assign(Thread& thread, Value const& a, bool clone, Value cons
 			}
 		}
 	}
-	Subset2AssignSlow(thread, a, clone, i, b, c);
+	Subset2AssignSlow(state, a, clone, i, b, c);
 }
 
 
-void Insert(Thread& thread, Value const& src, int64_t srcIndex, Value& dst, int64_t dstIndex, int64_t length);
+void Insert(State& state, Value const& src, int64_t srcIndex, Value& dst, int64_t dstIndex, int64_t length);
 
-void Resize(Thread& thread, bool clone, Value& src, int64_t newLength);
+void Resize(State& state, bool clone, Value& src, int64_t newLength);
 
 template<class T>
 inline T Subset(T const& src, int64_t start, int64_t length) {
@@ -209,16 +211,16 @@ inline Integer Repeat(Integer const& each, int64_t const length) {
 	return r;
 }
 
-Double RandomVector(Thread& thread, int64_t const length);
+Double RandomVector(State& state, int64_t const length);
 
 Integer Semijoin(Value const& x, Value const& table);
 
-List Map(Thread& thread, String func, List args, Character result);
-List Scan(Thread& thread, String func, List args, Character result);
-List Fold(Thread& thread, String func, List args, Character result);
+List Map(State& state, String func, List args, Character result);
+List Scan(State& state, String func, List args, Character result);
+List Fold(State& state, String func, List args, Character result);
 
-List MapR(Thread& thread, Closure const& func, List args, Character result);
-List MapI(Thread& thread, Closure const& func, List args);
+List MapR(State& state, Closure const& func, List args, Character result);
+List MapI(State& state, Closure const& func, List args);
 
 #endif
 

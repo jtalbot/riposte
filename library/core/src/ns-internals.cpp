@@ -5,7 +5,7 @@
 #include <eigen3/Eigen/Dense>
 
 extern "C"
-Value importIntoEnv(Thread& thread, Value const* args) {
+Value importIntoEnv(State& state, Value const* args) {
 
     Environment* out = ((REnvironment const&)args[0]).environment();    
     Character const& out_names = (Character const&)args[1];

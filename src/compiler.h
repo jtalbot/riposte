@@ -18,8 +18,8 @@
 
 class Compiler {
 private:
-	Thread& thread;
 	State& state;
+	Global& global;
 
 	enum Scope {
 		TOPLEVEL,
@@ -79,7 +79,7 @@ private:
 	Operand kill(Operand i) { if(i.loc == REGISTER) { n = std::min(n, i.i); } return i; }
 	Operand top() { return Operand(REGISTER, n); }
 
-	Compiler(Thread& thread, Scope scope) : thread(thread), state(thread.state), scope(scope), loopDepth(0), n(0), max_n(0) {}
+	Compiler(State& state, Scope scope) : state(state), global(state.global), scope(scope), loopDepth(0), n(0), max_n(0) {}
 	
 	Code* compile(Value const& expr);			// compile function block, code ends with return
 	Operand compile(Value const& expr, Code* code);		// compile into existing code block
@@ -102,38 +102,38 @@ private:
 	void dumpCode() const;
 
 public:
-	static CompiledCall makeCall(Thread& thread, List const& call, Character const& names);
+	static CompiledCall makeCall(State& state, List const& call, Character const& names);
 
-	static Code* compileTopLevel(Thread& thread, Value const& expr) {
-		Compiler compiler(thread, TOPLEVEL);
+	static Code* compileTopLevel(State& state, Value const& expr) {
+		Compiler compiler(state, TOPLEVEL);
 		return compiler.compile(expr);
 	}
 	
-	static Code* compilePromise(Thread& thread, Value const& expr) {
-		Compiler compiler(thread, PROMISE);
+	static Code* compilePromise(State& state, Value const& expr) {
+		Compiler compiler(state, PROMISE);
 		return compiler.compile(expr);
 	}
 	
-    static Prototype* compileClosureBody(Thread& thread, Value const& expr) {
-		Compiler compiler(thread, CLOSURE);
+    static Prototype* compileClosureBody(State& state, Value const& expr) {
+		Compiler compiler(state, CLOSURE);
         Code* code = compiler.compile(expr);
         Prototype* p = new Prototype();
         p->code = code;
         return p;
 	}
 
-    static Code* deferPromiseCompilation(Thread& thread, Value const& expr) {
+    static Code* deferPromiseCompilation(State& state, Value const& expr) {
         Code* code = new (Code::Finalize) Code();
         assert(((int64_t)code) % 16 == 0); // do we still need this assumption?
         code->expression = expr;
         return code;
     }
 
-    static void doPromiseCompilation(Thread& thread, Code* code) {
+    static void doPromiseCompilation(State& state, Code* code) {
         if(!code->bc.empty())
             return;
  
-        Compiler compiler(thread, PROMISE);
+        Compiler compiler(state, PROMISE);
 
         // promises use first two registers to pass environment info
         // for replacing promise with evaluated value

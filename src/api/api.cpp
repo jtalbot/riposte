@@ -6,7 +6,7 @@
 
 #define R_NO_REMAP
 #include <Rinternals.h>
-
+#include <lzma.h>
 
 const int32_t Integer32::NAelement = std::numeric_limits<int32_t>::min();
 const int32_t Logical32::NAelement = std::numeric_limits<int32_t>::min();
@@ -137,77 +137,77 @@ void R_init_libR(DLLInfo *) {
     SEXPStack* stack = new SEXPStack;
     stack->size = &R_PPStackTop;
     stack->stack = R_PPStack;
-    globalState->apiStack = stack;
+    global->apiStack = stack;
 
-    Value global;
-    REnvironment::Init(global, globalState->global);
-    R_GlobalEnv = globalState->installSEXP(global);
+    Value globalEnv;
+    REnvironment::Init(globalEnv, global->global);
+    R_GlobalEnv = global->installSEXP(globalEnv);
     
     Value empty;
-    REnvironment::Init(empty, globalState->empty);
-    R_EmptyEnv = globalState->installSEXP(empty);
+    REnvironment::Init(empty, global->empty);
+    R_EmptyEnv = global->installSEXP(empty);
 
-    R_NilValue = globalState->installSEXP(Null::Singleton());
+    R_NilValue = global->installSEXP(Null::Singleton());
     R_UnboundValue = R_MissingArg =
-        globalState->installSEXP(Value::Nil());
+        global->installSEXP(Value::Nil());
 
-    R_TrueValue = globalState->installSEXP(Logical::c(Logical::TrueElement));
-    R_FalseValue = globalState->installSEXP(Logical::c(Logical::FalseElement));
-    R_LogicalNAValue = globalState->installSEXP(Logical::c(Logical::NAelement));
+    R_TrueValue = global->installSEXP(Logical::c(Logical::TrueElement));
+    R_FalseValue = global->installSEXP(Logical::c(Logical::FalseElement));
+    R_LogicalNAValue = global->installSEXP(Logical::c(Logical::NAelement));
 
     R_PackageSymbol =
-        globalState->installSEXP(CreateSymbol(globalState->internStr("package")));
+        global->installSEXP(CreateSymbol(global->internStr("package")));
     R_Bracket2Symbol =   /* "[[" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("[[")));
+        global->installSEXP(CreateSymbol(global->internStr("[[")));
     R_BracketSymbol =    /* "[" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("[")));
+        global->installSEXP(CreateSymbol(global->internStr("[")));
     R_BraceSymbol =      /* "{" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("{")));
+        global->installSEXP(CreateSymbol(global->internStr("{")));
     R_ClassSymbol =      /* "class" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("class")));
+        global->installSEXP(CreateSymbol(global->internStr("class")));
     R_DeviceSymbol =     /* ".Device" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr(".Device")));
+        global->installSEXP(CreateSymbol(global->internStr(".Device")));
     R_DimNamesSymbol =   /* "dimnames" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("dimnames")));
+        global->installSEXP(CreateSymbol(global->internStr("dimnames")));
     R_DimSymbol =        /* "dim" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("dim")));
+        global->installSEXP(CreateSymbol(global->internStr("dim")));
     R_DollarSymbol =     /* "$" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("$")));
+        global->installSEXP(CreateSymbol(global->internStr("$")));
     R_DotsSymbol =       /* "..." */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("...")));
+        global->installSEXP(CreateSymbol(global->internStr("...")));
     R_DropSymbol =       /* "drop" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("drop")));
+        global->installSEXP(CreateSymbol(global->internStr("drop")));
     R_LastvalueSymbol =  /* ".Last.value" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr(".Last.value")));
+        global->installSEXP(CreateSymbol(global->internStr(".Last.value")));
     R_LevelsSymbol =     /* "levels" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("levels")));
+        global->installSEXP(CreateSymbol(global->internStr("levels")));
     R_ModeSymbol =       /* "mode" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("mode")));
+        global->installSEXP(CreateSymbol(global->internStr("mode")));
     R_NameSymbol =       /* "name" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("name")));
+        global->installSEXP(CreateSymbol(global->internStr("name")));
     R_NamesSymbol =      /* "names" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("names")));
+        global->installSEXP(CreateSymbol(global->internStr("names")));
     R_NaRmSymbol =       /* "na.rm" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("na.rm")));
+        global->installSEXP(CreateSymbol(global->internStr("na.rm")));
     R_PackageSymbol =    /* "package" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("package")));
+        global->installSEXP(CreateSymbol(global->internStr("package")));
     R_QuoteSymbol =      /* "quote" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("quote")));
+        global->installSEXP(CreateSymbol(global->internStr("quote")));
     R_RowNamesSymbol =   /* "row.names" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("row.names")));
+        global->installSEXP(CreateSymbol(global->internStr("row.names")));
     R_SeedsSymbol =      /* ".Random.seed" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr(".Random.seed")));
+        global->installSEXP(CreateSymbol(global->internStr(".Random.seed")));
     R_SourceSymbol =     /* "source" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("source")));
+        global->installSEXP(CreateSymbol(global->internStr("source")));
     R_TspSymbol =        /* "tsp" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr("tsp")));
+        global->installSEXP(CreateSymbol(global->internStr("tsp")));
 
     R_dot_defined =      /* ".defined" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr(".defined")));
+        global->installSEXP(CreateSymbol(global->internStr(".defined")));
     R_dot_Method =       /* ".Method" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr(".Method")));
+        global->installSEXP(CreateSymbol(global->internStr(".Method")));
     R_dot_target =       /* ".target" */
-        globalState->installSEXP(CreateSymbol(globalState->internStr(".target")));
+        global->installSEXP(CreateSymbol(global->internStr(".target")));
 
     R_NaString = (SEXP)Strings::NA;        /* NA_STRING as a CHARSXP */
     R_BlankString = (SEXP)Strings::empty;     /* "" as a CHARSXP */

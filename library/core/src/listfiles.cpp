@@ -7,7 +7,7 @@
 #include "../../../src/interpreter.h"
 
 extern "C"
-void listfiles_map(Thread& thread,
+void listfiles_map(State& state,
     Value& out,
     Character::Element path)
 {
@@ -30,7 +30,7 @@ void listfiles_map(Thread& thread,
 
         result = Character(names.size());
         for(size_t i = 0; i < names.size(); ++i) {
-            result[i] = thread.internStr(names[i].c_str());
+            result[i] = state.internStr(names[i].c_str());
         }
     }
 

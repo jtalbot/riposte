@@ -13,7 +13,7 @@ void regex_finalize(Value v) {
 }
 
 extern "C"
-Value regex_compile(Thread& thread, Value const* args) {
+Value regex_compile(State& state, Value const* args) {
     Character pattern = (Character const&)args[0];
     Logical ignorecase = (Logical const&)args[1];
     Logical fixed = (Logical const&)args[2];
@@ -34,7 +34,7 @@ Value regex_compile(Thread& thread, Value const* args) {
 }
 
 extern "C"
-void grep_map(Thread& thread, Logical::Element& s,
+void grep_map(State& state, Logical::Element& s,
         Value const& regex, String text) {
     
     Externalptr const& p = (Externalptr const&)regex;
@@ -46,7 +46,7 @@ void grep_map(Thread& thread, Logical::Element& s,
 }
 
 extern "C"
-void regex_map(Thread& thread, Integer::Element& s, Integer::Element& l,
+void regex_map(State& state, Integer::Element& s, Integer::Element& l,
         Value const& regex, String text) {
     
     Externalptr const& p = (Externalptr const&)regex;
@@ -65,7 +65,7 @@ void regex_map(Thread& thread, Integer::Element& s, Integer::Element& l,
 }
 
 extern "C"
-void gregex_map(Thread& thread,
+void gregex_map(State& state,
         Value& start, Value& length, Value const& regex, String text) {
     
     Externalptr const& p = (Externalptr const&)regex;
@@ -117,7 +117,7 @@ static std::string replaceAll(
 }
 
 extern "C"
-void sub_map(Thread& thread, Character::Element& out,
+void sub_map(State& state, Character::Element& out,
         Value const& regex, String text, String sub) {
     
     Externalptr const& p = (Externalptr const&)regex;
@@ -146,12 +146,12 @@ void sub_map(Thread& thread, Character::Element& out,
         result.append( text->s, text->s+m[0].rm_so );
         result.append( s );
         result.append( text->s+m[0].rm_eo, text->s+strlen(text->s) );
-        out = thread.internStr(result.c_str());
+        out = state.internStr(result.c_str());
     }
 }
 
 extern "C"
-void gsub_map(Thread& thread, Character::Element& out,
+void gsub_map(State& state, Character::Element& out,
         Value const& regex, String text, String sub) {
     
     Externalptr const& p = (Externalptr const&)regex;
@@ -184,11 +184,11 @@ void gsub_map(Thread& thread, Character::Element& out,
             offset += m[0].rm_eo;
         }
     } while( match == 0 );
-    out = thread.internStr(result.c_str());
+    out = state.internStr(result.c_str());
 }
 
 extern "C"
-void agrep_map(Thread& thread, Logical::Element& s,
+void agrep_map(State& state, Logical::Element& s,
         Value const& regex, String text, Integer const& costs, Double const& bounds, Integer const& length) {
 
     Externalptr const& p = (Externalptr const&)regex;
@@ -235,7 +235,7 @@ void pcre_finalize(Value v) {
 }
 
 extern "C"
-Value pcre_regex_compile(Thread& thread, Value const* args) {
+Value pcre_regex_compile(State& state, Value const* args) {
     Character pattern = (Character const&)args[0];
     Logical ignorecase = (Logical const&)args[1];
 
@@ -256,7 +256,7 @@ Value pcre_regex_compile(Thread& thread, Value const* args) {
 }
 
 extern "C"
-void pcre_grep_map(Thread& thread, Logical::Element& s,
+void pcre_grep_map(State& state, Logical::Element& s,
         Value const& regex, String text) {
     
     Externalptr const& p = (Externalptr const&)regex;
@@ -271,7 +271,7 @@ void pcre_grep_map(Thread& thread, Logical::Element& s,
 }
 
 extern "C"
-void pcre_regex_map(Thread& thread, Integer::Element& s, Integer::Element& l,
+void pcre_regex_map(State& state, Integer::Element& s, Integer::Element& l,
         Value const& regex, String text) {
     
     Externalptr const& p = (Externalptr const&)regex;
@@ -294,7 +294,7 @@ void pcre_regex_map(Thread& thread, Integer::Element& s, Integer::Element& l,
 }
 
 extern "C"
-void pcre_gregex_map(Thread& thread,
+void pcre_gregex_map(State& state,
         Value& start, Value& length, Value const& regex, String text) {
     
     Externalptr const& p = (Externalptr const&)regex;

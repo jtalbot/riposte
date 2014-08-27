@@ -7,6 +7,7 @@
 #include <list>
 #include <iostream>
 
+#include "riposte.h"
 #include "value.h"
 #include "thread.h"
 #include "random.h"
@@ -16,6 +17,8 @@
 #include "epee/ir.h"
 #include "epee/trace.h"
 #endif
+
+class Global;
 
 ////////////////////////////////////////////////////////////////////
 // VM data structures
@@ -100,7 +103,7 @@ struct Code : public HeapObject {
     std::vector<CompiledCall> calls;
     int registers;
     
-	void printByteCode(State const& state) const;
+	void printByteCode(Global const& global) const;
 	void visit() const;
 
     static void Finalize(HeapObject* o);
@@ -348,14 +351,12 @@ struct SEXPStack {
 };
 
 ////////////////////////////////////////////////////////////////////
-// Global shared state 
+// Global state (shared across all threads) 
 ///////////////////////////////////////////////////////////////////
 
-class Thread;
+class State;
 
-#define DEFAULT_NUM_REGISTERS 10000 
-
-class State {
+class Global {
 public:
 	StringTable strings;
 
@@ -389,24 +390,20 @@ public:
         }
     }
 
-    std::list<Thread*> threads;
-    Thread* getThread();
-    void deleteThread(Thread* s);
+    std::list<State*> states;
+    State* getState();
+    void deleteState(State* s);
 
 	bool verbose;
 	bool epeeEnabled;
 
-    enum Format {
-        RiposteFormat,
-        RFormat
-    };
-    Format format;
+    Riposte::Format format;
     
     Character arguments;
 
     TaskQueues queues;
 
-	State(uint64_t threads, int64_t argc, char** argv);
+	Global(uint64_t threads, int64_t argc, char** argv);
 
 	std::string stringify(Value const& v) const;
 	std::string deparse(Value const& v) const;
@@ -420,26 +417,26 @@ public:
 	}
 };
 
-// Global state pointer, used by the R API, which
-// doesn't get passed the state.
-extern State* globalState;
+// Global pointer, used by the R API, which
+// doesn't get passed a per-thread State.
+extern Global* global;
 
 ////////////////////////////////////////////////////////////////////
-// Per-thread state 
+// Per-thread State 
 ///////////////////////////////////////////////////////////////////
 
-class Thread {
-public:
-	State& state;
-	Value* registers;
+#define DEFAULT_NUM_REGISTERS 10000 
 
+class State {
+public:
+    // Shared global state
+	Global& global;
+
+    // Interpreter execution data structures
+	Value* registers;
 	std::vector<StackFrame> stack;
 	StackFrame frame;
-
-    std::vector<Value> gcStack;
-    
     bool visible;
-	
     int64_t assignment[256], set[256]; // temporary space for matching arguments
 	
 #ifdef EPEE
@@ -447,10 +444,10 @@ public:
 #endif
 
 	Random random;
-
+    std::vector<Value> gcStack;
     TaskQueue* queue;
 
-	Thread(State& state, TaskQueue* queue);
+	State(Global& global, TaskQueue* queue);
 
 	StackFrame& push() {
 		stack.push_back(frame);
@@ -462,10 +459,10 @@ public:
 		stack.pop_back();
 	}
 
-	std::string stringify(Value const& v) const { return state.stringify(v); }
-	std::string deparse(Value const& v) const { return state.deparse(v); }
-	String internStr(std::string s) { return state.internStr(s); }
-	std::string externStr(String s) const { return state.externStr(s); }
+	std::string stringify(Value const& v) const { return global.stringify(v); }
+	std::string deparse(Value const& v) const { return global.deparse(v); }
+	String internStr(std::string s) { return global.internStr(s); }
+	std::string externStr(String s) const { return global.externStr(s); }
 
 	Value eval(Code const* code, Environment* environment, int64_t resultSlot = 0); 
 	Value eval(Code const* code);
@@ -473,3 +470,4 @@ public:
 };
 
 #endif
+

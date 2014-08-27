@@ -55,7 +55,7 @@ struct HeapObject {
 	void* operator new(unsigned long bytes, GCFinalizer finalizer);
 };
 
-class State;
+class Global;
 
 class Heap {
 private:
@@ -64,7 +64,7 @@ private:
 	uint64_t heapSize;
 	uint64_t total;
 
-	void mark(State& state);
+	void mark(Global& global);
 	void sweep();
 	
 	void makeRegions(uint64_t regions);
@@ -83,9 +83,9 @@ public:
 	HeapObject* smallalloc(uint64_t bytes);
 	HeapObject* alloc(uint64_t bytes, GCFinalizer finalizer = 0);
 	
-    void collect(State& state);
+    void collect(Global& global);
 
-	static Heap Global;
+	static Heap GlobalHeap;
 };
 
 inline HeapObject* Heap::smallalloc(uint64_t bytes) {
@@ -118,9 +118,9 @@ inline HeapObject* Heap::alloc(uint64_t bytes, GCFinalizer finalizer) {
 	return (HeapObject*)(g->data);
 }
 
-inline void Heap::collect(State& state) {
+inline void Heap::collect(Global& global) {
     if(total > heapSize) {
-        mark(state);
+        mark(global);
         sweep();
         if(total > heapSize*0.6 && heapSize < (1<<30))
             heapSize *= 2;
@@ -130,18 +130,18 @@ inline void Heap::collect(State& state) {
 
 inline void* HeapObject::operator new(unsigned long bytes) {
     assert(bytes <= 2048);
-    return Heap::Global.smallalloc(bytes);
+    return Heap::GlobalHeap.smallalloc(bytes);
 }
 
 inline void* HeapObject::operator new(unsigned long bytes, unsigned long extra) {
     unsigned long total = bytes + extra;
     return total <= 2048 ? 
-        Heap::Global.smallalloc(total) : 
-        Heap::Global.alloc(total);
+        Heap::GlobalHeap.smallalloc(total) : 
+        Heap::GlobalHeap.alloc(total);
 }
 
 inline void* HeapObject::operator new(unsigned long bytes, GCFinalizer finalizer) {
-    return Heap::Global.alloc(bytes, finalizer);
+    return Heap::GlobalHeap.alloc(bytes, finalizer);
 }
 #endif
 

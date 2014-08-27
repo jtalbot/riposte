@@ -65,7 +65,7 @@ $(PACKAGES): $(RIPOSTE)
 	$(MAKE) -C library/$@ $(MAKECMDGOALS)
 
 $(API): $(API_OBJECTS) $(RIPOSTE)
-	$(CXX) $(LFLAGS) -L/usr/local/opt/gettext/lib/ -L. -lRiposte -Xlinker -reexport-lintl -Xlinker -reexport-lRmath -dynamiclib -compatibility_version 3.1.0 -current_version 3.1.1 -o $@ $^
+	$(CXX) $(LFLAGS) -L/usr/local/opt/gettext/lib/ -L. -lRiposte -Xlinker -reexport-llzma -Xlinker -reexport-lintl -Xlinker -reexport-lRmath -dynamiclib -compatibility_version 3.1.0 -current_version 3.1.1 -o $@ $^
 
 $(RIPOSTE): $(OBJECTS)
 	$(CXX) $(LFLAGS) -dynamiclib -o $@ $^ $(LIBS)

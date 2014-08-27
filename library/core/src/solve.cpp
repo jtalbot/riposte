@@ -5,7 +5,7 @@
 #include <eigen3/Eigen/Dense>
 
 extern "C"
-Value solve(Thread& thread, Value const* args) {
+Value solve(State& state, Value const* args) {
     int64_t As = ((Integer const&)args[1])[0];
     Eigen::MatrixXd A = Eigen::Map<Eigen::MatrixXd>((double*)((Double const&)args[0]).v(), As, As);
     int64_t Br = ((Integer const&)args[3])[0];

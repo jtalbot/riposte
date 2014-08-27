@@ -21,19 +21,19 @@ T const& Cast(Value const& v) {
 }
 
 extern "C"
-Value cat(Thread& thread, Value const* args) {
+Value cat(State& state, Value const* args) {
 	List const& a = Cast<List>(args[0]);
 	Character const& b = Cast<Character>(args[1]);
 	for(int64_t i = 0; i < a.length(); i++) {
 		if(!List::isNA(a[i])) {
-			Character c = As<Character>(thread, a[i]);
+			Character c = As<Character>(state, a[i]);
 			for(int64_t j = 0; j < c.length(); j++) {
                 if(c[j] == Character::NAelement)
                     printf("NA");
                 else
-				    printf("%s", thread.externStr(c[j]).c_str());
+				    printf("%s", state.externStr(c[j]).c_str());
 				if(!(i == a.length()-1 && j == c.length()-1))
-					printf("%s", thread.externStr(b[0]).c_str());
+					printf("%s", state.externStr(b[0]).c_str());
 			}
 		}
 	}
@@ -41,23 +41,23 @@ Value cat(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value library(Thread& thread, Value const* args, Value& result) {
+Value library(State& state, Value const* args, Value& result) {
     REnvironment dest = Cast<REnvironment>(args[0]);
 	Character from = Cast<Character>(args[1]);
     if(from.length() > 0)
-		loadPackage(thread, dest.environment(), "library", thread.externStr(from[0]));
+		loadPackage(state, dest.environment(), "library", state.externStr(from[0]));
     
     return Null::Singleton();
 }
 
 extern "C"
-Value readtable(Thread& thread, Value const* args) {
-	Character from = As<Character>(thread, args[0]);
-	Character sep_list = As<Character>(thread,args[1]);
-	Character format = As<Character>(thread, args[2]);
+Value readtable(State& state, Value const* args) {
+	Character from = As<Character>(state, args[0]);
+	Character sep_list = As<Character>(state,args[1]);
+	Character format = As<Character>(state, args[2]);
 	if(from.length() > 0 && sep_list.length() > 0 && format.length() > 0) {
-		std::string name = thread.externStr(from[0]);
-		std::string sep = thread.externStr(sep_list[0]);
+		std::string name = state.externStr(from[0]);
+		std::string sep = state.externStr(sep_list[0]);
 		
 		std::vector<void*> lists;
 		
@@ -101,7 +101,7 @@ Value readtable(Thread& thread, Value const* args) {
 						((std::vector<double>*)lists[list_idx])->push_back(date);
 						list_idx++;
 					} else if(Strings::Character == format[i]) {
-						String s = thread.internStr(rest);
+						String s = state.internStr(rest);
 						((std::vector<String>*)lists[list_idx])->push_back(s);
 						list_idx++;
 					}
@@ -142,7 +142,7 @@ Value readtable(Thread& thread, Value const* args) {
 
 
 extern "C"
-Value source(Thread& thread, Value const* args) {
+Value source(State& state, Value const* args) {
 	Character file = Cast<Character>(args[0]);
 	std::ifstream t(file[0]->s);
 	std::stringstream buffer;
@@ -150,22 +150,22 @@ Value source(Thread& thread, Value const* args) {
 	std::string code = buffer.str();
 
 	Value value;
-	parse(thread.state, file[0]->s, code.c_str(), code.length(), true, value);	
+	parse(state.global, file[0]->s, code.c_str(), code.length(), true, value);	
 	
 	return value;
 }
 
 extern "C"
-Value paste(Thread& thread, Value const* args) {
-	Character a = As<Character>(thread, args[0]);
-	String sep = As<Character>(thread, args[1])[0];
+Value paste(State& state, Value const* args) {
+	Character a = As<Character>(state, args[0]);
+	String sep = As<Character>(state, args[1])[0];
 	std::string r = "";
 	for(int64_t i = 0; i < a.length()-1; i++) {
 		r += a[i]->s;
 		r += sep->s; 
 	}
 	if(0 < a.length()) r += a[a.length()-1]->s;
-	return Character::c(thread.internStr(r));
+	return Character::c(state.internStr(r));
 }
 
 #include <sys/time.h>
@@ -178,29 +178,29 @@ uint64_t readTime()
 }
 
 extern "C"
-Value proctime(Thread& thread, Value const* args) {
+Value proctime(State& state, Value const* args) {
 	uint64_t s = readTime();
 	return Double::c(s/(1000000.0));
 }
 
 extern "C"
-Value traceconfig(Thread & thread, Value const* args) {
-	Logical c = As<Logical>(thread, args[0]);
+Value traceconfig(State & state, Value const* args) {
+	Logical c = As<Logical>(state, args[0]);
 	if(c.length() == 0) _error("condition is of zero length");
-	thread.state.epeeEnabled = Logical::isTrue(c[0]);
+	state.global.epeeEnabled = Logical::isTrue(c[0]);
 	return Null::Singleton();
 }
 
 // args( A, m, n, B, m, n )
 extern "C"
-Value matrixmultiply(Thread & thread, Value const* args) {
+Value matrixmultiply(State & state, Value const* args) {
 	double mA = asReal1(args[1]);
 	double nA = asReal1(args[2]);
-	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
+	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(state, args[0]).v(), mA, nA);
 	
 	double mB = asReal1(args[4]);
 	double nB = asReal1(args[5]);
-	Eigen::MatrixXd bb = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[3]).v(), mB, nB);
+	Eigen::MatrixXd bb = Eigen::Map<Eigen::MatrixXd>(As<Double>(state, args[3]).v(), mB, nB);
 
 	Double c(aa.rows()*bb.cols());
 	Eigen::Map<Eigen::MatrixXd>(c.v(), aa.rows(), bb.cols()) = aa*bb;
@@ -209,10 +209,10 @@ Value matrixmultiply(Thread & thread, Value const* args) {
 
 // args( A, m, n )
 extern "C"
-Value eigensymmetric(Thread & thread, Value const* args) {
+Value eigensymmetric(State & state, Value const* args) {
 	double mA = asReal1(args[1]);
 	double nA = asReal1(args[2]);
-	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
+	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(state, args[0]).v(), mA, nA);
 	
 	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigenSolver(aa);
 	Double c(aa.rows()*aa.cols());
@@ -228,10 +228,10 @@ Value eigensymmetric(Thread & thread, Value const* args) {
 
 // args( A, m, n )
 extern "C"
-Value eigen(Thread & thread, Value const* args) {
+Value eigen(State & state, Value const* args) {
 	/*double mA = asReal1(args[1]);
 	double nA = asReal1(args[2]);
-	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(thread, args[0]).v(), mA, nA);
+	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(state, args[0]).v(), mA, nA);
 	
 	Eigen::EigenSolver<Eigen::MatrixXd> eigenSolver(aa);
 	Double c(aa.rows()*aa.cols());
@@ -247,7 +247,7 @@ Value eigen(Thread & thread, Value const* args) {
 }
 
 extern "C"
-Value commandArgs(Thread& thread, Value const* args) {
-	return thread.state.arguments;
+Value commandArgs(State& state, Value const* args) {
+	return state.global.arguments;
 }
 

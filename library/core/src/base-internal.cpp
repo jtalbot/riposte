@@ -7,7 +7,7 @@
 #include "../../../src/coerce.h"
 
 extern "C"
-Value decompress(Thread& thread, Value const* args) {
+Value decompress(State& state, Value const* args) {
     Raw const& data = (Raw const&)args[0];
     Integer const& size = (Integer const&)args[1];
     Character const& comp = (Character const&)args[2];

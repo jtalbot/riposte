@@ -4,7 +4,9 @@
 
 #include "value.h"
 
-int parse(State& state, char const* filename,
+class Global;
+
+int parse(Global& global, char const* filename,
     char const* code, size_t len, bool isEof, Value& result, FILE* trace=NULL);
 
 #endif

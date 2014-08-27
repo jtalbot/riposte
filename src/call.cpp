@@ -4,15 +4,15 @@
 #include "compiler.h"
 
 Instruction const* force(
-    Thread& thread, Promise const& p,
+    State& state, Promise const& p,
     Environment* targetEnv, Value targetIndex,
     int64_t outRegister, Instruction const* returnpc) {
 
-    Code* code = p.isExpression() ? p.code() : thread.state.promiseCode;
-    Compiler::doPromiseCompilation(thread, code);
+    Code* code = p.isExpression() ? p.code() : state.global.promiseCode;
+    Compiler::doPromiseCompilation(state, code);
     Instruction const* r = buildStackFrame(
-        thread, p.environment(), code, outRegister, returnpc);
-    thread.frame.isPromise = true;
+        state, p.environment(), code, outRegister, returnpc);
+    state.frame.isPromise = true;
             
     REnvironment::Init(REGISTER(0), targetEnv);
     REGISTER(1) = targetIndex;
@@ -23,44 +23,44 @@ Instruction const* force(
     return r;
 }
 
-void dumpStack(Thread& thread) {
+void dumpStack(State& state) {
    
-    for(int64_t i = thread.stack.size()-1; i >= 0; --i) {
-        StackFrame const& s = thread.stack[i];
+    for(int64_t i = state.stack.size()-1; i >= 0; --i) {
+        StackFrame const& s = state.stack[i];
 
         std::cout << i << ": ";
         if(s.isPromise) {
-            std::cout << "Forcing " << thread.deparse(s.registers[1]) << std::endl;
+            std::cout << "Forcing " << state.deparse(s.registers[1]) << std::endl;
         }
         else {
-            std::cout << thread.deparse(s.environment->get(Strings::__call__)) << std::endl;
+            std::cout << state.deparse(s.environment->get(Strings::__call__)) << std::endl;
         }
     }
 
     /*std::cout << "\t(Executing in " << 
-        "0x" << intToHexStr((int64_t)thread.frame.environment) << ")" << std::endl;
+        "0x" << intToHexStr((int64_t)state.frame.environment) << ")" << std::endl;
 	
-    thread.frame.code->printByteCode(thread.state);
+    state.frame.code->printByteCode(state.global);
     
     std::cout << "Returning to: " << 
-        "0x" << intToHexStr((int64_t)thread.frame.returnpc) << std::endl;
+        "0x" << intToHexStr((int64_t)state.frame.returnpc) << std::endl;
     */
 }
 
-Instruction const* buildStackFrame(Thread& thread, 
+Instruction const* buildStackFrame(State& state, 
     Environment* environment, Code const* code, 
     int64_t outRegister, Instruction const* returnpc) {
 
 	// make new stack frame
-	StackFrame& s = thread.push();
+	StackFrame& s = state.push();
 	s.environment = environment;
 	s.code = code;
 	s.returnpc = returnpc;
 	s.registers += outRegister;
     s.isPromise = false;
 	
-	if(s.registers+code->registers > thread.registers+DEFAULT_NUM_REGISTERS) {
-        dumpStack(thread);
+	if(s.registers+code->registers > state.registers+DEFAULT_NUM_REGISTERS) {
+        dumpStack(state);
 		_internalError("Register overflow");
     }
 
@@ -73,7 +73,7 @@ Instruction const* buildStackFrame(Thread& thread,
 	return &(code->bc[0]);
 }
 
-inline void assignArgument(Thread& thread, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {
+inline void assignArgument(State& state, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {
 	assert(!v.isFuture());
 	
 	Value& w = assignEnv->insert(n);
@@ -83,7 +83,7 @@ inline void assignArgument(Thread& thread, Environment* evalEnv, Environment* as
 	}
 }
 
-inline void assignDot(Thread& thread, Value const& v, Environment* evalEnv, Value& out) {
+inline void assignDot(State& state, Value const& v, Environment* evalEnv, Value& out) {
 	out = v;
 
 	if(v.isPromise()) {
@@ -161,7 +161,7 @@ bool namedArguments(Character const& dotnames, CompiledCall const& call) {
 
 
 // Generic argument matching
-Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, CompiledCall const& call) {
+Environment* MatchArgs(State& state, Environment* env, Closure const& func, CompiledCall const& call) {
     Character const& parameters = func.prototype()->parameters;
     List const& defaults = func.prototype()->defaults;
 	int64_t pDotIndex = func.prototype()->dotIndex;
@@ -178,12 +178,12 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 
     // set extra args (they must be named)
     for(size_t i = 0; i < call.extraArgs.length(); ++i) {
-        assignArgument(thread, env, fenv, call.extraNames[i], call.extraArgs[i]);
+        assignArgument(state, env, fenv, call.extraNames[i], call.extraArgs[i]);
     }
 
 	// set defaults
 	for(int64_t i = 0; i < (int64_t)parameters.length(); ++i) {
-		assignArgument(thread, fenv, fenv, parameters[i], defaults[i]);
+		assignArgument(state, fenv, fenv, parameters[i], defaults[i]);
     }
 
 	if(!named) {
@@ -193,7 +193,7 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 		for(int64_t i = 0; i < end; ++i) {
 			Value arg = argument(i, dots, call, env);
 			if(!arg.isNil()) {
-				assignArgument(thread, env, fenv, parameters[i], arg);
+				assignArgument(state, env, fenv, parameters[i], arg);
             }
 		}
 
@@ -204,13 +204,13 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
                 List newdots(numArgs-end);
                 for(int64_t i = end; i < numArgs; i++) {
 	                Value arg = argument(i, dots, call, env);
-                    assignDot(thread, arg, env, newdots[i-end]);
+                    assignDot(state, arg, env, newdots[i-end]);
                 }
                 fenv->insert(Strings::__dots__) = newdots;
             }
             else {
                 _error(std::string("Unused args in call: ")
-                        + thread.state.deparse(call.call));
+                        + state.global.deparse(call.call));
             }
         }
     }
@@ -222,7 +222,7 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 		    for(int64_t i = 0; i < numArgs; i++) {
                 Value arg = argument(i, dots, call, env);
                 String n = name(i, dots, dotnames, call);
-                assignDot(thread, arg, env, newdots[i]);
+                assignDot(state, arg, env, newdots[i]);
                 names[i] = n;
             }
             fenv->insert(Strings::__dots__) = newdots;
@@ -238,7 +238,7 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
             _error("Too many arguments for fixed size assignment arrays");
         }
 	
-		int64_t *assignment = thread.assignment, *set = thread.set;
+		int64_t *assignment = state.assignment, *set = state.set;
 		for(int64_t i = 0; i < numArgs; i++)
             assignment[i] = -1;
 		for(int64_t i = 0; i < (int64_t)parameters.length(); i++)
@@ -294,7 +294,7 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 			if(j != pDotIndex && set[j] >= 0) {
 				Value arg = argument(set[j], dots, call, env);
 				if(!arg.isNil()) {
-					assignArgument(thread, env, fenv, parameters[j], arg);
+					assignArgument(state, env, fenv, parameters[j], arg);
 			    }
                 numDots--;
             }
@@ -313,7 +313,7 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
                         String n = name(i, dots, dotnames, call);
                         if(n != Strings::empty)
                             named = true;
-                        assignDot(thread, arg, env, newdots[j]);
+                        assignDot(state, arg, env, newdots[j]);
                         names[j] = n;
                         j++;
 			        }
@@ -325,7 +325,7 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
             }
             else {
                 _error(std::string("Unused args in call: ")
-                        + thread.state.deparse(call.call));
+                        + state.global.deparse(call.call));
 	        }
         }
     }
@@ -340,7 +340,7 @@ Environment* MatchArgs(Thread& thread, Environment* env, Closure const& func, Co
 
 // Assumes no names and no ... in the argument list.
 // Supports ... in the parameter list.
-Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func, CompiledCall const& call) {
+Environment* FastMatchArgs(State& state, Environment* env, Closure const& func, CompiledCall const& call) {
     Prototype const* prototype = func.prototype();
 	Character const& parameters = prototype->parameters;
     List const& defaults = prototype->defaults;
@@ -355,17 +355,17 @@ Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func
 
     // set extra args (they must be named)
     for(size_t i = 0; i < call.extraArgs.length(); ++i) {
-        assignArgument(thread, env, fenv, 
+        assignArgument(state, env, fenv, 
             call.extraNames[i], call.extraArgs[i]);
     }
 
 	// set parameters from arguments & defaults
 	for(int64_t i = 0; i < parameters.length(); i++) {
 		if(i < end && !arguments[i].isNil()) {
-			assignArgument(thread, env, fenv, parameters[i], arguments[i]);
+			assignArgument(state, env, fenv, parameters[i], arguments[i]);
         }
 		else {
-			assignArgument(thread, fenv, fenv, parameters[i], defaults[i]);
+			assignArgument(state, fenv, fenv, parameters[i], defaults[i]);
         }
 	}
 
@@ -375,13 +375,13 @@ Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func
 	    if(pDotIndex < parameters.length()) {
             List dots(arguments.length()-end);
             for(int64_t i = end; i < (int64_t)arguments.length(); i++) {
-                assignDot(thread, arguments[i], env, dots[i-end]);
+                assignDot(state, arguments[i], env, dots[i-end]);
             }
             fenv->insert(Strings::__dots__) = dots;
         }
         else if(arguments.length() > end) {
             _error(std::string("Unused args in call: ")
-                    + thread.state.deparse(call.call));
+                    + state.global.deparse(call.call));
 	    }
     }
 
@@ -393,10 +393,10 @@ Environment* FastMatchArgs(Thread& thread, Environment* env, Closure const& func
     return fenv;
 }
 
-Value Quote(Thread& thread, Value const& v) {
+Value Quote(State& state, Value const& v) {
     if(isSymbol(v) || isCall(v) || isExpression(v)) {
         List call(2);
-        call[0] = CreateSymbol(thread.state.internStr("quote"));
+        call[0] = CreateSymbol(state.global.internStr("quote"));
         call[1] = v;
         return CreateCall(call);
     } else {
@@ -404,67 +404,67 @@ Value Quote(Thread& thread, Value const& v) {
     }
 }
 
-Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, int64_t out) {
+Instruction const* GenericDispatch(State& state, Instruction const& inst, String op, Value const& a, int64_t out) {
 	Environment* penv;
-	Value const& f = thread.frame.environment->getRecursive(op, penv);
+	Value const& f = state.frame.environment->getRecursive(op, penv);
 	if(f.isClosure()) {
 		List call = List::c(
                         CreateSymbol(op),
-                        Quote(thread, a));
-        CompiledCall cc = Compiler::makeCall(thread, call, Character(0));
-		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
-		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
+                        Quote(state, a));
+        CompiledCall cc = Compiler::makeCall(state, call, Character(0));
+		Environment* fenv = FastMatchArgs(state, state.frame.environment, ((Closure const&)f), cc);
+		return buildStackFrame(state, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
 	_error(std::string("Failed to find generic for builtin op: ") + op->s);
 }
 
-Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out) {
+Instruction const* GenericDispatch(State& state, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out) {
 	Environment* penv;
-	Value const& f = thread.frame.environment->getRecursive(op, penv);
+	Value const& f = state.frame.environment->getRecursive(op, penv);
 	if(f.isClosure()) { 
 		List call = List::c(
                         CreateSymbol(op),
-                        Quote(thread, a),
-                        Quote(thread, b));
-        CompiledCall cc = Compiler::makeCall(thread, call, Character(0));
-		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
-		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
+                        Quote(state, a),
+                        Quote(state, b));
+        CompiledCall cc = Compiler::makeCall(state, call, Character(0));
+		Environment* fenv = FastMatchArgs(state, state.frame.environment, ((Closure const&)f), cc);
+		return buildStackFrame(state, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
 	_error(std::string("Failed to find generic for builtin op: ") + op->s + " type: " + Type::toString(a.type()) + " " + Type::toString(b.type()));
 }
 
-Instruction const* GenericDispatch(Thread& thread, Instruction const& inst, String op, Value const& a, Value const& b, Value const& c, int64_t out) {
+Instruction const* GenericDispatch(State& state, Instruction const& inst, String op, Value const& a, Value const& b, Value const& c, int64_t out) {
 	Environment* penv;
-	Value const& f = thread.frame.environment->getRecursive(op, penv);
+	Value const& f = state.frame.environment->getRecursive(op, penv);
 	if(f.isClosure()) { 
 		List call = List::c(
                         CreateSymbol(op),
-                        Quote(thread, a),
-                        Quote(thread, b),
-                        Quote(thread, c));
+                        Quote(state, a),
+                        Quote(state, b),
+                        Quote(state, c));
         Character names = Character::c(
                         Strings::empty,
                         Strings::empty,
                         Strings::empty,
                         Strings::value);
-        CompiledCall cc = Compiler::makeCall(thread, call, names);
-        Environment* fenv = MatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
-		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
+        CompiledCall cc = Compiler::makeCall(state, call, names);
+        Environment* fenv = MatchArgs(state, state.frame.environment, ((Closure const&)f), cc);
+		return buildStackFrame(state, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
 	_error(std::string("Failed to find generic for builtin op: ") + op->s);
 }
 
 
-Instruction const* StopDispatch(Thread& thread, Instruction const& inst, String msg, int64_t out) {
+Instruction const* StopDispatch(State& state, Instruction const& inst, String msg, int64_t out) {
 	Environment* penv;
-	Value const& f = thread.frame.environment->getRecursive(thread.internStr("__stop__"), penv);
+	Value const& f = state.frame.environment->getRecursive(state.internStr("__stop__"), penv);
 	if(f.isClosure()) {
 		List call = List::c(
                         f, 
                         Character::c(msg));
-        CompiledCall cc = Compiler::makeCall(thread, call, Character(0));
-		Environment* fenv = FastMatchArgs(thread, thread.frame.environment, ((Closure const&)f), cc);
-		return buildStackFrame(thread, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
+        CompiledCall cc = Compiler::makeCall(state, call, Character(0));
+		Environment* fenv = FastMatchArgs(state, state.frame.environment, ((Closure const&)f), cc);
+		return buildStackFrame(state, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
 	}
 	_error(std::string("Failed to find stop handler (__stop__)"));
 }
@@ -472,7 +472,7 @@ Instruction const* StopDispatch(Thread& thread, Instruction const& inst, String 
 
 template<>
 bool EnvironmentBinaryDispatch< struct eqVOp<REnvironment, REnvironment> >
-(Thread& thread, void* args, Value const& a, Value const& b, Value& c) {
+(State& state, void* args, Value const& a, Value const& b, Value& c) {
     Logical::InitScalar(c,
         ((REnvironment const&)a).environment() == ((REnvironment const&)b).environment() ?
             Logical::TrueElement : Logical::FalseElement );
@@ -481,24 +481,24 @@ bool EnvironmentBinaryDispatch< struct eqVOp<REnvironment, REnvironment> >
 
 template<>
 bool EnvironmentBinaryDispatch< struct neqVOp<REnvironment, REnvironment> >
-(Thread& thread, void* args, Value const& a, Value const& b, Value& c) {
+(State& state, void* args, Value const& a, Value const& b, Value& c) {
     Logical::InitScalar(c,
         ((REnvironment const&)a).environment() != ((REnvironment const&)b).environment() ?
             Logical::TrueElement : Logical::FalseElement );
     return true;
 }
 
-void IfElseDispatch(Thread& thread, void* args, Value const& a, Value const& b, Value const& cond, Value& c) {
+void IfElseDispatch(State& state, void* args, Value const& a, Value const& b, Value const& cond, Value& c) {
 	if(a.isVector() && b.isVector())
 	{
         if(a.isCharacter() || b.isCharacter())
-		    Zip3< IfElseVOp<Character> >::eval(thread, args, As<Character>(thread, a), As<Character>(thread, b), As<Logical>(thread, cond), c);
+		    Zip3< IfElseVOp<Character> >::eval(state, args, As<Character>(state, a), As<Character>(state, b), As<Logical>(state, cond), c);
 	    else if(a.isDouble() || b.isDouble())
-		    Zip3< IfElseVOp<Double> >::eval(thread, args, As<Double>(thread, a), As<Double>(thread, b), As<Logical>(thread, cond), c);
+		    Zip3< IfElseVOp<Double> >::eval(state, args, As<Double>(state, a), As<Double>(state, b), As<Logical>(state, cond), c);
 	    else if(a.isInteger() || b.isInteger())	
-		    Zip3< IfElseVOp<Integer> >::eval(thread, args, As<Integer>(thread, a), As<Integer>(thread, b), As<Logical>(thread, cond), c);
+		    Zip3< IfElseVOp<Integer> >::eval(state, args, As<Integer>(state, a), As<Integer>(state, b), As<Logical>(state, cond), c);
 	    else if(a.isLogical() || b.isLogical())	
-		    Zip3< IfElseVOp<Logical> >::eval(thread, args, As<Logical>(thread, a), As<Logical>(thread, b), As<Logical>(thread, cond), c);
+		    Zip3< IfElseVOp<Logical> >::eval(state, args, As<Logical>(state, a), As<Logical>(state, b), As<Logical>(state, cond), c);
 	    else if(a.isNull() || b.isNull() || cond.isNull())
 		    c = Null::Singleton();
     }
@@ -509,34 +509,34 @@ void IfElseDispatch(Thread& thread, void* args, Value const& a, Value const& b, 
 
 #ifdef EPEE
 template< template<class X> class Group, IROpCode::Enum Op>
-bool RecordUnary(Thread& thread, Value const& a, Value& c) {
+bool RecordUnary(State& state, Value const& a, Value& c) {
     // If we can record the instruction, we can delay execution
-    if(thread.traces.isTraceable<Group>(a)) {
-        c = thread.traces.EmitUnary<Group>(thread.frame.environment, Op, a, 0);
-        thread.traces.OptBind(thread, c);
+    if(state.traces.isTraceable<Group>(a)) {
+        c = state.traces.EmitUnary<Group>(state.frame.environment, Op, a, 0);
+        state.traces.OptBind(state, c);
         return true;
     }
     // If we couldn't delay, and the argument is a future, then we need to evaluate it.
     if(a.isFuture()) {
-        thread.traces.Bind(thread, a);
+        state.traces.Bind(state, a);
     }
     return false;
 }
 
 template< template<class X, class Y> class Group, IROpCode::Enum Op>
-bool RecordBinary(Thread& thread, Value const& a, Value const& b, Value& c) {
+bool RecordBinary(State& state, Value const& a, Value const& b, Value& c) {
     // If we can record the instruction, we can delay execution
-    if(thread.traces.isTraceable<Group>(a, b)) {
-        c = thread.traces.EmitBinary<Group>(thread.frame.environment, Op, a, b, 0);
-        thread.traces.OptBind(thread, c);
+    if(state.traces.isTraceable<Group>(a, b)) {
+        c = state.traces.EmitBinary<Group>(state.frame.environment, Op, a, b, 0);
+        state.traces.OptBind(state, c);
         return true;
     }
     // If we couldn't delay, and the arguments are futures, then we need to evaluate them.
     if(a.isFuture()) {
-        thread.traces.Bind(thread, a);
+        state.traces.Bind(state, a);
     }
     if(b.isFuture()) {
-        thread.traces.Bind(thread, b);
+        state.traces.Bind(state, b);
     }
     return false;
 }
@@ -544,58 +544,58 @@ bool RecordBinary(Thread& thread, Value const& a, Value const& b, Value& c) {
 
 #ifdef EPEE
 #define SLOW_DISPATCH_DEFN(Name, String, Group, Func) \
-Instruction const* Name##Slow(Thread& thread, Instruction const& inst, void* args, Value const& a, Value& c) { \
-    if(RecordUnary<Group, IROpCode::Name>(thread, a, c)) \
+Instruction const* Name##Slow(State& state, Instruction const& inst, void* args, Value const& a, Value& c) { \
+    if(RecordUnary<Group, IROpCode::Name>(state, a, c)) \
         return &inst+1; \
     else if(!((Object const&)a).hasAttributes() \
-            && Group##Dispatch<Name##VOp>(thread, args, a, c)) \
+            && Group##Dispatch<Name##VOp>(state, args, a, c)) \
         return &inst+1; \
     else \
-        return GenericDispatch(thread, inst, Strings::Name, a, inst.c); \
+        return GenericDispatch(state, inst, Strings::Name, a, inst.c); \
 }
 UNARY_FOLD_SCAN_BYTECODES(SLOW_DISPATCH_DEFN)
 #undef SLOW_DISPATCH_DEFN
 
 #define SLOW_DISPATCH_DEFN(Name, String, Group, Func) \
-Instruction const* Name##Slow(Thread& thread, Instruction const& inst, void* args, Value const& a, Value const& b, Value& c) { \
-    if(RecordBinary<Group, IROpCode::Name>(thread, a, b, c)) \
+Instruction const* Name##Slow(State& state, Instruction const& inst, void* args, Value const& a, Value const& b, Value& c) { \
+    if(RecordBinary<Group, IROpCode::Name>(state, a, b, c)) \
         return &inst+1; \
     else if(   !((Object const&)a).hasAttributes() \
             && !((Object const&)b).hasAttributes() \
-            && Group##Dispatch<Name##VOp>(thread, args, a, b, c)) \
+            && Group##Dispatch<Name##VOp>(state, args, a, b, c)) \
         return &inst+1; \
     else \
-        return GenericDispatch(thread, inst, Strings::Name, a, b, inst.c); \
+        return GenericDispatch(state, inst, Strings::Name, a, b, inst.c); \
 }
 BINARY_BYTECODES(SLOW_DISPATCH_DEFN)
 #undef SLOW_DISPATCH_DEFN
 #else
 #define SLOW_DISPATCH_DEFN(Name, String, Group, Func) \
-Instruction const* Name##Slow(Thread& thread, Instruction const& inst, void* args, Value const& a, Value& c) { \
+Instruction const* Name##Slow(State& state, Instruction const& inst, void* args, Value const& a, Value& c) { \
     if(!((Object const&)a).hasAttributes() \
-            && Group##Dispatch<Name##VOp>(thread, args, a, c)) \
+            && Group##Dispatch<Name##VOp>(state, args, a, c)) \
         return &inst+1; \
     else \
-        return GenericDispatch(thread, inst, Strings::Name, a, inst.c); \
+        return GenericDispatch(state, inst, Strings::Name, a, inst.c); \
 }
 UNARY_FOLD_SCAN_BYTECODES(SLOW_DISPATCH_DEFN)
 #undef SLOW_DISPATCH_DEFN
 
 #define SLOW_DISPATCH_DEFN(Name, String, Group, Func) \
-Instruction const* Name##Slow(Thread& thread, Instruction const& inst, void* args, Value const& a, Value const& b, Value& c) { \
+Instruction const* Name##Slow(State& state, Instruction const& inst, void* args, Value const& a, Value const& b, Value& c) { \
     if(   !((Object const&)a).hasAttributes() \
             && !((Object const&)b).hasAttributes() \
-            && Group##Dispatch<Name##VOp>(thread, args, a, b, c)) \
+            && Group##Dispatch<Name##VOp>(state, args, a, b, c)) \
         return &inst+1; \
     else \
-        return GenericDispatch(thread, inst, Strings::Name, a, b, inst.c); \
+        return GenericDispatch(state, inst, Strings::Name, a, b, inst.c); \
 }
 BINARY_BYTECODES(SLOW_DISPATCH_DEFN)
 #undef SLOW_DISPATCH_DEFN
 #endif
 
 
-Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const& a, Value const& b, Value& c) {
+Instruction const* GetSlow(State& state, Instruction const& inst, Value const& a, Value const& b, Value& c) {
     BIND(a); BIND(b);
    
     // This case seems wrong, but some base code relies on this behavior. 
@@ -642,7 +642,7 @@ Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const&
                     return &inst+1;
                 }
                 else {
-                    return force(thread, ((Promise const&)v), 
+                    return force(state, ((Promise const&)v), 
                         ((REnvironment&)a).environment(), b,
                         inst.c, &inst+1); 
                 }
@@ -665,6 +665,6 @@ Instruction const* GetSlow(Thread& thread, Instruction const& inst, Value const&
         }
     }
  
-    return GenericDispatch(thread, inst, Strings::bb, a, b, inst.c); 
+    return GenericDispatch(state, inst, Strings::bb, a, b, inst.c); 
 }
 

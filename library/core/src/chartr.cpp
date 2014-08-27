@@ -12,7 +12,7 @@ void chartr_finalize(Value v) {
 }
 
 extern "C"
-Value chartr_compile(Thread& thread, Value const* args) {
+Value chartr_compile(State& state, Value const* args) {
     Character o = (Character const&)args[0];
     Character n = (Character const&)args[1];
     unsigned char* map = new unsigned char[256];
@@ -29,7 +29,7 @@ Value chartr_compile(Thread& thread, Value const* args) {
 }
 
 extern "C"
-void chartr_map(Thread& thread,
+void chartr_map(State& state,
         Character::Element& result,
         Character::Element text,
         Value const& map) {
@@ -40,6 +40,6 @@ void chartr_map(Thread& thread,
     for(size_t i = 0; i < t.size(); i++) {
         t[i] = m[(unsigned char)t[i]];
     }
-    result = thread.internStr(t.c_str());
+    result = state.internStr(t.c_str());
 }
 

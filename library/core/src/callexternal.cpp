@@ -9,7 +9,7 @@
 #include "../../../libs/dyncall/dyncall/dyncall.h"
 
 extern "C"
-Value dotC(Thread& thread, Value const* args) {
+Value dotC(State& state, Value const* args) {
     Externalptr const& func = (Externalptr const&)args[0];
     List const& arguments = (List const&)args[1];
 
@@ -42,39 +42,39 @@ Value dotC(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value dotCall(Thread& thread, Value const* args) {
+Value dotCall(State& state, Value const* args) {
     Externalptr const& func = (Externalptr const&)args[0];
     List const& arguments = (List const&)args[1];
 
-    if(!thread.state.apiStack)
+    if(!state.global.apiStack)
         throw "Cannot use .Call interface without R API loaded";
 
     DCCallVM* vm = dcNewCallVM(4096);
     dcMode(vm, DC_CALL_C_DEFAULT);
 
     // Get the lock on the global state...
-    thread.state.apiLock.acquire();
+    state.global.apiLock.acquire();
     
     // The API will push user-created SEXPs on the global R_PPStack.
     // Remember the size so we can restore to the correct size.
-    int stackSize = *thread.state.apiStack->size;
+    int stackSize = *state.global.apiStack->size;
 
     // Pass as SEXPs, these need to be protected as well...
-    // We should probably save them in the thread-specific stack instead
+    // We should probably save them in the state-specific stack instead
     for(size_t i = 0; i < arguments.length(); ++i) {
         SEXP a = new SEXPREC(arguments[i]);
-        thread.state.apiStack->stack[(*thread.state.apiStack->size)++] = a;
+        state.global.apiStack->stack[(*state.global.apiStack->size)++] = a;
         dcArgPointer(vm, (void*)a);
     }
 
     SEXP result = (SEXP)dcCallPointer(vm, func.ptr());
 
-    (*thread.state.apiStack->size) -= arguments.length();
-    if(*thread.state.apiStack->size != stackSize)
+    (*state.global.apiStack->size) -= arguments.length();
+    if(*state.global.apiStack->size != stackSize)
         printf("Protection stack not restored to original size");
-    *thread.state.apiStack->size = stackSize;
+    *state.global.apiStack->size = stackSize;
 
-    thread.state.apiLock.release();
+    state.global.apiLock.release();
     
     dcFree(vm);
 
@@ -82,39 +82,39 @@ Value dotCall(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value dotExternal(Thread& thread, Value const* args) {
+Value dotExternal(State& state, Value const* args) {
     Externalptr const& func = (Externalptr const&)args[0];
     List const& arguments = (List const&)args[1];
 
-    if(!thread.state.apiStack)
+    if(!state.global.apiStack)
         throw "Cannot use .Call interface without R API loaded";
 
     DCCallVM* vm = dcNewCallVM(4096);
     dcMode(vm, DC_CALL_C_DEFAULT);
 
     // Get the lock on the global state...
-    thread.state.apiLock.acquire();
+    state.global.apiLock.acquire();
     
     // The API will push user-created SEXPs on the global R_PPStack.
     // Remember the size so we can restore to the correct size.
-    int stackSize = *thread.state.apiStack->size;
+    int stackSize = *state.global.apiStack->size;
 
     // Pass as SEXPs, these need to be protected as well...
-    // We should probably save them in the thread-specific stack instead
+    // We should probably save them in the state-specific stack instead
     {
         SEXP a = new SEXPREC(arguments);
-        thread.state.apiStack->stack[(*thread.state.apiStack->size)++] = a;
+        state.global.apiStack->stack[(*state.global.apiStack->size)++] = a;
         dcArgPointer(vm, (void*)a);
     }
 
     SEXP result = (SEXP)dcCallPointer(vm, func.ptr());
 
-    (*thread.state.apiStack->size)--;
-    if(*thread.state.apiStack->size != stackSize)
+    (*state.global.apiStack->size)--;
+    if(*state.global.apiStack->size != stackSize)
         printf("Protection stack not restored to original size");
-    *thread.state.apiStack->size = stackSize;
+    *state.global.apiStack->size = stackSize;
 
-    thread.state.apiLock.release();
+    state.global.apiLock.release();
     
     dcFree(vm);
 

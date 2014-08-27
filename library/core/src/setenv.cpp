@@ -9,7 +9,7 @@
 #include "../../../src/coerce.h"
 
 extern "C"
-void syssetenv_map(Thread& thread,
+void syssetenv_map(State& state,
     Logical::Element& r,
     Character::Element name, Character::Element value)
 {
@@ -19,7 +19,7 @@ void syssetenv_map(Thread& thread,
 } 
 
 extern "C"
-void sysunsetenv_map(Thread& thread,
+void sysunsetenv_map(State& state,
     Logical::Element& r,
     Character::Element name)
 {

@@ -5,7 +5,7 @@
 #include "../../../src/coerce.h"
 
 extern "C"
-Value tabulate(Thread& thread, Value const* args) {
+Value tabulate(State& state, Value const* args) {
     Integer const& b = (Integer const&)args[0];
     Integer const& n = (Integer const&)args[1];
 

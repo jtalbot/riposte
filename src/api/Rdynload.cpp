@@ -5,7 +5,7 @@
 #include "../frontend.h"
 
 Value parseC(R_CMethodDef const* call, std::string klass) {
-    Value n = Character::c(globalState->internStr(call->name));
+    Value n = Character::c(global->internStr(call->name));
     Value a;
     Externalptr::Init(a, (void*)(call->fun), Value::Nil(), Value::Nil(), NULL);
     Value d = Null::Singleton();
@@ -13,17 +13,17 @@ Value parseC(R_CMethodDef const* call, std::string klass) {
 
     // TODO: parse the types and styles too
     Character names(4);
-    names[0] = globalState->internStr("name");
-    names[1] = globalState->internStr("address");
-    names[2] = globalState->internStr("dll");
-    names[3] = globalState->internStr("numParameters");
+    names[0] = global->internStr("name");
+    names[1] = global->internStr("address");
+    names[2] = global->internStr("dll");
+    names[3] = global->internStr("numParameters");
 
     List r = List::c(n, a, d, num);
     Dictionary* dict = new Dictionary(2);
     dict->insert(Strings::classSym) =
         Character::c(
-            globalState->internStr(klass),
-            globalState->internStr("NativeSymbolInfo"));
+            global->internStr(klass),
+            global->internStr("NativeSymbolInfo"));
     dict->insert(Strings::names) = names;
     r.attributes(dict);
 
@@ -31,7 +31,7 @@ Value parseC(R_CMethodDef const* call, std::string klass) {
 }
 
 Value parseCall(R_CallMethodDef const* call, std::string klass) {
-    Value n = Character::c(globalState->internStr(call->name));
+    Value n = Character::c(global->internStr(call->name));
 
     Value a;
     Externalptr::Init(a, (void*)(call->fun), Value::Nil(), Value::Nil(), NULL);
@@ -40,17 +40,17 @@ Value parseCall(R_CallMethodDef const* call, std::string klass) {
 
     // TODO: parse the types and styles too
     Character names(4);
-    names[0] = globalState->internStr("name");
-    names[1] = globalState->internStr("address");
-    names[2] = globalState->internStr("dll");
-    names[3] = globalState->internStr("numParameters");
+    names[0] = global->internStr("name");
+    names[1] = global->internStr("address");
+    names[2] = global->internStr("dll");
+    names[3] = global->internStr("numParameters");
 
     List r = List::c(n, a, d, num);
     Dictionary* dict = new Dictionary(2);
     dict->insert(Strings::classSym) =
         Character::c(
-            globalState->internStr(klass),
-            globalState->internStr("NativeSymbolInfo"));
+            global->internStr(klass),
+            global->internStr("NativeSymbolInfo"));
     dict->insert(Strings::names) = names;
     r.attributes(dict);
 
@@ -80,7 +80,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
         }
         Dictionary* d = new Dictionary(2);
         d->insert(Strings::classSym) =
-            Character::c(globalState->internStr("NativeRoutineList"));
+            Character::c(global->internStr("NativeRoutineList"));
         d->insert(Strings::names) = names;
         r.attributes(d);
         args[0] = r;
@@ -101,7 +101,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
         }
         Dictionary* d = new Dictionary(2);
         d->insert(Strings::classSym) =
-            Character::c(globalState->internStr("NativeRoutineList"));
+            Character::c(global->internStr("NativeRoutineList"));
         d->insert(Strings::names) = names;
         r.attributes(d);
         args[1] = r;
@@ -122,7 +122,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
         }
         Dictionary* d = new Dictionary(2);
         d->insert(Strings::classSym) =
-            Character::c(globalState->internStr("NativeRoutineList"));
+            Character::c(global->internStr("NativeRoutineList"));
         d->insert(Strings::names) = names;
         r.attributes(d);
         args[2] = r;
@@ -143,7 +143,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
         }
         Dictionary* d = new Dictionary(2);
         d->insert(Strings::classSym) =
-            Character::c(globalState->internStr("NativeRoutineList"));
+            Character::c(global->internStr("NativeRoutineList"));
         d->insert(Strings::names) = names;
         r.attributes(d);
         args[3] = r;

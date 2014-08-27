@@ -2,6 +2,7 @@
 #include "api.h"
 #include <stddef.h>
 
+#include "../riposte.h"
 #include "../frontend.h"
 #include "../compiler.h"
 
@@ -574,9 +575,9 @@ SEXP Rf_eval(SEXP x, SEXP env) {
 
     Promise const& p = (Promise const&)x->v;
 
-    Thread* thread = globalState->getThread();
-    Value r = thread->eval(p, 0);
-    globalState->deleteThread(thread);
+    Riposte::State& state = Riposte::newState();
+    Value r = ((::State*)&state)->eval(p, 0);
+    Riposte::deleteState(state);
     
     return new SEXPREC(r);
 }
@@ -640,7 +641,7 @@ void Rf_gsetVar(SEXP, SEXP, SEXP) {
 }
 
 SEXP Rf_install(const char * s) {
-    return globalState->installSEXP(CreateSymbol(globalState->internStr(s)));
+    return global->installSEXP(CreateSymbol(global->internStr(s)));
 }
 
 SEXP Rf_lengthgets(SEXP, R_len_t) {
@@ -660,7 +661,7 @@ SEXP Rf_namesgets(SEXP, SEXP) {
 }
 
 SEXP Rf_mkChar(const char * str) {
-    String s = globalState->internStr(str);
+    String s = global->internStr(str);
     Value r;
     ScalarString::Init(r, s);
     return new SEXPREC(r);
@@ -769,7 +770,7 @@ cetype_t Rf_getCharCE(SEXP) {
 }
 
 SEXP Rf_mkCharCE(const char * str, cetype_t type) {
-    String s = globalState->internStr(str);
+    String s = global->internStr(str);
     Value r;
     ScalarString::Init(r, s);
     return new SEXPREC(r);
@@ -798,17 +799,17 @@ SEXP R_FindNamespace(SEXP info) {
     List call(2);
     
     Character fn(1);
-    fn[0] = globalState->internStr("getNamespace");
+    fn[0] = global->internStr("getNamespace");
     
     call[0] = fn;
     call[1] = ToRiposteValue(info->v);
 
     call = CreateCall(call);
-   
-    Thread* thread = globalState->getThread();
-    Code* code = Compiler::compileTopLevel(*thread, call);
-    Value r = thread->eval(code, globalState->global);
-    globalState->deleteThread(thread);
+  
+    Riposte::State& state = Riposte::newState(); 
+    Code* code = Compiler::compileTopLevel((::State&)state, call);
+    Value r = ((::State*)&state)->eval(code, global->global);
+    Riposte::deleteState(state);
 
     return new SEXPREC(r);
 }
@@ -851,11 +852,11 @@ int R_check_class_etc      (SEXP x, const char **valid) {
 
 /* preserve objects across GCs */
 void R_PreserveObject(SEXP object) {
-    globalState->installSEXP(object);
+    global->installSEXP(object);
 }
 
 void R_ReleaseObject(SEXP object) {
-    globalState->uninstallSEXP(object);
+    global->uninstallSEXP(object);
 }
 
 /* Replacements for popen and system */
@@ -1004,7 +1005,7 @@ SEXP     Rf_mkNamed(SEXPTYPE, const char **) {
 
 SEXP     Rf_mkString(const char * s) {
     Character v(1);
-    v[0] = globalState->internStr(s);
+    v[0] = global->internStr(s);
     return new SEXPREC(v);
 }
 

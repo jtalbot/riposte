@@ -13,7 +13,7 @@ void dyn_finalize(Value v) {
 }
 
 extern "C"
-Value dynload(Thread& thread, Value const* args) {
+Value dynload(State& state, Value const* args) {
     Character const& name = (Character const&)args[0];
     Logical const& local = (Logical const&)args[1];
     Logical const& now = (Logical const&)args[2];
@@ -33,14 +33,14 @@ Value dynload(Thread& thread, Value const* args) {
 }
 
 extern "C"
-Value dynunload(Thread& thread, Value const* args) {
+Value dynunload(State& state, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     dlclose(p.ptr());
     return Value::Nil();
 }
 
 extern "C"
-Value dynsym(Thread& thread, Value const* args) {
+Value dynsym(State& state, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     Character const& name = (Character const&)args[1];
     

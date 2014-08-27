@@ -73,18 +73,18 @@ public:
 		}
 	}
 
-	TaskQueue& getMainThread() const {
+	TaskQueue& getMainState() const {
 		return *queues[0];
 	}
 };
 
-class Thread;
+class State;
 
 class TaskQueue {
 public:
 	struct Task {
-		typedef void* (*HeaderPtr)(void* args, uint64_t a, uint64_t b, Thread& thread);
-		typedef void (*FunctionPtr)(void* args, void* header, uint64_t a, uint64_t b, Thread& thread);
+		typedef void* (*HeaderPtr)(void* args, uint64_t a, uint64_t b, State& state);
+		typedef void (*FunctionPtr)(void* args, void* header, uint64_t a, uint64_t b, State& state);
 
 		HeaderPtr header;
 		FunctionPtr func;
@@ -104,7 +104,7 @@ public:
 	TaskQueues& qs;
 	uint64_t index;
 	pthread_t pthread;
-    Thread* thread;
+    State* state;
 	
 	std::deque<Task> tasks;
 	Lock tasksLock;
@@ -118,12 +118,12 @@ public:
 		return 0;
 	}
 
-	void doall(Thread& thread, Task::HeaderPtr header, Task::FunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment=1, uint64_t ppt = 1);
+	void doall(State& state, Task::HeaderPtr header, Task::FunctionPtr func, void* args, uint64_t a, uint64_t b, uint64_t alignment=1, uint64_t ppt = 1);
 
 private:
 	void loop();
 	
-    void run(Thread& thread, Task& t);
+    void run(State& state, Task& t);
 	uint64_t split(Task const& t);
 	bool dequeue(Task& out);
 	bool steal(Task& out);

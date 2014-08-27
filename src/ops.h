@@ -17,12 +17,12 @@ struct Name##VOp {\
 	static typename R::Element PassNA(typename MA::Element const a, typename R::Element const fa) { \
 		return !MA::isCheckedNA(a) ? fa : R::NAelement; \
 	} \
-	static typename R::Element eval(Thread& thread, void* args, typename A::Element const v) {\
-		typename MA::Element a = Cast<A, MA>(thread, v); \
+	static typename R::Element eval(State& state, void* args, typename A::Element const v) {\
+		typename MA::Element a = Cast<A, MA>(state, v); \
 		return (Func); \
 	} \
-	static void Scalar(Thread& thread, void* args, typename A::Element const a, Value& c) { \
-		R::InitScalar(c, eval(thread, args, a)); \
+	static void Scalar(State& state, void* args, typename A::Element const a, Value& c) { \
+		R::InitScalar(c, eval(state, args, a)); \
 	} \
 };
 
@@ -39,11 +39,11 @@ struct lnotVOp<Raw> {
     typedef Raw A;
     typedef Raw MA;
     typedef Raw R;
-    static Raw::Element eval(Thread& thread, void* args, Raw::Element const v) {
+    static Raw::Element eval(State& state, void* args, Raw::Element const v) {
         return ~v;
     }
-    static void Scalar(Thread& thread, void* args, Raw::Element const a, Value& c) {
-        Raw::InitScalar(c, eval(thread, args, a));
+    static void Scalar(State& state, void* args, Raw::Element const a, Value& c) {
+        Raw::InitScalar(c, eval(state, args, a));
     }
 };
 
@@ -62,13 +62,13 @@ struct Name##VOp {\
 	static typename R::Element PassCheckedNA(typename MA::Element const a, typename MB::Element const b, typename R::Element const f) { \
         return (!MA::isNA(a) && !MB::isNA(b)) ? f : R::NAelement; \
 	} \
-	static typename R::Element eval(Thread& thread, void* args, typename A::Element const v, typename B::Element const w) {\
-		typename MA::Element const a = Cast<A, MA>(thread, v); \
-		typename MB::Element const b = Cast<B, MB>(thread, w); \
+	static typename R::Element eval(State& state, void* args, typename A::Element const v, typename B::Element const w) {\
+		typename MA::Element const a = Cast<A, MA>(state, v); \
+		typename MB::Element const b = Cast<B, MB>(state, w); \
 		return (Func); \
 	} \
-	static void Scalar(Thread& thread, void* args, typename A::Element const a, typename B::Element const b, Value& c) { \
-		R::InitScalar(c, eval(thread, args, a, b)); \
+	static void Scalar(State& state, void* args, typename A::Element const a, typename B::Element const b, Value& c) { \
+		R::InitScalar(c, eval(state, args, a, b)); \
 	} \
 };
 
@@ -78,35 +78,35 @@ inline int64_t IDiv(int64_t a, int64_t b) { return b == 0 ? Integer::NAelement :
 inline double Mod(double a, double b) { return a - IDiv(a,b) * b; }
 inline int64_t Mod(int64_t a, int64_t b) { return b == 0 ? Integer::NAelement : a % b; }
 
-inline double riposte_max(Thread& thread, double a, double b) { return a > b ? a : b; }
-inline int64_t riposte_max(Thread& thread, int64_t a, int64_t b) { return a > b ? a : b; }
-inline int64_t riposte_max(Thread& thread, char a, char b) { return a | b; }
-inline String riposte_max(Thread& thread, String a, String b) { return strcmp(a->s,b->s) > 0 ? a : b; } 
+inline double riposte_max(State& state, double a, double b) { return a > b ? a : b; }
+inline int64_t riposte_max(State& state, int64_t a, int64_t b) { return a > b ? a : b; }
+inline int64_t riposte_max(State& state, char a, char b) { return a | b; }
+inline String riposte_max(State& state, String a, String b) { return strcmp(a->s,b->s) > 0 ? a : b; } 
 
-inline double riposte_min(Thread& thread, double a, double b) { return a < b ? a : b; }
-inline int64_t riposte_min(Thread& thread, int64_t a, int64_t b) { return a < b ? a : b; }
-inline int64_t riposte_min(Thread& thread, char a, char b) { return a & b; }
-inline String riposte_min(Thread& thread, String a, String b) { return strcmp(a->s,b->s) < 0 ? a : b; }
+inline double riposte_min(State& state, double a, double b) { return a < b ? a : b; }
+inline int64_t riposte_min(State& state, int64_t a, int64_t b) { return a < b ? a : b; }
+inline int64_t riposte_min(State& state, char a, char b) { return a & b; }
+inline String riposte_min(State& state, String a, String b) { return strcmp(a->s,b->s) < 0 ? a : b; }
 
-inline bool gt(Thread& thread, double a, double b) { return a > b; }
-inline bool gt(Thread& thread, int64_t a, int64_t b) { return a > b; }
-inline bool gt(Thread& thread, char a, char b) { return (unsigned char)a > (unsigned char)b; }
-inline bool gt(Thread& thread, String a, String b) { return strcmp(a->s,b->s) > 0; }
+inline bool gt(State& state, double a, double b) { return a > b; }
+inline bool gt(State& state, int64_t a, int64_t b) { return a > b; }
+inline bool gt(State& state, char a, char b) { return (unsigned char)a > (unsigned char)b; }
+inline bool gt(State& state, String a, String b) { return strcmp(a->s,b->s) > 0; }
 
-inline bool ge(Thread& thread, double a, double b) { return a >= b; }
-inline bool ge(Thread& thread, int64_t a, int64_t b) { return a >= b; }
-inline bool ge(Thread& thread, char a, char b) { return (unsigned char)a >= (unsigned char)b; }
-inline bool ge(Thread& thread, String a, String b) { return strcmp(a->s,b->s) >= 0; }
+inline bool ge(State& state, double a, double b) { return a >= b; }
+inline bool ge(State& state, int64_t a, int64_t b) { return a >= b; }
+inline bool ge(State& state, char a, char b) { return (unsigned char)a >= (unsigned char)b; }
+inline bool ge(State& state, String a, String b) { return strcmp(a->s,b->s) >= 0; }
 
-inline bool lt(Thread& thread, double a, double b) { return a < b; }
-inline bool lt(Thread& thread, int64_t a, int64_t b) { return a < b; }
-inline bool lt(Thread& thread, char a, char b) { return (unsigned char)a < (unsigned char)b; }
-inline bool lt(Thread& thread, String a, String b) { return strcmp(a->s,b->s) < 0; }
+inline bool lt(State& state, double a, double b) { return a < b; }
+inline bool lt(State& state, int64_t a, int64_t b) { return a < b; }
+inline bool lt(State& state, char a, char b) { return (unsigned char)a < (unsigned char)b; }
+inline bool lt(State& state, String a, String b) { return strcmp(a->s,b->s) < 0; }
 
-inline bool le(Thread& thread, double a, double b) { return a <= b; }
-inline bool le(Thread& thread, int64_t a, int64_t b) { return a <= b; }
-inline bool le(Thread& thread, char a, char b) { return (unsigned char)a <= (unsigned char)b; }
-inline bool le(Thread& thread, String a, String b) { return strcmp(a->s,b->s) <= 0; }
+inline bool le(State& state, double a, double b) { return a <= b; }
+inline bool le(State& state, int64_t a, int64_t b) { return a <= b; }
+inline bool le(State& state, char a, char b) { return (unsigned char)a <= (unsigned char)b; }
+inline bool le(State& state, String a, String b) { return strcmp(a->s,b->s) <= 0; }
 
 ARITH_BINARY_BYTECODES(BINARY_OP)
 ORDINAL_BINARY_BYTECODES(BINARY_OP)
@@ -122,11 +122,11 @@ struct lorVOp<Raw,Raw> {
     typedef Raw MB;
     typedef Raw R;
 
-    static Raw::Element eval(Thread& thread, void* args, Raw::Element const v, Raw::Element const w) {
+    static Raw::Element eval(State& state, void* args, Raw::Element const v, Raw::Element const w) {
         return v | w;
     }
-    static void Scalar(Thread& thread, void* args, Raw::Element const a, Raw::Element const b, Value& c) {
-        Raw::InitScalar(c, eval(thread, args, a, b));
+    static void Scalar(State& state, void* args, Raw::Element const a, Raw::Element const b, Value& c) {
+        Raw::InitScalar(c, eval(state, args, a, b));
     }
 };
 
@@ -138,11 +138,11 @@ struct landVOp<Raw,Raw> {
     typedef Raw MB;
     typedef Raw R;
 
-    static Raw::Element eval(Thread& thread, void* args, Raw::Element const v, Raw::Element const w) {
+    static Raw::Element eval(State& state, void* args, Raw::Element const v, Raw::Element const w) {
         return v & w;
     }
-    static void Scalar(Thread& thread, void* args, Raw::Element const a, Raw::Element const b, Value& c) {
-        Raw::InitScalar(c, eval(thread, args, a, b));
+    static void Scalar(State& state, void* args, Raw::Element const a, Raw::Element const b, Value& c) {
+        Raw::InitScalar(c, eval(state, args, a, b));
     }
 };
 
@@ -174,8 +174,8 @@ template<> struct pmaxBase<Character> { static Character::Element base() { retur
 template<typename T> \
 struct Name##VOp : public Func##VOp<typename Func##VOp<T, T>::R, T> {\
 	static typename Name##VOp::A::Element base() { return Func##Base<T>::base(); } \
-	static void Scalar(Thread& thread, void* args, typename Name##VOp::B::Element const b, Value& c) { \
-		Name##VOp::R::InitScalar(c, Cast<typename Name##VOp::B, typename Name##VOp::MB>(thread, b)); \
+	static void Scalar(State& state, void* args, typename Name##VOp::B::Element const b, Value& c) { \
+		Name##VOp::R::InitScalar(c, Cast<typename Name##VOp::B, typename Name##VOp::MB>(state, b)); \
 	} \
 };
 
@@ -192,7 +192,7 @@ struct IfElseVOp {
     typedef S B;
     typedef Logical C;
     typedef S R;
-    static typename R::Element eval(Thread& thread, void* args, typename A::Element const a, typename B::Element const b, typename C::Element const c) {
+    static typename R::Element eval(State& state, void* args, typename A::Element const a, typename B::Element const b, typename C::Element const c) {
         if(Logical::isTrue(c))
             return a;
         else if(Logical::isFalse(c))
@@ -200,8 +200,8 @@ struct IfElseVOp {
         else
             return R::NAelement;
     }
-    static void Scalar(Thread& thread, void* args, typename A::Element const a, typename B::Element const b, typename C::Element const c, Value& out) {
-        R::InitScalar(out, eval(thread, args, a, b, c));
+    static void Scalar(State& state, void* args, typename A::Element const a, typename B::Element const b, typename C::Element const c, Value& out) {
+        R::InitScalar(out, eval(state, args, a, b, c));
     }
 };
 
@@ -217,20 +217,20 @@ struct FoldFuncOp {
     typedef T R;
     typedef void* I;
 
-    typedef I (*Base)(Thread&);
-    typedef I (*Func)(Thread&, I, typename A::Element);
-    typedef typename R::Element (*Fini)(Thread&, I);
+    typedef I (*Base)(State&);
+    typedef I (*Func)(State&, I, typename A::Element);
+    typedef typename R::Element (*Fini)(State&, I);
     
-    static I base(Thread& thread, void* funcs) {
-        return ((Base)((FoldFuncArgs*)funcs)->base)(thread);
+    static I base(State& state, void* funcs) {
+        return ((Base)((FoldFuncArgs*)funcs)->base)(state);
     }
 
-    static I eval(Thread& thread, void* funcs, I const a, typename A::Element b) {
-		return ((Func)((FoldFuncArgs*)funcs)->func)(thread, a, b);
+    static I eval(State& state, void* funcs, I const a, typename A::Element b) {
+		return ((Func)((FoldFuncArgs*)funcs)->func)(state, a, b);
     }
 
-    static typename R::Element finalize(Thread& thread, void* funcs, I const a) {
-        return ((Fini)((FoldFuncArgs*)funcs)->fini)(thread, a);
+    static typename R::Element finalize(State& state, void* funcs, I const a) {
+        return ((Fini)((FoldFuncArgs*)funcs)->fini)(state, a);
     }
 };
 

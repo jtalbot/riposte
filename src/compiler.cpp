@@ -197,7 +197,7 @@ Compiler::Operand Compiler::placeInRegister(Operand r) {
 // Compute compiled call...precompiles promise code and some necessary values
 struct Pair { String n; Value v; };
 
-CompiledCall Compiler::makeCall(Thread& thread, List const& call, Character const& names) {
+CompiledCall Compiler::makeCall(State& state, List const& call, Character const& names) {
     List rcall = CreateCall(call, names.length() > 0 ? names : Value::Nil());
     int64_t dotIndex = call.length()-1;
 	std::vector<Pair>  arguments;
@@ -240,7 +240,7 @@ CompiledCall Compiler::makeCall(Thread& thread, List const& call, Character cons
                 p.n = Strings::empty;
 	    	} else if(isCall(call[i]) || isSymbol(call[i])) {
                 if(p.n != Strings::empty) named = true;
-                Promise::Init(p.v, NULL, deferPromiseCompilation(thread, call[i]), false);
+                Promise::Init(p.v, NULL, deferPromiseCompilation(state, call[i]), false);
     		} else {
                 if(p.n != Strings::empty) named = true;
 	    		p.v = call[i];
@@ -264,7 +264,7 @@ CompiledCall Compiler::makeCall(Thread& thread, List const& call, Character cons
 
 // a standard call, not an op
 Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& call, Character const& names, Code* code) {
-	CompiledCall a = makeCall(thread, call, names);
+	CompiledCall a = makeCall(state, call, names);
 	code->calls.push_back(a);
 	kill(function);
 	Operand result = allocRegister();
@@ -445,7 +445,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
                 List n(c.length()+1);
 
 			    for(int64_t i = 0; i < c.length(); i++) { n[i] = c[i]; }
-			    String as = state.internStr(state.externStr(SymbolStr(c[0])) + "<-");
+			    String as = global.internStr(global.externStr(SymbolStr(c[0])) + "<-");
 			    n[0] = CreateSymbol(as);
 			    n[c.length()] = value;
 
@@ -534,7 +534,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
             }
 			else if(!formals[i].isNil()) /*if(isCall(formals[i]) || isSymbol(formals[i]))*/ {
 				Promise::Init(defaults[i], NULL, 
-                    deferPromiseCompilation(thread, formals[i]), true);
+                    deferPromiseCompilation(state, formals[i]), true);
 			}
 			else {
 				defaults[i] = formals[i];
@@ -542,7 +542,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		}
 
 		//compile the source for the body
-		Prototype* functionCode = Compiler::compileClosureBody(thread, call[2]);
+		Prototype* functionCode = Compiler::compileClosureBody(state, call[2]);
 
 		// Populate function info
         functionCode->formals = formals;

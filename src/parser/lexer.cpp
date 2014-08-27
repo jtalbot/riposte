@@ -485,7 +485,7 @@ void Parser::token(int tok, Value v)
 	}
 }
 
-Parser::Parser(State& state, char const* filename) : line(0), col(0), state(state), filename(filename), errors(0), complete(false), lastTokenWasNL(false) 
+Parser::Parser(Global& global, char const* filename) : line(0), col(0), global(global), filename(filename), errors(0), complete(false), lastTokenWasNL(false) 
 {}
 
 int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* trace )
@@ -699,15 +699,15 @@ _eof_trans:
 	break;
 	case 27:
 #line 54 "lexer.rl"
-	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.internStr(unescape(s))) );}}
+	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(global.internStr(unescape(s))) );}}
 	break;
 	case 28:
 #line 56 "lexer.rl"
-	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(state.internStr(unescape(s))) );}}
+	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(global.internStr(unescape(s))) );}}
 	break;
 	case 29:
 #line 65 "lexer.rl"
-	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol(state.internStr(unescape(s))) );}}
+	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol(global.internStr(unescape(s))) );}}
 	break;
 	case 30:
 #line 71 "lexer.rl"
@@ -819,7 +819,7 @@ _eof_trans:
 	break;
 	case 57:
 #line 126 "lexer.rl"
-	{te = p+1;{token(TOKEN_SPECIALOP, CreateSymbol(state.internStr(std::string(ts, te-ts))) ); }}
+	{te = p+1;{token(TOKEN_SPECIALOP, CreateSymbol(global.internStr(std::string(ts, te-ts))) ); }}
 	break;
 	case 58:
 #line 129 "lexer.rl"
@@ -835,7 +835,7 @@ _eof_trans:
 	break;
 	case 61:
 #line 63 "lexer.rl"
-	{te = p;p--;{token( TOKEN_SYMBOL, CreateSymbol(state.internStr(std::string(ts, te-ts))) );}}
+	{te = p;p--;{token( TOKEN_SYMBOL, CreateSymbol(global.internStr(std::string(ts, te-ts))) );}}
 	break;
 	case 62:
 #line 68 "lexer.rl"
@@ -981,10 +981,10 @@ _eof_trans:
 	{{p = ((te))-1;}token( TOKEN_BREAK, CreateSymbol(Strings::breakSym) );}
 	break;
 	case 23:
-	{{p = ((te))-1;}token( TOKEN_SYMBOL, CreateSymbol(state.internStr(std::string(ts, te-ts))));}
+	{{p = ((te))-1;}token( TOKEN_SYMBOL, CreateSymbol(global.internStr(std::string(ts, te-ts))));}
 	break;
 	case 24:
-	{{p = ((te))-1;}token( TOKEN_SYMBOL, CreateSymbol(state.internStr(std::string(ts, te-ts))) );}
+	{{p = ((te))-1;}token( TOKEN_SYMBOL, CreateSymbol(global.internStr(std::string(ts, te-ts))) );}
 	break;
 	case 70:
 	{{p = ((te))-1;}token( TOKEN_NEWLINE );}
@@ -1058,14 +1058,14 @@ _again:
 String Parser::popSource() {
 	assert(source.size() > 0);
 	std::string s(source.top(), le-source.top());
-	String result = state.internStr(rtrim(s));
+	String result = global.internStr(rtrim(s));
 	source.pop();
 	return result;	
 }
 
-int parse(State& state, char const* filename,
+int parse(Global& global, char const* filename,
     char const* code, size_t len, bool isEof, Value& result, FILE* trace) {
-    Parser parser(state, filename);
+    Parser parser(global, filename);
     return parser.execute(code, len, isEof, result, trace);
 }
 
