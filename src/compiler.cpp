@@ -268,11 +268,7 @@ Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& ca
 	code->calls.push_back(a);
 	kill(function);
 	Operand result = allocRegister();
-	if(a.names.length() == 0 
-      && a.dotIndex >= (int64_t)a.arguments.length())
-		emit(ByteCode::fastcall, function, code->calls.size()-1, result);
-	else
-		emit(ByteCode::call, function, code->calls.size()-1, result);
+    emit(ByteCode::call, function, code->calls.size()-1, result);
 	return result;
 }
 

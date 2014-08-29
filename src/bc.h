@@ -10,7 +10,6 @@
     _(jmp,          "jmp")                                                     \
     _(branch,       "branch")                                                  \
     _(call,         "call")                                                    \
-    _(fastcall,     "fastcall")                                                \
     _(ret,          "ret")          /* return from function */                 \
     _(forbegin,     "forbegin")                                                \
     _(forend,       "forend")                                                  \

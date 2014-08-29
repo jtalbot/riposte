@@ -42,23 +42,11 @@ static inline Instruction const* call_op(State& state, Instruction const& inst) 
     Closure const& func = (Closure const&)a;
 	CompiledCall const& call = state.frame.code->calls[inst.b];
 
-	Environment* fenv = MatchArgs(state, state.frame.environment, func, call);
-    return buildStackFrame(state, fenv, func.prototype()->code, inst.c, &inst+1);
-}
-
-static inline Instruction const* fastcall_op(State& state, Instruction const& inst) {
-    state.visible = true;
-	Heap::GlobalHeap.collect(state.global);
-	DECODE(a); BIND(a);
-	if(!a.isClosure())
-        return StopDispatch(state, inst, state.internStr(
-		    (std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n").c_str()),
-            inst.c);
-	
-    Closure const& func = (Closure const&)a;
-	CompiledCall const& call = state.frame.code->calls[inst.b];
-	
-	Environment* fenv = FastMatchArgs(state, state.frame.environment, func, call);
+	Environment* fenv =
+        (call.names.length() == 0 &&
+         call.dotIndex >= (int64_t)call.arguments.length())
+        ? FastMatchArgs(state, state.frame.environment, func, call)
+        : MatchArgs(state, state.frame.environment, func, call);
     return buildStackFrame(state, fenv, func.prototype()->code, inst.c, &inst+1);
 }
 
@@ -1729,7 +1717,7 @@ void Code::printByteCode(Global const& global) const {
 		std::cout << "\tCode: " << std::endl;
 		for(int64_t i = 0; i < (int64_t)bc.size(); i++) {
 			std::cout << std::hex << &bc[i] << std::dec << "\t" << i << ":\t" << bc[i].toString();
-			if(bc[i].bc == ByteCode::call || bc[i].bc == ByteCode::fastcall) {
+			if(bc[i].bc == ByteCode::call) {
 				std::cout << "\t\t(arguments: " << calls[bc[i].b].arguments.length() << ")";
 			}
 			std::cout << std::endl;
