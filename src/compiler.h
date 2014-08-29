@@ -101,6 +101,27 @@ private:
 	int64_t encodeOperand(Operand op) const;
 	void dumpCode() const;
 
+    Operand emitMissing(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitSwitch(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitAssign(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitRm(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitFunction(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitReturn(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitFor(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitWhile(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitRepeat(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitNext(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitBreak(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitIf(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitBrace(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitParen(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitTernary(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitBinaryMap(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitBinary(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitUnary(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitNullary(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitPromise(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+
 public:
 	static CompiledCall makeCall(State& state, List const& call, Character const& names);
 
