@@ -12,7 +12,6 @@
     _(call,         "call")                                                    \
     _(fastcall,     "fastcall")                                                \
     _(ret,          "ret")          /* return from function */                 \
-    _(retp,         "retp")         /* return from a promise or default */     \
     _(forbegin,     "forbegin")                                                \
     _(forend,       "forend")                                                  \
     _(mov,          "mov")                                                     \
@@ -59,6 +58,7 @@
 #define ENVIRONMENT_BYTECODES(_)                                               \
     _(env_new,      "env_new")                                                 \
     _(env_get,      "env_get")      /* get a value from an environment */      \
+    _(env_set,      "env_set")      /* set a value in an environment */        \
     _(env_names,    "env_names")    /* get symbols defined in environment */   \
     _(env_global,   "env_global")   /* get the global environment */           \
 

@@ -931,11 +931,12 @@ Code* Compiler::compile(Value const& expr) {
 	Code* code = new (Code::Finalize) Code();
 	assert(((int64_t)code) % 16 == 0); // our type packing assumes that this is true
 
+    Operand env, index;
     if(scope == PROMISE) {
         // promises use first two registers to pass environment info
         // for replacing promise with evaluated value
-        allocRegister();
-        allocRegister();
+        env = allocRegister();
+        index = allocRegister();
     }
 
     Operand result = compile(expr, code);
@@ -943,8 +944,10 @@ Code* Compiler::compile(Value const& expr) {
     // insert appropriate termination statement at end of code
     if(scope == CLOSURE)
         emit(ByteCode::ret, result, 0, 0);
-    else if(scope == PROMISE)
-        emit(ByteCode::retp, result, 0, 0);
+    else if(scope == PROMISE) {
+        emit(ByteCode::env_set, index, env, result);
+        emit(ByteCode::done, result, 0, 0);
+    }
     else { // TOPLEVEL
         result = placeInRegister(result);
         if(result.i != 0)

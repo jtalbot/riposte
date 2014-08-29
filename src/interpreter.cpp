@@ -25,7 +25,6 @@ static inline Instruction const* getsub_op(State& state, Instruction const& inst
 static inline Instruction const* jc_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* lt_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* ret_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* retp_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 static inline Instruction const* strip_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 
 
@@ -108,37 +107,6 @@ static inline Instruction const* ret_op(State& state, Instruction const& inst) {
 #ifdef EPEE
 	state.traces.LiveEnvironment(state.frame.environment, a);
 #endif
-	return returnpc;
-}
-
-static inline Instruction const* retp_op(State& state, Instruction const& inst) {
-	// we can return futures from promises, so don't BIND
-	DECODE(a);
-	
-    if(REGISTER(1).isCharacter()) {
-        assert(REGISTER(0).isEnvironment());
-	    Environment* env = ((REnvironment const&)REGISTER(0)).environment();
-		
-        env->insert(REGISTER(1).s) = a;
-#ifdef EPEE
-	    state.traces.LiveEnvironment(env, a);
-#endif
-	} else if(REGISTER(1).isInteger()) {
-        assert(REGISTER(0).isEnvironment());
-	    Environment* env = ((REnvironment const&)REGISTER(0)).environment();
-        
-        assert(env->get(Strings::__dots__).isList());
-        ((List&)env->insert(Strings::__dots__))[REGISTER(1).i] = a;
-#ifdef EPEE
-	    state.traces.LiveEnvironment(env, a);
-#endif
-	} // otherwise, don't store anywhere...
-	
-	REGISTER(0) = a;
-	
-    Instruction const* returnpc = state.frame.returnpc;
-	state.pop();
-	
 	return returnpc;
 }
 
@@ -1319,6 +1287,36 @@ static inline Instruction const* env_get_op(State& state, Instruction const& ins
     return &inst+1;
 }
 
+static inline Instruction const* env_set_op(State& state, Instruction const& inst) {
+    // a = index, b = environment, c = value
+
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+    DECODE(c); // don't BIND
+       
+    if(a.isCharacter()) {
+        assert(b.isEnvironment());
+           Environment* env = ((REnvironment const&)b).environment();
+               
+        env->insert(a.s) = c;
+#ifdef EPEE
+           state.traces.LiveEnvironment(env, c);
+#endif
+       } else if(a.isInteger()) {
+        assert(b.isEnvironment());
+           Environment* env = ((REnvironment const&)b).environment();
+        
+        assert(env->get(Strings::__dots__).isList());
+        ((List&)env->insert(Strings::__dots__))[a.i] = c;
+#ifdef EPEE
+           state.traces.LiveEnvironment(env, c);
+#endif
+       }
+    // otherwise, don't store anywhere...
+       
+    return &inst+1;
+}
+
 static inline Instruction const* env_global_op(State& state, Instruction const& inst) {
     state.visible = true;
     REnvironment::Init(OUT(c), state.global.global);
@@ -1549,6 +1547,15 @@ static inline Instruction const* semijoin_op(State& state, Instruction const& in
     return &inst+1;
 }
 
+static inline Instruction const* done_op(State& state, Instruction const& inst) { 
+    DECODE(a);
+    REGISTER(0) = a;
+
+    Instruction const* pc = state.frame.returnpc; 
+    state.pop();
+    return pc;
+}
+
 //
 //    Main interpreter loop 
 //
@@ -1568,7 +1575,11 @@ bool interpret(State& state, Instruction const* pc) {
         return false; 
     }
     done_label: {
-        return true;
+        pc = done_op(state, *pc);
+        if(pc != 0)
+            goto *(void*)(labels[pc->bc]);
+        else
+            return true;
     }
 #else
     while(pc->bc != ByteCode::done) {
@@ -1595,14 +1606,11 @@ Value State::eval(Code const* code, Environment* environment, int64_t resultSlot
 	uint64_t stackSize = stack.size();
     StackFrame oldFrame = frame;
 
-    Instruction done(ByteCode::done, 0, 0, 0);
-
 	// make room for the result
-	Instruction const* run = buildStackFrame(*this, environment, code, resultSlot, &done);
+	Instruction const* run = buildStackFrame(*this, environment, code, resultSlot, 0);
 	try {
 		bool success = interpret(*this, run);
         if(success) {
-            pop();
             if(stackSize != stack.size())
 		        _error("Stack was the wrong size at the end of eval");
 		    return frame.registers[resultSlot];
@@ -1633,9 +1641,7 @@ Value State::eval(Promise const& p, int64_t resultSlot) {
 	uint64_t stackSize = stack.size();
     StackFrame oldFrame = frame;
     
-    Instruction done(ByteCode::done, 0, 0, 0);
-
-    Instruction const* run = force(*this, p, NULL, Value::Nil(), resultSlot, &done);
+    Instruction const* run = force(*this, p, NULL, Value::Nil(), resultSlot, 0);
    
     try {
 		bool success = interpret(*this, run);
@@ -1705,7 +1711,8 @@ Global::Global(uint64_t states, int64_t argc, char** argv)
 
     promiseCode = new (Code::Finalize) Code();
     promiseCode->bc.push_back(Instruction(ByteCode::force, 2, 0, 2));
-    promiseCode->bc.push_back(Instruction(ByteCode::retp, 2, 0, 0));
+    promiseCode->bc.push_back(Instruction(ByteCode::env_set, 1, 0, 2));
+    promiseCode->bc.push_back(Instruction(ByteCode::done, 2, 0, 0));
     promiseCode->registers = 3;
     promiseCode->expression = Value::Nil();
 }
