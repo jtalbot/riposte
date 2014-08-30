@@ -161,35 +161,6 @@ static inline Instruction const* jc_op(State& state, Instruction const& inst) {
             inst.c);
 }
 
-static inline Instruction const* branch_op(State& state, Instruction const& inst) {
-    state.visible = true;
-	DECODE(a);
-	int64_t index = -1;
-	if(a.isDouble1()) index = (int64_t)a.d;
-	else if(a.isInteger1()) index = a.i;
-	else if(a.isLogical1()) index = a.i;
-	else if(a.isCharacter1()) {
-		for(int64_t i = 1; i <= inst.b; i++) {
-			String s = CONSTANT((&inst+i)->a).s;
-			if(s == a.s) {
-				index = i;
-				break;
-			}
-			if(index < 0 && s == Strings::empty) {
-				index = i;
-			}
-		}
-	}
-    else
-        _error("EXPR must be a length 1 vector");
-
-	if(index >= 1 && index <= inst.b) {
-		return &inst + ((&inst+index)->c);
-	} 
-	BIND(a);
-	return &inst+1+inst.b;
-}
-
 static inline Instruction const* forbegin_op(State& state, Instruction const& inst) {
     state.visible = true;
 	// a = loop variable (e.g. i), b = loop vector(e.g. 1:100), c = counter register
@@ -432,13 +403,6 @@ static inline Instruction const* storeup_op(State& state, Instruction const& ins
 	return &inst+1;
 }
 
-static inline Instruction const* rm_op(State& state, Instruction const& inst) {
-    String s = ((Character const&)CONSTANT(inst.a)).s;
-    state.frame.environment->remove( s );
-    OUT(c) = Null::Singleton();
-    return &inst+1;
-}
-
 static inline Instruction const* force_op(State& state, Instruction const& inst) {
     Value const& a = REGISTER(inst.a);
 
@@ -555,81 +519,6 @@ static inline Instruction const* dots_op(State& state, Instruction const& inst) 
         d->insert(Strings::names) = state.frame.environment->get(Strings::__names__);
         ((Object&)out).attributes(d);
 	}
-    return &inst+1;
-}
-
-static inline Instruction const* missing_op(State& state, Instruction const& inst) {
-    state.visible = true;
-    DECODE(a);
-    bool missing = false;
-
-    Environment* e = state.frame.environment;
-    Value x = a;
-
-    do {
-
-    if( x.isCharacter() && ((Character const&)x).length() == 1 ) {
-        Environment* foundEnv;
-        Value const& v = e->getRecursive(x.s, foundEnv);
-        missing = (    v.isPromise()
-                    && ((Promise const&)v).isDefault() 
-                    && foundEnv == state.frame.environment
-                  ) || v.isNil();
-
-        if(v.isPromise() && !((Promise const&)v).isDefault() && foundEnv == e) {
-            // see if missing is passed down
-            // missing is only passed down if
-            // the referenced symbol is an argument.
-            // this whole feature is a disaster.
-            if(((Promise const&)v).isExpression()) {
-                Value const& expr = ((Promise const&)v).code()->expression;
-                Environment* env = ((Promise const&)v).environment();
-                Value const& func = env->get(Strings::__function__);
-                if(isSymbol(expr) && func.isClosure()) {
-                    // see if the expr is an argument
-                    Character const& parameters = ((Closure const&)func).prototype()->parameters;
-                    bool matched = false;
-                    for(size_t i = 0; i < parameters.length() && !matched; ++i) {
-                        if(((Character const&)expr).s == parameters[i])
-                            matched = true;
-                    }
-                    
-                    if(!matched)
-                        break;
-
-                    e = env;
-                    x = expr;
-                    continue;
-                }
-            }
-        }
-        break;
-    }
-    else {
-        int64_t index = -1;
-        if( x.isInteger() && ((Integer const&)x).length() == 1 )
-            index = x.i-1;
-        else if( x.isDouble() && ((Double const&)x).length() == 1 )
-            index = x.d-1;
-        else
-            _error("Invalid argument to missing");
-
-        List const& dots = (List const&)
-            e->get(Strings::__dots__);
-
-        missing = !dots.isList() ||
-                  index < 0 ||
-                  index >= dots.length() ||
-                  dots[index].isNil();
-
-        break;
-    }
-
-    } while(true);
-
-    Logical::InitScalar(OUT(c),
-        missing ? Logical::TrueElement : Logical::FalseElement);
-
     return &inst+1;
 }
 
@@ -1302,6 +1191,122 @@ static inline Instruction const* env_set_op(State& state, Instruction const& ins
        }
     // otherwise, don't store anywhere...
        
+    return &inst+1;
+}
+
+static inline Instruction const* env_rm_op(State& state, Instruction const& inst) {
+    state.visible = true;
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isEnvironment() && !a.isNull()) {
+        return StopDispatch(state, inst, state.internStr(
+            "invalid 'envir' argument to .env_rm"), 
+            inst.c);
+    }
+    if(!b.isCharacter()) {
+        return StopDispatch(state, inst, state.internStr(
+            "invalid 'x' argument to .env_rm"), 
+            inst.c);
+    }
+
+    Environment* env = a.isEnvironment()
+        ? ((REnvironment const&)a).environment()
+        : state.frame.environment;
+
+    Character const& names = (Character const&)b;
+
+    for(int64_t i = 0; i < names.length(); ++i) {
+        env->remove( names[i] );
+    }
+
+    OUT(c) = Null::Singleton();
+    return &inst+1;
+}
+
+static inline Instruction const* env_missing_op(State& state, Instruction const& inst) {
+    state.visible = true;
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isEnvironment() && !a.isNull()) {
+        return StopDispatch(state, inst, state.internStr(
+            "invalid 'envir' argument to .env_missing"), 
+            inst.c);
+    }
+
+    Environment* e = a.isEnvironment()
+        ? ((REnvironment const&)a).environment()
+        : state.frame.environment;
+
+    Value x = b;
+
+    bool missing = false;
+
+    do {
+
+    if( x.isCharacter() && ((Character const&)x).length() == 1 ) {
+        Environment* foundEnv;
+        Value const& v = e->getRecursive(x.s, foundEnv);
+        missing = (    v.isPromise()
+                    && ((Promise const&)v).isDefault() 
+                    && foundEnv == state.frame.environment
+                  ) || v.isNil();
+
+        if(v.isPromise() && !((Promise const&)v).isDefault() && foundEnv == e) {
+            // see if missing is passed down
+            // missing is only passed down if
+            // the referenced symbol is an argument.
+            // this whole feature is a disaster.
+            if(((Promise const&)v).isExpression()) {
+                Value const& expr = ((Promise const&)v).code()->expression;
+                Environment* env = ((Promise const&)v).environment();
+                Value const& func = env->get(Strings::__function__);
+                if(isSymbol(expr) && func.isClosure()) {
+                    // see if the expr is an argument
+                    Character const& parameters = ((Closure const&)func).prototype()->parameters;
+                    bool matched = false;
+                    for(size_t i = 0; i < parameters.length() && !matched; ++i) {
+                        if(((Character const&)expr).s == parameters[i])
+                            matched = true;
+                    }
+                    
+                    if(!matched)
+                        break;
+
+                    e = env;
+                    x = expr;
+                    continue;
+                }
+            }
+        }
+        break;
+    }
+    else {
+        int64_t index = -1;
+        if( x.isInteger() && ((Integer const&)x).length() == 1 )
+            index = x.i-1;
+        else if( x.isDouble() && ((Double const&)x).length() == 1 )
+            index = x.d-1;
+        else
+            _error("Invalid argument to missing");
+
+        List const& dots = (List const&)
+            e->get(Strings::__dots__);
+
+        missing = !dots.isList() ||
+                  index < 0 ||
+                  index >= dots.length() ||
+                  dots[index].isNil();
+
+        break;
+    }
+
+    } while(true);
+
+    Logical::InitScalar(OUT(c),
+        missing ? Logical::TrueElement : Logical::FalseElement);
+
     return &inst+1;
 }
 

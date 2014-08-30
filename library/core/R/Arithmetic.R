@@ -1,13 +1,13 @@
 
 `+` <- function(x,y) {
-    if(missing(y))
+    if(.env_missing(NULL,'y'))
         UseGroupMethod('+', 'Ops', x)
     else
         UseMultiMethod('+', 'Ops', x, y)
 }
 
 `+.default` <- function(x, y) {
-    if(missing(y)) {
+    if(.env_missing(NULL,'y')) {
         .ArithCheckUnary(x)
         x
     }
@@ -18,14 +18,14 @@
 }
 
 `-` <- function(x,y) {
-    if(missing(y))
+    if(.env_missing(NULL,'y'))
         UseGroupMethod('-', 'Ops', x)
     else
         UseMultiMethod('-', 'Ops', x, y)
 }
 
 `-.default` <- function(x, y) {
-    if(missing(y)) {
+    if(.env_missing(NULL,'y')) {
         .ArithCheckUnary(x)
         -x
     }

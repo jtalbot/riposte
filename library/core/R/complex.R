@@ -47,9 +47,12 @@ Conj.complex <- function(x) {
 }
 
 complex <- function(length.out = 0L, real = numeric(), imaginary = numeric()) {
-	if(missing(real) && missing(imaginary) && missing(modulus) && missing(argument)) {
+	if( .env_missing(NULL,'real') &&
+        .env_missing(NULL,'imaginary') &&
+        .env_missing(NULL,'modulus') &&
+        .env_missing(NULL,'argument')) {
 		r <- list(Re=numeric(length.out), Im=numeric(length.out))
-	} else if(missing(modulus) && missing(argument)) {
+	} else if(.env_missing(NULL,'modulus') && .env_missing(NULL,'argument')) {
 		r <- list(Re=real, Im=imaginary)
 	} 
 	class(r) <- 'complex'

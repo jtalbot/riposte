@@ -62,7 +62,7 @@
 
     idx <- list()
     for(i in seq_len(...())) {
-        if(missing(...(i))) {
+        if(.env_missing(NULL,i)) {
             idx[[i]] <- seq_len(d[[i]])
         }
         else { 
@@ -256,7 +256,7 @@
 
     idx <- list()
     for(i in seq_len(...())) {
-        if(missing(...(i))) {
+        if(.env_missing(NULL,i)) {
             idx[[i]] <- seq_len(d[[i]])
         }
         else { 

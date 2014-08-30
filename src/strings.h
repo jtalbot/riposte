@@ -52,7 +52,6 @@
 	_(assign, 	"<-") \
 	_(assign2, 	"<<-") \
 	_(eqassign, 	"=") \
-    _(rm,           "rm") \
 	_(function, 	"function") \
 	_(returnSym, 	"return") \
 	_(forSym, 	"for") \
@@ -133,7 +132,6 @@
 	_(dotClass, 	".Class") \
 	_(docall,	"do.call") \
 	_(list,		"list") \
-	_(missing,	"missing") \
 	_(mmul,		"%*%") \
 	_(apply,	"apply") \
 	_(ifelse,	"ifelse") \
@@ -157,8 +155,9 @@
     _(env_new, ".env_new") \
     _(env_names, ".env_names") \
     _(env_global, ".env_global") \
-    _(env_remove, ".env_remove") \
+    _(env_rm, ".env_rm") \
     _(env_get, ".get") \
+	_(env_missing, ".env_missing") \
     _(frame, ".frame") \
     _(top, ".top") \
     _(print, "print") \

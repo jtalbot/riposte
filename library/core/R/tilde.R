@@ -1,6 +1,6 @@
 
 `~` <- function(y, model) {
-    if(missing(model)) {
+    if(.env_missing(NULL,'model')) {
         r <- list(as.name('~'),
             .pr_expr(.getenv(NULL), 'y')
             )

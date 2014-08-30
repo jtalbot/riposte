@@ -1,7 +1,18 @@
 
 `switch` <- function(EXPR, ...) {
-    p <- substitute(switch(EXPR, ...), environment(NULL))
-    promise('r', p, parent.frame(1L), environment(NULL))
-    r
+    EXPR <- strip(EXPR)
+    if(.type(EXPR) == 'character') {
+        EXPR <- .semijoin(EXPR, `.__names__.`)
+        if(EXPR == 0L)
+            EXPR <- .semijoin('', `.__names__.`)
+    
+        while(.env_missing(NULL,EXPR) && EXPR <= ...())
+            EXPR <- EXPR+1L
+    }
+
+    if(EXPR >= 1 && EXPR <= ...())
+        ...(EXPR)
+    else
+        NULL
 }
 

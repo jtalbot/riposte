@@ -8,7 +8,6 @@
 #define CONTROL_FLOW_BYTECODES(_)                                              \
     _(jc,           "jc")                                                      \
     _(jmp,          "jmp")                                                     \
-    _(branch,       "branch")                                                  \
     _(call,         "call")                                                    \
     _(ret,          "ret")          /* return from function */                 \
     _(forbegin,     "forbegin")                                                \
@@ -24,11 +23,9 @@
     _(loadfn,       "loadfn")       /* = get(x, environment(), "function", TRUE) */ \
     _(store,        "store")        /* = <-,  assign(x, environment(), FALSE) */\
     _(storeup,      "storeup")      /* = <<-, assign(x, parent.env(environment()), TRUE) */ \
-    _(rm,           "rm")           /* = remove('x', environment()) */         \
     _(dotsv,        "dotsv")        /* = ..# */                                \
     _(dotsc,        "dotsc")        /* = length(...) */                        \
     _(dots,         "dots")         /* = list(...) */                          \
-    _(missing,      "missing")      /* check if an argument is missing */      \
 
 #define STACK_FRAME_BYTECODES(_)                                               \
     _(frame,        "frame")        /* get a stack frame by index */           \
@@ -58,6 +55,8 @@
     _(env_new,      "env_new")                                                 \
     _(env_get,      "env_get")      /* get a value from an environment */      \
     _(env_set,      "env_set")      /* set a value in an environment */        \
+    _(env_rm,       "env_rm" )      /* undefine values in an environment */    \
+    _(env_missing,  "env_missing" ) /* see if an argument is missing */        \
     _(env_names,    "env_names")    /* get symbols defined in environment */   \
     _(env_global,   "env_global")   /* get the global environment */           \
 

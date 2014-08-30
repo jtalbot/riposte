@@ -78,7 +78,7 @@
 
 UseMethod <- function(generic, object)
 {
-    if(missing(object)) {
+    if(.env_missing(NULL,'object')) {
         formals <- attr(.frame(1L)[['.__function__.']][['formals']], 'names')
         if(length(formals) == 0)
             object <- NULL
@@ -130,7 +130,7 @@ UseMethod <- function(generic, object)
 }
 
 NextMethod <- function(generic, object, ...) {
-    if(missing(generic))
+    if(.env_missing(NULL,'generic'))
         generic <- parent.frame(1L)[['.Generic']]
 
     class <- .frame(2L)[['.Class']]

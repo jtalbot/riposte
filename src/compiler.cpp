@@ -82,6 +82,8 @@ static ByteCode::Enum op2(String const& func) {
     if(func == Strings::setenv) return ByteCode::setenv;
 	
     if(func == Strings::env_get) return ByteCode::env_get;
+    if(func == Strings::env_rm) return ByteCode::env_rm;
+    if(func == Strings::env_missing) return ByteCode::env_missing;
 
     if(func == Strings::semijoin) return ByteCode::semijoin;
     if(func == Strings::as) return ByteCode::as;
@@ -275,7 +277,7 @@ Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& ca
 	return result;
 }
 
-Compiler::Operand Compiler::compileExternalFunctionCall(List const& call, Code* code) {
+Compiler::Operand Compiler::emitExternal(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
 	if(call.length() < 2)
         _error(".External needs at least one argument");
     Operand func = placeInRegister(compile(call[1], code));
@@ -293,67 +295,6 @@ Compiler::Operand Compiler::compileExternalFunctionCall(List const& call, Code* 
 	Operand result = allocRegister();
 	emit(ByteCode::external, func, call.length()-1, result);
 	return result;
-}
-
-Compiler::Operand Compiler::emitMissing(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
-    if(call.length() != 2) _error("missing requires one argument");
-
-    Operand s;
-    // lots of special cases to handle
-    if(call[1].isCharacter() && ((Character const&)call[1]).length() == 1) {
-        int64_t dd = isDotDot(call[1].s);
-        s = dd > 0
-            ? compileConstant(Integer::c(dd), code)
-            : compileConstant(call[1], code);
-    }
-    else if(isCall(call[1]) 
-        && ((List const&)call[1]).length() == 2
-        && ((List const&)call[1])[0].s == Strings::dots) {
-        s = compile(((List const&)call[1])[1], code);
-    }
-    else _error("wrong parameter to missing");
-
-    Operand result = allocRegister();
-    emit(ByteCode::missing, s, 0, result); 
-    return result;
-}
-
-Compiler::Operand Compiler::emitSwitch(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
-    if(call.length() == 0) _error("'EXPR' is missing");
-    Operand c = compile(call[1], code);
-    int64_t n = call.length()-2;
-
-    int64_t branch = emit(ByteCode::branch, kill(c), n, 0);
-    for(int64_t i = 2; i < call.length(); i++) {
-        Character ni = Character::c(names.length() > i ? names[i] : Strings::empty);
-        emit(ByteCode::branch, compileConstant(ni, code), 0, 0);
-    }
-    
-    std::vector<int64_t> jmps;
-    Operand result = placeInRegister(compileConstant(Null::Singleton(), code));
-    jmps.push_back(emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0));
-    
-    for(int64_t i = 1; i <= n; i++) {
-        ir[branch+i].c = (int64_t)ir.size()-branch;
-        if(!call[i+1].isNil()) {
-            kill(result);
-            Operand r = placeInRegister(compile(call[i+1], code));
-            if(r.loc != INVALID && r != result)
-                throw CompileError(std::string("switch statement doesn't put all its results in the same register"));
-            if(i < n)
-                jmps.push_back(emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0));
-        } else if(i == n) {
-            kill(result);
-            Operand r = placeInRegister(compileConstant(Null::Singleton(), code));
-            if(r.loc != INVALID && r != result) 
-                throw CompileError(std::string("switch statement doesn't put all its results in the same register"));
-        }
-    }
-    for(int64_t i = 0; i < (int64_t)jmps.size(); i++) {
-        ir[jmps[i]].a = (int64_t)ir.size()-jmps[i];
-        ir[jmps[i]].a = (int64_t)ir.size()-jmps[i];
-    }
-    return result;
 }
 
 Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
@@ -426,17 +367,23 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Char
         kill(target);
 
         Operand rm = allocRegister();
-        emit( ByteCode::rm, tmp, 0, rm );
+        Operand env = compileConstant(Null::Singleton(), code);
+        emit( ByteCode::env_rm, env, tmp, rm );
         kill( rm );
     }
     return rhs;
 }
 
-Compiler::Operand Compiler::emitRm(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
-    Operand symbol = compileConstant(Character::c(SymbolStr(call[1])), code);
-    Operand rm = allocRegister();
-    emit( ByteCode::rm, symbol, 0, rm );
-    return rm;
+Compiler::Operand Compiler::emitPromise(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+    Operand a = compile(call[1], code);
+    Operand b = compile(call[2], code);
+    Operand c = compile(call[3], code);
+    Operand d = compile(call[4], code);
+    kill(d); kill(c); kill(b); kill(a);
+    Operand result = allocRegister();
+    emit(ByteCode::pr_new, a, b, result);
+    emit(ByteCode::pr_new, c, d, result);
+    return result;
 }
 
 Compiler::Operand Compiler::emitFunction(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
@@ -695,18 +642,6 @@ Compiler::Operand Compiler::emitNullary(ByteCode::Enum bc, List const& call, Cha
     return result;
 }
  
-Compiler::Operand Compiler::emitPromise(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
-    Operand a = compile(call[1], code);
-    Operand b = compile(call[2], code);
-    Operand c = compile(call[3], code);
-    Operand d = compile(call[4], code);
-    kill(d); kill(c); kill(b); kill(a);
-    Operand result = allocRegister();
-    emit(ByteCode::pr_new, a, b, result);
-    emit(ByteCode::pr_new, c, d, result);
-    return result;
-}
-
 Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Code* code) {
 
 	int64_t length = call.length();
@@ -719,9 +654,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		return compileFunctionCall(compile(call[0], code), call, names, code);
 
 	String func = SymbolStr(call[0]);
-    // list and missing are the only built in function that
-    // handles ... or named parameters
-	// we only handle the list(...) case through an op for now
+    // list and missing are the only built in functions that handle ...
 	if(func == Strings::list && call.length() == 2 
 		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
 	{
@@ -731,9 +664,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		kill(storage); kill(counter);
 		emit(ByteCode::dots, counter, storage, result); 
 		return result;
-	}
-	else if(func == Strings::missing) {
-        return emitMissing(ByteCode::missing, call, names, code);
 	}
 
 	// These functions can't be called directly if the arguments are named or if
@@ -748,12 +678,6 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	if(complicated)
 		return compileFunctionCall(compile(call[0], code), call, names, code);
 
-	// switch statement supports named args
-	if(func == Strings::switchSym)
-	{
-        return emitSwitch(ByteCode::branch, call, names, code);
-	}
-
 	for(int64_t i = 0; i < length; i++) {
 		if(names.length() > i && names[i] != Strings::empty) 
 			complicated = true;
@@ -764,7 +688,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
     if(func == Strings::external)
     {
-		return compileExternalFunctionCall(call, code);
+		return emitExternal(ByteCode::external, call, names, code);
     }
 	else if(func == Strings::assign ||
 		func == Strings::eqassign || 
@@ -774,11 +698,9 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
             func == Strings::assign2 ? ByteCode::storeup : ByteCode::store,
             call, names, code); 
 	}
-    else if(func == Strings::rm 
-        && call.length() == 2 
-        && (isSymbol(call[1]) || call[1].isCharacter1()))
+    else if(func == Strings::promise)
     {
-        return emitRm(ByteCode::fn_new, call, names, code);
+        return emitPromise(ByteCode::pr_new, call, names, code);
     }
 	else if(func == Strings::function) 
 	{
@@ -862,6 +784,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		func == Strings::vector ||
 		func == Strings::attrget ||
         func == Strings::env_get ||
+        func == Strings::env_rm ||
+        func == Strings::env_missing ||
         func == Strings::setenv ||
         func == Strings::semijoin ||
         func == Strings::as ||
@@ -912,14 +836,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	{
         return emitNullary(op0(func), call, names, code);
 	}
-    else if(func == Strings::isnil && call.length() == 1) {
-        return compileConstant(Logical::True(), code);
-    }
-    else if(func == Strings::promise)
-    {
-        return emitPromise(ByteCode::pr_new, call, names, code);
-    }
-
+    
     // Otherwise, generate standard function call...
 	return compileFunctionCall(compileSymbol(call[0], code, true), call, names, code);
 }

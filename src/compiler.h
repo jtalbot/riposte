@@ -88,8 +88,6 @@ private:
 	Operand compileSymbol(Value const& symbol, Code* code, bool isClosure); 
 	Operand compileCall(List const& call, Character const& names, Code* code); 
 	Operand compileFunctionCall(Operand function, List const& call, Character const& names, Code* code); 
-	Operand compileInternalFunctionCall(List const& call, Code* code); 
-	Operand compileExternalFunctionCall(List const& call, Code* code); 
 	Operand compileExpression(List const& values, Code* code);
     Operand visible(Operand op);
     Operand invisible(Operand op);
@@ -102,9 +100,9 @@ private:
 	void dumpCode() const;
 
     Operand emitMissing(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
-    Operand emitSwitch(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+	Operand emitExternal(ByteCode::Enum bc, List const& call, Character const& names, Code* code); 
     Operand emitAssign(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
-    Operand emitRm(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
+    Operand emitPromise(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
     Operand emitFunction(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
     Operand emitReturn(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
     Operand emitFor(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
@@ -120,7 +118,6 @@ private:
     Operand emitBinary(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
     Operand emitUnary(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
     Operand emitNullary(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
-    Operand emitPromise(ByteCode::Enum bc, List const& call, Character const& names, Code* code);
 
 public:
 	static CompiledCall makeCall(State& state, List const& call, Character const& names);
