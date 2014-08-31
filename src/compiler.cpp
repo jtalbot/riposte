@@ -2,112 +2,151 @@
 #include "compiler.h"
 #include "runtime.h"
 
-static ByteCode::Enum op0(String const& func) {
+Compiler::EmitTable::EmitTable() {
 
-    if(func == Strings::dots) return ByteCode::dotsc;
-    if(func == Strings::env_global) return ByteCode::env_global;
-    if(func == Strings::stop) return ByteCode::stop;
-    throw RuntimeError(std::string("unexpected symbol '") + func->s + "' used as a nullary operator"); 
+    // R control flow
+    add(Strings::function, -1, &Compiler::emitFunction); 
+    add(Strings::returnSym, -1, &Compiler::emitReturn);
+    add(Strings::ifSym, -1, &Compiler::emitIf); 
+    
+    add(Strings::forSym, -1, &Compiler::emitFor); 
+    add(Strings::whileSym, -1, &Compiler::emitWhile); 
+    add(Strings::repeatSym, -1, &Compiler::emitRepeat); 
+    add(Strings::nextSym, -1, &Compiler::emitNext); 
+    add(Strings::breakSym, -1, &Compiler::emitBreak); 
+    
+    add(Strings::brace, -1, &Compiler::emitBrace); 
+    add(Strings::paren, -1, &Compiler::emitParen); 
+
+    // R assignment operators
+    add(Strings::assign,   -1, &Compiler::emitAssign,   ByteCode::store); 
+    add(Strings::eqassign, -1, &Compiler::emitAssign,   ByteCode::store); 
+    add(Strings::assign2,  -1, &Compiler::emitAssign,   ByteCode::storeup);
+
+    // R arithmetic operators
+    add(Strings::add, 1, &Compiler::emitUnary, ByteCode::pos);
+    add(Strings::add, 2, &Compiler::emitBinary, ByteCode::add);
+    add(Strings::sub, 1, &Compiler::emitUnary, ByteCode::neg);
+    add(Strings::sub, 2, &Compiler::emitBinary, ByteCode::sub);
+    add(Strings::mul, 2, &Compiler::emitBinary, ByteCode::mul);
+    add(Strings::div, 2, &Compiler::emitBinary, ByteCode::div);
+    add(Strings::idiv, 2, &Compiler::emitBinary, ByteCode::idiv);
+    add(Strings::mod, 2, &Compiler::emitBinary, ByteCode::mod);
+    add(Strings::pow, 2, &Compiler::emitBinary, ByteCode::pow);
+
+    add(Strings::sum, 1, &Compiler::emitUnary, ByteCode::sum);
+    add(Strings::prod, 1, &Compiler::emitUnary, ByteCode::prod);
+
+    add(Strings::cumsum, 1, &Compiler::emitUnary, ByteCode::cumsum);
+    add(Strings::cumprod, 1, &Compiler::emitUnary, ByteCode::cumprod);
+    
+    // R ordinal operators
+    add(Strings::lt, 2, &Compiler::emitBinary, ByteCode::lt);
+    add(Strings::gt, 2, &Compiler::emitBinary, ByteCode::gt);
+    add(Strings::eq, 2, &Compiler::emitBinary, ByteCode::eq);
+    add(Strings::neq, 2, &Compiler::emitBinary, ByteCode::neq);
+    add(Strings::ge, 2, &Compiler::emitBinary, ByteCode::ge);
+    add(Strings::le, 2, &Compiler::emitBinary, ByteCode::le);
+
+    add(Strings::pmin, 2, &Compiler::emitBinary, ByteCode::pmin);
+    add(Strings::pmax, 2, &Compiler::emitBinary, ByteCode::pmax);
+    
+    add(Strings::min, 1, &Compiler::emitUnary, ByteCode::min);
+    add(Strings::max, 1, &Compiler::emitUnary, ByteCode::max);
+    
+    add(Strings::cummin, 1, &Compiler::emitUnary, ByteCode::cummin);
+    add(Strings::cummax, 1, &Compiler::emitUnary, ByteCode::cummax);
+    
+    // R logical operators
+    add(Strings::lor, 2, &Compiler::emitBinary, ByteCode::lor);
+    add(Strings::land, 2, &Compiler::emitBinary, ByteCode::land);
+    add(Strings::lnot, 1, &Compiler::emitUnary, ByteCode::lnot);
+    add(Strings::isna, 1, &Compiler::emitUnary, ByteCode::isna);
+    
+    add(Strings::any, 1, &Compiler::emitUnary, ByteCode::any);
+    add(Strings::all, 1, &Compiler::emitUnary, ByteCode::all);
+
+    // Object operators
+    add(Strings::bracket, 2, &Compiler::emitBinary, ByteCode::getsub);
+    add(Strings::bracketAssign, 3, &Compiler::emitTernary, ByteCode::setsub);
+    
+    add(Strings::bb, 2, &Compiler::emitBinary, ByteCode::get);
+    add(Strings::bbAssign, 3, &Compiler::emitTernary, ByteCode::set);
+
+    add(Strings::attrget, 2, &Compiler::emitBinary, ByteCode::getattr);
+    add(Strings::attrset, 3, &Compiler::emitTernary, ByteCode::setattr);
+    add(Strings::attributes, 1, &Compiler::emitUnary, ByteCode::attributes);
+    
+    add(Strings::getenv, 1, &Compiler::emitUnary, ByteCode::getenv);
+    add(Strings::setenv, 2, &Compiler::emitBinary, ByteCode::setenv);
+    
+    add(Strings::as, 2, &Compiler::emitBinary, ByteCode::as);
+    add(Strings::type, 1, &Compiler::emitUnary, ByteCode::type);
+    add(Strings::strip, 1, &Compiler::emitUnary, ByteCode::strip);
+    add(Strings::length, 1, &Compiler::emitUnary, ByteCode::length);
+    
+    add(Strings::invisible, 1, &Compiler::emitUnary, ByteCode::invisible);
+    add(Strings::visible, 1, &Compiler::emitUnary, ByteCode::visible);
+    
+    add(Strings::isnil, 1, &Compiler::emitUnary, ByteCode::isnil);
+    
+    // Riposte-specific operators
+    add(Strings::external, -1, &Compiler::emitExternal);
+
+    // Promise operators
+    add(Strings::promise,  -1, &Compiler::emitPromise); 
+    add(Strings::pr_expr, 2, &Compiler::emitBinary, ByteCode::pr_expr);
+    add(Strings::pr_env, 2, &Compiler::emitBinary, ByteCode::pr_env);
+
+    // Environment operators
+    add(Strings::env_get, 2, &Compiler::emitBinary, ByteCode::env_get);
+    add(Strings::env_rm, 2, &Compiler::emitBinary, ByteCode::env_rm);
+    add(Strings::env_missing, 2, &Compiler::emitBinary, ByteCode::env_missing);
+    add(Strings::env_new, 1, &Compiler::emitUnary, ByteCode::env_new);
+    add(Strings::env_names, 1, &Compiler::emitUnary, ByteCode::env_names);
+    add(Strings::env_global, 0, &Compiler::emitNullary, ByteCode::env_global);
+    
+    add(Strings::dots, 1, &Compiler::emitUnary, ByteCode::dotsv);
+    add(Strings::dots, 0, &Compiler::emitNullary, ByteCode::dotsc);
+
+    //   Vector ops 
+    add(Strings::vector, 2, &Compiler::emitBinary, ByteCode::vector);
+    add(Strings::seqlen, 1, &Compiler::emitUnary, ByteCode::seq);
+    add(Strings::random, 1, &Compiler::emitUnary, ByteCode::random);
+    
+    add(Strings::ifelse, 3, &Compiler::emitTernary, ByteCode::ifelse);
+    add(Strings::split, 3, &Compiler::emitTernary, ByteCode::split);
+    add(Strings::index, 3, &Compiler::emitTernary, ByteCode::index);
+   
+    add(Strings::map, 2, &Compiler::emitBinaryMap, ByteCode::map);
+    add(Strings::map, 3, &Compiler::emitTernary, ByteCode::map);
+    add(Strings::scan, 3, &Compiler::emitTernary, ByteCode::scan);
+    add(Strings::fold, 3, &Compiler::emitTernary, ByteCode::fold);
+
+    add(Strings::semijoin, 2, &Compiler::emitBinary, ByteCode::semijoin);
+
+    // Stack frame access
+    add(Strings::frame, 1, &Compiler::emitUnary, ByteCode::frame);
+    
+    // Error handling
+    add(Strings::stop, 0, &Compiler::emitNullary, ByteCode::stop);
 }
 
-static ByteCode::Enum op1(String const& func) {
-	if(func == Strings::add) return ByteCode::pos; 
-	if(func == Strings::sub) return ByteCode::neg; 
-	
-    if(func == Strings::isna) return ByteCode::isna; 
-	
-	if(func == Strings::lnot) return ByteCode::lnot; 
-	
-	if(func == Strings::sum) return ByteCode::sum; 
-	if(func == Strings::prod) return ByteCode::prod; 
-	if(func == Strings::min) return ByteCode::min; 
-	if(func == Strings::max) return ByteCode::max; 
-	if(func == Strings::any) return ByteCode::any; 
-	if(func == Strings::all) return ByteCode::all; 
-	if(func == Strings::cumsum) return ByteCode::cumsum; 
-	if(func == Strings::cumprod) return ByteCode::cumprod; 
-	if(func == Strings::cummin) return ByteCode::cummin; 
-	if(func == Strings::cummax) return ByteCode::cummax; 
-	
-	if(func == Strings::seqlen) return ByteCode::seq;
-	
-    if(func == Strings::type) return ByteCode::type; 
-	if(func == Strings::strip) return ByteCode::strip; 
-    if(func == Strings::length) return ByteCode::length;
-	
-	if(func == Strings::random) return ByteCode::random; 
-	
-    if(func == Strings::dots) return ByteCode::dotsv;
-
-    if(func == Strings::attributes) return ByteCode::attributes;
-    if(func == Strings::getenv) return ByteCode::getenv;
-    if(func == Strings::env_new) return ByteCode::env_new;
-    if(func == Strings::env_names) return ByteCode::env_names;
-    if(func == Strings::frame) return ByteCode::frame;
-    
-    if(func == Strings::invisible) return ByteCode::invisible;
-    if(func == Strings::visible) return ByteCode::visible;
-    
-    if(func == Strings::isnil) return ByteCode::isnil;
-    
-    throw RuntimeError(std::string("unexpected symbol '") + func->s + "' used as a unary operator"); 
-}
-
-static ByteCode::Enum op2(String const& func) {
-	if(func == Strings::add) return ByteCode::add; 
-	if(func == Strings::sub) return ByteCode::sub; 
-	if(func == Strings::mul) return ByteCode::mul;
-	if(func == Strings::div) return ByteCode::div; 
-	if(func == Strings::idiv) return ByteCode::idiv; 
-	if(func == Strings::mod) return ByteCode::mod; 
-	if(func == Strings::pow) return ByteCode::pow; 
-	if(func == Strings::lt) return ByteCode::lt; 
-	if(func == Strings::gt) return ByteCode::gt; 
-	if(func == Strings::eq) return ByteCode::eq; 
-	if(func == Strings::neq) return ByteCode::neq; 
-	if(func == Strings::ge) return ByteCode::ge; 
-	if(func == Strings::le) return ByteCode::le; 
-	if(func == Strings::lor) return ByteCode::lor; 
-	if(func == Strings::land) return ByteCode::land; 
-
-	if(func == Strings::pmin) return ByteCode::pmin; 
-	if(func == Strings::pmax) return ByteCode::pmax; 
-
-	if(func == Strings::bracket) return ByteCode::getsub;
-	if(func == Strings::bb) return ByteCode::get;
-
-	if(func == Strings::vector) return ByteCode::vector;
-
-    if(func == Strings::attrget) return ByteCode::getattr;
-    if(func == Strings::setenv) return ByteCode::setenv;
-	
-    if(func == Strings::env_get) return ByteCode::env_get;
-    if(func == Strings::env_rm) return ByteCode::env_rm;
-    if(func == Strings::env_missing) return ByteCode::env_missing;
-
-    if(func == Strings::semijoin) return ByteCode::semijoin;
-    if(func == Strings::as) return ByteCode::as;
-    if(func == Strings::pr_expr) return ByteCode::pr_expr;
-    if(func == Strings::pr_env) return ByteCode::pr_env;
-    
-    throw RuntimeError(std::string("unexpected symbol '") + func->s + "' used as a binary operator"); 
-}
-
-static ByteCode::Enum op3(String const& func) {
-	if(func == Strings::bracketAssign) return ByteCode::setsub;
-	if(func == Strings::bbAssign) return ByteCode::set;
-	if(func == Strings::split) return ByteCode::split;
-	if(func == Strings::ifelse) return ByteCode::ifelse;
-	if(func == Strings::index) return ByteCode::index;
-	if(func == Strings::attrset) return ByteCode::setattr;
-	if(func == Strings::map) return ByteCode::map;
-	if(func == Strings::scan) return ByteCode::scan;
-	if(func == Strings::fold) return ByteCode::fold;
-	throw RuntimeError(std::string("unexpected symbol '") + func->s + "' used as a trinary operator"); 
+// generate byte code arguments from operands as follows...
+// 	INTEGER operands unchanged
+//	CONSTANT operands encoded with negative integers
+//	REGISTER operands encoded with non-negative integers
+//	INVALID operands just go to 0 since they will never be used
+int64_t Compiler::encodeOperand(Operand op) const {
+	if(op.loc == INTEGER) return op.i;
+	else if(op.loc == CONSTANT) return -(op.i+1);
+	else if(op.loc == REGISTER) return (op.i);
+	else return 0;
 }
 
 int64_t Compiler::emit(ByteCode::Enum bc, Operand a, Operand b, Operand c) {
-	ir.push_back(IRNode(bc, a, b, c));
+	ir.push_back(Instruction(bc,
+        encodeOperand(a), encodeOperand(b), encodeOperand(c)));
 	return ir.size()-1;
 }
 
@@ -127,11 +166,11 @@ Compiler::Operand Compiler::visible(Operand op) {
 
 void Compiler::resolveLoopExits(int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget) {
 	for(int64_t i = start; i < end; i++) {
-		if(ir[i].bc == ByteCode::jmp && ir[i].a.i == 0) {
-			if(ir[i].b.i == 1) {
-				ir[i].a.i = nextTarget-i;
-			} else if(ir[i].b.i == 2) {
-				ir[i].a.i = breakTarget-i;
+		if(ir[i].bc == ByteCode::jmp && ir[i].a == 0) {
+			if(ir[i].b == 1) {
+				ir[i].a = encodeOperand(nextTarget-i);
+			} else if(ir[i].b == 2) {
+				ir[i].a = encodeOperand(breakTarget-i);
 			}
 		}
 	}
@@ -277,9 +316,9 @@ Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& ca
 	return result;
 }
 
-Compiler::Operand Compiler::emitExternal(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitExternal(ByteCode::Enum bc, List const& call, Code* code) {
 	if(call.length() < 2)
-        _error(".External needs at least one argument");
+        _error(".Riposte needs at least one argument");
     Operand func = placeInRegister(compile(call[1], code));
 	
 	// compile parameters directly...reserve registers for them.
@@ -297,7 +336,7 @@ Compiler::Operand Compiler::emitExternal(ByteCode::Enum bc, List const& call, Ch
 	return result;
 }
 
-Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code* code) {
     Value dest = call[1];
     
     Operand rhs = compile(call[2], code);
@@ -335,27 +374,20 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Char
 
             Character nnames(c.length()+1);
 
-            if(!hasNames(c) && 
-               (as == Strings::bracketAssign || 
-                as == Strings::bbAssign) && 
-               c.length() == 3) {
-                for(int64_t i = 0; i < c.length()+1; i++) {
+            // Add 'value' to argument names. Necessary for correctly
+            // calling user-defined replacement functions.
+            if(hasNames(c)) {
+                Value names = getNames(c);
+                for(int64_t i = 0; i < c.length(); i++) { 
+                    nnames[i] = ((Character const&)names)[i];
+                }
+            } else {
+                for(int64_t i = 0; i < c.length(); i++) {
                     nnames[i] = Strings::empty;
                 }
             }
-            else {
-                if(hasNames(c)) {
-                    Value names = getNames(c);
-                    for(int64_t i = 0; i < c.length(); i++) { 
-                        nnames[i] = ((Character const&)names)[i];
-                    }
-                } else {
-                    for(int64_t i = 0; i < c.length(); i++) {
-                        nnames[i] = Strings::empty;
-                    }
-                }
-                nnames[c.length()] = Strings::value;
-            }
+            nnames[nnames.length()-1] = Strings::value;
+            
             value = CreateCall(n, nnames);
             dest = c[1];
         }
@@ -374,7 +406,7 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Char
     return rhs;
 }
 
-Compiler::Operand Compiler::emitPromise(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitPromise(ByteCode::Enum bc, List const& call, Code* code) {
     Operand a = compile(call[1], code);
     Operand b = compile(call[2], code);
     Operand c = compile(call[3], code);
@@ -386,7 +418,7 @@ Compiler::Operand Compiler::emitPromise(ByteCode::Enum bc, List const& call, Cha
     return result;
 }
 
-Compiler::Operand Compiler::emitFunction(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitFunction(ByteCode::Enum bc, List const& call, Code* code) {
     //compile the default parameters
     assert(call[1].isList() || call[1].isNull());
     List formals = call[1].isList()
@@ -439,7 +471,7 @@ Compiler::Operand Compiler::emitFunction(ByteCode::Enum bc, List const& call, Ch
     return reg;
 }
 
-Compiler::Operand Compiler::emitReturn(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitReturn(ByteCode::Enum bc, List const& call, Code* code) {
 		Operand result;
 		if(call.length() == 1) {
 			result = compileConstant(Null::Singleton(), code);
@@ -451,7 +483,7 @@ Compiler::Operand Compiler::emitReturn(ByteCode::Enum bc, List const& call, Char
 		return result;
 }
 
-Compiler::Operand Compiler::emitFor(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitFor(ByteCode::Enum bc, List const& call, Code* code) {
     Operand loop_variable =
         compileConstant(Character::c(SymbolStr(call[1])), code);
     Operand loop_vector = placeInRegister(compile(call[2], code));
@@ -471,14 +503,14 @@ Compiler::Operand Compiler::emitFor(ByteCode::Enum bc, List const& call, Charact
     emit(ByteCode::forend, loop_variable, loop_vector, loop_counter);
     emit(ByteCode::jmp, beginbody-endbody, 0, 0);
 
-    ir[beginbody-1].a.i = endbody-beginbody+4;
+    ir[beginbody-1].a = encodeOperand(endbody-beginbody+4);
 
     kill(body); kill(loop_limit); kill(loop_variable); 
     kill(loop_counter); kill(loop_vector);
     return invisible(compileConstant(Null::Singleton(), code));
 }
 
-Compiler::Operand Compiler::emitWhile(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitWhile(ByteCode::Enum bc, List const& call, Code* code) {
     Operand head_condition = compile(call[1], code);
     emit(ByteCode::jc, 2, 0, kill(head_condition));
     emit(ByteCode::stop, (int64_t)0, (int64_t)0, (int64_t)0);
@@ -500,7 +532,7 @@ Compiler::Operand Compiler::emitWhile(ByteCode::Enum bc, List const& call, Chara
     return invisible(compileConstant(Null::Singleton(), code));
 }
 
-Compiler::Operand Compiler::emitRepeat(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitRepeat(ByteCode::Enum bc, List const& call, Code* code) {
     loopDepth++;
     int64_t beginbody = ir.size();
     Operand body = compile(call[1], code);
@@ -513,21 +545,21 @@ Compiler::Operand Compiler::emitRepeat(ByteCode::Enum bc, List const& call, Char
     return invisible(compileConstant(Null::Singleton(), code));
 }
 
-Compiler::Operand Compiler::emitNext(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitNext(ByteCode::Enum bc, List const& call, Code* code) {
     if(loopDepth == 0)
         throw CompileError("next used outside of loop");
     emit(ByteCode::jmp, 0, 1, 0);
     return Operand(INVALID, (int64_t)0);
 }
 
-Compiler::Operand Compiler::emitBreak(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitBreak(ByteCode::Enum bc, List const& call, Code* code) {
     if(loopDepth == 0)
         throw CompileError("break used outside of loop");
     emit(ByteCode::jmp, 0, 2, 0);
     return Operand(INVALID, (int64_t)0);
 }
 
-Compiler::Operand Compiler::emitIf(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitIf(ByteCode::Enum bc, List const& call, Code* code) {
     Operand resultT, resultF, resultNA;
     if(call.length() < 3 || call.length() > 5)
         throw CompileError("invalid if statement");
@@ -577,7 +609,7 @@ Compiler::Operand Compiler::emitIf(ByteCode::Enum bc, List const& call, Characte
                     : resultNA );
 }
 
-Compiler::Operand Compiler::emitBrace(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitBrace(ByteCode::Enum bc, List const& call, Code* code) {
 		int64_t length = call.length();
 		if(length <= 1) {
 			return compileConstant(Null::Singleton(), code);
@@ -591,13 +623,13 @@ Compiler::Operand Compiler::emitBrace(ByteCode::Enum bc, List const& call, Chara
 		}
 }
 
-Compiler::Operand Compiler::emitParen(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitParen(ByteCode::Enum bc, List const& call, Code* code) {
     Operand result = compile(call[1], code);
     emit(ByteCode::visible, result, 0, result);
     return result;
 }
 
-Compiler::Operand Compiler::emitTernary(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitTernary(ByteCode::Enum bc, List const& call, Code* code) {
     Operand c = placeInRegister(compile(call[1], code));
     Operand b = compile(call[2], code);
     Operand a = compile(call[3], code);
@@ -608,7 +640,7 @@ Compiler::Operand Compiler::emitTernary(ByteCode::Enum bc, List const& call, Cha
     return result;
 }
 
-Compiler::Operand Compiler::emitBinaryMap(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitBinaryMap(ByteCode::Enum bc, List const& call, Code* code) {
     Operand c = placeInRegister(compile(call[1], code));
     Operand b = compile(call[2], code);
     Operand a = compileConstant(Value::Nil(), code);
@@ -619,7 +651,7 @@ Compiler::Operand Compiler::emitBinaryMap(ByteCode::Enum bc, List const& call, C
     return result;
 }
 
-Compiler::Operand Compiler::emitBinary(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitBinary(ByteCode::Enum bc, List const& call, Code* code) {
     Operand a = compile(call[1], code);
     Operand b = compile(call[2], code);
     kill(b); kill(a);
@@ -628,7 +660,7 @@ Compiler::Operand Compiler::emitBinary(ByteCode::Enum bc, List const& call, Char
     return result;
 }
 		
-Compiler::Operand Compiler::emitUnary(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitUnary(ByteCode::Enum bc, List const& call, Code* code) {
     Operand a = compile(call[1], code);
     kill(a);
     Operand result = allocRegister();
@@ -636,12 +668,12 @@ Compiler::Operand Compiler::emitUnary(ByteCode::Enum bc, List const& call, Chara
     return result;
 }
  
-Compiler::Operand Compiler::emitNullary(ByteCode::Enum bc, List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::emitNullary(ByteCode::Enum bc, List const& call, Code* code) {
     Operand result = allocRegister();
     emit(bc, 0, 0, result);
     return result;
 }
- 
+
 Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Code* code) {
 
 	int64_t length = call.length();
@@ -650,11 +682,14 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		throw CompileError("invalid empty call");
 	}
 
+    // If the function is not a literal, compile a standard call.
 	if(!isSymbol(call[0]) && !call[0].isCharacter1())
 		return compileFunctionCall(compile(call[0], code), call, names, code);
 
+    // Get the function literal
 	String func = SymbolStr(call[0]);
-    // list and missing are the only built in functions that handle ...
+
+    // Compile list(...), the only built-in function that handles ...
 	if(func == Strings::list && call.length() == 2 
 		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
 	{
@@ -666,179 +701,33 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 		return result;
 	}
 
-	// These functions can't be called directly if the arguments are named or if
-	// there is a ... in the args list
-
-	bool complicated = false;
+    // The rest of the built in functions don't support ...
+    // or named arguments (except for 'value' in replacement functions),
+    // so check and if there are any, compile a normal function call.
+	bool hasDots = false;
 	for(int64_t i = 1; i < length; i++) {
 		if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) 
-			complicated = true;
+			hasDots = true;
 	}
 
-	if(complicated)
-		return compileFunctionCall(compile(call[0], code), call, names, code);
+    bool hasNames = names.length() > 0;
 
-	for(int64_t i = 0; i < length; i++) {
-		if(names.length() > i && names[i] != Strings::empty) 
-			complicated = true;
-	}
-	
-	//if(complicated)
-	//	return compileFunctionCall(call, names, code);
+    // Check the three built-in replacement functions for the names
+    // we do support. This is necessary since our support for compiling
+    // complex assignments will introduce 'value' into the argument names.
+    if( ( func == Strings::bracketAssign ||
+          func == Strings::bbAssign ||
+          func == Strings::attrset ) && names.length() == 4 ) {
 
-    if(func == Strings::external)
-    {
-		return emitExternal(ByteCode::external, call, names, code);
+        hasNames = !(names[0] == Strings::empty &&
+                     names[1] == Strings::empty &&
+                     names[2] == Strings::empty &&
+                     names[3] == Strings::value);
     }
-	else if(func == Strings::assign ||
-		func == Strings::eqassign || 
-		func == Strings::assign2)
-	{
-        return emitAssign(
-            func == Strings::assign2 ? ByteCode::storeup : ByteCode::store,
-            call, names, code); 
-	}
-    else if(func == Strings::promise)
-    {
-        return emitPromise(ByteCode::pr_new, call, names, code);
-    }
-	else if(func == Strings::function) 
-	{
-        return emitFunction(ByteCode::fn_new, call, names, code);
-	} 
-	else if(func == Strings::returnSym)
-	{
-        return emitReturn(ByteCode::fn_new, call, names, code);
-	} 
-	else if(func == Strings::forSym) 
-	{
-        return emitFor(ByteCode::forbegin, call, names, code);
-	} 
-	else if(func == Strings::whileSym)
-	{
-        return emitWhile(ByteCode::done, call, names, code);
-	} 
-	else if(func == Strings::repeatSym)
-	{
-        return emitRepeat(ByteCode::done, call, names, code);
-	}
-	else if(func == Strings::nextSym)
-	{
-        return emitNext(ByteCode::done, call, names, code);
-	} 
-	else if(func == Strings::breakSym)
-	{
-        return emitBreak(ByteCode::done, call, names, code);
-	} 
-	else if(func == Strings::ifSym) 
-	{
-        return emitIf(ByteCode::done, call, names, code);
-	}
-	else if(func == Strings::brace) 
-	{
-        return emitBrace(ByteCode::done, call, names, code);
-	} 
-	else if(func == Strings::paren) 
-	{
-        return emitParen(ByteCode::done, call, names, code);
-	}
- 
-	// Ternary operators
-	else if((func == Strings::bracketAssign ||
-		func == Strings::bbAssign ||
-		func == Strings::split ||
-		func == Strings::ifelse ||
-		func == Strings::index ||
-        func == Strings::attrset ||
-        func == Strings::map ||
-        func == Strings::scan ||
-        func == Strings::fold) &&
-		call.length() == 4) {
-        return emitTernary(op3(func), call, names, code);
-	}
-	else if(
-        func == Strings::map &&
-		call.length() == 3) {
-        return emitBinaryMap(op3(func), call, names, code);
-	}
-	// Binary operators
-	else if((func == Strings::add ||
-		func == Strings::sub ||
-		func == Strings::mul ||
-		func == Strings::div || 
-		func == Strings::idiv || 
-		func == Strings::pow || 
-		func == Strings::mod ||
-		func == Strings::eq ||
-		func == Strings::neq ||
-		func == Strings::lt ||
-		func == Strings::gt ||
-		func == Strings::ge ||
-		func == Strings::le ||
-		func == Strings::pmin ||
-		func == Strings::pmax ||
-		func == Strings::lor ||
-		func == Strings::land ||
-		func == Strings::bracket ||
-		func == Strings::bb ||
-		func == Strings::vector ||
-		func == Strings::attrget ||
-        func == Strings::env_get ||
-        func == Strings::env_rm ||
-        func == Strings::env_missing ||
-        func == Strings::setenv ||
-        func == Strings::semijoin ||
-        func == Strings::as ||
-        func == Strings::pr_expr ||
-        func == Strings::pr_env) &&
-		call.length() == 3) 
-	{
-        return emitBinary(op2(func), call, names, code);
-	} 
-	// Unary operators
-	else if((func == Strings::add ||
-		func == Strings::sub ||
-		func == Strings::lnot || 
-		func == Strings::isna ||
-		func == Strings::sum ||
-		func == Strings::prod ||
-		func == Strings::min ||
-		func == Strings::max ||
-		func == Strings::any ||
-		func == Strings::all ||
-		func == Strings::cumsum ||
-		func == Strings::cumprod ||
-		func == Strings::cummin ||
-		func == Strings::cummax ||
-        func == Strings::seqlen ||
-		func == Strings::type ||
-		func == Strings::strip ||
-		func == Strings::random ||
-        func == Strings::dots ||
-        func == Strings::attributes ||
-        func == Strings::getenv ||
-        func == Strings::env_new ||
-        func == Strings::env_names ||
-        func == Strings::length ||
-        func == Strings::frame ||
-        func == Strings::invisible ||
-        func == Strings::visible ||
-        func == Strings::isnil)
-		&& call.length() == 2)
-	{
-        return emitUnary(op1(func), call, names, code);
-	} 
-	// Nullary operators
-	else if((func == Strings::dots ||
-             func == Strings::env_global ||
-             func == Strings::stop)
-		&& call.length() == 1)
-	{
-        return emitNullary(op0(func), call, names, code);
-	}
-    
-    // Otherwise, generate standard function call...
-	return compileFunctionCall(compileSymbol(call[0], code, true), call, names, code);
+
+    return (hasDots || hasNames)
+        ? compileFunctionCall(compile(call[0], code), call, names, code)
+        : GetEmitTable()(*this, func, call, code);
 }
 
 Compiler::Operand Compiler::compileExpression(List const& values, Code* code) {
@@ -874,66 +763,66 @@ Compiler::Operand Compiler::compile(Value const& expr, Code* code) {
 
 
 
-void Compiler::dumpCode() const {
-	for(size_t i = 0; i < ir.size(); i++) {
-		std::cout << ByteCode::toString(ir[i].bc) << "\t" << ir[i].a.toString() << "\t" << ir[i].b.toString() << "\t" << ir[i].c.toString() << std::endl;
-	}
-}
+Code* Compiler::compileExpression(State& state, Value const& expr) {
 
-// generate actual code from IR as follows...
-// 	INTEGER operands unchanged
-//	CONSTANT operands encoded with negative integers
-//	REGISTER operands encoded with non-negative integers
-//	INVALID operands just go to 0 since they will never be used
-int64_t Compiler::encodeOperand(Operand op) const {
-	if(op.loc == INTEGER) return op.i;
-	else if(op.loc == CONSTANT) return -(op.i+1);
-	else if(op.loc == REGISTER) return (op.i);
-	else return 0;
-}
-
-
-Code* Compiler::compile(Value const& expr) {
+    Compiler compiler(state);
 	Code* code = new (Code::Finalize) Code();
-	assert(((int64_t)code) % 16 == 0); // our type packing assumes that this is true
-
-    Operand env, index;
-    if(scope == PROMISE) {
-        // promises use first two registers to pass environment info
-        // for replacing promise with evaluated value
-        env = allocRegister();
-        index = allocRegister();
-    }
-
-    Operand result = compile(expr, code);
-
-    // insert appropriate termination statement at end of code
-    if(scope == CLOSURE)
-        emit(ByteCode::ret, result, 0, 0);
-    else if(scope == PROMISE) {
-        emit(ByteCode::env_set, index, env, result);
-        emit(ByteCode::done, result, 0, 0);
-    }
-    else { // TOPLEVEL
-        result = placeInRegister(result);
-        if(result.i != 0)
-            _error("Top level expression did not place its result in register 0");
-        emit(ByteCode::done, result, 0, 0);
-    }
+    Operand result = compiler.compile(expr, code);
+    compiler.emit(ByteCode::done, result, 0, 0);
     
+	code->registers = compiler.max_n; 
 	code->expression = expr;
+    code->bc.swap(compiler.ir);
+
+    return code;
+}
+
+Prototype* Compiler::compileClosureBody(State& state, Value const& expr) {
+    Compiler compiler(state);
+	Code* code = new (Code::Finalize) Code();
+    Operand result = compiler.compile(expr, code);
+   
+    // A function that terminates without a return implicitly
+    // returns the result value.
+    compiler.emit(ByteCode::ret, result, 0, 0);
     
     // interpreter assumes at least 2 registers for each function
     // one for the return value and one for an onexit result 
-	code->registers = std::max(max_n, 2LL); 
+	code->registers = std::max(compiler.max_n, 2LL); 
+	code->expression = expr;
+    code->bc.swap(compiler.ir);
 
-	for(size_t i = 0; i < ir.size(); i++) {
-		code->bc.push_back(Instruction(ir[i].bc, 
-            encodeOperand(ir[i].a),
-            encodeOperand(ir[i].b),
-            encodeOperand(ir[i].c)));
-	}
+    Prototype* p = new Prototype();
+    p->code = code;
+    
+    return p;
+}
 
+Code* Compiler::deferPromiseCompilation(State& state, Value const& expr) {
+    Code* code = new (Code::Finalize) Code();
+    code->expression = expr;
     return code;
+}
+
+void Compiler::doPromiseCompilation(State& state, Code* code) {
+    if(!code->bc.empty())
+        return;
+
+    Compiler compiler(state);
+
+    // promises use first two registers to pass environment info
+    // for replacing promise with evaluated value
+    Operand env = compiler.allocRegister();
+    Operand index = compiler.allocRegister();
+
+    Operand result = compiler.compile(code->expression, code);
+
+    // overwrite the promise with the result 
+    // so it is not evaluated multiple times.
+    compiler.emit(ByteCode::env_set, index, env, result);
+    compiler.emit(ByteCode::done, result, 0, 0);
+
+    code->registers = compiler.max_n;
+    code->bc.swap(compiler.ir);
 }
 

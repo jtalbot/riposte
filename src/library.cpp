@@ -24,7 +24,7 @@ void sourceFile(State& state, std::string name, Environment* env) {
             code.c_str(), code.length(), true, value);
 		
         if(!value.isNil())
-            state.eval(Compiler::compileTopLevel(state, value), env);
+            state.eval(Compiler::compileExpression(state, value), env);
     } catch(RiposteException const& e) { 
         _error("Unable to load library " + name + " (" + e.kind() + "): " + e.what());
     } 

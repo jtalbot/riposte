@@ -140,7 +140,7 @@ static int run(State& state, std::string inname, std::istream& in, std::ostream&
         List p(1);
         p[0] = CreateSymbol(state.internStr("repl"));
         //p[1] = CreateSymbol(Strings::Last_value);
-        print = Compiler::compileTopLevel(state, CreateCall(p));
+        print = Compiler::compileExpression(state, CreateCall(p));
         // save the promise to the gcStack so that the gc doesn't clean it up.
         Value v;
         Promise::Init(v, 0, print, false);
@@ -158,7 +158,7 @@ static int run(State& state, std::string inname, std::istream& in, std::ostream&
             if(done || expr.isNil()) 
                 continue;
 
-            Code* code = Compiler::compileTopLevel(state, expr);
+            Code* code = Compiler::compileExpression(state, expr);
             Value result = state.eval(code, state.global.global);
 
             // Nil indicates an error that was dispatched correctly.

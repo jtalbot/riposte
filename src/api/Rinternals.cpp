@@ -807,7 +807,7 @@ SEXP R_FindNamespace(SEXP info) {
     call = CreateCall(call);
   
     Riposte::State& state = Riposte::newState(); 
-    Code* code = Compiler::compileTopLevel((::State&)state, call);
+    Code* code = Compiler::compileExpression((::State&)state, call);
     Value r = ((::State*)&state)->eval(code, global->global);
     Riposte::deleteState(state);
 

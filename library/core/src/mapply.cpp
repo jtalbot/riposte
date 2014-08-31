@@ -17,7 +17,7 @@ void* mapplyheader(void* args, uint64_t start, uint64_t end, State& state) {
 	apply[0] = l.func;
 	for(int64_t i = 0; i < l.in.length(); i++)
 		apply[i+1] = Value::Nil();
-	Code* p = Compiler::compileTopLevel(state, CreateCall(apply));
+	Code* p = Compiler::compileExpression(state, CreateCall(apply));
 	return p;
 }
 

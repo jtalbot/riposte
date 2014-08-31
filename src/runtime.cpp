@@ -897,7 +897,7 @@ List MapR(State& state, Closure const& func, List args, Character result) {
             apply = CreateCall(apply);
         }
 
-        Code* p = Compiler::compileTopLevel(state, apply);
+        Code* p = Compiler::compileExpression(state, apply);
 
         for(int64_t i = 0; i < length; ++i) {
             for(int64_t k = 0; k < s.size(); ++k) {
@@ -969,7 +969,7 @@ List MapI(State& state, Closure const& func, List args) {
             apply = CreateCall(apply);
         }
 
-        Code* p = Compiler::compileTopLevel(state, apply);
+        Code* p = Compiler::compileExpression(state, apply);
 
         for(int64_t i = 0; i < length; ++i) {
             for(int64_t k = 0; k < s.size(); ++k) {

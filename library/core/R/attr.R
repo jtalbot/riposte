@@ -7,6 +7,5 @@ attr <- function(x, which, exact=TRUE) {
 
 `attr<-` <- function(x, which, value) {
     `attr<-`(x, which, value)
-    x
 }
 
