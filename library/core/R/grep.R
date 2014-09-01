@@ -165,27 +165,53 @@ gregexpr <- function(pattern, text, ignore.case, perl, fixed, useBytes)
 
 sub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
 {
-    .Map('sub_map',
-        list(
-            .Riposte('regex_compile',
-                as.character.default(pattern), 
-                identical(ignore.case, TRUE),
-                identical(fixed, TRUE)),
-            as.character.default(text),
-            as.character.default(replacement)
-        ), .characters('character'))[[1]]
+    if(.isTRUE(fixed) || !.isTRUE(perl)) {
+        .Map('sub_map',
+            list(
+                .Riposte('regex_compile',
+                    as.character.default(pattern), 
+                    identical(ignore.case, TRUE),
+                    identical(fixed, TRUE)),
+                as.character.default(text),
+                as.character.default(replacement)
+            ), .characters('character'))[[1]]
+    }
+    else {
+        .Map('pcre_sub_map',
+            list(
+                .Riposte('pcre_regex_compile',
+                    as.character.default(pattern), 
+                    identical(ignore.case, TRUE),
+                    identical(fixed, TRUE)),
+                as.character.default(text),
+                as.character.default(replacement)
+            ), .characters('character'))[[1]]
+    }
 }
 
 gsub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
 {
-    .Map('gsub_map',
-        list(
-            .Riposte('regex_compile',
-                as.character.default(pattern), 
-                identical(ignore.case, TRUE),
-                identical(fixed, TRUE)),
-            as.character.default(text),
-            as.character.default(replacement)
-        ), .characters('character'))[[1]]
+    if(.isTRUE(fixed) || !.isTRUE(perl)) {
+        .Map('gsub_map',
+            list(
+                .Riposte('regex_compile',
+                    as.character.default(pattern), 
+                    identical(ignore.case, TRUE),
+                    identical(fixed, TRUE)),
+                as.character.default(text),
+                as.character.default(replacement)
+            ), .characters('character'))[[1]]
+    }
+    else {
+        .Map('pcre_gsub_map',
+            list(
+                .Riposte('pcre_regex_compile',
+                    as.character.default(pattern), 
+                    identical(ignore.case, TRUE),
+                    identical(fixed, TRUE)),
+                as.character.default(text),
+                as.character.default(replacement)
+            ), .characters('character'))[[1]]
+    }
 }
 

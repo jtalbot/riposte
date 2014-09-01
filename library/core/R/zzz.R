@@ -60,6 +60,10 @@ primitives <- .characters(
     'break',
     'next',
 
+    # Devices.R
+    '.Device',
+    '.Devices',
+
     # Encoding.R
     'enc2native',
     'enc2utf8',

@@ -729,7 +729,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
     }
 
     return (hasDots || hasNames)
-        ? compileFunctionCall(compile(call[0], code), call, names, code)
+        ? compileFunctionCall(compileSymbol(call[0], code, true), call, names, code)
         : GetEmitTable()(*this, func, call, code);
 }
 

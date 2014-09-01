@@ -26,7 +26,12 @@ Value regex_compile(State& state, Value const* args) {
     
     regex_t* r = new regex_t();
 
-    tre_regcomp(r, pattern[0]->s, flags);
+    int err = tre_regcomp(r, pattern[0]->s, flags);
+    
+    if(err) {
+        printf("Failed to compile regex pattern (%d): %s\n",
+            err, pattern[0]->s);
+    }
 
     Value v;
     Externalptr::Init(v, r, Value::Nil(), Value::Nil(), regex_finalize);
@@ -303,7 +308,6 @@ void pcre_gregex_map(State& state,
     std::vector<Integer::Element> ss;
     std::vector<Integer::Element> ll;
 
-    regmatch_t m;
     size_t len = strlen(text->s);
     size_t offset = 0;
     int rc = 0;
@@ -329,5 +333,84 @@ void pcre_gregex_map(State& state,
     
     start = s;
     length = l;
+}
+
+extern "C"
+void pcre_sub_map(State& state, Character::Element& out,
+        Value const& regex, String text, String sub) {
+    
+    Externalptr const& p = (Externalptr const&)regex;
+    pcre* r = (pcre*)p.ptr();
+
+    int ovector[30] = {0};
+    int rc = pcre_exec(r, NULL, text->s, strlen(text->s), 0, 0, ovector, 30);
+    
+    if(rc < 0 && rc != PCRE_ERROR_NOMATCH)
+        printf("PCRE matching error %d\n", rc);
+
+    if(rc < 0) {
+        out = text;
+    }
+    else {
+        std::string s(sub->s);
+        // replace all back references in sub
+        char c = '1';
+        for(int i = 1; i <= 9; ++i, ++c) {
+            if(i < rc) {
+                s = replaceAll(s, std::string("\\")+c, 
+                    std::string(text->s+ovector[2*i], text->s+ovector[2*i+1]));
+            }
+            else {
+                s = replaceAll(s, std::string("\\")+c, 
+                    std::string(""));
+            }
+        }
+        std::string result;
+        result.append( text->s, text->s+ovector[0] );
+        result.append( s );
+        result.append( text->s+ovector[1], text->s+strlen(text->s) );
+        out = state.internStr(result.c_str());
+    }
+}
+
+extern "C"
+void pcre_gsub_map(State& state, Character::Element& out,
+        Value const& regex, String text, String sub) {
+   
+    Externalptr const& p = (Externalptr const&)regex;
+    pcre* r = (pcre*)p.ptr();
+
+    size_t len = strlen(text->s);
+    size_t offset = 0;
+    int rc = 0;
+    std::string result="";
+    do {
+        int ovector[30] = {0};
+        rc = pcre_exec(r, NULL, text->s, len, offset, 0, ovector, 30);
+        if(rc < 0 && rc != PCRE_ERROR_NOMATCH)
+            printf("PCRE matching error %d\n", rc);
+
+        if( rc >= 0 ) {
+            std::string s(sub->s);
+            // replace all back references in sub
+            char c = '1';
+            for(int i = 1; i <= 9; ++i, ++c) {
+                if(i < rc) {
+                    s = replaceAll(s, std::string("\\")+c, 
+                        std::string(text->s+ovector[2*i]+offset, 
+                                    text->s+ovector[2*i+1]+offset));
+                }
+                else {
+                    s = replaceAll(s, std::string("\\")+c, 
+                        std::string(""));
+                }
+            }
+            result.append( text->s+offset, text->s+ovector[0]+offset );
+            result.append( s );
+            offset += ovector[1];
+        }
+    } while( rc >= 0 );
+
+    out = state.internStr(result.c_str());
 }
 

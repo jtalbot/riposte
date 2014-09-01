@@ -258,8 +258,7 @@ void SET_STRING_ELT(SEXP x, R_xlen_t i, SEXP a) {
         printf("Assigning past the end in SET_STRING_ELT");
         throw;
     }
-    
-    c[i] = ((ScalarString const&)a).string();
+    c[i] = ((ScalarString const&)a->v).string();
 }
 
 SEXP SET_VECTOR_ELT(SEXP x, R_xlen_t i, SEXP v) {
@@ -773,7 +772,8 @@ SEXP Rf_mkCharCE(const char * str, cetype_t type) {
     String s = global->internStr(str);
     Value r;
     ScalarString::Init(r, s);
-    return new SEXPREC(r);
+    SEXP v = new SEXPREC(r);
+    return v;
 }
 
 SEXP Rf_mkCharLenCE(const char *, int, cetype_t) {

@@ -34,13 +34,14 @@ static inline Instruction const* call_op(State& state, Instruction const& inst) 
     state.visible = true;
 	Heap::GlobalHeap.collect(state.global);
 	DECODE(a); BIND(a);
-	if(!a.isClosure())
+	
+    CompiledCall const& call = state.frame.code->calls[inst.b];
+	
+    if(!a.isClosure())
         return StopDispatch(state, inst, state.internStr(
 		    (std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n").c_str()),
             inst.c);
-	
     Closure const& func = (Closure const&)a;
-	CompiledCall const& call = state.frame.code->calls[inst.b];
 
 	Environment* fenv =
         (call.names.length() == 0 &&
@@ -1021,7 +1022,10 @@ static inline Instruction const* setattr_op(State& state, Instruction const& ins
 		OUT(c) = o;
 		return &inst+1;
 	}
-	_error("Invalid attrset operation");
+    
+    return StopDispatch(state, inst, state.internStr(
+            "Invalid setattr operation"), 
+            inst.c);
 }
 
 static inline Instruction const* attributes_op(State& state, Instruction const& inst) {
