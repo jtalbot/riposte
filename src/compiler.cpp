@@ -238,74 +238,6 @@ Compiler::Operand Compiler::placeInRegister(Operand r) {
 	return r;
 }
 
-// Compute compiled call...precompiles promise code and some necessary values
-struct Pair { String n; Value v; };
-
-CompiledCall Compiler::makeCall(State& state, List const& call, Character const& names) {
-    List rcall = CreateCall(call, names.length() > 0 ? names : Value::Nil());
-    int64_t dotIndex = call.length()-1;
-	std::vector<Pair>  arguments;
-    bool named = false;
-
-    List extraArgs(0);
-    Character extraNames(0);
-
-	for(int64_t i = 1; i < call.length(); i++) {
-		Pair p;
-		if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
-
-        if(p.n == Strings::__extraArgs__) {
-            List const& l = (List const&)call[i];
-            if(!hasNames(l) 
-                || l.length() != ((Character const&)getNames(l)).length()) {
-                _error("__extraArgs__ must be named");
-            }
-            extraArgs = l;
-            extraArgs.attributes(0);
-            extraNames = (Character const&)getNames(l);
-
-            // remove the extraArgs from the original call
-            rcall = List(call.length()-1);
-            for(size_t j=0, k=0; j < call.length(); ++j)
-                if(j != i)
-                    rcall[k++] = call[j];
-            if(names.length() > 0 ) {
-                Character rnames = Character(names.length()-1);
-                for(size_t j=0, k=0; j < names.length(); ++j)
-                    if(j != i)
-                        rnames[k++] = names[j];
-                rcall = CreateCall(rcall, rnames);
-            }
-        }
-        else {
-		    if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) {
-			    p.v = call[i];
-    			dotIndex = i-1;
-                p.n = Strings::empty;
-	    	} else if(isCall(call[i]) || isSymbol(call[i])) {
-                if(p.n != Strings::empty) named = true;
-                Promise::Init(p.v, NULL, deferPromiseCompilation(state, call[i]), false);
-    		} else {
-                if(p.n != Strings::empty) named = true;
-	    		p.v = call[i];
-		    }
-    		arguments.push_back(p);
-	    }
-    }
-
-    List args(arguments.size());
-    for(size_t i = 0; i < arguments.size(); ++i) {
-        args[i] = arguments[i].v;
-    }
-    Character argnames(named ? arguments.size() : 0);
-    for(size_t i = 0; i < arguments.size() && named; ++i) {
-        argnames[i] = arguments[i].n;
-    }
-
-
-	return CompiledCall(rcall, args, argnames, dotIndex, extraArgs, extraNames);
-}
-
 // a standard call, not an op
 Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& call, Character const& names, Code* code) {
 	CompiledCall a = makeCall(state, call, names);
@@ -437,11 +369,13 @@ Compiler::Operand Compiler::emitFunction(ByteCode::Enum bc, List const& call, Co
     List defaults(formals.length());
     int64_t dotIndex = formals.length();
     for(int64_t i = 0; i < formals.length(); i++) {
+        // Make defaults. In order to detect defaults when using missing,
+        // all defaults must be put into promises.
         if(parameters[i] == Strings::dots) {
             dotIndex = i;
             defaults[i] = Value::Nil();
         }
-        else if(!formals[i].isNil()) /*if(isCall(formals[i]) || isSymbol(formals[i]))*/ {
+        else if(!formals[i].isNil()) {
             Promise::Init(defaults[i], NULL, 
                 deferPromiseCompilation(state, formals[i]), true);
         }
@@ -476,7 +410,7 @@ Compiler::Operand Compiler::emitReturn(ByteCode::Enum bc, List const& call, Code
 		if(call.length() == 1) {
 			result = compileConstant(Null::Singleton(), code);
 		} else if(call.length() == 2)
-			result = placeInRegister(compile(call[1], code));
+			result = compile(call[1], code);
 		else
 			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
 		emit(ByteCode::ret, result, 0, 0);
@@ -674,6 +608,75 @@ Compiler::Operand Compiler::emitNullary(ByteCode::Enum bc, List const& call, Cod
     return result;
 }
 
+
+
+// Compute compiled call...precompiles promise code and some necessary values
+struct Pair { String n; Value v; };
+
+CompiledCall Compiler::makeCall(State& state, List const& call, Character const& names) {
+    List rcall = CreateCall(call, names.length() > 0 ? names : Value::Nil());
+    int64_t dotIndex = call.length()-1;
+	std::vector<Pair>  arguments;
+    bool named = false;
+
+    List extraArgs(0);
+    Character extraNames(0);
+
+	for(int64_t i = 1; i < call.length(); i++) {
+		Pair p;
+		if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
+
+        if(p.n == Strings::__extraArgs__) {
+            List const& l = (List const&)call[i];
+            if(!hasNames(l) 
+                || l.length() != ((Character const&)getNames(l)).length()) {
+                _error("__extraArgs__ must be named");
+            }
+            extraArgs = l;
+            extraArgs.attributes(0);
+            extraNames = (Character const&)getNames(l);
+
+            // remove the extraArgs from the original call
+            rcall = List(call.length()-1);
+            for(size_t j=0, k=0; j < call.length(); ++j)
+                if(j != i)
+                    rcall[k++] = call[j];
+            if(names.length() > 0 ) {
+                Character rnames = Character(names.length()-1);
+                for(size_t j=0, k=0; j < names.length(); ++j)
+                    if(j != i)
+                        rnames[k++] = names[j];
+                rcall = CreateCall(rcall, rnames);
+            }
+        }
+        else {
+		    if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) {
+			    p.v = call[i];
+    			dotIndex = i-1;
+                p.n = Strings::empty;
+	    	} else if(isCall(call[i]) || isSymbol(call[i])) {
+                if(p.n != Strings::empty) named = true;
+                Promise::Init(p.v, NULL, deferPromiseCompilation(state, call[i]), false);
+    		} else {
+                if(p.n != Strings::empty) named = true;
+	    		p.v = call[i];
+		    }
+    		arguments.push_back(p);
+	    }
+    }
+
+    List args(arguments.size());
+    for(size_t i = 0; i < arguments.size(); ++i) {
+        args[i] = arguments[i].v;
+    }
+    Character argnames(named ? arguments.size() : 0);
+    for(size_t i = 0; i < arguments.size() && named; ++i) {
+        argnames[i] = arguments[i].n;
+    }
+
+	return CompiledCall(rcall, args, argnames, dotIndex, extraArgs, extraNames);
+}
+
 Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Code* code) {
 
 	int64_t length = call.length();
@@ -744,10 +747,6 @@ Compiler::Operand Compiler::compile(Value const& expr, Code* code) {
 	if(isSymbol(expr)) {
 		return compileSymbol(expr, code, false);
 	}
-	if(isExpression(expr)) {
-		assert(expr.isList());
-		return compileExpression((List const&)expr, code);
-	}
 	else if(isCall(expr)) {
 		assert(expr.isList());
 		return compileCall((List const&)expr, 
@@ -767,7 +766,10 @@ Code* Compiler::compileExpression(State& state, Value const& expr) {
 
     Compiler compiler(state);
 	Code* code = new (Code::Finalize) Code();
-    Operand result = compiler.compile(expr, code);
+   
+    Operand result = isExpression(expr)
+        ? compiler.compileExpression((List const&)expr, code)
+        : compiler.compile(expr, code);
     compiler.emit(ByteCode::done, result, 0, 0);
     
 	code->registers = compiler.max_n; 

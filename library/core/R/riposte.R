@@ -63,8 +63,7 @@ time <- function(x) {
 
 source <- function(file, eval.env=globalenv()) {
     p <- .Riposte('source', file)
-    promise('q', p, eval.env, .getenv(NULL))
-    q
+    eval(p, eval.env, NULL)
 }
 
 # this is called when interpreter bytecodes fail

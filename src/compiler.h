@@ -18,8 +18,7 @@
 
 class Compiler {
 private:
-    // global is only needed for interning names of replacement functions.
-    // it would be nice to get rid of this dependency.
+	State& state;
 	Global& global;
 
 	uint64_t loopDepth;
@@ -66,7 +65,7 @@ private:
 	Operand kill(Operand i) { if(i.loc == REGISTER) { n = std::min(n, i.i); } return i; }
 	Operand top() { return Operand(REGISTER, n); }
 
-	Compiler(Global& global) : global(global), loopDepth(0), n(0), max_n(0) {}
+	Compiler(State& state) : state(state), global(state.global), loopDepth(0), n(0), max_n(0) {}
 	
 	Operand compile(Value const& expr, Code* code);
 

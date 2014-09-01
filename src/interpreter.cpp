@@ -163,7 +163,9 @@ static inline Instruction const* jc_op(State& state, Instruction const& inst) {
 
 static inline Instruction const* forbegin_op(State& state, Instruction const& inst) {
     state.visible = true;
-	// a = loop variable (e.g. i), b = loop vector(e.g. 1:100), c = counter register
+	// a = loop variable (e.g. i)
+    // b = loop vector(e.g. 1:100)
+    // c = counter register
 	// following instruction is a jmp that contains offset
     Value const& b = REGISTER(inst.b);
 	BIND(b);

@@ -5,7 +5,16 @@ eval <- function(expr, envir, enclos) {
         environment(envir) <- enclos
     }
 
-    promise('f', expr, envir, .getenv(NULL))
-    f
+    if(is.expression(expr)) {
+        f <- NULL
+        for(e in expr) {
+            promise('f', e, envir, .getenv(NULL))
+            f
+        }
+    }
+    else { 
+        promise('f', expr, envir, .getenv(NULL))
+        f
+    }
 }
 
