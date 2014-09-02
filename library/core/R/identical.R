@@ -19,11 +19,8 @@ identical <- function(x, y, num.eq, single.NA,
         }
         return(TRUE)
     }
-    else if(is.environment(x)) {
-        x == y
-    }
     else {
-        .stop(sprintf("identical NYI for %s", .type(x)))
+        x==y
     }
 }
 

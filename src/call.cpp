@@ -488,6 +488,26 @@ bool EnvironmentBinaryDispatch< struct neqVOp<REnvironment, REnvironment> >
     return true;
 }
 
+template<>
+bool ClosureBinaryDispatch< struct eqVOp<Closure, Closure> >
+(State& state, void* args, Value const& a, Value const& b, Value& c) {
+    Logical::InitScalar(c,
+        ((Closure const&)a).environment() == ((Closure const&)b).environment() &&
+        ((Closure const&)a).prototype() == ((Closure const&)b).prototype() ?
+            Logical::TrueElement : Logical::FalseElement );
+    return true;
+}
+
+template<>
+bool ClosureBinaryDispatch< struct neqVOp<Closure, Closure> >
+(State& state, void* args, Value const& a, Value const& b, Value& c) {
+    Logical::InitScalar(c,
+        ((Closure const&)a).environment() != ((Closure const&)b).environment() ||
+        ((Closure const&)a).prototype() != ((Closure const&)b).prototype() ?
+            Logical::TrueElement : Logical::FalseElement );
+    return true;
+}
+
 void IfElseDispatch(State& state, void* args, Value const& a, Value const& b, Value const& cond, Value& c) {
 	if(a.isVector() && b.isVector())
 	{

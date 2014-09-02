@@ -489,6 +489,12 @@ internals <- .characters(
     'Encoding',
     'setEncoding',
 
+    # Extremes.R
+    'pmin',
+    'pmin.int',
+    'pmax',
+    'pmax.int',
+
     # R.Version.R
     'Version',
 
@@ -513,6 +519,9 @@ internals <- .characters(
 
     # Sys.time.R
     'Sys.time',
+
+    # abbreviate.R
+    'abbreviate',
 
     # args.R
     'args',
@@ -699,6 +708,9 @@ internals <- .characters(
     # internal.R
     'shortRowNames',
 
+    # invisible.R
+    'withVisible',
+    
     # l10n_info.R
     'l10n_info',
 
@@ -762,7 +774,6 @@ internals <- .characters(
 
     # order.R
     'order',
-    'sort',
 
     # parse
     'parse',
@@ -834,6 +845,11 @@ internals <- .characters(
     # solve.R
     'La_solve',
 
+    # sort.R
+    'sort',
+    'psort',
+    'qsort',
+    
     # stop.R
     'stop',
     'geterrmessage',
@@ -880,6 +896,9 @@ internals <- .characters(
 
     # unique.R
     'unique',
+
+    # unlink.R
+    'unlink',
 
     # unlist.R
     'unlist',

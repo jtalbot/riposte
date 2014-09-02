@@ -166,6 +166,7 @@
     _(stop, ".stop") \
     _(invisible, ".invisible") \
     _(visible, ".visible") \
+    _(withVisible, ".withVisible") \
     _(__onexit__, ".__on.exit__.") \
     _(__extraArgs__, ".__extraArgs__.") \
     _(__nargs__, ".__nargs__.") \

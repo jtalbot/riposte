@@ -16,6 +16,7 @@
     _(external,     "external")                                                \
     _(invisible,    "invisible")                                               \
     _(visible,      "visible")                                                 \
+    _(withVisible,  "withVisible")                                                 \
     _(force,        "force")                                                   \
 
 #define LOAD_STORE_BYTECODES(_)                                                \

@@ -219,6 +219,16 @@ static inline Instruction const* visible_op(State& state, Instruction const& ins
     return &inst+1;
 }
 
+static inline Instruction const* withVisible_op(State& state, Instruction const& inst) {
+    DECODE(a);
+    List result(2);
+    result[0] = a;
+    result[1] = Logical::c(state.visible
+        ? Logical::TrueElement : Logical::FalseElement);
+    OUT(c) = result;
+    return &inst+1;
+}
+
 static inline Instruction const* external_op(State& state, Instruction const& inst) {
     state.visible = true;
 	DECODE(a);
@@ -1241,14 +1251,14 @@ static inline Instruction const* env_missing_op(State& state, Instruction const&
             inst.c);
     }
 
-    Environment* e = a.isEnvironment()
+    Environment* original_env = a.isEnvironment()
         ? ((REnvironment const&)a).environment()
         : state.frame.environment;
+    Environment* e = original_env;
 
     Value x = b;
 
     bool missing = false;
-
     do {
 
     if( x.isCharacter() && ((Character const&)x).length() == 1 ) {
@@ -1256,7 +1266,7 @@ static inline Instruction const* env_missing_op(State& state, Instruction const&
         Value const& v = e->getRecursive(x.s, foundEnv);
         missing = (    v.isPromise()
                     && ((Promise const&)v).isDefault() 
-                    && foundEnv == state.frame.environment
+                    && foundEnv == original_env 
                   ) || v.isNil();
 
         if(v.isPromise() && !((Promise const&)v).isDefault() && foundEnv == e) {
@@ -1276,7 +1286,7 @@ static inline Instruction const* env_missing_op(State& state, Instruction const&
                         if(((Character const&)expr).s == parameters[i])
                             matched = true;
                     }
-                    
+
                     if(!matched)
                         break;
 
@@ -1683,6 +1693,10 @@ State::State(Global& global, TaskQueue* queue)
 {
 	registers = new Value[DEFAULT_NUM_REGISTERS];
 	frame.registers = registers;
+    frame.environment = NULL;
+    frame.code = NULL;
+    frame.isPromise = false;
+    frame.returnpc = NULL;
 }
 
 Global::Global(uint64_t states, int64_t argc, char** argv) 
@@ -1769,12 +1783,12 @@ void deleteState(State& s) {
 }
 
 
-String newString(State const& state, std::string const& str) {
-    return (String)((::State&)state).internStr(str);
-}
-
 std::string getString(State const& state, String str) {
     return std::string(((::String)str)->s);
+}
+
+String newString(State const& state, std::string const& str) {
+    return (String)((::State&)state).internStr(str);
 }
 
 } // namespace Riposte

@@ -87,6 +87,7 @@ Compiler::EmitTable::EmitTable() {
     
     add(Strings::invisible, 1, &Compiler::emitUnary, ByteCode::invisible);
     add(Strings::visible, 1, &Compiler::emitUnary, ByteCode::visible);
+    add(Strings::withVisible, 1, &Compiler::emitUnary, ByteCode::withVisible);
     
     add(Strings::isnil, 1, &Compiler::emitUnary, ByteCode::isnil);
     

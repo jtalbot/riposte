@@ -3,8 +3,8 @@
 UNAME := $(shell uname -s)
 CXX := clang++
 CC := clang
-CXXFLAGS := -Wall -Iinclude
-CFLAGS := -Wall -Iinclude
+CXXFLAGS := -Wall -Iinclude -g
+CFLAGS := -Wall -Iinclude -g
 LFLAGS := -fpic
 LIBS := -Llibs/dyncall/dyncall -lpthread -ldyncall_s
 
@@ -47,13 +47,13 @@ DEPENDENCIES := $(patsubst %.cpp,build/%.d,$(ALL_SRC))
 
 default: debug
 
-debug: CXXFLAGS += -DDEBUG -O0 -g
+debug: CXXFLAGS += -DDEBUG -O0
 debug: all
 
-release: CXXFLAGS += -DNDEBUG -O3 -g
+release: CXXFLAGS += -DNDEBUG -O3
 release: all
 
-asm: CXXFLAGS += -DNDEBUG -O3 -g 
+asm: CXXFLAGS += -DNDEBUG -O3
 asm: $(ASM)
 
 all: $(EXECUTABLE) $(API) $(PACKAGES)

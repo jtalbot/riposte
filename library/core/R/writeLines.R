@@ -1,5 +1,5 @@
 
-writeLines <- function(text, con, sep, useBytes) 
+writeLines <- function(text, con, sep, useBytes)
     .writeLines(con, text, sep, useBytes)
 
 .writeLines <- function(con, text, sep, useBytes)
@@ -17,7 +17,8 @@ writeLines <- function(text, con, sep, useBytes)
 }
 
 .writeLines.terminal <- function(con, text, sep, useBytes) {
-    .Riposte('terminal_writeLines', strip(con), as.character(text), as.character(sep))
+    cat(text, '', sep, FALSE, FALSE, FALSE)
+    #.Riposte('terminal_writeLines', strip(con), as.character(text), as.character(sep))
     NULL
 }
 

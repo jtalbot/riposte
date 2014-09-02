@@ -1,47 +1,47 @@
 
-`<` <- function(x,y) UseMultiMethod('<', 'Ops', x, y)
+`<` <- function(e1,e2) UseMultiMethod('<', 'Ops', e1, e2)
 
-`<.default` <- function(x, y) {
-    .OrdinalCheckBinary(x,y)
-    strip(x)<strip(y)
+`<.default` <- function(e1, e2) {
+    .OrdinalCheckBinary(e1,e2)
+    strip(e1)<strip(e2)
 }
 
-`>` <- function(x,y) UseMultiMethod('>', 'Ops', x, y)
+`>` <- function(e1,e2) UseMultiMethod('>', 'Ops', e1, e2)
 
-`>.default` <- function(x, y) {
-    .OrdinalCheckBinary(x,y)
-    strip(x)>strip(y)
+`>.default` <- function(e1, e2) {
+    .OrdinalCheckBinary(e1,e2)
+    strip(e1)>strip(e2)
 }
 
-`<=` <- function(x,y) UseMultiMethod('<=', 'Ops', x, y)
+`<=` <- function(e1,e2) UseMultiMethod('<=', 'Ops', e1, e2)
 
-`<=.default` <- function(x, y) {
-    .OrdinalCheckBinary(x,y)
-    strip(x)<=strip(y)
+`<=.default` <- function(e1, e2) {
+    .OrdinalCheckBinary(e1,e2)
+    strip(e1)<=strip(e2)
 }
 
-`>=` <- function(x,y) UseMultiMethod('>=', 'Ops', x, y)
+`>=` <- function(e1,e2) UseMultiMethod('>=', 'Ops', e1, e2)
 
-`>=.default` <- function(x, y) {
-    .OrdinalCheckBinary(x,y)
-    strip(x)>=strip(y)
+`>=.default` <- function(e1, e2) {
+    .OrdinalCheckBinary(e1,e2)
+    strip(e1)>=strip(e2)
 }
 
-`==` <- function(x,y) UseMultiMethod('==', 'Ops', x, y)
+`==` <- function(e1,e2) UseMultiMethod('==', 'Ops', e1, e2)
 
-`==.default` <- function(x, y) {
-    .OrdinalCheckBinary(x,y)
-    strip(x)==strip(y)
+`==.default` <- function(e1, e2) {
+    .OrdinalCheckBinary(e1,e2)
+    strip(e1)==strip(e2)
 }
 
-`==.environment` <- function(x, y) {
-    strip(x)==strip(y)
+`==.environment` <- function(e1, e2) {
+    strip(e1)==strip(e2)
 }
 
-`!=` <- function(x,y) UseMultiMethod('!=', 'Ops', x, y)
+`!=` <- function(e1,e2) UseMultiMethod('!=', 'Ops', e1, e2)
 
-`!=.default` <- function(x, y) {
-    .OrdinalCheckBinary(x,y)
-    strip(x)!=strip(y)
+`!=.default` <- function(e1, e2) {
+    .OrdinalCheckBinary(e1,e2)
+    strip(e1)!=strip(e2)
 }
 

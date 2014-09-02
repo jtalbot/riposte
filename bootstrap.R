@@ -88,5 +88,3 @@
 
 .First.sys()
 
-example(InsectSprays)
-

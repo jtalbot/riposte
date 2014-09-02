@@ -1040,7 +1040,7 @@ _again:
 
 	if( cs == Scanner_error && syntaxErrors == 0) {
 		syntaxErrors++;
-		std::cout << "Lexing error (" << filename << ":" << intToStr(line+1) << ")" << std::endl; 
+		std::cout << "Lexing error (" << filename << ":" << intToStr(line+1) << ":" << intToStr(col+1) << ")" << std::endl;
         // TODO: make a meaningful error. te can be 0x0 sometimes! Try entering `z
         // (" << intToStr(line+1) << "," << intToStr(col+1) << ") : unexpected '" << std::string(ts, te-ts) + "'" << std::endl; 
 	}

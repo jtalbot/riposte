@@ -109,4 +109,12 @@ textConnection <- function(nm, object, open, env, type) {
 
 .open.textConnection <- function(con, open, blocking) NULL
 .close.textConnection <- function(con, type) NULL
+.connection.cat.textConnection <- function(con, x) {
+    e <- attr(con, 'conn')
 
+    if(is.null(e$env[[e$text]]))
+        e$env[[e$text]] <- x
+    else
+        e$env[[e$text]] <- .concat(list(e$env[[e$text]], x))
+    NULL    
+}

@@ -3,11 +3,11 @@
 
 sink <- function(file, closeOnExit, message, split) {
     if(file == -1L) {
-        if(length(.sunk_connections > 0L))
-            .sunk_connections <- .sunk_connections[-length(.sunk_connections)]
+        if(length(.sunk_connections) > 0L)
+            .sunk_connections <<- .sunk_connections[-length(.sunk_connections)]
     }
     else {
-       .sunk_connections[length(.sunk_connections)+1L] <- list(file, split)
+        .sunk_connections[[length(.sunk_connections)+1L]] <<- list(file, split)
     }
 }
 

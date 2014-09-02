@@ -1018,15 +1018,19 @@ static void yy_reduce(
   **     break;
   */
       case 0: /* prog ::= */
-      case 2: /* prog ::= error */ yytestcase(yyruleno==2);
 #line 71 "grammar.y"
-{ parser->result = Value::Nil(); }
-#line 1025 "grammar.c"
+{ List list(0); parser->result = CreateExpression(list); }
+#line 1024 "grammar.c"
         break;
       case 1: /* prog ::= optnl statementlist optnl */
 #line 72 "grammar.y"
 { parser->result = CreateExpression(yymsp[-1].minor.yy82->values()); }
-#line 1030 "grammar.c"
+#line 1029 "grammar.c"
+        break;
+      case 2: /* prog ::= error */
+#line 73 "grammar.y"
+{ parser->result = Value::Nil(); }
+#line 1034 "grammar.c"
         break;
       case 3: /* statement ::= expr EQ_ASSIGN optnl statement */
       case 17: /* expr ::= expr COLON optnl expr */ yytestcase(yyruleno==17);
@@ -1052,7 +1056,7 @@ static void yy_reduce(
       case 52: /* expr ::= expr AT optnl symbolstr */ yytestcase(yyruleno==52);
 #line 75 "grammar.y"
 { yygotominor.yy0 = CreateCall(List::c(yymsp[-2].minor.yy0, yymsp[-3].minor.yy0, yymsp[0].minor.yy0)); }
-#line 1056 "grammar.c"
+#line 1060 "grammar.c"
         break;
       case 4: /* statement ::= expr */
       case 6: /* expr ::= NUM_CONST */ yytestcase(yyruleno==6);
@@ -1063,25 +1067,25 @@ static void yy_reduce(
       case 56: /* symbolstr ::= SYMBOL */ yytestcase(yyruleno==56);
 #line 76 "grammar.y"
 { yygotominor.yy0 = yymsp[0].minor.yy0; }
-#line 1067 "grammar.c"
+#line 1071 "grammar.c"
         break;
       case 5: /* expr ::= NIL_CONST */
 #line 78 "grammar.y"
 { yygotominor.yy0 = Value::Nil();   yy_destructor(yypParser,40,&yymsp[0].minor);
 }
-#line 1073 "grammar.c"
+#line 1077 "grammar.c"
         break;
       case 10: /* expr ::= LBRACE optnl statementlist optnl RBRACE */
 #line 84 "grammar.y"
 { yymsp[-2].minor.yy82->push_front(Strings::empty, yymsp[-4].minor.yy0); yygotominor.yy0 = CreateCall(yymsp[-2].minor.yy82->values(), yymsp[-2].minor.yy82->names(false));   yy_destructor(yypParser,45,&yymsp[0].minor);
 }
-#line 1079 "grammar.c"
+#line 1083 "grammar.c"
         break;
       case 11: /* expr ::= LPAREN optnl statementlist optnl RPAREN */
 #line 85 "grammar.y"
 { yymsp[-2].minor.yy82->push_front(Strings::empty, yymsp[-4].minor.yy0); yygotominor.yy0 = CreateCall(yymsp[-2].minor.yy82->values(), yymsp[-2].minor.yy82->names(false));   yy_destructor(yypParser,46,&yymsp[0].minor);
 }
-#line 1085 "grammar.c"
+#line 1089 "grammar.c"
         break;
       case 12: /* expr ::= MINUS optnl expr */
       case 13: /* expr ::= PLUS optnl expr */ yytestcase(yyruleno==13);
@@ -1091,26 +1095,26 @@ static void yy_reduce(
       case 44: /* expr ::= REPEAT optnl statement */ yytestcase(yyruleno==44);
 #line 87 "grammar.y"
 { yygotominor.yy0 = CreateCall(List::c(yymsp[-2].minor.yy0, yymsp[0].minor.yy0)); }
-#line 1095 "grammar.c"
+#line 1099 "grammar.c"
         break;
       case 37: /* expr ::= expr RIGHT_ASSIGN optnl expr */
 #line 114 "grammar.y"
 { yygotominor.yy0 = CreateCall(List::c(yymsp[-2].minor.yy0, yymsp[0].minor.yy0, yymsp[-3].minor.yy0)); }
-#line 1100 "grammar.c"
+#line 1104 "grammar.c"
         break;
       case 38: /* expr ::= FUNCTION optnl LPAREN optnl formallist optnl RPAREN optnl statement */
 #line 115 "grammar.y"
 { yygotominor.yy0 = CreateCall(List::c(yymsp[-8].minor.yy0, CreatePairlist(yymsp[-4].minor.yy82->values(), yymsp[-4].minor.yy82->names(true)), yymsp[0].minor.yy0, Character::c(parser->popSource())));   yy_destructor(yypParser,36,&yymsp[-6].minor);
   yy_destructor(yypParser,46,&yymsp[-2].minor);
 }
-#line 1107 "grammar.c"
+#line 1111 "grammar.c"
         break;
       case 39: /* expr ::= expr LPAREN optnl sublist optnl RPAREN */
 #line 116 "grammar.y"
 { yymsp[-2].minor.yy82->push_front(Strings::empty, yymsp[-5].minor.yy0); yygotominor.yy0 = CreateCall(yymsp[-2].minor.yy82->values(), yymsp[-2].minor.yy82->names(false));   yy_destructor(yypParser,36,&yymsp[-4].minor);
   yy_destructor(yypParser,46,&yymsp[0].minor);
 }
-#line 1114 "grammar.c"
+#line 1118 "grammar.c"
         break;
       case 40: /* expr ::= IF optnl LPAREN optnl expr optnl RPAREN optnl statement */
       case 43: /* expr ::= WHILE optnl LPAREN optnl expr optnl RPAREN optnl statement */ yytestcase(yyruleno==43);
@@ -1118,7 +1122,7 @@ static void yy_reduce(
 { yygotominor.yy0 = CreateCall(List::c(yymsp[-8].minor.yy0, yymsp[-4].minor.yy0, yymsp[0].minor.yy0));   yy_destructor(yypParser,36,&yymsp[-6].minor);
   yy_destructor(yypParser,46,&yymsp[-2].minor);
 }
-#line 1122 "grammar.c"
+#line 1126 "grammar.c"
         break;
       case 41: /* expr ::= IF optnl LPAREN optnl expr optnl RPAREN optnl statement ELSE optnl statement */
 #line 118 "grammar.y"
@@ -1126,7 +1130,7 @@ static void yy_reduce(
   yy_destructor(yypParser,46,&yymsp[-5].minor);
   yy_destructor(yypParser,7,&yymsp[-2].minor);
 }
-#line 1130 "grammar.c"
+#line 1134 "grammar.c"
         break;
       case 42: /* expr ::= FOR optnl LPAREN optnl SYMBOL optnl IN optnl expr optnl RPAREN optnl statement */
 #line 119 "grammar.y"
@@ -1134,20 +1138,20 @@ static void yy_reduce(
   yy_destructor(yypParser,47,&yymsp[-6].minor);
   yy_destructor(yypParser,46,&yymsp[-2].minor);
 }
-#line 1138 "grammar.c"
+#line 1142 "grammar.c"
         break;
       case 45: /* expr ::= expr LBB optnl sublist optnl RBRACKET RBRACKET */
 #line 122 "grammar.y"
 { yymsp[-3].minor.yy82->push_front(Strings::empty, yymsp[-6].minor.yy0); yymsp[-3].minor.yy82->push_front(Strings::empty, yymsp[-5].minor.yy0); yygotominor.yy0 = CreateCall(yymsp[-3].minor.yy82->values(), yymsp[-3].minor.yy82->names(false));   yy_destructor(yypParser,48,&yymsp[-1].minor);
   yy_destructor(yypParser,48,&yymsp[0].minor);
 }
-#line 1145 "grammar.c"
+#line 1149 "grammar.c"
         break;
       case 46: /* expr ::= expr LBRACKET optnl sublist optnl RBRACKET */
 #line 123 "grammar.y"
 { yymsp[-2].minor.yy82->push_front(Strings::empty, yymsp[-5].minor.yy0); yymsp[-2].minor.yy82->push_front(Strings::empty, yymsp[-4].minor.yy0); yygotominor.yy0 = CreateCall(yymsp[-2].minor.yy82->values(), yymsp[-2].minor.yy82->names(false));   yy_destructor(yypParser,48,&yymsp[0].minor);
 }
-#line 1151 "grammar.c"
+#line 1155 "grammar.c"
         break;
       case 47: /* expr ::= SYMBOL NS_GET symbolstr */
       case 48: /* expr ::= STR_CONST NS_GET symbolstr */ yytestcase(yyruleno==48);
@@ -1155,74 +1159,74 @@ static void yy_reduce(
       case 50: /* expr ::= STR_CONST NS_GET_INT symbolstr */ yytestcase(yyruleno==50);
 #line 124 "grammar.y"
 { yygotominor.yy0 = CreateCall(List::c(yymsp[-1].minor.yy0, yymsp[-2].minor.yy0, yymsp[0].minor.yy0)); }
-#line 1159 "grammar.c"
+#line 1163 "grammar.c"
         break;
       case 51: /* expr ::= expr DOLLAR optnl symbolstr */
 #line 128 "grammar.y"
 { if(isSymbol(yymsp[0].minor.yy0)) yymsp[0].minor.yy0 = Character::c(SymbolStr(yymsp[0].minor.yy0)); yygotominor.yy0 = CreateCall(List::c(yymsp[-2].minor.yy0, yymsp[-3].minor.yy0, yymsp[0].minor.yy0)); }
-#line 1164 "grammar.c"
+#line 1168 "grammar.c"
         break;
       case 53: /* expr ::= NEXT */
       case 54: /* expr ::= BREAK */ yytestcase(yyruleno==54);
 #line 130 "grammar.y"
 { yygotominor.yy0 = CreateCall(List::c(yymsp[0].minor.yy0)); }
-#line 1170 "grammar.c"
+#line 1174 "grammar.c"
         break;
       case 57: /* optnl ::= NEWLINE */
 #line 136 "grammar.y"
 {
   yy_destructor(yypParser,51,&yymsp[0].minor);
 }
-#line 1177 "grammar.c"
+#line 1181 "grammar.c"
         break;
       case 59: /* statementlist ::= statementlist SEMICOLON statement */
 #line 139 "grammar.y"
 { yygotominor.yy82 = yymsp[-2].minor.yy82; yygotominor.yy82->push_back(Strings::empty, yymsp[0].minor.yy0);   yy_destructor(yypParser,52,&yymsp[-1].minor);
 }
-#line 1183 "grammar.c"
+#line 1187 "grammar.c"
         break;
       case 60: /* statementlist ::= statementlist SEMICOLON */
 #line 140 "grammar.y"
 { yygotominor.yy82 = yymsp[-1].minor.yy82;   yy_destructor(yypParser,52,&yymsp[0].minor);
 }
-#line 1189 "grammar.c"
+#line 1193 "grammar.c"
         break;
       case 61: /* statementlist ::= statementlist NEWLINE statement */
 #line 141 "grammar.y"
 { yygotominor.yy82 = yymsp[-2].minor.yy82; yygotominor.yy82->push_back(Strings::empty, yymsp[0].minor.yy0);   yy_destructor(yypParser,51,&yymsp[-1].minor);
 }
-#line 1195 "grammar.c"
+#line 1199 "grammar.c"
         break;
       case 62: /* statementlist ::= statement */
       case 73: /* sub ::= expr */ yytestcase(yyruleno==73);
 #line 142 "grammar.y"
 { yygotominor.yy82 = new Pairs(); yygotominor.yy82->push_back(Strings::empty, yymsp[0].minor.yy0); }
-#line 1201 "grammar.c"
+#line 1205 "grammar.c"
         break;
       case 63: /* statementlist ::= */
       case 66: /* sub ::= */ yytestcase(yyruleno==66);
       case 74: /* formallist ::= */ yytestcase(yyruleno==74);
 #line 143 "grammar.y"
 { yygotominor.yy82 = new Pairs(); }
-#line 1208 "grammar.c"
+#line 1212 "grammar.c"
         break;
       case 64: /* sublist ::= sub */
 #line 145 "grammar.y"
 { yygotominor.yy82 = yymsp[0].minor.yy82; }
-#line 1213 "grammar.c"
+#line 1217 "grammar.c"
         break;
       case 65: /* sublist ::= sublist optnl COMMA optnl sub */
 #line 146 "grammar.y"
 { yygotominor.yy82 = yymsp[-4].minor.yy82; if(yygotominor.yy82->length() == 0) yygotominor.yy82->push_back(Strings::empty, Value::Nil()); if(yymsp[0].minor.yy82->length() == 1) yygotominor.yy82->push_back(yymsp[0].minor.yy82->name(0), yymsp[0].minor.yy82->value(0)); else if(yymsp[0].minor.yy82->length() == 0) yygotominor.yy82->push_back(Strings::empty, Value::Nil());   yy_destructor(yypParser,53,&yymsp[-2].minor);
 }
-#line 1219 "grammar.c"
+#line 1223 "grammar.c"
         break;
       case 67: /* sub ::= SYMBOL optnl EQ_ASSIGN */
       case 68: /* sub ::= STR_CONST optnl EQ_ASSIGN */ yytestcase(yyruleno==68);
 #line 149 "grammar.y"
 { yygotominor.yy82 = new Pairs(); yygotominor.yy82->push_back(SymbolStr(yymsp[-2].minor.yy0), Value::Nil());   yy_destructor(yypParser,9,&yymsp[0].minor);
 }
-#line 1226 "grammar.c"
+#line 1230 "grammar.c"
         break;
       case 69: /* sub ::= SYMBOL optnl EQ_ASSIGN optnl expr */
       case 70: /* sub ::= STR_CONST optnl EQ_ASSIGN optnl expr */ yytestcase(yyruleno==70);
@@ -1230,39 +1234,39 @@ static void yy_reduce(
 #line 151 "grammar.y"
 { yygotominor.yy82 = new Pairs(); yygotominor.yy82->push_back(SymbolStr(yymsp[-4].minor.yy0), yymsp[0].minor.yy0);   yy_destructor(yypParser,9,&yymsp[-2].minor);
 }
-#line 1234 "grammar.c"
+#line 1238 "grammar.c"
         break;
       case 71: /* sub ::= NULL_CONST optnl EQ_ASSIGN */
 #line 153 "grammar.y"
 { yygotominor.yy82 = new Pairs(); yygotominor.yy82->push_back(Strings::Null, Value::Nil());   yy_destructor(yypParser,43,&yymsp[-2].minor);
   yy_destructor(yypParser,9,&yymsp[0].minor);
 }
-#line 1241 "grammar.c"
+#line 1245 "grammar.c"
         break;
       case 72: /* sub ::= NULL_CONST optnl EQ_ASSIGN optnl expr */
 #line 154 "grammar.y"
 { yygotominor.yy82 = new Pairs(); yygotominor.yy82->push_back(Strings::Null, yymsp[0].minor.yy0);   yy_destructor(yypParser,43,&yymsp[-4].minor);
   yy_destructor(yypParser,9,&yymsp[-2].minor);
 }
-#line 1248 "grammar.c"
+#line 1252 "grammar.c"
         break;
       case 75: /* formallist ::= SYMBOL */
 #line 158 "grammar.y"
 { yygotominor.yy82 = new Pairs(); yygotominor.yy82->push_back(SymbolStr(yymsp[0].minor.yy0), Value::Nil()); }
-#line 1253 "grammar.c"
+#line 1257 "grammar.c"
         break;
       case 77: /* formallist ::= formallist optnl COMMA optnl SYMBOL */
 #line 160 "grammar.y"
 { yygotominor.yy82 = yymsp[-4].minor.yy82; yygotominor.yy82->push_back(SymbolStr(yymsp[0].minor.yy0), Value::Nil());   yy_destructor(yypParser,53,&yymsp[-2].minor);
 }
-#line 1259 "grammar.c"
+#line 1263 "grammar.c"
         break;
       case 78: /* formallist ::= formallist optnl COMMA optnl SYMBOL optnl EQ_ASSIGN optnl expr */
 #line 161 "grammar.y"
 { yygotominor.yy82 = yymsp[-8].minor.yy82; yygotominor.yy82->push_back(SymbolStr(yymsp[-4].minor.yy0), yymsp[0].minor.yy0);   yy_destructor(yypParser,53,&yymsp[-6].minor);
   yy_destructor(yypParser,9,&yymsp[-2].minor);
 }
-#line 1266 "grammar.c"
+#line 1270 "grammar.c"
         break;
       default:
       /* (58) optnl ::= */ yytestcase(yyruleno==58);
@@ -1328,7 +1332,7 @@ static void yy_syntax_error(
 #line 53 "grammar.y"
 
         parser->errors++;
-#line 1332 "grammar.c"
+#line 1336 "grammar.c"
   ParseARG_STORE; /* Suppress warning about unused %extra_argument variable */
 }
 
@@ -1350,7 +1354,7 @@ static void yy_accept(
 #line 57 "grammar.y"
 
 	parser->complete = true;
-#line 1354 "grammar.c"
+#line 1358 "grammar.c"
   ParseARG_STORE; /* Suppress warning about unused %extra_argument variable */
 }
 

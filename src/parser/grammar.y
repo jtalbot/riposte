@@ -68,7 +68,7 @@
      printf("Giving up.  Parser is hopelessly lost...\n");
 }*/
 
-prog ::= . { parser->result = Value::Nil(); }
+prog ::= . { List list(0); parser->result = CreateExpression(list); }
 prog ::= optnl statementlist(B) optnl. { parser->result = CreateExpression(B->values()); }
 prog ::= error. { parser->result = Value::Nil(); }
 

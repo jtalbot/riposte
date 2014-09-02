@@ -288,14 +288,14 @@ int main(int argc, char** argv)
     }
 
     /* Either execute the specified file or read interactively from stdin  */
-    if(filename) {
+/*    if(filename) {
         std::ifstream in(filename);
         rc = run((State&)state, std::string(filename), in, std::cout, false, echo);
     } 
     else {
         rc = run((State&)state, std::string("<stdin>"), std::cin, std::cout, true, echo);
     }
-
+*/
     /* Session over */
 
     fflush(stdout);

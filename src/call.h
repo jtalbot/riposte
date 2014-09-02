@@ -230,6 +230,24 @@ template<>
 bool EnvironmentBinaryDispatch< struct neqVOp<REnvironment, REnvironment> >
 (State& state, void* args, Value const& a, Value const& b, Value& c);
 
+template< class Op >
+bool ClosureBinaryFast(State& state, void* args, Value const& a, Value const& b, Value& c) {
+    return false;
+}
+
+template< class Op >
+bool ClosureBinaryDispatch(State& state, void* args, Value const& a, Value const& b, Value& c) {
+	return false;
+}
+
+template<>
+bool ClosureBinaryDispatch< struct eqVOp<REnvironment, REnvironment> >
+(State& state, void* args, Value const& a, Value const& b, Value& c);
+
+template<>
+bool ClosureBinaryDispatch< struct neqVOp<REnvironment, REnvironment> >
+(State& state, void* args, Value const& a, Value const& b, Value& c);
+
 template< template<typename S, typename T> class Op > 
 bool UnifyBinaryFast(State& state, void* args, Value a, Value b, Value& c) {
     if(a.isDouble1() && b.isDouble1())
@@ -277,6 +295,9 @@ bool UnifyBinaryDispatch(State& state, void* args, Value const& a, Value const& 
     }
     else if(a.isEnvironment() && b.isEnvironment()) {
         return EnvironmentBinaryDispatch< Op<REnvironment, REnvironment> >(state, args, a, b, c);
+    }
+    else if(a.isClosure() && b.isClosure()) {
+        return ClosureBinaryDispatch< Op<Closure, Closure> >(state, args, a, b, c);
     }
     else {
 	    return false; 

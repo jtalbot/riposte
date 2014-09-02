@@ -38,12 +38,17 @@
 
     searchlist <- .pconcat(.pconcat(generic, '.'), targets)
 
+    methodsTable <- defenv[['.__S3MethodsTable__.']]
+
     for(i in seq_len(length(searchlist))) {
         if(i == 1 && !match.first)
             next
 
         n <- searchlist[[i]]
         fn <- .find(n, callenv, "closure")
+
+        if(is.null(fn) && !is.null(methodsTable))
+            fn <- methodsTable[[n]]
 
         if(!is.null(fn)) {
             ncall <- attr(call, 'names')
@@ -84,9 +89,13 @@ UseMethod <- function(generic, object)
             object <- NULL
         else {
             f <- formals[[1L]]
-            if(f == '...')
+            if(f == '...') {
                 f <- '..1'
-            mcall <- call('missing', as.name(f))
+                mcall <- call('missing', 1L)
+            }
+            else {
+                mcall <- call('missing', as.name(f))
+            }
             promise('miss', mcall, .frame(1L), .getenv(NULL))
             if(miss)
                 object <- NULL
@@ -109,6 +118,7 @@ UseMethod <- function(generic, object)
 
     names <- attr(call,'names')
     call <- strip(call)
+    
     if(!is.null(attr(object,'class'))) {
         qq <- list(as.name('quote'), object)
         attr(qq, 'class') <- 'call'
@@ -139,12 +149,19 @@ NextMethod <- function(generic, object, ...) {
 
     formals <- attr(.frame(2L)[['.__function__.']][['formals']], 'names')
     call <- list()
+    names <- NULL
     call[[1]] <- as.name(generic)
+    names[[1]] <- ''
     for(i in seq_len(length(formals))) {
-        call[[i+1L]] <- as.name(formals[[i]]) 
+        call[[i+1L]] <- as.name(formals[[i]])
+        if(formals[[i]] != '...')
+            names[[i+1L]] <- formals[[i]]
+        else
+            names[[i+1L]] <- ''
     }
     attr(call, 'class') <- 'call'
-    
+    attr(call, 'names') <- names
+ 
     call <- .resolve.generic.call(
         generic,
         generic,
@@ -154,7 +171,7 @@ NextMethod <- function(generic, object, ...) {
         defenv,
         FALSE,
         TRUE)
- 
+
     if(!is.null(call)) {
         promise('p', call, .frame(2L), .getenv(NULL))
         return(p)

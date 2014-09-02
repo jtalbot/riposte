@@ -189,6 +189,9 @@ void gsub_map(State& state, Character::Element& out,
             offset += m[0].rm_eo;
         }
     } while( match == 0 );
+
+    result.append( text->s+offset, text->s+strlen(text->s) );
+
     out = state.internStr(result.c_str());
 }
 
@@ -411,6 +414,8 @@ void pcre_gsub_map(State& state, Character::Element& out,
         }
     } while( rc >= 0 );
 
+    result.append( text->s+offset, text->s+strlen(text->s) );
+    
     out = state.internStr(result.c_str());
 }
 
