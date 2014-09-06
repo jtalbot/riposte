@@ -17,7 +17,7 @@ enum Format {
 
 //      Initialize Riposte global state. Must be called first.
 void        initialize(int argc, char** argv,
-                int threads, bool verbose, Format format);
+                int threads, bool verbose, Format format, bool profile);
 
 //      Clean up the Riposte global state. Must be called last.
 void        finalize();

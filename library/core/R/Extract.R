@@ -167,6 +167,7 @@
 
 `[[.call` <- `[[.expression` <- `[[.list` <- `[[.pairlist` <- 
     function(x, i, ..., exact = TRUE) {
+
     if(is.character.default(i)) {
         i <- which(names(x)==i)
         if(length(i)==0)

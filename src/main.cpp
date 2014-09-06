@@ -159,7 +159,7 @@ static int run(State& state, std::string inname, std::istream& in, std::ostream&
                 continue;
 
             Code* code = Compiler::compileExpression(state, expr);
-            Value result = state.eval(code, state.global.global);
+            Value result = state.evalTopLevel(code, state.global.global);
 
             // Nil indicates an error that was dispatched correctly.
             // Don't print anything, but no need to propagate error.
@@ -168,7 +168,7 @@ static int run(State& state, std::string inname, std::istream& in, std::ostream&
 
             state.global.global->insert(Strings::Last_value) = result;
             if(echo && state.visible) {
-                state.eval(print, state.global.global);
+                state.evalTopLevel(print, state.global.global);
                 // Print directly (for debugging)
                 //std::cout<< state.stringify(result) << std::endl;
             }
@@ -211,18 +211,20 @@ int main(int argc, char** argv)
         { "script",    0,    NULL,    's' },
         { "args",      0,    NULL,    'a' },
         { "format",    1,    NULL,    'F' },
+        { "profile",   1,    NULL,    'p' },
         { NULL,        0,    NULL,     0  }
     };
 
     /*  Parse commandline options  */
     char * filename = NULL;
     bool echo = true;
+    char* profileName = NULL;
     Riposte::Format format = Riposte::RiposteFormat;
     int threads = 1; 
 
     int ch;
     opterr = 0;
-    while ((ch = getopt_long(argc, argv, "df:hj:vqas", longopts, NULL)) != -1)
+    while ((ch = getopt_long(argc, argv, "df:hj:vqasp:", longopts, NULL)) != -1)
     {
         // don't parse args past '--args'
         if(ch == 'a')
@@ -252,6 +254,9 @@ int main(int argc, char** argv)
                 else
                     format = Riposte::RiposteFormat;
                 break;
+            case 'p':
+                profileName = optarg;
+                break;
             case 'h':
             default:
                 usage();
@@ -266,7 +271,7 @@ int main(int argc, char** argv)
         info(threads, std::cout);
 
     /* Initialize Riposte VM */
-    Riposte::initialize(argc, argv, threads, verbose, format);
+    Riposte::initialize(argc, argv, threads, verbose, format, profileName!=NULL);
 
     /* Create an execution state for the main thread */
     Riposte::State& state = Riposte::newState();
@@ -300,6 +305,9 @@ int main(int argc, char** argv)
 
     fflush(stdout);
     fflush(stderr);
+
+    if(profileName != NULL)
+        global->dumpProfile(profileName);
 
     Riposte::deleteState(state);
     Riposte::finalize();

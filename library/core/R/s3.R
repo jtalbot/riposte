@@ -57,9 +57,10 @@
             call[[1L]] <- fn
 
             if(i <= length(classlist))
-                newclasslist <- classlist[i:length(classlist)]
+                newclasslist <- classlist[i+seq_len(length(classlist)-i+1L)-1L]
             else
                 newclasslist <- NULL
+
             if(i != 1L)
                 attr(newclasslist, 'previous') <- classlist
             

@@ -394,6 +394,7 @@ public:
     State* getState();
     void deleteState(State* s);
 
+    bool profile;
 	bool verbose;
 	bool epeeEnabled;
 
@@ -403,8 +404,9 @@ public:
 
     TaskQueues queues;
 
-	Global(uint64_t threads, int64_t argc, char** argv);
+    Global(uint64_t threads, int64_t argc, char** argv);
 
+    void dumpProfile(std::string filename);
 	std::string stringify(Value const& v) const;
 	std::string deparse(Value const& v) const;
 
@@ -464,6 +466,7 @@ public:
 	String internStr(std::string s) { return global.internStr(s); }
 	std::string externStr(String s) const { return global.externStr(s); }
 
+	Value evalTopLevel(Code const* code, Environment* environment, int64_t resultSlot = 0); 
 	Value eval(Code const* code, Environment* environment, int64_t resultSlot = 0); 
 	Value eval(Code const* code);
     Value eval(Promise const& p, int64_t resultSlot = 0);

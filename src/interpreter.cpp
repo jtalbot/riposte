@@ -3,6 +3,8 @@
 #include <stdexcept>
 #include <string>
 #include <dlfcn.h>
+#include <unistd.h>
+#include <fstream>
 
 #include "value.h"
 #include "type.h"
@@ -1565,6 +1567,8 @@ static inline Instruction const* done_op(State& state, Instruction const& inst) 
     return pc;
 }
 
+void profileStack(State const& state);
+
 //
 //    Main interpreter loop 
 //
@@ -1576,13 +1580,12 @@ bool interpret(State& state, Instruction const* pc) {
     static const void* labels[] = {BYTECODES(LABELS_THREADED)};
 
     goto *(void*)(labels[pc->bc]);
-    #define LABELED_OP(name,type,...) \
-        name##_label: \
-            { pc = name##_op(state, *pc); goto *(void*)(labels[pc->bc]); } 
+    #define LABELED_OP(name,type,...)       \
+        name##_label: {                     \
+            pc = name##_op(state, *pc);     \
+            goto *(void*)(labels[pc->bc]);  \
+        } 
     STANDARD_BYTECODES(LABELED_OP)
-    stop_label: { 
-        return false; 
-    }
     done_label: {
         pc = done_op(state, *pc);
         if(pc != 0)
@@ -1590,8 +1593,64 @@ bool interpret(State& state, Instruction const* pc) {
         else
             return true;
     }
+    stop_label: { 
+        return false; 
+    }
 #else
     while(pc->bc != ByteCode::done) {
+        switch(pc->bc) {
+            #define SWITCH_OP(name,type,...) \
+            case ByteCode::name: { pc = name##_op(state, *pc); } break;
+            STANDARD_BYTECODES(SWITCH_OP)
+            case ByteCode::stop: { 
+                return false; 
+            } break;
+	        case ByteCode::done: { 
+                pc = done_op(state, *pc);
+                if(pc == 0)
+                    return true;
+            }
+        };
+    }
+#endif
+}
+
+bool profileFlag = false;
+void sigalrm_handler(int sig) {
+    profileFlag = true;
+}
+
+bool profile(State& state, Instruction const* pc) {
+#ifdef USE_THREADED_INTERPRETER
+    #define LABELS_THREADED(name,type,...) (void*)&&name##_label,
+    static const void* labels[] = {BYTECODES(LABELS_THREADED)};
+
+    goto *(void*)(labels[pc->bc]);
+    #define LABELED_PROFILE_OP(name,type,...)       \
+        name##_label: {                     \
+            pc = name##_op(state, *pc);     \
+            if(profileFlag) {               \
+                profileStack(state);        \
+            }                               \
+            goto *(void*)(labels[pc->bc]);  \
+        } 
+    STANDARD_BYTECODES(LABELED_PROFILE_OP)
+    stop_label: { 
+        return false; 
+    }
+    done_label: {
+        pc = done_op(state, *pc);
+        if(pc != 0)
+            goto *(void*)(labels[pc->bc]);
+        else {
+            return true;
+        }
+    }
+#else
+    while(pc->bc != ByteCode::done) {
+        if(profileFlag) {
+            profileStack(state);
+        }
         switch(pc->bc) {
             #define SWITCH_OP(name,type,...) \
             case ByteCode::name: { pc = name##_op(state, *pc); } break;
@@ -1607,6 +1666,20 @@ bool interpret(State& state, Instruction const* pc) {
 #endif
 }
 
+Value State::evalTopLevel(Code const* code, Environment* environment, int64_t resultSlot) {
+    if(global.profile) {
+        profileFlag = false;
+        signal(SIGALRM, &sigalrm_handler);
+        ualarm(1000,1000);
+    }
+
+	Value result = eval(code, environment, resultSlot);
+
+    ualarm(0,0);
+
+    return result;
+}
+
 Value State::eval(Code const* code) {
 	return eval(code, frame.environment, frame.code->registers);
 }
@@ -1618,7 +1691,9 @@ Value State::eval(Code const* code, Environment* environment, int64_t resultSlot
 	// make room for the result
 	Instruction const* run = buildStackFrame(*this, environment, code, resultSlot, 0);
 	try {
-		bool success = interpret(*this, run);
+		bool success = global.profile
+            ? profile(*this, run)
+            : interpret(*this, run);
         if(success) {
             if(stackSize != stack.size())
 		        _error("Stack was the wrong size at the end of eval");
@@ -1653,7 +1728,9 @@ Value State::eval(Promise const& p, int64_t resultSlot) {
     Instruction const* run = force(*this, p, NULL, Value::Nil(), resultSlot, 0);
    
     try {
-		bool success = interpret(*this, run);
+		bool success = global.profile
+            ? profile(*this, run)
+            : interpret(*this, run);
         if(success) {
             if(stackSize != stack.size())
 		        _error("Stack was the wrong size at the end of eval");
@@ -1700,7 +1777,8 @@ State::State(Global& global, TaskQueue* queue)
 }
 
 Global::Global(uint64_t states, int64_t argc, char** argv) 
-	: verbose(false)
+	: profile(false)
+    , verbose(false)
     , epeeEnabled(true)
     , format(Riposte::RiposteFormat)
     , queues(states) {
@@ -1751,13 +1829,101 @@ void Code::printByteCode(Global const& global) const {
 	std::cout << std::endl;
 }
 
+struct ProfileNode {
+    int64_t count;
+    std::map<std::string, ProfileNode> children;
+};
+ProfileNode profileRoot;
+
+void profileStack(State const& state) {
+    ProfileNode* node = &profileRoot;
+    node->count++;
+    for(size_t index = 1; index <= state.stack.size(); ++index) {
+        StackFrame const& s = (index < state.stack.size())
+            ? state.stack[index] : state.frame;
+
+        if(!s.isPromise && s.environment->has(Strings::__call__)) {
+            List const& l = (List const&)s.environment->get(Strings::__call__);
+            std::string str = state.deparse(l[0]);
+            node = &(node->children[str]);
+            node->count++; 
+        }
+    }
+    profileFlag = false;
+}
+
+struct Ordered {
+    int64_t count;
+    std::string str;
+};
+
+bool operator<(Ordered const& a, Ordered const& b) {
+    return a.count > b.count;
+}
+
+void dumpProfile(std::stringstream& out, std::string const& name, int indent,
+        ProfileNode const& node, std::map<std::string, int64_t>& leaves) {
+    std::vector<Ordered> o;
+    int64_t total = 0;
+    for(std::map<std::string, ProfileNode>::const_iterator i = 
+            node.children.begin(); i != node.children.end(); ++i) {
+        Ordered oo;
+        oo.count = i->second.count;
+        oo.str = i->first;
+        o.push_back(oo);
+        total += i->second.count;
+    }
+
+    if(node.count > 500) {
+        for(int j = 0; j < indent; ++j)
+            out << " ";
+        out << name << ": " << node.count-total << "  ( " << node.count << ")" << std::endl;
+    }
+
+    leaves[name] += node.count-total;
+
+    std::sort(o.begin(), o.end());
+    for(std::vector<Ordered>::const_iterator i = o.begin(); i != o.end(); ++i) {
+        std::map<std::string, ProfileNode>::const_iterator q = node.children.find(i->str);
+        dumpProfile(out, q->first, indent+1, q->second, leaves);
+    }
+}
+
+void Global::dumpProfile(std::string filename) {
+    std::stringstream buffer;
+
+    if(profile) {
+        std::map<std::string, int64_t> leaves;
+        ::dumpProfile(buffer, "root", 0, profileRoot, leaves);
+        std::vector<Ordered> o;
+        for(std::map<std::string, int64_t>::const_iterator i = leaves.begin();
+                i != leaves.end(); ++i) {
+            Ordered oo;
+            oo.count = i->second;
+            oo.str = i->first;
+            o.push_back(oo);
+        }
+
+        std::sort(o.begin(), o.end());
+       
+        buffer << "\n\nIndividual functions" << std::endl; 
+        for(std::vector<Ordered>::const_iterator i = o.begin(); i != o.end(); ++i)
+            buffer << i->str << ": " << i->count << std::endl;
+    }
+
+    std::ofstream file(filename.c_str());
+    file << buffer.rdbuf() << std::endl;
+}
+
+
 namespace Riposte {
 
 void initialize(int argc, char** argv,
-    int threads, bool verbose, Format format) {
+    int threads, bool verbose, Format format, bool profile) {
     global = new Global(threads, argc, argv);
     global->verbose = verbose;
     global->format = format;
+    global->profile = profile;
 }
 
 void finalize() {
