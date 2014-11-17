@@ -5,6 +5,8 @@
 #include <iostream>
 
 #include "../value.h"
+#include "../interpreter.h"
+#include "../frontend.h"
 
 #define _NYI(M) do { std::cerr << "NYI: " << M << std::endl; throw; } while(0)
 
@@ -31,7 +33,58 @@ VECTOR_IMPL(Logical32, int32_t, false)
     static Logical32 fromLogical(Logical const& i);
 };
 
+// While Riposte treats a pairlist as a normal list internally,
+// the R API requires pairlists be actual pairlists where
+// references to internal elements can mutate the overall list
+// so provide support for that here...
+struct Pairlist : public Object {
+    static const Type::Enum ValueType = Type::Pairlist;
+
+    struct Inner : public HeapObject {
+        SEXP car;
+        SEXP cdr;
+        String tag;
+
+        Inner(SEXP car, SEXP cdr, String tag)
+            : car(car), cdr(cdr), tag(tag) {}
+    };
+
+    static Pairlist& Init(Value& v, SEXP car, SEXP cdr, String tag) {
+        Value::Init(v, Type::Pairlist, 0);
+        v.p = new Inner(car, cdr, tag);
+        return (Pairlist&)v;
+    };
+
+    SEXP car() const {
+        return ((Inner*)p)->car;
+    }
+    SEXP cdr() const {
+        return ((Inner*)p)->cdr;
+    }
+    String tag() const {
+        return ((Inner*)p)->tag;
+    }
+    
+    void car(SEXP x) const {
+        ((Inner*)p)->car = x;
+    }
+    void cdr(SEXP x) const {
+        ((Inner*)p)->cdr = x;
+    }
+    void tag(String x) const {
+        ((Inner*)p)->tag = x;
+    }
+
+    static List toList(Pairlist const& pairlist);
+    static Value fromList(List const& list);
+};
+
 Value ToRiposteValue(Value const& v);
+
+// R API requires interned symbols
+// Riposte does not, so translate here...
+SEXP ToSEXP(Value const& v);
+SEXP ToSEXP(char const* s);
 
 #endif
 

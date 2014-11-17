@@ -24,6 +24,7 @@
 	_(Logical32,    "logical32",   13) \
 	_(Integer32,    "integer32",   14) \
 	_(ScalarString, "scalarstring",15) \
+	_(Pairlist,     "pairlist",    16) \
 
 DECLARE_ENUM_WITH_VALUES(Type, TYPES)
 

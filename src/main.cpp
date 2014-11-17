@@ -92,8 +92,10 @@ static bool terminal(Global& global, std::string inname, std::istream & in, std:
         }
     }
 
-    if (status == -1)
-        code = Value::Nil();
+    if (status == -1) {
+        List list(0);
+        code = CreateExpression(list);
+    }
 
     return false;
 }
@@ -119,8 +121,10 @@ static bool pipe(Global& global, std::string inname, std::istream & in, std::ost
         }
     }
 
-    if (status == -1)
-        code = Value::Nil();
+    if (status == -1) {
+        List list(0);
+        code = CreateExpression(list);
+    }
 
     return in.eof();
 }
@@ -155,7 +159,7 @@ static int run(State& state, std::string inname, std::istream& in, std::ostream&
                 terminal(state.global, inname, in, out, expr) :
                 pipe(state.global, inname, in, out, expr);
 
-            if(done || expr.isNil()) 
+            if(done || (isExpression(expr) && ((List const&)expr).length()==0)) 
                 continue;
 
             Code* code = Compiler::compileExpression(state, expr);
@@ -284,7 +288,7 @@ int main(int argc, char** argv)
     catch(RiposteException const& e) { 
         e_message("Error", e.kind().c_str(), e.what().c_str());
     } 
-  
+
     int rc; 
     /* Load bootstrap file if it exists */
     {
@@ -293,14 +297,14 @@ int main(int argc, char** argv)
     }
 
     /* Either execute the specified file or read interactively from stdin  */
-/*    if(filename) {
+    if(filename) {
         std::ifstream in(filename);
         rc = run((State&)state, std::string(filename), in, std::cout, false, echo);
     } 
     else {
         rc = run((State&)state, std::string("<stdin>"), std::cin, std::cout, true, echo);
     }
-*/
+
     /* Session over */
 
     fflush(stdout);

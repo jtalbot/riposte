@@ -33,8 +33,6 @@ void Rf_con_pushback(Rconnection con, Rboolean newLine, char *line) {
 }
 }
 
-typedef void* SEXP;
-
 extern "C" {
 
 // The following are not exposed in header files, but are used by utils

@@ -33,28 +33,37 @@ inline String className(Object const& o) {
 	return Strings::NA;
 }
 
+inline String baseClassName(Object const& o) {
+	if(hasClass(o)) {
+		Value const& v = getClass(o);
+		if(v.isCharacter() && ((Character const&)v).length() > 0)
+			return ((Character const&)v)[((Character const&)v).length()-1];
+	}
+	return Strings::NA;
+}
+
 inline bool isSymbol(Value const& v) {
         return 	v.isObject()
 		&& hasClass((Object const&)v) 
-		&& className((Object const&)v) == Strings::name;
+		&& baseClassName((Object const&)v) == Strings::name;
 }
 
 inline bool isCall(Value const& v) {
         return 	v.isObject()
 		&& hasClass((Object const&)v) 
-		&& className((Object const&)v) == Strings::call;
+		&& baseClassName((Object const&)v) == Strings::call;
 }
 
 inline bool isExpression(Value const& v) {
         return 	v.isObject()
 		&& hasClass((Object const&)v) 
-		&& className((Object const&)v) == Strings::expression;
+		&& baseClassName((Object const&)v) == Strings::expression;
 }
 
 inline bool isPairlist(Value const& v) {
         return 	v.isObject()
 		&& hasClass((Object const&)v) 
-		&& className((Object const&)v) == Strings::pairlist;
+		&& baseClassName((Object const&)v) == Strings::pairlist;
 }
 
 inline Object CreateSymbol(String s) {

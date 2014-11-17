@@ -17,11 +17,11 @@ seterrmessage <- NULL
 
         .connection.cat.terminal(2L, .pconcat(message, '\n')) 
         
-        n <- 1L
+        n <- 2L
         repeat {
             call <- .frame(n)[['.__call__.']]
             if(!is.null(call))
-                .cat(n, ': ', .deparse(call),'\n')
+                .cat(n-1L, ': ', .deparse(call),'\n')
 
             if(is.null(.frame(n)[['.__parent__.']]))
                 break

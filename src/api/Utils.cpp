@@ -3,12 +3,12 @@
 #include <R_ext/Utils.h>
 
 /* ../../main/sort.c : */
-void    R_isort(int*, int) {
-    _NYI("R_isort");
+void    R_isort(int* x, int n) {
+    std::sort(x, x+n);
 }
 
-void    R_rsort(double*, int) {
-    _NYI("R_rsort");
+void    R_rsort(double* x, int n) {
+    std::sort(x, x+n);
 }
 
 void    rsort_with_index(double *, int *, int) {
@@ -33,7 +33,8 @@ char *R_tmpnam(const char *prefix, const char *tempdir) {
 }
 
 void R_CheckUserInterrupt(void) {
-    _NYI("R_CheckUserInterrupt");
+    // TODO: actually check for errors.
+    // Figure out how to jump out of the user code.
 }
 
 void R_CheckStack(void) {

@@ -107,33 +107,55 @@ int  (TYPEOF)(SEXP x) {
         case Type::Integer32:   return INTSXP;
         case Type::Logical32:   return LGLSXP;
         case Type::ScalarString: return CHARSXP;
+        case Type::Pairlist:
+            if(isCall(x->v))    return LANGSXP;
+            else if(isExpression(x->v)) return EXPRSXP;
+            else                return LISTSXP;
         default:
             throw "Unknown type in TYPEOF";
     }
 }
 
 int  (NAMED)(SEXP x) {
-    _NYI("NAMED");
+    return (x->v.isObject() && hasNames((Object const&)x->v))
+        ? 1 : 0;
 }
 
 void (SET_OBJECT)(SEXP x, int v) {
-    _NYI("SET_OBJECT");
+    // do nothing, we don't have a flag
 }
 
 void (SET_TYPEOF)(SEXP x, int v) {
-    _NYI("SET_TYPEOF");
+    switch(v) {
+        case LANGSXP: {
+            if(!(x->v).isList())
+                printf("SET_TYPEOF called with LANGSXP on non-list\n");
+            x->v = CreateCall((List const&)x->v);
+        }
+        break;
+        default:
+            printf("SET_TYPEOF called with unknown type: %d\n", v);
+    }
 }
 
 void (SET_NAMED)(SEXP x, int v) {
-    _NYI("SET_NAMED");
+    // do nothing, we don't have a flag
 }
 
 void SET_ATTRIB(SEXP x, SEXP v) {
-    _NYI("SET_ATTRIB");
+    printf("SET:ATTRIB %d %d\n", x->v.type(), v->v.type());
+    printf("NYI: SET_ATTRIB. What does it do?\n");
 }
 
 void DUPLICATE_ATTRIB(SEXP to, SEXP from) {
-    _NYI("DUPLICATE_ATTRIB");
+    if(!to->v.isObject() || !from->v.isObject()) {
+        printf("DUPLICATE_ATTRIB arguments are not objects");
+        throw;
+    }
+        
+    Object& t = (Object&)to->v;
+    Object const& f = (Object const&)from->v;
+    t.attributes(f.attributes());
 }
 
 /* S4 object testing */
@@ -162,7 +184,7 @@ int  (LENGTH)(SEXP x) {
 
 R_xlen_t  (XLENGTH)(SEXP x) {
     if(!x->v.isVector()) {
-        printf("LENGTH called on non-vector\n");
+        printf("XLENGTH called on non-vector\n");
         return 0;
     }
 
@@ -174,11 +196,29 @@ void (SETLENGTH)(SEXP x, int v) {
 }
 
 int  (IS_LONG_VEC)(SEXP x) {
-    _NYI("IS_LONG_VEC");
+    if(!x->v.isVector()) {
+        printf("IS_LONG_VEC called on non-vector\n");
+        return 0;
+    }
+
+    int64_t len = ((Vector const&)x->v).length();
+
+    return len > std::numeric_limits<int>::max() ? 1 : 0;
 }
 
 int  *(LOGICAL)(SEXP x) {
-    _NYI("LOGICAL");
+
+    if(x->v.isLogical()) {
+        x->v = Logical32::fromLogical((Logical const&)x->v);
+    }
+    
+    if(x->v.type() == Type::Logical32) {
+        return ((Logical32&)x->v).v();
+    }
+    else {
+        printf("Called LOGICAL on something that is not a logical\n");
+        return NULL;
+    }
 }
 
 int  *(INTEGER)(SEXP x) {
@@ -227,7 +267,7 @@ SEXP (STRING_ELT)(SEXP x, R_xlen_t i) {
     }
     Value r;
     ScalarString::Init(r, l[i]);
-    return new SEXPREC(r);
+    return ToSEXP(r);
 }
 
 SEXP (VECTOR_ELT)(SEXP x, R_xlen_t i) {
@@ -240,7 +280,7 @@ SEXP (VECTOR_ELT)(SEXP x, R_xlen_t i) {
         printf("Accessing past the end of the list in VECTOR_ELT");
         throw;
     }
-    return new SEXPREC(l[i]);
+    return ToSEXP(l[i]);
 }
 
 void SET_STRING_ELT(SEXP x, R_xlen_t i, SEXP a) {
@@ -262,117 +302,140 @@ void SET_STRING_ELT(SEXP x, R_xlen_t i, SEXP a) {
 }
 
 SEXP SET_VECTOR_ELT(SEXP x, R_xlen_t i, SEXP v) {
-    _NYI("SET_VECTOR_ELT");
+    if(!x->v.isList()) {
+        printf("Argument is not a list in SET_VECTOR_ELT");
+        throw;
+    }
+    
+    List& l = (List&)x->v;
+    if(i >= l.length()) {
+        printf("Assigning past the end in SET_VECTOR_ELT");
+        throw;
+    }
+    l[i] = v->v;
+
+    return v;
 }
 
 /* List Access Functions */
 /* These also work for ... objects */
 
 SEXP (TAG)(SEXP e) {
-    _NYI("TAG");
+    if(e->v.isList())
+        e->v = Pairlist::fromList((List const&)e->v);
+
+    if(e->v.type() == Type::Pairlist) {
+        return ToSEXP(((Pairlist const&)e->v).tag()->s);
+    } else {
+        printf("Argument to TAG is not a pairlist: %d\n", e->v.type());
+        throw;
+    }
 }
 
 SEXP (CAR)(SEXP e) {
-    if(!e->v.isList()) {
-        printf("Argument is not a list in CAR: %d\n", e->v.type());
+    if(e->v.isList())
+        e->v = Pairlist::fromList((List const&)e->v);
+
+    if(e->v.type() == Type::Pairlist) {
+        return ((Pairlist const&)e->v).car();
+    } else {
+        printf("Argument to CAR is not a pairlist: %d\n", e->v.type());
         throw;
     }
-    // TODO: check length
-    return new SEXPREC(((List const&)e->v)[0]);
 }
 
 SEXP (CDR)(SEXP e) {
-    if(!e->v.isList()) {
-        printf("Argument is not a list in CDR\n");
+    if(e->v.isList())
+        e->v = Pairlist::fromList((List const&)e->v);
+
+    if(e->v.type() == Type::Pairlist) {
+        return ((Pairlist const&)e->v).cdr();
+    } else {
+        printf("Argument to CDR is not a pairlist: %d\n", e->v.type());
         throw;
     }
-    // TODO: this is going to lose names.
-    // TODO: check length
-    List const& l = (List const&)e->v;
-    List r(l.length()-1);
-    for(int64_t i = 1; i < l.length(); ++i)
-        r[i-1] = l[i];
-    
-    return new SEXPREC(r);
 }
 
 SEXP (CADR)(SEXP e) {
-    if(!e->v.isList()) {
-        printf("Argument is not a list in CADR\n");
-        throw;
-    }
-    // TODO: check length
-    return new SEXPREC(((List const&)e->v)[1]);
+    return CAR(CDR(e));
 }
 
 SEXP (CDDR)(SEXP e) {
-    if(!e->v.isList()) {
-        printf("Argument is not a list in CDDR\n");
-        throw;
-    }
-    // TODO: this is going to lose names.
-    // TODO: check length
-    List const& l = (List const&)e->v;
-    List r(l.length()-2);
-    for(int64_t i = 2; i < l.length(); ++i)
-        r[i-2] = l[i];
-    
-    return new SEXPREC(r);
+    return CDR(CDR(e));
 }
 
 SEXP (CADDR)(SEXP e) {
-    if(!e->v.isList()) {
-        printf("Argument is not a list in CADDR\n");
-        throw;
-    }
-    // TODO: check length
-    return new SEXPREC(((List const&)e->v)[2]);
+    return CAR(CDR(CDR(e)));
 }
 
 SEXP (CADDDR)(SEXP e) {
-    if(!e->v.isList()) {
-        printf("Argument is not a list in CADDR\n");
-        throw;
-    }
-    // TODO: check length
-    return new SEXPREC(((List const&)e->v)[3]);
+    return CAR(CDR(CDR(CDR(e))));
 }
 
 SEXP (CAD4R)(SEXP e) {
-    if(!e->v.isList()) {
-        printf("Argument is not a list in CAD4R\n");
+    return CAR(CDR(CDR(CDR(CDR(e)))));
+}
+
+void SET_TAG(SEXP e, SEXP y) {
+    if(e->v.isList())
+        e->v = Pairlist::fromList((List const&)e->v);
+
+    if(e->v.type() == Type::Pairlist) {
+        if(isSymbol(y->v)) {
+            return ((Pairlist const&)e->v).tag(SymbolStr(y->v));
+        }
+        else {
+            printf("Tag argument to SET_TAG is not a symbol: %d\n", y->v.type());
+            throw;
+        }
+    } else {
+        printf("Argument to SET_TAG is not a pairlist: %d\n", e->v.type());
         throw;
     }
-    // TODO: check length
-    return new SEXPREC(((List const&)e->v)[4]);
 }
 
-void SET_TAG(SEXP x, SEXP y) {
-    _NYI("SET_TAG");
+SEXP SETCAR(SEXP e, SEXP y) {
+    if(e->v.isList())
+        e->v = Pairlist::fromList((List const&)e->v);
+
+    if(e->v.type() == Type::Pairlist) {
+        ((Pairlist const&)e->v).car(y);
+    } else {
+        printf("Argument to CDR is not a pairlist: %d\n", e->v.type());
+        throw;
+    }
+
+    return y;
 }
 
-SEXP SETCAR(SEXP x, SEXP y) {
-    _NYI("SETCAR");
+SEXP SETCDR(SEXP e, SEXP y) {
+    if(e->v.isList())
+        e->v = Pairlist::fromList((List const&)e->v);
+
+    if(e->v.type() == Type::Pairlist) {
+        ((Pairlist const&)e->v).cdr(y);
+    } else {
+        printf("Argument to CDR is not a pairlist: %d\n", e->v.type());
+        throw;
+    }
+
+    return y;
 }
 
-SEXP SETCDR(SEXP x, SEXP y) {
-    _NYI("SETCDR");
+SEXP SETCADR(SEXP e, SEXP y) {
+    return SETCAR(CDR(e), y);
 }
 
-SEXP SETCADR(SEXP x, SEXP y) {
-    _NYI("SETCADR");
+SEXP SETCADDR(SEXP e, SEXP y) {
+    return SETCAR(CDR(CDR(e)), y);
 }
 
-SEXP SETCADDR(SEXP x, SEXP y) {
-    _NYI("SETCADDR");
-}
-
-SEXP SETCADDDR(SEXP x, SEXP y) {
-    _NYI("SETCADDDR");
+SEXP SETCADDDR(SEXP e, SEXP y) {
+    return SETCAR(CDR(CDR(CDR(e))), y);
 }
 
 SEXP SETCAD4R(SEXP e, SEXP y) {
-    _NYI("SETCAD4R");
+    return SETCAR(CDR(CDR(CDR(CDR(e)))), y);
 }
 
 /* Closure Access Functions */
@@ -465,8 +528,10 @@ int Rf_asInteger(SEXP x) {
         return (int)x->v.i;
     else if(x->v.isDouble1())
         return (int)x->v.d;
-    else 
-        _NYI("Rf_asInteger");
+    else if(x->v.isLogical1())
+        return Logical::isTrue(x->v.c) ? 1 : 0;
+    
+    _NYI("Rf_asInteger");
 }
 double Rf_asReal(SEXP x) {
     if(x->v.isInteger1())
@@ -487,12 +552,29 @@ SEXP Rf_alloc3DArray(SEXPTYPE, int, int, int) {
     _NYI("Rf_alloc3DArray");
 }
 
-SEXP Rf_allocMatrix(SEXPTYPE, int, int) {
-    _NYI("Rf_allocMatrix");
+SEXP Rf_allocMatrix(SEXPTYPE type, int rows, int cols) {
+    SEXP r = Rf_allocVector3(type, ((R_xlen_t)rows)*cols, NULL);
+
+    Dictionary* d = new Dictionary(2);
+    
+    d->insert(global->internStr("class")) =
+        Character::c(global->internStr("matrix"));
+    d->insert(global->internStr("dim")) =
+        Integer::c(rows, cols);
+
+    ((Object&)r->v).attributes(d);
+
+    return r;
 }
 
-SEXP Rf_allocList(int) {
-    _NYI("Rf_allocList");
+SEXP Rf_allocList(int n) {
+    SEXP r = R_NilValue;
+    for(int i = 0; i < n; ++i) {
+        Pairlist v;
+        Pairlist::Init(v, R_NilValue, r, Strings::empty);
+        r = ToSEXP(v);
+    }
+    return r;
 }
 
 SEXP Rf_allocS4Object(void) {
@@ -509,22 +591,57 @@ SEXP Rf_allocVector3(SEXPTYPE type, R_xlen_t len, R_allocator_t* alloc) {
     
     Value v;
     switch(type) {
-        case LGLSXP: v = Logical(len); break;
-        case INTSXP: v = Integer(len); break;
-        case REALSXP: v = Double(len); break;
-        case STRSXP: v = Character(len); break;
+        case LGLSXP: {
+            v = Logical(len); 
+		    for(int64_t i = 0; i < len; i++) ((Logical&)v)[i] = Logical::FalseElement;
+        } break;
+        case INTSXP: {
+            v = Integer(len); 
+		    for(int64_t i = 0; i < len; i++) ((Integer&)v)[i] = 0;
+        } break;
+        case REALSXP: {
+            v = Double(len);
+		    for(int64_t i = 0; i < len; i++) ((Double&)v)[i] = 0;
+        } break;
+        case STRSXP: {
+            v = Character(len);
+		    for(int64_t i = 0; i < len; i++) ((Character&)v)[i] = Strings::empty;
+        } break;
+        case VECSXP: {
+            v = List(len);
+		    for(int64_t i = 0; i < len; i++) ((List&)v)[i] = Null::Singleton();
+        } break;
         default: printf("Unsupported type in Rf_allocVector3: %d\n", type); throw; break;
     }
 
-    return new SEXPREC(v);
+    return ToSEXP(v);
 }
 
 SEXP Rf_classgets(SEXP, SEXP) {
     _NYI("Rf_classgets");
 }
 
-SEXP Rf_cons(SEXP, SEXP) {
-    _NYI("Rf_cons");
+SEXP Rf_cons(SEXP x, SEXP y) {
+    if(!(y->v).isList() && !(y->v).isNull()) {
+        printf("Rf_cons called without lists\n");
+    }
+
+    if((y->v).isNull()) {
+        List r(1);
+        r[0] = x->v;
+        return ToSEXP(CreatePairlist(r));
+    }
+    else {
+        List ly = (List const&)y->v;
+        List r(1+ly.length());
+        r[0] = x->v;
+        for(int64_t i = 0; i < ly.length(); ++i)
+            r[i+1] = ly[i];
+        
+        // TODO: copy names over too
+        return ToSEXP(CreatePairlist(r));
+    }
+
 }
 
 void Rf_copyMatrix(SEXP, SEXP, Rboolean) {
@@ -555,8 +672,90 @@ SEXP Rf_dimnamesgets(SEXP, SEXP) {
     _NYI("Rf_dimnamesgets");
 }
 
-SEXP Rf_duplicate(SEXP) {
-    _NYI("Rf_duplicate");
+SEXP Rf_duplicate(SEXP x) {
+    
+    int type = x->v.type();
+
+    Value r;
+    switch(type) {
+        case Type::Nil:
+        case Type::Promise:
+        case Type::Future:
+        case Type::Closure:
+        case Type::Environment:
+        case Type::Externalptr:
+        case Type::Null:
+        case Type::ScalarString:
+            return x;
+        case Type::Raw: {
+            Raw a(((Raw const&)x->v).length());
+            for(int64_t i = 0; i < a.length(); ++i)
+                a[i] = ((Raw const&)x->v)[i];
+            r = a;
+        } break;
+        case Type::Logical: {
+            Logical a(((Logical const&)x->v).length());
+            for(int64_t i = 0; i < a.length(); ++i)
+                a[i] = ((Logical const&)x->v)[i];
+            r = a;
+        } break;
+        case Type::Integer: {
+            Integer a(((Integer const&)x->v).length());
+            for(int64_t i = 0; i < a.length(); ++i)
+                a[i] = ((Integer const&)x->v)[i];
+            r = a;
+        } break;
+        case Type::Double: {
+            Double a(((Double const&)x->v).length());
+            for(int64_t i = 0; i < a.length(); ++i)
+                a[i] = ((Double const&)x->v)[i];
+            r = a;
+        } break;
+        case Type::Character: {
+            Character a(((Character const&)x->v).length());
+            for(int64_t i = 0; i < a.length(); ++i)
+                a[i] = ((Character const&)x->v)[i];
+            r = a;
+        } break;
+        case Type::List: {
+            List a(((List const&)x->v).length());
+            for(int64_t i = 0; i < a.length(); ++i)
+                a[i] = ((List const&)x->v)[i];
+            r = a;
+        } break;
+        case Type::Integer32: {
+            Integer32 a(((Integer32 const&)x->v).length());
+            for(int64_t i = 0; i < a.length(); ++i)
+                a[i] = ((Integer32 const&)x->v)[i];
+            r = a;
+        } break;
+        case Type::Logical32: {
+            Logical32 a(((Logical32 const&)x->v).length());
+            for(int64_t i = 0; i < a.length(); ++i)
+                a[i] = ((Logical32 const&)x->v)[i];
+            r = a;
+        } break;
+        case Type::Pairlist: {
+            Pairlist a = (Pairlist const&)x->v;
+            Pairlist::Init(a, a.car(), a.cdr(), a.tag() );
+            r = a;
+            while(a.cdr()->v.type() == Type::Pairlist) {
+                a = (Pairlist const&)a.cdr()->v;
+                Pairlist n;
+                Pairlist::Init(n, a.car(), a.cdr(), a.tag() );
+                a.cdr(ToSEXP(n));
+                a = n;
+            }
+        } break;
+        default:
+            throw "Unknown type in Rf_duplicate";
+    }
+    
+    if((x->v).isObject()) {
+        ((Object&)r).attributes(((Object const&)x->v).attributes());
+    }
+
+    return ToSEXP(r);
 }
 
 SEXP Rf_duplicated(SEXP, Rboolean) {
@@ -578,7 +777,7 @@ SEXP Rf_eval(SEXP x, SEXP env) {
     Value r = ((::State*)&state)->eval(p, 0);
     Riposte::deleteState(state);
     
-    return new SEXPREC(r);
+    return ToSEXP(r);
 }
 
 SEXP Rf_findFun(SEXP, SEXP) {
@@ -600,7 +799,7 @@ SEXP Rf_findVar(SEXP symbol, SEXP env) {
     if(r.isNil())
         return R_UnboundValue;
     else
-        return new SEXPREC(r);
+        return ToSEXP(r);
 }
 
 SEXP Rf_findVarInFrame(SEXP, SEXP) {
@@ -624,7 +823,7 @@ SEXP Rf_getAttrib(SEXP obj, SEXP symbol) {
 
     if( ((Object const&)obj->v).hasAttributes() &&
         ((Object const&)obj->v).attributes()->has(SymbolStr(symbol->v)) ) {
-        return new SEXPREC(
+        return ToSEXP(
             ((Object const&)obj->v).attributes()->get(SymbolStr(symbol->v)) );
     }
 
@@ -640,7 +839,7 @@ void Rf_gsetVar(SEXP, SEXP, SEXP) {
 }
 
 SEXP Rf_install(const char * s) {
-    return global->installSEXP(CreateSymbol(global->internStr(s)));
+    return ToSEXP(s);
 }
 
 SEXP Rf_lengthgets(SEXP, R_len_t) {
@@ -663,7 +862,7 @@ SEXP Rf_mkChar(const char * str) {
     String s = global->internStr(str);
     Value r;
     ScalarString::Init(r, s);
-    return new SEXPREC(r);
+    return ToSEXP(r);
 }
 
 int Rf_ncols(SEXP) {
@@ -703,7 +902,7 @@ SEXP Rf_setAttrib(SEXP in, SEXP attr, SEXP value) {
                     : new Dictionary(1);
     d->insert(((Character const&)attr->v)[0]) = ToRiposteValue(value->v);
     o.attributes(d);
-    return new SEXPREC(o);
+    return ToSEXP(o);
 }
 
 void Rf_setVar(SEXP, SEXP, SEXP) {
@@ -748,12 +947,16 @@ void R_signal_reprotect_error(PROTECT_INDEX i) {
     _NYI("R_signal_reprotect_error");
 }
 
-void R_ProtectWithIndex(SEXP, PROTECT_INDEX *) {
-    _NYI("R_ProtectWithIndex");
+void R_ProtectWithIndex(SEXP s, PROTECT_INDEX * i) {
+    *i = R_PPStackTop;
+    Rf_protect(s);
 }
 
-void R_Reprotect(SEXP, PROTECT_INDEX) {
-    _NYI("R_Reprotect");
+void R_Reprotect(SEXP s, PROTECT_INDEX i) {
+    if(i < R_PPStackTop && i >= 0)
+        R_PPStack[i] = s;
+    else
+        R_signal_reprotect_error(i);
 }
 
 SEXP R_tryEvalSilent(SEXP, SEXP, int *) {
@@ -772,7 +975,7 @@ SEXP Rf_mkCharCE(const char * str, cetype_t type) {
     String s = global->internStr(str);
     Value r;
     ScalarString::Init(r, s);
-    SEXP v = new SEXPREC(r);
+    SEXP v = ToSEXP(r);
     return v;
 }
 
@@ -811,7 +1014,7 @@ SEXP R_FindNamespace(SEXP info) {
     Value r = ((::State*)&state)->eval(code, global->global);
     Riposte::deleteState(state);
 
-    return new SEXPREC(r);
+    return ToSEXP(r);
 }
 
 /* needed for R_load/savehistory handling in front ends */
@@ -898,8 +1101,8 @@ Rboolean Rf_isInteger(SEXP) {
     _NYI("Rf_isInteger");
 }
 
-Rboolean Rf_isLanguage(SEXP) {
-    _NYI("Rf_isLanguage");
+Rboolean Rf_isLanguage(SEXP x) {
+    return isCall(x->v) ? TRUE : FALSE;
 }
 
 Rboolean Rf_isMatrix(SEXP) {
@@ -986,6 +1189,16 @@ SEXP     Rf_lang5(SEXP, SEXP, SEXP, SEXP, SEXP) {
 }
 
 R_len_t  Rf_length(SEXP x) {
+
+    if(x->v.type() == Type::Pairlist) {
+        R_len_t size = 1;
+        while(((Pairlist const&)x->v).cdr()->v.type() == Type::Pairlist) {
+            x = ((Pairlist const&)x->v).cdr();
+            size++;
+        }
+        return size;
+    }
+
     if(!x->v.isVector()) {
         printf("Rf_length called on non-vector\n");
         return 0;
@@ -1006,7 +1219,7 @@ SEXP     Rf_mkNamed(SEXPTYPE, const char **) {
 SEXP     Rf_mkString(const char * s) {
     Character v(1);
     v[0] = global->internStr(s);
-    return new SEXPREC(v);
+    return ToSEXP(v);
 }
 
 int  Rf_nlevels(SEXP) {
@@ -1014,15 +1227,15 @@ int  Rf_nlevels(SEXP) {
 }
 
 SEXP     Rf_ScalarInteger(int i) {
-    return new SEXPREC(Integer::c(i));
+    return ToSEXP(Integer::c(i));
 }
 
 SEXP     Rf_ScalarLogical(int f) {
-    return new SEXPREC(Logical::c(f ? Logical::TrueElement : Logical::FalseElement));
+    return ToSEXP(Logical::c(f ? Logical::TrueElement : Logical::FalseElement));
 }
 
 SEXP     Rf_ScalarReal(double d) {
-    return new SEXPREC(Double::c(d));
+    return ToSEXP(Double::c(d));
 }
 
 SEXP     Rf_ScalarString(SEXP s) {
@@ -1033,7 +1246,7 @@ SEXP     Rf_ScalarString(SEXP s) {
 
     Character r(1);
     r[0] = ((ScalarString const&)s->v).string();
-    return new SEXPREC(r);
+    return ToSEXP(r);
 }
 
 extern "C" {

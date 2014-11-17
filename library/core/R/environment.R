@@ -2,15 +2,21 @@
 environment <- function(fun) {
     if(is.null(fun))
         .frame(2L)
-    else
+    else if(is.environment(fun))
         .getenv(fun)
+    else if(is.function(fun))
+        .getenv(fun)
+    else
+        attr(fun, '.Environment')
 }
 
 `environment<-` <- function(fun, value) {
-    if(inherits(fun, 'formula', FALSE))
-        attr(fun, '.Environment') <- value
-    else
+    if(is.environment(fun))
         .setenv(fun, value)
+    else if(is.function(fun))
+        .setenv(fun, value)
+    else
+        attr(fun, '.Environment') <- value
 }
 
 

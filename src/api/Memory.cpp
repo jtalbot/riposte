@@ -3,11 +3,12 @@
 #include <R_ext/Memory.h>
 
 void*   vmaxget(void) {
-    _NYI("vmaxget");
+    // We don't allow the user to control memory management
+    return 0;
 }
 
 void    vmaxset(const void *) {
-    _NYI("vmaxset");
+    // We don't allow the user to control memory management
 }
 
 char*   R_alloc(size_t, int) {

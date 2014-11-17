@@ -74,7 +74,7 @@ static inline Instruction const* ret_op(State& state, Instruction const& inst) {
 	Instruction const* returnpc = state.frame.returnpc;
     
     Value& onexit = state.frame.environment->insert(Strings::__onexit__);
-    if(onexit.isObject()) {
+    if(onexit.isObject() && !onexit.isNull()) {
         Promise::Init(onexit,
             state.frame.environment,
             Compiler::deferPromiseCompilation(state, onexit), false);
@@ -165,7 +165,7 @@ static inline Instruction const* jc_op(State& state, Instruction const& inst) {
 }
 
 static inline Instruction const* forbegin_op(State& state, Instruction const& inst) {
-    state.visible = true;
+    //state.visible = true;
 	// a = loop variable (e.g. i)
     // b = loop vector(e.g. 1:100)
     // c = counter register
@@ -187,7 +187,7 @@ static inline Instruction const* forbegin_op(State& state, Instruction const& in
 }
 
 static inline Instruction const* forend_op(State& state, Instruction const& inst) {
-    state.visible = true;
+    //state.visible = true;
 	Value& counter = REGISTER(inst.c);
 	Value& limit = REGISTER(inst.c+1);
 	if(__builtin_expect(counter.i < limit.i, true)) {
@@ -918,8 +918,11 @@ static inline Instruction const* setenv_op(State& state, Instruction const& inst
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
-    if(!b.isEnvironment())
-        _error("replacement object is not an environment");
+    if(!b.isEnvironment()) {
+        return StopDispatch(state, inst, state.internStr(
+            "setenv replacement object is not an environment"), 
+            inst.c);
+    }
 
     Environment* value = ((REnvironment const&)b).environment();
 
@@ -1705,15 +1708,6 @@ Value State::eval(Code const* code, Environment* environment, int64_t resultSlot
             return Value::Nil();
         }
     } catch(...) {
-        std::cout << "Unknown error: " << std::endl;
-/*        if(!frame.isPromise && frame.environment->getContext()) {
-            std::cout << stack.size() << ": " << stringify(frame.environment->getContext()->call);
-        }
-        for(int64_t i = stack.size()-1; i > std::max(stackSize, 1ULL); --i) {
-            if(!stack[i].isPromise && stack[i].environment->getContext())
-                std::cout << i << ": " << stringify(stack[i].environment->getContext()->call);
-        }*/
-        
         stack.resize(stackSize);
         frame = oldFrame;
 	    throw;
@@ -1742,8 +1736,6 @@ Value State::eval(Promise const& p, int64_t resultSlot) {
             return Value::Nil();
         }
     } catch(...) {
-        std::cout << "Unknown error: " << std::endl;
-        
         stack.resize(stackSize);
         frame = oldFrame;
 	    throw;

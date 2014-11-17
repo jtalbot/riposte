@@ -191,8 +191,8 @@ SEXP Rf_deparse1(SEXP,Rboolean,int) {
     _NYI("Rf_deparse1");
 }
 
-SEXP Rf_deparse1line(SEXP,Rboolean) {
-    _NYI("Rf_deparse1line");
+SEXP Rf_deparse1line(SEXP call, Rboolean abbrev) {
+    return ToSEXP(global->deparse(call->v).c_str());
 }
 
 SEXP R_data_class(SEXP , Rboolean) {

@@ -3,8 +3,12 @@
 #include <R_ext/Print.h>
 
 
-void Rprintf(const char *, ...) {
-    _NYI("Rprintf");
+void Rprintf(const char * format, ...) {
+    // TODO: make this go to the current output stream
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
 }
 
 void REprintf(const char *, ...) {
@@ -12,8 +16,6 @@ void REprintf(const char *, ...) {
 }
 
 // The following is from Print.h
-
-typedef void* SEXP;
 
 typedef struct {
     int width;

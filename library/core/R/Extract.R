@@ -116,7 +116,14 @@
 }
 
 # normal subsetting loses the class.
-# expressions need to keep their class
+# calls and expressions need to keep their class
+
+`[.call` <- function(x, ..., drop = TRUE)
+{
+    r <- `[.default`(x, ..., drop=drop)
+    attr(r, 'class') <- 'call'
+    r
+}
 
 `[.expression` <- function(x, ..., drop = TRUE)
 {

@@ -74,6 +74,7 @@ primitives <- .characters(
     '[.environment',
     '[.matrix',
     '[.array',
+    '[.call',
     '[.expression',
     '[[',
     '[[.default',
@@ -675,6 +676,7 @@ internals <- .characters(
 
     # format.R
     'format',
+    'formatC',
 
     # get.R
     'get',

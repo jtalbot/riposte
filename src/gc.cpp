@@ -2,6 +2,7 @@
 #include "gc.h"
 #include "value.h"
 #include "interpreter.h"
+#include "api/api.h"
 
 bool HeapObject::marked() const {
 	return (gcObject()->flags & slot()) != 0;
@@ -76,6 +77,19 @@ static void traverse(Value const& v) {
 			if(((Promise&)v).isExpression())
 				VISIT(((Promise&)v).code());
 			break;
+		case Type::Integer32:
+			VISIT(((Integer32 const&)v).attributes());
+			VISIT(((Integer32 const&)v).inner());
+			break;
+		case Type::Logical32:
+			VISIT(((Logical32 const&)v).attributes());
+			VISIT(((Logical32 const&)v).inner());
+			break;
+        case Type::Pairlist:
+            VISIT((Pairlist::Inner const*)v.p);
+            VISIT(((Pairlist const&)v).car());
+            VISIT(((Pairlist const&)v).cdr());
+            break;
 		default:
 			// do nothing
 			break;

@@ -25,6 +25,7 @@
 	_(Logical32,    "logical32")    \
 	_(Integer32,    "integer32")    \
 	_(ScalarString, "scalarstring") \
+	_(Pairlist,     "pairlist") \
 	/* Constant strings */	        \
 	_(empty, 	    "")             \
 	_(NArep, 	    "<NA>")         \

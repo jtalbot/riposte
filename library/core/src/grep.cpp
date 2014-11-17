@@ -17,7 +17,7 @@ Value regex_compile(State& state, Value const* args) {
     Character pattern = (Character const&)args[0];
     Logical ignorecase = (Logical const&)args[1];
     Logical fixed = (Logical const&)args[2];
-
+    
     int flags = REG_EXTENDED;
     if(Logical::isTrue(ignorecase[0]))
         flags |= REG_ICASE;
@@ -80,16 +80,19 @@ void gregex_map(State& state,
     std::vector<Integer::Element> ll;
 
     regmatch_t m;
+    size_t len = strlen(text->s);
     size_t offset = 0;
     int match = 0;
-    do {
+    while(offset < len && match == 0) {
         match = tre_regexec(r, text->s+offset, 1, &m, 0);
         if(match == 0) {
             ss.push_back(m.rm_so+1+offset);
             ll.push_back(m.rm_eo - m.rm_so);
-            offset += m.rm_eo;
+            // If the match is length 0, add 1 so we don't find
+            // the same match again.
+            offset += m.rm_eo > 1 ? m.rm_eo : 1;
         }
-    } while( match == 0 );
+    }
 
     Integer s(ss.size());
     Integer l(ll.size());
@@ -314,7 +317,7 @@ void pcre_gregex_map(State& state,
     size_t len = strlen(text->s);
     size_t offset = 0;
     int rc = 0;
-    do {
+    while(offset < len && rc >= 0) {
         int ovector[6] = {0};
         rc = pcre_exec(r, NULL, text->s, len, offset, 0, ovector, 6);
         if(rc < 0 && rc != PCRE_ERROR_NOMATCH)
@@ -323,9 +326,11 @@ void pcre_gregex_map(State& state,
         if( rc >= 0 ) {
             ss.push_back(ovector[0]+1);
             ll.push_back(ovector[1]-ovector[0]);
-            offset = ovector[1];
+            // If the match is length 0, add 1 so we don't find
+            // the same match again.
+            offset = ovector[1] != offset ? ovector[1] : offset+1;
         }
-    } while( rc >= 0 );
+    }
 
     Integer s(ss.size());
     Integer l(ll.size());

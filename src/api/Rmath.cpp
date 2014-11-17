@@ -1,6 +1,7 @@
 
 #include "api.h"
 #include <stddef.h>
+#include <cmath>
 
 #include <R_ext/Arith.h>
 #include <R_ext/Rdynload.h>
@@ -9,10 +10,10 @@
 DL_FUNC  User_norm_fun = NULL;
 
 double R_pow(double x, double y) {
-    _NYI("R_pow");
+    return pow(x,y);
 }
 
 double R_pow_di(double x, int n) {
-    _NYI("R_pow_di");
+    return pow(x,n);
 }
 

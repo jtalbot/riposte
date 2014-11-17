@@ -442,7 +442,11 @@ Compiler::Operand Compiler::emitFor(ByteCode::Enum bc, List const& call, Code* c
 
     kill(body); kill(loop_limit); kill(loop_variable); 
     kill(loop_counter); kill(loop_vector);
-    return invisible(compileConstant(Null::Singleton(), code));
+    //return invisible(compileConstant(Null::Singleton(), code));
+    
+    Operand t = allocRegister();
+    emit(ByteCode::mov, body, 0, t);
+    return t;
 }
 
 Compiler::Operand Compiler::emitWhile(ByteCode::Enum bc, List const& call, Code* code) {

@@ -48,6 +48,59 @@ Logical32 Logical32::fromLogical(Logical const& i) {
     return result;
 }
 
+List Pairlist::toList(Pairlist const& pairlist) {
+    std::vector<Value> values;
+    std::vector<String> names;
+    bool anyNames = false;
+
+    Pairlist const* p = &pairlist;
+
+    do {
+        values.push_back(p->car()->v);
+        names.push_back(p->tag());
+        if(names.back() != Strings::empty)
+            anyNames = true;
+        if(p->cdr()->v.type() != Type::Pairlist)
+            break;
+        p = (Pairlist*)&p->cdr()->v;
+    } while(true);
+
+    List result(values.size());
+    for(size_t i = 0; i < values.size(); ++i)
+        result[i] = values[i];
+
+    Value rnames = Value::Nil();
+
+    if(anyNames) {
+        Character tnames(names.size());
+        for(size_t i = 0; i < names.size(); ++i)
+            tnames[i] = names[i];
+        rnames = tnames;
+    }
+
+    return CreatePairlist(result, rnames);
+}
+
+Value Pairlist::fromList(List const& list) {
+    if(list.length() == 0)
+        return Value::Nil();
+
+    SEXP tail = R_NilValue;
+    for(size_t i = list.length()-1; i > 0; --i) {
+        Value v;
+        String tag = (hasNames(list)) ? ((Character const&)getNames(list))[i] : Strings::empty;
+        Pairlist::Init(v, ToSEXP(list[i]), tail, tag);
+        tail = ToSEXP(v);
+    }
+    Pairlist v;
+    String tag = (hasNames(list)) ? ((Character const&)getNames(list))[0] : Strings::empty;
+    Pairlist::Init(v, ToSEXP(list[0]), tail, tag);
+    
+    v.attributes(list.attributes());
+
+    return v;
+}
+
 Value ToRiposteValue(Value const& v) {
     if(v.type() == Type::Integer32)
         return Integer32::toInteger((Integer32 const&)v);
@@ -55,8 +108,30 @@ Value ToRiposteValue(Value const& v) {
         return Logical32::toLogical((Logical32 const&)v);
     else if(v.type() == Type::ScalarString)
         return Character::c(((ScalarString const&)v).string());
+    else if(v.type() == Type::Pairlist)
+        return Pairlist::toList((Pairlist const&)v);
     else
         return v;
+}
+
+std::map<String, SEXP> symbols;
+SEXP ToSEXP(Value const& v) {
+    if(isSymbol(v)) {
+        std::map<String, SEXP>::const_iterator i =
+           symbols.find(SymbolStr(v));
+        if(i != symbols.end())
+            return i->second;
+
+        SEXP sexp = global->installSEXP(CreateSymbol(SymbolStr(v)));
+        symbols[SymbolStr(v)] = sexp;
+        return sexp;
+    }
+    else return new SEXPREC(v);
+}
+
+SEXP ToSEXP(char const* s) {
+    String str = global->internStr(s);
+    return ToSEXP(CreateSymbol(str));
 }
 
 // Rinternals.h
@@ -156,61 +231,65 @@ void R_init_libR(DLLInfo *) {
     R_LogicalNAValue = global->installSEXP(Logical::c(Logical::NAelement));
 
     R_PackageSymbol =
-        global->installSEXP(CreateSymbol(global->internStr("package")));
+        ToSEXP("package");
     R_Bracket2Symbol =   /* "[[" */
-        global->installSEXP(CreateSymbol(global->internStr("[[")));
+        ToSEXP("[[");
     R_BracketSymbol =    /* "[" */
-        global->installSEXP(CreateSymbol(global->internStr("[")));
+        ToSEXP("[");
     R_BraceSymbol =      /* "{" */
-        global->installSEXP(CreateSymbol(global->internStr("{")));
+        ToSEXP("{");
     R_ClassSymbol =      /* "class" */
-        global->installSEXP(CreateSymbol(global->internStr("class")));
+        ToSEXP("class");
     R_DeviceSymbol =     /* ".Device" */
-        global->installSEXP(CreateSymbol(global->internStr(".Device")));
+        ToSEXP(".Device");
     R_DimNamesSymbol =   /* "dimnames" */
-        global->installSEXP(CreateSymbol(global->internStr("dimnames")));
+        ToSEXP("dimnames");
     R_DimSymbol =        /* "dim" */
-        global->installSEXP(CreateSymbol(global->internStr("dim")));
+        ToSEXP("dim");
     R_DollarSymbol =     /* "$" */
-        global->installSEXP(CreateSymbol(global->internStr("$")));
+        ToSEXP("$");
     R_DotsSymbol =       /* "..." */
-        global->installSEXP(CreateSymbol(global->internStr("...")));
+        ToSEXP("...");
     R_DropSymbol =       /* "drop" */
-        global->installSEXP(CreateSymbol(global->internStr("drop")));
+        ToSEXP("drop");
     R_LastvalueSymbol =  /* ".Last.value" */
-        global->installSEXP(CreateSymbol(global->internStr(".Last.value")));
+        ToSEXP(".Last.value");
     R_LevelsSymbol =     /* "levels" */
-        global->installSEXP(CreateSymbol(global->internStr("levels")));
+        ToSEXP("levels");
     R_ModeSymbol =       /* "mode" */
-        global->installSEXP(CreateSymbol(global->internStr("mode")));
+        ToSEXP("mode");
     R_NameSymbol =       /* "name" */
-        global->installSEXP(CreateSymbol(global->internStr("name")));
+        ToSEXP("name");
     R_NamesSymbol =      /* "names" */
-        global->installSEXP(CreateSymbol(global->internStr("names")));
+        ToSEXP("names");
     R_NaRmSymbol =       /* "na.rm" */
-        global->installSEXP(CreateSymbol(global->internStr("na.rm")));
+        ToSEXP("na.rm");
     R_PackageSymbol =    /* "package" */
-        global->installSEXP(CreateSymbol(global->internStr("package")));
+        ToSEXP("package");
     R_QuoteSymbol =      /* "quote" */
-        global->installSEXP(CreateSymbol(global->internStr("quote")));
+        ToSEXP("quote");
     R_RowNamesSymbol =   /* "row.names" */
-        global->installSEXP(CreateSymbol(global->internStr("row.names")));
+        ToSEXP("row.names");
     R_SeedsSymbol =      /* ".Random.seed" */
-        global->installSEXP(CreateSymbol(global->internStr(".Random.seed")));
+        ToSEXP(".Random.seed");
     R_SourceSymbol =     /* "source" */
-        global->installSEXP(CreateSymbol(global->internStr("source")));
+        ToSEXP("source");
     R_TspSymbol =        /* "tsp" */
-        global->installSEXP(CreateSymbol(global->internStr("tsp")));
+        ToSEXP("tsp");
 
     R_dot_defined =      /* ".defined" */
-        global->installSEXP(CreateSymbol(global->internStr(".defined")));
+        ToSEXP(".defined");
     R_dot_Method =       /* ".Method" */
-        global->installSEXP(CreateSymbol(global->internStr(".Method")));
+        ToSEXP(".Method");
     R_dot_target =       /* ".target" */
-        global->installSEXP(CreateSymbol(global->internStr(".target")));
+        ToSEXP(".target");
 
-    R_NaString = (SEXP)Strings::NA;        /* NA_STRING as a CHARSXP */
-    R_BlankString = (SEXP)Strings::empty;     /* "" as a CHARSXP */
+    Value NaString;
+    ScalarString::Init(NaString, Strings::NA);
+    R_NaString = ToSEXP(NaString); /* NA_STRING as a CHARSXP */
+    Value BlankString;
+    ScalarString::Init(BlankString, Strings::empty);
+    R_BlankString = ToSEXP(BlankString);     /* "" as a CHARSXP */
 
     R_Interactive = TRUE;
 

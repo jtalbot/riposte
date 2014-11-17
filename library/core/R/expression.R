@@ -1,6 +1,6 @@
 
 expression <- function(...) {
-    r <- list(...)
+    r <- `.__call__.`[-1L]
     class(r) <- 'expression'
     r
 }

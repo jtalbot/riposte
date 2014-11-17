@@ -175,7 +175,10 @@ DL_FUNC R_FindSymbol(char const *, char const *,
    The naming of these routines may be less than ideal. */
 
 void R_RegisterCCallable(const char *package, const char *name, DL_FUNC fptr) {
-    printf("R_RegisterCCallable not implemented. Called on %s: %s\n", package, name); 
+    Externalptr a;
+    Externalptr::Init(a, (void*)(fptr), Value::Nil(), Value::Nil(), NULL);
+    global->installSEXP(a);
+    // TODO: store this in a map where we can look it up later.
 }
 
 extern "C" {

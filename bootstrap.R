@@ -43,6 +43,8 @@
     # Set up some other variables that R must set somewhere else
     namespace.base[['.Options']] <- internal::options()
 
+    internal::options(prompt="> ")
+    internal::options(continue="+ ")
     internal::options(verbose=FALSE)
     internal::options(width=80L)
     internal::options(ts.eps=1e-05)
@@ -83,8 +85,9 @@
     internal::dyn.load('libR.dylib', TRUE, TRUE, '')
     #internal::dyn.load('libRblas.dylib', TRUE, TRUE, '')
 
-    "Loaded base library"
+    invisible("Loaded base library")
 })()
 
-.First.sys()
+invisible(.First.sys())
 
+source('test.R')

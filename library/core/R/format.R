@@ -123,3 +123,8 @@ format <- function(x, trim, digits, nsmall, width, something, na.encode, scienti
 }
 
 
+formatC <- function(x, mode, width, digits, format, flag, i.strlen) {
+    as.character(x)
+}
+
+
