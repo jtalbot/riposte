@@ -80,6 +80,10 @@ SEXP (ATTRIB)(SEXP x) {
     _NYI("ATTRIB");
 }
 
+int  (OBJECT)(SEXP x) {
+    _NYI("OBJECT");
+}
+
 int  (TYPEOF)(SEXP x) {
 
     int type = x->v.type();

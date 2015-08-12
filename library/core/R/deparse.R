@@ -308,4 +308,8 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
     .pconcat(func, ')')
 }
 
+.deparse.externalptr <- function(x, ...)
+{
+    'externalptr'
+}
 

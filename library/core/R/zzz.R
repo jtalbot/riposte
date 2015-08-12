@@ -660,6 +660,7 @@ internals <- .characters(
 
     # exists.R
     'exists',
+    'get0',
 
     # file.R
     'file.exists',
@@ -773,6 +774,7 @@ internals <- .characters(
 
     # options.R
     'options',
+    'getOption',
 
     # order.R
     'order',

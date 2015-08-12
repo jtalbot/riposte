@@ -1,7 +1,7 @@
 
 #include <stdlib.h>
-#include <unistd.h>
 
+#include "../../../src/riposte.h"
 #include "../../../src/runtime.h"
 #include "../../../src/compiler.h"
 #include "../../../src/parser.h"
@@ -20,14 +20,22 @@ void sysgetenv_map(State& state,
 } 
 
 extern "C"
-char **environ;
-
-extern "C"
 Value sysgetenv(State& state, Value const* args)
 {
-    // TODO: implement. Apparently you can only get the
-    // environment variables from the executable, not a library?
-    return Null::Singleton();
+    size_t cnt = 0;
+    for(char** env = Riposte::getEnv(); *env; ++env) {
+        cnt++;
+    }
+
+    Character result(cnt);
+
+    size_t i = 0;
+    for(char** env = Riposte::getEnv(); *env; ++env) {
+        result[i] = state.internStr(*env);
+        ++i;
+    }
+    
+    return result;
 }
 
 

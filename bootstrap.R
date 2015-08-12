@@ -90,4 +90,3 @@
 
 invisible(.First.sys())
 
-source('test.R')

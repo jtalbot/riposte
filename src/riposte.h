@@ -46,6 +46,11 @@ String		newString    (State const&, std::string const& str);
 //      Convert back to an stl string.
 std::string getString    (State const&, String str);
 
+
+// Access to enviroment variables
+char** getEnv();
+
+
 /*
 // An opaque fat pointer to a Riposte value. Users can assume 
 // that a Value is 128 bits, but shouldn't make any assumptions

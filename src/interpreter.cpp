@@ -1949,5 +1949,14 @@ String newString(State const& state, std::string const& str) {
     return (String)((::State&)state).internStr(str);
 }
 
+
+extern "C"
+char** environ;
+
+char** getEnv()
+{
+    return environ;    
+}
+
 } // namespace Riposte
 

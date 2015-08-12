@@ -9,7 +9,7 @@ duplicated <- function(x, incomparables, fromLast, nmax) {
 
     if(.isTRUE(fromLast))
         x <- .rev(x)
-        
+
     r <- (.match(x, x) != seq_len(length(x))) &
          (.match(x, incomparables) == 0L)
 

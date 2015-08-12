@@ -6,7 +6,7 @@ order <- function(na.last, decreasing, ...) {
     if(length(l) == 0L)
         return(vector('integer', 0))
  
-    lengths <- .Map(length, list(l), 'double')[[1L]]
+    lengths <- .Map(length, list(l), 'integer')[[1L]]
     mn <- min(lengths)
     mx <- max(lengths)
     if(mn != mx)

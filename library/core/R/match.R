@@ -1,7 +1,7 @@
 
 .match <- function(x, table) {
     if(is.list(x) || is.list(table))
-        .semijoin(as.character.default(x), as.character.default(table))
+        .semijoin(as.list(x), as.list(table))
     else if(is.character.default(x) || is.character.default(table))
         .semijoin(as.character.default(x), as.character.default(table))
 

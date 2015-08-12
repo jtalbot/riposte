@@ -1,5 +1,5 @@
 
-nchar <- function(x, type = "chars", allowNA = FALSE) {
+nchar <- function(x, type, allowNA, keepNA) {
     .Map('nchar_map', list(as.character.default(x)), 'integer')[[1L]]
 }
 

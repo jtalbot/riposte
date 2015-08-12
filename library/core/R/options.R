@@ -34,3 +34,8 @@ options <- (function() {
     }
 
 })()
+
+getOption <- function(x)
+{
+    options(x)[[1]]
+}
