@@ -28,7 +28,8 @@ lazyLoadDBfetch <- function(key, file, compressed, hook) {
     len <- len-4L
 
     comp <- '1'
-    if(compressed == 2 || compressed == 3) {
+    if (compressed == 2 || compressed == 3)
+    {
         comp <- readBin(f, 'character', 1, 1, FALSE, FALSE)
         len <- len-1L
     }
@@ -40,6 +41,9 @@ lazyLoadDBfetch <- function(key, file, compressed, hook) {
         r <- .Riposte('decompress', r, size, comp)
 
     con <- rawConnection('', r, 'r')
-    unserializeFromConn(con, hook)
+    x <- unserializeFromConn(con, hook)
+    print("Starting")
+    print(x)
+    x
 }
 

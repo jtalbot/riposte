@@ -123,6 +123,8 @@
 	'?' {token( TOKEN_QUESTION, CreateSymbol(Strings::question) );};
 	
 	# Special Operators.
+	'===' {token( TOKEN_SPECIALOP, CreateSymbol(Strings::id) );};
+	'!==' {token( TOKEN_SPECIALOP, CreateSymbol(Strings::nid) );};
 	('%' [^\n%]* '%') {token(TOKEN_SPECIALOP, CreateSymbol(global.internStr(std::string(ts, te-ts))) ); };
 
 	# Separators.

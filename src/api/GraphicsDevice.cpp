@@ -47,3 +47,8 @@ void Rf_NewFrameConfirm(pDevDesc) { /* used in graphics.c, grid */
     _NYI("Rf_NewFrameConfirm");
 }
 
+extern "C" {
+    SEXP do_bmVersion(void) { /* used by grDevices */
+        _NYI("do_bmVersion");
+    }
+}

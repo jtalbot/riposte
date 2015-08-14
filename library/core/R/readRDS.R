@@ -78,8 +78,10 @@ unserializeFromConn <- function(con, refhook) {
         # if it has attributes and it's a pairlist
         # (or apparently some other things), they come first...
         if((flags & as.raw(0x02)) && 
-            (type == 0x02 || type == 0x03 || type == 0x06)) {
+            (type == 0x02 || type == 0x03 || type == 0x05 || type == 0x06)) {
             attrs <- .unserialize()
+            #print('Attrs1')
+            #print(attrs)
         }
 
         v <- switch(as.integer(type)+1,
@@ -88,7 +90,7 @@ unserializeFromConn <- function(con, refhook) {
             .unserialize.pairlist(sexp),
             .unserialize.closure(),
             .unserialize.environment(),
-            .unserialize.promise(),
+            .unserialize.promise(sexp),
             .unserialize.language(),
             .unserialize.special(),
             .unserialize.builtin(),
@@ -105,15 +107,16 @@ unserializeFromConn <- function(con, refhook) {
             .unserialize.list(),
             .stop('Unsupported type in .unserialize (expressions vector)'),
             .unserialize.bytecode(),
-            .stop('Unsupported type in .unserialize (external pointer)'),
+            .unserialize.extptr(),
             .stop('Unsupported type in .unserialize (weak reference)'),
             .stop('Unsupported type in .unserialize (raw bytes)'),
-            .stop('Unsupported type in .unserialize (S4, non-vector)')
+            .unserialize.S4()
             )
 
         if(flags & as.raw(0x02)) {
-            if(type != 0x02 && type != 0x03 && type != 0x06)
+            if(type != 0x02 && type != 0x03 && type != 0x05 && type != 0x06) {
                 attrs <- .unserialize()
+            }
             attributes(v) <- attrs
         }
 
@@ -157,6 +160,12 @@ unserializeFromConn <- function(con, refhook) {
         tag <- .unserialize()
         e[names(tag)] <- strip(tag)
         e
+    }
+
+    .unserialize.promise <- function(sexp) {
+        value <- .unserialize()
+        expr <- .unserialize()
+        value    
     }
 
     .unserialize.string <- function() {
@@ -225,6 +234,20 @@ unserializeFromConn <- function(con, refhook) {
         head <- .unserialize()
         tail <- .unserialize()
         r <- c.default(head, tail)
+        attr(r, 'class') <- 'call'
+        r
+    }
+
+    .unserialize.special <- function() {
+        n <- as.name(.unserialize.string())
+        r <- list(as.name('::'), as.name('primitive'), n)
+        attr(r, 'class') <- 'call'
+        r
+    }
+
+    .unserialize.builtin <- function() {
+        n <- as.name(.unserialize.string())
+        r <- list(as.name('::'), as.name('primitive'), n)
         attr(r, 'class') <- 'call'
         r
     }
@@ -312,6 +335,21 @@ unserializeFromConn <- function(con, refhook) {
         # don't know why I need this length
         len <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
         .unserialize.bc.body()
+    }
+
+    .unserialize.extptr <- function() {
+        protected <- .unserialize()
+        tag <- .unserialize()
+        print("EXTPTR")
+        print(protected)
+        print(tag)
+        r <- NULL
+        refs[[length(refs)+1L]] <<- r
+        r
+    }
+
+    .unserialize.S4 <- function() {
+        NULL
     }
 
     .unserialize()

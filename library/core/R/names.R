@@ -3,6 +3,7 @@ names <- function(x) UseMethod('names', x)
 
 names.default <- function(x) attr(x, 'names')
 
+names.environment <- function(x) .env_names(x)
 
 `names<-` <- function(x, value) UseMethod('names<-', x)
 

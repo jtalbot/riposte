@@ -846,6 +846,10 @@ SEXP Rf_install(const char * s) {
     return ToSEXP(s);
 }
 
+SEXP Rf_installChar(SEXP s) {
+    return ToSEXP(s->v);
+}
+
 SEXP Rf_lengthgets(SEXP, R_len_t) {
     _NYI("Rf_lengthgets");
 }

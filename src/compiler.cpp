@@ -89,6 +89,8 @@ Compiler::EmitTable::EmitTable() {
     add(Strings::visible, 1, &Compiler::emitUnary, ByteCode::visible);
     add(Strings::withVisible, 1, &Compiler::emitUnary, ByteCode::withVisible);
     
+    add(Strings::id, 2, &Compiler::emitBinary, ByteCode::id);
+    add(Strings::nid, 2, &Compiler::emitBinary, ByteCode::nid);
     add(Strings::isnil, 1, &Compiler::emitUnary, ByteCode::isnil);
     
     // Riposte-specific operators
@@ -100,7 +102,9 @@ Compiler::EmitTable::EmitTable() {
     add(Strings::pr_env, 2, &Compiler::emitBinary, ByteCode::pr_env);
 
     // Environment operators
+    add(Strings::env_has, 2, &Compiler::emitBinary, ByteCode::env_has);
     add(Strings::env_get, 2, &Compiler::emitBinary, ByteCode::env_get);
+    add(Strings::env_set, 3, &Compiler::emitTernary, ByteCode::env_set);
     add(Strings::env_rm, 2, &Compiler::emitBinary, ByteCode::env_rm);
     add(Strings::env_missing, 2, &Compiler::emitBinary, ByteCode::env_missing);
     add(Strings::env_new, 1, &Compiler::emitUnary, ByteCode::env_new);

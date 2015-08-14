@@ -101,14 +101,14 @@ struct Promise : public Value {
 	};
 
 	static Promise& Init(Value& v, Environment* env, Code* code, bool isDefault) {
-		Value::Init(v, Type::Promise, Expression|isDefault);
+        Value::Init(v, Type::Promise, Expression|isDefault);
 		v.header += (((uint64_t)env) << 16);
 		v.p = code;
 		return (Promise&)v;
 	}
 
 	static Promise& Init(Value& v, Environment* env, uint64_t dotindex, bool isDefault) {
-		Value::Init(v, Type::Promise, Dots|isDefault);
+        Value::Init(v, Type::Promise, Dots|isDefault);
 		v.header += (((uint64_t)env) << 16);
 		v.i = dotindex;
 		return (Promise&)v;

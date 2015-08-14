@@ -211,6 +211,28 @@ inline Integer Repeat(Integer const& each, int64_t const length) {
 	return r;
 }
 
+
+bool IdSlow(Value const& a, Value const& b);
+ 
+inline
+bool Id(Value const& a, Value const& b)
+{
+    // Quick shallow comparisons
+    if(a == b)
+        return true;
+
+	if(a.type() != b.type())
+        return false;
+
+    if(a.isVector()
+        && ((Vector const&)a).length() != ((Vector const&)b).length())
+        return false;
+	
+    return IdSlow(a, b);
+}
+
+
+
 Double RandomVector(State& state, int64_t const length);
 
 Integer Semijoin(Value const& x, Value const& table);

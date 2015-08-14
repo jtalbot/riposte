@@ -572,6 +572,11 @@ static inline Instruction const* pr_new_op(State& state, Instruction const& inst
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
+    if( !a.isCharacter1() ||
+        !REGISTER((&inst+1)->a).isEnvironment() ||
+        !REGISTER((&inst+1)->b).isEnvironment())
+        return StopDispatch(state, inst, state.internStr("wrong types in pr_new"), inst.c);
+
     REnvironment& eval = (REnvironment&)REGISTER((&inst+1)->a);
     REnvironment& assign = (REnvironment&)REGISTER((&inst+1)->b);
 
@@ -644,6 +649,24 @@ static inline Instruction const* pr_env_op(State& state, Instruction const& inst
 }
 
 // OBJECT_BYTECODES
+
+static inline Instruction const* id_op(State& state, Instruction const& inst) {
+    state.visible = true;
+	DECODE(a);
+    DECODE(b);
+
+	OUT(c) = Id(a,b) ? Logical::True() : Logical::False();
+    return &inst+1;
+}
+
+static inline Instruction const* nid_op(State& state, Instruction const& inst) {
+    state.visible = true;
+	DECODE(a);
+    DECODE(b);
+
+	OUT(c) = Id(a,b) ? Logical::False() : Logical::True();
+    return &inst+1;
+}
 
 static inline Instruction const* isnil_op(State& state, Instruction const& inst) {
     state.visible = true;
@@ -1161,6 +1184,29 @@ static inline Instruction const* env_names_op(State& state, Instruction const& i
     }
 
     OUT(c) = r;
+    return &inst+1;
+}
+
+static inline Instruction const* env_has_op(State& state, Instruction const& inst) {
+    state.visible = true;
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+
+    if(!a.isEnvironment()) {
+        return StopDispatch(state, inst, state.internStr(
+            "invalid 'envir' argument to .getenv"), 
+            inst.c);
+    }
+    if(!b.isCharacter() || b.pac != 1) {
+        return StopDispatch(state, inst, state.internStr(
+            "invalid 'x' argument to .getenv"), 
+            inst.c);
+    }
+
+    OUT(c) = (((REnvironment const&)a).environment()->
+                get(((Character const&)b).s)).isNil()
+                ? Logical::False()
+                : Logical::True();
     return &inst+1;
 }
 
@@ -1693,6 +1739,7 @@ Value State::eval(Code const* code, Environment* environment, int64_t resultSlot
 
 	// make room for the result
 	Instruction const* run = buildStackFrame(*this, environment, code, resultSlot, 0);
+
 	try {
 		bool success = global.profile
             ? profile(*this, run)

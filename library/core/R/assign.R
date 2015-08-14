@@ -1,20 +1,28 @@
 
-assign <- function(x, value, envir, inherits) {
-    if(!inherits || !is.nil(.get(envir, x))) {
-        envir[[x]] <- value
+assign <- function(x, value, envir, inherits)
+{
+    print(x)
+    if(!inherits || .env_has(envir, x))
+    {
+        .env_set(envir, x, value)
         return(value)
     }
-    else {
-        while(envir != emptyenv()) {
+    else
+    {
+        while(envir != emptyenv())
+        {
             envir <- .getenv(envir)
-            if(!is.nil(.get(envir, value))) {
-                envir[[x]] <- value
+            if(.env_has(envir, value))
+            {
+                .env_set(envir, x, value)
                 return(value)
             }
         }
     }
+
     g <- .env_global()
     g[[x]] <- value
+
     return(value)
 }
 

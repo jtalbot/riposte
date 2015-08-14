@@ -34,6 +34,8 @@
 	_(Maximal,      "\255")         \
     /* Primitive functions */ \
 	_(isnil,        "is.nil")   \
+	_(id,           "===")   \
+	_(nid,          "!==")   \
     _(Complex, 	    "complex")	\
 	_(Function,	    "function")	\
 	_(BuiltIn,	    "builtin")	\
@@ -157,6 +159,8 @@
     _(env_names, ".env_names") \
     _(env_global, ".env_global") \
     _(env_rm, ".env_rm") \
+    _(env_has, ".env_has") \
+    _(env_get, ".env_get") \
     _(env_get, ".get") \
 	_(env_missing, ".env_missing") \
     _(frame, ".frame") \

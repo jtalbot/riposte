@@ -20,3 +20,11 @@ length.default <- function(x) length(strip(x))
     x[seq_len(len)]
 }
 
+lengths <- function(x, use.names)
+{
+    r <- .Map(length, list(x))
+    if(use.names)
+        names(r) <- names(x)
+    r
+}
+

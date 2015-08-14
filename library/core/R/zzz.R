@@ -405,6 +405,7 @@ primitives <- .characters(
     # names.R
     'names',
     'names.default',
+    'names.environment',
     'names<-',
     'names<-.default',
 
@@ -721,6 +722,9 @@ internals <- .characters(
     'lapply',
     'vapply',
 
+    # length.R
+    'lengths',
+    
     # list.R 
     'env2list',
 
@@ -770,6 +774,7 @@ internals <- .characters(
     
     # ns-reflect.R (in zzz...)
     'getRegisteredNamespace',
+    'isRegisteredNamespace',
     'registerNamespace',
 
     # options.R

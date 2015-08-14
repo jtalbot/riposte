@@ -227,12 +227,12 @@ void Heap::sweep() {
             }
 
 			if(h->size == regionSize) {
-				//printf("Freeing region %llx\n", t);
-				//memset(t, 0xff, h->size);
+				//printf("Freeing region %llx--%llx\n", h, h+h->size);
+				//memset(h->data, 0xff, h->size);
 				freeRegions.push_front(h);
 			}
 			else {
-				//memset(t, 0xff, h->size);
+				//memset(h->data, 0xff, h->size);
 				free(h->head);
 			}
 		} else {
@@ -262,7 +262,7 @@ void Heap::popRegion() {
 
 	GCObject* g = freeRegions.front();
 	freeRegions.pop_front();
-	//printf("Popping to %llx\n", g);
+	//printf("Popping %llx--%llx\n", g, g+g->size);
 	total += g->size;
 	root = g->Activate(root, 0);
 

@@ -2,6 +2,7 @@
 # in zzz.R for now...
 
 getRegisteredNamespace <- NULL
+isRegisteredNamespace <- NULL
 registerNamespace <- NULL
 getNamespaceRegistry <- NULL
 
@@ -12,6 +13,10 @@ getNamespaceRegistry <- NULL
 
     getRegisteredNamespace <<- function(name) {
         return( namespaces[[strip(name)]] )
+    }
+
+    isRegisteredNamespace <<- function(name) {
+        !is.nil( namespaces[[strip(name)]] )
     }
 
     registerNamespace <<- function(name, env) {

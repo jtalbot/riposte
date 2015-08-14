@@ -365,6 +365,82 @@ void Subset2AssignSlow(State& state, Value const& a, bool clone, Value const& i,
 		_error("NYI indexing type");
 }
 
+
+bool IdSlow(Value const& a, Value const& b)
+{
+    // We've already verified that they have the same type
+    // and, for vectors, the same length.
+	switch(a.type())
+    {
+        case Type::Closure:
+        {
+            auto x = (Closure const&)a;
+            auto y = (Closure const&)b;
+            return x.prototype() == y.prototype() &&
+                   x.environment() == y.environment();
+        }
+        case Type::Environment:
+        {
+            auto x = (REnvironment const&)a;
+            auto y = (REnvironment const&)b;
+            return x.environment() == y.environment();
+        }
+        case Type::Null:
+        {
+            return true;
+        }
+        case Type::Raw:
+        {
+            auto x = (Raw const&)a;
+            auto y = (Raw const&)b;
+            for(size_t i = 0; i < x.length(); ++i)
+                if(x[i] != y[i]) return false;
+            return true;
+        }
+        case Type::Logical:
+        {
+            auto x = (Logical const&)a;
+            auto y = (Logical const&)b;
+            for(size_t i = 0; i < x.length(); ++i)
+                if(x[i] != y[i]) return false;
+            return true;
+        }
+        case Type::Integer:
+        {
+            auto x = (Integer const&)a;
+            auto y = (Integer const&)b;
+            for(size_t i = 0; i < x.length(); ++i)
+                if(x[i] != y[i]) return false;
+            return true;
+        }
+        case Type::Double:
+        {
+            auto x = (Double const&)a;
+            auto y = (Double const&)b;
+            for(size_t i = 0; i < x.length(); ++i)
+                if(x[i] != y[i]) return false;
+            return true;
+        }
+        case Type::Character:
+        {
+            auto x = (Character const&)a;
+            auto y = (Character const&)b;
+            for(size_t i = 0; i < x.length(); ++i)
+                if(x[i] != y[i]) return false;
+            return true;
+        }
+        case Type::List:
+        {
+            auto x = (List const&)a;
+            auto y = (List const&)b;
+            for(size_t i = 0; i < x.length(); ++i)
+                if(!Id(x[i], y[i])) return false;
+            return true;
+        }
+		default: _error("NYI: Id on this type"); break;
+	};
+}
+
 template<class T>
 Integer Semijoin(T const& x, T const& table) {
     Integer r(x.length());
@@ -404,6 +480,24 @@ Integer Semijoin(T const& x, T const& table) {
     return r;
 }
 
+template<>
+Integer Semijoin<List>(List const& x, List const& table) {
+    Integer r(x.length());
+
+    // TODO: make this more efficient
+    for(size_t i = 0; i < x.length(); ++i)
+    {
+        r[i] = 0;
+        for(size_t j = 0; j < table.length(); ++j)
+        {
+            if(Id(x[i], table[j]))
+                r[i] = j+1; 
+        }
+    }
+
+    return r;
+}
+
 Integer Semijoin(Value const& a, Value const& b) {
 
     // assumes that the two arguments are the same type...
@@ -419,6 +513,8 @@ Integer Semijoin(Value const& a, Value const& b) {
         return Semijoin<Double>((Double const&)a, (Double const&)b);
     else if(a.isCharacter())
         return Semijoin<Character>((Character const&)a, (Character const&)b);
+    else if(a.isList())
+        return Semijoin<List>((List const&)a, (List const&)b);
     else
         _error("Unsupported type in semijoin");
 }

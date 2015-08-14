@@ -38,6 +38,8 @@
 
 #define OBJECT_BYTECODES(_)                                                    \
     _(isnil,        "isnil")                                                   \
+    _(id,           "id")                                                      \
+    _(nid,          "nid")                                                     \
     _(type,         "type")                                                    \
     _(length,       "length")                                                  \
     _(get,          "get")          /* $, [[   (works on all objects) */       \
@@ -54,6 +56,7 @@
 
 #define ENVIRONMENT_BYTECODES(_)                                               \
     _(env_new,      "env_new")                                                 \
+    _(env_has,      "env_has")      /* check a value in an environment */      \
     _(env_get,      "env_get")      /* get a value from an environment */      \
     _(env_set,      "env_set")      /* set a value in an environment */        \
     _(env_rm,       "env_rm" )      /* undefine values in an environment */    \

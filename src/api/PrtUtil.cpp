@@ -2,37 +2,50 @@
 #include "api.h"
 #include <R_ext/PrtUtil.h>
 
-void Rf_formatLogical(int *, R_xlen_t, int *) {
-    _NYI("Rf_formatLogical");
+void formatLogical(int *, R_xlen_t, int *) {
+    _NYI("formatLogical");
 }
 
-void Rf_formatInteger(int *, R_xlen_t, int *) {
-    _NYI("Rf_formatInteger");
+void formatInteger(int *, R_xlen_t, int *) {
+    _NYI("formatInteger");
 }
 
-void Rf_formatReal(double *, R_xlen_t, int *, int *, int *, int) {
-    _NYI("Rf_formatReal");
+void formatReal(double *, R_xlen_t, int *, int *, int *, int) {
+    _NYI("formatReal");
 }
 
-void Rf_formatComplex(Rcomplex *, R_xlen_t, int *, int *, int *, int *, int *, int *, int) {
-    _NYI("Rf_formatComplex");
+void formatComplex(Rcomplex *, R_xlen_t, int *, int *, int *, int *, int *, int *, int) {
+    _NYI("formatComplex");
 }
 
 /* Formating of values */
-const char *Rf_EncodeLogical(int, int) {
-    _NYI("Rf_EncodeLogical");
+const char *EncodeLogical(int, int) {
+    _NYI("EncodeLogical");
 }
 
-const char *Rf_EncodeInteger(int, int) {
-    _NYI("Rf_EncodeInteger");
+const char *EncodeInteger(int, int) {
+    _NYI("EncodeInteger");
 }
 
-const char *Rf_EncodeReal(double, int, int, int, char) {
-    _NYI("Rf_EncodeReal");
+const char *EncodeReal0(double, int, int, int, const char*) {
+    _NYI("EncodeReal0");
 }
 
-const char *Rf_EncodeComplex(Rcomplex, int, int, int, int, int, int, char) {
-    _NYI("Rf_EncodeComplex");
+const char *EncodeReal(double, int, int, int, char) {
+    _NYI("EncodeReal");
 }
 
+const char *EncodeComplex(Rcomplex, int, int, int, int, int, int, const char*) {
+    _NYI("EncodeComplex");
+}
+
+extern "C"
+{
+
+const char *Rf_EncodeChar(SEXP x)
+{
+    _NYI("EncodeChar");
+}
+
+}
 

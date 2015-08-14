@@ -1,15 +1,13 @@
 
 .match <- function(x, table) {
     if(is.list(x) || is.list(table))
-        .semijoin(as.list(x), as.list(table))
+        .semijoin(as(x, 'list'), as(table, 'list'))
     else if(is.character.default(x) || is.character.default(table))
         .semijoin(as.character.default(x), as.character.default(table))
-
     else if(is.raw(x) && is.raw(table))
         .semijoin(x, table)
     else if(is.raw(x) || is.raw(table))
         .semijoin(as.character.default(x), as.character.default(table))
-
     else if(is.double(x) || is.double(table))
         .semijoin(as.double(x), as.double(table))
     else if(is.integer(x) || is.integer(table))

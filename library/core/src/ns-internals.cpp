@@ -2,8 +2,6 @@
 #include "../../../src/runtime.h"
 #include "../../../src/interpreter.h"
 
-#include <eigen3/Eigen/Dense>
-
 extern "C"
 Value importIntoEnv(State& state, Value const* args) {
 

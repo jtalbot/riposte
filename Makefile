@@ -3,7 +3,7 @@
 UNAME := $(shell uname -s)
 CXX := clang++
 CC := clang
-CXXFLAGS := -Wall -Iinclude -g
+CXXFLAGS := -std=c++11 -Wall -Iinclude -g
 CFLAGS := -Wall -Iinclude -g
 LFLAGS := -fpic
 LIBS := -Llibs/dyncall/dyncall -lpthread -ldyncall_s
@@ -65,7 +65,7 @@ $(PACKAGES): $(RIPOSTE)
 	$(MAKE) -C library/$@ $(MAKECMDGOALS)
 
 $(API): $(API_OBJECTS) $(RIPOSTE)
-	$(CXX) $(LFLAGS) -L/usr/local/opt/gettext/lib/ -L. -lRiposte -Xlinker -reexport-llzma -Xlinker -reexport-lintl -Xlinker -reexport-lRmath -dynamiclib -compatibility_version 3.1.0 -current_version 3.1.1 -o $@ $^
+	$(CXX) $(LFLAGS) -L/usr/local/opt/gettext/lib/ -L. -lRiposte -Xlinker -reexport-llzma -Xlinker -reexport-lintl -Xlinker -reexport-lRmath -dynamiclib -compatibility_version 3.2.0 -current_version 3.2.1 -o $@ $^
 
 $(RIPOSTE): $(OBJECTS)
 	$(CXX) $(LFLAGS) -dynamiclib -o $@ $^ $(LIBS)

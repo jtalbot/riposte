@@ -296,7 +296,8 @@ public:
 	explicit Environment(int64_t initialLoad, Environment* enclosure)
         : Dictionary(initialLoad)
         , enclosure(enclosure)
-        , attributes(0) {}
+        , attributes(0)
+        {}
 
 	Environment* getEnclosure() const { return enclosure; }
 	void setEnclosure(Environment* env) { enclosure = env; }
