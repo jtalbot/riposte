@@ -34,18 +34,18 @@ static inline Instruction const* strip_op(State& state, Instruction const& inst)
 
 static inline Instruction const* call_op(State& state, Instruction const& inst) {
     state.visible = true;
-	Heap::GlobalHeap.collect(state.global);
-	DECODE(a); BIND(a);
-	
+    Heap::GlobalHeap.collect(state.global);
+    DECODE(a); BIND(a);
+
     CompiledCall const& call = state.frame.code->calls[inst.b];
-	
+
     if(!a.isClosure())
         return StopDispatch(state, inst, state.internStr(
-		    (std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n").c_str()),
+            (std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n").c_str()),
             inst.c);
     Closure const& func = (Closure const&)a;
 
-	Environment* fenv =
+    Environment* fenv =
         (call.names.length() == 0 &&
          call.dotIndex >= (int64_t)call.arguments.length())
         ? FastMatchArgs(state, state.frame.environment, func, call)
@@ -54,9 +54,9 @@ static inline Instruction const* call_op(State& state, Instruction const& inst) 
 }
 
 static inline Instruction const* ret_op(State& state, Instruction const& inst) {
-	// we can return futures from functions, so don't BIND
-	DECODE(a);
-	
+    // we can return futures from functions, so don't BIND
+    DECODE(a);
+
     if(state.stack.size() == 1)
         _error("no function to return from, jumping to top level");
 
@@ -70,44 +70,44 @@ static inline Instruction const* ret_op(State& state, Instruction const& inst) {
                  && state.frame.isPromise == false) );
     }
 
-	REGISTER(0) = a;
-	Instruction const* returnpc = state.frame.returnpc;
+    REGISTER(0) = a;
+    Instruction const* returnpc = state.frame.returnpc;
     
     Value& onexit = state.frame.environment->insert(Strings::__onexit__);
     if(onexit.isObject() && !onexit.isNull()) {
         Promise::Init(onexit,
             state.frame.environment,
             Compiler::deferPromiseCompilation(state, onexit), false);
-		return force(state, (Promise const&)onexit,
+        return force(state, (Promise const&)onexit,
             state.frame.environment, Value::Nil(),
             1, &inst);
-	}
+    }
     
-	// We can free this environment for reuse
-	// as long as we don't return a closure...
-	// but also can't if an assignment to an 
+    // We can free this environment for reuse
+    // as long as we don't return a closure...
+    // but also can't if an assignment to an 
     // out of scope variable occurs (<<-, assign) with a value of a closure!
 #ifdef EPEE
-	if(!(a.isClosure() || a.isEnvironment() || a.isList())) {
-		state.traces.KillEnvironment(state.frame.environment);
-	}
+    if(!(a.isClosure() || a.isEnvironment() || a.isList())) {
+        state.traces.KillEnvironment(state.frame.environment);
+    }
 #endif
 
     state.pop();
 
 #ifdef EPEE
-	state.traces.LiveEnvironment(state.frame.environment, a);
+    state.traces.LiveEnvironment(state.frame.environment, a);
 #endif
-	return returnpc;
+    return returnpc;
 }
 
 static inline Instruction const* jmp_op(State& state, Instruction const& inst) {
-	return &inst+inst.a;
+    return &inst+inst.a;
 }
 
 static inline Instruction const* jc_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(c); BIND(c);
+    DECODE(c); BIND(c);
     Logical::Element cond;
     if(c.isLogical1())
         cond = c.c;
@@ -166,45 +166,45 @@ static inline Instruction const* jc_op(State& state, Instruction const& inst) {
 
 static inline Instruction const* forbegin_op(State& state, Instruction const& inst) {
     //state.visible = true;
-	// a = loop variable (e.g. i)
+    // a = loop variable (e.g. i)
     // b = loop vector(e.g. 1:100)
     // c = counter register
-	// following instruction is a jmp that contains offset
+    // following instruction is a jmp that contains offset
     Value const& b = REGISTER(inst.b);
-	BIND(b);
+    BIND(b);
     if(!b.isVector())
-		_error("Invalid for() loop sequence");
-	Vector const& v = (Vector const&)b;
-	if((int64_t)v.length() <= 0) {
-		return &inst+(&inst+1)->a;	// offset is in following JMP, dispatch together
-	} else {
+        _error("Invalid for() loop sequence");
+    Vector const& v = (Vector const&)b;
+    if((int64_t)v.length() <= 0) {
+        return &inst+(&inst+1)->a;    // offset is in following JMP, dispatch together
+    } else {
         String i = ((Character const&)CONSTANT(inst.a)).s;
-		Element2(v, 0, state.frame.environment->insert(i));
-		Integer::InitScalar(REGISTER(inst.c), 1);
-		Integer::InitScalar(REGISTER(inst.c+1), v.length());
-		return &inst+2;			// skip over following JMP
-	}
+        Element2(v, 0, state.frame.environment->insert(i));
+        Integer::InitScalar(REGISTER(inst.c), 1);
+        Integer::InitScalar(REGISTER(inst.c+1), v.length());
+        return &inst+2;            // skip over following JMP
+    }
 }
 
 static inline Instruction const* forend_op(State& state, Instruction const& inst) {
     //state.visible = true;
-	Value& counter = REGISTER(inst.c);
-	Value& limit = REGISTER(inst.c+1);
-	if(__builtin_expect(counter.i < limit.i, true)) {
+    Value& counter = REGISTER(inst.c);
+    Value& limit = REGISTER(inst.c+1);
+    if(__builtin_expect(counter.i < limit.i, true)) {
         String i = ((Character const&)CONSTANT(inst.a)).s;
-		Value const& b = REGISTER(inst.b);
-		Element2(b, counter.i, state.frame.environment->insert(i));
-		counter.i++;
-		return &inst+(&inst+1)->a;
-	} else {
-		return &inst+2;			// skip over following JMP
-	}
+        Value const& b = REGISTER(inst.b);
+        Element2(b, counter.i, state.frame.environment->insert(i));
+        counter.i++;
+        return &inst+(&inst+1)->a;
+    } else {
+        return &inst+2;            // skip over following JMP
+    }
 }
 
 static inline Instruction const* mov_op(State& state, Instruction const& inst) {
-	DECODE(a);
-	OUT(c) = a;
-	return &inst+1;
+    DECODE(a);
+    OUT(c) = a;
+    return &inst+1;
 }
 
 static inline Instruction const* invisible_op(State& state, Instruction const& inst) {
@@ -233,7 +233,7 @@ static inline Instruction const* withVisible_op(State& state, Instruction const&
 
 static inline Instruction const* external_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a);
+    DECODE(a);
 
     void* func = NULL;
     if(a.isCharacter1()) {
@@ -258,9 +258,9 @@ static inline Instruction const* external_op(State& state, Instruction const& in
     }
 
     uint64_t nargs = inst.b;
-	for(int64_t i = 0; i < nargs; i++) {
-		BIND(REGISTER(inst.a+i+1));
-	}
+    for(int64_t i = 0; i < nargs; i++) {
+        BIND(REGISTER(inst.a+i+1));
+    }
     try {
         typedef Value (*Func)(State&, Value const*);
         Func f = (Func)func;
@@ -273,7 +273,7 @@ static inline Instruction const* external_op(State& state, Instruction const& in
         _error(std::string("External function call failed with unknown error"));
     }
 
-	return &inst+1;
+    return &inst+1;
 }
 
 static inline Instruction const* map_op(State& state, Instruction const& inst) {
@@ -340,82 +340,100 @@ static inline Instruction const* fold_op(State& state, Instruction const& inst) 
 
 // LOAD_STORE_BYTECODES
 
-static inline Instruction const* load_op(State& state, Instruction const& inst) {
+static inline
+Instruction const* load_op(State& state, Instruction const& inst)
+{
     state.visible = true;
-	String s = ((Character const&)CONSTANT(inst.a)).s;
-	Environment* env;
-	Value const& v = state.frame.environment->getRecursive(s, env);
-	if(v.isObject()) {
-		OUT(c) = v;
-		return &inst+1;
-    }
-    else if(v.isPromise()) {
-        return force(state, (Promise const&)v, 
-            env, ((Character const&)CONSTANT(inst.a)),
-            inst.c, &inst+1);
-    }
-    else {
-        return StopDispatch(state, inst, state.internStr(
-            (std::string("Object '") + s->s + "' not found").c_str()), 
-            inst.c);
-    }
-}
+    String s = ((Character const&)CONSTANT(inst.a)).s;
 
-static inline Instruction const* loadfn_op(State& state, Instruction const& inst) {
-    state.visible = true;
-	String s = ((Character const&)CONSTANT(inst.a)).s;
-	Environment* env = state.frame.environment;
+    Environment* env;
+    Value const* v = state.frame.environment->getRecursive2(s, env);
 
-    // Iterate until we find a function
-    do {
-	    Value const& v = env->getRecursive(s, env);
-
-        if(v.isClosure()) {
-            OUT(c) = v;
+    if(v)
+    {
+        if(!v->isPromise())
+        {
+            OUT(c) = *v;
             return &inst+1;
         }
-	    else if(v.isPromise()) {
-            // Must return to this instruction to check if it's a function.
-            return force(state, (Promise const&)v, 
+        else
+        {
+            return force(state, (Promise const&)*v,
                 env, ((Character const&)CONSTANT(inst.a)),
-                inst.c, &inst);
+                inst.c, &inst+1);
         }
-        else if(v.isNil()) {
-            return StopDispatch(state, inst, state.internStr(
-                (std::string("Object '") + s->s + "' not found").c_str()), 
-                inst.c);
-        }
-        env = env->getEnclosure();
-	} while(env != 0);
+    }
 
-    _internalError("loadfn failed to find value");
+    return StopDispatch(state, inst, state.internStr(
+            (std::string("Object '") + s->s + "' not found").c_str()), 
+            inst.c);
+}
+
+static inline
+Instruction const* loadfn_op(State& state, Instruction const& inst)
+{
+    state.visible = true;
+    String s = ((Character const&)CONSTANT(inst.a)).s;
+
+    Environment* env = state.frame.environment;
+
+    // Iterate until we find a function
+    do
+    {
+        Value* v = env->getRecursive2(s, env);
+
+        if(v)
+        {
+            if(v->isClosure())
+            {
+                OUT(c) = *v;
+                return &inst+1;
+            }
+            else if(v->isPromise())
+            {
+                // Must return to this instruction to check if it's a function.
+                return force(state, (Promise const&)*v, 
+                    env, ((Character const&)CONSTANT(inst.a)),
+                    inst.c, &inst);
+            }
+            else
+            {
+                env = env->getEnclosure();
+            }
+        }
+
+    } while(env != 0);
+
+    return StopDispatch(state, inst, state.internStr(
+            (std::string("Object '") + s->s + "' not found").c_str()), 
+            inst.c);
 }
 
 static inline Instruction const* store_op(State& state, Instruction const& inst) {
     state.visible = false;
     String s = ((Character const&)CONSTANT(inst.a)).s; 
-	DECODE(c); // don't BIND
-	state.frame.environment->insert(s) = c;
-	return &inst+1;
+    DECODE(c); // don't BIND
+    state.frame.environment->insert(s) = c;
+    return &inst+1;
 }
 
 static inline Instruction const* storeup_op(State& state, Instruction const& inst) {
     state.visible = false;
-	// assign2 is always used to assign up at least one scope level...
-	// so start off looking up one level...
-	assert(state.frame.environment->getEnclosure() != 0);
+    // assign2 is always used to assign up at least one scope level...
+    // so start off looking up one level...
+    assert(state.frame.environment->getEnclosure() != 0);
 
-	DECODE(c); BIND(c);
-	
-	String s = ((Character const&)CONSTANT(inst.a)).s;
-	Environment* penv;
-	Value& dest = state.frame.environment->getEnclosure()->insertRecursive(s, penv);
+    DECODE(c); BIND(c);
+
+    String s = ((Character const&)CONSTANT(inst.a)).s;
+    Environment* penv;
+    Value& dest = state.frame.environment->getEnclosure()->insertRecursive(s, penv);
     if(!dest.isNil())
         dest = c;
     else
         state.global.global->insert(s) = c;
 
-	return &inst+1;
+    return &inst+1;
 }
 
 static inline Instruction const* force_op(State& state, Instruction const& inst) {
@@ -452,13 +470,13 @@ static inline Instruction const* dotsv_op(State& state, Instruction const& inst)
 
     Value const& t = state.frame.environment->get(Strings::__dots__);
 
-	if(!t.isList() ||
+    if(!t.isList() ||
        idx >= (int64_t)((List const&)t).length() ||
        idx < (int64_t)0)
         return StopDispatch(state, inst, state.internStr((std::string("The '...' list does not contain ") + intToStr(idx+1) + " elements").c_str()), inst.c);
-	
+
     Value const& v = ((List const&)t)[idx];
-   
+
     if(v.isObject()) {
         OUT(c) = v;
         return &inst+1;
@@ -487,30 +505,30 @@ static inline Instruction const* dotsc_op(State& state, Instruction const& inst)
 
 static inline Instruction const* dots_op(State& state, Instruction const& inst) {
     state.visible = true;
-	static const List empty(0);
+    static const List empty(0);
     List const& dots = 
         state.frame.environment->has(Strings::__dots__)
             ? (List const&)state.frame.environment->get(Strings::__dots__)
             : empty;
-	
-	Value& iter = REGISTER(inst.a);
-	Value& out = OUT(c);
 
-	// First time through, make a result vector...
-	if(iter.i == -1) {
-		Heap::GlobalHeap.collect(state.global);
-		out = List(dots.length());
-		memset(((List&)out).v(), 0, dots.length()*sizeof(List::Element));
-	    iter.i++;
+    Value& iter = REGISTER(inst.a);
+    Value& out = OUT(c);
+
+    // First time through, make a result vector...
+    if(iter.i == -1) {
+        Heap::GlobalHeap.collect(state.global);
+        out = List(dots.length());
+        memset(((List&)out).v(), 0, dots.length()*sizeof(List::Element));
+        iter.i++;
     }
-	
-	while(iter.i < (int64_t)dots.length()) {
-		Value const& v = dots[iter.i];
+
+    while(iter.i < (int64_t)dots.length()) {
+        Value const& v = dots[iter.i];
 
         if(v.isObject()) {
-		    BIND(v); // BIND since we don't yet support futures in lists
-		    ((List&)out)[iter.i] = v;
-		    iter.i++;
+            BIND(v); // BIND since we don't yet support futures in lists
+            ((List&)out)[iter.i] = v;
+            iter.i++;
         }
         else if(v.isPromise()) {
             return force(state, (Promise const&)v,
@@ -519,21 +537,21 @@ static inline Instruction const* dots_op(State& state, Instruction const& inst) 
         }
         else if(v.isNil()) {
             // We're allowing Nils to escape now
-		    ((List&)out)[iter.i] = v;
-		    iter.i++;
+            ((List&)out)[iter.i] = v;
+            iter.i++;
             /*return StopDispatch(state, inst, state.internStr(
                 "argument is missing, with no default"),
                 inst.c);*/
         }
-	}
-	
-	// check to see if we need to add names
+    }
+
+    // check to see if we need to add names
     if(state.frame.environment->get(Strings::__names__).isCharacter() 
         && dots.length() > 0) {
         Dictionary* d = new Dictionary(1);
         d->insert(Strings::names) = state.frame.environment->get(Strings::__names__);
         ((Object&)out).attributes(d);
-	}
+    }
     return &inst+1;
 }
 
@@ -605,9 +623,9 @@ static inline Instruction const* pr_expr_op(State& state, Instruction const& ins
 
     if(a.isEnvironment() && b.isCharacter() && ((Character const&)b).length() == 1) {
         REnvironment const& env = ((REnvironment const&)a);
-	    String s = ((Character const&)b).s;
+        String s = ((Character const&)b).s;
 
-	    Value v = env.environment()->get(s);
+        Value v = env.environment()->get(s);
         if(v.isPromise())
             v = ((Promise const&)v).code()->expression;
         OUT(c) = v;
@@ -638,13 +656,13 @@ static inline Instruction const* pr_env_op(State& state, Instruction const& inst
     // TODO: check types
 
     REnvironment const& env = ((REnvironment const&)a);
-	String s = ((Character const&)b).s;
-	Value v = env.environment()->get(s);
+    String s = ((Character const&)b).s;
+    Value v = env.environment()->get(s);
     if(v.isPromise())
         REnvironment::Init(v, ((Promise const&)v).environment());
     else
         v = Null::Singleton();
-	OUT(c) = v;
+    OUT(c) = v;
     return &inst+1;
 }
 
@@ -652,34 +670,34 @@ static inline Instruction const* pr_env_op(State& state, Instruction const& inst
 
 static inline Instruction const* id_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a);
+    DECODE(a);
     DECODE(b);
 
-	OUT(c) = Id(a,b) ? Logical::True() : Logical::False();
+    OUT(c) = Id(a,b) ? Logical::True() : Logical::False();
     return &inst+1;
 }
 
 static inline Instruction const* nid_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a);
+    DECODE(a);
     DECODE(b);
 
-	OUT(c) = Id(a,b) ? Logical::False() : Logical::True();
+    OUT(c) = Id(a,b) ? Logical::False() : Logical::True();
     return &inst+1;
 }
 
 static inline Instruction const* isnil_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a);
-	OUT(c) = a.isNil() ? Logical::True() : Logical::False();
+    DECODE(a);
+    OUT(c) = a.isNil() ? Logical::True() : Logical::False();
     return &inst+1;
 }
 
 static inline Instruction const* type_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a);
+    DECODE(a);
 #ifdef EPEE
-	switch(state.traces.futureType(a)) {
+    switch(state.traces.futureType(a)) {
 #else
     switch(a.type()) {
 #endif
@@ -695,36 +713,36 @@ static inline Instruction const* type_op(State& state, Instruction const& inst) 
             OUT(c) = Character::c(state.internStr(std::string("Unknown type (") + intToStr(a.type()) + ")"));
             break;
     }
-	return &inst+1;
+    return &inst+1;
 }
 
 static inline Instruction const* length_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a);
-	if(a.isVector())
-		Integer::InitScalar(OUT(c), ((Vector const&)a).length());
+    DECODE(a);
+    if(a.isVector())
+        Integer::InitScalar(OUT(c), ((Vector const&)a).length());
 #ifdef EPEE
-	else if(a.isFuture()) {
-		IRNode::Shape shape = state.traces.futureShape(a);
-		if(shape.split < 0 && shape.filter < 0) {
-			Integer::InitScalar(OUT(c), shape.length);
-		} else {
-			OUT(c) = state.traces.EmitUnary<CountFold>(state.frame.environment, IROpCode::length, a, 0);
-			state.traces.OptBind(state, OUT(c));
-		}
-	}
+    else if(a.isFuture()) {
+        IRNode::Shape shape = state.traces.futureShape(a);
+        if(shape.split < 0 && shape.filter < 0) {
+            Integer::InitScalar(OUT(c), shape.length);
+        } else {
+            OUT(c) = state.traces.EmitUnary<CountFold>(state.frame.environment, IROpCode::length, a, 0);
+            state.traces.OptBind(state, OUT(c));
+        }
+    }
 #endif
-	else if(((Object const&)a).hasAttributes()) { 
-		return GenericDispatch(state, inst, Strings::length, a, inst.c); 
-	} else {
-		Integer::InitScalar(OUT(c), 1);
-	}
-	return &inst+1;
+    else if(((Object const&)a).hasAttributes()) { 
+        return GenericDispatch(state, inst, Strings::length, a, inst.c); 
+    } else {
+        Integer::InitScalar(OUT(c), 1);
+    }
+    return &inst+1;
 }
 
 static inline Instruction const* get_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a); DECODE(b);
+    DECODE(a); DECODE(b);
     if(GetFast(state, a, b, OUT(c)))
         return &inst+1;
     else {
@@ -741,25 +759,25 @@ static inline Instruction const* get_op(State& state, Instruction const& inst) {
 
 static inline Instruction const* set_op(State& state, Instruction const& inst) {
     state.visible = true;
-	// a = value, b = index, c = dest
-	DECODE(a); DECODE(b); DECODE(c);
-	BIND(b);
+    // a = value, b = index, c = dest
+    DECODE(a); DECODE(b); DECODE(c);
+    BIND(b);
 
 #ifdef EPEE
-	if(a.isFuture() && (c.isVector() || c.isFuture())) {
-		if(b.isInteger() && ((Integer const&)b).length() == 1) {
-			OUT(c) = state.traces.EmitSStore(state.frame.environment, c, ((Integer&)b)[0], a);
-			return &inst+1;
-		}
-		else if(b.isDouble() && ((Double const&)b).length() == 1) {
-			OUT(c) = state.traces.EmitSStore(state.frame.environment, c, ((Double&)b)[0], a);
-			return &inst+1;
-		}
-	}
+    if(a.isFuture() && (c.isVector() || c.isFuture())) {
+        if(b.isInteger() && ((Integer const&)b).length() == 1) {
+            OUT(c) = state.traces.EmitSStore(state.frame.environment, c, ((Integer&)b)[0], a);
+            return &inst+1;
+        }
+        else if(b.isDouble() && ((Double const&)b).length() == 1) {
+            OUT(c) = state.traces.EmitSStore(state.frame.environment, c, ((Double&)b)[0], a);
+            return &inst+1;
+        }
+    }
 #endif
 
-	BIND(a);
-	BIND(c);
+    BIND(a);
+    BIND(c);
 
     if( !((Object const&)c).hasAttributes() ) {
         if(c.isVector() && ( b.isDouble1() || b.isInteger1() )) {
@@ -767,7 +785,7 @@ static inline Instruction const* set_op(State& state, Instruction const& inst) {
             return &inst+1;
         }
         else if(c.isEnvironment() && b.isCharacter1()) {
-	        String s = ((Character const&)b).s;
+            String s = ((Character const&)b).s;
             if(a.isNil())
                 ((REnvironment&)c).environment()->remove(s);
             else
@@ -777,7 +795,7 @@ static inline Instruction const* set_op(State& state, Instruction const& inst) {
         }
         else if(c.isClosure() && b.isCharacter1()) {
             //Closure const& f = (Closure const&)c;
-	        //String s = ((Character const&)b).s;
+            //String s = ((Character const&)b).s;
             _error("Assignment to function members is not yet implemented");
         }
     }
@@ -786,40 +804,40 @@ static inline Instruction const* set_op(State& state, Instruction const& inst) {
 
 static inline Instruction const* getsub_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a); DECODE(b);
+    DECODE(a); DECODE(b);
 
-	if(a.isVector() && !((Object const&)a).hasAttributes()) {
-		if(b.isDouble1()
+    if(a.isVector() && !((Object const&)a).hasAttributes()) {
+        if(b.isDouble1()
             && (int64_t)(b.d-1) >= 0
             && (int64_t)(b.d-1) < ((Vector const&)a).length()) { 
             Element(a, b.d-1, OUT(c)); return &inst+1; }
-		else if(b.isInteger1()
+        else if(b.isInteger1()
             && (b.i-1) >= 0
             && (b.i-1) < ((Vector const&)a).length()) { 
             Element(a, b.i-1, OUT(c)); return &inst+1; }
-	}
+    }
 
 #ifdef EPEE
-	if( state.traces.isTraceable(a, b) 
-		&& state.traces.futureType(b) == Type::Logical 
-		&& state.traces.futureShape(a) == state.traces.futureShape(b)) {
-		OUT(c) = state.traces.EmitFilter(state.frame.environment, a, b);
-		state.traces.OptBind(state, OUT(c));
-		return &inst+1;
-	}
+    if( state.traces.isTraceable(a, b) 
+        && state.traces.futureType(b) == Type::Logical 
+        && state.traces.futureShape(a) == state.traces.futureShape(b)) {
+        OUT(c) = state.traces.EmitFilter(state.frame.environment, a, b);
+        state.traces.OptBind(state, OUT(c));
+        return &inst+1;
+    }
 #endif
 
-	BIND(a);
+    BIND(a);
 
 #ifdef EPEE
-	if(state.traces.isTraceable(a, b) 
-		&& (state.traces.futureType(b) == Type::Integer 
-			|| state.traces.futureType(b) == Type::Double)) {
-		OUT(c) = state.traces.EmitGather(state.frame.environment, a, b);
-		state.traces.OptBind(state, OUT(c));
-		return &inst+1;
-	}
-#endif	
+    if(state.traces.isTraceable(a, b) 
+        && (state.traces.futureType(b) == Type::Integer 
+            || state.traces.futureType(b) == Type::Double)) {
+        OUT(c) = state.traces.EmitGather(state.frame.environment, a, b);
+        state.traces.OptBind(state, OUT(c));
+        return &inst+1;
+    }
+#endif
 
     BIND(b);
 
@@ -848,31 +866,31 @@ static inline Instruction const* getsub_op(State& state, Instruction const& inst
 
 static inline Instruction const* setsub_op(State& state, Instruction const& inst) {
     state.visible = true;
-	// a = value, b = index, c = dest 
-	DECODE(a); DECODE(b); DECODE(c); 
+    // a = value, b = index, c = dest 
+    DECODE(a); DECODE(b); DECODE(c); 
     BIND(b); BIND(c);
 
-#ifdef EPEE	
-	if(a.isFuture() && (c.isVector() || c.isFuture())) {
-		if(b.isInteger() && ((Integer const&)b).length() == 1) {
-			OUT(c) = state.traces.EmitSStore(state.frame.environment, c, ((Integer&)b)[0], a);
-			return &inst+1;
-		}
-		else if(b.isDouble() && ((Double const&)b).length() == 1) {
-			OUT(c) = state.traces.EmitSStore(state.frame.environment, c, ((Double&)b)[0], a);
-			return &inst+1;
-		}
-	}
+#ifdef EPEE
+    if(a.isFuture() && (c.isVector() || c.isFuture())) {
+        if(b.isInteger() && ((Integer const&)b).length() == 1) {
+            OUT(c) = state.traces.EmitSStore(state.frame.environment, c, ((Integer&)b)[0], a);
+            return &inst+1;
+        }
+        else if(b.isDouble() && ((Double const&)b).length() == 1) {
+            OUT(c) = state.traces.EmitSStore(state.frame.environment, c, ((Double&)b)[0], a);
+            return &inst+1;
+        }
+    }
 #endif
 
-	BIND(a);
+    BIND(a);
 
     if( !((Object const&)c).hasAttributes() ) {
         if(c.isVector() && ( b.isDouble() || b.isInteger() || b.isLogical() )) {
             SubsetAssign(state, c, true, b, a, OUT(c));
             return &inst+1;
         }
-	}
+    }
     if(c.isEnvironment() && b.isCharacter()) {
         REnvironment const& env = ((REnvironment const&)c);
         Character const& i = ((Character const&)b);
@@ -911,7 +929,7 @@ static inline Instruction const* setsub_op(State& state, Instruction const& inst
         return &inst+1;
     }
 
-	return GenericDispatch(state, inst, Strings::bracketAssign, c, b, a, inst.c); 
+    return GenericDispatch(state, inst, Strings::bracketAssign, c, b, a, inst.c); 
 }
 
 static inline Instruction const* getenv_op(State& state, Instruction const& inst) {
@@ -978,11 +996,11 @@ static inline Instruction const* setenv_op(State& state, Instruction const& inst
 
 static inline Instruction const* getattr_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a);
-	DECODE(b); BIND(b);
-	if(a.isObject() && b.isCharacter1()) {
-		String name = ((Character const&)b)[0];
-		Object const& o = (Object const&)a;
+    DECODE(a);
+    DECODE(b); BIND(b);
+    if(a.isObject() && b.isCharacter1()) {
+        String name = ((Character const&)b)[0];
+        Object const& o = (Object const&)a;
         if(o.isEnvironment()) {
             if(((REnvironment&)o).environment()->hasAttributes() &&
                ((REnvironment&)o).environment()->getAttributes()->has(name))
@@ -996,20 +1014,20 @@ static inline Instruction const* getattr_op(State& state, Instruction const& ins
             else
                 OUT(c) = Null::Singleton();
         }
-		return &inst+1;
-	}
+        return &inst+1;
+    }
     printf("%d %d\n", a.type(), b.type());
-	_error("Invalid attrget operation");
+    _error("Invalid attrget operation");
 }
 
 static inline Instruction const* setattr_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(c);
-	DECODE(b); BIND(b);
-	DECODE(a); BIND(a);
-	if(c.isObject() && b.isCharacter1()) {
-		String name = ((Character const&)b)[0];
-		Object o = (Object const&)c;
+    DECODE(c);
+    DECODE(b); BIND(b);
+    DECODE(a); BIND(a);
+    if(c.isObject() && b.isCharacter1()) {
+        String name = ((Character const&)b)[0];
+        Object o = (Object const&)c;
         if(a.isNil() || a.isNull()) {
             if(o.isEnvironment() &&
                 ((REnvironment&)o).environment()->hasAttributes() &&
@@ -1017,10 +1035,10 @@ static inline Instruction const* setattr_op(State& state, Instruction const& ins
                 if(((REnvironment&)o).environment()->getAttributes()->Size() > 1) {
                     Dictionary* d = ((REnvironment&)o).environment()->getAttributes()->clone(0);
                     d->remove(name);
-		            ((REnvironment&)o).environment()->setAttributes(d);
+                    ((REnvironment&)o).environment()->setAttributes(d);
                 }
                 else {
-		            ((REnvironment&)o).environment()->setAttributes(NULL);
+                    ((REnvironment&)o).environment()->setAttributes(NULL);
                 }
             }
             else if(o.hasAttributes()
@@ -1028,7 +1046,7 @@ static inline Instruction const* setattr_op(State& state, Instruction const& ins
                 if(o.attributes()->Size() > 1) {
                     Dictionary* d = o.attributes()->clone(0);
                     d->remove(name);
-		            o.attributes(d);
+                    o.attributes(d);
                 }
                 else {
                     o.attributes(NULL);
@@ -1057,9 +1075,9 @@ static inline Instruction const* setattr_op(State& state, Instruction const& ins
                 o.attributes(d);
             }
         }
-		OUT(c) = o;
-		return &inst+1;
-	}
+        OUT(c) = o;
+        return &inst+1;
+    }
     
     return StopDispatch(state, inst, state.internStr(
             "Invalid setattr operation"), 
@@ -1089,9 +1107,9 @@ static inline Instruction const* attributes_op(State& state, Instruction const& 
                 n[j] = i.string();
                 v[j] = i.value();
             }
-			Dictionary* r = new Dictionary(1);
-			r->insert(Strings::names) = n;
-			v.attributes(r);
+            Dictionary* r = new Dictionary(1);
+            r->insert(Strings::names) = n;
+            v.attributes(r);
             OUT(c) = v;
         }
     }
@@ -1103,23 +1121,23 @@ static inline Instruction const* attributes_op(State& state, Instruction const& 
 
 static inline Instruction const* strip_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a);
-	Value& c = OUT(c);
-	c = a;
-	((Object&)c).attributes(0);
-	return &inst+1;
+    DECODE(a);
+    Value& c = OUT(c);
+    c = a;
+    ((Object&)c).attributes(0);
+    return &inst+1;
 }
 
 static inline Instruction const* as_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a); BIND(a);
+    DECODE(a); BIND(a);
     DECODE(b); BIND(b);
     if(!b.isCharacter1()) {
         return StopDispatch(state, inst, state.internStr(
             "invalid type argument to 'as'"), 
             inst.c);
     }
-	String type = b.s;
+    String type = b.s;
     try {
         if(type == Strings::Null)
             OUT(c) = As<Null>(state, a);
@@ -1147,7 +1165,7 @@ static inline Instruction const* as_op(State& state, Instruction const& inst) {
     }
 
     // Add support for futures
-	return &inst+1; 
+    return &inst+1;
 }
 
 // ENVIRONMENT_BYTECODES
@@ -1231,6 +1249,7 @@ static inline Instruction const* env_get_op(State& state, Instruction const& ins
     return &inst+1;
 }
 
+// TODO: This isn't implemented correctly yet
 static inline Instruction const* env_set_op(State& state, Instruction const& inst) {
     // a = index, b = environment, c = value
 
@@ -1387,10 +1406,10 @@ static inline Instruction const* env_global_op(State& state, Instruction const& 
 
 static inline Instruction const* fn_new_op(State& state, Instruction const& inst) {
     state.visible = true;
-	Value const& function = CONSTANT(inst.a);
-	Value& out = OUT(c);
-	Closure::Init(out, ((Closure const&)function).prototype(), state.frame.environment);
-	return &inst+1;
+    Value const& function = CONSTANT(inst.a);
+    Value& out = OUT(c);
+    Closure::Init(out, ((Closure const&)function).prototype(), state.frame.environment);
+    return &inst+1;
 }
 
 
@@ -1399,7 +1418,7 @@ static inline Instruction const* fn_new_op(State& state, Instruction const& inst
 #define OP(Name, string, Group, Func) \
 static inline Instruction const* Name##_op(State& state, Instruction const& inst) { \
     state.visible = true; \
-	DECODE(a);	\
+    DECODE(a);    \
     if( Group##Fast<Name##VOp>( state, NULL, a, OUT(c) ) ) \
         return &inst+1; \
     else { \
@@ -1419,8 +1438,8 @@ UNARY_FOLD_SCAN_BYTECODES(OP)
 #define OP(Name, string, Group, Func) \
 static inline Instruction const* Name##_op(State& state, Instruction const& inst) { \
     state.visible = true; \
-	DECODE(a);	\
-	DECODE(b);	\
+    DECODE(a);    \
+    DECODE(b);    \
     if( Group##Fast<Name##VOp>( state, NULL, a, b, OUT(c) ) ) \
         return &inst+1; \
     else { \
@@ -1439,99 +1458,99 @@ BINARY_BYTECODES(OP)
 
 static inline Instruction const* ifelse_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a);
-	DECODE(b);
-	DECODE(c);
-	if(c.isLogical1()) {
-		OUT(c) = Logical::isTrue(c.c) ? b : a;
-		return &inst+1; 
-	}
-	else if(c.isInteger1()) {
-		OUT(c) = c.i ? b : a;
-		return &inst+1; 
-	}
-	else if(c.isDouble1()) {
-		OUT(c) = c.d ? b : a;
-		return &inst+1; 
-	}
+    DECODE(a);
+    DECODE(b);
+    DECODE(c);
+    if(c.isLogical1()) {
+        OUT(c) = Logical::isTrue(c.c) ? b : a;
+        return &inst+1; 
+    }
+    else if(c.isInteger1()) {
+        OUT(c) = c.i ? b : a;
+        return &inst+1; 
+    }
+    else if(c.isDouble1()) {
+        OUT(c) = c.d ? b : a;
+        return &inst+1; 
+    }
 #ifdef EPEE
-	if(state.traces.isTraceable<IfElse>(a,b,c)) {
-		OUT(c) = state.traces.EmitIfElse(state.frame.environment, a, b, c);
-		state.traces.OptBind(state, OUT(c));
-		return &inst+1;
-	}
+    if(state.traces.isTraceable<IfElse>(a,b,c)) {
+        OUT(c) = state.traces.EmitIfElse(state.frame.environment, a, b, c);
+        state.traces.OptBind(state, OUT(c));
+        return &inst+1;
+    }
 #endif
-	BIND(a); BIND(b); BIND(c);
+    BIND(a); BIND(b); BIND(c);
 
     IfElseDispatch(state, NULL, b, a, c, OUT(c));
-	return &inst+1; 
+    return &inst+1; 
 }
 
 static inline Instruction const* split_op(State& state, Instruction const& inst) {
     state.visible = true;
 #ifdef EPEE
-	DECODE(a); BIND(a);
-	DECODE(b);
-	DECODE(c);
-	int64_t levels = As<Integer>(state, a)[0];
-	if(state.traces.isTraceable<Split>(b,c)) {
-		OUT(c) = state.traces.EmitSplit(state.frame.environment, c, b, levels);
-		state.traces.OptBind(state, OUT(c));
-		return &inst+1;
-	}
-	BIND(a); BIND(b); BIND(c);
+    DECODE(a); BIND(a);
+    DECODE(b);
+    DECODE(c);
+    int64_t levels = As<Integer>(state, a)[0];
+    if(state.traces.isTraceable<Split>(b,c)) {
+        OUT(c) = state.traces.EmitSplit(state.frame.environment, c, b, levels);
+        state.traces.OptBind(state, OUT(c));
+        return &inst+1;
+    }
+    BIND(a); BIND(b); BIND(c);
 #endif
 
-	_error("split not defined in scalar yet");
-	return &inst+1; 
+    _error("split not defined in scalar yet");
+    return &inst+1; 
 }
 
 static inline Instruction const* vector_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a); BIND(a);
-	DECODE(b); BIND(b);
-	String stype = As<Character>(state, a)[0];
-	Type::Enum type = string2Type( stype );
-	int64_t l = As<Integer>(state, b)[0];
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+    String stype = As<Character>(state, a)[0];
+    Type::Enum type = string2Type( stype );
+    int64_t l = As<Integer>(state, b)[0];
 
-#ifdef EPEE	
-	if(state.global.epeeEnabled 
-		&& (type == Type::Double || type == Type::Integer || type == Type::Logical)
-		&& l >= TRACE_VECTOR_WIDTH) {
-		OUT(c) = state.traces.EmitConstant(state.frame.environment, type, l, 0);
-		state.traces.OptBind(state, OUT(c));
-		return &inst+1;
-	}
+#ifdef EPEE
+    if(state.global.epeeEnabled
+        && (type == Type::Double || type == Type::Integer || type == Type::Logical)
+        && l >= TRACE_VECTOR_WIDTH) {
+        OUT(c) = state.traces.EmitConstant(state.frame.environment, type, l, 0);
+        state.traces.OptBind(state, OUT(c));
+        return &inst+1;
+    }
 #endif
 
-	if(type == Type::Logical) {
-		Logical v(l);
-		for(int64_t i = 0; i < l; i++) v[i] = Logical::FalseElement;
-		OUT(c) = v;
-	} else if(type == Type::Integer) {
-		Integer v(l);
-		for(int64_t i = 0; i < l; i++) v[i] = 0;
-		OUT(c) = v;
-	} else if(type == Type::Double) {
-		Double v(l);
-		for(int64_t i = 0; i < l; i++) v[i] = 0;
-		OUT(c) = v;
-	} else if(type == Type::Character) {
-		Character v(l);
-		for(int64_t i = 0; i < l; i++) v[i] = Strings::empty;
-		OUT(c) = v;
-	} else if(type == Type::Raw) {
-		Raw v(l);
-		for(int64_t i = 0; i < l; i++) v[i] = 0;
-		OUT(c) = v;
-	} else if(type == Type::List) {
+    if(type == Type::Logical) {
+        Logical v(l);
+        for(int64_t i = 0; i < l; i++) v[i] = Logical::FalseElement;
+        OUT(c) = v;
+    } else if(type == Type::Integer) {
+        Integer v(l);
+        for(int64_t i = 0; i < l; i++) v[i] = 0;
+        OUT(c) = v;
+    } else if(type == Type::Double) {
+        Double v(l);
+        for(int64_t i = 0; i < l; i++) v[i] = 0;
+        OUT(c) = v;
+    } else if(type == Type::Character) {
+        Character v(l);
+        for(int64_t i = 0; i < l; i++) v[i] = Strings::empty;
+        OUT(c) = v;
+    } else if(type == Type::Raw) {
+        Raw v(l);
+        for(int64_t i = 0; i < l; i++) v[i] = 0;
+        OUT(c) = v;
+    } else if(type == Type::List) {
         List v(l);
         for(int64_t i = 0; i < l; i++) v[i] = Null::Singleton();
         OUT(c) = v;
     } else {
-		_error(std::string("Invalid type in vector: ") + stype->s);
-	} 
-	return &inst+1;
+        _error(std::string("Invalid type in vector: ") + stype->s);
+    } 
+    return &inst+1;
 }
 
 static inline Instruction const* seq_op(State& state, Instruction const& inst) {
@@ -1554,41 +1573,41 @@ static inline Instruction const* seq_op(State& state, Instruction const& inst) {
 
 static inline Instruction const* index_op(State& state, Instruction const& inst) {
     state.visible = true;
-	// c = n, b = each, a = length
-	DECODE(a); BIND(a);
-	DECODE(b); BIND(b);
-	DECODE(c); BIND(c);
+    // c = n, b = each, a = length
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+    DECODE(c); BIND(c);
 
-	int64_t n = As<Integer>(state, c)[0];
-	int64_t each = As<Integer>(state, b)[0];
-	int64_t len = As<Integer>(state, a)[0];
+    int64_t n = As<Integer>(state, c)[0];
+    int64_t each = As<Integer>(state, b)[0];
+    int64_t len = As<Integer>(state, a)[0];
 
-#ifdef EPEE	
-	if(len >= TRACE_VECTOR_WIDTH) {
-		OUT(c) = state.traces.EmitIndex(state.frame.environment, len, (int64_t)n, (int64_t)each);
-		state.traces.OptBind(state, OUT(c));
-		return &inst+1;
-	}
+#ifdef EPEE
+    if(len >= TRACE_VECTOR_WIDTH) {
+        OUT(c) = state.traces.EmitIndex(state.frame.environment, len, (int64_t)n, (int64_t)each);
+        state.traces.OptBind(state, OUT(c));
+        return &inst+1;
+    }
 #endif
 
-	OUT(c) = Repeat((int64_t)n, (int64_t)each, len);
-	return &inst+1;
+    OUT(c) = Repeat((int64_t)n, (int64_t)each, len);
+    return &inst+1;
 }
 
 static inline Instruction const* random_op(State& state, Instruction const& inst) {
     state.visible = true;
-	DECODE(a); BIND(a);
+    DECODE(a); BIND(a);
 
-	int64_t len = As<Integer>(state, a)[0];
-	
-	/*if(len >= TRACE_VECTOR_WIDTH) {
-		OUT(c) = state.EmitRandom(state.frame.environment, len);
-		state.OptBind(OUT(c));
-		return &inst+1;
-	}*/
+    int64_t len = As<Integer>(state, a)[0];
 
-	OUT(c) = RandomVector(state, len);
-	return &inst+1;
+    /*if(len >= TRACE_VECTOR_WIDTH) {
+        OUT(c) = state.EmitRandom(state.frame.environment, len);
+        state.OptBind(OUT(c));
+        return &inst+1;
+    }*/
+
+    OUT(c) = RandomVector(state, len);
+    return &inst+1;
 }
 
 static inline Instruction const* semijoin_op(State& state, Instruction const& inst) {
@@ -1599,7 +1618,7 @@ static inline Instruction const* semijoin_op(State& state, Instruction const& in
     // assumes that the two arguments are the same type...
     if(a.type() != b.type())
         return StopDispatch(state, inst, state.internStr(
-		    std::string("Arguments to semijoin must have the same type\n").c_str()),
+            std::string("Arguments to semijoin must have the same type\n").c_str()),
             inst.c);
     assert(a.type() == b.type());
     OUT(c) = Semijoin(a, b);
@@ -1654,7 +1673,7 @@ bool interpret(State& state, Instruction const* pc) {
             case ByteCode::stop: { 
                 return false; 
             } break;
-	        case ByteCode::done: { 
+            case ByteCode::done: { 
                 pc = done_op(state, *pc);
                 if(pc == 0)
                     return true;
@@ -1707,7 +1726,7 @@ bool profile(State& state, Instruction const* pc) {
             case ByteCode::stop: { 
                 return false; 
             } break;
-	        case ByteCode::done: { 
+            case ByteCode::done: { 
                 return true;
             }
         };
@@ -1722,7 +1741,7 @@ Value State::evalTopLevel(Code const* code, Environment* environment, int64_t re
         ualarm(1000,1000);
     }
 
-	Value result = eval(code, environment, resultSlot);
+    Value result = eval(code, environment, resultSlot);
 
     ualarm(0,0);
 
@@ -1730,24 +1749,24 @@ Value State::evalTopLevel(Code const* code, Environment* environment, int64_t re
 }
 
 Value State::eval(Code const* code) {
-	return eval(code, frame.environment, frame.code->registers);
+    return eval(code, frame.environment, frame.code->registers);
 }
 
 Value State::eval(Code const* code, Environment* environment, int64_t resultSlot) {
-	uint64_t stackSize = stack.size();
+    uint64_t stackSize = stack.size();
     StackFrame oldFrame = frame;
 
-	// make room for the result
-	Instruction const* run = buildStackFrame(*this, environment, code, resultSlot, 0);
+    // make room for the result
+    Instruction const* run = buildStackFrame(*this, environment, code, resultSlot, 0);
 
-	try {
-		bool success = global.profile
+    try {
+        bool success = global.profile
             ? profile(*this, run)
             : interpret(*this, run);
         if(success) {
             if(stackSize != stack.size())
-		        _error("Stack was the wrong size at the end of eval");
-		    return frame.registers[resultSlot];
+                _error("Stack was the wrong size at the end of eval");
+            return frame.registers[resultSlot];
         }
         else {
             stack.resize(stackSize);
@@ -1757,25 +1776,25 @@ Value State::eval(Code const* code, Environment* environment, int64_t resultSlot
     } catch(...) {
         stack.resize(stackSize);
         frame = oldFrame;
-	    throw;
+        throw;
     }
 }
 
 Value State::eval(Promise const& p, int64_t resultSlot) {
     
-	uint64_t stackSize = stack.size();
+    uint64_t stackSize = stack.size();
     StackFrame oldFrame = frame;
     
     Instruction const* run = force(*this, p, NULL, Value::Nil(), resultSlot, 0);
    
     try {
-		bool success = global.profile
+        bool success = global.profile
             ? profile(*this, run)
             : interpret(*this, run);
         if(success) {
             if(stackSize != stack.size())
-		        _error("Stack was the wrong size at the end of eval");
-		    return frame.registers[resultSlot];
+                _error("Stack was the wrong size at the end of eval");
+            return frame.registers[resultSlot];
         }
         else {
             stack.resize(stackSize);
@@ -1785,7 +1804,7 @@ Value State::eval(Promise const& p, int64_t resultSlot) {
     } catch(...) {
         stack.resize(stackSize);
         frame = oldFrame;
-	    throw;
+        throw;
     } 
 }
 
@@ -1807,8 +1826,8 @@ State::State(Global& global, TaskQueue* queue)
     , random(0)
     , queue(queue)
 {
-	registers = new Value[DEFAULT_NUM_REGISTERS];
-	frame.registers = registers;
+    registers = new Value[DEFAULT_NUM_REGISTERS];
+    frame.registers = registers;
     frame.environment = NULL;
     frame.code = NULL;
     frame.isPromise = false;
@@ -1816,28 +1835,28 @@ State::State(Global& global, TaskQueue* queue)
 }
 
 Global::Global(uint64_t states, int64_t argc, char** argv) 
-	: profile(false)
+    : profile(false)
     , verbose(false)
     , epeeEnabled(true)
     , format(Riposte::RiposteFormat)
     , queues(states) {
 
     // initialize string table
-	#define ENUM_STRING_TABLE(name, str) \
+    #define ENUM_STRING_TABLE(name, str) \
         Strings::name = strings.in(std::string(str));
     STRINGS(ENUM_STRING_TABLE);
    
     // initialize basic environments 
-	this->empty = new Environment(1,(Environment*)0);
+    this->empty = new Environment(1,(Environment*)0);
     this->global = new Environment(1,empty);
 
     this->apiStack = NULL;
 
     // intialize arguments list
-	arguments = Character(argc);
-	for(int64_t i = 0; i < argc; i++) {
-		arguments[i] = internStr(std::string(argv[i]));
-	}
+    arguments = Character(argc);
+    for(int64_t i = 0; i < argc; i++) {
+        arguments[i] = internStr(std::string(argv[i]));
+    }
 
     promiseCode = new (Code::Finalize) Code();
     promiseCode->bc.push_back(Instruction(ByteCode::force, 2, 0, 2));
@@ -1848,24 +1867,24 @@ Global::Global(uint64_t states, int64_t argc, char** argv)
 }
 
 void Code::printByteCode(Global const& global) const {
-	std::cout << "Code: " << intToHexStr((int64_t)this) << std::endl;
-	std::cout << "\tRegisters: " << registers << std::endl;
-	if(constants.size() > 0) {
-		std::cout << "\tConstants: " << std::endl;
-		for(int64_t i = 0; i < (int64_t)constants.size(); i++)
-			std::cout << "\t\t" << i << ":\t" << global.stringify(constants[i]) << std::endl;
-	}
-	if(bc.size() > 0) {
-		std::cout << "\tCode: " << std::endl;
-		for(int64_t i = 0; i < (int64_t)bc.size(); i++) {
-			std::cout << std::hex << &bc[i] << std::dec << "\t" << i << ":\t" << bc[i].toString();
-			if(bc[i].bc == ByteCode::call) {
-				std::cout << "\t\t(arguments: " << calls[bc[i].b].arguments.length() << ")";
-			}
-			std::cout << std::endl;
-		}
-	}
-	std::cout << std::endl;
+    std::cout << "Code: " << intToHexStr((int64_t)this) << std::endl;
+    std::cout << "\tRegisters: " << registers << std::endl;
+    if(constants.size() > 0) {
+        std::cout << "\tConstants: " << std::endl;
+        for(int64_t i = 0; i < (int64_t)constants.size(); i++)
+            std::cout << "\t\t" << i << ":\t" << global.stringify(constants[i]) << std::endl;
+    }
+    if(bc.size() > 0) {
+        std::cout << "\tCode: " << std::endl;
+        for(int64_t i = 0; i < (int64_t)bc.size(); i++) {
+            std::cout << std::hex << &bc[i] << std::dec << "\t" << i << ":\t" << bc[i].toString();
+            if(bc[i].bc == ByteCode::call) {
+                std::cout << "\t\t(arguments: " << calls[bc[i].b].arguments.length() << ")";
+            }
+            std::cout << std::endl;
+        }
+    }
+    std::cout << std::endl;
 }
 
 struct ProfileNode {

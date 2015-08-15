@@ -873,6 +873,13 @@ SEXP Rf_mkChar(const char * str) {
     return ToSEXP(r);
 }
 
+SEXP Rf_mkCharLen(const char * str, int len) {
+    String s = global->internStr(std::string(str, len));
+    Value r;
+    ScalarString::Init(r, s);
+    return ToSEXP(r);
+}
+
 int Rf_ncols(SEXP) {
     _NYI("Rf_ncols");
 }

@@ -1,10 +1,9 @@
 
 assign <- function(x, value, envir, inherits)
 {
-    print(x)
     if(!inherits || .env_has(envir, x))
     {
-        .env_set(envir, x, value)
+        envir[[x]] <- value
         return(value)
     }
     else
@@ -14,7 +13,7 @@ assign <- function(x, value, envir, inherits)
             envir <- .getenv(envir)
             if(.env_has(envir, value))
             {
-                .env_set(envir, x, value)
+                envir[[x]] <- value
                 return(value)
             }
         }

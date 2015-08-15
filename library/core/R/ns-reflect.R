@@ -16,7 +16,7 @@ getNamespaceRegistry <- NULL
     }
 
     isRegisteredNamespace <<- function(name) {
-        !is.nil( namespaces[[strip(name)]] )
+        .env_has(namespaces, strip(name))
     }
 
     registerNamespace <<- function(name, env) {

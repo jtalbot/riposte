@@ -41,7 +41,9 @@ SEXP R_deferred_default_method(void) {
 
 SEXP R_set_prim_method(SEXP fname, SEXP op, SEXP code_vec, SEXP fundef,
                SEXP mlist) {
-    _NYI("R_set_prim_method");
+    printf("R_set_prim_method is not implemented, S4 dispatch probably won't work\n"); 
+    return fname;
+    //_NYI("R_set_prim_method");
 }
 
 SEXP do_set_prim_method(SEXP op, const char *code_string, SEXP fundef,

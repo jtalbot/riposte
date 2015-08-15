@@ -340,9 +340,6 @@ unserializeFromConn <- function(con, refhook) {
     .unserialize.extptr <- function() {
         protected <- .unserialize()
         tag <- .unserialize()
-        print("EXTPTR")
-        print(protected)
-        print(tag)
         r <- NULL
         refs[[length(refs)+1L]] <<- r
         r

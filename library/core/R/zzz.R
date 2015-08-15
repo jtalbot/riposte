@@ -293,6 +293,9 @@ primitives <- .characters(
     'expression',
     'is.expression',
 
+    # forceAndCall.R
+    'forceAndCall',
+
     # function.R
     'function',
     'return',
