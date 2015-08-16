@@ -18,21 +18,33 @@
 
 Global* global;
 
-static inline Instruction const* mov_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* store_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* forend_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* add_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* get_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* getsub_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* jc_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* lt_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* ret_op(State& state, Instruction const& inst) ALWAYS_INLINE;
-static inline Instruction const* strip_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+static inline
+Instruction const* mov_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+static inline
+Instruction const* store_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+static inline
+Instruction const* forend_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+static inline
+Instruction const* add_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+static inline
+Instruction const* get_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+static inline
+Instruction const* getsub_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+static inline
+Instruction const* jc_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+static inline
+Instruction const* lt_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+static inline
+Instruction const* ret_op(State& state, Instruction const& inst) ALWAYS_INLINE;
+static inline
+Instruction const* strip_op(State& state, Instruction const& inst) ALWAYS_INLINE;
 
 
 // CONTROL_FLOW_BYTECODES 
 
-static inline Instruction const* call_op(State& state, Instruction const& inst) {
+static inline
+Instruction const* call_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     Heap::GlobalHeap.collect(state.global);
     DECODE(a); BIND(a);
@@ -43,7 +55,7 @@ static inline Instruction const* call_op(State& state, Instruction const& inst) 
         return StopDispatch(state, inst, state.internStr(
             (std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n").c_str()),
             inst.c);
-    Closure const& func = (Closure const&)a;
+    auto func = static_cast<Closure const&>(a);
 
     Environment* fenv =
         (call.names.length() == 0 &&
@@ -53,7 +65,10 @@ static inline Instruction const* call_op(State& state, Instruction const& inst) 
     return buildStackFrame(state, fenv, func.prototype()->code, inst.c, &inst+1);
 }
 
-static inline Instruction const* ret_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* ret_op(State& state, Instruction const& inst)
+{
     // we can return futures from functions, so don't BIND
     DECODE(a);
 
@@ -78,7 +93,7 @@ static inline Instruction const* ret_op(State& state, Instruction const& inst) {
         Promise::Init(onexit,
             state.frame.environment,
             Compiler::deferPromiseCompilation(state, onexit), false);
-        return force(state, (Promise const&)onexit,
+        return force(state, static_cast<Promise const&>(onexit),
             state.frame.environment, Value::Nil(),
             1, &inst);
     }
@@ -101,11 +116,17 @@ static inline Instruction const* ret_op(State& state, Instruction const& inst) {
     return returnpc;
 }
 
-static inline Instruction const* jmp_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* jmp_op(State& state, Instruction const& inst)
+{
     return &inst+inst.a;
 }
 
-static inline Instruction const* jc_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* jc_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(c); BIND(c);
     Logical::Element cond;
@@ -119,32 +140,32 @@ static inline Instruction const* jc_op(State& state, Instruction const& inst) {
     // but this seems to be somewhat widely used, even
     // in some of the recommended R packages.
     else if(c.isLogical()) {
-        if(((Logical const&)c).length() > 0)
-            cond = ((Logical const&)c)[0];
+        if(static_cast<Logical const&>(c).length() > 0)
+            cond = static_cast<Logical const&>(c)[0];
         else
             return StopDispatch(state, inst, state.internStr(
             "conditional is of length zero"), 
             inst.c);
     }
     else if(c.isInteger()) {
-        if(((Integer const&)c).length() > 0)
-            cond = Cast<Integer, Logical>(state, ((Integer const&)c)[0]);
+        if(static_cast<Integer const&>(c).length() > 0)
+            cond = Cast<Integer, Logical>(state, static_cast<Integer const&>(c)[0]);
         else
             return StopDispatch(state, inst, state.internStr(
             "conditional is of length zero"), 
             inst.c);
     }
     else if(c.isDouble()) {
-        if(((Double const&)c).length() > 0)
-            cond = Cast<Double, Logical>(state, ((Double const&)c)[0]);
+        if(static_cast<Double const&>(c).length() > 0)
+            cond = Cast<Double, Logical>(state, static_cast<Double const&>(c)[0]);
         else
             return StopDispatch(state, inst, state.internStr(
             "conditional is of length zero"), 
             inst.c);
     }
     else if(c.isRaw()) {
-        if(((Raw const&)c).length() > 0)
-            cond = Cast<Raw, Logical>(state, ((Raw const&)c)[0]);
+        if(static_cast<Raw const&>(c).length() > 0)
+            cond = Cast<Raw, Logical>(state, static_cast<Raw const&>(c)[0]);
         else
             return StopDispatch(state, inst, state.internStr(
             "conditional is of length zero"), 
@@ -164,7 +185,10 @@ static inline Instruction const* jc_op(State& state, Instruction const& inst) {
             inst.c);
 }
 
-static inline Instruction const* forbegin_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* forbegin_op(State& state, Instruction const& inst)
+{
     //state.visible = true;
     // a = loop variable (e.g. i)
     // b = loop vector(e.g. 1:100)
@@ -178,7 +202,7 @@ static inline Instruction const* forbegin_op(State& state, Instruction const& in
     if((int64_t)v.length() <= 0) {
         return &inst+(&inst+1)->a;    // offset is in following JMP, dispatch together
     } else {
-        String i = ((Character const&)CONSTANT(inst.a)).s;
+        String i = static_cast<Character const&>(CONSTANT(inst.a)).s;
         Element2(v, 0, state.frame.environment->insert(i));
         Integer::InitScalar(REGISTER(inst.c), 1);
         Integer::InitScalar(REGISTER(inst.c+1), v.length());
@@ -186,12 +210,15 @@ static inline Instruction const* forbegin_op(State& state, Instruction const& in
     }
 }
 
-static inline Instruction const* forend_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* forend_op(State& state, Instruction const& inst)
+{
     //state.visible = true;
     Value& counter = REGISTER(inst.c);
     Value& limit = REGISTER(inst.c+1);
     if(__builtin_expect(counter.i < limit.i, true)) {
-        String i = ((Character const&)CONSTANT(inst.a)).s;
+        String i = static_cast<Character const&>(CONSTANT(inst.a)).s;
         Value const& b = REGISTER(inst.b);
         Element2(b, counter.i, state.frame.environment->insert(i));
         counter.i++;
@@ -201,27 +228,39 @@ static inline Instruction const* forend_op(State& state, Instruction const& inst
     }
 }
 
-static inline Instruction const* mov_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* mov_op(State& state, Instruction const& inst)
+{
     DECODE(a);
     OUT(c) = a;
     return &inst+1;
 }
 
-static inline Instruction const* invisible_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* invisible_op(State& state, Instruction const& inst)
+{
     state.visible = false;
     DECODE(a);
     OUT(c) = a;
     return &inst+1;
 }
 
-static inline Instruction const* visible_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* visible_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a);
     OUT(c) = a;
     return &inst+1;
 }
 
-static inline Instruction const* withVisible_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* withVisible_op(State& state, Instruction const& inst)
+{
     DECODE(a);
     List result(2);
     result[0] = a;
@@ -231,7 +270,10 @@ static inline Instruction const* withVisible_op(State& state, Instruction const&
     return &inst+1;
 }
 
-static inline Instruction const* external_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* external_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a);
 
@@ -276,7 +318,10 @@ static inline Instruction const* external_op(State& state, Instruction const& in
     return &inst+1;
 }
 
-static inline Instruction const* map_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* map_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -288,13 +333,13 @@ static inline Instruction const* map_op(State& state, Instruction const& inst) {
     if(c.isCharacter1()) {
         if(!a.isCharacter())
             _error("External map return types must be a character vector");
-        OUT(c) = Map(state, c.s, (List const&)b, (Character const&)a);
+        OUT(c) = Map(state, c.s, static_cast<List const&>(b), static_cast<Character const&>(a));
     }
     else if(c.isClosure()) {
         if(a.isCharacter())
-            OUT(c) = MapR(state, (Closure const&)c, (List const&)b, (Character const&)a);
+            OUT(c) = MapR(state, static_cast<Closure const&>(c), static_cast<List const&>(b), static_cast<Character const&>(a));
         else
-            OUT(c) = MapI(state, (Closure const&)c, (List const&)b);
+            OUT(c) = MapI(state, static_cast<Closure const&>(c), static_cast<List const&>(b));
     }
     else
         _error(".Map function name must be a string or a closure");
@@ -302,7 +347,10 @@ static inline Instruction const* map_op(State& state, Instruction const& inst) {
     return &inst+1;
 }
 
-static inline Instruction const* scan_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* scan_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -315,12 +363,15 @@ static inline Instruction const* scan_op(State& state, Instruction const& inst) 
     if(!a.isCharacter())
         _error("External scan return types must be a character vector");
 
-    OUT(c) = Scan(state, c.s, (List const&)b, (Character const&)a);
+    OUT(c) = Scan(state, c.s, static_cast<List const&>(b), static_cast<Character const&>(a));
     
     return &inst+1;
 }
 
-static inline Instruction const* fold_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* fold_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -333,7 +384,7 @@ static inline Instruction const* fold_op(State& state, Instruction const& inst) 
     if(!a.isCharacter())
         _error("External fold return types must be a character vector");
 
-    OUT(c) = Fold(state, c.s, (List const&)b, (Character const&)a);
+    OUT(c) = Fold(state, c.s, static_cast<List const&>(b), static_cast<Character const&>(a));
     
     return &inst+1;
 }
@@ -344,7 +395,7 @@ static inline
 Instruction const* load_op(State& state, Instruction const& inst)
 {
     state.visible = true;
-    String s = ((Character const&)CONSTANT(inst.a)).s;
+    String s = static_cast<Character const&>(CONSTANT(inst.a)).s;
 
     Environment* env;
     Value const* v = state.frame.environment->getRecursive2(s, env);
@@ -358,8 +409,8 @@ Instruction const* load_op(State& state, Instruction const& inst)
         }
         else
         {
-            return force(state, (Promise const&)*v,
-                env, ((Character const&)CONSTANT(inst.a)),
+            return force(state, static_cast<Promise const&>(*v),
+                env, static_cast<Character const&>(CONSTANT(inst.a)),
                 inst.c, &inst+1);
         }
     }
@@ -369,11 +420,12 @@ Instruction const* load_op(State& state, Instruction const& inst)
             inst.c);
 }
 
+
 static inline
 Instruction const* loadfn_op(State& state, Instruction const& inst)
 {
     state.visible = true;
-    String s = ((Character const&)CONSTANT(inst.a)).s;
+    String s = static_cast<Character const&>(CONSTANT(inst.a)).s;
 
     Environment* env = state.frame.environment;
 
@@ -392,8 +444,8 @@ Instruction const* loadfn_op(State& state, Instruction const& inst)
             else if(v->isPromise())
             {
                 // Must return to this instruction to check if it's a function.
-                return force(state, (Promise const&)*v, 
-                    env, ((Character const&)CONSTANT(inst.a)),
+                return force(state, static_cast<Promise const&>(*v), 
+                    env, static_cast<Character const&>(CONSTANT(inst.a)),
                     inst.c, &inst);
             }
             else
@@ -409,15 +461,21 @@ Instruction const* loadfn_op(State& state, Instruction const& inst)
             inst.c);
 }
 
-static inline Instruction const* store_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* store_op(State& state, Instruction const& inst)
+{
     state.visible = false;
-    String s = ((Character const&)CONSTANT(inst.a)).s; 
+    String s = static_cast<Character const&>(CONSTANT(inst.a)).s; 
     DECODE(c); // don't BIND
     state.frame.environment->insert(s) = c;
     return &inst+1;
 }
 
-static inline Instruction const* storeup_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* storeup_op(State& state, Instruction const& inst)
+{
     state.visible = false;
     // assign2 is always used to assign up at least one scope level...
     // so start off looking up one level...
@@ -425,7 +483,7 @@ static inline Instruction const* storeup_op(State& state, Instruction const& ins
 
     DECODE(c); BIND(c);
 
-    String s = ((Character const&)CONSTANT(inst.a)).s;
+    String s = static_cast<Character const&>(CONSTANT(inst.a)).s;
     Environment* penv;
     Value& dest = state.frame.environment->getEnclosure()->insertRecursive(s, penv);
     if(!dest.isNil())
@@ -436,18 +494,21 @@ static inline Instruction const* storeup_op(State& state, Instruction const& ins
     return &inst+1;
 }
 
-static inline Instruction const* force_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* force_op(State& state, Instruction const& inst)
+{
     Value const& a = REGISTER(inst.a);
 
     assert(state.frame.environment->get(Strings::__dots__).isList());
-    Value const& t = ((List const&)state.frame.environment->get(Strings::__dots__))[a.i];
+    Value const& t = static_cast<List const&>(state.frame.environment->get(Strings::__dots__))[a.i];
 
     if(t.isObject()) {
         OUT(c) = t;
         return &inst+1;
     }
     else if(t.isPromise()) {
-        return force(state, (Promise const&)t,
+        return force(state, static_cast<Promise const&>(t),
                 state.frame.environment, a,
                 inst.c, &inst+1);
     }
@@ -456,33 +517,36 @@ static inline Instruction const* force_op(State& state, Instruction const& inst)
     }
 }
 
-static inline Instruction const* dotsv_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* dotsv_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
 
     int64_t idx = 0;
     if(a.isInteger1())
-        idx = ((Integer const&)a)[0] - 1;
+        idx = static_cast<Integer const&>(a)[0] - 1;
     else if(a.isDouble1())
-        idx = (int64_t)((Double const&)a)[0] - 1;
+        idx = (int64_t)static_cast<Double const&>(a)[0] - 1;
     else
         return StopDispatch(state, inst, state.internStr("Invalid type in dotsv"), inst.c);
 
     Value const& t = state.frame.environment->get(Strings::__dots__);
 
     if(!t.isList() ||
-       idx >= (int64_t)((List const&)t).length() ||
+       idx >= (int64_t)static_cast<List const&>(t).length() ||
        idx < (int64_t)0)
         return StopDispatch(state, inst, state.internStr((std::string("The '...' list does not contain ") + intToStr(idx+1) + " elements").c_str()), inst.c);
 
-    Value const& v = ((List const&)t)[idx];
+    Value const& v = static_cast<List const&>(t)[idx];
 
     if(v.isObject()) {
         OUT(c) = v;
         return &inst+1;
     }
     else if(v.isPromise()) {
-        return force(state, (Promise const&)v,
+        return force(state, static_cast<Promise const&>(v),
             state.frame.environment, Integer::c(idx),
             inst.c, &inst+1);
     }
@@ -494,21 +558,27 @@ static inline Instruction const* dotsv_op(State& state, Instruction const& inst)
     }
 }
 
-static inline Instruction const* dotsc_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* dotsc_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     if(!state.frame.environment->get(Strings::__dots__).isList())
         OUT(c) = Integer::c(0);
     else
-        OUT(c) = Integer::c((int64_t)((List const&)state.frame.environment->get(Strings::__dots__)).length());
+        OUT(c) = Integer::c((int64_t)static_cast<List const&>(state.frame.environment->get(Strings::__dots__)).length());
     return &inst+1;
 }
 
-static inline Instruction const* dots_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* dots_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     static const List empty(0);
     List const& dots = 
         state.frame.environment->has(Strings::__dots__)
-            ? (List const&)state.frame.environment->get(Strings::__dots__)
+            ? static_cast<List const&>(state.frame.environment->get(Strings::__dots__))
             : empty;
 
     Value& iter = REGISTER(inst.a);
@@ -531,7 +601,7 @@ static inline Instruction const* dots_op(State& state, Instruction const& inst) 
             iter.i++;
         }
         else if(v.isPromise()) {
-            return force(state, (Promise const&)v,
+            return force(state, static_cast<Promise const&>(v),
                 state.frame.environment, Integer::c(iter.i),
                 inst.b, &inst);
         }
@@ -556,7 +626,9 @@ static inline Instruction const* dots_op(State& state, Instruction const& inst) 
 }
 
 // STACK_FRAME_BYTECODES
-static inline Instruction const* frame_op(State& state, Instruction const& inst) {
+static inline
+Instruction const* frame_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     int64_t index = a.i;
@@ -566,7 +638,7 @@ static inline Instruction const* frame_op(State& state, Instruction const& inst)
     while(index > 0) {
         Value const& v = env->get(Strings::__parent__);
         if(v.isEnvironment())
-            env = ((REnvironment const&)v).environment();
+            env = static_cast<REnvironment const&>(v).environment();
         else
             break;
         index--;
@@ -585,7 +657,9 @@ static inline Instruction const* frame_op(State& state, Instruction const& inst)
 
 // PROMISE_BYTECODES
 
-static inline Instruction const* pr_new_op(State& state, Instruction const& inst) {
+static inline
+Instruction const* pr_new_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -616,28 +690,31 @@ static inline Instruction const* pr_new_op(State& state, Instruction const& inst
     return &inst+2;
 }
 
-static inline Instruction const* pr_expr_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* pr_expr_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
-    if(a.isEnvironment() && b.isCharacter() && ((Character const&)b).length() == 1) {
-        REnvironment const& env = ((REnvironment const&)a);
-        String s = ((Character const&)b).s;
+    if(a.isEnvironment() && b.isCharacter() && static_cast<Character const&>(b).length() == 1) {
+        REnvironment const& env = static_cast<REnvironment const&>(a);
+        String s = static_cast<Character const&>(b).s;
 
         Value v = env.environment()->get(s);
         if(v.isPromise())
-            v = ((Promise const&)v).code()->expression;
+            v = static_cast<Promise const&>(v).code()->expression;
         OUT(c) = v;
         return &inst+1;
     }
     else if(a.isList() && b.isInteger1()) {
-        List const& l = ((List const&)a);
-        int64_t i = ((Integer const&)b).i - 1;
+        List const& l = static_cast<List const&>(a);
+        int64_t i = static_cast<Integer const&>(b).i - 1;
         if(i >= 0 && i < l.length()) {
             Value v = l[i];
             if(v.isPromise())
-                v = ((Promise const&)v).code()->expression;
+                v = static_cast<Promise const&>(v).code()->expression;
             OUT(c) = v;
             return &inst+1;
         }
@@ -648,18 +725,21 @@ static inline Instruction const* pr_expr_op(State& state, Instruction const& ins
                 inst.c);
 }
 
-static inline Instruction const* pr_env_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* pr_env_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
     // TODO: check types
 
-    REnvironment const& env = ((REnvironment const&)a);
-    String s = ((Character const&)b).s;
+    REnvironment const& env = static_cast<REnvironment const&>(a);
+    String s = static_cast<Character const&>(b).s;
     Value v = env.environment()->get(s);
     if(v.isPromise())
-        REnvironment::Init(v, ((Promise const&)v).environment());
+        REnvironment::Init(v, static_cast<Promise const&>(v).environment());
     else
         v = Null::Singleton();
     OUT(c) = v;
@@ -668,7 +748,9 @@ static inline Instruction const* pr_env_op(State& state, Instruction const& inst
 
 // OBJECT_BYTECODES
 
-static inline Instruction const* id_op(State& state, Instruction const& inst) {
+static inline
+Instruction const* id_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a);
     DECODE(b);
@@ -677,7 +759,10 @@ static inline Instruction const* id_op(State& state, Instruction const& inst) {
     return &inst+1;
 }
 
-static inline Instruction const* nid_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* nid_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a);
     DECODE(b);
@@ -686,14 +771,20 @@ static inline Instruction const* nid_op(State& state, Instruction const& inst) {
     return &inst+1;
 }
 
-static inline Instruction const* isnil_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* isnil_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a);
     OUT(c) = a.isNil() ? Logical::True() : Logical::False();
     return &inst+1;
 }
 
-static inline Instruction const* type_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* type_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a);
 #ifdef EPEE
@@ -716,7 +807,10 @@ static inline Instruction const* type_op(State& state, Instruction const& inst) 
     return &inst+1;
 }
 
-static inline Instruction const* length_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* length_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a);
     if(a.isVector())
@@ -740,7 +834,10 @@ static inline Instruction const* length_op(State& state, Instruction const& inst
     return &inst+1;
 }
 
-static inline Instruction const* get_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* get_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); DECODE(b);
     if(GetFast(state, a, b, OUT(c)))
@@ -757,7 +854,10 @@ static inline Instruction const* get_op(State& state, Instruction const& inst) {
     }
 }
 
-static inline Instruction const* set_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* set_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     // a = value, b = index, c = dest
     DECODE(a); DECODE(b); DECODE(c);
@@ -765,11 +865,11 @@ static inline Instruction const* set_op(State& state, Instruction const& inst) {
 
 #ifdef EPEE
     if(a.isFuture() && (c.isVector() || c.isFuture())) {
-        if(b.isInteger() && ((Integer const&)b).length() == 1) {
+        if(b.isInteger() && static_cast<Integer const&>(b).length() == 1) {
             OUT(c) = state.traces.EmitSStore(state.frame.environment, c, ((Integer&)b)[0], a);
             return &inst+1;
         }
-        else if(b.isDouble() && ((Double const&)b).length() == 1) {
+        else if(b.isDouble() && static_cast<Double const&>(b).length() == 1) {
             OUT(c) = state.traces.EmitSStore(state.frame.environment, c, ((Double&)b)[0], a);
             return &inst+1;
         }
@@ -785,24 +885,27 @@ static inline Instruction const* set_op(State& state, Instruction const& inst) {
             return &inst+1;
         }
         else if(c.isEnvironment() && b.isCharacter1()) {
-            String s = ((Character const&)b).s;
+            String s = static_cast<Character const&>(b).s;
             if(a.isNil())
-                ((REnvironment&)c).environment()->remove(s);
+                static_cast<REnvironment const&>(c).environment()->remove(s);
             else
-                ((REnvironment&)c).environment()->insert(s) = a;
+                static_cast<REnvironment const&>(c).environment()->insert(s) = a;
             OUT(c) = c;
             return &inst+1;
         }
         else if(c.isClosure() && b.isCharacter1()) {
-            //Closure const& f = (Closure const&)c;
-            //String s = ((Character const&)b).s;
+            //Closure const& f = static_cast<Closure const&>(c);
+            //String s = static_cast<Character const&>(b).s;
             _error("Assignment to function members is not yet implemented");
         }
     }
     return GenericDispatch(state, inst, Strings::bbAssign, c, b, a, inst.c); 
 }
 
-static inline Instruction const* getsub_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* getsub_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); DECODE(b);
 
@@ -848,8 +951,8 @@ static inline Instruction const* getsub_op(State& state, Instruction const& inst
     }
     // TODO: this should force promises...
     else if(a.isEnvironment() && b.isCharacter()) {
-        REnvironment const& env = ((REnvironment const&)a);
-        Character const& i = ((Character const&)b);
+        REnvironment const& env = static_cast<REnvironment const&>(a);
+        Character const& i = static_cast<Character const&>(b);
         List r(i.length());
         for(int64_t k = 0; k < i.length(); ++k) {
             if(env.environment()->has(i[k]))
@@ -864,7 +967,10 @@ static inline Instruction const* getsub_op(State& state, Instruction const& inst
     return GenericDispatch(state, inst, Strings::bracket, a, b, inst.c); 
 }
 
-static inline Instruction const* setsub_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* setsub_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     // a = value, b = index, c = dest 
     DECODE(a); DECODE(b); DECODE(c); 
@@ -872,11 +978,11 @@ static inline Instruction const* setsub_op(State& state, Instruction const& inst
 
 #ifdef EPEE
     if(a.isFuture() && (c.isVector() || c.isFuture())) {
-        if(b.isInteger() && ((Integer const&)b).length() == 1) {
+        if(b.isInteger() && static_cast<Integer const&>(b).length() == 1) {
             OUT(c) = state.traces.EmitSStore(state.frame.environment, c, ((Integer&)b)[0], a);
             return &inst+1;
         }
-        else if(b.isDouble() && ((Double const&)b).length() == 1) {
+        else if(b.isDouble() && static_cast<Double const&>(b).length() == 1) {
             OUT(c) = state.traces.EmitSStore(state.frame.environment, c, ((Double&)b)[0], a);
             return &inst+1;
         }
@@ -892,8 +998,8 @@ static inline Instruction const* setsub_op(State& state, Instruction const& inst
         }
     }
     if(c.isEnvironment() && b.isCharacter()) {
-        REnvironment const& env = ((REnvironment const&)c);
-        Character const& i = ((Character const&)b);
+        REnvironment const& env = static_cast<REnvironment const&>(c);
+        Character const& i = static_cast<Character const&>(b);
         if(a.isVector()) {
             List const& l = As<List>(state, a);
             int64_t len = std::max(l.length(), i.length());
@@ -932,18 +1038,21 @@ static inline Instruction const* setsub_op(State& state, Instruction const& inst
     return GenericDispatch(state, inst, Strings::bracketAssign, c, b, a, inst.c); 
 }
 
-static inline Instruction const* getenv_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* getenv_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
 
     if(a.isEnvironment()) {
-        Environment* enc = ((REnvironment const&)a).environment()->getEnclosure();
+        Environment* enc = static_cast<REnvironment const&>(a).environment()->getEnclosure();
         if(enc == 0)
             _error("environment does not have an enclosing environment");
         REnvironment::Init(OUT(c), enc);
     }
     else if(a.isClosure()) {
-        REnvironment::Init(OUT(c), ((Closure const&)a).environment());
+        REnvironment::Init(OUT(c), static_cast<Closure const&>(a).environment());
     }
     else if(a.isNull()) {
         REnvironment::Init(OUT(c), state.frame.environment);
@@ -954,7 +1063,10 @@ static inline Instruction const* getenv_op(State& state, Instruction const& inst
     return &inst+1;
 }
 
-static inline Instruction const* setenv_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* setenv_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -965,10 +1077,10 @@ static inline Instruction const* setenv_op(State& state, Instruction const& inst
             inst.c);
     }
 
-    Environment* value = ((REnvironment const&)b).environment();
+    Environment* value = static_cast<REnvironment const&>(b).environment();
 
     if(a.isEnvironment()) {
-        Environment* target = ((REnvironment const&)a).environment();
+        Environment* target = static_cast<REnvironment const&>(a).environment();
         
         // Riposte allows enclosing environment replacement,
         // but requires that no loops be introduced in the environment chain.
@@ -979,12 +1091,12 @@ static inline Instruction const* setenv_op(State& state, Instruction const& inst
             p = p->getEnclosure();
         }
         
-        ((REnvironment const&)a).environment()->setEnclosure(
-            ((REnvironment const&)b).environment());
+        static_cast<REnvironment const&>(a).environment()->setEnclosure(
+            static_cast<REnvironment const&>(b).environment());
         OUT(c) = a;
     }
     else if(a.isClosure()) {
-        Closure::Init(OUT(c), ((Closure const&)a).prototype(), value);
+        Closure::Init(OUT(c), static_cast<Closure const&>(a).prototype(), value);
     }
     else {
         return StopDispatch(state, inst, state.internStr(
@@ -994,17 +1106,20 @@ static inline Instruction const* setenv_op(State& state, Instruction const& inst
     return &inst+1;
 }
 
-static inline Instruction const* getattr_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* getattr_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a);
     DECODE(b); BIND(b);
     if(a.isObject() && b.isCharacter1()) {
-        String name = ((Character const&)b)[0];
+        String name = static_cast<Character const&>(b)[0];
         Object const& o = (Object const&)a;
         if(o.isEnvironment()) {
-            if(((REnvironment&)o).environment()->hasAttributes() &&
-               ((REnvironment&)o).environment()->getAttributes()->has(name))
-                OUT(c) = ((REnvironment&)o).environment()->getAttributes()->get(name);
+            if(static_cast<REnvironment const&>(o).environment()->hasAttributes() &&
+               static_cast<REnvironment const&>(o).environment()->getAttributes()->has(name))
+                OUT(c) = static_cast<REnvironment const&>(o).environment()->getAttributes()->get(name);
             else
                 OUT(c) = Null::Singleton();
         }
@@ -1021,25 +1136,28 @@ static inline Instruction const* getattr_op(State& state, Instruction const& ins
     _error("Invalid attrget operation");
 }
 
-static inline Instruction const* setattr_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* setattr_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(c);
     DECODE(b); BIND(b);
     DECODE(a); BIND(a);
     if(c.isObject() && b.isCharacter1()) {
-        String name = ((Character const&)b)[0];
+        String name = static_cast<Character const&>(b)[0];
         Object o = (Object const&)c;
         if(a.isNil() || a.isNull()) {
             if(o.isEnvironment() &&
-                ((REnvironment&)o).environment()->hasAttributes() &&
-                ((REnvironment&)o).environment()->getAttributes()->has(name)) {
-                if(((REnvironment&)o).environment()->getAttributes()->Size() > 1) {
-                    Dictionary* d = ((REnvironment&)o).environment()->getAttributes()->clone(0);
+                static_cast<REnvironment&>(o).environment()->hasAttributes() &&
+                static_cast<REnvironment&>(o).environment()->getAttributes()->has(name)) {
+                if(static_cast<REnvironment&>(o).environment()->getAttributes()->Size() > 1) {
+                    Dictionary* d = static_cast<REnvironment&>(o).environment()->getAttributes()->clone(0);
                     d->remove(name);
-                    ((REnvironment&)o).environment()->setAttributes(d);
+                    static_cast<REnvironment&>(o).environment()->setAttributes(d);
                 }
                 else {
-                    ((REnvironment&)o).environment()->setAttributes(NULL);
+                    static_cast<REnvironment&>(o).environment()->setAttributes(NULL);
                 }
             }
             else if(o.hasAttributes()
@@ -1057,16 +1175,16 @@ static inline Instruction const* setattr_op(State& state, Instruction const& ins
         else {
             Value v = a;
             if(name == Strings::rownames && v.isInteger()) {
-                Integer const& i = (Integer const&)v;
+                auto i = static_cast<Integer const&>(v);
                 if(i.length() == 2 && Integer::isNA(i[0])) {    
                     v = Sequence((int64_t)1,1,abs(i[1]));
                 }
             }
             if(o.isEnvironment()) {
-                Dictionary* d = ((REnvironment&)o).environment()->getAttributes();
+                Dictionary* d = static_cast<REnvironment&>(o).environment()->getAttributes();
                 d = d ? d->clone(1) : new Dictionary(1);
                 d->insert(name) = v;
-                ((REnvironment&)o).environment()->setAttributes(d);
+                static_cast<REnvironment&>(o).environment()->setAttributes(d);
             }
             else {
                 Dictionary* d = o.hasAttributes()
@@ -1085,14 +1203,17 @@ static inline Instruction const* setattr_op(State& state, Instruction const& ins
             inst.c);
 }
 
-static inline Instruction const* attributes_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* attributes_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a);
     if(a.isObject()) {
         Object o = (Object const&)a;
 
         Dictionary* d = o.isEnvironment()
-            ? ((REnvironment&)o).environment()->getAttributes()
+            ? static_cast<REnvironment&>(o).environment()->getAttributes()
             : o.attributes();
 
         if(d == NULL || d->Size() == 0) {
@@ -1120,7 +1241,10 @@ static inline Instruction const* attributes_op(State& state, Instruction const& 
     return &inst+1;
 }
 
-static inline Instruction const* strip_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* strip_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a);
     Value& c = OUT(c);
@@ -1129,7 +1253,10 @@ static inline Instruction const* strip_op(State& state, Instruction const& inst)
     return &inst+1;
 }
 
-static inline Instruction const* as_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* as_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -1171,14 +1298,16 @@ static inline Instruction const* as_op(State& state, Instruction const& inst) {
 
 // ENVIRONMENT_BYTECODES
 
-static inline Instruction const* env_new_op(State& state, Instruction const& inst) {
+static inline
+Instruction const* env_new_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
 
     if(!a.isEnvironment())
         _error("'enclos' must be an environment");
 
-    Environment* env = new Environment(4,((REnvironment const&)a).environment());
+    Environment* env = new Environment(4,static_cast<REnvironment const&>(a).environment());
     Value p;
     REnvironment::Init(p, state.frame.environment);
     env->insert(Strings::__parent__) = p;
@@ -1186,14 +1315,17 @@ static inline Instruction const* env_new_op(State& state, Instruction const& ins
     return &inst+1;
 }
 
-static inline Instruction const* env_names_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* env_names_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
 
     if(!a.isEnvironment())
         _error("'enclos' must be an environment");
 
-    Environment* env = ((REnvironment const&)a).environment();
+    Environment* env = static_cast<REnvironment const&>(a).environment();
 
     Character r(env->Size());
     int64_t j = 0;
@@ -1206,7 +1338,10 @@ static inline Instruction const* env_names_op(State& state, Instruction const& i
     return &inst+1;
 }
 
-static inline Instruction const* env_has_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* env_has_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -1222,14 +1357,17 @@ static inline Instruction const* env_has_op(State& state, Instruction const& ins
             inst.c);
     }
 
-    OUT(c) = (((REnvironment const&)a).environment()->
-                get(((Character const&)b).s)).isNil()
+    OUT(c) = (static_cast<REnvironment const&>(a).environment()->
+                get(static_cast<Character const&>(b).s)).isNil()
                 ? Logical::False()
                 : Logical::True();
     return &inst+1;
 }
 
-static inline Instruction const* env_get_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* env_get_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -1245,13 +1383,15 @@ static inline Instruction const* env_get_op(State& state, Instruction const& ins
             inst.c);
     }
 
-    OUT(c) = ((REnvironment const&)a).environment()->
-                get(((Character const&)b).s);
+    OUT(c) = static_cast<REnvironment const&>(a).environment()->
+                get(static_cast<Character const&>(b).s);
     return &inst+1;
 }
 
 // TODO: This isn't implemented correctly yet
-static inline Instruction const* env_set_op(State& state, Instruction const& inst) {
+static inline
+Instruction const* env_set_op(State& state, Instruction const& inst)
+{
     // a = index, b = environment, c = value
 
     DECODE(a); BIND(a);
@@ -1260,7 +1400,7 @@ static inline Instruction const* env_set_op(State& state, Instruction const& ins
        
     if(a.isCharacter()) {
         assert(b.isEnvironment());
-           Environment* env = ((REnvironment const&)b).environment();
+           Environment* env = static_cast<REnvironment const&>(b).environment();
                
         env->insert(a.s) = c;
 #ifdef EPEE
@@ -1268,7 +1408,7 @@ static inline Instruction const* env_set_op(State& state, Instruction const& ins
 #endif
        } else if(a.isInteger()) {
         assert(b.isEnvironment());
-           Environment* env = ((REnvironment const&)b).environment();
+           Environment* env = static_cast<REnvironment const&>(b).environment();
         
         assert(env->get(Strings::__dots__).isList());
         ((List&)env->insert(Strings::__dots__))[a.i] = c;
@@ -1281,7 +1421,10 @@ static inline Instruction const* env_set_op(State& state, Instruction const& ins
     return &inst+1;
 }
 
-static inline Instruction const* env_rm_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* env_rm_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -1298,10 +1441,10 @@ static inline Instruction const* env_rm_op(State& state, Instruction const& inst
     }
 
     Environment* env = a.isEnvironment()
-        ? ((REnvironment const&)a).environment()
+        ? static_cast<REnvironment const&>(a).environment()
         : state.frame.environment;
 
-    Character const& names = (Character const&)b;
+    Character const& names = static_cast<Character const&>(b);
 
     for(int64_t i = 0; i < names.length(); ++i) {
         env->remove( names[i] );
@@ -1311,7 +1454,10 @@ static inline Instruction const* env_rm_op(State& state, Instruction const& inst
     return &inst+1;
 }
 
-static inline Instruction const* env_missing_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* env_missing_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -1323,7 +1469,7 @@ static inline Instruction const* env_missing_op(State& state, Instruction const&
     }
 
     Environment* original_env = a.isEnvironment()
-        ? ((REnvironment const&)a).environment()
+        ? static_cast<REnvironment const&>(a).environment()
         : state.frame.environment;
     Environment* e = original_env;
 
@@ -1332,29 +1478,29 @@ static inline Instruction const* env_missing_op(State& state, Instruction const&
     bool missing = false;
     do {
 
-    if( x.isCharacter() && ((Character const&)x).length() == 1 ) {
+    if( x.isCharacter() && static_cast<Character const&>(x).length() == 1 ) {
         Environment* foundEnv;
         Value const& v = e->getRecursive(x.s, foundEnv);
         missing = (    v.isPromise()
-                    && ((Promise const&)v).isDefault() 
+                    && static_cast<Promise const&>(v).isDefault() 
                     && foundEnv == original_env 
                   ) || v.isNil();
 
-        if(v.isPromise() && !((Promise const&)v).isDefault() && foundEnv == e) {
+        if(v.isPromise() && !static_cast<Promise const&>(v).isDefault() && foundEnv == e) {
             // see if missing is passed down
             // missing is only passed down if
             // the referenced symbol is an argument.
             // this whole feature is a disaster.
-            if(((Promise const&)v).isExpression()) {
-                Value const& expr = ((Promise const&)v).code()->expression;
-                Environment* env = ((Promise const&)v).environment();
+            if(static_cast<Promise const&>(v).isExpression()) {
+                Value const& expr = static_cast<Promise const&>(v).code()->expression;
+                Environment* env = static_cast<Promise const&>(v).environment();
                 Value const& func = env->get(Strings::__function__);
                 if(isSymbol(expr) && func.isClosure()) {
                     // see if the expr is an argument
-                    Character const& parameters = ((Closure const&)func).prototype()->parameters;
+                    Character const& parameters = static_cast<Closure const&>(func).prototype()->parameters;
                     bool matched = false;
                     for(size_t i = 0; i < parameters.length() && !matched; ++i) {
-                        if(((Character const&)expr).s == parameters[i])
+                        if(static_cast<Character const&>(expr).s == parameters[i])
                             matched = true;
                     }
 
@@ -1371,15 +1517,15 @@ static inline Instruction const* env_missing_op(State& state, Instruction const&
     }
     else {
         int64_t index = -1;
-        if( x.isInteger() && ((Integer const&)x).length() == 1 )
+        if( x.isInteger() && static_cast<Integer const&>(x).length() == 1 )
             index = x.i-1;
-        else if( x.isDouble() && ((Double const&)x).length() == 1 )
+        else if( x.isDouble() && static_cast<Double const&>(x).length() == 1 )
             index = x.d-1;
         else
             _error("Invalid argument to missing");
 
-        List const& dots = (List const&)
-            e->get(Strings::__dots__);
+        List const& dots = static_cast<List const&>(
+            e->get(Strings::__dots__));
 
         missing = !dots.isList() ||
                   index < 0 ||
@@ -1397,7 +1543,10 @@ static inline Instruction const* env_missing_op(State& state, Instruction const&
     return &inst+1;
 }
 
-static inline Instruction const* env_global_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* env_global_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     REnvironment::Init(OUT(c), state.global.global);
     return &inst+1;
@@ -1405,11 +1554,13 @@ static inline Instruction const* env_global_op(State& state, Instruction const& 
 
 // FUNCTION_BYTECODES
 
-static inline Instruction const* fn_new_op(State& state, Instruction const& inst) {
+static inline
+Instruction const* fn_new_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     Value const& function = CONSTANT(inst.a);
     Value& out = OUT(c);
-    Closure::Init(out, ((Closure const&)function).prototype(), state.frame.environment);
+    Closure::Init(out, static_cast<Closure const&>(function).prototype(), state.frame.environment);
     return &inst+1;
 }
 
@@ -1417,7 +1568,9 @@ static inline Instruction const* fn_new_op(State& state, Instruction const& inst
 // VECTOR BYTECODES
 
 #define OP(Name, string, Group, Func) \
-static inline Instruction const* Name##_op(State& state, Instruction const& inst) { \
+static inline \
+Instruction const* Name##_op(State& state, Instruction const& inst) \
+{ \
     state.visible = true; \
     DECODE(a);    \
     if( Group##Fast<Name##VOp>( state, NULL, a, OUT(c) ) ) \
@@ -1437,7 +1590,9 @@ UNARY_FOLD_SCAN_BYTECODES(OP)
 #undef OP
 
 #define OP(Name, string, Group, Func) \
-static inline Instruction const* Name##_op(State& state, Instruction const& inst) { \
+static inline \
+Instruction const* Name##_op(State& state, Instruction const& inst) \
+{ \
     state.visible = true; \
     DECODE(a);    \
     DECODE(b);    \
@@ -1457,7 +1612,9 @@ static inline Instruction const* Name##_op(State& state, Instruction const& inst
 BINARY_BYTECODES(OP)
 #undef OP
 
-static inline Instruction const* ifelse_op(State& state, Instruction const& inst) {
+static inline
+Instruction const* ifelse_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a);
     DECODE(b);
@@ -1487,7 +1644,10 @@ static inline Instruction const* ifelse_op(State& state, Instruction const& inst
     return &inst+1; 
 }
 
-static inline Instruction const* split_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* split_op(State& state, Instruction const& inst)
+{
     state.visible = true;
 #ifdef EPEE
     DECODE(a); BIND(a);
@@ -1506,7 +1666,10 @@ static inline Instruction const* split_op(State& state, Instruction const& inst)
     return &inst+1; 
 }
 
-static inline Instruction const* vector_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* vector_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -1554,7 +1717,10 @@ static inline Instruction const* vector_op(State& state, Instruction const& inst
     return &inst+1;
 }
 
-static inline Instruction const* seq_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* seq_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
 
@@ -1572,7 +1738,10 @@ static inline Instruction const* seq_op(State& state, Instruction const& inst) {
     return &inst+1;
 }
 
-static inline Instruction const* index_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* index_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     // c = n, b = each, a = length
     DECODE(a); BIND(a);
@@ -1595,7 +1764,10 @@ static inline Instruction const* index_op(State& state, Instruction const& inst)
     return &inst+1;
 }
 
-static inline Instruction const* random_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* random_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
 
@@ -1611,7 +1783,10 @@ static inline Instruction const* random_op(State& state, Instruction const& inst
     return &inst+1;
 }
 
-static inline Instruction const* semijoin_op(State& state, Instruction const& inst) {
+
+static inline
+Instruction const* semijoin_op(State& state, Instruction const& inst)
+{
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -1627,7 +1802,10 @@ static inline Instruction const* semijoin_op(State& state, Instruction const& in
     return &inst+1;
 }
 
-static inline Instruction const* done_op(State& state, Instruction const& inst) { 
+
+static inline
+Instruction const* done_op(State& state, Instruction const& inst)
+{ 
     DECODE(a);
     REGISTER(0) = a;
 
@@ -1911,7 +2089,7 @@ void profileStack(State const& state) {
             ? state.stack[index] : state.frame;
 
         if(!s.isPromise && s.environment->has(Strings::__call__)) {
-            List const& l = (List const&)s.environment->get(Strings::__call__);
+            auto l = static_cast<List const&>(s.environment->get(Strings::__call__));
             std::string str = state.deparse(l[0]);
             node = &(node->children[str]);
             node->count++; 
