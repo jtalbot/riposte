@@ -687,7 +687,13 @@ Unstream* MakeUnstream(State& state, String t, int64_t s) {
     if(t == Strings::Logical) return new UnstreamImpl<Logical>(state, Logical(s));
     if(t == Strings::Integer) return new UnstreamImpl<Integer>(state, Integer(s));
     if(t == Strings::Double)  return new UnstreamImpl<Double>(state, Double(s));
-    if(t == Strings::Character) return new UnstreamImpl<Character>(state, Character(s));
+    if(t == Strings::Character) {
+        Character v(s);
+        // clear the result vector so the gc isn't confused
+        for(size_t i = 0; i < s; ++i)
+            v[i] = Strings::NA;
+        return new UnstreamImpl<Character>(state, v);
+    }
     if(t == Strings::Raw)     return new UnstreamImpl<Raw>(state, Raw(s));
     if(t == Strings::List) {
         List v(s);
@@ -987,10 +993,10 @@ List MapR(State& state, Closure const& func, List args, Character result) {
             nn[0] = Strings::empty;
             for(int64_t i = 0; i < names.length(); i++)
                 nn[i+1] = names[i];
-            apply = CreateCall(apply, nn);
+            apply = CreateCall(state.global, apply, nn);
         }
         else {
-            apply = CreateCall(apply);
+            apply = CreateCall(state.global, apply);
         }
 
         Code* p = Compiler::compileExpression(state, apply);
@@ -1059,10 +1065,10 @@ List MapI(State& state, Closure const& func, List args) {
             nn[0] = Strings::empty;
             for(int64_t i = 0; i < names.length(); i++)
                 nn[i+1] = names[i];
-            apply = CreateCall(apply, nn);
+            apply = CreateCall(state.global, apply, nn);
         }
         else {
-            apply = CreateCall(apply);
+            apply = CreateCall(state.global, apply);
         }
 
         Code* p = Compiler::compileExpression(state, apply);

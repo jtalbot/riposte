@@ -7,7 +7,6 @@
             .stop(sprintf("Can't find .C function: %s", .NAME))
     }
 
-    print(sprintf(".C: %s", .NAME$name))
     if(!inherits(.NAME, 'NativeSymbolInfo', FALSE)) {
         .stop("Unknown .NAME argument to .Call")
     }
@@ -23,7 +22,6 @@
             .stop(sprintf("Can't find .Call function: %s", .NAME))
     }
     
-    print(sprintf(".Call: %s", .NAME$name))
     if(!inherits(.NAME, 'NativeSymbolInfo', FALSE)) {
         .stop("Unknown .NAME argument to .Call")
     }
@@ -39,7 +37,6 @@
             .stop(sprintf("Can't find .Riposte function: %s", .NAME))
     }
     
-    print(sprintf(".External: %s", .NAME$name))
     if(!inherits(.NAME, 'NativeSymbolInfo', FALSE)) {
         .stop("Unknown .NAME argument to .Riposte")
     }

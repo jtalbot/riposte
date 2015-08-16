@@ -1011,8 +1011,9 @@ static inline Instruction const* getattr_op(State& state, Instruction const& ins
         else {
             if(o.hasAttributes() && o.attributes()->has(name))
                 OUT(c) = o.attributes()->get(name);
-            else
+            else {
                 OUT(c) = Null::Singleton();
+            }
         }
         return &inst+1;
     }
@@ -1843,7 +1844,7 @@ Global::Global(uint64_t states, int64_t argc, char** argv)
 
     // initialize string table
     #define ENUM_STRING_TABLE(name, str) \
-        Strings::name = strings.in(std::string(str));
+        Strings::name = strings.in(std::string(str), false);
     STRINGS(ENUM_STRING_TABLE);
    
     // initialize basic environments 
@@ -1864,6 +1865,15 @@ Global::Global(uint64_t states, int64_t argc, char** argv)
     promiseCode->bc.push_back(Instruction(ByteCode::done, 2, 0, 0));
     promiseCode->registers = 3;
     promiseCode->expression = Value::Nil();
+
+    symbolDict = new Dictionary(1);
+    symbolDict->insert(Strings::classSym) = Character::c(Strings::name);
+
+    callDict = new Dictionary(1); 
+    callDict->insert(Strings::classSym) = Character::c(Strings::call);
+    
+    exprDict = new Dictionary(1);
+    exprDict->insert(Strings::classSym) = Character::c(Strings::expression);
 }
 
 void Code::printByteCode(Global const& global) const {

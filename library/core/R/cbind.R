@@ -7,7 +7,7 @@ cbind <- function(deparse.level, ...) {
     
     f <- function(x) {
         if(is.matrix(x))
-            dim(x)[[1L]]
+            as.integer(dim(x)[[1L]])
         else
             NA_integer_
     }
@@ -43,7 +43,7 @@ rbind <- function(deparse.level, ...) {
     
     f <- function(x) {
         if(is.matrix(x))
-            dim(x)[[2L]]
+            as.integer(dim(x)[[2L]])
         else
             NA_integer_
     }
@@ -68,16 +68,26 @@ rbind <- function(deparse.level, ...) {
             rep_len(x, ncol)
     }
 
-	x <- unlist(.Map(r, list(l))[[1L]],FALSE,FALSE)
-    nrow <- length(x)/ncol
+	x <- unlist(.Map(r, list(l)),FALSE,FALSE)
+    nrow <- length(x)%/%ncol
     # t
     x <- x[ncol*(index(nrow,1L,length(x))-1L)+
                  index(ncol,nrow,length(x))]
 
 	dim(x) <- c(nrow, ncol)
-    if(!is.null(names(l)) || !is.null(names(l[[1L]])))
-        dimnames(x) <- list(names(l), rep_len(names(l[[1L]]), ncol))
-	
+
+    if(length(l) > 0L)
+    {
+        rownames <- names(l)
+        if(is.matrix(l[[1]]))
+            colnames <- dimnames(l[[1L]])[[2L]]
+        else
+            colnames <- names(l[[1L]])
+
+        if(!is.null(rownames) || !is.null(colnames))
+            dimnames(x) <- list(rownames, rep_len(colnames, ncol))
+	}
+
     x
 }
 

@@ -11,7 +11,7 @@ readDCF <- function(file, fields, keep.white) {
     }
 
     r <- vector('character', 0)
-    attr(r, 'dim') <- c(0, length(fields))
+    dim(r) <- c(0L, length(fields))
     row <- rep_len(NA_character_, length(fields))
     some <- FALSE
     for(i in seq_len(length(lines))) {

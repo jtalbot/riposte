@@ -134,7 +134,7 @@ void (SET_TYPEOF)(SEXP x, int v) {
         case LANGSXP: {
             if(!(x->v).isList())
                 printf("SET_TYPEOF called with LANGSXP on non-list\n");
-            x->v = CreateCall((List const&)x->v);
+            x->v = CreateCall(*global, (List const&)x->v);
         }
         break;
         default:
@@ -1022,7 +1022,7 @@ SEXP R_FindNamespace(SEXP info) {
     call[0] = fn;
     call[1] = ToRiposteValue(info->v);
 
-    call = CreateCall(call);
+    call = CreateCall(*global, call);
   
     Riposte::State& state = Riposte::newState(); 
     Code* code = Compiler::compileExpression((::State&)state, call);

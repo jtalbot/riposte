@@ -122,7 +122,7 @@ SEXP ToSEXP(Value const& v) {
         if(i != symbols.end())
             return i->second;
 
-        SEXP sexp = global->installSEXP(CreateSymbol(SymbolStr(v)));
+        SEXP sexp = global->installSEXP(CreateSymbol(*global, SymbolStr(v)));
         symbols[SymbolStr(v)] = sexp;
         return sexp;
     }
@@ -131,7 +131,7 @@ SEXP ToSEXP(Value const& v) {
 
 SEXP ToSEXP(char const* s) {
     String str = global->internStr(s);
-    return ToSEXP(CreateSymbol(str));
+    return ToSEXP(CreateSymbol(*global, str));
 }
 
 // Rinternals.h

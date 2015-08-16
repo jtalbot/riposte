@@ -41,21 +41,22 @@ struct Instruction {
 };
 
 class StringTable {
-    std::map<std::string, String> stringTable;
+    std::map<std::string, std::pair<String, bool> > stringTable;
     Lock lock;
+
 public:
 
-    String in(std::string const& s) {
+    String in(std::string const& s, bool weak=true) {
         lock.acquire();
-        std::map<std::string, String>::const_iterator i = stringTable.find(s);
+        auto i = stringTable.find(s);
         if(i == stringTable.end()) {
             String string = new (s.size()+1) StringImpl();
             memcpy((void*)string->s, s.c_str(), s.size()+1);
-            stringTable[s] = string;
+            stringTable[s] = std::make_pair(string, weak);
             lock.release();
             return string;
         } else {
-            String ss = i->second;
+            String ss = i->second.first;
             lock.release();
             return ss;
         }
@@ -65,9 +66,11 @@ public:
         return std::string(s->s);
     }
 
-    std::map<std::string, String> const& table() const {
+    std::map<std::string, std::pair<String, bool> > const& table() const {
         return stringTable;
     }
+
+    void sweep();
 };
 
 struct CompiledCall {
@@ -241,12 +244,15 @@ public:
         return p->v;
     }
 
-    void remove(String name) {
+    void remove(String name)
+    {
+        // TODO: avoid the rehashing here
         bool success;
         Pair* p = find(name, success);
         if(success) {
-            load--;
             memset(p, 0, sizeof(Pair));
+            load--;
+            rehash(nextPow2(load*2));
         }
     }
 
@@ -397,6 +403,10 @@ public:
     Environment* empty;
     Environment* global;
     Code* promiseCode;
+
+    Dictionary* symbolDict;
+    Dictionary* callDict;
+    Dictionary* exprDict;
 
     // For R API support
     Lock apiLock;

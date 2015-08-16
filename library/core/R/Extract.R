@@ -54,7 +54,7 @@
 
     d <- attr(x, 'dim')
 
-    if((length(d) != 1L || .isTRUE(drop)) && ...() == 1L)
+    if((length(d) !== 1L || drop === TRUE) && ...() === 1L)
         return( `[.default`(x,..1) )
 
     if(length(d) != ...())
@@ -98,8 +98,9 @@
     r <- strip(x)[indices]
     attr(r,'dim') <- .Map(length, list(idx), 'integer')[[1L]]
 
-    if(length(r) != prod(attr(r,'dim')))
+    if(length(r) != prod(attr(r,'dim'))) {
         .stop('dim length is not correct')
+    }
 
     dn <- dimnames.default(x)
     if(!is.null(dn)) {
@@ -110,7 +111,7 @@
         dimnames(r) <- rn
     }
 
-    if(.isTRUE(drop))
+    if(drop === TRUE)
         r <- drop(r)
     r
 }

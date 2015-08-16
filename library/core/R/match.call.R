@@ -55,8 +55,8 @@
     r
 }
 
-match.call <- function(definition, call, expand.dots) {
-  
+match.call <- function(definition, call, expand.dots, envir)
+{
     if(is.null(definition))
         definition <- .frame(2L)[['.__function__.']]
 

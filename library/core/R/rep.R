@@ -1,7 +1,8 @@
 
 rep <- function(x, ...) UseMethod('rep', x)
 
-rep.default <- function(x, times = 1, length.out = NA_integer_, each = 1) {
+rep.default <- function(x, times = 1, length.out = NA_integer_, each = 1)
+{
     times <- as.integer(times)
     length.out <- as.integer(length.out)
     each <- as.integer(each)
@@ -17,7 +18,8 @@ rep.default <- function(x, times = 1, length.out = NA_integer_, each = 1) {
     x
 }
 
-rep.int <- function(x, times) {
+rep.int <- function(x, times)
+{
     times <- as.integer(times)
     if(any(times < 0L))
         .stop("invalid 'times' argument")
@@ -33,7 +35,8 @@ rep.int <- function(x, times) {
     }
 }
 
-rep_len <- function(x, length.out) {
+rep_len <- function(x, length.out)
+{
     length.out <- as.integer(length.out)
 
     if(length(length.out) == 0 || length.out[[1]] < 0)

@@ -66,7 +66,7 @@ inline bool isPairlist(Value const& v) {
 		&& baseClassName((Object const&)v) == Strings::pairlist;
 }
 
-inline Object CreateSymbol(String s) {
+inline Object CreateSymbol(Global& g, String s) {
 	Object v = Character::c(s);
 	Dictionary* d = new Dictionary(1);
 	d->insert(Strings::classSym) = Character::c(Strings::name);
@@ -74,19 +74,21 @@ inline Object CreateSymbol(String s) {
 	return v;
 }
 
-inline List CreateExpression(List l) {
-	Dictionary* d = new Dictionary(1);
-	d->insert(Strings::classSym) = Character::c(Strings::expression);
-	l.attributes(d);
+inline List CreateExpression(Global& g, List l) {
+	l.attributes(g.exprDict);
 	return l;
 }
 
-inline List CreateCall(List l, Value const& names = Value::Nil()) {
-	Dictionary* d = new Dictionary(2);
-	d->insert(Strings::classSym) = Character::c(Strings::call);
-	if(!names.isNil())
+inline List CreateCall(Global& g, List l, Value const& names = Value::Nil()) {
+    if(!names.isNil()) {
+    	Dictionary* d = new Dictionary(2);
+	    d->insert(Strings::classSym) = Character::c(Strings::call);
 		d->insert(Strings::names) = names;
-	l.attributes(d);
+	    l.attributes(d);
+    }
+    else {
+        l.attributes(g.callDict);
+    }
 	return l;
 }
 

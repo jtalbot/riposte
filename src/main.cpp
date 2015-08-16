@@ -94,7 +94,7 @@ static bool terminal(Global& global, std::string inname, std::istream & in, std:
 
     if (status == -1) {
         List list(0);
-        code = CreateExpression(list);
+        code = CreateExpression(global, list);
     }
 
     return false;
@@ -123,7 +123,7 @@ static bool pipe(Global& global, std::string inname, std::istream & in, std::ost
 
     if (status == -1) {
         List list(0);
-        code = CreateExpression(list);
+        code = CreateExpression(global, list);
     }
 
     return in.eof();
@@ -142,9 +142,9 @@ static int run(State& state, std::string inname, std::istream& in, std::ostream&
     if(echo)
     {
         List p(1);
-        p[0] = CreateSymbol(state.internStr("repl"));
+        p[0] = CreateSymbol(state.global, state.internStr("repl"));
         //p[1] = CreateSymbol(Strings::Last_value);
-        print = Compiler::compileExpression(state, CreateCall(p));
+        print = Compiler::compileExpression(state, CreateCall(state.global, p));
         // save the promise to the gcStack so that the gc doesn't clean it up.
         Value v;
         Promise::Init(v, 0, print, false);

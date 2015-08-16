@@ -396,9 +396,9 @@ Environment* FastMatchArgs(State& state, Environment* env, Closure const& func, 
 Value Quote(State& state, Value const& v) {
     if(isSymbol(v) || isCall(v) || isExpression(v)) {
         List call(2);
-        call[0] = CreateSymbol(state.global.internStr("quote"));
+        call[0] = CreateSymbol(state.global, state.global.internStr("quote"));
         call[1] = v;
-        return CreateCall(call);
+        return CreateCall(state.global, call);
     } else {
         return v;
     }
@@ -409,7 +409,7 @@ Instruction const* GenericDispatch(State& state, Instruction const& inst, String
 	Value const& f = state.frame.environment->getRecursive(op, penv);
 	if(f.isClosure()) {
 		List call = List::c(
-                        CreateSymbol(op),
+                        CreateSymbol(state.global, op),
                         Quote(state, a));
         CompiledCall cc = Compiler::makeCall(state, call, Character(0));
 		Environment* fenv = FastMatchArgs(state, state.frame.environment, ((Closure const&)f), cc);
@@ -423,7 +423,7 @@ Instruction const* GenericDispatch(State& state, Instruction const& inst, String
 	Value const& f = state.frame.environment->getRecursive(op, penv);
 	if(f.isClosure()) { 
 		List call = List::c(
-                        CreateSymbol(op),
+                        CreateSymbol(state.global, op),
                         Quote(state, a),
                         Quote(state, b));
         CompiledCall cc = Compiler::makeCall(state, call, Character(0));
@@ -438,7 +438,7 @@ Instruction const* GenericDispatch(State& state, Instruction const& inst, String
 	Value const& f = state.frame.environment->getRecursive(op, penv);
 	if(f.isClosure()) { 
 		List call = List::c(
-                        CreateSymbol(op),
+                        CreateSymbol(state.global, op),
                         Quote(state, a),
                         Quote(state, b),
                         Quote(state, c));

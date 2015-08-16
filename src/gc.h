@@ -65,7 +65,7 @@ private:
 	uint64_t total;
 
 	void mark(Global& global);
-	void sweep();
+	void sweep(Global& global);
 	
 	void makeRegions(uint64_t regions);
 	void popRegion();	
@@ -121,7 +121,7 @@ inline HeapObject* Heap::alloc(uint64_t bytes, GCFinalizer finalizer) {
 inline void Heap::collect(Global& global) {
     if(total > heapSize) {
         mark(global);
-        sweep();
+        sweep(global);
         if(total > heapSize*0.6 && heapSize < (1<<30))
             heapSize *= 2;
     }

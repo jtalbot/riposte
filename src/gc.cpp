@@ -23,11 +23,27 @@ GCObject* HeapObject::gcObject() const {
 	return (GCObject*)((uint64_t)this & ~(Heap::regionSize-1));
 }
 
+uint64_t nil_count;
+uint64_t env_count;
+uint64_t clos_count;
+uint64_t extptr_count;
+uint64_t null_count;
+uint64_t double_count;
+uint64_t integer_count;
+uint64_t logical_count;
+uint64_t character_count;
+uint64_t raw_count;
+uint64_t list_count;
+uint64_t type_count[17];
 
 #define VISIT(p) if((p) != 0 && !(p)->marked()) (p)->visit()
 
 static void traverse(Value const& v) {
+    //type_count[v.type()]++;
 	switch(v.type()) {
+        case Type::Nil:
+            // do nothing
+            break;
 		case Type::Environment:
 			VISIT(((REnvironment const&)v).attributes());
 			VISIT(((REnvironment const&)v).environment());
@@ -42,6 +58,9 @@ static void traverse(Value const& v) {
             VISIT((Externalptr::Inner const*)v.p);
             traverse(((Externalptr const&)v).tag());
             traverse(((Externalptr const&)v).prot());
+            break;
+        case Type::Null:
+            // do nothing
             break;
 		case Type::Double:
 			VISIT(((Double const&)v).attributes());
@@ -58,6 +77,16 @@ static void traverse(Value const& v) {
 		case Type::Character:
 			VISIT(((Character const&)v).attributes());
 			VISIT(((Character const&)v).inner());
+            {
+                if(v.packed() > 1) {
+                    auto p = (VectorImpl<Type::Character, String, false>::Inner const*)v.p;
+                    for(size_t i = 0; i < p->length; ++i)
+                        VISIT(p->data[i]);
+                }
+                else if(v.packed() == 1) {
+                    VISIT(v.s);
+                }
+            }
 			break;
 		case Type::Raw:
 			VISIT(((Raw const&)v).attributes());
@@ -85,29 +114,30 @@ static void traverse(Value const& v) {
 			VISIT(((Logical32 const&)v).attributes());
 			VISIT(((Logical32 const&)v).inner());
 			break;
+        case Type::ScalarString:
+            VISIT(((ScalarString const&)v).s);
+            break;
         case Type::Pairlist:
             VISIT((Pairlist::Inner const*)v.p);
             VISIT(((Pairlist const&)v).car());
             VISIT(((Pairlist const&)v).cdr());
+            VISIT(((Pairlist const&)v).tag());
             break;
 		default:
+            printf("Unimplemented type: %d\n", v.type()); 
 			// do nothing
 			break;
 	}
 }
 
-/*void Dictionary::Inner::visit() const {
-	for(uint64_t i = 0; i < size; i++) {
-		if(d[i].n != Strings::NA)
-			traverse(d[i].v);
-	}
-	// do nothing for now
-}*/
+uint64_t dictionary_count;
 
 void Dictionary::visit() const {
+    //dictionary_count++;
 	HeapObject::visit();
 	VISIT(d);
 	for(uint64_t i = 0; i < size; i++) {
+        VISIT(d->d[i].n);
 		if(d->d[i].n != Strings::NA)
 			traverse(d->d[i].v);
 	}
@@ -119,7 +149,10 @@ void Environment::visit() const {
     VISIT(attributes);
 }
 
+uint64_t code_count;
+
 void Code::visit() const {
+    //code_count++;
 	HeapObject::visit();
 	traverse(expression);
 	
@@ -142,10 +175,14 @@ void Code::Finalize(HeapObject* o) {
     code->calls.clear();
 }
 
+uint64_t prototype_count;
+
 void Prototype::visit() const {
+    //prototype_count++;
 	HeapObject::visit();
 	VISIT(code);
-	
+	VISIT(string);
+
     traverse(formals);
 	traverse(parameters);
     traverse(defaults);
@@ -157,21 +194,27 @@ void SEXPREC::visit() const {
 }
 
 void Heap::mark(Global& global) {
+
+    /*for(int i = 0; i < 17; ++i)
+        type_count[i] = 0;
+    dictionary_count = 0;
+    code_count = 0;
+    prototype_count = 0;*/
+
 	// traverse root set
 	// mark the region that I'm currently allocating into
     ((HeapObject*)bump)->visit();
 	
 	//printf("--global--\n");
-	VISIT(global.global);
-	traverse(global.arguments);
+	VISIT(global.empty);
+    VISIT(global.global);
     VISIT(global.promiseCode);
+	
+    traverse(global.arguments);
 
-    for(std::map<std::string, String>::const_iterator i = 
-            global.strings.table().begin();
-            i != global.strings.table().end();
-            ++i) {
-        VISIT(i->second);
-    }
+    VISIT(global.symbolDict);
+    VISIT(global.callDict);
+    VISIT(global.exprDict);
 
 	for(std::list<State*>::iterator t = global.states.begin();
             t != global.states.end(); ++t) {
@@ -211,9 +254,36 @@ void Heap::mark(Global& global) {
             VISIT(global.apiStack->stack[i]);
         }
     }
+
+    /*for(int i = 0; i < 17; ++i)
+        printf("%d: %d\n", i, type_count[i]);
+    printf("dict: %d\n", dictionary_count);
+    printf("code: %d\n", code_count);
+    printf("proto: %d\n", prototype_count);*/
 }
 
-void Heap::sweep() {
+
+void StringTable::sweep() {
+    lock.acquire();
+    //uint64_t old_total = stringTable.size();
+    for (auto it = stringTable.cbegin(); it != stringTable.cend(); )
+    {
+        if((*it).second.second && !(*it).second.first->marked()) {
+            it = stringTable.erase(it);
+        }
+        else
+            ++it;
+    }
+	//printf("Swept string table: \t%d => \t %d\n", old_total, stringTable.size());
+    lock.release();
+}
+
+void Heap::sweep(Global& global) {
+
+    // sweep global string table first to remove dead weak references
+    global.strings.sweep();    
+
+    // sweep heap
 	//uint64_t old_total = total;
 	total = 0;
 	GCObject** g = &root;

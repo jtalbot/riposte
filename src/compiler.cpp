@@ -294,8 +294,8 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code
         Operand tmp = compileConstant(Character::c(Strings::assignTmp), code);
         emit( ByteCode::store, tmp, 0, rhs );
 
-        List y = CreateCall(List::c(CreateSymbol(Strings::getenv), Null::Singleton()));
-        List z = CreateCall(List::c(CreateSymbol(Strings::env_get), y, Character::c(Strings::assignTmp)));
+        List y = CreateCall(global, List::c(CreateSymbol(global, Strings::getenv), Null::Singleton()));
+        List z = CreateCall(global, List::c(CreateSymbol(global, Strings::env_get), y, Character::c(Strings::assignTmp)));
         Value value = z;
         while(isCall(dest)) {
             List const& c = (List const&)dest;
@@ -306,7 +306,7 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code
 
             for(int64_t i = 0; i < c.length(); i++) { n[i] = c[i]; }
             String as = global.internStr(global.externStr(SymbolStr(c[0])) + "<-");
-            n[0] = CreateSymbol(as);
+            n[0] = CreateSymbol(global, as);
             n[c.length()] = value;
 
             Character nnames(c.length()+1);
@@ -325,7 +325,7 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code
             }
             nnames[nnames.length()-1] = Strings::value;
             
-            value = CreateCall(n, nnames);
+            value = CreateCall(global, n, nnames);
             dest = c[1];
         }
 
@@ -623,7 +623,7 @@ Compiler::Operand Compiler::emitNullary(ByteCode::Enum bc, List const& call, Cod
 struct Pair { String n; Value v; };
 
 CompiledCall Compiler::makeCall(State& state, List const& call, Character const& names) {
-    List rcall = CreateCall(call, names.length() > 0 ? names : Value::Nil());
+    List rcall = CreateCall(state.global, call, names.length() > 0 ? names : Value::Nil());
     int64_t dotIndex = call.length()-1;
 	std::vector<Pair>  arguments;
     bool named = false;
@@ -655,7 +655,7 @@ CompiledCall Compiler::makeCall(State& state, List const& call, Character const&
                 for(size_t j=0, k=0; j < names.length(); ++j)
                     if(j != i)
                         rnames[k++] = names[j];
-                rcall = CreateCall(rcall, rnames);
+                rcall = CreateCall(state.global, rcall, rnames);
             }
         }
         else {
