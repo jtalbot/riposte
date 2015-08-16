@@ -1,6 +1,6 @@
 Riposte, a fast interpreter and JIT for R.
 
-Justin Talbot <jtalbot@stanford.edu>
+Justin Talbot <justintalbot@gmail.com>
 Zach Devito 
 
 We only do development on OSX and Linux. It's unlikely that our JIT will work on Windows.
@@ -23,12 +23,12 @@ Compiling riposte
 3. Execute ./riposte to start
 
 4. To load R standard library
-    Build R 3.1.1 from sources with
+    Build R 3.2.1 from sources with
     ./configure --with-aqua=no --with-tcltk=no --with-x=no --with-cairo=no --with-ICU=no --enable-byte-compiled-packages=no --enable-strict-barrier=yes --enable-R-profiling=no
     Copy lib/libRblas.dylib and lib/libRlapack.dylib into Riposte's home directory
     Copy the contents of the library directory into Riposte's library directory
 
-	In R-3.1.1/src/nmath/standalone, delete -DMATHLIB_STANDALONE from Makefile, do make shared
+	In R-3.2.1/src/nmath/standalone, delete -DMATHLIB_STANDALONE from Makefile, do make shared
     Copy src/nmath/standalone/libRmath.dylib into Riposte's home directory
 
 Flags
