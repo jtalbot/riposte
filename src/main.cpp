@@ -25,11 +25,9 @@ static int verbose = 0;
 static void info(int threads, std::ostream& out) 
 {
     out << "Riposte (" << threads << " threads) "
-        << "-- Copyright (C) 2010-2013 Stanford, 2014 Justin Talbot" << std::endl;
+        << "-- Copyright (C) 2010-2015 Stanford, Justin Talbot" << std::endl;
     out << "http://jtalbot.github.com/riposte/" << std::endl;
     out << std::endl;
-    out << "If you have the base R libraries installed, you can load them by running:" << std::endl << "source('bootstrap.R')" << std::endl;
-
 }
 
 /* debug messages */
@@ -195,9 +193,12 @@ static void usage()
 {
     l_message(0,"usage: riposte [options]... [script [args]...]");
     l_message(0,"options:");
-    l_message(0,"    -f, --file         execute R script");
-    l_message(0,"    -v, --verbose      enable verbose output");
-    l_message(0,"    -j N               launch Riposte with N threads");
+    l_message(0,"    -f, --file            execute R script");
+    l_message(0,"    -b, --bootstrap       load bootstrap.R on startup");
+    l_message(0,"    -p, --profile FILE    dump sampled stack traces to FILE");
+    l_message(0,"    -v, --verbose         enable verbose output");
+    l_message(0,"    -q, --quiet           minimize output");
+    l_message(0,"    -j N                  launch Riposte with N threads");
 }
 
 extern int opterr;
@@ -216,6 +217,7 @@ int main(int argc, char** argv)
         { "args",      0,    NULL,    'a' },
         { "format",    1,    NULL,    'F' },
         { "profile",   1,    NULL,    'p' },
+        { "bootstrap", 0,    NULL,    'b' },
         { NULL,        0,    NULL,     0  }
     };
 
@@ -224,11 +226,12 @@ int main(int argc, char** argv)
     bool echo = true;
     char* profileName = NULL;
     Riposte::Format format = Riposte::RiposteFormat;
-    int threads = 1; 
+    int threads = 1;
+    bool bootstrap = false; 
 
     int ch;
     opterr = 0;
-    while ((ch = getopt_long(argc, argv, "df:hj:vqasp:", longopts, NULL)) != -1)
+    while ((ch = getopt_long(argc, argv, "df:hj:vqasbp:", longopts, NULL)) != -1)
     {
         // don't parse args past '--args'
         if(ch == 'a')
@@ -261,6 +264,9 @@ int main(int argc, char** argv)
             case 'p':
                 profileName = optarg;
                 break;
+            case 'b':
+                bootstrap = true;
+                break;
             case 'h':
             default:
                 usage();
@@ -271,7 +277,7 @@ int main(int argc, char** argv)
 
     d_message(1,NULL,"Command option processing complete");
 
-    if(!filename)
+    if(!filename && echo)
         info(threads, std::cout);
 
     /* Initialize Riposte VM */
@@ -291,9 +297,13 @@ int main(int argc, char** argv)
 
     int rc; 
     /* Load bootstrap file if it exists */
-    {
+    if(bootstrap) {
         std::ifstream in("bootstrap.R");
         rc = run((State&)state, std::string("bootstrap.R"), in, std::cout, false, echo);
+    }
+    else if(echo)
+    {
+        std::cout << "If you have the base R libraries installed, you can load them by running:" << std::endl << "source('bootstrap.R')" << std::endl;
     }
 
     /* Either execute the specified file or read interactively from stdin  */
