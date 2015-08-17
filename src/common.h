@@ -15,7 +15,7 @@
 #include <cstdlib>
 #include <limits>
 #ifdef __GNUC__
-	#define ALWAYS_INLINE __attribute__((always_inline))
+	#define ALWAYS_INLINE __inline__ __attribute__((always_inline))
 #else
 	#define ALWAYS_INLINE
 #endif

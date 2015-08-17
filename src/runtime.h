@@ -20,7 +20,7 @@ inline double asReal1(Value const& v) {
 String type2String(Type::Enum type);
 Type::Enum string2Type(String str);
 
-void Element(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
+void Element(Value const& v, int64_t index, Value& out);
 inline void Element(Value const& v, int64_t index, Value& out) {
 	switch(v.type()) {
 		#define CASE(Name)   \
@@ -33,7 +33,7 @@ inline void Element(Value const& v, int64_t index, Value& out) {
 	};
 }
 
-void Element2(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
+void Element2(Value const& v, int64_t index, Value& out);
 inline void Element2(Value const& v, int64_t index, Value& out) {
 	switch(v.type()) {
 		#define CASE(Name)   \
@@ -86,7 +86,7 @@ inline void Subset2(State& state, Value const& a, Value const& i, Value& out) {
 	_error("Invalid subset index");
 }
 
-void ElementAssign(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
+void ElementAssign(Value const& v, int64_t index, Value& out);
 inline void ElementAssign(Value const& v, int64_t index, Value& out) {
 	switch(v.type()) {
 		#define CASE(Name) case Type::Name: ((Name&)out)[index] = ((Name const&)v)[0]; break;
@@ -96,7 +96,7 @@ inline void ElementAssign(Value const& v, int64_t index, Value& out) {
 	};
 }
 
-void Element2Assign(Value const& v, int64_t index, Value& out) ALWAYS_INLINE;
+void Element2Assign(Value const& v, int64_t index, Value& out);
 inline void Element2Assign(Value const& v, int64_t index, Value& out) {
     if(index < 0 || index > ((Vector const&)out).length()) _error("Out-of-range index");
 	switch(out.type()) {

@@ -141,7 +141,8 @@ protected:
     // an empty pair (String::NA, Value::Nil).
     // success is set to true if the variable is found. This boolean flag
     // is necessary for compiler optimizations to eliminate expensive control flow.
-    Pair* find(String name, bool& success) const ALWAYS_INLINE {
+    ALWAYS_INLINE
+    Pair* find(String name, bool& success) const {
         uint64_t i = ((uint64_t)name >> 3) & ksize;
         Pair* first = &d->d[i];
         if(__builtin_expect(first->n == name, true)) {
@@ -163,7 +164,8 @@ protected:
     // Returns the location where variable `name` should be inserted.
     // Assumes that `name` doesn't exist in the hash table yet.
     // Used for rehash and insert where this is known to be true.
-    Pair* slot(String name) const ALWAYS_INLINE {
+    ALWAYS_INLINE
+    Pair* slot(String name) const {
         uint64_t i = ((uint64_t)name >> 3) & ksize;
         if(__builtin_expect(d->d[i].n == Strings::NA, true)) {
             return &d->d[i];
@@ -203,7 +205,7 @@ public:
 
     // Returns a pointer to the entry for `name`
     // or a nullptr if it doesn't exist.
-    Value* get2(String name) ALWAYS_INLINE
+    Value* get2(String name)
     {
         uint64_t i = ((uint64_t)name >> 3) & ksize, j = 0;
 
@@ -220,13 +222,13 @@ public:
         return nullptr;
     }
 
-    bool has(String name) const ALWAYS_INLINE {
+    bool has(String name) const {
         bool success;
         find(name, success);
         return success;
     }
 
-    Value const& get(String name) const ALWAYS_INLINE {
+    Value const& get(String name) const {
         bool success;
         return find(name, success)->v;
     }
@@ -333,7 +335,7 @@ public:
 
     // Look up insertion location using R <<- rules
     // (i.e. find variable with same name in the lexical scope)
-    Value& insertRecursive(String name, Environment*& env) const ALWAYS_INLINE {
+    Value& insertRecursive(String name, Environment*& env) const {
         env = (Environment*)this;
         
         bool success;
@@ -346,12 +348,12 @@ public:
     
     // Look up variable using standard R lexical scoping rules
     // Should be same as insertRecursive, but with extra constness
-    Value const& getRecursive(String name, Environment*& env) const ALWAYS_INLINE {
+    Value const& getRecursive(String name, Environment*& env) const {
         return insertRecursive(name, env);
     }
 
     // Look up variable through enclosure chain 
-    Value* getRecursive2(String name, Environment*& env) ALWAYS_INLINE
+    Value* getRecursive2(String name, Environment*& env)
     {
         env = this;
         do {

@@ -2,7 +2,7 @@
  
 UNAME := $(shell uname -s)
 CXX := clang++
-CXXFLAGS := -Wall -I/usr/local/include -g
+CXXFLAGS := -std=c++11 -Wall -I/usr/local/include -g
 CFLAGS := -Wall -fPIC -g
 LFLAGS := -dynamiclib -L/usr/local/lib -L../..
 LIBS := -lpthread -ltre -lpcre -lboost_iostreams-mt -llzma -liconv

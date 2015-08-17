@@ -14,7 +14,7 @@ endif
 
 EPEE=0
 
-SRC := type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp runtime.cpp library.cpp format.cpp gc.cpp call.cpp thread.cpp
+SRC := type.cpp strings.cpp bc.cpp value.cpp output.cpp interpreter.cpp compiler.cpp runtime.cpp library.cpp format.cpp gc.cpp call.cpp thread.cpp inst.cpp
 
 SRC += parser/lexer.cpp
 

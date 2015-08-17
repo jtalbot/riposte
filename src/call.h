@@ -9,6 +9,7 @@
 #include "exceptions.h"
 #include "runtime.h"
 
+// Common instruction decode patterns
 
 #define REGISTER(i) (*(state.frame.registers+(i)))
 #define CONSTANT(i) (state.frame.code->constants[-1-(i)])
@@ -31,6 +32,7 @@ if(__builtin_expect(X.isFuture(), false)) { \
 #else
 #define BIND(X)
 #endif
+
 
 Instruction const* force(
     State& state, Promise const& p,
@@ -475,9 +477,9 @@ inline bool GetFast(State& state, Value a, Value b, Value& c) {
 
     else if(a.isEnvironment() ) {
          if( b.isCharacter()
-         && ((Character const&)b).length() == 1) {
-	        String s = ((Character const&)b).s;
-            Value const& v = ((REnvironment&)a).environment()->get(s);
+         && static_cast<Character const&>(b).length() == 1) {
+	        String s = static_cast<Character const&>(b).s;
+            Value const& v = static_cast<REnvironment const&>(a).environment()->get(s);
             if(v.isObject()) {
                 c = v;
                 return true;
