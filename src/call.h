@@ -1,5 +1,5 @@
 
-#ifndef RIPOSTE_CALL_H
+#pragma once
 
 // code for making function calls
 
@@ -8,36 +8,6 @@
 #include "vector.h"
 #include "exceptions.h"
 #include "runtime.h"
-
-// Common instruction decode patterns
-
-#define REGISTER(i) (*(state.frame.registers+(i)))
-#define CONSTANT(i) (state.frame.code->constants[-1-(i)])
-
-// Out register is currently always a register, not memory
-#define OUT(X) (*(state.frame.registers+(inst.X)))
-
-#define DECODE(X) \
-Value const& X = \
-	__builtin_expect((inst.X) >= 0, true) \
-		? *(state.frame.registers+(inst.X)) \
-	    : state.frame.code->constants[-1-(inst.X)];
-
-#ifdef EPEE
-#define BIND(X) \
-if(__builtin_expect(X.isFuture(), false)) { \
-	state.traces.Bind(state,X); \
-	return &inst; \
-}
-#else
-#define BIND(X)
-#endif
-
-
-Instruction const* force(
-    State& state, Promise const& p,
-    Environment* targetEnv, Value targetIndex,
-    int64_t outRegister, Instruction const* returnpc);
 
 Instruction const* buildStackFrame(State& state, 
     Environment* environment, Code const* code, 
@@ -441,55 +411,3 @@ bool UnifyScanDispatch(State& state, void* args, Value const& a, Value& c) {
 	else return false;
 }
 
-#define SLOW_DISPATCH_DEFN(Name, String, Group, Func) \
-Instruction const* Name##Slow(State& state, Instruction const& inst, void* args, Value const& a, Value& c);
-UNARY_FOLD_SCAN_BYTECODES(SLOW_DISPATCH_DEFN)
-#undef SLOW_DISPATCH_DEFN
-
-#define SLOW_DISPATCH_DEFN(Name, String, Group, Func) \
-Instruction const* Name##Slow(State& state, Instruction const& inst, void* args, Value const& a, Value const& b, Value& c);
-BINARY_BYTECODES(SLOW_DISPATCH_DEFN)
-#undef SLOW_DISPATCH_DEFN
-
-inline bool GetFast(State& state, Value a, Value b, Value& c) {
-	if(((Object const&)a).hasAttributes())
-        return false;
-
-	else if(a.isVector()) {
-        Vector const& v = (Vector const&)a;
-		if(    b.isInteger() 
-            && ((Integer const&)b).length() == 1
-            && !Integer::isNA(b.i)
-            && (b.i-1) >= 0 
-            && (b.i-1) < v.length() ) {
-            Element2(v, b.i-1, c);
-            return true;
-        }
-		else if(b.isDouble() 
-            && ((Double const&)b).length() == 1
-            && !Double::isNA(b.d)
-            && (b.d-1) >= 0
-            && (b.d-1) < v.length()) {
-            Element2(a, b.d-1, c);
-            return true;
-        }
-	}
-
-    else if(a.isEnvironment() ) {
-         if( b.isCharacter()
-         && static_cast<Character const&>(b).length() == 1) {
-	        String s = static_cast<Character const&>(b).s;
-            Value const& v = static_cast<REnvironment const&>(a).environment()->get(s);
-            if(v.isObject()) {
-                c = v;
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-Instruction const* GetSlow(State& state, Instruction const& inst, Value const& a, Value const& b, Value& c);
-
-#endif

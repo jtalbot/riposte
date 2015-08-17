@@ -2,13 +2,33 @@
 #include <string>
 #include <dlfcn.h>
 
-#include "value.h"
-#include "type.h"
-#include "bc.h"
-#include "ops.h"
-#include "runtime.h"
+#include "inst.h"
+
 #include "call.h"
 #include "compiler.h"
+#include "ops.h"
+#include "runtime.h"
+
+
+Instruction const* force(
+    State& state, Promise const& p,
+    Environment* targetEnv, Value targetIndex,
+    int64_t outRegister, Instruction const* returnpc) {
+
+    Code* code = p.isExpression() ? p.code() : state.global.promiseCode;
+    Compiler::doPromiseCompilation(state, code);
+    Instruction const* r = buildStackFrame(
+        state, p.environment(), code, outRegister, returnpc);
+    state.frame.isPromise = true;
+            
+    REnvironment::Init(REGISTER(0), targetEnv);
+    REGISTER(1) = targetIndex;
+	
+    if(p.isDotdot())		
+        Integer::InitScalar(REGISTER(2), p.dotIndex());
+
+    return r;
+}
 
 
 Instruction const* call_impl(State& state, Instruction const& inst)
@@ -571,11 +591,81 @@ Instruction const* length_impl(State& state, Instruction const& inst)
 Instruction const* get_impl(State& state, Instruction const& inst)
 {
     state.visible = true;
-    DECODE(a); DECODE(b);
-    try {
-        return GetSlow( state, inst, a, b, OUT(c) );
+    DECODE(a); BIND(a);
+    DECODE(b); BIND(b);
+    try
+    { 
+        // This case seems wrong, but some base code relies on this behavior. 
+        if(a.isNull()) {
+            OUT(c) = Null::Singleton();
+            return &inst+1;
+        }
+        else if(!static_cast<Object const&>(a).hasAttributes())
+        {
+	        if(a.isVector()) {
+                auto v = static_cast<Vector const&>(a);
+		        if(b.isInteger()) {
+                    if(  ((Integer const&)b).length() != 1
+                    || (b.i-1) < 0 )
+                        _error("attempt to select more or less than one element");
+                    if( (b.i-1) >= v.length() )
+                        _error("subscript out of bounds");
+
+                    Element2(v, b.i-1, OUT(c));
+                    return &inst+1;
+                }
+		        else if(b.isDouble()) {
+                    if(  ((Double const&)b).length() != 1
+                    || ((int64_t)b.d-1) < 0 )
+                        _error("attempt to select more or less than one element");
+                    if( ((int64_t)b.d-1) >= v.length())
+                        _error("subscript out of bounds");
+                
+                    Element2(a, (int64_t)b.d-1, OUT(c));
+                    return &inst+1;
+                }
+	        }
+            else if(a.isEnvironment()) {
+                if( b.isCharacter()
+                    && static_cast<Character const&>(b).length() == 1) {
+	                String s = static_cast<Character const&>(b).s;
+                    Value const& v = static_cast<REnvironment const&>(a).environment()->get(s);
+                    if(v.isObject()) {
+                        OUT(c) = v;
+                        return &inst+1;
+                    }
+                    else if(v.isNil()) {
+                        OUT(c) = Null::Singleton();
+                        return &inst+1;
+                    }
+                    else {
+                        return force(state, static_cast<Promise const&>(v), 
+                            static_cast<REnvironment const&>(a).environment(), b,
+                            inst.c, &inst+1); 
+                    }
+                }
+            }
+            else if(a.isClosure()) {
+                if( b.isCharacter()
+                    && static_cast<Character const&>(b).length() == 1 ) {
+                    auto f = static_cast<Closure const&>(a);
+	                String s = static_cast<Character const&>(b).s;
+                    if(s == Strings::body) {
+                        OUT(c) = f.prototype()->code->expression;
+                        return &inst+1;
+                    }
+                    else if(s == Strings::formals) {
+                        OUT(c) = f.prototype()->formals;
+                        return &inst+1;
+                    }
+                }
+            }
+        }
+ 
+        return GenericDispatch(state, inst, Strings::bb, a, b, inst.c); 
     }
-    catch(RuntimeError const& e) {
+    catch(RuntimeError const& e)
+    {
         return StopDispatch(state, inst, state.internStr(
             e.what().c_str()), 
             inst.c);

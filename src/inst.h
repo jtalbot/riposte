@@ -1,18 +1,66 @@
+/*
+    Riposte
 
+    Instruction handlers
+
+    To help out the compiler, instruction handlers are split
+    into a fast-path that should be inlined into the interpreter
+    (defined in this file) and a slow-path impl function that
+    will not be inlined.
+*/
+
+#pragma once
+
+
+#include "bc.h"
 #include "call.h"
-
-// To help out the compiler, bytecode handlers are split
-// into a fast-path that should be inlined into the interpreter
-// (defined in this file) and a slow-path impl function that should
-// be called from the interpreter.
+#include "interpreter.h"
+#include "type.h"
+#include "value.h"
 
 
-// Forward define impls for all bytecodes
+// Forward define impls for all instructions
 #define DEFINE_IMPL(name,...) \
     Instruction const* name##_impl(State& state, Instruction const& inst);
 STANDARD_BYTECODES(DEFINE_IMPL);
 
 
+// Common instruction decoding code
+#define REGISTER(i) (*(state.frame.registers+(i)))
+#define CONSTANT(i) (state.frame.code->constants[-1-(i)])
+#define OUT(X)      (*(state.frame.registers+(inst.X)))
+
+// Most instructions can take either registers or constants
+// as arguments. They are distinguished by the sign of the argument.
+#define DECODE(X) \
+Value const& X = \
+	__builtin_expect((inst.X) >= 0, true) \
+		? *(state.frame.registers+(inst.X)) \
+	    : state.frame.code->constants[-1-(inst.X)];
+
+// Epee's deferred evaluation approach requires us to "bind" futures
+// when we can no longer defer evaluation. This causes them to be evaluated.
+#ifdef EPEE
+#define BIND(X) \
+if(__builtin_expect(X.isFuture(), false)) { \
+	state.traces.Bind(state,X); \
+	return &inst; \
+}
+#else
+#define BIND(X)
+#endif
+
+
+// Helper function to trigger forcing of promises
+// without recursion on the interpreter.
+Instruction const* force(
+    State& state, Promise const& p,
+    Environment* targetEnv, Value targetIndex,
+    int64_t outRegister, Instruction const* returnpc);
+
+
+
+// ---Instruction handlers---
 
 
 // CONTROL_FLOW_BYTECODES 
@@ -66,6 +114,8 @@ Instruction const* forbegin_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* forend_inst(State& state, Instruction const& inst)
 {
+    // The forend instruction takes up two instruction slots.
+    // The second slot has the jump offset.
     Value& counter = REGISTER(inst.c);
     Value& limit = REGISTER(inst.c+1);
 
@@ -407,8 +457,39 @@ Instruction const* get_inst(State& state, Instruction const& inst)
 {
     state.visible = true;
     DECODE(a); DECODE(b);
-    if(GetFast(state, a, b, OUT(c)))
-        return &inst+1;
+
+    if(a.isVector() && !static_cast<Object const&>(a).hasAttributes())
+    {
+        auto v = static_cast<Vector const&>(a);
+		if(    b.isInteger() 
+            && static_cast<Integer const&>(b).length() == 1
+            && !Integer::isNA(b.i)
+            && (b.i-1) >= 0 
+            && (b.i-1) < v.length() ) {
+            Element2(v, b.i-1, OUT(c));
+            return &inst+1;
+        }
+		else if(b.isDouble() 
+            && static_cast<Double const&>(b).length() == 1
+            && !Double::isNA(b.d)
+            && (b.d-1) >= 0
+            && (b.d-1) < v.length()) {
+            Element2(a, (int64_t)b.d-1, OUT(c));
+            return &inst+1;
+        }
+	}
+    else if(a.isEnvironment() && !static_cast<Object const&>(a).hasAttributes())
+    {
+         if( b.isCharacter()
+            && static_cast<Character const&>(b).length() == 1) {
+	        String s = static_cast<Character const&>(b).s;
+            Value const& v = static_cast<REnvironment const&>(a).environment()->get(s);
+            if(v.isObject()) {
+                OUT(c) = v;
+                return &inst+1;
+            }
+        }
+    }
 
     return get_impl(state, inst);
 }
