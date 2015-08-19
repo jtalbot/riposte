@@ -390,37 +390,37 @@ Value Quote(State& state, Value const& v) {
 
 Instruction const* GenericDispatch(State& state, Instruction const& inst, String op, Value const& a, int64_t out) {
 	Environment* penv;
-	Value const& f = state.frame.environment->getRecursive(op, penv);
-	if(f.isClosure()) {
+	Value const* f = state.frame.environment->getRecursive(op, penv);
+	if(f && f->isClosure()) {
 		List call = List::c(
                         CreateSymbol(state.global, op),
                         Quote(state, a));
         CompiledCall cc = Compiler::makeCall(state, call, Character(0));
-		Environment* fenv = FastMatchArgs(state, state.frame.environment, ((Closure const&)f), cc);
-		return buildStackFrame(state, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
+		Environment* fenv = FastMatchArgs(state, state.frame.environment, static_cast<Closure const&>(*f), cc);
+		return buildStackFrame(state, fenv, static_cast<Closure const&>(*f).prototype()->code, out, &inst+1);
 	}
 	_error(std::string("Failed to find generic for builtin op: ") + op->s);
 }
 
 Instruction const* GenericDispatch(State& state, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out) {
 	Environment* penv;
-	Value const& f = state.frame.environment->getRecursive(op, penv);
-	if(f.isClosure()) { 
+	Value const* f = state.frame.environment->getRecursive(op, penv);
+	if(f && f->isClosure()) { 
 		List call = List::c(
                         CreateSymbol(state.global, op),
                         Quote(state, a),
                         Quote(state, b));
         CompiledCall cc = Compiler::makeCall(state, call, Character(0));
-		Environment* fenv = FastMatchArgs(state, state.frame.environment, ((Closure const&)f), cc);
-		return buildStackFrame(state, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
+		Environment* fenv = FastMatchArgs(state, state.frame.environment, static_cast<Closure const&>(*f), cc);
+		return buildStackFrame(state, fenv, static_cast<Closure const&>(*f).prototype()->code, out, &inst+1);
 	}
 	_error(std::string("Failed to find generic for builtin op: ") + op->s + " type: " + Type::toString(a.type()) + " " + Type::toString(b.type()));
 }
 
 Instruction const* GenericDispatch(State& state, Instruction const& inst, String op, Value const& a, Value const& b, Value const& c, int64_t out) {
 	Environment* penv;
-	Value const& f = state.frame.environment->getRecursive(op, penv);
-	if(f.isClosure()) { 
+	Value const* f = state.frame.environment->getRecursive(op, penv);
+	if(f && f->isClosure()) { 
 		List call = List::c(
                         CreateSymbol(state.global, op),
                         Quote(state, a),
@@ -432,8 +432,8 @@ Instruction const* GenericDispatch(State& state, Instruction const& inst, String
                         Strings::empty,
                         Strings::value);
         CompiledCall cc = Compiler::makeCall(state, call, names);
-        Environment* fenv = MatchArgs(state, state.frame.environment, ((Closure const&)f), cc);
-		return buildStackFrame(state, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
+        Environment* fenv = MatchArgs(state, state.frame.environment, static_cast<Closure const&>(*f), cc);
+		return buildStackFrame(state, fenv, static_cast<Closure const&>(*f).prototype()->code, out, &inst+1);
 	}
 	_error(std::string("Failed to find generic for builtin op: ") + op->s);
 }
@@ -441,14 +441,14 @@ Instruction const* GenericDispatch(State& state, Instruction const& inst, String
 
 Instruction const* StopDispatch(State& state, Instruction const& inst, String msg, int64_t out) {
 	Environment* penv;
-	Value const& f = state.frame.environment->getRecursive(state.internStr("__stop__"), penv);
-	if(f.isClosure()) {
+	Value const* f = state.frame.environment->getRecursive(state.internStr("__stop__"), penv);
+	if(f && f->isClosure()) {
 		List call = List::c(
-                        f, 
+                        *f, 
                         Character::c(msg));
         CompiledCall cc = Compiler::makeCall(state, call, Character(0));
-		Environment* fenv = FastMatchArgs(state, state.frame.environment, ((Closure const&)f), cc);
-		return buildStackFrame(state, fenv, ((Closure const&)f).prototype()->code, out, &inst+1);
+		Environment* fenv = FastMatchArgs(state, state.frame.environment, static_cast<Closure const&>(*f), cc);
+		return buildStackFrame(state, fenv, static_cast<Closure const&>(*f).prototype()->code, out, &inst+1);
 	}
 	_error(std::string("Failed to find stop handler (__stop__)"));
 }
@@ -476,8 +476,8 @@ template<>
 bool ClosureBinaryDispatch< struct eqVOp<Closure, Closure> >
 (State& state, void* args, Value const& a, Value const& b, Value& c) {
     Logical::InitScalar(c,
-        ((Closure const&)a).environment() == ((Closure const&)b).environment() &&
-        ((Closure const&)a).prototype() == ((Closure const&)b).prototype() ?
+        static_cast<Closure const&>(a).environment() == static_cast<Closure const&>(b).environment() &&
+        static_cast<Closure const&>(a).prototype() == static_cast<Closure const&>(b).prototype() ?
             Logical::TrueElement : Logical::FalseElement );
     return true;
 }
@@ -486,8 +486,8 @@ template<>
 bool ClosureBinaryDispatch< struct neqVOp<Closure, Closure> >
 (State& state, void* args, Value const& a, Value const& b, Value& c) {
     Logical::InitScalar(c,
-        ((Closure const&)a).environment() != ((Closure const&)b).environment() ||
-        ((Closure const&)a).prototype() != ((Closure const&)b).prototype() ?
+        static_cast<Closure const&>(a).environment() != static_cast<Closure const&>(b).environment() ||
+        static_cast<Closure const&>(a).prototype() != static_cast<Closure const&>(b).prototype() ?
             Logical::TrueElement : Logical::FalseElement );
     return true;
 }

@@ -88,6 +88,16 @@ inline int64_t riposte_min(State& state, int64_t a, int64_t b) { return a < b ? 
 inline int64_t riposte_min(State& state, char a, char b) { return a & b; }
 inline String riposte_min(State& state, String a, String b) { return strcmp(a->s,b->s) < 0 ? a : b; }
 
+inline bool eq(State& state, double a, double b) { return a == b; }
+inline bool eq(State& state, int64_t a, int64_t b) { return a == b; }
+inline bool eq(State& state, char a, char b) { return (unsigned char)a == (unsigned char)b; }
+inline bool eq(State& state, String a, String b) { return strcmp(a->s,b->s) == 0; }
+
+inline bool neq(State& state, double a, double b) { return a != b; }
+inline bool neq(State& state, int64_t a, int64_t b) { return a != b; }
+inline bool neq(State& state, char a, char b) { return (unsigned char)a != (unsigned char)b; }
+inline bool neq(State& state, String a, String b) { return strcmp(a->s,b->s) != 0; }
+
 inline bool gt(State& state, double a, double b) { return a > b; }
 inline bool gt(State& state, int64_t a, int64_t b) { return a > b; }
 inline bool gt(State& state, char a, char b) { return (unsigned char)a > (unsigned char)b; }

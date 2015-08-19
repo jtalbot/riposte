@@ -161,11 +161,33 @@ protected:
         return &d->d[i];
     }
 
+    // Returns a pointer to the entry for `name`
+    // or a nullptr if it doesn't exist.
+    Value* find2(String name) const
+    {
+        if(!this) return nullptr;
+
+        uint64_t i = ((uint64_t)name >> 3) & ksize, j = 0;
+
+        if(__builtin_expect(d->d[i].n == name, true))
+            return &d->d[i].v;
+
+        while(d->d[i].n != Strings::NA)
+        {
+            i = (i+(++j)) & ksize;
+            if(__builtin_expect(d->d[i].n == name, true))
+                return &d->d[i].v;
+        }
+
+        return nullptr;
+    }
+
     // Returns the location where variable `name` should be inserted.
     // Assumes that `name` doesn't exist in the hash table yet.
     // Used for rehash and insert where this is known to be true.
     ALWAYS_INLINE
-    Pair* slot(String name) const {
+    Pair* slot(String name) const
+    {
         uint64_t i = ((uint64_t)name >> 3) & ksize;
         if(__builtin_expect(d->d[i].n == Strings::NA, true)) {
             return &d->d[i];
@@ -177,7 +199,8 @@ protected:
         return &d->d[i];
     }
 
-    void rehash(uint64_t s) {
+    void rehash(uint64_t s)
+    {
         uint64_t old_size = size;
         uint64_t old_load = load;
         Inner* old_d = d;
@@ -199,75 +222,59 @@ protected:
     }
 
 public:
-    Dictionary(int64_t initialLoad) : size(0), load(0), d(0) {
+
+    // Mutable interface for environments
+
+    Dictionary(int64_t initialLoad) : size(0), load(0), d(0)
+    {
         rehash(std::max((uint64_t)1, nextPow2(initialLoad*2)));
     }
 
-    // Returns a pointer to the entry for `name`
-    // or a nullptr if it doesn't exist.
-    Value* get(String name) const
+    Value* get(String name)
     {
-        if(!this) return nullptr;
-
-        uint64_t i = ((uint64_t)name >> 3) & ksize, j = 0;
-
-        if(__builtin_expect(d->d[i].n == name, true))
-            return &d->d[i].v;
-
-        while(d->d[i].n != Strings::NA)
-        {
-            i = (i+(++j)) & ksize;
-            if(__builtin_expect(d->d[i].n == name, true))
-                return &d->d[i].v;
-        }
-
-        return nullptr;
+        return find2(name); 
     }
 
-    Value& insert(String name) {
-        bool success;
-        Pair* p = find(name, success);
-        if(!success) {
+    Value& insert(String name)
+    {
+        Value* v = find2(name);
+        if(!v)
+        {
             if(((load+1) * 2) > size)
                 rehash((size*2));
             load++;
-            p = slot(name);
+            Pair* p = slot(name);
             p->n = name;
+            return p->v;
         }
-        return p->v;
+        else
+        {
+            return *v;
+        }
     }
 
     void remove(String name)
     {
-        // TODO: avoid the rehashing here
+        // TODO: avoid rehashing here
         bool success;
         Pair* p = find(name, success);
-        if(success) {
+        if(success)
+        {
             memset(p, 0, sizeof(Pair));
             load--;
             rehash(nextPow2(load*2));
         }
     }
 
-    void clear() {
+    void clear()
+    {
         memset(d->d, 0, sizeof(Pair)*size); 
         load = 0;
     }
 
-    // clone with room for extra elements
-    /*Dictionary* clone(uint64_t extra) const {
-        Dictionary* clone = new Dictionary(load+extra);
-        // copy over elements
-        if(load > 0) {
-            for(uint64_t i = 0; i < size; i++) {
-                if(d->d[i].n != Strings::NA) {
-                    clone->load++;
-                    *clone->slot(d->d[i].n) = d->d[i];
-                }
-            }
-        }
-        return clone;
-    }*/
+
+    // Immutable interface for attributes
+    // A null 'this' pointer must be treated as an empty dictionary
 
     Dictionary(String name, Value const& v)
         : size(2), ksize(1), d(new (sizeof(Pair)*2) Inner())
@@ -277,10 +284,15 @@ public:
         *slot(name) = Pair { name, v };
     }
 
+    Value const* get(String name) const
+    {
+        return find2(name); 
+    }
+
     // clone without an entry
     Dictionary const* cloneWithout(String name) const
     {
-        auto v = get(name);
+        auto v = find2(name);
         if(!v) return this;
         if(load == 1) return nullptr;
 
@@ -311,7 +323,7 @@ public:
             return clone;
         }
 
-        auto p = get(name);
+        auto p = find2(name);
 
         // copy over elements
         Dictionary* clone = new Dictionary(load+(p?0:1));
@@ -390,27 +402,8 @@ public:
     void setAttributes(Dictionary const* d) { attributes = d; }
     bool hasAttributes() const { return attributes != 0; }
 
-    // Look up insertion location using R <<- rules
-    // (i.e. find variable with same name in the lexical scope)
-    Value& insertRecursive(String name, Environment*& env) const {
-        env = (Environment*)this;
-        
-        bool success;
-        Pair* p = env->find(name, success);
-        while(!success && (env = env->getEnclosure())) {
-            p = env->find(name, success);
-        }
-        return p->v;
-    }
-    
-    // Look up variable using standard R lexical scoping rules
-    // Should be same as insertRecursive, but with extra constness
-    Value const& getRecursive(String name, Environment*& env) const {
-        return insertRecursive(name, env);
-    }
-
     // Look up variable through enclosure chain 
-    Value* getRecursive2(String name, Environment*& env)
+    Value* getRecursive(String name, Environment*& env)
     {
         env = this;
         do {
@@ -424,7 +417,8 @@ public:
     void visit() const;
 };
 
-struct StackFrame {
+struct StackFrame
+{
     Value* registers;
     Environment* environment;
     Code const* code;
@@ -434,7 +428,8 @@ struct StackFrame {
 };
 
 // For R API support
-struct SEXPREC : public HeapObject {
+struct SEXPREC : public HeapObject
+{
     Value v;
     SEXPREC(Value const& v) : v(v) {}
     void visit() const;
@@ -442,7 +437,8 @@ struct SEXPREC : public HeapObject {
 
 typedef SEXPREC* SEXP;
 
-struct SEXPStack {
+struct SEXPStack
+{
     int* size;
     SEXP* stack;
 };
@@ -453,7 +449,8 @@ struct SEXPStack {
 
 class State;
 
-class Global {
+class Global
+{
 public:
     StringTable strings;
 
@@ -530,7 +527,8 @@ extern Global* global;
 
 #define DEFAULT_NUM_REGISTERS 10000 
 
-class State {
+class State
+{
 public:
     // Shared global state
     Global& global;

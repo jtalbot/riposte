@@ -799,11 +799,9 @@ SEXP Rf_findVar(SEXP symbol, SEXP env) {
         throw;
     }
     Environment* foundEnv;
-    Value r = ((REnvironment&)env->v).environment()->getRecursive(symbol->v.s, foundEnv);
-    if(r.isNil())
-        return R_UnboundValue;
-    else
-        return ToSEXP(r);
+    Value const* v = ((REnvironment&)env->v).environment()->getRecursive(symbol->v.s, foundEnv);
+
+    return (v && !v->isNil()) ? ToSEXP(*v) : R_UnboundValue;
 }
 
 SEXP Rf_findVarInFrame(SEXP, SEXP) {

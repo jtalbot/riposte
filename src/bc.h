@@ -103,8 +103,8 @@
 	_(pmax, "pmax",	UnifyBinary, PassCheckedNA(a,b,riposte_max(state,a,b)))   \
 
 #define ORDINAL_BINARY_BYTECODES(_)                                            \
-	_(eq, "eq", OrdinalBinary, PassCheckedNA(a,b,(a==b)?Logical::TrueElement:Logical::FalseElement)) \
-	_(neq, "neq", OrdinalBinary, PassCheckedNA(a,b,a!=b?Logical::TrueElement:Logical::FalseElement)) \
+	_(eq, "eq", OrdinalBinary, PassCheckedNA(a,b,eq(state,a,b)?Logical::TrueElement:Logical::FalseElement)) \
+	_(neq, "neq", OrdinalBinary, PassCheckedNA(a,b,neq(state,a,b)?Logical::TrueElement:Logical::FalseElement)) \
 	_(gt, "gt",	OrdinalBinary, PassCheckedNA(a,b,gt(state,a,b)?Logical::TrueElement:Logical::FalseElement)) \
 	_(ge, "ge",	OrdinalBinary, PassCheckedNA(a,b,ge(state,a,b)?Logical::TrueElement:Logical::FalseElement)) \
 	_(lt, "lt",	OrdinalBinary, PassCheckedNA(a,b,lt(state,a,b)?Logical::TrueElement:Logical::FalseElement)) \

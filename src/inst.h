@@ -211,7 +211,7 @@ Instruction const* load_inst(State& state, Instruction const& inst)
     String s = static_cast<Character const&>(CONSTANT(inst.a)).s;
 
     Environment* env;
-    Value const* v = state.frame.environment->getRecursive2(s, env);
+    Value const* v = state.frame.environment->getRecursive(s, env);
 
     if(v)
     {
@@ -243,7 +243,7 @@ Instruction const* loadfn_inst(State& state, Instruction const& inst)
     // Iterate until we find a function
     do
     {
-        Value* v = env->getRecursive2(s, env);
+        Value* v = env->getRecursive(s, env);
 
         if(v)
         {
@@ -297,10 +297,10 @@ Instruction const* storeup_inst(State& state, Instruction const& inst)
     assert(up != 0);
 
     Environment* penv;
-    Value& dest = up->insertRecursive(s, penv);
+    Value* dest = up->getRecursive(s, penv);
 
-    if(!dest.isNil())
-        dest = c;
+    if(dest)
+        *dest = c;
     else
         state.global.global->insert(s) = c;
 

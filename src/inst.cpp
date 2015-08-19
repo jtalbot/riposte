@@ -1258,20 +1258,21 @@ Instruction const* env_missing_impl(State& state, Instruction const& inst)
 
     if( x.isCharacter() && static_cast<Character const&>(x).length() == 1 ) {
         Environment* foundEnv;
-        Value const& v = e->getRecursive(x.s, foundEnv);
-        missing = (    v.isPromise()
-                    && static_cast<Promise const&>(v).isDefault() 
+        Value const* v = e->getRecursive(x.s, foundEnv);
+        missing = !v || v->isNil() ||
+                  ( v->isPromise()
+                    && static_cast<Promise const&>(*v).isDefault() 
                     && foundEnv == original_env 
-                  ) || v.isNil();
+                  );
 
-        if(v.isPromise() && !static_cast<Promise const&>(v).isDefault() && foundEnv == e) {
+        if(v->isPromise() && !static_cast<Promise const&>(*v).isDefault() && foundEnv == e) {
             // see if missing is passed down
             // missing is only passed down if
             // the referenced symbol is an argument.
             // this whole feature is a disaster.
-            if(static_cast<Promise const&>(v).isExpression()) {
-                Value const& expr = static_cast<Promise const&>(v).code()->expression;
-                Environment* env = static_cast<Promise const&>(v).environment();
+            if(static_cast<Promise const&>(*v).isExpression()) {
+                Value const& expr = static_cast<Promise const&>(*v).code()->expression;
+                Environment* env = static_cast<Promise const&>(*v).environment();
                 Value const* func = env->get(Strings::__function__);
                 if(isSymbol(expr) && func && func->isClosure()) {
                     // see if the expr is an argument
