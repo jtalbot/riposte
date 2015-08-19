@@ -139,11 +139,11 @@ struct Promise : public Value {
 // Objects
 
 struct Object : public Value {
-	Dictionary* attributes() const { 
-		return (Dictionary*)(header >> 16); 
+	Dictionary const* attributes() const { 
+		return (Dictionary const*)(header >> 16); 
 	}
 	
-	void attributes(Dictionary* d) {
+	void attributes(Dictionary const* d) {
 		header = (header & ((1<<16)-1)) | ((uint64_t)d << 16);
 	}
 

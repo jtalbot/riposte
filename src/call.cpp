@@ -13,7 +13,11 @@ void dumpStack(State& state) {
             std::cout << "Forcing " << state.deparse(s.registers[1]) << std::endl;
         }
         else {
-            std::cout << state.deparse(s.environment->get(Strings::__call__)) << std::endl;
+            Value const* v = s.environment->get(Strings::__call__);
+            if(v)
+                std::cout << state.deparse(*v) << std::endl;
+            else
+                std::cout << "<no call in environment>" << std::endl;
         }
     }
 
@@ -72,24 +76,24 @@ inline void assignDot(State& state, Value const& v, Environment* evalEnv, Value&
 	assert(!v.isFuture());
 }
 
-Value argument(int64_t index, List const& dots, CompiledCall const& call, Environment* env) {
+Value argument(int64_t index, List const* dots, CompiledCall const& call, Environment* env) {
 	if(index < call.dotIndex) {
 		return call.arguments[index];
 	} else {
 		index -= call.dotIndex;
-        int64_t ndots = dots.isList() ? dots.length() : 0;
+        int64_t ndots = (dots && dots->isList()) ? dots->length() : 0;
 		if(index < ndots) {
 			// Promises in the dots can't be passed down 
 			//     (general rule is that promises only
 			//	occur once anywhere in the program). 
 			// But everything else can be passed down.
-			if(dots[index].isPromise()) {
+			if((*dots)[index].isPromise()) {
 				Value p;
 				Promise::Init(p, env, index, false);
 				return p;
 			} 
 			else {
-				return dots[index];
+				return (*dots)[index];
 			}
 		}
 		else {
@@ -99,17 +103,17 @@ Value argument(int64_t index, List const& dots, CompiledCall const& call, Enviro
 	}
 }
 
-String name(int64_t index, List const& dots, 
-                Character const& dotnames, CompiledCall const& call) {
+String name(int64_t index, List const* dots, 
+                Character const* dotnames, CompiledCall const& call) {
 	if(index < call.dotIndex) {
 		return index < call.names.length() 
             ? call.names[index] 
             : Strings::empty;
 	} else {
 		index -= call.dotIndex;
-        int64_t ndots = dots.isList() ? dots.length() : 0;
+        int64_t ndots = (dots && dots->isList()) ? dots->length() : 0;
 		if(index < ndots) {
-		    return dotnames.isCharacter() ? dotnames[index] : Strings::empty;
+		    return (dotnames && dotnames->isCharacter()) ? (*dotnames)[index] : Strings::empty;
 		}
 		else {
 			index -= ndots;
@@ -120,19 +124,19 @@ String name(int64_t index, List const& dots,
 	}
 }
 
-int64_t numArguments(List const& dots, CompiledCall const& call) {
+int64_t numArguments(List const* dots, CompiledCall const& call) {
 	if(call.dotIndex < (int64_t)call.arguments.length()) {
 		// subtract 1 to not count the dots
-        int64_t ndots = dots.isList() ? dots.length() : 0;
+        int64_t ndots = (dots && dots->isList()) ? dots->length() : 0;
 		return call.arguments.length() - 1 + ndots;
 	} else {
 		return call.arguments.length();
 	}
 }
 
-bool namedArguments(Character const& dotnames, CompiledCall const& call) {
+bool namedArguments(Character const* dotnames, CompiledCall const& call) {
 	if(call.dotIndex < (int64_t)call.arguments.length()) {
-        bool dotsNamed = dotnames.isCharacter() ? dotnames.length() : false;
+        bool dotsNamed = (dotnames && dotnames->isCharacter()) ? dotnames->length() : false;
 		return call.names.length()>0 || dotsNamed;
 	} else {
 		return call.names.length()>0;
@@ -146,8 +150,8 @@ Environment* MatchArgs(State& state, Environment* env, Closure const& func, Comp
     List const& defaults = func.prototype()->defaults;
 	int64_t pDotIndex = func.prototype()->dotIndex;
 
-    List const& dots = (List const&)env->get(Strings::__dots__);
-    Character const& dotnames = (Character const&)env->get(Strings::__names__);
+    List const* dots = (List const*)env->get(Strings::__dots__);
+    Character const* dotnames = (Character const*)env->get(Strings::__names__);
 
 	int64_t numArgs = numArguments(dots, call);
 	bool named = namedArguments(dotnames, call);

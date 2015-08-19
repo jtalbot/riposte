@@ -205,8 +205,10 @@ public:
 
     // Returns a pointer to the entry for `name`
     // or a nullptr if it doesn't exist.
-    Value* get2(String name)
+    Value* get(String name) const
     {
+        if(!this) return nullptr;
+
         uint64_t i = ((uint64_t)name >> 3) & ksize, j = 0;
 
         if(__builtin_expect(d->d[i].n == name, true))
@@ -220,17 +222,6 @@ public:
         }
 
         return nullptr;
-    }
-
-    bool has(String name) const {
-        bool success;
-        find(name, success);
-        return success;
-    }
-
-    Value const& get(String name) const {
-        bool success;
-        return find(name, success)->v;
     }
 
     Value& insert(String name) {
@@ -264,8 +255,8 @@ public:
     }
 
     // clone with room for extra elements
-    Dictionary* clone(uint64_t extra) const {
-        Dictionary* clone = new Dictionary((load+extra)*2);
+    /*Dictionary* clone(uint64_t extra) const {
+        Dictionary* clone = new Dictionary(load+extra);
         // copy over elements
         if(load > 0) {
             for(uint64_t i = 0; i < size; i++) {
@@ -275,6 +266,69 @@ public:
                 }
             }
         }
+        return clone;
+    }*/
+
+    Dictionary(String name, Value const& v)
+        : size(2), ksize(1), d(new (sizeof(Pair)*2) Inner())
+    {
+        clear();
+        load++;
+        *slot(name) = Pair { name, v };
+    }
+
+    // clone without an entry
+    Dictionary const* cloneWithout(String name) const
+    {
+        auto v = get(name);
+        if(!v) return this;
+        if(load == 1) return nullptr;
+
+        // copy over elements
+        Dictionary* clone = new Dictionary(load-1);
+        if(load > 0)
+        {
+            for(uint64_t i = 0; i < size; i++)
+            {
+                if(d->d[i].n != Strings::NA && d->d[i].n != name)
+                {
+                    clone->load++;
+                    *clone->slot(d->d[i].n) = d->d[i];
+                }
+            }
+        }
+        return clone;
+    }
+
+    // clone with a new entry
+    Dictionary const* cloneWith(String name, Value const& v) const
+    {
+        if(!this)
+        {
+            Dictionary* clone = new Dictionary(1);
+            clone->load++;
+            *clone->slot(name) = Pair { name, v };
+            return clone;
+        }
+
+        auto p = get(name);
+
+        // copy over elements
+        Dictionary* clone = new Dictionary(load+(p?0:1));
+        if(load-(p?1:0) > 0)
+        {
+            for(uint64_t i = 0; i < size; i++)
+            {
+                if(d->d[i].n != Strings::NA && d->d[i].n != name)
+                {
+                    clone->load++;
+                    *clone->slot(d->d[i].n) = d->d[i];
+                }
+            }
+        }
+        clone->load++;
+        *clone->slot(name) = Pair { name, v };
+
         return clone;
     }
 
@@ -311,13 +365,16 @@ public:
 
     void visit() const;
 
-    uint64_t Size() const { return load; }
+    uint64_t Size() const {
+        if(!this) return 0;
+        return load;
+    }
 };
 
 class Environment : public Dictionary {
 
     Environment* enclosure;
-    Dictionary* attributes;
+    Dictionary const* attributes;
 
 public:
     explicit Environment(int64_t initialLoad, Environment* enclosure)
@@ -329,8 +386,8 @@ public:
     Environment* getEnclosure() const { return enclosure; }
     void setEnclosure(Environment* env) { enclosure = env; }
 
-    Dictionary* getAttributes() const { return attributes; }
-    void setAttributes(Dictionary* d) { attributes = d; }
+    Dictionary const* getAttributes() const { return attributes; }
+    void setAttributes(Dictionary const* d) { attributes = d; }
     bool hasAttributes() const { return attributes != 0; }
 
     // Look up insertion location using R <<- rules
@@ -357,7 +414,7 @@ public:
     {
         env = this;
         do {
-            Value* p = env->get2(name);
+            Value* p = env->get(name);
             if(p) return p;
         } while((env = env->getEnclosure()));
 

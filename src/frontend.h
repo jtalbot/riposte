@@ -9,19 +9,19 @@
 // Here to keep the core VM clean of this stuff.
 
 inline bool hasNames(Object const& v) {
-	return v.hasAttributes() && v.attributes()->has(Strings::names);
-}
-
-inline bool hasClass(Object const& v) {
-	return v.hasAttributes() && v.attributes()->has(Strings::classSym);
-}
-
-inline Value const& getNames(Object const& v) {
 	return v.attributes()->get(Strings::names);
 }
 
-inline Value const& getClass(Object const& v) {
+inline bool hasClass(Object const& v) {
 	return v.attributes()->get(Strings::classSym);
+}
+
+inline Value const& getNames(Object const& v) {
+	return *v.attributes()->get(Strings::names);
+}
+
+inline Value const& getClass(Object const& v) {
+	return *v.attributes()->get(Strings::classSym);
 }
 
 inline String className(Object const& o) {
@@ -68,9 +68,7 @@ inline bool isPairlist(Value const& v) {
 
 inline Object CreateSymbol(Global& g, String s) {
 	Object v = Character::c(s);
-	Dictionary* d = new Dictionary(1);
-	d->insert(Strings::classSym) = Character::c(Strings::name);
-	v.attributes(d);
+    v.attributes(g.symbolDict);
 	return v;
 }
 
@@ -102,9 +100,7 @@ inline List CreatePairlist(List l, Value const& names = Value::Nil()) {
 }
 
 inline List CreateNamedList(List l, Value const& names) {
-	Dictionary* d = new Dictionary(1);
-    d->insert(Strings::names) = names;
-	l.attributes(d);
+	l.attributes(new Dictionary(Strings::names, names));
 	return l;
 }
 

@@ -825,13 +825,9 @@ SEXP Rf_getAttrib(SEXP obj, SEXP symbol) {
         throw;
     }
 
-    if( ((Object const&)obj->v).hasAttributes() &&
-        ((Object const&)obj->v).attributes()->has(SymbolStr(symbol->v)) ) {
-        return ToSEXP(
-            ((Object const&)obj->v).attributes()->get(SymbolStr(symbol->v)) );
-    }
+    Value const* v = ((Object const&)obj->v).attributes()->get(SymbolStr(symbol->v));
 
-    return R_NilValue;
+    return v ? ToSEXP(*v) : R_NilValue;
 }
 
 SEXP Rf_GetOption1(SEXP) {
@@ -907,16 +903,18 @@ SEXP Rf_setAttrib(SEXP in, SEXP attr, SEXP value) {
         printf("attr argument is not a 1-element Character in Rf_setAttrib");
     }
 
-    // TODO: This needs to erase attributes too.
+    // TODO:
     // I should probably just be calling a shared SetAttr API function
     // which is also used by the interpreter.
     Object o = (Object&)in->v;
 
-    Dictionary* d = o.hasAttributes()
-                    ? o.attributes()->clone(1)
-                    : new Dictionary(1);
-    d->insert(((Character const&)attr->v)[0]) = ToRiposteValue(value->v);
-    o.attributes(d);
+    String s = ((Character const&)attr->v)[0];
+    Value v = ToRiposteValue(value->v);
+
+    o.attributes(v.isNull()
+        ? o.attributes()->cloneWithout(s)
+        : o.attributes()->cloneWith(s, v));
+    
     return ToSEXP(o);
 }
 

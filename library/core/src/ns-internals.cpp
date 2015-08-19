@@ -14,7 +14,8 @@ Value importIntoEnv(State& state, Value const* args) {
     assert(out_names.length() == in_names.length());
 
     for(size_t i = 0; i < out_names.length(); ++i) {
-        out->insert(out_names[i]) = in->get(in_names[i]);
+        Value const* v = in->get(in_names[i]);
+        out->insert(out_names[i]) = v ? *v : Value::Nil();
     }
     
     return args[0]; 

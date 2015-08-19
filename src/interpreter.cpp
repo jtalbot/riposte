@@ -239,14 +239,9 @@ Global::Global(uint64_t states, int64_t argc, char** argv)
     promiseCode->registers = 3;
     promiseCode->expression = Value::Nil();
 
-    symbolDict = new Dictionary(1);
-    symbolDict->insert(Strings::classSym) = Character::c(Strings::name);
-
-    callDict = new Dictionary(1); 
-    callDict->insert(Strings::classSym) = Character::c(Strings::call);
-    
-    exprDict = new Dictionary(1);
-    exprDict->insert(Strings::classSym) = Character::c(Strings::expression);
+    symbolDict = new Dictionary(Strings::classSym, Character::c(Strings::name));
+    callDict = new Dictionary(Strings::classSym, Character::c(Strings::call)); 
+    exprDict = new Dictionary(Strings::classSym, Character::c(Strings::expression));
 }
 
 void Code::printByteCode(Global const& global) const {
@@ -283,8 +278,9 @@ void profileStack(State const& state) {
         StackFrame const& s = (index < state.stack.size())
             ? state.stack[index] : state.frame;
 
-        if(!s.isPromise && s.environment->has(Strings::__call__)) {
-            auto l = static_cast<List const&>(s.environment->get(Strings::__call__));
+        Value const* v = s.environment->get(Strings::__call__);
+        if(!s.isPromise && v && v->isList()) {
+            auto l = static_cast<List const&>(*v);
             std::string str = state.deparse(l[0]);
             node = &(node->children[str]);
             node->count++; 

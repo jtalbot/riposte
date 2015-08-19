@@ -341,14 +341,14 @@ Instruction const* dotsv_impl(State& state, Instruction const& inst)
     else
         return StopDispatch(state, inst, state.internStr("Invalid type in dotsv"), inst.c);
 
-    Value const& t = state.frame.environment->get(Strings::__dots__);
+    Value const* t = state.frame.environment->get(Strings::__dots__);
 
-    if(!t.isList() ||
-       idx >= (int64_t)static_cast<List const&>(t).length() ||
+    if(!t || !t->isList() ||
+       idx >= (int64_t)static_cast<List const&>(*t).length() ||
        idx < (int64_t)0)
         return StopDispatch(state, inst, state.internStr((std::string("The '...' list does not contain ") + intToStr(idx+1) + " elements").c_str()), inst.c);
 
-    Value const& v = static_cast<List const&>(t)[idx];
+    Value const& v = static_cast<List const&>(*t)[idx];
 
     if(v.isObject()) {
         OUT(c) = v;
@@ -371,53 +371,62 @@ Instruction const* dotsv_impl(State& state, Instruction const& inst)
 Instruction const* dots_impl(State& state, Instruction const& inst)
 {
     state.visible = true;
-    static const List empty(0);
-    List const& dots = 
-        state.frame.environment->has(Strings::__dots__)
-            ? static_cast<List const&>(state.frame.environment->get(Strings::__dots__))
-            : empty;
+
+    Value const* t = state.frame.environment->get(Strings::__dots__);
+    if(!t)
+    {
+        OUT(c) =  List(0);
+        return &inst+1;
+    }
+    else if(!t->isList())
+    {
+        OUT(c) = *t;
+        return &inst+1;
+    }
+
+    List const& dots = static_cast<List const&>(*t); 
 
     Value& iter = REGISTER(inst.a);
     Value& out = OUT(c);
 
     // First time through, make a result vector...
-    if(iter.i == -1) {
+    if(iter.i == -1)
+    {
         Heap::GlobalHeap.collect(state.global);
         out = List(dots.length());
         memset(((List&)out).v(), 0, dots.length()*sizeof(List::Element));
+
         iter.i++;
     }
 
-    while(iter.i < (int64_t)dots.length()) {
+    while(iter.i < (int64_t)dots.length())
+    {
         Value const& v = dots[iter.i];
 
-        if(v.isObject()) {
+        if(!v.isPromise())
+        {
             BIND(v); // BIND since we don't yet support futures in lists
             ((List&)out)[iter.i] = v;
             iter.i++;
         }
-        else if(v.isPromise()) {
+        else
+        {
             return force(state, static_cast<Promise const&>(v),
                 state.frame.environment, Integer::c(iter.i),
                 inst.b, &inst);
         }
-        else if(v.isNil()) {
-            // We're allowing Nils to escape now
-            ((List&)out)[iter.i] = v;
-            iter.i++;
-            /*return StopDispatch(state, inst, state.internStr(
-                "argument is missing, with no default"),
-                inst.c);*/
-        }
     }
 
     // check to see if we need to add names
-    if(state.frame.environment->get(Strings::__names__).isCharacter() 
-        && dots.length() > 0) {
+    Value const* names = state.frame.environment->get(Strings::__names__);
+
+    if(names && names->isCharacter())
+    {
         Dictionary* d = new Dictionary(1);
-        d->insert(Strings::names) = state.frame.environment->get(Strings::__names__);
+        d->insert(Strings::names) = *names;
         ((Object&)out).attributes(d);
     }
+
     return &inst+1;
 }
 
@@ -430,10 +439,11 @@ Instruction const* frame_impl(State& state, Instruction const& inst)
 
     Environment* env = state.frame.environment;
 
-    while(index > 0) {
-        Value const& v = env->get(Strings::__parent__);
-        if(v.isEnvironment())
-            env = static_cast<REnvironment const&>(v).environment();
+    while(index > 0)
+    {
+        Value const* v = env->get(Strings::__parent__);
+        if(v && v->isEnvironment())
+            env = static_cast<REnvironment const&>(*v).environment();
         else
             break;
         index--;
@@ -490,17 +500,22 @@ Instruction const* pr_expr_impl(State& state, Instruction const& inst)
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
-    if(a.isEnvironment() && b.isCharacter() && static_cast<Character const&>(b).length() == 1) {
+    if(a.isEnvironment() && b.isCharacter() && static_cast<Character const&>(b).length() == 1)
+    {
         REnvironment const& env = static_cast<REnvironment const&>(a);
         String s = static_cast<Character const&>(b).s;
 
-        Value v = env.environment()->get(s);
-        if(v.isPromise())
-            v = static_cast<Promise const&>(v).code()->expression;
-        OUT(c) = v;
-        return &inst+1;
+        Value const* v = env.environment()->get(s);
+        if(v)
+        {
+            OUT(c) = (v->isPromise())
+                ? static_cast<Promise const&>(*v).code()->expression
+                : *v;
+            return &inst+1;
+        }
     }
-    else if(a.isList() && b.isInteger1()) {
+    else if(a.isList() && b.isInteger1())
+    {
         List const& l = static_cast<List const&>(a);
         int64_t i = static_cast<Integer const&>(b).i - 1;
         if(i >= 0 && i < l.length()) {
@@ -511,6 +526,7 @@ Instruction const* pr_expr_impl(State& state, Instruction const& inst)
             return &inst+1;
         }
     }
+
     printf("%d %d\n", a.type(), b.type());
     return StopDispatch(state, inst, state.internStr(
                 "invalid pr_expr expression"), 
@@ -528,12 +544,13 @@ Instruction const* pr_env_impl(State& state, Instruction const& inst)
 
     REnvironment const& env = static_cast<REnvironment const&>(a);
     String s = static_cast<Character const&>(b).s;
-    Value v = env.environment()->get(s);
-    if(v.isPromise())
-        REnvironment::Init(v, static_cast<Promise const&>(v).environment());
+
+    Value const* v = env.environment()->get(s);
+    if(v && v->isPromise())
+        REnvironment::Init(OUT(c), static_cast<Promise const&>(*v).environment());
     else
-        v = Null::Singleton();
-    OUT(c) = v;
+        OUT(c) = Null::Singleton();
+    
     return &inst+1;
 }
 
@@ -629,17 +646,18 @@ Instruction const* get_impl(State& state, Instruction const& inst)
                 if( b.isCharacter()
                     && static_cast<Character const&>(b).length() == 1) {
 	                String s = static_cast<Character const&>(b).s;
-                    Value const& v = static_cast<REnvironment const&>(a).environment()->get(s);
-                    if(v.isObject()) {
-                        OUT(c) = v;
-                        return &inst+1;
-                    }
-                    else if(v.isNil()) {
+                    Value const* v = static_cast<REnvironment const&>(a).environment()->get(s);
+                    if(!v)
+                    {
                         OUT(c) = Null::Singleton();
                         return &inst+1;
                     }
+                    else if(v->isObject() || v->isNil()) {
+                        OUT(c) = *v;
+                        return &inst+1;
+                    }
                     else {
-                        return force(state, static_cast<Promise const&>(v), 
+                        return force(state, static_cast<Promise const&>(*v), 
                             static_cast<REnvironment const&>(a).environment(), b,
                             inst.c, &inst+1); 
                     }
@@ -770,11 +788,10 @@ Instruction const* getsub_impl(State& state, Instruction const& inst)
         REnvironment const& env = static_cast<REnvironment const&>(a);
         Character const& i = static_cast<Character const&>(b);
         List r(i.length());
-        for(int64_t k = 0; k < i.length(); ++k) {
-            if(env.environment()->has(i[k]))
-                r[k] = env.environment()->get(i[k]);
-            else
-                r[k] = Null::Singleton();
+        for(int64_t k = 0; k < i.length(); ++k)
+        {
+            Value const* v = env.environment()->get(i[k]);
+            r[k] = v ? *v : Null::Singleton();
         }
         OUT(c) = r; 
         return &inst+1;
@@ -901,25 +918,26 @@ Instruction const* getattr_impl(State& state, Instruction const& inst)
     state.visible = true;
     DECODE(a);
     DECODE(b); BIND(b);
-    if(a.isObject() && b.isCharacter1()) {
+    if(a.isObject() && b.isCharacter1())
+    {
         String name = static_cast<Character const&>(b)[0];
         Object const& o = (Object const&)a;
-        if(o.isEnvironment()) {
-            if(static_cast<REnvironment const&>(o).environment()->hasAttributes() &&
-               static_cast<REnvironment const&>(o).environment()->getAttributes()->has(name))
-                OUT(c) = static_cast<REnvironment const&>(o).environment()->getAttributes()->get(name);
-            else
-                OUT(c) = Null::Singleton();
+        REnvironment const& env = (REnvironment const&)a;
+
+        Value const* v = nullptr;
+        if(a.isEnvironment())
+        {
+            v = env.environment()->getAttributes()->get(name);
         }
-        else {
-            if(o.hasAttributes() && o.attributes()->has(name))
-                OUT(c) = o.attributes()->get(name);
-            else {
-                OUT(c) = Null::Singleton();
-            }
+        else if(a.isObject())
+        {
+            v = o.attributes()->get(name);
         }
+
+        OUT(c) = v ? *v : Null::Singleton();
         return &inst+1;
     }
+
     printf("%d %d\n", a.type(), b.type());
     _error("Invalid attrget operation");
 }
@@ -931,58 +949,45 @@ Instruction const* setattr_impl(State& state, Instruction const& inst)
     DECODE(c);
     DECODE(b); BIND(b);
     DECODE(a); BIND(a);
-    if(c.isObject() && b.isCharacter1()) {
+
+    if(b.isCharacter1())
+    {
         String name = static_cast<Character const&>(b)[0];
-        Object o = (Object const&)c;
-        if(a.isNil() || a.isNull()) {
-            if(o.isEnvironment() &&
-                static_cast<REnvironment&>(o).environment()->hasAttributes() &&
-                static_cast<REnvironment&>(o).environment()->getAttributes()->has(name)) {
-                if(static_cast<REnvironment&>(o).environment()->getAttributes()->Size() > 1) {
-                    Dictionary* d = static_cast<REnvironment&>(o).environment()->getAttributes()->clone(0);
-                    d->remove(name);
-                    static_cast<REnvironment&>(o).environment()->setAttributes(d);
-                }
-                else {
-                    static_cast<REnvironment&>(o).environment()->setAttributes(NULL);
-                }
-            }
-            else if(o.hasAttributes()
-               && o.attributes()->has(name)) {
-                if(o.attributes()->Size() > 1) {
-                    Dictionary* d = o.attributes()->clone(0);
-                    d->remove(name);
-                    o.attributes(d);
-                }
-                else {
-                    o.attributes(NULL);
-                }
+
+        // Special casing for R's compressed rownames representation.
+        // Can we move this to the R compatibility layer?
+        Value v = a;
+        if(name == Strings::rownames && v.isInteger()) {
+            auto i = static_cast<Integer const&>(v);
+            if(i.length() == 2 && Integer::isNA(i[0])) {    
+                v = Sequence((int64_t)1,1,abs(i[1]));
             }
         }
-        else {
-            Value v = a;
-            if(name == Strings::rownames && v.isInteger()) {
-                auto i = static_cast<Integer const&>(v);
-                if(i.length() == 2 && Integer::isNA(i[0])) {    
-                    v = Sequence((int64_t)1,1,abs(i[1]));
-                }
-            }
-            if(o.isEnvironment()) {
-                Dictionary* d = static_cast<REnvironment&>(o).environment()->getAttributes();
-                d = d ? d->clone(1) : new Dictionary(1);
-                d->insert(name) = v;
-                static_cast<REnvironment&>(o).environment()->setAttributes(d);
-            }
-            else {
-                Dictionary* d = o.hasAttributes()
-                            ? o.attributes()->clone(1)
-                            : new Dictionary(1);
-                d->insert(name) = v;
-                o.attributes(d);
-            }
+
+        if(c.isEnvironment())
+        {
+            REnvironment env = (REnvironment const&)c;
+            Dictionary const* d = env.environment()->getAttributes();
+
+            // Delete the attribute if the user assign NULL
+            env.environment()->setAttributes(
+                a.isNull() ? d->cloneWithout(name) : d->cloneWith(name,v));
+
+            OUT(c) = env;
+            return &inst+1;
         }
-        OUT(c) = o;
-        return &inst+1;
+        else if(c.isObject())
+        {
+            Object o = (Object const&)c;
+            Dictionary const* d = o.attributes();
+
+            // Delete the attribute if the user assigns NULL
+            o.attributes(
+                a.isNull() ? d->cloneWithout(name) : d->cloneWith(name, v));
+
+            OUT(c) = o;
+            return &inst+1;
+        }
     }
     
     return StopDispatch(state, inst, state.internStr(
@@ -995,35 +1000,35 @@ Instruction const* attributes_impl(State& state, Instruction const& inst)
 {
     state.visible = true;
     DECODE(a);
-    if(a.isObject()) {
-        Object o = (Object const&)a;
 
-        Dictionary* d = o.isEnvironment()
-            ? static_cast<REnvironment&>(o).environment()->getAttributes()
-            : o.attributes();
+    if(a.isObject())
+    {
+        Object const& obj = (Object const&)a;
+        REnvironment const& env = (REnvironment const&)a;
 
-        if(d == NULL || d->Size() == 0) {
-            OUT(c) = Null::Singleton();
-        }
-        else {
+        Dictionary const* d = a.isEnvironment()
+            ? env.environment()->getAttributes()
+            : obj.attributes();
+
+        if(d->Size() > 0)
+        {
             Character n(d->Size());
             List v(d->Size());
+
             int64_t j = 0;
-            for(Dictionary::const_iterator i = d->begin();
-                    i != d->end(); 
-                    ++i, ++j) {
+            for(auto i = d->begin(); i != d->end(); ++i, ++j)
+            {
                 n[j] = i.string();
                 v[j] = i.value();
             }
-            Dictionary* r = new Dictionary(1);
-            r->insert(Strings::names) = n;
-            v.attributes(r);
+
+            v.attributes(new Dictionary(Strings::names, n)); 
             OUT(c) = v;
+            return &inst+1;
         }
     }
-    else {
-        OUT(c) = Null::Singleton();
-    }
+    
+    OUT(c) = Null::Singleton();
     return &inst+1;
 }
 
@@ -1126,10 +1131,11 @@ Instruction const* env_has_impl(State& state, Instruction const& inst)
             inst.c);
     }
 
-    OUT(c) = (static_cast<REnvironment const&>(a).environment()->
-                get(static_cast<Character const&>(b).s)).isNil()
-                ? Logical::False()
-                : Logical::True();
+    auto env = static_cast<REnvironment const&>(a);
+    auto str = static_cast<Character const&>(b);
+
+    Value const* v = env.environment()->get(str.s);
+    OUT(c) = v ? Logical::True() : Logical::False();
 
     return &inst+1;
 }
@@ -1152,8 +1158,11 @@ Instruction const* env_get_impl(State& state, Instruction const& inst)
             inst.c);
     }
 
-    OUT(c) = static_cast<REnvironment const&>(a).environment()->
-                get(static_cast<Character const&>(b).s);
+    auto env = static_cast<REnvironment const&>(a);
+    auto str = static_cast<Character const&>(b);
+
+    Value const* v = env.environment()->get(str.s);
+    OUT(c) = v ? *v : Value::Nil();
 
     return &inst+1;
 }
@@ -1167,25 +1176,25 @@ Instruction const* env_set_impl(State& state, Instruction const& inst)
     DECODE(b); BIND(b);
     DECODE(c); // don't BIND
        
-    if(a.isCharacter()) {
-        assert(b.isEnvironment());
-           Environment* env = static_cast<REnvironment const&>(b).environment();
-               
+    assert(b.isEnvironment());
+    Environment* env = static_cast<REnvironment const&>(b).environment();
+
+    if(a.isCharacter())
+    {
         env->insert(a.s) = c;
+    }
+    else if(a.isInteger())
+    {
+        // TODO: what if the dots don't exist or they aren't long enough?
+        Value* dots = env->get(Strings::__dots__);
+        assert(dots && dots->isList());
+
+        ((List&)*dots)[a.i] = c;
+    }
+
 #ifdef EPEE
-           state.traces.LiveEnvironment(env, c);
+        state.traces.LiveEnvironment(env, c);
 #endif
-       } else if(a.isInteger()) {
-        assert(b.isEnvironment());
-           Environment* env = static_cast<REnvironment const&>(b).environment();
-        
-        assert(env->get(Strings::__dots__).isList());
-        ((List&)env->insert(Strings::__dots__))[a.i] = c;
-#ifdef EPEE
-           state.traces.LiveEnvironment(env, c);
-#endif
-       }
-    // otherwise, don't store anywhere...
        
     return &inst+1;
 }
@@ -1214,7 +1223,9 @@ Instruction const* env_rm_impl(State& state, Instruction const& inst)
 
     Character const& names = static_cast<Character const&>(b);
 
-    for(int64_t i = 0; i < names.length(); ++i) {
+    // TODO: could have bulk removal code that would be a lot more efficient
+    for(int64_t i = 0; i < names.length(); ++i)
+    {
         env->remove( names[i] );
     }
 
@@ -1261,10 +1272,10 @@ Instruction const* env_missing_impl(State& state, Instruction const& inst)
             if(static_cast<Promise const&>(v).isExpression()) {
                 Value const& expr = static_cast<Promise const&>(v).code()->expression;
                 Environment* env = static_cast<Promise const&>(v).environment();
-                Value const& func = env->get(Strings::__function__);
-                if(isSymbol(expr) && func.isClosure()) {
+                Value const* func = env->get(Strings::__function__);
+                if(isSymbol(expr) && func && func->isClosure()) {
                     // see if the expr is an argument
-                    Character const& parameters = static_cast<Closure const&>(func).prototype()->parameters;
+                    Character const& parameters = static_cast<Closure const&>(*func).prototype()->parameters;
                     bool matched = false;
                     for(size_t i = 0; i < parameters.length() && !matched; ++i) {
                         if(static_cast<Character const&>(expr).s == parameters[i])
@@ -1291,13 +1302,13 @@ Instruction const* env_missing_impl(State& state, Instruction const& inst)
         else
             _error("Invalid argument to missing");
 
-        List const& dots = static_cast<List const&>(
-            e->get(Strings::__dots__));
+        Value const* dots = e->get(Strings::__dots__);
 
-        missing = !dots.isList() ||
+        missing = !dots ||
+                  !dots->isList() ||
                   index < 0 ||
-                  index >= dots.length() ||
-                  dots[index].isNil();
+                  index >= static_cast<List const&>(*dots).length() ||
+                  static_cast<List const&>(*dots)[index].isNil();
 
         break;
     }

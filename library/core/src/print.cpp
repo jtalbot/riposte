@@ -242,7 +242,7 @@ std::string stringify(Global const& global, Value const& value, std::vector<int6
 	};
 	if(value.isObject() && ((Object const&)value).hasAttributes()) {
 		result = result + "\nAttributes:\n";
-		Dictionary* d = ((Object const&)value).attributes();
+		Dictionary const* d = ((Object const&)value).attributes();
 		for(Dictionary::const_iterator i = d->begin(); i != d->end(); ++i) {
 			result = result + "\t" + global.externStr(i.string())
 				+ ":\t" + global.stringify(i.value()) + "\n";

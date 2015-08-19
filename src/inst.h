@@ -311,25 +311,27 @@ Instruction const* storeup_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* force_inst(State& state, Instruction const& inst)
 {
-    Value const& a = REGISTER(inst.a);
+    Value const* dots = state.frame.environment->get(Strings::__dots__);
 
-    Value const& dots = state.frame.environment->get(Strings::__dots__);
-    assert(dots.isList());
+    if(dots && dots->isList())
+    {
+        Value const& a = REGISTER(inst.a);
+        Value const& t = static_cast<List const&>(*dots)[a.i];
 
-    Value const& t = static_cast<List const&>(dots)[a.i];
+        if(t.isObject())
+        {
+            OUT(c) = t;
+            return &inst+1;
+        }
+        else if(t.isPromise())
+        {
+            return force(state, static_cast<Promise const&>(t),
+                    state.frame.environment, a,
+                    inst.c, &inst+1);
+        }
+    }
 
-    if(t.isObject()) {
-        OUT(c) = t;
-        return &inst+1;
-    }
-    else if(t.isPromise()) {
-        return force(state, static_cast<Promise const&>(t),
-                state.frame.environment, a,
-                inst.c, &inst+1);
-    }
-    else {
-        _internalError("Unexpected Nil operand in force_I");
-    }
+    _internalError("Unexpected operand type in force_inst");
 }
 
 
@@ -344,12 +346,11 @@ ALWAYS_INLINE
 Instruction const* dotsc_inst(State& state, Instruction const& inst)
 {
     state.visible = true;
-    Value const& dots = state.frame.environment->get(Strings::__dots__);
+    Value const* dots = state.frame.environment->get(Strings::__dots__);
 
-    if(!dots.isList())
-        OUT(c) = Integer::c(0);
-    else
-        OUT(c) = Integer::c(static_cast<List const&>(dots).length());
+    OUT(c) = Integer::c(dots && dots->isList()
+        ? static_cast<List const&>(*dots).length()
+        : 0);
 
     return &inst+1;
 }
@@ -481,11 +482,12 @@ Instruction const* get_inst(State& state, Instruction const& inst)
     else if(a.isEnvironment() && !static_cast<Object const&>(a).hasAttributes())
     {
          if( b.isCharacter()
-            && static_cast<Character const&>(b).length() == 1) {
+            && static_cast<Character const&>(b).length() == 1)
+         {
 	        String s = static_cast<Character const&>(b).s;
-            Value const& v = static_cast<REnvironment const&>(a).environment()->get(s);
-            if(v.isObject()) {
-                OUT(c) = v;
+            Value const* v = static_cast<REnvironment const&>(a).environment()->get(s);
+            if(v && v->isObject()) {
+                OUT(c) = *v;
                 return &inst+1;
             }
         }
@@ -614,10 +616,12 @@ Instruction const* env_has_inst(State& state, Instruction const& inst)
 
     if(a.isEnvironment() && b.isCharacter() && b.pac == 1)
     {
-        OUT(c) = (static_cast<REnvironment const&>(a).environment()->
-                get(static_cast<Character const&>(b).s)).isNil()
-                ? Logical::False()
-                : Logical::True();
+        auto env = static_cast<REnvironment const&>(a);
+        auto str = static_cast<Character const&>(b);
+
+        Value const* v = env.environment()->get(str.s);
+        OUT(c) = v ? Logical::True() : Logical::False();
+
         return &inst+1;
     }
 
@@ -634,8 +638,12 @@ Instruction const* env_get_inst(State& state, Instruction const& inst)
 
     if(a.isEnvironment() && b.isCharacter() && b.pac == 1)
     {
-        OUT(c) = static_cast<REnvironment const&>(a).environment()->
-                get(static_cast<Character const&>(b).s);
+        auto env = static_cast<REnvironment const&>(a);
+        auto str = static_cast<Character const&>(b);
+
+        Value const* v = env.environment()->get(str.s);
+        OUT(c) = v ? *v : Value::Nil();
+
         return &inst+1;
     }
 
