@@ -51,13 +51,48 @@ if(__builtin_expect(X.isFuture(), false)) { \
 #endif
 
 
+// Some utility functions for dealing with interned strings
+ALWAYS_INLINE
+Value const* internAndGet(State const& state, Dictionary const* d, String s)
+{
+    // All environment names are already interned.
+    // So if we can't find an interned version of s,
+    // it doesn't exist in the environment and there
+    // is nothing to get.
+    String i = state.global.strings.get(s->s);
+    return i ? d->get(i) : nullptr;
+}
+
+ALWAYS_INLINE
+Value* internAndGetRec(State const& state, Environment* e, String s, Environment*& out)
+{
+    // All environment names are already interned.
+    // So if we can't find an interned version of s,
+    // it doesn't exist in the environment and there
+    // is nothing to get.
+    String i = state.global.strings.get(s->s);
+    out = nullptr;
+    return i ? e->getRecursive(i, out) : nullptr;
+}
+
+ALWAYS_INLINE
+void internAndRemove(State const& state, Dictionary* d, String s)
+{
+    // All environment names are already interned.
+    // So if we can't find an interned version of s,
+    // it doesn't exist in the environment and there
+    // is nothing to remove.
+    String name = state.global.strings.get(s->s);
+    if(name)
+        d->remove(name);
+}
+
 // Helper function to trigger forcing of promises
 // without recursion on the interpreter.
 Instruction const* force(
     State& state, Promise const& p,
     Environment* targetEnv, Value targetIndex,
     int64_t outRegister, Instruction const* returnpc);
-
 
 
 // ---Instruction handlers---
@@ -479,13 +514,15 @@ Instruction const* get_inst(State& state, Instruction const& inst)
             return &inst+1;
         }
 	}
-    else if(a.isEnvironment() && !static_cast<Object const&>(a).hasAttributes())
+    else if(a.isEnvironment())
     {
-         if( b.isCharacter()
-            && static_cast<Character const&>(b).length() == 1)
-         {
+        auto env = static_cast<REnvironment const&>(a);
+
+        if( b.isCharacter() && b.pac == 1 )
+        {
 	        String s = static_cast<Character const&>(b).s;
-            Value const* v = static_cast<REnvironment const&>(a).environment()->get(s);
+
+            Value const* v = internAndGet(state, env.environment(), s);
             if(v && v->isObject()) {
                 OUT(c) = *v;
                 return &inst+1;
@@ -619,53 +656,13 @@ Instruction const* env_has_inst(State& state, Instruction const& inst)
         auto env = static_cast<REnvironment const&>(a);
         auto str = static_cast<Character const&>(b);
 
-        Value const* v = env.environment()->get(str.s);
+        Value const* v = internAndGet(state, env.environment(), str.s);
         OUT(c) = v ? Logical::True() : Logical::False();
 
         return &inst+1;
     }
 
     return env_has_impl(state, inst);
-}
-
-
-ALWAYS_INLINE
-Instruction const* env_get_inst(State& state, Instruction const& inst)
-{
-    state.visible = true;
-    DECODE(a);
-    DECODE(b);
-
-    if(a.isEnvironment() && b.isCharacter() && b.pac == 1)
-    {
-        auto env = static_cast<REnvironment const&>(a);
-        auto str = static_cast<Character const&>(b);
-
-        Value const* v = env.environment()->get(str.s);
-        OUT(c) = v ? *v : Value::Nil();
-
-        return &inst+1;
-    }
-
-    return env_get_impl(state, inst);
-}
-
-// TODO: This isn't implemented correctly yet
-ALWAYS_INLINE
-Instruction const* env_set_inst(State& state, Instruction const& inst)
-{
-    // a = index, b = environment, c = value
-    DECODE(a);
-    DECODE(b);
-    DECODE(c);
-
-    if(a.isCharacter() && a.pac == 1 && b.isEnvironment() && c.isObject())
-    {
-        static_cast<REnvironment const&>(b).environment()->insert(a.s) = c;
-        return &inst+1;
-    }
-
-    return env_set_impl(state, inst);
 }
 
 
@@ -677,7 +674,7 @@ Instruction const* env_rm_inst(State& state, Instruction const& inst)
 
     if(a.isEnvironment() && b.isCharacter() && b.pac == 1)
     {
-        static_cast<REnvironment const&>(a).environment()->remove(b.s);
+        internAndRemove(state, static_cast<REnvironment const&>(a).environment(), b.s);
         return &inst+1;
     }
    
@@ -800,6 +797,28 @@ ALWAYS_INLINE
 Instruction const* done_inst(State& state, Instruction const& inst)
 { 
     DECODE(a);
+
+    // Finish execution of the block and store the result in
+    // the requested location.
+
+    REnvironment& env = static_cast<REnvironment&>(REGISTER(0));
+    Value const& index = REGISTER(1);
+
+    if(index.isCharacter1())
+    {
+        assert(env.isEnvironment());
+        // caller guarantees that index is interned already.
+        env.environment()->insert(index.s) = a;
+    }
+    else if(index.isInteger1())
+    {
+        assert(env.isEnvironment());
+        // caller guarantees that dots exists and is an ok length
+        Value* dots = env.environment()->get(Strings::__dots__);
+        assert(dots && dots->isList());
+        static_cast<List&>(*dots)[index.i] = a;
+    }
+    
     REGISTER(0) = a;
 
     Instruction const* pc = state.frame.returnpc; 

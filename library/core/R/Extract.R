@@ -362,11 +362,11 @@
 }
 
 `$` <- function(a, b) {
-    a[[strip(.pr_expr(.getenv(NULL), quote(b)))]]
+    a[[strip(.pr_expr(.getenv(NULL), 'b'))]]
 }
 
 `$<-` <- function(x, i, value) {
-    x[[strip(.pr_expr(.getenv(NULL), quote(i)))]] <- value
+    x[[strip(.pr_expr(.getenv(NULL), 'i'))]] <- value
     x
 }
 

@@ -132,6 +132,10 @@ Value State::eval(Code const* code, Environment* environment, int64_t resultSlot
 
     // make room for the result
     Instruction const* run = buildStackFrame(*this, environment, code, resultSlot, 0);
+    // The first two registers are used for setting a return environment.
+    // We just want it in the resultSlot, so set to Nil.
+    frame.registers[0] = Value::Nil();
+    frame.registers[1] = Value::Nil();
 
     try {
         bool success = global.profile
@@ -234,7 +238,6 @@ Global::Global(uint64_t states, int64_t argc, char** argv)
 
     promiseCode = new (Code::Finalize) Code();
     promiseCode->bc.push_back(Instruction(ByteCode::force, 2, 0, 2));
-    promiseCode->bc.push_back(Instruction(ByteCode::env_set, 1, 0, 2));
     promiseCode->bc.push_back(Instruction(ByteCode::done, 2, 0, 0));
     promiseCode->registers = 3;
     promiseCode->expression = Value::Nil();

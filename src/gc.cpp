@@ -268,9 +268,8 @@ void StringTable::sweep() {
     //uint64_t old_total = stringTable.size();
     for (auto it = stringTable.cbegin(); it != stringTable.cend(); )
     {
-        if((*it).second.second && !(*it).second.first->marked()) {
+        if(it->second.second && !it->second.first->marked())
             it = stringTable.erase(it);
-        }
         else
             ++it;
     }

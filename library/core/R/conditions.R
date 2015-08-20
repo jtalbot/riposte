@@ -10,8 +10,8 @@
     cc <- class(cond)
 
     while(.frame(frame) != globalenv()
-            && !is.nil(.get(.frame(frame), '.__parent__.'))) {
-        e <- .get(.frame(frame), '.__parent__.')
+            && .env_has(.frame(frame), '.__parent__.')) {
+        e <- .frame(frame)[['.__parent__.']]
         h <- e[['.__handlers__.']]
         n <- names(h)
         for(i in seq_len(length(n))) {

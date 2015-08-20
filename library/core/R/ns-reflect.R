@@ -24,7 +24,7 @@ getNamespaceRegistry <- NULL
 
         namespaces[[strip(name)]] <<- env
 
-        if(is.nil(.get(env, '.__NAMESPACE__.')))
+        if(!.env_has(env, '.__NAMESPACE__.'))
             env[['.__NAMESPACE__.']] <- NULL
 
         env

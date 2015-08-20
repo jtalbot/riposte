@@ -43,10 +43,10 @@ library <- function(., parent.env) {
     envname <- strip(.pr_expr(.getenv(NULL), 'a'))
     name <- strip(.pr_expr(.getenv(NULL), 'b'))
     env <- getRegisteredNamespace(envname)
-    if(is.nil(.get(env, name)))
+    if(!.env_has(env, name))
         .stop(sprintf("'%s' is not an exported object from 'namespace:%s'",name,envname))
     else
-        .get(env,name)
+        env[[name]]
 }
 
 cummean <- function(x) UseGroupMethod('cummean', 'Math', x)

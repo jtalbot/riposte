@@ -1,6 +1,6 @@
 
 isNamespaceEnv <- function(ns) {
-    !is.nil(.get(ns, '.__NAMESPACE__.'))
+    .env_has(ns, '.__NAMESPACE__.')
 }
 
 importIntoEnv <- function(impenv, impnames, expenv, expnames) {

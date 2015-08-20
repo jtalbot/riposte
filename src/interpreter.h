@@ -2,6 +2,7 @@
 #define _RIPOSTE_INTERPRETER_H
 
 #include <map>
+#include <unordered_map>
 #include <set>
 #include <deque>
 #include <list>
@@ -40,34 +41,76 @@ struct Instruction {
     }
 };
 
-class StringTable {
-    std::map<std::string, std::pair<String, bool> > stringTable;
-    Lock lock;
+class StringTable
+{
+    //std::vector< std::pair<String, bool> > strings;
+    //std::unordered_map< std::string, size_t > index; 
+    std::unordered_map<std::string, std::pair<String, bool> > stringTable; 
+    mutable Lock lock;
 
 public:
 
-    String in(std::string const& s, bool weak=true) {
+    /*size_t insert(std::string const& s)
+    {
         lock.acquire();
-        auto i = stringTable.find(s);
-        if(i == stringTable.end()) {
+        auto i = index.find(s);
+
+        size_t offset;
+        if(i != index.end())
+        {
+            offset = i->second;
+        }
+        else
+        {
             String string = new (s.size()+1) StringImpl();
             memcpy((void*)string->s, s.c_str(), s.size()+1);
-            stringTable[s] = std::make_pair(string, weak);
-            lock.release();
-            return string;
-        } else {
-            String ss = i->second.first;
-            lock.release();
-            return ss;
+           
+            offset = strings.size(); 
+            strings.push_back(std::make_pair(string, false));
+            index[s] = offset;
         }
+
+        lock.release();
+        return offset;
+    }*/
+
+    String get(std::string const& s) const
+    {
+        lock.acquire();
+        auto i = stringTable.find(s);
+
+        String result = (i != stringTable.end())
+            ? i->second.first
+            : Strings::NA;
+
+        lock.release();
+        return result;
     }
 
-    std::string out(String s) const {
+    String in(std::string const& s, bool weak=true)
+    {
+        lock.acquire();
+        auto i = stringTable.find(s);
+
+        String result;
+        if(i != stringTable.end())
+        {
+            result = i->second.first;
+        }
+        else
+        {
+            result = new (s.size()+1) StringImpl();
+            memcpy((void*)result->s, s.c_str(), s.size()+1);
+            stringTable[s] = std::make_pair(result, weak);
+        }
+        
+        lock.release();
+        return result;
+    }
+
+    std::string out(String s) const
+    {
         return std::string(s->s);
-    }
-
-    std::map<std::string, std::pair<String, bool> > const& table() const {
-        return stringTable;
     }
 
     void sweep();

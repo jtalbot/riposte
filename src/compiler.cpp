@@ -103,8 +103,6 @@ Compiler::EmitTable::EmitTable() {
 
     // Environment operators
     add(Strings::env_has, 2, &Compiler::emitBinary, ByteCode::env_has);
-    add(Strings::env_get, 2, &Compiler::emitBinary, ByteCode::env_get);
-    add(Strings::env_set, 3, &Compiler::emitTernary, ByteCode::env_set);
     add(Strings::env_rm, 2, &Compiler::emitBinary, ByteCode::env_rm);
     add(Strings::env_missing, 2, &Compiler::emitBinary, ByteCode::env_missing);
     add(Strings::env_new, 1, &Compiler::emitUnary, ByteCode::env_new);
@@ -294,9 +292,7 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code
         Operand tmp = compileConstant(Character::c(Strings::assignTmp), code);
         emit( ByteCode::store, tmp, 0, rhs );
 
-        List y = CreateCall(global, List::c(CreateSymbol(global, Strings::getenv), Null::Singleton()));
-        List z = CreateCall(global, List::c(CreateSymbol(global, Strings::env_get), y, Character::c(Strings::assignTmp)));
-        Value value = z;
+        Value value = CreateSymbol(global, Strings::assignTmp);
         while(isCall(dest)) {
             List const& c = (List const&)dest;
             if(c.length() < 2L)
@@ -776,6 +772,11 @@ Code* Compiler::compileExpression(State& state, Value const& expr) {
     Compiler compiler(state);
 	Code* code = new (Code::Finalize) Code();
    
+    // blocks use first two registers to potentially pass
+    // return information.
+    (void) compiler.allocRegister();
+    (void) compiler.allocRegister();
+
     Operand result = isExpression(expr)
         ? compiler.compileExpression((List const&)expr, code)
         : compiler.compile(expr, code);
@@ -823,14 +824,10 @@ void Compiler::doPromiseCompilation(State& state, Code* code) {
 
     // promises use first two registers to pass environment info
     // for replacing promise with evaluated value
-    Operand env = compiler.allocRegister();
-    Operand index = compiler.allocRegister();
+    (void) compiler.allocRegister();
+    (void) compiler.allocRegister();
 
     Operand result = compiler.compile(code->expression, code);
-
-    // overwrite the promise with the result 
-    // so it is not evaluated multiple times.
-    compiler.emit(ByteCode::env_set, index, env, result);
     compiler.emit(ByteCode::done, result, 0, 0);
 
     code->registers = compiler.max_n;

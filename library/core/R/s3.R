@@ -3,7 +3,7 @@
 {
     while(env != emptyenv())
     {
-        if(!is.nil(.get(env, name)) && (type == "any" || .type(env[[name]]) == type))
+        if(.env_has(env, name) && (type == "any" || .type(env[[name]]) == type))
             return(as.name(name))
         else {
             env <- .getenv(env)

@@ -22,12 +22,12 @@ quote <- function(...) {
         {
             if(is.symbol(expr[[i]]) && strip(expr[[i]]) == '...') {
                 # expand dots in place
-                d <- .get(env, '.__dots__.')
-                n <- .get(env, '.__names__.')
-                if(is.list(.get(env,'.__dots__.'))) {
+                d <- env[['.__dots__.']]
+                n <- env[['.__names__.']]
+                if(is.list(d)) {
                     for(k in seq_len(length(d))) {
                         expr[[j]] <- .pr_expr(d, k)
-                        if(is.character.default(.get(env, '.__names__.')))
+                        if(is.character.default(n))
                             attr(expr, 'names')[[j]] <- n[[k]]
                         j <- j+1L
                     }
@@ -39,7 +39,7 @@ quote <- function(...) {
             }
         }
     }
-    else if (is.symbol(expr) && env != .env_global() && !is.nil(.get(env, expr)))
+    else if (is.symbol(expr) && env != .env_global() && .env_has(env, expr))
     {
         expr <- .pr_expr(env, expr)
     }

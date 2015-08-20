@@ -160,8 +160,6 @@
     _(env_global, ".env_global") \
     _(env_rm, ".env_rm") \
     _(env_has, ".env_has") \
-    _(env_set, ".env_set") \
-    _(env_get, ".get") \
 	_(env_missing, ".env_missing") \
     _(frame, ".frame") \
     _(top, ".top") \

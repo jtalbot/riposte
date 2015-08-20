@@ -1,6 +1,7 @@
 
-.Primitive <- function(name) {
+.Primitive <- function(name)
+{
     env <- getRegisteredNamespace('core') 
-    .get(env, strip(name))
+    env[[strip(name)]]
 }
 

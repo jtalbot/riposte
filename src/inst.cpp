@@ -475,7 +475,8 @@ Instruction const* pr_new_impl(State& state, Instruction const& inst)
     REnvironment& eval = (REnvironment&)REGISTER((&inst+1)->a);
     REnvironment& assign = (REnvironment&)REGISTER((&inst+1)->b);
 
-    Value& v = assign.environment()->insert(a.s);
+    String in = state.global.strings.in(a.s->s);
+    Value& v = assign.environment()->insert(in);
 
     try {
         Promise::Init(v,
@@ -505,7 +506,7 @@ Instruction const* pr_expr_impl(State& state, Instruction const& inst)
         REnvironment const& env = static_cast<REnvironment const&>(a);
         String s = static_cast<Character const&>(b).s;
 
-        Value const* v = env.environment()->get(s);
+        Value const* v = internAndGet(state, env.environment(), s);
         if(v)
         {
             OUT(c) = (v->isPromise())
@@ -545,7 +546,7 @@ Instruction const* pr_env_impl(State& state, Instruction const& inst)
     REnvironment const& env = static_cast<REnvironment const&>(a);
     String s = static_cast<Character const&>(b).s;
 
-    Value const* v = env.environment()->get(s);
+    Value const* v = internAndGet(state, env.environment(), s);
     if(v && v->isPromise())
         REnvironment::Init(OUT(c), static_cast<Promise const&>(*v).environment());
     else
@@ -646,7 +647,9 @@ Instruction const* get_impl(State& state, Instruction const& inst)
                 if( b.isCharacter()
                     && static_cast<Character const&>(b).length() == 1) {
 	                String s = static_cast<Character const&>(b).s;
-                    Value const* v = static_cast<REnvironment const&>(a).environment()->get(s);
+                    auto env = static_cast<REnvironment const&>(a);
+                    Value const* v = internAndGet(state, env.environment(), s);
+                    
                     if(!v)
                     {
                         OUT(c) = Null::Singleton();
@@ -720,11 +723,11 @@ Instruction const* set_impl(State& state, Instruction const& inst)
             return &inst+1;
         }
         else if(c.isEnvironment() && b.isCharacter1()) {
+            auto env = static_cast<REnvironment const&>(c);
             String s = static_cast<Character const&>(b).s;
-            if(a.isNil())
-                static_cast<REnvironment const&>(c).environment()->remove(s);
-            else
-                static_cast<REnvironment const&>(c).environment()->insert(s) = a;
+            String in = state.global.strings.in(s->s);
+            
+            env.environment()->insert(in) = a;
             OUT(c) = c;
             return &inst+1;
         }
@@ -790,7 +793,7 @@ Instruction const* getsub_impl(State& state, Instruction const& inst)
         List r(i.length());
         for(int64_t k = 0; k < i.length(); ++k)
         {
-            Value const* v = env.environment()->get(i[k]);
+            Value const* v = internAndGet(state, env.environment(), i[k]);
             r[k] = v ? *v : Null::Singleton();
         }
         OUT(c) = r; 
@@ -829,37 +832,37 @@ Instruction const* setsub_impl(State& state, Instruction const& inst)
             return &inst+1;
         }
     }
-    if(c.isEnvironment() && b.isCharacter()) {
-        REnvironment const& env = static_cast<REnvironment const&>(c);
-        Character const& i = static_cast<Character const&>(b);
-        if(a.isVector()) {
+    if(c.isEnvironment() && b.isCharacter())
+    {
+        auto env = static_cast<REnvironment const&>(c);
+        auto i   = static_cast<Character const&>(b);
+
+        if(a.isVector())
+        {
             List const& l = As<List>(state, a);
             int64_t len = std::max(l.length(), i.length());
             if(l.length() == 0 || i.length() == 0) len = 0;
-            for(int64_t k = 0; k < len; ++k) {
+            for(int64_t k = 0; k < len; ++k)
+            {
                 int64_t ix = k % i.length();
                 int64_t lx = k % l.length();
-                if(i[ix] != Strings::empty 
-                    && !Character::isNA(i[ix])) {
-                    if(l[lx].isNil())
-                        env.environment()->remove(i[ix]);
-                    else
-                        env.environment()->insert(i[ix]) = l[lx];
+                if(!Character::isNA(i[ix]))
+                {
+                    String in = state.global.strings.in(i[ix]->s);
+                    env.environment()->insert(in) = l[lx];
                 }
             }
         }
-        else {
+        else
+        {
             int64_t len = i.length();
-            if(a.isNil()) {
-                for(int64_t k = 0; k < len; ++k) {
-                    if(i[k] != Strings::empty && !Character::isNA(i[k]))
-                        env.environment()->remove(i[k]);
-                }
-            }
-            else {
-                for(int64_t k = 0; k < len; ++k) {
-                    if(i[k] != Strings::empty && !Character::isNA(i[k]))
-                        env.environment()->insert(i[k]) = a;
+                
+            for(int64_t k = 0; k < len; ++k)
+            {
+                if(!Character::isNA(i[k]))
+                {
+                    String in = state.global.strings.in(i[k]->s);
+                    env.environment()->insert(in) = a;
                 }
             }
         }
@@ -927,11 +930,11 @@ Instruction const* getattr_impl(State& state, Instruction const& inst)
         Value const* v = nullptr;
         if(a.isEnvironment())
         {
-            v = env.environment()->getAttributes()->get(name);
+            v = internAndGet(state, env.environment()->getAttributes(), name);
         }
         else if(a.isObject())
         {
-            v = o.attributes()->get(name);
+            v = internAndGet(state, o.attributes(), name);
         }
 
         OUT(c) = v ? *v : Null::Singleton();
@@ -952,14 +955,17 @@ Instruction const* setattr_impl(State& state, Instruction const& inst)
 
     if(b.isCharacter1())
     {
-        String name = static_cast<Character const&>(b)[0];
+        String str = static_cast<Character const&>(b)[0];
+        String name = state.global.strings.in(str->s);
 
         // Special casing for R's compressed rownames representation.
         // Can we move this to the R compatibility layer?
         Value v = a;
-        if(name == Strings::rownames && v.isInteger()) {
+        if(name == Strings::rownames && v.isInteger())
+        {
             auto i = static_cast<Integer const&>(v);
-            if(i.length() == 2 && Integer::isNA(i[0])) {    
+            if(i.length() == 2 && Integer::isNA(i[0]))
+            { 
                 v = Sequence((int64_t)1,1,abs(i[1]));
             }
         }
@@ -1134,68 +1140,9 @@ Instruction const* env_has_impl(State& state, Instruction const& inst)
     auto env = static_cast<REnvironment const&>(a);
     auto str = static_cast<Character const&>(b);
 
-    Value const* v = env.environment()->get(str.s);
+    Value const* v = internAndGet(state, env.environment(), str.s);
     OUT(c) = v ? Logical::True() : Logical::False();
 
-    return &inst+1;
-}
-
-
-Instruction const* env_get_impl(State& state, Instruction const& inst)
-{
-    state.visible = true;
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-
-    if(!a.isEnvironment()) {
-        return StopDispatch(state, inst, state.internStr(
-            "invalid 'envir' argument to .getenv"), 
-            inst.c);
-    }
-    if(!b.isCharacter() || b.pac != 1) {
-        return StopDispatch(state, inst, state.internStr(
-            "invalid 'x' argument to .getenv"), 
-            inst.c);
-    }
-
-    auto env = static_cast<REnvironment const&>(a);
-    auto str = static_cast<Character const&>(b);
-
-    Value const* v = env.environment()->get(str.s);
-    OUT(c) = v ? *v : Value::Nil();
-
-    return &inst+1;
-}
-
-
-Instruction const* env_set_impl(State& state, Instruction const& inst)
-{
-    // a = index, b = environment, c = value
-
-    DECODE(a); BIND(a);
-    DECODE(b); BIND(b);
-    DECODE(c); // don't BIND
-       
-    assert(b.isEnvironment());
-    Environment* env = static_cast<REnvironment const&>(b).environment();
-
-    if(a.isCharacter())
-    {
-        env->insert(a.s) = c;
-    }
-    else if(a.isInteger())
-    {
-        // TODO: what if the dots don't exist or they aren't long enough?
-        Value* dots = env->get(Strings::__dots__);
-        assert(dots && dots->isList());
-
-        ((List&)*dots)[a.i] = c;
-    }
-
-#ifdef EPEE
-        state.traces.LiveEnvironment(env, c);
-#endif
-       
     return &inst+1;
 }
 
@@ -1226,7 +1173,7 @@ Instruction const* env_rm_impl(State& state, Instruction const& inst)
     // TODO: could have bulk removal code that would be a lot more efficient
     for(int64_t i = 0; i < names.length(); ++i)
     {
-        env->remove( names[i] );
+        internAndRemove(state, env, names[i]);
     }
 
     OUT(c) = Null::Singleton();
@@ -1258,7 +1205,8 @@ Instruction const* env_missing_impl(State& state, Instruction const& inst)
 
     if( x.isCharacter() && static_cast<Character const&>(x).length() == 1 ) {
         Environment* foundEnv;
-        Value const* v = e->getRecursive(x.s, foundEnv);
+        Value const* v = internAndGetRec(state, e, x.s, foundEnv);
+        
         missing = !v || v->isNil() ||
                   ( v->isPromise()
                     && static_cast<Promise const&>(*v).isDefault() 

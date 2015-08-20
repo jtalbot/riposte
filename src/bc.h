@@ -57,8 +57,6 @@
 #define ENVIRONMENT_BYTECODES(_)                                               \
     _(env_new,      "env_new")                                                 \
     _(env_has,      "env_has")      /* check a value in an environment */      \
-    _(env_get,      "env_get")      /* get a value from an environment */      \
-    _(env_set,      "env_set")      /* set a value in an environment */        \
     _(env_rm,       "env_rm" )      /* undefine values in an environment */    \
     _(env_missing,  "env_missing" ) /* see if an argument is missing */        \
     _(env_names,    "env_names")    /* get symbols defined in environment */   \
@@ -144,8 +142,8 @@
     _(semijoin, "semijoin")
 
 #define SPECIAL_BYTECODES(_) 	                                               \
-    _(stop,         "stop")                                                    \
-	_(done,         "done") 
+    _(stop,         "stop")     /* stop execution with an error */             \
+	_(done,         "done")     /* finish execution of block and store result */
 
 #define UNARY_BYTECODES(_) \
 	ARITH_UNARY_BYTECODES(_) \
