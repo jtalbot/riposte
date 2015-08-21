@@ -23,17 +23,15 @@ GCObject* HeapObject::gcObject() const {
 	return (GCObject*)((uint64_t)this & ~(Heap::regionSize-1));
 }
 
-uint64_t nil_count;
-uint64_t env_count;
-uint64_t clos_count;
-uint64_t extptr_count;
-uint64_t null_count;
-uint64_t double_count;
-uint64_t integer_count;
-uint64_t logical_count;
-uint64_t character_count;
-uint64_t raw_count;
-uint64_t list_count;
+uint64_t NumberOfSetBits(uint64_t i)
+{
+    i = i - ((i >> 1) & 0x5555555555555555UL);
+    i = (i & 0x3333333333333333UL) + ((i >> 2) & 0x3333333333333333UL);
+    return (((i + (i >> 4)) & 0xF0F0F0F0F0F0F0FUL) * 0x101010101010101UL) >> 56;
+}
+
+uint64_t bytes;
+
 uint64_t type_count[17];
 
 #define VISIT(p) if((p) != 0 && !(p)->marked()) (p)->visit()
@@ -53,11 +51,13 @@ static void traverse(Value const& v) {
 			VISIT((Closure::Inner const*)v.p);
 			VISIT(((Closure const&)v).prototype());
 			VISIT(((Closure const&)v).environment());
+            //bytes += 16;
 			break;
         case Type::Externalptr:
             VISIT((Externalptr::Inner const*)v.p);
             traverse(((Externalptr const&)v).tag());
             traverse(((Externalptr const&)v).prot());
+            //bytes += 48;
             break;
         case Type::Null:
             // do nothing
@@ -65,14 +65,17 @@ static void traverse(Value const& v) {
 		case Type::Double:
 			VISIT(((Double const&)v).attributes());
 			VISIT(((Double const&)v).inner());
+            //bytes += 8*((Double const&)v).length();
 			break;
 		case Type::Integer:
 			VISIT(((Integer const&)v).attributes());
 			VISIT(((Integer const&)v).inner());
+            //bytes += 8*((Integer const&)v).length();
 			break;
 		case Type::Logical:
 			VISIT(((Logical const&)v).attributes());
 			VISIT(((Logical const&)v).inner());
+            //bytes += 1*((Logical const&)v).length();
 			break;
 		case Type::Character:
 			VISIT(((Character const&)v).attributes());
@@ -80,17 +83,21 @@ static void traverse(Value const& v) {
             {
                 if(v.packed() > 1) {
                     auto p = (VectorImpl<Type::Character, String, false>::Inner const*)v.p;
-                    for(size_t i = 0; i < p->length; ++i)
+                    for(size_t i = 0; i < p->length; ++i) {
                         VISIT(p->data[i]);
+                        //bytes += p->data[i] ? strlen(p->data[i]->s)+1 : 0;
+                    }
                 }
                 else if(v.packed() == 1) {
                     VISIT(v.s);
                 }
+                //bytes += 8*((Character const&)v).length();
             }
 			break;
 		case Type::Raw:
 			VISIT(((Raw const&)v).attributes());
 			VISIT(((Raw const&)v).inner());
+            //bytes += 1*((Raw const&)v).length();
 			break;
 		case Type::List:
 			VISIT(((List const&)v).attributes());
@@ -99,6 +106,7 @@ static void traverse(Value const& v) {
 				List const& l = (List const&)v;
 				for(int64_t i = 0; i < l.length(); i++)
 					traverse(l[i]);
+            //bytes += 16*((List const&)v).length();
 			}
 			break;
 		case Type::Promise:
@@ -116,12 +124,14 @@ static void traverse(Value const& v) {
 			break;
         case Type::ScalarString:
             VISIT(((ScalarString const&)v).s);
+            //bytes += strlen(((ScalarString const&)v).s->s);
             break;
         case Type::Pairlist:
             VISIT((Pairlist::Inner const*)v.p);
             VISIT(((Pairlist const&)v).car());
             VISIT(((Pairlist const&)v).cdr());
             VISIT(((Pairlist const&)v).tag());
+            //bytes += 24;
             break;
 		default:
             printf("Unimplemented type: %d\n", v.type()); 
@@ -141,12 +151,14 @@ void Dictionary::visit() const {
 		if(d->d[i].n != Strings::NA)
 			traverse(d->d[i].v);
 	}
+    //bytes += 24*size+48;
 }
 
 void Environment::visit() const {
 	Dictionary::visit();
     VISIT(enclosure);
     VISIT(attributes);
+    //bytes += 16;
 }
 
 uint64_t code_count;
@@ -166,13 +178,14 @@ void Code::visit() const {
         traverse(calls[i].extraArgs);
         traverse(calls[i].extraNames);
 	}
+    //bytes += 8*bc.size() + 16*constants.size() + 88*calls.size() + 3;
 }
 
 void Code::Finalize(HeapObject* o) {
     Code* code = (Code*)o;
-    code->bc.clear();
-    code->constants.clear();
-    code->calls.clear();
+    code->bc.~vector<Instruction>();
+    code->constants.~vector<Value>();
+    code->calls.~vector<CompiledCall>();
 }
 
 uint64_t prototype_count;
@@ -186,11 +199,15 @@ void Prototype::visit() const {
     traverse(formals);
 	traverse(parameters);
     traverse(defaults);
+
+    //bytes += 72;
 }
 
 void SEXPREC::visit() const {
 	HeapObject::visit();
     traverse(v);
+
+    //bytes += 16;
 }
 
 void Heap::mark(Global& global) {
@@ -200,6 +217,7 @@ void Heap::mark(Global& global) {
     dictionary_count = 0;
     code_count = 0;
     prototype_count = 0;*/
+    //bytes = 0;
 
 	// traverse root set
 	// mark the region that I'm currently allocating into
@@ -260,13 +278,14 @@ void Heap::mark(Global& global) {
     printf("dict: %d\n", dictionary_count);
     printf("code: %d\n", code_count);
     printf("proto: %d\n", prototype_count);*/
+    //printf("bytes: %d\n", bytes);
 }
 
 
 void Heap::sweep(Global& global) {
 
     // sweep heap
-	//uint64_t old_total = total;
+	//uint64_t old_total = total, bytes = 0;
 	total = 0;
 	GCObject** g = &root;
 	while(*g != 0) {
@@ -288,12 +307,13 @@ void Heap::sweep(Global& global) {
 				free(h->head);
 			}
 		} else {
+            //bytes += 64*NumberOfSetBits(h->flags);
 			total += h->size;
 			h->unmark();
 			g = &(h->next);
 		}
 	}
-	//printf("Swept: \t%d => \t %d\n", old_total, total);
+	//printf("Swept: \t%d => \t %d      (%d)\n", old_total, total, bytes);
 }
 
 void Heap::makeRegions(uint64_t regions) {
