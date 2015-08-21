@@ -18,7 +18,7 @@ void sprintf_map(State& state, String& r, String fmt, ...) {
     vsnprintf( out, maxlength, fmt->s, arglist );
     va_end( arglist );
 
-    r = state.internStr(out);
+    r = MakeString(out);
 }
 
 extern "C"

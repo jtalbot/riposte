@@ -11,7 +11,7 @@ void substr_map(State& state,
         Integer::Element start,
         Integer::Element length) {
     std::string s(text->s);
-    result = state.internStr(s.substr(start, length).c_str());
+    result = MakeString(s.substr(start, length).c_str());
 }
 
 extern "C"
@@ -23,7 +23,7 @@ void substrassign_map(State& state,
         Character::Element repl) {
 
     std::string s(text->s);
-    result = state.internStr(
+    result = MakeString(
         (s.substr(0, start) + repl->s + s.substr(
             std::min((Integer::Element)s.size(),start+length)).c_str()));
 }

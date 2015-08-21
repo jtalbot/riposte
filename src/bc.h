@@ -97,16 +97,16 @@
 	_(land, "land",	LogicalBinary, ((!a||!b)  ?0:(a>0)?1:b))                   \
 
 #define UNIFY_BINARY_BYTECODES(_)                                              \
-	_(pmin, "pmin",	UnifyBinary, PassCheckedNA(a,b,riposte_min(state,a,b)))   \
-	_(pmax, "pmax",	UnifyBinary, PassCheckedNA(a,b,riposte_max(state,a,b)))   \
+	_(pmin, "pmin",	UnifyBinary, PassCheckedNA(a,b,riposte_min(a,b)))   \
+	_(pmax, "pmax",	UnifyBinary, PassCheckedNA(a,b,riposte_max(a,b)))   \
 
 #define ORDINAL_BINARY_BYTECODES(_)                                            \
-	_(eq, "eq", OrdinalBinary, PassCheckedNA(a,b,eq(state,a,b)?Logical::TrueElement:Logical::FalseElement)) \
-	_(neq, "neq", OrdinalBinary, PassCheckedNA(a,b,neq(state,a,b)?Logical::TrueElement:Logical::FalseElement)) \
-	_(gt, "gt",	OrdinalBinary, PassCheckedNA(a,b,gt(state,a,b)?Logical::TrueElement:Logical::FalseElement)) \
-	_(ge, "ge",	OrdinalBinary, PassCheckedNA(a,b,ge(state,a,b)?Logical::TrueElement:Logical::FalseElement)) \
-	_(lt, "lt",	OrdinalBinary, PassCheckedNA(a,b,lt(state,a,b)?Logical::TrueElement:Logical::FalseElement)) \
-	_(le, "le",	OrdinalBinary, PassCheckedNA(a,b,le(state,a,b)?Logical::TrueElement:Logical::FalseElement)) \
+	_(eq, "eq", OrdinalBinary, PassCheckedNA(a,b,eq(a,b)?Logical::TrueElement:Logical::FalseElement)) \
+	_(neq, "neq", OrdinalBinary, PassCheckedNA(a,b,neq(a,b)?Logical::TrueElement:Logical::FalseElement)) \
+	_(gt, "gt",	OrdinalBinary, PassCheckedNA(a,b,gt(a,b)?Logical::TrueElement:Logical::FalseElement)) \
+	_(ge, "ge",	OrdinalBinary, PassCheckedNA(a,b,ge(a,b)?Logical::TrueElement:Logical::FalseElement)) \
+	_(lt, "lt",	OrdinalBinary, PassCheckedNA(a,b,lt(a,b)?Logical::TrueElement:Logical::FalseElement)) \
+	_(le, "le",	OrdinalBinary, PassCheckedNA(a,b,le(a,b)?Logical::TrueElement:Logical::FalseElement)) \
 
 #define SPECIAL_MAP_BYTECODES(_)                                               \
 	_(ifelse, "ifelse", IfElse)                                                \

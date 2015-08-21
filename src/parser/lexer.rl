@@ -51,18 +51,18 @@
 	
 	# Single and double-quoted string literals.
 	( "'" ( [^'\\] | /\\./ )* "'" ) 
-		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(global.internStr(unescape(s))) );};
+		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(MakeString(unescape(s))) );};
 	( '"' ( [^"\\] | /\\./ )* '"' ) 
-		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(global.internStr(unescape(s))) );};
+		{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(MakeString(unescape(s))) );};
 
 	# CreateSymbols.
 	( '..' digit+ )
-		{token( TOKEN_SYMBOL, CreateSymbol(global,global.internStr(std::string(ts, te-ts))));};
+		{token( TOKEN_SYMBOL, CreateSymbol(global,MakeString(std::string(ts, te-ts))));};
 
 	( ('.' ([a-zA-Z_.] [a-zA-Z0-9_.]*)?) | [a-zA-Z] [a-zA-Z0-9_.]* ) 
-		{token( TOKEN_SYMBOL, CreateSymbol(global,global.internStr(std::string(ts, te-ts))) );};
+		{token( TOKEN_SYMBOL, CreateSymbol(global,MakeString(std::string(ts, te-ts))) );};
 	( '`' ( [^`\\] | /\\./ )* '`' ) 
-		{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol(global,global.internStr(unescape(s))) );};
+		{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol(global,MakeString(unescape(s))) );};
 	# Numeric literals.
 	( float exponent? ) 
 		{token( TOKEN_NUM_CONST, Double::c(strtod(std::string(ts, te).c_str(), NULL)) );};
@@ -125,7 +125,7 @@
 	# Special Operators.
 	'===' {token( TOKEN_SPECIALOP, CreateSymbol(global,Strings::id) );};
 	'!==' {token( TOKEN_SPECIALOP, CreateSymbol(global,Strings::nid) );};
-	('%' [^\n%]* '%') {token(TOKEN_SPECIALOP, CreateSymbol(global,global.internStr(std::string(ts, te-ts))) ); };
+	('%' [^\n%]* '%') {token(TOKEN_SPECIALOP, CreateSymbol(global,MakeString(std::string(ts, te-ts))) ); };
 
 	# Separators.
 	',' {token( TOKEN_COMMA );};
@@ -256,7 +256,7 @@ int Parser::execute( const char* data, int len, bool isEof, Value& out, FILE* tr
 String Parser::popSource() {
 	assert(source.size() > 0);
 	std::string s(source.top(), le-source.top());
-	String result = global.internStr(rtrim(s));
+	String result = MakeString(rtrim(s));
 	source.pop();
 	return result;	
 }

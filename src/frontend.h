@@ -45,25 +45,25 @@ inline String baseClassName(Object const& o) {
 inline bool isSymbol(Value const& v) {
         return 	v.isObject()
 		&& hasClass((Object const&)v) 
-		&& baseClassName((Object const&)v) == Strings::name;
+		&& Eq(baseClassName((Object const&)v), Strings::name);
 }
 
 inline bool isCall(Value const& v) {
         return 	v.isObject()
 		&& hasClass((Object const&)v) 
-		&& baseClassName((Object const&)v) == Strings::call;
+		&& Eq(baseClassName((Object const&)v), Strings::call);
 }
 
 inline bool isExpression(Value const& v) {
         return 	v.isObject()
 		&& hasClass((Object const&)v) 
-		&& baseClassName((Object const&)v) == Strings::expression;
+		&& Eq(baseClassName((Object const&)v), Strings::expression);
 }
 
 inline bool isPairlist(Value const& v) {
         return 	v.isObject()
 		&& hasClass((Object const&)v) 
-		&& baseClassName((Object const&)v) == Strings::pairlist;
+		&& Eq(baseClassName((Object const&)v), Strings::pairlist);
 }
 
 inline Object CreateSymbol(Global& g, String s) {

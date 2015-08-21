@@ -14,7 +14,7 @@ void getlocale_map(State& state,
 {
     char const* v = setlocale(category, NULL);
     if(v)
-        r = state.internStr(v);
+        r = MakeString(v);
     else
         r = Strings::empty;
 }
@@ -25,7 +25,7 @@ void setlocale_map(State& state,
 {
     char const* v = setlocale(category, locale->s);
     if(v)
-        r = state.internStr(v);
+        r = MakeString(v);
     else
         r = Strings::empty;
 }

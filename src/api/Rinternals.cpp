@@ -561,9 +561,9 @@ SEXP Rf_allocMatrix(SEXPTYPE type, int rows, int cols) {
 
     Dictionary* d = new Dictionary(2);
     
-    d->insert(global->internStr("class")) =
-        Character::c(global->internStr("matrix"));
-    d->insert(global->internStr("dim")) =
+    d->insert(MakeString("class")) =
+        Character::c(MakeString("matrix"));
+    d->insert(MakeString("dim")) =
         Integer::c(rows, cols);
 
     ((Object&)r->v).attributes(d);
@@ -798,8 +798,10 @@ SEXP Rf_findVar(SEXP symbol, SEXP env) {
         printf("argument to findVar is not a one element Character");
         throw;
     }
+
+    String in = global->strings.intern(symbol->v.s->s);
     Environment* foundEnv;
-    Value const* v = ((REnvironment&)env->v).environment()->getRecursive(symbol->v.s, foundEnv);
+    Value const* v = ((REnvironment&)env->v).environment()->getRecursive(in, foundEnv);
 
     return (v && !v->isNil()) ? ToSEXP(*v) : R_UnboundValue;
 }
@@ -861,16 +863,14 @@ SEXP Rf_namesgets(SEXP, SEXP) {
 }
 
 SEXP Rf_mkChar(const char * str) {
-    String s = global->internStr(str);
     Value r;
-    ScalarString::Init(r, s);
+    ScalarString::Init(r, MakeString(str));
     return ToSEXP(r);
 }
 
 SEXP Rf_mkCharLen(const char * str, int len) {
-    String s = global->internStr(std::string(str, len));
     Value r;
-    ScalarString::Init(r, s);
+    ScalarString::Init(r, MakeString(std::string(str, len)));
     return ToSEXP(r);
 }
 
@@ -983,9 +983,8 @@ cetype_t Rf_getCharCE(SEXP) {
 }
 
 SEXP Rf_mkCharCE(const char * str, cetype_t type) {
-    String s = global->internStr(str);
     Value r;
-    ScalarString::Init(r, s);
+    ScalarString::Init(r, MakeString(str));
     SEXP v = ToSEXP(r);
     return v;
 }
@@ -1013,7 +1012,7 @@ SEXP R_FindNamespace(SEXP info) {
     List call(2);
     
     Character fn(1);
-    fn[0] = global->internStr("getNamespace");
+    fn[0] = MakeString("getNamespace");
     
     call[0] = fn;
     call[1] = ToRiposteValue(info->v);
@@ -1229,7 +1228,7 @@ SEXP     Rf_mkNamed(SEXPTYPE, const char **) {
 
 SEXP     Rf_mkString(const char * s) {
     Character v(1);
-    v[0] = global->internStr(s);
+    v[0] = MakeString(s);
     return ToSEXP(v);
 }
 

@@ -154,7 +154,7 @@ void sub_map(State& state, Character::Element& out,
         result.append( text->s, text->s+m[0].rm_so );
         result.append( s );
         result.append( text->s+m[0].rm_eo, text->s+strlen(text->s) );
-        out = state.internStr(result.c_str());
+        out = MakeString(result.c_str());
     }
 }
 
@@ -195,7 +195,7 @@ void gsub_map(State& state, Character::Element& out,
 
     result.append( text->s+offset, text->s+strlen(text->s) );
 
-    out = state.internStr(result.c_str());
+    out = MakeString(result.c_str());
 }
 
 extern "C"
@@ -377,7 +377,7 @@ void pcre_sub_map(State& state, Character::Element& out,
         result.append( text->s, text->s+ovector[0] );
         result.append( s );
         result.append( text->s+ovector[1], text->s+strlen(text->s) );
-        out = state.internStr(result.c_str());
+        out = MakeString(result.c_str());
     }
 }
 
@@ -421,6 +421,6 @@ void pcre_gsub_map(State& state, Character::Element& out,
 
     result.append( text->s+offset, text->s+strlen(text->s) );
     
-    out = state.internStr(result.c_str());
+    out = MakeString(result.c_str());
 }
 

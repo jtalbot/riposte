@@ -179,7 +179,8 @@ void Compiler::resolveLoopExits(int64_t start, int64_t end, int64_t nextTarget, 
 	}
 }
 
-Compiler::Operand Compiler::compileConstant(Value const& expr, Code* code) {
+Compiler::Operand Compiler::compileConstant(Value expr, Code* code) {
+
 	std::map<Value, int64_t>::const_iterator i = constants.find(expr);
 	int64_t index = 0;
 
@@ -215,6 +216,9 @@ static int64_t isDotDot(String s) {
 
 Compiler::Operand Compiler::compileSymbol(Value const& symbol, Code* code, bool isClosure) {
 	String s = SymbolStr(symbol);
+    
+    // symbols have to be interned
+    s = global.strings.intern(s->s);
 	
 	int64_t dd = isDotDot(s);
 	if(dd > 0) {
@@ -278,7 +282,7 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code
 
     // Handle simple assignment 
     if(!isCall(dest)) {
-        Operand target = compileConstant(Character::c(SymbolStr(dest)), code);
+        Operand target = compileConstant(InternStrings(state, Character::c(SymbolStr(dest))), code);
         emit(bc, target, 0, rhs);
     }
     
@@ -289,7 +293,7 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code
     //	1) dim(a) <- `[<-`(dim(a), 1, x)
     //	2) a <- `dim<-`(a, `[<-`(dim(a), 1, x))
     else {
-        Operand tmp = compileConstant(Character::c(Strings::assignTmp), code);
+        Operand tmp = compileConstant(InternStrings(state, Character::c(Strings::assignTmp)), code);
         emit( ByteCode::store, tmp, 0, rhs );
 
         Value value = CreateSymbol(global, Strings::assignTmp);
@@ -301,7 +305,7 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code
             List n(c.length()+1);
 
             for(int64_t i = 0; i < c.length(); i++) { n[i] = c[i]; }
-            String as = global.internStr(global.externStr(SymbolStr(c[0])) + "<-");
+            String as = MakeString(global.externStr(SymbolStr(c[0])) + "<-");
             n[0] = CreateSymbol(global, as);
             n[c.length()] = value;
 
@@ -325,7 +329,7 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code
             dest = c[1];
         }
 
-        Operand target = compileConstant(Character::c(SymbolStr(dest)), code);
+        Operand target = compileConstant(InternStrings(state, Character::c(SymbolStr(dest))), code);
         Operand source = compile(value, code);
         emit(bc, target, 0, source);
         kill(source);
@@ -372,7 +376,7 @@ Compiler::Operand Compiler::emitFunction(ByteCode::Enum bc, List const& call, Co
     for(int64_t i = 0; i < formals.length(); i++) {
         // Make defaults. In order to detect defaults when using missing,
         // all defaults must be put into promises.
-        if(parameters[i] == Strings::dots) {
+        if(Eq(parameters[i], Strings::dots)) {
             dotIndex = i;
             defaults[i] = Value::Nil();
         }
@@ -390,7 +394,7 @@ Compiler::Operand Compiler::emitFunction(ByteCode::Enum bc, List const& call, Co
 
     // Populate function info
     functionCode->formals = formals;
-    functionCode->parameters = parameters;
+    functionCode->parameters = InternStrings(state, parameters);
     functionCode->defaults = defaults;
     functionCode->string = call[3].isCharacter()
         ? SymbolStr(call[3])
@@ -420,7 +424,7 @@ Compiler::Operand Compiler::emitReturn(ByteCode::Enum bc, List const& call, Code
 
 Compiler::Operand Compiler::emitFor(ByteCode::Enum bc, List const& call, Code* code) {
     Operand loop_variable =
-        compileConstant(Character::c(SymbolStr(call[1])), code);
+        compileConstant(InternStrings(state, Character::c(SymbolStr(call[1]))), code);
     Operand loop_vector = placeInRegister(compile(call[2], code));
     Operand loop_counter = allocRegister();	// save space for loop counter
     Operand loop_limit = allocRegister(); // save space for the loop limit
@@ -631,7 +635,7 @@ CompiledCall Compiler::makeCall(State& state, List const& call, Character const&
 		Pair p;
 		if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
 
-        if(p.n == Strings::__extraArgs__) {
+        if(Eq(p.n, Strings::__extraArgs__)) {
             List const& l = (List const&)call[i];
             if(!hasNames(l) 
                 || l.length() != ((Character const&)getNames(l)).length()) {
@@ -655,15 +659,15 @@ CompiledCall Compiler::makeCall(State& state, List const& call, Character const&
             }
         }
         else {
-		    if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) {
+		    if(isSymbol(call[i]) && Eq(SymbolStr(call[i]), Strings::dots)) {
 			    p.v = call[i];
     			dotIndex = i-1;
                 p.n = Strings::empty;
 	    	} else if(isCall(call[i]) || isSymbol(call[i])) {
-                if(p.n != Strings::empty) named = true;
+                if(!Eq(p.n, Strings::empty)) named = true;
                 Promise::Init(p.v, NULL, deferPromiseCompilation(state, call[i]), false);
     		} else {
-                if(p.n != Strings::empty) named = true;
+                if(!Eq(p.n, Strings::empty)) named = true;
 	    		p.v = call[i];
 		    }
     		arguments.push_back(p);
@@ -679,7 +683,8 @@ CompiledCall Compiler::makeCall(State& state, List const& call, Character const&
         argnames[i] = arguments[i].n;
     }
 
-	return CompiledCall(rcall, args, argnames, dotIndex, extraArgs, extraNames);
+	return CompiledCall(rcall, args, InternStrings(state, argnames),
+                            dotIndex, extraArgs, InternStrings(state, extraNames));
 }
 
 Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Code* code) {
@@ -698,8 +703,8 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 	String func = SymbolStr(call[0]);
 
     // Compile list(...), the only built-in function that handles ...
-	if(func == Strings::list && call.length() == 2 
-		&& isSymbol(call[1]) && SymbolStr(call[1]) == Strings::dots)
+	if(Eq(func, Strings::list) && call.length() == 2 
+		&& isSymbol(call[1]) && Eq(SymbolStr(call[1]), Strings::dots))
 	{
 		Operand result = allocRegister();
 		Operand counter = placeInRegister(compile(Integer::c(-1), code));
@@ -714,7 +719,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
     // so check and if there are any, compile a normal function call.
 	bool hasDots = false;
 	for(int64_t i = 1; i < length; i++) {
-		if(isSymbol(call[i]) && SymbolStr(call[i]) == Strings::dots) 
+		if(isSymbol(call[i]) && Eq(SymbolStr(call[i]), Strings::dots)) 
 			hasDots = true;
 	}
 
@@ -723,14 +728,14 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
     // Check the three built-in replacement functions for the names
     // we do support. This is necessary since our support for compiling
     // complex assignments will introduce 'value' into the argument names.
-    if( ( func == Strings::bracketAssign ||
-          func == Strings::bbAssign ||
-          func == Strings::attrset ) && names.length() == 4 ) {
+    if( ( Eq(func, Strings::bracketAssign) ||
+          Eq(func, Strings::bbAssign) ||
+          Eq(func, Strings::attrset) ) && names.length() == 4 ) {
 
-        hasNames = !(names[0] == Strings::empty &&
-                     names[1] == Strings::empty &&
-                     names[2] == Strings::empty &&
-                     names[3] == Strings::value);
+        hasNames = !(Eq(names[0], Strings::empty) &&
+                     Eq(names[1], Strings::empty) &&
+                     Eq(names[2], Strings::empty) &&
+                     Eq(names[3], Strings::value));
     }
 
     return (hasDots || hasNames)

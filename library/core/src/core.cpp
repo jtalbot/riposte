@@ -26,7 +26,7 @@ Value cat(State& state, Value const* args) {
 	Character const& b = Cast<Character>(args[1]);
 	for(int64_t i = 0; i < a.length(); i++) {
 		if(!List::isNA(a[i])) {
-			Character c = As<Character>(state, a[i]);
+			Character c = As<Character>(a[i]);
 			for(int64_t j = 0; j < c.length(); j++) {
                 if(c[j] == Character::NAelement)
                     printf("NA");
@@ -52,9 +52,9 @@ Value library(State& state, Value const* args, Value& result) {
 
 extern "C"
 Value readtable(State& state, Value const* args) {
-	Character from = As<Character>(state, args[0]);
-	Character sep_list = As<Character>(state,args[1]);
-	Character format = As<Character>(state, args[2]);
+	Character from = As<Character>(args[0]);
+	Character sep_list = As<Character>(args[1]);
+	Character format = As<Character>(args[2]);
 	if(from.length() > 0 && sep_list.length() > 0 && format.length() > 0) {
 		std::string name = state.externStr(from[0]);
 		std::string sep = state.externStr(sep_list[0]);
@@ -101,7 +101,7 @@ Value readtable(State& state, Value const* args) {
 						((std::vector<double>*)lists[list_idx])->push_back(date);
 						list_idx++;
 					} else if(Strings::Character == format[i]) {
-						String s = state.internStr(rest);
+						String s = MakeString(rest);
 						((std::vector<String>*)lists[list_idx])->push_back(s);
 						list_idx++;
 					}
@@ -157,15 +157,15 @@ Value source(State& state, Value const* args) {
 
 extern "C"
 Value paste(State& state, Value const* args) {
-	Character a = As<Character>(state, args[0]);
-	String sep = As<Character>(state, args[1])[0];
+	Character a = As<Character>(args[0]);
+	String sep = As<Character>(args[1])[0];
 	std::string r = "";
 	for(int64_t i = 0; i < a.length()-1; i++) {
 		r += a[i]->s;
 		r += sep->s; 
 	}
 	if(0 < a.length()) r += a[a.length()-1]->s;
-	return Character::c(state.internStr(r));
+	return Character::c(MakeString(r));
 }
 
 #include <sys/time.h>
@@ -185,7 +185,7 @@ Value proctime(State& state, Value const* args) {
 
 extern "C"
 Value traceconfig(State & state, Value const* args) {
-	Logical c = As<Logical>(state, args[0]);
+	Logical c = As<Logical>(args[0]);
 	if(c.length() == 0) _error("condition is of zero length");
 	state.global.epeeEnabled = Logical::isTrue(c[0]);
 	return Null::Singleton();
@@ -196,11 +196,11 @@ extern "C"
 Value matrixmultiply(State & state, Value const* args) {
 	double mA = asReal1(args[1]);
 	double nA = asReal1(args[2]);
-	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(state, args[0]).v(), mA, nA);
+	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(args[0]).v(), mA, nA);
 	
 	double mB = asReal1(args[4]);
 	double nB = asReal1(args[5]);
-	Eigen::MatrixXd bb = Eigen::Map<Eigen::MatrixXd>(As<Double>(state, args[3]).v(), mB, nB);
+	Eigen::MatrixXd bb = Eigen::Map<Eigen::MatrixXd>(As<Double>(args[3]).v(), mB, nB);
 
 	Double c(aa.rows()*bb.cols());
 	Eigen::Map<Eigen::MatrixXd>(c.v(), aa.rows(), bb.cols()) = aa*bb;
@@ -212,7 +212,7 @@ extern "C"
 Value eigensymmetric(State & state, Value const* args) {
 	double mA = asReal1(args[1]);
 	double nA = asReal1(args[2]);
-	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(state, args[0]).v(), mA, nA);
+	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(args[0]).v(), mA, nA);
 	
 	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigenSolver(aa);
 	Double c(aa.rows()*aa.cols());
@@ -231,7 +231,7 @@ extern "C"
 Value eigen(State & state, Value const* args) {
 	/*double mA = asReal1(args[1]);
 	double nA = asReal1(args[2]);
-	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(state, args[0]).v(), mA, nA);
+	Eigen::MatrixXd aa = Eigen::Map<Eigen::MatrixXd>(As<Double>(args[0]).v(), mA, nA);
 	
 	Eigen::EigenSolver<Eigen::MatrixXd> eigenSolver(aa);
 	Double c(aa.rows()*aa.cols());

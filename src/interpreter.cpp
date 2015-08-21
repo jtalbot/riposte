@@ -9,6 +9,22 @@
 
 Global* global;
 
+String MakeString(std::string const& s)
+{
+    String result = new (s.size()+1) StringImpl();
+    memcpy((void*)result->s, s.c_str(), s.size()+1);
+    return result;
+}
+
+Character InternStrings(State& state, Character const& c)
+{
+    Character r(c.length());
+    for(size_t i = 0; i < c.length(); ++i) {
+        r[i] = state.global.strings.intern(c[i]->s);
+    }
+    return r;
+}
+
 void profileStack(State const& state);
 
 //
@@ -233,7 +249,7 @@ Global::Global(uint64_t states, int64_t argc, char** argv)
     // intialize arguments list
     arguments = Character(argc);
     for(int64_t i = 0; i < argc; i++) {
-        arguments[i] = internStr(std::string(argv[i]));
+        arguments[i] = MakeString(std::string(argv[i]));
     }
 
     promiseCode = new (Code::Finalize) Code();

@@ -8,54 +8,54 @@ class State;
 
 template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
 struct Map1 {
-	static void eval(State& state, void* args, typename Op::A::Element const* a, typename Op::R::Element* r) {
-		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, args, a[i]);
+	static void eval( void* args, typename Op::A::Element const* a, typename Op::R::Element* r) {
+		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(args, a[i]);
 	}
 };
 
 template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
 struct Map2VV {
-	static void eval(State& state, void* args, typename Op::A::Element const* a, typename Op::B::Element const* b, typename Op::R::Element* r) {
-		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, args, a[i], b[i]);
+	static void eval( void* args, typename Op::A::Element const* a, typename Op::B::Element const* b, typename Op::R::Element* r) {
+		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(args, a[i], b[i]);
 	}
 };
 
 template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
 struct Map2SV {
-	static void eval(State& state, void* args, typename Op::A::Element const a, typename Op::B::Element const* b, typename Op::R::Element* r) {
-		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, args, a, b[i]);
+	static void eval( void* args, typename Op::A::Element const a, typename Op::B::Element const* b, typename Op::R::Element* r) {
+		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(args, a, b[i]);
 	}
 };
 
 template< class Op, int64_t N, bool Multiple = (((N)%(4)) == 0) >
 struct Map2VS {
-	static void eval(State& state, void* args, typename Op::A::Element const* a, typename Op::B::Element const b, typename Op::R::Element* r) {
-		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(state, args, a[i], b);
+	static void eval( void* args, typename Op::A::Element const* a, typename Op::B::Element const b, typename Op::R::Element* r) {
+		for(int64_t i = 0; i < N; ++i) r[i] = Op::eval(args, a[i], b);
 	}
 };
 
 template< class Op, int64_t N >
 struct FoldLeftT {
-	static typename Op::R eval(State& state, void* args, typename Op::A::Element const* a, typename Op::R::Element r) {
-		for(int64_t i = 0; i < N; ++i) r = Op::eval(state, args, r, a[i]);
+	static typename Op::R eval( void* args, typename Op::A::Element const* a, typename Op::R::Element r) {
+		for(int64_t i = 0; i < N; ++i) r = Op::eval(args, r, a[i]);
 		return r;
 	}
 };
 
 template< class Op, int64_t N >
 struct ScanLeftT {
-	static typename Op::R eval(State& state, void* args, typename Op::A::Element const* a, typename Op::R::Element b, typename Op::R::Element* r) {
-		for(int64_t i = 0; i < N; ++i) r[i] = b = Op::eval(state, args, b, a[i]);
+	static typename Op::R eval( void* args, typename Op::A::Element const* a, typename Op::R::Element b, typename Op::R::Element* r) {
+		for(int64_t i = 0; i < N; ++i) r[i] = b = Op::eval(args, b, a[i]);
 		return b;
 	}
 };
 
 template< class Op >
 struct Zip1 {
-	static void eval(State& state, void* args, typename Op::A const& a, Value& out)
+	static void eval( void* args, typename Op::A const& a, Value& out)
 	{
 		if(a.isScalar()) {
-			Op::Scalar(state, args, a[0], out);
+			Op::Scalar(args, a[0], out);
 		}
 		else {
 			typename Op::R r(a.length());
@@ -64,9 +64,9 @@ struct Zip1 {
 			int64_t length = a.length();
 			int64_t i = 0;
 			for(; i < length-3; i+=4)
-                Map1<Op,4>::eval(state, args, ae+i, re+i);
+                Map1<Op,4>::eval(args, ae+i, re+i);
 			for(; i < length; i++)
-                Map1<Op,1>::eval(state, args, ae+i, re+i);
+                Map1<Op,1>::eval(args, ae+i, re+i);
 			out = (Value&)r;
 		}
 	}
@@ -74,10 +74,10 @@ struct Zip1 {
 
 template< class Op >
 struct Zip2 {
-	static void eval(State& state, void* args, typename Op::A const& a, typename Op::B const& b, Value& out)
+	static void eval( void* args, typename Op::A const& a, typename Op::B const& b, Value& out)
 	{
 		if(a.isScalar() && b.isScalar()) {
-			Op::Scalar(state, args, a[0], b[0], out);
+			Op::Scalar(args, a[0], b[0], out);
 		}
 		else if(b.isScalar()) {
 			typename Op::R r(a.length());
@@ -86,8 +86,8 @@ struct Zip2 {
 			typename Op::B::Element be = b[0];
 			int64_t length = a.length();
 			int64_t i = 0;
-			for(; i < length-3; i+=4) Map2VS<Op,4>::eval(state, args, ae+i, be, re+i);
-			for(; i < length; i++) Map2VS<Op,1>::eval(state, args, ae+i, be, re+i);
+			for(; i < length-3; i+=4) Map2VS<Op,4>::eval(args, ae+i, be, re+i);
+			for(; i < length; i++) Map2VS<Op,1>::eval(args, ae+i, be, re+i);
 			out = (Value&)r;
 		}
 		else if(a.isScalar()) {
@@ -97,8 +97,8 @@ struct Zip2 {
 			typename Op::B::Element const* be = b.v();
 			int64_t length = b.length();
 			int64_t i = 0;
-			for(; i < length-3; i+=4) Map2SV<Op,4>::eval(state, args, ae, be+i, re+i);
-			for(; i < length; i++) Map2SV<Op,1>::eval(state, args, ae, be+i, re+i);
+			for(; i < length-3; i+=4) Map2SV<Op,4>::eval(args, ae, be+i, re+i);
+			for(; i < length; i++) Map2SV<Op,1>::eval(args, ae, be+i, re+i);
 			out = (Value&)r;
 		}
 		else if(a.length() == b.length()) {
@@ -108,8 +108,8 @@ struct Zip2 {
 			typename Op::B::Element const* be = b.v();
 			int64_t length = a.length();
 			int64_t i = 0;
-			for(; i < length-3; i+=4) Map2VV<Op,4>::eval(state, args, ae+i, be+i, re+i);
-			for(; i < length; i++) Map2VV<Op,1>::eval(state, args, ae+i, be+i, re+i);
+			for(; i < length-3; i+=4) Map2VV<Op,4>::eval(args, ae+i, be+i, re+i);
+			for(; i < length; i++) Map2VV<Op,1>::eval(args, ae+i, be+i, re+i);
 			out = (Value&)r;
 		}
 		else if(a.length() == 0 || b.length() == 0) {
@@ -124,7 +124,7 @@ struct Zip2 {
 			int64_t blength = b.length();
 			int64_t j = 0;
 			for(int64_t i = 0; i < alength; ++i) {
-				re[i] = Op::eval(state, args, ae[i], be[j]);
+				re[i] = Op::eval(args, ae[i], be[j]);
 				++j;
 				if(j >= blength) j = 0;
 			}
@@ -139,7 +139,7 @@ struct Zip2 {
 			int64_t blength = b.length();
 			int64_t j = 0;
 			for(int64_t i = 0; i < blength; ++i) {
-				re[i] = Op::eval(state, args, ae[j], be[i]);
+				re[i] = Op::eval(args, ae[j], be[i]);
 				++j;
 				if(j >= alength) j = 0;
 			}
@@ -150,7 +150,7 @@ struct Zip2 {
 
 template< class Op >
 struct Zip3 {
-	static void eval(State& state, void* args, typename Op::A const& a, typename Op::B const& b, typename Op::C const& c, Value& out)
+	static void eval( void* args, typename Op::A const& a, typename Op::B const& b, typename Op::C const& c, Value& out)
 	{
         if(a.length() == 0 || b.length() == 0 || c.length() == 0) {
             typename Op::R r(0);
@@ -167,7 +167,7 @@ struct Zip3 {
 	    	typename Op::C::Element const* ce = c.v();
 	
             for(int64_t i = 0; i < length;) {
-	            re[i++] = Op::eval(state, args, ae[ai++], be[bi++], ce[ci++]);
+	            re[i++] = Op::eval(args, ae[ai++], be[bi++], ce[ci++]);
                 if(ai >= a.length()) ai = 0;
                 if(bi >= b.length()) bi = 0;
                 if(ci >= c.length()) ci = 0;
@@ -179,7 +179,7 @@ struct Zip3 {
 
 template< class Op >
 struct Zip2N {
-	static void eval(State& state, void* args, int64_t N, typename Op::AV const& a, typename Op::BV const& b, Value& out)
+	static void eval( void* args, int64_t N, typename Op::AV const& a, typename Op::BV const& b, Value& out)
 	{
 		typename Op::A::Element const* ae = a.v();
 		typename Op::B::Element const* be = b.v();
@@ -187,7 +187,7 @@ struct Zip2N {
 		typename Op::R::Element* re = r.v();
 		int64_t j = 0, k = 0;
 		for(int64_t i = 0; i < N; i++) {
-			re[i] = Op::eval(state, args, ae[j++], be[k++]);
+			re[i] = Op::eval(args, ae[j++], be[k++]);
 			if(j >= a.length) j = 0;
 			if(k >= b.length) k = 0;
 		}
@@ -197,13 +197,13 @@ struct Zip2N {
 
 template< class Op >
 struct FoldLeft {
-	static void eval(State& state, void* args, typename Op::B const& b, Value& out)
+	static void eval( void* args, typename Op::B const& b, Value& out)
 	{
 		typename Op::B::Element const* be = b.v();
 		typename Op::R::Element a = Op::base();
 		int64_t length = b.length();
 		for(int64_t i = 0; i < length; ++i) {
-			a = Op::eval(state, args, a, be[i]);
+			a = Op::eval(args, a, be[i]);
         }
 		Op::R::InitScalar(out, a);
 	}
@@ -211,21 +211,21 @@ struct FoldLeft {
 
 template< class Op >
 struct FoldLeft2 {
-    static void eval(State& state, void* args, typename Op::A const& a, Value& out)
+    static void eval( void* args, typename Op::A const& a, Value& out)
     {
         typename Op::A::Element const* ae = a.v();
-        typename Op::I b = Op::base(state, args);
+        typename Op::I b = Op::base(args);
         int64_t length = a.length();
 		for(int64_t i = 0; i < length; ++i) {
-			b = Op::eval(state, args, b, ae[i]);
+			b = Op::eval(args, b, ae[i]);
 		}
-		Op::R::InitScalar(out, Op::finalize(state, args, b));
+		Op::R::InitScalar(out, Op::finalize(args, b));
     }
 };
 
 template< class Op >
 struct ScanLeft {
-	static void eval(State& state, void* args, typename Op::B const& b, Value& out)
+	static void eval( void* args, typename Op::B const& b, Value& out)
 	{
 		typename Op::B::Element const* be = b.v();
 		typename Op::R::Element a = Op::base();
@@ -233,7 +233,7 @@ struct ScanLeft {
 		typename Op::R::Element* re = r.v();
 		int64_t length = b.length();
 		for(int64_t i = 0; i < length; ++i) {
-			re[i] = a = Op::eval(state, args, a, be[i]);
+			re[i] = a = Op::eval(args, a, be[i]);
 		}
 		out = (Value&)r;
 	}
@@ -241,16 +241,16 @@ struct ScanLeft {
 
 template< class Op >
 struct ScanLeft2 {
-    static void eval(State& state, void* args, typename Op::A const& a, Value& out)
+    static void eval( void* args, typename Op::A const& a, Value& out)
     {
         typename Op::A::Element const* ae = a.v();
-        typename Op::I b = Op::base(state, args);
+        typename Op::I b = Op::base(args);
         int64_t length = a.length();
         typename Op::R r(length);
         typename Op::R::Element* re = r.v();
 		for(int64_t i = 0; i < length; ++i) {
-			b = Op::eval(state, args, b, ae[i]);
-		    re[i] = Op::finalize(state, args, b);
+			b = Op::eval(args, b, ae[i]);
+		    re[i] = Op::finalize(args, b);
         }
         out = (Value&)r;
     }

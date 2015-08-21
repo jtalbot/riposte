@@ -9,7 +9,6 @@
 #include "ops.h"
 #include "runtime.h"
 
-
 Instruction const* force(
     State& state, Promise const& p,
     Environment* targetEnv, Value targetIndex,
@@ -53,8 +52,8 @@ Instruction const* call_impl(State& state, Instruction const& inst)
         return buildStackFrame(state, fenv, func.prototype()->code, inst.c, &inst+1);
     }
 
-    return StopDispatch(state, inst, state.internStr(
-        (std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n").c_str()), inst.c);
+    return StopDispatch(state, inst, MakeString(
+        (std::string("Non-function (") + Type::toString(a.type()) + ") as first parameter to call\n")), inst.c);
 }
 
 
@@ -116,9 +115,9 @@ Instruction const* jc_impl(State& state, Instruction const& inst)
     if(c.isLogical1())
         cond = c.c;
     else if(c.isInteger1())
-        cond = Cast<Integer, Logical>(state, c.i);
+        cond = Cast<Integer, Logical>(c.i);
     else if(c.isDouble1())
-        cond = Cast<Double, Logical>(state, c.i);
+        cond = Cast<Double, Logical>(c.i);
     // It breaks my heart to allow non length-1 vectors,
     // but this seems to be somewhat widely used, even
     // in some of the recommended R packages.
@@ -126,36 +125,36 @@ Instruction const* jc_impl(State& state, Instruction const& inst)
         if(static_cast<Logical const&>(c).length() > 0)
             cond = static_cast<Logical const&>(c)[0];
         else
-            return StopDispatch(state, inst, state.internStr(
+            return StopDispatch(state, inst, MakeString(
             "conditional is of length zero"), 
             inst.c);
     }
     else if(c.isInteger()) {
         if(static_cast<Integer const&>(c).length() > 0)
-            cond = Cast<Integer, Logical>(state, static_cast<Integer const&>(c)[0]);
+            cond = Cast<Integer, Logical>(static_cast<Integer const&>(c)[0]);
         else
-            return StopDispatch(state, inst, state.internStr(
+            return StopDispatch(state, inst, MakeString(
             "conditional is of length zero"), 
             inst.c);
     }
     else if(c.isDouble()) {
         if(static_cast<Double const&>(c).length() > 0)
-            cond = Cast<Double, Logical>(state, static_cast<Double const&>(c)[0]);
+            cond = Cast<Double, Logical>(static_cast<Double const&>(c)[0]);
         else
-            return StopDispatch(state, inst, state.internStr(
+            return StopDispatch(state, inst, MakeString(
             "conditional is of length zero"), 
             inst.c);
     }
     else if(c.isRaw()) {
         if(static_cast<Raw const&>(c).length() > 0)
-            cond = Cast<Raw, Logical>(state, static_cast<Raw const&>(c)[0]);
+            cond = Cast<Raw, Logical>(static_cast<Raw const&>(c)[0]);
         else
-            return StopDispatch(state, inst, state.internStr(
+            return StopDispatch(state, inst, MakeString(
             "conditional is of length zero"), 
             inst.c);
     }
     else {
-        return StopDispatch(state, inst, state.internStr(
+        return StopDispatch(state, inst, MakeString(
                     "conditional argument is not interpretable as logical"), 
                     inst.c);
     }
@@ -163,7 +162,7 @@ Instruction const* jc_impl(State& state, Instruction const& inst)
     if(Logical::isTrue(cond)) return &inst+inst.a;
     else if(Logical::isFalse(cond)) return &inst+inst.b;
     else if((&inst+1)->bc != ByteCode::stop) return &inst+1;
-    else return StopDispatch(state, inst, state.internStr(
+    else return StopDispatch(state, inst, MakeString(
             "NA where TRUE/FALSE needed"), 
             inst.c);
 }
@@ -215,7 +214,7 @@ Instruction const* external_impl(State& state, Instruction const& inst)
     }
 
     if(func == NULL) {
-        return StopDispatch(state, inst, state.internStr(
+        return StopDispatch(state, inst, MakeString(
             ".External needs a Character(1) or Externalptr as its first argument"), 
             inst.c);
     }
@@ -312,8 +311,8 @@ Instruction const* load_impl(State& state, Instruction const& inst)
 {
     String s = static_cast<Character const&>(CONSTANT(inst.a)).s;
     
-    return StopDispatch(state, inst, state.internStr(
-            (std::string("Object '") + s->s + "' not found").c_str()), 
+    return StopDispatch(state, inst, MakeString(
+            (std::string("Object '") + s->s + "' not found")), 
             inst.c);
 }
 
@@ -322,8 +321,8 @@ Instruction const* loadfn_impl(State& state, Instruction const& inst)
 {
     String s = static_cast<Character const&>(CONSTANT(inst.a)).s;
     
-    return StopDispatch(state, inst, state.internStr(
-            (std::string("Object '") + s->s + "' not found").c_str()), 
+    return StopDispatch(state, inst, MakeString(
+            (std::string("Object '") + s->s + "' not found")), 
             inst.c);
 }
 
@@ -339,14 +338,14 @@ Instruction const* dotsv_impl(State& state, Instruction const& inst)
     else if(a.isDouble1())
         idx = (int64_t)static_cast<Double const&>(a)[0] - 1;
     else
-        return StopDispatch(state, inst, state.internStr("Invalid type in dotsv"), inst.c);
+        return StopDispatch(state, inst, MakeString("Invalid type in dotsv"), inst.c);
 
     Value const* t = state.frame.environment->get(Strings::__dots__);
 
     if(!t || !t->isList() ||
        idx >= (int64_t)static_cast<List const&>(*t).length() ||
        idx < (int64_t)0)
-        return StopDispatch(state, inst, state.internStr((std::string("The '...' list does not contain ") + intToStr(idx+1) + " elements").c_str()), inst.c);
+        return StopDispatch(state, inst, MakeString((std::string("The '...' list does not contain ") + intToStr(idx+1) + " elements")), inst.c);
 
     Value const& v = static_cast<List const&>(*t)[idx];
 
@@ -360,9 +359,9 @@ Instruction const* dotsv_impl(State& state, Instruction const& inst)
             inst.c, &inst+1);
     }
     else {
-        return StopDispatch(state, inst, state.internStr(
+        return StopDispatch(state, inst, MakeString(
             (std::string("Object '..") + intToStr(idx+1) + 
-                "' not found, missing argument?").c_str()), 
+                "' not found, missing argument?")), 
             inst.c);
     }
 }
@@ -454,7 +453,7 @@ Instruction const* frame_impl(State& state, Instruction const& inst)
         return &inst+1;
     }
     else {
-        return StopDispatch(state, inst, state.internStr(
+        return StopDispatch(state, inst, MakeString(
             "not that many frames on the stack"), 
             inst.c);
     }
@@ -470,7 +469,7 @@ Instruction const* pr_new_impl(State& state, Instruction const& inst)
     if( !a.isCharacter1() ||
         !REGISTER((&inst+1)->a).isEnvironment() ||
         !REGISTER((&inst+1)->b).isEnvironment())
-        return StopDispatch(state, inst, state.internStr("wrong types in pr_new"), inst.c);
+        return StopDispatch(state, inst, MakeString("wrong types in pr_new"), inst.c);
 
     REnvironment& eval = (REnvironment&)REGISTER((&inst+1)->a);
     REnvironment& assign = (REnvironment&)REGISTER((&inst+1)->b);
@@ -484,8 +483,8 @@ Instruction const* pr_new_impl(State& state, Instruction const& inst)
             Compiler::deferPromiseCompilation(state, b), false);
     }
     catch(RuntimeError const& e) {
-        return StopDispatch(state, inst, state.internStr(
-            e.what().c_str()), 
+        return StopDispatch(state, inst, MakeString(
+            e.what()), 
             inst.c);
     }
 
@@ -529,7 +528,7 @@ Instruction const* pr_expr_impl(State& state, Instruction const& inst)
     }
 
     printf("%d %d\n", a.type(), b.type());
-    return StopDispatch(state, inst, state.internStr(
+    return StopDispatch(state, inst, MakeString(
                 "invalid pr_expr expression"), 
                 inst.c);
 }
@@ -671,11 +670,11 @@ Instruction const* get_impl(State& state, Instruction const& inst)
                     && static_cast<Character const&>(b).length() == 1 ) {
                     auto f = static_cast<Closure const&>(a);
 	                String s = static_cast<Character const&>(b).s;
-                    if(s == Strings::body) {
+                    if(Eq(s, Strings::body)) {
                         OUT(c) = f.prototype()->code->expression;
                         return &inst+1;
                     }
-                    else if(s == Strings::formals) {
+                    else if(Eq(s, Strings::formals)) {
                         OUT(c) = f.prototype()->formals;
                         return &inst+1;
                     }
@@ -687,8 +686,8 @@ Instruction const* get_impl(State& state, Instruction const& inst)
     }
     catch(RuntimeError const& e)
     {
-        return StopDispatch(state, inst, state.internStr(
-            e.what().c_str()), 
+        return StopDispatch(state, inst, MakeString(
+            e.what()), 
             inst.c);
     }
 }
@@ -839,7 +838,7 @@ Instruction const* setsub_impl(State& state, Instruction const& inst)
 
         if(a.isVector())
         {
-            List const& l = As<List>(state, a);
+            List const& l = As<List>(a);
             int64_t len = std::max(l.length(), i.length());
             if(l.length() == 0 || i.length() == 0) len = 0;
             for(int64_t k = 0; k < len; ++k)
@@ -881,7 +880,7 @@ Instruction const* setenv_impl(State& state, Instruction const& inst)
     DECODE(b); BIND(b);
 
     if(!b.isEnvironment()) {
-        return StopDispatch(state, inst, state.internStr(
+        return StopDispatch(state, inst, MakeString(
             "setenv replacement object is not an environment"), 
             inst.c);
     }
@@ -908,7 +907,7 @@ Instruction const* setenv_impl(State& state, Instruction const& inst)
         Closure::Init(OUT(c), static_cast<Closure const&>(a).prototype(), value);
     }
     else {
-        return StopDispatch(state, inst, state.internStr(
+        return StopDispatch(state, inst, MakeString(
             "target of assignment does not have an enclosing environment"), 
             inst.c);
     }
@@ -961,7 +960,7 @@ Instruction const* setattr_impl(State& state, Instruction const& inst)
         // Special casing for R's compressed rownames representation.
         // Can we move this to the R compatibility layer?
         Value v = a;
-        if(name == Strings::rownames && v.isInteger())
+        if(Eq(name, Strings::rownames) && v.isInteger())
         {
             auto i = static_cast<Integer const&>(v);
             if(i.length() == 2 && Integer::isNA(i[0]))
@@ -996,7 +995,7 @@ Instruction const* setattr_impl(State& state, Instruction const& inst)
         }
     }
     
-    return StopDispatch(state, inst, state.internStr(
+    return StopDispatch(state, inst, MakeString(
             "Invalid setattr operation"), 
             inst.c);
 }
@@ -1045,33 +1044,33 @@ Instruction const* as_impl(State& state, Instruction const& inst)
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
     if(!b.isCharacter1()) {
-        return StopDispatch(state, inst, state.internStr(
+        return StopDispatch(state, inst, MakeString(
             "invalid type argument to 'as'"), 
             inst.c);
     }
     String type = b.s;
     try {
-        if(type == Strings::Null)
-            OUT(c) = As<Null>(state, a);
-        else if(type == Strings::Logical)
-            OUT(c) = As<Logical>(state, a);
-        else if(type == Strings::Integer)
-            OUT(c) = As<Integer>(state, a);
-        else if(type == Strings::Double)
-            OUT(c) = As<Double>(state, a);
-        else if(type == Strings::Character)
-            OUT(c) = As<Character>(state, a);
-        else if(type == Strings::List)
-            OUT(c) = As<List>(state, a);
-        else if(type == Strings::Raw)
-            OUT(c) = As<Raw>(state, a);
+        if(Eq(type, Strings::Null))
+            OUT(c) = As<Null>(a);
+        else if(Eq(type, Strings::Logical))
+            OUT(c) = As<Logical>(a);
+        else if(Eq(type, Strings::Integer))
+            OUT(c) = As<Integer>(a);
+        else if(Eq(type, Strings::Double))
+            OUT(c) = As<Double>(a);
+        else if(Eq(type, Strings::Character))
+            OUT(c) = As<Character>(a);
+        else if(Eq(type, Strings::List))
+            OUT(c) = As<List>(a);
+        else if(Eq(type, Strings::Raw))
+            OUT(c) = As<Raw>(a);
         else
-            return StopDispatch(state, inst, state.internStr(
+            return StopDispatch(state, inst, MakeString(
                 "'as' not yet defined for this type"), 
                 inst.c);
     }
     catch(RuntimeError const& e) {
-        return StopDispatch(state, inst, state.internStr(
+        return StopDispatch(state, inst, MakeString(
                 e.what()), 
                 inst.c);
     }
@@ -1127,12 +1126,12 @@ Instruction const* env_has_impl(State& state, Instruction const& inst)
     DECODE(b); BIND(b);
 
     if(!a.isEnvironment()) {
-        return StopDispatch(state, inst, state.internStr(
+        return StopDispatch(state, inst, MakeString(
             "invalid 'envir' argument to .getenv"), 
             inst.c);
     }
     if(!b.isCharacter() || b.pac != 1) {
-        return StopDispatch(state, inst, state.internStr(
+        return StopDispatch(state, inst, MakeString(
             "invalid 'x' argument to .getenv"), 
             inst.c);
     }
@@ -1154,12 +1153,12 @@ Instruction const* env_rm_impl(State& state, Instruction const& inst)
     DECODE(b); BIND(b);
 
     if(!a.isEnvironment() && !a.isNull()) {
-        return StopDispatch(state, inst, state.internStr(
+        return StopDispatch(state, inst, MakeString(
             "invalid 'envir' argument to .env_rm"), 
             inst.c);
     }
     if(!b.isCharacter()) {
-        return StopDispatch(state, inst, state.internStr(
+        return StopDispatch(state, inst, MakeString(
             "invalid 'x' argument to .env_rm"), 
             inst.c);
     }
@@ -1188,7 +1187,7 @@ Instruction const* env_missing_impl(State& state, Instruction const& inst)
     DECODE(b); BIND(b);
 
     if(!a.isEnvironment() && !a.isNull()) {
-        return StopDispatch(state, inst, state.internStr(
+        return StopDispatch(state, inst, MakeString(
             "invalid 'envir' argument to .env_missing"), 
             inst.c);
     }
@@ -1287,8 +1286,8 @@ Instruction const* Name##_impl(State& state, Instruction const& inst) \
             return GenericDispatch(state, inst, Strings::Name, a, inst.c); \
     } \
     catch(RuntimeError const& e) {\
-        return StopDispatch(state, inst, state.internStr( \
-            e.what().c_str()), \
+        return StopDispatch(state, inst, MakeString( \
+            e.what()), \
             inst.c); \
     } \
 }
@@ -1313,8 +1312,8 @@ Instruction const* Name##_impl(State& state, Instruction const& inst) \
             return GenericDispatch(state, inst, Strings::Name, a, b, inst.c); \
     } \
     catch(RuntimeError const& e) { \
-        return StopDispatch(state, inst, state.internStr( \
-            e.what().c_str()), \
+        return StopDispatch(state, inst, MakeString( \
+            e.what()), \
             inst.c); \
     } \
 }
@@ -1336,8 +1335,8 @@ Instruction const* Name##_impl(State& state, Instruction const& inst) \
             return GenericDispatch(state, inst, Strings::Name, a, inst.c); \
     } \
     catch(RuntimeError const& e) {\
-        return StopDispatch(state, inst, state.internStr( \
-            e.what().c_str()), \
+        return StopDispatch(state, inst, MakeString( \
+            e.what()), \
             inst.c); \
     } \
 }
@@ -1359,8 +1358,8 @@ Instruction const* Name##_impl(State& state, Instruction const& inst) \
             return GenericDispatch(state, inst, Strings::Name, a, b, inst.c); \
     } \
     catch(RuntimeError const& e) { \
-        return StopDispatch(state, inst, state.internStr( \
-            e.what().c_str()), \
+        return StopDispatch(state, inst, MakeString( \
+            e.what()), \
             inst.c); \
     } \
 }
@@ -1409,7 +1408,7 @@ Instruction const* split_impl(State& state, Instruction const& inst)
     DECODE(a); BIND(a);
     DECODE(b);
     DECODE(c);
-    int64_t levels = As<Integer>(state, a)[0];
+    int64_t levels = As<Integer>(a)[0];
     if(state.traces.isTraceable<Split>(b,c)) {
         OUT(c) = state.traces.EmitSplit(state.frame.environment, c, b, levels);
         state.traces.OptBind(state, OUT(c));
@@ -1428,9 +1427,9 @@ Instruction const* vector_impl(State& state, Instruction const& inst)
     state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
-    String stype = As<Character>(state, a)[0];
+    String stype = As<Character>(a)[0];
     Type::Enum type = string2Type( stype );
-    int64_t l = As<Integer>(state, b)[0];
+    int64_t l = As<Integer>(b)[0];
 
 #ifdef EPEE
     if(state.global.epeeEnabled
@@ -1478,7 +1477,7 @@ Instruction const* seq_impl(State& state, Instruction const& inst)
     state.visible = true;
     DECODE(a); BIND(a);
 
-    int64_t len = As<Integer>(state, a)[0];
+    int64_t len = As<Integer>(a)[0];
 
 #ifdef EPEE
     if(len >= TRACE_VECTOR_WIDTH) {
@@ -1501,9 +1500,9 @@ Instruction const* index_impl(State& state, Instruction const& inst)
     DECODE(b); BIND(b);
     DECODE(c); BIND(c);
 
-    int64_t n = As<Integer>(state, c)[0];
-    int64_t each = As<Integer>(state, b)[0];
-    int64_t len = As<Integer>(state, a)[0];
+    int64_t n = As<Integer>(c)[0];
+    int64_t each = As<Integer>(b)[0];
+    int64_t len = As<Integer>(a)[0];
 
 #ifdef EPEE
     if(len >= TRACE_VECTOR_WIDTH) {
@@ -1523,7 +1522,7 @@ Instruction const* random_impl(State& state, Instruction const& inst)
     state.visible = true;
     DECODE(a); BIND(a);
 
-    int64_t len = As<Integer>(state, a)[0];
+    int64_t len = As<Integer>(a)[0];
 
     /*if(len >= TRACE_VECTOR_WIDTH) {
         OUT(c) = state.EmitRandom(state.frame.environment, len);
@@ -1544,8 +1543,8 @@ Instruction const* semijoin_impl(State& state, Instruction const& inst)
 
     // assumes that the two arguments are the same type...
     if(a.type() != b.type())
-        return StopDispatch(state, inst, state.internStr(
-            std::string("Arguments to semijoin must have the same type\n").c_str()),
+        return StopDispatch(state, inst, MakeString(
+            std::string("Arguments to semijoin must have the same type\n")),
             inst.c);
     assert(a.type() == b.type());
     OUT(c) = Semijoin(a, b);

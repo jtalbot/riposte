@@ -31,13 +31,13 @@ void fileinfo_map(State& state,
 
         passwd const* p = getpwuid(t.st_uid);
         if(p != NULL)
-            uname = state.internStr(p->pw_name);
+            uname = MakeString(p->pw_name);
         else
             grname = Character::NAelement;
 
         group const* g = getgrgid(t.st_gid);        
         if(g != NULL)
-            grname = state.internStr(g->gr_name);
+            grname = MakeString(g->gr_name);
         else
             grname = Character::NAelement;
     }
@@ -61,7 +61,7 @@ void pathexpand_map(State& state, String& g, String f)
         glob_t gl;
         if(glob(head.c_str(), GLOB_TILDE | GLOB_NOCHECK, NULL, &gl) == 0) {
             std::string tail = slash == std::string::npos ? "" : file.substr(slash);
-            g = state.internStr(
+            g = MakeString(
                 (std::string(gl.gl_pathv[0]) + tail).c_str());
             globfree(&gl);
             return;
@@ -95,7 +95,7 @@ Value sysglob(State& state, Value const* args)
 
     Character r(gl.gl_pathc);
     for(size_t i = 0; i < gl.gl_pathc; ++i) {
-        r[i] = state.internStr(gl.gl_pathv[i]);
+        r[i] = MakeString(gl.gl_pathv[i]);
     }
 
     globfree(&gl);
@@ -107,7 +107,7 @@ void realpath_map(State& state, String& g, String f, String winslash)
 {
     char* r = realpath(f->s, NULL);
     if(r != NULL) {
-        g = state.internStr(r);
+        g = MakeString(r);
         free(r);
     }
     else {

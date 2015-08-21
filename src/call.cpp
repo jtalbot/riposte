@@ -2,6 +2,7 @@
 #include "call.h"
 #include "frontend.h"
 #include "compiler.h"
+#include "inst.h"
 
 void dumpStack(State& state) {
    
@@ -59,7 +60,6 @@ Instruction const* buildStackFrame(State& state,
 
 inline void assignArgument(State& state, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {
 	assert(!v.isFuture());
-	
 	Value& w = assignEnv->insert(n);
 	w = v;
 	if(v.isPromise()) {
@@ -380,7 +380,7 @@ Environment* FastMatchArgs(State& state, Environment* env, Closure const& func, 
 Value Quote(State& state, Value const& v) {
     if(isSymbol(v) || isCall(v) || isExpression(v)) {
         List call(2);
-        call[0] = CreateSymbol(state.global, state.global.internStr("quote"));
+        call[0] = CreateSymbol(state.global, Strings::quote);
         call[1] = v;
         return CreateCall(state.global, call);
     } else {
@@ -390,6 +390,7 @@ Value Quote(State& state, Value const& v) {
 
 Instruction const* GenericDispatch(State& state, Instruction const& inst, String op, Value const& a, int64_t out) {
 	Environment* penv;
+    op = state.global.strings.intern(op->s);
 	Value const* f = state.frame.environment->getRecursive(op, penv);
 	if(f && f->isClosure()) {
 		List call = List::c(
@@ -404,6 +405,7 @@ Instruction const* GenericDispatch(State& state, Instruction const& inst, String
 
 Instruction const* GenericDispatch(State& state, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out) {
 	Environment* penv;
+    op = state.global.strings.intern(op->s);
 	Value const* f = state.frame.environment->getRecursive(op, penv);
 	if(f && f->isClosure()) { 
 		List call = List::c(
@@ -419,6 +421,7 @@ Instruction const* GenericDispatch(State& state, Instruction const& inst, String
 
 Instruction const* GenericDispatch(State& state, Instruction const& inst, String op, Value const& a, Value const& b, Value const& c, int64_t out) {
 	Environment* penv;
+    op = state.global.strings.intern(op->s);
 	Value const* f = state.frame.environment->getRecursive(op, penv);
 	if(f && f->isClosure()) { 
 		List call = List::c(
@@ -441,7 +444,7 @@ Instruction const* GenericDispatch(State& state, Instruction const& inst, String
 
 Instruction const* StopDispatch(State& state, Instruction const& inst, String msg, int64_t out) {
 	Environment* penv;
-	Value const* f = state.frame.environment->getRecursive(state.internStr("__stop__"), penv);
+	Value const* f = state.frame.environment->getRecursive(Strings::__stop__, penv);
 	if(f && f->isClosure()) {
 		List call = List::c(
                         *f, 
@@ -496,13 +499,13 @@ void IfElseDispatch(State& state, void* args, Value const& a, Value const& b, Va
 	if(a.isVector() && b.isVector())
 	{
         if(a.isCharacter() || b.isCharacter())
-		    Zip3< IfElseVOp<Character> >::eval(state, args, As<Character>(state, a), As<Character>(state, b), As<Logical>(state, cond), c);
+		    Zip3< IfElseVOp<Character> >::eval(args, As<Character>(a), As<Character>(b), As<Logical>(cond), c);
 	    else if(a.isDouble() || b.isDouble())
-		    Zip3< IfElseVOp<Double> >::eval(state, args, As<Double>(state, a), As<Double>(state, b), As<Logical>(state, cond), c);
+		    Zip3< IfElseVOp<Double> >::eval(args, As<Double>(a), As<Double>(b), As<Logical>(cond), c);
 	    else if(a.isInteger() || b.isInteger())	
-		    Zip3< IfElseVOp<Integer> >::eval(state, args, As<Integer>(state, a), As<Integer>(state, b), As<Logical>(state, cond), c);
+		    Zip3< IfElseVOp<Integer> >::eval(args, As<Integer>(a), As<Integer>(b), As<Logical>(cond), c);
 	    else if(a.isLogical() || b.isLogical())	
-		    Zip3< IfElseVOp<Logical> >::eval(state, args, As<Logical>(state, a), As<Logical>(state, b), As<Logical>(state, cond), c);
+		    Zip3< IfElseVOp<Logical> >::eval(args, As<Logical>(a), As<Logical>(b), As<Logical>(cond), c);
 	    else if(a.isNull() || b.isNull() || cond.isNull())
 		    c = Null::Singleton();
     }

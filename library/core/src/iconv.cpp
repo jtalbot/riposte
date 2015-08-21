@@ -24,7 +24,7 @@ void iconv_map(State& state,
         printf("iconv failed\n");
     }
     else {
-        result = state.internStr(out);
+        result = MakeString(out);
     }
 
     iconv_close(descriptor);

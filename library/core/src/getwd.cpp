@@ -10,7 +10,7 @@ Value getwd_impl(State& state, Value const* args) {
     char* wd = getcwd(buf, 2048);
     if(wd != 0) {
         Character r(1);
-        r[0] = state.internStr(wd);
+        r[0] = MakeString(wd);
         return r;
     }
     else {

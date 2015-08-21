@@ -256,7 +256,7 @@ extern "C"
 Value print(State& state, Value const* args) {
     std::vector<int64_t> emptyNest;
 	std::string r = stringify(state.global, args[0], emptyNest);
-    return Character::c(state.internStr(r));
+    return Character::c(MakeString(r));
 }
 
 template<class T> std::string deparse(Global const& global, typename T::Element a) {

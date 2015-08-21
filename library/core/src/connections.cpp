@@ -67,7 +67,7 @@ void file_finalize(Value v) {
 
 extern "C"
 Value file_new(State& state, Value const* args) {
-    Character desc = As<Character>(state, args[0]);
+    Character desc = As<Character>(args[0]);
     FileConnection* fc = new FileConnection(desc[0]->s);
     Value v;
     Externalptr::Init(v, fc, Value::Nil(), Value::Nil(), file_finalize);
@@ -131,7 +131,7 @@ Value file_readLines(State& state, Value const* args) {
 
     Character r(lines.size());
     for(size_t i = 0; i < lines.size(); ++i) {
-        r[i] = state.internStr(lines[i].c_str());
+        r[i] = MakeString(lines[i].c_str());
     }
 
     return r;
@@ -156,7 +156,7 @@ extern "C"
 Value file_description(State& state, Value const* args) {
     Externalptr const& p = (Externalptr const&)args[0];
     FileConnection* fc = (FileConnection*)p.ptr();
-    return Character::c(state.internStr(fc->name));
+    return Character::c(MakeString(fc->name));
 }
 
 extern "C"
@@ -194,7 +194,7 @@ Value gzfile_readLines(State& state, Value const* args) {
 
     Character r(lines.size());
     for(size_t i = 0; i < lines.size(); ++i) {
-        r[i] = state.internStr(lines[i].c_str());
+        r[i] = MakeString(lines[i].c_str());
     }
 
     return r;
@@ -215,7 +215,7 @@ Value terminal_readLines(State& state, Value const* args) {
 
     Character r(lines.size());
     for(size_t i = 0; i < lines.size(); ++i) {
-        r[i] = state.internStr(lines[i].c_str());
+        r[i] = MakeString(lines[i].c_str());
     }
 
     return r;

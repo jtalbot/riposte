@@ -44,11 +44,17 @@ struct GCObject {
 	}
 };
 
+class Heap;
+
 struct HeapObject {
 	bool marked() const;
 	void visit() const;
 	uint64_t slot() const;
 	GCObject* gcObject() const;
+
+	void* operator new(unsigned long bytes, Heap& heap);
+	void* operator new(unsigned long bytes, unsigned long extra, Heap& heap);
+	void* operator new(unsigned long bytes, GCFinalizer finalizer, Heap& heap);
 
 	void* operator new(unsigned long bytes);
 	void* operator new(unsigned long bytes, unsigned long extra);
@@ -86,6 +92,7 @@ public:
     void collect(Global& global);
 
 	static Heap GlobalHeap;
+	static Heap ConstHeap;
 };
 
 inline HeapObject* Heap::smallalloc(uint64_t bytes) {
@@ -128,20 +135,33 @@ inline void Heap::collect(Global& global) {
 }
 
 
-inline void* HeapObject::operator new(unsigned long bytes) {
+inline void* HeapObject::operator new(unsigned long bytes, Heap& heap) {
     assert(bytes <= 2048);
-    return Heap::GlobalHeap.smallalloc(bytes);
+    return heap.smallalloc(bytes);
+}
+
+inline void* HeapObject::operator new(unsigned long bytes, unsigned long extra, Heap& heap) {
+    unsigned long total = bytes + extra;
+    return total <= 2048 ? 
+        heap.smallalloc(total) : 
+        heap.alloc(total);
+}
+
+inline void* HeapObject::operator new(unsigned long bytes, GCFinalizer finalizer, Heap& heap) {
+    return heap.alloc(bytes, finalizer);
+}
+
+
+inline void* HeapObject::operator new(unsigned long bytes) {
+    return HeapObject::operator new(bytes, Heap::GlobalHeap);
 }
 
 inline void* HeapObject::operator new(unsigned long bytes, unsigned long extra) {
-    unsigned long total = bytes + extra;
-    return total <= 2048 ? 
-        Heap::GlobalHeap.smallalloc(total) : 
-        Heap::GlobalHeap.alloc(total);
+    return HeapObject::operator new(bytes, extra, Heap::GlobalHeap);
 }
 
 inline void* HeapObject::operator new(unsigned long bytes, GCFinalizer finalizer) {
-    return Heap::GlobalHeap.alloc(bytes, finalizer);
+    return HeapObject::operator new(bytes, finalizer, Heap::GlobalHeap);
 }
 #endif
 

@@ -703,15 +703,15 @@ _eof_trans:
 	break;
 	case 27:
 #line 54 "lexer.rl"
-	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(global.internStr(unescape(s))) );}}
+	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(MakeString(unescape(s))) );}}
 	break;
 	case 28:
 #line 56 "lexer.rl"
-	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(global.internStr(unescape(s))) );}}
+	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_STR_CONST, Character::c(MakeString(unescape(s))) );}}
 	break;
 	case 29:
 #line 65 "lexer.rl"
-	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol(global,global.internStr(unescape(s))) );}}
+	{te = p+1;{std::string s(ts+1, te-ts-2); token( TOKEN_SYMBOL, CreateSymbol(global,MakeString(unescape(s))) );}}
 	break;
 	case 30:
 #line 71 "lexer.rl"
@@ -823,7 +823,7 @@ _eof_trans:
 	break;
 	case 57:
 #line 128 "lexer.rl"
-	{te = p+1;{token(TOKEN_SPECIALOP, CreateSymbol(global,global.internStr(std::string(ts, te-ts))) ); }}
+	{te = p+1;{token(TOKEN_SPECIALOP, CreateSymbol(global,MakeString(std::string(ts, te-ts))) ); }}
 	break;
 	case 58:
 #line 131 "lexer.rl"
@@ -839,7 +839,7 @@ _eof_trans:
 	break;
 	case 61:
 #line 63 "lexer.rl"
-	{te = p;p--;{token( TOKEN_SYMBOL, CreateSymbol(global,global.internStr(std::string(ts, te-ts))) );}}
+	{te = p;p--;{token( TOKEN_SYMBOL, CreateSymbol(global,MakeString(std::string(ts, te-ts))) );}}
 	break;
 	case 62:
 #line 68 "lexer.rl"
@@ -993,10 +993,10 @@ _eof_trans:
 	{{p = ((te))-1;}token( TOKEN_BREAK, CreateSymbol(global,Strings::breakSym) );}
 	break;
 	case 23:
-	{{p = ((te))-1;}token( TOKEN_SYMBOL, CreateSymbol(global,global.internStr(std::string(ts, te-ts))));}
+	{{p = ((te))-1;}token( TOKEN_SYMBOL, CreateSymbol(global,MakeString(std::string(ts, te-ts))));}
 	break;
 	case 24:
-	{{p = ((te))-1;}token( TOKEN_SYMBOL, CreateSymbol(global,global.internStr(std::string(ts, te-ts))) );}
+	{{p = ((te))-1;}token( TOKEN_SYMBOL, CreateSymbol(global,MakeString(std::string(ts, te-ts))) );}
 	break;
 	case 72:
 	{{p = ((te))-1;}token( TOKEN_NEWLINE );}
@@ -1070,7 +1070,7 @@ _again:
 String Parser::popSource() {
 	assert(source.size() > 0);
 	std::string s(source.top(), le-source.top());
-	String result = global.internStr(rtrim(s));
+	String result = MakeString(rtrim(s));
 	source.pop();
 	return result;	
 }

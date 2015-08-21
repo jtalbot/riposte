@@ -165,7 +165,7 @@ void signif_map(State& state, double& r, double a, int64_t b) {
 
 extern "C"
 void concat_map(State& state, String& r, String a, String b) {
-    r = state.internStr(std::string(a->s) + b->s);
+    r = MakeString(std::string(a->s) + b->s);
 }
 
 extern "C"
@@ -180,7 +180,7 @@ void concat_op(State& state, void* accumulator, String a) {
 
 extern "C"
 void concat_fini(State& state, void* accumulator, String& r) {
-    r = state.internStr(*((std::string*)accumulator));
+    r = MakeString(*((std::string*)accumulator));
     delete (std::string*)accumulator;
 }
 
@@ -213,6 +213,6 @@ double mean_fini(State& state, void* accumulator) {
 
 extern "C"
 void escape_map(State& state, String& r, String a) {
-    r = state.internStr( escape(state.externStr(a)) );
+    r = MakeString( escape(state.externStr(a)) );
 }
 

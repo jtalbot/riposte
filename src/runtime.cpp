@@ -15,7 +15,7 @@ extern "C" {
 }
 
 Type::Enum string2Type(String str) {
-#define CASE(name, string, ...) if(str == Strings::name) return Type::name;
+#define CASE(name, string, ...) if(Eq(str, Strings::name)) return Type::name;
 TYPES(CASE)
 #undef CASE
 	_error("Invalid type");
@@ -45,7 +45,7 @@ void Insert(State& state, D const& src, int64_t srcIndex, D& dst, int64_t dstInd
 
 template<class S, class D>
 void Insert(State& state, S const& src, int64_t srcIndex, D& dst, int64_t dstIndex, int64_t length) {
-	D as = As<D>(state, src);
+	D as = As<D>(src);
 	Insert(state, as, srcIndex, dst, dstIndex, length);
 }
 
@@ -184,7 +184,7 @@ struct SubsetLogical {
 
 void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 	if(i.isDouble() || i.isInteger()) {
-		Integer index = As<Integer>(state, i);
+		Integer index = As<Integer>(i);
 		int64_t positive = 0, negative = 0;
 		for(int64_t i = 0; i < index.length(); i++) {
 			if(index[i] > 0 || Integer::isNA(index[i])) positive++;
@@ -294,11 +294,11 @@ struct SubsetAssignLogical {
 
 void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, Value const& b, Value& c) {
 	if(i.isDouble() || i.isInteger()) {
-		Integer idx = As<Integer>(state, i);
+		Integer idx = As<Integer>(i);
         #define CASE(Name) \
             (a.is##Name() || b.is##Name()) \
             SubsetAssignInclude<Name>::eval( \
-                state, As<Name>(state, a), clone, idx, As<Name>(state, b), c);
+                state, As<Name>(a), clone, idx, As<Name>(b), c);
 
         if CASE(List)
         else if CASE(Character)
@@ -316,7 +316,7 @@ void SubsetAssignSlow(State& state, Value const& a, bool clone, Value const& i, 
         #define CASE(Name) \
             (a.is##Name() || b.is##Name()) \
             SubsetAssignLogical<Name>::eval( \
-                state, As<Name>(state, a), clone, idx, As<Name>(state, b), c);
+                state, As<Name>(a), clone, idx, As<Name>(b), c);
 
         if CASE(List)
         else if CASE(Character)
@@ -426,7 +426,8 @@ bool IdSlow(Value const& a, Value const& b)
             auto x = (Character const&)a;
             auto y = (Character const&)b;
             for(size_t i = 0; i < x.length(); ++i)
-                if(x[i] != y[i]) return false;
+                if(Neq(x[i], y[i]))
+                    return false;
             return true;
         }
         case Type::List:
@@ -446,13 +447,12 @@ Integer Semijoin(T const& x, T const& table) {
     Integer r(x.length());
 
     if(table.length() <= x.length()) {
-        std::map<typename T::Element, int64_t> index;
+        std::unordered_map<typename T::Element, int64_t> index;
         for(int64_t i = table.length()-1; i >= 0; --i) {
             index[table[i]] = i;
         }
         for(int64_t i = 0; i < x.length(); ++i) {
-            typename std::map<typename T::Element, int64_t>::const_iterator 
-                j = index.find(x[i]);
+            auto j = index.find(x[i]);
             r[i] = (j == index.end()) ? 0 : (j->second+1);
         }
     }
@@ -460,19 +460,38 @@ Integer Semijoin(T const& x, T const& table) {
         for(int64_t i = 0; i < x.length(); ++i) {
             r[i] = 0;
         }
-        std::map< typename T::Element, std::vector<int64_t> > queries;
+        std::unordered_map< typename T::Element, std::vector<int64_t> > queries;
         for(int64_t i = 0; i < x.length(); ++i) {
             queries[x[i]].push_back(i);
         }
         for(int64_t i = 0; i < table.length() && queries.size() > 0; ++i) {
-            typename std::map< typename T::Element, std::vector<int64_t> >::iterator
-                j = queries.find(table[i]);
+            auto j = queries.find(table[i]);
             if(j != queries.end()) {
                 std::vector<int64_t> const& q = j->second;
                 for(int64_t k = 0; k < q.size(); ++k) {
                     r[q[k]] = (i+1);
                 }
                 queries.erase(j);
+            }
+        }
+    }
+
+    return r;
+}
+
+template<>
+Integer Semijoin<Character>(Character const& x, Character const& table) {
+    Integer r(x.length());
+
+    // TODO: make this more efficient
+    for(size_t i = 0; i < x.length(); ++i)
+    {
+        r[i] = 0;
+        for(size_t j = 0; j < table.length(); ++j)
+        {
+            if(Eq(x[i], table[j]))
+            {
+                r[i] = j+1;
             }
         }
     }
@@ -491,7 +510,7 @@ Integer Semijoin<List>(List const& x, List const& table) {
         for(size_t j = 0; j < table.length(); ++j)
         {
             if(Id(x[i], table[j]))
-                r[i] = j+1; 
+                r[i] = j+1;
         }
     }
 
@@ -684,18 +703,18 @@ struct UnstreamImpl : public Unstream {
 };
 
 Unstream* MakeUnstream(State& state, String t, int64_t s) {
-    if(t == Strings::Logical) return new UnstreamImpl<Logical>(state, Logical(s));
-    if(t == Strings::Integer) return new UnstreamImpl<Integer>(state, Integer(s));
-    if(t == Strings::Double)  return new UnstreamImpl<Double>(state, Double(s));
-    if(t == Strings::Character) {
+    if(Eq(t, Strings::Logical)) return new UnstreamImpl<Logical>(state, Logical(s));
+    if(Eq(t, Strings::Integer)) return new UnstreamImpl<Integer>(state, Integer(s));
+    if(Eq(t, Strings::Double))  return new UnstreamImpl<Double>(state, Double(s));
+    if(Eq(t, Strings::Character)) {
         Character v(s);
         // clear the result vector so the gc isn't confused
         for(size_t i = 0; i < s; ++i)
             v[i] = Strings::NA;
         return new UnstreamImpl<Character>(state, v);
     }
-    if(t == Strings::Raw)     return new UnstreamImpl<Raw>(state, Raw(s));
-    if(t == Strings::List) {
+    if(Eq(t, Strings::Raw))     return new UnstreamImpl<Raw>(state, Raw(s));
+    if(Eq(t, Strings::List)) {
         List v(s);
         // clear the result vector so the gc isn't confused
         for(size_t i = 0; i < s; ++i)
@@ -1005,7 +1024,7 @@ List MapR(State& state, Closure const& func, List args, Character result) {
             for(int64_t k = 0; k < s.size(); ++k) {
                 p->calls[0].arguments[k] = (*s[k])(i);
             }
-            List r = As<List>(state, state.eval(p));
+            List r = As<List>(state.eval(p));
             for(int64_t k = 0; k < u.size(); ++k) {
                 (*u[k])(i, r[k]);
             }

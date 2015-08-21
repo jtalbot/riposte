@@ -114,24 +114,31 @@ Value ToRiposteValue(Value const& v) {
         return v;
 }
 
-std::map<String, SEXP> symbols;
-SEXP ToSEXP(Value const& v) {
-    if(isSymbol(v)) {
-        std::map<String, SEXP>::const_iterator i =
-           symbols.find(SymbolStr(v));
-        if(i != symbols.end())
-            return i->second;
+std::map<std::string, SEXP> symbols;
 
-        SEXP sexp = global->installSEXP(CreateSymbol(*global, SymbolStr(v)));
-        symbols[SymbolStr(v)] = sexp;
-        return sexp;
-    }
-    else return new SEXPREC(v);
+SEXP InternSymbol(char const* s)
+{
+    std::string str(s);
+
+    auto i = symbols.find(str);
+    if(i != symbols.end())
+        return i->second;
+
+    SEXP sexp = global->installSEXP(CreateSymbol(*global, MakeString(str)));
+    symbols[str] = sexp;
+
+    return sexp;
+}
+
+SEXP ToSEXP(Value const& v) {
+    if(isSymbol(v))
+        return InternSymbol(SymbolStr(v)->s);
+    else
+        return new SEXPREC(v);
 }
 
 SEXP ToSEXP(char const* s) {
-    String str = global->internStr(s);
-    return ToSEXP(CreateSymbol(*global, str));
+    return InternSymbol(s);
 }
 
 // Rinternals.h

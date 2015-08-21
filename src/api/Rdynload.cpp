@@ -4,8 +4,8 @@
 
 #include "../frontend.h"
 
-Value parseC(R_CMethodDef const* call, std::string klass) {
-    Value n = Character::c(global->internStr(call->name));
+Value parseC(R_CMethodDef const* call, String klass) {
+    Value n = Character::c(MakeString(call->name));
     Value a;
     Externalptr::Init(a, (void*)(call->fun), Value::Nil(), Value::Nil(), NULL);
     Value d = Null::Singleton();
@@ -13,26 +13,23 @@ Value parseC(R_CMethodDef const* call, std::string klass) {
 
     // TODO: parse the types and styles too
     Character names(4);
-    names[0] = global->internStr("name");
-    names[1] = global->internStr("address");
-    names[2] = global->internStr("dll");
-    names[3] = global->internStr("numParameters");
+    names[0] = Strings::name;
+    names[1] = Strings::address;
+    names[2] = Strings::dll;
+    names[3] = Strings::numParameters;
 
     List r = List::c(n, a, d, num);
     Dictionary* dict = new Dictionary(2);
     dict->insert(Strings::classSym) =
-        Character::c(
-            global->internStr(klass),
-            global->internStr("NativeSymbolInfo"));
+        Character::c(klass, Strings::NativeSymbolInfo);
     dict->insert(Strings::names) = names;
     r.attributes(dict);
 
     return r;
 }
 
-Value parseCall(R_CallMethodDef const* call, std::string klass) {
-    Value n = Character::c(global->internStr(call->name));
-
+Value parseCall(R_CallMethodDef const* call, String klass) {
+    Value n = Character::c(MakeString(call->name));
     Value a;
     Externalptr::Init(a, (void*)(call->fun), Value::Nil(), Value::Nil(), NULL);
     Value d = Null::Singleton();
@@ -40,17 +37,15 @@ Value parseCall(R_CallMethodDef const* call, std::string klass) {
 
     // TODO: parse the types and styles too
     Character names(4);
-    names[0] = global->internStr("name");
-    names[1] = global->internStr("address");
-    names[2] = global->internStr("dll");
-    names[3] = global->internStr("numParameters");
+    names[0] = Strings::name;
+    names[1] = Strings::address;
+    names[2] = Strings::dll;
+    names[3] = Strings::numParameters;
 
     List r = List::c(n, a, d, num);
     Dictionary* dict = new Dictionary(2);
     dict->insert(Strings::classSym) =
-        Character::c(
-            global->internStr(klass),
-            global->internStr("NativeSymbolInfo"));
+        Character::c(klass, Strings::NativeSymbolInfo);
     dict->insert(Strings::names) = names;
     r.attributes(dict);
 
@@ -69,7 +64,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
         std::vector<Value> values;
         R_CMethodDef const* a = croutines;
         while(a->name != NULL) {
-            values.push_back(parseC(a, "CRoutine"));
+            values.push_back(parseC(a, Strings::CRoutine));
             ++a;
         }
         List r(values.size());
@@ -80,7 +75,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
         }
         Dictionary* d = new Dictionary(2);
         d->insert(Strings::classSym) =
-            Character::c(global->internStr("NativeRoutineList"));
+            Character::c(Strings::NativeRoutineList);
         d->insert(Strings::names) = names;
         r.attributes(d);
         args[0] = r;
@@ -90,7 +85,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
         std::vector<Value> values;
         R_CallMethodDef const* a = callRoutines;
         while(a->name != NULL) {
-            values.push_back(parseCall(a, "CallRoutine"));
+            values.push_back(parseCall(a, Strings::CallRoutine));
             ++a;
         }
         List r(values.size());
@@ -101,7 +96,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
         }
         Dictionary* d = new Dictionary(2);
         d->insert(Strings::classSym) =
-            Character::c(global->internStr("NativeRoutineList"));
+            Character::c(Strings::NativeRoutineList);
         d->insert(Strings::names) = names;
         r.attributes(d);
         args[1] = r;
@@ -111,7 +106,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
         std::vector<Value> values;
         R_CMethodDef const* a = (R_CMethodDef const*)fortranRoutines;
         while(a->name != NULL) {
-            values.push_back(parseC(a, "FortranRoutine"));
+            values.push_back(parseC(a, Strings::FortranRoutine));
             ++a;
         }
         List r(values.size());
@@ -122,7 +117,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
         }
         Dictionary* d = new Dictionary(2);
         d->insert(Strings::classSym) =
-            Character::c(global->internStr("NativeRoutineList"));
+            Character::c(Strings::NativeRoutineList);
         d->insert(Strings::names) = names;
         r.attributes(d);
         args[2] = r;
@@ -132,7 +127,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
         std::vector<Value> values;
         R_CallMethodDef const* a = externalRoutines;
         while(a->name != NULL) {
-            values.push_back(parseCall(a, "ExternalRoutine"));
+            values.push_back(parseCall(a, Strings::ExternalRoutine));
             ++a;
         }
         List r(values.size());
@@ -143,7 +138,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
         }
         Dictionary* d = new Dictionary(2);
         d->insert(Strings::classSym) =
-            Character::c(global->internStr("NativeRoutineList"));
+            Character::c(Strings::NativeRoutineList);
         d->insert(Strings::names) = names;
         r.attributes(d);
         args[3] = r;

@@ -340,6 +340,6 @@ std::string State::deparse(Value const& value) const {
 
 extern "C"
 Value deparse(State& state, Value const* args) {
-    return Character::c(state.internStr(state.deparse(args[0])));
+    return Character::c(MakeString(state.deparse(args[0])));
 }
 

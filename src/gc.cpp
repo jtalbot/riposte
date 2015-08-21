@@ -263,24 +263,7 @@ void Heap::mark(Global& global) {
 }
 
 
-void StringTable::sweep() {
-    lock.acquire();
-    //uint64_t old_total = stringTable.size();
-    for (auto it = stringTable.cbegin(); it != stringTable.cend(); )
-    {
-        if(it->second.second && !it->second.first->marked())
-            it = stringTable.erase(it);
-        else
-            ++it;
-    }
-	//printf("Swept string table: \t%d => \t %d\n", old_total, stringTable.size());
-    lock.release();
-}
-
 void Heap::sweep(Global& global) {
-
-    // sweep global string table first to remove dead weak references
-    global.strings.sweep();    
 
     // sweep heap
 	//uint64_t old_total = total;
@@ -340,5 +323,6 @@ void Heap::popRegion() {
 }
 
 Heap Heap::GlobalHeap;
+Heap Heap::ConstHeap;
 
 

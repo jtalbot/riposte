@@ -87,6 +87,7 @@ void internAndRemove(State const& state, Dictionary* d, String s)
         d->remove(name);
 }
 
+
 // Helper function to trigger forcing of promises
 // without recursion on the interpreter.
 Instruction const* force(

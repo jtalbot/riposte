@@ -179,16 +179,31 @@
     _(__dots__, ".__dots__.") \
     _(__names__, ".__names__.") \
     _(rownames, "row.names") \
+    _(quote, "quote") \
+    _(__stop__, "__stop__") \
+    _(repl, "repl") \
+    _(address, "address") \
+    _(dll, "dll") \
+    _(numParameters, "numParameters") \
+    _(NativeSymbolInfo, "NativeSymbolInfo") \
+    _(NativeRoutineList, "NativeRoutineList") \
+    _(CRoutine, "CRoutine") \
+    _(CallRoutine, "CallRoutine") \
+    _(FortranRoutine, "FortranRoutine") \
+    _(ExternalRoutine, "ExternalRoutine")
 
 struct StringImpl : public HeapObject {
     char s[];
 };
 typedef const StringImpl* String;
 
+bool Eq(String s, String t);
+bool Neq(String s, String t);
+
 //typedef const char* String;
 
 namespace Strings {
-	static const String NA = 0;
+	static const String NA = nullptr;
 #define DECLARE(name, string, ...) extern String name;
 	STRINGS(DECLARE)
 #undef DECLARE

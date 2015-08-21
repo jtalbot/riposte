@@ -30,7 +30,7 @@ void listfiles_map(State& state,
 
         result = Character(names.size());
         for(size_t i = 0; i < names.size(); ++i) {
-            result[i] = state.internStr(names[i].c_str());
+            result[i] = MakeString(names[i].c_str());
         }
     }
 

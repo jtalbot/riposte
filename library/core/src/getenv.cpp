@@ -16,7 +16,7 @@ void sysgetenv_map(State& state,
     char const* var = getenv(name->s);
     r = (var == NULL) 
         ? unset 
-        : state.internStr(var);
+        : MakeString(var);
 } 
 
 extern "C"
@@ -31,7 +31,7 @@ Value sysgetenv(State& state, Value const* args)
 
     size_t i = 0;
     for(char** env = Riposte::getEnv(); *env; ++env) {
-        result[i] = state.internStr(*env);
+        result[i] = MakeString(*env);
         ++i;
     }
     

@@ -15,7 +15,7 @@ void basename_map(State& state,
     char* copy = (char*)malloc(1+strlen(f->s));
     strcpy(copy, f->s);
     char* p = basename(copy);
-    r = state.internStr(p);
+    r = MakeString(p);
     free(copy);
 }
 
@@ -27,7 +27,7 @@ void dirname_map(State& state,
     char* copy = (char*)malloc(1+strlen(f->s));
     strcpy(copy, f->s);
     char* p = dirname(copy);
-    r = state.internStr(p);
+    r = MakeString(p);
     free(copy);
 }
 

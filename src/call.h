@@ -28,23 +28,23 @@ Instruction const* StopDispatch(State& state, Instruction const& inst, String ms
 
 template< template<typename T> class Op >
 bool ArithUnary1Fast(State& state, void* args, Value const& a, Value& c) {
-    if     (a.isDouble1())  { Op<Double>::Scalar(state, args, a.d, c);   return true; }
-    else if(a.isInteger1()) { Op<Integer>::Scalar(state, args, a.i, c);  return true; }
+    if     (a.isDouble1())  { Op<Double>::Scalar(args, a.d, c);   return true; }
+    else if(a.isInteger1()) { Op<Integer>::Scalar(args, a.i, c);  return true; }
     else return false;
 }
 
 template< template<typename T> class Op > 
 bool ArithUnary1Dispatch(State& state, void* args, Value const& a, Value& c) {
-	if(a.isDouble()) { Zip1< Op<Double> >::eval(state, args, (Double const&)a, c); return true; }
-	else if(a.isInteger()) { Zip1< Op<Integer> >::eval(state, args, (Integer const&)a, c); return true; }
-	else if(a.isLogical()) { Zip1< Op<Logical> >::eval(state, args, (Logical const&)a, c); return true; }
+	if(a.isDouble()) { Zip1< Op<Double> >::eval(args, (Double const&)a, c); return true; }
+	else if(a.isInteger()) { Zip1< Op<Integer> >::eval(args, (Integer const&)a, c); return true; }
+	else if(a.isLogical()) { Zip1< Op<Logical> >::eval(args, (Logical const&)a, c); return true; }
 	else if(a.isNull())	{ c = Null::Singleton(); return true; }
 	else return false;
 }
 
 template< template<typename T> class Op >
 bool ArithUnary2Fast(State& state, void* args, Value const& a, Value& c) {
-    if (a.isDouble1())  { Op<Double>::Scalar(state, args, a.d, c);   return true; }
+    if (a.isDouble1())  { Op<Double>::Scalar(args, a.d, c);   return true; }
     else return false;
 }
 
@@ -55,38 +55,38 @@ bool ArithUnary2Dispatch(State& state, void* args, Value a, Value& c) {
 
 template< template<typename T> class Op >
 bool LogicalUnaryFast(State& state, void* args, Value a, Value& c) {
-    if     (a.isLogical1()) { Op<Logical>::Scalar(state, args, a.c, c);  return true; }
-    else if(a.isDouble1())  { Op<Double>::Scalar(state, args, a.d, c);   return true; }
-    else if(a.isInteger1()) { Op<Integer>::Scalar(state, args, a.i, c);  return true; }
-    else if(a.isRaw1()) { Op<Raw>::Scalar(state, args, a.u, c);  return true; }
+    if     (a.isLogical1()) { Op<Logical>::Scalar(args, a.c, c);  return true; }
+    else if(a.isDouble1())  { Op<Double>::Scalar(args, a.d, c);   return true; }
+    else if(a.isInteger1()) { Op<Integer>::Scalar(args, a.i, c);  return true; }
+    else if(a.isRaw1()) { Op<Raw>::Scalar(args, a.u, c);  return true; }
     else return false;
 }
 
 template< template<typename T> class Op > 
 bool LogicalUnaryDispatch(State& state, void* args, Value a, Value& c) {
-	if(a.isLogical())	{ Zip1< Op<Logical> >::eval(state, args, (Logical const&)a, c); return true; }
-	else if(a.isDouble()) { Zip1< Op<Double> >::eval(state, args, (Double const&)a, c); return true; }
-	else if(a.isInteger()) { Zip1< Op<Integer> >::eval(state, args, (Integer const&)a, c); return true; }
-    else if(a.isRaw()) { Zip1< Op<Raw> >::eval(state, args, (Raw const&)a, c); return true; }
+	if(a.isLogical())	{ Zip1< Op<Logical> >::eval(args, (Logical const&)a, c); return true; }
+	else if(a.isDouble()) { Zip1< Op<Double> >::eval(args, (Double const&)a, c); return true; }
+	else if(a.isInteger()) { Zip1< Op<Integer> >::eval(args, (Integer const&)a, c); return true; }
+    else if(a.isRaw()) { Zip1< Op<Raw> >::eval(args, (Raw const&)a, c); return true; }
 	else if(a.isNull())	{ c = Logical(0); return true; }
 	else return false;
 };
 
 template< template<typename T> class Op >
 bool OrdinalUnaryFast(State& state, void* args, Value a, Value& c) {
-    if(a.isDouble1())         { Op<Double>::Scalar(state, args, a.d, c);   return true; }
-    else if(a.isInteger1())   { Op<Integer>::Scalar(state, args, a.i, c);  return true; }
-    else if(a.isLogical1())   { Op<Logical>::Scalar(state, args, a.c, c);  return true; }
-    else if(a.isCharacter1()) { Op<Character>::Scalar(state, args, a.s, c);return true; }
+    if(a.isDouble1())         { Op<Double>::Scalar(args, a.d, c);   return true; }
+    else if(a.isInteger1())   { Op<Integer>::Scalar(args, a.i, c);  return true; }
+    else if(a.isLogical1())   { Op<Logical>::Scalar(args, a.c, c);  return true; }
+    else if(a.isCharacter1()) { Op<Character>::Scalar(args, a.s, c);return true; }
     else return false;
 }
 
 template< template<typename T> class Op > 
 bool OrdinalUnaryDispatch(State& state, void* args, Value a, Value& c) {
-	if(a.isDouble())	{ Zip1< Op<Double> >::eval(state, args, (Double const&)a, c); return true; }
-	else if(a.isInteger())	{ Zip1< Op<Integer> >::eval(state, args, (Integer const&)a, c); return true; }
-	else if(a.isLogical())	{ Zip1< Op<Logical> >::eval(state, args, (Logical const&)a, c); return true; }
-	else if(a.isCharacter()) { Zip1< Op<Character> >::eval(state, args, (Character const&)a, c); return true; }
+	if(a.isDouble())	{ Zip1< Op<Double> >::eval(args, (Double const&)a, c); return true; }
+	else if(a.isInteger())	{ Zip1< Op<Integer> >::eval(args, (Integer const&)a, c); return true; }
+	else if(a.isLogical())	{ Zip1< Op<Logical> >::eval(args, (Logical const&)a, c); return true; }
+	else if(a.isCharacter()) { Zip1< Op<Character> >::eval(args, (Character const&)a, c); return true; }
     else if(a.isList() && ((List const&)a).length() == 0) {
         c = Logical::c(); return true;
     }
@@ -96,30 +96,30 @@ bool OrdinalUnaryDispatch(State& state, void* args, Value a, Value& c) {
 template< template<typename S, typename T> class Op > 
 bool ArithBinary1Fast(State& state, void* args, Value a, Value b, Value& c) {
     if(a.isDouble1() && b.isDouble1())
-        { Op<Double, Double>::Scalar(state, args, a.d, b.d, c); return true; }
+        { Op<Double, Double>::Scalar(args, a.d, b.d, c); return true; }
     if(a.isInteger1() && b.isInteger1())
-        { Op<Integer, Integer>::Scalar(state, args, a.i, b.i, c); return true; }
+        { Op<Integer, Integer>::Scalar(args, a.i, b.i, c); return true; }
 	else return false;
 }
 
 template< template<typename S, typename T> class Op > 
 bool ArithBinary1Dispatch(State& state, void* args, Value a, Value b, Value& c) {
 	if(a.isDouble()) {
-		if(b.isDouble()) {	Zip2< Op<Double,Double> >::eval(state, args, (Double const&)a, (Double const&)b, c); return true; }
-		else if(b.isInteger()) {	Zip2< Op<Double,Integer> >::eval(state, args, (Double const&)a, (Integer const&)b, c); return true; }
-		else if(b.isLogical()) {	Zip2< Op<Double,Logical> >::eval(state, args, (Double const&)a, (Logical const&)b, c); return true; }
+		if(b.isDouble()) {	Zip2< Op<Double,Double> >::eval(args, (Double const&)a, (Double const&)b, c); return true; }
+		else if(b.isInteger()) {	Zip2< Op<Double,Integer> >::eval(args, (Double const&)a, (Integer const&)b, c); return true; }
+		else if(b.isLogical()) {	Zip2< Op<Double,Logical> >::eval(args, (Double const&)a, (Logical const&)b, c); return true; }
 		else if(b.isNull())	{ c = Double(0); return true; }
 		else return false;
 	} else if(a.isInteger()) {
-		if(b.isDouble()) {	Zip2< Op<Integer,Double> >::eval(state, args, (Integer const&)a, (Double const&)b, c); return true; }
-		else if(b.isInteger()) {	Zip2< Op<Integer,Integer> >::eval(state, args, (Integer const&)a, (Integer const&)b, c); return true; }
-		else if(b.isLogical()) {	Zip2< Op<Integer,Logical> >::eval(state, args, (Integer const&)a, (Logical const&)b, c); return true; }
+		if(b.isDouble()) {	Zip2< Op<Integer,Double> >::eval(args, (Integer const&)a, (Double const&)b, c); return true; }
+		else if(b.isInteger()) {	Zip2< Op<Integer,Integer> >::eval(args, (Integer const&)a, (Integer const&)b, c); return true; }
+		else if(b.isLogical()) {	Zip2< Op<Integer,Logical> >::eval(args, (Integer const&)a, (Logical const&)b, c); return true; }
 		else if(b.isNull())	{ c = Double(0); return true; }
 		else return false;
 	} else if(a.isLogical()) {
-		if(b.isDouble()) {	Zip2< Op<Logical,Double> >::eval(state, args, (Logical const&)a, (Double const&)b, c); return true; }
-		else if(b.isInteger()) { 	Zip2< Op<Logical,Integer> >::eval(state, args, (Logical const&)a, (Integer const&)b, c); return true; }
-		else if(b.isLogical()) {	Zip2< Op<Logical,Logical> >::eval(state, args, (Logical const&)a, (Logical const&)b, c); return true; }
+		if(b.isDouble()) {	Zip2< Op<Logical,Double> >::eval(args, (Logical const&)a, (Double const&)b, c); return true; }
+		else if(b.isInteger()) { 	Zip2< Op<Logical,Integer> >::eval(args, (Logical const&)a, (Integer const&)b, c); return true; }
+		else if(b.isLogical()) {	Zip2< Op<Logical,Logical> >::eval(args, (Logical const&)a, (Logical const&)b, c); return true; }
 		else if(b.isNull())	{ c = Double(0); return true; }
 		else return false;
 	} else if(a.isNull()) {
@@ -132,7 +132,7 @@ bool ArithBinary1Dispatch(State& state, void* args, Value a, Value b, Value& c) 
 template< template<typename S, typename T> class Op > 
 bool ArithBinary2Fast(State& state, void* args, Value a, Value b, Value& c) {
     if(a.isDouble1() && b.isDouble1())
-        { Op<Double, Double>::Scalar(state, args, a.d, b.d, c); return true; }
+        { Op<Double, Double>::Scalar(args, a.d, b.d, c); return true; }
 	else return false;
 }
 
@@ -144,11 +144,11 @@ bool ArithBinary2Dispatch(State& state, void* args, Value a, Value b, Value& c) 
 template< template<typename S, typename T> class Op > 
 bool LogicalBinaryFast(State& state, void* args, Value a, Value b, Value& c) {
     if(a.isLogical1() && b.isLogical1()) { 
-        Op<Logical, Logical>::Scalar(state, args, a.c, b.c, c);
+        Op<Logical, Logical>::Scalar(args, a.c, b.c, c);
         return true;
     }
 	else if(a.isRaw() && b.isRaw()) {
-		Op<Raw,Raw>::Scalar(state, args, a.u, b.u, c); 
+		Op<Raw,Raw>::Scalar(args, a.u, b.u, c); 
         return true;
     } 
 	else return false;
@@ -157,25 +157,25 @@ bool LogicalBinaryFast(State& state, void* args, Value a, Value b, Value& c) {
 template< template<typename S, typename T> class Op >
 bool LogicalBinaryDispatch(State& state, void* args, Value a, Value b, Value& c) {
 	if(a.isLogical()) {
-		if(b.isLogical()) { 	Zip2< Op<Logical,Logical> >::eval(state, args, (Logical const&)a, (Logical const&)b, c); return true; }
-		else if(b.isDouble()) { 	Zip2< Op<Logical,Double> >::eval(state, args, (Logical const&)a, (Double const&)b, c); return true; }
-		else if(b.isInteger()) { 	Zip2< Op<Logical,Integer> >::eval(state, args, (Logical const&)a, (Integer const&)b, c); return true; }
+		if(b.isLogical()) { 	Zip2< Op<Logical,Logical> >::eval(args, (Logical const&)a, (Logical const&)b, c); return true; }
+		else if(b.isDouble()) { 	Zip2< Op<Logical,Double> >::eval(args, (Logical const&)a, (Double const&)b, c); return true; }
+		else if(b.isInteger()) { 	Zip2< Op<Logical,Integer> >::eval(args, (Logical const&)a, (Integer const&)b, c); return true; }
 		else if(b.isNull())	{ c = Logical(0); return true; }
 		else return false;
 	} else if(a.isDouble()) {
-		if(b.isLogical()) {	Zip2< Op<Double,Logical> >::eval(state, args, (Double const&)a, (Logical const&)b, c); return true; }
-		else if(b.isDouble()) {	Zip2< Op<Double,Double> >::eval(state, args, (Double const&)a, (Double const&)b, c); return true; }
-		else if(b.isInteger()) {	Zip2< Op<Double,Integer> >::eval(state, args, (Double const&)a, (Integer const&)b, c); return true; }
+		if(b.isLogical()) {	Zip2< Op<Double,Logical> >::eval(args, (Double const&)a, (Logical const&)b, c); return true; }
+		else if(b.isDouble()) {	Zip2< Op<Double,Double> >::eval(args, (Double const&)a, (Double const&)b, c); return true; }
+		else if(b.isInteger()) {	Zip2< Op<Double,Integer> >::eval(args, (Double const&)a, (Integer const&)b, c); return true; }
 		else if(b.isNull())	{ c = Logical(0); return true; }
 		else return false;
 	} else if(a.isInteger()) {
-		if(b.isLogical()) {	Zip2< Op<Integer,Logical> >::eval(state, args, (Integer const&)a, (Logical const&)b, c); return true; }
-		else if(b.isDouble()) {	Zip2< Op<Integer,Double> >::eval(state, args, (Integer const&)a, (Double const&)b, c); return true; }
-		else if(b.isInteger()) { Zip2< Op<Integer,Integer> >::eval(state, args, (Integer const&)a, (Integer const&)b, c); return true; }
+		if(b.isLogical()) {	Zip2< Op<Integer,Logical> >::eval(args, (Integer const&)a, (Logical const&)b, c); return true; }
+		else if(b.isDouble()) {	Zip2< Op<Integer,Double> >::eval(args, (Integer const&)a, (Double const&)b, c); return true; }
+		else if(b.isInteger()) { Zip2< Op<Integer,Integer> >::eval(args, (Integer const&)a, (Integer const&)b, c); return true; }
 		else if(b.isNull())	{ c = Logical(0); return true; }
 		else return false; 
 	} else if(a.isRaw() && b.isRaw()) {
-		Zip2< Op<Raw,Raw> >::eval(state, args, (Raw const&)a, (Raw const&)b, c); 
+		Zip2< Op<Raw,Raw> >::eval(args, (Raw const&)a, (Raw const&)b, c); 
         return true;
 	} else if(a.isNull()) {
 		if(b.isDouble() || b.isInteger() || b.isLogical() || b.isNull()) { c = Logical(0); return true; }
@@ -223,13 +223,13 @@ bool ClosureBinaryDispatch< struct neqVOp<REnvironment, REnvironment> >
 template< template<typename S, typename T> class Op > 
 bool UnifyBinaryFast(State& state, void* args, Value a, Value b, Value& c) {
     if(a.isDouble1() && b.isDouble1())
-        { Op<Double, Double>::Scalar(state, args, a.d, b.d, c); return true; }
+        { Op<Double, Double>::Scalar(args, a.d, b.d, c); return true; }
     if(a.isInteger1() && b.isInteger1())
-        { Op<Integer, Integer>::Scalar(state, args, a.i, b.i, c); return true; }
+        { Op<Integer, Integer>::Scalar(args, a.i, b.i, c); return true; }
     if(a.isLogical1() && b.isLogical1())
-        { Op<Logical, Logical>::Scalar(state, args, a.c, b.c, c); return true; }
+        { Op<Logical, Logical>::Scalar(args, a.c, b.c, c); return true; }
     if(a.isCharacter1() && b.isCharacter1())
-        { Op<Character, Character>::Scalar(state, args, a.s, b.s, c); return true; }
+        { Op<Character, Character>::Scalar(args, a.s, b.s, c); return true; }
 	else return false;
 }
 
@@ -238,19 +238,19 @@ bool UnifyBinaryDispatch(State& state, void* args, Value const& a, Value const& 
 	if(a.isVector() && b.isVector())
 	{
         if(a.isCharacter() || b.isCharacter()) {
-		    Zip2< Op<Character, Character> >::eval(state, args, As<Character>(state, a), As<Character>(state, b), c);
+		    Zip2< Op<Character, Character> >::eval(args, As<Character>(a), As<Character>(b), c);
             return true;
         }
 	    else if(a.isDouble() || b.isDouble()) {
-		    Zip2< Op<Double, Double> >::eval(state, args, As<Double>(state, a), As<Double>(state, b), c);
+		    Zip2< Op<Double, Double> >::eval(args, As<Double>(a), As<Double>(b), c);
             return true;
         }
 	    else if(a.isInteger() || b.isInteger()) {	
-		    Zip2< Op<Integer, Integer> >::eval(state, args, As<Integer>(state, a), As<Integer>(state, b), c);
+		    Zip2< Op<Integer, Integer> >::eval(args, As<Integer>(a), As<Integer>(b), c);
             return true;
         }
 	    else if(a.isLogical() || b.isLogical())	{
-		    Zip2< Op<Logical, Logical> >::eval(state, args, As<Logical>(state, a), As<Logical>(state, b), c);
+		    Zip2< Op<Logical, Logical> >::eval(args, As<Logical>(a), As<Logical>(b), c);
             return true;
         }
 	    else if(a.isNull() || b.isNull()) {
@@ -307,107 +307,107 @@ bool RoundBinaryDispatch(State& state, void* args, Value a, Value b, Value& c) {
 
 template< template<typename T> class Op >
 bool ArithFold1Fast(State& state, void* args, Value a, Value& c) {
-    if(a.isDouble1())         { Op<Double>::Scalar(state, args, a.d, c);   return true; }
-    else if(a.isInteger1())   { Op<Integer>::Scalar(state, args, a.i, c);  return true; }
-    else if(a.isLogical1())   { Op<Logical>::Scalar(state, args, a.c, c);  return true; }
+    if(a.isDouble1())         { Op<Double>::Scalar(args, a.d, c);   return true; }
+    else if(a.isInteger1())   { Op<Integer>::Scalar(args, a.i, c);  return true; }
+    else if(a.isLogical1())   { Op<Logical>::Scalar(args, a.c, c);  return true; }
     else return false;
 }
 
 template< template<typename T> class Op >
 bool ArithFold1Dispatch(State& state, void* args, Value const& a, Value& c) {
-	if(a.isDouble())	{ FoldLeft< Op<Double> >::eval(state, args, (Double const&)a, c); return true; }
-	else if(a.isInteger())	{ FoldLeft< Op<Integer> >::eval(state, args, (Integer const&)a, c); return true; }
-	else if(a.isLogical())	{ FoldLeft< Op<Logical> >::eval(state, args, (Logical const&)a, c); return true; }
-	else if(a.isNull())	{ Op<Double>::Scalar(state, args, Op<Double>::base(), c); return true; }
+	if(a.isDouble())	{ FoldLeft< Op<Double> >::eval(args, (Double const&)a, c); return true; }
+	else if(a.isInteger())	{ FoldLeft< Op<Integer> >::eval(args, (Integer const&)a, c); return true; }
+	else if(a.isLogical())	{ FoldLeft< Op<Logical> >::eval(args, (Logical const&)a, c); return true; }
+	else if(a.isNull())	{ Op<Double>::Scalar(args, Op<Double>::base(), c); return true; }
 	else return false; 
 }
 
 template< template<typename T> class Op >
 bool ArithFold2Fast(State& state, void* args, Value a, Value& c) {
-    if(a.isDouble1())         { Op<Double>::Scalar(state, args, a.d, c);   return true; }
-    else if(a.isInteger1())   { Op<Integer>::Scalar(state, args, a.i, c);  return true; }
-    else if(a.isLogical1())   { Op<Logical>::Scalar(state, args, a.c, c);  return true; }
+    if(a.isDouble1())         { Op<Double>::Scalar(args, a.d, c);   return true; }
+    else if(a.isInteger1())   { Op<Integer>::Scalar(args, a.i, c);  return true; }
+    else if(a.isLogical1())   { Op<Logical>::Scalar(args, a.c, c);  return true; }
     else return false;
 }
 
 template< template<typename T> class Op >
 bool ArithFold2Dispatch(State& state, void* args, Value const& a, Value& c) {
-	if(a.isDouble())	{ FoldLeft< Op<Double> >::eval(state, args, (Double const&)a, c); return true; }
-	else if(a.isInteger())	{ FoldLeft< Op<Integer> >::eval(state, args, (Integer const&)a, c); return true; }
-	else if(a.isLogical())	{ FoldLeft< Op<Logical> >::eval(state, args, (Logical const&)a, c); return true; }
-	else if(a.isNull())	{ Op<Double>::Scalar(state, args, Op<Double>::base(), c); return true; }
+	if(a.isDouble())	{ FoldLeft< Op<Double> >::eval(args, (Double const&)a, c); return true; }
+	else if(a.isInteger())	{ FoldLeft< Op<Integer> >::eval(args, (Integer const&)a, c); return true; }
+	else if(a.isLogical())	{ FoldLeft< Op<Logical> >::eval(args, (Logical const&)a, c); return true; }
+	else if(a.isNull())	{ Op<Double>::Scalar(args, Op<Double>::base(), c); return true; }
 	else return false;
 }
 
 template< template<typename T> class Op >
 bool LogicalFoldFast(State& state, void* args, Value a, Value& c) {
-    if(a.isLogical1())        { Op<Logical>::Scalar(state, args, a.c, c);  return true; }
-    else if(a.isDouble1())    { Op<Double>::Scalar(state, args, a.d, c);   return true; }
-    else if(a.isInteger1())   { Op<Integer>::Scalar(state, args, a.i, c);  return true; }
+    if(a.isLogical1())        { Op<Logical>::Scalar(args, a.c, c);  return true; }
+    else if(a.isDouble1())    { Op<Double>::Scalar(args, a.d, c);   return true; }
+    else if(a.isInteger1())   { Op<Integer>::Scalar(args, a.i, c);  return true; }
     else return false;
 }
 
 template< template<typename T> class Op >
 bool LogicalFoldDispatch(State& state, void* args, Value const& a, Value& c) {
-	if(a.isLogical())	{ FoldLeft< Op<Logical> >::eval(state, args, (Logical const&)a, c); return true; }
-	else if(a.isDouble())	{ FoldLeft< Op<Double> >::eval(state, args, (Double const&)a, c); return true; }
-	else if(a.isInteger())	{ FoldLeft< Op<Integer> >::eval(state, args, (Integer const&)a, c); return true; }
-	else if(a.isNull())	{ Op<Logical>::Scalar(state, args, Op<Logical>::base(), c); return true; }
+	if(a.isLogical())	{ FoldLeft< Op<Logical> >::eval(args, (Logical const&)a, c); return true; }
+	else if(a.isDouble())	{ FoldLeft< Op<Double> >::eval(args, (Double const&)a, c); return true; }
+	else if(a.isInteger())	{ FoldLeft< Op<Integer> >::eval(args, (Integer const&)a, c); return true; }
+	else if(a.isNull())	{ Op<Logical>::Scalar(args, Op<Logical>::base(), c); return true; }
 	else return false;
 }
 
 template< template<typename T> class Op >
 bool UnifyFoldFast(State& state, void* args, Value a, Value& c) {
-    if(a.isCharacter1())      { Op<Character>::Scalar(state, args, a.s, c);   return true; }
-    else if(a.isDouble1())    { Op<Double>::Scalar(state, args, a.d, c);   return true; }
-    else if(a.isLogical1())   { Op<Logical>::Scalar(state, args, a.c, c);  return true; }
-    else if(a.isInteger1())   { Op<Integer>::Scalar(state, args, a.i, c);  return true; }
+    if(a.isCharacter1())      { Op<Character>::Scalar(args, a.s, c);   return true; }
+    else if(a.isDouble1())    { Op<Double>::Scalar(args, a.d, c);   return true; }
+    else if(a.isLogical1())   { Op<Logical>::Scalar(args, a.c, c);  return true; }
+    else if(a.isInteger1())   { Op<Integer>::Scalar(args, a.i, c);  return true; }
     else return false;
 }
 
 template< template<typename T> class Op >
 bool UnifyFoldDispatch(State& state, void* args, Value const& a, Value& c) {
-	if(a.isCharacter())	{ FoldLeft< Op<Character> >::eval(state, args, (Character const&)a, c); return true; }
-	else if(a.isDouble())	{ FoldLeft< Op<Double> >::eval(state, args, (Double const&)a, c); return true; }
-	else if(a.isInteger())	{ FoldLeft< Op<Integer> >::eval(state, args, (Integer const&)a, c); return true; }
-	else if(a.isLogical())	{ FoldLeft< Op<Logical> >::eval(state, args, (Logical const&)a, c); return true; }
+	if(a.isCharacter())	{ FoldLeft< Op<Character> >::eval(args, (Character const&)a, c); return true; }
+	else if(a.isDouble())	{ FoldLeft< Op<Double> >::eval(args, (Double const&)a, c); return true; }
+	else if(a.isInteger())	{ FoldLeft< Op<Integer> >::eval(args, (Integer const&)a, c); return true; }
+	else if(a.isLogical())	{ FoldLeft< Op<Logical> >::eval(args, (Logical const&)a, c); return true; }
 	else if(a.isNull())	{ c = Null::Singleton(); return true; }
 	else return false; 
 }
 
 template< template<typename T> class Op >
 bool ArithScanFast(State& state, void* args, Value a, Value& c) {
-    if     (a.isDouble1())  { Op<Double>::Scalar(state, args, a.d, c);   return true; }
-    else if(a.isInteger1()) { Op<Integer>::Scalar(state, args, a.i, c);  return true; }
-    else if(a.isLogical1()) { Op<Logical>::Scalar(state, args, a.c, c);  return true; }
+    if     (a.isDouble1())  { Op<Double>::Scalar(args, a.d, c);   return true; }
+    else if(a.isInteger1()) { Op<Integer>::Scalar(args, a.i, c);  return true; }
+    else if(a.isLogical1()) { Op<Logical>::Scalar(args, a.c, c);  return true; }
     else return false;
 }
 
 template< template<typename T> class Op >
 bool ArithScanDispatch(State& state, void* args, Value const& a, Value& c) {
-	if(a.isDouble())	{ ScanLeft< Op<Double> >::eval(state, args, (Double const&)a, c); return true; }
-	else if(a.isInteger())	{ ScanLeft< Op<Integer> >::eval(state, args, (Integer const&)a, c); return true; }
-	else if(a.isLogical())	{ ScanLeft< Op<Logical> >::eval(state, args, (Logical const&)a, c); return true; }
-	else if(a.isNull())	{ Op<Double>::Scalar(state, args, Op<Double>::base(), c); return true; }
+	if(a.isDouble())	{ ScanLeft< Op<Double> >::eval(args, (Double const&)a, c); return true; }
+	else if(a.isInteger())	{ ScanLeft< Op<Integer> >::eval(args, (Integer const&)a, c); return true; }
+	else if(a.isLogical())	{ ScanLeft< Op<Logical> >::eval(args, (Logical const&)a, c); return true; }
+	else if(a.isNull())	{ Op<Double>::Scalar(args, Op<Double>::base(), c); return true; }
 	else return false;
 }
 
 template< template<typename T> class Op >
 bool UnifyScanFast(State& state, void* args, Value a, Value& c) {
-    if(a.isCharacter1())      { Op<Character>::Scalar(state, args, a.s, c);   return true; }
-    else if(a.isDouble1())    { Op<Double>::Scalar(state, args, a.d, c);   return true; }
-    else if(a.isLogical1())   { Op<Logical>::Scalar(state, args, a.c, c);  return true; }
-    else if(a.isInteger1())   { Op<Integer>::Scalar(state, args, a.i, c);  return true; }
+    if(a.isCharacter1())      { Op<Character>::Scalar(args, a.s, c);   return true; }
+    else if(a.isDouble1())    { Op<Double>::Scalar(args, a.d, c);   return true; }
+    else if(a.isLogical1())   { Op<Logical>::Scalar(args, a.c, c);  return true; }
+    else if(a.isInteger1())   { Op<Integer>::Scalar(args, a.i, c);  return true; }
     else return false;
 }
 
 template< template<typename T> class Op >
 bool UnifyScanDispatch(State& state, void* args, Value const& a, Value& c) {
-	if(a.isCharacter())	{ ScanLeft< Op<Character> >::eval(state, args, (Character const&)a, c); return true; }
-	else if(a.isDouble())	{ ScanLeft< Op<Double> >::eval(state, args, (Double const&)a, c); return true; }
-	else if(a.isInteger())	{ ScanLeft< Op<Integer> >::eval(state, args, (Integer const&)a, c); return true; }
-	else if(a.isLogical())	{ ScanLeft< Op<Logical> >::eval(state, args, (Logical const&)a, c); return true; }
-	else if(a.isNull())	{ Op<Double>::Scalar(state, args, Op<Double>::base(), c); return true; }
+	if(a.isCharacter())	{ ScanLeft< Op<Character> >::eval(args, (Character const&)a, c); return true; }
+	else if(a.isDouble())	{ ScanLeft< Op<Double> >::eval(args, (Double const&)a, c); return true; }
+	else if(a.isInteger())	{ ScanLeft< Op<Integer> >::eval(args, (Integer const&)a, c); return true; }
+	else if(a.isLogical())	{ ScanLeft< Op<Logical> >::eval(args, (Logical const&)a, c); return true; }
+	else if(a.isNull())	{ Op<Double>::Scalar(args, Op<Double>::base(), c); return true; }
 	else return false;
 }
 

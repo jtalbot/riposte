@@ -41,6 +41,10 @@ struct Instruction {
     }
 };
 
+String MakeString(std::string const& s);
+
+Character InternStrings(State& state, Character const& c);
+
 class StringTable
 {
     //std::vector< std::pair<String, bool> > strings;
@@ -87,6 +91,30 @@ public:
         return result;
     }
 
+    String intern(const char* p)
+    {
+        if(!p) return nullptr;
+        std::string s(p);
+
+        lock.acquire();
+        auto i = stringTable.find(s);
+
+        String result;
+        if(i != stringTable.end())
+        {
+            result = i->second.first;
+        }
+        else
+        {
+            result = new (s.size()+1, Heap::ConstHeap) StringImpl();
+            memcpy((void*)result->s, s.c_str(), s.size()+1);
+            stringTable[s] = std::make_pair(result, false);
+        }
+        
+        lock.release();
+        return result;
+    }
+
     String in(std::string const& s, bool weak=true)
     {
         lock.acquire();
@@ -99,7 +127,7 @@ public:
         }
         else
         {
-            result = new (s.size()+1) StringImpl();
+            result = new (s.size()+1, Heap::ConstHeap) StringImpl();
             memcpy((void*)result->s, s.c_str(), s.size()+1);
             stringTable[s] = std::make_pair(result, weak);
         }
@@ -112,8 +140,6 @@ public:
     {
         return std::string(s->s);
     }
-
-    void sweep();
 };
 
 struct CompiledCall {

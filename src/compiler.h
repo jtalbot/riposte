@@ -69,7 +69,7 @@ private:
 	
 	Operand compile(Value const& expr, Code* code);
 
-	Operand compileConstant(Value const& expr, Code* code);
+	Operand compileConstant(Value expr, Code* code);
 	Operand compileSymbol(Value const& symbol, Code* code, bool isClosure); 
 	Operand compileCall(List const& call, Character const& names, Code* code); 
 	Operand compileFunctionCall(Operand function, List const& call, Character const& names, Code* code); 
@@ -110,25 +110,24 @@ private:
             EmitFn fn;
         };
 
-        std::map<std::pair<String, int>, Emit> emits;
+        std::map<std::pair<std::string, int>, Emit> emits;
 
         void add(String name, int args,
                 EmitFn fn, ByteCode::Enum bc=ByteCode::done) {
             Emit emit;
             emit.bc = bc;
             emit.fn = fn;
-            emits[std::make_pair(name, args)] = emit;
+            emits[std::make_pair(std::string(name->s), args)] = emit;
         }
 
         public:
         Operand operator()(Compiler& compiler, String fn, List const& call, Code* code) const {
             // first try to find an exact match on number of args
-            std::map<std::pair<String, int>, Emit>::const_iterator i =
-                emits.find(std::make_pair(fn, call.length()-1));
+            auto i = emits.find(std::make_pair(std::string(fn->s), call.length()-1));
             
             // then try to find a version that can take any number of args
             if(i == emits.end())
-                i = emits.find(std::make_pair(fn, -1));
+                i = emits.find(std::make_pair(std::string(fn->s), -1));
             
             if(i != emits.end()) {
                 return (compiler.*(i->second.fn))(

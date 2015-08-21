@@ -40,6 +40,6 @@ void chartr_map(State& state,
     for(size_t i = 0; i < t.size(); i++) {
         t[i] = m[(unsigned char)t[i]];
     }
-    result = state.internStr(t.c_str());
+    result = MakeString(t.c_str());
 }
 
