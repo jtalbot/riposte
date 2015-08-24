@@ -41,11 +41,11 @@ Instruction const* call_impl(State& state, Instruction const& inst)
     {
         auto func = static_cast<Closure const&>(a);
 
-        CompiledCall const& call = state.frame.code->calls[inst.b];
+        auto call = static_cast<CompiledCall const&>(state.frame.code->calls[inst.b]);
 
         Environment* fenv =
-            (call.names.length() == 0 &&
-             call.dotIndex >= (int64_t)call.arguments.length())
+            (call.names().length() == 0 &&
+             call.dotIndex() >= (int64_t)call.arguments().length())
             ? FastMatchArgs(state, state.frame.environment, func, call)
             : MatchArgs(state, state.frame.environment, func, call);
 

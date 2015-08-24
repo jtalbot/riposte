@@ -179,14 +179,14 @@ void Compiler::resolveLoopExits(int64_t start, int64_t end, int64_t nextTarget, 
 	}
 }
 
-Compiler::Operand Compiler::compileConstant(Value expr, Code* code) {
+Compiler::Operand Compiler::compileConstant(Value expr) {
 
 	std::map<Value, int64_t>::const_iterator i = constants.find(expr);
 	int64_t index = 0;
 
 	if(i == constants.end()) {
-		index = code->constants.size();
-		code->constants.push_back(expr);
+		index = constantList.size();
+		constantList.push_back(expr);
 		constants[expr] = index;
 	} else {
 		index = i->second;
@@ -214,7 +214,7 @@ static int64_t isDotDot(String s) {
 	return -1;	
 }
 
-Compiler::Operand Compiler::compileSymbol(Value const& symbol, Code* code, bool isClosure) {
+Compiler::Operand Compiler::compileSymbol(Value const& symbol, bool isClosure) {
 	String s = SymbolStr(symbol);
     
     // symbols have to be interned
@@ -222,13 +222,13 @@ Compiler::Operand Compiler::compileSymbol(Value const& symbol, Code* code, bool 
 	
 	int64_t dd = isDotDot(s);
 	if(dd > 0) {
-        Operand idx = compileConstant(Integer::c(dd), code); 
+        Operand idx = compileConstant(Integer::c(dd)); 
 		Operand t = allocRegister();
 		emit(ByteCode::dotsv, idx, 0, t);
 		return t;
 	}
 	else {
-		Operand sym = compileConstant(Character::c(s), code);
+		Operand sym = compileConstant(Character::c(s));
 		Operand t = allocRegister();
 		emit(isClosure ? ByteCode::loadfn : ByteCode::load, sym, 0, t);
 		return t;
@@ -248,10 +248,10 @@ Compiler::Operand Compiler::placeInRegister(Operand r) {
 // a standard call, not an op
 Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& call, Character const& names, Code* code) {
 	CompiledCall a = makeCall(state, call, names);
-	code->calls.push_back(a);
+	compiledCalls.push_back(a);
 	kill(function);
 	Operand result = allocRegister();
-    emit(ByteCode::call, function, code->calls.size()-1, result);
+    emit(ByteCode::call, function, compiledCalls.size()-1, result);
 	return result;
 }
 
@@ -282,7 +282,7 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code
 
     // Handle simple assignment 
     if(!isCall(dest)) {
-        Operand target = compileConstant(InternStrings(state, Character::c(SymbolStr(dest))), code);
+        Operand target = compileConstant(InternStrings(state, Character::c(SymbolStr(dest))));
         emit(bc, target, 0, rhs);
     }
     
@@ -293,7 +293,7 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code
     //	1) dim(a) <- `[<-`(dim(a), 1, x)
     //	2) a <- `dim<-`(a, `[<-`(dim(a), 1, x))
     else {
-        Operand tmp = compileConstant(InternStrings(state, Character::c(Strings::assignTmp)), code);
+        Operand tmp = compileConstant(InternStrings(state, Character::c(Strings::assignTmp)));
         emit( ByteCode::store, tmp, 0, rhs );
 
         Value value = CreateSymbol(global, Strings::assignTmp);
@@ -329,14 +329,14 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code
             dest = c[1];
         }
 
-        Operand target = compileConstant(InternStrings(state, Character::c(SymbolStr(dest))), code);
+        Operand target = compileConstant(InternStrings(state, Character::c(SymbolStr(dest))));
         Operand source = compile(value, code);
         emit(bc, target, 0, source);
         kill(source);
         kill(target);
 
         Operand rm = allocRegister();
-        Operand env = compileConstant(Null::Singleton(), code);
+        Operand env = compileConstant(Null::Singleton());
         emit( ByteCode::env_rm, env, tmp, rm );
         kill( rm );
     }
@@ -403,7 +403,7 @@ Compiler::Operand Compiler::emitFunction(ByteCode::Enum bc, List const& call, Co
 
     Value function;
     Closure::Init(function, functionCode, 0);
-    Operand funcOp = compileConstant(function, code);
+    Operand funcOp = compileConstant(function);
 
     Operand reg = allocRegister();	
     emit(ByteCode::fn_new, funcOp, 0, reg);
@@ -413,7 +413,7 @@ Compiler::Operand Compiler::emitFunction(ByteCode::Enum bc, List const& call, Co
 Compiler::Operand Compiler::emitReturn(ByteCode::Enum bc, List const& call, Code* code) {
 		Operand result;
 		if(call.length() == 1) {
-			result = compileConstant(Null::Singleton(), code);
+			result = compileConstant(Null::Singleton());
 		} else if(call.length() == 2)
 			result = compile(call[1], code);
 		else
@@ -424,7 +424,7 @@ Compiler::Operand Compiler::emitReturn(ByteCode::Enum bc, List const& call, Code
 
 Compiler::Operand Compiler::emitFor(ByteCode::Enum bc, List const& call, Code* code) {
     Operand loop_variable =
-        compileConstant(InternStrings(state, Character::c(SymbolStr(call[1]))), code);
+        compileConstant(InternStrings(state, Character::c(SymbolStr(call[1]))));
     Operand loop_vector = placeInRegister(compile(call[2], code));
     Operand loop_counter = allocRegister();	// save space for loop counter
     Operand loop_limit = allocRegister(); // save space for the loop limit
@@ -472,7 +472,7 @@ Compiler::Operand Compiler::emitWhile(ByteCode::Enum bc, List const& call, Code*
     ir[beginbody-2].b = endbody-beginbody+4;
     loopDepth--;
     
-    return invisible(compileConstant(Null::Singleton(), code));
+    return invisible(compileConstant(Null::Singleton()));
 }
 
 Compiler::Operand Compiler::emitRepeat(ByteCode::Enum bc, List const& call, Code* code) {
@@ -485,7 +485,7 @@ Compiler::Operand Compiler::emitRepeat(ByteCode::Enum bc, List const& call, Code
     emit(ByteCode::jmp, beginbody-endbody, 0, 0);
     
     kill(body);
-    return invisible(compileConstant(Null::Singleton(), code));
+    return invisible(compileConstant(Null::Singleton()));
 }
 
 Compiler::Operand Compiler::emitNext(ByteCode::Enum bc, List const& call, Code* code) {
@@ -525,7 +525,7 @@ Compiler::Operand Compiler::emitIf(ByteCode::Enum bc, List const& call, Code* co
     resultF = placeInRegister(
         call.length() >= 4 
             ? compile(call[3], code)
-            : invisible(compileConstant(Null::Singleton(), code)));
+            : invisible(compileConstant(Null::Singleton())));
     assert(resultNA == resultF || 
            resultNA.loc == INVALID || 
            resultF.loc == INVALID);
@@ -555,7 +555,7 @@ Compiler::Operand Compiler::emitIf(ByteCode::Enum bc, List const& call, Code* co
 Compiler::Operand Compiler::emitBrace(ByteCode::Enum bc, List const& call, Code* code) {
 		int64_t length = call.length();
 		if(length <= 1) {
-			return compileConstant(Null::Singleton(), code);
+			return compileConstant(Null::Singleton());
 		} else {
 			Operand result;
 			for(int64_t i = 1; i < length; i++) {
@@ -586,7 +586,7 @@ Compiler::Operand Compiler::emitTernary(ByteCode::Enum bc, List const& call, Cod
 Compiler::Operand Compiler::emitBinaryMap(ByteCode::Enum bc, List const& call, Code* code) {
     Operand c = placeInRegister(compile(call[1], code));
     Operand b = compile(call[2], code);
-    Operand a = compileConstant(Value::Nil(), code);
+    Operand a = compileConstant(Value::Nil());
     kill(a); kill(b); kill(c);
     Operand result = allocRegister();
     assert(c == result);
@@ -739,13 +739,13 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
     }
 
     return (hasDots || hasNames)
-        ? compileFunctionCall(compileSymbol(call[0], code, true), call, names, code)
+        ? compileFunctionCall(compileSymbol(call[0], true), call, names, code)
         : GetEmitTable()(*this, func, call, code);
 }
 
 Compiler::Operand Compiler::compileExpression(List const& values, Code* code) {
 	Operand result;
-	if(values.length() == 0) result = compileConstant(Null::Singleton(), code);
+	if(values.length() == 0) result = compileConstant(Null::Singleton());
 	for(int64_t i = 0; i < values.length(); i++) {
 		kill(result);
 		result = compile(values[i], code);
@@ -755,7 +755,7 @@ Compiler::Operand Compiler::compileExpression(List const& values, Code* code) {
 
 Compiler::Operand Compiler::compile(Value const& expr, Code* code) {
 	if(isSymbol(expr)) {
-		return compileSymbol(expr, code, false);
+		return compileSymbol(expr, false);
 	}
 	else if(isCall(expr)) {
 		assert(expr.isList());
@@ -766,7 +766,7 @@ Compiler::Operand Compiler::compile(Value const& expr, Code* code) {
 			code);
 	}
 	else {
-		return visible(compileConstant(expr, code));
+		return visible(compileConstant(expr));
 	}
 }
 
@@ -775,8 +775,8 @@ Compiler::Operand Compiler::compile(Value const& expr, Code* code) {
 Code* Compiler::compileExpression(State& state, Value const& expr) {
 
     Compiler compiler(state);
-	Code* code = new (Code::Finalize) Code();
-   
+	Code* code = new Code();
+  
     // blocks use first two registers to potentially pass
     // return information.
     (void) compiler.allocRegister();
@@ -789,14 +789,31 @@ Code* Compiler::compileExpression(State& state, Value const& expr) {
     
 	code->registers = compiler.max_n; 
 	code->expression = expr;
-    code->bc.swap(compiler.ir);
+    {
+        Integer bc(compiler.ir.size());
+        for(size_t i = 0; i < compiler.ir.size(); ++i)
+            bc[i] = compiler.ir[i].i;
+        code->bc = bc;
+    }
+    {
+        List con(compiler.constantList.size());
+        for(size_t i = 0; i < compiler.constantList.size(); ++i)
+            con[i] = compiler.constantList[i];
+        code->constants = con;
+    }
+    {
+        List calls(compiler.compiledCalls.size());
+        for(size_t i = 0; i < compiler.compiledCalls.size(); ++i)
+            calls[i] = compiler.compiledCalls[i];
+        code->calls = calls;
+    }
 
     return code;
 }
 
 Prototype* Compiler::compileClosureBody(State& state, Value const& expr) {
     Compiler compiler(state);
-	Code* code = new (Code::Finalize) Code();
+	Code* code = new Code();
     Operand result = compiler.compile(expr, code);
    
     // A function that terminates without a return implicitly
@@ -807,7 +824,24 @@ Prototype* Compiler::compileClosureBody(State& state, Value const& expr) {
     // one for the return value and one for an onexit result 
 	code->registers = std::max(compiler.max_n, 2LL); 
 	code->expression = expr;
-    code->bc.swap(compiler.ir);
+    {
+        Integer bc(compiler.ir.size());
+        for(size_t i = 0; i < compiler.ir.size(); ++i)
+            bc[i] = compiler.ir[i].i;
+        code->bc = bc;
+    }
+    {
+        List con(compiler.constantList.size());
+        for(size_t i = 0; i < compiler.constantList.size(); ++i)
+            con[i] = compiler.constantList[i];
+        code->constants = con;
+    }
+    {
+        List calls(compiler.compiledCalls.size());
+        for(size_t i = 0; i < compiler.compiledCalls.size(); ++i)
+            calls[i] = compiler.compiledCalls[i];
+        code->calls = calls;
+    }
 
     Prototype* p = new Prototype();
     p->code = code;
@@ -816,13 +850,14 @@ Prototype* Compiler::compileClosureBody(State& state, Value const& expr) {
 }
 
 Code* Compiler::deferPromiseCompilation(State& state, Value const& expr) {
-    Code* code = new (Code::Finalize) Code();
+    Code* code = new Code();
     code->expression = expr;
+    code->bc = Integer(0);
     return code;
 }
 
 void Compiler::doPromiseCompilation(State& state, Code* code) {
-    if(!code->bc.empty())
+    if(code->bc.length() > 0)
         return;
 
     Compiler compiler(state);
@@ -836,6 +871,23 @@ void Compiler::doPromiseCompilation(State& state, Code* code) {
     compiler.emit(ByteCode::done, result, 0, 0);
 
     code->registers = compiler.max_n;
-    code->bc.swap(compiler.ir);
+    {
+        Integer bc(compiler.ir.size());
+        for(size_t i = 0; i < compiler.ir.size(); ++i)
+            bc[i] = compiler.ir[i].i;
+        code->bc = bc;
+    }
+    {
+        List con(compiler.constantList.size());
+        for(size_t i = 0; i < compiler.constantList.size(); ++i)
+            con[i] = compiler.constantList[i];
+        code->constants = con;
+    }
+    {
+        List calls(compiler.compiledCalls.size());
+        for(size_t i = 0; i < compiler.compiledCalls.size(); ++i)
+            calls[i] = compiler.compiledCalls[i];
+        code->calls = calls;
+    }
 }
 

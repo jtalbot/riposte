@@ -26,8 +26,16 @@ class Global;
 ///////////////////////////////////////////////////////////////////
 
 struct Instruction {
-    int16_t a, b, c;
-    ByteCode::Enum bc:16;
+    union {
+        int64_t i;
+        struct {
+            int16_t a, b, c;
+            ByteCode::Enum bc:16;
+        };
+    };
+
+    explicit Instruction(int64_t i) :
+        i(i) {}
 
     Instruction(ByteCode::Enum bc, int16_t a=0, int16_t b=0, int16_t c=0) :
         a(a), b(b), c(c), bc(bc) {}
@@ -142,16 +150,8 @@ public:
     }
 };
 
-struct CompiledCall {
-    List call;
-
-    List arguments;
-    Character names;
-    int64_t dotIndex;
-
-    List extraArgs;
-    Character extraNames;
-    
+struct CompiledCall : public List
+{
     explicit CompiledCall(
         List const& call, 
         List const& arguments, 
@@ -159,26 +159,57 @@ struct CompiledCall {
         int64_t dotIndex,
         List const& extraArgs,
         Character const& extraNames) 
-        : call(call)
-        , arguments(arguments)
-        , names(names)
-        , dotIndex(dotIndex)
-        , extraArgs(extraArgs)
-        , extraNames(extraNames) {}
+        : List(6)
+    {
+        (*this)[0] = call;
+        (*this)[1] = arguments;
+        (*this)[2] = names;
+        (*this)[3] = Integer::c(dotIndex);
+        (*this)[4] = extraArgs;
+        (*this)[5] = extraNames;
+    }
+
+    List const&      call() const {
+        return static_cast<List const&>((*this)[0]);
+    }
+
+    List const&      arguments() const {
+        return static_cast<List const&>((*this)[1]);
+    }
+
+    // Need a non-const version because Map in runtime.cpp modifies this.
+    List&            arguments() {
+        return static_cast<List&>((*this)[1]);
+    }
+
+    Character const& names() const {
+        return static_cast<Character const&>((*this)[2]);
+    }
+
+    int64_t          dotIndex() const {
+        return static_cast<Integer const&>((*this)[3]).i;
+    }
+
+    List const&      extraArgs() const {
+        return static_cast<List const&>((*this)[4]);
+    }
+
+    Character const& extraNames() const {
+        return static_cast<Character const&>((*this)[5]);
+    }
 };
 
 struct Code : public HeapObject {
     Value expression;
 
-    std::vector<Instruction> bc;
-    std::vector<Value> constants;
-    std::vector<CompiledCall> calls;
-    int registers;
-    
+    Integer bc;
+    List constants;
+
+    List calls;
+    uint64_t registers;
+
     void printByteCode(Global const& global) const;
     void visit() const;
-
-    static void Finalize(HeapObject* o);
 };
 
 struct Prototype : public HeapObject {

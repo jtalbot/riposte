@@ -1,26 +1,53 @@
 
+#include <bitset>
+#include <iostream>
+#include <strings.h>
+#include <stdlib.h>
+
 #include "gc.h"
 #include "value.h"
 #include "interpreter.h"
 #include "api/api.h"
 
+void GCObject::sweep()
+{
+    for(uint64_t i = 0; i < WORDS; ++i)
+    {
+        uint64_t b = block[i] & mark[i];
+        uint64_t m = block[i] ^ mark[i];
+
+        block[i] = b;
+        mark[i] = m;
+    }
+}
+
 bool HeapObject::marked() const {
-	return (gcObject()->flags & slot()) != 0;
+    uint64_t i = ((uint64_t)this & (REGION_SIZE-1)) / CELL_SIZE;
+    uint64_t slot = i % 64;
+    uint64_t word = i / 64;
+    
+    return (gcObject()->mark[word] & (((uint64_t)1) << slot)) != 0;
 }
 
 void HeapObject::visit() const {
-	gcObject()->flags |= slot();
+    uint64_t i = ((uint64_t)this & (REGION_SIZE-1)) / CELL_SIZE;
+    uint64_t slot = i % 64;
+    uint64_t word = i / 64;
+    
+    gcObject()->mark[word] |= (((uint64_t)1) << slot);
 }
 
-uint64_t HeapObject::slot() const {
-	assert(((uint64_t)this & 63) == 0);
-	uint64_t s = ((uint64_t)this & (Heap::regionSize-1)) >> 6;
-	assert(s >= 1 && s <= 63);
-	return (((uint64_t)1) << s);
+void HeapObject::block() const {
+    uint64_t i = ((uint64_t)this & (REGION_SIZE-1)) / CELL_SIZE;
+    uint64_t slot = i % 64;
+    uint64_t word = i / 64;
+    
+    gcObject()->mark[word] &= ~(((uint64_t)1) << slot);
+    gcObject()->block[word] |= (((uint64_t)1) << slot);
 }
 
 GCObject* HeapObject::gcObject() const {
-	return (GCObject*)((uint64_t)this & ~(Heap::regionSize-1));
+    return (GCObject*)((uint64_t)this & ~(REGION_SIZE-1));
 }
 
 uint64_t NumberOfSetBits(uint64_t i)
@@ -38,21 +65,21 @@ uint64_t type_count[17];
 
 static void traverse(Value const& v) {
     //type_count[v.type()]++;
-	switch(v.type()) {
+    switch(v.type()) {
         case Type::Nil:
             // do nothing
             break;
-		case Type::Environment:
-			VISIT(((REnvironment const&)v).attributes());
-			VISIT(((REnvironment const&)v).environment());
-			break;
-		case Type::Closure:
-			VISIT(((Closure const&)v).attributes());
-			VISIT((Closure::Inner const*)v.p);
-			VISIT(((Closure const&)v).prototype());
-			VISIT(((Closure const&)v).environment());
+        case Type::Environment:
+            VISIT(((REnvironment const&)v).attributes());
+            VISIT(((REnvironment const&)v).environment());
+            break;
+        case Type::Closure:
+            VISIT(((Closure const&)v).attributes());
+            VISIT((Closure::Inner const*)v.p);
+            VISIT(((Closure const&)v).prototype());
+            VISIT(((Closure const&)v).environment());
             //bytes += 16;
-			break;
+            break;
         case Type::Externalptr:
             VISIT((Externalptr::Inner const*)v.p);
             traverse(((Externalptr const&)v).tag());
@@ -62,24 +89,24 @@ static void traverse(Value const& v) {
         case Type::Null:
             // do nothing
             break;
-		case Type::Double:
-			VISIT(((Double const&)v).attributes());
-			VISIT(((Double const&)v).inner());
+        case Type::Double:
+            VISIT(((Double const&)v).attributes());
+            VISIT(((Double const&)v).inner());
             //bytes += 8*((Double const&)v).length();
-			break;
-		case Type::Integer:
-			VISIT(((Integer const&)v).attributes());
-			VISIT(((Integer const&)v).inner());
+            break;
+        case Type::Integer:
+            VISIT(((Integer const&)v).attributes());
+            VISIT(((Integer const&)v).inner());
             //bytes += 8*((Integer const&)v).length();
-			break;
-		case Type::Logical:
-			VISIT(((Logical const&)v).attributes());
-			VISIT(((Logical const&)v).inner());
+            break;
+        case Type::Logical:
+            VISIT(((Logical const&)v).attributes());
+            VISIT(((Logical const&)v).inner());
             //bytes += 1*((Logical const&)v).length();
-			break;
-		case Type::Character:
-			VISIT(((Character const&)v).attributes());
-			VISIT(((Character const&)v).inner());
+            break;
+        case Type::Character:
+            VISIT(((Character const&)v).attributes());
+            VISIT(((Character const&)v).inner());
             {
                 if(v.packed() > 1) {
                     auto p = (VectorImpl<Type::Character, String, false>::Inner const*)v.p;
@@ -93,35 +120,35 @@ static void traverse(Value const& v) {
                 }
                 //bytes += 8*((Character const&)v).length();
             }
-			break;
-		case Type::Raw:
-			VISIT(((Raw const&)v).attributes());
-			VISIT(((Raw const&)v).inner());
+            break;
+        case Type::Raw:
+            VISIT(((Raw const&)v).attributes());
+            VISIT(((Raw const&)v).inner());
             //bytes += 1*((Raw const&)v).length();
-			break;
-		case Type::List:
-			VISIT(((List const&)v).attributes());
-			VISIT(((List const&)v).inner());
-			{
-				List const& l = (List const&)v;
-				for(int64_t i = 0; i < l.length(); i++)
-					traverse(l[i]);
+            break;
+        case Type::List:
+            VISIT(((List const&)v).attributes());
+            VISIT(((List const&)v).inner());
+            {
+                List const& l = (List const&)v;
+                for(int64_t i = 0; i < l.length(); i++)
+                    traverse(l[i]);
             //bytes += 16*((List const&)v).length();
-			}
-			break;
-		case Type::Promise:
-			VISIT(((Promise&)v).environment());
-			if(((Promise&)v).isExpression())
-				VISIT(((Promise&)v).code());
-			break;
-		case Type::Integer32:
-			VISIT(((Integer32 const&)v).attributes());
-			VISIT(((Integer32 const&)v).inner());
-			break;
-		case Type::Logical32:
-			VISIT(((Logical32 const&)v).attributes());
-			VISIT(((Logical32 const&)v).inner());
-			break;
+            }
+            break;
+        case Type::Promise:
+            VISIT(((Promise&)v).environment());
+            if(((Promise&)v).isExpression())
+                VISIT(((Promise&)v).code());
+            break;
+        case Type::Integer32:
+            VISIT(((Integer32 const&)v).attributes());
+            VISIT(((Integer32 const&)v).inner());
+            break;
+        case Type::Logical32:
+            VISIT(((Logical32 const&)v).attributes());
+            VISIT(((Logical32 const&)v).inner());
+            break;
         case Type::ScalarString:
             VISIT(((ScalarString const&)v).s);
             //bytes += strlen(((ScalarString const&)v).s->s);
@@ -133,29 +160,29 @@ static void traverse(Value const& v) {
             VISIT(((Pairlist const&)v).tag());
             //bytes += 24;
             break;
-		default:
+        default:
             printf("Unimplemented type: %d\n", v.type()); 
-			// do nothing
-			break;
-	}
+            // do nothing
+            break;
+    }
 }
 
 uint64_t dictionary_count;
 
 void Dictionary::visit() const {
     //dictionary_count++;
-	HeapObject::visit();
-	VISIT(d);
-	for(uint64_t i = 0; i < size; i++) {
+    HeapObject::visit();
+    VISIT(d);
+    for(uint64_t i = 0; i < size; i++) {
         VISIT(d->d[i].n);
-		if(d->d[i].n != Strings::NA)
-			traverse(d->d[i].v);
-	}
+        if(d->d[i].n != Strings::NA)
+            traverse(d->d[i].v);
+    }
     //bytes += 24*size+48;
 }
 
 void Environment::visit() const {
-	Dictionary::visit();
+    Dictionary::visit();
     VISIT(enclosure);
     VISIT(attributes);
     //bytes += 16;
@@ -165,49 +192,49 @@ uint64_t code_count;
 
 void Code::visit() const {
     //code_count++;
-	HeapObject::visit();
-	traverse(expression);
-	
-    for(uint64_t i = 0; i < constants.size(); i++) {
-		traverse(constants[i]);
-	}
-	for(uint64_t i = 0; i < calls.size(); i++) {
-		traverse(calls[i].call);
-        traverse(calls[i].arguments);
-        traverse(calls[i].names);
-        traverse(calls[i].extraArgs);
-        traverse(calls[i].extraNames);
-	}
+    HeapObject::visit();
+    traverse(expression);
+    traverse(bc);
+    traverse(constants);
+    traverse(calls);
     //bytes += 8*bc.size() + 16*constants.size() + 88*calls.size() + 3;
-}
-
-void Code::Finalize(HeapObject* o) {
-    Code* code = (Code*)o;
-    code->bc.~vector<Instruction>();
-    code->constants.~vector<Value>();
-    code->calls.~vector<CompiledCall>();
 }
 
 uint64_t prototype_count;
 
 void Prototype::visit() const {
     //prototype_count++;
-	HeapObject::visit();
-	VISIT(code);
-	VISIT(string);
+    HeapObject::visit();
+    VISIT(code);
+    VISIT(string);
 
     traverse(formals);
-	traverse(parameters);
+    traverse(parameters);
     traverse(defaults);
 
     //bytes += 72;
 }
 
 void SEXPREC::visit() const {
-	HeapObject::visit();
+    HeapObject::visit();
     traverse(v);
 
     //bytes += 16;
+}
+
+
+Heap::Heap() : heapSize(1<<20), total(0)
+{
+    makeArenas((1<<20)/REGION_SIZE);
+    bump = arenas[0]->data;
+    limit = arenas[0]->data;
+}
+
+HeapObject* Heap::addFinalizer(HeapObject* h, GCFinalizer f)
+{
+    if(h && f)
+        finalizers.push_back(std::make_pair(h, f));
+    return h;
 }
 
 void Heap::mark(Global& global) {
@@ -219,53 +246,53 @@ void Heap::mark(Global& global) {
     prototype_count = 0;*/
     //bytes = 0;
 
-	// traverse root set
-	// mark the region that I'm currently allocating into
+    // traverse root set
+    // mark the region that I'm currently allocating into
     ((HeapObject*)bump)->visit();
-	
-	//printf("--global--\n");
-	VISIT(global.empty);
+    
+    //printf("--global--\n");
+    VISIT(global.empty);
     VISIT(global.global);
     VISIT(global.promiseCode);
-	
+    
     traverse(global.arguments);
 
     VISIT(global.symbolDict);
     VISIT(global.callDict);
     VISIT(global.exprDict);
 
-	for(std::list<State*>::iterator t = global.states.begin();
+    for(std::list<State*>::iterator t = global.states.begin();
             t != global.states.end(); ++t) {
-		State* state = *t;
+        State* state = *t;
 
-		//printf("--stack--\n");
-		for(uint64_t i = 0; i < state->stack.size(); i++) {
-			VISIT(state->stack[i].code);
-			VISIT(state->stack[i].environment);
-		}
-		//printf("--frame--\n");
-		VISIT(state->frame.code);
-		VISIT(state->frame.environment);
+        //printf("--stack--\n");
+        for(uint64_t i = 0; i < state->stack.size(); i++) {
+            VISIT(state->stack[i].code);
+            VISIT(state->stack[i].environment);
+        }
+        //printf("--frame--\n");
+        VISIT(state->frame.code);
+        VISIT(state->frame.environment);
 
-		//printf("--trace--\n");
-		// traces only hold weak references...
+        //printf("--trace--\n");
+        // traces only hold weak references...
 
-		//printf("--registers--\n");
-		for(Value const* r = state->registers; r < state->frame.registers+state->frame.code->registers; ++r) {
-			traverse(*r);
-		}
+        //printf("--registers--\n");
+        for(Value const* r = state->registers; r < state->frame.registers+state->frame.code->registers; ++r) {
+            traverse(*r);
+        }
 
-		//printf("--gc stack--\n");
-		for(uint64_t i = 0; i < state->gcStack.size(); i++) {
-			traverse(state->gcStack[i]);
-		}
-	}
-	
-    // R API support	
+        //printf("--gc stack--\n");
+        for(uint64_t i = 0; i < state->gcStack.size(); i++) {
+            traverse(state->gcStack[i]);
+        }
+    }
+    
+    // R API support    
     for(std::list<SEXP>::iterator i = global.installedSEXPs.begin(); 
             i != global.installedSEXPs.end(); ++i) {
-	    VISIT(*i);
-	}
+        VISIT(*i);
+    }
 
     if(global.apiStack) {
         for(int i = 0; i < *global.apiStack->size; ++i) {
@@ -282,64 +309,264 @@ void Heap::mark(Global& global) {
 }
 
 
-void Heap::sweep(Global& global) {
+void Heap::sweep(Global& global)
+{
 
     // sweep heap
-	//uint64_t old_total = total, bytes = 0;
-	total = 0;
-	GCObject** g = &root;
-	while(*g != 0) {
-		GCObject* h = *g;
-		if(!h->marked()) {
-		//	//printf("Deleting %llx\n", h);
-			*g = h->next;
-            if(h->finalizer != 0) {
-                h->finalizer((HeapObject*)h->data);
+    uint64_t old_total = total, bytes = 0;
+    total = 0;
+
+    // Should really be kept per arena for cache locality
+    for(auto i = finalizers.begin(); i != finalizers.end();)
+    {
+        if(!i->first->marked())
+        {
+            i->second(i->first);
+            i = finalizers.erase(i);
+        }
+        else
+        {
+            ++i;
+        }
+    }
+
+    for(auto b : arenas)
+    {
+        b->sweep();
+        if(b->marked())
+            total += REGION_SIZE;
+    }
+
+    uint64_t bigtotal = 0;
+    for(auto i = blocks.begin(); i != blocks.end();)
+    {
+        auto b = *i;
+
+        b->sweep();
+        if(!b->marked())
+        {
+            free(b);
+
+            i = blocks.erase(i);
+        }
+        else
+        {
+            bigtotal += REGION_SIZE;
+            ++i;
+        }
+    }
+
+    bump = arenas[0]->data;
+    limit = arenas[0]->data;
+    arenaIndex = 0;
+
+    total += bigtotal;
+
+    //printf("Swept: %d   =>    %d + %d\n", old_total, total-bigtotal, bigtotal);
+}
+
+HeapObject* Heap::alloc(uint64_t bytes)
+{
+	bytes += sizeof(GCObject);
+	total += bytes;
+
+    char* head;
+    posix_memalign((void**)&head, REGION_SIZE, bytes);
+	memset(head, 0xab, bytes);
+	GCObject* g = (GCObject*)head;
+	g->Init();
+    blocks.push_back(g);
+
+	HeapObject* o = (HeapObject*)(g->data);
+    o->block();
+    return o;
+}
+
+void Heap::makeArenas(uint64_t regions)
+{
+    char* head;
+    posix_memalign((void**)&head, REGION_SIZE, regions*REGION_SIZE);
+    for(uint64_t i = 0; i < regions; i++) {
+        GCObject* r = (GCObject*)head;
+        r->Init();
+        r->mark[0] |= ((uint64_t)1) << ((r->data-(char*)r)/CELL_SIZE);
+        assert(((uint64_t)r & (REGION_SIZE-1)) == 0);
+        arenas.push_back(r);
+        head += REGION_SIZE;
+    }
+}
+
+bool find(GCObject* g, uint64_t cells, uint64_t& start, uint64_t& size)
+{
+    if(start/64 >= GCObject::WORDS)
+        return false;
+
+    // on entry, start should be pointing to a block boundary
+    assert( (g->block[start/64] & (1ull << (start%64))) ^
+            (g->mark[start/64] & (1ull << (start%64))) );
+
+    bool free = !(g->block[start/64] & (1ull << (start%64)));
+    // i always points after the start of the next block
+    uint64_t i = start+1;
+
+    for(uint64_t word = i/64; word < GCObject::WORDS; ++word)
+    {
+        // While still in this word, advance the search.
+        while(i/64 == word)
+        {
+            // If free, we're looking for the next block flag.
+            if(free)
+            {
+                uint64_t b = g->block[word] >> (i%64);
+                uint64_t p = ffsll(b);
+
+                if(p) {
+                    // clear mark flags to coalesce free blocks
+                    g->mark[word] &= ~(((1ull << ((i%64)+(p-1)))-1) ^ ((1ull << (i%64))-1));
+                    
+                    i += p;
+                    free = false;
+                    if(i-start-1 >= cells) {
+                        size = i-start-1;
+                        return true;
+                    }
+                }
+                else {
+                    // clear mark flags to coalesce free blocks
+                    g->mark[word] &= ~((~0) ^ ((1ull << i)-1));
+                    i = (i+64)&~63;
+                }
             }
+            // If used, we're looking for the next mark flag.
+            else
+            {
+                uint64_t b = g->mark[word] >> (i%64);
+                uint64_t p = ffsll(b);
 
-			if(h->size == regionSize) {
-				//printf("Freeing region %llx--%llx\n", h, h+h->size);
-				//memset(h->data, 0xff, h->size);
-				freeRegions.push_front(h);
-			}
-			else {
-				//memset(h->data, 0xff, h->size);
-				free(h->head);
-			}
-		} else {
-            //bytes += 64*NumberOfSetBits(h->flags);
-			total += h->size;
-			h->unmark();
-			g = &(h->next);
-		}
-	}
-	//printf("Swept: \t%d => \t %d      (%d)\n", old_total, total, bytes);
+                if(p) {
+                    i += p;
+                    start = (i-1);
+                    free = true;
+                }
+                else {
+                    i = (i+64)&~63;
+                }
+            }
+        }
+    }
+
+    size = i-start;
+    return free && size >= cells;
+}
+bool find2(GCObject* g, uint64_t cells, uint64_t& start, uint64_t& size)
+{
+uint64_t i = start;
+bool free = true;
+        for(uint64_t word = i/64; word < GCObject::WORDS; ++word)
+        {
+            for(uint64_t slot = i%64; slot < 64; ++slot, ++i)
+            {
+                uint64_t b = g->block[word] & (((uint64_t)1) << slot);
+                uint64_t m = g->mark[word] & (((uint64_t)1) << slot);
+            
+                if(b && !m) {
+                    if(free && size >= cells) return true;
+                    free = false;
+                }
+                else if(!b && m && !free) { free = true; start = i; size = 1; }
+                else if(!b && m && free) {
+                    //g->mark[word] &= ~(((uint64_t)1) << slot);
+                    size++;
+                }
+                else {
+                    size++;
+                }
+            }
+        }
+
+        return free && size >= cells;
 }
 
-void Heap::makeRegions(uint64_t regions) {
-	char* head = (char*)malloc((regions+1)*regionSize);
-	for(uint64_t i = 0; i < regions; i++) {
-	    GCObject* r = ((HeapObject*)(head+regionSize-1))->gcObject();
-		r->Init(head, regionSize);
-		assert(((uint64_t)r & (regionSize-1)) == 0);
-		freeRegions.push_back(r);
-		head += regionSize;
-	}
-}
+void Heap::popRegion(uint64_t bytes)
+{
+    // find the next range at least bytes large
+    uint64_t cells = (bytes+(CELL_SIZE-1))/CELL_SIZE;
 
-void Heap::popRegion() {
-	//printf("Making new region: %d\n", freeRegions.size());
-	if(freeRegions.empty())
-		makeRegions(256);
+    GCObject* g = arenas[arenaIndex];
+    
+    // mark the remaining space free
+    if(bump < limit)
+    {
+        uint64_t i = (bump-(char*)g)/CELL_SIZE;
+        g->mark[i/64] |= 1ull << (i%64);
+    }
 
-	GCObject* g = freeRegions.front();
-	freeRegions.pop_front();
-	//printf("Popping %llx--%llx\n", g, g+g->size);
-	total += g->size;
-	root = g->Activate(root, 0);
+    // try to do something useful in the current arenaIndex
+    uint64_t start = (limit-(char*)g)/CELL_SIZE, size = 0;
+    //uint64_t start2 = (limit-(char*)g)/CELL_SIZE, size2 = 0;
 
-	bump = (char*)(g->data);
-	limit = ((char*)g) + regionSize;
+    bool a = find(g, cells, start, size);
+    //bool b = find2(g, cells, start2, size2);
+
+    /*if(a!=b || (a && b && (start != start2 || size != size2)))
+    {
+        printf("%d: looking for %d @ %d >> \n", arenaIndex, cells, (limit-(char*)g)/CELL_SIZE);
+        printf("(%d %d %d)   (%d %d %d)\n", a, start, size, b, start2, size2);
+        std::cout << std::bitset<64>(g->block[0]) << " " << std::bitset<64>(g->block[1]) << std::endl;
+        std::cout << std::bitset<64>(g->mark[0]) << " " << std::bitset<64>(g->mark[1]) << std::endl;
+        std::cout << std::endl;
+    }*/
+
+    if(a)
+    {
+        bump = (char*)(g) + start*CELL_SIZE;
+        limit = (char*)(g) + (start+size)*CELL_SIZE;
+        return;
+    }
+
+    while(true)
+    {
+        arenaIndex++;
+        
+        if(arenaIndex >= arenas.size()) {
+            makeArenas((1<<20)/REGION_SIZE);
+        }
+
+        GCObject* g = arenas[arenaIndex];
+        
+        if(!g->marked())
+        {
+            memset(&g->mark, 0, GCObject::WORDS*8);
+            memset(&g->block, 0, GCObject::WORDS*8);
+            g->mark[0] |= ((uint64_t)1) << ((g->data-(char*)g)/CELL_SIZE);
+            bump = (char*)(g->data);
+            limit = ((char*)g) + REGION_SIZE;
+            total += REGION_SIZE;
+            return;
+        }
+
+        uint64_t start = (g->data-(char*)g)/CELL_SIZE, size = 0;
+        //uint64_t start2 = (g->data-(char*)g)/CELL_SIZE, size2 = 0;
+
+    bool a = find(g, cells, start, size);
+    //bool b = find2(g, cells, start2, size2);
+
+    /*if(a!=b || (a && b && (start != start2 || size != size2)))
+    {
+        printf("%d: looking for %d @ %d >> \n", arenaIndex, cells, (limit-(char*)g)/CELL_SIZE);
+        printf("(%d %d %d)   (%d %d %d)\n", a, start, size, b, start2, size2);
+        std::cout << std::bitset<64>(g->block[0]) << " " << std::bitset<64>(g->block[1]) << std::endl;
+        std::cout << std::bitset<64>(g->mark[0]) << " " << std::bitset<64>(g->mark[1]) << std::endl;
+        std::cout << std::endl;
+    }*/
+
+        if(a)
+        {
+            bump = (char*)(g) + start*CELL_SIZE;
+            limit = (char*)(g) + (start+size)*CELL_SIZE;
+            return;
+        }
+    }
 }
 
 Heap Heap::GlobalHeap;

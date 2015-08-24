@@ -31,6 +31,8 @@ private:
 	};
 
 	std::map<Value, int64_t, ValueComp> constants;
+    std::vector<Value> constantList;
+    std::vector<Value> compiledCalls;
 
 	enum Loc {
 		INVALID,
@@ -69,8 +71,8 @@ private:
 	
 	Operand compile(Value const& expr, Code* code);
 
-	Operand compileConstant(Value expr, Code* code);
-	Operand compileSymbol(Value const& symbol, Code* code, bool isClosure); 
+	Operand compileConstant(Value expr);
+	Operand compileSymbol(Value const& symbol, bool isClosure); 
 	Operand compileCall(List const& call, Character const& names, Code* code); 
 	Operand compileFunctionCall(Operand function, List const& call, Character const& names, Code* code); 
 	Operand compileExpression(List const& values, Code* code);
@@ -135,7 +137,7 @@ private:
             }
             else {
                 return compiler.compileFunctionCall(
-                    compiler.compileSymbol(call[0], code, true),
+                    compiler.compileSymbol(call[0], true),
                     call, Character(0), code); 
             }
         }

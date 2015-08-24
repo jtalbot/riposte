@@ -1022,7 +1022,7 @@ List MapR(State& state, Closure const& func, List args, Character result) {
 
         for(int64_t i = 0; i < length; ++i) {
             for(int64_t k = 0; k < s.size(); ++k) {
-                p->calls[0].arguments[k] = (*s[k])(i);
+                static_cast<CompiledCall&>(p->calls[0]).arguments()[k] = (*s[k])(i);
             }
             List r = As<List>(state.eval(p));
             for(int64_t k = 0; k < u.size(); ++k) {
@@ -1094,7 +1094,7 @@ List MapI(State& state, Closure const& func, List args) {
 
         for(int64_t i = 0; i < length; ++i) {
             for(int64_t k = 0; k < s.size(); ++k) {
-                p->calls[0].arguments[k] = (*s[k])(i);
+                static_cast<CompiledCall&>(p->calls[0]).arguments()[k] = (*s[k])(i);
             }
             result[i] = state.eval(p);
         }

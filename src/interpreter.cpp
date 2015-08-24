@@ -252,9 +252,11 @@ Global::Global(uint64_t states, int64_t argc, char** argv)
         arguments[i] = MakeString(std::string(argv[i]));
     }
 
-    promiseCode = new (Code::Finalize) Code();
-    promiseCode->bc.push_back(Instruction(ByteCode::force, 2, 0, 2));
-    promiseCode->bc.push_back(Instruction(ByteCode::done, 2, 0, 0));
+    promiseCode = new Code();
+    Integer bc(2);
+    bc[0] = Instruction(ByteCode::force, 2, 0, 2).i;
+    bc[1] = Instruction(ByteCode::done, 2, 0, 0).i;
+    promiseCode->bc = bc;
     promiseCode->registers = 3;
     promiseCode->expression = Value::Nil();
 
@@ -266,17 +268,18 @@ Global::Global(uint64_t states, int64_t argc, char** argv)
 void Code::printByteCode(Global const& global) const {
     std::cout << "Code: " << intToHexStr((int64_t)this) << std::endl;
     std::cout << "\tRegisters: " << registers << std::endl;
-    if(constants.size() > 0) {
+    if(constants.length() > 0) {
         std::cout << "\tConstants: " << std::endl;
-        for(int64_t i = 0; i < (int64_t)constants.size(); i++)
+        for(int64_t i = 0; i < (int64_t)constants.length(); i++)
             std::cout << "\t\t" << i << ":\t" << global.stringify(constants[i]) << std::endl;
     }
-    if(bc.size() > 0) {
+    if(bc.length() > 0) {
         std::cout << "\tCode: " << std::endl;
-        for(int64_t i = 0; i < (int64_t)bc.size(); i++) {
-            std::cout << std::hex << &bc[i] << std::dec << "\t" << i << ":\t" << bc[i].toString();
-            if(bc[i].bc == ByteCode::call) {
-                std::cout << "\t\t(arguments: " << calls[bc[i].b].arguments.length() << ")";
+        for(int64_t i = 0; i < (int64_t)bc.length(); i++) {
+            Instruction inst(bc[i]);
+            std::cout << std::hex << &inst << std::dec << "\t" << i << ":\t" << inst.toString();
+            if(inst.bc == ByteCode::call) {
+                std::cout << "\t\t(arguments: " << static_cast<CompiledCall const&>(calls[inst.b]).arguments().length() << ")";
             }
             std::cout << std::endl;
         }

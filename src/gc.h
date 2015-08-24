@@ -6,127 +6,112 @@
 #include "common.h"
 #include <assert.h>
 
+const uint64_t CELL_SIZE = 32;
+const uint64_t REGION_SIZE = 4096;
+
 struct HeapObject;
 typedef void (*GCFinalizer)(HeapObject*);
 
-struct GCObject {
-    void* head;
-	uint64_t size;
-	
-    GCObject* next;
-    GCFinalizer finalizer;
-	
-    uint64_t flags;
-	uint64_t padding[3];
-	char data[];
+struct GCObject
+{
+    static const uint64_t WORDS = REGION_SIZE/CELL_SIZE/64;
 
-    void Init(void* h, uint64_t s) {
-        head = h;
-        size = s;
-        next = 0;
-        finalizer = 0;
-        flags = 0;
+    uint64_t mark[WORDS];
+    uint64_t block[WORDS];
+    char data[];
+
+    void Init() {
+        memset(&mark, 0, WORDS*8);
+        memset(&block, 0, WORDS*8);
     }
     
-	GCObject* Activate(GCObject* n, GCFinalizer f) {
-		next = n;
-        finalizer = f;
-		flags = 0;
-        return this;
-	}
+    bool marked() const {
+        for(uint64_t i = 0; i < WORDS; ++i)
+            if(block[i]) return true;
+        return false;
+    }
 
-	bool marked() const {
-		return flags != 0;
-	}
-
-	void unmark() {
-		flags = 0;
-	}
+    void sweep();
 };
 
 class Heap;
 
-struct HeapObject {
-	bool marked() const;
-	void visit() const;
-	uint64_t slot() const;
-	GCObject* gcObject() const;
+struct HeapObject
+{
+    bool marked() const;
+    void visit() const;
+    void block() const;
+    uint64_t word() const;
+    GCObject* gcObject() const;
 
-	void* operator new(unsigned long bytes, Heap& heap);
-	void* operator new(unsigned long bytes, unsigned long extra, Heap& heap);
-	void* operator new(unsigned long bytes, GCFinalizer finalizer, Heap& heap);
+    void* operator new(unsigned long bytes, Heap& heap);
+    void* operator new(unsigned long bytes, unsigned long extra, Heap& heap);
+    void* operator new(unsigned long bytes, GCFinalizer finalizer, Heap& heap);
 
-	void* operator new(unsigned long bytes);
-	void* operator new(unsigned long bytes, unsigned long extra);
-	void* operator new(unsigned long bytes, GCFinalizer finalizer);
+    void* operator new(unsigned long bytes);
+    void* operator new(unsigned long bytes, unsigned long extra);
+    void* operator new(unsigned long bytes, GCFinalizer finalizer);
 };
 
 class Global;
 
-class Heap {
+class Heap
+{
 private:
 
-	GCObject* root;
-	uint64_t heapSize;
-	uint64_t total;
+    uint64_t heapSize;
+    uint64_t total;
 
-	void mark(Global& global);
-	void sweep(Global& global);
-	
-	void makeRegions(uint64_t regions);
-	void popRegion();	
+    void mark(Global& global);
+    void sweep(Global& global);
+    
+    void makeArenas(uint64_t regions);
+    void popRegion(uint64_t bytes);    
 
-	std::deque<GCObject*> freeRegions;
-	char* bump, *limit;
+    std::deque<GCObject*> arenas;
+    std::deque<GCObject*> blocks;
+    std::deque< std::pair<HeapObject*, GCFinalizer> > finalizers;
+
+    char* bump, *limit;
+    uint64_t arenaIndex;
 
 public:
-	static const uint64_t regionSize = (1<<12);
-	
-    Heap() : root(0), heapSize(1<<20), total(0) {
-		popRegion();
-	}
+    Heap();
 
-	HeapObject* smallalloc(uint64_t bytes);
-	HeapObject* alloc(uint64_t bytes, GCFinalizer finalizer = 0);
-	
+    HeapObject* smallalloc(uint64_t bytes);
+    HeapObject* alloc(uint64_t bytes);
+
+    HeapObject* addFinalizer(HeapObject*, GCFinalizer);
+ 
     void collect(Global& global);
 
-	static Heap GlobalHeap;
-	static Heap ConstHeap;
+    static Heap GlobalHeap;
+    static Heap ConstHeap;
 };
 
-inline HeapObject* Heap::smallalloc(uint64_t bytes) {
-	// so the slot marking scheme works, objects have to take up
-    // at least page size/slot = 64 bytes
-    // this is actually only true for recursive objects so we could
-    // be a bit more aggressive about this
-    bytes = (bytes + 63) & (~63);
-	if(bump+bytes >= limit)
-		popRegion();
-	
-	//printf("Region: allocating %d at %llx\n", bytes, (uint64_t)bump);
-	HeapObject* o = (HeapObject*)bump;
-	assert(((uint64_t) o & 63) == 0);
-	memset(o, 0xba, bytes);
-	bump += bytes;
-	return o;
+inline HeapObject* Heap::smallalloc(uint64_t bytes)
+{
+    // Round up to a multiple of the cell size
+    bytes = (bytes + (CELL_SIZE-1)) & (~(CELL_SIZE-1));
+
+    if(bump+bytes > limit)
+        popRegion(bytes);
+    
+    assert(((uint64_t) bump & (CELL_SIZE-1)) == 0);
+    
+    HeapObject* o = (HeapObject*)bump;
+    o->block();
+    memset(o, 0xba, bytes);
+
+    bump += bytes;
+    return o;
 }
 
-inline HeapObject* Heap::alloc(uint64_t bytes, GCFinalizer finalizer) {
-	bytes += sizeof(GCObject);
-	
-	total += bytes+regionSize;
-	char* head = (char*)malloc(bytes+regionSize);
-	memset(head, 0xab, bytes+regionSize);
-	GCObject* g = ((HeapObject*)(head+regionSize-1))->gcObject();
-	g->Init(head, bytes+regionSize);
-    root = g->Activate(root, finalizer);
-
-	return (HeapObject*)(g->data);
-}
-
-inline void Heap::collect(Global& global) {
-    if(total > heapSize) {
+ALWAYS_INLINE
+void Heap::collect(Global& global)
+{
+    if(total > heapSize)
+    {
         mark(global);
         sweep(global);
         if(total > heapSize*0.6 && heapSize < (1<<30))
@@ -135,24 +120,32 @@ inline void Heap::collect(Global& global) {
 }
 
 
-inline void* HeapObject::operator new(unsigned long bytes, Heap& heap) {
-    assert(bytes <= 2048);
+ALWAYS_INLINE
+void* HeapObject::operator new(unsigned long bytes, Heap& heap)
+{
+    assert(bytes <= (REGION_SIZE/2));
     return heap.smallalloc(bytes);
 }
 
-inline void* HeapObject::operator new(unsigned long bytes, unsigned long extra, Heap& heap) {
+ALWAYS_INLINE
+void* HeapObject::operator new(unsigned long bytes, unsigned long extra, Heap& heap)
+{
     unsigned long total = bytes + extra;
-    return total <= 2048 ? 
+    return total <= (REGION_SIZE/2) ? 
         heap.smallalloc(total) : 
         heap.alloc(total);
 }
 
-inline void* HeapObject::operator new(unsigned long bytes, GCFinalizer finalizer, Heap& heap) {
-    return heap.alloc(bytes, finalizer);
+ALWAYS_INLINE
+void* HeapObject::operator new(unsigned long bytes, GCFinalizer finalizer, Heap& heap)
+{
+    assert(bytes <= (REGION_SIZE/2));
+    return heap.addFinalizer( heap.smallalloc(bytes), finalizer );
 }
 
 
-inline void* HeapObject::operator new(unsigned long bytes) {
+inline void* HeapObject::operator new(unsigned long bytes)
+{
     return HeapObject::operator new(bytes, Heap::GlobalHeap);
 }
 
@@ -160,8 +153,10 @@ inline void* HeapObject::operator new(unsigned long bytes, unsigned long extra) 
     return HeapObject::operator new(bytes, extra, Heap::GlobalHeap);
 }
 
-inline void* HeapObject::operator new(unsigned long bytes, GCFinalizer finalizer) {
+inline void* HeapObject::operator new(unsigned long bytes, GCFinalizer finalizer)
+{
     return HeapObject::operator new(bytes, finalizer, Heap::GlobalHeap);
 }
+
 #endif
 

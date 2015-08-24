@@ -55,7 +55,7 @@ Instruction const* buildStackFrame(State& state,
         s.registers[i] = Value::Nil();
     }
 
-	return &(code->bc[0]);
+	return (Instruction const*)&(code->bc[0]);
 }
 
 inline void assignArgument(State& state, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {
@@ -77,10 +77,10 @@ inline void assignDot(State& state, Value const& v, Environment* evalEnv, Value&
 }
 
 Value argument(int64_t index, List const* dots, CompiledCall const& call, Environment* env) {
-	if(index < call.dotIndex) {
-		return call.arguments[index];
+	if(index < call.dotIndex()) {
+		return call.arguments()[index];
 	} else {
-		index -= call.dotIndex;
+		index -= call.dotIndex();
         int64_t ndots = (dots && dots->isList()) ? dots->length() : 0;
 		if(index < ndots) {
 			// Promises in the dots can't be passed down 
@@ -98,48 +98,48 @@ Value argument(int64_t index, List const* dots, CompiledCall const& call, Enviro
 		}
 		else {
 			index -= ndots;
-			return call.arguments[call.dotIndex+index+1];
+			return call.arguments()[call.dotIndex()+index+1];
 		}
 	}
 }
 
 String name(int64_t index, List const* dots, 
                 Character const* dotnames, CompiledCall const& call) {
-	if(index < call.dotIndex) {
-		return index < call.names.length() 
-            ? call.names[index] 
+	if(index < call.dotIndex()) {
+		return index < call.names().length() 
+            ? call.names()[index] 
             : Strings::empty;
 	} else {
-		index -= call.dotIndex;
+		index -= call.dotIndex();
         int64_t ndots = (dots && dots->isList()) ? dots->length() : 0;
 		if(index < ndots) {
 		    return (dotnames && dotnames->isCharacter()) ? (*dotnames)[index] : Strings::empty;
 		}
 		else {
 			index -= ndots;
-			return call.dotIndex+index+1 < call.names.length()
-                ? call.names[call.dotIndex+index+1]
+			return call.dotIndex()+index+1 < call.names().length()
+                ? call.names()[call.dotIndex()+index+1]
                 : Strings::empty;
 		}
 	}
 }
 
 int64_t numArguments(List const* dots, CompiledCall const& call) {
-	if(call.dotIndex < (int64_t)call.arguments.length()) {
+	if(call.dotIndex() < (int64_t)call.arguments().length()) {
 		// subtract 1 to not count the dots
         int64_t ndots = (dots && dots->isList()) ? dots->length() : 0;
-		return call.arguments.length() - 1 + ndots;
+		return call.arguments().length() - 1 + ndots;
 	} else {
-		return call.arguments.length();
+		return call.arguments().length();
 	}
 }
 
 bool namedArguments(Character const* dotnames, CompiledCall const& call) {
-	if(call.dotIndex < (int64_t)call.arguments.length()) {
+	if(call.dotIndex() < (int64_t)call.arguments().length()) {
         bool dotsNamed = (dotnames && dotnames->isCharacter()) ? dotnames->length() : false;
-		return call.names.length()>0 || dotsNamed;
+		return call.names().length()>0 || dotsNamed;
 	} else {
-		return call.names.length()>0;
+		return call.names().length()>0;
 	}
 }
 
@@ -161,8 +161,8 @@ Environment* MatchArgs(State& state, Environment* env, Closure const& func, Comp
         func.environment());
 
     // set extra args (they must be named)
-    for(size_t i = 0; i < call.extraArgs.length(); ++i) {
-        assignArgument(state, env, fenv, call.extraNames[i], call.extraArgs[i]);
+    for(size_t i = 0; i < call.extraArgs().length(); ++i) {
+        assignArgument(state, env, fenv, call.extraNames()[i], call.extraArgs()[i]);
     }
 
 	// set defaults
@@ -194,7 +194,7 @@ Environment* MatchArgs(State& state, Environment* env, Closure const& func, Comp
             }
             else {
                 _error(std::string("Unused args in call: ")
-                        + state.global.deparse(call.call));
+                        + state.global.deparse(call.call()));
             }
         }
     }
@@ -309,13 +309,13 @@ Environment* MatchArgs(State& state, Environment* env, Closure const& func, Comp
             }
             else {
                 _error(std::string("Unused args in call: ")
-                        + state.global.deparse(call.call));
+                        + state.global.deparse(call.call()));
 	        }
         }
     }
 
     REnvironment::Init(fenv->insert(Strings::__parent__), env);
-    fenv->insert(Strings::__call__) = call.call;
+    fenv->insert(Strings::__call__) = call.call();
     fenv->insert(Strings::__function__) = func;
     fenv->insert(Strings::__nargs__) = Integer::c(numArgs);
 
@@ -328,19 +328,19 @@ Environment* FastMatchArgs(State& state, Environment* env, Closure const& func, 
     Prototype const* prototype = func.prototype();
 	Character const& parameters = prototype->parameters;
     List const& defaults = prototype->defaults;
-	List const& arguments = call.arguments;
+	List const& arguments = call.arguments();
 
 	int64_t const pDotIndex = prototype->dotIndex;
 	int64_t const end = std::min(arguments.length(), pDotIndex);
 
     Environment* fenv = new Environment(
-        (int64_t)call.arguments.length() + 5,
+        (int64_t)call.arguments().length() + 5,
         func.environment());
 
     // set extra args (they must be named)
-    for(size_t i = 0; i < call.extraArgs.length(); ++i) {
+    for(size_t i = 0; i < call.extraArgs().length(); ++i) {
         assignArgument(state, env, fenv, 
-            call.extraNames[i], call.extraArgs[i]);
+            call.extraNames()[i], call.extraArgs()[i]);
     }
 
 	// set parameters from arguments & defaults
@@ -365,12 +365,12 @@ Environment* FastMatchArgs(State& state, Environment* env, Closure const& func, 
         }
         else if(arguments.length() > end) {
             _error(std::string("Unused args in call: ")
-                    + state.global.deparse(call.call));
+                    + state.global.deparse(call.call()));
 	    }
     }
 
     REnvironment::Init(fenv->insert(Strings::__parent__), env);
-    fenv->insert(Strings::__call__) = call.call;
+    fenv->insert(Strings::__call__) = call.call();
     fenv->insert(Strings::__function__) = func;
     fenv->insert(Strings::__nargs__) = Integer::c(arguments.length());
     

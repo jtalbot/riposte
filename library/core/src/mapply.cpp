@@ -33,7 +33,7 @@ void mapplybody(void* args, void* header, uint64_t start, uint64_t end, State& s
 				Element2(e, i % ((Vector const&)e).length(), a);
 			else
 				a = e;
-			p->calls[0].arguments[j] = a;
+			static_cast<CompiledCall&>(p->calls[0]).arguments()[j] = a;
 		}
 		l.out[i] = state.eval(p);
 	}
