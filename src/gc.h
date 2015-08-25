@@ -7,7 +7,8 @@
 #include <assert.h>
 
 const uint64_t CELL_SIZE = 32;
-const uint64_t REGION_SIZE = 4096;
+const uint64_t REGION_SIZE = 65536;
+const uint64_t CELL_COUNT = REGION_SIZE/CELL_SIZE;
 
 struct HeapObject;
 typedef void (*GCFinalizer)(HeapObject*);
@@ -93,7 +94,6 @@ inline HeapObject* Heap::smallalloc(uint64_t bytes)
 {
     // Round up to a multiple of the cell size
     bytes = (bytes + (CELL_SIZE-1)) & (~(CELL_SIZE-1));
-
     if(bump+bytes > limit)
         popRegion(bytes);
     

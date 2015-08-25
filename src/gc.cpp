@@ -362,7 +362,7 @@ void Heap::sweep(Global& global)
 
     total += bigtotal;
 
-    //printf("Swept: %d   =>    %d + %d\n", old_total, total-bigtotal, bigtotal);
+    printf("Swept: %d   =>    %d + %d\n", old_total, total-bigtotal, bigtotal);
 }
 
 HeapObject* Heap::alloc(uint64_t bytes)
@@ -396,6 +396,70 @@ void Heap::makeArenas(uint64_t regions)
     }
 }
 
+bool next(GCObject* g, uint64_t& start, uint64_t& end)
+{
+    // Advance start until we're at a free block.
+    uint64_t s = start;
+
+    if(s >= CELL_COUNT)
+        return false;
+
+    if(g->mark[s/64] >> (s%64))
+    {
+        s += ffsll(g->mark[s/64] >> (s%64))-1;
+    }
+    else
+    {
+        s = (s+64)&~63;
+        while(s < CELL_COUNT && !g->mark[s/64])
+            s += 64;
+        if(s < CELL_COUNT)
+            s += ffsll(g->mark[s/64])-1;
+    }
+
+    // Post-condition: s should be at a free block or past the end
+    assert(s == CELL_COUNT || ((g->mark[s/64] >> (s%64)) & 1));
+
+    // Coalesce free blocks (clearing mark flags) up to the next non-free block.
+    uint64_t e = s;
+    
+    if(e >= CELL_COUNT)
+        return false;
+
+    if(g->block[e/64] >> (e%64))
+    {
+        e += ffsll(g->block[e/64] >> (e%64))-1;
+        // TODO: can this be any simpler while avoiding undef shift behavior?
+        g->mark[e/64] &=  ((1ull << s%64)-1) |
+                          ((1ull << s%64)  ) |
+                         ~((1ull << e%64)-1);
+    }
+    else
+    {
+        // TODO: can this be any simpler while avoiding undef shift behavior?
+        g->mark[s/64] &= ((1ull << s%64)-1) |
+                         ((1ull << s%64)  );
+        e = (e+64)&~63;
+        while(e < CELL_COUNT && !g->block[e/64])
+        {
+            g->mark[e/64] = 0;
+            e += 64;
+        }
+        if(e < CELL_COUNT)
+        {
+            e += ffsll(g->block[e/64])-1;
+            g->mark[e/64] &= ~((1ull << e%64)-1); 
+        }
+    }
+
+    // Post-condition: e should be at a non-free block or past the end
+    assert(e == CELL_COUNT || ((g->block[e/64] >> (e%64)) & 1));
+
+    start = s;
+    end = e;
+    return true;
+}
+
 bool find(GCObject* g, uint64_t cells, uint64_t& start, uint64_t& size)
 {
     if(start/64 >= GCObject::WORDS)
@@ -422,7 +486,7 @@ bool find(GCObject* g, uint64_t cells, uint64_t& start, uint64_t& size)
 
                 if(p) {
                     // clear mark flags to coalesce free blocks
-                    g->mark[word] &= ~(((1ull << ((i%64)+(p-1)))-1) ^ ((1ull << (i%64))-1));
+    //                g->mark[word] &= ~(((1ull << ((i%64)+(p-1)))-1) ^ ((1ull << (i%64))-1));
                     
                     i += p;
                     free = false;
@@ -433,7 +497,7 @@ bool find(GCObject* g, uint64_t cells, uint64_t& start, uint64_t& size)
                 }
                 else {
                     // clear mark flags to coalesce free blocks
-                    g->mark[word] &= ~((~0) ^ ((1ull << i)-1));
+      //              g->mark[word] &= ~((~0) ^ ((1ull << i)-1));
                     i = (i+64)&~63;
                 }
             }
@@ -458,6 +522,7 @@ bool find(GCObject* g, uint64_t cells, uint64_t& start, uint64_t& size)
     size = i-start;
     return free && size >= cells;
 }
+
 bool find2(GCObject* g, uint64_t cells, uint64_t& start, uint64_t& size)
 {
 uint64_t i = start;
@@ -487,6 +552,20 @@ bool free = true;
         return free && size >= cells;
 }
 
+bool find3(GCObject* g, uint64_t cells, uint64_t& start, uint64_t& size)
+{
+    uint64_t end = 0;
+    while(next(g, start, end))
+    {
+        size = end-start;
+        if(size >= cells)
+            return true;
+        start  = end;
+    }
+
+    return false;
+}
+
 void Heap::popRegion(uint64_t bytes)
 {
     // find the next range at least bytes large
@@ -505,12 +584,18 @@ void Heap::popRegion(uint64_t bytes)
     uint64_t start = (limit-(char*)g)/CELL_SIZE, size = 0;
     //uint64_t start2 = (limit-(char*)g)/CELL_SIZE, size2 = 0;
 
-    bool a = find(g, cells, start, size);
-    //bool b = find2(g, cells, start2, size2);
+    //uint64_t b0 = g->block[0], b1 = g->block[1];
+    //uint64_t m0 = g->mark[0], m1 = g->mark[1];
+
+    //bool a = find(g, cells, start, size);
+    //bool b = find3(g, cells, start2, size2);
+    bool a = find3(g, cells, start, size);
 
     /*if(a!=b || (a && b && (start != start2 || size != size2)))
     {
         printf("%d: looking for %d @ %d >> \n", arenaIndex, cells, (limit-(char*)g)/CELL_SIZE);
+        std::cout << std::bitset<64>(b0) << " " << std::bitset<64>(b1) << std::endl;
+        std::cout << std::bitset<64>(m0) << " " << std::bitset<64>(m1) << std::endl;
         printf("(%d %d %d)   (%d %d %d)\n", a, start, size, b, start2, size2);
         std::cout << std::bitset<64>(g->block[0]) << " " << std::bitset<64>(g->block[1]) << std::endl;
         std::cout << std::bitset<64>(g->mark[0]) << " " << std::bitset<64>(g->mark[1]) << std::endl;
@@ -548,12 +633,18 @@ void Heap::popRegion(uint64_t bytes)
         uint64_t start = (g->data-(char*)g)/CELL_SIZE, size = 0;
         //uint64_t start2 = (g->data-(char*)g)/CELL_SIZE, size2 = 0;
 
-    bool a = find(g, cells, start, size);
-    //bool b = find2(g, cells, start2, size2);
+    //uint64_t b0 = g->block[0], b1 = g->block[1];
+    //uint64_t m0 = g->mark[0], m1 = g->mark[1];
+
+    //bool a = find(g, cells, start, size);
+    //bool b = find3(g, cells, start2, size2);
+    bool a = find3(g, cells, start, size);
 
     /*if(a!=b || (a && b && (start != start2 || size != size2)))
     {
-        printf("%d: looking for %d @ %d >> \n", arenaIndex, cells, (limit-(char*)g)/CELL_SIZE);
+        printf("%d: looking for %d @ %d >> \n", arenaIndex, cells, (g->data-(char*)g)/CELL_SIZE);
+        std::cout << std::bitset<64>(b0) << " " << std::bitset<64>(b1) << std::endl;
+        std::cout << std::bitset<64>(m0) << " " << std::bitset<64>(m1) << std::endl;
         printf("(%d %d %d)   (%d %d %d)\n", a, start, size, b, start2, size2);
         std::cout << std::bitset<64>(g->block[0]) << " " << std::bitset<64>(g->block[1]) << std::endl;
         std::cout << std::bitset<64>(g->mark[0]) << " " << std::bitset<64>(g->mark[1]) << std::endl;
