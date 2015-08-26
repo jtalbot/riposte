@@ -3,6 +3,8 @@
 #define RIPOSTE_GC_H
 
 #include <deque>
+#include <map>
+
 #include "common.h"
 #include <assert.h>
 
@@ -54,6 +56,21 @@ struct HeapObject
     void* operator new(unsigned long bytes, GCFinalizer finalizer);
 };
 
+struct Arena
+{
+    Arena(GCObject* ptr) : ptr(ptr) {}
+
+    GCObject* ptr;
+};
+
+struct LargeArena : Arena
+{
+    LargeArena(GCObject* ptr, uint64_t bytes)
+        : Arena(ptr), bytes(bytes) {}
+
+    uint64_t bytes;
+};
+
 class Global;
 
 class Heap
@@ -69,15 +86,21 @@ private:
     void makeArenas(uint64_t regions);
     void popRegion(uint64_t bytes);    
 
-    std::deque<GCObject*> arenas;
-    std::deque<GCObject*> blocks;
+    std::deque<Arena>      arenas;
+    std::deque<LargeArena> larges;
     std::deque< std::pair<HeapObject*, GCFinalizer> > finalizers;
 
+    std::multimap<uint64_t, char*> freeBlocks;
+
     char* bump, *limit;
-    uint64_t arenaIndex;
+    uint64_t arenaIndex, arenaOffset;
+
+    uint64_t sweeps;
+    
 
 public:
     Heap();
+    ~Heap();
 
     HeapObject* smallalloc(uint64_t bytes);
     HeapObject* alloc(uint64_t bytes);
@@ -114,7 +137,7 @@ void Heap::collect(Global& global)
     {
         mark(global);
         sweep(global);
-        if(total > heapSize*0.6 && heapSize < (1<<30))
+        if(total > heapSize*0.75 && heapSize < (1<<30))
             heapSize *= 2;
     }
 }

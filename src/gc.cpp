@@ -223,11 +223,17 @@ void SEXPREC::visit() const {
 }
 
 
-Heap::Heap() : heapSize(1<<20), total(0)
+Heap::Heap() : heapSize(1<<20), total(0), sweeps(0)
 {
     makeArenas((1<<20)/REGION_SIZE);
-    bump = arenas[0]->data;
-    limit = arenas[0]->data;
+    bump = arenas[0].ptr->data;
+    limit = arenas[0].ptr->data;
+    arenaIndex = 0;
+    arenaOffset = (arenas[0].ptr->data-(char*)arenas[0].ptr)/CELL_SIZE;
+}
+
+Heap::~Heap() {
+    printf("Sweeps: %d\n", sweeps);
 }
 
 HeapObject* Heap::addFinalizer(HeapObject* h, GCFinalizer f)
@@ -311,7 +317,7 @@ void Heap::mark(Global& global) {
 
 void Heap::sweep(Global& global)
 {
-
+    sweeps++;
     // sweep heap
     uint64_t old_total = total, bytes = 0;
     total = 0;
@@ -330,35 +336,38 @@ void Heap::sweep(Global& global)
         }
     }
 
-    for(auto b : arenas)
+    for(auto& b : arenas)
     {
-        b->sweep();
-        if(b->marked())
-            total += REGION_SIZE;
+        b.ptr->sweep();
+        if(b.ptr->marked())
+            total += REGION_SIZE/32;
     }
 
     uint64_t bigtotal = 0;
-    for(auto i = blocks.begin(); i != blocks.end();)
+    for(auto i = larges.begin(); i != larges.end();)
     {
         auto b = *i;
 
-        b->sweep();
-        if(!b->marked())
+        b.ptr->sweep();
+        if(!b.ptr->marked())
         {
-            free(b);
-
-            i = blocks.erase(i);
+            free(b.ptr);
+            i = larges.erase(i);
         }
         else
         {
-            bigtotal += REGION_SIZE;
+            bigtotal += b.bytes;
             ++i;
         }
     }
 
-    bump = arenas[0]->data;
-    limit = arenas[0]->data;
+    bump = arenas[0].ptr->data;
+    limit = arenas[0].ptr->data;
     arenaIndex = 0;
+    arenaOffset = (arenas[0].ptr->data-(char*)arenas[0].ptr)/CELL_SIZE;
+    
+    // sweep may have changed free block sizes, so delete saved blocks
+    //freeBlocks.clear();
 
     total += bigtotal;
 
@@ -375,7 +384,7 @@ HeapObject* Heap::alloc(uint64_t bytes)
 	memset(head, 0xab, bytes);
 	GCObject* g = (GCObject*)head;
 	g->Init();
-    blocks.push_back(g);
+    larges.push_back(LargeArena(g, bytes));
 
 	HeapObject* o = (HeapObject*)(g->data);
     o->block();
@@ -391,7 +400,7 @@ void Heap::makeArenas(uint64_t regions)
         r->Init();
         r->mark[0] |= ((uint64_t)1) << ((r->data-(char*)r)/CELL_SIZE);
         assert(((uint64_t)r & (REGION_SIZE-1)) == 0);
-        arenas.push_back(r);
+        arenas.push_back(Arena(r));
         head += REGION_SIZE;
     }
 }
@@ -404,31 +413,35 @@ bool next(GCObject* g, uint64_t& start, uint64_t& end)
     if(s >= CELL_COUNT)
         return false;
 
-    if(g->mark[s/64] >> (s%64))
+    while(s < CELL_COUNT && ((g->block[s/64] >> (s%64)) & 1))
     {
-        s += ffsll(g->mark[s/64] >> (s%64))-1;
-    }
-    else
-    {
-        s = (s+64)&~63;
-        while(s < CELL_COUNT && !g->mark[s/64])
-            s += 64;
-        if(s < CELL_COUNT)
-            s += ffsll(g->mark[s/64])-1;
+        if((g->mark[s/64] >> (s%64)) & ~1ull)
+        {
+            s += ffsll((g->mark[s/64] >> (s%64)) & ~1ull)-1;
+        }
+        else
+        {
+            s = (s+64)&~63;
+            while(s < CELL_COUNT && !g->mark[s/64])
+                s += 64;
+            if(s < CELL_COUNT)
+                s += ffsll(g->mark[s/64])-1;
+        }
     }
 
-    // Post-condition: s should be at a free block or past the end
-    assert(s == CELL_COUNT || ((g->mark[s/64] >> (s%64)) & 1));
+    // If we're at the end of the arena, there is no next free block.
+    if(s >= CELL_COUNT)
+        return false;
+
+    // Post-condition: s should be at a free block
+    assert((g->mark[s/64] >> (s%64)) & 1);
 
     // Coalesce free blocks (clearing mark flags) up to the next non-free block.
     uint64_t e = s;
     
-    if(e >= CELL_COUNT)
-        return false;
-
     if(g->block[e/64] >> (e%64))
     {
-        e += ffsll(g->block[e/64] >> (e%64))-1;
+        e += ffsll((g->block[e/64] >> (e%64)) & ~1ull)-1;
         // TODO: can this be any simpler while avoiding undef shift behavior?
         g->mark[e/64] &=  ((1ull << s%64)-1) |
                           ((1ull << s%64)  ) |
@@ -460,154 +473,101 @@ bool next(GCObject* g, uint64_t& start, uint64_t& end)
     return true;
 }
 
-bool find(GCObject* g, uint64_t cells, uint64_t& start, uint64_t& size)
-{
-    if(start/64 >= GCObject::WORDS)
-        return false;
-
-    // on entry, start should be pointing to a block boundary
-    assert( (g->block[start/64] & (1ull << (start%64))) ^
-            (g->mark[start/64] & (1ull << (start%64))) );
-
-    bool free = !(g->block[start/64] & (1ull << (start%64)));
-    // i always points after the start of the next block
-    uint64_t i = start+1;
-
-    for(uint64_t word = i/64; word < GCObject::WORDS; ++word)
-    {
-        // While still in this word, advance the search.
-        while(i/64 == word)
-        {
-            // If free, we're looking for the next block flag.
-            if(free)
-            {
-                uint64_t b = g->block[word] >> (i%64);
-                uint64_t p = ffsll(b);
-
-                if(p) {
-                    // clear mark flags to coalesce free blocks
-    //                g->mark[word] &= ~(((1ull << ((i%64)+(p-1)))-1) ^ ((1ull << (i%64))-1));
-                    
-                    i += p;
-                    free = false;
-                    if(i-start-1 >= cells) {
-                        size = i-start-1;
-                        return true;
-                    }
-                }
-                else {
-                    // clear mark flags to coalesce free blocks
-      //              g->mark[word] &= ~((~0) ^ ((1ull << i)-1));
-                    i = (i+64)&~63;
-                }
-            }
-            // If used, we're looking for the next mark flag.
-            else
-            {
-                uint64_t b = g->mark[word] >> (i%64);
-                uint64_t p = ffsll(b);
-
-                if(p) {
-                    i += p;
-                    start = (i-1);
-                    free = true;
-                }
-                else {
-                    i = (i+64)&~63;
-                }
-            }
-        }
-    }
-
-    size = i-start;
-    return free && size >= cells;
-}
-
-bool find2(GCObject* g, uint64_t cells, uint64_t& start, uint64_t& size)
-{
-uint64_t i = start;
-bool free = true;
-        for(uint64_t word = i/64; word < GCObject::WORDS; ++word)
-        {
-            for(uint64_t slot = i%64; slot < 64; ++slot, ++i)
-            {
-                uint64_t b = g->block[word] & (((uint64_t)1) << slot);
-                uint64_t m = g->mark[word] & (((uint64_t)1) << slot);
-            
-                if(b && !m) {
-                    if(free && size >= cells) return true;
-                    free = false;
-                }
-                else if(!b && m && !free) { free = true; start = i; size = 1; }
-                else if(!b && m && free) {
-                    //g->mark[word] &= ~(((uint64_t)1) << slot);
-                    size++;
-                }
-                else {
-                    size++;
-                }
-            }
-        }
-
-        return free && size >= cells;
-}
-
-bool find3(GCObject* g, uint64_t cells, uint64_t& start, uint64_t& size)
-{
-    uint64_t end = 0;
-    while(next(g, start, end))
-    {
-        size = end-start;
-        if(size >= cells)
-            return true;
-        start  = end;
-    }
-
-    return false;
-}
-
 void Heap::popRegion(uint64_t bytes)
 {
-    // find the next range at least bytes large
-    uint64_t cells = (bytes+(CELL_SIZE-1))/CELL_SIZE;
-
-    GCObject* g = arenas[arenaIndex];
-    
     // mark the remaining space free
     if(bump < limit)
     {
+        GCObject* g = ((HeapObject*)bump)->gcObject();
         uint64_t i = (bump-(char*)g)/CELL_SIZE;
         g->mark[i/64] |= 1ull << (i%64);
+        //freeBlocks.insert(std::make_pair((limit-bump)/CELL_SIZE, bump));
     }
 
-    // try to do something useful in the current arenaIndex
-    uint64_t start = (limit-(char*)g)/CELL_SIZE, size = 0;
-    //uint64_t start2 = (limit-(char*)g)/CELL_SIZE, size2 = 0;
+    // find the next range at least bytes large
+    uint64_t cells = (bytes+(CELL_SIZE-1))/CELL_SIZE;
+    GCObject* g = arenas[arenaIndex].ptr;
+    uint64_t start = arenaOffset, end = 0, count = 0;
 
-    //uint64_t b0 = g->block[0], b1 = g->block[1];
-    //uint64_t m0 = g->mark[0], m1 = g->mark[1];
-
-    //bool a = find(g, cells, start, size);
-    //bool b = find3(g, cells, start2, size2);
-    bool a = find3(g, cells, start, size);
-
-    /*if(a!=b || (a && b && (start != start2 || size != size2)))
+    // try to get a best fit
+    /*if(cells <= 16)
     {
-        printf("%d: looking for %d @ %d >> \n", arenaIndex, cells, (limit-(char*)g)/CELL_SIZE);
-        std::cout << std::bitset<64>(b0) << " " << std::bitset<64>(b1) << std::endl;
-        std::cout << std::bitset<64>(m0) << " " << std::bitset<64>(m1) << std::endl;
-        printf("(%d %d %d)   (%d %d %d)\n", a, start, size, b, start2, size2);
-        std::cout << std::bitset<64>(g->block[0]) << " " << std::bitset<64>(g->block[1]) << std::endl;
-        std::cout << std::bitset<64>(g->mark[0]) << " " << std::bitset<64>(g->mark[1]) << std::endl;
-        std::cout << std::endl;
+        if(!freeM[cells-1].empty())
+        {
+            //printf("Best fit %d into %d\n", cells, cells);
+            bump = freeM[cells-1].back();
+            freeM[cells-1].pop_back();
+            limit = bump+cells*CELL_SIZE;
+            return;
+        }
     }*/
 
-    if(a)
+    // constrained scan for best fit 
+    
+/*    while(next(g, start, end) && count++ < 64)
     {
-        bump = (char*)(g) + start*CELL_SIZE;
-        limit = (char*)(g) + (start+size)*CELL_SIZE;
-        return;
+        uint64_t size = end-start;
+        //printf("Adding %d\n", size);
+        freeM[size-1].push_back((char*)g + start*CELL_SIZE); 
+
+        start  = end;
+        arenaOffset = end;
+    }*/
+
+    // first fit from lists
+    /*if(cells <= 2048)
+    {
+        uint64_t c = cells;
+        while(c < 2048 && freeM[c-1].empty())
+            c++;
+
+        if(!freeM[c-1].empty())
+        {
+            freeCount--;
+            //printf("First fit %d into %d\n", cells, c);
+            bump = freeM[c-1].back();
+            freeM[c-1].pop_back();
+            limit = bump+c*CELL_SIZE;
+            return;
+        }
+    }*/
+
+    //auto freeBlock = freeBlocks.lower_bound(cells); 
+    //if(freeBlock != freeBlocks.end()) {
+    //    uint64_t size = freeBlock->first;
+    //    bump = freeBlock->second;
+    //    freeBlocks.erase(freeBlock);
+        
+        //printf("First fit %d into %d\n", cells, size);
+        //if(freeBlocks.size() < 250 || size == cells)
+        //{
+   //         limit = bump + size*CELL_SIZE;
+        //}
+        //else
+        //{
+        //    limit = bump + cells*CELL_SIZE;
+        //    ((HeapObject*)bump)->gcObject()->mark[arenaOffset/64] |= (1ull << arenaOffset%64);
+        //    freeBlocks.insert(std::make_pair(size-cells, limit));
+        //}
+    //    return;
+   // }
+
+    // open scan for first fit 
+    while(next(g, start, end))
+    {
+        uint64_t size = end-start;
+        if(size >= cells)
+        {
+            bump = (char*)(g) + start*CELL_SIZE;
+            limit = (char*)(g) + end*CELL_SIZE;
+            arenaOffset = end;
+            return;
+        }
+        //freeBlocks.insert(std::make_pair(size, (char*)g + start*CELL_SIZE)); 
+        start  = end;
     }
+
+    //printf("Next region for %d\n", cells);
 
     while(true)
     {
@@ -617,7 +577,7 @@ void Heap::popRegion(uint64_t bytes)
             makeArenas((1<<20)/REGION_SIZE);
         }
 
-        GCObject* g = arenas[arenaIndex];
+        GCObject* g = arenas[arenaIndex].ptr;
         
         if(!g->marked())
         {
@@ -626,37 +586,81 @@ void Heap::popRegion(uint64_t bytes)
             g->mark[0] |= ((uint64_t)1) << ((g->data-(char*)g)/CELL_SIZE);
             bump = (char*)(g->data);
             limit = ((char*)g) + REGION_SIZE;
+            arenaOffset = CELL_COUNT;
             total += REGION_SIZE;
             return;
         }
 
-        uint64_t start = (g->data-(char*)g)/CELL_SIZE, size = 0;
-        //uint64_t start2 = (g->data-(char*)g)/CELL_SIZE, size2 = 0;
-
-    //uint64_t b0 = g->block[0], b1 = g->block[1];
-    //uint64_t m0 = g->mark[0], m1 = g->mark[1];
-
-    //bool a = find(g, cells, start, size);
-    //bool b = find3(g, cells, start2, size2);
-    bool a = find3(g, cells, start, size);
-
-    /*if(a!=b || (a && b && (start != start2 || size != size2)))
+        arenaOffset = (g->data-(char*)g)/CELL_SIZE;
+    uint64_t start = arenaOffset, end = 0, count = 0;
+   
+    // try to get a best fit
+    /*if(cells <= 16)
     {
-        printf("%d: looking for %d @ %d >> \n", arenaIndex, cells, (g->data-(char*)g)/CELL_SIZE);
-        std::cout << std::bitset<64>(b0) << " " << std::bitset<64>(b1) << std::endl;
-        std::cout << std::bitset<64>(m0) << " " << std::bitset<64>(m1) << std::endl;
-        printf("(%d %d %d)   (%d %d %d)\n", a, start, size, b, start2, size2);
-        std::cout << std::bitset<64>(g->block[0]) << " " << std::bitset<64>(g->block[1]) << std::endl;
-        std::cout << std::bitset<64>(g->mark[0]) << " " << std::bitset<64>(g->mark[1]) << std::endl;
-        std::cout << std::endl;
-    }*/
-
-        if(a)
+        if(!freeM[cells-1].empty())
         {
-            bump = (char*)(g) + start*CELL_SIZE;
-            limit = (char*)(g) + (start+size)*CELL_SIZE;
+            //printf("Best fit %d into %d\n", cells, cells);
+            bump = freeM[cells-1].back();
+            freeM[cells-1].pop_back();
+            limit = bump+cells*CELL_SIZE;
             return;
         }
+    }*/
+
+    // constrained scan for best fit 
+    /*while(next(g, start, end) && count++ < 64)
+    {
+        uint64_t size = end-start;
+        //printf("Adding %d\n", size);
+        freeM[size-1].push_back((char*)g + start*CELL_SIZE); 
+
+        start  = end;
+        arenaOffset = end;
+    }*/
+
+    // first fit from lists
+    /*if(cells <= 2048)
+    {
+        uint64_t c = cells;
+        while(c < 2048 && freeM[c-1].empty())
+            c++;
+
+        if(!freeM[c-1].empty())
+        {
+            freeCount--;
+            //printf("First fit %d into %d\n", cells, c);
+            bump = freeM[c-1].back();
+            freeM[c-1].pop_back();
+            limit = bump+c*CELL_SIZE;
+            return;
+        }
+    }*/
+
+    /*auto freeBlock = freeBlocks.lower_bound(cells); 
+    if(freeBlock != freeBlocks.end()) {
+        bump = freeBlock->second;
+        limit = freeBlock->second + freeBlock->first*CELL_SIZE;
+        freeBlocks.erase(freeBlock);
+        return;
+    }*/
+
+    // open scan for first fit 
+    start = arenaOffset;
+    while(next(g, start, end))
+    {
+        uint64_t size = end-start;
+        if(size >= cells)
+        {
+            bump = (char*)(g) + start*CELL_SIZE;
+            limit = (char*)(g) + end*CELL_SIZE;
+            arenaOffset = end;
+            return;
+        }
+        
+        //freeBlocks.insert(std::make_pair(size, (char*)g + start*CELL_SIZE)); 
+        start  = end;
+    }
+
     }
 }
 
