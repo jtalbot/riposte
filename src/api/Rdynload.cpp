@@ -19,10 +19,9 @@ Value parseC(R_CMethodDef const* call, String klass) {
     names[3] = Strings::numParameters;
 
     List r = List::c(n, a, d, num);
-    Dictionary* dict = new Dictionary(2);
-    dict->insert(Strings::classSym) =
-        Character::c(klass, Strings::NativeSymbolInfo);
-    dict->insert(Strings::names) = names;
+    auto dict = new Dictionary(
+        Strings::classSym, Character::c(klass, Strings::NativeSymbolInfo),
+        Strings::names, names);
     r.attributes(dict);
 
     return r;
@@ -43,10 +42,9 @@ Value parseCall(R_CallMethodDef const* call, String klass) {
     names[3] = Strings::numParameters;
 
     List r = List::c(n, a, d, num);
-    Dictionary* dict = new Dictionary(2);
-    dict->insert(Strings::classSym) =
-        Character::c(klass, Strings::NativeSymbolInfo);
-    dict->insert(Strings::names) = names;
+    auto dict = new Dictionary(
+        Strings::classSym, Character::c(klass, Strings::NativeSymbolInfo),
+        Strings::names, names);
     r.attributes(dict);
 
     return r;
@@ -73,11 +71,10 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
             r[i] = values[i];
             names[i] = ((List const&)values[i])[0].s;
         }
-        Dictionary* d = new Dictionary(2);
-        d->insert(Strings::classSym) =
-            Character::c(Strings::NativeRoutineList);
-        d->insert(Strings::names) = names;
-        r.attributes(d);
+        auto dict = new Dictionary(
+            Strings::classSym, Character::c(Strings::NativeRoutineList),
+            Strings::names, names);
+        r.attributes(dict);
         args[0] = r;
     }
 
@@ -94,11 +91,10 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
             r[i] = values[i];
             names[i] = ((List const&)values[i])[0].s;
         }
-        Dictionary* d = new Dictionary(2);
-        d->insert(Strings::classSym) =
-            Character::c(Strings::NativeRoutineList);
-        d->insert(Strings::names) = names;
-        r.attributes(d);
+        auto dict = new Dictionary(
+            Strings::classSym, Character::c(Strings::NativeRoutineList),
+            Strings::names, names);
+        r.attributes(dict);
         args[1] = r;
     }
 
@@ -115,11 +111,10 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
             r[i] = values[i];
             names[i] = ((List const&)values[i])[0].s;
         }
-        Dictionary* d = new Dictionary(2);
-        d->insert(Strings::classSym) =
-            Character::c(Strings::NativeRoutineList);
-        d->insert(Strings::names) = names;
-        r.attributes(d);
+        auto dict = new Dictionary(
+            Strings::classSym, Character::c(Strings::NativeRoutineList),
+            Strings::names, names);
+        r.attributes(dict);
         args[2] = r;
     }
     
@@ -136,11 +131,10 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
             r[i] = values[i];
             names[i] = ((List const&)values[i])[0].s;
         }
-        Dictionary* d = new Dictionary(2);
-        d->insert(Strings::classSym) =
-            Character::c(Strings::NativeRoutineList);
-        d->insert(Strings::names) = names;
-        r.attributes(d);
+        auto dict = new Dictionary(
+            Strings::classSym, Character::c(Strings::NativeRoutineList),
+            Strings::names, names);
+        r.attributes(dict);
         args[3] = r;
     }
 

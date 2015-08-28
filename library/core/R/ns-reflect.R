@@ -22,7 +22,7 @@ getNamespaceRegistry <- NULL
     registerNamespace <<- function(name, env) {
         attr(env,'name') <- .pconcat('namespace:',strip(name))
 
-        namespaces[[strip(name)]] <<- env
+        namespaces[[strip(name)]] <- env
 
         if(!.env_has(env, '.__NAMESPACE__.'))
             env[['.__NAMESPACE__.']] <- NULL

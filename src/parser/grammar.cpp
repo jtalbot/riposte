@@ -1104,7 +1104,7 @@ static void yy_reduce(
         break;
       case 38: /* expr ::= FUNCTION optnl LPAREN optnl formallist optnl RPAREN optnl statement */
 #line 115 "grammar.y"
-{ yygotominor.yy0 = CreateCall(*global,List::c(yymsp[-8].minor.yy0, CreatePairlist(yymsp[-4].minor.yy82->values(), yymsp[-4].minor.yy82->names(true)), yymsp[0].minor.yy0, Character::c(parser->popSource())));   yy_destructor(yypParser,36,&yymsp[-6].minor);
+{ yygotominor.yy0 = CreateCall(*global,List::c(yymsp[-8].minor.yy0, CreatePairlist(*global, yymsp[-4].minor.yy82->values(), yymsp[-4].minor.yy82->names(true)), yymsp[0].minor.yy0, Character::c(parser->popSource())));   yy_destructor(yypParser,36,&yymsp[-6].minor);
   yy_destructor(yypParser,46,&yymsp[-2].minor);
 }
 #line 1111 "grammar.c"

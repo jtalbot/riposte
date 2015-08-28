@@ -71,7 +71,7 @@
 		{token( TOKEN_NUM_CONST, Integer::c(strtoll(std::string(ts, te-1).c_str(), NULL, 10)) );};
 	
 	( float exponent? 'i' ) 
-		{token( TOKEN_NUM_CONST, CreateComplex(strtod(std::string(ts, te-1).c_str(), NULL)) );};
+		{token( TOKEN_NUM_CONST, CreateComplex(global, strtod(std::string(ts, te-1).c_str(), NULL)) );};
 	
 	# Integer octal. Leading part buffered by float.
 	#( '0' [0-9]+ [ulUL]{0,2} ) 

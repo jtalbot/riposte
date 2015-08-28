@@ -889,5 +889,7 @@ void Compiler::doPromiseCompilation(State& state, Code* code) {
             calls[i] = compiler.compiledCalls[i];
         code->calls = calls;
     }
+
+    code->writeBarrier();
 }
 

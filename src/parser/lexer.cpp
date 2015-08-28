@@ -719,7 +719,7 @@ _eof_trans:
 	break;
 	case 31:
 #line 74 "lexer.rl"
-	{te = p+1;{token( TOKEN_NUM_CONST, CreateComplex(strtod(std::string(ts, te-1).c_str(), NULL)) );}}
+	{te = p+1;{token( TOKEN_NUM_CONST, CreateComplex(global, strtod(std::string(ts, te-1).c_str(), NULL)) );}}
 	break;
 	case 32:
 #line 85 "lexer.rl"

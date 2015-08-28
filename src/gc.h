@@ -4,6 +4,7 @@
 
 #include <deque>
 #include <map>
+#include <unordered_map>
 
 #include "common.h"
 #include <assert.h>
@@ -35,6 +36,7 @@ struct GCObject
     }
 
     void sweep();
+    void sweepMinor();
 };
 
 class Heap;
@@ -42,10 +44,11 @@ class Heap;
 struct HeapObject
 {
     bool marked() const;
-    void visit() const;
     void block() const;
     uint64_t word() const;
     GCObject* gcObject() const;
+
+    bool visit() const;
 
     void* operator new(unsigned long bytes, Heap& heap);
     void* operator new(unsigned long bytes, unsigned long extra, Heap& heap);
@@ -54,6 +57,17 @@ struct HeapObject
     void* operator new(unsigned long bytes);
     void* operator new(unsigned long bytes, unsigned long extra);
     void* operator new(unsigned long bytes, GCFinalizer finalizer);
+};
+
+struct GrayHeapObject : HeapObject
+{
+public:
+    uint8_t type;
+    mutable bool gray;
+    GrayHeapObject(uint8_t type) : type(type), gray(true) {}
+
+    void writeBarrier() const;
+    bool visit() const;
 };
 
 struct Arena
@@ -77,12 +91,6 @@ class Heap
 {
 private:
 
-    uint64_t heapSize;
-    uint64_t total;
-
-    void mark(Global& global);
-    void sweep(Global& global);
-    
     void makeArenas(uint64_t regions);
     void popRegion(uint64_t bytes);    
 
@@ -95,23 +103,17 @@ private:
     char* bump, *limit;
     uint64_t arenaIndex, arenaOffset;
 
-    uint64_t sweeps;
-    
-
 public:
     Heap();
-    ~Heap();
 
+    uint64_t sweep();
+    
     HeapObject* smallalloc(uint64_t bytes);
     HeapObject* alloc(uint64_t bytes);
 
     HeapObject* addFinalizer(HeapObject*, GCFinalizer);
- 
-    void collect(Global& global);
-
-    static Heap GlobalHeap;
-    static Heap ConstHeap;
 };
+
 
 inline HeapObject* Heap::smallalloc(uint64_t bytes)
 {
@@ -130,18 +132,51 @@ inline HeapObject* Heap::smallalloc(uint64_t bytes)
     return o;
 }
 
-ALWAYS_INLINE
-void Heap::collect(Global& global)
+class Memory
 {
-    if(total > heapSize)
+public:
+    uint64_t heapSize;
+    uint64_t total;
+
+private:
+    uint64_t sweeps;
+    std::unordered_map<GCObject*, std::deque<GrayHeapObject const*>> grays;
+
+    void mark(Global& global);
+    uint64_t sweep();
+    
+public:
+    Memory();
+    ~Memory();
+ 
+    ALWAYS_INLINE
+    void collect(Global& global)
     {
-        mark(global);
-        sweep(global);
-        if(total > heapSize*0.75 && heapSize < (1<<30))
-            heapSize *= 2;
+        if(total > heapSize)
+        {
+            mark(global);
+            total = sweep();
+            if(total > heapSize*0.75 && heapSize < (1<<30))
+                heapSize *= 2;
+        }
+    }
+ 
+    void pushGray(GrayHeapObject const*);
+
+    Heap GlobalHeap;
+    Heap ConstHeap;
+   
+    static Memory All;
+};
+
+ALWAYS_INLINE
+void GrayHeapObject::writeBarrier() const
+{
+    if(!gray) {
+        Memory::All.pushGray(this);
+        gray = true;
     }
 }
-
 
 ALWAYS_INLINE
 void* HeapObject::operator new(unsigned long bytes, Heap& heap)
@@ -169,16 +204,16 @@ void* HeapObject::operator new(unsigned long bytes, GCFinalizer finalizer, Heap&
 
 inline void* HeapObject::operator new(unsigned long bytes)
 {
-    return HeapObject::operator new(bytes, Heap::GlobalHeap);
+    return HeapObject::operator new(bytes, Memory::All.GlobalHeap);
 }
 
 inline void* HeapObject::operator new(unsigned long bytes, unsigned long extra) {
-    return HeapObject::operator new(bytes, extra, Heap::GlobalHeap);
+    return HeapObject::operator new(bytes, extra, Memory::All.GlobalHeap);
 }
 
 inline void* HeapObject::operator new(unsigned long bytes, GCFinalizer finalizer)
 {
-    return HeapObject::operator new(bytes, finalizer, Heap::GlobalHeap);
+    return HeapObject::operator new(bytes, finalizer, Memory::All.GlobalHeap);
 }
 
 #endif

@@ -78,7 +78,7 @@ List Pairlist::toList(Pairlist const& pairlist) {
         rnames = tnames;
     }
 
-    return CreatePairlist(result, rnames);
+    return CreatePairlist(*global, result, rnames);
 }
 
 Value Pairlist::fromList(List const& list) {

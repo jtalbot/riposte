@@ -240,6 +240,7 @@ struct Vector : public Object {
 	};
 
 	int64_t length() const { return packed() <= 1 ? (int64_t)packed() : ((Inner*)p)->length; }
+	int64_t capacity() const { return packed() <= 1 ? (int64_t)packed() : ((Inner*)p)->capacity; }
 	bool isScalar() const { return length() == 1; }
 	void* raw() { return (void*)(((Inner*)p)+1); }	// assumes that data is immediately after capacity
 	void const* raw() const { return (void const*)(((Inner*)p)+1); }	// assumes that data is immediately after capacity

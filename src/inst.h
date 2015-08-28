@@ -55,12 +55,23 @@ if(__builtin_expect(X.isFuture(), false)) { \
 ALWAYS_INLINE
 Value const* internAndGet(State const& state, Dictionary const* d, String s)
 {
-    // All environment names are already interned.
+    // All attribute names are already interned.
     // So if we can't find an interned version of s,
     // it doesn't exist in the environment and there
     // is nothing to get.
     String i = state.global.strings.get(s->s);
     return i ? d->get(i) : nullptr;
+}
+
+ALWAYS_INLINE
+Value const* internAndGet(State const& state, Environment* e, String s)
+{
+    // All environment names are already interned.
+    // So if we can't find an interned version of s,
+    // it doesn't exist in the environment and there
+    // is nothing to get.
+    String i = state.global.strings.get(s->s);
+    return i ? e->get(i) : nullptr;
 }
 
 ALWAYS_INLINE
@@ -76,7 +87,7 @@ Value* internAndGetRec(State const& state, Environment* e, String s, Environment
 }
 
 ALWAYS_INLINE
-void internAndRemove(State const& state, Dictionary* d, String s)
+void internAndRemove(State const& state, Environment* d, String s)
 {
     // All environment names are already interned.
     // So if we can't find an interned version of s,
@@ -335,11 +346,13 @@ Instruction const* storeup_inst(State& state, Instruction const& inst)
     Environment* penv;
     Value* dest = up->getRecursive(s, penv);
 
-    if(dest)
+    if(dest) {
+        penv->writeBarrier();
         *dest = c;
-    else
+    }
+    else {
         state.global.global->insert(s) = c;
-
+    }
     return &inst+1;
 }
 
@@ -815,9 +828,9 @@ Instruction const* done_inst(State& state, Instruction const& inst)
     {
         assert(env.isEnvironment());
         // caller guarantees that dots exists and is an ok length
-        Value* dots = env.environment()->get(Strings::__dots__);
-        assert(dots && dots->isList());
-        static_cast<List&>(*dots)[index.i] = a;
+        Value& dots = env.environment()->insert(Strings::__dots__);
+        assert(dots.isList());
+        static_cast<List&>(dots)[index.i] = a;
     }
     
     REGISTER(0) = a;

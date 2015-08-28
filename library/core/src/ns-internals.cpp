@@ -17,6 +17,7 @@ Value importIntoEnv(State& state, Value const* args) {
         Value const* v = in->get(in_names[i]);
         out->insert(out_names[i]) = v ? *v : Value::Nil();
     }
+    out->writeBarrier();
     
     return args[0]; 
 }

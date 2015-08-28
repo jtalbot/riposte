@@ -21,20 +21,24 @@ void GCObject::sweep()
     }
 }
 
+void GCObject::sweepMinor()
+{
+    for(uint64_t i = 0; i < WORDS; ++i)
+    {
+        uint64_t b = block[i] & mark[i];
+        uint64_t m = block[i] | mark[i];
+
+        block[i] = b;
+        mark[i] = m;
+    }
+}
+
 bool HeapObject::marked() const {
     uint64_t i = ((uint64_t)this & (REGION_SIZE-1)) / CELL_SIZE;
     uint64_t slot = i % 64;
     uint64_t word = i / 64;
     
     return (gcObject()->mark[word] & (((uint64_t)1) << slot)) != 0;
-}
-
-void HeapObject::visit() const {
-    uint64_t i = ((uint64_t)this & (REGION_SIZE-1)) / CELL_SIZE;
-    uint64_t slot = i % 64;
-    uint64_t word = i / 64;
-    
-    gcObject()->mark[word] |= (((uint64_t)1) << slot);
 }
 
 void HeapObject::block() const {
@@ -50,6 +54,33 @@ GCObject* HeapObject::gcObject() const {
     return (GCObject*)((uint64_t)this & ~(REGION_SIZE-1));
 }
 
+bool HeapObject::visit() const
+{
+    if(this)
+    {
+        uint64_t i = ((uint64_t)this & (REGION_SIZE-1)) / CELL_SIZE;
+        uint64_t slot = i % 64;
+        uint64_t word = i / 64;
+    
+        bool marked = (gcObject()->mark[word] & (((uint64_t)1) << slot)) != 0;
+        gcObject()->mark[word] |= (((uint64_t)1) << slot);
+
+        return !marked;
+    }
+    return false;
+}
+
+bool GrayHeapObject::visit() const
+{
+    if(this)
+    {
+        bool result = HeapObject::visit() || gray;
+        gray = false;
+        return result;
+    }
+    return false;
+}
+
 uint64_t NumberOfSetBits(uint64_t i)
 {
     i = i - ((i >> 1) & 0x5555555555555555UL);
@@ -61,8 +92,6 @@ uint64_t bytes;
 
 uint64_t type_count[17];
 
-#define VISIT(p) if((p) != 0 && !(p)->marked()) (p)->visit()
-
 static void traverse(Value const& v) {
     //type_count[v.type()]++;
     switch(v.type()) {
@@ -70,94 +99,92 @@ static void traverse(Value const& v) {
             // do nothing
             break;
         case Type::Environment:
-            VISIT(((REnvironment const&)v).attributes());
-            VISIT(((REnvironment const&)v).environment());
+            ((REnvironment const&)v).attributes()->visit();
+            ((REnvironment const&)v).environment()->visit();
             break;
         case Type::Closure:
-            VISIT(((Closure const&)v).attributes());
-            VISIT((Closure::Inner const*)v.p);
-            VISIT(((Closure const&)v).prototype());
-            VISIT(((Closure const&)v).environment());
+            ((Closure const&)v).attributes()->visit();
+            ((Closure::Inner const*)v.p)->visit();
+            ((Closure const&)v).prototype()->visit();
+            ((Closure const&)v).environment()->visit();
             //bytes += 16;
             break;
         case Type::Externalptr:
-            VISIT((Externalptr::Inner const*)v.p);
-            traverse(((Externalptr const&)v).tag());
-            traverse(((Externalptr const&)v).prot());
+            ((Externalptr::Inner const*)v.p)->visit();
+            if(v.p) {
+                traverse(((Externalptr const&)v).tag());
+                traverse(((Externalptr const&)v).prot());
+            }
             //bytes += 48;
             break;
         case Type::Null:
             // do nothing
             break;
         case Type::Double:
-            VISIT(((Double const&)v).attributes());
-            VISIT(((Double const&)v).inner());
+            assert(((Double const&)v).length() <= ((Double const&)v).capacity());
+            ((Double const&)v).attributes()->visit();
+            ((Double const&)v).inner()->visit();
             //bytes += 8*((Double const&)v).length();
             break;
         case Type::Integer:
-            VISIT(((Integer const&)v).attributes());
-            VISIT(((Integer const&)v).inner());
+            assert(((Integer const&)v).length() <= ((Integer const&)v).capacity());
+            ((Integer const&)v).attributes()->visit();
+            ((Integer const&)v).inner()->visit();
             //bytes += 8*((Integer const&)v).length();
             break;
         case Type::Logical:
-            VISIT(((Logical const&)v).attributes());
-            VISIT(((Logical const&)v).inner());
+            assert(((Logical const&)v).length() <= ((Logical const&)v).capacity());
+            ((Logical const&)v).attributes()->visit();
+            ((Logical const&)v).inner()->visit();
             //bytes += 1*((Logical const&)v).length();
             break;
         case Type::Character:
-            VISIT(((Character const&)v).attributes());
-            VISIT(((Character const&)v).inner());
-            {
-                if(v.packed() > 1) {
-                    auto p = (VectorImpl<Type::Character, String, false>::Inner const*)v.p;
-                    for(size_t i = 0; i < p->length; ++i) {
-                        VISIT(p->data[i]);
-                        //bytes += p->data[i] ? strlen(p->data[i]->s)+1 : 0;
-                    }
-                }
-                else if(v.packed() == 1) {
-                    VISIT(v.s);
-                }
+            assert(((Character const&)v).length() <= ((Character const&)v).capacity());
+            ((Character const&)v).attributes()->visit();
+            ((Character const&)v).inner()->visit();
+            for(size_t i = 0; i < ((Character const&)v).length(); ++i)
+                ((Character const&)v)[i]->visit();
                 //bytes += 8*((Character const&)v).length();
-            }
             break;
         case Type::Raw:
-            VISIT(((Raw const&)v).attributes());
-            VISIT(((Raw const&)v).inner());
+            assert(((Raw const&)v).length() <= ((Raw const&)v).capacity());
+            ((Raw const&)v).attributes()->visit();
+            ((Raw const&)v).inner()->visit();
             //bytes += 1*((Raw const&)v).length();
             break;
         case Type::List:
-            VISIT(((List const&)v).attributes());
-            VISIT(((List const&)v).inner());
+            assert(((List const&)v).length() <= ((List const&)v).capacity());
+            ((List const&)v).attributes()->visit();
+            ((List const&)v).inner()->visit();
             {
                 List const& l = (List const&)v;
                 for(int64_t i = 0; i < l.length(); i++)
                     traverse(l[i]);
-            //bytes += 16*((List const&)v).length();
             }
+            //bytes += 16*((List const&)v).length();
             break;
         case Type::Promise:
-            VISIT(((Promise&)v).environment());
+            ((Promise&)v).environment()->visit();
             if(((Promise&)v).isExpression())
-                VISIT(((Promise&)v).code());
+                ((Promise&)v).code()->visit();
             break;
         case Type::Integer32:
-            VISIT(((Integer32 const&)v).attributes());
-            VISIT(((Integer32 const&)v).inner());
+            ((Integer32 const&)v).attributes()->visit();
+            ((Integer32 const&)v).inner()->visit();
             break;
         case Type::Logical32:
-            VISIT(((Logical32 const&)v).attributes());
-            VISIT(((Logical32 const&)v).inner());
+            ((Logical32 const&)v).attributes()->visit();
+            ((Logical32 const&)v).inner()->visit();
             break;
         case Type::ScalarString:
-            VISIT(((ScalarString const&)v).s);
+            ((ScalarString const&)v).s->visit();
             //bytes += strlen(((ScalarString const&)v).s->s);
             break;
         case Type::Pairlist:
-            VISIT((Pairlist::Inner const*)v.p);
-            VISIT(((Pairlist const&)v).car());
-            VISIT(((Pairlist const&)v).cdr());
-            VISIT(((Pairlist const&)v).tag());
+            ((Pairlist::Inner const*)v.p)->visit();
+            ((Pairlist const&)v).car()->visit();
+            ((Pairlist const&)v).cdr()->visit();
+            ((Pairlist const&)v).tag()->visit();
             //bytes += 24;
             break;
         default:
@@ -169,71 +196,113 @@ static void traverse(Value const& v) {
 
 uint64_t dictionary_count;
 
-void Dictionary::visit() const {
+void Dictionary::visit() const
+{
     //dictionary_count++;
-    HeapObject::visit();
-    VISIT(d);
-    for(uint64_t i = 0; i < size; i++) {
-        VISIT(d->d[i].n);
-        if(d->d[i].n != Strings::NA)
-            traverse(d->d[i].v);
+    if(HeapObject::visit())
+    {
+        d->visit();
+        for(uint64_t i = 0; i < size; i++)
+        {
+            d->d[i].n->visit();
+            if(d->d[i].n != Strings::NA)
+                traverse(d->d[i].v);
+        }
     }
     //bytes += 24*size+48;
 }
 
-void Environment::visit() const {
-    Dictionary::visit();
-    VISIT(enclosure);
-    VISIT(attributes);
+void Environment::visit() const
+{
+    if(GrayHeapObject::visit())
+    {
+        enclosure->visit();
+        attributes->visit();
+        d->visit(); 
+            
+        for(uint64_t i = 0; i < size; i++)
+        {
+            d->d[i].n->visit();
+            if(d->d[i].n != Strings::NA)
+                traverse(d->d[i].v);
+        }
+
+        // also have to traverse the dots for now
+        Value const* dots = get(Strings::__dots__);
+        if(dots && dots->isList())
+        {
+            ((List const&)*dots).attributes()->visit();
+            ((List const&)*dots).inner()->visit();
+            {
+                List const& l = (List const&)*dots;
+                for(int64_t i = 0; i < l.length(); i++)
+                    traverse(l[i]);
+            //bytes += 16*((List const&)v).length();
+            }
+        }
+    }
     //bytes += 16;
 }
 
 uint64_t code_count;
 
-void Code::visit() const {
+void Code::visit() const
+{
     //code_count++;
-    HeapObject::visit();
-    traverse(expression);
-    traverse(bc);
-    traverse(constants);
-    traverse(calls);
+    if(GrayHeapObject::visit())
+    {
+        traverse(expression);
+        traverse(bc);
+        traverse(constants);
+        traverse(calls);
+    }
     //bytes += 8*bc.size() + 16*constants.size() + 88*calls.size() + 3;
 }
 
 uint64_t prototype_count;
 
-void Prototype::visit() const {
+void Prototype::visit() const
+{
     //prototype_count++;
-    HeapObject::visit();
-    VISIT(code);
-    VISIT(string);
+    if(HeapObject::visit())
+    {
+        code->visit();
+        string->visit();
 
-    traverse(formals);
-    traverse(parameters);
-    traverse(defaults);
-
+        traverse(formals);
+        traverse(parameters);
+        traverse(defaults);
+    }
     //bytes += 72;
 }
 
-void SEXPREC::visit() const {
-    HeapObject::visit();
-    traverse(v);
-
+void SEXPREC::visit() const
+{
+    if(HeapObject::visit())
+    {
+        traverse(v);
+    }
     //bytes += 16;
 }
 
+void Pairlist::Inner::visit() const
+{
+    if(GrayHeapObject::visit())
+    {
+        car->visit();
+        cdr->visit();
+        tag->visit();
+    }
+}
 
-Heap::Heap() : heapSize(1<<20), total(0), sweeps(0)
+
+Heap::Heap()
 {
     makeArenas((1<<20)/REGION_SIZE);
     bump = arenas[0].ptr->data;
     limit = arenas[0].ptr->data;
     arenaIndex = 0;
     arenaOffset = (arenas[0].ptr->data-(char*)arenas[0].ptr)/CELL_SIZE;
-}
-
-Heap::~Heap() {
-    printf("Sweeps: %d\n", sweeps);
 }
 
 HeapObject* Heap::addFinalizer(HeapObject* h, GCFinalizer f)
@@ -243,86 +312,15 @@ HeapObject* Heap::addFinalizer(HeapObject* h, GCFinalizer f)
     return h;
 }
 
-void Heap::mark(Global& global) {
-
-    /*for(int i = 0; i < 17; ++i)
-        type_count[i] = 0;
-    dictionary_count = 0;
-    code_count = 0;
-    prototype_count = 0;*/
-    //bytes = 0;
-
-    // traverse root set
-    // mark the region that I'm currently allocating into
-    ((HeapObject*)bump)->visit();
-    
-    //printf("--global--\n");
-    VISIT(global.empty);
-    VISIT(global.global);
-    VISIT(global.promiseCode);
-    
-    traverse(global.arguments);
-
-    VISIT(global.symbolDict);
-    VISIT(global.callDict);
-    VISIT(global.exprDict);
-
-    for(std::list<State*>::iterator t = global.states.begin();
-            t != global.states.end(); ++t) {
-        State* state = *t;
-
-        //printf("--stack--\n");
-        for(uint64_t i = 0; i < state->stack.size(); i++) {
-            VISIT(state->stack[i].code);
-            VISIT(state->stack[i].environment);
-        }
-        //printf("--frame--\n");
-        VISIT(state->frame.code);
-        VISIT(state->frame.environment);
-
-        //printf("--trace--\n");
-        // traces only hold weak references...
-
-        //printf("--registers--\n");
-        for(Value const* r = state->registers; r < state->frame.registers+state->frame.code->registers; ++r) {
-            traverse(*r);
-        }
-
-        //printf("--gc stack--\n");
-        for(uint64_t i = 0; i < state->gcStack.size(); i++) {
-            traverse(state->gcStack[i]);
-        }
-    }
-    
-    // R API support    
-    for(std::list<SEXP>::iterator i = global.installedSEXPs.begin(); 
-            i != global.installedSEXPs.end(); ++i) {
-        VISIT(*i);
-    }
-
-    if(global.apiStack) {
-        for(int i = 0; i < *global.apiStack->size; ++i) {
-            VISIT(global.apiStack->stack[i]);
-        }
-    }
-
-    /*for(int i = 0; i < 17; ++i)
-        printf("%d: %d\n", i, type_count[i]);
-    printf("dict: %d\n", dictionary_count);
-    printf("code: %d\n", code_count);
-    printf("proto: %d\n", prototype_count);*/
-    //printf("bytes: %d\n", bytes);
-}
-
-
-void Heap::sweep(Global& global)
+uint64_t Heap::sweep()
 {
-    sweeps++;
+    static uint64_t t = 0;
+
     // sweep heap
-    uint64_t old_total = total, bytes = 0;
-    total = 0;
+    uint64_t total = 0;
 
     // Should really be kept per arena for cache locality
+    // TODO: this should really be run after the sweep below
     for(auto i = finalizers.begin(); i != finalizers.end();)
     {
         if(!i->first->marked())
@@ -338,7 +336,11 @@ void Heap::sweep(Global& global)
 
     for(auto& b : arenas)
     {
-        b.ptr->sweep();
+        if(t%16 == 0)
+            b.ptr->sweep();
+        else
+            b.ptr->sweepMinor();
+
         if(b.ptr->marked())
             total += REGION_SIZE/32;
     }
@@ -348,7 +350,10 @@ void Heap::sweep(Global& global)
     {
         auto b = *i;
 
-        b.ptr->sweep();
+        if(t%16 == 0)
+            b.ptr->sweep();
+        else
+            b.ptr->sweepMinor();
         if(!b.ptr->marked())
         {
             free(b.ptr);
@@ -368,16 +373,15 @@ void Heap::sweep(Global& global)
     
     // sweep may have changed free block sizes, so delete saved blocks
     //freeBlocks.clear();
+    t++;
 
-    total += bigtotal;
-
-    printf("Swept: %d   =>    %d + %d\n", old_total, total-bigtotal, bigtotal);
+    return total += bigtotal;
 }
 
 HeapObject* Heap::alloc(uint64_t bytes)
 {
+    Memory::All.total += bytes;
 	bytes += sizeof(GCObject);
-	total += bytes;
 
     char* head;
     posix_memalign((void**)&head, REGION_SIZE, bytes);
@@ -413,6 +417,10 @@ bool next(GCObject* g, uint64_t& start, uint64_t& end)
     if(s >= CELL_COUNT)
         return false;
 
+    // Precondition: start should be on a block boundary.
+    assert(((g->mark[s/64] >> (s%64)) & 1) |
+           ((g->block[s/64] >> (s%64)) & 1));
+    
     while(s < CELL_COUNT && ((g->block[s/64] >> (s%64)) & 1))
     {
         if((g->mark[s/64] >> (s%64)) & ~1ull)
@@ -487,7 +495,7 @@ void Heap::popRegion(uint64_t bytes)
     // find the next range at least bytes large
     uint64_t cells = (bytes+(CELL_SIZE-1))/CELL_SIZE;
     GCObject* g = arenas[arenaIndex].ptr;
-    uint64_t start = arenaOffset, end = 0, count = 0;
+    uint64_t start = arenaOffset, end = 0;
 
     // try to get a best fit
     /*if(cells <= 16)
@@ -587,12 +595,12 @@ void Heap::popRegion(uint64_t bytes)
             bump = (char*)(g->data);
             limit = ((char*)g) + REGION_SIZE;
             arenaOffset = CELL_COUNT;
-            total += REGION_SIZE;
+            Memory::All.total += REGION_SIZE;
             return;
         }
 
         arenaOffset = (g->data-(char*)g)/CELL_SIZE;
-    uint64_t start = arenaOffset, end = 0, count = 0;
+    uint64_t start = arenaOffset, end = 0;
    
     // try to get a best fit
     /*if(cells <= 16)
@@ -664,7 +672,118 @@ void Heap::popRegion(uint64_t bytes)
     }
 }
 
-Heap Heap::GlobalHeap;
-Heap Heap::ConstHeap;
+Memory::Memory() : heapSize(1<<20), total(0), sweeps(0)
+{
+}
+
+Memory::~Memory() {
+    printf("Sweeps: %d\n", sweeps);
+}
+
+void Memory::mark(Global& global)
+{
+    /*for(int i = 0; i < 17; ++i)
+        type_count[i] = 0;
+    dictionary_count = 0;
+    code_count = 0;
+    prototype_count = 0;*/
+    //bytes = 0;
+
+    // traverse root set
+    // mark the region that I'm currently allocating into
+    
+    //printf("--global--\n");
+    global.empty->visit();
+    global.global->visit();
+    global.promiseCode->visit();
+    
+    traverse(global.arguments);
+
+    global.symbolDict->visit();
+    global.callDict->visit();
+    global.exprDict->visit();
+
+    for(std::list<State*>::iterator t = global.states.begin();
+            t != global.states.end(); ++t) {
+        State* state = *t;
+
+        //printf("--stack--\n");
+        for(uint64_t i = 0; i < state->stack.size(); i++) {
+            state->stack[i].code->visit();
+            state->stack[i].environment->visit();
+        }
+        //printf("--frame--\n");
+        state->frame.code->visit();
+        state->frame.environment->visit();
+
+        //printf("--trace--\n");
+        // traces only hold weak references...
+
+        //printf("--registers--\n");
+        for(Value const* r = state->registers; r < state->frame.registers+state->frame.code->registers; ++r) {
+            traverse(*r);
+        }
+
+        //printf("--gc stack--\n");
+        for(uint64_t i = 0; i < state->gcStack.size(); i++) {
+            traverse(state->gcStack[i]);
+        }
+    }
+    
+    // R API support    
+    for(auto& i : global.installedSEXPs)
+    {
+        i->visit();
+    }
+
+    if(global.apiStack) {
+        for(int i = 0; i < *global.apiStack->size; ++i) {
+            global.apiStack->stack[i]->visit();
+        }
+    }
+
+    // gray sets
+    for(auto& a : grays)
+    {
+        for(auto& g : a.second)
+        {
+            if(g->type == 0)
+                static_cast<Environment const*>(g)->visit();
+            else if(g->type == 1)
+                static_cast<Pairlist::Inner const*>(g)->visit();
+            else if(g->type == 2)
+                static_cast<Code const*>(g)->visit();
+            else {
+                printf("Unknown gray type %d\n", g->type);
+            }
+        }
+    }
+    grays.clear();
+
+    /*for(int i = 0; i < 17; ++i)
+        printf("%d: %d\n", i, type_count[i]);
+    printf("dict: %d\n", dictionary_count);
+    printf("code: %d\n", code_count);
+    printf("proto: %d\n", prototype_count);*/
+    //printf("bytes: %d\n", bytes);
+}
+
+uint64_t Memory::sweep()
+{
+    sweeps++;
+    uint64_t v = GlobalHeap.sweep();
+    printf("Sweeping => %d\n", v);
+    return v;
+}
+
+void Memory::pushGray(GrayHeapObject const* h) {
+    //printf("Marking gray\n");
+    if(h->marked()) {
+        GCObject* g = h->gcObject();
+        grays[g].push_back(h);
+    }
+}
+
+Memory Memory::All;
 
 

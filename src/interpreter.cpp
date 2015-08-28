@@ -263,6 +263,8 @@ Global::Global(uint64_t states, int64_t argc, char** argv)
     symbolDict = new Dictionary(Strings::classSym, Character::c(Strings::name));
     callDict = new Dictionary(Strings::classSym, Character::c(Strings::call)); 
     exprDict = new Dictionary(Strings::classSym, Character::c(Strings::expression));
+    pairlistDict = new Dictionary(Strings::classSym, Character::c(Strings::pairlist));
+    complexDict = new Dictionary(Strings::classSym, Character::c(Strings::Complex), Strings::names, Character::c(Strings::Re, Strings::Im));
 }
 
 void Code::printByteCode(Global const& global) const {

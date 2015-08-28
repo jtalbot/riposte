@@ -114,7 +114,7 @@ public:
         }
         else
         {
-            result = new (s.size()+1, Heap::ConstHeap) StringImpl();
+            result = new (s.size()+1, Memory::All.ConstHeap) StringImpl();
             memcpy((void*)result->s, s.c_str(), s.size()+1);
             stringTable[s] = std::make_pair(result, false);
         }
@@ -135,7 +135,7 @@ public:
         }
         else
         {
-            result = new (s.size()+1, Heap::ConstHeap) StringImpl();
+            result = new (s.size()+1, Memory::All.ConstHeap) StringImpl();
             memcpy((void*)result->s, s.c_str(), s.size()+1);
             stringTable[s] = std::make_pair(result, weak);
         }
@@ -199,7 +199,11 @@ struct CompiledCall : public List
     }
 };
 
-struct Code : public HeapObject {
+// Code can be lazily compiled, so needs to be a gray object
+struct Code : public GrayHeapObject {
+
+    Code() : GrayHeapObject(2) {}
+
     Value expression;
 
     Integer bc;
@@ -225,7 +229,8 @@ struct Prototype : public HeapObject {
 };
 
 
-class Dictionary : public HeapObject {
+class HashMap 
+{
 protected:
     uint64_t size, load, ksize;
 
@@ -261,8 +266,6 @@ protected:
         return &d->d[i];
     }
 
-    // Returns a pointer to the entry for `name`
-    // or a nullptr if it doesn't exist.
     Value* find2(String name) const
     {
         if(!this) return nullptr;
@@ -321,72 +324,94 @@ protected:
         }
     }
 
-public:
-
-    // Mutable interface for environments
-
-    Dictionary(int64_t initialLoad) : size(0), load(0), d(0)
-    {
-        rehash(std::max((uint64_t)1, nextPow2(initialLoad*2)));
-    }
-
-    Value* get(String name)
-    {
-        return find2(name); 
-    }
-
-    Value& insert(String name)
-    {
-        Value* v = find2(name);
-        if(!v)
-        {
-            if(((load+1) * 2) > size)
-                rehash((size*2));
-            load++;
-            Pair* p = slot(name);
-            p->n = name;
-            return p->v;
-        }
-        else
-        {
-            return *v;
-        }
-    }
-
-    void remove(String name)
-    {
-        // TODO: avoid rehashing here
-        bool success;
-        Pair* p = find(name, success);
-        if(success)
-        {
-            memset(p, 0, sizeof(Pair));
-            load--;
-            rehash(nextPow2(load*2));
-        }
-    }
-
     void clear()
     {
         memset(d->d, 0, sizeof(Pair)*size); 
         load = 0;
     }
 
+public:
 
-    // Immutable interface for attributes
+    HashMap(uint64_t initialLoad)
+        : size(0), load(0), ksize(0), d(nullptr)
+    {
+        rehash(std::max((uint64_t)1, nextPow2(initialLoad*2)));
+        clear();
+    }
+
+    // Returns a pointer to the entry for `name`
+    // or a nullptr if it doesn't exist.
+    Value const* get(String name) const
+    {
+        return find2(name); 
+    }
+
+    uint64_t Size() const {
+        if(!this) return 0;
+        return load;
+    }
+
+    class const_iterator
+    {
+        HashMap const* d;
+        int64_t i;
+
+    public:
+        const_iterator(HashMap const* d, int64_t idx) {
+            this->d = d;
+            i = std::max((int64_t)0, std::min((int64_t)d->size, idx));
+            while(d->d->d[i].n == Strings::NA && i < (int64_t)d->size) i++;
+        }
+        String string() const { return d->d->d[i].n; }    
+        Value const& value() const { return d->d->d[i].v; }
+        const_iterator& operator++() {
+            while(d->d->d[++i].n == Strings::NA && i < (int64_t)d->size);
+            return *this;
+        }
+        bool operator==(const_iterator const& o) {
+            return d == o.d && i == o.i;
+        }
+        bool operator!=(const_iterator const& o) {
+            return d != o.d || i != o.i;
+        }
+    };
+
+    const_iterator begin() const {
+        return const_iterator(this, 0);
+    }
+
+    const_iterator end() const {
+        return const_iterator(this, size);
+    }
+
+};
+
+class Dictionary : public HeapObject, public HashMap
+{
+protected:
+    Dictionary(uint64_t initialLoad)
+        : HashMap(initialLoad)
+    {}
+
+public:
+    // Immutable HashMap for attributes
     // A null 'this' pointer must be treated as an empty dictionary
 
     Dictionary(String name, Value const& v)
-        : size(2), ksize(1), d(new (sizeof(Pair)*2) Inner())
+        : HashMap(1)
     {
-        clear();
         load++;
         *slot(name) = Pair { name, v };
     }
 
-    Value const* get(String name) const
+    Dictionary(String name0, Value const& v0,
+               String name1, Value const& v1)
+        : HashMap(2)
     {
-        return find2(name); 
+        load++;
+        *slot(name0) = Pair { name0, v0 };
+        load++;
+        *slot(name1) = Pair { name1, v1 };
     }
 
     // clone without an entry
@@ -444,70 +469,84 @@ public:
         return clone;
     }
 
-    class const_iterator {
-        Dictionary const* d;
-        int64_t i;
-    public:
-        const_iterator(Dictionary const* d, int64_t idx) {
-            this->d = d;
-            i = std::max((int64_t)0, std::min((int64_t)d->size, idx));
-            while(d->d->d[i].n == Strings::NA && i < (int64_t)d->size) i++;
-        }
-        String string() const { return d->d->d[i].n; }    
-        Value const& value() const { return d->d->d[i].v; }
-        const_iterator& operator++() {
-            while(d->d->d[++i].n == Strings::NA && i < (int64_t)d->size);
-            return *this;
-        }
-        bool operator==(const_iterator const& o) {
-            return d == o.d && i == o.i;
-        }
-        bool operator!=(const_iterator const& o) {
-            return d != o.d || i != o.i;
-        }
-    };
-
-    const_iterator begin() const {
-        return const_iterator(this, 0);
-    }
-
-    const_iterator end() const {
-        return const_iterator(this, size);
-    }
-
     void visit() const;
-
-    uint64_t Size() const {
-        if(!this) return 0;
-        return load;
-    }
 };
 
-class Environment : public Dictionary {
-
+class Environment : public GrayHeapObject, public HashMap
+{
     Environment* enclosure;
     Dictionary const* attributes;
 
 public:
     explicit Environment(int64_t initialLoad, Environment* enclosure)
-        : Dictionary(initialLoad)
+        : GrayHeapObject(0)
+        , HashMap(initialLoad)
         , enclosure(enclosure)
         , attributes(0)
         {}
 
     Environment* getEnclosure() const { return enclosure; }
-    void setEnclosure(Environment* env) { enclosure = env; }
+    void setEnclosure(Environment* env) {
+        enclosure = env;
+        writeBarrier();
+    }
 
     Dictionary const* getAttributes() const { return attributes; }
-    void setAttributes(Dictionary const* d) { attributes = d; }
+    void setAttributes(Dictionary const* d) {
+        attributes = d;
+        writeBarrier();
+    }
     bool hasAttributes() const { return attributes != 0; }
+
+
+    Value& insert(String name)
+    {
+        // TODO: is this write barrier always necessary?
+        writeBarrier();
+        Value* v = find2(name);
+        if(!v)
+        {
+            if(((load+1) * 2) > size)
+                rehash((size*2));
+            load++;
+            Pair* p = slot(name);
+            p->n = name;
+            return p->v;
+        }
+        else
+        {
+            return *v;
+        }
+    }
+
+    void remove(String name)
+    {
+        // TODO: avoid rehashing here
+        bool success;
+        Pair* p = find(name, success);
+        if(success)
+        {
+            memset(p, 0, sizeof(Pair));
+            load--;
+            rehash(std::max((uint64_t)1, nextPow2(load*2)));
+        }
+    }
+
+    void clear()
+    {
+        HashMap::clear();
+        memset(d->d, 0, sizeof(Pair)*size); 
+        load = 0;
+    }
+
+
 
     // Look up variable through enclosure chain 
     Value* getRecursive(String name, Environment*& env)
     {
         env = this;
         do {
-            Value* p = env->get(name);
+            Value* p = env->find2(name);
             if(p) return p;
         } while((env = env->getEnclosure()));
 
@@ -563,6 +602,8 @@ public:
     Dictionary* symbolDict;
     Dictionary* callDict;
     Dictionary* exprDict;
+    Dictionary* pairlistDict;
+    Dictionary* complexDict;
 
     // For R API support
     Lock apiLock;

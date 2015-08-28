@@ -26,15 +26,19 @@ Value cat(State& state, Value const* args) {
 	Character const& b = Cast<Character>(args[1]);
 	for(int64_t i = 0; i < a.length(); i++) {
 		if(!List::isNA(a[i])) {
-			Character c = As<Character>(a[i]);
-			for(int64_t j = 0; j < c.length(); j++) {
-                if(c[j] == Character::NAelement)
-                    printf("NA");
-                else
-				    printf("%s", state.externStr(c[j]).c_str());
-				if(!(i == a.length()-1 && j == c.length()-1))
-					printf("%s", state.externStr(b[0]).c_str());
-			}
+            if(a[i].isEnvironment())
+                printf("<environment: %llx>", (unsigned long long)a[i].p);
+            else {
+			    Character c = As<Character>(a[i]);
+			    for(int64_t j = 0; j < c.length(); j++) {
+                    if(c[j] == Character::NAelement)
+                        printf("NA");
+                    else
+				        printf("%s", state.externStr(c[j]).c_str());
+				    if(!(i == a.length()-1 && j == c.length()-1))
+					    printf("%s", state.externStr(b[0]).c_str());
+			    }
+            }
 		}
 	}
 	return Null::Singleton();

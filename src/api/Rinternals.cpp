@@ -559,13 +559,10 @@ SEXP Rf_alloc3DArray(SEXPTYPE, int, int, int) {
 SEXP Rf_allocMatrix(SEXPTYPE type, int rows, int cols) {
     SEXP r = Rf_allocVector3(type, ((R_xlen_t)rows)*cols, NULL);
 
-    Dictionary* d = new Dictionary(2);
+    auto d = new Dictionary(
+        Strings::classSym, Character::c(MakeString("matrix")),
+        Strings::dim, Integer::c(rows, cols));
     
-    d->insert(MakeString("class")) =
-        Character::c(MakeString("matrix"));
-    d->insert(MakeString("dim")) =
-        Integer::c(rows, cols);
-
     ((Object&)r->v).attributes(d);
 
     return r;
@@ -633,7 +630,7 @@ SEXP Rf_cons(SEXP x, SEXP y) {
     if((y->v).isNull()) {
         List r(1);
         r[0] = x->v;
-        return ToSEXP(CreatePairlist(r));
+        return ToSEXP(CreatePairlist(*global, r));
     }
     else {
         List ly = (List const&)y->v;
@@ -643,7 +640,7 @@ SEXP Rf_cons(SEXP x, SEXP y) {
             r[i+1] = ly[i];
         
         // TODO: copy names over too
-        return ToSEXP(CreatePairlist(r));
+        return ToSEXP(CreatePairlist(*global, r));
     }
 
 }
@@ -670,6 +667,7 @@ void Rf_defineVar(SEXP symbol, SEXP val, SEXP env) {
     Value v = ToRiposteValue(val->v);
 
     ((REnvironment&)env->v).environment()->insert(SymbolStr(symbol->v)) = v;
+    ((REnvironment&)env->v).environment()->writeBarrier();
 }
 
 SEXP Rf_dimnamesgets(SEXP, SEXP) {

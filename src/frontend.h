@@ -79,9 +79,9 @@ inline List CreateExpression(Global& g, List l) {
 
 inline List CreateCall(Global& g, List l, Value const& names = Value::Nil()) {
     if(!names.isNil()) {
-    	Dictionary* d = new Dictionary(2);
-	    d->insert(Strings::classSym) = Character::c(Strings::call);
-		d->insert(Strings::names) = names;
+    	auto d = new Dictionary(
+            Strings::classSym, Character::c(Strings::call),
+            Strings::names, names);
 	    l.attributes(d);
     }
     else {
@@ -90,12 +90,16 @@ inline List CreateCall(Global& g, List l, Value const& names = Value::Nil()) {
 	return l;
 }
 
-inline List CreatePairlist(List l, Value const& names = Value::Nil()) {
-	Dictionary* d = new Dictionary(2);
-	d->insert(Strings::classSym) = Character::c(Strings::pairlist);
-	if(!names.isNil())
-		d->insert(Strings::names) = names;
-	l.attributes(d);
+inline List CreatePairlist(Global& g, List l, Value const& names = Value::Nil()) {
+	if(!names.isNil()) {
+    	auto d = new Dictionary(
+            Strings::classSym, Character::c(Strings::pairlist),
+            Strings::names, names);
+	    l.attributes(d);
+    }
+    else {
+        l.attributes(g.pairlistDict);
+    }
 	return l;
 }
 
@@ -104,12 +108,9 @@ inline List CreateNamedList(List l, Value const& names) {
 	return l;
 }
 
-inline Object CreateComplex(double a) {
+inline Object CreateComplex(Global& g, double a) {
 	Object l = List::c(Double::c(0), Double::c(a));
-	Dictionary* d = new Dictionary(2);
-	d->insert(Strings::classSym) = Character::c(Strings::Complex);
-	d->insert(Strings::names) = Character::c(Strings::Re, Strings::Im);
-	l.attributes(d);
+    l.attributes(g.complexDict);
 	return l;
 }
 

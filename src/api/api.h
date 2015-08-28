@@ -40,13 +40,15 @@ VECTOR_IMPL(Logical32, int32_t, false)
 struct Pairlist : public Object {
     static const Type::Enum ValueType = Type::Pairlist;
 
-    struct Inner : public HeapObject {
+    struct Inner : public GrayHeapObject {
         SEXP car;
         SEXP cdr;
         String tag;
 
         Inner(SEXP car, SEXP cdr, String tag)
-            : car(car), cdr(cdr), tag(tag) {}
+            : GrayHeapObject(1), car(car), cdr(cdr), tag(tag) {}
+
+        void visit() const;
     };
 
     static Pairlist& Init(Value& v, SEXP car, SEXP cdr, String tag) {
@@ -67,12 +69,15 @@ struct Pairlist : public Object {
     
     void car(SEXP x) const {
         ((Inner*)p)->car = x;
+        ((Inner*)p)->writeBarrier();
     }
     void cdr(SEXP x) const {
         ((Inner*)p)->cdr = x;
+        ((Inner*)p)->writeBarrier();
     }
     void tag(String x) const {
         ((Inner*)p)->tag = x;
+        ((Inner*)p)->writeBarrier();
     }
 
     static List toList(Pairlist const& pairlist);

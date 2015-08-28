@@ -32,7 +32,7 @@ Instruction const* force(
 
 Instruction const* call_impl(State& state, Instruction const& inst)
 {
-    Heap::GlobalHeap.collect(state.global);
+    Memory::All.collect(state.global);
 
     DECODE(a); BIND(a);
     state.visible = true;
@@ -391,7 +391,7 @@ Instruction const* dots_impl(State& state, Instruction const& inst)
     // First time through, make a result vector...
     if(iter.i == -1)
     {
-        Heap::GlobalHeap.collect(state.global);
+        Memory::All.collect(state.global);
         out = List(dots.length());
         memset(((List&)out).v(), 0, dots.length()*sizeof(List::Element));
 
@@ -421,8 +421,7 @@ Instruction const* dots_impl(State& state, Instruction const& inst)
 
     if(names && names->isCharacter())
     {
-        Dictionary* d = new Dictionary(1);
-        d->insert(Strings::names) = *names;
+        auto d = new Dictionary(Strings::names, *names);
         ((Object&)out).attributes(d);
     }
 
@@ -974,7 +973,7 @@ Instruction const* setattr_impl(State& state, Instruction const& inst)
             REnvironment env = (REnvironment const&)c;
             Dictionary const* d = env.environment()->getAttributes();
 
-            // Delete the attribute if the user assign NULL
+            // Delete the attribute if the user assigns NULL
             env.environment()->setAttributes(
                 a.isNull() ? d->cloneWithout(name) : d->cloneWith(name,v));
 
