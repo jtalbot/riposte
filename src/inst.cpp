@@ -197,23 +197,18 @@ Instruction const* external_impl(State& state, Instruction const& inst)
     state.visible = true;
     DECODE(a);
 
-    void* func = NULL;
+    void* func = nullptr;
     if(a.isCharacter1()) {
         String name = a.s;
-        for(std::map<std::string,void*>::iterator i = state.global.handles.begin();
-            i != state.global.handles.end(); ++i) {
-            func = dlsym(i->second, name->s);
-            if(func != NULL)
-                break;
-        }
-        if(func == NULL)
+        func = state.global.get_dl_symbol(name->s);
+        if(!func)
             _error(std::string("Can't find external function: ") + name->s);
     }
     else if(a.isExternalptr()) {
         func = ((Externalptr const&)a).ptr();
     }
 
-    if(func == NULL) {
+    if(!func) {
         return StopDispatch(state, inst, MakeString(
             ".External needs a Character(1) or Externalptr as its first argument"), 
             inst.c);
@@ -964,7 +959,7 @@ Instruction const* setattr_impl(State& state, Instruction const& inst)
             auto i = static_cast<Integer const&>(v);
             if(i.length() == 2 && Integer::isNA(i[0]))
             { 
-                v = Sequence((int64_t)1,1,abs(i[1]));
+                v = Sequence((int64_t)1,1,std::abs(i[1]));
             }
         }
 

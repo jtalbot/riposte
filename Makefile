@@ -3,8 +3,8 @@
 UNAME := $(shell uname -s)
 CXX := clang++
 CC := clang
-CXXFLAGS := -std=c++11 -Wall -Iinclude -g
-CFLAGS := -Wall -Iinclude -g
+CXXFLAGS := -std=c++11 -Wall -Wno-undefined-bool-conversion -Iinclude -g3
+CFLAGS := -Wall -Iinclude -g3
 LFLAGS := -fpic
 LIBS := -Llibs/dyncall/dyncall -lpthread -ldyncall_s
 

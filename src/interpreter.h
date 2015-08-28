@@ -593,8 +593,6 @@ class Global
 public:
     StringTable strings;
 
-    std::map<std::string, void*> handles;
-    
     Environment* empty;
     Environment* global;
     Code* promiseCode;
@@ -656,6 +654,11 @@ public:
     std::string externStr(String s) const {
         return strings.out(s);
     }
+
+    std::unordered_map<std::string, void*> dl_handles;
+    std::unordered_map<std::string, void*> dl_symbols;
+
+    void* get_dl_symbol(std::string const& s);
 };
 
 // Global pointer, used by the R API, which

@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <fstream>
+#include <dlfcn.h>
 
 #include "value.h"
 #include "bc.h"
@@ -374,6 +375,25 @@ void Global::dumpProfile(std::string filename) {
 
     std::ofstream file(filename.c_str());
     file << buffer.rdbuf() << std::endl;
+}
+
+void* Global::get_dl_symbol(std::string const& s)
+{
+    auto i = dl_symbols.find(s);
+    if(i != dl_symbols.end())
+        return i->second;
+
+    for(auto& j : dl_handles)
+    {
+        void* func = dlsym(j.second, s.c_str());
+        if(func != nullptr)
+        {
+            dl_symbols[s] = func;
+            return func;
+        }
+    }
+
+    return nullptr;
 }
 
 

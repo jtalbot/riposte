@@ -25,7 +25,7 @@ void isnan_map(State& state, Logical::Element& r, double a) {
 
 extern "C"
 void iabs_map(State& state, int64_t& r, int64_t a) {
-    r = Integer::isNA(a) ? Integer::NAelement : abs(a);
+    r = Integer::isNA(a) ? Integer::NAelement : std::abs(a);
 }
 
 extern "C"

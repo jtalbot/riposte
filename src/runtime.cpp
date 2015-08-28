@@ -4,7 +4,6 @@
 #include "runtime.h"
 #include "compiler.h"
 
-#include <dlfcn.h>
 #include "../libs/dyncall/dyncall/dyncall.h"
 
 // Needed by libRblas, figure out a good placd to put this...
@@ -539,27 +538,11 @@ Integer Semijoin(Value const& a, Value const& b) {
 }
 
 static void* find_function(State& state, const char* name) {
-    //static String lastname = Strings::empty;
-    //static void* lastfunc = NULL;
 
-    void* func = NULL;
-    /*if(std::string(name) == std::string(lastname)) {
-        func = lastfunc;
-    }
-    else {*/
-        for(std::map<std::string,void*>::iterator i = state.global.handles.begin();
-            i != state.global.handles.end(); ++i) {
-            func = dlsym(i->second, name);
-            if(func != NULL)
-                break;
-        }
-        //lastfunc = func;
-        //lastname = name;
-    //}
-
-    if(func == NULL)
+    void* func = state.global.get_dl_symbol(name);
+    if(!func)
         _error("Can't find external function");
-    
+
     return func;
 }
 

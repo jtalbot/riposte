@@ -38,7 +38,7 @@ void openDynamic(State& state, std::string path, Environment* env) {
         _error(std::string("failed to open: ") + path + " (" + dlerror() + ")");
     }
     else {
-        state.global.handles[path] = lib;
+        state.global.dl_handles[path] = lib;
     }
 }
 
