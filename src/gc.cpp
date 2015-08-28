@@ -198,9 +198,9 @@ uint64_t dictionary_count;
 
 void Dictionary::visit() const
 {
-    //dictionary_count++;
     if(HeapObject::visit())
     {
+        //dictionary_count++;
         d->visit();
         for(uint64_t i = 0; i < size; i++)
         {
@@ -212,10 +212,13 @@ void Dictionary::visit() const
     //bytes += 24*size+48;
 }
 
+uint64_t environment_count;
+
 void Environment::visit() const
 {
     if(GrayHeapObject::visit())
     {
+        //environment_count++;
         enclosure->visit();
         attributes->visit();
         d->visit(); 
@@ -248,9 +251,9 @@ uint64_t code_count;
 
 void Code::visit() const
 {
-    //code_count++;
     if(GrayHeapObject::visit())
     {
+        //code_count++;
         traverse(expression);
         traverse(bc);
         traverse(constants);
@@ -677,13 +680,14 @@ Memory::Memory() : heapSize(1<<20), total(0), sweeps(0)
 }
 
 Memory::~Memory() {
-    printf("Sweeps: %d\n", sweeps);
+    //printf("Sweeps: %d\n", sweeps);
 }
 
 void Memory::mark(Global& global)
 {
     /*for(int i = 0; i < 17; ++i)
         type_count[i] = 0;
+    environment_count = 0;
     dictionary_count = 0;
     code_count = 0;
     prototype_count = 0;*/
@@ -762,6 +766,7 @@ void Memory::mark(Global& global)
 
     /*for(int i = 0; i < 17; ++i)
         printf("%d: %d\n", i, type_count[i]);
+    printf("env: %d\n", environment_count);
     printf("dict: %d\n", dictionary_count);
     printf("code: %d\n", code_count);
     printf("proto: %d\n", prototype_count);*/
@@ -772,7 +777,7 @@ uint64_t Memory::sweep()
 {
     sweeps++;
     uint64_t v = GlobalHeap.sweep();
-    printf("Sweeping => %d\n", v);
+    //printf("Sweeping => %d\n", v);
     return v;
 }
 
