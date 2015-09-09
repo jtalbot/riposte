@@ -79,7 +79,7 @@ inline List CreateExpression(Global& g, List l) {
 
 inline List CreateCall(Global& g, List l, Value const& names = Value::Nil()) {
     if(!names.isNil()) {
-    	auto d = new Dictionary(
+    	auto d = Dictionary::Make(
             Strings::classSym, Character::c(Strings::call),
             Strings::names, names);
 	    l.attributes(d);
@@ -92,7 +92,7 @@ inline List CreateCall(Global& g, List l, Value const& names = Value::Nil()) {
 
 inline List CreatePairlist(Global& g, List l, Value const& names = Value::Nil()) {
 	if(!names.isNil()) {
-    	auto d = new Dictionary(
+    	auto d = Dictionary::Make(
             Strings::classSym, Character::c(Strings::pairlist),
             Strings::names, names);
 	    l.attributes(d);
@@ -104,7 +104,7 @@ inline List CreatePairlist(Global& g, List l, Value const& names = Value::Nil())
 }
 
 inline List CreateNamedList(List l, Value const& names) {
-	l.attributes(new Dictionary(Strings::names, names));
+	l.attributes(Dictionary::Make(Strings::names, names));
 	return l;
 }
 

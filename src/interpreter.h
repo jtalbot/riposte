@@ -3,8 +3,7 @@
 
 #include <map>
 #include <unordered_map>
-#include <set>
-#include <deque>
+#include <unordered_set>
 #include <list>
 #include <iostream>
 
@@ -57,7 +56,7 @@ class StringTable
 {
     //std::vector< std::pair<String, bool> > strings;
     //std::unordered_map< std::string, size_t > index; 
-    std::unordered_map<std::string, std::pair<String, bool> > stringTable; 
+    std::unordered_map<std::string, std::pair<String, bool> > stringTable;
     mutable Lock lock;
 
 public:
@@ -86,10 +85,11 @@ public:
         return offset;
     }*/
 
-    String get(std::string const& s) const
+    String get(String s) const
     {
         lock.acquire();
-        auto i = stringTable.find(s);
+
+        auto i = stringTable.find(s->s);
 
         String result = (i != stringTable.end())
             ? i->second.first
@@ -228,58 +228,162 @@ struct Prototype : public HeapObject {
     void visit() const;
 };
 
-
-class HashMap 
+// A simple immutable named list implementation for attributes
+// Eventually, we may want to store entries sorted
+// so we can do a binary search instead of a scan.
+class Dictionary : public HeapObject
 {
 protected:
-    uint64_t size, load, ksize;
-
     struct Pair { String n; Value v; };
     
-    struct Inner : public HeapObject {
-        Pair d[];
-    };
+    uint64_t size;
+    Pair d[];
 
-    Inner* d;
+    Dictionary(uint64_t size)
+        : size(size)
+    {}
 
-    // Returns the location of variable `name` in this environment or
-    // an empty pair (String::NA, Value::Nil).
-    // success is set to true if the variable is found. This boolean flag
-    // is necessary for compiler optimizations to eliminate expensive control flow.
-    ALWAYS_INLINE
-    Pair* find(String name, bool& success) const {
-        uint64_t i = ((uint64_t)name >> 3) & ksize;
-        Pair* first = &d->d[i];
-        if(__builtin_expect(first->n == name, true)) {
-            success = true;
-            return first;
-        }
-        uint64_t j = 0;
-        while(d->d[i].n != Strings::NA) {
-            i = (i+(++j)) & ksize;
-            if(__builtin_expect(d->d[i].n == name, true)) {
-                success = true;
-                return &d->d[i];
-            }
-        }
-        success = false;
-        return &d->d[i];
+    static Dictionary* Make(uint64_t size)
+    {
+        return new (sizeof(Pair)*size) Dictionary(size); 
     }
 
-    Value* find2(String name) const
+public:
+    static Dictionary const* Make(String name, Value const& v)
+    {
+        Dictionary* result = Make(1);
+        result->d[0] = Pair { name, v };
+        return result;
+    }
+
+    static Dictionary const* Make(
+        String name0, Value const& v0,
+        String name1, Value const& v1)
+    {
+        Dictionary* result = Make(2);
+        result->d[0] = Pair { name0, v0 };
+        result->d[1] = Pair { name1, v1 };
+        return result;
+    }
+
+    uint64_t Size() const {
+        if(!this) return 0;
+        return size;
+    }
+
+    // Returns a pointer to the entry for `name`
+    // or a nullptr if it doesn't exist.
+    Value const* get(String name) const
     {
         if(!this) return nullptr;
+        
+        for(uint64_t i = 0; i < size; ++i)
+            if(d[i].n == name) return &d[i].v;
 
-        uint64_t i = ((uint64_t)name >> 3) & ksize, j = 0;
+        return nullptr;
+    }
 
-        if(__builtin_expect(d->d[i].n == name, true))
-            return &d->d[i].v;
+    // clone without an entry
+    Dictionary const* cloneWithout(String name) const
+    {
+        if(!this || size == 0) return nullptr;
+        
+        auto v = get(name);
+        if(!v) return this;
+        if(size == 1) return nullptr;
 
-        while(d->d[i].n != Strings::NA)
+        // copy over elements
+        Dictionary* clone = Make(size-1);
+        for(uint64_t i = 0, j = 0; i < size; i++)
         {
-            i = (i+(++j)) & ksize;
-            if(__builtin_expect(d->d[i].n == name, true))
-                return &d->d[i].v;
+            if(d[i].n != name)
+                clone->d[j++] = d[i];
+        }
+        return clone;
+    }
+
+    // clone with a new entry
+    Dictionary const* cloneWith(String name, Value const& v) const
+    {
+        if(!this || size == 0)
+        {
+            Dictionary* clone = Make(1);
+            clone->d[0] = Pair { name, v };
+            return clone;
+        }
+
+        auto p = get(name);
+
+        // copy over elements
+        Dictionary* clone = Make(size+(p?0:1));
+        uint64_t j = 0;
+        for(uint64_t i = 0; i < size; i++)
+        {
+            if(d[i].n != name)
+                clone->d[j++] = d[i];
+        }
+        clone->d[j] = Pair { name, v };
+
+        return clone;
+    }
+
+    List list() const
+    {
+        Character n(size);
+        List v(size);
+        for(size_t i = 0, j = 0; i < size; ++i)
+        {
+            n[j  ] = d[i].n;
+            v[j++] = d[i].v;
+        }
+
+        v.attributes(Make(Strings::names, n));
+        return v;
+    }
+
+    void visit() const;
+};
+
+class HashMap : public HeapObject 
+{
+    HashMap(uint64_t size, uint64_t capacity)
+        : size(size), capacity(capacity)
+    {
+        memset(d, 0, sizeof(Pair)*capacity); 
+    }
+
+public:
+    struct Pair { String n; Value v; };
+   
+    uint64_t size, capacity;
+    Pair d[]; 
+   
+    // assumes capacity is a power of 2 
+    static HashMap* Make(uint64_t size, uint64_t capacity)
+    {
+        return new (sizeof(Pair)*capacity) HashMap(size, capacity);
+    }
+
+    uint64_t find(String name) const
+    {
+        uint64_t i = ((uint64_t)name >> 5) & (capacity-1);
+        while(d[i].n != name && d[i].n != Strings::NA)
+            i = (i+1) & (capacity-1);
+        return i;
+    }
+
+    Value* find2(String name)
+    {
+        uint64_t i = ((uint64_t)name >> 5) & (capacity-1);
+
+        if(__builtin_expect(d[i].n == name, true))
+            return &d[i].v;
+
+        while(d[i].n != Strings::NA)
+        {
+            i = (i+1) & (capacity-1);
+            if(__builtin_expect(d[i].n == name, true))
+                return &d[i].v;
         }
 
         return nullptr;
@@ -288,201 +392,46 @@ protected:
     // Returns the location where variable `name` should be inserted.
     // Assumes that `name` doesn't exist in the hash table yet.
     // Used for rehash and insert where this is known to be true.
-    ALWAYS_INLINE
-    Pair* slot(String name) const
+    Pair* slot(String name)
     {
-        uint64_t i = ((uint64_t)name >> 3) & ksize;
-        if(__builtin_expect(d->d[i].n == Strings::NA, true)) {
-            return &d->d[i];
-        }
-        uint64_t j = 0;
-        while(d->d[i].n != Strings::NA) {
-            i = (i+(++j)) & ksize;
-        }
-        return &d->d[i];
-    }
-
-    void rehash(uint64_t s)
-    {
-        uint64_t old_size = size;
-        uint64_t old_load = load;
-        Inner* old_d = d;
-
-        d = new (sizeof(Pair)*s) Inner();
-        size = s;
-        ksize = s-1;
-        clear();
+        uint64_t i = ((uint64_t)name >> 5) & (capacity-1);
+        if(__builtin_expect(d[i].n == Strings::NA, true))
+            return &d[i];
         
-        // copy over previous populated values...
-        if(old_load > 0) {
-            for(uint64_t i = 0; i < old_size; i++) {
-                if(old_d->d[i].n != Strings::NA) {
-                    load++;
-                    *slot(old_d->d[i].n) = old_d->d[i];
-                }
-            }
-        }
+        while(d[i].n != Strings::NA)
+            i = (i+1) & (capacity-1);
+        
+        return &d[i];
     }
 
-    void clear()
+    HashMap* rehash(uint64_t new_capacity) const
     {
-        memset(d->d, 0, sizeof(Pair)*size); 
-        load = 0;
-    }
+        HashMap* result = Make(size, new_capacity);
 
-public:
-
-    HashMap(uint64_t initialLoad)
-        : size(0), load(0), ksize(0), d(nullptr)
-    {
-        rehash(std::max((uint64_t)1, nextPow2(initialLoad*2)));
-        clear();
-    }
-
-    // Returns a pointer to the entry for `name`
-    // or a nullptr if it doesn't exist.
-    Value const* get(String name) const
-    {
-        return find2(name); 
-    }
-
-    uint64_t Size() const {
-        if(!this) return 0;
-        return load;
-    }
-
-    class const_iterator
-    {
-        HashMap const* d;
-        int64_t i;
-
-    public:
-        const_iterator(HashMap const* d, int64_t idx) {
-            this->d = d;
-            i = std::max((int64_t)0, std::min((int64_t)d->size, idx));
-            while(d->d->d[i].n == Strings::NA && i < (int64_t)d->size) i++;
-        }
-        String string() const { return d->d->d[i].n; }    
-        Value const& value() const { return d->d->d[i].v; }
-        const_iterator& operator++() {
-            while(d->d->d[++i].n == Strings::NA && i < (int64_t)d->size);
-            return *this;
-        }
-        bool operator==(const_iterator const& o) {
-            return d == o.d && i == o.i;
-        }
-        bool operator!=(const_iterator const& o) {
-            return d != o.d || i != o.i;
-        }
-    };
-
-    const_iterator begin() const {
-        return const_iterator(this, 0);
-    }
-
-    const_iterator end() const {
-        return const_iterator(this, size);
-    }
-
-};
-
-class Dictionary : public HeapObject, public HashMap
-{
-protected:
-    Dictionary(uint64_t initialLoad)
-        : HashMap(initialLoad)
-    {}
-
-public:
-    // Immutable HashMap for attributes
-    // A null 'this' pointer must be treated as an empty dictionary
-
-    Dictionary(String name, Value const& v)
-        : HashMap(1)
-    {
-        load++;
-        *slot(name) = Pair { name, v };
-    }
-
-    Dictionary(String name0, Value const& v0,
-               String name1, Value const& v1)
-        : HashMap(2)
-    {
-        load++;
-        *slot(name0) = Pair { name0, v0 };
-        load++;
-        *slot(name1) = Pair { name1, v1 };
-    }
-
-    // clone without an entry
-    Dictionary const* cloneWithout(String name) const
-    {
-        auto v = find2(name);
-        if(!v) return this;
-        if(load == 1) return nullptr;
-
-        // copy over elements
-        Dictionary* clone = new Dictionary(load-1);
-        if(load > 0)
-        {
-            for(uint64_t i = 0; i < size; i++)
-            {
-                if(d->d[i].n != Strings::NA && d->d[i].n != name)
-                {
-                    clone->load++;
-                    *clone->slot(d->d[i].n) = d->d[i];
-                }
-            }
-        }
-        return clone;
-    }
-
-    // clone with a new entry
-    Dictionary const* cloneWith(String name, Value const& v) const
-    {
-        if(!this)
-        {
-            Dictionary* clone = new Dictionary(1);
-            clone->load++;
-            *clone->slot(name) = Pair { name, v };
-            return clone;
+        // copy over values...
+        for(uint64_t i = 0; i < capacity; i++) {
+            if(d[i].n != Strings::NA)
+                *result->slot(d[i].n) = d[i];
         }
 
-        auto p = find2(name);
-
-        // copy over elements
-        Dictionary* clone = new Dictionary(load+(p?0:1));
-        if(load-(p?1:0) > 0)
-        {
-            for(uint64_t i = 0; i < size; i++)
-            {
-                if(d->d[i].n != Strings::NA && d->d[i].n != name)
-                {
-                    clone->load++;
-                    *clone->slot(d->d[i].n) = d->d[i];
-                }
-            }
-        }
-        clone->load++;
-        *clone->slot(name) = Pair { name, v };
-
-        return clone;
+        return result;
     }
 
     void visit() const;
 };
 
-class Environment : public GrayHeapObject, public HashMap
+class Environment : public GrayHeapObject
 {
     Environment* enclosure;
     Dictionary const* attributes;
+    HashMap* map;
 
 public:
-    explicit Environment(int64_t initialLoad, Environment* enclosure)
+    explicit Environment(uint64_t size, Environment* enclosure)
         : GrayHeapObject(0)
-        , HashMap(initialLoad)
         , enclosure(enclosure)
-        , attributes(0)
+        , attributes(nullptr)
+        , map(HashMap::Make(0, nextPow2(std::max(size+1, size*2))))
         {}
 
     Environment* getEnclosure() const { return enclosure; }
@@ -498,59 +447,80 @@ public:
     }
     bool hasAttributes() const { return attributes != 0; }
 
+    void init(String name, Value v)
+    {
+        HashMap::Pair* p = map->slot(name);
+        *p = { name, v };
+        map->size++;
+    }
+
+    // Returns a pointer to the entry for `name`
+    // or a nullptr if it doesn't exist.
+    Value const* get(String name) const
+    {
+        uint64_t i = map->find(name);
+        return (map->d[i].n != Strings::NA)
+            ? &map->d[i].v
+            : nullptr;
+    }
 
     Value& insert(String name)
     {
         // TODO: is this write barrier always necessary?
         writeBarrier();
-        Value* v = find2(name);
-        if(!v)
-        {
-            if(((load+1) * 2) > size)
-                rehash((size*2));
-            load++;
-            Pair* p = slot(name);
-            p->n = name;
-            return p->v;
-        }
+        Value* v = map->find2(name);
+        if(v)
+            return *v;
         else
         {
-            return *v;
+            if(((map->size+1) * 4) > (map->capacity*3))
+                map = map->rehash(map->capacity*2);
+            map->size++;
+            HashMap::Pair* p = map->slot(name);
+            p->n = name;
+            return p->v;
         }
     }
 
     void remove(String name)
     {
-        // TODO: avoid rehashing here
-        bool success;
-        Pair* p = find(name, success);
-        if(success)
+        uint64_t i = map->find(name);
+        if(map->d[i].n != Strings::NA)
+            map->size--;
+        while(map->d[i].n != Strings::NA)
         {
-            memset(p, 0, sizeof(Pair));
-            load--;
-            rehash(std::max((uint64_t)1, nextPow2(load*2)));
+            uint64_t j = i, k;
+            do {
+                j = (j+1) % (map->capacity-1);
+                k = ((uint64_t)map->d[j].n >> 5) & (map->capacity-1);
+            } while(map->d[j].n != Strings::NA &&
+                  ((i<=j) ? ((i<k)&&(k<=j)) : ((i<k)||(k<=j))));
+            map->d[i] = map->d[j];
+            i = j;
         }
     }
-
-    void clear()
-    {
-        HashMap::clear();
-        memset(d->d, 0, sizeof(Pair)*size); 
-        load = 0;
-    }
-
-
 
     // Look up variable through enclosure chain 
     Value* getRecursive(String name, Environment*& env)
     {
         env = this;
         do {
-            Value* p = env->find2(name);
+            Value* p = env->map->find2(name);
             if(p) return p;
         } while((env = env->getEnclosure()));
 
         return nullptr;
+    }
+
+    Character names() const
+    {
+        Character result(map->size);
+        for(uint64_t i = 0, j = 0; i < map->capacity; ++i)
+        {
+            if(map->d[i].n != Strings::NA)
+                result[j++] = map->d[i].n;
+        }
+        return result;
     }
 
     void visit() const;
@@ -597,11 +567,11 @@ public:
     Environment* global;
     Code* promiseCode;
 
-    Dictionary* symbolDict;
-    Dictionary* callDict;
-    Dictionary* exprDict;
-    Dictionary* pairlistDict;
-    Dictionary* complexDict;
+    Dictionary const* symbolDict;
+    Dictionary const* callDict;
+    Dictionary const* exprDict;
+    Dictionary const* pairlistDict;
+    Dictionary const* complexDict;
 
     // For R API support
     Lock apiLock;

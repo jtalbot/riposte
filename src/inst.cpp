@@ -416,7 +416,7 @@ Instruction const* dots_impl(State& state, Instruction const& inst)
 
     if(names && names->isCharacter())
     {
-        auto d = new Dictionary(Strings::names, *names);
+        auto d = Dictionary::Make(Strings::names, *names);
         ((Object&)out).attributes(d);
     }
 
@@ -954,7 +954,7 @@ Instruction const* setattr_impl(State& state, Instruction const& inst)
         // Special casing for R's compressed rownames representation.
         // Can we move this to the R compatibility layer?
         Value v = a;
-        if(Eq(name, Strings::rownames) && v.isInteger())
+        if(v.isInteger() && Eq(name, Strings::rownames))
         {
             auto i = static_cast<Integer const&>(v);
             if(i.length() == 2 && Integer::isNA(i[0]))
@@ -1011,18 +1011,7 @@ Instruction const* attributes_impl(State& state, Instruction const& inst)
 
         if(d->Size() > 0)
         {
-            Character n(d->Size());
-            List v(d->Size());
-
-            int64_t j = 0;
-            for(auto i = d->begin(); i != d->end(); ++i, ++j)
-            {
-                n[j] = i.string();
-                v[j] = i.value();
-            }
-
-            v.attributes(new Dictionary(Strings::names, n)); 
-            OUT(c) = v;
+            OUT(c) = d->list();
             return &inst+1;
         }
     }
@@ -1101,14 +1090,7 @@ Instruction const* env_names_impl(State& state, Instruction const& inst)
 
     Environment* env = static_cast<REnvironment const&>(a).environment();
 
-    Character r(env->Size());
-    int64_t j = 0;
-    for(Dictionary::const_iterator i = env->begin(); i != env->end(); ++i, ++j)
-    {
-        r[j] = i.string();
-    }
-
-    OUT(c) = r;
+    OUT(c) = env->names();
     return &inst+1;
 }
 

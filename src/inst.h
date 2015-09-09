@@ -59,7 +59,7 @@ Value const* internAndGet(State const& state, Dictionary const* d, String s)
     // So if we can't find an interned version of s,
     // it doesn't exist in the environment and there
     // is nothing to get.
-    String i = state.global.strings.get(s->s);
+    String i = state.global.strings.get(s);
     return i ? d->get(i) : nullptr;
 }
 
@@ -70,7 +70,7 @@ Value const* internAndGet(State const& state, Environment* e, String s)
     // So if we can't find an interned version of s,
     // it doesn't exist in the environment and there
     // is nothing to get.
-    String i = state.global.strings.get(s->s);
+    String i = state.global.strings.get(s);
     return i ? e->get(i) : nullptr;
 }
 
@@ -81,7 +81,7 @@ Value* internAndGetRec(State const& state, Environment* e, String s, Environment
     // So if we can't find an interned version of s,
     // it doesn't exist in the environment and there
     // is nothing to get.
-    String i = state.global.strings.get(s->s);
+    String i = state.global.strings.get(s);
     out = nullptr;
     return i ? e->getRecursive(i, out) : nullptr;
 }
@@ -93,7 +93,7 @@ void internAndRemove(State const& state, Environment* d, String s)
     // So if we can't find an interned version of s,
     // it doesn't exist in the environment and there
     // is nothing to remove.
-    String name = state.global.strings.get(s->s);
+    String name = state.global.strings.get(s);
     if(name)
         d->remove(name);
 }

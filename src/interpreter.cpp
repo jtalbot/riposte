@@ -261,11 +261,11 @@ Global::Global(uint64_t states, int64_t argc, char** argv)
     promiseCode->registers = 3;
     promiseCode->expression = Value::Nil();
 
-    symbolDict = new Dictionary(Strings::classSym, Character::c(Strings::name));
-    callDict = new Dictionary(Strings::classSym, Character::c(Strings::call)); 
-    exprDict = new Dictionary(Strings::classSym, Character::c(Strings::expression));
-    pairlistDict = new Dictionary(Strings::classSym, Character::c(Strings::pairlist));
-    complexDict = new Dictionary(Strings::classSym, Character::c(Strings::Complex), Strings::names, Character::c(Strings::Re, Strings::Im));
+    symbolDict = Dictionary::Make(Strings::classSym, Character::c(Strings::name));
+    callDict = Dictionary::Make(Strings::classSym, Character::c(Strings::call)); 
+    exprDict = Dictionary::Make(Strings::classSym, Character::c(Strings::expression));
+    pairlistDict = Dictionary::Make(Strings::classSym, Character::c(Strings::pairlist));
+    complexDict = Dictionary::Make(Strings::classSym, Character::c(Strings::Complex), Strings::names, Character::c(Strings::Re, Strings::Im));
 }
 
 void Code::printByteCode(Global const& global) const {

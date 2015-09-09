@@ -19,7 +19,7 @@ Value parseC(R_CMethodDef const* call, String klass) {
     names[3] = Strings::numParameters;
 
     List r = List::c(n, a, d, num);
-    auto dict = new Dictionary(
+    auto dict = Dictionary::Make(
         Strings::classSym, Character::c(klass, Strings::NativeSymbolInfo),
         Strings::names, names);
     r.attributes(dict);
@@ -42,7 +42,7 @@ Value parseCall(R_CallMethodDef const* call, String klass) {
     names[3] = Strings::numParameters;
 
     List r = List::c(n, a, d, num);
-    auto dict = new Dictionary(
+    auto dict = Dictionary::Make(
         Strings::classSym, Character::c(klass, Strings::NativeSymbolInfo),
         Strings::names, names);
     r.attributes(dict);
@@ -71,7 +71,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
             r[i] = values[i];
             names[i] = ((List const&)values[i])[0].s;
         }
-        auto dict = new Dictionary(
+        auto dict = Dictionary::Make(
             Strings::classSym, Character::c(Strings::NativeRoutineList),
             Strings::names, names);
         r.attributes(dict);
@@ -91,7 +91,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
             r[i] = values[i];
             names[i] = ((List const&)values[i])[0].s;
         }
-        auto dict = new Dictionary(
+        auto dict = Dictionary::Make(
             Strings::classSym, Character::c(Strings::NativeRoutineList),
             Strings::names, names);
         r.attributes(dict);
@@ -111,7 +111,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
             r[i] = values[i];
             names[i] = ((List const&)values[i])[0].s;
         }
-        auto dict = new Dictionary(
+        auto dict = Dictionary::Make(
             Strings::classSym, Character::c(Strings::NativeRoutineList),
             Strings::names, names);
         r.attributes(dict);
@@ -131,7 +131,7 @@ int R_registerRoutines(DllInfo *info, const R_CMethodDef * const croutines,
             r[i] = values[i];
             names[i] = ((List const&)values[i])[0].s;
         }
-        auto dict = new Dictionary(
+        auto dict = Dictionary::Make(
             Strings::classSym, Character::c(Strings::NativeRoutineList),
             Strings::names, names);
         r.attributes(dict);

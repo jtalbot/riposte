@@ -67,6 +67,13 @@ inline void assignArgument(State& state, Environment* evalEnv, Environment* assi
 	}
 }
 
+inline void assignArgumentFast(State& state, Environment* evalEnv, Environment* assignEnv, String n, Value v)
+{
+    if(v.isPromise())
+        ((Promise&)v).environment(evalEnv);
+    assignEnv->init(n,v);
+}
+
 inline void assignDot(State& state, Value const& v, Environment* evalEnv, Value& out) {
 	out = v;
 
@@ -334,22 +341,16 @@ Environment* FastMatchArgs(State& state, Environment* env, Closure const& func, 
 	int64_t const end = std::min(arguments.length(), pDotIndex);
 
     Environment* fenv = new Environment(
-        (int64_t)call.arguments().length() + 5,
+        (int64_t)parameters.length() + call.extraArgs().length() + 4,
         func.environment());
-
-    // set extra args (they must be named)
-    for(size_t i = 0; i < call.extraArgs().length(); ++i) {
-        assignArgument(state, env, fenv, 
-            call.extraNames()[i], call.extraArgs()[i]);
-    }
 
 	// set parameters from arguments & defaults
 	for(int64_t i = 0; i < parameters.length(); i++) {
 		if(i < end && !arguments[i].isNil()) {
-			assignArgument(state, env, fenv, parameters[i], arguments[i]);
+			assignArgumentFast(state, env, fenv, parameters[i], arguments[i]);
         }
 		else {
-			assignArgument(state, fenv, fenv, parameters[i], defaults[i]);
+			assignArgumentFast(state, fenv, fenv, parameters[i], defaults[i]);
         }
 	}
 
@@ -369,11 +370,19 @@ Environment* FastMatchArgs(State& state, Environment* env, Closure const& func, 
 	    }
     }
 
-    REnvironment::Init(fenv->insert(Strings::__parent__), env);
-    fenv->insert(Strings::__call__) = call.call();
-    fenv->insert(Strings::__function__) = func;
-    fenv->insert(Strings::__nargs__) = Integer::c(arguments.length());
+    Value parent;
+    REnvironment::Init(parent, env);
+    fenv->init(Strings::__parent__, parent);
+    fenv->init(Strings::__call__, call.call());
+    fenv->init(Strings::__function__, func);
+    fenv->init(Strings::__nargs__, Integer::c(arguments.length()));
     
+    // set extra args (they must be named)
+    for(size_t i = 0; i < call.extraArgs().length(); ++i) {
+        assignArgument(state, env, fenv, 
+            call.extraNames()[i], call.extraArgs()[i]);
+    }
+
     return fenv;
 }
 

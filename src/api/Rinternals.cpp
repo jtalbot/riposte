@@ -559,7 +559,7 @@ SEXP Rf_alloc3DArray(SEXPTYPE, int, int, int) {
 SEXP Rf_allocMatrix(SEXPTYPE type, int rows, int cols) {
     SEXP r = Rf_allocVector3(type, ((R_xlen_t)rows)*cols, NULL);
 
-    auto d = new Dictionary(
+    auto d = Dictionary::Make(
         Strings::classSym, Character::c(MakeString("matrix")),
         Strings::dim, Integer::c(rows, cols));
     

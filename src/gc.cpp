@@ -201,15 +201,25 @@ void Dictionary::visit() const
     if(HeapObject::visit())
     {
         //dictionary_count++;
-        d->visit();
         for(uint64_t i = 0; i < size; i++)
         {
-            d->d[i].n->visit();
-            if(d->d[i].n != Strings::NA)
-                traverse(d->d[i].v);
+            d[i].n->visit();
+            if(d[i].n != Strings::NA)
+                traverse(d[i].v);
         }
     }
     //bytes += 24*size+48;
+}
+
+void HashMap::visit() const
+{
+    HeapObject::visit();
+    for(uint64_t i = 0; i < capacity; i++)
+    {
+        d[i].n->visit();
+        if(d[i].n != Strings::NA)
+            traverse(d[i].v);
+    }
 }
 
 uint64_t environment_count;
@@ -221,15 +231,8 @@ void Environment::visit() const
         //environment_count++;
         enclosure->visit();
         attributes->visit();
-        d->visit(); 
+        map->visit(); 
             
-        for(uint64_t i = 0; i < size; i++)
-        {
-            d->d[i].n->visit();
-            if(d->d[i].n != Strings::NA)
-                traverse(d->d[i].v);
-        }
-
         // also have to traverse the dots for now
         Value const* dots = get(Strings::__dots__);
         if(dots && dots->isList())

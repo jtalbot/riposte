@@ -126,7 +126,7 @@ inline HeapObject* Heap::smallalloc(uint64_t bytes)
     
     HeapObject* o = (HeapObject*)bump;
     o->block();
-    memset(o, 0xba, bytes);
+    //memset(o, 0xba, bytes);
 
     bump += bytes;
     return o;
