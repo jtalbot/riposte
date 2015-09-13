@@ -24,7 +24,7 @@ void sprintf_map(State& state, String& r, String fmt, ...) {
 extern "C"
 Value printf_parse(State& state, Value const* args)
 {
-    Character const& c = (Character const&)args[0];
+    auto c = static_cast<Character const&>(args[0]);
     
     Character r(0);
 

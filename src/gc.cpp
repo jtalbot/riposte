@@ -41,19 +41,6 @@ bool HeapObject::marked() const {
     return (gcObject()->mark[word] & (((uint64_t)1) << slot)) != 0;
 }
 
-void HeapObject::block() const {
-    uint64_t i = ((uint64_t)this & (REGION_SIZE-1)) / CELL_SIZE;
-    uint64_t slot = i % 64;
-    uint64_t word = i / 64;
-    
-    gcObject()->mark[word] &= ~(((uint64_t)1) << slot);
-    gcObject()->block[word] |= (((uint64_t)1) << slot);
-}
-
-GCObject* HeapObject::gcObject() const {
-    return (GCObject*)((uint64_t)this & ~(REGION_SIZE-1));
-}
-
 bool HeapObject::visit() const
 {
     if(this)
@@ -316,6 +303,22 @@ HeapObject* Heap::addFinalizer(HeapObject* h, GCFinalizer f)
     if(h && f)
         finalizers.push_back(std::make_pair(h, f));
     return h;
+}
+
+bool Heap::containsSlow(GCObject const* g) const
+{ 
+    for(auto& a : arenas)
+    {
+        if(a.ptr == g)
+            return true;
+    }
+    for(auto& a : larges)
+    {
+        if(a.ptr == g)
+            return true;
+    }
+
+    return false;
 }
 
 uint64_t Heap::sweep()

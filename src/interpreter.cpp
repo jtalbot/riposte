@@ -21,7 +21,7 @@ Character InternStrings(State& state, Character const& c)
 {
     Character r(c.length());
     for(size_t i = 0; i < c.length(); ++i) {
-        r[i] = state.global.strings.intern(c[i]->s);
+        r[i] = state.global.strings.intern(c[i]);
     }
     return r;
 }
@@ -238,7 +238,7 @@ Global::Global(uint64_t states, int64_t argc, char** argv)
 
     // initialize string table
     #define ENUM_STRING_TABLE(name, str) \
-        Strings::name = strings.in(std::string(str), false);
+        Strings::name = strings.in(std::string(str));
     STRINGS(ENUM_STRING_TABLE);
    
     // initialize basic environments 
@@ -435,7 +435,7 @@ std::string getString(State const& state, String str) {
 }
 
 String newString(State const& state, std::string const& str) {
-    return (String)((::State&)state).internStr(str);
+    return (Riposte::String)((::State&)state).internStr(str);
 }
 
 

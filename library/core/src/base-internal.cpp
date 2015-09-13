@@ -8,9 +8,9 @@
 
 extern "C"
 Value decompress(State& state, Value const* args) {
-    Raw const& data = (Raw const&)args[0];
-    Integer const& size = (Integer const&)args[1];
-    Character const& comp = (Character const&)args[2];
+    Raw const& data = static_cast<Raw const&>(args[0]);
+    Integer const& size = static_cast<Integer const&>(args[1]);
+    Character const& comp = static_cast<Character const&>(args[2]);
 
     int64_t s = size[0];
     char c = comp[0]->s[0];

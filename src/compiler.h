@@ -153,6 +153,8 @@ private:
 
     friend class EmitTable;
 
+    static void compilePromise(State& state, Code* code);
+
 public:
 	static CompiledCall makeCall(State& state, List const& call, Character const& names);
 
@@ -160,7 +162,12 @@ public:
     static Prototype* compileClosureBody(State& state, Value const& expr);
 
     static Code* deferPromiseCompilation(State& state, Value const& expr);
-    static void doPromiseCompilation(State& state, Code* code);
+    static void doPromiseCompilation(State& state, Code* code)
+    {
+        if(code->bc.length() == 0)
+            compilePromise(state, code);
+    }
+
 };
 
 // compilation routines

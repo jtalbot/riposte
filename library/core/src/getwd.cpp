@@ -21,7 +21,7 @@ Value getwd_impl(State& state, Value const* args) {
 extern "C"
 Value setwd_impl(State& state, Value const* args) {
     Value r = getwd_impl(state, 0);
-    Character const& wd = (Character const&)args[0];
+    auto wd = static_cast<Character const&>(args[0]);
     if(wd.length() == 1)
         chdir(wd[0]->s);
     return r;

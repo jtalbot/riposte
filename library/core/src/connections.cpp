@@ -60,14 +60,14 @@ struct FileConnection {
 
 extern "C"
 void file_finalize(Value v) {
-    Externalptr const& p = (Externalptr const&)v;
+    auto p = static_cast<Externalptr const&>(v);
     FileConnection* fc = (FileConnection*)p.ptr();
     delete fc;
 }
 
 extern "C"
 Value file_new(State& state, Value const* args) {
-    Character desc = As<Character>(args[0]);
+    auto desc = As<Character>(args[0]);
     FileConnection* fc = new FileConnection(desc[0]->s);
     Value v;
     Externalptr::Init(v, fc, Value::Nil(), Value::Nil(), file_finalize);
@@ -76,8 +76,8 @@ Value file_new(State& state, Value const* args) {
 
 extern "C"
 Value file_open(State& state, Value const* args) {
-    Externalptr const& p = (Externalptr const&)args[0];
-    Character const& mode = (Character const&)args[1];
+    auto p = static_cast<Externalptr const&>(args[0]);
+    auto mode = static_cast<Character const&>(args[1]);
     FileConnection* fc = (FileConnection*)p.ptr();
     fc->open(std::string(mode[0]->s));
     return p; 
@@ -85,7 +85,7 @@ Value file_open(State& state, Value const* args) {
 
 extern "C"
 Value file_close(State& state, Value const* args) {
-    Externalptr const& p = (Externalptr const&)args[0];
+    auto p = static_cast<Externalptr const&>(args[0]);
     FileConnection* fc = (FileConnection*)p.ptr();
     fc->close();
     return p; 
@@ -93,31 +93,31 @@ Value file_close(State& state, Value const* args) {
 
 extern "C"
 Value file_cat(State& state, Value const* args) {
-    Externalptr const& p = (Externalptr const&)args[0];
+    auto p = static_cast<Externalptr const&>(args[0]);
     FileConnection* fc = (FileConnection*)p.ptr();
-    Character const& c = (Character const&)args[1];
+    auto c = static_cast<Character const&>(args[1]);
     fc->write(c[0]->s);
     return p;
 }
 
 extern "C"
 Value stdout_cat(State& state, Value const* args) {
-    Character const& c = (Character const&)args[0];
+    auto c = static_cast<Character const&>(args[0]);
     std::cout << c[0]->s;
     return Null::Singleton();
 }
 
 extern "C"
 Value stderr_cat(State& state, Value const* args) {
-    Character const& c = (Character const&)args[0];
+    auto c = static_cast<Character const&>(args[0]);
     std::cerr << c[0]->s;
     return Null::Singleton();
 }
 
 extern "C"
 Value file_readLines(State& state, Value const* args) {
-    Externalptr const& p = (Externalptr const&)args[0];
-    Integer const& n = (Integer const&)args[1];
+    auto p = static_cast<Externalptr const&>(args[0]);
+    auto n = static_cast<Integer const&>(args[1]);
     FileConnection* fc = (FileConnection*)p.ptr();
     int64_t maxLines = n[0];
 
@@ -139,9 +139,9 @@ Value file_readLines(State& state, Value const* args) {
 
 extern "C"
 Value file_writeLines(State& state, Value const* args) {
-    Externalptr const& p = (Externalptr const&)args[0];
-    Character const& lines = (Character const&)args[1];
-    Character const& sep = (Character const&)args[2];
+    auto p = static_cast<Externalptr const&>(args[0]);
+    auto lines = static_cast<Character const&>(args[1]);
+    auto sep = static_cast<Character const&>(args[2]);
     FileConnection* fc = (FileConnection*)p.ptr();
 
     for(int64_t i = 0; i < lines.length(); ++i) {
@@ -154,15 +154,15 @@ Value file_writeLines(State& state, Value const* args) {
 
 extern "C"
 Value file_description(State& state, Value const* args) {
-    Externalptr const& p = (Externalptr const&)args[0];
+    auto p = static_cast<Externalptr const&>(args[0]);
     FileConnection* fc = (FileConnection*)p.ptr();
     return Character::c(MakeString(fc->name));
 }
 
 extern "C"
 Value gzfile_readLines(State& state, Value const* args) {
-    Externalptr const& p = (Externalptr const&)args[0];
-    Integer const& n = (Integer const&)args[1];
+    auto p = static_cast<Externalptr const&>(args[0]);
+    auto n = static_cast<Integer const&>(args[1]);
     FileConnection* fc = (FileConnection*)p.ptr();
     int64_t maxLines = n[0];
 
@@ -202,7 +202,7 @@ Value gzfile_readLines(State& state, Value const* args) {
 
 extern "C"
 Value terminal_readLines(State& state, Value const* args) {
-    Integer const& n = (Integer const&)args[1];
+    auto n = static_cast<Integer const&>(args[1]);
     int64_t maxLines = n[0];
     
     std::vector<std::string> lines;
@@ -223,8 +223,8 @@ Value terminal_readLines(State& state, Value const* args) {
 
 extern "C"
 Value terminal_writeLines(State& state, Value const* args) {
-    Character const& lines = (Character const&)args[1];
-    Character const& sep = (Character const&)args[2];
+    auto lines = static_cast<Character const&>(args[1]);
+    auto sep = static_cast<Character const&>(args[2]);
 
     for(int64_t i = 0; i < lines.length(); ++i) {
         std::cout << lines[i]->s << sep[0]->s;
@@ -235,8 +235,8 @@ Value terminal_writeLines(State& state, Value const* args) {
 
 extern "C"
 Value file_readBin(State& state, Value const* args) {
-    Externalptr const& p = (Externalptr const&)args[0];
-    Integer const& n = (Integer const&)args[1];
+    auto p = static_cast<Externalptr const&>(args[0]);
+    auto n = static_cast<Integer const&>(args[1]);
 
     FileConnection* fc = (FileConnection*)p.ptr();
     int64_t length = n[0];
@@ -249,8 +249,8 @@ Value file_readBin(State& state, Value const* args) {
 
 extern "C"
 Value gzfile_readBin(State& state, Value const* args) {
-    Externalptr const& p = (Externalptr const&)args[0];
-    Integer const& n = (Integer const&)args[1];
+    auto p = static_cast<Externalptr const&>(args[0]);
+    auto n = static_cast<Integer const&>(args[1]);
 
     FileConnection* fc = (FileConnection*)p.ptr();
     int64_t length = n[0];
@@ -278,8 +278,8 @@ Value gzfile_readBin(State& state, Value const* args) {
 
 extern "C"
 Value file_seek(State& state, Value const* args) {
-    Externalptr const& p = (Externalptr const&)args[0];
-    Double const& n = (Double const&)args[1];
+    auto p = static_cast<Externalptr const&>(args[0]);
+    auto n = static_cast<Double const&>(args[1]);
 
     // TODO: implement origin & rw
 

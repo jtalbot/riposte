@@ -11,9 +11,9 @@
 extern "C"
 Value parse(State& state, Value const* args)
 {
-    Character const& c = (Character const&)args[0];
-    //Integer const& n = (Integer const&)args[1];
-    Character const& name = (Character const&)args[2];
+    auto c = static_cast<Character const&>(args[0]);
+    //auto n = static_cast<Integer const&>(args[1]);
+    auto name = static_cast<Character const&>(args[2]);
 
     Value result;
     parse(state.global, name[0]->s, c[0]->s, strlen(c[0]->s), true, result);

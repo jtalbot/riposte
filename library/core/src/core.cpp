@@ -22,8 +22,8 @@ T const& Cast(Value const& v) {
 
 extern "C"
 Value cat(State& state, Value const* args) {
-	List const& a = Cast<List>(args[0]);
-	Character const& b = Cast<Character>(args[1]);
+	auto a = Cast<List>(args[0]);
+	auto b = Cast<Character>(args[1]);
 	for(int64_t i = 0; i < a.length(); i++) {
 		if(!List::isNA(a[i])) {
             if(a[i].isEnvironment())
@@ -46,8 +46,8 @@ Value cat(State& state, Value const* args) {
 
 extern "C"
 Value library(State& state, Value const* args, Value& result) {
-    REnvironment dest = Cast<REnvironment>(args[0]);
-	Character from = Cast<Character>(args[1]);
+    auto dest = Cast<REnvironment>(args[0]);
+	auto from = Cast<Character>(args[1]);
     if(from.length() > 0)
 		loadPackage(state, dest.environment(), "library", state.externStr(from[0]));
     
@@ -56,9 +56,9 @@ Value library(State& state, Value const* args, Value& result) {
 
 extern "C"
 Value readtable(State& state, Value const* args) {
-	Character from = As<Character>(args[0]);
-	Character sep_list = As<Character>(args[1]);
-	Character format = As<Character>(args[2]);
+	auto from = As<Character>(args[0]);
+	auto sep_list = As<Character>(args[1]);
+	auto format = As<Character>(args[2]);
 	if(from.length() > 0 && sep_list.length() > 0 && format.length() > 0) {
 		std::string name = state.externStr(from[0]);
 		std::string sep = state.externStr(sep_list[0]);
@@ -147,7 +147,7 @@ Value readtable(State& state, Value const* args) {
 
 extern "C"
 Value source(State& state, Value const* args) {
-	Character file = Cast<Character>(args[0]);
+	auto file = Cast<Character>(args[0]);
 	std::ifstream t(file[0]->s);
 	std::stringstream buffer;
 	buffer << t.rdbuf();
@@ -161,8 +161,8 @@ Value source(State& state, Value const* args) {
 
 extern "C"
 Value paste(State& state, Value const* args) {
-	Character a = As<Character>(args[0]);
-	String sep = As<Character>(args[1])[0];
+	auto a = As<Character>(args[0]);
+	auto sep = As<Character>(args[1])[0];
 	std::string r = "";
 	for(int64_t i = 0; i < a.length()-1; i++) {
 		r += a[i]->s;
@@ -189,7 +189,7 @@ Value proctime(State& state, Value const* args) {
 
 extern "C"
 Value traceconfig(State & state, Value const* args) {
-	Logical c = As<Logical>(args[0]);
+	auto c = As<Logical>(args[0]);
 	if(c.length() == 0) _error("condition is of zero length");
 	state.global.epeeEnabled = Logical::isTrue(c[0]);
 	return Null::Singleton();

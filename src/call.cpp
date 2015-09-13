@@ -399,7 +399,7 @@ Value Quote(State& state, Value const& v) {
 
 Instruction const* GenericDispatch(State& state, Instruction const& inst, String op, Value const& a, int64_t out) {
 	Environment* penv;
-    op = state.global.strings.intern(op->s);
+    op = state.global.strings.intern(op);
 	Value const* f = state.frame.environment->getRecursive(op, penv);
 	if(f && f->isClosure()) {
 		List call = List::c(
@@ -414,7 +414,7 @@ Instruction const* GenericDispatch(State& state, Instruction const& inst, String
 
 Instruction const* GenericDispatch(State& state, Instruction const& inst, String op, Value const& a, Value const& b, int64_t out) {
 	Environment* penv;
-    op = state.global.strings.intern(op->s);
+    op = state.global.strings.intern(op);
 	Value const* f = state.frame.environment->getRecursive(op, penv);
 	if(f && f->isClosure()) { 
 		List call = List::c(
@@ -430,7 +430,7 @@ Instruction const* GenericDispatch(State& state, Instruction const& inst, String
 
 Instruction const* GenericDispatch(State& state, Instruction const& inst, String op, Value const& a, Value const& b, Value const& c, int64_t out) {
 	Environment* penv;
-    op = state.global.strings.intern(op->s);
+    op = state.global.strings.intern(op);
 	Value const* f = state.frame.environment->getRecursive(op, penv);
 	if(f && f->isClosure()) { 
 		List call = List::c(

@@ -6,15 +6,15 @@
 
 extern "C"
 void chartr_finalize(Value v) {
-    Externalptr const& p = (Externalptr const&)v;
+    auto p = static_cast<Externalptr const&>(v);
     unsigned char* r = (unsigned char*)p.ptr();
     delete [] r;
 }
 
 extern "C"
 Value chartr_compile(State& state, Value const* args) {
-    Character o = (Character const&)args[0];
-    Character n = (Character const&)args[1];
+    auto o = static_cast<Character const&>(args[0]);
+    auto n = static_cast<Character const&>(args[1]);
     unsigned char* map = new unsigned char[256];
     for(size_t i = 0; i < 256; i++) map[i] = i;
     size_t i = 0;
@@ -33,7 +33,7 @@ void chartr_map(State& state,
         Character::Element& result,
         Character::Element text,
         Value const& map) {
-    Externalptr const& p = (Externalptr const&)map;
+    auto p = static_cast<Externalptr const&>(map);
     unsigned char* m = (unsigned char*)p.ptr();
 
     std::string t(text->s);

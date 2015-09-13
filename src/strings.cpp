@@ -8,11 +8,13 @@ STRINGS(DEFINE)
 
 bool Eq(String s, String t)
 {
-    return s == t || (s && t && strcmp(s->s, t->s) == 0);
+    return s == t ||
+            (s && t && strcmp(s->s, t->s) == 0);
 }
 
 bool Neq(String s, String t)
 {
-    return s != t && (!s || !t || strcmp(s->s, t->s) != 0);
+    return s != t &&
+        (!s || !t || strcmp(s->s, t->s) != 0);
 }
 

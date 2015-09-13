@@ -8,7 +8,7 @@
 extern "C"
 Value charToRaw(State& state, Value const* args)
 {
-    Character const& c = (Character const&)args[0];
+    auto c = static_cast<Character const&>(args[0]);
 
     String s = c[0];
     int64_t len = strlen(s->s);
@@ -24,7 +24,7 @@ Value charToRaw(State& state, Value const* args)
 extern "C"
 Value rawToChar(State& state, Value const* args)
 {
-    Raw const& c = (Raw const&)args[0];
+    auto c = static_cast<Raw const&>(args[0]);
 
     std::string s((const char*)c.v(), c.length());
 
@@ -34,7 +34,7 @@ Value rawToChar(State& state, Value const* args)
 extern "C"
 Value rawToCharacters(State& state, Value const* args)
 {
-    Raw const& c = (Raw const&)args[0];
+    auto c = static_cast<Raw const&>(args[0]);
 
     Character r(c.length());
     for(int64_t i = 0; i < c.length(); ++i) {
@@ -46,8 +46,8 @@ Value rawToCharacters(State& state, Value const* args)
 extern "C"
 Value rawToDouble(State& state, Value const* args)
 {
-    Raw const& c = (Raw const&)args[0];
-    int64_t size = ((Integer const&)args[1])[0];
+    auto c = static_cast<Raw const&>(args[0]);
+    int64_t size = static_cast<Integer const&>(args[1])[0];
 
     int64_t n = c.length() / size;
     Double r(n);
@@ -81,9 +81,9 @@ Value rawToDouble(State& state, Value const* args)
 extern "C"
 Value rawToInteger(State& state, Value const* args)
 {
-    Raw const& c = (Raw const&)args[0];
-    int64_t size = ((Integer const&)args[1])[0];
-    bool sign = Logical::isTrue(((Logical const&)args[2])[0]);
+    auto c = static_cast<Raw const&>(args[0]);
+    int64_t size = static_cast<Integer const&>(args[1])[0];
+    bool sign = Logical::isTrue(static_cast<Logical const&>(args[2])[0]);
 
     int64_t n = c.length() / size;
     Integer r(n);
@@ -146,8 +146,8 @@ Value rawToInteger(State& state, Value const* args)
 extern "C"
 Value rawToLogical(State& state, Value const* args)
 {
-    Raw const& c = (Raw const&)args[0];
-    int64_t size = ((Integer const&)args[1])[0];
+    auto c = static_cast<Raw const&>(args[0]);
+    int64_t size = static_cast<Integer const&>(args[1])[0];
 
     int64_t n = c.length() / size;
     Logical r(n);

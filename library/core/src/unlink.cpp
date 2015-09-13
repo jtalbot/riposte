@@ -6,9 +6,9 @@
 extern "C"
 Value sysunlink(State& state, Value const* args)
 {
-    Character const& c = (Character const&)args[0];
-    //Logical const& recursive = (Logical const&)args[1];
-    //Logical const& force = (Logical const&)args[2];
+    auto c = static_cast<Character const&>(args[0]);
+    //auto recursive = static_cast<Logical const&>(args[1]);
+    //auto force = static_cast<Logical const&>(args[2]);
 
     bool ok = true;
 

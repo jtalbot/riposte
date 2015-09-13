@@ -54,93 +54,59 @@ Character InternStrings(State& state, Character const& c);
 
 class StringTable
 {
-    //std::vector< std::pair<String, bool> > strings;
-    //std::unordered_map< std::string, size_t > index; 
-    std::unordered_map<std::string, std::pair<String, bool> > stringTable;
-    mutable Lock lock;
+    std::unordered_map<std::string, String> stringTable;
 
 public:
 
-    /*size_t insert(std::string const& s)
-    {
-        lock.acquire();
-        auto i = index.find(s);
-
-        size_t offset;
-        if(i != index.end())
-        {
-            offset = i->second;
-        }
-        else
-        {
-            String string = new (s.size()+1) StringImpl();
-            memcpy((void*)string->s, s.c_str(), s.size()+1);
-           
-            offset = strings.size(); 
-            strings.push_back(std::make_pair(string, false));
-            index[s] = offset;
-        }
-
-        lock.release();
-        return offset;
-    }*/
-
     String get(String s) const
     {
-        lock.acquire();
+        if(Memory::All.ConstHeap.contains(s) || s == Strings::NA)
+            return s;
 
-        auto i = stringTable.find(s->s);
+        auto i = stringTable.find(std::string(s->s));
 
         String result = (i != stringTable.end())
-            ? i->second.first
+            ? i->second 
             : Strings::NA;
 
-        lock.release();
         return result;
     }
 
-    String intern(const char* p)
+    String get(std::string const& s) const
     {
-        if(!p) return nullptr;
-        std::string s(p);
+        auto i = stringTable.find(s);
 
-        lock.acquire();
+        String result = (i != stringTable.end())
+            ? i->second 
+            : Strings::NA;
+
+        return result;
+    }
+
+    String intern(String s)
+    {
+        if(Memory::All.ConstHeap.contains(s) || s == Strings::NA)
+            return s;
+
+        return in(std::string(s->s));
+    }
+
+    String in(std::string const& s)
+    {
         auto i = stringTable.find(s);
 
         String result;
         if(i != stringTable.end())
         {
-            result = i->second.first;
+            result = i->second;
         }
         else
         {
             result = new (s.size()+1, Memory::All.ConstHeap) StringImpl();
             memcpy((void*)result->s, s.c_str(), s.size()+1);
-            stringTable[s] = std::make_pair(result, false);
+            stringTable[s] = result;
         }
         
-        lock.release();
-        return result;
-    }
-
-    String in(std::string const& s, bool weak=true)
-    {
-        lock.acquire();
-        auto i = stringTable.find(s);
-
-        String result;
-        if(i != stringTable.end())
-        {
-            result = i->second.first;
-        }
-        else
-        {
-            result = new (s.size()+1, Memory::All.ConstHeap) StringImpl();
-            memcpy((void*)result->s, s.c_str(), s.size()+1);
-            stringTable[s] = std::make_pair(result, weak);
-        }
-        
-        lock.release();
         return result;
     }
 
@@ -617,11 +583,11 @@ public:
     std::string stringify(Value const& v) const;
     std::string deparse(Value const& v) const;
 
-    String internStr(std::string s) {
+    String internStr(const std::string& s) {
         return strings.in(s);
     }
 
-    std::string externStr(String s) const {
+    std::string externStr(const String& s) const {
         return strings.out(s);
     }
 

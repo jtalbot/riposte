@@ -797,7 +797,7 @@ SEXP Rf_findVar(SEXP symbol, SEXP env) {
         throw;
     }
 
-    String in = global->strings.intern(symbol->v.s->s);
+    String in = global->strings.intern(symbol->v.s);
     Environment* foundEnv;
     Value const* v = ((REnvironment&)env->v).environment()->getRecursive(in, foundEnv);
 

@@ -7,16 +7,16 @@
 
 extern "C"
 void regex_finalize(Value v) {
-    Externalptr const& p = (Externalptr const&)v;
+    auto p = static_cast<Externalptr const&>(v);
     regex_t* r = (regex_t*)p.ptr();
     delete r;
 }
 
 extern "C"
 Value regex_compile(State& state, Value const* args) {
-    Character pattern = (Character const&)args[0];
-    Logical ignorecase = (Logical const&)args[1];
-    Logical fixed = (Logical const&)args[2];
+    auto pattern = static_cast<Character const&>(args[0]);
+    auto ignorecase = static_cast<Logical const&>(args[1]);
+    auto fixed = static_cast<Logical const&>(args[2]);
     
     int flags = REG_EXTENDED;
     if(Logical::isTrue(ignorecase[0]))
@@ -42,7 +42,7 @@ extern "C"
 void grep_map(State& state, Logical::Element& s,
         Value const& regex, String text) {
     
-    Externalptr const& p = (Externalptr const&)regex;
+    auto p = static_cast<Externalptr const&>(regex);
     regex_t* r = (regex_t*)p.ptr();
 
     s = (tre_regexec(r, text->s, 0, NULL, 0) == 0)
@@ -54,7 +54,7 @@ extern "C"
 void regex_map(State& state, Integer::Element& s, Integer::Element& l,
         Value const& regex, String text) {
     
-    Externalptr const& p = (Externalptr const&)regex;
+    auto p = static_cast<Externalptr const&>(regex);
     regex_t* r = (regex_t*)p.ptr();
 
     regmatch_t m;
@@ -73,7 +73,7 @@ extern "C"
 void gregex_map(State& state,
         Value& start, Value& length, Value const& regex, String text) {
     
-    Externalptr const& p = (Externalptr const&)regex;
+    auto p = static_cast<Externalptr const&>(regex);
     regex_t* r = (regex_t*)p.ptr();
 
     std::vector<Integer::Element> ss;
@@ -128,7 +128,7 @@ extern "C"
 void sub_map(State& state, Character::Element& out,
         Value const& regex, String text, String sub) {
     
-    Externalptr const& p = (Externalptr const&)regex;
+    auto p = static_cast<Externalptr const&>(regex);
     regex_t* r = (regex_t*)p.ptr();
 
     regmatch_t m[10];
@@ -162,7 +162,7 @@ extern "C"
 void gsub_map(State& state, Character::Element& out,
         Value const& regex, String text, String sub) {
     
-    Externalptr const& p = (Externalptr const&)regex;
+    auto p = static_cast<Externalptr const&>(regex);
     regex_t* r = (regex_t*)p.ptr();
 
     regmatch_t m[10];
@@ -202,7 +202,7 @@ extern "C"
 void agrep_map(State& state, Logical::Element& s,
         Value const& regex, String text, Integer const& costs, Double const& bounds, Integer const& length) {
 
-    Externalptr const& p = (Externalptr const&)regex;
+    auto p = static_cast<Externalptr const&>(regex);
     regex_t* r = (regex_t*)p.ptr();
 
     regamatch_t match;
@@ -240,15 +240,15 @@ void agrep_map(State& state, Logical::Element& s,
 
 extern "C"
 void pcre_finalize(Value v) {
-    Externalptr const& p = (Externalptr const&)v;
+    auto p = static_cast<Externalptr const&>(v);
     pcre* r = (pcre*)p.ptr();
     pcre_free(r);
 }
 
 extern "C"
 Value pcre_regex_compile(State& state, Value const* args) {
-    Character pattern = (Character const&)args[0];
-    Logical ignorecase = (Logical const&)args[1];
+    auto pattern = static_cast<Character const&>(args[0]);
+    auto ignorecase = static_cast<Logical const&>(args[1]);
 
     int flags = 0;
     if(Logical::isTrue(ignorecase[0]))
@@ -270,7 +270,7 @@ extern "C"
 void pcre_grep_map(State& state, Logical::Element& s,
         Value const& regex, String text) {
     
-    Externalptr const& p = (Externalptr const&)regex;
+    auto p = static_cast<Externalptr const&>(regex);
     pcre* r = (pcre*)p.ptr();
 
     int rc = pcre_exec(r, NULL, text->s, strlen(text->s), 0, 0, 0, 0);
@@ -285,7 +285,7 @@ extern "C"
 void pcre_regex_map(State& state, Integer::Element& s, Integer::Element& l,
         Value const& regex, String text) {
     
-    Externalptr const& p = (Externalptr const&)regex;
+    auto p = static_cast<Externalptr const&>(regex);
     pcre* r = (pcre*)p.ptr();
 
     int ovector[6] = {0};
@@ -308,7 +308,7 @@ extern "C"
 void pcre_gregex_map(State& state,
         Value& start, Value& length, Value const& regex, String text) {
     
-    Externalptr const& p = (Externalptr const&)regex;
+    auto p = static_cast<Externalptr const&>(regex);
     pcre* r = (pcre*)p.ptr();
 
     std::vector<Integer::Element> ss;
@@ -347,7 +347,7 @@ extern "C"
 void pcre_sub_map(State& state, Character::Element& out,
         Value const& regex, String text, String sub) {
     
-    Externalptr const& p = (Externalptr const&)regex;
+    auto p = static_cast<Externalptr const&>(regex);
     pcre* r = (pcre*)p.ptr();
 
     int ovector[30] = {0};
@@ -385,7 +385,7 @@ extern "C"
 void pcre_gsub_map(State& state, Character::Element& out,
         Value const& regex, String text, String sub) {
    
-    Externalptr const& p = (Externalptr const&)regex;
+    auto p = static_cast<Externalptr const&>(regex);
     pcre* r = (pcre*)p.ptr();
 
     size_t len = strlen(text->s);

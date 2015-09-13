@@ -193,7 +193,10 @@
     _(ExternalRoutine, "ExternalRoutine")
 
 struct StringImpl : public HeapObject {
+    //uint64_t length;
     char s[];
+
+    //StringImpl(uint64_t length) : length(length) {}
 };
 typedef const StringImpl* String;
 

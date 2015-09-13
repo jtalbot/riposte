@@ -8,15 +8,15 @@
 
 extern "C"
 void dyn_finalize(Value v) {
-    Externalptr const& p = (Externalptr const&)v;
+    auto p = static_cast<Externalptr const&>(v);
     dlclose(p.ptr());
 }
 
 extern "C"
 Value dynload(State& state, Value const* args) {
-    Character const& name = (Character const&)args[0];
-    Logical const& local = (Logical const&)args[1];
-    Logical const& now = (Logical const&)args[2];
+    auto name = static_cast<Character const&>(args[0]);
+    auto local = static_cast<Logical const&>(args[1]);
+    auto now = static_cast<Logical const&>(args[2]);
 
     int f1 = Logical::isTrue(local[0]) ? RTLD_LOCAL : RTLD_GLOBAL;
     int f2 = Logical::isTrue(now[0]) ? RTLD_NOW : RTLD_LAZY;
@@ -34,15 +34,15 @@ Value dynload(State& state, Value const* args) {
 
 extern "C"
 Value dynunload(State& state, Value const* args) {
-    Externalptr const& p = (Externalptr const&)args[0];
+    auto p = static_cast<Externalptr const&>(args[0]);
     dlclose(p.ptr());
     return Value::Nil();
 }
 
 extern "C"
 Value dynsym(State& state, Value const* args) {
-    Externalptr const& p = (Externalptr const&)args[0];
-    Character const& name = (Character const&)args[1];
+    auto p = static_cast<Externalptr const&>(args[0]);
+    auto name = static_cast<Character const&>(args[1]);
     
     dlerror();
     void* r = dlsym(p.ptr(), name.s->s);

@@ -44,9 +44,22 @@ class Heap;
 struct HeapObject
 {
     bool marked() const;
-    void block() const;
     uint64_t word() const;
-    GCObject* gcObject() const;
+    
+    GCObject* gcObject() const {
+        return (GCObject*)((uint64_t)this & ~(REGION_SIZE-1));
+    }
+
+
+    void block() const
+    {
+        uint64_t i = ((uint64_t)this & (REGION_SIZE-1)) / CELL_SIZE;
+        uint64_t slot = i % 64;
+        uint64_t word = i / 64;
+    
+        gcObject()->mark[word] &= ~(((uint64_t)1) << slot);
+        gcObject()->block[word] |= (((uint64_t)1) << slot);
+    }
 
     bool visit() const;
 
@@ -58,6 +71,7 @@ struct HeapObject
     void* operator new(unsigned long bytes, unsigned long extra);
     void* operator new(unsigned long bytes, GCFinalizer finalizer);
 };
+
 
 struct GrayHeapObject : HeapObject
 {
@@ -112,6 +126,18 @@ public:
     HeapObject* alloc(uint64_t bytes);
 
     HeapObject* addFinalizer(HeapObject*, GCFinalizer);
+
+    bool contains(HeapObject const* o) const
+    {
+        GCObject const* g = o->gcObject();
+        
+        if(arenas.size() == 1 && larges.size() == 0)
+            return g == arenas.back().ptr;
+        else
+            return containsSlow(g);
+    }
+
+    bool containsSlow(GCObject const* g) const;
 };
 
 

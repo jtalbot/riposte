@@ -73,8 +73,8 @@ void pathexpand_map(State& state, String& g, String f)
 extern "C"
 Value sysglob(State& state, Value const* args)
 {
-    Character const& c = (Character const&)args[0];
-    Logical const& l = (Logical const&)args[1];
+    auto c = static_cast<Character const&>(args[0]);
+    auto l = static_cast<Logical const&>(args[1]);
 
     bool dir = Logical::isTrue(l[0]);
 

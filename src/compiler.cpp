@@ -218,7 +218,7 @@ Compiler::Operand Compiler::compileSymbol(Value const& symbol, bool isClosure) {
 	String s = SymbolStr(symbol);
     
     // symbols have to be interned
-    s = global.strings.intern(s->s);
+    s = global.strings.intern(s);
 	
 	int64_t dd = isDotDot(s);
 	if(dd > 0) {
@@ -856,10 +856,8 @@ Code* Compiler::deferPromiseCompilation(State& state, Value const& expr) {
     return code;
 }
 
-void Compiler::doPromiseCompilation(State& state, Code* code) {
-    if(code->bc.length() > 0)
-        return;
-
+void Compiler::compilePromise(State& state, Code* code)
+{
     Compiler compiler(state);
 
     // promises use first two registers to pass environment info
