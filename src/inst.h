@@ -53,17 +53,6 @@ if(__builtin_expect(X.isFuture(), false)) { \
 
 // Some utility functions for dealing with interned strings
 ALWAYS_INLINE
-Value const* internAndGet(State const& state, Dictionary const* d, String s)
-{
-    // All attribute names are already interned.
-    // So if we can't find an interned version of s,
-    // it doesn't exist in the environment and there
-    // is nothing to get.
-    String i = state.global.strings.get(s);
-    return i ? d->get(i) : nullptr;
-}
-
-ALWAYS_INLINE
 Value const* internAndGet(State const& state, Environment* e, String s)
 {
     // All environment names are already interned.

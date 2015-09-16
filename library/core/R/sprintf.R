@@ -11,17 +11,20 @@ sprintf <- function(...) {
         print(length(args))
     }
 
+    a <- list(args[[1]], list(specs))
+
     for(i in seq_along(args)) {
         if(i > 1L) {
             if(!is.na(specs[[i-1L]])) {
                 func <- .pconcat('as.', specs[[i-1L]]) 
                 call <- as.call(list(func, args[[i]]))
                 promise('p', call, .frame(2L), .getenv(NULL))
-                args[[i]] <- p
+                a[[i+1L]] <- p
             }
         }
     }
-    .Map('sprintf_map', args, 'character')[[1]]
+
+    .Map('sprintf_map', a, 'character')[[1]]
 }
 
 printf_parse <- function(format) {

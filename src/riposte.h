@@ -42,7 +42,7 @@ struct StringImpl;
 typedef const StringImpl* String;
 
 //      Intern an stl string.
-String		newString    (State const&, std::string const& str);
+//String		newString    (State const&, std::string const& str);
 //      Convert back to an stl string.
 std::string getString    (State const&, String str);
 

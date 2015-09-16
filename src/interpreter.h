@@ -54,33 +54,36 @@ Character InternStrings(State& state, Character const& c);
 
 class StringTable
 {
-    std::unordered_map<std::string, String> stringTable;
+    struct StringHash {
+        size_t operator()(String s) const {
+            return Hash(s);
+        }
+    };
+
+    struct StringEq {
+        // We know that they won't be NA nor equal pointers here
+        // so this can be simpler than the generic Eq implementation.
+        bool operator()(String s, String t) const {
+            return s->length == t->length &&
+                   strncmp(s->s, t->s, s->length) == 0;
+        }
+    };
+
+    std::unordered_set<String, StringHash, StringEq> stringTable;
 
 public:
 
+    ALWAYS_INLINE
     String get(String s) const
     {
         if(Memory::All.ConstHeap.contains(s) || s == Strings::NA)
             return s;
 
-        auto i = stringTable.find(std::string(s->s));
-
-        String result = (i != stringTable.end())
-            ? i->second 
-            : Strings::NA;
-
-        return result;
-    }
-
-    String get(std::string const& s) const
-    {
         auto i = stringTable.find(s);
 
-        String result = (i != stringTable.end())
-            ? i->second 
+        return (i != stringTable.end())
+            ? *i 
             : Strings::NA;
-
-        return result;
     }
 
     String intern(String s)
@@ -88,31 +91,21 @@ public:
         if(Memory::All.ConstHeap.contains(s) || s == Strings::NA)
             return s;
 
-        return in(std::string(s->s));
-    }
-
-    String in(std::string const& s)
-    {
         auto i = stringTable.find(s);
 
         String result;
         if(i != stringTable.end())
         {
-            result = i->second;
+            result = *i;
         }
         else
         {
-            result = new (s.size()+1, Memory::All.ConstHeap) StringImpl();
-            memcpy((void*)result->s, s.c_str(), s.size()+1);
-            stringTable[s] = result;
+            result = new (s->length+1, Memory::All.ConstHeap) StringImpl(s->length);
+            memcpy((void*)result->s, s->s, s->length+1);
+            stringTable.insert(result);
         }
         
         return result;
-    }
-
-    std::string out(String s) const
-    {
-        return std::string(s->s);
     }
 };
 
@@ -244,7 +237,7 @@ public:
         if(!this) return nullptr;
         
         for(uint64_t i = 0; i < size; ++i)
-            if(d[i].n == name) return &d[i].v;
+            if(Eq(d[i].n, name)) return &d[i].v;
 
         return nullptr;
     }
@@ -262,7 +255,7 @@ public:
         Dictionary* clone = Make(size-1);
         for(uint64_t i = 0, j = 0; i < size; i++)
         {
-            if(d[i].n != name)
+            if(!Eq(d[i].n, name))
                 clone->d[j++] = d[i];
         }
         return clone;
@@ -285,7 +278,7 @@ public:
         uint64_t j = 0;
         for(uint64_t i = 0; i < size; i++)
         {
-            if(d[i].n != name)
+            if(!Eq(d[i].n, name))
                 clone->d[j++] = d[i];
         }
         clone->d[j] = Pair { name, v };
@@ -330,15 +323,9 @@ public:
         return new (sizeof(Pair)*capacity) HashMap(size, capacity);
     }
 
-    uint64_t find(String name) const
-    {
-        uint64_t i = ((uint64_t)name >> 5) & (capacity-1);
-        while(d[i].n != name && d[i].n != Strings::NA)
-            i = (i+1) & (capacity-1);
-        return i;
-    }
-
-    Value* find2(String name)
+    // Returns a pointer to the entry for `name`
+    // or a nullptr if it doesn't exist.
+    Value const* get(String name) const
     {
         uint64_t i = ((uint64_t)name >> 5) & (capacity-1);
 
@@ -355,7 +342,26 @@ public:
         return nullptr;
     }
 
-    // Returns the location where variable `name` should be inserted.
+    // Returns a pointer to the entry pair for `name`
+    // or to the slot where it should be added.
+    Pair* find(String name)
+    {
+        uint64_t i = ((uint64_t)name >> 5) & (capacity-1);
+
+        if(__builtin_expect(d[i].n == name, true))
+            return &d[i];
+
+        while(d[i].n != Strings::NA)
+        {
+            i = (i+1) & (capacity-1);
+            if(__builtin_expect(d[i].n == name, true))
+                return &d[i];
+        }
+
+        return &d[i];
+    }
+
+    // Returns a pointer where variable `name` should be inserted.
     // Assumes that `name` doesn't exist in the hash table yet.
     // Used for rehash and insert where this is known to be true.
     Pair* slot(String name)
@@ -370,18 +376,30 @@ public:
         return &d[i];
     }
 
-    HashMap* rehash(uint64_t new_capacity) const
+    void remove(String name)
     {
-        HashMap* result = Make(size, new_capacity);
+        // find the entry
+        uint64_t i = ((uint64_t)name >> 5) & (capacity-1);
+        while(d[i].n != name && d[i].n != Strings::NA)
+            i = (i+1) & (capacity-1);
 
-        // copy over values...
-        for(uint64_t i = 0; i < capacity; i++) {
-            if(d[i].n != Strings::NA)
-                *result->slot(d[i].n) = d[i];
+        if(d[i].n != Strings::NA)
+            size--;
+
+        while(d[i].n != Strings::NA)
+        {
+            uint64_t j = i, k;
+            do {
+                j = (j+1) % (capacity-1);
+                k = ((uint64_t)d[j].n >> 5) & (capacity-1);
+            } while(d[j].n != Strings::NA &&
+                  ((i<=j) ? ((i<k)&&(k<=j)) : ((i<k)||(k<=j))));
+            d[i] = d[j];
+            i = j;
         }
-
-        return result;
     }
+
+    HashMap* rehash(uint64_t new_capacity) const;
 
     void visit() const;
 };
@@ -413,6 +431,7 @@ public:
     }
     bool hasAttributes() const { return attributes != 0; }
 
+    // Caller asserts that name doesn't yet exist in the environment
     void init(String name, Value v)
     {
         HashMap::Pair* p = map->slot(name);
@@ -424,25 +443,31 @@ public:
     // or a nullptr if it doesn't exist.
     Value const* get(String name) const
     {
-        uint64_t i = map->find(name);
-        return (map->d[i].n != Strings::NA)
-            ? &map->d[i].v
-            : nullptr;
+        assert(Memory::All.ConstHeap.contains(name));
+        return map->get(name);
     }
 
     Value& insert(String name)
     {
+        assert(Memory::All.ConstHeap.contains(name));
+
         // TODO: is this write barrier always necessary?
         writeBarrier();
-        Value* v = map->find2(name);
-        if(v)
-            return *v;
+        
+        HashMap::Pair* p = map->find(name);
+        if(p->n == name)
+        {
+            return p->v;
+        }
         else
         {
             if(((map->size+1) * 4) > (map->capacity*3))
+            {
                 map = map->rehash(map->capacity*2);
+                p = map->slot(name);
+            }
+            
             map->size++;
-            HashMap::Pair* p = map->slot(name);
             p->n = name;
             return p->v;
         }
@@ -450,29 +475,19 @@ public:
 
     void remove(String name)
     {
-        uint64_t i = map->find(name);
-        if(map->d[i].n != Strings::NA)
-            map->size--;
-        while(map->d[i].n != Strings::NA)
-        {
-            uint64_t j = i, k;
-            do {
-                j = (j+1) % (map->capacity-1);
-                k = ((uint64_t)map->d[j].n >> 5) & (map->capacity-1);
-            } while(map->d[j].n != Strings::NA &&
-                  ((i<=j) ? ((i<k)&&(k<=j)) : ((i<k)||(k<=j))));
-            map->d[i] = map->d[j];
-            i = j;
-        }
+        assert(Memory::All.ConstHeap.contains(name));
+        map->remove(name);
     }
 
     // Look up variable through enclosure chain 
     Value* getRecursive(String name, Environment*& env)
     {
+        assert(Memory::All.ConstHeap.contains(name));
+
         env = this;
         do {
-            Value* p = env->map->find2(name);
-            if(p) return p;
+            HashMap::Pair* p = env->map->find(name);
+            if(p->n == name) return &p->v;
         } while((env = env->getEnclosure()));
 
         return nullptr;
@@ -583,12 +598,8 @@ public:
     std::string stringify(Value const& v) const;
     std::string deparse(Value const& v) const;
 
-    String internStr(const std::string& s) {
-        return strings.in(s);
-    }
-
     std::string externStr(const String& s) const {
-        return strings.out(s);
+        return std::string(s->s, s->length);
     }
 
     std::unordered_map<std::string, void*> dl_handles;
@@ -642,7 +653,6 @@ public:
 
     std::string stringify(Value const& v) const { return global.stringify(v); }
     std::string deparse(Value const& v) const { return global.deparse(v); }
-    String internStr(std::string s) { return global.internStr(s); }
     std::string externStr(String s) const { return global.externStr(s); }
 
     Value evalTopLevel(Code const* code, Environment* environment, int64_t resultSlot = 0); 

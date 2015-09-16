@@ -28,7 +28,7 @@ Value rawToChar(State& state, Value const* args)
 
     std::string s((const char*)c.v(), c.length());
 
-    return Character::c(state.internStr(s));
+    return Character::c(MakeString(s));
 }
 
 extern "C"
@@ -38,7 +38,7 @@ Value rawToCharacters(State& state, Value const* args)
 
     Character r(c.length());
     for(int64_t i = 0; i < c.length(); ++i) {
-        r[i] = state.internStr(std::string(1, c[i]));
+        r[i] = MakeString(std::string(1, c[i]));
     }
     return r;
 }

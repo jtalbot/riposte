@@ -12,7 +12,7 @@ Global* global;
 
 String MakeString(std::string const& s)
 {
-    String result = new (s.size()+1) StringImpl();
+    String result = new (s.size()+1) StringImpl(s.size());
     memcpy((void*)result->s, s.c_str(), s.size()+1);
     return result;
 }
@@ -24,6 +24,19 @@ Character InternStrings(State& state, Character const& c)
         r[i] = state.global.strings.intern(c[i]);
     }
     return r;
+}
+
+HashMap* HashMap::rehash(uint64_t new_capacity) const
+{
+    HashMap* result = Make(size, new_capacity);
+
+    // copy over values...
+    for(uint64_t i = 0; i < capacity; i++) {
+        if(d[i].n != Strings::NA)
+            *result->slot(d[i].n) = d[i];
+    }
+
+    return result;
 }
 
 void profileStack(State const& state);
@@ -238,7 +251,7 @@ Global::Global(uint64_t states, int64_t argc, char** argv)
 
     // initialize string table
     #define ENUM_STRING_TABLE(name, str) \
-        Strings::name = strings.in(std::string(str));
+        Strings::name = strings.intern(MakeString(str));
     STRINGS(ENUM_STRING_TABLE);
    
     // initialize basic environments 
@@ -432,10 +445,6 @@ void deleteState(State& s) {
 
 std::string getString(State const& state, String str) {
     return std::string(((::String)str)->s);
-}
-
-String newString(State const& state, std::string const& str) {
-    return (Riposte::String)((::State&)state).internStr(str);
 }
 
 

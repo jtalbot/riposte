@@ -6,15 +6,16 @@
 STRINGS(DEFINE)
 #undef DEFINE
 
-bool Eq(String s, String t)
-{
-    return s == t ||
-            (s && t && strcmp(s->s, t->s) == 0);
-}
+extern uint64_t
+siphash( const uint8_t *in, uint64_t inlen, const uint64_t k0, const uint64_t k1 );
 
-bool Neq(String s, String t)
+size_t HashSlow(String s)
 {
-    return s != t &&
-        (!s || !t || strcmp(s->s, t->s) != 0);
-}
+    size_t h = (size_t)siphash((uint8_t*)s->s, s->length,
+        0x3d9c62a3403c404e,
+        0xe6ab9a6ad910c7c2);
 
+    s->hash = h;
+
+    return h;
+}

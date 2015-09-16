@@ -666,8 +666,9 @@ void Rf_defineVar(SEXP symbol, SEXP val, SEXP env) {
 
     Value v = ToRiposteValue(val->v);
 
-    ((REnvironment&)env->v).environment()->insert(SymbolStr(symbol->v)) = v;
-    ((REnvironment&)env->v).environment()->writeBarrier();
+    String s = global->strings.intern(SymbolStr(symbol->v));
+
+    ((REnvironment&)env->v).environment()->insert(s) = v;
 }
 
 SEXP Rf_dimnamesgets(SEXP, SEXP) {

@@ -193,15 +193,38 @@
     _(ExternalRoutine, "ExternalRoutine")
 
 struct StringImpl : public HeapObject {
-    //uint64_t length;
+    uint64_t length;
+    mutable size_t hash;
     char s[];
 
-    //StringImpl(uint64_t length) : length(length) {}
+    StringImpl(uint64_t length, size_t hash=0)
+        : length(length), hash(hash)
+    {}
 };
 typedef const StringImpl* String;
 
-bool Eq(String s, String t);
-bool Neq(String s, String t);
+ALWAYS_INLINE
+bool Eq(String s, String t)
+{
+    return s == t ||
+        (s && t && s->length == t->length && strncmp(s->s, t->s, s->length) == 0);
+}
+
+ALWAYS_INLINE
+bool Neq(String s, String t)
+{
+    return !Eq(s, t);
+}
+
+size_t HashSlow(String s);
+
+ALWAYS_INLINE
+size_t Hash(String s)
+{
+    return (s->hash != 0)
+        ? s->hash
+        : HashSlow(s);
+}
 
 //typedef const char* String;
 

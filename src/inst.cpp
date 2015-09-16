@@ -306,6 +306,24 @@ Instruction const* load_impl(State& state, Instruction const& inst)
 {
     String s = static_cast<Character const&>(CONSTANT(inst.a)).s;
     
+    Environment* env;
+    Value const* v = state.frame.environment->getRecursive(s, env);
+
+    if(v)
+    {
+        if(!v->isPromise())
+        {
+            OUT(c) = *v;
+            return &inst+1;
+        }
+        else
+        {
+            return force(state, static_cast<Promise const&>(*v),
+                env, static_cast<Character const&>(CONSTANT(inst.a)),
+                inst.c, &inst+1);
+        }
+    }
+
     return StopDispatch(state, inst, MakeString(
             (std::string("Object '") + s->s + "' not found")), 
             inst.c);
@@ -468,7 +486,7 @@ Instruction const* pr_new_impl(State& state, Instruction const& inst)
     REnvironment& eval = (REnvironment&)REGISTER((&inst+1)->a);
     REnvironment& assign = (REnvironment&)REGISTER((&inst+1)->b);
 
-    String in = state.global.strings.in(a.s->s);
+    String in = state.global.strings.intern(a.s);
     Value& v = assign.environment()->insert(in);
 
     try {
@@ -653,8 +671,9 @@ Instruction const* get_impl(State& state, Instruction const& inst)
                         return &inst+1;
                     }
                     else {
+                        auto out = Character::c(state.global.strings.intern(s));
                         return force(state, static_cast<Promise const&>(*v), 
-                            static_cast<REnvironment const&>(a).environment(), b,
+                            static_cast<REnvironment const&>(a).environment(), out,
                             inst.c, &inst+1); 
                     }
                 }
@@ -718,7 +737,7 @@ Instruction const* set_impl(State& state, Instruction const& inst)
         else if(c.isEnvironment() && b.isCharacter1()) {
             auto env = static_cast<REnvironment const&>(c);
             String s = static_cast<Character const&>(b).s;
-            String in = state.global.strings.in(s->s);
+            String in = state.global.strings.intern(s);
             
             env.environment()->insert(in) = a;
             OUT(c) = c;
@@ -841,7 +860,7 @@ Instruction const* setsub_impl(State& state, Instruction const& inst)
                 int64_t lx = k % l.length();
                 if(!Character::isNA(i[ix]))
                 {
-                    String in = state.global.strings.in(i[ix]->s);
+                    String in = state.global.strings.intern(i[ix]);
                     env.environment()->insert(in) = l[lx];
                 }
             }
@@ -854,7 +873,7 @@ Instruction const* setsub_impl(State& state, Instruction const& inst)
             {
                 if(!Character::isNA(i[k]))
                 {
-                    String in = state.global.strings.in(i[k]->s);
+                    String in = state.global.strings.intern(i[k]);
                     env.environment()->insert(in) = a;
                 }
             }
@@ -923,11 +942,11 @@ Instruction const* getattr_impl(State& state, Instruction const& inst)
         Value const* v = nullptr;
         if(a.isEnvironment())
         {
-            v = internAndGet(state, env.environment()->getAttributes(), name);
+            v = env.environment()->getAttributes()->get(name);
         }
         else if(a.isObject())
         {
-            v = internAndGet(state, o.attributes(), name);
+            v = o.attributes()->get(name);
         }
 
         OUT(c) = v ? *v : Null::Singleton();
@@ -948,8 +967,7 @@ Instruction const* setattr_impl(State& state, Instruction const& inst)
 
     if(b.isCharacter1())
     {
-        String str = static_cast<Character const&>(b)[0];
-        String name = state.global.strings.in(str->s);
+        String name = static_cast<Character const&>(b)[0];
 
         // Special casing for R's compressed rownames representation.
         // Can we move this to the R compatibility layer?
@@ -1155,7 +1173,6 @@ Instruction const* env_rm_impl(State& state, Instruction const& inst)
     return &inst+1;
 }
 
-
 Instruction const* env_missing_impl(State& state, Instruction const& inst)
 {
     state.visible = true;
@@ -1202,7 +1219,7 @@ Instruction const* env_missing_impl(State& state, Instruction const& inst)
                     Character const& parameters = static_cast<Closure const&>(*func).prototype()->parameters;
                     bool matched = false;
                     for(size_t i = 0; i < parameters.length() && !matched; ++i) {
-                        if(static_cast<Character const&>(expr).s == parameters[i])
+                        if(Eq(static_cast<Character const&>(expr).s, parameters[i]))
                             matched = true;
                     }
 

@@ -14,11 +14,12 @@ Value importIntoEnv(State& state, Value const* args) {
     assert(out_names.length() == in_names.length());
 
     for(size_t i = 0; i < out_names.length(); ++i) {
-        Value const* v = in->get(in_names[i]);
-        out->insert(out_names[i]) = v ? *v : Value::Nil();
+        String out_name = global->strings.intern(out_names[i]);
+        String in_name = global->strings.intern(in_names[i]);
+        Value const* v = in->get(in_name);
+        out->insert(out_name) = v ? *v : Value::Nil();
     }
-    out->writeBarrier();
-    
+
     return args[0]; 
 }
 
