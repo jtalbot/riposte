@@ -14,6 +14,13 @@
 #include <stdio.h>
 #include <cstdlib>
 #include <limits>
+
+#ifdef __GNUC__
+	#define NEVER_INLINE __attribute__((noinline))
+#else
+	#define NEVER_INLINE
+#endif
+
 #ifdef __GNUC__
 	#define ALWAYS_INLINE __inline__ __attribute__((always_inline))
 #else

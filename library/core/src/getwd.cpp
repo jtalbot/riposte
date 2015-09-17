@@ -14,7 +14,7 @@ Value getwd_impl(State& state, Value const* args) {
         return r;
     }
     else {
-        return Null::Singleton();
+        return Null();
     }
 }
 

@@ -122,7 +122,7 @@ struct SubsetInclude<List> {
 		int64_t length = d.length();
 		for(int64_t i = 0; i < length; i++) {
 			if(Integer::isNA(de[i]) ||
-                (de[i]-1) >= a.length()) re[j++] = Null::Singleton();
+                (de[i]-1) >= a.length()) re[j++] = Null();
 			else if(de[i] != 0) re[j++] = ae[de[i]-1];
 		}
 		out = r;
@@ -193,7 +193,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 			_error("mixed subscripts not allowed");
 		else if(positive > 0) {
 			switch(a.type()) {
-				case Type::Null: out = Null::Singleton(); break;
+				case Type::Null: out = Null(); break;
 #define CASE(Name,...) case Type::Name: SubsetInclude<Name>::eval(state, (Name const&)a, index, positive, out); break;
 						 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
@@ -202,7 +202,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 		}
 		else if(negative > 0) {
 			switch(a.type()) {
-				case Type::Null: out = Null::Singleton(); break;
+				case Type::Null: out = Null(); break;
 #define CASE(Name) case Type::Name: SubsetExclude<Name>::eval(state, (Name const&)a, index, negative, out); break;
 						 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
@@ -211,7 +211,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 		}
 		else {
 			switch(a.type()) {
-				case Type::Null: out = Null::Singleton(); break;
+				case Type::Null: out = Null(); break;
 #define CASE(Name) case Type::Name: out = Name(0); break;
 						 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE
@@ -222,7 +222,7 @@ void SubsetSlow(State& state, Value const& a, Value const& i, Value& out) {
 	else if(i.isLogical()) {
 		Logical const& index = (Logical const&)i;
 		switch(a.type()) {
-			case Type::Null: out = Null::Singleton(); break;
+			case Type::Null: out = Null(); break;
 #define CASE(Name) case Type::Name: SubsetLogical<Name>::eval(state, (Name const&)a, index, out); break;
 					 VECTOR_TYPES_NOT_NULL(CASE)
 #undef CASE

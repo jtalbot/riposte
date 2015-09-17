@@ -70,9 +70,7 @@
     .Map("escape_map", list(as.character.default(x)), 'character')[[1L]]
 }
 
-.pconcat <- function(x,y) {
-    .Map("concat_map", list(as.character.default(x), as.character.default(y)), 'character')[[1L]]
-}
+.pconcat <- function(x, y) .pconcat(strip(x), strip(y))
 
 .concat <- function(x) {
     .Fold("concat", list(as.character.default(x)), 'character')[[1L]]

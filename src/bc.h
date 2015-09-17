@@ -79,6 +79,9 @@
 #define LOGICAL_UNARY_BYTECODES(_)                                             \
 	_(lnot, "lnot",	LogicalUnary, PassNA(a, ~a))                               \
 
+#define CHARACTER_UNARY_BYTECODES(_)                                           \
+    _(nchar, "nchar", CharacterUnary, PassNA(a, Length(a)))                    \
+
 #define ORDINAL_UNARY_BYTECODES(_)                                             \
 	_(isna,	"isna",	OrdinalUnary,	MA::isNA(a)?Logical::TrueElement:Logical::FalseElement) \
 
@@ -95,6 +98,9 @@
 #define LOGICAL_BINARY_BYTECODES(_)                                            \
 	_(lor, "lor",	LogicalBinary, ((a<0||b<0)?-1:(a>0)?1:b))                  \
 	_(land, "land",	LogicalBinary, ((!a||!b)  ?0:(a>0)?1:b))                   \
+
+#define CHARACTER_BINARY_BYTECODES(_)                                          \
+    _(pconcat, "pconcat", CharacterBinary, PassCheckedNA(a,b,Concat(a,b)))     \
 
 #define UNIFY_BINARY_BYTECODES(_)                                              \
 	_(pmin, "pmin",	UnifyBinary, PassCheckedNA(a,b,riposte_min(a,b)))   \
@@ -148,11 +154,13 @@
 #define UNARY_BYTECODES(_) \
 	ARITH_UNARY_BYTECODES(_) \
 	LOGICAL_UNARY_BYTECODES(_) \
+	CHARACTER_UNARY_BYTECODES(_) \
 	ORDINAL_UNARY_BYTECODES(_) \
 
 #define BINARY_BYTECODES(_) \
 	ARITH_BINARY_BYTECODES(_) \
 	LOGICAL_BINARY_BYTECODES(_) \
+	CHARACTER_BINARY_BYTECODES(_) \
 	UNIFY_BINARY_BYTECODES(_) \
 	ORDINAL_BINARY_BYTECODES(_) \
 

@@ -48,8 +48,6 @@ struct Instruction {
     }
 };
 
-String MakeString(std::string const& s);
-
 Character InternStrings(State& state, Character const& c);
 
 class StringTable
@@ -447,6 +445,7 @@ public:
         return map->get(name);
     }
 
+    ALWAYS_INLINE
     Value& insert(String name)
     {
         assert(Memory::All.ConstHeap.contains(name));

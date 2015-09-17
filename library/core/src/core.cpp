@@ -41,7 +41,7 @@ Value cat(State& state, Value const* args) {
             }
 		}
 	}
-	return Null::Singleton();
+	return Null();
 }
 
 extern "C"
@@ -51,7 +51,7 @@ Value library(State& state, Value const* args, Value& result) {
     if(from.length() > 0)
 		loadPackage(state, dest.environment(), "library", state.externStr(from[0]));
     
-    return Null::Singleton();
+    return Null();
 }
 
 extern "C"
@@ -140,7 +140,7 @@ Value readtable(State& state, Value const* args) {
 		}
 		return l;
 	} else {
-		return Null::Singleton();
+		return Null();
 	}
 }
 
@@ -192,7 +192,7 @@ Value traceconfig(State & state, Value const* args) {
 	auto c = As<Logical>(args[0]);
 	if(c.length() == 0) _error("condition is of zero length");
 	state.global.epeeEnabled = Logical::isTrue(c[0]);
-	return Null::Singleton();
+	return Null();
 }
 
 // args( A, m, n, B, m, n )

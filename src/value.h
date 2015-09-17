@@ -81,7 +81,7 @@ struct Value {
 	bool isAtomic() const { return type() >= Type::Null && type() < Type::List; }
 	bool isVector() const { return type() >= Type::Null && type() <= Type::List; }
 	
-	static Value const& Nil() { static const Value v = {{0}, {0}}; return v; }
+	constexpr static const Value Nil() { return Value {{0}, {0}}; }
 };
 
 //
@@ -311,7 +311,8 @@ struct VectorImpl : public Vector {
 		return (VectorImpl<VType, ElementType, Recursive>&)v;
 	}
 
-	static void InitScalar(Value& _v, ElementType const& d) {
+	static void InitScalar(Value& _v, ElementType d)
+    {
         Vector& v = (Vector&) _v;
 		Value::Init(v, ValueType, 1);
 		if(canPack)
@@ -334,33 +335,39 @@ struct Name : public VectorImpl<Type::Name, Element, Recursive> { 			\
 	static Name c(Element v0, Element v1) { Name c(2); c[0] = v0; c[1] = v1; return c; } \
 	static Name c(Element v0, Element v1, Element v2) { Name c(3); c[0] = v0; c[1] = v1; c[2] = v2; return c; } \
 	static Name c(Element v0, Element v1, Element v2, Element v3) { Name c(4); c[0] = v0; c[1] = v1; c[2] = v2; c[3] = v3; return c; } \
-	const static Element NAelement; \
-	static Name NA() { static Name na = Name::c(NAelement); return na; }  \
 	static Name& Init(Value& v, int64_t length) { return (Name&)VectorImpl<Type::Name, Element, Recursive>::Init(v, length); } \
 	static void InitScalar(Value& v, Element const& d) { VectorImpl<Type::Name, Element, Recursive>::InitScalar(v, d); \
 }\
 /* note missing }; */
 
 VECTOR_IMPL(Null, unsigned char, false)  
-	static Null const& Singleton() { static Null s = Null::c(); return s; } 
+    
+    constexpr static const unsigned char NAelement = 255;
+
 	static bool isNA() { return false; }
 	static bool isCheckedNA() { return false; }
 };
 
 VECTOR_IMPL(Logical, char, false)
-	const static char TrueElement;
-	const static char FalseElement;
+	constexpr static const char TrueElement  = -1;
+	constexpr static const char FalseElement =  0;
+	constexpr static const char NAelement    =  1;
 
-	static Logical const& True() { static Logical t = Logical::c(-1); return t; }
-	static Logical const& False() { static Logical f = Logical::c(0); return f; } 
+	static Logical True()  { return Logical::c(TrueElement); }
+	static Logical False() { return Logical::c(FalseElement); } 
+	static Logical NA()    { return Logical::c(NAelement); }
 	
-	static bool isTrue(char c) { return c == -1; }
-	static bool isFalse(char c) { return c == 0; }
-	static bool isNA(char c) { return c == 1; }
-	static bool isCheckedNA(char c) { return isNA(c); }
+	constexpr static bool isTrue(char c) { return c == TrueElement; }
+	constexpr static bool isFalse(char c) { return c == FalseElement; }
+	constexpr static bool isNA(char c) { return c == NAelement; }
+	constexpr static bool isCheckedNA(char c) { return isNA(c); }
 };
 
 VECTOR_IMPL(Integer, int64_t, false)
+	constexpr static const int64_t NAelement = std::numeric_limits<int64_t>::min();
+	
+    static Integer NA() { return Integer::c(NAelement); }
+
 	static bool isNA(int64_t c) { return c == NAelement; }
 	static bool isCheckedNA(int64_t c) { return isNA(c); }
 }; 
@@ -371,26 +378,40 @@ VECTOR_IMPL(Double, double, false)
 		double d;
 	};
 
-	static Double const& Inf() { static Double i = Double::c(std::numeric_limits<double>::infinity()); return i; }
-	static Double const& NInf() { static Double i = Double::c(-std::numeric_limits<double>::infinity()); return i; }
-	static Double const& NaN() { static Double n = Double::c(std::numeric_limits<double>::quiet_NaN()); return n; } 
+	static const double NAelement;
+	
+    static Double NA() { return Double::c(NAelement); }
+    static Double Inf() { return Double::c(std::numeric_limits<double>::infinity()); }
+	static Double NInf() { return Double::c(-std::numeric_limits<double>::infinity()); }
+	static Double NaN() { return Double::c(std::numeric_limits<double>::quiet_NaN()); } 
 	
 	static bool isNA(double c) { _doublena a, b; a.d = c; b.d = NAelement; return a.i==b.i; }
-	static bool isNaN(double c) { return (c != c) && !isNA(c); }
-	static bool isCheckedNA(int64_t c) { return false; }
+	constexpr static bool isNaN(double c) { return (c != c) && !isNA(c); }
+	constexpr static bool isCheckedNA(int64_t c) { return false; }
 };
 
 VECTOR_IMPL(Character, String, false)
-	static bool isNA(String c) { return c == Strings::NA; }
-	static bool isCheckedNA(String c) { return isNA(c); }
+
+	constexpr static const String NAelement = Strings::NA;
+	static Character NA() { return Character::c(NAelement); }
+	
+    constexpr static bool isNA(String c) { return c == NAelement; }
+	constexpr static bool isCheckedNA(String c) { return isNA(c); }
 };
 
 VECTOR_IMPL(Raw, unsigned char, false) 
-	static bool isNA(unsigned char c) { return false; }
-	static bool isCheckedNA(unsigned char c) { return false; }
+    
+    constexpr static const unsigned char NAelement = 255;
+	
+    constexpr static bool isNA(unsigned char c) { return false; }
+	constexpr static bool isCheckedNA(unsigned char c) { return false; }
 };
 
-VECTOR_IMPL(List, Value, true) 
+VECTOR_IMPL(List, Value, true)
+
+    constexpr static const Value NAelement = Value::Nil();
+	static List NA() { return List::c(NAelement); }
+ 
 	static bool isNA(Value const& c) { return c.isNil(); }
 	static bool isCheckedNA(Value const& c) { return isNA(c); }
 };

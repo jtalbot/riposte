@@ -58,7 +58,7 @@ Value dynsym(State& state, Value const* args) {
         return v;
     }
     else {
-        return Null::Singleton();
+        return Null();
     }
 }
 

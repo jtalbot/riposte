@@ -8,9 +8,6 @@
 #include <Rinternals.h>
 #include <lzma.h>
 
-const int32_t Integer32::NAelement = std::numeric_limits<int32_t>::min();
-const int32_t Logical32::NAelement = std::numeric_limits<int32_t>::min();
-
 Integer Integer32::toInteger(Integer32 const& i) {
     Integer result(i.length());
     result.attributes(i.attributes());
@@ -229,7 +226,7 @@ void R_init_libR(DLLInfo *) {
     REnvironment::Init(empty, global->empty);
     R_EmptyEnv = global->installSEXP(empty);
 
-    R_NilValue = global->installSEXP(Null::Singleton());
+    R_NilValue = global->installSEXP(Null());
     R_UnboundValue = R_MissingArg =
         global->installSEXP(Value::Nil());
 

@@ -22,12 +22,19 @@ struct ScalarString : public Value {
 };
 
 VECTOR_IMPL(Integer32, int32_t, false)
+
+    constexpr static const int32_t NAelement = std::numeric_limits<int32_t>::min();
+
+
     static bool isNA(int32_t c) { return c == NAelement; }
     static Integer toInteger(Integer32 const& i);
     static Integer32 fromInteger(Integer const& i);
 };
 
 VECTOR_IMPL(Logical32, int32_t, false)
+
+    constexpr static const int32_t NAelement = std::numeric_limits<int32_t>::min();
+
     static bool isNA(int32_t c) { return c == NAelement; }
     static Logical toLogical(Logical32 const& i);
     static Logical32 fromLogical(Logical const& i);

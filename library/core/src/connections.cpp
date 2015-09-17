@@ -104,14 +104,14 @@ extern "C"
 Value stdout_cat(State& state, Value const* args) {
     auto c = static_cast<Character const&>(args[0]);
     std::cout << c[0]->s;
-    return Null::Singleton();
+    return Null();
 }
 
 extern "C"
 Value stderr_cat(State& state, Value const* args) {
     auto c = static_cast<Character const&>(args[0]);
     std::cerr << c[0]->s;
-    return Null::Singleton();
+    return Null();
 }
 
 extern "C"
@@ -149,7 +149,7 @@ Value file_writeLines(State& state, Value const* args) {
         fc->f.write(sep[0]->s, strlen(sep[0]->s));
     }
     
-    return Null::Singleton();
+    return Null();
 }
 
 extern "C"
@@ -230,7 +230,7 @@ Value terminal_writeLines(State& state, Value const* args) {
         std::cout << lines[i]->s << sep[0]->s;
     }
     
-    return Null::Singleton();
+    return Null();
 }
 
 extern "C"

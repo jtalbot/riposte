@@ -516,7 +516,7 @@ void IfElseDispatch(State& state, void* args, Value const& a, Value const& b, Va
 	    else if(a.isLogical() || b.isLogical())	
 		    Zip3< IfElseVOp<Logical> >::eval(args, As<Logical>(a), As<Logical>(b), As<Logical>(cond), c);
 	    else if(a.isNull() || b.isNull() || cond.isNull())
-		    c = Null::Singleton();
+		    c = Null();
     }
     else {
 	    _error("non-zippable argument to ifelse operator");

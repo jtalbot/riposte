@@ -9,7 +9,7 @@ chartr <- function(old, new, x) {
     old <- old[[1L]]
     new <- new[[1L]]
 
-    if(nchar(old) != nchar(new))
+    if(.nchar(old) != .nchar(new))
         .stop("'old' and 'new' are not the same length")
 
     .Map('chartr_map',

@@ -28,7 +28,7 @@
 
 	# Keywords.
     'Nil'   {token( TOKEN_NIL_CONST );};
-	'NULL' 	{token( TOKEN_NULL_CONST, Null::Singleton() );};
+	'NULL' 	{token( TOKEN_NULL_CONST, Null() );};
 	'NA' 	{token( TOKEN_NUM_CONST, Logical::NA() );};
 	'TRUE' 	{token( TOKEN_NUM_CONST, Logical::True() );};
 	'FALSE'	{token( TOKEN_NUM_CONST, Logical::False() );};

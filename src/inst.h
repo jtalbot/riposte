@@ -21,7 +21,7 @@
 
 // Forward define impls for all instructions
 #define DEFINE_IMPL(name,...) \
-    Instruction const* name##_impl(State& state, Instruction const& inst);
+    NEVER_INLINE Instruction const* name##_impl(State& state, Instruction const& inst);
 STANDARD_BYTECODES(DEFINE_IMPL);
 
 
@@ -577,7 +577,7 @@ Instruction const* getenv_inst(State& state, Instruction const& inst)
         REnvironment::Init(OUT(c), state.frame.environment);
     }
     else {
-        OUT(c) = Null::Singleton();
+        OUT(c) = Null();
     }
     return &inst+1;
 }
@@ -675,12 +675,20 @@ Instruction const* env_rm_inst(State& state, Instruction const& inst)
     DECODE(a);
     DECODE(b);
 
-    if(a.isEnvironment() && b.isCharacter() && b.pac == 1)
+    if(b.isCharacter() && b.pac == 1)
     {
-        internAndRemove(state, static_cast<REnvironment const&>(a).environment(), b.s);
-        return &inst+1;
+        if(a.isEnvironment())
+        {
+            internAndRemove(state, static_cast<REnvironment const&>(a).environment(), b.s);
+            return &inst+1;
+        }
+        else if(a.isNull())
+        {
+            internAndRemove(state, state.frame.environment, b.s);
+            return &inst+1;
+        }
     }
-   
+
     return env_rm_impl(state, inst);
 }
 

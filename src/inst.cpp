@@ -500,7 +500,7 @@ Instruction const* pr_new_impl(State& state, Instruction const& inst)
             inst.c);
     }
 
-    OUT(c) = Null::Singleton();
+    OUT(c) = Null();
 
     return &inst+2;
 }
@@ -561,7 +561,7 @@ Instruction const* pr_env_impl(State& state, Instruction const& inst)
     if(v && v->isPromise())
         REnvironment::Init(OUT(c), static_cast<Promise const&>(*v).environment());
     else
-        OUT(c) = Null::Singleton();
+        OUT(c) = Null();
     
     return &inst+1;
 }
@@ -626,7 +626,7 @@ Instruction const* get_impl(State& state, Instruction const& inst)
     { 
         // This case seems wrong, but some base code relies on this behavior. 
         if(a.isNull()) {
-            OUT(c) = Null::Singleton();
+            OUT(c) = Null();
             return &inst+1;
         }
         else if(!static_cast<Object const&>(a).hasAttributes())
@@ -663,7 +663,7 @@ Instruction const* get_impl(State& state, Instruction const& inst)
                     
                     if(!v)
                     {
-                        OUT(c) = Null::Singleton();
+                        OUT(c) = Null();
                         return &inst+1;
                     }
                     else if(v->isObject() || v->isNil()) {
@@ -806,7 +806,7 @@ Instruction const* getsub_impl(State& state, Instruction const& inst)
         for(int64_t k = 0; k < i.length(); ++k)
         {
             Value const* v = internAndGet(state, env.environment(), i[k]);
-            r[k] = v ? *v : Null::Singleton();
+            r[k] = v ? *v : Null();
         }
         OUT(c) = r; 
         return &inst+1;
@@ -949,7 +949,7 @@ Instruction const* getattr_impl(State& state, Instruction const& inst)
             v = o.attributes()->get(name);
         }
 
-        OUT(c) = v ? *v : Null::Singleton();
+        OUT(c) = v ? *v : Null();
         return &inst+1;
     }
 
@@ -1034,7 +1034,7 @@ Instruction const* attributes_impl(State& state, Instruction const& inst)
         }
     }
     
-    OUT(c) = Null::Singleton();
+    OUT(c) = Null();
     return &inst+1;
 }
 
@@ -1169,7 +1169,7 @@ Instruction const* env_rm_impl(State& state, Instruction const& inst)
         internAndRemove(state, env, names[i]);
     }
 
-    OUT(c) = Null::Singleton();
+    OUT(c) = Null();
     return &inst+1;
 }
 
@@ -1456,7 +1456,7 @@ Instruction const* vector_impl(State& state, Instruction const& inst)
         OUT(c) = v;
     } else if(type == Type::List) {
         List v(l);
-        for(int64_t i = 0; i < l; i++) v[i] = Null::Singleton();
+        for(int64_t i = 0; i < l; i++) v[i] = Null();
         OUT(c) = v;
     } else {
         _error(std::string("Invalid type in vector: ") + stype->s);

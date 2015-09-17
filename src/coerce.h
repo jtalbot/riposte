@@ -46,7 +46,7 @@ void As(Value src, O& out) {
 
 template<>
 inline void As<Null>(Value src, Null& out) {
-       out = Null::Singleton();
+       out = Null();
 }
 
 template<class O>
@@ -60,7 +60,7 @@ inline Value As(Type::Enum type, Value const& src) {
 	if(src.type() == type)
 		return src;
 	switch(type) {
-		case Type::Null: return Null::Singleton(); break;
+		case Type::Null: return Null(); break;
 		#define CASE(Name,...) case Type::Name: return As<Name>(src); break;
 		VECTOR_TYPES_NOT_NULL(CASE)
 		#undef CASE

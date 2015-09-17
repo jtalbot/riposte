@@ -170,6 +170,8 @@
     _(invisible, ".invisible") \
     _(visible, ".visible") \
     _(withVisible, ".withVisible") \
+    _(nchar, ".nchar") \
+    _(pconcat, ".pconcat") \
     _(__onexit__, ".__on.exit__.") \
     _(__extraArgs__, ".__extraArgs__.") \
     _(__nargs__, ".__nargs__.") \
@@ -193,7 +195,7 @@
     _(ExternalRoutine, "ExternalRoutine")
 
 struct StringImpl : public HeapObject {
-    uint64_t length;
+    int64_t length;
     mutable size_t hash;
     char s[];
 
@@ -226,10 +228,17 @@ size_t Hash(String s)
         : HashSlow(s);
 }
 
-//typedef const char* String;
+ALWAYS_INLINE
+int64_t Length(String s)
+{
+    return s->length;
+}
+
+String MakeString(std::string const& s);
+String Concat(String s, String t);
 
 namespace Strings {
-	static const String NA = nullptr;
+	constexpr static const String NA = nullptr;
 #define DECLARE(name, string, ...) extern String name;
 	STRINGS(DECLARE)
 #undef DECLARE

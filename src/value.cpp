@@ -1,21 +1,21 @@
 
 #include "value.h"
 
+const unsigned char Null::NAelement;
+
+const char Logical::TrueElement;
+const char Logical::FalseElement;
+const char Logical::NAelement;
+
+const int64_t Integer::NAelement;
+
 Double::_doublena doublena = {0x7fff000000001953};
-
-const unsigned char Null::NAelement = 255;
-
-const unsigned char Raw::NAelement = 255;
-
-const char Logical::TrueElement = -1;
-const char Logical::FalseElement = 0;
-const char Logical::NAelement = 1;
-
-const int64_t Integer::NAelement = std::numeric_limits<int64_t>::min();
 
 const double Double::NAelement = doublena.d;
 
-const String Character::NAelement = Strings::NA;
+const String Character::NAelement;
 
-const Value List::NAelement = Value::Nil();
+const unsigned char Raw::NAelement;
+
+const Value List::NAelement;
 

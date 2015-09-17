@@ -19,3 +19,26 @@ size_t HashSlow(String s)
 
     return h;
 }
+
+String MakeString(std::string const& s)
+{
+    String result = new (s.size()+1) StringImpl(s.size());
+    memcpy((void*)result->s, s.c_str(), s.size()+1);
+    return result;
+}
+
+String Concat(String s, String t)
+{
+    if(s->length == 0)
+        return t;
+    if(t->length == 0)
+        return s;
+
+    int64_t length = s->length + t->length;
+    String result = new (length+1) StringImpl(length);
+    memcpy((void*)result->s, s->s, s->length);
+    memcpy((void*)(result->s+s->length), t->s, t->length+1);
+
+    return result;
+}
+

@@ -3,7 +3,7 @@ readDCF <- function(file, fields, keep.white) {
     lines <- readLines(file, -1, TRUE, FALSE, 'unknown')
     split <- strip(regexpr(':', lines, FALSE, FALSE, TRUE, FALSE))
     keys <- substr(lines, 0L, split-1L)
-    values <- substr(lines, split+1L, nchar(lines))
+    values <- substr(lines, split+1L, .nchar(lines))
 
     if(is.null(fields)) {
         fields <- unique(keys, NULL, FALSE, length(keys))

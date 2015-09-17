@@ -610,7 +610,7 @@ SEXP Rf_allocVector3(SEXPTYPE type, R_xlen_t len, R_allocator_t* alloc) {
         } break;
         case VECSXP: {
             v = List(len);
-		    for(int64_t i = 0; i < len; i++) ((List&)v)[i] = Null::Singleton();
+		    for(int64_t i = 0; i < len; i++) ((List&)v)[i] = Null();
         } break;
         default: printf("Unsupported type in Rf_allocVector3: %d\n", type); throw; break;
     }

@@ -12,6 +12,7 @@ primitives <- .characters(
  
     # 000
     '.make.namespace',
+    '.pconcat',
  
     # Arithmetic.R
     '+',

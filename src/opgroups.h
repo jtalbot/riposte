@@ -12,6 +12,8 @@ template<class X> struct ArithUnary2   { typedef X A; typedef Double MA; typedef
 
 template<class X> struct LogicalUnary  { typedef X A; typedef Logical MA; typedef Logical R; };
 
+template<class X> struct CharacterUnary  { typedef X A; typedef Character MA; typedef Integer R; };
+
 template<class X> struct OrdinalUnary  { typedef X A; typedef X MA; typedef Logical R; };
 
 
@@ -32,6 +34,9 @@ template<class X, class Y> struct ArithBinary2
 
 template<class X, class Y> struct LogicalBinary
     { typedef X A; typedef Y B; typedef Logical MA; typedef Logical MB; typedef Logical R; };
+
+template<class X, class Y> struct CharacterBinary
+    { typedef X A; typedef Y B; typedef Character MA; typedef Character MB; typedef Character R; };
 
 template<class X, class Y> struct RoundBinary
     { typedef X A; typedef Y B; typedef Double MA; typedef Integer MB; typedef Double R; };

@@ -1,9 +1,9 @@
 
 nchar <- function(x, type, allowNA, keepNA) {
-    .Map('nchar_map', list(as.character.default(x)), 'integer')[[1L]]
+    .nchar(strip(x))
 }
 
 nzchar <- function(x) {
-    .Map('nzchar_map', list(as.character.default(x)), 'logical')[[1L]]
+    .nchar(strip(x)) > 0
 }
 

@@ -26,7 +26,7 @@
      
     for(i in seq_len(length(x))) {
         if(r[[i]] == 0L && x[[i]] != '') {
-            m <- (substr(xtable,1L,nchar(x[[i]])) == x[[i]])
+            m <- (substr(xtable,1L,.nchar(x[[i]])) == x[[i]])
             m <- m & !complete
 
             if(sum(m) > 1L)

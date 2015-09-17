@@ -66,6 +66,10 @@ Compiler::EmitTable::EmitTable() {
     add(Strings::any, 1, &Compiler::emitUnary, ByteCode::any);
     add(Strings::all, 1, &Compiler::emitUnary, ByteCode::all);
 
+    // R character operators
+    add(Strings::nchar, 1, &Compiler::emitUnary, ByteCode::nchar);
+    add(Strings::pconcat, 2, &Compiler::emitBinary, ByteCode::pconcat);
+
     // Object operators
     add(Strings::bracket, 2, &Compiler::emitBinary, ByteCode::getsub);
     add(Strings::bracketAssign, 3, &Compiler::emitTernary, ByteCode::setsub);
@@ -336,7 +340,7 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code
         kill(target);
 
         Operand rm = allocRegister();
-        Operand env = compileConstant(Null::Singleton());
+        Operand env = compileConstant(Null());
         emit( ByteCode::env_rm, env, tmp, rm );
         kill( rm );
     }
@@ -413,7 +417,7 @@ Compiler::Operand Compiler::emitFunction(ByteCode::Enum bc, List const& call, Co
 Compiler::Operand Compiler::emitReturn(ByteCode::Enum bc, List const& call, Code* code) {
 		Operand result;
 		if(call.length() == 1) {
-			result = compileConstant(Null::Singleton());
+			result = compileConstant(Null());
 		} else if(call.length() == 2)
 			result = compile(call[1], code);
 		else
@@ -446,7 +450,7 @@ Compiler::Operand Compiler::emitFor(ByteCode::Enum bc, List const& call, Code* c
 
     kill(body); kill(loop_limit); kill(loop_variable); 
     kill(loop_counter); kill(loop_vector);
-    //return invisible(compileConstant(Null::Singleton(), code));
+    //return invisible(compileConstant(Null(), code));
     
     Operand t = allocRegister();
     emit(ByteCode::mov, body, 0, t);
@@ -472,7 +476,7 @@ Compiler::Operand Compiler::emitWhile(ByteCode::Enum bc, List const& call, Code*
     ir[beginbody-2].b = endbody-beginbody+4;
     loopDepth--;
     
-    return invisible(compileConstant(Null::Singleton()));
+    return invisible(compileConstant(Null()));
 }
 
 Compiler::Operand Compiler::emitRepeat(ByteCode::Enum bc, List const& call, Code* code) {
@@ -485,7 +489,7 @@ Compiler::Operand Compiler::emitRepeat(ByteCode::Enum bc, List const& call, Code
     emit(ByteCode::jmp, beginbody-endbody, 0, 0);
     
     kill(body);
-    return invisible(compileConstant(Null::Singleton()));
+    return invisible(compileConstant(Null()));
 }
 
 Compiler::Operand Compiler::emitNext(ByteCode::Enum bc, List const& call, Code* code) {
@@ -525,7 +529,7 @@ Compiler::Operand Compiler::emitIf(ByteCode::Enum bc, List const& call, Code* co
     resultF = placeInRegister(
         call.length() >= 4 
             ? compile(call[3], code)
-            : invisible(compileConstant(Null::Singleton())));
+            : invisible(compileConstant(Null())));
     assert(resultNA == resultF || 
            resultNA.loc == INVALID || 
            resultF.loc == INVALID);
@@ -555,7 +559,7 @@ Compiler::Operand Compiler::emitIf(ByteCode::Enum bc, List const& call, Code* co
 Compiler::Operand Compiler::emitBrace(ByteCode::Enum bc, List const& call, Code* code) {
 		int64_t length = call.length();
 		if(length <= 1) {
-			return compileConstant(Null::Singleton());
+			return compileConstant(Null());
 		} else {
 			Operand result;
 			for(int64_t i = 1; i < length; i++) {
@@ -745,7 +749,7 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
 
 Compiler::Operand Compiler::compileExpression(List const& values, Code* code) {
 	Operand result;
-	if(values.length() == 0) result = compileConstant(Null::Singleton());
+	if(values.length() == 0) result = compileConstant(Null());
 	for(int64_t i = 0; i < values.length(); i++) {
 		kill(result);
 		result = compile(values[i], code);

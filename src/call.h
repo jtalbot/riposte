@@ -38,7 +38,7 @@ bool ArithUnary1Dispatch(State& state, void* args, Value const& a, Value& c) {
 	if(a.isDouble()) { Zip1< Op<Double> >::eval(args, (Double const&)a, c); return true; }
 	else if(a.isInteger()) { Zip1< Op<Integer> >::eval(args, (Integer const&)a, c); return true; }
 	else if(a.isLogical()) { Zip1< Op<Logical> >::eval(args, (Logical const&)a, c); return true; }
-	else if(a.isNull())	{ c = Null::Singleton(); return true; }
+	else if(a.isNull())	{ c = Null(); return true; }
 	else return false;
 }
 
@@ -69,6 +69,26 @@ bool LogicalUnaryDispatch(State& state, void* args, Value a, Value& c) {
 	else if(a.isInteger()) { Zip1< Op<Integer> >::eval(args, (Integer const&)a, c); return true; }
     else if(a.isRaw()) { Zip1< Op<Raw> >::eval(args, (Raw const&)a, c); return true; }
 	else if(a.isNull())	{ c = Logical(0); return true; }
+	else return false;
+};
+
+template< template<typename T> class Op >
+bool CharacterUnaryFast(State& state, void* args, Value a, Value& c) {
+    if (a.isCharacter1())
+    {
+        Op<Character>::Scalar(args, a.s, c);
+        return true;
+    }
+    else return false;
+}
+
+template< template<typename T> class Op > 
+bool CharacterUnaryDispatch(State& state, void* args, Value a, Value& c) {
+    if (a.isCharacter())
+    {
+	    Zip1< Op<Character> >::eval(args, (Character const&)a, c);
+        return true;
+    }
 	else return false;
 };
 
@@ -184,6 +204,25 @@ bool LogicalBinaryDispatch(State& state, void* args, Value a, Value b, Value& c)
     else return false;
 }
 
+template< template<typename S, typename T> class Op > 
+bool CharacterBinaryFast(State& state, void* args, Value a, Value b, Value& c) {
+    if(a.isCharacter1() && b.isCharacter1()) { 
+        Op<Character, Character>::Scalar(args, a.s, b.s, c);
+        return true;
+    }
+	else return false;
+}
+
+template< template<typename S, typename T> class Op >
+bool CharacterBinaryDispatch(State& state, void* args, Value a, Value b, Value& c) {
+	if(a.isCharacter() && b.isCharacter()) {
+        Zip2< Op<Character, Character> >::eval(args,
+            (Character const&)a, (Character const&)b, c);
+        return true;
+	}
+    else return false;
+}
+
 template< class Op >
 bool EnvironmentBinaryFast(State& state, void* args, Value const& a, Value const& b, Value& c) {
     return false;
@@ -254,7 +293,7 @@ bool UnifyBinaryDispatch(State& state, void* args, Value const& a, Value const& 
             return true;
         }
 	    else if(a.isNull() || b.isNull()) {
-		    c = Null::Singleton();
+		    c = Null();
             return true;
         }
         else if(a.isList() && ((List const&)a).length() == 0 &&
@@ -371,7 +410,7 @@ bool UnifyFoldDispatch(State& state, void* args, Value const& a, Value& c) {
 	else if(a.isDouble())	{ FoldLeft< Op<Double> >::eval(args, (Double const&)a, c); return true; }
 	else if(a.isInteger())	{ FoldLeft< Op<Integer> >::eval(args, (Integer const&)a, c); return true; }
 	else if(a.isLogical())	{ FoldLeft< Op<Logical> >::eval(args, (Logical const&)a, c); return true; }
-	else if(a.isNull())	{ c = Null::Singleton(); return true; }
+	else if(a.isNull())	{ c = Null(); return true; }
 	else return false; 
 }
 

@@ -8,7 +8,7 @@ Value parseC(R_CMethodDef const* call, String klass) {
     Value n = Character::c(MakeString(call->name));
     Value a;
     Externalptr::Init(a, (void*)(call->fun), Value::Nil(), Value::Nil(), NULL);
-    Value d = Null::Singleton();
+    Value d = Null();
     Value num = Integer::c(call->numArgs);
 
     // TODO: parse the types and styles too
@@ -31,7 +31,7 @@ Value parseCall(R_CallMethodDef const* call, String klass) {
     Value n = Character::c(MakeString(call->name));
     Value a;
     Externalptr::Init(a, (void*)(call->fun), Value::Nil(), Value::Nil(), NULL);
-    Value d = Null::Singleton();
+    Value d = Null();
     Value num = Integer::c(call->numArgs);
 
     // TODO: parse the types and styles too

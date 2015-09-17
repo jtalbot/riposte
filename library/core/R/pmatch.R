@@ -6,7 +6,7 @@ pmatch <- function(x, table, nomatch, duplicates.ok)
     if(duplicates.ok) {
         r <- match(x, table, 0L, '')
         for(i in seq_len(length(x))) {
-            m <- which(substr(table,1L,nchar(x[[i]])) == x[[i]])
+            m <- which(substr(table,1L,.nchar(x[[i]])) == x[[i]])
             if(length(m) > 0L)
                 r[[i]] <- m[[1L]]
         }
@@ -18,7 +18,7 @@ pmatch <- function(x, table, nomatch, duplicates.ok)
 
         for(i in seq_len(length(x))) {
             if(r[[i]] == 0L && x[[i]] != '') {
-                m <- (substr(table,1L,nchar(x[[i]])) == x[[i]])
+                m <- (substr(table,1L,.nchar(x[[i]])) == x[[i]])
                 m <- m & !complete
 
                 if(sum(m) == 1L)

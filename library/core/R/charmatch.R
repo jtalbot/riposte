@@ -8,7 +8,7 @@ charmatch <- function(x, table, nomatch)
         if(length(m) == 1L)
             r[[i]] <- m[[1L]]
         else if(length(m) == 0L) { 
-            m <- which(substr(table,1L,nchar(x[[i]])) == x[[i]])
+            m <- which(substr(table,1L,.nchar(x[[i]])) == x[[i]])
             if(length(m) == 1L)
                 r[[i]] <- m[[1L]]
             else if(length(m) == 0L)

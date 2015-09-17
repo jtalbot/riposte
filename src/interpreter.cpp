@@ -10,13 +10,6 @@
 
 Global* global;
 
-String MakeString(std::string const& s)
-{
-    String result = new (s.size()+1) StringImpl(s.size());
-    memcpy((void*)result->s, s.c_str(), s.size()+1);
-    return result;
-}
-
 Character InternStrings(State& state, Character const& c)
 {
     Character r(c.length());

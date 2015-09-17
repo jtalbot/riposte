@@ -939,7 +939,7 @@ _eof_trans:
 	{{p = ((te))-1;}token( TOKEN_NIL_CONST );}
 	break;
 	case 2:
-	{{p = ((te))-1;}token( TOKEN_NULL_CONST, Null::Singleton() );}
+	{{p = ((te))-1;}token( TOKEN_NULL_CONST, Null() );}
 	break;
 	case 4:
 	{{p = ((te))-1;}token( TOKEN_NUM_CONST, Logical::True() );}
