@@ -321,8 +321,27 @@ public:
         return new (sizeof(Pair)*capacity) HashMap(size, capacity);
     }
 
+    // Returns whether or not 'name' exists.
+    // Fast path if the field does not exist.
+    bool has(String name) const
+    {
+        uint64_t i = ((uint64_t)name >> 5) & (capacity-1);
+
+        if(__builtin_expect(d[i].n == name, false))
+            return true;
+
+        while(d[i].n != Strings::NA)
+        {
+            i = (i+1) & (capacity-1);
+            if(__builtin_expect(d[i].n == name, false))
+                return true;
+        }
+
+        return false;
+    }
+
     // Returns a pointer to the entry for `name`
-    // or a nullptr if it doesn't exist.
+    // or a nullptr if it doesn't exist. Fast path if the field exists.
     Value const* get(String name) const
     {
         uint64_t i = ((uint64_t)name >> 5) & (capacity-1);
@@ -435,6 +454,12 @@ public:
         HashMap::Pair* p = map->slot(name);
         *p = { name, v };
         map->size++;
+    }
+
+    bool has(String name) const
+    {
+        assert(Memory::All.ConstHeap.contains(name));
+        return map->has(name);
     }
 
     // Returns a pointer to the entry for `name`

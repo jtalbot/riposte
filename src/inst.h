@@ -111,6 +111,35 @@ Instruction const* call_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* ret_inst(State& state, Instruction const& inst)
 {
+    // we can return futures from functions, so don't BIND
+    DECODE(a);
+
+    if( state.stack.size() > 1 &&
+        !state.frame.isPromise &&
+        !state.frame.environment->has(Strings::__onexit__))
+    {
+        REGISTER(0) = a;
+        Instruction const* returnpc = state.frame.returnpc;
+    
+        // We can free this environment for reuse
+        // as long as we don't return a closure...
+        // but also can't if an assignment to an 
+        // out of scope variable occurs (<<-, assign) with a value of a closure!
+        #ifdef EPEE
+        if(!(a.isClosure() || a.isEnvironment() || a.isList())) {
+            state.traces.KillEnvironment(state.frame.environment);
+        }
+        #endif
+
+        state.pop();
+
+        #ifdef EPEE
+        state.traces.LiveEnvironment(state.frame.environment, a);
+        #endif
+
+        return returnpc;
+    }
+
     return ret_impl(state, inst);
 }
 

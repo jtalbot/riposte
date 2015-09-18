@@ -106,30 +106,47 @@ private:
 
     typedef Operand (Compiler::*EmitFn)(ByteCode::Enum bc, List const& call, Code* code);
     
-    class EmitTable {
+    class EmitTable
+    {
         struct Emit {
             ByteCode::Enum bc;
             EmitFn fn;
         };
 
-        std::map<std::pair<std::string, int>, Emit> emits;
+        struct PairHash {
+            size_t operator()(std::pair<String, int> s) const {
+                return Hash(s.first) ^ (size_t)s.second;
+            }
+        };
+
+        struct PairEq {
+            bool operator()(std::pair<String, int> s,
+                            std::pair<String, int> t) const {
+                return s.second == t.second &&
+                       s.first->length == t.first->length &&
+                       strncmp(s.first->s, t.first->s, s.first->length) == 0;
+            }
+        };
+
+        std::unordered_map<
+            std::pair<String, int>, Emit, PairHash, PairEq> emits;
 
         void add(String name, int args,
                 EmitFn fn, ByteCode::Enum bc=ByteCode::done) {
             Emit emit;
             emit.bc = bc;
             emit.fn = fn;
-            emits[std::make_pair(std::string(name->s), args)] = emit;
+            emits[std::make_pair(name, args)] = emit;
         }
 
         public:
         Operand operator()(Compiler& compiler, String fn, List const& call, Code* code) const {
             // first try to find an exact match on number of args
-            auto i = emits.find(std::make_pair(std::string(fn->s), call.length()-1));
+            auto i = emits.find(std::make_pair(fn, call.length()-1));
             
             // then try to find a version that can take any number of args
             if(i == emits.end())
-                i = emits.find(std::make_pair(std::string(fn->s), -1));
+                i = emits.find(std::make_pair(fn, -1));
             
             if(i != emits.end()) {
                 return (compiler.*(i->second.fn))(
