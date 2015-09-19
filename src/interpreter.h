@@ -162,12 +162,11 @@ struct Code : public GrayHeapObject {
     Code() : GrayHeapObject(2) {}
 
     Value expression;
-
     Integer bc;
     List constants;
-
     List calls;
     uint64_t registers;
+    bool isPromise;
 
     void printByteCode(Global const& global) const;
     void visit() const;
@@ -536,8 +535,6 @@ struct StackFrame
     Value* registers;
     Environment* environment;
     Code const* code;
-    bool isPromise;
-
     Instruction const* returnpc;
 };
 

@@ -231,7 +231,6 @@ State::State(Global& global, TaskQueue* queue)
     frame.registers = registers;
     frame.environment = NULL;
     frame.code = NULL;
-    frame.isPromise = false;
     frame.returnpc = NULL;
 }
 
@@ -310,7 +309,7 @@ void profileStack(State const& state) {
             ? state.stack[index] : state.frame;
 
         Value const* v = s.environment->get(Strings::__call__);
-        if(!s.isPromise && v && v->isList()) {
+        if(!s.code->isPromise && v && v->isList()) {
             auto l = static_cast<List const&>(*v);
             std::string str = state.deparse(l[0]);
             node = &(node->children[str]);

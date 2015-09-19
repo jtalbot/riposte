@@ -10,7 +10,7 @@ void dumpStack(State& state) {
         StackFrame const& s = state.stack[i];
 
         std::cout << i << ": ";
-        if(s.isPromise) {
+        if(s.code->isPromise) {
             std::cout << "Forcing " << state.deparse(s.registers[1]) << std::endl;
         }
         else {
@@ -42,7 +42,6 @@ Instruction const* buildStackFrame(State& state,
 	s.code = code;
 	s.returnpc = returnpc;
 	s.registers += outRegister;
-    s.isPromise = false;
 	
 	if(s.registers+code->registers > state.registers+DEFAULT_NUM_REGISTERS) {
         dumpStack(state);

@@ -18,8 +18,7 @@ Instruction const* force(
     Compiler::doPromiseCompilation(state, code);
     Instruction const* r = buildStackFrame(
         state, p.environment(), code, outRegister, returnpc);
-    state.frame.isPromise = true;
-            
+
     REnvironment::Init(REGISTER(0), targetEnv);
     REGISTER(1) = targetIndex;
 	
@@ -65,14 +64,14 @@ Instruction const* ret_impl(State& state, Instruction const& inst)
     if(state.stack.size() == 1)
         _error("no function to return from, jumping to top level");
 
-    if(state.frame.isPromise) {
+    if(state.frame.code->isPromise) {
         Environment* env = state.frame.environment;
         do {
             if(state.stack.size() <= 1)
                 _error("no function to return from, jumping to top level");
             state.pop();
         } while( !(state.frame.environment == env 
-                 && state.frame.isPromise == false) );
+                 && state.frame.code->isPromise == false) );
     }
 
     REGISTER(0) = a;

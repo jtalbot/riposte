@@ -811,6 +811,7 @@ Code* Compiler::compileExpression(State& state, Value const& expr) {
             calls[i] = compiler.compiledCalls[i];
         code->calls = calls;
     }
+    code->isPromise = false;
 
     return code;
 }
@@ -846,6 +847,7 @@ Prototype* Compiler::compileClosureBody(State& state, Value const& expr) {
             calls[i] = compiler.compiledCalls[i];
         code->calls = calls;
     }
+    code->isPromise = false;
 
     Prototype* p = new Prototype();
     p->code = code;
@@ -857,6 +859,7 @@ Code* Compiler::deferPromiseCompilation(State& state, Value const& expr) {
     Code* code = new Code();
     code->expression = expr;
     code->bc = Integer(0);
+    code->isPromise = true;
     return code;
 }
 

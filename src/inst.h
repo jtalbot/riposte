@@ -115,7 +115,7 @@ Instruction const* ret_inst(State& state, Instruction const& inst)
     DECODE(a);
 
     if( state.stack.size() > 1 &&
-        !state.frame.isPromise &&
+        !state.frame.code->isPromise &&
         !state.frame.environment->has(Strings::__onexit__))
     {
         REGISTER(0) = a;
