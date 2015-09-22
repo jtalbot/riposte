@@ -301,7 +301,7 @@ int main(int argc, char** argv)
         std::ifstream in("bootstrap.R");
         rc = run((State&)state, std::string("bootstrap.R"), in, std::cout, false, echo);
     }
-    else if(echo)
+    else if(!filename && echo)
     {
         std::cout << "If you have the base R libraries installed, you can load them by running:" << std::endl << "source('bootstrap.R')" << std::endl;
     }

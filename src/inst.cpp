@@ -1446,6 +1446,11 @@ Instruction const* seq_impl(State& state, Instruction const& inst)
     }
 #endif
 
+    if(Integer::isNA(len))
+        _error("NA/NaN argument");
+    if(len < 0)
+        _error("Arugment less than zero");
+
     OUT(c) = Sequence(1LL, 1LL, len);
     return &inst+1;
 }

@@ -684,6 +684,9 @@ internals <- .characters(
     'format',
     'formatC',
 
+    # gc.R
+    'gc',
+
     # get.R
     'get',
     'mget',
