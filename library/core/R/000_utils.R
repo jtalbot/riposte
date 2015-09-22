@@ -1,12 +1,4 @@
 
-.isTRUE <- function(x) {
-    .type(x) == 'logical' && length(x) == 1L && !is.na(x) && x
-}
-
-.isFALSE <- function(x) {
-    .type(x) == 'logical' && length(x) == 1L && !is.na(x) && !x
-}
-
 .c <- function(...) {
     unlist(list(...), FALSE, TRUE)
 }

@@ -1,5 +1,5 @@
 
-file.info <- function(files) {
+file.info <- function(files, extra_cols) {
     r <- .Map('fileinfo_map', list(files), 
         .characters('double', 'logical', 'integer', 'integer', 'integer', 'integer', 'integer', 'integer', 'character', 'character'))
 

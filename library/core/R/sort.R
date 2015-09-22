@@ -2,7 +2,7 @@
 sort <- function(x, decreasing) {
 
     if(length(x) > 1L) {
-        x[.Riposte('order', FALSE, .isTRUE(decreasing), list(x))]
+        x[.Riposte('order', FALSE, decreasing===TRUE, list(x))]
     }
     else {
         x

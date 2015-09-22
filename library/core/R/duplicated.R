@@ -4,16 +4,16 @@
 }
 
 duplicated <- function(x, incomparables, fromLast, nmax) {
-    if(.isFALSE(incomparables))
+    if(incomparables === FALSE)
         incomparables <- NULL
 
-    if(.isTRUE(fromLast))
+    if(fromLast === TRUE)
         x <- .rev(x)
 
     r <- (.match(x, x) != seq_len(length(x))) &
          (.match(x, incomparables) == 0L)
 
-    if(.isTRUE(fromLast))
+    if(fromLast === TRUE)
         r <- .rev(r)
 
     r

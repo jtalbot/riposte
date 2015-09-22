@@ -19,7 +19,7 @@ readBin <- function(con, what, n, size, signed, swap) {
     else
         con <- con[seq_len(n*size)]
 
-    if(.isTRUE(swap) && size > 1L) {
+    if(swap===TRUE && size > 1L) {
         con <- con[(size-seq_len(size)) + (seq_len(n*size)-1L) %/% size * size + 1L]
     }
  
@@ -33,7 +33,7 @@ readBin <- function(con, what, n, size, signed, swap) {
             integer=,
             int=
                 if(size == 1 || size == 2 || size == 4 || size == 8)
-                    .Riposte('rawToInteger', con, size, .isTRUE(signed))
+                    .Riposte('rawToInteger', con, size, signed===TRUE)
                 else
                     .stop(sprintf('size %d is unknown on this machine', size)),
             logical=

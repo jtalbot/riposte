@@ -12,7 +12,7 @@ dyn.load <- function(x, local, now, str) {
     info <- list(`.C`=list(), `.Call`=list(), `.Fortran`=list(), `.Riposte`=list(), useDynamicLookup=FALSE, forceSymbols=FALSE)
         
     if(x != 'base') {
-        handle <- .Riposte('dynload', as.character(x), .isTRUE(local), .isTRUE(now))
+        handle <- .Riposte('dynload', as.character(x), local===TRUE, now===TRUE)
         attr(handle, 'class') <- 'DLLHandle'
         
         name <- sub('\\.[[:alnum:]]+$', '', basename(x), FALSE, FALSE, FALSE, FALSE)

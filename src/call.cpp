@@ -54,7 +54,10 @@ Instruction const* buildStackFrame(State& state,
         s.registers[i] = Value::Nil();
     }
 
-	return (Instruction const*)&(code->bc[0]);
+    // debugging
+    // state.frame.code->printByteCode(state.global);
+	
+    return (Instruction const*)&(code->bc[0]);
 }
 
 inline void assignArgument(State& state, Environment* evalEnv, Environment* assignEnv, String n, Value const& v) {

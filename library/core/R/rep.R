@@ -7,7 +7,7 @@ rep.default <- function(x, times = 1, length.out = NA_integer_, each = 1)
     length.out <- as.integer(length.out)
     each <- as.integer(each)
 
-    if(!is.na(each) && .isTRUE(each != 1L))
+    if(!is.na(each) && each !== 1L)
         x <- rep.int(x, rep.int(each, length(x)))
    
     if(!is.na(times) && is.na(length.out))

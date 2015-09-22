@@ -60,6 +60,37 @@ private:
 		}
 	};
 
+    struct Tail {
+        enum Type {
+            None,
+            Return,
+            Done
+        };
+
+        enum Visibility {
+            Default = 0,
+            Visible = 1,
+            Invisible = 2
+        };
+
+        Type type;
+        Visibility visibility;
+
+        Tail(Type type, Visibility visibility)
+            : type(type), visibility(visibility) {}
+
+        Tail()
+            : type(Type::None), visibility(Visibility::Default) {}
+    };
+
+    Tail visible(Tail t) {
+        return Tail { t.type, t.visibility == Tail::Default ? Tail::Visible : t.visibility };
+    }
+
+    Tail invisible(Tail t) {
+        return Tail { t.type, t.visibility == Tail::Default ? Tail::Invisible : t.visibility };
+    }
+
 	std::vector<Instruction> ir;
 
 	int64_t n, max_n;
@@ -69,42 +100,44 @@ private:
 
 	Compiler(State& state) : state(state), global(state.global), loopDepth(0), n(0), max_n(0) {}
 	
-	Operand compile(Value const& expr, Code* code);
+	Operand compile(Value const& expr, Tail tail, Code* code);
 
-	Operand compileConstant(Value expr);
-	Operand compileSymbol(Value const& symbol, bool isClosure); 
-	Operand compileCall(List const& call, Character const& names, Code* code); 
-	Operand compileFunctionCall(Operand function, List const& call, Character const& names, Code* code); 
-	Operand compileExpression(List const& values, Code* code);
-    Operand visible(Operand op);
-    Operand invisible(Operand op);
+	Operand compileConstant(Value expr, Tail tail);
+	Operand compileSymbol(Value const& symbol, bool isClosure, Tail tail); 
+	Operand compileCall(List const& call, Character const& names, Tail tail, Code* code); 
+	Operand compileFunctionCall(Operand function, List const& call, Character const& names, Tail tail, Code* code); 
+	Operand compileExpression(List const& values, Tail tail, Code* code);
 	Operand placeInRegister(Operand r);
 
 	int64_t emit(ByteCode::Enum bc, Operand a, Operand b, Operand c);
 	void resolveLoopExits(int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget);
 	int64_t encodeOperand(Operand op) const;
 
-    Operand emitMissing(ByteCode::Enum bc, List const& call, Code* code);
-	Operand emitExternal(ByteCode::Enum bc, List const& call, Code* code); 
-    Operand emitAssign(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitPromise(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitFunction(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitReturn(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitFor(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitWhile(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitRepeat(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitNext(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitBreak(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitIf(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitBrace(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitParen(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitTernary(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitBinaryMap(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitBinary(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitUnary(ByteCode::Enum bc, List const& call, Code* code);
-    Operand emitNullary(ByteCode::Enum bc, List const& call, Code* code);
+    Operand emitTail(Operand op, Tail tail);
 
-    typedef Operand (Compiler::*EmitFn)(ByteCode::Enum bc, List const& call, Code* code);
+    Operand emitMissing(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+	Operand emitExternal(ByteCode::Enum bc, List const& call, Tail tail, Code* code); 
+    Operand emitAssign(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitPromise(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitFunction(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitReturn(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitFor(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitWhile(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitRepeat(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitNext(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitBreak(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitIf(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitBrace(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitParen(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitTernary(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitBinaryMap(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitBinary(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitUnary(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitNullary(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitVisible(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+    Operand emitInvisible(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
+
+    typedef Operand (Compiler::*EmitFn)(ByteCode::Enum bc, List const& call, Tail tail, Code* code);
     
     class EmitTable
     {
@@ -140,7 +173,7 @@ private:
         }
 
         public:
-        Operand operator()(Compiler& compiler, String fn, List const& call, Code* code) const {
+        Operand operator()(Compiler& compiler, String fn, List const& call, Tail tail, Code* code) const {
             // first try to find an exact match on number of args
             auto i = emits.find(std::make_pair(fn, call.length()-1));
             
@@ -150,12 +183,12 @@ private:
             
             if(i != emits.end()) {
                 return (compiler.*(i->second.fn))(
-                    i->second.bc, call, code);
+                    i->second.bc, call, tail, code);
             }
             else {
                 return compiler.compileFunctionCall(
-                    compiler.compileSymbol(call[0], true),
-                    call, Character(0), code); 
+                    compiler.compileSymbol(call[0], true, Tail()),
+                    call, Character(0), tail, code); 
             }
         }
 

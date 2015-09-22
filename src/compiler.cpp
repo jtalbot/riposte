@@ -89,8 +89,8 @@ Compiler::EmitTable::EmitTable() {
     add(Strings::strip, 1, &Compiler::emitUnary, ByteCode::strip);
     add(Strings::length, 1, &Compiler::emitUnary, ByteCode::length);
     
-    add(Strings::invisible, 1, &Compiler::emitUnary, ByteCode::invisible);
-    add(Strings::visible, 1, &Compiler::emitUnary, ByteCode::visible);
+    add(Strings::invisible, 1, &Compiler::emitInvisible);
+    add(Strings::visible, 1, &Compiler::emitVisible);
     add(Strings::withVisible, 1, &Compiler::emitUnary, ByteCode::withVisible);
     
     add(Strings::id, 2, &Compiler::emitBinary, ByteCode::id);
@@ -140,164 +140,179 @@ Compiler::EmitTable::EmitTable() {
 }
 
 // generate byte code arguments from operands as follows...
-// 	INTEGER operands unchanged
-//	CONSTANT operands encoded with negative integers
-//	REGISTER operands encoded with non-negative integers
-//	INVALID operands just go to 0 since they will never be used
+//     INTEGER operands unchanged
+//    CONSTANT operands encoded with negative integers
+//    REGISTER operands encoded with non-negative integers
+//    INVALID operands just go to 0 since they will never be used
 int64_t Compiler::encodeOperand(Operand op) const {
-	if(op.loc == INTEGER) return op.i;
-	else if(op.loc == CONSTANT) return -(op.i+1);
-	else if(op.loc == REGISTER) return (op.i);
-	else return 0;
+    if(op.loc == INTEGER) return op.i;
+    else if(op.loc == CONSTANT) return -(op.i+1);
+    else if(op.loc == REGISTER) return (op.i);
+    else return 0;
 }
 
 int64_t Compiler::emit(ByteCode::Enum bc, Operand a, Operand b, Operand c) {
-	ir.push_back(Instruction(bc,
+    ir.push_back(Instruction(bc,
         encodeOperand(a), encodeOperand(b), encodeOperand(c)));
-	return ir.size()-1;
-}
-
-Compiler::Operand Compiler::invisible(Operand op) {
-    kill(op);
-    Operand r = allocRegister();
-    emit(ByteCode::invisible, op, 0, r);
-    return r;
-}
-
-Compiler::Operand Compiler::visible(Operand op) {
-    kill(op);
-    Operand r = allocRegister();
-    emit(ByteCode::visible, op, 0, r);
-    return r;
+    return ir.size()-1;
 }
 
 void Compiler::resolveLoopExits(int64_t start, int64_t end, int64_t nextTarget, int64_t breakTarget) {
-	for(int64_t i = start; i < end; i++) {
-		if(ir[i].bc == ByteCode::jmp && ir[i].a == 0) {
-			if(ir[i].b == 1) {
-				ir[i].a = encodeOperand(nextTarget-i);
-			} else if(ir[i].b == 2) {
-				ir[i].a = encodeOperand(breakTarget-i);
-			}
-		}
-	}
+    for(int64_t i = start; i < end; i++) {
+        if(ir[i].bc == ByteCode::jmp && ir[i].a == 0) {
+            if(ir[i].b == 1) {
+                ir[i].a = encodeOperand(nextTarget-i);
+            } else if(ir[i].b == 2) {
+                ir[i].a = encodeOperand(breakTarget-i);
+            }
+        }
+    }
 }
 
-Compiler::Operand Compiler::compileConstant(Value expr) {
+Compiler::Operand Compiler::emitTail(Operand op, Tail tail)
+{
+    switch(tail.type)
+    {
+        case Tail::None:
+            // nothing
+            break;
+        case Tail::Return:
+            emit(ByteCode::ret, op, tail.visibility, 0);
+            break;
+        case Tail::Done:
+            emit(ByteCode::done, op, tail.visibility, 0);
+            break;
+    };
 
-	std::map<Value, int64_t>::const_iterator i = constants.find(expr);
-	int64_t index = 0;
+    return op;
+}
 
-	if(i == constants.end()) {
-		index = constantList.size();
-		constantList.push_back(expr);
-		constants[expr] = index;
-	} else {
-		index = i->second;
-	}
-	return Operand(CONSTANT, index);
+Compiler::Operand
+Compiler::compileConstant(Value expr, Tail tail)
+{
+    std::map<Value, int64_t>::const_iterator i = constants.find(expr);
+    int64_t index = 0;
+
+    if(i == constants.end()) {
+        index = constantList.size();
+        constantList.push_back(expr);
+        constants[expr] = index;
+    } else {
+        index = i->second;
+    }
+    return emitTail(Operand(CONSTANT, index), visible(tail));
 }
 
 static int64_t isDotDot(String s) {
-	if(s != 0 && s->s[0] == '.' && s->s[1] == '.') {
+    if(s != 0 && s->s[0] == '.' && s->s[1] == '.') {
 
         // catch ...
         if(s->s[2] == '.' && s->s[3] == 0)
             return 0;
 
-		int64_t v = 0;
-		int64_t i = 2;
-		// maximum 64-bit integer has 19 digits, but really who's going to pass
-		// that many var args?
-		while(i < (19+2) && s->s[i] >= '0' && s->s[i] <= '9') {
-			v = v*10 + (s->s[i] - '0');
-			i++;
-		}
-		if(i < (19+2) && s->s[i] == 0) return v;
-	}
-	return -1;	
+        int64_t v = 0;
+        int64_t i = 2;
+        // maximum 64-bit integer has 19 digits, but really who's going to pass
+        // that many var args?
+        while(i < (19+2) && s->s[i] >= '0' && s->s[i] <= '9') {
+            v = v*10 + (s->s[i] - '0');
+            i++;
+        }
+        if(i < (19+2) && s->s[i] == 0) return v;
+    }
+    return -1;    
 }
 
-Compiler::Operand Compiler::compileSymbol(Value const& symbol, bool isClosure) {
-	String s = SymbolStr(symbol);
+Compiler::Operand
+Compiler::compileSymbol(Value const& symbol, bool isClosure, Tail tail)
+{
+    String s = SymbolStr(symbol);
     
     // symbols have to be interned
     s = global.strings.intern(s);
-	
-	int64_t dd = isDotDot(s);
-	if(dd > 0) {
-        Operand idx = compileConstant(Integer::c(dd)); 
-		Operand t = allocRegister();
-		emit(ByteCode::dotsv, idx, 0, t);
-		return t;
-	}
-	else {
-		Operand sym = compileConstant(Character::c(s));
-		Operand t = allocRegister();
-		emit(isClosure ? ByteCode::loadfn : ByteCode::load, sym, 0, t);
-		return t;
-	}
+    
+    int64_t dd = isDotDot(s);
+    if(dd > 0) {
+        Operand idx = compileConstant(Integer::c(dd), Tail()); 
+        Operand t = allocRegister();
+        emit(ByteCode::dotsv, idx, 0, t);
+        return emitTail(t, visible(tail));
+    }
+    else {
+        Operand sym = compileConstant(Character::c(s), Tail());
+        Operand t = allocRegister();
+        emit(isClosure ? ByteCode::loadfn : ByteCode::load, sym, 0, t);
+        return emitTail(t, visible(tail));
+    }
 }
 
-Compiler::Operand Compiler::placeInRegister(Operand r) {
-	if(r.loc != REGISTER && r.loc != INVALID) {
-		kill(r);
-		Operand t = allocRegister();
-		emit(ByteCode::mov, r, 0, t);
-		return t;
-	}
-	return r;
+Compiler::Operand
+Compiler::placeInRegister(Operand r)
+{
+    if(r.loc != REGISTER && r.loc != INVALID) {
+        kill(r);
+        Operand t = allocRegister();
+        emit(ByteCode::mov, r, 0, t);
+        return t;
+    }
+    return r;
 }
 
 // a standard call, not an op
-Compiler::Operand Compiler::compileFunctionCall(Operand function, List const& call, Character const& names, Code* code) {
-	CompiledCall a = makeCall(state, call, names);
-	compiledCalls.push_back(a);
-	kill(function);
-	Operand result = allocRegister();
+Compiler::Operand
+Compiler::compileFunctionCall(Operand function, List const& call, Character const& names, Tail tail, Code* code)
+{
+    CompiledCall a = makeCall(state, call, names);
+    compiledCalls.push_back(a);
+    kill(function);
+    Operand result = allocRegister();
     emit(ByteCode::call, function, compiledCalls.size()-1, result);
-	return result;
+    return emitTail(result, tail);
 }
 
-Compiler::Operand Compiler::emitExternal(ByteCode::Enum bc, List const& call, Code* code) {
-	if(call.length() < 2)
+Compiler::Operand
+Compiler::emitExternal(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
+    if(call.length() < 2)
         _error(".Riposte needs at least one argument");
-    Operand func = placeInRegister(compile(call[1], code));
-	
-	// compile parameters directly...reserve registers for them.
-	int64_t reg = func.i;
-	for(int64_t i = 2; i < call.length(); i++) {
-		Operand r = placeInRegister(compile(call[i], code));
-		assert(r.i == reg+1);
-		reg = r.i; 
-	}
-	// kill all parameters
-	kill(reg);	   // only necessary to silence unused warning
+    Operand func = placeInRegister(compile(call[1], Tail(), code));
+    
+    // compile parameters directly...reserve registers for them.
+    int64_t reg = func.i;
+    for(int64_t i = 2; i < call.length(); i++) {
+        Operand r = placeInRegister(compile(call[i], Tail(), code));
+        assert(r.i == reg+1);
+        reg = r.i; 
+    }
+    // kill all parameters
+    kill(reg);       // only necessary to silence unused warning
     kill(func); 
-	Operand result = allocRegister();
-	emit(ByteCode::external, func, call.length()-1, result);
-	return result;
+    Operand result = allocRegister();
+    emit(ByteCode::external, func, call.length()-1, result);
+    return emitTail(result, visible(tail));
 }
 
-Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code* code) {
+Compiler::Operand
+Compiler::emitAssign(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
     Value dest = call[1];
     
-    Operand rhs = compile(call[2], code);
+    Operand rhs = compile(call[2], Tail(), code);
 
     // Handle simple assignment 
     if(!isCall(dest)) {
-        Operand target = compileConstant(InternStrings(state, Character::c(SymbolStr(dest))));
+        Operand target = compileConstant(InternStrings(state, Character::c(SymbolStr(dest))), Tail());
         emit(bc, target, 0, rhs);
     }
     
     // Handle complex LHS assignment instructions...
     // semantics here are kind of tricky. Consider compiling:
-    //	 dim(a)[1] <- x
+    //     dim(a)[1] <- x
     // This is progressively turned `inside out`:
-    //	1) dim(a) <- `[<-`(dim(a), 1, x)
-    //	2) a <- `dim<-`(a, `[<-`(dim(a), 1, x))
+    //    1) dim(a) <- `[<-`(dim(a), 1, x)
+    //    2) a <- `dim<-`(a, `[<-`(dim(a), 1, x))
     else {
-        Operand tmp = compileConstant(InternStrings(state, Character::c(Strings::assignTmp)));
+        Operand tmp = compileConstant(InternStrings(state, Character::c(Strings::assignTmp)), Tail());
         emit( ByteCode::store, tmp, 0, rhs );
 
         Value value = CreateSymbol(global, Strings::assignTmp);
@@ -333,33 +348,38 @@ Compiler::Operand Compiler::emitAssign(ByteCode::Enum bc, List const& call, Code
             dest = c[1];
         }
 
-        Operand target = compileConstant(InternStrings(state, Character::c(SymbolStr(dest))));
-        Operand source = compile(value, code);
+        Operand target = compileConstant(InternStrings(state, Character::c(SymbolStr(dest))), Tail());
+        Operand source = compile(value, Tail(), code);
         emit(bc, target, 0, source);
         kill(source);
         kill(target);
 
         Operand rm = allocRegister();
-        Operand env = compileConstant(Null());
+        Operand env = compileConstant(Null(), Tail());
         emit( ByteCode::env_rm, env, tmp, rm );
         kill( rm );
     }
-    return rhs;
+
+    return emitTail(rhs,invisible(tail));
 }
 
-Compiler::Operand Compiler::emitPromise(ByteCode::Enum bc, List const& call, Code* code) {
-    Operand a = compile(call[1], code);
-    Operand b = compile(call[2], code);
-    Operand c = compile(call[3], code);
-    Operand d = compile(call[4], code);
+Compiler::Operand
+Compiler::emitPromise(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
+    Operand a = compile(call[1], Tail(), code);
+    Operand b = compile(call[2], Tail(), code);
+    Operand c = compile(call[3], Tail(), code);
+    Operand d = compile(call[4], Tail(), code);
     kill(d); kill(c); kill(b); kill(a);
     Operand result = allocRegister();
     emit(ByteCode::pr_new, a, b, result);
     emit(ByteCode::pr_new, c, d, result);
-    return result;
+    return emitTail(result, visible(tail));
 }
 
-Compiler::Operand Compiler::emitFunction(ByteCode::Enum bc, List const& call, Code* code) {
+Compiler::Operand
+Compiler::emitFunction(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
     //compile the default parameters
     assert(call[1].isList() || call[1].isNull());
     List formals = call[1].isList()
@@ -407,30 +427,33 @@ Compiler::Operand Compiler::emitFunction(ByteCode::Enum bc, List const& call, Co
 
     Value function;
     Closure::Init(function, functionCode, 0);
-    Operand funcOp = compileConstant(function);
+    Operand funcOp = compileConstant(function, Tail());
 
-    Operand reg = allocRegister();	
+    Operand reg = allocRegister();    
     emit(ByteCode::fn_new, funcOp, 0, reg);
-    return reg;
+    return emitTail(reg, visible(tail));
 }
 
-Compiler::Operand Compiler::emitReturn(ByteCode::Enum bc, List const& call, Code* code) {
-		Operand result;
-		if(call.length() == 1) {
-			result = compileConstant(Null());
-		} else if(call.length() == 2)
-			result = compile(call[1], code);
-		else
-			throw CompileError("Too many parameters to return. Wouldn't multiple return values be nice?\n");
-		emit(ByteCode::ret, result, 0, 0);
-		return result;
+Compiler::Operand
+Compiler::emitReturn(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
+    Operand result;
+    if(call.length() == 1) {
+        result = compileConstant(Null(), Tail(Tail::Return, Tail::Default));
+    } else if(call.length() == 2)
+        result = compile(call[1], Tail(Tail::Return, Tail::Default), code);
+    else
+        throw CompileError("Too many parameters to return.");
+    return result;
 }
 
-Compiler::Operand Compiler::emitFor(ByteCode::Enum bc, List const& call, Code* code) {
+Compiler::Operand
+Compiler::emitFor(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
     Operand loop_variable =
-        compileConstant(InternStrings(state, Character::c(SymbolStr(call[1]))));
-    Operand loop_vector = placeInRegister(compile(call[2], code));
-    Operand loop_counter = allocRegister();	// save space for loop counter
+        compileConstant(InternStrings(state, Character::c(SymbolStr(call[1]))), Tail());
+    Operand loop_vector = placeInRegister(compile(call[2], Tail(), code));
+    Operand loop_counter = allocRegister();    // save space for loop counter
     Operand loop_limit = allocRegister(); // save space for the loop limit
 
     emit(ByteCode::forbegin, loop_variable, loop_vector, loop_counter);
@@ -438,7 +461,7 @@ Compiler::Operand Compiler::emitFor(ByteCode::Enum bc, List const& call, Code* c
     
     loopDepth++;
     int64_t beginbody = ir.size();
-    Operand body = compile(call[3], code);
+    Operand body = compile(call[3], Tail(), code);
     int64_t endbody = ir.size();
     resolveLoopExits(beginbody, endbody, endbody, endbody+2);
     loopDepth--;
@@ -450,74 +473,88 @@ Compiler::Operand Compiler::emitFor(ByteCode::Enum bc, List const& call, Code* c
 
     kill(body); kill(loop_limit); kill(loop_variable); 
     kill(loop_counter); kill(loop_vector);
-    //return invisible(compileConstant(Null(), code));
-    
+
     Operand t = allocRegister();
-    emit(ByteCode::mov, body, 0, t);
-    return t;
+    if(body != t)
+        emit(ByteCode::mov, body, 0, t);
+    return emitTail(t, invisible(tail));
 }
 
-Compiler::Operand Compiler::emitWhile(ByteCode::Enum bc, List const& call, Code* code) {
-    Operand head_condition = compile(call[1], code);
+Compiler::Operand
+Compiler::emitWhile(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
+    Operand head_condition = compile(call[1], Tail(), code);
     emit(ByteCode::jc, 2, 0, kill(head_condition));
     emit(ByteCode::stop, (int64_t)0, (int64_t)0, (int64_t)0);
     loopDepth++;
     
     int64_t beginbody = ir.size();
-    Operand body = compile(call[2], code);
+    Operand body = compile(call[2], Tail(), code);
     kill(body);
-    int64_t tail = ir.size();
-    Operand tail_condition = compile(call[1], code);
+    int64_t tail_idx = ir.size();
+    Operand tail_condition = compile(call[1], Tail(), code);
     int64_t endbody = ir.size();
     
     emit(ByteCode::jc, beginbody-endbody, 2, kill(tail_condition));
     emit(ByteCode::stop, (int64_t)0, (int64_t)0, (int64_t)0);
-    resolveLoopExits(beginbody, endbody, tail, endbody+2);
+    resolveLoopExits(beginbody, endbody, tail_idx, endbody+2);
     ir[beginbody-2].b = endbody-beginbody+4;
     loopDepth--;
     
-    return invisible(compileConstant(Null()));
+    return compileConstant(Null(), invisible(tail));
 }
 
-Compiler::Operand Compiler::emitRepeat(ByteCode::Enum bc, List const& call, Code* code) {
+Compiler::Operand
+Compiler::emitRepeat(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
     loopDepth++;
     int64_t beginbody = ir.size();
-    Operand body = compile(call[1], code);
+    Operand body = compile(call[1], Tail(), code);
     int64_t endbody = ir.size();
     resolveLoopExits(beginbody, endbody, endbody, endbody+1);
     loopDepth--;
     emit(ByteCode::jmp, beginbody-endbody, 0, 0);
     
     kill(body);
-    return invisible(compileConstant(Null()));
+    return compileConstant(Null(), invisible(tail));
 }
 
-Compiler::Operand Compiler::emitNext(ByteCode::Enum bc, List const& call, Code* code) {
+Compiler::Operand
+Compiler::emitNext(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
     if(loopDepth == 0)
         throw CompileError("next used outside of loop");
     emit(ByteCode::jmp, 0, 1, 0);
     return Operand(INVALID, (int64_t)0);
 }
 
-Compiler::Operand Compiler::emitBreak(ByteCode::Enum bc, List const& call, Code* code) {
+Compiler::Operand
+Compiler::emitBreak(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
     if(loopDepth == 0)
         throw CompileError("break used outside of loop");
     emit(ByteCode::jmp, 0, 2, 0);
     return Operand(INVALID, (int64_t)0);
 }
 
-Compiler::Operand Compiler::emitIf(ByteCode::Enum bc, List const& call, Code* code) {
+Compiler::Operand
+Compiler::emitIf(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
     Operand resultT, resultF, resultNA;
     if(call.length() < 3 || call.length() > 5)
         throw CompileError("invalid if statement");
     
-    Operand cond = compile(call[1], code);
+    Operand cond = compile(call[1], Tail(), code);
     emit(ByteCode::jc, 0, 0, kill(cond));
     
     int64_t begin1 = ir.size();
     if(call.length() == 5) {
-        resultNA = placeInRegister(compile(call[4], code));
-        emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0);
+        resultNA = compile(call[4], tail, code);
+        if(tail.type == Tail::None)
+        {
+            resultNA = placeInRegister(resultNA);
+            emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0);
+        }
     }
     else {
         resultNA = Operand();
@@ -526,26 +563,36 @@ Compiler::Operand Compiler::emitIf(ByteCode::Enum bc, List const& call, Code* co
     kill(resultNA);
 
     int64_t begin2 = ir.size();
-    resultF = placeInRegister(
-        call.length() >= 4 
-            ? compile(call[3], code)
-            : invisible(compileConstant(Null())));
-    assert(resultNA == resultF || 
+    resultF = call.length() >= 4 
+            ? compile(call[3], tail, code)
+            : compileConstant(Null(), invisible(tail));
+    if(tail.type == Tail::None)
+    {
+        resultF = placeInRegister(resultF);
+        assert(resultNA == resultF || 
            resultNA.loc == INVALID || 
            resultF.loc == INVALID);
-    emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0);
+        emit(ByteCode::jmp, (int64_t)0, (int64_t)0, (int64_t)0);
+    }
     kill(resultF);
-    
+ 
     int64_t begin3 = ir.size();
-    resultT = placeInRegister(compile(call[2], code));
-    assert(resultT == resultF || 
-           resultT.loc == INVALID || 
-           resultF.loc == INVALID);
+    resultT = compile(call[2], tail, code);
+    if(tail.type == Tail::None)
+    {
+        resultT = placeInRegister(resultT);
+        assert(resultT == resultF || 
+            resultT.loc == INVALID || 
+            resultF.loc == INVALID);
+    }
     kill(resultT);
 
     int64_t end = ir.size();
-    ir[begin3-1].a = end-begin3+1;
-    ir[begin2-1].a = end-begin2+1;
+    if(tail.type == Tail::None)
+    {
+        ir[begin3-1].a = end-begin3+1;
+        ir[begin2-1].a = end-begin2+1;
+    }
     ir[begin1-1].a = begin3-begin1+1;
     ir[begin1-1].b = begin2-begin1+1;
 
@@ -556,69 +603,93 @@ Compiler::Operand Compiler::emitIf(ByteCode::Enum bc, List const& call, Code* co
                     : resultNA );
 }
 
-Compiler::Operand Compiler::emitBrace(ByteCode::Enum bc, List const& call, Code* code) {
-		int64_t length = call.length();
-		if(length <= 1) {
-			return compileConstant(Null());
-		} else {
-			Operand result;
-			for(int64_t i = 1; i < length; i++) {
-				kill(result);
-				result = compile(call[i], code);
-			}
-			return result;
-		}
+Compiler::Operand
+Compiler::emitBrace(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
+    int64_t length = call.length();
+    if(length <= 1) {
+        return compileConstant(Null(), tail);
+    } else {
+        Operand result;
+        for(int64_t i = 1; i < length; i++) {
+            kill(result);
+            result = compile(call[i], i == length-1 ? tail : Tail(), code);
+        }
+        return result;
+    }
 }
 
-Compiler::Operand Compiler::emitParen(ByteCode::Enum bc, List const& call, Code* code) {
-    Operand result = compile(call[1], code);
-    emit(ByteCode::visible, result, 0, result);
-    return result;
+Compiler::Operand
+Compiler::emitParen(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
+    return compile(call[1], visible(tail), code);
 }
 
-Compiler::Operand Compiler::emitTernary(ByteCode::Enum bc, List const& call, Code* code) {
-    Operand c = placeInRegister(compile(call[1], code));
-    Operand b = compile(call[2], code);
-    Operand a = compile(call[3], code);
+Compiler::Operand
+Compiler::emitTernary(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
+    Operand c = placeInRegister(compile(call[1], Tail(), code));
+    Operand b = compile(call[2], Tail(), code);
+    Operand a = compile(call[3], Tail(), code);
     kill(a); kill(b); kill(c);
     Operand result = allocRegister();
     assert(c == result);
     emit(bc, a, b, result);
-    return result;
+    return emitTail(result, visible(tail));
 }
 
-Compiler::Operand Compiler::emitBinaryMap(ByteCode::Enum bc, List const& call, Code* code) {
-    Operand c = placeInRegister(compile(call[1], code));
-    Operand b = compile(call[2], code);
-    Operand a = compileConstant(Value::Nil());
+Compiler::Operand
+Compiler::emitBinaryMap(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
+    Operand c = placeInRegister(compile(call[1], Tail(), code));
+    Operand b = compile(call[2], Tail(), code);
+    Operand a = compileConstant(Value::Nil(), Tail());
     kill(a); kill(b); kill(c);
     Operand result = allocRegister();
     assert(c == result);
     emit(ByteCode::map, a, b, result);
-    return result;
+    return emitTail(result, visible(tail));
 }
 
-Compiler::Operand Compiler::emitBinary(ByteCode::Enum bc, List const& call, Code* code) {
-    Operand a = compile(call[1], code);
-    Operand b = compile(call[2], code);
+Compiler::Operand
+Compiler::emitBinary(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
+    Operand a = compile(call[1], Tail(), code);
+    Operand b = compile(call[2], Tail(), code);
     kill(b); kill(a);
     Operand result = allocRegister();
     emit(bc, a, b, result);
-    return result;
+    return emitTail(result, visible(tail));
 }
-		
-Compiler::Operand Compiler::emitUnary(ByteCode::Enum bc, List const& call, Code* code) {
-    Operand a = compile(call[1], code);
+        
+Compiler::Operand
+Compiler::emitUnary(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
+    Operand a = compile(call[1], Tail(), code);
     kill(a);
     Operand result = allocRegister();
     emit(bc, a, 0, result);
-    return result;
+    return emitTail(result, visible(tail));
 }
  
-Compiler::Operand Compiler::emitNullary(ByteCode::Enum bc, List const& call, Code* code) {
+Compiler::Operand
+Compiler::emitNullary(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
     Operand result = allocRegister();
     emit(bc, 0, 0, result);
-    return result;
+    return emitTail(result, visible(tail));
+}
+
+Compiler::Operand
+Compiler::emitVisible(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
+    return compile(call[1], visible(tail), code);
+}
+
+Compiler::Operand
+Compiler::emitInvisible(ByteCode::Enum bc, List const& call, Tail tail, Code* code)
+{
+    return compile(call[1], invisible(tail), code);
 }
 
 
@@ -629,15 +700,15 @@ struct Pair { String n; Value v; };
 CompiledCall Compiler::makeCall(State& state, List const& call, Character const& names) {
     List rcall = CreateCall(state.global, call, names.length() > 0 ? names : Value::Nil());
     int64_t dotIndex = call.length()-1;
-	std::vector<Pair>  arguments;
+    std::vector<Pair>  arguments;
     bool named = false;
 
     List extraArgs(0);
     Character extraNames(0);
 
-	for(int64_t i = 1; i < call.length(); i++) {
-		Pair p;
-		if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
+    for(int64_t i = 1; i < call.length(); i++) {
+        Pair p;
+        if(names.length() > 0) p.n = names[i]; else p.n = Strings::empty;
 
         if(Eq(p.n, Strings::__extraArgs__)) {
             List const& l = (List const&)call[i];
@@ -663,19 +734,19 @@ CompiledCall Compiler::makeCall(State& state, List const& call, Character const&
             }
         }
         else {
-		    if(isSymbol(call[i]) && Eq(SymbolStr(call[i]), Strings::dots)) {
-			    p.v = call[i];
-    			dotIndex = i-1;
+            if(isSymbol(call[i]) && Eq(SymbolStr(call[i]), Strings::dots)) {
+                p.v = call[i];
+                dotIndex = i-1;
                 p.n = Strings::empty;
-	    	} else if(isCall(call[i]) || isSymbol(call[i])) {
+            } else if(isCall(call[i]) || isSymbol(call[i])) {
                 if(!Eq(p.n, Strings::empty)) named = true;
                 Promise::Init(p.v, NULL, deferPromiseCompilation(state, call[i]), false);
-    		} else {
+            } else {
                 if(!Eq(p.n, Strings::empty)) named = true;
-	    		p.v = call[i];
-		    }
-    		arguments.push_back(p);
-	    }
+                p.v = call[i];
+            }
+            arguments.push_back(p);
+        }
     }
 
     List args(arguments.size());
@@ -687,45 +758,45 @@ CompiledCall Compiler::makeCall(State& state, List const& call, Character const&
         argnames[i] = arguments[i].n;
     }
 
-	return CompiledCall(rcall, args, InternStrings(state, argnames),
+    return CompiledCall(rcall, args, InternStrings(state, argnames),
                             dotIndex, extraArgs, InternStrings(state, extraNames));
 }
 
-Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Code* code) {
+Compiler::Operand Compiler::compileCall(List const& call, Character const& names, Tail tail, Code* code) {
 
-	int64_t length = call.length();
+    int64_t length = call.length();
 
-	if(length == 0) {
-		throw CompileError("invalid empty call");
-	}
+    if(length == 0) {
+        throw CompileError("invalid empty call");
+    }
 
     // If the function is not a literal, compile a standard call.
-	if(!isSymbol(call[0]) && !call[0].isCharacter1())
-		return compileFunctionCall(compile(call[0], code), call, names, code);
+    if(!isSymbol(call[0]) && !call[0].isCharacter1())
+        return compileFunctionCall(compile(call[0], Tail(), code), call, names, tail, code);
 
     // Get the function literal
-	String func = SymbolStr(call[0]);
+    String func = SymbolStr(call[0]);
 
     // Compile list(...), the only built-in function that handles ...
-	if(Eq(func, Strings::list) && call.length() == 2 
-		&& isSymbol(call[1]) && Eq(SymbolStr(call[1]), Strings::dots))
-	{
-		Operand result = allocRegister();
-		Operand counter = placeInRegister(compile(Integer::c(-1), code));
-		Operand storage = allocRegister();
-		kill(storage); kill(counter);
-		emit(ByteCode::dots, counter, storage, result); 
-		return result;
-	}
+    if(Eq(func, Strings::list) && call.length() == 2 
+        && isSymbol(call[1]) && Eq(SymbolStr(call[1]), Strings::dots))
+    {
+        Operand result = allocRegister();
+        Operand counter = placeInRegister(compile(Integer::c(-1), Tail(), code));
+        Operand storage = allocRegister();
+        kill(storage); kill(counter);
+        emit(ByteCode::dots, counter, storage, result); 
+        return emitTail(result, tail);
+    }
 
     // The rest of the built in functions don't support ...
     // or named arguments (except for 'value' in replacement functions),
     // so check and if there are any, compile a normal function call.
-	bool hasDots = false;
-	for(int64_t i = 1; i < length; i++) {
-		if(isSymbol(call[i]) && Eq(SymbolStr(call[i]), Strings::dots)) 
-			hasDots = true;
-	}
+    bool hasDots = false;
+    for(int64_t i = 1; i < length; i++) {
+        if(isSymbol(call[i]) && Eq(SymbolStr(call[i]), Strings::dots)) 
+            hasDots = true;
+    }
 
     bool hasNames = names.length() > 0;
 
@@ -743,35 +814,37 @@ Compiler::Operand Compiler::compileCall(List const& call, Character const& names
     }
 
     return (hasDots || hasNames)
-        ? compileFunctionCall(compileSymbol(call[0], true), call, names, code)
-        : GetEmitTable()(*this, func, call, code);
+        ? compileFunctionCall(compileSymbol(call[0], true, Tail()), call, names, tail, code)
+        : GetEmitTable()(*this, func, call, tail, code);
 }
 
-Compiler::Operand Compiler::compileExpression(List const& values, Code* code) {
-	Operand result;
-	if(values.length() == 0) result = compileConstant(Null());
-	for(int64_t i = 0; i < values.length(); i++) {
-		kill(result);
-		result = compile(values[i], code);
-	}
-	return result;
+Compiler::Operand Compiler::compileExpression(List const& values, Tail tail, Code* code) {
+    Operand result;
+    if(values.length() == 0) result = compileConstant(Null(), tail);
+    for(int64_t i = 0; i < values.length(); i++) {
+        kill(result);
+        result = compile(values[i], i == values.length()-1 ? tail : Tail(), code);
+    }
+    return result;
 }
 
-Compiler::Operand Compiler::compile(Value const& expr, Code* code) {
-	if(isSymbol(expr)) {
-		return compileSymbol(expr, false);
-	}
-	else if(isCall(expr)) {
-		assert(expr.isList());
-		return compileCall((List const&)expr, 
-			hasNames((List const&)expr) ? 
-				(Character const&)getNames((List const&)expr) : 
-				Character(0), 
-			code);
-	}
-	else {
-		return visible(compileConstant(expr));
-	}
+Compiler::Operand Compiler::compile(Value const& expr, Tail tail, Code* code)
+{
+    if(isSymbol(expr)) {
+        return compileSymbol(expr, false, tail);
+    }
+    else if(isCall(expr)) {
+        assert(expr.isList());
+        return compileCall((List const&)expr, 
+            hasNames((List const&)expr) ? 
+                (Character const&)getNames((List const&)expr) : 
+                Character(0),
+            tail,
+            code);
+    }
+    else {
+        return compileConstant(expr, tail);
+    }
 }
 
 
@@ -779,7 +852,7 @@ Compiler::Operand Compiler::compile(Value const& expr, Code* code) {
 Code* Compiler::compileExpression(State& state, Value const& expr) {
 
     Compiler compiler(state);
-	Code* code = new Code();
+    Code* code = new Code();
   
     // blocks use first two registers to potentially pass
     // return information.
@@ -787,12 +860,12 @@ Code* Compiler::compileExpression(State& state, Value const& expr) {
     (void) compiler.allocRegister();
 
     Operand result = isExpression(expr)
-        ? compiler.compileExpression((List const&)expr, code)
-        : compiler.compile(expr, code);
-    compiler.emit(ByteCode::done, result, 0, 0);
+        ? compiler.compileExpression((List const&)expr, Tail(Tail::Done, Tail::Default), code)
+        : compiler.compile(expr, Tail(Tail::Done, Tail::Default), code);
+    //compiler.emit(ByteCode::done, result, 0, 0);
     
-	code->registers = compiler.max_n; 
-	code->expression = expr;
+    code->registers = compiler.max_n;
+    code->expression = expr;
     {
         Integer bc(compiler.ir.size());
         for(size_t i = 0; i < compiler.ir.size(); ++i)
@@ -816,19 +889,20 @@ Code* Compiler::compileExpression(State& state, Value const& expr) {
     return code;
 }
 
-Prototype* Compiler::compileClosureBody(State& state, Value const& expr) {
+Prototype* Compiler::compileClosureBody(State& state, Value const& expr)
+{
     Compiler compiler(state);
-	Code* code = new Code();
-    Operand result = compiler.compile(expr, code);
+    Code* code = new Code();
+    Operand result = compiler.compile(expr, Tail(Tail::Return, Tail::Default), code);
    
     // A function that terminates without a return implicitly
     // returns the result value.
-    compiler.emit(ByteCode::ret, result, 0, 0);
+    //compiler.emit(ByteCode::ret, result, 0, 0);
     
     // interpreter assumes at least 2 registers for each function
     // one for the return value and one for an onexit result 
-	code->registers = std::max(compiler.max_n, 2LL); 
-	code->expression = expr;
+    code->registers = std::max(compiler.max_n, 2LL); 
+    code->expression = expr;
     {
         Integer bc(compiler.ir.size());
         for(size_t i = 0; i < compiler.ir.size(); ++i)
@@ -872,8 +946,8 @@ void Compiler::compilePromise(State& state, Code* code)
     (void) compiler.allocRegister();
     (void) compiler.allocRegister();
 
-    Operand result = compiler.compile(code->expression, code);
-    compiler.emit(ByteCode::done, result, 0, 0);
+    Operand result = compiler.compile(code->expression, Tail(Tail::Done, Tail::Default), code);
+    //compiler.emit(ByteCode::done, result, 0, 0);
 
     code->registers = compiler.max_n;
     {

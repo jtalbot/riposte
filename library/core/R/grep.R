@@ -6,7 +6,7 @@
     if(length(pattern)>1L)
         .stop("argument 'pattern' has length > 1")
 
-    if(.isTRUE(fixed) || !.isTRUE(perl)) {
+    if(fixed === TRUE || perl !== TRUE) {
         .Map('grep_map',
             list(
                 .Riposte('regex_compile',
@@ -33,7 +33,7 @@ grepl <- function(pattern, x, ignore.case, value, perl, fixed, useBytes, invert)
 
     r <- .grep(pattern, x, ignore.case, perl, fixed, useBytes)[[1]]
     
-    if(.isTRUE(invert))
+    if(invert === TRUE)
         r <- !r
 
     r
@@ -43,7 +43,7 @@ grep <- function(pattern, x, ignore.case, value, perl, fixed, useBytes, invert)
 {
     r <- grepl(pattern, x, ignore.case, FALSE, perl, fixed, useBytes, invert)
     
-    if(.isTRUE(value))
+    if(value === TRUE)
         x[r]
     else 
         seq_len(length(x))[r]
@@ -79,7 +79,7 @@ agrep <- function(pattern, x, ignore.case, value, costs, bounds, useBytes, fixed
 {
     r <- agrepl(pattern, x, ignore.case, FALSE, costs, bounds, useBytes, fixed)
 
-    if(.isTRUE(value))
+    if(value === TRUE)
         x[r]
     else
         seq_len(length(x))[r]
@@ -92,7 +92,7 @@ agrep <- function(pattern, x, ignore.case, value, costs, bounds, useBytes, fixed
     if(length(pattern)>1L)
         .stop("argument 'pattern' has length > 1")
 
-    if(.isTRUE(fixed) || !.isTRUE(perl)) {
+    if(fixed === TRUE || perl !== TRUE) {
         .Map('regex_map', 
             list(
                 .Riposte('regex_compile',
@@ -129,7 +129,7 @@ regexpr <- function(pattern, text, ignore.case, perl, fixed, useBytes)
     if(length(pattern)>1L)
         .stop("argument 'pattern' has length > 1")
 
-    if(.isTRUE(fixed) || !.isTRUE(perl)) {
+    if(fixed === TRUE || perl !== TRUE) {
         .Map('gregex_map', 
             list(
                 .Riposte('regex_compile',
@@ -165,7 +165,7 @@ gregexpr <- function(pattern, text, ignore.case, perl, fixed, useBytes)
 
 sub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
 {
-    if(.isTRUE(fixed) || !.isTRUE(perl)) {
+    if(fixed === TRUE || perl !== TRUE) {
         .Map('sub_map',
             list(
                 .Riposte('regex_compile',
@@ -191,7 +191,7 @@ sub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
 
 gsub <- function(pattern, replacement, text, ignore.case, perl, fixed, useBytes)
 {
-    if(.isTRUE(fixed) || !.isTRUE(perl)) {
+    if(fixed === TRUE || perl !== TRUE) {
         .Map('gsub_map',
             list(
                 .Riposte('regex_compile',

@@ -57,7 +57,7 @@ deparse <- function(expr, width.cutoff, backtick, control, nlines) {
     attrs <- attributes(x)
     x <- strip(x)
     if(length(x) > 1L && !any(is.na(x)) && 
-        .isTRUE(all(x == x[[1]]:(x[[1]]+length(x)-1L))))
+        all(x == x[[1]]:(x[[1]]+length(x)-1L) === TRUE))
         .wrap(sprintf('%dL:%dL', x[[1]], x[[1]]+length(x)-1L),
                 'integer',
                 attrs)

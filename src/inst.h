@@ -120,7 +120,10 @@ Instruction const* ret_inst(State& state, Instruction const& inst)
     {
         REGISTER(0) = a;
         Instruction const* returnpc = state.frame.returnpc;
-    
+        if(inst.b == 1)
+            state.visible = true;
+        else if(inst.b == 2)
+            state.visible = false;
         // We can free this environment for reuse
         // as long as we don't return a closure...
         // but also can't if an assignment to an 
@@ -209,26 +212,6 @@ Instruction const* mov_inst(State& state, Instruction const& inst)
 
 
 ALWAYS_INLINE
-Instruction const* invisible_inst(State& state, Instruction const& inst)
-{
-    state.visible = false;
-    DECODE(a);
-    OUT(c) = a;
-    return &inst+1;
-}
-
-
-ALWAYS_INLINE
-Instruction const* visible_inst(State& state, Instruction const& inst)
-{
-    state.visible = true;
-    DECODE(a);
-    OUT(c) = a;
-    return &inst+1;
-}
-
-
-ALWAYS_INLINE
 Instruction const* withVisible_inst(State& state, Instruction const& inst)
 {
     DECODE(a);
@@ -272,7 +255,6 @@ Instruction const* fold_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* load_inst(State& state, Instruction const& inst)
 {
-    state.visible = true;
     String s = static_cast<Character const&>(CONSTANT(inst.a)).s;
 
     Environment* env;
@@ -300,7 +282,6 @@ Instruction const* load_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* loadfn_inst(State& state, Instruction const& inst)
 {
-    state.visible = true;
     String s = static_cast<Character const&>(CONSTANT(inst.a)).s;
 
     Environment* env = state.frame.environment;
@@ -339,7 +320,6 @@ Instruction const* loadfn_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* store_inst(State& state, Instruction const& inst)
 {
-    state.visible = false;
     String s = static_cast<Character const&>(CONSTANT(inst.a)).s; 
     DECODE(c); // don't BIND
 
@@ -352,7 +332,6 @@ Instruction const* store_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* storeup_inst(State& state, Instruction const& inst)
 {
-    state.visible = false;
     String s = static_cast<Character const&>(CONSTANT(inst.a)).s;
     DECODE(c); BIND(c);
 
@@ -412,7 +391,6 @@ Instruction const* dotsv_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* dotsc_inst(State& state, Instruction const& inst)
 {
-    state.visible = true;
     Value const* dots = state.frame.environment->get(Strings::__dots__);
 
     OUT(c) = Integer::c(dots && dots->isList()
@@ -467,7 +445,6 @@ Instruction const* pr_env_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* id_inst(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a);
     DECODE(b);
 
@@ -479,7 +456,6 @@ Instruction const* id_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* nid_inst(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a);
     DECODE(b);
 
@@ -491,7 +467,6 @@ Instruction const* nid_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* isnil_inst(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a);
     OUT(c) = a.isNil() ? Logical::True() : Logical::False();
     return &inst+1;
@@ -508,7 +483,6 @@ Instruction const* type_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* length_inst(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a);
 
     if(a.isVector()) {
@@ -523,7 +497,6 @@ Instruction const* length_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* get_inst(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); DECODE(b);
 
     if(a.isVector() && !static_cast<Object const&>(a).hasAttributes())
@@ -590,7 +563,6 @@ Instruction const* setsub_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* getenv_inst(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
 
     if(a.isEnvironment()) {
@@ -643,7 +615,6 @@ Instruction const* attributes_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* strip_inst(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a);
 
     Value& c = OUT(c);
@@ -679,7 +650,6 @@ Instruction const* env_names_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* env_has_inst(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a);
     DECODE(b);
 
@@ -732,7 +702,6 @@ Instruction const* env_missing_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* env_global_inst(State& state, Instruction const& inst)
 {
-    state.visible = true;
     REnvironment::Init(OUT(c), state.global.global);
     return &inst+1;
 }
@@ -742,8 +711,6 @@ Instruction const* env_global_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE
 Instruction const* fn_new_inst(State& state, Instruction const& inst)
 {
-    state.visible = true;
-
     Value const& function = CONSTANT(inst.a);
     Closure::Init(OUT(c),
         static_cast<Closure const&>(function).prototype(),
@@ -759,7 +726,6 @@ Instruction const* fn_new_inst(State& state, Instruction const& inst)
 ALWAYS_INLINE \
 Instruction const* Name##_inst(State& state, Instruction const& inst) \
 { \
-    state.visible = true; \
     DECODE(a);    \
     if( Group##Fast<Name##VOp>( state, NULL, a, OUT(c) ) ) \
         return &inst+1; \
@@ -773,7 +739,6 @@ UNARY_FOLD_SCAN_BYTECODES(OP)
 ALWAYS_INLINE \
 Instruction const* Name##_inst(State& state, Instruction const& inst) \
 { \
-    state.visible = true; \
     DECODE(a);    \
     DECODE(b);    \
     if( Group##Fast<Name##VOp>( state, NULL, a, b, OUT(c) ) ) \
@@ -860,6 +825,10 @@ Instruction const* done_inst(State& state, Instruction const& inst)
     }
     
     REGISTER(0) = a;
+    if(inst.b == 1)
+        state.visible = true;
+    else if(inst.b == 2)
+        state.visible = false;
 
     Instruction const* pc = state.frame.returnpc; 
     state.pop();

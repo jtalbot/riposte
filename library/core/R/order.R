@@ -13,7 +13,7 @@ order <- function(na.last, decreasing, ...) {
         .stop('argument lengths differ')
 
     if(mn > 1L) {
-        .Riposte('order', .isTRUE(na.last), .isTRUE(decreasing), l)
+        .Riposte('order', na.last===TRUE, decreasing===TRUE, l)
     }
     else {
         seq_len(mn)

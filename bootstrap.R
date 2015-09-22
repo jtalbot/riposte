@@ -50,6 +50,7 @@
     internal::options(ts.eps=1e-05)
     internal::options(keep.source=internal::Sys.getenv('R_KEEP_PKG_SOURCE','')=='yes')
     internal::options(keep.source.pkgs=internal::Sys.getenv('R_KEEP_PKG_SOURCE','')=='yes')
+    internal::options(OutDec='.')
 
     namespace.base$.Machine <- list(
         double.eps = 2.22044604925031e-16,

@@ -9,7 +9,7 @@ browserSetDebug <- NULL
 
     browser <<- function(text="", condition=NULL, expr=TRUE, skipCalls=0L)
     {
-        if(!.isTRUE(expr))
+        if(expr !== TRUE)
             return
 
         browserContexts[[length(browserContexts)+1L]] <<-
@@ -26,7 +26,7 @@ browserSetDebug <- NULL
             cmd <- readLines(stdin(), n=1L)
         
             if(cmd == '') {
-                if(.isTRUE(options('browserNLdisabled')))
+                if(options('browserNLdisabled') === TRUE)
                     next
                 else
                     break

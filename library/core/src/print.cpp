@@ -243,7 +243,7 @@ std::string stringify(Global const& global, Value const& value, std::vector<int6
 	if(value.isObject() && ((Object const&)value).hasAttributes()) {
 		result = result + "\nAttributes:\n";
 		List v = ((Object const&)value).attributes()->list();
-        Character n = (Character const&)*v.attributes()->get(Strings::__names__);
+        Character n = (Character const&)*v.attributes()->get(Strings::names);
 		for(size_t i = 0; i < v.length(); ++i) {
 			result = result + "\t" + global.externStr(n[i])
 				+ ":\t" + global.stringify(v[i]) + "\n";

@@ -34,7 +34,6 @@ Instruction const* call_impl(State& state, Instruction const& inst)
     Memory::All.collect(state.global);
 
     DECODE(a); BIND(a);
-    state.visible = true;
 
     if(a.isClosure())
     {
@@ -86,6 +85,11 @@ Instruction const* ret_impl(State& state, Instruction const& inst)
             state.frame.environment, Value::Nil(),
             1, &inst);
     }
+
+    if(inst.b == 1)
+        state.visible = true;
+    else if(inst.b == 2)
+        state.visible = false;
     
     // We can free this environment for reuse
     // as long as we don't return a closure...
@@ -108,7 +112,6 @@ Instruction const* ret_impl(State& state, Instruction const& inst)
 
 Instruction const* jc_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(c); BIND(c);
     Logical::Element cond;
     if(c.isLogical1())
@@ -169,7 +172,6 @@ Instruction const* jc_impl(State& state, Instruction const& inst)
 
 Instruction const* forbegin_impl(State& state, Instruction const& inst)
 {
-    //state.visible = true;
     // a = loop variable (e.g. i)
     // b = loop vector(e.g. 1:100)
     // c = counter register
@@ -193,7 +195,6 @@ Instruction const* forbegin_impl(State& state, Instruction const& inst)
 
 Instruction const* external_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a);
 
     void* func = nullptr;
@@ -235,7 +236,6 @@ Instruction const* external_impl(State& state, Instruction const& inst)
 
 Instruction const* map_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
     DECODE(c); BIND(c);
@@ -263,7 +263,6 @@ Instruction const* map_impl(State& state, Instruction const& inst)
 
 Instruction const* scan_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
     DECODE(c); BIND(c);
@@ -283,7 +282,6 @@ Instruction const* scan_impl(State& state, Instruction const& inst)
 
 Instruction const* fold_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
     DECODE(c); BIND(c);
@@ -341,7 +339,6 @@ Instruction const* loadfn_impl(State& state, Instruction const& inst)
 
 Instruction const* dotsv_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
 
     int64_t idx = 0;
@@ -381,8 +378,6 @@ Instruction const* dotsv_impl(State& state, Instruction const& inst)
 
 Instruction const* dots_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
-
     Value const* t = state.frame.environment->get(Strings::__dots__);
     if(!t)
     {
@@ -443,7 +438,6 @@ Instruction const* dots_impl(State& state, Instruction const& inst)
 
 Instruction const* frame_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     int64_t index = a.i;
 
@@ -473,7 +467,6 @@ Instruction const* frame_impl(State& state, Instruction const& inst)
 
 Instruction const* pr_new_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
@@ -507,7 +500,6 @@ Instruction const* pr_new_impl(State& state, Instruction const& inst)
 
 Instruction const* pr_expr_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
@@ -547,7 +539,6 @@ Instruction const* pr_expr_impl(State& state, Instruction const& inst)
 
 Instruction const* pr_env_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
@@ -568,7 +559,6 @@ Instruction const* pr_env_impl(State& state, Instruction const& inst)
 
 Instruction const* type_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a);
 
 #ifdef EPEE
@@ -592,7 +582,6 @@ Instruction const* type_impl(State& state, Instruction const& inst)
 
 Instruction const* length_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a);
     if(a.isVector())
         Integer::InitScalar(OUT(c), static_cast<Vector const&>(a).length());
@@ -618,7 +607,6 @@ Instruction const* length_impl(State& state, Instruction const& inst)
 
 Instruction const* get_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
     try
@@ -707,7 +695,6 @@ Instruction const* get_impl(State& state, Instruction const& inst)
 
 Instruction const* set_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     // a = value, b = index, c = dest
     DECODE(a); DECODE(b); DECODE(c);
     BIND(b);
@@ -754,7 +741,6 @@ Instruction const* set_impl(State& state, Instruction const& inst)
 
 Instruction const* getsub_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); DECODE(b);
 
     if(a.isVector() && !static_cast<Object const&>(a).hasAttributes()) {
@@ -817,7 +803,6 @@ Instruction const* getsub_impl(State& state, Instruction const& inst)
 
 Instruction const* setsub_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     // a = value, b = index, c = dest 
     DECODE(a); DECODE(b); DECODE(c); 
     BIND(b); BIND(c);
@@ -887,7 +872,6 @@ Instruction const* setsub_impl(State& state, Instruction const& inst)
 
 Instruction const* setenv_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
@@ -929,7 +913,6 @@ Instruction const* setenv_impl(State& state, Instruction const& inst)
 
 Instruction const* getattr_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a);
     DECODE(b); BIND(b);
     if(a.isObject() && b.isCharacter1())
@@ -959,7 +942,6 @@ Instruction const* getattr_impl(State& state, Instruction const& inst)
 
 Instruction const* setattr_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(c);
     DECODE(b); BIND(b);
     DECODE(a); BIND(a);
@@ -1014,7 +996,6 @@ Instruction const* setattr_impl(State& state, Instruction const& inst)
 
 Instruction const* attributes_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a);
 
     if(a.isObject())
@@ -1040,7 +1021,6 @@ Instruction const* attributes_impl(State& state, Instruction const& inst)
 
 Instruction const* as_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
     if(!b.isCharacter1()) {
@@ -1082,7 +1062,6 @@ Instruction const* as_impl(State& state, Instruction const& inst)
 
 Instruction const* env_new_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
 
     if(!a.isEnvironment())
@@ -1099,7 +1078,6 @@ Instruction const* env_new_impl(State& state, Instruction const& inst)
 
 Instruction const* env_names_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
 
     if(!a.isEnvironment())
@@ -1114,7 +1092,6 @@ Instruction const* env_names_impl(State& state, Instruction const& inst)
 
 Instruction const* env_has_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
@@ -1141,7 +1118,6 @@ Instruction const* env_has_impl(State& state, Instruction const& inst)
 
 Instruction const* env_rm_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
@@ -1174,7 +1150,6 @@ Instruction const* env_rm_impl(State& state, Instruction const& inst)
 
 Instruction const* env_missing_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 
@@ -1266,7 +1241,6 @@ Instruction const* env_missing_impl(State& state, Instruction const& inst)
 #define OP(Name, string, Group, Func) \
 Instruction const* Name##_impl(State& state, Instruction const& inst) \
 { \
-    state.visible = true; \
     DECODE(a);    \
     try { \
         if(RecordUnary<Group, IROpCode::Name>(state, a, OUT(c))) \
@@ -1289,7 +1263,6 @@ UNARY_FOLD_SCAN_BYTECODES(OP)
 #define OP(Name, string, Group, Func) \
 Instruction const* Name##_impl(State& state, Instruction const& inst) \
 { \
-    state.visible = true; \
     DECODE(a);    \
     DECODE(b);    \
     try { \
@@ -1317,7 +1290,6 @@ BINARY_BYTECODES(OP)
 #define OP(Name, string, Group, Func) \
 Instruction const* Name##_impl(State& state, Instruction const& inst) \
 { \
-    state.visible = true; \
     DECODE(a);    \
     try { \
         if(!static_cast<Object const&>(a).hasAttributes() \
@@ -1338,7 +1310,6 @@ UNARY_FOLD_SCAN_BYTECODES(OP)
 #define OP(Name, string, Group, Func) \
 Instruction const* Name##_impl(State& state, Instruction const& inst) \
 { \
-    state.visible = true; \
     DECODE(a);    \
     DECODE(b);    \
     try { \
@@ -1363,7 +1334,6 @@ BINARY_BYTECODES(OP)
 
 Instruction const* ifelse_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a);
     DECODE(b);
     DECODE(c);
@@ -1395,7 +1365,6 @@ Instruction const* ifelse_impl(State& state, Instruction const& inst)
 
 Instruction const* split_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
 #ifdef EPEE
     DECODE(a); BIND(a);
     DECODE(b);
@@ -1416,7 +1385,6 @@ Instruction const* split_impl(State& state, Instruction const& inst)
 
 Instruction const* vector_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
     String stype = As<Character>(a)[0];
@@ -1466,7 +1434,6 @@ Instruction const* vector_impl(State& state, Instruction const& inst)
 
 Instruction const* seq_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
 
     int64_t len = As<Integer>(a)[0];
@@ -1486,7 +1453,6 @@ Instruction const* seq_impl(State& state, Instruction const& inst)
 
 Instruction const* index_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     // c = n, b = each, a = length
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
@@ -1511,7 +1477,6 @@ Instruction const* index_impl(State& state, Instruction const& inst)
 
 Instruction const* random_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
 
     int64_t len = As<Integer>(a)[0];
@@ -1529,7 +1494,6 @@ Instruction const* random_impl(State& state, Instruction const& inst)
 
 Instruction const* semijoin_impl(State& state, Instruction const& inst)
 {
-    state.visible = true;
     DECODE(a); BIND(a);
     DECODE(b); BIND(b);
 

@@ -2,7 +2,7 @@
 unserializeFromConn <- function(con, refhook) {
     # read header
     header <- readChar(con, 2L, TRUE)
-    if(header == 'X\n') {
+    if(header === 'X\n') {
         readBin(con, 'integer', 3L, 4L, TRUE, TRUE)
         .unserialize(con, refhook)
     }
@@ -23,13 +23,13 @@ unserializeFromConn <- function(con, refhook) {
         type <- as.integer(sexp[[4L]])
         flags <- sexp[[3L]]
 
-        if(type == 0xf1)
+        if(type === 0xf1L)
             return(baseenv())
 
-        if(type == 0xf2)
+        if(type === 0xf2L)
             return(emptyenv())
 
-        if(type == 0xf7) {
+        if(type === 0xf7L) {
             # this seems to be 0 all the time
             int1 <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
             r <- refhook(.unserialize.character())
@@ -37,7 +37,7 @@ unserializeFromConn <- function(con, refhook) {
             return(r)
         }
 
-        if(type == 0xf9) {
+        if(type === 0xf9L) {
             # this is a namespace, but not sure how to read it.
             int1 <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
             int2 <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
@@ -48,29 +48,29 @@ unserializeFromConn <- function(con, refhook) {
             return(r)
         }
 
-        if(type == 0xfa)
+        if(type === 0xfaL)
             return(internal::getRegisteredNamespace('base'))
 
-        if(type == 0xfb)
+        if(type === 0xfbL)
             return(Nil)     # missing argument in Riposte
 
-        if(type == 0xfd)
+        if(type === 0xfdL)
             return(globalenv())
 
-        if(type == 0xfe)
+        if(type === 0xfeL)
             return(NULL)
 
-        if(type == 0xff) {
+        if(type === 0xffL) {
             idx <- as.integer(sexp[[3L]])+
                    256*as.integer(sexp[[2L]])+
                    65536*as.integer(sexp[[1L]])
-            if(idx == 0L) {
+            if(idx === 0L) {
                 idx <- readBin(con, 'integer', 1L, 4L, TRUE, TRUE)
             }
             return(refs[[idx]])
         }
 
-        if(as.integer(type) < 1 || as.integer(type) > 25) {
+        if(type < 1L || type > 25L) {
             print(type)
             .stop("Unsupported type in .unserialize (unknown)")
         }
@@ -78,13 +78,13 @@ unserializeFromConn <- function(con, refhook) {
         # if it has attributes and it's a pairlist
         # (or apparently some other things), they come first...
         if((flags & as.raw(0x02)) && 
-            (type == 0x02 || type == 0x03 || type == 0x05 || type == 0x06)) {
+            (type === 0x02L || type === 0x03L || type === 0x05L || type === 0x06L)) {
             attrs <- .unserialize()
             #print('Attrs1')
             #print(attrs)
         }
 
-        v <- switch(as.integer(type)+1,
+        v <- switch(type+1L,
             NULL,
             .unserialize.symbol(),
             .unserialize.pairlist(sexp),
@@ -114,7 +114,7 @@ unserializeFromConn <- function(con, refhook) {
             )
 
         if(flags & as.raw(0x02)) {
-            if(type != 0x02 && type != 0x03 && type != 0x05 && type != 0x06) {
+            if(type !== 0x02L && type !== 0x03L && type !== 0x05L && type !== 0x06L) {
                 attrs <- .unserialize()
             }
             attributes(v) <- attrs

@@ -7,11 +7,11 @@ prod <- function(..., na.rm = FALSE) {
 }
 
 prod.default <- function(..., na.rm = FALSE) {
-    x <- c(...)
+    x <- as.double(c(...))
 
     if(na.rm)
-        prod(x[!is.na(x)])
+        prod(strip(x)[!is.na(strip(x))])
     else
-        prod(x)
+        prod(strip(x))
 }
 
