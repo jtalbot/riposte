@@ -29,7 +29,7 @@ int R_interrupts_pending;
 typedef SEXP (*R_stdGen_ptr_t)(SEXP, SEXP, SEXP); /* typedef */
 //R_stdGen_ptr_t R_get_standardGeneric_ptr(void); /* get method */
 R_stdGen_ptr_t R_set_standardGeneric_ptr(R_stdGen_ptr_t, SEXP) { /* set method */
-    printf("R_set_standardGeneric_ptr is not implemented, S4 dispatch probably won't work\n"); 
+    fprintf(stderr, "R_set_standardGeneric_ptr is not implemented, S4 dispatch probably won't work\n"); 
     return NULL;
 }
 
@@ -41,7 +41,7 @@ SEXP R_deferred_default_method(void) {
 
 SEXP R_set_prim_method(SEXP fname, SEXP op, SEXP code_vec, SEXP fundef,
                SEXP mlist) {
-    printf("R_set_prim_method is not implemented, S4 dispatch probably won't work\n"); 
+    fprintf(stderr, "R_set_prim_method is not implemented, S4 dispatch probably won't work\n"); 
     return fname;
     //_NYI("R_set_prim_method");
 }
@@ -52,7 +52,7 @@ SEXP do_set_prim_method(SEXP op, const char *code_string, SEXP fundef,
 }
 
 void R_set_quick_method_check(R_stdGen_ptr_t) {
-    printf("R_set_quick_method_check is not implemented, S4 dispatch probably won't work\n"); 
+    fprintf(stderr, "R_set_quick_method_check is not implemented, S4 dispatch probably won't work\n"); 
 }
 
 SEXP R_primitive_methods(SEXP op) {

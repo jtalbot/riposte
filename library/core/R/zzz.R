@@ -491,6 +491,10 @@ primitives <- .characters(
     )
 
 internals <- .characters(
+
+    # .bincode.R
+    'bincode',
+
     # Encoding.R
     'Encoding',
     'setEncoding',
@@ -551,6 +555,7 @@ internals <- .characters(
 
     # attach.R
     'attach',
+    'detach',
 
     # base-internal.R
     'makeLazy',
@@ -896,6 +901,9 @@ internals <- .characters(
     'sys.parent',
     'sys.on.exit',
     'parent.frame',
+
+    # system
+    'system',
 
     # t.R
     't.default',

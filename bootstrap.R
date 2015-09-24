@@ -56,7 +56,7 @@
         double.eps = 2.22044604925031e-16,
         double.neg.eps = 1.11022302462516e-16,
         double.xmin = 2.2250738585072e-308,
-        double.xmax = 1.79769313486232e+308,
+        double.xmax = 1.797693134862315807937289714e+308,
         double.base = 2L,
         double.digits = 53L,
         double.rounding = 5L,
@@ -81,6 +81,7 @@
     names <- internal::ls(namespace.base, TRUE)
     base[names] <- namespace.base[names]
     internal::registerNamespace('baseenv',base)
+    attr(base,'name') <- 'package:base'
 
     # Load the Riposte version of the R API 
     internal::dyn.load('libR.dylib', TRUE, TRUE, '')

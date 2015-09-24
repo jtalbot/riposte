@@ -1,6 +1,7 @@
 
-(for(i in 1:10) 1)
-(for(i in 1:10) i)
+# DIFF: riposte returns the last value from the for loop, not NULL
+#(for(i in 1:10) 1)
+#(for(i in 1:10) i)
 
 {
     for(i in 1:10) i

@@ -10,24 +10,34 @@
 }
 
 .search.path <- function(n, env) {
-    if(n > 0L) {
-        env <- .env_global()
-        while(n > 0) {
-            env <- .getenv(env)
-            n <- n-1
-        }
-        env
+    env <- .env_global()
+    while(n > 0) {
+        env <- .getenv(env)
+        n <- n-1
     }
-    else {
-        .getenv(env)
+    env
+}
+
+.search.path.name <- function(n, env) {
+    env <- .env_global()
+
+    while(env != emptyenv()) {
+    
+        if(attr(env, 'name') == n)
+            return(env)
+
+        env <- .getenv(env)
     }
+
+    .stop(fprintf('no item called "%s" on the search list', n))
 }
 
 as.environment <- function(x)
 	switch(.type(x),
 		environment=x,
 		double=,
-		integer=.search.path(as.integer(x), .frame(1L)),
+		integer=if(x >= 0L) .search.path(as.integer(x), .frame(1L)) else .frame(2L),
+        character=.search.path.name(as.character(x), .frame(1L)),
         list=.list2env(x),
 		.stop("unsupported cast to environment")) 
 

@@ -41,16 +41,19 @@ format <- function(x, trim, digits, nsmall, width, something, na.encode, scienti
 
 .format.logical <- function(x, ...)
 {
+    #as.character(x)
     .Riposte('print', x)
 }
 
 .format.integer <- function(x, ...)
 {
+    #as.character(x)
     .Riposte('print', x)
 }
 
 .format.double <- function(x, ...)
 {
+    #as(x, 'character')
     .Riposte('print', x)
 }
 

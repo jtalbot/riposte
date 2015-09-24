@@ -68,7 +68,7 @@ std::string stringifyVector(State const& state, T const& v) {
 		maxlength = std::max((int64_t)maxlength, (int64_t)stringify<T>(state, v[i]).length());
 	}
 	int64_t indexwidth = intToStr(length+1).length();
-	int64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
+	int64_t perline = std::max(floor((80.0-(indexwidth+2))/(maxlength+1)), 1.0);
 	for(int64_t i = 0; i < length; i+=perline) {
 		result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
 		for(int64_t j = 0; j < perline && i+j < length; j++) {

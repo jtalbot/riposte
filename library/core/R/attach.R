@@ -26,3 +26,15 @@ attach <- function(what, pos, name) {
 
     r 
 }
+
+detach <- function(pos) {
+    
+    e <- globalenv()
+    pos <- as.integer(pos)
+    while(pos > 2L) {
+        e <- .getenv(e)
+        pos <- pos-1L
+    }
+
+    .setenv(e, .getenv(.getenv(e)))
+}

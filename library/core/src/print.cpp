@@ -10,10 +10,13 @@
 #include <iomanip>
 #include <math.h>
 
-std::string pad(std::string s, int64_t width)
+std::string pad(std::string s, int64_t width, bool leftAlign=false)
 {
 	std::stringstream ss;
-	ss << std::setw(width) << s;
+    if(leftAlign)
+        ss << std::left << std::setw(width) << s;
+    else
+	    ss << std::setw(width) << s;
 	return ss.str();
 }
 
@@ -39,12 +42,12 @@ template<> std::string stringify<Double>(Global const& global, Double::Element a
 }  
 
 template<> std::string stringify<Character>(Global const& global, Character::Element a) {
-	return Character::isNA(a) ? "NA" : std::string("\"") + escape(global.externStr(a)) + "\"";
-}  
+    return Character::isNA(a) ? "NA" : std::string("\"") + escape(global.externStr(a)) + "\"";
+}
 
 template<> std::string stringify<List>(Global const& global, List::Element a) {
 	return global.stringify(a);
-}  
+}
 
 template<class T>
 std::string stringifyVector(Global const& global, T const& v) {
@@ -54,17 +57,52 @@ std::string stringifyVector(Global const& global, T const& v) {
 		return std::string(Type::toString(v.ValueType)) + "(0)";
 
 	bool dots = false;
+    bool named = false;
+
 	if(length > 100) { dots = true; length = 100; }
 	int64_t maxlength = 1;
 	for(int64_t i = 0; i < length; i++) {
 		maxlength = std::max((int64_t)maxlength, (int64_t)stringify<T>(global, v[i]).length());
 	}
-	int64_t indexwidth = intToStr(length+1).length();
-	int64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
+    
+    int64_t namelength = 0;
+    Character names;
+	if(v.isObject() && ((Object const&)v).hasAttributes()) {
+        Dictionary const* d = ((Object const&)v).attributes();
+        Value const* n = d->get(Strings::names);
+        if(n) {
+            named = true;
+            names = static_cast<Character const&>(*n);
+            for(int64_t i = 0; i < length; ++i)
+                namelength = std::max(namelength, (int64_t)global.externStr(names[i]).length());
+        }
+	}
+
+	int64_t indexwidth = named ? 0 : intToStr(length+1).length()+2;
+    int64_t actualwidth = std::max(maxlength, namelength);
+
+	int64_t perline = std::max(floor((80.0-(indexwidth+1))/(actualwidth+1)), 1.0);
+
+    bool leftAlign = (v.ValueType == Type::Character) && !named;
+
 	for(int64_t i = 0; i < length; i+=perline) {
-		result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
-		for(int64_t j = 0; j < perline && i+j < length; j++) {
-			result = result + pad(stringify<T>(global, v[i+j]), maxlength+1);
+        if(named) {
+            for(int64_t j = 0; j < perline && i+j < length; j++) {
+                if(j > 0)
+                    result = result+" ";
+			    result = result + pad(global.externStr(names[i+j]), actualwidth);
+		    }
+			result = result + "\n";
+        }
+        else {
+		    result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth);
+		    result = result + " ";
+        }
+
+        for(int64_t j = 0; j < perline && i+j < length; j++) {
+            if(j > 0)
+                result = result+" ";
+			result = result + pad(stringify<T>(global, v[i+j]), actualwidth, leftAlign);
 		}
 
 		if(i+perline < length)	
@@ -140,17 +178,49 @@ std::string stringifyVector<Double>(Global const& global, Double const& v) {
         f.sdecimals = std::max(f.sdecimals, tf.sdecimals);
         f.fdecimals = std::max(f.fdecimals, tf.fdecimals);
     }
+
+    bool named = false;
 	
     int64_t maxlength = 1;
 	for(int64_t i = 0; i < length; i++) {
 		maxlength = std::max((int64_t)maxlength, (int64_t)stringify(global, v[i], f).length());
 	}
-	int64_t indexwidth = intToStr(length+1).length();
-	int64_t perline = std::max(floor(80.0/(maxlength+1) + indexwidth), 1.0);
+
+    int64_t namelength = 0;
+    Character names;
+	if(v.isObject() && ((Object const&)v).hasAttributes()) {
+        Dictionary const* d = ((Object const&)v).attributes();
+        Value const* n = d->get(Strings::names);
+        if(n) {
+            named = true;
+            names = static_cast<Character const&>(*n);
+            for(int64_t i = 0; i < length; ++i)
+                namelength = std::max(namelength, (int64_t)global.externStr(names[i]).length());
+        }
+	}
+
+	int64_t indexwidth = named ? 0 : intToStr(length+1).length()+2;
+    int64_t actualwidth = std::max(maxlength, namelength);
+
+	int64_t perline = std::max(floor((80.0-(indexwidth+1))/(actualwidth+1)), 1.0);
 	for(int64_t i = 0; i < length; i+=perline) {
-		result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth+2);
-		for(int64_t j = 0; j < perline && i+j < length; j++) {
-			result = result + pad(stringify(global, v[i+j], f), maxlength+1);
+        if(named) {
+            for(int64_t j = 0; j < perline && i+j < length; j++) {
+		        if(j > 0)
+                    result = result + " ";
+			    result = result + pad(global.externStr(names[i+j]), actualwidth);
+            }
+			result = result + "\n";
+        }
+        else {
+		    result = result + pad(std::string("[") + intToStr(i+1) + "]", indexwidth);
+            result = result + " ";
+		}
+
+        for(int64_t j = 0; j < perline && i+j < length; j++) {
+		    if(j > 0)
+                result = result + " ";
+			result = result + pad(stringify(global, v[i+j], f), actualwidth);
 		}
 
 		if(i+perline < length)	
@@ -241,13 +311,24 @@ std::string stringify(Global const& global, Value const& value, std::vector<int6
 			break;
 	};
 	if(value.isObject() && ((Object const&)value).hasAttributes()) {
-		result = result + "\nAttributes:\n";
 		List v = ((Object const&)value).attributes()->list();
         Character n = (Character const&)*v.attributes()->get(Strings::names);
-		for(size_t i = 0; i < v.length(); ++i) {
-			result = result + "\t" + global.externStr(n[i])
-				+ ":\t" + global.stringify(v[i]) + "\n";
+		bool display = false;
+        for(size_t i = 0; i < v.length(); ++i) {
+            if(!Eq(n[i], Strings::names))
+                display = true;
 		}
+        if(display)
+        {
+		    result = result + "\nAttributes:\n";
+		    for(size_t i = 0; i < v.length(); ++i) {
+                if(n[i] != Strings::names)
+                {
+			        result = result + "\t" + global.externStr(n[i])
+				        + ":\t" + global.stringify(v[i]) + "\n";
+                }
+		    }
+        }
 	}
 	return result;
 }

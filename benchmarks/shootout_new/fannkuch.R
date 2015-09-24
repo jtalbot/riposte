@@ -9,14 +9,14 @@ fannkuch <- function(n)
     maxflips <- 0
     sum <- 0
 
-    while(TRUE)
+    repeat
     {
         q1 <- p[1L]    
         if(q1 != 1L)
         {
             q[2L:n] <- p[2L:n]
             flips <- 1
-            while(TRUE)
+            repeat
             {
                 qq <- q[q1]
                 if(qq == 1)

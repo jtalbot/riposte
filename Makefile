@@ -102,7 +102,7 @@ build/%.d: src/%.cpp
 # tests
 COVERAGE_TESTS = $(shell find tests/coverage -type f -name '*.R')
 BLACKBOX_TESTS = $(shell find tests/blackbox -type f -name '*.R')
-CORE_TESTS = $(shell find library/core/tests -type f -name '*.R')
+CORE_TESTS =     $(shell find library/core/tests -type f -name '*.R')
 #BASE_TESTS = $(shell find library/base/tests -type f -name '*.R')
 
 .PHONY: tests $(COVERAGE_TESTS) $(BLACKBOX_TESTS) $(CORE_TESTS) #$(BASE_TESTS)
@@ -131,6 +131,18 @@ $(CORE_TESTS):
 $(BASE_TESTS):
 	-@Rscript --vanilla --default-packages=NULL $@ > $@.key
 	-@./riposte --format=R -f $@ > $@.out
+	-@diff -b $@.key $@.out $(COVERAGE_FLAGS)
+	-@rm $@.key $@.out
+
+LIBRARY_TESTS =  $(shell find tests/library -type f -name '*.R')
+.PHONY: library_tests $(LIBRARY_TESTS)
+COVERAGE_FLAGS := 
+library_tests: COVERAGE_FLAGS += >/dev/null
+library_tests: $(LIBRARY_TESTS)
+
+$(LIBRARY_TESTS):
+	-@Rscript --vanilla --default-packages=NULL $@ > $@.key
+	-@R_DEFAULT_PACKAGES=NULL ./riposte --format=R -b -f $@ > $@.out
 	-@diff -b $@.key $@.out $(COVERAGE_FLAGS)
 	-@rm $@.key $@.out
 
